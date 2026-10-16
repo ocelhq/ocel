@@ -3,6 +3,7 @@ package cloudfront
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -159,8 +160,9 @@ func TestDestroyWaitsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 
 	w := newWorld()
 	e := &cloudFront{
-		ns:   defaultNamespace,
-		open: func(context.Context) (Clients, error) { return w.clients(), nil },
+		ns:         defaultNamespace,
+		ensurePart: w.ensurePart,
+		open:       func(context.Context) (Clients, error) { return w.clients(), nil },
 		pacing: Rollout{
 			Wait: func(context.Context, time.Duration) error {
 				w.trail.record("wait")
@@ -199,6 +201,7 @@ func TestADistributionOfAProjectWithALongSlugIsFoundByTheNameItWasMintedUnder(t 
 	w := newWorld()
 	name := distributionName(defaultNamespace, strings.Repeat("storefront-", 20), environment.TierProduction)
 	spec := distributionSpec{
+		tier:          environment.TierProduction,
 		name:          name,
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
 		function:      "arn:aws:cloudfront::111122223333:function/resolver",
@@ -273,6 +276,7 @@ func TestEveryConfigIncludesLoggingSoAnUpdateIsLegal(t *testing.T) {
 
 	w := newWorld()
 	spec := distributionSpec{
+		tier:          environment.TierProduction,
 		name:          "storefront",
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
 		function:      "arn:aws:cloudfront::111122223333:function/resolver",
@@ -309,6 +313,7 @@ func TestEveryConfigSpellsOutTheFieldsAnUpdateInsistsOn(t *testing.T) {
 
 	w := newWorld()
 	spec := distributionSpec{
+		tier:          environment.TierProduction,
 		name:          "storefront",
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
 		function:      "arn:aws:cloudfront::111122223333:function/resolver",
@@ -403,6 +408,7 @@ func TestEveryCertificateAConfigNamesIsOneAnUpdateAccepts(t *testing.T) {
 
 	w := newWorld()
 	spec := distributionSpec{
+		tier:          environment.TierProduction,
 		name:          "storefront",
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
 		function:      "arn:aws:cloudfront::111122223333:function/resolver",
@@ -548,7 +554,7 @@ func TestARemovalSaysSoWhenTheInstalledBootstrapFrontsNoEdge(t *testing.T) {
 	}
 	bound(t, stack)
 	orphaned := storeless(t, e, stack)
-	w.cfn.otherEdge = true
+	w.forgetPart(t)
 
 	if err := orphaned.UnbindDomain(context.Background(), boundHost); err == nil {
 		t.Error("UnbindDomain against a bootstrap that fronts no edge = nil, want the refusal said out loud: a bootstrap installed without the edge feature is not an account with none")
@@ -612,5 +618,39 @@ func TestAPromotedRouteSendsTheImmutablePrefixesTheBuildNamedToTheBucket(t *test
 	published := routeOn(t, w, stack, boundHost)
 	if !slices.Equal(published.Immutable, []string{"/docs/_next/static/"}) {
 		t.Errorf("the hostname's route sends %v to the bucket, want the prefixes the build named: the resolver reads no framework's paths of its own", published.Immutable)
+	}
+}
+
+func TestEveryDistributionTheEdgeRaisesIsTaggedOcelsForItsTierSoTheTagInvalidatorMayFlushIt(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		tier  environment.Tier
+		name  string
+		raise func(*testing.T, *world)
+	}{
+		{environment.TierProduction, productionDistributionName(), func(t *testing.T, w *world) {
+			if _, err := bootstrapped(t, w).Reconcile(context.Background(), testSpec(), edge.StackState{}); err != nil {
+				t.Fatalf("Reconcile: %v", err)
+			}
+		}},
+		{environment.TierPreview, previewWildcardName(previewBase), func(t *testing.T, w *world) {
+			if _, err := previewBootstrapped(t, w).ReconcilePreviewWildcard(context.Background(), previewWildcardSpec()); err != nil {
+				t.Fatalf("ReconcilePreviewWildcard: %v", err)
+			}
+		}},
+	} {
+		t.Run(string(tc.tier), func(t *testing.T) {
+			w := newWorld()
+			tc.raise(t, w)
+			dist := w.front.named(tc.name)
+			if dist == nil {
+				t.Fatalf("no distribution named %q; CloudFront has %v", tc.name, w.front.mutations())
+			}
+			want := map[string]string{"ocel:managed-by": "ocel", "ocel:env-tier": string(tc.tier)}
+			if !maps.Equal(dist.tags, want) {
+				t.Errorf("distribution tags = %v, want %v: the tag invalidator invalidates only the distributions tagged so", dist.tags, want)
+			}
+		})
 	}
 }

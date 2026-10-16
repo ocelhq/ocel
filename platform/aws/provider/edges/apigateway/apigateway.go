@@ -18,11 +18,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
+	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -33,7 +35,7 @@ const propagationBound = 5 * time.Second
 const (
 	routerHeaderValue = string(Kind)
 
-	stageName = bootstrap.EdgeStageName
+	stageName = notfoundapi.StageName
 
 	entryVariable  = "entry"
 	assetsVariable = "assets"
@@ -87,8 +89,9 @@ type Clients struct {
 }
 
 type apiGateway struct {
-	ns   bootstrap.Namespace
-	open func(context.Context) (Clients, error)
+	ns         bootstrap.Namespace
+	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error)
+	open       func(context.Context) (Clients, error)
 
 	mu        sync.Mutex
 	delete    *Deletion
@@ -96,8 +99,10 @@ type apiGateway struct {
 	leaseWait func(context.Context, time.Duration) error
 }
 
-func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
-	return newAPIGateway(ns, open)
+func New(ns bootstrap.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error)) edge.Edge {
+	front := newAPIGateway(ns, open)
+	front.ensurePart = ensurePart
+	return front
 }
 
 func newAPIGateway(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) *apiGateway {

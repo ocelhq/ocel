@@ -6,6 +6,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
 )
 
 func namesOf(t *testing.T, n Namespace) map[string]string {
@@ -45,8 +49,8 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 	return map[string]string{
 		"core stack":            production,
 		"preview core stack":    preview,
-		"feature stack":         n.FeatureStackName(FeatureImageOptimization, environment.TierProduction),
-		"preview feature stack": n.FeatureStackName(FeatureImageOptimization, environment.TierPreview),
+		"feature stack":         n.FeatureStackName(FeatureCloudflareEdge, environment.TierProduction),
+		"preview feature stack": n.FeatureStackName(FeatureCloudflareEdge, environment.TierPreview),
 		"passphrase param":      n.PassphraseParamFor(environment.TierProduction),
 		"edge user":             edgeUser,
 		"preview edge user":     edgeUserPreview,
@@ -59,14 +63,18 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 		"variables key alias":   n.variablesKeyAliasFor(environment.TierProduction),
 		"edge invoke role":      n.EdgeInvokeRoleName(environment.TierProduction),
 		"preview invoke role":   n.EdgeInvokeRoleName(environment.TierPreview),
-		"not found api":         n.EdgeNotFoundAPIName(environment.TierProduction),
+		"not found api":         notfoundapi.NameFor(string(n), environment.TierProduction),
+		"image optimizer":       imageoptimizer.NamesFor(string(n), environment.TierProduction).Function,
+		"preview optimizer":     imageoptimizer.NamesFor(string(n), environment.TierPreview).Function,
+		"tag invalidator":       taginvalidator.NamesFor(string(n), environment.TierPreview).Function,
+		"invalidator queue":     taginvalidator.NamesFor(string(n), environment.TierProduction).Queue,
 		"routes store":          n.EdgeRoutesStoreName(environment.TierProduction),
 		"preview routes store":  n.EdgeRoutesStoreName(environment.TierPreview),
 		"resolver":              n.EdgeResolverName(environment.TierPreview),
 		"empty body function":   n.EdgeEmptyBodyName(environment.TierProduction),
-		"cache policy":          n.edgeCachePolicyName(environment.TierProduction),
-		"headers policy":        n.edgeHeadersPolicyName(environment.TierProduction),
-		"asset access":          n.edgeAssetAccessName(environment.TierProduction),
+		"cache policy":          n.EdgeCachePolicyName(environment.TierProduction),
+		"headers policy":        n.EdgeHeadersPolicyName(environment.TierProduction),
+		"asset access":          n.EdgeAssetAccessName(environment.TierProduction),
 		"cache policy name":     n.PolicyName("edge-cache"),
 	}
 }
@@ -75,8 +83,8 @@ func TestDefaultNamespaceKeepsEveryNameUnchanged(t *testing.T) {
 	want := map[string]string{
 		"core stack":            "ocel-bootstrap",
 		"preview core stack":    "ocel-bootstrap-preview",
-		"feature stack":         "ocel-bootstrap-image-optimization",
-		"preview feature stack": "ocel-bootstrap-image-optimization-preview",
+		"feature stack":         "ocel-bootstrap-cloudflare-edge",
+		"preview feature stack": "ocel-bootstrap-cloudflare-edge-preview",
 		"passphrase param":      "/ocel/pulumi/passphrase",
 		"edge user":             "ocel-edge",
 		"preview edge user":     "ocel-edge-preview",
@@ -90,6 +98,10 @@ func TestDefaultNamespaceKeepsEveryNameUnchanged(t *testing.T) {
 		"edge invoke role":      "ocel-edge-invoke",
 		"preview invoke role":   "ocel-edge-invoke-preview",
 		"not found api":         "ocel-not-found-production",
+		"image optimizer":       "ocel-optimizer",
+		"preview optimizer":     "ocel-optimizer-preview",
+		"tag invalidator":       "ocel-invalidator-preview",
+		"invalidator queue":     "ocel-app-ocel-invalidator",
 		"routes store":          "ocel-routes",
 		"preview routes store":  "ocel-routes-preview",
 		"resolver":              "ocel-resolver-preview",
@@ -112,7 +124,7 @@ func TestDefaultNamespaceKeepsEveryNameUnchanged(t *testing.T) {
 
 func TestEveryNameContainsTheNamespace(t *testing.T) {
 	for what, got := range namesOf(t, Namespace("j-abc-cache")) {
-		if strings.Contains(got, "ocel") {
+		if strings.Contains(strings.TrimPrefix(got, awsports.AppScope+"-"), "ocel") {
 			t.Errorf("the %s is %q, which still names ocel rather than the namespace it was derived from", what, got)
 		}
 		if !strings.Contains(got, "j-abc-cache") {
@@ -140,6 +152,10 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 		"edge invoke role":      64,
 		"preview invoke role":   64,
 		"not found api":         128,
+		"image optimizer":       64,
+		"preview optimizer":     64,
+		"tag invalidator":       64,
+		"invalidator queue":     80,
 		"routes store":          64,
 		"preview routes store":  64,
 		"resolver":              64,

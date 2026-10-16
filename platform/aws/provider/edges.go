@@ -20,6 +20,7 @@ func (p *Provider) edgeDeps() edges.Deps {
 		AWS:          func(context.Context) (aws.Config, error) { return p.aws, nil },
 		Certificates: p.options.Certificates,
 		Namespace:    p.namespace,
+		EnsurePart:   p.ensurePartNamed,
 		ArtifactBucket: func(ctx context.Context, tier environment.Tier) (string, error) {
 			deployed, err := p.bootstrapped(ctx, tier)
 			if err != nil {

@@ -102,10 +102,6 @@ func (n Namespace) EdgeInvokeRoleName(tier environment.Tier) string {
 	return n.edgeSetName("edge-invoke", tier)
 }
 
-func (n Namespace) EdgeNotFoundAPIName(tier environment.Tier) string {
-	return string(n) + "-not-found-" + string(tier)
-}
-
 func (n Namespace) EdgeRoutesStoreName(tier environment.Tier) string {
 	return n.edgeSetName("routes", tier)
 }
@@ -118,15 +114,15 @@ func (n Namespace) EdgeEmptyBodyName(tier environment.Tier) string {
 	return n.edgeSetName("empty-body", tier)
 }
 
-func (n Namespace) edgeCachePolicyName(tier environment.Tier) string {
+func (n Namespace) EdgeCachePolicyName(tier environment.Tier) string {
 	return n.edgeSetName("cache", tier)
 }
 
-func (n Namespace) edgeHeadersPolicyName(tier environment.Tier) string {
+func (n Namespace) EdgeHeadersPolicyName(tier environment.Tier) string {
 	return n.edgeSetName("headers", tier)
 }
 
-func (n Namespace) edgeAssetAccessName(tier environment.Tier) string {
+func (n Namespace) EdgeAssetAccessName(tier environment.Tier) string {
 	return n.edgeSetName("assets", tier)
 }
 

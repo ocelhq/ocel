@@ -203,13 +203,13 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	front := &mintingEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
 	apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), front)
-	fronted := Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}
+	fronted := Request{Features: []string{FeatureCloudflareEdge}}
 
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, fronted, nil); err != nil {
 		t.Fatalf("the bootstrap that installs the edge: %v", err)
 	}
 
-	drop := Request{Features: []string{FeatureISR}, Remove: []string{FeatureCloudflareEdge}}
+	drop := Request{Remove: []string{FeatureCloudflareEdge}}
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, drop, nil); err != nil {
 		t.Fatalf("dropping %s: %v", FeatureCloudflareEdge, err)
 	}
@@ -225,5 +225,41 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, fronted, nil); err != nil {
 		t.Fatalf("a plain bootstrap straight after the drop: %v", err)
+	}
+}
+
+func TestTheEdgeUserInvokesTheImageOptimizerOfItsOwnTierByNameAndNoOtherFunction(t *testing.T) {
+	for _, tc := range []struct {
+		tier      environment.Tier
+		optimizer string
+	}{
+		{environment.TierProduction, "ocel-optimizer"},
+		{environment.TierPreview, "ocel-optimizer-preview"},
+	} {
+		t.Run(string(tc.tier), func(t *testing.T) {
+			var tmpl edgeUserTemplate
+			if err := yaml.Unmarshal([]byte(featureTemplate(FeatureCloudflareEdge, tc.tier)), &tmpl); err != nil {
+				t.Fatalf("template is not valid YAML: %v", err)
+			}
+			want := "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:" + tc.optimizer
+			var named []string
+			for _, st := range tmpl.Resources["EdgeUser"].Properties.Policies[0].PolicyDocument.Statement {
+				if !hasAction(st.Action, "lambda:InvokeFunction") {
+					continue
+				}
+				for _, resource := range yamlStrings(st.Resource) {
+					if strings.HasSuffix(resource, ":function:*") {
+						continue
+					}
+					named = append(named, resource)
+					if st.Condition != nil {
+						t.Errorf("the invoke grant on %s is conditioned on %v, and the optimizer carries no app function's tags", resource, st.Condition)
+					}
+				}
+			}
+			if !slices.Equal(named, []string{want}) {
+				t.Errorf("the edge user invokes %v by name, want %s alone", named, want)
+			}
+		})
 	}
 }

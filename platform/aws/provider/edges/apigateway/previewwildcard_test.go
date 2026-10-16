@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 )
 
 const (
@@ -134,11 +134,36 @@ func TestReconcilePreviewWildcardRoutesEverythingUnclaimedTo404(t *testing.T) {
 	if catchAll == nil {
 		t.Fatalf("no catch-all rule; the wildcard has %v", w.gateway.mutations())
 	}
-	if catchAll.api != fakeNotFoundAPI || catchAll.stage != bootstrap.EdgeStageName {
-		t.Errorf("catch-all rule serves %s/%s, want the %s the core stack outputs, on %s", catchAll.api, catchAll.stage, bootstrap.OutputEdgeNotFoundAPIID, stageName)
+	if catchAll.api != fakeNotFoundAPI || catchAll.stage != notfoundapi.StageName {
+		t.Errorf("catch-all rule serves %s/%s, want the REST API the %s part records, on %s", catchAll.api, catchAll.stage, notfoundapi.Part, stageName)
+	}
+	if want := "preview " + notfoundapi.Part + " for ocel domain use --preview"; !slices.Contains(w.ensured, want) {
+		t.Errorf("parts ensured = %v, want %q: the first preview wildcard on this edge adds the 404 responder", w.ensured, want)
 	}
 	if catchAll.priority != catchAllPriority {
 		t.Errorf("catch-all priority = %d, want %d; rules are evaluated lowest first, so the catch-all has to lose to every preview", catchAll.priority, catchAllPriority)
+	}
+}
+
+func TestTheFirstPreviewWildcardTellsTheUserItAddsThe404Responder(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := w.edge()
+	if _, err := e.Bootstrap(ctx, environment.TierPreview); err != nil {
+		t.Fatalf("Bootstrap(preview): %v", err)
+	}
+	var heard []string
+	spec := previewWildcardSpec()
+	spec.Warn = func(line string) { heard = append(heard, line) }
+
+	if _, err := e.ReconcilePreviewWildcard(ctx, spec); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard: %v", err)
+	}
+
+	if want := "added the " + notfoundapi.Part + " part"; !slices.Contains(heard, want) {
+		t.Errorf("the user heard %v, want %q: adding a bootstrap part is never silent", heard, want)
 	}
 }
 

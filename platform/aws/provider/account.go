@@ -88,6 +88,15 @@ func (m *memo[K, V]) resolve(key K, fill func() (V, error)) (V, error) {
 	return value, nil
 }
 
+func (m *memo[K, V]) remember(key K, value V) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.values == nil {
+		m.values = map[K]V{}
+	}
+	m.values[key] = value
+}
+
 func (m *memo[K, V]) forget() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

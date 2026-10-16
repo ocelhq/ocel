@@ -76,8 +76,8 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 			"and a feature they leave out stays included. --remove is the only way anything goes.\n\n" +
 			"Every run prints the changes it would make before asking; --dry prints them and stops.",
 		Example: fmt.Sprintf("  $ ocel bootstrap %s\n", name) +
-			fmt.Sprintf("  $ ocel bootstrap %s --features isr,image-optimization\n", name) +
-			fmt.Sprintf("  $ ocel bootstrap %s --remove image-optimization\n", name) +
+			fmt.Sprintf("  $ ocel bootstrap %s --features variables-key\n", name) +
+			fmt.Sprintf("  $ ocel bootstrap %s --remove variables-key\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --dry\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --repair", name),
 		Args: cobra.NoArgs,

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -172,11 +173,11 @@ func TestTheAPIGatewayEdgeRunsNoCode(t *testing.T) {
 	}
 }
 
-func TestTheEdgeKindReachesItsBootstrapFeature(t *testing.T) {
+func TestTheEdgeKindNeedsNoBootstrapFeature(t *testing.T) {
 	t.Parallel()
 
-	if got := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureAPIGatewayEdge {
-		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else provisions the invoke role and the not-found API this edge fronts deployments with", Kind, got, bootstrap.FeatureAPIGatewayEdge)
+	if got := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != "" {
+		t.Errorf("bootstrapping with the %q edge raises the %q feature, want none: its invoke role is in the base and its not-found API is the %s part", Kind, got, notfoundapi.Part)
 	}
 }
 
@@ -750,7 +751,7 @@ func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	if got := apiName(defaultNamespace, "shop", environment.TierProduction, ""); got != "ocel--shop--production" {
 		t.Errorf("apiName = %q, want the project stem the rest of the deploy path matches on", got)
 	}
-	if name := defaultNamespace.EdgeNotFoundAPIName(environment.TierProduction); cloudflare.ProjectOwnsWorker(string(defaultNamespace), "not", name) || strings.Contains(name, "--") {
+	if name := notfoundapi.NameFor(string(defaultNamespace), environment.TierProduction); cloudflare.ProjectOwnsWorker(string(defaultNamespace), "not", name) || strings.Contains(name, "--") {
 		t.Errorf("the not-found API is named %q, which a project could claim as its own", name)
 	}
 }
@@ -885,7 +886,7 @@ func TestReconcileRefusesAnAccountThatWasNeverBootstrapped(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
-		w.cfn.otherEdge = true
+		w.cfn.noInvokeRole = true
 		_, err := w.edge().Reconcile(context.Background(), testSpec(), edge.StackState{})
 		if err == nil {
 			t.Fatal("Reconcile succeeded without the role API Gateway invokes through")

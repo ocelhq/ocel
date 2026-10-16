@@ -1,11 +1,15 @@
 package cloudfront
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 type edgeSet struct {
@@ -17,21 +21,48 @@ type edgeSet struct {
 	originAccessControl  string
 }
 
-func edgeSetOf(deployed bootstrap.Deployed, tier environment.Tier) (edgeSet, error) {
-	set := edgeSet{
-		keyValueStoreARN:     deployed.Outputs[bootstrap.OutputEdgeRoutesStoreARN],
-		functionARN:          deployed.Outputs[bootstrap.OutputEdgeResolverARN],
-		emptyBodyFunctionARN: deployed.Outputs[bootstrap.OutputEdgeEmptyBodyARN],
-		cachePolicy:          deployed.Outputs[bootstrap.OutputEdgeCachePolicy],
-		headersPolicy:        deployed.Outputs[bootstrap.OutputEdgeHeadersPolicy],
-		originAccessControl:  deployed.Outputs[bootstrap.OutputEdgeAssetAccess],
+func edgeSetFrom(set cloudfrontpart.Set) edgeSet {
+	return edgeSet{
+		keyValueStoreARN:     set.RoutesStore,
+		functionARN:          set.Resolver,
+		emptyBodyFunctionARN: set.EmptyBody,
+		cachePolicy:          set.CachePolicy,
+		headersPolicy:        set.HeadersPolicy,
+		originAccessControl:  set.AssetAccess,
 	}
-	if set.keyValueStoreARN == "" || set.functionARN == "" || set.emptyBodyFunctionARN == "" || set.cachePolicy == "" || set.headersPolicy == "" || set.originAccessControl == "" {
+}
+
+func partRecords(c Clients, deployed bootstrap.Deployed) keyvalue.Store {
+	return awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(deployed.StateTable)}
+}
+
+func (p *cloudFront) readEdgeSet(ctx context.Context, c Clients, deployed bootstrap.Deployed, tier environment.Tier) (edgeSet, error) {
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, partRecords(c, deployed), tier, cloudfrontpart.Part)
+	if err != nil {
+		return edgeSet{}, err
+	}
+	set := cloudfrontpart.SetOf(cloudfrontpart.NamesFor(p.ns, tier), recorded.Resources)
+	if !present || recorded.State != stackrecords.PartReady || !set.Complete() {
 		return edgeSet{}, refuseUnbootstrapped(tier)
 	}
-	return set, nil
+	return edgeSetFrom(set), nil
+}
+
+func (p *cloudFront) ensureEdgeSet(ctx context.Context, tier environment.Tier, addedBy string, say func(string)) (edgeSet, error) {
+	if p.ensurePart == nil {
+		return edgeSet{}, fmt.Errorf("the %q edge was built without a way to add the %s bootstrap part", Kind, cloudfrontpart.Part)
+	}
+	resources, err := p.ensurePart(ctx, tier, cloudfrontpart.Part, addedBy, say)
+	if err != nil {
+		return edgeSet{}, err
+	}
+	set := cloudfrontpart.SetOf(cloudfrontpart.NamesFor(p.ns, tier), resources)
+	if !set.Complete() {
+		return edgeSet{}, refuseUnbootstrapped(tier)
+	}
+	return edgeSetFrom(set), nil
 }
 
 func refuseUnbootstrapped(tier environment.Tier) error {
-	return fmt.Errorf("the %s bootstrap in this account has nothing the %q edge fronts deployments with: its resolver function, key value store and cache policies are provisioned in the %s feature stack, and this account has none. Run `%s` with this edge selected, then deploy again", tier, Kind, bootstrap.FeatureCloudFrontEdge, provider.BootstrapCommand(tier))
+	return fmt.Errorf("the %s tier in this account has nothing the %q edge fronts deployments with: its resolver function, key value store and cache policies make up the %s bootstrap part, which no deploy has added. Deploy a project through this edge to add it", tier, Kind, cloudfrontpart.Part)
 }

@@ -56,6 +56,7 @@ func (s *stack) tier() environment.Tier { return s.state.Tier }
 func (s *stack) spec() distributionSpec {
 	return distributionSpec{
 		name:          distributionName(s.p.ns, s.slug(), s.tier()),
+		tier:          s.tier(),
 		assetOrigin:   assetOriginDomain(s.own.AssetBucket, s.own.Region),
 		function:      s.own.Function,
 		emptyBody:     s.own.EmptyBodyFunction,
@@ -78,7 +79,7 @@ func (s *stack) clients(ctx context.Context) (Clients, error) {
 	if err != nil || !deployed.Present {
 		return c, err
 	}
-	set, err := edgeSetOf(deployed, s.tier())
+	set, err := s.p.readEdgeSet(ctx, c, deployed, s.tier())
 	if err != nil {
 		return c, err
 	}
@@ -253,7 +254,7 @@ func (s *stack) serveContainers(ctx context.Context, c Clients, promotionID, app
 	}
 	if s.onPreviewWildcard() {
 		base := s.previewBase()
-		spec, _, err := s.p.previewWildcardSpec(ctx, c, base)
+		spec, _, err := s.p.previewWildcardSpec(ctx, c, base, nil)
 		if err != nil {
 			return awsports.ContainerFront{}, err
 		}

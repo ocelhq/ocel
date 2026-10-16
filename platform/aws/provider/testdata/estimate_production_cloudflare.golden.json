@@ -202,144 +202,6 @@
       "status": "STATUS_FREE"
     },
     {
-      "resource": "project:shop/shared:production/aws_sqs_queue:TagInvalidatorDeadLetterQueue",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Requests",
-          "unit": "requests",
-          "monthlyQuantity": "10000",
-          "unitPrice": "0.0000004",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 10000 requests",
-          "rateRef": "aws/sqs/requests"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.00"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_lambda_function:TagInvalidator",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Requests",
-          "unit": "requests",
-          "monthlyQuantity": "1000000",
-          "unitPrice": "0.0000002",
-          "monthlyCost": "0.20",
-          "usageBased": true,
-          "assumption": "moderate profile: 1000000 requests",
-          "rateRef": "aws/lambda/requests-arm"
-        },
-        {
-          "name": "Duration",
-          "unit": "GB-seconds",
-          "monthlyQuantity": "100000",
-          "unitPrice": "0.0000133334",
-          "monthlyCost": "1.33",
-          "usageBased": true,
-          "assumption": "moderate profile: 100000 GB-seconds",
-          "rateRef": "aws/lambda/duration-arm"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "1.53"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_lambda_event_source_mapping:TagInvalidatorStream",
-      "status": "STATUS_FREE"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:TagInvalidatorLogGroup",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Ingested",
-          "unit": "GB",
-          "monthlyQuantity": "1",
-          "unitPrice": "0.5",
-          "monthlyCost": "0.50",
-          "usageBased": true,
-          "assumption": "moderate profile: 1 GB",
-          "rateRef": "aws/logs/ingest"
-        },
-        {
-          "name": "Stored",
-          "unit": "GB-month",
-          "monthlyQuantity": "0.5",
-          "unitPrice": "0.03",
-          "monthlyCost": "0.02",
-          "usageBased": true,
-          "assumption": "moderate profile: 0.5 GB-month",
-          "rateRef": "aws/logs/storage"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.52"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_lambda_function:ImageOptimizer",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Requests",
-          "unit": "requests",
-          "monthlyQuantity": "1000000",
-          "unitPrice": "0.0000002",
-          "monthlyCost": "0.20",
-          "usageBased": true,
-          "assumption": "moderate profile: 1000000 requests",
-          "rateRef": "aws/lambda/requests-arm"
-        },
-        {
-          "name": "Duration",
-          "unit": "GB-seconds",
-          "monthlyQuantity": "345507.8125",
-          "unitPrice": "0.0000133334",
-          "monthlyCost": "4.61",
-          "usageBased": true,
-          "assumption": "moderate profile: 345507.8125 GB-seconds",
-          "rateRef": "aws/lambda/duration-arm"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "4.81"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_lambda_function_url:ImageOptimizerUrl",
-      "status": "STATUS_FREE"
-    },
-    {
-      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:ImageOptimizerLogGroup",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Ingested",
-          "unit": "GB",
-          "monthlyQuantity": "1",
-          "unitPrice": "0.5",
-          "monthlyCost": "0.50",
-          "usageBased": true,
-          "assumption": "moderate profile: 1 GB",
-          "rateRef": "aws/logs/ingest"
-        },
-        {
-          "name": "Stored",
-          "unit": "GB-month",
-          "monthlyQuantity": "0.5",
-          "unitPrice": "0.03",
-          "monthlyCost": "0.02",
-          "usageBased": true,
-          "assumption": "moderate profile: 0.5 GB-month",
-          "rateRef": "aws/logs/storage"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.52"
-    },
-    {
       "resource": "project:shop/shared:production/aws_kms_key:VariablesKey",
       "status": "STATUS_PRICED",
       "components": [
@@ -395,6 +257,144 @@
     },
     {
       "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-env-sync",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Ingested",
+          "unit": "GB",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.5",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB",
+          "rateRef": "aws/logs/ingest"
+        },
+        {
+          "name": "Stored",
+          "unit": "GB-month",
+          "monthlyQuantity": "0.5",
+          "unitPrice": "0.03",
+          "monthlyCost": "0.02",
+          "usageBased": true,
+          "assumption": "moderate profile: 0.5 GB-month",
+          "rateRef": "aws/logs/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.52"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_function:ocel-optimizer",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000002",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "aws/lambda/requests-arm"
+        },
+        {
+          "name": "Duration",
+          "unit": "GB-seconds",
+          "monthlyQuantity": "345507.8125",
+          "unitPrice": "0.0000133334",
+          "monthlyCost": "4.61",
+          "usageBased": true,
+          "assumption": "moderate profile: 345507.8125 GB-seconds",
+          "rateRef": "aws/lambda/duration-arm"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "4.81"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_function_url:ocel-optimizer-url",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-optimizer",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Ingested",
+          "unit": "GB",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.5",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB",
+          "rateRef": "aws/logs/ingest"
+        },
+        {
+          "name": "Stored",
+          "unit": "GB-month",
+          "monthlyQuantity": "0.5",
+          "unitPrice": "0.03",
+          "monthlyCost": "0.02",
+          "usageBased": true,
+          "assumption": "moderate profile: 0.5 GB-month",
+          "rateRef": "aws/logs/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.52"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_sqs_queue:ocel-app-ocel-invalidator",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/sqs/requests"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.00"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_function:ocel-invalidator",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000002",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "aws/lambda/requests-arm"
+        },
+        {
+          "name": "Duration",
+          "unit": "GB-seconds",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000133334",
+          "monthlyCost": "1.33",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 GB-seconds",
+          "rateRef": "aws/lambda/duration-arm"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "1.53"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_event_source_mapping:ocel-invalidator-stream",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-invalidator",
       "status": "STATUS_PRICED",
       "components": [
         {

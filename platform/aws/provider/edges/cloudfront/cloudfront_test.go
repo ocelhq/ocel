@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -293,11 +294,24 @@ func TestTheCloudFrontEdgeRunsNoCode(t *testing.T) {
 	}
 }
 
-func TestTheEdgeKindReachesItsBootstrapFeature(t *testing.T) {
+func TestTheEdgeKindNeedsNoBootstrapFeature(t *testing.T) {
 	t.Parallel()
 
-	if got := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureCloudFrontEdge {
-		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else provisions the resolver, routes store and policies this edge reads", Kind, got, bootstrap.FeatureCloudFrontEdge)
+	if got := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != "" {
+		t.Errorf("bootstrapping with the %q edge raises the %q feature, want none: the first deploy through it adds the %s part", Kind, got, cloudfrontpart.Part)
+	}
+}
+
+func TestReconcilingAddsTheCloudFrontPartAsTheDeployingProject(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	if _, err := bootstrapped(t, w).Reconcile(context.Background(), testSpec(), edge.StackState{}); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if want := cloudfrontpart.Part + " for " + testSpec().Slug; !slices.Contains(w.parts.ensured, want) {
+		t.Errorf("parts ensured = %v, want %q: the first deploy through this edge adds what every distribution shares", w.parts.ensured, want)
 	}
 }
 
@@ -393,8 +407,8 @@ func TestReconcile(t *testing.T) {
 		if aws.ToString(behavior.CachePolicyId) != ownState(t, stack).CachePolicy {
 			t.Errorf("cache policy = %q, want the one bootstrap made (%q)", aws.ToString(behavior.CachePolicyId), ownState(t, stack).CachePolicy)
 		}
-		if got := aws.ToString(distribution.config.CacheTagConfig.HeaderName); got != bootstrap.EdgeCacheTagHeader {
-			t.Errorf("cache tag header = %q, want %q", got, bootstrap.EdgeCacheTagHeader)
+		if got := aws.ToString(distribution.config.CacheTagConfig.HeaderName); got != cloudfrontpart.CacheTagHeader {
+			t.Errorf("cache tag header = %q, want %q", got, cloudfrontpart.CacheTagHeader)
 		}
 		origin := distribution.config.Origins.Items[0]
 		if aws.ToString(origin.DomainName) != assetOriginDomain(fakeAssetBucket, fakeRegion) {
@@ -740,8 +754,8 @@ func TestDestroyDisablesTheDistributionBeforeDeletingIt(t *testing.T) {
 	if len(w.front.distributions) != 0 {
 		t.Errorf("%d distributions survived destroy, want none", len(w.front.distributions))
 	}
-	if len(w.dynamo.items) != 0 {
-		t.Errorf("the ledger left %d items behind, want none", len(w.dynamo.items))
+	if w.ledgerItems() != 0 {
+		t.Errorf("the ledger left %d items behind, want none", w.ledgerItems())
 	}
 	if got := ownState(t, stack).Distribution; got != "" {
 		t.Errorf("state still records distribution %q after destroy", got)
@@ -796,7 +810,7 @@ func TestDestroyKeepsTheLedgerUntilTheDistributionIsActuallyGone(t *testing.T) {
 	if len(w.front.distributions) != 1 {
 		t.Fatalf("%d distributions left, want the one the rollout would not release", len(w.front.distributions))
 	}
-	if len(w.dynamo.items) == 0 {
+	if w.ledgerItems() == 0 {
 		t.Error("the deployments ledger was erased while the distribution it names still exists; a re-run would never find it")
 	}
 
@@ -807,8 +821,8 @@ func TestDestroyKeepsTheLedgerUntilTheDistributionIsActuallyGone(t *testing.T) {
 	if len(w.front.distributions) != 0 {
 		t.Errorf("%d distributions survived the re-run, want none", len(w.front.distributions))
 	}
-	if len(w.dynamo.items) != 0 {
-		t.Errorf("the ledger left %d items behind after the re-run, want none", len(w.dynamo.items))
+	if w.ledgerItems() != 0 {
+		t.Errorf("the ledger left %d items behind after the re-run, want none", w.ledgerItems())
 	}
 }
 
@@ -839,8 +853,8 @@ func TestCacheTagHeaderIsTheOneTheOriginWrites(t *testing.T) {
 	if named == nil {
 		t.Fatalf("%s no longer names the header the origin puts its cache tags in", shaping)
 	}
-	if got := string(named[1]); got != bootstrap.EdgeCacheTagHeader {
-		t.Errorf("the origin writes its tags in %q and the cache policy reads %q, so CloudFront stores no tag at all and every invalidation misses", got, bootstrap.EdgeCacheTagHeader)
+	if got := string(named[1]); got != cloudfrontpart.CacheTagHeader {
+		t.Errorf("the origin writes its tags in %q and the cache policy reads %q, so CloudFront stores no tag at all and every invalidation misses", got, cloudfrontpart.CacheTagHeader)
 	}
 }
 

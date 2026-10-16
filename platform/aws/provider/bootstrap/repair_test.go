@@ -236,16 +236,16 @@ func TestChangeSets(t *testing.T) {
 
 	t.Run("a replacement stops a bootstrap that was not told to accept one", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(environment.TierProduction)
+		stack := keyStack(environment.TierProduction)
 		stacks.fallBehind(stack)
-		stacks.plan(stack, change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
+		stacks.plan(stack, change(cfntypes.ChangeActionModify, "VariablesKey", "AWS::KMS::Key", cfntypes.ReplacementTrue))
 
 		err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil)
 		if err == nil {
-			t.Fatal("a bootstrap that would replace a live queue was allowed through")
+			t.Fatal("a bootstrap that would replace a live key was allowed through")
 		}
-		if !strings.Contains(err.Error(), "TagInvalidatorDeadLetterQueue") {
-			t.Errorf("refusal = %q, want it to name TagInvalidatorDeadLetterQueue", err)
+		if !strings.Contains(err.Error(), "VariablesKey") {
+			t.Errorf("refusal = %q, want it to name VariablesKey", err)
 		}
 		if left := stacks.leftBehind(); len(left) != 0 {
 			t.Errorf("change sets %v were neither applied nor deleted", left)
@@ -254,9 +254,9 @@ func TestChangeSets(t *testing.T) {
 
 	t.Run("accepting replacements writes the stack", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(environment.TierProduction)
+		stack := keyStack(environment.TierProduction)
 		stacks.fallBehind(stack)
-		stacks.plan(stack, change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
+		stacks.plan(stack, change(cfntypes.ChangeActionModify, "VariablesKey", "AWS::KMS::Key", cfntypes.ReplacementTrue))
 
 		req := everything()
 		req.AcceptReplacements = true
@@ -274,7 +274,7 @@ func TestRepair(t *testing.T) {
 
 	t.Run("a required feature stack that has fallen behind is written back", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(environment.TierProduction)
+		stack := keyStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		var log repairLog
 
@@ -309,11 +309,11 @@ func TestRepair(t *testing.T) {
 
 	t.Run("a stack this deploy does not need is left alone", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := optStack(environment.TierProduction)
+		stack := keyStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		var log repairLog
 
-		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, &log)
+		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, RepairRequest{Features: []string{FeatureCloudflareEdge}, Writer: "1.4.0"}, &log)
 		if err != nil {
 			t.Fatalf("Repair: %v", err)
 		}
@@ -324,9 +324,9 @@ func TestRepair(t *testing.T) {
 
 	t.Run("a change the rule refuses leaves the stack unchanged", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(environment.TierProduction)
+		stack := keyStack(environment.TierProduction)
 		stacks.fallBehind(stack)
-		stacks.plan(stack, change(cfntypes.ChangeActionRemove, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
+		stacks.plan(stack, change(cfntypes.ChangeActionRemove, "VariablesKeyAlias", "AWS::KMS::Alias", cfntypes.ReplacementFalse))
 		var log repairLog
 
 		repaired, err := Repair(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
@@ -336,7 +336,7 @@ func TestRepair(t *testing.T) {
 		if repaired || stacks.template(stack) != behindTemplate {
 			t.Error("a refused change was applied anyway")
 		}
-		if !log.says("WARN Could not refresh stack "+stack) || !log.says("TagInvalidatorDeadLetterQueue") {
+		if !log.says("WARN Could not refresh stack "+stack) || !log.says("VariablesKeyAlias") {
 			t.Errorf("repair said %v, want it to name what stopped it", log.Lines())
 		}
 		if left := stacks.leftBehind(); len(left) != 0 {
@@ -347,7 +347,7 @@ func TestRepair(t *testing.T) {
 	t.Run("a stack another run is writing is left to that run", func(t *testing.T) {
 		recordWaits(t)
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(environment.TierProduction)
+		stack := keyStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.busy(stack, cfn.ChangeSetAttempts*2)
 		var log repairLog
@@ -367,7 +367,7 @@ func TestRepair(t *testing.T) {
 	t.Run("a stack that goes idle still behind is left to whoever wrote it", func(t *testing.T) {
 		recordWaits(t)
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(environment.TierProduction)
+		stack := keyStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.busy(stack, 3)
 		var log repairLog

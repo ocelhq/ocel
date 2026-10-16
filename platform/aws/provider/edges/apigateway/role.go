@@ -11,7 +11,7 @@ import (
 func requireInvokeRole(ns bootstrap.Namespace, deployed bootstrap.Deployed, tier environment.Tier) (string, error) {
 	arn := deployed.Outputs[bootstrap.OutputEdgeInvokeRoleARN]
 	if arn == "" {
-		return "", fmt.Errorf("the %s role API Gateway invokes this project's functions through does not exist in this account, so the %q edge has nothing to front the deployment with. It is provisioned by the %s feature stack, which this account has none of, and this deploy will not create it: run `%s` with this edge selected and deploy again", ns.EdgeInvokeRoleName(tier), Kind, bootstrap.FeatureAPIGatewayEdge, provider.BootstrapCommand(tier))
+		return "", fmt.Errorf("the %s role API Gateway invokes this project's functions through does not exist in this account, so the %q edge has nothing to front the deployment with. It is made with the %s bootstrap, which predates it: run `%s` and deploy again", ns.EdgeInvokeRoleName(tier), Kind, tier, provider.BootstrapCommand(tier))
 	}
 	return arn, nil
 }

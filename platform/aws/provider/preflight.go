@@ -38,7 +38,36 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := p.resolveRuntimeLayers(ctx, pre); err != nil {
 		return err
 	}
+	if err := p.ensureDeployParts(ctx, pre); err != nil {
+		return err
+	}
 	return p.stacks.Preflight(ctx, pre)
+}
+
+func (p *Provider) ensureDeployParts(ctx context.Context, pre provider.DeployPreflight) error {
+	tier := pre.Deploy.Tier
+	deployed, err := p.bootstrapped(ctx, tier)
+	if err != nil || !deployed.Present || pre.Dry {
+		return err
+	}
+	used, err := p.partsUsedBy(pre.Deploy.Apps, pre.Edge)
+	if err != nil {
+		return err
+	}
+	var say func(string)
+	if pre.Progress != nil {
+		say = pre.Progress.Say
+	}
+	for _, name := range used {
+		work, err := p.partWorkFor(ctx, tier, name)
+		if err != nil {
+			return err
+		}
+		if _, err := p.ensurePart(ctx, tier, work, pre.Deploy.Slug, say); err != nil {
+			return err
+		}
+	}
+	return recordPartsUsed(ctx, p.KeyValues(), tier, pre.Deploy.Slug, used)
 }
 
 func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPreflight) error {

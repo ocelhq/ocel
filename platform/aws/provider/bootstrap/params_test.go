@@ -125,7 +125,7 @@ func TestPlanParametersOnAConvergedAccountKeepsEverything(t *testing.T) {
 
 func TestPlanParametersLeavesOutWhatAnEdgeThatAdoptsNothingNeverWrites(t *testing.T) {
 	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: newFakeSSM(), IAM: &fakeIAM{}}, defaultNamespace,
-		environment.TierProduction, []EdgeAdoption{{Kind: KindCloudFront}}, Request{Features: []string{FeatureCloudFrontEdge}})
+		environment.TierProduction, []EdgeAdoption{{Kind: "cloudfront"}}, Request{})
 	if err != nil {
 		t.Fatalf("PlanParameters: %v", err)
 	}

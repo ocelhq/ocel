@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
+	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
 )
 
 const (
@@ -99,6 +100,15 @@ const (
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
+	edgeFunctionARNPrefix = "arn:aws:cloudfront::*:function/"
+	edgeRoutesStoreARN    = "arn:aws:cloudfront::*:key-value-store/*"
+	edgeCachePolicyARN    = "arn:aws:cloudfront::*:cache-policy/*"
+	edgeHeadersPolicyARN  = "arn:aws:cloudfront::*:response-headers-policy/*"
+	edgeAssetAccessARN    = "arn:aws:cloudfront::*:origin-access-control/*"
+	restAPIsARN           = "arn:aws:apigateway:*::/restapis"
+	restAPIResourcesARN   = "arn:aws:apigateway:*::/restapis/*"
+	apiGatewayTagsARN     = "arn:aws:apigateway:*::/tags/*"
+
 	UnscopedResource = "*"
 )
 
@@ -118,10 +128,10 @@ type ScopedARNs struct {
 	appRoles             string
 	partRoles            []string
 	bastionRole          string
-	bootstrapFunction    string
-	bootstrapLogGroups   []string
-	bootstrapQueues      []string
 	envSyncFunction      string
+	invalidatorRole      string
+	invalidatorFunction  string
+	edgeFunctions        []string
 	edgeUser             string
 	passphraseParam      string
 	edgeParams           []string
@@ -150,14 +160,19 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + envsourcesync.NamesFor(string(n), tier).Role,
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + envsourcesync.NamesFor(string(n), tier).ScheduleRole,
 		},
-		bastionRole:       "arn:aws:iam::*:role/" + bastion.NameFor(tier),
-		bootstrapFunction: "arn:aws:lambda:*:*:function:" + n.CoreStackName() + "*",
-		envSyncFunction:   "arn:aws:lambda:*:*:function:" + envsourcesync.NamesFor(string(n), tier).Function,
-		edgeUser:          "arn:aws:iam::*:user/" + edgeUser,
-		passphraseParam:   parameterARNPrefix + n.PassphraseParamFor(tier),
-		originParam:       parameterARNPrefix + origin,
-		kvToken:           parameterARNPrefix + n.KVTokenRoot() + "/*",
-		signingKey:        "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/*",
+		bastionRole:         "arn:aws:iam::*:role/" + bastion.NameFor(tier),
+		envSyncFunction:     "arn:aws:lambda:*:*:function:" + envsourcesync.NamesFor(string(n), tier).Function,
+		invalidatorRole:     "arn:aws:iam::*:role" + n.bootstrapRolePathFor(tier) + taginvalidator.NamesFor(string(n), tier).Role,
+		invalidatorFunction: "arn:aws:lambda:*:*:function:" + taginvalidator.NamesFor(string(n), tier).Function,
+		edgeFunctions: []string{
+			edgeFunctionARNPrefix + n.EdgeResolverName(tier),
+			edgeFunctionARNPrefix + n.EdgeEmptyBodyName(tier),
+		},
+		edgeUser:        "arn:aws:iam::*:user/" + edgeUser,
+		passphraseParam: parameterARNPrefix + n.PassphraseParamFor(tier),
+		originParam:     parameterARNPrefix + origin,
+		kvToken:         parameterARNPrefix + n.KVTokenRoot() + "/*",
+		signingKey:      "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/*",
 	}
 	for _, bucket := range coreStackBuckets {
 		named := "arn:aws:s3:::" + strings.ToLower(core+"-"+bucket) + "-*"
@@ -172,8 +187,6 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 	for _, f := range featureRegistry {
 		stack := f.stackName(n, tier)
 		stacks = append(stacks, stack)
-		a.bootstrapLogGroups = append(a.bootstrapLogGroups, "arn:aws:logs:*:*:log-group:/aws/lambda/"+stack+"-*")
-		a.bootstrapQueues = append(a.bootstrapQueues, "arn:aws:sqs:*:*:"+stack+"-*")
 	}
 	for _, stack := range stacks {
 		a.BootstrapStacks = append(a.BootstrapStacks, "arn:aws:cloudformation:*:*:stack/"+stack+"/*")
@@ -1250,88 +1263,6 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 			Condition: mergeConditions(attachedPolicyIsAServiceRole(false), r.madeByItsStacks()),
 		},
 		{
-			Actions:   []string{"iam:PassRole"},
-			Resources: r.bootstrapRoles,
-			Condition: passedToLambda(),
-		},
-		{
-			Actions:   []string{"lambda:CreateFunction"},
-			Resources: []string{r.bootstrapFunction},
-			Condition: r.madeForItsTier(),
-		},
-		{
-			Actions:   []string{"lambda:TagResource"},
-			Resources: []string{r.bootstrapFunction},
-			Condition: r.taggedOnlyAsItsTier(),
-		},
-		{
-			Actions: []string{
-				"lambda:GetFunction",
-				"lambda:GetFunctionConfiguration",
-				"lambda:GetFunctionUrlConfig",
-				"lambda:GetPolicy",
-				"lambda:ListTags",
-			},
-			Resources: []string{r.bootstrapFunction},
-		},
-		{
-			Actions: []string{
-				"lambda:AddPermission",
-				"lambda:CreateFunctionUrlConfig",
-				"lambda:DeleteFunction",
-				"lambda:DeleteFunctionUrlConfig",
-				"lambda:RemovePermission",
-				"lambda:UntagResource",
-				"lambda:UpdateFunctionCode",
-				"lambda:UpdateFunctionConfiguration",
-				"lambda:UpdateFunctionUrlConfig",
-			},
-			Resources: []string{r.bootstrapFunction},
-			Condition: r.madeByItsStacks(),
-		},
-		{
-			Actions: []string{
-				"logs:CreateLogGroup",
-				"logs:DeleteLogGroup",
-				"logs:ListTagsForResource",
-				"logs:PutRetentionPolicy",
-				"logs:TagResource",
-				"logs:UntagResource",
-			},
-			Resources: r.bootstrapLogGroups,
-		},
-		{
-			Actions:   []string{"lambda:CreateEventSourceMapping"},
-			Resources: []string{UnscopedResource},
-			Condition: map[string]any{
-				"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction},
-			},
-		},
-		{
-			Actions: []string{
-				"lambda:DeleteEventSourceMapping",
-				"lambda:GetEventSourceMapping",
-				"lambda:UpdateEventSourceMapping",
-			},
-			Resources: []string{bootstrapEventSourceARN},
-			Condition: map[string]any{
-				"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction},
-			},
-		},
-		{
-			Actions: []string{
-				"sqs:CreateQueue",
-				"sqs:DeleteQueue",
-				"sqs:GetQueueAttributes",
-				"sqs:GetQueueUrl",
-				"sqs:ListQueueTags",
-				"sqs:SetQueueAttributes",
-				"sqs:TagQueue",
-				"sqs:UntagQueue",
-			},
-			Resources: r.bootstrapQueues,
-		},
-		{
 			Actions:   []string{"ssm:AddTagsToResource", "ssm:PutParameter"},
 			Resources: slices.Concat([]string{r.passphraseParam, r.originParam}, r.edgeParams),
 		},
@@ -1390,12 +1321,118 @@ func broughtVariablesKeyAccess(broughtKey string) []GrantStatement {
 	}
 }
 
+func (r ScopedARNs) invokesTheTagInvalidator() map[string]any {
+	return map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": []string{r.invalidatorFunction, r.invalidatorFunction + ":*"}}}
+}
+
+func partProvisioning(r ScopedARNs) []GrantStatement {
+	return []GrantStatement{
+		{
+			Actions:   []string{"iam:PassRole"},
+			Resources: []string{r.invalidatorRole},
+			Condition: passedToLambda(),
+		},
+		{
+			Actions:   []string{"lambda:CreateEventSourceMapping"},
+			Resources: []string{UnscopedResource},
+			Condition: r.invokesTheTagInvalidator(),
+		},
+		{
+			Actions: []string{
+				"lambda:DeleteEventSourceMapping",
+				"lambda:GetEventSourceMapping",
+				"lambda:UpdateEventSourceMapping",
+			},
+			Resources: []string{bootstrapEventSourceARN},
+			Condition: r.invokesTheTagInvalidator(),
+		},
+		{
+			Actions:   []string{"lambda:ListEventSourceMappings"},
+			Resources: []string{UnscopedResource},
+		},
+		{
+			Actions: []string{
+				"cloudfront:CreateFunction",
+				"cloudfront:DescribeFunction",
+				"cloudfront:PublishFunction",
+				"cloudfront:UpdateFunction",
+			},
+			Resources: r.edgeFunctions,
+		},
+		{
+			Actions:   []string{"cloudfront:CreateKeyValueStore", "cloudfront:DescribeKeyValueStore"},
+			Resources: []string{edgeRoutesStoreARN},
+		},
+		{
+			Actions:   []string{"cloudfront:CreateCachePolicy", "cloudfront:GetCachePolicy", "cloudfront:UpdateCachePolicy"},
+			Resources: []string{edgeCachePolicyARN},
+		},
+		{
+			Actions:   []string{"cloudfront:CreateResponseHeadersPolicy", "cloudfront:GetResponseHeadersPolicy", "cloudfront:UpdateResponseHeadersPolicy"},
+			Resources: []string{edgeHeadersPolicyARN},
+		},
+		{
+			Actions:   []string{"cloudfront:CreateOriginAccessControl", "cloudfront:GetOriginAccessControl", "cloudfront:UpdateOriginAccessControl"},
+			Resources: []string{edgeAssetAccessARN},
+		},
+		{
+			Actions:   []string{"cloudfront:ListCachePolicies", "cloudfront:ListOriginAccessControls", "cloudfront:ListResponseHeadersPolicies"},
+			Resources: []string{UnscopedResource},
+		},
+		{
+			Actions:   []string{"apigateway:POST"},
+			Resources: []string{restAPIsARN},
+			Condition: r.taggedOnCreateForItsTier(),
+		},
+		{
+			Actions:   []string{"apigateway:PUT"},
+			Resources: []string{apiGatewayTagsARN},
+			Condition: r.taggedOnCreateForItsTier(),
+		},
+		{
+			Actions:   []string{"apigateway:GET", "apigateway:POST", "apigateway:PUT"},
+			Resources: []string{restAPIResourcesARN},
+			Condition: r.taggedByOcelForItsTier(),
+		},
+	}
+}
+
+func partReclaiming(r ScopedARNs) []GrantStatement {
+	return []GrantStatement{
+		{
+			Actions:   []string{"cloudfront:DeleteFunction"},
+			Resources: r.edgeFunctions,
+		},
+		{
+			Actions:   []string{"cloudfront:DeleteKeyValueStore"},
+			Resources: []string{edgeRoutesStoreARN},
+		},
+		{
+			Actions:   []string{"cloudfront:DeleteCachePolicy"},
+			Resources: []string{edgeCachePolicyARN},
+		},
+		{
+			Actions:   []string{"cloudfront:DeleteResponseHeadersPolicy"},
+			Resources: []string{edgeHeadersPolicyARN},
+		},
+		{
+			Actions:   []string{"cloudfront:DeleteOriginAccessControl"},
+			Resources: []string{edgeAssetAccessARN},
+		},
+		{
+			Actions:   []string{"apigateway:DELETE"},
+			Resources: []string{restAPIResourcesARN},
+			Condition: r.taggedByOcelForItsTier(),
+		},
+	}
+}
+
 func deployGrants(r ScopedARNs, broughtKey string) []GrantStatement {
-	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r))
+	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r), partProvisioning(r))
 }
 
 func bootstrapGrants(r ScopedARNs, broughtKey string) []GrantStatement {
-	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r), runtimeReclaiming(r), bootstrapProvisioning(r), edgePrincipal(r))
+	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r), partProvisioning(r), runtimeReclaiming(r), partReclaiming(r), bootstrapProvisioning(r), edgePrincipal(r))
 }
 
 func refuseUnservedTier(tier environment.Tier) error {

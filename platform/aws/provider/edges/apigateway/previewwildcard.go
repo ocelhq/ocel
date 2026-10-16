@@ -10,8 +10,6 @@ import (
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
 func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
@@ -26,13 +24,9 @@ func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	outputs, err := bootstrap.FeatureOutputs(ctx, c.CFN, p.ns, environment.TierPreview, bootstrap.FeatureAPIGatewayEdge)
+	notFound, err := p.ensureNotFoundAPI(ctx, spec.Warn)
 	if err != nil {
 		return "", err
-	}
-	notFound := outputs[bootstrap.OutputEdgeNotFoundAPIID]
-	if notFound == "" {
-		return "", fmt.Errorf("the preview bootstrap has no %s stack, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap preview` with this edge selected first", bootstrap.FeatureAPIGatewayEdge, wildcard)
 	}
 	front, err := ensurePreviewDomain(ctx, c, wildcard, spec.Certificate)
 	if err != nil {

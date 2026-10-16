@@ -23,6 +23,8 @@ import (
 
 const previewSweepPage = 50
 
+const previewWildcardAddedBy = "ocel domain use --preview"
+
 func previewWildcardName(baseDomain string) string {
 	return naming.Fit(maxDistributionNameLen, naming.FieldSeparator,
 		naming.Fixed(sharedNamespace),
@@ -46,7 +48,7 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	distribution, deployed, err := p.previewWildcardSpec(ctx, c, spec.BaseDomain)
+	distribution, deployed, err := p.previewWildcardSpec(ctx, c, spec.BaseDomain, spec.Warn)
 	if err != nil {
 		return "", err
 	}
@@ -123,7 +125,7 @@ func convergeWildcard(ctx context.Context, c Clients, spec distributionSpec, id,
 	return putConfig(ctx, c, id, etag, spec.keeping(current).config([]string{wildcard}, certificate))
 }
 
-func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDomain string) (distributionSpec, bootstrap.Deployed, error) {
+func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDomain string, say func(string)) (distributionSpec, bootstrap.Deployed, error) {
 	deployed, err := p.bootstrap(ctx, c, environment.TierPreview)
 	if err != nil {
 		return distributionSpec{}, bootstrap.Deployed{}, err
@@ -131,12 +133,13 @@ func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDom
 	if !deployed.Present {
 		return distributionSpec{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not installed, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
 	}
-	set, err := edgeSetOf(deployed, environment.TierPreview)
+	set, err := p.ensureEdgeSet(ctx, environment.TierPreview, previewWildcardAddedBy, say)
 	if err != nil {
 		return distributionSpec{}, bootstrap.Deployed{}, err
 	}
 	return distributionSpec{
 		name:          previewWildcardName(baseDomain),
+		tier:          environment.TierPreview,
 		assetOrigin:   assetOriginDomain(deployed.AssetBucket, c.Region),
 		function:      set.functionARN,
 		emptyBody:     set.emptyBodyFunctionARN,

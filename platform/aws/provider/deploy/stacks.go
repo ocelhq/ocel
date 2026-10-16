@@ -66,6 +66,8 @@ type Stacks struct {
 	opened map[Scope]*release
 
 	containerInfraLock sync.Mutex
+
+	PlanParts func(ctx context.Context, spec provider.StackSpec) ([]provider.ChangeGroup, error)
 }
 
 type release struct {
@@ -429,7 +431,16 @@ func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return opened.plan(ctx, spec, progress)
+	planned, err := opened.plan(ctx, spec, progress)
+	if err != nil || r.PlanParts == nil || spec.App == nil {
+		return planned, err
+	}
+	parts, err := r.PlanParts(ctx, spec)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	planned.Groups = append(parts, planned.Groups...)
+	return planned, nil
 }
 
 func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress progress.Log) (provider.Plan, error) {

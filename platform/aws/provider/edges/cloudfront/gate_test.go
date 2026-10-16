@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,9 +17,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
 )
 
 var shopGate = gate.Gate{
@@ -394,57 +395,60 @@ func TestThePublishedGateAnswersTheConformanceSuite(t *testing.T) {
 	})
 }
 
-func refusedUntilBootstrapped(t *testing.T, err error, tier environment.Tier) {
-	t.Helper()
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("err = %v, want a %s refusal: the %s resolver predates the gate and would serve the tier to anyone", err, refusal.CodeNotReady, tier)
-	}
-	if want := provider.BootstrapCommand(tier); !strings.Contains(refused.Message, want) {
-		t.Errorf("refusal = %q, want it to name `%s`, which installs the resolver that runs the gate", refused.Message, want)
-	}
-}
+func TestEveryPathThatAddsTheCloudFrontPartTellsTheUser(t *testing.T) {
+	t.Parallel()
+	want := "added the " + cloudfrontpart.Part + " part"
+	heard := func(lines *[]string) func(string) { return func(line string) { *lines = append(*lines, line) } }
 
-func TestAProtectedDeployIsRefusedWhileTheTiersResolverPredatesTheGate(t *testing.T) {
-	eachTier(t, func(t *testing.T, tier environment.Tier) {
-		w := newWorld()
-		e := bootstrappedFor(t, w, tier)
-		w.cfn.resolverPredatesGate = true
-
-		_, err := e.Reconcile(context.Background(), gatedSpec(tier, &shopGate), priorFor(tier))
-
-		refusedUntilBootstrapped(t, err, tier)
-		if _, recorded := recordedGate(t, w, tier); recorded {
-			t.Error("the gate was written to the routes store of a resolver that does not read it")
+	t.Run("a reconcile", func(t *testing.T) {
+		var lines []string
+		spec := testSpec()
+		spec.Warn = heard(&lines)
+		if _, err := bootstrapped(t, newWorld()).Reconcile(context.Background(), spec, edge.StackState{}); err != nil {
+			t.Fatalf("Reconcile: %v", err)
 		}
-		if got := w.front.count("CreateDistribution"); got != 0 {
-			t.Errorf("CreateDistribution calls = %d, want 0: nothing is served before the tier can gate it", got)
+		if !slices.Contains(lines, want) {
+			t.Errorf("the user heard %v, want %q", lines, want)
+		}
+	})
+	t.Run("a gate publication", func(t *testing.T) {
+		w := newWorld()
+		e := bootstrappedFor(t, w, environment.TierProduction)
+		state := reconcileGated(t, e, environment.TierProduction, nil).State()
+		var lines []string
+		if err := e.Hooks().PublishGate(context.Background(), edge.GatePublication{State: state, Gate: &shopGate, Say: heard(&lines)}); err != nil {
+			t.Fatalf("PublishGate: %v", err)
+		}
+		if !slices.Contains(lines, want) {
+			t.Errorf("the user heard %v, want %q", lines, want)
+		}
+	})
+	t.Run("a preview wildcard", func(t *testing.T) {
+		var lines []string
+		spec := previewWildcardSpec()
+		spec.Warn = heard(&lines)
+		if _, err := previewBootstrapped(t, newWorld()).ReconcilePreviewWildcard(context.Background(), spec); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
+		}
+		if !slices.Contains(lines, want) {
+			t.Errorf("the user heard %v, want %q", lines, want)
 		}
 	})
 }
 
-func TestAnUnprotectedDeployReconcilesWhileTheTiersResolverPredatesTheGate(t *testing.T) {
-	eachTier(t, func(t *testing.T, tier environment.Tier) {
-		w := newWorld()
-		e := bootstrappedFor(t, w, tier)
-		w.cfn.resolverPredatesGate = true
-
-		reconcileGated(t, e, tier, nil)
-	})
-}
-
-func TestPublishingAGateIsRefusedWhileTheTiersResolverPredatesTheGate(t *testing.T) {
+func TestPublishingAGateAddsTheCloudFrontPartTheGateIsReadBy(t *testing.T) {
 	eachTier(t, func(t *testing.T, tier environment.Tier) {
 		w := newWorld()
 		e := bootstrappedFor(t, w, tier)
 		state := reconcileGated(t, e, tier, nil).State()
-		w.cfn.resolverPredatesGate = true
+		w.parts.ensured = nil
 
-		err := e.Hooks().PublishGate(context.Background(), edge.GatePublication{State: state, Gate: &shopGate})
+		if err := e.Hooks().PublishGate(context.Background(), edge.GatePublication{State: state, Gate: &shopGate}); err != nil {
+			t.Fatalf("PublishGate: %v", err)
+		}
 
-		refusedUntilBootstrapped(t, err, tier)
-		if _, recorded := recordedGate(t, w, tier); recorded {
-			t.Error("the gate was written to the routes store of a resolver that does not read it")
+		if len(w.parts.ensured) != 1 || !strings.HasPrefix(w.parts.ensured[0], cloudfrontpart.Part+" for ") {
+			t.Errorf("parts ensured = %v, want the %s part ensured before the gate is written into its routes store", w.parts.ensured, cloudfrontpart.Part)
 		}
 	})
 }

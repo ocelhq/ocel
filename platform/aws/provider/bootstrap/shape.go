@@ -17,8 +17,6 @@ func WithVariablesKey(arn string) ShapeOption {
 	return func(in *featureInputs) { in.variablesKey = arn }
 }
 
-const shapedArtifactBucket = "artifacts"
-
 var shapedTypes = map[string]shapedType{
 	"AWS::S3::Bucket":                 {token: "aws_s3_bucket"},
 	"AWS::DynamoDB::Table":            {token: "aws_dynamodb_table", properties: dynamoProperties},

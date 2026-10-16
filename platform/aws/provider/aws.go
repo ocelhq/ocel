@@ -38,6 +38,7 @@ type Provider struct {
 	deployed memo[environment.Tier, bootstrap.Reading]
 	params   memo[tierEdge, bootstrap.TierParams]
 	layers   memo[environment.Tier, map[string]string]
+	parts    memo[tierPart, partRead]
 	identity memo[struct{}, *sts.GetCallerIdentityOutput]
 	opened   edges.Opened
 	sts      control.STSAPI
@@ -70,6 +71,7 @@ func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootst
 	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns, sts: sts.NewFromConfig(cfg)}
 	p.ProbeAddress = emulatedProbeAddress(cfg)
 	p.stacks = deploy.NewStacks(p.release, &deploy.Realized{})
+	p.stacks.PlanParts = p.planDeployParts
 	return p
 }
 
@@ -115,7 +117,9 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return forgetting{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VariablesKey, p.namespace, p.readBootstrap), forget: p.forget, key: p.Key, keyValues: p.KeyValues(), region: p.aws.Region, envSourceSync: p.envSourceSyncPart, repairParts: p.repairParts}, nil
+	b := control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VariablesKey, p.namespace, p.readBootstrap)
+	b.RemoveParts, b.PlanPartRemoval = p.removeAddedParts, p.planAddedPartRemoval
+	return forgetting{Bootstrap: b, forget: p.forget, key: p.Key, keyValues: p.KeyValues(), region: p.aws.Region, envSourceSync: p.envSourceSyncPart, addedParts: p.describeAddedParts, repairParts: p.repairParts}, nil
 }
 
 func (p *Provider) Stacks() provider.Stacks { return p.stacks }

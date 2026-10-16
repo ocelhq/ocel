@@ -46,7 +46,7 @@ type CloudFrontAPI interface {
 	DescribeKeyValueStore(context.Context, *cloudfront.DescribeKeyValueStoreInput, ...func(*cloudfront.Options)) (*cloudfront.DescribeKeyValueStoreOutput, error)
 
 	ListDistributions(context.Context, *cloudfront.ListDistributionsInput, ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error)
-	CreateDistribution(context.Context, *cloudfront.CreateDistributionInput, ...func(*cloudfront.Options)) (*cloudfront.CreateDistributionOutput, error)
+	CreateDistributionWithTags(context.Context, *cloudfront.CreateDistributionWithTagsInput, ...func(*cloudfront.Options)) (*cloudfront.CreateDistributionWithTagsOutput, error)
 	GetDistribution(context.Context, *cloudfront.GetDistributionInput, ...func(*cloudfront.Options)) (*cloudfront.GetDistributionOutput, error)
 	GetDistributionConfig(context.Context, *cloudfront.GetDistributionConfigInput, ...func(*cloudfront.Options)) (*cloudfront.GetDistributionConfigOutput, error)
 	UpdateDistribution(context.Context, *cloudfront.UpdateDistributionInput, ...func(*cloudfront.Options)) (*cloudfront.UpdateDistributionOutput, error)
@@ -74,17 +74,20 @@ type Clients struct {
 }
 
 type cloudFront struct {
-	ns      bootstrap.Namespace
-	open    func(context.Context) (Clients, error)
-	options Options
-	pacing  Rollout
+	ns         bootstrap.Namespace
+	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error)
+	open       func(context.Context) (Clients, error)
+	options    Options
+	pacing     Rollout
 
 	mu      sync.Mutex
 	clients *Clients
 }
 
-func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error), options Options) edge.Edge {
-	return newCloudFront(ns, open, options)
+func New(ns bootstrap.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error), options Options) edge.Edge {
+	front := newCloudFront(ns, open, options)
+	front.ensurePart = ensurePart
+	return front
 }
 
 func newCloudFront(ns bootstrap.Namespace, open func(context.Context) (Clients, error), options Options) *cloudFront {
@@ -286,14 +289,9 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if err := prior.Private.Into(&own); err != nil {
 		return nil, err
 	}
-	set, err := edgeSetOf(deployed, spec.Tier)
+	set, err := p.ensureEdgeSet(ctx, spec.Tier, spec.Slug, spec.Warn)
 	if err != nil {
 		return nil, err
-	}
-	if spec.Gate != nil {
-		if err := refuseResolverWithoutGate(deployed, spec.Tier, spec.Slug); err != nil {
-			return nil, err
-		}
 	}
 
 	next := prior
