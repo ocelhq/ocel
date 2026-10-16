@@ -44,6 +44,12 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "^(wanted_by)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "properties": {
@@ -93,6 +99,12 @@
           "type": "string"
         },
         "usedBy": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "wantedBy": {
           "items": {
             "type": "string"
           },
