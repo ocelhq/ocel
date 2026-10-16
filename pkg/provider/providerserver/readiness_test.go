@@ -138,17 +138,56 @@ func TestStateReadsRepairOnDeployFromTheRecord(t *testing.T) {
 	}
 }
 
-type unbootstrappedStore struct{ keyvalue.Store }
+type storeTheBootstrapCreates struct {
+	keyvalue.Store
+	bootstrap provider.Bootstrap
+}
 
-func (unbootstrappedStore) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
-	return keyvalue.Entry{}, refusal.Refuse(refusal.CodeNotReady, "this project keeps no store yet")
+func (s storeTheBootstrapCreates) refuseBeforeBootstrap(ctx context.Context, tier environment.Tier) error {
+	described, err := s.bootstrap.Describe(ctx, tier)
+	if err != nil {
+		return err
+	}
+	if !described.Present {
+		return refusal.Refuse(refusal.CodeNotReady, "this project keeps no store yet")
+	}
+	return nil
+}
+
+func (s storeTheBootstrapCreates) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+	if err := s.refuseBeforeBootstrap(ctx, key.Partition.Tier); err != nil {
+		return keyvalue.Entry{}, err
+	}
+	return s.Store.Read(ctx, key)
+}
+
+func (s storeTheBootstrapCreates) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	if err := s.refuseBeforeBootstrap(ctx, entry.Key.Partition.Tier); err != nil {
+		return "", err
+	}
+	return s.Store.Write(ctx, entry)
+}
+
+func (s storeTheBootstrapCreates) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	if err := s.refuseBeforeBootstrap(ctx, in.Tier); err != nil {
+		return nil, err
+	}
+	return s.Store.List(ctx, in, under...)
+}
+
+type vendorWithAStoreTheBootstrapCreates struct {
+	*fake.Provider
+}
+
+func (p vendorWithAStoreTheBootstrapCreates) KeyValues() keyvalue.Store {
+	return storeTheBootstrapCreates{Store: p.Provider.KeyValues(), bootstrap: p.FakeBootstrap()}
 }
 
 func TestStateReportsNoBootstrapWhereTheStoreItWouldRecordInIsNotThere(t *testing.T) {
 	t.Parallel()
 
 	readiness, p := newReadiness(t, "2.0.0")
-	readiness.KeyValues = unbootstrappedStore{p.KeyValues()}
+	readiness.KeyValues = vendorWithAStoreTheBootstrapCreates{p}.KeyValues()
 
 	status, err := readiness.Status(context.Background(), environment.TierProduction)
 	if err != nil {
@@ -156,6 +195,45 @@ func TestStateReportsNoBootstrapWhereTheStoreItWouldRecordInIsNotThere(t *testin
 	}
 	if status.Present {
 		t.Error("Status() reports a bootstrap where none was applied")
+	}
+}
+
+type missingStore struct{ keyvalue.Store }
+
+func (missingStore) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
+	return keyvalue.Entry{}, refusal.Refuse(refusal.CodeNotReady, "this project keeps no store yet")
+}
+
+func (missingStore) List(context.Context, keyvalue.Partition, ...string) ([]keyvalue.Entry, error) {
+	return nil, refusal.Refuse(refusal.CodeNotReady, "this project keeps no store yet")
+}
+
+func TestStateReadsABootstrapInterruptedBeforeItCreatedItsStoreAsUnfinished(t *testing.T) {
+	t.Parallel()
+
+	readiness, p := newReadiness(t, "2.0.0")
+	bootstrapped(t, p, environment.TierProduction)
+	p.FakeBootstrap().MarkUnfinished()
+	readiness.KeyValues = missingStore{p.KeyValues()}
+
+	status, err := readiness.Status(context.Background(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Status() error = %v, want the unfinished bootstrap reported so a bootstrap can finish it", err)
+	}
+	if !status.Unfinished {
+		t.Error("Status() reads a bootstrap that never created its store as finished")
+	}
+}
+
+func TestNothingDependsOnABootstrapThatNeverCreatedItsStore(t *testing.T) {
+	t.Parallel()
+
+	readiness, p := newReadiness(t, "2.0.0")
+	bootstrapped(t, p, environment.TierProduction)
+	readiness.KeyValues = missingStore{p.KeyValues()}
+
+	if err := readiness.RefuseIfInUse(context.Background(), environment.TierProduction); err != nil {
+		t.Errorf("RefuseIfInUse() = %v, want nothing in use where no store was ever created", err)
 	}
 }
 
