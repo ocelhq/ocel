@@ -30,6 +30,17 @@ func (h *Service) envSourceSync(store variablestore.Store, tier environment.Tier
 	}, nil
 }
 
+func (h *Service) ensureSync(ctx context.Context, scope variablestore.Scope, descriptor envsource.Descriptor) error {
+	if descriptor.Reading() != envsource.ReadingOnSchedule {
+		return nil
+	}
+	backend, err := h.Source.Read()
+	if err != nil || backend.EnsureEnvSourceSync == nil {
+		return err
+	}
+	return provider.RefusalError(backend.EnsureEnvSourceSync(ctx, scope.Tier, scope.Project))
+}
+
 func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEnvSourceRequest) (*variablestorev1.SyncEnvSourceResponse, error) {
 	if req.GetRegistered() == nil && !h.CallerNamesEnvSource {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
@@ -57,6 +68,9 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEn
 		return nil, err
 	}
 	if err := refuseLogin(descriptor, envSync.Login); err != nil {
+		return nil, err
+	}
+	if err := h.ensureSync(ctx, scope, descriptor); err != nil {
 		return nil, err
 	}
 
