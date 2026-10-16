@@ -38,15 +38,16 @@ type Rollout struct {
 
 type AppRollout struct {
 	RouteKey
-	Target               string
-	HealthPath           string
-	HealthPathDiscovered bool
+	Target                string
+	HealthPath            string
+	HealthPathDiscovered  bool
+	RevalidateTokenDigest string
 }
 
 func (a AppRollout) path() string { return "/" + strings.TrimPrefix(a.HealthPath, "/") }
 
 func (a AppRollout) route() AppRoute {
-	return AppRoute{RouteKey: a.RouteKey, Upstream: a.Target}
+	return AppRoute{RouteKey: a.RouteKey, Upstream: a.Target, RevalidateTokenDigest: a.RevalidateTokenDigest}
 }
 
 func (a AppRollout) gate() string { return a.Target + a.path() }

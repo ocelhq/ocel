@@ -12,6 +12,7 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -612,5 +613,33 @@ func TestAPromotedRouteSendsTheImmutablePrefixesTheBuildNamedToTheBucket(t *test
 	published := routeOn(t, w, stack, boundHost)
 	if !slices.Equal(published.Immutable, []string{"/docs/_next/static/"}) {
 		t.Errorf("the hostname's route sends %v to the bucket, want the prefixes the build named: the resolver reads no framework's paths of its own", published.Immutable)
+	}
+}
+
+func TestAPromotedRouteCarriesTheRevalidateTokenDigestOfTheReleaseItServes(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	record := router.ReleaseRecord{
+		App:                   "web",
+		Release:               "d1.f1",
+		RootFunction:          "/",
+		RootFunctionPhysical:  entryFunction,
+		FunctionURLs:          map[string]string{"/": fakeEntryURL},
+		AssetPrefix:           fakeAssetPrefix,
+		RevalidateTokenDigest: gate.HashRevalidateToken("b1946ac92492d2347c6235b4d2611184"),
+	}
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
+	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	bound(t, stack)
+
+	if published := routeOn(t, w, stack, boundHost); published.RevalidateTokenDigest != record.RevalidateTokenDigest {
+		t.Errorf("the hostname's route carries revalidate token digest %q, want %q: the resolver admits a revalidating HEAD on the digest of the release the hostname serves", published.RevalidateTokenDigest, record.RevalidateTokenDigest)
 	}
 }

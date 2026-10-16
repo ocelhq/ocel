@@ -3,9 +3,10 @@ import {
   GATE_CACHE_CONTROL,
   type Gate,
   parseGate,
+  REVALIDATE_HEADER,
   ROBOTS_TAG,
 } from "@platform/edge-contract/gate";
-import type { ReleasesBinding } from "./releases";
+import { type ReleaseLookup, type ReleasesBinding, resolveRelease } from "./releases";
 
 export type GateRead = { kind: "open" } | { kind: "gated"; gate: Gate } | { kind: "unreadable" };
 
@@ -66,16 +67,32 @@ async function fetchGate(
   return gate ? { kind: "gated", gate } : { kind: "unreadable" };
 }
 
+export async function readRevalidateTokenDigest(
+  request: Request,
+  releases: ReleaseLookup,
+): Promise<string | undefined> {
+  if (request.method !== "HEAD" || !request.headers.has(REVALIDATE_HEADER)) return undefined;
+  const resolution = await resolveRelease(releases);
+  return resolution.kind === "found" ? resolution.record.revalidateTokenDigest : undefined;
+}
+
 export async function gateRequest(
   request: Request,
   gate: Gate,
   nowSeconds: number,
+  revalidateTokenDigest?: string,
 ): Promise<GateOutcome> {
   const url = new URL(request.url);
   const target = url.pathname + url.search;
   const verdict = await checkGate(
     gate,
-    { method: request.method, host: url.host, target, headers: request.headers },
+    {
+      method: request.method,
+      host: url.host,
+      target,
+      headers: request.headers,
+      revalidateTokenDigest,
+    },
     nowSeconds,
   );
   if (verdict.kind === "respond") {

@@ -4,7 +4,12 @@ import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GATE_FILE_VAR, GATE_INLINE_VAR, hashPassword } from "@platform/edge-contract/gate";
+import {
+  GATE_FILE_VAR,
+  GATE_INLINE_VAR,
+  hashPassword,
+  hashRevalidateToken,
+} from "@platform/edge-contract/gate";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 
 type Msg = { type: string; payload: any };
@@ -52,9 +57,13 @@ async function start(door: string, invoke: Invoke): Promise<number> {
   return messages.filter((m) => m.type === "server-ready").at(-1)!.payload.httpPort;
 }
 
-async function reach(port: number, headers: Record<string, string>): Promise<number> {
+async function reach(
+  port: number,
+  headers: Record<string, string>,
+  method = "GET",
+): Promise<number> {
   return new Promise<number>((resolve, reject) => {
-    const req = http.request({ host: "127.0.0.1", port, path: "/", headers }, (res) => {
+    const req = http.request({ host: "127.0.0.1", port, path: "/", headers, method }, (res) => {
       res.on("data", () => {});
       res.on("end", () => resolve(res.statusCode!));
     });
@@ -200,3 +209,36 @@ describe.each(Object.keys(doors))("%s", (door) => {
     expect(await reach(port, {})).toBe(200);
   });
 });
+
+describe.each(["serveEntry", "serveInvoke"] as const)(
+  "%s given the release's revalidate token digest",
+  (door) => {
+    const token = "b1946ac92492d2347c6235b4d2611184";
+
+    async function startRevalidating(): Promise<number> {
+      const mac = await hashPassword("k", "pw");
+      process.env[GATE_FILE_VAR] = await mountGate(JSON.stringify({ key: "k", passwordMac: mac }));
+      const digest = await hashRevalidateToken(token);
+      const before = messages.filter((m) => m.type === "server-ready").length;
+      await (door === "serveEntry"
+        ? host.serveEntry(echo, undefined, digest)
+        : host.serveInvoke(echo, undefined, undefined, digest));
+      await waitFor(() => messages.filter((m) => m.type === "server-ready").length > before);
+      return messages.filter((m) => m.type === "server-ready").at(-1)!.payload.httpPort;
+    }
+
+    test("a HEAD carrying the token reaches the app with the token kept", async () => {
+      const port = await startRevalidating();
+
+      expect(await reach(port, { "x-prerender-revalidate": token }, "HEAD")).toBe(200);
+      expect(seen?.["x-prerender-revalidate"]).toBe(token);
+    });
+
+    test("a GET carrying the token never reaches the app", async () => {
+      const port = await startRevalidating();
+
+      expect(await reach(port, { "x-prerender-revalidate": token })).toBe(401);
+      expect(seen).toBeUndefined();
+    });
+  },
+);

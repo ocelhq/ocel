@@ -2,6 +2,7 @@ export const COOKIE_NAME = "__Host-ocel-session";
 export const LOGIN_PATH = "/.ocel/login";
 export const BYPASS_HEADER = "x-ocel-bypass";
 export const SET_BYPASS_COOKIE_HEADER = "x-ocel-set-bypass-cookie";
+export const REVALIDATE_HEADER = "x-prerender-revalidate";
 export const SESSION_SECONDS = 7 * 24 * 60 * 60;
 
 export const GATE_CACHE_CONTROL = "private, no-store";
@@ -60,6 +61,7 @@ export interface GateRequest {
   host: string;
   target: string;
   headers: Headers;
+  revalidateTokenDigest?: string;
 }
 
 export interface GateResponse {
@@ -74,6 +76,17 @@ export type GateVerdict =
 
 export async function hashPassword(key: string, password: string): Promise<string> {
   return (await signer(key))(PASSWORD_PURPOSE, password);
+}
+
+export async function hashRevalidateToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return encodeHex(digest);
+}
+
+async function isRevalidation(request: GateRequest): Promise<boolean> {
+  const token = request.headers.get(REVALIDATE_HEADER);
+  if (request.method !== "HEAD" || !request.revalidateTokenDigest || !token) return false;
+  return equalHex(await hashRevalidateToken(token), request.revalidateTokenDigest);
 }
 
 export async function checkGate(
@@ -100,7 +113,15 @@ export async function checkGate(
     return redirect(sign, sanitizeNext(request.target), request.host, nowSeconds);
   }
 
-  if (!(hasPassword || hasBypass || hasSession || allowsOptions(gate, request.method, path))) {
+  if (
+    !(
+      hasPassword ||
+      hasBypass ||
+      hasSession ||
+      (await isRevalidation(request)) ||
+      allowsOptions(gate, request.method, path)
+    )
+  ) {
     return answerLoginPage(sanitizeNext(request.target), false);
   }
 
@@ -133,10 +154,12 @@ async function signer(key: string): Promise<Sign> {
       imported,
       encoder.encode(`${purpose}\n${input}`),
     );
-    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
-      "",
-    );
+    return encodeHex(digest);
   };
+}
+
+function encodeHex(digest: ArrayBuffer): string {
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function signSession(sign: Sign, host: string, expiry: string): Promise<string> {

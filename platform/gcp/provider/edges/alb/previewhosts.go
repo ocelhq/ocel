@@ -65,7 +65,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 	if err := s.refuseExhaustedLimits(ctx, took, withdrawn); err != nil {
 		return router.Unserved{Err: err}
 	}
-	if err := s.admitGatedHosts(ctx, took, progress); err != nil {
+	if err := s.admitGatedHosts(ctx, pickHosts(hosts, took), progress); err != nil {
 		return router.Unserved{Err: err}
 	}
 	for i, hostname := range withdrawn {
@@ -118,11 +118,12 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 		return Host{}, nil, err
 	}
 	served := Host{
-		App:          record.App,
-		Service:      service,
-		Backend:      backendName(s.state.Slug, s.state.Tier, host.Hostname),
-		Pointer:      move.Pointer,
-		StaticRoutes: routes,
+		App:                   record.App,
+		Service:               service,
+		Backend:               backendName(s.state.Slug, s.state.Tier, host.Hostname),
+		Pointer:               move.Pointer,
+		StaticRoutes:          routes,
+		RevalidateTokenDigest: record.RevalidateTokenDigest,
 	}
 	if !deployment {
 		return served, nil, nil

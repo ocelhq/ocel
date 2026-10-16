@@ -14,6 +14,7 @@ export interface ReleaseRecord {
   assetPrefix: string;
   isrPrefix: string;
   purgeSecret?: string;
+  revalidateTokenDigest?: string;
   createdAt: number;
   edgeWorkers?: EdgeWorkers;
   env?: Record<string, string>;

@@ -56,6 +56,32 @@ func (s *stack) listRoutedHosts() []string {
 	return hosts
 }
 
+func (s *stack) listRoutedHostRecords() map[string]Host {
+	routed := map[string]Host{}
+	for _, hostname := range s.listRoutedHosts() {
+		routed[hostname] = s.recorded.Hosts[hostname]
+	}
+	return routed
+}
+
+func withRevalidateTokenDigests(digests map[string]string, admitted map[string]Host) map[string]string {
+	kept := maps.Clone(digests)
+	if kept == nil {
+		kept = map[string]string{}
+	}
+	for hostname, host := range admitted {
+		if host.RevalidateTokenDigest == "" {
+			delete(kept, hostname)
+			continue
+		}
+		kept[hostname] = host.RevalidateTokenDigest
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return kept
+}
+
 func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 	if !s.isGated() {
 		return nil
@@ -81,7 +107,11 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 			return gateRecord{}, false
 		}
 		newlyGated = !found
-		record = gateRecord{Hosts: slices.Sorted(maps.Keys(toSet(recorded.Hosts, routed))), Gate: *held}
+		record = gateRecord{
+			Hosts:                  slices.Sorted(maps.Keys(toSet(recorded.Hosts, routed))),
+			Gate:                   *held,
+			RevalidateTokenDigests: withRevalidateTokenDigests(recorded.RevalidateTokenDigests, s.listRoutedHostRecords()),
+		}
 		return record, true
 	})
 	if err != nil {
@@ -101,10 +131,11 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 	return s.e.publishGates(ctx, tier, proof, log)
 }
 
-func (s *stack) admitGatedHosts(ctx context.Context, hosts []string, log progress.Log) error {
-	if !s.isGated() || len(hosts) == 0 {
+func (s *stack) admitGatedHosts(ctx context.Context, admitted map[string]Host, log progress.Log) error {
+	if !s.isGated() || len(admitted) == 0 {
 		return nil
 	}
+	hosts := slices.Sorted(maps.Keys(admitted))
 	if log == nil {
 		log = progress.Discard()
 	}
@@ -115,6 +146,7 @@ func (s *stack) admitGatedHosts(ctx context.Context, hosts []string, log progres
 	}
 	if _, err := s.e.changeGateRecord(ctx, tier, s.state.Slug, func(recorded gateRecord, _ bool) (gateRecord, bool) {
 		recorded.Hosts = slices.Sorted(maps.Keys(toSet(recorded.Hosts, hosts)))
+		recorded.RevalidateTokenDigests = withRevalidateTokenDigests(recorded.RevalidateTokenDigests, admitted)
 		return recorded, true
 	}); err != nil {
 		return err
@@ -131,6 +163,11 @@ func (s *stack) forgetGatedHosts(ctx context.Context, hosts []string, log progre
 			return recorded, false
 		}
 		recorded.Hosts = slices.DeleteFunc(slices.Clone(recorded.Hosts), func(host string) bool { return slices.Contains(hosts, host) })
+		forgotten := map[string]Host{}
+		for _, host := range hosts {
+			forgotten[host] = Host{}
+		}
+		recorded.RevalidateTokenDigests = withRevalidateTokenDigests(recorded.RevalidateTokenDigests, forgotten)
 		return recorded, true
 	})
 	if err != nil {

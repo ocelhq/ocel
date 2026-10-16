@@ -33,7 +33,8 @@ func (k RouteKey) identity() string {
 
 type AppRoute struct {
 	RouteKey
-	Upstream string `json:"upstream"`
+	Upstream              string `json:"upstream"`
+	RevalidateTokenDigest string `json:"revalidateTokenDigest,omitempty"`
 }
 
 type HostClaim live.Claimed

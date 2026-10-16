@@ -12,15 +12,16 @@ import (
 
 var cacheOverrides = []string{"CDN-Cache-Control", "Cloudflare-CDN-Cache-Control", "Surrogate-Control"}
 
-func answerGate(w http.ResponseWriter, r *http.Request, held *gate.Gate, named func(http.Header), now time.Time) (func(http.Header), bool) {
+func answerGate(w http.ResponseWriter, r *http.Request, held *gate.Gate, revalidateTokenDigest string, named func(http.Header), now time.Time) (func(http.Header), bool) {
 	if held == nil {
 		return func(http.Header) {}, true
 	}
 	request := gate.Request{
-		Method: r.Method,
-		Host:   hostOf(r.Host),
-		Target: r.URL.RequestURI(),
-		Header: gate.Header(r.Header),
+		Method:                r.Method,
+		Host:                  hostOf(r.Host),
+		Target:                r.URL.RequestURI(),
+		Header:                gate.Header(r.Header),
+		RevalidateTokenDigest: revalidateTokenDigest,
 	}
 	verdict := held.Check(request, now)
 	if answer := verdict.Response; answer != nil {

@@ -28,6 +28,7 @@ const (
 	LoginPath             = "/.ocel/login"
 	HeaderBypass          = "x-ocel-bypass"
 	HeaderSetBypassCookie = "x-ocel-set-bypass-cookie"
+	HeaderRevalidate      = "x-prerender-revalidate"
 	SessionLifetime       = 7 * 24 * time.Hour
 	CacheControl          = "private, no-store"
 	RobotsTag             = "noindex"
@@ -66,10 +67,11 @@ func (g Gate) MarshalJSON() ([]byte, error) {
 }
 
 type Request struct {
-	Method string
-	Host   string
-	Target string
-	Header Header
+	Method                string
+	Host                  string
+	Target                string
+	Header                Header
+	RevalidateTokenDigest string
 }
 
 type Response struct {
@@ -86,6 +88,19 @@ type Verdict struct {
 
 func HashPassword(key, password string) string {
 	return sign(key, passwordPurpose, password)
+}
+
+func HashRevalidateToken(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(digest[:])
+}
+
+func isRevalidation(req Request) bool {
+	tokens := req.Header.Values(HeaderRevalidate)
+	if req.Method != methodHead || req.RevalidateTokenDigest == "" || len(tokens) != 1 || tokens[0] == "" {
+		return false
+	}
+	return hmac.Equal([]byte(HashRevalidateToken(tokens[0])), []byte(req.RevalidateTokenDigest))
 }
 
 func isLogin(method, target string) bool {
@@ -107,7 +122,7 @@ func (g Gate) Check(req Request, now time.Time) Verdict {
 		return g.redirect(sanitizeNext(req.Target), req.Host, now)
 	}
 
-	if !hasBasic && !hasBypass && !hasCookie && !g.allowsOptions(req.Method, path) {
+	if !hasBasic && !hasBypass && !hasCookie && !isRevalidation(req) && !g.allowsOptions(req.Method, path) {
 		return answerLoginPage(sanitizeNext(req.Target), false)
 	}
 

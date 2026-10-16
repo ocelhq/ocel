@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import rawVectors from "../../../../pkg/edge/edgeconformance/gate.json" with { type: "json" };
 import gateEncodings from "../fixtures/gate.json" with { type: "json" };
-import { checkGate, decodeMountedGate, type Gate, hashPassword, parseGate } from "../src/gate.mjs";
+import {
+  checkGate,
+  decodeMountedGate,
+  type Gate,
+  hashPassword,
+  hashRevalidateToken,
+  parseGate,
+} from "../src/gate.mjs";
 
 interface Expectation {
   forward?: boolean;
@@ -23,6 +30,7 @@ interface Case {
     method: string;
     host: string;
     target: string;
+    revalidateTokenDigest?: string;
     headers: Record<string, string | string[]>;
   };
   expect: Expectation;
@@ -51,6 +59,7 @@ describe("the gate answers every conformance vector", () => {
           host: example.request.host,
           target: example.request.target,
           headers: encodeWireHeaders(example.request.headers),
+          revalidateTokenDigest: example.request.revalidateTokenDigest,
         },
         vectors.nowSeconds,
       );
@@ -88,6 +97,12 @@ describe("the gate answers every conformance vector", () => {
 it("hashes a password to the value the vectors store", async () => {
   expect(await hashPassword("test-preview-key", "JBSWY3DPEHPK3PXP2345")).toBe(
     "f18e0cd484c475051052b9fed4f125e1db487c694fc74b1128b40bb4af41e5a3",
+  );
+});
+
+it("hashes a revalidate token to the digest the vectors store", async () => {
+  expect(await hashRevalidateToken("b1946ac92492d2347c6235b4d2611184")).toBe(
+    "8f0a88218e0b3a8c717eb9d90e7e0f2e12bddeb3121a11d9cdbae1737c08a384",
   );
 });
 

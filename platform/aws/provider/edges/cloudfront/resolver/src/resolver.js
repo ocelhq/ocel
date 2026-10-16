@@ -66,14 +66,14 @@ function variantPath(pathname, headers) {
   return base + '.rsc';
 }
 
+function sha256Hex(text) {
+  // biome-ignore lint/style/useNodejsImportProtocol: CloudFront Functions names its built-in module crypto
+  return require('crypto').createHash('sha256').update(String(text)).digest('hex');
+}
+
 function draftSuffix(cookies) {
   if (!cookies || cookies[DRAFT_COOKIE] === undefined) return '';
-  // biome-ignore lint/style/useNodejsImportProtocol: CloudFront Functions names its built-in module crypto
-  var digest = require('crypto')
-    .createHash('sha256')
-    .update(String(cookies[DRAFT_COOKIE].value))
-    .digest('hex');
-  return '.draft-' + digest.slice(0, 16);
+  return '.draft-' + sha256Hex(cookies[DRAFT_COOKIE].value).slice(0, 16);
 }
 
 function cacheKey(release, pathname, headers, cookies) {
@@ -85,9 +85,8 @@ function cacheKey(release, pathname, headers, cookies) {
 }
 
 function assetOriginPath(prefix) {
-  var path = prefix === undefined || prefix === null ? '' : String(prefix);
-  while (path.length > 0 && path.charAt(0) === '/') path = path.slice(1);
-  while (path.length > 0 && path.charAt(path.length - 1) === '/') path = path.slice(0, -1);
+  var path =
+    prefix === undefined || prefix === null ? '' : String(prefix).replace(/^\/+|\/+$/g, '');
   return path === '' ? '' : '/' + path;
 }
 

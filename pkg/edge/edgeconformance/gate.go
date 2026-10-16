@@ -24,10 +24,11 @@ type gateCase struct {
 	Name    string          `json:"name"`
 	Gate    json.RawMessage `json:"gate"`
 	Request struct {
-		Method  string                  `json:"method"`
-		Host    string                  `json:"host"`
-		Target  string                  `json:"target"`
-		Headers map[string]headerValues `json:"headers"`
+		Method                string                  `json:"method"`
+		Host                  string                  `json:"host"`
+		Target                string                  `json:"target"`
+		RevalidateTokenDigest string                  `json:"revalidateTokenDigest"`
+		Headers               map[string]headerValues `json:"headers"`
 	} `json:"request"`
 	Expect struct {
 		Forward              bool              `json:"forward"`
@@ -89,10 +90,11 @@ func RunGateWith(t *testing.T, check GateCheck) {
 				}
 			}
 			verdict := check(t, held, gate.Request{
-				Method: example.Request.Method,
-				Host:   example.Request.Host,
-				Target: example.Request.Target,
-				Header: header,
+				Method:                example.Request.Method,
+				Host:                  example.Request.Host,
+				Target:                example.Request.Target,
+				Header:                header,
+				RevalidateTokenDigest: example.Request.RevalidateTokenDigest,
 			}, now)
 
 			if example.Expect.Forward {

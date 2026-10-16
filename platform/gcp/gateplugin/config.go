@@ -11,19 +11,21 @@ import (
 )
 
 const (
-	configFormat = "ocel-gate 1"
-	hostLine     = "h"
-	gateLine     = "g"
-	emptyField   = "-"
-	hexDigits    = "0123456789ABCDEF"
+	configFormat   = "ocel-gate 1"
+	hostLine       = "h"
+	gateLine       = "g"
+	revalidateLine = "r"
+	emptyField     = "-"
+	hexDigits      = "0123456789ABCDEF"
 )
 
 type Config struct {
-	hosts map[string]string
-	gates map[string]gate.Gate
+	hosts                  map[string]string
+	gates                  map[string]gate.Gate
+	revalidateTokenDigests map[string]string
 }
 
-func EncodeConfig(hosts map[string]string, gates map[string]gate.Gate) string {
+func EncodeConfig(hosts map[string]string, gates map[string]gate.Gate, revalidateTokenDigests map[string]string) string {
 	var text strings.Builder
 	text.WriteString(configFormat + "\n")
 	for _, slug := range slices.Sorted(maps.Keys(gates)) {
@@ -36,6 +38,11 @@ func EncodeConfig(hosts map[string]string, gates map[string]gate.Gate) string {
 	for _, host := range slices.Sorted(maps.Keys(hosts)) {
 		text.WriteString(strings.Join([]string{hostLine, escapeField(strings.ToLower(host)), escapeField(hosts[host])}, " ") + "\n")
 	}
+	for _, host := range slices.Sorted(maps.Keys(hosts)) {
+		if digest := revalidateTokenDigests[host]; digest != "" {
+			text.WriteString(strings.Join([]string{revalidateLine, escapeField(strings.ToLower(host)), escapeField(digest)}, " ") + "\n")
+		}
+	}
 	return text.String()
 }
 
@@ -44,7 +51,7 @@ func ParseConfig(text string) (Config, error) {
 	if lines[0] != configFormat {
 		return Config{}, errors.New("the plugin config does not start with " + configFormat)
 	}
-	config := Config{hosts: map[string]string{}, gates: map[string]gate.Gate{}}
+	config := Config{hosts: map[string]string{}, gates: map[string]gate.Gate{}, revalidateTokenDigests: map[string]string{}}
 	for i, line := range lines[1:] {
 		if line == "" {
 			continue
@@ -68,6 +75,16 @@ func ParseConfig(text string) (Config, error) {
 				return Config{}, refuseLine(number, err)
 			}
 			config.hosts[host] = slug
+		case fields[0] == revalidateLine && len(fields) == 3:
+			host, err := unescapeField(fields[1], "host")
+			if err != nil {
+				return Config{}, refuseLine(number, err)
+			}
+			digest, err := unescapeField(fields[2], "revalidate token digest")
+			if err != nil {
+				return Config{}, refuseLine(number, err)
+			}
+			config.revalidateTokenDigests[host] = digest
 		default:
 			return Config{}, refuseLine(number, errors.New("it is no gate and no host"))
 		}
@@ -75,6 +92,11 @@ func ParseConfig(text string) (Config, error) {
 	for host, slug := range config.hosts {
 		if _, gated := config.gates[slug]; !gated {
 			return Config{}, errors.New("the plugin config routes " + host + " to " + slug + ", which has no gate")
+		}
+	}
+	for host := range config.revalidateTokenDigests {
+		if _, routed := config.hosts[host]; !routed {
+			return Config{}, errors.New("the plugin config names a revalidate token digest for " + host + ", which it routes to no gate")
 		}
 	}
 	return config, nil
@@ -95,6 +117,16 @@ func (c Config) FindProject(slug string) (gate.Gate, []string, bool) {
 		}
 	}
 	return held, hosts, gated
+}
+
+func (c Config) FindRevalidateTokenDigests(slug string) map[string]string {
+	digests := map[string]string{}
+	for host, digest := range c.revalidateTokenDigests {
+		if c.hosts[host] == slug {
+			digests[host] = digest
+		}
+	}
+	return digests
 }
 
 func (c Config) FindGate(host string) (gate.Gate, bool) {

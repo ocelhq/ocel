@@ -2103,6 +2103,146 @@
           "x-robots-tag": "noindex"
         }
       }
+    },
+    {
+      "name": "a HEAD carrying the revalidate token of the release the host serves forwards with the token kept",
+      "request": {
+        "method": "HEAD",
+        "host": "app-abc.preview.example.com",
+        "target": "/blog/first",
+        "revalidateTokenDigest": "8f0a88218e0b3a8c717eb9d90e7e0f2e12bddeb3121a11d9cdbae1737c08a384",
+        "headers": {
+          "x-prerender-revalidate": "b1946ac92492d2347c6235b4d2611184",
+          "cookie": "a=1"
+        }
+      },
+      "expect": {
+        "forward": true,
+        "forwardHeaders": {
+          "x-prerender-revalidate": "b1946ac92492d2347c6235b4d2611184",
+          "cookie": "a=1"
+        },
+        "forwardHeadersAbsent": [],
+        "responseHeaders": {
+          "x-robots-tag": "noindex"
+        }
+      }
+    },
+    {
+      "name": "a revalidating HEAD forwards with the gate's own credentials removed",
+      "request": {
+        "method": "HEAD",
+        "host": "app-abc.preview.example.com",
+        "target": "/blog/first",
+        "revalidateTokenDigest": "8f0a88218e0b3a8c717eb9d90e7e0f2e12bddeb3121a11d9cdbae1737c08a384",
+        "headers": {
+          "x-prerender-revalidate": "b1946ac92492d2347c6235b4d2611184",
+          "x-ocel-bypass": "not-a-bypass-secret",
+          "x-ocel-set-bypass-cookie": "true",
+          "cookie": "__Host-ocel-session=1700003600.0000000000000000000000000000000000000000000000000000000000000000; b=2"
+        }
+      },
+      "expect": {
+        "forward": true,
+        "forwardHeaders": {
+          "x-prerender-revalidate": "b1946ac92492d2347c6235b4d2611184",
+          "cookie": "b=2"
+        },
+        "forwardHeadersAbsent": ["x-ocel-bypass", "x-ocel-set-bypass-cookie"],
+        "responseHeaders": {
+          "x-robots-tag": "noindex"
+        }
+      }
+    },
+    {
+      "name": "a GET carrying the revalidate token of the release the host serves is refused",
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/blog/first",
+        "revalidateTokenDigest": "8f0a88218e0b3a8c717eb9d90e7e0f2e12bddeb3121a11d9cdbae1737c08a384",
+        "headers": {
+          "x-prerender-revalidate": "b1946ac92492d2347c6235b4d2611184"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": ["data-next=\"/blog/first\""],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a HEAD carrying the revalidate token of another build is refused",
+      "request": {
+        "method": "HEAD",
+        "host": "app-abc.preview.example.com",
+        "target": "/blog/first",
+        "revalidateTokenDigest": "8f0a88218e0b3a8c717eb9d90e7e0f2e12bddeb3121a11d9cdbae1737c08a384",
+        "headers": {
+          "x-prerender-revalidate": "a-token-from-another-build-00000"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a HEAD carrying a revalidate token is refused when the release the host serves has none",
+      "request": {
+        "method": "HEAD",
+        "host": "app-abc.preview.example.com",
+        "target": "/blog/first",
+        "headers": {
+          "x-prerender-revalidate": "b1946ac92492d2347c6235b4d2611184"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
+    },
+    {
+      "name": "a HEAD repeating the revalidate token is refused",
+      "request": {
+        "method": "HEAD",
+        "host": "app-abc.preview.example.com",
+        "target": "/blog/first",
+        "revalidateTokenDigest": "8f0a88218e0b3a8c717eb9d90e7e0f2e12bddeb3121a11d9cdbae1737c08a384",
+        "headers": {
+          "x-prerender-revalidate": [
+            "b1946ac92492d2347c6235b4d2611184",
+            "b1946ac92492d2347c6235b4d2611184"
+          ]
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex"
+        },
+        "bodyContains": [],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location"]
+      }
     }
   ]
 }

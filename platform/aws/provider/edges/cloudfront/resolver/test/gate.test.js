@@ -186,7 +186,9 @@ afterEach(() => {
 describe.each(RESOLVERS)("the %s resolver", (_name, program) => {
   describe("answers the gate's conformance vectors", () => {
     for (const example of vectors.cases) {
-      const tier = { host: example.request.host, route: routeOf("production") };
+      const digest = example.request.revalidateTokenDigest;
+      const route = { ...routeOf("production"), ...(digest && { revalidateTokenDigest: digest }) };
+      const tier = { host: example.request.host, route };
 
       it(example.name, async () => {
         const gate = { ...vectors.gate, ...example.gate };

@@ -29,7 +29,7 @@ func CheckGateOverHTTP(t *testing.T, held gate.Gate, req gate.Request, now time.
 		}
 	}
 	answered := httptest.NewRecorder()
-	keepPrivate, passed := answerGate(answered, r, &held, func(http.Header) {}, now)
+	keepPrivate, passed := answerGate(answered, r, &held, req.RevalidateTokenDigest, func(http.Header) {}, now)
 	if !passed {
 		return gate.Verdict{Response: &gate.Response{
 			Status: answered.Code,

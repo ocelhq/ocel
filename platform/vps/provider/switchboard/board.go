@@ -228,7 +228,7 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer hangUp()
-	keepGatedPrivate, passed := answerGate(w, r, forward.Gate, named, time.Now())
+	keepGatedPrivate, passed := answerGate(w, r, forward.Gate, forward.RevalidateTokenDigest, named, time.Now())
 	if !passed {
 		return
 	}

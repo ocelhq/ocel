@@ -68,6 +68,7 @@ func (c Config) Check(req gate.Request, now time.Time) gate.Verdict {
 	if !gated {
 		return gate.Verdict{Forward: req.Header}
 	}
+	req.RevalidateTokenDigest = c.revalidateTokenDigests[normalizeHost(req.Host)]
 	return held.Check(req, now)
 }
 

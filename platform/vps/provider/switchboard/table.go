@@ -50,15 +50,17 @@ type visitorHeaders struct {
 }
 
 type answer struct {
-	upstream string
-	store    bool
-	gate     *gate.Gate
+	upstream              string
+	store                 bool
+	gate                  *gate.Gate
+	revalidateTokenDigest string
 }
 
 type Forward struct {
-	Upstream string
-	Strip    string
-	Gate     *gate.Gate
+	Upstream              string
+	Strip                 string
+	Gate                  *gate.Gate
+	RevalidateTokenDigest string
 }
 
 type claim struct {
@@ -79,10 +81,11 @@ type shield struct {
 }
 
 type route struct {
-	Owner    string `json:"owner"`
-	Pointer  string `json:"pointer"`
-	App      string `json:"app"`
-	Upstream string `json:"upstream"`
+	Owner                 string `json:"owner"`
+	Pointer               string `json:"pointer"`
+	App                   string `json:"app"`
+	Upstream              string `json:"upstream"`
+	RevalidateTokenDigest string `json:"revalidateTokenDigest,omitempty"`
 }
 
 func (r route) identity() string {
@@ -255,6 +258,7 @@ func Read(document []byte) (*Table, error) {
 			answered := answer{upstream: appRoute.Upstream, store: !appRoute.app()}
 			if appRoute.app() {
 				answered.gate = gates[appRoute.Owner]
+				answered.revalidateTokenDigest = appRoute.RevalidateTokenDigest
 			}
 			table.answering[hostname] = answered
 		}
@@ -366,7 +370,7 @@ func (t *Table) Forward(host, requested string) (Forward, bool) {
 	}) {
 		return Forward{}, false
 	}
-	return Forward{Upstream: answered.upstream, Gate: answered.gate}, true
+	return Forward{Upstream: answered.upstream, Gate: answered.gate, RevalidateTokenDigest: answered.revalidateTokenDigest}, true
 }
 
 func (t *Table) Admits(hostname string) bool { return t.admitted[strings.ToLower(hostname)] }

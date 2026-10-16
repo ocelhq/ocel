@@ -26,6 +26,15 @@ func TestAPasswordHashesToTheValueTheVectorsStore(t *testing.T) {
 	}
 }
 
+func TestARevalidateTokenHashesToTheDigestTheVectorsStore(t *testing.T) {
+	t.Parallel()
+
+	const want = "8f0a88218e0b3a8c717eb9d90e7e0f2e12bddeb3121a11d9cdbae1737c08a384"
+	if got := gate.HashRevalidateToken("b1946ac92492d2347c6235b4d2611184"); got != want {
+		t.Errorf("HashRevalidateToken = %q, want %q", got, want)
+	}
+}
+
 func TestAGateEncodesAsTheJSONTheEdgeContractFixtureRecords(t *testing.T) {
 	t.Parallel()
 
