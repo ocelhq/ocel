@@ -136,30 +136,6 @@ func idsOf(items []item) []string {
 	return ids
 }
 
-func TestEachTierBootstrapsItsEnvSourceSyncAfterItsKeyAndItsAccount(t *testing.T) {
-	t.Parallel()
-	names := Names{namespace: "ocel", project: "acme-prod"}
-	for _, tier := range bothTiers {
-		for _, emulated := range []bool{false, true} {
-			ids := idsOf(bootstrapItems(names, tier, emulated))
-			at := func(target item) int { return slices.Index(ids, target.ID()) }
-			key := at(item{Kind: KindKey, Name: string(tier)})
-			account := at(item{Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier)})
-			service := at(item{Kind: KindService, Name: names.EnvSourceSync(tier)})
-			schedule := at(item{Kind: KindSchedule, Name: names.EnvSourceSync(tier)})
-			if account < 0 || service < 0 || schedule < 0 {
-				t.Fatalf("a %s bootstrap (emulated=%t) provisions %v, want the sync account, service and schedule among them", tier, emulated, ids)
-			}
-			if service < key || service < account || schedule < service {
-				t.Errorf("a %s bootstrap (emulated=%t) provisions %v, want the key and the account before the service, and the service before the schedule that calls it", tier, emulated, ids)
-			}
-			if repository := at(item{Kind: KindRepository, Name: names.Repository(tier)}); !emulated && service < repository {
-				t.Errorf("a %s bootstrap provisions %v, want the repository the service's image is pushed to before the service", tier, ids)
-			}
-		}
-	}
-}
-
 func TestTheSyncServiceRunsTheEmbeddedSyncAsItsOwnAccountAndOnlyThatAccountMayCallIt(t *testing.T) {
 	t.Parallel()
 	server := newSyncServer()
@@ -271,8 +247,8 @@ func TestASyncServiceRunOrReachedOtherwiseIsMendedInPlace(t *testing.T) {
 			if err != nil || !found.present || found.mends != reasonServiceChanged {
 				t.Fatalf("servicePresence() = %+v, %v, want it present and mended", found, err)
 			}
-			if err := b.mend(ctx, survey{Tier: tier, Names: b.clients.Names}, item{Kind: KindService, Name: name}); err != nil {
-				t.Fatalf("mend() = %v", err)
+			if err := b.makeService(ctx, tier, name); err != nil {
+				t.Fatalf("makeService() = %v", err)
 			}
 			if !server.wasPatched(path) {
 				t.Error("the mend did not update the service in place")
@@ -297,8 +273,8 @@ func TestAMendedSyncServiceServesTheRevisionTheMendMade(t *testing.T) {
 	}
 	server.change(func() { server.services[path].Template.Containers[0].Image += "0" })
 
-	if err := b.mend(ctx, survey{Tier: tier, Names: b.clients.Names}, item{Kind: KindService, Name: name}); err != nil {
-		t.Fatalf("mend() = %v", err)
+	if err := b.makeService(ctx, tier, name); err != nil {
+		t.Fatalf("makeService() = %v", err)
 	}
 
 	var served, latest string
@@ -634,7 +610,7 @@ func TestAScheduleCallingAsAnotherAccountIsMended(t *testing.T) {
 	}
 }
 
-func TestRemovingATierStopsTheScheduleAndTheServiceBeforeTheKeyAndTheAccounts(t *testing.T) {
+func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheBucketWithTheStamp(t *testing.T) {
 	t.Parallel()
 	names := Names{namespace: "ocel", project: "acme-prod"}
 	tier := environment.TierProduction
@@ -648,17 +624,6 @@ func TestRemovingATierStopsTheScheduleAndTheServiceBeforeTheKeyAndTheAccounts(t 
 		order = append(order, taking.item.ID())
 	}
 	at := func(target item) int { return slices.Index(order, target.ID()) }
-	schedule := at(item{Kind: KindSchedule, Name: names.EnvSourceSync(tier)})
-	service := at(item{Kind: KindService, Name: names.EnvSourceSync(tier)})
-	for _, later := range []item{
-		{Kind: KindKey, Name: string(tier)},
-		{Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier)},
-		{Kind: KindRepository, Name: names.Repository(tier)},
-	} {
-		if schedule < 0 || service < 0 || schedule > service || service > at(later) {
-			t.Errorf("removal runs %v, want the schedule, then the service, then %s", order, later.ID())
-		}
-	}
 	if at(item{Kind: KindBucket, Name: names.StateBucket(tier)}) > at(item{Kind: KindBucket, Name: names.Bucket(tier)}) {
 		t.Errorf("removal runs %v, want the state bucket before the bucket with the stamp", order)
 	}

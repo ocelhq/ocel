@@ -36,6 +36,7 @@ type Provider struct {
 	warmRoots   *x509.CertPool
 
 	projectDir string
+	writtenBy  provider.WrittenBy
 
 	records keyvalue.Store
 
@@ -61,6 +62,7 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 		return nil, err
 	}
 	p.projectDir = settings.ProjectDir
+	p.writtenBy = settings.WrittenBy
 	return p, nil
 }
 
@@ -127,6 +129,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		OpenDirectImages:      p.OpenDirectImages,
 		CheckBucket:           s3store.Check,
 		ProveIdentity:         ports.ProveIdentity,
+		EnsureEnvSourceSync:   p.EnsureEnvSourceSync,
 		ForwardPorts:          p.ForwardPorts,
 		ServeBindingProxy:     p.ServeBindingProxy,
 		Cost:                  &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},

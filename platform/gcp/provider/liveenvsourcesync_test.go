@@ -55,7 +55,7 @@ func posted(t *testing.T, uri string) int {
 	}
 }
 
-func TestLiveATierRunsItsEnvSourceSyncAndRemovingTheTierTakesItAway(t *testing.T) {
+func TestLiveTheFirstScheduledEnvSourceRunsItsTiersSyncAndRemovingTheTierTakesItAway(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
 	tier := environment.TierPreview
@@ -68,9 +68,15 @@ func TestLiveATierRunsItsEnvSourceSyncAndRemovingTheTierTakesItAway(t *testing.T
 	}
 	location := "projects/" + liveProject() + "/locations/" + liveRegion()
 	servicePath := location + "/services/" + names.EnvSourceSync(tier)
+	if _, err := cloudRun(t).Projects.Locations.Services.Get(servicePath).Context(ctx).Do(); err == nil {
+		t.Errorf("%s exists after a bootstrap alone, want it left to the first scheduled env source", servicePath)
+	}
+	if err := p.EnsureEnvSourceSync(ctx, tier, "shop"); err != nil {
+		t.Fatalf("EnsureEnvSourceSync() = %v", err)
+	}
 	service, err := cloudRun(t).Projects.Locations.Services.Get(servicePath).Context(ctx).Do()
 	if err != nil {
-		t.Fatalf("Get(%s) after a bootstrap = %v, want the service the sync answers on", servicePath, err)
+		t.Fatalf("Get(%s) after the first scheduled env source = %v, want the service the sync answers on", servicePath, err)
 	}
 	if service.Ingress != "INGRESS_TRAFFIC_INTERNAL_ONLY" || service.InvokerIamDisabled {
 		t.Errorf("the sync takes %s with invokerIamDisabled %t, want internal traffic from a caller with run.invoker", service.Ingress, service.InvokerIamDisabled)
@@ -93,7 +99,7 @@ func TestLiveATierRunsItsEnvSourceSyncAndRemovingTheTierTakesItAway(t *testing.T
 	schedule := location + "/jobs/" + names.EnvSourceSync(tier)
 	created, err := schedules(t).Projects.Locations.Jobs.Get(schedule).Context(ctx).Do()
 	if err != nil {
-		t.Fatalf("Get(%s) after a bootstrap = %v, want the schedule that calls the sync", schedule, err)
+		t.Fatalf("Get(%s) after the first scheduled env source = %v, want the schedule that calls the sync", schedule, err)
 	}
 	if created.Schedule != "* * * * *" || created.HttpTarget == nil || created.HttpTarget.Uri != service.Uri+"/" || created.HttpTarget.HttpMethod != http.MethodPost {
 		t.Errorf("the sync is called %+v on %q, want POST %s/ every minute", created.HttpTarget, created.Schedule, service.Uri)
@@ -108,38 +114,6 @@ func TestLiveATierRunsItsEnvSourceSyncAndRemovingTheTierTakesItAway(t *testing.T
 	if _, err := accounts(t).Projects.ServiceAccounts.Get(account).Context(ctx).Do(); err != nil {
 		t.Errorf("Get(%s) after a bootstrap = %v, want the account", account, err)
 	}
-	described, err := bootstrap.Describe(ctx, tier)
-	if err != nil || len(described.Stacks) != 1 || !described.Stacks[0].DigestCurrent {
-		t.Errorf("Describe() = %+v, %v, want the stack current with the sync in place", described, err)
-	}
-	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier})
-	if err != nil {
-		t.Fatalf("Plan() after a bootstrap = %v", err)
-	}
-	rows := rowsOf(t, plan)
-	for _, id := range []string{"run:service/" + names.EnvSourceSync(tier), "cloudscheduler:job/" + names.EnvSourceSync(tier), "iam:serviceaccount/" + names.EnvSourceSyncAccount(tier)} {
-		if row := rows[id]; row.Action != provider.ActionKeep {
-			t.Errorf("Plan() after a bootstrap shows %s as %q (%q), want it kept: what the bootstrap created reads as current", id, row.Action, row.Reason)
-		}
-	}
-
-	if _, err := schedules(t).Projects.Locations.Jobs.Pause(schedule, &cloudscheduler.PauseJobRequest{}).Context(ctx).Do(); err != nil {
-		t.Fatalf("Pause(%s) = %v", schedule, err)
-	}
-	plan, err = bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier})
-	if err != nil {
-		t.Fatalf("Plan() over a paused schedule = %v", err)
-	}
-	if row := rowsOf(t, plan)["cloudscheduler:job/"+names.EnvSourceSync(tier)]; row.Action != provider.ActionUpdate {
-		t.Errorf("Plan() shows a paused schedule as %q (%q), want it mended: it never calls the sync", row.Action, row.Reason)
-	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
-		t.Fatalf("Apply(%s) over a paused schedule = %v", tier, err)
-	}
-	if resumed, err := schedules(t).Projects.Locations.Jobs.Get(schedule).Context(ctx).Do(); err != nil || resumed.State != "ENABLED" {
-		t.Errorf("Get(%s) after the mend = %+v, %v, want it enabled", schedule, resumed, err)
-	}
-
 	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", tier, err)
 	}

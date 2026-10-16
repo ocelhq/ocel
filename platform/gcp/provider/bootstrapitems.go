@@ -108,14 +108,6 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier),
 			Note: "the identity the env source sync runs as and Cloud Scheduler calls it as: it reads and writes this project's records, seals and opens under the tier key, and calls the sync service alone",
 		},
-		{
-			Kind: KindService, Name: names.EnvSourceSync(tier),
-			Note: "the env source sync: each call syncs every scheduled env source this tier registers once, and it bills only while a sync runs",
-		},
-		{
-			Kind: KindSchedule, Name: names.EnvSourceSync(tier),
-			Note: "calls the env source sync once a minute, with no retry because the next minute is the retry",
-		},
 	}
 	return slices.DeleteFunc(items, func(each item) bool { return !provisioned(each.Kind, emulated) })
 }

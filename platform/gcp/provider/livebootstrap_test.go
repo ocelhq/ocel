@@ -179,8 +179,6 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 		"kms:key/" + string(tier):                                       provider.StackGroupKind,
 		"secretmanager:secret/" + liveNames(t).PassphraseSecret(tier):   provider.ParameterGroupKind,
 		"iam:serviceaccount/" + liveNames(t).EnvSourceSyncAccount(tier): provider.StackGroupKind,
-		"run:service/" + liveNames(t).EnvSourceSync(tier):               provider.StackGroupKind,
-		"cloudscheduler:job/" + liveNames(t).EnvSourceSync(tier):        provider.StackGroupKind,
 	}
 	if !emulated() {
 		rows["artifactregistry:repository/"+liveNames(t).Repository(tier)] = provider.StackGroupKind
