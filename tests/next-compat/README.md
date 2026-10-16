@@ -60,15 +60,16 @@ prepared:
    `e2e-nc-direct` and `e2e-nc-alb`. From a scratch directory whose
    `ocel.config.ts` declares `gcpProvider({ project, region })`:
    ```bash
-   OCEL_NAMESPACE=e2e-nc-direct ocel bootstrap production --features tasks
+   OCEL_NAMESPACE=e2e-nc-direct ocel bootstrap production
    ```
    Add `edge: alb()` and `dns: cloudflareDns()` to `gcpProvider`'s options, then:
    ```bash
-   OCEL_NAMESPACE=e2e-nc-alb ocel bootstrap preview --features tasks,alb-edge
+   OCEL_NAMESPACE=e2e-nc-alb ocel bootstrap preview
    OCEL_NAMESPACE=e2e-nc-alb ocel domain use '*.<gcp wildcard>' --preview
    ```
-   with a wildcard of its own, not `E2E_PREVIEW_DOMAIN`'s: that one belongs to
-   the AWS entry worker.
+   Binding the wildcard adds the load balancer it is entered on. Use a wildcard
+   of its own, not `E2E_PREVIEW_DOMAIN`'s: that one belongs to the AWS entry
+   worker.
 3. gcp-cloudflare is offered in the dispatch and refused by the harness until
    Cloudflare runs code in front of a gcp origin. It will run in `e2e-nc-cf`.
 
