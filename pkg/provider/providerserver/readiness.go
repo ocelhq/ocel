@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -123,9 +124,10 @@ type featureChange struct {
 	requested []string
 	removing  []string
 	ordered   []string
+	wants     map[string][]string
 }
 
-func (r Readiness) resolveFeatureChange(status BootstrapStatus, req ApplyRequest) (featureChange, error) {
+func (r Readiness) resolveFeatureChange(ctx context.Context, status BootstrapStatus, req ApplyRequest) (featureChange, error) {
 	catalogue := r.Bootstrap.Catalogue()
 	asked, err := bootstrapplan.FeaturesWithDependencies(catalogue, req.Features)
 	if err != nil {
@@ -141,7 +143,17 @@ func (r Readiness) resolveFeatureChange(status BootstrapStatus, req ApplyRequest
 	if err := r.refuseRemovingEdgeFeature(catalogue, req.Remove, removing); err != nil {
 		return featureChange{}, err
 	}
-	requested, err := bootstrapplan.FeaturesWithDependencies(catalogue, r.withEdgeFeature(catalogue, req.Features))
+	wants, err := r.wantedParts(ctx, status.Tier, catalogue, removing)
+	if err != nil {
+		return featureChange{}, err
+	}
+	named := r.withEdgeFeature(catalogue, req.Features)
+	for _, part := range slices.Sorted(maps.Keys(wants)) {
+		if !slices.Contains(named, part) {
+			named = append(slices.Clone(named), part)
+		}
+	}
+	requested, err := bootstrapplan.FeaturesWithDependencies(catalogue, named)
 	if err != nil {
 		return featureChange{}, err
 	}
@@ -149,7 +161,25 @@ func (r Readiness) resolveFeatureChange(status BootstrapStatus, req ApplyRequest
 	if err != nil {
 		return featureChange{}, err
 	}
-	return featureChange{status: status, requested: requested, removing: removing, ordered: ordered}, nil
+	return featureChange{status: status, requested: requested, removing: removing, ordered: ordered, wants: wants}, nil
+}
+
+func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, catalogue []provider.Feature, removing []string) (map[string][]string, error) {
+	recorded, err := stackrecords.ListBootstrapWants(ctx, r.KeyValues, tier)
+	if storeAbsent(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	offered := bootstrapplan.InCatalogueOrder(catalogue, slices.Collect(maps.Keys(recorded)))
+	wants := map[string][]string{}
+	for _, part := range offered {
+		if !slices.Contains(removing, part) {
+			wants[part] = recorded[part]
+		}
+	}
+	return wants, nil
 }
 
 func (r Readiness) withEdgeFeature(catalogue []provider.Feature, requested []string) []string {
@@ -195,7 +225,7 @@ func (r Readiness) Plan(ctx context.Context, tier environment.Tier, req ApplyReq
 }
 
 func (r Readiness) PlanFrom(ctx context.Context, status BootstrapStatus, req ApplyRequest) (provider.Plan, error) {
-	change, err := r.resolveFeatureChange(status, req)
+	change, err := r.resolveFeatureChange(ctx, status, req)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -239,7 +269,7 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 	if err != nil {
 		return err
 	}
-	change, err := r.resolveFeatureChange(status, req)
+	change, err := r.resolveFeatureChange(ctx, status, req)
 	if err != nil {
 		return err
 	}
@@ -258,7 +288,7 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 	if req.RepairOnDeploy != nil {
 		repairOnDeploy = *req.RepairOnDeploy
 	}
-	claimed, err := r.claimParts(ctx, change.status, change.requested)
+	claimed, err := r.claimParts(ctx, change.status, change.requested, change.wants)
 	if err != nil {
 		return errors.Join(err, r.releaseParts(ctx, tier, claimed))
 	}
@@ -268,6 +298,9 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 		return errors.Join(err, r.releaseParts(ctx, tier, claimed))
 	}
 	if err := r.recordParts(ctx, tier, change.requested, change.removing); err != nil {
+		return err
+	}
+	if err := r.forgetMetWants(ctx, tier, change.wants); err != nil {
 		return err
 	}
 	return r.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{RepairOnDeploy: repairOnDeploy})
