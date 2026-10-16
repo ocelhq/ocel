@@ -354,7 +354,7 @@ export interface AwsProviderOptions {
   logs?: AwsLogOptions;
   /** The AWS region to deploy into. */
   region?: string;
-  /** ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features variables-key makes a key ocel owns. */
+  /** ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap makes a key ocel owns, once a project here first seals a value. */
   variablesKey?: string;
   /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
   edge?: AwsEdgeDescriptor;

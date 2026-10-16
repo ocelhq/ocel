@@ -2,6 +2,7 @@ package variablestoreserver_test
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
 
@@ -11,8 +12,10 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
+	providercontract "github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
@@ -34,7 +37,11 @@ func (s *addedSyncs) ensure(_ context.Context, tier environment.Tier, project st
 
 func servedAddingSync(t *testing.T, syncs *addedSyncs) variablestorev1connect.VariableStoreServiceClient {
 	t.Helper()
-	provider := fake.NewProvider(fake.Options{})
+	return servedAddingSyncTo(t, fake.NewProvider(fake.Options{}), syncs)
+}
+
+func servedAddingSyncTo(t *testing.T, provider *fake.Provider, syncs *addedSyncs) variablestorev1connect.VariableStoreServiceClient {
+	t.Helper()
 	return serve(t, &variablestoreserver.Service{CallerNamesEnvSource: true, Source: variablestoreserver.FixedBackend{
 		KeyValues:           provider.KeyValues(),
 		Cipher:              provider.Cipher(),
@@ -91,5 +98,26 @@ func TestAScheduledEnvSourceWhoseSyncCannotBeAddedIsNeverRegistered(t *testing.T
 	described, err := variables.DescribeEnvSource(context.Background(), &variablestorev1.DescribeEnvSourceRequest{Tier: production, Slug: slug})
 	if err != nil || described.GetStatus().GetEnvSource() != "builtin" {
 		t.Errorf("DescribeEnvSource() = %+v, %v, want the tier still builtin", described, err)
+	}
+}
+
+func TestAScheduledEnvSourceRefusedForAWantedPartRecordsTheWantForTheRegisteringProject(t *testing.T) {
+	syncs := &addedSyncs{refuse: providercontract.WantedPartError{
+		Part: providercontract.FeatureVariablesKey,
+		Err:  refusal.Refuse(refusal.CodeNotReady, "the production bootstrap has no key to seal a value under"),
+	}}
+	vendor := fake.NewProvider(fake.Options{})
+	variables := servedAddingSyncTo(t, vendor, syncs)
+	_, server := newInfisical(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, variables, production)
+
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, never)); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("SyncEnvSource() = %v, want the refusal passed on", err)
+	}
+
+	wants, err := stackrecords.ListBootstrapWants(context.Background(), vendor.KeyValues(), environment.TierProduction)
+	if err != nil || !slices.Equal(wants[providercontract.FeatureVariablesKey], []string{slug}) {
+		t.Errorf("ListBootstrapWants() = %v, %v, want %s's want of the variables key, for `ocel bootstrap production` to add", wants, err, slug)
 	}
 }

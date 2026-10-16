@@ -1,10 +1,12 @@
 package live
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
@@ -46,8 +48,12 @@ func TestRender(t *testing.T) {
 		if err == nil {
 			t.Fatal("Render = nil, want a manifest with live values and no key refused")
 		}
-		if want := "ocel bootstrap production --features variables-key"; !strings.Contains(err.Error(), want) {
-			t.Errorf("error = %v, want it to name `%s`", err, want)
+		if want := "Run `ocel bootstrap production`"; !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "--features") {
+			t.Errorf("error = %v, want it to name %s alone", err, want)
+		}
+		var wanted provider.WantedPartError
+		if !errors.As(err, &wanted) || wanted.Part != provider.FeatureVariablesKey {
+			t.Errorf("error = %#v, want it to say it is for want of %s, for the deploy to record", err, provider.FeatureVariablesKey)
 		}
 	})
 
