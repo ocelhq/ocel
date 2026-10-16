@@ -272,6 +272,7 @@ func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, prog
 	if b.applied[req.Tier] == nil {
 		b.applied[req.Tier] = []string{}
 	}
+	b.parts[req.Tier] = slices.DeleteFunc(b.parts[req.Tier], func(part provider.BootstrapPart) bool { return slices.Contains(req.Remove, part.Name) })
 	b.stale = map[string]bool{}
 	b.unreadable = map[string]string{}
 	if progress != nil {

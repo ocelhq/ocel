@@ -119,7 +119,7 @@ func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 	}
 }
 
-func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
+func TestPlanRefusesARemovalAProjectUsesAndShowsItWhenForced(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -129,19 +129,24 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 	recordProject(t, p, "shop", fake.PartImages)
 
 	req := providerserver.ApplyRequest{Remove: []string{fake.PartImages}}
+	if _, err := readiness.Plan(ctx, environment.TierProduction, req); err == nil || !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("Plan() error = %v, want the removal refused before any plan is drawn, naming --force", err)
+	}
+	if err := readiness.Apply(ctx, provider.Plan{}, environment.TierProduction, req, nil); err == nil {
+		t.Error("Apply() took a removal shop uses without --force")
+	}
+
+	req.Force = true
 	plan, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
-		t.Fatalf("Plan() error = %v, want a plan that shows the removal rather than refusing it", err)
+		t.Fatalf("Plan() error = %v, want a forced removal planned", err)
 	}
 	removed := groupFor(t, plan, fake.PartImages)
 	if removed.Action != provider.ActionDelete {
 		t.Errorf("the images group is %q, want it deleted where the run named it for removal", removed.Action)
 	}
 	if !strings.Contains(removed.Reason, "shop") {
-		t.Errorf("the images group reads %q, want it to name the project deployed against it", removed.Reason)
-	}
-	if err := readiness.Apply(ctx, plan, environment.TierProduction, req, nil); err == nil {
-		t.Error("Apply() took the removal the plan warned about without --force")
+		t.Errorf("the images group reads %q, want it to name the project that uses it", removed.Reason)
 	}
 }
 

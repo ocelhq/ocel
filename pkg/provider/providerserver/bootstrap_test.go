@@ -888,3 +888,90 @@ func TestBootstrapDescribesAndCreatesATierWhoseStoreTheBootstrapCreates(t *testi
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 }
+
+const deployAddedPart = "optimizer"
+
+func withADeployAddedPart(t *testing.T, vendor *fake.Provider, users ...string) {
+	t.Helper()
+	bootstrap := vendor.FakeBootstrap()
+	bootstrap.Offers(append(bootstrap.Parts(), provider.Part{Name: deployAddedPart, Summary: "a part the first deploy that uses it adds"})...)
+	if users == nil {
+		users = []string{}
+	}
+	bootstrap.AddPart(environment.TierProduction, provider.BootstrapPart{
+		Name:      deployAddedPart,
+		Resources: []provider.PartResource{{Kind: "Fake::Function", ID: "optimizer"}},
+		UsedBy:    users,
+	})
+}
+
+func TestARemovalOfAPartADeployAddedReachesTheVendor(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	withADeployAddedPart(t, vendor)
+
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{
+		Tier:   environmentv1.Tier_TIER_PRODUCTION,
+		Remove: []string{deployAddedPart},
+	})
+
+	applied := vendor.FakeBootstrap().Applied()
+	if removing := applied[len(applied)-1]; !slices.Equal(removing.Remove, []string{deployAddedPart}) {
+		t.Errorf("Apply() removed %v, want %s, a part a deploy added and no project uses", removing.Remove, deployAddedPart)
+	}
+	if _, listed := describedParts(t, client)[deployAddedPart]; listed {
+		t.Errorf("%s is still described after its removal", deployAddedPart)
+	}
+}
+
+func TestARemovalOfAPartAProjectUsesIsRefusedBeforeAnyPlanUnlessForced(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	withADeployAddedPart(t, vendor, "shop")
+	before := len(vendor.FakeBootstrap().Applied())
+
+	events, err := streamedEvents(t, client, &contractv1.BootstrapRequest{
+		Tier:   environmentv1.Tier_TIER_PRODUCTION,
+		Remove: []string{deployAddedPart},
+		Dry:    true,
+	})
+	said := connectMessage(err)
+	for _, event := range events {
+		if event.GetPlan() != nil {
+			t.Fatal("a dry removal of a part shop uses drew a plan, want it refused before the plan is shown")
+		}
+		said += event.GetResult().GetError()
+	}
+	for _, want := range []string{deployAddedPart, "shop", "--force"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the refusal reads %q, want it to contain %q", said, want)
+		}
+	}
+	if got := len(vendor.FakeBootstrap().Applied()); got != before {
+		t.Errorf("the refused removal applied the bootstrap %d times, want none", got-before)
+	}
+
+	plan := streamedPlan(t, client, &contractv1.BootstrapRequest{
+		Tier:   environmentv1.Tier_TIER_PRODUCTION,
+		Remove: []string{deployAddedPart},
+		Force:  true,
+		Dry:    true,
+	})
+	at := slices.IndexFunc(plan.GetGroups(), func(group *planv1.ChangeGroup) bool { return group.GetPart() == deployAddedPart })
+	if at < 0 {
+		t.Fatalf("a forced removal planned %v, want a group taking %s down", plan.GetGroups(), deployAddedPart)
+	}
+	if group := plan.GetGroups()[at]; group.GetAction() != planv1.Change_ACTION_DELETE || !strings.Contains(group.GetReason(), "shop") {
+		t.Errorf("%s is planned %s %q, want it deleted with shop named as the project it breaks", deployAddedPart, group.GetAction(), group.GetReason())
+	}
+
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Remove: []string{deployAddedPart}, Force: true})
+	applied := vendor.FakeBootstrap().Applied()
+	if last := applied[len(applied)-1]; !last.Force || !slices.Contains(last.Remove, deployAddedPart) {
+		t.Errorf("a forced removal reached the vendor as %+v, want the force passed on, so a vendor check that only restates who uses the part stands aside", last)
+	}
+}

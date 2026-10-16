@@ -102,16 +102,28 @@ type partChange struct {
 	status    BootstrapStatus
 	requested []string
 	removing  []string
+	users     map[string][]string
 	wants     map[string][]string
 }
 
 func (r Readiness) resolvePartChange(ctx context.Context, status BootstrapStatus, req ApplyRequest) (partChange, error) {
 	offered := r.Bootstrap.Parts()
-	removing, err := bootstrapplan.PartsToRemove(offered, status.Parts, req.Remove)
+	installed, described, err := r.installedParts(ctx, status, req.Remove)
+	if err != nil {
+		return partChange{}, err
+	}
+	removing, err := bootstrapplan.PartsToRemove(offered, installed, req.Remove)
 	if err != nil {
 		return partChange{}, err
 	}
 	if err := r.refuseRemovingEdgePart(offered, removing); err != nil {
+		return partChange{}, err
+	}
+	users, err := r.partUsers(ctx, status.Tier, described, removing)
+	if err != nil {
+		return partChange{}, err
+	}
+	if err := refuseRemovingUsedParts(removing, users, req.Force); err != nil {
 		return partChange{}, err
 	}
 	wants, err := r.wantedParts(ctx, status.Tier, offered, removing)
@@ -128,7 +140,67 @@ func (r Readiness) resolvePartChange(ctx context.Context, status BootstrapStatus
 		}
 	}
 	requested = bootstrapplan.InOfferedOrder(offered, requested)
-	return partChange{status: status, requested: requested, removing: removing, wants: wants}, nil
+	return partChange{status: status, requested: requested, removing: removing, users: users, wants: wants}, nil
+}
+
+func (r Readiness) installedParts(ctx context.Context, status BootstrapStatus, named []string) ([]string, []provider.BootstrapPart, error) {
+	if len(named) == 0 {
+		return status.Parts, nil, nil
+	}
+	described, err := r.Bootstrap.DescribeParts(ctx, status.description())
+	if err != nil {
+		return nil, nil, err
+	}
+	installed := slices.Clone(status.Parts)
+	for _, part := range described {
+		if !slices.Contains(installed, part.Name) {
+			installed = append(installed, part.Name)
+		}
+	}
+	return installed, described, nil
+}
+
+func (r Readiness) partUsers(ctx context.Context, tier environment.Tier, described []provider.BootstrapPart, removing []string) (map[string][]string, error) {
+	if len(removing) == 0 {
+		return nil, nil
+	}
+	recorded, err := r.RecordedParts(ctx, tier)
+	if err != nil {
+		return nil, err
+	}
+	users := map[string][]string{}
+	for _, name := range removing {
+		part := provider.BootstrapPart{Name: name}
+		if at := slices.IndexFunc(described, func(each provider.BootstrapPart) bool { return each.Name == name }); at >= 0 {
+			part = described[at]
+		}
+		if using := usersOf(part, recorded, true); len(using) > 0 {
+			users[name] = using
+		}
+	}
+	return users, nil
+}
+
+func refuseRemovingUsedParts(removing []string, users map[string][]string, force bool) error {
+	if force || len(users) == 0 {
+		return nil
+	}
+	var used, projects []string
+	for _, name := range removing {
+		if len(users[name]) == 0 {
+			continue
+		}
+		used = append(used, name)
+		for _, project := range users[name] {
+			if !slices.Contains(projects, project) {
+				projects = append(projects, project)
+			}
+		}
+	}
+	slices.Sort(projects)
+	return refusal.Refuse(refusal.CodeNotReady,
+		"removing %s would break %d project(s) here that use it: %s — re-run with --force to remove it anyway, or leave it in place",
+		strings.Join(used, ", "), len(projects), strings.Join(projects, ", "))
 }
 
 func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, offered []provider.Part, removing []string) (map[string][]string, error) {
@@ -163,6 +235,7 @@ func (c partChange) request(tier environment.Tier, req ApplyRequest, writer prov
 		Tier:               tier,
 		Parts:              c.requested,
 		Remove:             c.removing,
+		Force:              req.Force,
 		RefuseReplacements: !req.AcceptReplacements,
 		WrittenBy:          writer,
 		VendorState:        c.status.VendorState,
@@ -182,39 +255,21 @@ func (r Readiness) PlanFrom(ctx context.Context, status BootstrapStatus, req App
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	tier := status.Tier
-	plan, err := r.Bootstrap.Plan(ctx, change.request(tier, req, r.WrittenBy))
+	plan, err := r.Bootstrap.Plan(ctx, change.request(status.Tier, req, r.WrittenBy))
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return plan, r.noteDependents(ctx, tier, plan.Groups)
+	noteUsers(plan.Groups, change.users)
+	return plan, nil
 }
 
-func (r Readiness) noteDependents(ctx context.Context, tier environment.Tier, groups []provider.ChangeGroup) error {
-	var dropped []string
-	for _, group := range groups {
-		if group.Action == provider.ActionDelete && group.Part != "" {
-			dropped = append(dropped, group.Part)
-		}
-	}
-	if len(dropped) == 0 {
-		return nil
-	}
-	recorded, err := r.RecordedParts(ctx, tier)
-	if err != nil {
-		return err
-	}
+func noteUsers(groups []provider.ChangeGroup, users map[string][]string) {
 	for i, group := range groups {
-		if group.Action != provider.ActionDelete || group.Part == "" {
+		if group.Action != provider.ActionDelete || len(users[group.Part]) == 0 {
 			continue
 		}
-		dependents := ProjectsDependingOn(recorded, []string{group.Part})
-		if len(dependents) == 0 {
-			continue
-		}
-		groups[i].Reason = strings.Join(dependents, ", ") + " were deployed against it"
+		groups[i].Reason = strings.Join(users[group.Part], ", ") + " use it"
 	}
-	return nil
 }
 
 func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environment.Tier, req ApplyRequest, progress progress.Log) error {
@@ -224,9 +279,6 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 	}
 	change, err := r.resolvePartChange(ctx, status, req)
 	if err != nil {
-		return err
-	}
-	if err := r.admitRemovals(ctx, tier, change.removing, req.Force); err != nil {
 		return err
 	}
 	drawn, err := r.Bootstrap.Plan(ctx, change.request(tier, req, r.WrittenBy))
@@ -285,23 +337,6 @@ func (r Readiness) RefuseIfInUse(ctx context.Context, tier environment.Tier) err
 		return err
 	}
 	return users.Refuse(tier)
-}
-
-func (r Readiness) admitRemovals(ctx context.Context, tier environment.Tier, removing []string, force bool) error {
-	if len(removing) == 0 || force {
-		return nil
-	}
-	recorded, err := r.RecordedParts(ctx, tier)
-	if err != nil {
-		return err
-	}
-	dependents := ProjectsDependingOn(recorded, removing)
-	if len(dependents) == 0 {
-		return nil
-	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"removing %s would break %d project(s) already deployed here: %s — re-run with --force to remove it anyway, or leave it installed",
-		strings.Join(removing, ", "), len(dependents), strings.Join(dependents, ", "))
 }
 
 func (r Readiness) RecordedParts(ctx context.Context, tier environment.Tier) (map[string][]string, error) {

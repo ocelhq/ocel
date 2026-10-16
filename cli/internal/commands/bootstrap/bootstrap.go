@@ -174,24 +174,25 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		parts := planned.GetParts()
 		going := installedOf(parts, named)
 		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-		if absent := without(named, going); len(absent) > 0 {
-			planning.Say(fmt.Sprintf("%s is not in the %s bootstrap, so there is nothing to remove.", strings.Join(absent, ", "), readiness.TierName(tier)))
-		}
-		if len(named) > 0 && len(going) == 0 {
-			return nil
-		}
-
 		req := &contractv1.BootstrapRequest{
 			Tier:   tier,
-			Remove: going,
+			Remove: named,
 			Force:  opts.Force,
 			Edge:   cfg.EdgeSelection(),
+		}
+		if len(named) > 0 && len(going) == 0 {
+			if err := refuseUnofferedParts(ctx, provider, req); err != nil {
+				return err
+			}
+			sayNothingToRemove(planning, tier, named)
+			return nil
 		}
 
 		drawn, err := drawPlan(ctx, planning, provider, req)
 		if err != nil {
 			return err
 		}
+		sayNothingToRemove(planning, tier, without(named, going))
 		switch {
 		case drawn.rendered():
 		case len(going) > 0:
@@ -237,7 +238,6 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		}
 		planning.End(nil)
 
-		req.Force = req.Force || len(going) > 0
 		if err := applyPlan(ctx, provider, req, drawn); err != nil {
 			return err
 		}
@@ -270,6 +270,19 @@ func drawPlan(ctx context.Context, planning *run.Span, provider *providerprocess
 		notes = append(notes, &planv1.Note{Text: unchanged(req.GetTier())})
 	}
 	return drawnPlan{shown: planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", tier), plan, notes...)}, nil
+}
+
+func refuseUnofferedParts(ctx context.Context, provider *providerprocess.Provider, req *contractv1.BootstrapRequest) error {
+	dry := proto.CloneOf(req)
+	dry.Dry = true
+	_, err := providerprocess.Plan(ctx, provider, "Bootstrap", dry, contractv1connect.ProviderServiceClient.Bootstrap)
+	return err
+}
+
+func sayNothingToRemove(planning *run.Span, tier environmentv1.Tier, absent []string) {
+	if len(absent) > 0 {
+		planning.Say(fmt.Sprintf("%s is not in the %s bootstrap, so there is nothing to remove.", strings.Join(absent, ", "), readiness.TierName(tier)))
+	}
 }
 
 func confirmPlan(ctx context.Context, policy consent.Policy, planning *run.Span, provider *providerprocess.Provider, tier environmentv1.Tier, drawn drawnPlan) (bool, error) {
