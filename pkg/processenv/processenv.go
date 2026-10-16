@@ -31,6 +31,10 @@ const NextPublicURLEnvVar = "NEXT_PUBLIC_OCEL_URL"
 
 const SvelteKitPublicURLEnvVar = "PUBLIC_OCEL_URL"
 
+// TODO: this binds to Vercel's internals: Next's metadataBase fallback for social images
+// reads only Vercel's variables (next/dist/lib/metadata/resolvers/resolve-url.js). Drop it
+// for whatever Next reads once it offers a platform-neutral fallback, and recheck that
+// fallback whenever the pinned Next version moves.
 const NextMetadataBaseHostEnvVar = "VERCEL_PROJECT_PRODUCTION_URL"
 
 const PublicKeysEnvVar = "OCEL_PUBLIC_KEYS"
