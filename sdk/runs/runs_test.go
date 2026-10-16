@@ -113,19 +113,17 @@ func TestReplayReturnsTheNewRunsHandle(t *testing.T) {
 	}
 }
 
-func TestRescheduleMovesTheRunDueByADelayFromNow(t *testing.T) {
+func TestRescheduleMakesTheRunDueAtTheTimeGiven(t *testing.T) {
 	runtime := sdktest.ServeRuntime(t, nil)
 	runtime.Run = storedRun()
 
-	before := time.Now()
-	if _, err := runs.Reschedule(t.Context(), "run-1", runs.Delay(10*time.Minute)); err != nil {
+	due := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	if _, err := runs.Reschedule(t.Context(), "run-1", due); err != nil {
 		t.Fatalf("Reschedule() error = %v", err)
 	}
 
-	req := sdktest.Only[*taskv1.RescheduleRunRequest](t, runtime)
-	due := req.GetDueAt().AsTime()
-	if req.GetId() != "run-1" || due.Before(before.Add(10*time.Minute)) || due.After(time.Now().Add(10*time.Minute)) {
-		t.Errorf("request = %v, want the run due ten minutes from now", req)
+	if req := sdktest.Only[*taskv1.RescheduleRunRequest](t, runtime); req.GetId() != "run-1" || !req.GetDueAt().AsTime().Equal(due) {
+		t.Errorf("request = %v, want run-1 due at %v", req, due)
 	}
 }
 
@@ -137,7 +135,7 @@ func TestRunOperationsRefuseDuringDiscovery(t *testing.T) {
 		"List":       sdktest.ErrorOf(runs.List(t.Context())),
 		"Cancel":     sdktest.ErrorOf(runs.Cancel(t.Context(), "run-1")),
 		"Replay":     sdktest.ErrorOf(runs.Replay(t.Context(), "run-1")),
-		"Reschedule": sdktest.ErrorOf(runs.Reschedule(t.Context(), "run-1", runs.Delay(time.Minute))),
+		"Reschedule": sdktest.ErrorOf(runs.Reschedule(t.Context(), "run-1", time.Now().Add(time.Minute))),
 	} {
 		var unprovisioned *ocel.UnprovisionedError
 		if !errors.As(err, &unprovisioned) || unprovisioned.Resource != "runs" || unprovisioned.Access != access {
@@ -153,5 +151,15 @@ func TestListRefusesAStatusItDoesNotKnow(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), `"RUNNING"`) || len(runtime.Requests()) != 0 {
 		t.Errorf("List() error = %v after %d requests, want an error naming the status and no request", err, len(runtime.Requests()))
+	}
+}
+
+func TestFromContextReadsTheRunNewContextCarries(t *testing.T) {
+	want := runs.Context{Kind: runs.KindTask, Name: "resize", ID: "run-1", Attempt: runs.Attempt{Number: 2, Of: 3}}
+
+	got, ok := runs.FromContext(runs.NewContext(t.Context(), want))
+
+	if !ok || got != want {
+		t.Errorf("FromContext() = %+v, %v, want %+v", got, ok, want)
 	}
 }

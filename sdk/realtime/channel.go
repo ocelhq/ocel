@@ -19,7 +19,7 @@ import (
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 )
 
-const maxRealtimeEventBytes = 240 << 10
+const maxEventBytes = 240 << 10
 
 // A SubscribeContext is what a subscribe rule decides from.
 type SubscribeContext[A, P any] struct {
@@ -292,7 +292,7 @@ func (c *declaredChannel) encodeEnvelope(wire string, body any) ([]byte, denialC
 	if err != nil {
 		return nil, denialInvalidBody
 	}
-	if len(envelope) > maxRealtimeEventBytes {
+	if len(envelope) > maxEventBytes {
 		return nil, denialBodyTooLarge
 	}
 	return envelope, ""

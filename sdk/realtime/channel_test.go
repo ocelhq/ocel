@@ -21,7 +21,7 @@ type blobEvent struct {
 }
 
 func TestPublishSendsTheEnvelopeToTheRuntimeOnItsWireChannel(t *testing.T) {
-	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime, _ := serveFakeRuntime(t, "app")
 	resource := realtime.New("app")
 	orders := realtime.NewChannel[orderEvent, orderParams](resource, "orders/:orderId", realtime.ChannelSubscribePublic())
 
@@ -41,7 +41,7 @@ func TestPublishSendsTheEnvelopeToTheRuntimeOnItsWireChannel(t *testing.T) {
 }
 
 func TestPublishRefusesParamsOrAnEventItCannotSend(t *testing.T) {
-	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime, _ := serveFakeRuntime(t, "app")
 	resource := realtime.New("app")
 	orders := realtime.NewChannel[orderEvent, orderParams](resource, "orders/:orderId", realtime.ChannelSubscribePublic())
 	blobs := realtime.NewChannel[blobEvent, struct{}](resource, "blobs", realtime.ChannelSubscribePublic())
@@ -61,7 +61,7 @@ func TestPublishRefusesParamsOrAnEventItCannotSend(t *testing.T) {
 }
 
 func TestPublishRefusesAnEventOutsideTheChannelSchema(t *testing.T) {
-	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime, _ := serveFakeRuntime(t, "app")
 	notes := realtime.NewChannel[chatMessage, struct{}](realtime.New("app"), "notes", realtime.ChannelSubscribePublic(),
 		realtime.Schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":3}}}`))
 
@@ -78,7 +78,7 @@ func TestPublishRefusesAnEventOutsideTheChannelSchema(t *testing.T) {
 }
 
 func TestPublishFailsWhenTheRuntimeRefusesIt(t *testing.T) {
-	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime, _ := serveFakeRuntime(t, "app")
 	runtime.refuse(connect.NewError(connect.CodeUnavailable, errors.New("the gateway refused it with status 401")))
 	orders := realtime.NewChannel[orderEvent, orderParams](realtime.New("app"), "orders/:orderId", realtime.ChannelSubscribePublic())
 
@@ -88,7 +88,7 @@ func TestPublishFailsWhenTheRuntimeRefusesIt(t *testing.T) {
 }
 
 func TestPublishWithoutTheRuntimeSaysHowToReachIt(t *testing.T) {
-	deliverRealtime(t, "app", readRealtimeFixture(t))
+	deliver(t, "app", readFixture(t))
 	t.Setenv("OCEL_RUNTIME_ADDRESS", "")
 	orders := realtime.NewChannel[orderEvent, orderParams](realtime.New("app"), "orders/:orderId", realtime.ChannelSubscribePublic())
 

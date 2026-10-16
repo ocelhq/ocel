@@ -12,7 +12,7 @@ import (
 	"ocel.dev/kv"
 )
 
-type kvFixture struct {
+type fixtureFile struct {
 	Keys []struct {
 		Pattern string            `json:"pattern"`
 		Params  map[string]string `json:"params"`
@@ -40,13 +40,13 @@ type fixtureSession struct {
 	Note   string   `json:"note"`
 }
 
-func readKVFixture(t *testing.T) kvFixture {
+func readFixture(t *testing.T) fixtureFile {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", "proto", "app", "resources", "v1", "fixtures", "kv.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fixture kvFixture
+	var fixture fixtureFile
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
@@ -55,10 +55,10 @@ func readKVFixture(t *testing.T) kvFixture {
 
 func TestTheKVFixtureKeysAreBuiltAsEverySDKBuildsThem(t *testing.T) {
 	ctx := context.Background()
-	for i, tc := range readKVFixture(t).Keys {
+	for i, tc := range readFixture(t).Keys {
 		t.Run(tc.Pattern, func(t *testing.T) {
 			name := fmt.Sprintf("keys%d", i)
-			server := serveKV(t, name)
+			server := serveStore(t, name)
 			cache := kv.New(name)
 			var set func(value string) error
 			var get func() (string, error)

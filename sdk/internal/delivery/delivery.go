@@ -9,7 +9,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"ocel.dev/internal/binding"
 	topicv1 "ocel.dev/internal/proto/app/topic/v1"
-	"ocel.dev/internal/runcontext"
 	"ocel.dev/runs"
 )
 
@@ -47,7 +46,7 @@ func deliver(ctx context.Context, name string, body io.Reader) answer {
 	if err := served.start(ctx); err != nil {
 		return newRetryAnswer(err)
 	}
-	ctx = context.WithValue(ctx, runcontext.Key{}, newRunContext(r, envelope))
+	ctx = runs.NewContext(ctx, newRunContext(r, envelope))
 	return r.Serve(ctx, envelope, served.wrapAttempt)
 }
 

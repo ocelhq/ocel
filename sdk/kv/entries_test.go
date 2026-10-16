@@ -15,7 +15,7 @@ import (
 )
 
 func TestATextEntryReadsWhatWasWrittenAndMissesAsErrMiss(t *testing.T) {
-	server := serveKV(t, "text")
+	server := serveStore(t, "text")
 	cache := kv.New("text")
 	greeting := kv.NewText[struct{}](cache, "greeting", "greeting")
 	notes := kv.NewText[string](cache, "notes", "notes/:id")
@@ -48,7 +48,7 @@ func TestATextEntryReadsWhatWasWrittenAndMissesAsErrMiss(t *testing.T) {
 }
 
 func TestACounterCountsAtomicallyFromZero(t *testing.T) {
-	serveKV(t, "counter")
+	serveStore(t, "counter")
 	cache := kv.New("counter")
 	hits := kv.NewCounter[string](cache, "hits", "hits/:page")
 	ctx := context.Background()
@@ -77,7 +77,7 @@ func TestACounterCountsAtomicallyFromZero(t *testing.T) {
 }
 
 func TestACounterHoldingNoIntegerIsInvalid(t *testing.T) {
-	server := serveKV(t, "badcounter")
+	server := serveStore(t, "badcounter")
 	cache := kv.New("badcounter")
 	hits := kv.NewCounter[struct{}](cache, "hits", "hits")
 	_ = server.Set("hits", "lots")
@@ -89,7 +89,7 @@ func TestACounterHoldingNoIntegerIsInvalid(t *testing.T) {
 }
 
 func TestAJSONEntryDecodesIntoItsTypeOnReadAndRefusesWhatDoesNot(t *testing.T) {
-	server := serveKV(t, "json")
+	server := serveStore(t, "json")
 	cache := kv.New("json")
 	sessions := kv.NewJSON[string, session](cache, "session", "session/:id")
 	lenient := kv.NewJSON[string, session](cache, "lenient", "lenient/:id", kv.MissOnInvalid())
@@ -136,7 +136,7 @@ func TestMissOnInvalidIsRefusedForAnythingButJSON(t *testing.T) {
 }
 
 func TestAListKeepsItsValuesInOrder(t *testing.T) {
-	serveKV(t, "list")
+	serveStore(t, "list")
 	cache := kv.New("list")
 	recent := kv.NewList[string](cache, "recent", "recent/:user")
 	ctx := context.Background()
@@ -177,7 +177,7 @@ func TestAListKeepsItsValuesInOrder(t *testing.T) {
 }
 
 func TestASetKeepsDistinctMembers(t *testing.T) {
-	serveKV(t, "set")
+	serveStore(t, "set")
 	cache := kv.New("set")
 	online := kv.NewSet[string](cache, "online", "online/:room")
 	ctx := context.Background()
@@ -228,7 +228,7 @@ func TestAnEmptyListOrSetWriteIsRefusedBeforeReachingTheStore(t *testing.T) {
 }
 
 func TestADeclaredTTLIsAppliedWithEveryWrite(t *testing.T) {
-	server := serveKV(t, "ttl")
+	server := serveStore(t, "ttl")
 	cache := kv.New("ttl")
 	ctx := context.Background()
 	sessions := kv.NewText[string](cache, "session", "session/:id", kv.TTL(30*24*time.Hour))
@@ -254,7 +254,7 @@ func TestADeclaredTTLIsAppliedWithEveryWrite(t *testing.T) {
 }
 
 func TestAWriteOverridesKeepsOrClearsTheTTL(t *testing.T) {
-	server := serveKV(t, "ttlwrite")
+	server := serveStore(t, "ttlwrite")
 	cache := kv.New("ttlwrite")
 	ctx := context.Background()
 	sessions := kv.NewText[string](cache, "session", "session/:id", kv.TTL(30*24*time.Hour))
@@ -267,11 +267,11 @@ func TestAWriteOverridesKeepsOrClearsTheTTL(t *testing.T) {
 	}
 	_ = sessions.Set(ctx, "o", "y", kv.KeepTTL())
 	if got := server.TTL("session/o"); got != 5*time.Second {
-		t.Errorf("TTL after KVKeepTTL = %v, want 5s kept", got)
+		t.Errorf("TTL after KeepTTL = %v, want 5s kept", got)
 	}
 	_ = sessions.Set(ctx, "o", "z", kv.NoTTL())
 	if got := server.TTL("session/o"); got != 0 {
-		t.Errorf("TTL after KVNoTTL = %v, want none", got)
+		t.Errorf("TTL after NoTTL = %v, want none", got)
 	}
 
 	_, _ = hits.Increment(ctx, "o", 1, kv.TTL(time.Minute))
@@ -293,8 +293,8 @@ func TestAWriteOverridesKeepsOrClearsTheTTL(t *testing.T) {
 }
 
 func TestTheKVFixtureValuesAreStoredAsEverySDKStoresThem(t *testing.T) {
-	fixture := readKVFixture(t)
-	server := serveKV(t, "values")
+	fixture := readFixture(t)
+	server := serveStore(t, "values")
 	cache := kv.New("values")
 	ctx := context.Background()
 	none := struct{}{}

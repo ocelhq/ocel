@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"time"
-
-	"ocel.dev/internal/runcontext"
 )
 
 // ErrAbort fails a run or message without retrying it. Return it, or an error
@@ -67,6 +65,14 @@ type Message struct {
 // handler, or a hook or middleware around them is handed. It reports false
 // for any other context.
 func FromContext(ctx context.Context) (Context, bool) {
-	run, ok := ctx.Value(runcontext.Key{}).(Context)
+	run, ok := ctx.Value(contextKey{}).(Context)
 	return run, ok
 }
+
+// NewContext returns a copy of ctx carrying run, which [FromContext] reads. It
+// is useful for testing a task's run or a consumer's handler.
+func NewContext(ctx context.Context, run Context) context.Context {
+	return context.WithValue(ctx, contextKey{}, run)
+}
+
+type contextKey struct{}

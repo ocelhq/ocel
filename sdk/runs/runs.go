@@ -138,25 +138,6 @@ func Cursor(cursor string) ListOption {
 	return listOption(func(s *listSettings) { s.cursor = cursor })
 }
 
-// A Due is when [Reschedule] makes a run due: [Delay] or [DelayUntil].
-type Due interface {
-	dueAt(now time.Time) time.Time
-}
-
-type delay time.Duration
-
-func (d delay) dueAt(now time.Time) time.Time { return now.Add(time.Duration(d)) }
-
-// Delay makes a run due this long from now, up to 30 days.
-func Delay(wait time.Duration) Due { return delay(wait) }
-
-type delayUntil time.Time
-
-func (d delayUntil) dueAt(time.Time) time.Time { return time.Time(d) }
-
-// DelayUntil makes a run due at a time, at most 30 days from now.
-func DelayUntil(due time.Time) Due { return delayUntil(due) }
-
 // Retrieve reads the run with id.
 func Retrieve(ctx context.Context, id string) (*Run, error) {
 	client, err := newClient("Retrieve")
@@ -231,16 +212,16 @@ func Replay(ctx context.Context, id string) (Handle, error) {
 	return Handle{ID: res.GetId()}, nil
 }
 
-// Reschedule moves when the delayed run with id is due, given as [Delay] or
-// [DelayUntil].
-func Reschedule(ctx context.Context, id string, due Due) (*Run, error) {
+// Reschedule makes the delayed run with id due at due, at most 30 days from
+// now.
+func Reschedule(ctx context.Context, id string, due time.Time) (*Run, error) {
 	client, err := newClient("Reschedule")
 	if err != nil {
 		return nil, err
 	}
 	res, err := client.RescheduleRun(ctx, &taskv1.RescheduleRunRequest{
 		Id:    id,
-		DueAt: timestamppb.New(due.dueAt(time.Now())),
+		DueAt: timestamppb.New(due),
 	})
 	if err != nil {
 		return nil, err

@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	maxRealtimeOps          = 50
-	maxRealtimeRequestBytes = 1 << 20
+	maxOps          = 50
+	maxRequestBytes = 1 << 20
 )
 
 type denialCode string
@@ -43,8 +43,8 @@ const (
 )
 
 var (
-	realtimeBatchKeys = []string{"connect", "ops"}
-	realtimeOpKeys    = []string{"op", "pattern", "params", "body"}
+	batchKeys = []string{"connect", "ops"}
+	opKeys    = []string{"op", "pattern", "params", "body"}
 )
 
 // A HandlerOption tunes the handler [Realtime.Handler] serves.
@@ -61,7 +61,7 @@ func AllowedOrigins(origins ...string) HandlerOption {
 	return func(s *handlerSettings) { s.allowedOrigins = append(s.allowedOrigins, origins...) }
 }
 
-type realtimeHandler struct {
+type handler struct {
 	realtime *Realtime
 	settings handlerSettings
 }
@@ -75,11 +75,11 @@ type realtimeHandler struct {
 // its own origin and those in [AllowedOrigins], answers Cache-Control:
 // no-store, and never sets a cookie.
 func (d *Realtime) Handler(opts ...HandlerOption) http.Handler {
-	handler := &realtimeHandler{realtime: d}
+	h := &handler{realtime: d}
 	for _, opt := range opts {
-		opt(&handler.settings)
+		opt(&h.settings)
 	}
-	return handler
+	return h
 }
 
 type realtimeBatch struct {
@@ -94,33 +94,33 @@ type realtimeOp struct {
 	body      json.RawMessage
 }
 
-type realtimeGrant struct {
+type grant struct {
 	Index int    `json:"i"`
 	Wire  string `json:"wire"`
 	Token string `json:"token,omitempty"`
 }
 
-type realtimeDenial struct {
+type denial struct {
 	Index int        `json:"i"`
 	Code  denialCode `json:"code"`
 }
 
 type realtimeAnswer struct {
-	Transport string           `json:"transport"`
-	URL       string           `json:"url"`
-	Host      string           `json:"host,omitempty"`
-	Connect   *mintedToken     `json:"connect,omitempty"`
-	Grants    []realtimeGrant  `json:"grants"`
-	Denied    []realtimeDenial `json:"denied"`
+	Transport string       `json:"transport"`
+	URL       string       `json:"url"`
+	Host      string       `json:"host,omitempty"`
+	Connect   *mintedToken `json:"connect,omitempty"`
+	Grants    []grant      `json:"grants"`
+	Denied    []denial     `json:"denied"`
 }
 
 type realtimeOutcome struct {
-	grant  *realtimeGrant
+	grant  *grant
 	denial denialCode
 	err    error
 }
 
-type realtimeCall struct {
+type call struct {
 	realtime *Realtime
 	request  *http.Request
 	body     []byte
@@ -129,7 +129,7 @@ type realtimeCall struct {
 	subject  string
 }
 
-func writeRealtimeResponse(w http.ResponseWriter, status int, body any) {
+func writeResponse(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Cache-Control", "no-store")
 	if body == nil {
 		w.WriteHeader(status)
@@ -144,8 +144,8 @@ func writeRealtimeResponse(w http.ResponseWriter, status int, body any) {
 	_, _ = w.Write(encoded)
 }
 
-func writeRealtimeError(w http.ResponseWriter, status int, message string) {
-	writeRealtimeResponse(w, status, map[string]string{"error": message})
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeResponse(w, status, map[string]string{"error": message})
 }
 
 func readFirstHeaderValue(r *http.Request, name string) string {
@@ -184,7 +184,7 @@ func resolveSocketURL(socket string, r *http.Request) string {
 	return scheme + "://" + readRequestHost(r) + socket
 }
 
-func (h *realtimeHandler) checkOrigin(r *http.Request) (cors http.Header, allowed bool) {
+func (h *handler) checkOrigin(r *http.Request) (cors http.Header, allowed bool) {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return nil, true
@@ -196,12 +196,12 @@ func (h *realtimeHandler) checkOrigin(r *http.Request) (cors http.Header, allowe
 	return nil, err == nil && parsed.Host != "" && parsed.Host == readRequestHost(r) && parsed.Scheme == readRequestScheme(r)
 }
 
-func (h *realtimeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		cors, allowed := h.checkOrigin(r)
 		if !allowed {
-			writeRealtimeError(w, http.StatusForbidden, "this origin may not call the realtime handler")
+			writeError(w, http.StatusForbidden, "this origin may not call the realtime handler")
 			return
 		}
 		for name, values := range cors {
@@ -221,67 +221,67 @@ func (h *realtimeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Headers", "authorization, content-type")
 		w.Header().Set("Access-Control-Max-Age", "600")
 		w.Header().Add("Vary", "Origin")
-		writeRealtimeResponse(w, http.StatusNoContent, nil)
+		writeResponse(w, http.StatusNoContent, nil)
 	default:
 		h.refuseMethod(w)
 	}
 }
 
-func (h *realtimeHandler) refuseMethod(w http.ResponseWriter) {
+func (h *handler) refuseMethod(w http.ResponseWriter) {
 	w.Header().Set("Allow", "POST")
-	writeRealtimeError(w, http.StatusMethodNotAllowed, "the realtime handler takes POST")
+	writeError(w, http.StatusMethodNotAllowed, "the realtime handler takes POST")
 }
 
-func (h *realtimeHandler) serveBatch(w http.ResponseWriter, r *http.Request) {
+func (h *handler) serveBatch(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if recover() != nil {
-			writeRealtimeError(w, http.StatusInternalServerError, "the realtime handler failed")
+			writeError(w, http.StatusInternalServerError, "the realtime handler failed")
 		}
 	}()
 	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
-		writeRealtimeError(w, http.StatusUnsupportedMediaType, "the realtime handler takes application/json")
+		writeError(w, http.StatusUnsupportedMediaType, "the realtime handler takes application/json")
 		return
 	}
-	tooLargeMessage := "a request is at most " + strconv.Itoa(maxRealtimeRequestBytes) + " bytes"
-	if r.ContentLength > maxRealtimeRequestBytes {
-		writeRealtimeError(w, http.StatusRequestEntityTooLarge, tooLargeMessage)
+	tooLargeMessage := "a request is at most " + strconv.Itoa(maxRequestBytes) + " bytes"
+	if r.ContentLength > maxRequestBytes {
+		writeError(w, http.StatusRequestEntityTooLarge, tooLargeMessage)
 		return
 	}
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRealtimeRequestBytes))
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBytes))
 	if tooLarge := (*http.MaxBytesError)(nil); errors.As(err, &tooLarge) {
-		writeRealtimeError(w, http.StatusRequestEntityTooLarge, tooLargeMessage)
+		writeError(w, http.StatusRequestEntityTooLarge, tooLargeMessage)
 		return
 	}
-	batch, ok := readRealtimeBatch(raw)
+	batch, ok := readBatch(raw)
 	if err != nil || !ok {
-		writeRealtimeError(w, http.StatusBadRequest, "the body is { connect?: boolean, ops: [{ op, pattern, params?, body? }] }")
+		writeError(w, http.StatusBadRequest, "the body is { connect?: boolean, ops: [{ op, pattern, params?, body? }] }")
 		return
 	}
-	if len(batch.ops) > maxRealtimeOps {
-		writeRealtimeError(w, http.StatusBadRequest, "a request holds at most "+strconv.Itoa(maxRealtimeOps)+" ops")
+	if len(batch.ops) > maxOps {
+		writeError(w, http.StatusBadRequest, "a request holds at most "+strconv.Itoa(maxOps)+" ops")
 		return
 	}
 	delivered, err := h.realtime.readBinding("Handler")
 	if err != nil {
-		writeRealtimeError(w, http.StatusInternalServerError, "the realtime resource has no binding this SDK can serve")
+		writeError(w, http.StatusInternalServerError, "the realtime resource has no binding this SDK can serve")
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(raw))
 	auth, err := h.authorizeRequest(r)
 	if err != nil {
-		writeRealtimeError(w, http.StatusInternalServerError, "authorize failed")
+		writeError(w, http.StatusInternalServerError, "authorize failed")
 		return
 	}
-	call := &realtimeCall{realtime: h.realtime, request: r, body: raw, binding: delivered, auth: auth, subject: readRealtimeSubject(auth)}
-	answer, err := call.answerBatch(batch)
+	c := &call{realtime: h.realtime, request: r, body: raw, binding: delivered, auth: auth, subject: readSubject(auth)}
+	answer, err := c.answerBatch(batch)
 	if err != nil {
-		writeRealtimeError(w, http.StatusInternalServerError, "the realtime handler failed")
+		writeError(w, http.StatusInternalServerError, "the realtime handler failed")
 		return
 	}
-	writeRealtimeResponse(w, http.StatusOK, answer)
+	writeResponse(w, http.StatusOK, answer)
 }
 
-func (h *realtimeHandler) authorizeRequest(r *http.Request) (auth any, err error) {
+func (h *handler) authorizeRequest(r *http.Request) (auth any, err error) {
 	authorize := h.realtime.settings.authorize
 	if authorize == nil {
 		return nil, nil
@@ -294,13 +294,13 @@ func (h *realtimeHandler) authorizeRequest(r *http.Request) (auth any, err error
 	return authorize(r)
 }
 
-func readRealtimeBatch(raw []byte) (realtimeBatch, bool) {
+func readBatch(raw []byte) (realtimeBatch, bool) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil || fields == nil {
 		return realtimeBatch{}, false
 	}
 	for key := range fields {
-		if !slices.Contains(realtimeBatchKeys, key) {
+		if !slices.Contains(batchKeys, key) {
 			return realtimeBatch{}, false
 		}
 	}
@@ -329,7 +329,7 @@ func readJSONString(raw json.RawMessage) (string, bool) {
 	return text, ok
 }
 
-func readRealtimeParams(raw json.RawMessage) (map[string]string, bool) {
+func readParams(raw json.RawMessage) (map[string]string, bool) {
 	params := map[string]string{}
 	var decoded any
 	if len(raw) == 0 {
@@ -359,7 +359,7 @@ func (d *Realtime) readOp(raw json.RawMessage) (realtimeOp, denialCode) {
 		return realtimeOp{}, denialInvalidOp
 	}
 	for key := range fields {
-		if !slices.Contains(realtimeOpKeys, key) {
+		if !slices.Contains(opKeys, key) {
 			return realtimeOp{}, denialInvalidOp
 		}
 	}
@@ -380,15 +380,15 @@ func (d *Realtime) readOp(raw json.RawMessage) (realtimeOp, denialCode) {
 	if operation == realtimePublish && channel.settings.publish == nil {
 		return realtimeOp{}, denialNoPublishRule
 	}
-	params, ok := readRealtimeParams(fields["params"])
+	params, ok := readParams(fields["params"])
 	if !ok {
 		return realtimeOp{}, denialInvalidParams
 	}
 	return realtimeOp{operation: operation, channel: channel, params: params, body: body}, ""
 }
 
-func (c *realtimeCall) answerBatch(batch realtimeBatch) (realtimeAnswer, error) {
-	answer := realtimeAnswer{Transport: c.binding.transport.name, URL: resolveSocketURL(c.binding.properties.GetUrl(), c.request), Grants: []realtimeGrant{}, Denied: []realtimeDenial{}}
+func (c *call) answerBatch(batch realtimeBatch) (realtimeAnswer, error) {
+	answer := realtimeAnswer{Transport: c.binding.transport.name, URL: resolveSocketURL(c.binding.properties.GetUrl(), c.request), Grants: []grant{}, Denied: []denial{}}
 	if c.binding.transport.answersHost {
 		answer.Host = c.binding.properties.GetHost()
 	}
@@ -431,7 +431,7 @@ func (c *realtimeCall) answerBatch(batch realtimeBatch) (realtimeAnswer, error) 
 			outcome.grant.Index = i
 			answer.Grants = append(answer.Grants, *outcome.grant)
 		default:
-			answer.Denied = append(answer.Denied, realtimeDenial{Index: i, Code: outcome.denial})
+			answer.Denied = append(answer.Denied, denial{Index: i, Code: outcome.denial})
 		}
 	}
 	return answer, nil
@@ -446,13 +446,13 @@ func runOpCatchingPanic(evaluate func() realtimeOutcome) (outcome realtimeOutcom
 	return evaluate()
 }
 
-func (c *realtimeCall) cloneRequest() *http.Request {
+func (c *call) cloneRequest() *http.Request {
 	clone := c.request.Clone(c.request.Context())
 	clone.Body = io.NopCloser(bytes.NewReader(c.body))
 	return clone
 }
 
-func (c *realtimeCall) subscribe(op realtimeOp) realtimeOutcome {
+func (c *call) subscribe(op realtimeOp) realtimeOutcome {
 	channel := op.channel
 	wire, refused := encodeWireChannel(c.realtime.name, channel.pattern, op.params, channel.settings.wildcard)
 	if refused != "" {
@@ -470,10 +470,10 @@ func (c *realtimeCall) subscribe(op realtimeOp) realtimeOutcome {
 	if err != nil {
 		return realtimeOutcome{err: err}
 	}
-	return realtimeOutcome{grant: &realtimeGrant{Wire: wire, Token: token.Token}}
+	return realtimeOutcome{grant: &grant{Wire: wire, Token: token.Token}}
 }
 
-func (c *realtimeCall) publish(op realtimeOp) realtimeOutcome {
+func (c *call) publish(op realtimeOp) realtimeOutcome {
 	channel := op.channel
 	wire, refused := encodeWireChannel(c.realtime.name, channel.pattern, op.params, false)
 	if refused != "" {
@@ -503,10 +503,10 @@ func (c *realtimeCall) publish(op realtimeOp) realtimeOutcome {
 	if err := c.realtime.publishEvent(c.request.Context(), runtime, wire, envelope); err != nil {
 		return realtimeOutcome{denial: denialPublishFailed}
 	}
-	return realtimeOutcome{grant: &realtimeGrant{Wire: wire}}
+	return realtimeOutcome{grant: &grant{Wire: wire}}
 }
 
-func readRealtimeSubject(auth any) string {
+func readSubject(auth any) string {
 	if auth == nil {
 		return "anonymous"
 	}

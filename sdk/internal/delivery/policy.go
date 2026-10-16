@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 )
 
@@ -21,13 +20,6 @@ func EnsureBatchPolicy(policy **resourcesv1.BatchPolicy) *resourcesv1.BatchPolic
 		*policy = &resourcesv1.BatchPolicy{}
 	}
 	return *policy
-}
-
-func EncodeDueAt(due func(now time.Time) time.Time) *timestamppb.Timestamp {
-	if due == nil {
-		return nil
-	}
-	return timestamppb.New(due(time.Now()))
 }
 
 func newOptionalDuration(duration time.Duration) *durationpb.Duration {

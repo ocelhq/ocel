@@ -28,7 +28,7 @@ import (
 	"ocel.dev/kv"
 )
 
-func serveKV(t *testing.T, name string) *miniredis.Miniredis {
+func serveStore(t *testing.T, name string) *miniredis.Miniredis {
 	t.Helper()
 	server := miniredis.RunT(t)
 	server.RequireUserAuth("app", "s3cret")
@@ -234,7 +234,7 @@ func TestEveryAccessorIsRefusedDuringDiscovery(t *testing.T) {
 }
 
 func TestClientConnectsToTheDeliveredBindingOnceAndSharesIt(t *testing.T) {
-	server := serveKV(t, "conn")
+	server := serveStore(t, "conn")
 	cache := kv.New("conn")
 	ctx := context.Background()
 
@@ -262,7 +262,7 @@ func TestClientConnectsOnceTheBindingArrivesAfterAFailedOpen(t *testing.T) {
 	if _, err := cache.Client(ctx); !errors.As(err, &missing) {
 		t.Fatalf("Client() before the binding err = %v, want a *ocel.MissingBindingError", err)
 	}
-	serveKV(t, "late")
+	serveStore(t, "late")
 
 	client, err := cache.Client(ctx)
 	if err != nil {
@@ -366,7 +366,7 @@ func (a authority) serverCertificate(t *testing.T, ip net.IP) tls.Certificate {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
 }
 
-func serveKVOverTLS(t *testing.T, name string, signer authority, delivered string) {
+func serveStoreOverTLS(t *testing.T, name string, signer authority, delivered string) {
 	t.Helper()
 	server := miniredis.NewMiniRedis()
 	server.RequireUserAuth("app", "s3cret")
@@ -386,7 +386,7 @@ func serveKVOverTLS(t *testing.T, name string, signer authority, delivered strin
 
 func TestClientTrustsTheCertificateAuthorityTheBindingDelivers(t *testing.T) {
 	signer := newAuthority(t)
-	serveKVOverTLS(t, "private", signer, signer.pem)
+	serveStoreOverTLS(t, "private", signer, signer.pem)
 	ctx := context.Background()
 
 	client, err := kv.New("private").Client(ctx)
@@ -399,7 +399,7 @@ func TestClientTrustsTheCertificateAuthorityTheBindingDelivers(t *testing.T) {
 }
 
 func TestClientRefusesAStoreWhoseCertificateTheDeliveredAuthorityDidNotSign(t *testing.T) {
-	serveKVOverTLS(t, "forged", newAuthority(t), newAuthority(t).pem)
+	serveStoreOverTLS(t, "forged", newAuthority(t), newAuthority(t).pem)
 	ctx := context.Background()
 
 	client, err := kv.New("forged").Client(ctx)
@@ -412,7 +412,7 @@ func TestClientRefusesAStoreWhoseCertificateTheDeliveredAuthorityDidNotSign(t *t
 }
 
 func TestClientIsRefusedWhenTheDeliveredAuthorityIsNoCertificate(t *testing.T) {
-	serveKVOverTLS(t, "garbled", newAuthority(t), "not a certificate")
+	serveStoreOverTLS(t, "garbled", newAuthority(t), "not a certificate")
 
 	_, err := kv.New("garbled").Client(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "caPem") {
