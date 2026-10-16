@@ -34,6 +34,13 @@ func (b bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 		return nil, nil
 	}
 	parts := b.surveyedParts(read, described.Stacks)
+	sync, present, err := b.envSourceSyncPart(ctx, read.Tier)
+	if err != nil {
+		return nil, err
+	}
+	if present {
+		parts = append(parts, sync)
+	}
 	service, err := bastion{clients: b.clients}.read(ctx, read.Tier)
 	if err != nil {
 		return nil, err

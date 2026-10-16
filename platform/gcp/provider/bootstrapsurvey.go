@@ -193,10 +193,6 @@ func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target
 		return b.rolePresence(ctx, role)
 	case KindServiceAccount:
 		return b.accountPresence(ctx, tier, target.Name)
-	case KindService:
-		return b.servicePresence(ctx, tier, target.Name)
-	case KindSchedule:
-		return b.schedulePresence(ctx, tier, target.Name)
 	}
 	return presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", target.Kind)
 }

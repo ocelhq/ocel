@@ -216,6 +216,34 @@
       "status": "STATUS_FREE"
     },
     {
+      "resource": "project:shop/shared:production/google_secret_manager_secret:ocel-production-pulumi-passphrase",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Active versions",
+          "unit": "version-months",
+          "monthlyQuantity": "1",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 version-months",
+          "rateRef": "gcp/secretmanager/version"
+        },
+        {
+          "name": "Access operations",
+          "unit": "operations",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 operations",
+          "rateRef": "gcp/secretmanager/access"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.00"
+    },
+    {
       "resource": "project:shop/shared:production/google_cloud_run_v2_service:ocel-production-envsourcesync",
       "status": "STATUS_PRICED",
       "components": [
@@ -258,34 +286,6 @@
           "unitPrice": "0",
           "monthlyCost": "0.00",
           "rateRef": "gcp/scheduler/job"
-        }
-      ],
-      "monthlyFixed": "0.00",
-      "monthlyUsage": "0.00"
-    },
-    {
-      "resource": "project:shop/shared:production/google_secret_manager_secret:ocel-production-pulumi-passphrase",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Active versions",
-          "unit": "version-months",
-          "monthlyQuantity": "1",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 1 version-months",
-          "rateRef": "gcp/secretmanager/version"
-        },
-        {
-          "name": "Access operations",
-          "unit": "operations",
-          "monthlyQuantity": "10000",
-          "unitPrice": "0",
-          "monthlyCost": "0.00",
-          "usageBased": true,
-          "assumption": "moderate profile: 10000 operations",
-          "rateRef": "gcp/secretmanager/access"
         }
       ],
       "monthlyFixed": "0.00",

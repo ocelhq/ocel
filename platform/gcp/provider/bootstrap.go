@@ -82,6 +82,7 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 		fronts:         g.p.Edges(),
 		stores:         g.p.memorystore(),
 		records:        g.p.KeyValues(),
+		writtenBy:      g.p.writtenBy,
 		pushBinary:     g.p.pushBinary,
 		deployAndRoute: g.p.deployAndRoute,
 		tearDown:       g.p.tearDown,
@@ -129,10 +130,11 @@ func (g bootstrapGate) Remove(ctx context.Context, tier environment.Tier, progre
 }
 
 type bootstrap struct {
-	clients *clients
-	fronts  provider.Edges
-	stores  memorystore
-	records keyvalue.Store
+	clients   *clients
+	fronts    provider.Edges
+	stores    memorystore
+	records   keyvalue.Store
+	writtenBy provider.WrittenBy
 
 	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	deployAndRoute func(ctx context.Context, s serving, progress progress.Log) (release, error)
@@ -375,10 +377,6 @@ func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 		return b.makeRole(ctx, role)
 	case KindServiceAccount:
 		return b.makeAccount(ctx, read, target.Name)
-	case KindService:
-		return b.makeService(ctx, read.Tier, target.Name)
-	case KindSchedule:
-		return b.makeSchedule(ctx, read.Tier, target.Name)
 	default:
 		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing provisions a %s", target.Kind)
 	}
@@ -848,7 +846,11 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	stack.Changes = bastions
+	syncs, err := b.envSourceSyncRemovals(ctx, tier)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	stack.Changes = slices.Concat(syncs, bastions)
 	for _, taking := range removals(read) {
 		change := provider.Change{
 			Kind:   string(taking.item.Kind),
@@ -872,7 +874,7 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 }
 
 var removalOrder = []Kind{
-	KindSecret, KindSchedule, KindService, KindKey, KindKeyRing, KindRole, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
+	KindSecret, KindKey, KindKeyRing, KindRole, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
 }
 
 func removals(read survey) []removal {
@@ -942,6 +944,9 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 	if err := b.tearFeatures(ctx, tier, read.Stamp.Features); err != nil {
 		return err
 	}
+	if err := b.removeEnvSourceSync(ctx, tier, progress); err != nil {
+		return err
+	}
 	if err := b.removeBastion(ctx, tier, progress); err != nil {
 		return err
 	}
@@ -999,10 +1004,6 @@ func (b bootstrap) take(ctx context.Context, read survey, target item) (destroyA
 		return 0, b.takeRepository(ctx, target.Name)
 	case KindServiceAccount:
 		return 0, b.takeAccount(ctx, read.Tier, target.Name)
-	case KindService:
-		return 0, b.takeService(ctx, target.Name)
-	case KindSchedule:
-		return 0, b.takeSchedule(ctx, target.Name)
 	default:
 		return 0, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", target.Kind)
 	}

@@ -138,6 +138,19 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/google_secret_manager_secret:ocel-preview-pulumi-passphrase",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_secret_manager_secret",
+      "name": "ocel-preview-pulumi-passphrase",
+      "region": "europe-west1",
+      "properties": {
+        "replication": {
+          "auto": {}
+        }
+      }
+    },
+    {
       "id": "project:shop/shared:preview/google_cloud_run_v2_service:ocel-preview-envsourcesync",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
@@ -178,19 +191,6 @@
       "properties": {
         "region": "europe-west1",
         "schedule": "* * * * *"
-      }
-    },
-    {
-      "id": "project:shop/shared:preview/google_secret_manager_secret:ocel-preview-pulumi-passphrase",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_secret_manager_secret",
-      "name": "ocel-preview-pulumi-passphrase",
-      "region": "europe-west1",
-      "properties": {
-        "replication": {
-          "auto": {}
-        }
       }
     },
     {
