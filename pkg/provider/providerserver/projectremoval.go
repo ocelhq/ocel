@@ -344,6 +344,11 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 		if err := r.discardCertificates(ctx, certificates, progress); err != nil {
 			errs = append(errs, err)
 		}
+		if remove := r.provider.Hooks().RemovePartUser; remove != nil {
+			if err := remove(ctx, r.tier, r.slug, progress); err != nil {
+				errs = append(errs, fmt.Errorf("remove %s as a user of the %s bootstrap's parts: %w", r.slug, r.tier, err))
+			}
+		}
 	}
 	if err := r.purgeValues(ctx, progress); err != nil {
 		errs = append(errs, err)

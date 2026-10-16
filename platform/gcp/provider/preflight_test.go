@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 func declaringAStore(memory int64) provider.DeployPreflight {
@@ -151,7 +150,7 @@ func failingOnAnyCall(t *testing.T) *Provider {
 
 func TestANextAppIsAdmittedWithoutReadingWhatTheTierHasInstalled(t *testing.T) {
 	for _, container := range []bool{false, true} {
-		for _, front := range []edge.Kind{edge.None, alb.Kind, cloudflare.Kind} {
+		for _, front := range []edge.Kind{edge.None, cloudflare.Kind} {
 			pre := shippingNext(container)
 			pre.Edge = front
 			if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {

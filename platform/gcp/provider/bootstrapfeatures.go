@@ -13,13 +13,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-const (
-	albFeature         = "alb-edge"
-	albShieldedFeature = "alb-cloudflare-origin"
-)
+const albShieldedFeature = "alb-cloudflare-origin"
 
 var (
 	albBaseAPIs     = []string{"compute.googleapis.com", "certificatemanager.googleapis.com"}
@@ -29,14 +25,6 @@ var (
 
 func (bootstrap) Catalogue() []provider.Feature {
 	return []provider.Feature{{
-		Name: albFeature,
-		Summary: "a global external Application Load Balancer as the front: one address, one certificate map, one URL map — " +
-			"the one bootstrap item with a recurring cost, about $18 a month plus egress, " +
-			"a custom role that may only clear Cloud CDN, which Next apps behind it are granted, " +
-			"and the gate as a Service Extensions plugin that runs in front of Cloud CDN on each tier, " +
-			"kept as a generic artifact in a repository in Artifact Registry",
-		Edges: []edge.Kind{alb.Kind},
-	}, {
 		Name: albShieldedFeature,
 		Summary: "a global external Application Load Balancer that Cloudflare forwards to and that refuses any client without the certificate the zone presents — " +
 			"a recurring cost, about $18 a month plus egress, " +
@@ -90,10 +78,7 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 }
 
 func (b bootstrap) raiseFeatures(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	if err := b.raiseFronts(ctx, req, progress); err != nil {
-		return err
-	}
-	return b.raiseCDNPurgeRole(ctx, req, progress)
+	return b.raiseFronts(ctx, req, progress)
 }
 
 func (b bootstrap) summaryOf(name string) string {
@@ -152,13 +137,7 @@ func (b bootstrap) dropFronts(
 }
 
 func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.BootstrapRequest, progress progress.Log) error {
-	if err := b.dropFronts(ctx, read, req, progress); err != nil {
-		return err
-	}
-	if slices.Contains(droppedFeatures(read.Stamp.Features, req), albFeature) {
-		ensureProgress(progress).Say("Kept custom role " + read.Names.CDNPurgeRolePath() + ": " + reasonRoleKept)
-	}
-	return nil
+	return b.dropFronts(ctx, read, req, progress)
 }
 
 func (b bootstrap) tearFeatures(ctx context.Context, tier environment.Tier, features []string) error {
@@ -227,11 +206,8 @@ func (b bootstrap) featuresFree(ctx context.Context, tier environment.Tier, feat
 
 func apisFor(tier environment.Tier, features []string) []string {
 	apis := slices.Clone(BootstrapAPIs)
-	switch {
-	case slices.Contains(features, albShieldedFeature):
+	if slices.Contains(features, albShieldedFeature) {
 		apis = appendMissing(apis, albShieldedAPIs)
-	case slices.Contains(features, albFeature):
-		apis = appendMissing(apis, albAPIs)
 	}
 	return apis
 }

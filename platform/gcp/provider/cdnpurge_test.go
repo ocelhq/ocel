@@ -147,7 +147,7 @@ func TestADeployBeforeTheBootstrapKeptTheCachePurgeRoleIsRefusedNamingTheBootstr
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("ProvisionFunctions() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(err.Error(), "ocel bootstrap --features alb-edge") {
+	if !strings.Contains(err.Error(), "`ocel bootstrap preview`") && !strings.Contains(err.Error(), "`ocel bootstrap production`") {
 		t.Errorf("the refusal %q does not name the bootstrap that keeps the role", err)
 	}
 	if got := server.identities().missingRoleAsks; got != 1 {

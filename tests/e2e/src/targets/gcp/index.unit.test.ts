@@ -8,7 +8,6 @@ import type { CellUnderTest } from "../../run/cellRun";
 import {
   cellOfSlug,
   gcpSweepOverlay,
-  laneFeatures,
   previewBootstrapArgs,
   refuseFlociWithoutFirestore,
 } from "./index";
@@ -84,48 +83,17 @@ describe("gcpSweepOverlay for a fronted cell", () => {
   });
 });
 
-describe("laneFeatures", () => {
-  const zoned = {
-    OCEL_E2E_ZONE: "j.example",
-    CLOUDFLARE_API_TOKEN: "token",
-    CLOUDFLARE_ACCOUNT_ID: "account",
-  };
-
-  it("bootstraps the load balancer on the real lane only when the run names a zone and a Cloudflare token and account", () => {
-    expect(laneFeatures({}, false)).toEqual([]);
-    expect(laneFeatures(zoned, false)).toEqual(["alb-edge"]);
-    expect(laneFeatures({ ...zoned, CLOUDFLARE_API_TOKEN: " " }, false)).toEqual([]);
-  });
-
-  it("bootstraps no feature on floci", () => {
-    expect(laneFeatures({}, true)).toEqual([]);
-    expect(laneFeatures(zoned, true)).toEqual([]);
-  });
-});
-
 describe("previewBootstrapArgs", () => {
-  const zoned = {
-    OCEL_E2E_ZONE: "j.example",
-    CLOUDFLARE_API_TOKEN: "token",
-    CLOUDFLARE_ACCOUNT_ID: "account",
-  };
   const previewing = { cells: [{ phases: ["deploy", "verify", "preview", "destroy"] }] };
   const plain = { cells: [{ phases: ["deploy", "verify", "destroy"] }] };
 
-  it("bootstraps the preview tier with the load balancer when a planned cell previews and the zone is set", () => {
-    expect(previewBootstrapArgs(zoned, false, previewing)).toEqual([
-      "bootstrap",
-      "preview",
-      "--yes",
-      "--features",
-      "alb-edge",
-    ]);
-    expect(previewBootstrapArgs({}, false, previewing)).toEqual(["bootstrap", "preview", "--yes"]);
+  it("bootstraps the preview tier when a planned cell previews, and its first deploy adds what it runs on", () => {
+    expect(previewBootstrapArgs(false, previewing)).toEqual(["bootstrap", "preview", "--yes"]);
   });
 
   it("bootstraps no preview tier on floci or when no planned cell previews", () => {
-    expect(previewBootstrapArgs(zoned, true, previewing)).toBeUndefined();
-    expect(previewBootstrapArgs(zoned, false, plain)).toBeUndefined();
+    expect(previewBootstrapArgs(true, previewing)).toBeUndefined();
+    expect(previewBootstrapArgs(false, plain)).toBeUndefined();
   });
 });
 

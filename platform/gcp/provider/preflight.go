@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
@@ -43,7 +44,23 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if slices.ContainsFunc(pre.Uses, func(uses buildoutput.Uses) bool { return uses.Revalidation }) {
 		parts = append(parts, tagDatabasePart)
 	}
+	if pre.Edge == alb.Kind {
+		parts = append(parts, albPart)
+	} else if err := p.leaveALB(ctx, pre); err != nil {
+		return err
+	}
 	return p.addParts(ctx, pre, parts)
+}
+
+func (p *Provider) leaveALB(ctx context.Context, pre provider.DeployPreflight) error {
+	if pre.Dry || pre.Deploy.Slug == "" {
+		return nil
+	}
+	b, err := bootstrapGate{p}.openBootstrap(ctx)
+	if err != nil {
+		return err
+	}
+	return b.releaseALB(ctx, pre.Deploy.Tier, pre.Deploy.Slug, false, pre.Progress)
 }
 
 func (p *Provider) addParts(ctx context.Context, pre provider.DeployPreflight, names []string) error {
@@ -54,12 +71,21 @@ func (p *Provider) addParts(ctx context.Context, pre provider.DeployPreflight, n
 	if err != nil {
 		return err
 	}
+	return b.addParts(ctx, pre, names)
+}
+
+func (b bootstrap) addParts(ctx context.Context, pre provider.DeployPreflight, names []string) error {
 	tier := pre.Deploy.Tier
 	for _, want := range b.listDeployedParts(tier) {
 		if !slices.Contains(names, want.name) {
 			continue
 		}
 		if !pre.Dry {
+			if want.name == albPart {
+				if err := b.claimALB(ctx, tier, pre.Deploy.Slug); err != nil {
+					return err
+				}
+			}
 			if err := b.ensurePart(ctx, tier, pre.Deploy.Slug, want); err != nil {
 				return err
 			}

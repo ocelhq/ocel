@@ -47,6 +47,7 @@ var deployedParts = []func(bootstrap, environment.Tier) part{
 	bootstrap.networkPart,
 	bootstrap.tasksPart,
 	bootstrap.tagDatabasePart,
+	bootstrap.albPart,
 }
 
 func (b bootstrap) listDeployedParts(tier environment.Tier) []part {

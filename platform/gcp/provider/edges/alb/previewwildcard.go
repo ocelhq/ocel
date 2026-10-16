@@ -65,6 +65,9 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 			"the %q edge terminates TLS for %s at the load balancer, so its certificate map needs the wildcard certificate, and this reconcile names none",
 			Kind, wildcard)
 	}
+	if err := e.claimFront(ctx, environment.TierPreview, wildcard); err != nil {
+		return "", err
+	}
 	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate, Shielded: e.deps.Shielded}
 	balancer, err := e.raiseServing(ctx, environment.TierPreview, entry, progress.Discard())
 	if err != nil {
@@ -103,7 +106,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	if err := keyvalue.Forget(ctx, e.deps.KeyValues, e.previewKey()); err != nil {
 		return fmt.Errorf("release which wildcard the %s edge served previews on: %w", Kind, err)
 	}
-	return nil
+	return e.releaseFront(ctx, environment.TierPreview, wildcard)
 }
 
 func previewResourceName(baseDomain string, role ...string) string {

@@ -99,6 +99,10 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Note: "the role a deploy credential is granted to create the service accounts its apps run as and to set who may act as them, and no more",
 		},
 		{
+			Kind: KindRole, Name: names.CDNPurgeRole(), Shared: true,
+			Note: "the role a deploy grants a Next app behind the alb to clear its revalidated pages from Cloud CDN, and no more",
+		},
+		{
 			Kind: KindRole, Name: names.PartsRole(), Shared: true,
 			Note: "the role a deploy credential is granted to add the parts of a bootstrap Google names no condition for, such as a tier's private network, and no more",
 		},

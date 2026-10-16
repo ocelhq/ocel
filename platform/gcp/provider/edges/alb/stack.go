@@ -126,8 +126,8 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	}
 	if !s.recorded.LoadBalancer.provisioned() {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"no %s load balancer is provisioned for tier %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this tier first",
-			Kind, s.state.Tier, binding.Hostname)
+			"no %s load balancer is provisioned for tier %s, and %s is served by writing a host rule into its url map: the first deploy behind the %s edge adds it, so deploy this project first",
+			Kind, s.state.Tier, binding.Hostname, Kind)
 	}
 	served, err := s.serving(ctx, binding.App)
 	if err != nil {
@@ -333,7 +333,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		s.state.PublishAddress(hostname, "")
 	}
 	s.state.Bound = nil
-	return nil
+	return s.e.releaseFront(ctx, s.state.Tier, s.state.Slug)
 }
 
 const maxResourceName = 63

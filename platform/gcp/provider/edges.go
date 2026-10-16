@@ -37,6 +37,7 @@ type edges struct {
 
 	certificates  provider.Certificates
 	readWorkerCAs func(ctx context.Context, tier environment.Tier) ([]string, error)
+	frontPart     *alb.FrontPart
 }
 
 var supportedEdges = []edge.Kind{alb.Kind, cloudflare.Kind}
@@ -61,6 +62,7 @@ func (p *Provider) edges() edges {
 
 		certificates:  p.Certificates(),
 		readWorkerCAs: p.readWorkerCAs,
+		frontPart:     &alb.FrontPart{Claim: p.claimALB, Release: p.releaseALB},
 	}
 }
 
@@ -85,6 +87,7 @@ func (e edges) openALB() *alb.Edge {
 		WaitBeforeRetry:    waitBeforeRetry,
 		ReadAssetsBucket:   e.assets,
 		CopyImmutableFiles: e.copyFiles,
+		FrontPart:          e.frontPart,
 	})
 }
 

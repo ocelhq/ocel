@@ -49,5 +49,5 @@ func isMissingRole(err error, role string) bool {
 func refuseMissingCDNPurgeRole(c *clients, role string, tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"the custom role %s that lets an app that revalidates behind the alb clear Cloud CDN is not in project %s: the %s bootstrap predates it.\n"+
-			"Run `ocel bootstrap --features alb-edge` for that tier, then deploy again", role, c.project, tier)
+			"Run `%s`, then deploy again", role, c.project, tier, provider.BootstrapCommand(tier))
 }

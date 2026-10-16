@@ -152,6 +152,10 @@
       "status": "STATUS_FREE"
     },
     {
+      "resource": "project:shop/shared:production/google_project_iam_custom_role:ocel_cdn_purge",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/google_project_iam_custom_role:ocel_parts",
       "status": "STATUS_FREE"
     },
@@ -489,7 +493,7 @@
   ],
   "coverage": {
     "supported": 13,
-    "free": 19,
+    "free": 20,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",

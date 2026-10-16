@@ -87,6 +87,25 @@ func TestPlanRemoveProjectNamesEveryStackTheDeployProvisioned(t *testing.T) {
 	}
 }
 
+func TestRemovingAProjectNoEdgeStackServedRemovesItAsAUserOfTheBootstrapParts(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	var removed []string
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.RemovePartUser = func(_ context.Context, tier environment.Tier, project string, _ progress.Log) error {
+			removed = append(removed, string(tier)+"/"+project)
+			return nil
+		}
+	})
+
+	if result := removeProject(t, client, projectRequest()); !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
+	}
+	if !slices.Equal(removed, []string{"production/shop"}) {
+		t.Errorf("removing shop removed part users %v, want shop removed from the parts its first deploy claimed before it failed", removed)
+	}
+}
+
 func TestPlanRemoveProjectOfAProjectNothingDeployedNamesNoStack(t *testing.T) {
 	t.Parallel()
 	client, _ := contractServed(t, "1.0.0")

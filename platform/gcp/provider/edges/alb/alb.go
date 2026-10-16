@@ -41,6 +41,26 @@ type Deps struct {
 	WaitBeforeRetry    func(ctx context.Context, attempt int) bool
 	ReadAssetsBucket   func(ctx context.Context, tier environment.Tier) (AssetsBucket, error)
 	CopyImmutableFiles func(ctx context.Context, tier environment.Tier, from, to StaticRoutes) error
+	FrontPart          *FrontPart
+}
+
+type FrontPart struct {
+	Claim   func(ctx context.Context, tier environment.Tier, user string) error
+	Release func(ctx context.Context, tier environment.Tier, user string) error
+}
+
+func (e *Edge) claimFront(ctx context.Context, tier environment.Tier, user string) error {
+	if e.deps.Shielded || e.deps.FrontPart == nil {
+		return nil
+	}
+	return e.deps.FrontPart.Claim(ctx, tier, user)
+}
+
+func (e *Edge) releaseFront(ctx context.Context, tier environment.Tier, user string) error {
+	if e.deps.Shielded || e.deps.FrontPart == nil {
+		return nil
+	}
+	return e.deps.FrontPart.Release(ctx, tier, user)
 }
 
 type Edge struct{ deps Deps }
@@ -234,7 +254,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	balancer := loadBalancerOf(outputs)
 	if !balancer.provisioned() {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"no %s load balancer is provisioned for tier %s: the %q edge serves every project in a tier from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this tier first",
+			"no %s load balancer is provisioned for tier %s: the %q edge serves every project in a tier from one, at %s, which a deploy adds before it reaches the edge. Deploy again",
 			Kind, spec.Tier, Kind, BaselineCost)
 	}
 	next := prior
@@ -319,8 +339,8 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 			Kind:   edge.EdgeGroupKind,
 			Name:   edge.EdgeGroupName(Kind) + "/load-balancer",
 			Action: edge.PlanKeep,
-			Reason: "the load balancer this project was balancing by is one per bootstrap tier and every other project in the tier is answered by it, " +
-				"so it stays provisioned and keeps costing " + BaselineCost + "; `ocel bootstrap remove` is what takes it down",
+			Reason: "the load balancer this project was balancing by is one per tier and costs " + BaselineCost + ": " +
+				"it stays while another project in the tier is served through it or a hostname is bound to it, and is taken down with the last project otherwise",
 		},
 	}
 }
