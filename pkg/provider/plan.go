@@ -45,7 +45,7 @@ type Plan struct {
 type ChangeGroup struct {
 	Kind    string
 	Name    string
-	Feature string
+	Part    string
 	Action  ChangeAction
 	Reason  string
 	Slow    bool

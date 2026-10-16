@@ -9,7 +9,7 @@ import (
 
 func (b bootstrap) edgeBootstrapStacks(ctx context.Context, read survey) ([]provider.BootstrapStack, error) {
 	var stacks []provider.BootstrapStack
-	err := b.eachFront(read.Stamp.Features, func(feature provider.Feature, front edge.Edge) error {
+	err := b.eachFront(read.Stamp.Parts, func(fronting provider.Part, front edge.Edge) error {
 		describe := front.Hooks().DescribeBootstrap
 		if describe == nil {
 			return nil
@@ -18,7 +18,7 @@ func (b bootstrap) edgeBootstrapStacks(ctx context.Context, read survey) ([]prov
 		if err != nil {
 			stacks = append(stacks, provider.BootstrapStack{
 				Name:      string(front.Kind()) + "/bootstrap",
-				Feature:   feature.Name,
+				Part:      fronting.Name,
 				Present:   true,
 				ReadError: err.Error(),
 			})
@@ -27,7 +27,7 @@ func (b bootstrap) edgeBootstrapStacks(ctx context.Context, read survey) ([]prov
 		for _, part := range parts {
 			stacks = append(stacks, provider.BootstrapStack{
 				Name:          string(front.Kind()) + "/" + part.Name,
-				Feature:       feature.Name,
+				Part:          fronting.Name,
 				Present:       true,
 				DigestCurrent: part.Current,
 			})

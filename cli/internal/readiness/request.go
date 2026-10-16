@@ -8,8 +8,8 @@ import (
 
 func newPreflightRequest(cfg *project.Project, req Request) *contractv1.PreflightRequest {
 	var wanted []string
-	if req.Feature != "" {
-		wanted = []string{req.Feature}
+	if req.Part != "" {
+		wanted = []string{req.Part}
 	}
 	return &contractv1.PreflightRequest{
 		RequiredTier:     req.Tier,

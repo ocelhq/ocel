@@ -21,7 +21,7 @@ const (
 	None Requirement = iota
 	Credentials
 	Infrastructure
-	Features
+	Parts
 )
 
 type Request struct {
@@ -32,7 +32,7 @@ type Request struct {
 	CheckHosts       bool
 	HostCheckDomains []string
 	RequireHostname  bool
-	Feature          string
+	Part             string
 	RecordWants      bool
 	DryRun           bool
 	Registry         *contractv1.ImageRegistry
@@ -46,8 +46,8 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 		span.Identity(identityEvent(cfg, req.Tier, read.Response.GetIdentity()))
 		err = RefuseUnready(read.Response, provider, cfg, req)
 	}
-	if err == nil && req.Feature != "" {
-		err = refuseMissingFeatures(NewFeatureGap(read.Response.GetBootstrap(), req.Feature), provider, cfg, req)
+	if err == nil && req.Part != "" {
+		err = refuseMissingParts(NewPartGap(read.Response.GetBootstrap(), req.Part), provider, cfg, req)
 	}
 	if err != nil {
 		return Preflight{}, err
@@ -68,8 +68,8 @@ func RefuseUnready(resp *contractv1.PreflightResponse, provider *providerprocess
 	if err := refuseAbsentInfrastructure(resp, provider, cfg, req.Tier); err != nil {
 		return err
 	}
-	if req.Require == Features {
-		if err := refuseMissingFeatures(NewGap(resp.GetBootstrap()), provider, cfg, req); err != nil {
+	if req.Require == Parts {
+		if err := refuseMissingParts(NewGap(resp.GetBootstrap()), provider, cfg, req); err != nil {
 			return err
 		}
 	}
@@ -99,11 +99,11 @@ func refuseAbsentInfrastructure(resp *contractv1.PreflightResponse, provider *pr
 	return &clierror.Error{Code: clierror.CodeBootstrapMissing, Hint: absent.Hint(), Cause: absent}
 }
 
-func refuseMissingFeatures(gap Gap, provider *providerprocess.Provider, cfg *project.Project, req Request) error {
+func refuseMissingParts(gap Gap, provider *providerprocess.Provider, cfg *project.Project, req Request) error {
 	if len(gap.Missing) == 0 {
 		return nil
 	}
-	return MissingFeaturesError{Gap: gap, Tier: req.Tier, Edge: cfg.EdgeSelection(), Provider: provider, Unrecorded: req.RecordWants && req.DryRun}.refuse()
+	return MissingPartsError{Gap: gap, Tier: req.Tier, Edge: cfg.EdgeSelection(), Provider: provider, Unrecorded: req.RecordWants && req.DryRun}.refuse()
 }
 
 func TierName(tier environmentv1.Tier) string {

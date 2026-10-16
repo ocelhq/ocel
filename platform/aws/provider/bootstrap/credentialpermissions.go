@@ -187,7 +187,7 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		a.BootstrapTables = append(a.BootstrapTables, named, named+"/*")
 	}
 	stacks := []string{core}
-	for _, f := range featureRegistry {
+	for _, f := range partRegistry {
 		stack := f.stackName(n, tier)
 		stacks = append(stacks, stack)
 	}

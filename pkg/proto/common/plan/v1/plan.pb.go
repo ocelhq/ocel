@@ -217,7 +217,7 @@ type ChangeGroup struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Feature       string                 `protobuf:"bytes,3,opt,name=feature,proto3" json:"feature,omitempty"`
+	Part          string                 `protobuf:"bytes,3,opt,name=part,proto3" json:"part,omitempty"`
 	Action        Change_Action          `protobuf:"varint,4,opt,name=action,proto3,enum=common.plan.v1.Change_Action" json:"action,omitempty"`
 	Reason        string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
 	Slow          bool                   `protobuf:"varint,6,opt,name=slow,proto3" json:"slow,omitempty"`
@@ -270,9 +270,9 @@ func (x *ChangeGroup) GetName() string {
 	return ""
 }
 
-func (x *ChangeGroup) GetFeature() string {
+func (x *ChangeGroup) GetPart() string {
 	if x != nil {
-		return x.Feature
+		return x.Part
 	}
 	return ""
 }
@@ -395,11 +395,11 @@ const file_common_plan_v1_plan_proto_rawDesc = "" +
 	"\x05notes\x18\x05 \x03(\v2\x14.common.plan.v1.NoteR\x05notes\"Q\n" +
 	"\x04Note\x125\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x1d.common.plan.v1.Change.ActionR\x06action\x12\x12\n" +
-	"\x04text\x18\x02 \x01(\tR\x04text\"\xe4\x01\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\"\xde\x01\n" +
 	"\vChangeGroup\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
-	"\afeature\x18\x03 \x01(\tR\afeature\x125\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04part\x18\x03 \x01(\tR\x04part\x125\n" +
 	"\x06action\x18\x04 \x01(\x0e2\x1d.common.plan.v1.Change.ActionR\x06action\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x12\n" +
 	"\x04slow\x18\x06 \x01(\bR\x04slow\x120\n" +

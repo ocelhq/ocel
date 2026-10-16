@@ -7,22 +7,22 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func ShapeParts(ns Namespace, tier environment.Tier, features []string, options ...ShapeOption) (map[string][]pricing.Shaped, error) {
-	in := featureInputs{ns: ns, tier: tier, alongside: FeatureSet{}}
+func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...ShapeOption) (map[string][]pricing.Shaped, error) {
+	in := partInputs{ns: ns, tier: tier, alongside: PartSet{}}
 	for _, option := range options {
 		option(&in)
 	}
-	for _, name := range features {
+	for _, name := range parts {
 		in.alongside[name] = true
 	}
 	shapes := map[string][]pricing.Shaped{
 		provider.BasePart: shapeTemplate(coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey))),
 		RuntimeLayersPart: shapedRuntimeLayers(),
 	}
-	for _, name := range features {
-		f, known := featureNamed(name)
+	for _, name := range parts {
+		f, known := partNamed(name)
 		if !known {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "this provider has no bootstrap feature named %q", name)
+			return nil, refusal.Refuse(refusal.CodeInvalid, "this provider has no bootstrap part named %q", name)
 		}
 		stack, err := f.template(in)
 		if err != nil {

@@ -89,12 +89,9 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	catalogue := readiness.Bootstrap.Catalogue()
-	required, err := bootstrapplan.RequiredFeatures(catalogue, readiness.Edge)
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
-	required = bootstrapplan.InCatalogueOrder(catalogue, append(required, req.GetWantedParts()...))
+	offered := readiness.Bootstrap.Parts()
+	required := bootstrapplan.RequiredParts(offered, readiness.Edge)
+	required = bootstrapplan.InOfferedOrder(offered, append(required, req.GetWantedParts()...))
 
 	var status bootstrapStatus
 	err = steps.run(string(vendor), progress.Reading.Title(bootstrapName(req.GetRequiredTier())), func() (err error) {
@@ -113,7 +110,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	}
 	resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
 	if req.GetRecordWants() {
-		if err := readiness.RecordWants(ctx, tier, req.GetSlug(), bootstrapplan.MissingFeatures(status.own.Features, required)); err != nil {
+		if err := readiness.RecordWants(ctx, tier, req.GetSlug(), bootstrapplan.MissingParts(status.own.Parts, required)); err != nil {
 			return nil, provider.RefusalError(err)
 		}
 	}
@@ -394,7 +391,7 @@ func listOtherSlugsIfUnrecorded(ctx context.Context, readiness Readiness, tier e
 	if len(own.Value) > 0 {
 		return nil, nil
 	}
-	recorded, err := readiness.RecordedFeatures(ctx, tier)
+	recorded, err := readiness.RecordedParts(ctx, tier)
 	if err != nil {
 		return nil, err
 	}

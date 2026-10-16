@@ -25,7 +25,7 @@ var production = []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION}
 
 func statusProject(t *testing.T) (clitest.FakeProject, commands.Invocation) {
 	t.Helper()
-	project, invocation := bootstrapProject(t, "", featureISR)
+	project, invocation := bootstrapProject(t, "", partISR)
 	ctx := context.Background()
 	store := project.Provider.KeyValues()
 	added := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
@@ -82,7 +82,7 @@ func TestBootstrapStatusShowsOneRowPerPartWithWhoAddedItWhoUsesItItsIdleCostAndI
 	}
 	for part, want := range map[string]string{
 		provider.BasePart: "base ocel bootstrap · 2026-09-02 — $0 current",
-		featureISR:        featureISR + " — — $0 current",
+		partISR:           partISR + " — — $0 current",
 		"containers":      "containers deploy api · 2026-10-10 api $7.30/mo creating",
 	} {
 		if got := strings.Join(rowOf(t, out, part), " "); got != want {
@@ -164,16 +164,16 @@ func TestBootstrapStatusSaysAPartWithAnIdleCostRetiresWithTheProjectsThatUseIt(t
 func TestBootstrapStatusSaysWhoWantsAPartTheBootstrapLacksAndTheCommandThatAddsIt(t *testing.T) {
 	project, invocation := statusProject(t)
 	for _, wanting := range []string{"web", "api"} {
-		if err := stackrecords.RecordBootstrapWant(context.Background(), project.Provider.KeyValues(), environment.TierProduction, featureImageOptimization, wanting); err != nil {
+		if err := stackrecords.RecordBootstrapWant(context.Background(), project.Provider.KeyValues(), environment.TierProduction, partImageOptimization, wanting); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	out := runStatus(t, invocation, project.Root, production, StatusOptions{})
 
-	want := featureImageOptimization + " — — — wanted by api, web, run `ocel bootstrap production`"
-	if got := strings.Join(rowOf(t, out, featureImageOptimization), " "); got != want {
-		t.Errorf("%s row = %q, want %q", featureImageOptimization, got, want)
+	want := partImageOptimization + " — — — wanted by api, web, run `ocel bootstrap production`"
+	if got := strings.Join(rowOf(t, out, partImageOptimization), " "); got != want {
+		t.Errorf("%s row = %q, want %q", partImageOptimization, got, want)
 	}
 }
 

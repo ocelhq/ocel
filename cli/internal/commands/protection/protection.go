@@ -102,7 +102,7 @@ func describeTier(tier environmentv1.Tier, slug string) string {
 }
 
 func openOptions(tier environmentv1.Tier) commands.OpenOptions {
-	return commands.OpenOptions{Tier: tier, Require: readiness.Features}
+	return commands.OpenOptions{Tier: tier, Require: readiness.Parts}
 }
 
 func loadProject(ctx context.Context, invocation commands.Invocation) (*project.Project, error) {

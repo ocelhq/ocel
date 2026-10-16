@@ -19,7 +19,7 @@ type Stamp struct {
 
 type StackStamp struct {
 	Name      string
-	Feature   string
+	Part      string
 	Present   bool
 	Digest    string
 	Intended  string
@@ -36,7 +36,7 @@ func (d Deployed) Stale(required []string) []StackStamp {
 		if !s.Present || s.Current() {
 			continue
 		}
-		if s.Feature != "" && !slices.Contains(required, s.Feature) {
+		if s.Part != "" && !slices.Contains(required, s.Part) {
 			continue
 		}
 		out = append(out, s)

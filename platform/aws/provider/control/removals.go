@@ -54,13 +54,13 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 }
 
 func (b Bootstrap) installedEdges(ctx context.Context, tier environment.Tier, deployed bootstrap.Deployed) ([]edge.Edge, error) {
-	featureKinds := bootstrap.EdgeKindsFor(deployed.Features.Names())
+	partKinds := bootstrap.EdgeKindsFor(deployed.Parts.Names())
 	fronts := []edge.Edge{b.Edge}
 	for _, kind := range b.Kinds {
 		if kind == b.Edge.Kind() {
 			continue
 		}
-		installed := slices.Contains(featureKinds, kind)
+		installed := slices.Contains(partKinds, kind)
 		if !installed {
 			var err error
 			if installed, err = bootstrap.EdgeInstalled(ctx, b.SSM, b.Namespace, tier, kind); err != nil {
@@ -98,7 +98,7 @@ func (b Bootstrap) removedEdgeGroup(ctx context.Context, tier environment.Tier, 
 	return &provider.ChangeGroup{
 		Kind:    edge.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(front.Kind()),
-		Feature: bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), front.Kind()),
+		Part:    bootstrapplan.PartFrontingEdge(bootstrap.Parts(), front.Kind()),
 		Action:  provider.ActionDelete,
 		Changes: changes,
 	}, nil

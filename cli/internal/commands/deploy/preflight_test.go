@@ -595,7 +595,7 @@ func TestDeploysEventsAreInTheCheckPhaseThenBuildWithInfraProvisionedBeforeTheAp
 	}
 }
 
-func setUpProjectLackingFeatures(t *testing.T) clitest.FakeProject {
+func setUpProjectLackingParts(t *testing.T) clitest.FakeProject {
 	t.Helper()
 	fixture := clitest.SetUpProject(t)
 	clitest.Bootstrap(t, fixture.Provider, environment.TierProduction)
@@ -606,7 +606,7 @@ func setUpProjectLackingFeatures(t *testing.T) clitest.FakeProject {
 const bootstrapCommand = "Run `ocel bootstrap production` and try again"
 
 func TestDeployYesNeverStopsToAsk(t *testing.T) {
-	fixture := setUpProjectLackingFeatures(t)
+	fixture := setUpProjectLackingParts(t)
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, apiFunction())
 	terminalStdin(&dependencies)
@@ -615,7 +615,7 @@ func TestDeployYesNeverStopsToAsk(t *testing.T) {
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
-		t.Fatal("an unattended deploy against a bootstrap missing a feature it needs was allowed through")
+		t.Fatal("an unattended deploy against a bootstrap missing a part it needs was allowed through")
 	}
 	if !strings.Contains(stdout.String(), bootstrapCommand) {
 		t.Errorf("stdout = %q, want the literal command to run", stdout.String())
@@ -634,7 +634,7 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 		{name: "with --yes", opts: deployOptions{yes: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			fixture := setUpProjectLackingFeatures(t)
+			fixture := setUpProjectLackingParts(t)
 			dependencies := newTestDependencies()
 			stubBuild(&dependencies, apiFunction())
 
@@ -642,7 +642,7 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 			err := runDeploy(context.Background(), dependencies, fixture.Root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 			if err == nil {
-				t.Fatal("a deploy against a bootstrap missing a feature it needs was allowed through")
+				t.Fatal("a deploy against a bootstrap missing a part it needs was allowed through")
 			}
 			if !strings.Contains(stdout.String(), bootstrapCommand) {
 				t.Errorf("stdout = %q, want the literal command to run", stdout.String())

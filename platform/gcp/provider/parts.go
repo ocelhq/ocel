@@ -89,11 +89,11 @@ func (b bootstrap) planPart(ctx context.Context, tier environment.Tier, want par
 		return provider.ChangeGroup{}, false, nil
 	}
 	group := provider.ChangeGroup{
-		Kind:    provider.StackGroupKind,
-		Name:    string(Vendor) + "/" + b.clients.project + "/" + string(tier) + "/" + want.name,
-		Feature: want.name,
-		Action:  provider.ActionCreate,
-		Reason:  fmt.Sprintf(reasonPartFirstUse, want.summary),
+		Kind:   provider.StackGroupKind,
+		Name:   string(Vendor) + "/" + b.clients.project + "/" + string(tier) + "/" + want.name,
+		Part:   want.name,
+		Action: provider.ActionCreate,
+		Reason: fmt.Sprintf(reasonPartFirstUse, want.summary),
 	}
 	change := provider.ActionCreate
 	switch {
@@ -182,10 +182,10 @@ func (b bootstrap) listPartRemovals(ctx context.Context, tier environment.Tier) 
 	groups := make([]provider.ChangeGroup, 0, len(recorded))
 	for _, each := range recorded {
 		group := provider.ChangeGroup{
-			Kind:    provider.StackGroupKind,
-			Name:    string(Vendor) + "/" + b.clients.project + "/" + string(tier) + "/" + each.name,
-			Feature: each.name,
-			Action:  provider.ActionDelete,
+			Kind:   provider.StackGroupKind,
+			Name:   string(Vendor) + "/" + b.clients.project + "/" + string(tier) + "/" + each.name,
+			Part:   each.name,
+			Action: provider.ActionDelete,
 		}
 		for _, resource := range each.resources {
 			group.Changes = append(group.Changes, provider.Change{Kind: resource.Kind, Name: resource.ID, Action: provider.ActionDelete})

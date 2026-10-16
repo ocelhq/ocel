@@ -62,8 +62,8 @@ func TestEdgeGroupKeepsTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 			if group.Kind != edge.EdgeGroupKind || group.Name != "cloudflare/edge" {
 				t.Errorf("group = %+v, want the cloudflare edge named under its own vendor", group)
 			}
-			if group.Feature != "cloudflare-edge" {
-				t.Errorf("group feature = %q, want the feature the edge participates through", group.Feature)
+			if group.Part != "cloudflare-edge" {
+				t.Errorf("group part = %q, want the part the edge participates through", group.Part)
 			}
 			if group.Action != tc.action || group.Reason != tc.reason {
 				t.Errorf("group action = %q (%q), want %q (%q)", group.Action, group.Reason, tc.action, tc.reason)

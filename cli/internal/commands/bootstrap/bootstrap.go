@@ -311,7 +311,7 @@ func resolveProject(ctx context.Context, invocation commands.Invocation, cwd str
 func downgradeWarning(tier environmentv1.Tier, status *contractv1.BootstrapStatus) string {
 	var wroteIt string
 	for _, stack := range status.GetStacks() {
-		if stack.GetFeature() == "" {
+		if stack.GetPart() == "" {
 			wroteIt = stack.GetWrittenBy()
 		}
 	}

@@ -3,46 +3,45 @@ package bootstrapplan
 import (
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func WithDefaultStackNames(described provider.BootstrapDescription, catalogue []provider.Feature, name func(feature string) string) provider.BootstrapDescription {
-	featured := make(map[string]bool, len(described.Stacks))
+func WithDefaultStackNames(described provider.BootstrapDescription, offered []provider.Part, name func(part string) string) provider.BootstrapDescription {
+	planned := make(map[string]bool, len(described.Stacks))
 	for _, stack := range described.Stacks {
-		featured[stack.Feature] = true
+		planned[stack.Part] = true
 	}
 	named := described
 	named.Stacks = slices.Clone(described.Stacks)
-	for _, feature := range append([]string{""}, featureNames(catalogue)...) {
-		if featured[feature] {
+	for _, part := range append([]string{""}, partNames(offered)...) {
+		if planned[part] {
 			continue
 		}
-		named.Stacks = append(named.Stacks, provider.BootstrapStack{Name: name(feature), Feature: feature})
+		named.Stacks = append(named.Stacks, provider.BootstrapStack{Name: name(part), Part: part})
 	}
 	return named
 }
 
-func ChangeGroups(described provider.BootstrapDescription, catalogue []provider.Feature, req provider.BootstrapRequest) []provider.ChangeGroup {
+func ChangeGroups(described provider.BootstrapDescription, offered []provider.Part, req provider.BootstrapRequest) []provider.ChangeGroup {
 	current := make(map[string]provider.BootstrapStack, len(described.Stacks))
 	for _, stack := range described.Stacks {
-		current[stack.Feature] = stack
+		current[stack.Part] = stack
 	}
 
 	groups := []provider.ChangeGroup{baselineGroup(described, current[""], req.Tier)}
-	for _, name := range req.Features {
-		groups = append(groups, featureGroup(current[name], name))
+	for _, name := range req.Parts {
+		groups = append(groups, partGroup(current[name], name))
 	}
 	for _, name := range req.Remove {
-		if slices.Contains(req.Features, name) {
+		if slices.Contains(req.Parts, name) {
 			continue
 		}
 		groups = append(groups, provider.ChangeGroup{
-			Kind:    provider.StackGroupKind,
-			Name:    stackName(current[name], name),
-			Feature: name,
-			Action:  provider.ActionDelete,
+			Kind:   provider.StackGroupKind,
+			Name:   stackName(current[name], name),
+			Part:   name,
+			Action: provider.ActionDelete,
 		})
 	}
 	return groups
@@ -54,8 +53,8 @@ func baselineGroup(described provider.BootstrapDescription, stack provider.Boots
 	return group
 }
 
-func featureGroup(stack provider.BootstrapStack, name string) provider.ChangeGroup {
-	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: stackName(stack, name), Feature: name}
+func partGroup(stack provider.BootstrapStack, name string) provider.ChangeGroup {
+	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: stackName(stack, name), Part: name}
 	group.Action, group.Reason = bootstrapStackAction(stack, true)
 	return group
 }
@@ -77,15 +76,6 @@ func PrefixWithVendor(vendor provider.Vendor, groups []provider.ChangeGroup) []p
 		named[i].Name = string(vendor) + "/" + named[i].Name
 	}
 	return named
-}
-
-func FeatureNeedingEdge(catalogue []provider.Feature, kind edge.Kind) string {
-	for _, f := range catalogue {
-		if slices.Contains(f.Edges, kind) {
-			return f.Name
-		}
-	}
-	return ""
 }
 
 func stackName(stack provider.BootstrapStack, fallback string) string {

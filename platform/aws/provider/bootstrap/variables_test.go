@@ -104,8 +104,8 @@ func variablesKeyBootstraps() []struct {
 		tier     environment.Tier
 		template string
 	}{
-		{"production", environment.TierProduction, featureTemplate(provider.FeatureVariablesKey, environment.TierProduction)},
-		{"preview", environment.TierPreview, featureTemplate(provider.FeatureVariablesKey, environment.TierPreview)},
+		{"production", environment.TierProduction, partTemplate(provider.VariablesKeyPart, environment.TierProduction)},
+		{"preview", environment.TierPreview, partTemplate(provider.VariablesKeyPart, environment.TierPreview)},
 	}
 }
 
@@ -267,7 +267,7 @@ func TestEveryVariablesResourceIsDescribedForItsTier(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVariablesTemplate(t, tc.template)
 
-			key := parseVariablesTemplate(t, featureTemplate(provider.FeatureVariablesKey, tc.tier))
+			key := parseVariablesTemplate(t, partTemplate(provider.VariablesKeyPart, tc.tier))
 			described := map[string]string{
 				"VariablesKey":        key.Resources["VariablesKey"].Properties.Description,
 				"VariablesKeyAlias":   key.Resources["VariablesKeyAlias"].Metadata.Description,
@@ -324,12 +324,12 @@ func TestTheCoreStackHoldsTheVariablesTableAndTheKeyStackTheKey(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		req := Request{Features: []string{provider.FeatureVariablesKey}}
+		req := Request{Parts: []string{provider.VariablesKeyPart}}
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		tmpl := parseVariablesTemplate(t, stacks.template(defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction)))
+		tmpl := parseVariablesTemplate(t, stacks.template(defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction)))
 		for _, name := range []string{"VariablesKey", "VariablesKeyAlias"} {
 			if _, ok := tmpl.Resources[name]; !ok {
 				t.Errorf("the variables-key stack does not declare %s", name)
@@ -348,7 +348,7 @@ func TestTheCoreStackHoldsTheVariablesTableAndTheKeyStackTheKey(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 
-		stack := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction)
+		stack := defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction)
 		if slices.Contains(stacks.stacks(), stack) {
 			t.Errorf("%s exists after a run that never asked for it; bootstrap creates nothing that bills while idle", stack)
 		}

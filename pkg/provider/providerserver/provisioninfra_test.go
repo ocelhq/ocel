@@ -574,16 +574,16 @@ func TestProvisionInfraRecordsAProjectNoDeployRecordedYet(t *testing.T) {
 	}
 }
 
-func TestProvisionInfraKeepsTheFeaturesADeployRecordedForTheProject(t *testing.T) {
+func TestProvisionInfraKeepsThePartsADeployRecordedForTheProject(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
-	recordProject(t, vendor, "shop", fake.FeatureCache, fake.FeatureImages)
+	recordProject(t, vendor, "shop", fake.PartCache, fake.PartImages)
 
 	provisionedInfra(t, client, infraRequest(deployRequest()))
 
 	recorded, _ := readProjectRecord(t, vendor)
-	if !slices.Equal(recorded.Features, []string{fake.FeatureCache, fake.FeatureImages}) {
-		t.Errorf("after ProvisionInfra() the project records features %v, want the ones its deploy recorded: it reads no app framework", recorded.Features)
+	if !slices.Equal(recorded.Parts, []string{fake.PartCache, fake.PartImages}) {
+		t.Errorf("after ProvisionInfra() the project records parts %v, want the ones its deploy recorded: it reads no app framework", recorded.Parts)
 	}
 }
 

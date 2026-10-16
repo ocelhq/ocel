@@ -3182,7 +3182,7 @@ func (x *BootstrapPartResource) GetId() string {
 type BootstrapStack struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Feature       string                 `protobuf:"bytes,2,opt,name=feature,proto3" json:"feature,omitempty"`
+	Part          string                 `protobuf:"bytes,2,opt,name=part,proto3" json:"part,omitempty"`
 	Present       bool                   `protobuf:"varint,3,opt,name=present,proto3" json:"present,omitempty"`
 	DigestCurrent bool                   `protobuf:"varint,4,opt,name=digest_current,json=digestCurrent,proto3" json:"digest_current,omitempty"`
 	WrittenBy     string                 `protobuf:"bytes,5,opt,name=written_by,json=writtenBy,proto3" json:"written_by,omitempty"`
@@ -3229,9 +3229,9 @@ func (x *BootstrapStack) GetName() string {
 	return ""
 }
 
-func (x *BootstrapStack) GetFeature() string {
+func (x *BootstrapStack) GetPart() string {
 	if x != nil {
-		return x.Feature
+		return x.Part
 	}
 	return ""
 }
@@ -7559,10 +7559,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x13_idle_monthly_fixed\";\n" +
 	"\x15BootstrapPartResource\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xd9\x01\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\xd3\x01\n" +
 	"\x0eBootstrapStack\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\afeature\x18\x02 \x01(\tR\afeature\x12\x18\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04part\x18\x02 \x01(\tR\x04part\x12\x18\n" +
 	"\apresent\x18\x03 \x01(\bR\apresent\x12%\n" +
 	"\x0edigest_current\x18\x04 \x01(\bR\rdigestCurrent\x12\x1d\n" +
 	"\n" +

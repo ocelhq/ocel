@@ -154,7 +154,7 @@ func (r *deployRun) ensureProject(ctx context.Context) error {
 		if len(entry.Value) > 0 {
 			return nil, false, nil
 		}
-		value, err := json.Marshal(stackrecords.Project{Features: r.features})
+		value, err := json.Marshal(stackrecords.Project{Parts: r.parts})
 		return value, true, err
 	})
 }

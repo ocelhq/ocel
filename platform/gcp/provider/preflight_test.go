@@ -28,7 +28,7 @@ func declaringAStore(memory int64) provider.DeployPreflight {
 	}
 }
 
-func TestAPublicBucketIsRefusedBeforeAnythingIsReadAndAPrivateOneNeedsNoFeature(t *testing.T) {
+func TestAPublicBucketIsRefusedBeforeAnythingIsReadAndAPrivateOneNeedsNoPart(t *testing.T) {
 	served := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		t.Errorf("preflight called %s %s, and a bucket needs nothing of the tier's bootstrap to be judged", r.Method, r.URL.Path)
 	}))
@@ -210,7 +210,7 @@ func TestADryDeployDeclaringADatabasePlansThePrivateNetworkAndMakesNothing(t *te
 	if len(server.wrote()) != 0 {
 		t.Errorf("a dry deploy wrote %v, want nothing", server.wrote())
 	}
-	if len(planned) != 1 || planned[0].Feature != networkPart || planned[0].Action != provider.ActionCreate || len(planned[0].Changes) != 4 {
+	if len(planned) != 1 || planned[0].Part != networkPart || planned[0].Action != provider.ActionCreate || len(planned[0].Changes) != 4 {
 		t.Errorf("a dry deploy planned %+v, want the %s part created with its four resources", planned, networkPart)
 	}
 }

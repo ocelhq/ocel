@@ -76,7 +76,7 @@ func setUpPreviewProject(t *testing.T) clitest.FakeProject {
 
 func bootstrapTier(t *testing.T, fixture clitest.FakeProject, tier environment.Tier) {
 	t.Helper()
-	clitest.Bootstrap(t, fixture.Provider, tier, fake.FeatureCache, fake.FeatureImages)
+	clitest.Bootstrap(t, fixture.Provider, tier, fake.PartCache, fake.PartImages)
 }
 
 func removeBootstrap(t *testing.T, fixture clitest.FakeProject, tier environment.Tier) {

@@ -63,13 +63,13 @@ func conformingBootstrap(t *testing.T, p *gcp.Provider) provider.Bootstrap {
 	return bootstrapOf(t, p)
 }
 
-func bootstrapped(t *testing.T, p *gcp.Provider, tier environment.Tier, features ...string) provider.Bootstrap {
+func bootstrapped(t *testing.T, p *gcp.Provider, tier environment.Tier, parts ...string) provider.Bootstrap {
 	t.Helper()
 
 	servicesEnabled(t)
 	ctx := context.Background()
 	bootstrap := bootstrapOf(t, p)
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Features: features, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Parts: parts, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v, want the resources every port beneath it reads and writes", tier, err)
 	}
 	t.Cleanup(func() {

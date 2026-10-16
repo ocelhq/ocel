@@ -11,9 +11,9 @@ import (
 func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleAccepts(t *testing.T) {
 	t.Parallel()
 
-	features := []string{albShieldedFeature}
-	if n := len(permissionsFor(features)); n <= 100 {
-		t.Fatalf("the features need %d permissions, want more than 100 to cross Google's limit", n)
+	parts := []string{cloudflareOriginPart}
+	if n := len(permissionsFor(parts)); n <= 100 {
+		t.Fatalf("the parts need %d permissions, want more than 100 to cross Google's limit", n)
 	}
 	var asked int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,10 +33,10 @@ func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleA
 	t.Cleanup(server.Close)
 	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1", endpoint: server.URL}}
 
-	if err := b.permitted(context.Background(), features); err != nil {
+	if err := b.permitted(context.Background(), parts); err != nil {
 		t.Fatalf("permitted: %v", err)
 	}
-	if want := len(permissionsFor(features)); asked != want {
+	if want := len(permissionsFor(parts)); asked != want {
 		t.Errorf("asked about %d permissions, want %d", asked, want)
 	}
 }

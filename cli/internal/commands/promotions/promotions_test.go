@@ -389,7 +389,7 @@ func TestThePromotionsListMarksAPromotionTakenBack(t *testing.T) {
 	}
 }
 
-func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
+func TestACommandThatReadsTheBootstrapNamesThePartItLacks(t *testing.T) {
 	project := promotedTwice(t)
 	clitest.Bootstrap(t, project.Provider, environment.TierProduction)
 	invocation := clitest.NewInvocation()
@@ -398,7 +398,7 @@ func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
 	clitest.AttachTerminalSink(invocation, &stdout)
 	err := runPromotionsList(context.Background(), invocation, project.Root, &stdout, &stderr)
 	if err == nil {
-		t.Fatal("a command reading a bootstrap that lacks a feature this project needs ran on regardless")
+		t.Fatal("a command reading a bootstrap that lacks a part this project needs ran on regardless")
 	}
 	if out := stdout.String(); !strings.Contains(out, "`ocel bootstrap production`") {
 		t.Errorf("refusal = %q, want the literal command to run", out)

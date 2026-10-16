@@ -21,8 +21,8 @@ func WithDefaultStackNames(ns Namespace, described provider.BootstrapDescription
 	if err != nil {
 		return described
 	}
-	return bootstrapplan.WithDefaultStackNames(described, Catalogue(), func(name string) string {
-		f, ok := featureNamed(name)
+	return bootstrapplan.WithDefaultStackNames(described, Parts(), func(name string) string {
+		f, ok := partNamed(name)
 		if !ok {
 			return coreStack
 		}
@@ -38,8 +38,8 @@ func PlanChanges(ctx context.Context, stacks cfn.API, layers LayerAPI, read Read
 		return nil, err
 	}
 	refs, tier := read.refs, read.tier
-	alongside := FeatureSet{}
-	for _, name := range req.Features {
+	alongside := PartSet{}
+	for _, name := range req.Parts {
 		alongside[name] = true
 	}
 
@@ -56,7 +56,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, layers LayerAPI, read Read
 		}()
 	}
 	for i, group := range groups {
-		stack, ok, err := renderGroup(target, group.Feature, featureInputs{
+		stack, ok, err := renderGroup(target, group.Part, partInputs{
 			ns:           read.ns,
 			tier:         tier,
 			refs:         refs,
@@ -97,34 +97,31 @@ func PlanRemove(ctx context.Context, stacks cfn.API, layers LayerTeardownAPI, re
 	if err != nil {
 		return nil, err
 	}
-	installed := read.Deployed.Features.Names()
-	order, err := FeatureDeleteOrder(installed)
-	if err != nil {
-		return nil, err
-	}
-	alongside := FeatureSet{}
+	installed := read.Deployed.Parts.Names()
+	order := installed
+	alongside := PartSet{}
 	for _, name := range installed {
 		alongside[name] = true
 	}
 
 	groups := make([]provider.ChangeGroup, 0, len(order)+2)
-	for _, feature := range append(order, "") {
-		if feature == "" {
+	for _, part := range append(order, "") {
+		if part == "" {
 			if group, found := removeRuntimeLayers(ctx, layers, records(read.Deployed.StateTable), read.ns, read.tier); found {
 				groups = append(groups, group)
 			}
 		}
 		name := coreStack
-		if feature != "" {
-			name = read.ns.FeatureStackName(feature, read.tier)
+		if part != "" {
+			name = read.ns.PartStackName(part, read.tier)
 		}
 		group := provider.ChangeGroup{
-			Kind:    provider.StackGroupKind,
-			Name:    name,
-			Feature: feature,
-			Action:  provider.ActionDelete,
+			Kind:   provider.StackGroupKind,
+			Name:   name,
+			Part:   part,
+			Action: provider.ActionDelete,
 		}
-		stack, ok, err := renderGroup(target, feature, featureInputs{
+		stack, ok, err := renderGroup(target, part, partInputs{
 			ns:           read.ns,
 			tier:         read.tier,
 			refs:         read.refs,
@@ -147,17 +144,14 @@ func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, layers LayerTeard
 	if err != nil {
 		return nil, err
 	}
-	installed, err := installedFeatures(ctx, stacks, read.ns, read.tier)
+	installed, err := installedParts(ctx, stacks, read.ns, read.tier)
 	if err != nil {
 		return nil, err
 	}
-	order, err := FeatureDeleteOrder(installed.Names())
-	if err != nil {
-		return nil, err
-	}
+	order := installed.Names()
 	left := make([]provider.ChangeGroup, 0, len(order)+2)
-	for _, feature := range order {
-		left = append(left, provider.ChangeGroup{Name: read.ns.FeatureStackName(feature, read.tier), Feature: feature})
+	for _, part := range order {
+		left = append(left, provider.ChangeGroup{Name: read.ns.PartStackName(part, read.tier), Part: part})
 	}
 	left = append(left, provider.ChangeGroup{Name: coreStack})
 
@@ -176,11 +170,11 @@ func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, layers LayerTeard
 			continue
 		}
 		groups = append(groups, provider.ChangeGroup{
-			Kind:    provider.StackGroupKind,
-			Name:    group.Name,
-			Feature: group.Feature,
-			Action:  provider.ActionDelete,
-			Reason:  "left in " + string(stack.StackStatus) + " with no usable core stack",
+			Kind:   provider.StackGroupKind,
+			Name:   group.Name,
+			Part:   group.Part,
+			Action: provider.ActionDelete,
+			Reason: "left in " + string(stack.StackStatus) + " with no usable core stack",
 		})
 	}
 	return groups, nil
@@ -211,19 +205,19 @@ func noteStranded(group provider.ChangeGroup) provider.ChangeGroup {
 	return group
 }
 
-func renderGroup(target spec, feature string, in featureInputs) (featureStack, bool, error) {
-	if feature == "" {
-		return featureStack{body: target.core(coreVariablesKey(in.alongside, in.variablesKey))}, true, nil
+func renderGroup(target spec, part string, in partInputs) (partStack, bool, error) {
+	if part == "" {
+		return partStack{body: target.core(coreVariablesKey(in.alongside, in.variablesKey))}, true, nil
 	}
-	f, ok := featureNamed(feature)
+	f, ok := partNamed(part)
 	if !ok {
-		return featureStack{}, false, nil
+		return partStack{}, false, nil
 	}
 	stack, err := f.template(in)
 	return stack, true, err
 }
 
-func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, tier environment.Tier, group provider.ChangeGroup, stack featureStack, writer provider.WrittenBy) provider.ChangeGroup {
+func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, tier environment.Tier, group provider.ChangeGroup, stack partStack, writer provider.WrittenBy) provider.ChangeGroup {
 	tags := stampTags(ns, tier, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
 	id, changes, err := cfn.Plan(ctx, stacks, ns.ChangeSetNameFor, group.Name, stack.body, stack.params,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}, tags)

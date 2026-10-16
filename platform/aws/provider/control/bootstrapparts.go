@@ -33,13 +33,13 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 	if b.VariablesKey != "" {
 		options = append(options, bootstrap.WithVariablesKey(b.VariablesKey))
 	}
-	shapes, err := bootstrap.ShapeParts(b.Namespace, described.Tier, read.Deployed.Features.Names(), options...)
+	shapes, err := bootstrap.ShapeParts(b.Namespace, described.Tier, read.Deployed.Parts.Names(), options...)
 	if err != nil {
 		return nil, err
 	}
 	summaries := map[string]string{provider.BasePart: baseSummary}
-	for _, feature := range bootstrap.Catalogue() {
-		summaries[feature.Name] = feature.Summary
+	for _, part := range bootstrap.Parts() {
+		summaries[part.Name] = part.Summary
 	}
 
 	var parts []provider.BootstrapPart
@@ -49,7 +49,7 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 		if !stack.Present {
 			continue
 		}
-		name := stack.Feature
+		name := stack.Part
 		if name == "" {
 			name = provider.BasePart
 		}

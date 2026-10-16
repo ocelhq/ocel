@@ -1156,7 +1156,7 @@ func TestAPlanIsAGateSetApartByBlankLinesTheMomentItLands(t *testing.T) {
 		Groups: []*planv1.ChangeGroup{{
 			Kind:    "stack",
 			Name:    "ocel-production-queues",
-			Feature: "queues",
+			Part:    "queues",
 			Action:  planv1.Change_ACTION_CREATE,
 			Changes: []*planv1.Change{{Kind: "Fake::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE}},
 		}},

@@ -62,11 +62,11 @@ func TestRemovingATierIgnoresATopicOnAnotherTier(t *testing.T) {
 	}
 }
 
-func TestTopicsAndTasksRunOnAPartAndNoLongerOnABootstrapFeature(t *testing.T) {
+func TestTopicsAndTasksRunOnAPartAndNoLongerOnABootstrapPart(t *testing.T) {
 	t.Parallel()
 
-	if slices.ContainsFunc(bootstrap{}.Catalogue(), func(f provider.Feature) bool { return f.Name == tasksPart }) {
-		t.Errorf("Catalogue() = %v, want no %q feature: the first deploy declaring a topic or a task adds what they run on", bootstrap{}.Catalogue(), tasksPart)
+	if slices.ContainsFunc(bootstrap{}.Parts(), func(f provider.Part) bool { return f.Name == tasksPart }) {
+		t.Errorf("Parts() = %v, want no %q part: the first deploy declaring a topic or a task adds what they run on", bootstrap{}.Parts(), tasksPart)
 	}
 	names := Names{namespace: "ocel", project: "acme-prod"}
 	push := item{Kind: KindServiceAccount, Name: names.PushAccount(environment.TierProduction)}
@@ -221,7 +221,7 @@ func TestADryDeployDeclaringATaskPlansTheTasksPartAndMakesNothing(t *testing.T) 
 	if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {
 		t.Fatalf("PreflightDeploy() = %v", err)
 	}
-	if len(planned) != 1 || planned[0].Feature != tasksPart || planned[0].Action != provider.ActionCreate {
+	if len(planned) != 1 || planned[0].Part != tasksPart || planned[0].Action != provider.ActionCreate {
 		t.Errorf("a dry deploy declaring a task planned %+v, want the %s part created", planned, tasksPart)
 	}
 }

@@ -11,10 +11,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-type ShapeOption func(*featureInputs)
+type ShapeOption func(*partInputs)
 
 func WithVariablesKey(arn string) ShapeOption {
-	return func(in *featureInputs) { in.variablesKey = arn }
+	return func(in *partInputs) { in.variablesKey = arn }
 }
 
 var shapedTypes = map[string]shapedType{
@@ -37,14 +37,14 @@ type shapedType struct {
 	properties func(map[string]any) map[string]any
 }
 
-func Shape(ns Namespace, tier environment.Tier, features []string, options ...ShapeOption) ([]pricing.Shaped, error) {
-	parts, err := ShapeParts(ns, tier, features, options...)
+func Shape(ns Namespace, tier environment.Tier, parts []string, options ...ShapeOption) ([]pricing.Shaped, error) {
+	shapes, err := ShapeParts(ns, tier, parts, options...)
 	if err != nil {
 		return nil, err
 	}
-	shaped := slices.Concat(parts[provider.BasePart], parts[RuntimeLayersPart])
-	for _, name := range features {
-		shaped = append(shaped, parts[name]...)
+	shaped := slices.Concat(shapes[provider.BasePart], shapes[RuntimeLayersPart])
+	for _, name := range parts {
+		shaped = append(shaped, shapes[name]...)
 	}
 	return shaped, nil
 }

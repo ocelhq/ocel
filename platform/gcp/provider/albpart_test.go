@@ -147,7 +147,7 @@ func TestADryDeployBehindTheALBPlansItsLoadBalancerAndRaisesNothing(t *testing.T
 	if err := b.addParts(context.Background(), pre, []string{albPart}); err != nil {
 		t.Fatalf("addParts() = %v", err)
 	}
-	if len(front.raised) != 0 || len(planned) != 1 || planned[0].Feature != albPart || planned[0].Action != provider.ActionCreate {
+	if len(front.raised) != 0 || len(planned) != 1 || planned[0].Part != albPart || planned[0].Action != provider.ActionCreate {
 		t.Errorf("a dry deploy raised %v and planned %+v, want nothing raised and the %s part planned", front.raised, planned, albPart)
 	}
 }
@@ -165,8 +165,8 @@ func TestADeployMayAddAndRetireTheALBsGateRepositoryAndTheBaseKeepsTheCDNPurgeRo
 	if !slices.Contains(idsOf(bootstrapItems(names, environment.TierProduction, false)), role.ID()) {
 		t.Errorf("the base provisions %v, want %s: a deploy grants Next apps behind the alb a role only a bootstrap may make", idsOf(bootstrapItems(names, environment.TierProduction, false)), role.ID())
 	}
-	if slices.ContainsFunc(bootstrap{}.Catalogue(), func(f provider.Feature) bool { return strings.Contains(f.Name, "alb-edge") }) {
-		t.Errorf("Catalogue() = %v, want no alb-edge feature: the first deploy behind the alb adds its load balancer", bootstrap{}.Catalogue())
+	if slices.ContainsFunc(bootstrap{}.Parts(), func(f provider.Part) bool { return strings.Contains(f.Name, "alb-edge") }) {
+		t.Errorf("Parts() = %v, want no alb-edge part: the first deploy behind the alb adds its load balancer", bootstrap{}.Parts())
 	}
 }
 

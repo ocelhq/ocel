@@ -47,7 +47,7 @@ const (
 type Deployed struct {
 	Present           bool
 	Stacks            []StackStamp
-	Features          FeatureSet
+	Parts             PartSet
 	StateBucket       string
 	StateTable        string
 	ArtifactBucket    string
@@ -85,7 +85,7 @@ type APIs struct {
 
 type Request struct {
 	VariablesKey       string
-	Features           []string
+	Parts              []string
 	Remove             []string
 	Writer             provider.WrittenBy
 	AcceptReplacements bool
@@ -133,18 +133,18 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 		return Deployed{}, stackRefs{}, err
 	}
 	if core == nil || cfn.Unusable(core.StackStatus) {
-		return Deployed{Present: false, Features: FeatureSet{}}, stackRefs{}, nil
+		return Deployed{Present: false, Parts: PartSet{}}, stackRefs{}, nil
 	}
 
-	d := Deployed{Present: true, Features: FeatureSet{}, Outputs: cfn.OutputsOf(core)}
+	d := Deployed{Present: true, Parts: PartSet{}, Outputs: cfn.OutputsOf(core)}
 	var refs stackRefs
 	if err := absorb(&d, &refs, d.Outputs); err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
 	coreStamp := readStamp(core.Tags)
 
-	stamps := make(map[string]Stamp, len(featureRegistry))
-	for _, f := range featureRegistry {
+	stamps := make(map[string]Stamp, len(partRegistry))
+	for _, f := range partRegistry {
 		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, tier))
 		if err != nil {
 			return Deployed{}, stackRefs{}, err
@@ -152,7 +152,7 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 		if stack == nil || cfn.Unusable(stack.StackStatus) {
 			continue
 		}
-		d.Features[f.name] = true
+		d.Parts[f.name] = true
 		stamps[f.name] = readStamp(stack.Tags)
 		out := cfn.OutputsOf(stack)
 		maps.Copy(d.Outputs, out)
@@ -172,17 +172,17 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 		Intended:  cfn.TemplateDigest(target.core(broughtVariablesKey(d.Outputs))),
 		WrittenBy: coreStamp.WrittenBy,
 	})
-	for _, f := range featureRegistry {
-		if !d.Features.Has(f.name) {
-			d.Stacks = append(d.Stacks, StackStamp{Name: f.stackName(ns, tier), Feature: f.name})
+	for _, f := range partRegistry {
+		if !d.Parts.Has(f.name) {
+			d.Stacks = append(d.Stacks, StackStamp{Name: f.stackName(ns, tier), Part: f.name})
 			continue
 		}
 		stamp := stamps[f.name]
-		intended, err := f.template(featureInputs{
+		intended, err := f.template(partInputs{
 			ns:           ns,
 			tier:         tier,
 			refs:         refs,
-			alongside:    d.Features,
+			alongside:    d.Parts,
 			variablesKey: broughtVariablesKey(d.Outputs),
 		})
 		if err != nil {
@@ -190,7 +190,7 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 		}
 		d.Stacks = append(d.Stacks, StackStamp{
 			Name:      f.stackName(ns, tier),
-			Feature:   f.name,
+			Part:      f.name,
 			Present:   true,
 			Digest:    stamp.Digest,
 			Intended:  cfn.TemplateDigest(intended.body),
@@ -207,9 +207,9 @@ func broughtVariablesKey(outputs map[string]string) string {
 	return outputs[outputVariablesKeyARN]
 }
 
-func installedFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (FeatureSet, error) {
-	installed := FeatureSet{}
-	for _, f := range featureRegistry {
+func installedParts(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (PartSet, error) {
+	installed := PartSet{}
+	for _, f := range partRegistry {
 		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, tier))
 		if err != nil {
 			return nil, err
@@ -323,11 +323,7 @@ func specFor(ns Namespace, tier environment.Tier) (spec, error) {
 }
 
 func run(ctx context.Context, apis APIs, target spec, req Request, progress progress.Log) error {
-	requested := req.Features
-	levels, err := featureLevels(requested)
-	if err != nil {
-		return err
-	}
+	requested := req.Parts
 
 	progress.Say("Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
 	secret, err := ensureOriginSecret(ctx, apis.SSM, target.ns, target.tier, time.Now())
@@ -346,7 +342,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 		progress.Debug(fmt.Sprintf("Reused the existing %s origin secret", target.tier))
 	}
 
-	alongside := FeatureSet{}
+	alongside := PartSet{}
 	for _, name := range requested {
 		alongside[name] = true
 	}
@@ -368,11 +364,11 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 		return err
 	}
 	steps := stepDeps{ns: target.ns, tier: target.tier, ssm: apis.SSM, iam: apis.IAM, progress: progress}
-	dropped := Removing(req.Features, req.Remove)
+	dropped := Removing(req.Parts, req.Remove)
 	if err := tearDownEdges(ctx, apis, steps, dropped); err != nil {
 		return err
 	}
-	if err := bootstrapEdges(ctx, apis, steps, req.Features, dropped); err != nil {
+	if err := bootstrapEdges(ctx, apis, steps, req.Parts, dropped); err != nil {
 		return err
 	}
 
@@ -387,19 +383,19 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 		progress.Debug("Reused the existing Pulumi passphrase")
 	}
 
-	if err := dropFeatures(ctx, apis.CFN, steps, req.Remove); err != nil {
+	if err := dropParts(ctx, apis.CFN, steps, req.Remove); err != nil {
 		return err
 	}
 
-	for _, level := range levels {
-		progress.Say(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(target.ns, level, target.tier), ", ")))
-		produced := make([]map[string]string, len(level))
+	if len(requested) > 0 {
+		progress.Say(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(partStackNames(target.ns, requested, target.tier), ", ")))
+		produced := make([]map[string]string, len(requested))
 		group, gctx := errgroup.WithContext(ctx)
-		for i, name := range level {
+		for i, name := range requested {
 			group.Go(func() error {
-				f, _ := featureNamed(name)
+				f, _ := partNamed(name)
 				stackName := f.stackName(target.ns, target.tier)
-				stack, err := f.template(featureInputs{
+				stack, err := f.template(partInputs{
 					ns:           target.ns,
 					tier:         target.tier,
 					refs:         refs,
@@ -429,8 +425,8 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 			}
 		}
 
-		for _, name := range level {
-			f, _ := featureNamed(name)
+		for _, name := range requested {
+			f, _ := partNamed(name)
 			if f.after == nil {
 				continue
 			}
@@ -443,13 +439,13 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	return nil
 }
 
-func dropFeatures(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder []string) error {
+func dropParts(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder []string) error {
 	if len(dropOrder) == 0 {
 		return nil
 	}
-	steps.progress.Say(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(steps.ns, dropOrder, steps.tier), ", ")))
+	steps.progress.Say(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(partStackNames(steps.ns, dropOrder, steps.tier), ", ")))
 	for _, name := range dropOrder {
-		f, _ := featureNamed(name)
+		f, _ := partNamed(name)
 		if f.drop == nil {
 			continue
 		}
@@ -457,7 +453,7 @@ func dropFeatures(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	return deleteFeatureStacks(ctx, stacks, steps.ns, steps.tier, dropOrder, steps.progress)
+	return deletePartStacks(ctx, stacks, steps.ns, steps.tier, dropOrder, steps.progress)
 }
 
 func openEdge(apis APIs, kind edge.Kind) (edge.Edge, error) {
@@ -465,19 +461,19 @@ func openEdge(apis APIs, kind edge.Kind) (edge.Edge, error) {
 		return apis.Edge, nil
 	}
 	if apis.Edges == nil {
-		return nil, fmt.Errorf("bootstrap: this run has no edge registry, so it cannot reach the %s edge its features depend on", kind)
+		return nil, fmt.Errorf("bootstrap: this run has no edge registry, so it cannot reach the %s edge its parts depend on", kind)
 	}
 	return apis.Edges.Open(kind, nil)
 }
 
-func bootstrapEdges(ctx context.Context, apis APIs, d stepDeps, features, dropped []string) error {
+func bootstrapEdges(ctx context.Context, apis APIs, d stepDeps, parts, dropped []string) error {
 	torn := EdgeKindsFor(dropped)
 	if !slices.Contains(torn, apis.Edge.Kind()) {
 		if err := bootstrapEdge(ctx, d, apis.Edge); err != nil {
 			return err
 		}
 	}
-	for _, kind := range EdgeKindsFor(features) {
+	for _, kind := range EdgeKindsFor(parts) {
 		if kind == apis.Edge.Kind() || slices.Contains(torn, kind) {
 			continue
 		}
@@ -590,8 +586,8 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func coreVariablesKey(alongside FeatureSet, brought string) string {
-	if alongside.Has(provider.FeatureVariablesKey) {
+func coreVariablesKey(alongside PartSet, brought string) string {
+	if alongside.Has(provider.VariablesKeyPart) {
 		return brought
 	}
 	return ""
@@ -708,10 +704,10 @@ func stateTableOutputs() string {
     Description: "DynamoDB table storing account-global Ocel state: the stack index prune and teardown walk, and the ISR tag clock the edge shares."
     Value: !Ref StateTable
   %s:
-    Description: "ARN of that table, handed to every feature stack that grants an item read or write on it."
+    Description: "ARN of that table, handed to every part stack that grants an item read or write on it."
     Value: !GetAtt StateTable.Arn
   %s:
-    Description: "ARN of that table's stream, handed to every feature stack that reads tag writes off it."
+    Description: "ARN of that table's stream, handed to every part stack that reads tag writes off it."
     Value: !GetAtt StateTable.StreamArn
 `, outputStateTable, outputStateTableARN, outputStateTableStreamARN)
 }
@@ -799,7 +795,7 @@ func assetBucketOutputs() string {
     Description: "S3 bucket storing per-build static assets, prerender fallbacks, image-optimizer config and the edge fetch cache. Read directly by the edge."
     Value: !Ref AssetBucket
   %s:
-    Description: "ARN of that bucket, handed to every feature stack that grants a read or a write inside it."
+    Description: "ARN of that bucket, handed to every part stack that grants a read or a write inside it."
     Value: !GetAtt AssetBucket.Arn
 `, outputAssetBucket, outputAssetBucketARN)
 }

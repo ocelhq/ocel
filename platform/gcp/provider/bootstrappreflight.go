@@ -233,28 +233,28 @@ func rolesFor(purpose edge.CredentialPurpose) []string {
 	return granted
 }
 
-func (b bootstrap) preflight(ctx context.Context, read survey, features []string) error {
-	if err := b.servicesOn(ctx, apisFor(read.Tier, features)); err != nil {
+func (b bootstrap) preflight(ctx context.Context, read survey, parts []string) error {
+	if err := b.servicesOn(ctx, apisFor(read.Tier, parts)); err != nil {
 		return err
 	}
-	if err := b.permitted(ctx, features); err != nil {
+	if err := b.permitted(ctx, parts); err != nil {
 		return err
 	}
 	return b.regionServed(ctx, read)
 }
 
-func permissionsFor(features []string) []string {
+func permissionsFor(parts []string) []string {
 	permissions := slices.Clone(bootstrapPermissions)
-	if slices.Contains(features, albShieldedFeature) {
+	if slices.Contains(parts, cloudflareOriginPart) {
 		permissions = appendMissing(permissions, alb.ShieldedPermissions)
 		permissions = appendMissing(permissions, assetStorePermissions)
 	}
 	return permissions
 }
 
-func rolesCovering(features []string) []string {
+func rolesCovering(parts []string) []string {
 	roles := rolesFor(edge.PurposeBootstrap)
-	if slices.Contains(features, albShieldedFeature) {
+	if slices.Contains(parts, cloudflareOriginPart) {
 		roles = appendMissing(roles, alb.ShieldedRoles())
 	}
 	return roles
@@ -285,12 +285,12 @@ func (b bootstrap) servicesOn(ctx context.Context, apis []string) error {
 		b.clients.project, strings.Join(off, ", "), strings.Join(off, " "), b.clients.project)
 }
 
-func (b bootstrap) permitted(ctx context.Context, features []string) error {
+func (b bootstrap) permitted(ctx context.Context, parts []string) error {
 	service, err := b.clients.Projects()
 	if err != nil {
 		return err
 	}
-	needed := permissionsFor(features)
+	needed := permissionsFor(parts)
 	var granted []string
 	for asked := range slices.Chunk(needed, testedPermissionsPerRequest) {
 		answer, err := attempted(ctx, service.Projects.TestIamPermissions(b.clients.project,
@@ -312,7 +312,7 @@ func (b bootstrap) permitted(ctx context.Context, features []string) error {
 	return refusal.Refuse(refusal.CodeDenied,
 		"this credential may not do what a bootstrap of project %s does: it lacks %s.\n"+
 			"Granting %s covers every one of them, but the permissions are what is checked",
-		b.clients.project, strings.Join(missing, ", "), strings.Join(rolesCovering(features), ", "))
+		b.clients.project, strings.Join(missing, ", "), strings.Join(rolesCovering(parts), ", "))
 }
 
 func (b bootstrap) regionServed(ctx context.Context, read survey) error {

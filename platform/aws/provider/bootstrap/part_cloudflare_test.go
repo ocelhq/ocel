@@ -34,8 +34,8 @@ func TestEdgeUser(t *testing.T) {
 		template string
 		userName string
 	}{
-		{string(environment.TierProduction), featureTemplate(FeatureCloudflareEdge, environment.TierProduction), edgeUserName},
-		{string(environment.TierPreview), featureTemplate(FeatureCloudflareEdge, environment.TierPreview), previewEdgeUser},
+		{string(environment.TierProduction), partTemplate(CloudflareEdgePart, environment.TierProduction), edgeUserName},
+		{string(environment.TierPreview), partTemplate(CloudflareEdgePart, environment.TierPreview), previewEdgeUser},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var tmpl edgeUserTemplate
@@ -153,7 +153,7 @@ func existingTagsSatisfy(condition map[string]any, tags map[string]string) bool 
 
 func TestTheEdgeUserCannotReadAnUntaggedObjectOfAProjectNamedEdgeOrAnAppNamedAssets(t *testing.T) {
 	var tmpl edgeUserTemplate
-	if err := yaml.Unmarshal([]byte(featureTemplate(FeatureCloudflareEdge, environment.TierProduction)), &tmpl); err != nil {
+	if err := yaml.Unmarshal([]byte(partTemplate(CloudflareEdgePart, environment.TierProduction)), &tmpl); err != nil {
 		t.Fatalf("template is not valid YAML: %v", err)
 	}
 	stmts := tmpl.Resources["EdgeUser"].Properties.Policies[0].PolicyDocument.Statement
@@ -198,20 +198,20 @@ func (e *mintingEdge) Teardown(context.Context, environment.Tier) error {
 	return nil
 }
 
-func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
+func TestDroppingTheEdgePartLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	ctx := context.Background()
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	front := &mintingEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
 	apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), front)
-	fronted := Request{Features: []string{FeatureCloudflareEdge}}
+	fronted := Request{Parts: []string{CloudflareEdgePart}}
 
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, fronted, nil); err != nil {
 		t.Fatalf("the bootstrap that installs the edge: %v", err)
 	}
 
-	drop := Request{Remove: []string{FeatureCloudflareEdge}}
+	drop := Request{Remove: []string{CloudflareEdgePart}}
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, drop, nil); err != nil {
-		t.Fatalf("dropping %s: %v", FeatureCloudflareEdge, err)
+		t.Fatalf("dropping %s: %v", CloudflareEdgePart, err)
 	}
 	if front.torn != 1 {
 		t.Errorf("the edge was torn down %d times, want once: the account fronts nothing with it after the drop", front.torn)
@@ -238,7 +238,7 @@ func TestTheEdgeUserInvokesTheImageOptimizerOfItsOwnTierByNameAndNoOtherFunction
 	} {
 		t.Run(string(tc.tier), func(t *testing.T) {
 			var tmpl edgeUserTemplate
-			if err := yaml.Unmarshal([]byte(featureTemplate(FeatureCloudflareEdge, tc.tier)), &tmpl); err != nil {
+			if err := yaml.Unmarshal([]byte(partTemplate(CloudflareEdgePart, tc.tier)), &tmpl); err != nil {
 				t.Fatalf("template is not valid YAML: %v", err)
 			}
 			want := "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:" + tc.optimizer

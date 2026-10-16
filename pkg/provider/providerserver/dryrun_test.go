@@ -176,7 +176,7 @@ func (p *addingParts) Hooks() provider.Hooks {
 func (p *addingParts) PreflightDeploy(_ context.Context, pre provider.DeployPreflight) error {
 	p.seen = append(p.seen, pre)
 	if pre.Dry {
-		pre.AddToPlan(provider.ChangeGroup{Kind: provider.StackGroupKind, Name: "fake/tasks", Feature: "tasks", Action: provider.ActionCreate})
+		pre.AddToPlan(provider.ChangeGroup{Kind: provider.StackGroupKind, Name: "fake/tasks", Part: "tasks", Action: provider.ActionCreate})
 	}
 	return nil
 }

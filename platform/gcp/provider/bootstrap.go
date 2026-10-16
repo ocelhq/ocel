@@ -71,7 +71,7 @@ const (
 
 type bootstrapGate struct{ p *Provider }
 
-func (g bootstrapGate) Catalogue() []provider.Feature { return bootstrap{}.Catalogue() }
+func (g bootstrapGate) Parts() []provider.Part { return bootstrap{}.Parts() }
 
 func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 	opened, err := g.p.openClients(ctx)
@@ -167,14 +167,14 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 		DigestCurrent: read.Stamp.Digest == digestOf(read.Names.Namespace(), items) && read.current(items),
 		WrittenBy:     read.Stamp.Writer,
 	}}
-	for _, feature := range read.Stamp.Features {
-		installed, err := b.featureInstalled(ctx, read.Tier, feature)
+	for _, part := range read.Stamp.Parts {
+		installed, err := b.partInstalled(ctx, read.Tier, part)
 		if err != nil {
 			return provider.BootstrapDescription{}, err
 		}
 		stacks = append(stacks, provider.BootstrapStack{
-			Name:          read.Project + "/" + string(read.Tier) + "/" + feature,
-			Feature:       feature,
+			Name:          read.Project + "/" + string(read.Tier) + "/" + part,
+			Part:          part,
 			Present:       installed,
 			DigestCurrent: installed,
 			WrittenBy:     read.Stamp.Writer,
@@ -201,17 +201,17 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.preflight(ctx, read, req.Features); err != nil {
+	if err := b.preflight(ctx, read, req.Parts); err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.featuresFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
+	if err := b.partsFree(ctx, req.Tier, droppedParts(read.Stamp.Parts, req)); err != nil {
 		return provider.Plan{}, err
 	}
 	current, err := b.described(ctx, read)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups := bootstrapplan.ChangeGroups(current, b.Catalogue(), req)
+	groups := bootstrapplan.ChangeGroups(current, b.Parts(), req)
 	groups[0].Changes = planned(read, stackItems(read.Names, read.Tier, read.Emulated))
 
 	params := provider.ChangeGroup{
@@ -220,7 +220,7 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		Changes: planned(read, parameterItems(read.Names, read.Tier)),
 	}
 	params.Action, params.Reason = provider.RollUp(params.Changes)
-	fronts, err := b.plannedFronts(ctx, req.Tier, req.Features)
+	fronts, err := b.plannedFronts(ctx, req.Tier, req.Parts)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -261,7 +261,7 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err != nil {
 		return err
 	}
-	if err := b.preflight(ctx, read, req.Features); err != nil {
+	if err := b.preflight(ctx, read, req.Parts); err != nil {
 		return err
 	}
 
@@ -270,15 +270,15 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := b.provision(ctx, read, stampItem(items, stampBucket), progress); err != nil {
 		return err
 	}
-	if err := b.dropFeatures(ctx, read, req, progress); err != nil {
+	if err := b.dropParts(ctx, read, req, progress); err != nil {
 		return err
 	}
 
 	written := stamp{
-		State:    stateApplying,
-		Writer:   req.WrittenBy.String(),
-		Digest:   digestOf(read.Names.Namespace(), items),
-		Features: installedFeatures(b.Catalogue(), read.Stamp.Features, req),
+		State:  stateApplying,
+		Writer: req.WrittenBy.String(),
+		Digest: digestOf(read.Names.Namespace(), items),
+		Parts:  installedParts(b.Parts(), read.Stamp.Parts, req),
 	}
 	generation, err := b.stampWith(ctx, read, written, read.Generation)
 	if err != nil {
@@ -292,7 +292,7 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 			return err
 		}
 	}
-	if err := b.raiseFeatures(ctx, req, progress); err != nil {
+	if err := b.raiseParts(ctx, req, progress); err != nil {
 		return err
 	}
 	written.State = stateComplete
@@ -827,7 +827,7 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.featuresFree(ctx, tier, read.Stamp.Features); err != nil {
+	if err := b.partsFree(ctx, tier, read.Stamp.Parts); err != nil {
 		return provider.Plan{}, err
 	}
 	if err := b.refusePartsInUse(ctx, tier); err != nil {
@@ -870,7 +870,7 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 		stack.Changes = append(stack.Changes, change)
 	}
 	params.Action, params.Reason = provider.RollUp(params.Changes)
-	fronts, err := b.removedFronts(ctx, tier, read.Stamp.Features)
+	fronts, err := b.removedFronts(ctx, tier, read.Stamp.Parts)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -937,7 +937,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 				"Run `%s` in every project deployed here first",
 			read.Names.StateBucket(tier), read.stateOf, destroyIn(tier))
 	}
-	if err := b.featuresFree(ctx, tier, read.Stamp.Features); err != nil {
+	if err := b.partsFree(ctx, tier, read.Stamp.Parts); err != nil {
 		return err
 	}
 	if err := b.refusePartsInUse(ctx, tier); err != nil {
@@ -950,7 +950,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 			return err
 		}
 	}
-	if err := b.tearFeatures(ctx, tier, read.Stamp.Features); err != nil {
+	if err := b.tearParts(ctx, tier, read.Stamp.Parts); err != nil {
 		return err
 	}
 	if err := b.removeParts(ctx, tier, progress); err != nil {

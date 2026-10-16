@@ -41,11 +41,11 @@ func TestTheFilterForStoresOnANetworkMatchesTheLabelsAStackWrites(t *testing.T) 
 	}
 }
 
-func TestThePrivateNetworkIsAPartAndNoLongerABootstrapFeature(t *testing.T) {
+func TestThePrivateNetworkIsAPartAndNoLongerABootstrapPart(t *testing.T) {
 	t.Parallel()
 
-	if slices.ContainsFunc(bootstrap{}.Catalogue(), func(f provider.Feature) bool { return f.Name == networkPart }) {
-		t.Errorf("Catalogue() = %v, want no %q feature: the first deploy declaring a database or a store adds the network", bootstrap{}.Catalogue(), networkPart)
+	if slices.ContainsFunc(bootstrap{}.Parts(), func(f provider.Part) bool { return f.Name == networkPart }) {
+		t.Errorf("Parts() = %v, want no %q part: the first deploy declaring a database or a store adds the network", bootstrap{}.Parts(), networkPart)
 	}
 	b, _ := servingNetworks(t)
 	network := b.networkPart(environment.TierProduction)
@@ -162,7 +162,7 @@ func TestRemovingATierTakesItsPrivateNetworkDownAndAPlanToRemoveItListsIt(t *tes
 	ctx := context.Background()
 
 	groups, err := b.listPartRemovals(ctx, environment.TierProduction)
-	if err != nil || len(groups) != 1 || groups[0].Feature != networkPart || groups[0].Action != provider.ActionDelete || len(groups[0].Changes) != 4 {
+	if err != nil || len(groups) != 1 || groups[0].Part != networkPart || groups[0].Action != provider.ActionDelete || len(groups[0].Changes) != 4 {
 		t.Fatalf("listPartRemovals() = %+v, %v, want the network part deleted with its four resources", groups, err)
 	}
 	if err := b.removeParts(ctx, environment.TierProduction, nil); err != nil {

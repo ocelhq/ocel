@@ -36,14 +36,11 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	features, err := bootstrapplan.RequiredFeatures(readiness.Bootstrap.Catalogue(), readiness.Edge)
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
+	parts := bootstrapplan.RequiredParts(readiness.Bootstrap.Parts(), readiness.Edge)
 	set, err := cost.Shape(ctx, provider.ShapeRequest{
 		Deploy:     spec,
 		Edge:       readiness.Edge,
-		Features:   features,
+		Parts:      parts,
 		Resources:  resources,
 		Functions:  shapedFunctions(req.GetManifest()),
 		Transforms: h.session.transforms(),

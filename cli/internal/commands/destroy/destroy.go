@@ -162,7 +162,7 @@ func destroyTier(ctx context.Context, invocation commands.Invocation, cfg *proje
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Pinning: executables.ChoosePinning(policy.DryRun), Tier: tier, Require: readiness.Features})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Pinning: executables.ChoosePinning(policy.DryRun), Tier: tier, Require: readiness.Parts})
 	check.End(err)
 	if err != nil {
 		return nil, err

@@ -40,7 +40,7 @@ func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {
 	conformance.RunStore(t, store)
 
 	in := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootConformance, Path: []string{"console"}}
-	written := json.RawMessage(`{"features":["cache"]}`)
+	written := json.RawMessage(`{"parts":["cache"]}`)
 	if _, err := store.Write(ctx, keyvalue.Entry{Key: in.Key("shop"), Value: written}); err != nil {
 		t.Fatalf("Write() = %v", err)
 	}

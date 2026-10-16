@@ -17,7 +17,7 @@ type reached struct {
 	removed int
 }
 
-func (r *reached) Catalogue() []provider.Feature { return nil }
+func (r *reached) Parts() []provider.Part { return nil }
 
 func (r *reached) Describe(context.Context, environment.Tier) (provider.BootstrapDescription, error) {
 	return provider.BootstrapDescription{}, nil

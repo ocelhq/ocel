@@ -52,7 +52,7 @@ func TestStateBackendURLIncludesTheEndpointTheAccountIsReachedOn(t *testing.T) {
 
 type stubBootstrap struct{ err error }
 
-func (stubBootstrap) Catalogue() []provider.Feature { return nil }
+func (stubBootstrap) Parts() []provider.Part { return nil }
 
 func (stubBootstrap) Describe(context.Context, environment.Tier) (provider.BootstrapDescription, error) {
 	return provider.BootstrapDescription{}, nil
@@ -104,7 +104,7 @@ func digestKeyAfter(t *testing.T, req provider.BootstrapRequest, keys ...string)
 }
 
 func TestAnApplyThatTakesTheVariablesKeyAwayForgetsTheDigestKeySealedUnderIt(t *testing.T) {
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{provider.FeatureVariablesKey}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{provider.VariablesKeyPart}}
 	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", ""); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Fatalf("the digest key after the variables key was removed reads %v, want it forgotten: nothing opens it once its key is gone, and a sync never replaces a key it cannot open", err)
 	}
@@ -267,7 +267,7 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 func TestDescribingTheBootstrapReadsTheAccountTheProviderAlreadyRead(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
-		return bootstrap.Reading{Deployed: bootstrap.Deployed{Present: true, Features: bootstrap.FeatureSet{}}}, nil
+		return bootstrap.Reading{Deployed: bootstrap.Deployed{Present: true, Parts: bootstrap.PartSet{}}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -373,8 +373,8 @@ func TestBucketsAreTheTiersArtifactAndAssetBucketsWhateverEdgesAreInstalled(t *t
 		return bootstrap.Reading{Deployed: bootstrap.Deployed{
 			ArtifactBucket: "functions",
 			AssetBucket:    "assets",
-			Features: bootstrap.FeatureSet{
-				bootstrap.FeatureCloudflareEdge: true,
+			Parts: bootstrap.PartSet{
+				bootstrap.CloudflareEdgePart: true,
 			},
 		}}, nil
 	}); err != nil {

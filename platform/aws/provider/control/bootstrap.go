@@ -96,14 +96,14 @@ func (b Bootstrap) paramAPIs() bootstrap.ParamAPIs {
 func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
 	return bootstrap.Request{
 		VariablesKey:       b.VariablesKey,
-		Features:           req.Features,
+		Parts:              req.Parts,
 		Remove:             req.Remove,
 		Writer:             req.WrittenBy,
 		AcceptReplacements: !req.RefuseReplacements,
 	}
 }
 
-func (b Bootstrap) Catalogue() []provider.Feature { return bootstrap.Catalogue() }
+func (b Bootstrap) Parts() []provider.Part { return bootstrap.Parts() }
 
 func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
 	read, err := b.read(ctx, tier)
@@ -125,7 +125,7 @@ func described(tier environment.Tier, deployed bootstrap.Deployed) provider.Boot
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, provider.BootstrapStack{
 			Name:          stack.Name,
-			Feature:       stack.Feature,
+			Part:          stack.Part,
 			Present:       stack.Present,
 			DigestCurrent: stack.Current(),
 			WrittenBy:     stack.WrittenBy,
@@ -140,7 +140,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		return provider.Plan{}, err
 	}
 	groups, err := bootstrap.PlanChanges(ctx, b.CFN, b.Layers, read, b.request(req),
-		bootstrapplan.ChangeGroups(bootstrap.WithDefaultStackNames(b.Namespace, described(req.Tier, read.Deployed)), bootstrap.Catalogue(), req))
+		bootstrapplan.ChangeGroups(bootstrap.WithDefaultStackNames(b.Namespace, described(req.Tier, read.Deployed)), bootstrap.Parts(), req))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -184,7 +184,7 @@ func (b Bootstrap) open(kind edge.Kind) (edge.Edge, error) {
 
 func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest) ([]bootstrap.EdgeAdoption, error) {
 	var out []bootstrap.EdgeAdoption
-	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
+	for _, kind := range bootstrap.EdgeKindsFor(req.Parts) {
 		front, err := b.open(kind)
 		if err != nil {
 			return nil, err
@@ -204,7 +204,7 @@ func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest)
 
 func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
-	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
+	for _, kind := range bootstrap.EdgeKindsFor(req.Parts) {
 		group, err := b.installedEdgeGroup(ctx, req.Tier, kind)
 		if err != nil {
 			return nil, err
@@ -213,7 +213,7 @@ func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest
 			groups = append(groups, *group)
 		}
 	}
-	for _, kind := range bootstrap.EdgeKindsFor(bootstrap.Removing(req.Features, req.Remove)) {
+	for _, kind := range bootstrap.EdgeKindsFor(bootstrap.Removing(req.Parts, req.Remove)) {
 		group, err := b.severedEdge(ctx, req.Tier, kind)
 		if err != nil {
 			return nil, err
@@ -234,7 +234,7 @@ func (b Bootstrap) installedEdgeGroup(ctx context.Context, tier environment.Tier
 	if err != nil || len(planned) == 0 {
 		return nil, err
 	}
-	group, err := bootstrapplan.EdgeGroup(kind, bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), kind), planned)
+	group, err := bootstrapplan.EdgeGroup(kind, bootstrapplan.PartFrontingEdge(bootstrap.Parts(), kind), planned)
 	if err != nil {
 		return nil, err
 	}
@@ -262,27 +262,27 @@ func (b Bootstrap) severedEdge(ctx context.Context, tier environment.Tier, kind 
 	if err != nil {
 		return nil, err
 	}
-	feature := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), kind)
+	part := bootstrapplan.PartFrontingEdge(bootstrap.Parts(), kind)
 	if group == nil {
 		planned, err := plannedBootstrap(ctx, front, tier)
 		if err != nil {
 			return nil, err
 		}
-		group = installedEdgeChanges(kind, feature, planned)
+		group = installedEdgeChanges(kind, part, planned)
 	}
 	if group == nil {
 		return nil, nil
 	}
-	group.Reason = fmt.Sprintf("dropping %s takes the %s edge with it", feature, kind)
+	group.Reason = fmt.Sprintf("dropping %s takes the %s edge with it", part, kind)
 	return group, nil
 }
 
-func installedEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanChange) *provider.ChangeGroup {
+func installedEdgeChanges(kind edge.Kind, part string, planned []edge.PlanChange) *provider.ChangeGroup {
 	group := provider.ChangeGroup{
-		Kind:    edge.EdgeGroupKind,
-		Name:    edge.EdgeGroupName(kind),
-		Feature: feature,
-		Action:  provider.ActionDelete,
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(kind),
+		Part:   part,
+		Action: provider.ActionDelete,
 	}
 	for _, change := range planned {
 		if change.Action == edge.PlanCreate {

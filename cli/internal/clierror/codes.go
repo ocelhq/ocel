@@ -18,7 +18,7 @@ const (
 	CodePrerequisiteMissing        = "prerequisite.missing"
 	CodeVariablesMissing           = "variables.missing"
 	CodeBootstrapMissing           = "bootstrap.missing"
-	CodeBootstrapFeaturesMissing   = "bootstrap.features_missing"
+	CodeBootstrapPartsMissing      = "bootstrap.parts_missing"
 	CodeConsoleNotLoggedIn         = "console.not_logged_in"
 	CodeConsoleNotLinked           = "console.not_linked"
 	CodeDoctorChecksFailed         = "doctor.checks_failed"
@@ -42,7 +42,7 @@ func Codes() []string {
 		CodePrerequisiteMissing,
 		CodeVariablesMissing,
 		CodeBootstrapMissing,
-		CodeBootstrapFeaturesMissing,
+		CodeBootstrapPartsMissing,
 		CodeConsoleNotLoggedIn,
 		CodeConsoleNotLinked,
 		CodeDoctorChecksFailed,

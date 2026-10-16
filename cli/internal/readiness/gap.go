@@ -25,7 +25,7 @@ func NewGap(status *contractv1.BootstrapStatus) Gap {
 		return gap
 	}
 	for _, stack := range status.GetStacks() {
-		feature := stack.GetFeature()
+		part := stack.GetPart()
 		switch {
 		case stack.GetPresent():
 			switch {
@@ -35,22 +35,22 @@ func NewGap(status *contractv1.BootstrapStatus) Gap {
 			case !stack.GetDigestCurrent():
 				gap.Stale = append(gap.Stale, stack.GetName())
 			}
-		case stack.GetRequired() && feature != "" && !slices.Contains(gap.Missing, feature):
-			gap.Missing = append(gap.Missing, feature)
+		case stack.GetRequired() && part != "" && !slices.Contains(gap.Missing, part):
+			gap.Missing = append(gap.Missing, part)
 		}
 	}
 	slices.Sort(gap.Missing)
 	return gap
 }
 
-func NewFeatureGap(status *contractv1.BootstrapStatus, feature string) Gap {
+func NewPartGap(status *contractv1.BootstrapStatus, part string) Gap {
 	var gap Gap
 	if !status.GetPresent() {
 		return gap
 	}
 	for _, stack := range status.GetStacks() {
-		if stack.GetFeature() == feature && stack.GetRequired() && !stack.GetPresent() {
-			gap.Missing = []string{feature}
+		if stack.GetPart() == part && stack.GetRequired() && !stack.GetPresent() {
+			gap.Missing = []string{part}
 		}
 	}
 	return gap
@@ -72,10 +72,10 @@ func (g Gap) RefuseMissing(tier environmentv1.Tier) error {
 	if len(g.Missing) == 0 {
 		return nil
 	}
-	return MissingFeaturesError{Gap: g, Tier: tier}.refuse()
+	return MissingPartsError{Gap: g, Tier: tier}.refuse()
 }
 
-type MissingFeaturesError struct {
+type MissingPartsError struct {
 	Gap        Gap
 	Tier       environmentv1.Tier
 	Edge       *contractv1.EdgeSelection
@@ -83,7 +83,7 @@ type MissingFeaturesError struct {
 	Unrecorded bool
 }
 
-func (e MissingFeaturesError) Error() string {
+func (e MissingPartsError) Error() string {
 	if e.Unrecorded {
 		return fmt.Sprintf("the %s bootstrap does not include what this project needs: %s.\nA dry run records nothing: %s",
 			TierName(e.Tier), strings.Join(e.Gap.Missing, ", "), e.Hint())
@@ -94,35 +94,35 @@ func (e MissingFeaturesError) Error() string {
 	)
 }
 
-func (MissingFeaturesError) Missing() prerequisite.Kind { return prerequisite.Bootstrap }
+func (MissingPartsError) Missing() prerequisite.Kind { return prerequisite.Bootstrap }
 
-func (e MissingFeaturesError) Finding() string {
+func (e MissingPartsError) Finding() string {
 	return fmt.Sprintf("The %s bootstrap does not include what this project needs: %s.", TierName(e.Tier), strings.Join(e.Gap.Missing, ", "))
 }
 
-func (e MissingFeaturesError) Remedy() string {
+func (e MissingPartsError) Remedy() string {
 	if e.Unrecorded {
 		return e.Hint()
 	}
 	return "`" + e.Hint() + "`"
 }
 
-func (e MissingFeaturesError) Hint() string {
+func (e MissingPartsError) Hint() string {
 	if e.Unrecorded {
 		return "deploy without --dry, which records what this project wants, then run `" + e.Gap.RepairCommand(e.Tier) + "`"
 	}
 	return e.Gap.RepairCommand(e.Tier)
 }
 
-func (e MissingFeaturesError) refuse() error {
-	return &clierror.Error{Code: clierror.CodeBootstrapFeaturesMissing, Hint: e.Hint(), Cause: e}
+func (e MissingPartsError) refuse() error {
+	return &clierror.Error{Code: clierror.CodeBootstrapPartsMissing, Hint: e.Hint(), Cause: e}
 }
 
-func (e MissingFeaturesError) BootstrapRequest() *contractv1.BootstrapRequest {
+func (e MissingPartsError) BootstrapRequest() *contractv1.BootstrapRequest {
 	return e.Gap.BootstrapRequest(e.Tier, e.Edge)
 }
 
-func (e MissingFeaturesError) BootstrapProvider() *providerprocess.Provider { return e.Provider }
+func (e MissingPartsError) BootstrapProvider() *providerprocess.Provider { return e.Provider }
 
 func (g Gap) RefuseIncomplete(tier environmentv1.Tier) error {
 	if err := g.RefuseMissing(tier); err != nil {

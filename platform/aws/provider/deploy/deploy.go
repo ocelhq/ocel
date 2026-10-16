@@ -40,7 +40,7 @@ type Config struct {
 	WrittenBy provider.WrittenBy
 	Rules     RulesAPI
 
-	RequiredFeatures []string
+	RequiredParts []string
 
 	StateTable          string
 	StateTableARN       string

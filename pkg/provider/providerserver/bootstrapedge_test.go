@@ -23,32 +23,29 @@ func fronting(t *testing.T, kind edge.Kind) (providerserver.Readiness, *fake.Pro
 	return readiness, p
 }
 
-func planFeatures(t *testing.T, readiness providerserver.Readiness, req providerserver.ApplyRequest) []string {
+func planParts(t *testing.T, readiness providerserver.Readiness, req providerserver.ApplyRequest) []string {
 	t.Helper()
 
 	plan, err := readiness.Plan(context.Background(), environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
-	var featured []string
+	var planned []string
 	for _, group := range plan.Groups {
-		if group.Feature != "" && group.Action != provider.ActionDelete {
-			featured = append(featured, group.Feature)
+		if group.Part != "" && group.Action != provider.ActionDelete {
+			planned = append(planned, group.Part)
 		}
 	}
-	return featured
+	return planned
 }
 
-func TestABootstrapEnsuresTheFeatureItsEdgeNeeds(t *testing.T) {
+func TestABootstrapEnsuresThePartItsEdgeRequires(t *testing.T) {
 	t.Parallel()
 
 	readiness, _ := fronting(t, fake.KindRelay)
-	featured := planFeatures(t, readiness, providerserver.ApplyRequest{})
-	if !slices.Contains(featured, fake.FeatureImages) {
-		t.Fatalf("a plain bootstrap behind the %s edge plans %v, want the feature that edge needs", fake.KindRelay, featured)
-	}
-	if !slices.Contains(featured, fake.FeatureCache) {
-		t.Errorf("plan = %v, want what the edge's feature depends on pulled in with it", featured)
+	planned := planParts(t, readiness, providerserver.ApplyRequest{})
+	if !slices.Contains(planned, fake.PartImages) {
+		t.Fatalf("a plain bootstrap behind the %s edge plans %v, want the part that edge requires", fake.KindRelay, planned)
 	}
 }
 
@@ -56,16 +53,16 @@ func TestABootstrapBehindAnotherEdgeEnsuresNothing(t *testing.T) {
 	t.Parallel()
 
 	readiness, _ := fronting(t, fake.KindDirect)
-	if featured := planFeatures(t, readiness, providerserver.ApplyRequest{}); len(featured) != 0 {
-		t.Fatalf("a plain bootstrap behind the %s edge plans %v, want nothing: no feature names that edge", fake.KindDirect, featured)
+	if planned := planParts(t, readiness, providerserver.ApplyRequest{}); len(planned) != 0 {
+		t.Fatalf("a plain bootstrap behind the %s edge plans %v, want nothing: no part names that edge", fake.KindDirect, planned)
 	}
 }
 
-func TestAnInstalledEdgeFeatureLeftOutIsKept(t *testing.T) {
+func TestAnInstalledEdgePartLeftOutIsKept(t *testing.T) {
 	t.Parallel()
 
 	readiness, p := fronting(t, fake.KindRelay)
-	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 
 	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{})
 	if err != nil {
@@ -73,19 +70,19 @@ func TestAnInstalledEdgeFeatureLeftOutIsKept(t *testing.T) {
 	}
 	for _, group := range plan.Groups {
 		if group.Action == provider.ActionDelete {
-			t.Fatalf("plan deletes %s, want a run that named no removal to take nothing down", group.Feature)
+			t.Fatalf("plan deletes %s, want a run that named no removal to take nothing down", group.Part)
 		}
 	}
 }
 
-func TestAnEdgeFeatureGoesOnlyWhenTheRunNamesIt(t *testing.T) {
+func TestAnEdgePartGoesOnlyWhenTheRunNamesIt(t *testing.T) {
 	t.Parallel()
 
 	readiness, p := fronting(t, fake.KindDirect)
-	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 
 	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
-		Remove: []string{fake.FeatureImages},
+		Remove: []string{fake.PartImages},
 	})
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
@@ -93,115 +90,95 @@ func TestAnEdgeFeatureGoesOnlyWhenTheRunNamesIt(t *testing.T) {
 	var removed []string
 	for _, group := range plan.Groups {
 		if group.Action == provider.ActionDelete {
-			removed = append(removed, group.Feature)
+			removed = append(removed, group.Part)
 		}
 	}
-	if !slices.Equal(removed, []string{fake.FeatureImages}) {
-		t.Fatalf("plan deletes %v, want exactly the feature the run named", removed)
+	if !slices.Equal(removed, []string{fake.PartImages}) {
+		t.Fatalf("plan deletes %v, want exactly the part the run named", removed)
 	}
 }
 
-func TestAnUnrequestedInstalledEdgeFeatureIsKept(t *testing.T) {
+func TestAnUnrequestedInstalledEdgePartIsKept(t *testing.T) {
 	t.Parallel()
 
 	readiness, p := fronting(t, fake.KindDirect)
-	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 
 	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Feature == fake.FeatureImages && group.Action == provider.ActionDelete {
-			t.Fatalf("bootstrapping behind %s deletes %s, want another edge's installed feature untouched", fake.KindDirect, fake.FeatureImages)
+		if group.Part == fake.PartImages && group.Action == provider.ActionDelete {
+			t.Fatalf("bootstrapping behind %s deletes %s, want another edge's installed part untouched", fake.KindDirect, fake.PartImages)
 		}
 	}
 }
 
-func TestRemovingAnEdgeFeatureNamesTheProjectsBehindIt(t *testing.T) {
+func TestRemovingAnEdgePartNamesTheProjectsBehindIt(t *testing.T) {
 	t.Parallel()
 
 	readiness, p := fronting(t, fake.KindDirect)
-	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
-	recordProject(t, p, "shop", fake.FeatureImages)
+	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
+	recordProject(t, p, "shop", fake.PartImages)
 
-	req := providerserver.ApplyRequest{Remove: []string{fake.FeatureImages}}
+	req := providerserver.ApplyRequest{Remove: []string{fake.PartImages}}
 	plan, err := readiness.Plan(context.Background(), environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
 	var reason string
 	for _, group := range plan.Groups {
-		if group.Feature == fake.FeatureImages && group.Action == provider.ActionDelete {
+		if group.Part == fake.PartImages && group.Action == provider.ActionDelete {
 			reason = group.Reason
 		}
 	}
 	if reason == "" {
-		t.Fatalf("removing %s says nothing about the projects deployed against it", fake.FeatureImages)
+		t.Fatalf("removing %s says nothing about the projects deployed against it", fake.PartImages)
 	}
 	if err := readiness.Apply(context.Background(), plan, environment.TierProduction, req, nil); err == nil {
-		t.Fatal("removing an edge feature a deployed project needs was admitted, want it refused")
+		t.Fatal("removing an edge part a deployed project needs was admitted, want it refused")
 	}
 }
 
-func TestRemovingTheFeatureTheChosenEdgeFrontsThroughIsRefused(t *testing.T) {
+func TestRemovingThePartTheChosenEdgeFrontsThroughIsRefused(t *testing.T) {
 	t.Parallel()
 
 	readiness, vendor := fronting(t, fake.KindRelay)
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache, fake.PartImages)
 
 	_, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
-		Remove: []string{fake.FeatureImages},
+		Remove: []string{fake.PartImages},
 	})
 	if err == nil {
-		t.Fatalf("a run behind the %s edge removed the feature that edge fronts through", fake.KindRelay)
+		t.Fatalf("a run behind the %s edge removed the part that edge fronts through", fake.KindRelay)
 	}
-	if !strings.Contains(err.Error(), fake.FeatureImages+" fronts this project's deploys") {
+	if !strings.Contains(err.Error(), fake.PartImages+" fronts this project's deploys") {
 		t.Errorf("refusal = %q, want it to name the edge this project fronts with", err)
 	}
 	if strings.Contains(err.Error(), "either ensured or removed") {
-		t.Errorf("refusal = %q, want the real conflict rather than features the run never asked to install", err)
+		t.Errorf("refusal = %q, want the real conflict rather than parts the run never asked to install", err)
 	}
 }
 
-func TestRemovingWhatTheFrontingFeatureDependsOnIsRefusedByName(t *testing.T) {
-	t.Parallel()
-
-	readiness, vendor := fronting(t, fake.KindRelay)
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
-
-	_, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
-		Remove: []string{fake.FeatureCache},
-	})
-	if err == nil {
-		t.Fatalf("removing %s took %s, the feature the %s edge fronts through, with it", fake.FeatureCache, fake.FeatureImages, fake.KindRelay)
-	}
-	if !strings.Contains(err.Error(), "removing "+fake.FeatureCache+" takes "+fake.FeatureImages+" down with it") {
-		t.Errorf("refusal = %q, want it to name what the cascade would take", err)
-	}
-	if strings.Contains(err.Error(), "either ensured or removed") {
-		t.Errorf("refusal = %q, want the real conflict rather than features the run never asked to install", err)
-	}
-}
-
-func TestRemovingAnEdgeFeatureThatFrontsNothingHereGoesAhead(t *testing.T) {
+func TestRemovingAnEdgePartThatFrontsNothingHereGoesAhead(t *testing.T) {
 	t.Parallel()
 
 	readiness, vendor := fronting(t, fake.KindDirect)
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache, fake.PartImages)
 
 	ctx := context.Background()
-	req := providerserver.ApplyRequest{Remove: []string{fake.FeatureImages}}
+	req := providerserver.ApplyRequest{Remove: []string{fake.PartImages}}
 	plan, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
 	if err := readiness.Apply(ctx, plan, environment.TierProduction, req, nil); err != nil {
-		t.Fatalf("removing an edge feature no project here fronts with: %v", err)
+		t.Fatalf("removing an edge part no project here fronts with: %v", err)
 	}
 }
 
-func TestARunNamingNoEdgeStillNeedsTheDefaultEdgesFeature(t *testing.T) {
+func TestARunNamingNoEdgeStillNeedsTheDefaultEdgesPart(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -216,13 +193,13 @@ func TestARunNamingNoEdgeStillNeedsTheDefaultEdgesFeature(t *testing.T) {
 		t.Fatalf("Preflight(): %v", err)
 	}
 	for _, stack := range resp.GetBootstrap().GetStacks() {
-		if stack.GetFeature() != fake.FeatureImages {
+		if stack.GetPart() != fake.PartImages {
 			continue
 		}
 		if !stack.GetRequired() || !stack.GetPresent() {
-			t.Fatalf("%s = %+v, want the default edge's feature required and installed after a bootstrap that named no edge", fake.FeatureImages, stack)
+			t.Fatalf("%s = %+v, want the default edge's part required and installed after a bootstrap that named no edge", fake.PartImages, stack)
 		}
 		return
 	}
-	t.Fatalf("Preflight() reported no %s stack at all", fake.FeatureImages)
+	t.Fatalf("Preflight() reported no %s stack at all", fake.PartImages)
 }

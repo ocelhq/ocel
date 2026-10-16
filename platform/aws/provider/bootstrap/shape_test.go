@@ -41,14 +41,14 @@ func TestTheCoreShapesItsBucketsTablesAndLayers(t *testing.T) {
 		t.Errorf("layers = %d, want one per architecture", got)
 	}
 	if got := len(shapedOf(shaped, "aws_kms_key")); got != 0 {
-		t.Errorf("a core without the variables-key feature shaped %d KMS keys", got)
+		t.Errorf("a core without the variables-key part shaped %d KMS keys", got)
 	}
 }
 
-func TestEveryFeatureTogetherShapesTheVariablesKeyAndNoFunctionOrQueue(t *testing.T) {
+func TestEveryPartTogetherShapesTheVariablesKeyAndNoFunctionOrQueue(t *testing.T) {
 	t.Parallel()
 
-	shaped, err := Shape(Namespace("ocel"), environment.TierProduction, []string{provider.FeatureVariablesKey, FeatureCloudflareEdge})
+	shaped, err := Shape(Namespace("ocel"), environment.TierProduction, []string{provider.VariablesKeyPart, CloudflareEdgePart})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestATemplateFunctionIsShapedAsTheTemplateSizesIt(t *testing.T) {
 func TestABroughtVariablesKeyShapesNoKey(t *testing.T) {
 	t.Parallel()
 
-	shaped, err := Shape(Namespace("ocel"), environment.TierPreview, []string{provider.FeatureVariablesKey}, WithVariablesKey("arn:aws:kms:us-east-1:1:key/k"))
+	shaped, err := Shape(Namespace("ocel"), environment.TierPreview, []string{provider.VariablesKeyPart}, WithVariablesKey("arn:aws:kms:us-east-1:1:key/k"))
 	if err != nil {
 		t.Fatal(err)
 	}

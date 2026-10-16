@@ -43,22 +43,22 @@ func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 	}
 }
 
-func TestReadingABootstrapSeesTheEdgeFeatureInstalledBesideTheCore(t *testing.T) {
+func TestReadingABootstrapSeesTheEdgePartInstalledBesideTheCore(t *testing.T) {
 	stamp := Stamp{}
 	api := stubStacksAPI{
 		coreStackName: outputs(map[string]string{
 			outputInfraTier:   string(environment.TierProduction),
 			outputAssetBucket: "assets-1",
 		}).stamped(stamp),
-		defaultNamespace.FeatureStackName(FeatureCloudflareEdge, environment.TierProduction): outputs(nil).stamped(stamp),
+		defaultNamespace.PartStackName(CloudflareEdgePart, environment.TierProduction): outputs(nil).stamped(stamp),
 	}
 
 	got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 	if err != nil {
 		t.Fatalf("CheckDeployed: %v", err)
 	}
-	if want := []string{FeatureCloudflareEdge}; !slices.Equal(got.Features.Names(), want) {
-		t.Errorf("Features = %v, want %v", got.Features.Names(), want)
+	if want := []string{CloudflareEdgePart}; !slices.Equal(got.Parts.Names(), want) {
+		t.Errorf("Parts = %v, want %v", got.Parts.Names(), want)
 	}
 	if got.Outputs[outputAssetBucket] != "assets-1" {
 		t.Errorf("Outputs[%s] = %q, want the core's asset bucket", outputAssetBucket, got.Outputs[outputAssetBucket])
@@ -71,11 +71,11 @@ func TestBootstrappingOneEdgeLeavesAnotherEdgesStackAlone(t *testing.T) {
 	store := preloadedStore()
 
 	cloudflare := apisFronting(stacks, ssmc, iamc, store, &fakeEdge{kind: KindCloudflare})
-	if err := Run(ctx, cloudflare, defaultNamespace, environment.TierProduction, Request{Features: []string{FeatureCloudflareEdge}}, nil); err != nil {
+	if err := Run(ctx, cloudflare, defaultNamespace, environment.TierProduction, Request{Parts: []string{CloudflareEdgePart}}, nil); err != nil {
 		t.Fatalf("bootstrapping behind the cloudflare edge: %v", err)
 	}
 
-	existing := defaultNamespace.FeatureStackName(FeatureCloudflareEdge, environment.TierProduction)
+	existing := defaultNamespace.PartStackName(CloudflareEdgePart, environment.TierProduction)
 	eventsBefore := len(stacks.events)
 	restamps := stacks.restamps
 
@@ -97,20 +97,20 @@ func TestBootstrappingOneEdgeLeavesAnotherEdgesStackAlone(t *testing.T) {
 	}
 }
 
-func TestAnEdgeFeatureInstallsItsOwnEdgeWhateverFrontsTheRun(t *testing.T) {
+func TestAnEdgePartInstallsItsOwnEdgeWhateverFrontsTheRun(t *testing.T) {
 	ctx := context.Background()
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	registry := newFakeEdges(&fakeEdge{kind: KindCloudflare})
 	apis := apisAcross(stacks, ssmc, iamc, preloadedStore(), &fakeEdge{kind: kindCloudFront}, registry)
 
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction,
-		Request{Features: []string{FeatureCloudflareEdge}}, nil); err != nil {
-		t.Fatalf("bootstrapping the cloudflare edge feature behind the cloudfront front: %v", err)
+		Request{Parts: []string{CloudflareEdgePart}}, nil); err != nil {
+		t.Fatalf("bootstrapping the cloudflare edge part behind the cloudfront front: %v", err)
 	}
 
 	front := registry.at(KindCloudflare)
 	if front.bootstraps != 1 {
-		t.Fatalf("the cloudflare edge was bootstrapped %d times, want once: the feature owns the edge, not the front this run picked", front.bootstraps)
+		t.Fatalf("the cloudflare edge was bootstrapped %d times, want once: the part owns the edge, not the front this run picked", front.bootstraps)
 	}
 }
 
@@ -120,20 +120,20 @@ func TestTheFrontThisRunPicksIsBootstrappedOnce(t *testing.T) {
 	apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), front)
 
 	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction,
-		Request{Features: []string{FeatureCloudflareEdge}}, nil); err != nil {
+		Request{Parts: []string{CloudflareEdgePart}}, nil); err != nil {
 		t.Fatalf("bootstrapping behind the cloudflare edge: %v", err)
 	}
 	if front.bootstraps != 1 {
-		t.Errorf("the front was bootstrapped %d times, want once: the feature and the front are the same edge here", front.bootstraps)
+		t.Errorf("the front was bootstrapped %d times, want once: the part and the front are the same edge here", front.bootstraps)
 	}
 }
 
-func TestRemovingAnEdgeFeatureTearsItsEdgeDownBeforeSeveringWhatReachesIt(t *testing.T) {
+func TestRemovingAnEdgePartTearsItsEdgeDownBeforeSeveringWhatReachesIt(t *testing.T) {
 	ctx := context.Background()
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	store := preloadedStore()
 	registry := newFakeEdges(&fakeEdge{kind: KindCloudflare})
-	install := Request{Features: []string{FeatureCloudflareEdge}}
+	install := Request{Parts: []string{CloudflareEdgePart}}
 	apis := apisAcross(stacks, ssmc, iamc, store, &fakeEdge{kind: kindCloudFront}, registry)
 
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, install, nil); err != nil {
@@ -154,12 +154,12 @@ func TestRemovingAnEdgeFeatureTearsItsEdgeDownBeforeSeveringWhatReachesIt(t *tes
 		}
 	}
 
-	drop := Request{Remove: []string{FeatureCloudflareEdge}}
+	drop := Request{Remove: []string{CloudflareEdgePart}}
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, drop, nil); err != nil {
-		t.Fatalf("removing the cloudflare edge feature behind the cloudfront front: %v", err)
+		t.Fatalf("removing the cloudflare edge part behind the cloudfront front: %v", err)
 	}
 	if front.teardowns != 1 {
-		t.Fatalf("the cloudflare edge was torn down %d times, want once: dropping its feature takes its externals with it", front.teardowns)
+		t.Fatalf("the cloudflare edge was torn down %d times, want once: dropping its part takes its externals with it", front.teardowns)
 	}
 	if len(presentWhileTearing) == 0 {
 		t.Error("the teardown ran with nothing left at SSM, so it had no credentials to reach the edge with")

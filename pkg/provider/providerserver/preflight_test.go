@@ -242,7 +242,7 @@ func TestPreflightReportsAPlainCredentialRefusalAsAProblemAndAsksNothing(t *test
 	}
 }
 
-func TestPreflightRequiresTheFeaturesTheEdgeNeeds(t *testing.T) {
+func TestPreflightRequiresThePartsTheEdgeNeeds(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -259,8 +259,8 @@ func TestPreflightRequiresTheFeaturesTheEdgeNeeds(t *testing.T) {
 		t.Fatalf("Preflight() error = %v", err)
 	}
 	for _, stack := range resp.GetBootstrap().GetStacks() {
-		if stack.GetFeature() == fake.FeatureCache && !stack.GetRequired() {
-			t.Errorf("%s is not marked required, and the relay edge needs it", fake.FeatureCache)
+		if stack.GetPart() == fake.PartCache && !stack.GetRequired() {
+			t.Errorf("%s is not marked required, and the relay edge needs it", fake.PartCache)
 		}
 	}
 }
@@ -278,11 +278,11 @@ func TestPreflightWithNoBootstrapYetReportsEveryPartTheEdgeRequires(t *testing.T
 	}
 	var absent []string
 	for _, stack := range resp.GetBootstrap().GetStacks() {
-		if stack.GetFeature() != "" && stack.GetRequired() && !stack.GetPresent() {
-			absent = append(absent, stack.GetFeature())
+		if stack.GetPart() != "" && stack.GetRequired() && !stack.GetPresent() {
+			absent = append(absent, stack.GetPart())
 		}
 	}
-	if want := []string{fake.FeatureCache, fake.FeatureImages}; !slices.Equal(absent, want) {
+	if want := []string{fake.PartImages}; !slices.Equal(absent, want) {
 		t.Errorf("Preflight() reports %v as required and absent, want %v, which the relay edge requires", absent, want)
 	}
 }
@@ -301,11 +301,11 @@ func TestPreflightReportsEveryPartTheEdgeRequiresThatABootstrapLacks(t *testing.
 	}
 	var absent []string
 	for _, stack := range resp.GetBootstrap().GetStacks() {
-		if stack.GetFeature() != "" && stack.GetRequired() && !stack.GetPresent() {
-			absent = append(absent, stack.GetFeature())
+		if stack.GetPart() != "" && stack.GetRequired() && !stack.GetPresent() {
+			absent = append(absent, stack.GetPart())
 		}
 	}
-	if want := []string{fake.FeatureCache, fake.FeatureImages}; !slices.Equal(absent, want) {
+	if want := []string{fake.PartImages}; !slices.Equal(absent, want) {
 		t.Errorf("Preflight() reports %v as required and absent, want %v, which the relay edge requires and the bootstrap lacks", absent, want)
 	}
 }
@@ -325,7 +325,7 @@ func TestAPreflightAskedToRecordWantsRecordsEveryPartTheProjectWantsThatTheBoots
 	client, vendor := contractServed(t, "1.2.3")
 	direct := &contractv1.EdgeSelection{Kind: "direct"}
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
+	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache)
 	_, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
@@ -336,7 +336,7 @@ func TestAPreflightAskedToRecordWantsRecordsEveryPartTheProjectWantsThatTheBoots
 		t.Fatalf("Preflight() error = %v", err)
 	}
 
-	want := map[string][]string{fake.FeatureImages: {"shop"}}
+	want := map[string][]string{fake.PartImages: {"shop"}}
 	if got := wantedParts(t, vendor, environment.TierProduction); !maps.EqualFunc(got, want, slices.Equal) {
 		t.Errorf("wants = %v, want %v: the bootstrap holds cache, and the relay edge also wants images", got, want)
 	}
@@ -353,13 +353,13 @@ func TestAPreflightRecordsAPartTheCommandWantsBeyondItsBuildOnlyWhenTheProviderO
 		Slug:         "shop",
 		Edge:         direct,
 		RecordWants:  true,
-		WantedParts:  []string{fake.FeatureCache, "variables-key"},
+		WantedParts:  []string{fake.PartCache, "variables-key"},
 	})
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
 
-	want := map[string][]string{fake.FeatureCache: {"shop"}}
+	want := map[string][]string{fake.PartCache: {"shop"}}
 	if got := wantedParts(t, vendor, environment.TierProduction); !maps.EqualFunc(got, want, slices.Equal) {
 		t.Errorf("wants = %v, want %v: this provider offers no variables-key", got, want)
 	}
@@ -375,7 +375,7 @@ func TestAPreflightNotAskedToRecordWantsRecordsNone(t *testing.T) {
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 		Edge:         direct,
-		WantedParts:  []string{fake.FeatureCache},
+		WantedParts:  []string{fake.PartCache},
 	})
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)

@@ -100,7 +100,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 		return nil, provider.RefusalError(err)
 	}
 	resp := &contractv1.DescribeBootstrapResponse{
-		Bootstrap: BootstrapStatusProto(status, h.session.writer, req.GetTier(), status.Features),
+		Bootstrap: BootstrapStatusProto(status, h.session.writer, req.GetTier(), status.Parts),
 	}
 	if req.GetWithParts() {
 		var price estimate
@@ -124,12 +124,12 @@ func ChangePlanProto(plan provider.Plan, subject, kind string) *planv1.ChangePla
 
 func GroupProto(group provider.ChangeGroup) *planv1.ChangeGroup {
 	rendered := &planv1.ChangeGroup{
-		Kind:    group.Kind,
-		Name:    group.Name,
-		Feature: group.Feature,
-		Action:  provider.ActionProto(group.Action),
-		Reason:  group.Reason,
-		Slow:    group.Slow,
+		Kind:   group.Kind,
+		Name:   group.Name,
+		Part:   group.Part,
+		Action: provider.ActionProto(group.Action),
+		Reason: group.Reason,
+		Slow:   group.Slow,
 	}
 	for _, change := range group.Changes {
 		rendered.Changes = append(rendered.Changes, &planv1.Change{
@@ -151,12 +151,12 @@ func PlanFromProto(shown *planv1.ChangePlan) (provider.Plan, error) {
 			return provider.Plan{}, err
 		}
 		converted := provider.ChangeGroup{
-			Kind:    group.GetKind(),
-			Name:    group.GetName(),
-			Feature: group.GetFeature(),
-			Action:  action,
-			Reason:  group.GetReason(),
-			Slow:    group.GetSlow(),
+			Kind:   group.GetKind(),
+			Name:   group.GetName(),
+			Part:   group.GetPart(),
+			Action: action,
+			Reason: group.GetReason(),
+			Slow:   group.GetSlow(),
 		}
 		for _, change := range group.GetChanges() {
 			if action, err = changeAction(change.GetAction()); err != nil {
@@ -196,17 +196,17 @@ func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, t
 	for _, stack := range current.Stacks {
 		status.Stacks = append(status.Stacks, &contractv1.BootstrapStack{
 			Name:          stack.Name,
-			Feature:       stack.Feature,
+			Part:          stack.Part,
 			Present:       stack.Present,
 			DigestCurrent: stack.DigestCurrent,
 			WrittenBy:     stack.WrittenBy,
-			Required:      stack.Feature == "" || slices.Contains(required, stack.Feature),
+			Required:      stack.Part == "" || slices.Contains(required, stack.Part),
 			ReadError:     stack.ReadError,
 		})
 	}
-	for _, feature := range required {
-		if !slices.ContainsFunc(current.Stacks, func(stack provider.BootstrapStack) bool { return stack.Feature == feature }) {
-			status.Stacks = append(status.Stacks, &contractv1.BootstrapStack{Feature: feature, Required: true})
+	for _, part := range required {
+		if !slices.ContainsFunc(current.Stacks, func(stack provider.BootstrapStack) bool { return stack.Part == part }) {
+			status.Stacks = append(status.Stacks, &contractv1.BootstrapStack{Part: part, Required: true})
 		}
 	}
 	return status

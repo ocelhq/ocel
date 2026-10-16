@@ -70,7 +70,7 @@ func TestAnEntryOnTheBoxIsAJSONFileHoldingTheValueAsWritten(t *testing.T) {
 	here := newHelperHere(t)
 	store := boxstore.NewKeyValues(here)
 	key := stackrecords.ProjectKey(environment.TierProduction, "shop")
-	revision, err := store.Write(context.Background(), keyvalue.Entry{Key: key, Value: json.RawMessage(`{"features": ["cache"]}`)})
+	revision, err := store.Write(context.Background(), keyvalue.Entry{Key: key, Value: json.RawMessage(`{"parts": ["cache"]}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,12 +90,12 @@ func TestAnEntryOnTheBoxIsAJSONFileHoldingTheValueAsWritten(t *testing.T) {
 	if err := json.Unmarshal(raw, &file); err != nil {
 		t.Fatalf("the entry's file holds %q, which is not JSON: %v", raw, err)
 	}
-	if file.Revision != string(revision) || string(file.Value) != `{"features":["cache"]}` {
+	if file.Revision != string(revision) || string(file.Value) != `{"parts":["cache"]}` {
 		t.Errorf("the entry's file holds revision %q and value %s, want %q and the value written", file.Revision, file.Value, revision)
 	}
 
 	read, err := (live.KeyValues{Root: here.root}).Read(context.Background(), key)
-	if err != nil || read.Revision != revision || string(read.Value) != `{"features":["cache"]}` {
+	if err != nil || read.Revision != revision || string(read.Value) != `{"parts":["cache"]}` {
 		t.Errorf("the box-side reader answered %+v, %v, want the entry the helper wrote", read, err)
 	}
 }
