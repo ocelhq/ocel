@@ -1,10 +1,13 @@
 package providerserver_test
 
 import (
+	"context"
 	"maps"
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -156,5 +159,47 @@ func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 	if after := records.Snapshot(); !maps.Equal(before, after) {
 		t.Errorf("a dry deploy wrote records: before %v, after %v",
 			slices.Sorted(maps.Keys(before)), slices.Sorted(maps.Keys(after)))
+	}
+}
+
+type addingParts struct {
+	*fake.Provider
+	seen []provider.DeployPreflight
+}
+
+func (p *addingParts) Hooks() provider.Hooks {
+	hooks := p.Provider.Hooks()
+	hooks.PreflightDeploy = p.PreflightDeploy
+	return hooks
+}
+
+func (p *addingParts) PreflightDeploy(_ context.Context, pre provider.DeployPreflight) error {
+	p.seen = append(p.seen, pre)
+	if pre.Dry {
+		pre.AddToPlan(provider.ChangeGroup{Kind: provider.StackGroupKind, Name: "fake/tasks", Feature: "tasks", Action: provider.ActionCreate})
+	}
+	return nil
+}
+
+func TestADryDeployPlansThePartsItsPreflightWouldAddBeforeAnythingElse(t *testing.T) {
+	builtProject(t)
+	declaresNeed(t, "web", edge.NeedRevalidation)
+	vendor := &addingParts{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
+
+	req := twoAppRequest()
+	req.Dry = true
+	result, events := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if got := groupNames(lastPlan(events)); len(got) == 0 || got[0] != "stack:fake/tasks" {
+		t.Errorf("the plan shows %v, want the part the deploy adds on first use as its first row: it is made before anything that runs on it", got)
+	}
+	if len(vendor.seen) != 1 {
+		t.Fatalf("the preflight ran %d times, want once", len(vendor.seen))
+	}
+	if uses := vendor.seen[0].Uses; !slices.ContainsFunc(uses, func(u buildoutput.Uses) bool { return u.Revalidation }) {
+		t.Errorf("the preflight was handed uses %+v, want the app that revalidates among them: a provider adds what revalidation runs on", uses)
 	}
 }

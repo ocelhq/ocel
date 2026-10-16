@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -70,6 +71,8 @@ type DeployPreflight struct {
 	Progress          progress.Log
 	WrittenBy         WrittenBy
 	Dry               bool
+	Uses              []buildoutput.Uses
+	AddToPlan         func(groups ...ChangeGroup)
 }
 
 type AppUsage struct {

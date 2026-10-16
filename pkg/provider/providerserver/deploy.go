@@ -170,6 +170,7 @@ type deployRun struct {
 	*edgeSession
 	readiness    Readiness
 	features     []string
+	uses         []buildoutput.Uses
 	transforms   []string
 	artifactRoot string
 	sender       *eventStream
@@ -293,6 +294,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		readiness:      readiness,
 		previewKeys:    &h.session.previewKeys,
 		features:       features,
+		uses:           uses,
 		transforms:     h.session.transforms(),
 		artifactRoot:   h.session.artifactRoot(),
 		sender:         sender,
@@ -960,6 +962,10 @@ func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error 
 		Progress:          progress,
 		WrittenBy:         r.readiness.WrittenBy,
 		Dry:               r.dry,
+		Uses:              r.uses,
+		AddToPlan: func(groups ...provider.ChangeGroup) {
+			r.dryRunPlan.parts = append(r.dryRunPlan.parts, groups...)
+		},
 	})
 }
 
