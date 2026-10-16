@@ -45,7 +45,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 		Short: "Set up the shared infrastructure deploys run on",
 		Long:  "Set up the shared infrastructure deploys run on.",
 		Example: "  $ ocel bootstrap production\n" +
-			"  $ ocel bootstrap preview --features all\n" +
+			"  $ ocel bootstrap preview\n" +
 			"  $ ocel bootstrap status",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
@@ -72,11 +72,10 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 		Aliases: aliases,
 		Short:   fmt.Sprintf("Set up or update the %s environment", name),
 		Long: fmt.Sprintf("Set up or update the %s environment.\n\n", name) +
-			"A bootstrap only ever builds up: --features and the interactive picker add and refresh, " +
-			"and a feature they leave out stays included. --remove is the only way anything goes.\n\n" +
+			"A bootstrap only ever builds up: each run brings its base current and adds every part a project here was refused for. " +
+			"--remove is the only way anything goes.\n\n" +
 			"Every run prints the changes it would make before asking; --dry prints them and stops.",
 		Example: fmt.Sprintf("  $ ocel bootstrap %s\n", name) +
-			fmt.Sprintf("  $ ocel bootstrap %s --features variables-key\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --remove variables-key\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --dry\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --repair", name),
@@ -98,6 +97,7 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 	commands.AddYesFlag(cmd, &opts.Yes)
 	commands.AddDryFlag(cmd, &opts.Dry, "Print the changes and stop, applying nothing")
 	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to add or refresh; whatever else is installed is left alone (also: all, none)")
+	_ = cmd.Flags().MarkHidden("features")
 	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of features to tear down; nothing goes unless it is named here")
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a feature other projects still use")
 	cmd.Flags().BoolVar(&opts.Repair, "repair", false, "Let later deploys refresh stale features on their own; --repair=false turns it off")

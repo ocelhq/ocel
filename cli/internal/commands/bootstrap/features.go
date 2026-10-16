@@ -310,7 +310,7 @@ func unmetDependency(catalogue []*contractv1.Feature, chosen []string) error {
 			if slices.Contains(chosen, dep) {
 				continue
 			}
-			return fmt.Errorf("%s needs %s, which this set leaves out; pass --features %s",
+			return fmt.Errorf("%s needs %s, which this set leaves out; name all of %s",
 				f.GetName(), dep, strings.Join(withDependencies(catalogue, chosen), ","))
 		}
 	}
