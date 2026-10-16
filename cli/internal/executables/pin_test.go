@@ -474,3 +474,49 @@ func TestTheLockIsWrittenInOneOrderWhateverOrderItWasBuiltIn(t *testing.T) {
 		t.Fatalf("the lock is not byte-identical across build order:\n%s\nvs\n%s", a, b)
 	}
 }
+
+func noRelease(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestADevelopmentBuildWithNoReleaseIsToldToSetTheProvidersDir(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"0.0.2-snapshot-1a2b3c4", "dev"} {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+
+			store := storeOn(t, noRelease(t), "linux", "amd64")
+			store.Version = version
+
+			_, err := ensurePinned(context.Background(), store, KindProvider, t.TempDir(), "fake", store.Platform, PinToLock)
+			if err == nil {
+				t.Fatal("ensurePinned() error = nil, want a build no release publishes refused")
+			}
+			for _, want := range []string{version, "development build", "no release", OverrideEnvVar, "scripts/snapshot.mjs", "dist/providers", "404"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not say %q", err.Error(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestAReleasedVersionWithNoReleaseIsNotToldToSetTheProvidersDir(t *testing.T) {
+	t.Parallel()
+
+	store := storeOn(t, noRelease(t), "linux", "amd64")
+
+	_, err := ensurePinned(context.Background(), store, KindProvider, t.TempDir(), "fake", store.Platform, PinToLock)
+	if err == nil {
+		t.Fatal("ensurePinned() error = nil, want a release that answers 404 refused")
+	}
+	if strings.Contains(err.Error(), OverrideEnvVar) || strings.Contains(err.Error(), "development build") {
+		t.Errorf("error %q calls release %s a development build", err.Error(), pinnedVersion)
+	}
+}

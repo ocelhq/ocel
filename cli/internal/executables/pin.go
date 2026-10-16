@@ -2,10 +2,13 @@ package executables
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
+	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
@@ -102,6 +105,11 @@ func writeReleaseLock(ctx context.Context, store *Store, projectDir string) (loc
 
 func readReleaseLock(ctx context.Context, store *Store) (lockfile.Lock, error) {
 	sums, err := store.Checksums(ctx)
+	var refused *statusError
+	if errors.As(err, &refused) && refused.status == http.StatusNotFound && !sdkversion.Released(store.Version) {
+		return lockfile.Lock{}, fmt.Errorf("ocel %s is a development build, and no release publishes its providers (%w): set %s to the providers built beside it — `node scripts/snapshot.mjs` in the ocel checkout builds them into dist/providers and prints the %s line to export",
+			store.Version, err, OverrideEnvVar, OverrideEnvVar)
+	}
 	if err != nil {
 		return lockfile.Lock{}, fmt.Errorf("read the checksums of release %s: %w", store.Version, err)
 	}
