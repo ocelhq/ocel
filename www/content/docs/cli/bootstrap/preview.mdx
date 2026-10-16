@@ -7,7 +7,7 @@ description: "Set up or update the preview environment."
 ocel bootstrap preview [flags]
 ```
 
-A bootstrap only ever builds up: each run brings its base current and adds every part a project here was refused for. `--remove` is the only way anything goes.
+A bootstrap only ever builds up: each run brings its base current and adds every part a project here was refused for. `--remove` takes a part down, whichever added it, and refuses while a project here uses it unless `--force`.
 
 Every run prints the changes it would make before asking; `--dry` prints them and stops.
 

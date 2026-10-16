@@ -69,7 +69,7 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 		Short:   fmt.Sprintf("Set up or update the %s environment", name),
 		Long: fmt.Sprintf("Set up or update the %s environment.\n\n", name) +
 			"A bootstrap only ever builds up: each run brings its base current and adds every part a project here was refused for. " +
-			"--remove is the only way anything goes.\n\n" +
+			"--remove takes a part down, whichever added it, and refuses while a project here uses it unless --force.\n\n" +
 			"Every run prints the changes it would make before asking; --dry prints them and stops.",
 		Example: fmt.Sprintf("  $ ocel bootstrap %s\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --remove variables-key\n", name) +
