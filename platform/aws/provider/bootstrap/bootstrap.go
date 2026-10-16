@@ -22,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 )
 
@@ -56,10 +55,14 @@ type Deployed struct {
 	VariablesTable    string
 	VariablesTableARN string
 	VariablesKeyARN   string
-	ImageOptimizerURL string
 	AppBoundaryARN    string
-	Tier              environment.Tier
-	Outputs           map[string]string
+
+	StateTableStreamARN   string
+	TagInvalidatorRoleARN string
+	EdgeInvokeRoleARN     string
+
+	Tier    environment.Tier
+	Outputs map[string]string
 }
 
 type SSMAPI interface {
@@ -120,14 +123,6 @@ func Read(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment
 	return Reading{Deployed: deployed, ns: ns, tier: tier, refs: refs}, nil
 }
 
-func FeatureOutputs(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier, name string) (map[string]string, error) {
-	f, ok := featureNamed(name)
-	if !ok {
-		return nil, fmt.Errorf("bootstrap: no feature named %q", name)
-	}
-	return cfn.StackOutputs(ctx, api, f.stackName(ns, tier))
-}
-
 func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (Deployed, stackRefs, error) {
 	coreStack, err := ns.StackNameFor(tier)
 	if err != nil {
@@ -183,13 +178,12 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 			continue
 		}
 		stamp := stamps[f.name]
-		intended, err := f.planned(featureInputs{
-			ns:             ns,
-			tier:           tier,
-			artifactBucket: d.ArtifactBucket,
-			refs:           refs,
-			alongside:      d.Features,
-			variablesKey:   broughtVariablesKey(d.Outputs),
+		intended, err := f.template(featureInputs{
+			ns:           ns,
+			tier:         tier,
+			refs:         refs,
+			alongside:    d.Features,
+			variablesKey: broughtVariablesKey(d.Outputs),
 		})
 		if err != nil {
 			return Deployed{}, stackRefs{}, err
@@ -237,7 +231,11 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 		case outputStateTableARN:
 			refs.stateTableARN = value
 		case outputStateTableStreamARN:
-			refs.stateTableStreamARN = value
+			d.StateTableStreamARN, refs.stateTableStreamARN = value, value
+		case outputTagInvalidatorRoleARN:
+			d.TagInvalidatorRoleARN = value
+		case OutputEdgeInvokeRoleARN:
+			d.EdgeInvokeRoleARN = value
 		case outputArtifactBucket:
 			d.ArtifactBucket = value
 		case outputAssetBucket:
@@ -250,10 +248,6 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 			d.VariablesTableARN = value
 		case outputVariablesKeyARN:
 			d.VariablesKeyARN = value
-		case outputImageOptimizerURL:
-			d.ImageOptimizerURL = value
-		case outputImageOptimizerARN:
-			refs.imageOptimizerARN = value
 		case outputAppBoundaryARN:
 			d.AppBoundaryARN = value
 		case outputInfraTier:
@@ -261,11 +255,6 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 		}
 	}
 	return nil
-}
-
-type stackPayloads struct {
-	optimizer   payloads.Placement
-	invalidator payloads.Placement
 }
 
 type spec struct {
@@ -410,13 +399,12 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 			group.Go(func() error {
 				f, _ := featureNamed(name)
 				stackName := f.stackName(target.ns, target.tier)
-				stack, err := f.staged(gctx, apis.Store, featureInputs{
-					ns:             target.ns,
-					tier:           target.tier,
-					artifactBucket: deployed.ArtifactBucket,
-					refs:           refs,
-					alongside:      alongside,
-					variablesKey:   req.VariablesKey,
+				stack, err := f.template(featureInputs{
+					ns:           target.ns,
+					tier:         target.tier,
+					refs:         refs,
+					alongside:    alongside,
+					variablesKey: req.VariablesKey,
 				})
 				if err != nil {
 					return fmt.Errorf("%s: %w", name, err)
@@ -613,17 +601,18 @@ func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey string) s
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: %q
 Resources:
-%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket storing the Pulumi state Ocel plans every %s deploy and teardown from. One versioned object per %s stack."
     Value: !Ref StateBucket
-%s%s%s%s%s  %s:
+%s%s%s%s%s%s  %s:
     Description: "The tier this bootstrap was installed for: production or preview."
     Value: '%s'
 `, coreStackDescription(tier),
 		stateBucketResource(tier), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), variablesResources(tier), appBoundaryResource(ns, tier, broughtKey),
+		tagInvalidatorRoleResource(ns, tier), edgeInvokeRoleResource(ns, tier),
 		outputStateBucket, tier, scopeOf(tier),
-		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), variablesOutputs(), appBoundaryOutput(), outputInfraTier, tier)
+		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), variablesOutputs(), appBoundaryOutput(), baseRoleOutputs(), outputInfraTier, tier)
 }
 
 func coreStackDescription(tier environment.Tier) string {
@@ -631,7 +620,7 @@ func coreStackDescription(tier environment.Tier) string {
 	if tier == environment.TierPreview {
 		apart = " It is kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
 	}
-	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Each edge this account fronts deployments with is installed in a feature stack of its own beside it.%s", tier, scopeOf(tier), apart)
+	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store and the roles the tag invalidator and API Gateway run as. Each other piece a deploy needs is added beside it on first use.%s", tier, scopeOf(tier), apart)
 }
 
 func scopeOf(tier environment.Tier) string {

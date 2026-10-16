@@ -102,7 +102,7 @@ func TestAnAWSBootstrapPlanIsUnchangedByTheEdgesBootstrapParts(t *testing.T) {
 	planned := []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-sample-worker", Action: edge.PlanKeep}}
 	req := provider.BootstrapRequest{
 		Tier:     environment.TierProduction,
-		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
+		Features: []string{bootstrap.FeatureCloudflareEdge},
 	}
 	planWith := func(front edge.Edge) provider.Plan {
 		t.Helper()

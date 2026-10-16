@@ -286,7 +286,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		}
 
 		fronted := newWorld()
-		fronted.cfn.otherEdge = true
+		fronted.forgetPart(t)
 		if _, err := fronted.edge().ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err == nil {
 			t.Error("ReconcilePreviewWildcard without a bootstrapped edge set err = nil, want an error")
 		}

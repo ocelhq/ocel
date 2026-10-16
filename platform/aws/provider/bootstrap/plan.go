@@ -37,7 +37,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, layers LayerAPI, read Read
 	if err != nil {
 		return nil, err
 	}
-	deployed, refs, tier := read.Deployed, read.refs, read.tier
+	refs, tier := read.refs, read.tier
 	alongside := FeatureSet{}
 	for _, name := range req.Features {
 		alongside[name] = true
@@ -57,12 +57,11 @@ func PlanChanges(ctx context.Context, stacks cfn.API, layers LayerAPI, read Read
 	}
 	for i, group := range groups {
 		stack, ok, err := renderGroup(target, group.Feature, featureInputs{
-			ns:             read.ns,
-			tier:           tier,
-			artifactBucket: deployed.ArtifactBucket,
-			refs:           refs,
-			alongside:      alongside,
-			variablesKey:   req.VariablesKey,
+			ns:           read.ns,
+			tier:         tier,
+			refs:         refs,
+			alongside:    alongside,
+			variablesKey: req.VariablesKey,
 		})
 		if err != nil {
 			work.Wait()
@@ -126,12 +125,11 @@ func PlanRemove(ctx context.Context, stacks cfn.API, layers LayerTeardownAPI, re
 			Action:  provider.ActionDelete,
 		}
 		stack, ok, err := renderGroup(target, feature, featureInputs{
-			ns:             read.ns,
-			tier:           read.tier,
-			artifactBucket: read.Deployed.ArtifactBucket,
-			refs:           read.refs,
-			alongside:      alongside,
-			variablesKey:   broughtVariablesKey(read.Deployed.Outputs),
+			ns:           read.ns,
+			tier:         read.tier,
+			refs:         read.refs,
+			alongside:    alongside,
+			variablesKey: broughtVariablesKey(read.Deployed.Outputs),
 		})
 		if err != nil {
 			return nil, err
@@ -221,7 +219,7 @@ func renderGroup(target spec, feature string, in featureInputs) (featureStack, b
 	if !ok {
 		return featureStack{}, false, nil
 	}
-	stack, err := f.planned(in)
+	stack, err := f.template(in)
 	return stack, true, err
 }
 

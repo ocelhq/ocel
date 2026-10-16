@@ -146,15 +146,15 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Tier:     environment.TierProduction,
-		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
+		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
 	}
-	if len(plan.Groups) != 6 {
-		t.Fatalf("plan = %v, want the core stack, the isr and edge stacks, the runtime, the parameters and the edge", plan.Groups)
+	if len(plan.Groups) != 5 {
+		t.Fatalf("plan = %v, want the core stack, the edge stack, the runtime, the parameters and the edge", plan.Groups)
 	}
-	for _, group := range plan.Groups[:3] {
+	for _, group := range plan.Groups[:2] {
 		if group.Kind != provider.StackGroupKind || !strings.HasPrefix(group.Name, "aws/") {
 			t.Errorf("group %+v, want a stack named under the vendor that hosts it", group)
 		}
@@ -162,14 +162,14 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	if got := plan.Groups[0].Name; got != "aws/"+coreStackName {
 		t.Errorf("the core group is %q, want %q", got, "aws/"+coreStackName)
 	}
-	if got, want := plan.Groups[3].Name, "aws/"+string(defaultNamespace)+"-runtime"; got != want {
+	if got, want := plan.Groups[2].Name, "aws/"+string(defaultNamespace)+"-runtime"; got != want {
 		t.Errorf("the runtime group is %q, want %q", got, want)
 	}
-	params := plan.Groups[4]
+	params := plan.Groups[3]
 	if params.Kind != provider.ParameterGroupKind || params.Name != "aws/"+bootstrap.ParamGroupName {
 		t.Errorf("the parameters group = %+v, want it named under the account that stores them", params)
 	}
-	edgeGroup := plan.Groups[5]
+	edgeGroup := plan.Groups[4]
 	if edgeGroup.Kind != edge.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
 		t.Errorf("the edge group = %+v, want the edge named under its own vendor", edgeGroup)
 	}
@@ -240,7 +240,7 @@ func TestPlanShowsAnEdgeFeatureArrivingBehindAnotherFront(t *testing.T) {
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Tier:     environment.TierProduction,
-		Features: []string{bootstrap.FeatureCloudFrontEdge, bootstrap.FeatureCloudflareEdge},
+		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -266,9 +266,8 @@ func TestPlanShowsAnEdgeFeatureGoingBehindAnotherFront(t *testing.T) {
 	b.Kinds = kindsOf(selected, other)
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
-		Tier:     environment.TierProduction,
-		Features: []string{bootstrap.FeatureCloudFrontEdge},
-		Remove:   []string{bootstrap.FeatureCloudflareEdge},
+		Tier:   environment.TierProduction,
+		Remove: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -627,7 +626,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	}
 
 	if _, err := readiness.PlanFrom(context.Background(), status, providerserver.ApplyRequest{
-		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
+		Features: []string{bootstrap.FeatureCloudflareEdge},
 	}); err != nil {
 		t.Fatalf("PlanFrom: %v", err)
 	}

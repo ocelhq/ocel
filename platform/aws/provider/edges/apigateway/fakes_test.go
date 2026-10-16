@@ -24,9 +24,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 )
 
 const (
@@ -43,6 +45,7 @@ type world struct {
 	routing *fakeRouting
 	dynamo  *fakeDynamo
 	cfn     *fakeCFN
+	ensured []string
 }
 
 func newWorld() *world {
@@ -61,11 +64,23 @@ func (w *world) clients() Clients {
 
 func (w *world) edge() *apiGateway {
 	return &apiGateway{
-		ns:        defaultNamespace,
-		open:      func(context.Context) (Clients, error) { return w.clients(), nil },
-		delete:    w.deletion(30),
-		leaseWait: func(context.Context, time.Duration) error { return nil },
+		ns:         defaultNamespace,
+		ensurePart: w.ensurePart,
+		open:       func(context.Context) (Clients, error) { return w.clients(), nil },
+		delete:     w.deletion(30),
+		leaseWait:  func(context.Context, time.Duration) error { return nil },
 	}
+}
+
+func (w *world) ensurePart(_ context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error) {
+	w.ensured = append(w.ensured, string(tier)+" "+part+" for "+addedBy)
+	if w.cfn.absent {
+		return nil, fmt.Errorf("the %s tier is not bootstrapped: run `%s`", tier, provider.BootstrapCommand(tier))
+	}
+	if say != nil {
+		say("added the " + part + " part")
+	}
+	return []provider.PartResource{{Kind: notfoundapi.KindRestAPI, ID: fakeNotFoundAPI}}, nil
 }
 
 func (w *world) deletion(attempts int) *Deletion {
@@ -81,8 +96,8 @@ func (w *world) deletion(attempts int) *Deletion {
 }
 
 type fakeCFN struct {
-	absent    bool
-	otherEdge bool
+	absent       bool
+	noInvokeRole bool
 }
 
 func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
@@ -97,13 +112,8 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 			{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(fakeStateTable)},
 			{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(fakeAssetBucket)},
 		}
-	case coreStackName + "-" + bootstrap.FeatureAPIGatewayEdge:
-		if f.otherEdge {
-			return &cloudformation.DescribeStacksOutput{}, nil
-		}
-		outputs = []cfntypes.Output{
-			{OutputKey: aws.String(bootstrap.OutputEdgeInvokeRoleARN), OutputValue: aws.String(fakeInvokeRole)},
-			{OutputKey: aws.String(bootstrap.OutputEdgeNotFoundAPIID), OutputValue: aws.String(fakeNotFoundAPI)},
+		if !f.noInvokeRole {
+			outputs = append(outputs, cfntypes.Output{OutputKey: aws.String(bootstrap.OutputEdgeInvokeRoleARN), OutputValue: aws.String(fakeInvokeRole)})
 		}
 	default:
 		return &cloudformation.DescribeStacksOutput{}, nil

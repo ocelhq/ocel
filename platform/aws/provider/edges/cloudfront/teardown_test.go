@@ -87,9 +87,11 @@ func TestTeardownLeavesTheDistributionsAnotherNamespaceFronts(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	e := bootstrapped(t, w)
-	if _, err := w.front.CreateDistribution(ctx, &cloudfront.CreateDistributionInput{
-		DistributionConfig: &cftypes.DistributionConfig{
-			Comment: aws.String(distributionName("other", "shop", environment.TierProduction)),
+	if _, err := w.front.CreateDistributionWithTags(ctx, &cloudfront.CreateDistributionWithTagsInput{
+		DistributionConfigWithTags: &cftypes.DistributionConfigWithTags{
+			DistributionConfig: &cftypes.DistributionConfig{
+				Comment: aws.String(distributionName("other", "shop", environment.TierProduction)),
+			},
 		},
 	}); err != nil {
 		t.Fatalf("CreateDistribution: %v", err)

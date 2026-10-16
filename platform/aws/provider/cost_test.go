@@ -190,8 +190,8 @@ func TestShapeBehindAPIGatewayProvisionsARestAPIPerDeploy(t *testing.T) {
 	golden(t, "shape_production_apigateway", set)
 
 	counts := typeCounts(set)
-	if counts["aws_api_gateway_rest_api"] != 2 || counts["aws_cloudfront_distribution"] != 0 || counts["aws_lb"] != 0 || counts["aws_data_transfer"] != 1 {
-		t.Errorf("counts = %v, want the shared 404 responder and the project's own REST API, the app's egress, no CloudFront and no container load balancer", counts)
+	if counts["aws_api_gateway_rest_api"] != 1 || counts["aws_cloudfront_distribution"] != 0 || counts["aws_lb"] != 0 || counts["aws_data_transfer"] != 1 {
+		t.Errorf("counts = %v, want the project's own REST API, the app's egress, no CloudFront and no container load balancer: the 404 responder is a part only the preview wildcard adds", counts)
 	}
 }
 

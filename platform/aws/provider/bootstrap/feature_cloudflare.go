@@ -9,33 +9,26 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 )
 
 const KindCloudflare = "cloudflare"
 
 var cloudflareEdgeFeature = feature{
-	name:       FeatureCloudflareEdge,
-	summary:    "Cloudflare as the front — workers and the credential it reads the asset bucket with",
-	dependsOn:  []string{FeatureISR},
-	edges:      []edge.Kind{KindCloudflare},
-	template:   cloudflareEdgeTemplate,
-	payloads:   noPayloads,
-	placements: noPlacements,
-	after:      mintEdgeCredentials,
-	afterPlan:  plannedEdgeCredentials,
-	drop:       severCloudflareEdge,
-	dropPlan:   plannedCloudflareSever,
+	name:      FeatureCloudflareEdge,
+	summary:   "Cloudflare as the front — workers and the credential it reads the asset bucket with",
+	edges:     []edge.Kind{KindCloudflare},
+	template:  cloudflareEdgeTemplate,
+	after:     mintEdgeCredentials,
+	afterPlan: plannedEdgeCredentials,
+	drop:      severCloudflareEdge,
+	dropPlan:  plannedCloudflareSever,
 }
 
 func cloudflareEdgeTemplate(in featureInputs) (featureStack, error) {
-	specs := []crossStackParam{
+	params, values := crossStack([]crossStackParam{
 		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the edge reader is scoped to the objects in it the deploy tagged edge-readable.", in.refs.assetBucketARN},
-	}
-	optimizer := in.alongside.Has(FeatureImageOptimization)
-	if optimizer {
-		specs = append(specs, crossStackParam{paramImageOptimizerARN, "ARN of the shared image optimizer, the one function the edge reader may invoke for an image.", in.refs.imageOptimizerARN})
-	}
-	params, values := crossStack(specs)
+	})
 
 	userName, err := in.ns.EdgeUserNameFor(in.tier)
 	if err != nil {
@@ -48,19 +41,15 @@ Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs in
 %sResources:
 %s`,
 			FeatureCloudflareEdge, in.tier, params,
-			edgeUserResource(in.ns, userName, in.tier, optimizer)),
+			edgeUserResource(in.ns, userName, in.tier)),
 	}, nil
 }
 
-func edgeUserResource(ns Namespace, userName string, tier environment.Tier, optimizer bool) string {
-	invoke := ""
-	if optimizer {
-		invoke = imageOptimizerInvokeStatement()
-	}
+func edgeUserResource(ns Namespace, userName string, tier environment.Tier) string {
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
     Metadata:
-      Description: "The identity the %s edge signs its calls into this account with: it invokes app functions, lists the asset bucket and reads the objects in it the deploy tagged edge-readable."
+      Description: "The identity the %s edge signs its calls into this account with: it invokes app functions and the image optimizer, lists the asset bucket and reads the objects in it the deploy tagged edge-readable."
     Properties:
       UserName: %s
       Policies:
@@ -86,10 +75,15 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
               - Effect: Allow
                 Action: s3:ListBucket
                 Resource: !Ref %s
-%s`, tier, userName, ns.PolicyName("edge-cache"),
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunctionUrl
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:%s'
+`, tier, userName, ns.PolicyName("edge-cache"),
 		naming.EnvTierTagKey, tier,
 		paramAssetBucketARN, naming.EdgeReadableTagKey, naming.EdgeReadableTagValue, paramAssetBucketARN,
-		invoke)
+		imageoptimizer.NamesFor(string(ns), tier).Function)
 }
 
 func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, _ Request) ([]provider.Change, error) {

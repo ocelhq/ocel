@@ -33,6 +33,8 @@ type Deps struct {
 
 	Namespace bootstrap.Namespace
 
+	EnsurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error)
+
 	ArtifactBucket func(ctx context.Context, tier environment.Tier) (string, error)
 }
 
@@ -49,10 +51,10 @@ var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error)
 		return cloudflare.New(string(deps.Namespace), decoded), nil
 	},
 	cloudfront.Kind: constructWithOptions(cloudfront.Kind, func(deps Deps, options cloudfront.Options) edge.Edge {
-		return cloudfront.New(deps.Namespace, cloudfront.FromConfig(deps.AWS), options)
+		return cloudfront.New(deps.Namespace, deps.EnsurePart, cloudfront.FromConfig(deps.AWS), options)
 	}),
 	apigateway.Kind: constructWithOptions(apigateway.Kind, func(deps Deps, _ apigateway.Options) edge.Edge {
-		return apigateway.New(deps.Namespace, apigateway.FromConfig(deps.AWS))
+		return apigateway.New(deps.Namespace, deps.EnsurePart, apigateway.FromConfig(deps.AWS))
 	}),
 }
 

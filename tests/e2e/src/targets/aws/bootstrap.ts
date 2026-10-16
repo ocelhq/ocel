@@ -17,25 +17,19 @@ import type { AwsWorld } from "./world";
 
 const DEFAULT_VPC_TRIES = 30;
 
-const EDGE_FEATURES: Record<string, string> = {
-  cloudfront: "cloudfront-edge",
-  "api-gateway": "apigateway-edge",
-  cloudflare: "cloudflare-edge",
+const EDGE_FEATURES: Record<string, string[]> = {
+  cloudfront: [],
+  "api-gateway": [],
+  cloudflare: ["cloudflare-edge"],
 };
-const FLOCI_FEATURES = [
-  "isr",
-  "image-optimization",
-  "cloudfront-edge",
-  "apigateway-edge",
-  "variables-key",
-];
+const FLOCI_FEATURES = ["variables-key"];
 
 export function cellBootstrapArgs(variant: Pick<Variant, "config">): string[] {
   const edge = EDGE_FEATURES[variant.config.edge ?? "cloudfront"];
   if (!edge) {
     throw new Error(`no AWS bootstrap feature fronts the ${variant.config.edge} edge`);
   }
-  const features = ["isr", "image-optimization", edge, "variables-key"];
+  const features = [...edge, "variables-key"];
   return ["bootstrap", "production", "--yes", "--features", features.join(",")];
 }
 

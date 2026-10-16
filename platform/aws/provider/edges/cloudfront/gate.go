@@ -12,10 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 )
 
 const (
@@ -43,24 +40,11 @@ func (p *cloudFront) publishGate(ctx context.Context, publication edge.GatePubli
 		return err
 	}
 	if publication.Gate != nil {
-		deployed, err := p.bootstrap(ctx, c, publication.State.Tier)
-		if err != nil {
-			return err
-		}
-		if err := refuseResolverWithoutGate(deployed, publication.State.Tier, publication.State.Slug); err != nil {
+		if _, err := p.ensureEdgeSet(ctx, publication.State.Tier, publication.State.Slug, publication.Say); err != nil {
 			return err
 		}
 	}
 	return s.reconcileGate(ctx, c, publication.Gate)
-}
-
-func refuseResolverWithoutGate(deployed bootstrap.Deployed, tier environment.Tier, slug string) error {
-	if deployed.Outputs[bootstrap.OutputEdgeGateDigest] == resolver.GateDigest() {
-		return nil
-	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"protection.%s is on for %s, and the resolver function of this account's %s bootstrap does not run the gate this CLI publishes, so it would serve the %s tier to anyone: run `%s` to install the resolver that runs it",
-		tier, slug, tier, tier, provider.BootstrapCommand(tier))
 }
 
 func (s *stack) reconcileGate(ctx context.Context, c Clients, gate *gate.Gate) error {

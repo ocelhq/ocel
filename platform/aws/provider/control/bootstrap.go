@@ -61,6 +61,9 @@ type Bootstrap struct {
 	VariablesKey string
 	Read         func(context.Context, environment.Tier) (bootstrap.Reading, error)
 
+	RemoveParts     func(ctx context.Context, tier environment.Tier) error
+	PlanPartRemoval func(ctx context.Context, tier environment.Tier) ([]provider.ChangeGroup, error)
+
 	Namespace bootstrap.Namespace
 }
 
@@ -347,6 +350,7 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 
 		RemoveBastion:       b.removeBastion,
 		RemoveEnvSourceSync: b.removeEnvSourceSync,
+		RemoveParts:         b.RemoveParts,
 	}, b.Namespace, tier, progress)
 }
 

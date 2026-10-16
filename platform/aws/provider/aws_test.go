@@ -375,7 +375,6 @@ func TestBucketsAreTheTiersArtifactAndAssetBucketsWhateverEdgesAreInstalled(t *t
 			AssetBucket:    "assets",
 			Features: bootstrap.FeatureSet{
 				bootstrap.FeatureCloudflareEdge: true,
-				bootstrap.FeatureCloudFrontEdge: true,
 			},
 		}}, nil
 	}); err != nil {

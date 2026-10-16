@@ -4,13 +4,21 @@ package aws_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 )
 
 func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T) {
@@ -125,47 +133,56 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	}
 }
 
-func TestLiveApplyingTheImageOptimizerDeploysItsOwnStackBesideTheCore(t *testing.T) {
+func TestLiveTheFirstDeployOfAnAppThatOptimizesImagesAddsTheImageOptimizerAndRemovingTheTierRemovesIt(t *testing.T) {
 	a := live(t)
 	tier := environment.TierProduction
 	boot := a.emptied(t, tier)
 	ctx := context.Background()
 
-	feature := bootstrap.FeatureImageOptimization
-	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, Features: []string{feature}}
-	if err := boot.Apply(ctx, req, nil); err != nil {
-		t.Fatalf("Apply(%s) = %v", feature, err)
+	if err := boot.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter}, nil); err != nil {
+		t.Fatalf("Apply() = %v", err)
 	}
-
-	name := defaultNamespace.FeatureStackName(feature, tier)
-	if status := a.stackStatus(t, name); status != "CREATE_COMPLETE" {
-		t.Errorf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", name, status)
-	}
-	installed, err := boot.Describe(ctx, tier)
-	if err != nil {
-		t.Fatalf("Describe() after Apply(%s) = %v", feature, err)
-	}
-	stack := stackNamed(t, installed, name)
-	if !stack.Present || !stack.DigestCurrent {
-		t.Errorf("Describe() = %+v, want the feature stack present at the digest applied", stack)
-	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, tier)
+	project := t.TempDir()
+	root, err := buildoutput.Root(project)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if deployed.ImageOptimizerURL == "" {
-		t.Error("the optimizer is installed without the URL every front calls it on")
+	app := buildoutput.AppRoot(root, "web")
+	if err := os.MkdirAll(app, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !deployed.Features.Has(feature) {
-		t.Errorf("the account reads back features %v, want %s among them", deployed.Features.Names(), feature)
+	if err := os.WriteFile(filepath.Join(app, buildoutput.HostingFile), []byte(`{"version":1,"framework":"next","needs":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(app, naming.ImageConfigFile), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
-	again, err := boot.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, Features: []string{feature}, VendorState: installed.VendorState})
+	p, err := aws.New(ctx, provider.Settings{ProjectDir: project, WrittenBy: liveWriter, Options: provider.Options{"region": liveRegion}})
 	if err != nil {
-		t.Fatalf("a second Plan(%s) = %v", feature, err)
+		t.Fatalf("New() = %v", err)
 	}
-	if group := groupNamed(t, again, "aws/"+name); group.Action != provider.ActionKeep {
-		t.Errorf("a second Plan() over an installed %s plans %q, want %q", feature, group.Action, provider.ActionKeep)
+	if err := p.Hooks().PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
+		Slug: "shop",
+		Tier: tier,
+		Apps: []provider.AppEntry{{App: "web", Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}}}},
+	}}); err != nil {
+		t.Fatalf("PreflightDeploy() = %v", err)
+	}
+	function := imageoptimizer.NamesFor(string(defaultNamespace), tier).Function
+	if !a.functionExists(function) {
+		t.Errorf("Lambda has no %s once the first deploy that optimizes images added it", function)
+	}
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), tier, imageoptimizer.Part)
+	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" || imageoptimizer.URLOf(recorded.Resources) == "" {
+		t.Errorf("part record = %+v, %v, %v, want it ready, added by shop, with the url every front calls it on", recorded, present, err)
+	}
+
+	if err := boot.Remove(ctx, tier, nil); err != nil {
+		t.Fatalf("Remove(%s) = %v", tier, err)
+	}
+	if a.functionExists(function) {
+		t.Errorf("the image optimizer %s outlived the tier it served", function)
 	}
 }
 

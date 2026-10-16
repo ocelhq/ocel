@@ -7,30 +7,20 @@ function features(args: string[]): string[] {
 }
 
 describe("cellBootstrapArgs", () => {
-  it("bootstraps a cloudflare cell without the CloudFront or API Gateway fronts", () => {
-    const named = features(cellBootstrapArgs({ config: { edge: "cloudflare" } }));
-    assert.ok(named.includes("cloudflare-edge"));
-    assert.ok(!named.includes("cloudfront-edge"));
-    assert.ok(!named.includes("apigateway-edge"));
+  it("bootstraps the Cloudflare edge for a cloudflare cell", () => {
+    assert.deepEqual(features(cellBootstrapArgs({ config: { edge: "cloudflare" } })), [
+      "cloudflare-edge",
+      "variables-key",
+    ]);
   });
 
-  it("bootstraps an api gateway cell without a CloudFront cache policy or a Cloudflare edge", () => {
-    const named = features(cellBootstrapArgs({ config: { edge: "api-gateway" } }));
-    assert.ok(named.includes("apigateway-edge"));
-    assert.ok(!named.includes("cloudfront-edge"));
-    assert.ok(!named.includes("cloudflare-edge"));
-  });
-
-  it("bootstraps CloudFront for a cell that names no edge, the one AWS defaults to", () => {
-    const named = features(cellBootstrapArgs({ config: {} }));
-    assert.ok(named.includes("cloudfront-edge"));
-    assert.ok(!named.includes("apigateway-edge"));
-    assert.ok(!named.includes("cloudflare-edge"));
-  });
-
-  it("keeps the variables key every cell's env set writes under", () => {
-    for (const edge of [undefined, "cloudflare", "api-gateway"] as const) {
-      assert.ok(features(cellBootstrapArgs({ config: { edge } })).includes("variables-key"));
+  it("names no edge feature for a CloudFront or API Gateway cell, whose first deploy adds its part", () => {
+    for (const edge of [undefined, "cloudfront", "api-gateway"] as const) {
+      assert.deepEqual(features(cellBootstrapArgs({ config: { edge } })), ["variables-key"]);
     }
+  });
+
+  it("refuses an edge no AWS bootstrap fronts", () => {
+    assert.throws(() => cellBootstrapArgs({ config: { edge: "alb" } }), /alb edge/);
   });
 });

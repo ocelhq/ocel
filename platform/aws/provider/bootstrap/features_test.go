@@ -15,12 +15,12 @@ func TestFeatureStackName(t *testing.T) {
 		tier environment.Tier
 		want string
 	}{
-		{environment.TierProduction, "ocel-bootstrap-isr"},
-		{environment.TierPreview, "ocel-bootstrap-isr-preview"},
+		{environment.TierProduction, "ocel-bootstrap-cloudflare-edge"},
+		{environment.TierPreview, "ocel-bootstrap-cloudflare-edge-preview"},
 	} {
-		f, ok := featureNamed(FeatureISR)
+		f, ok := featureNamed(FeatureCloudflareEdge)
 		if !ok {
-			t.Fatalf("no %s feature in the registry", FeatureISR)
+			t.Fatalf("no %s feature in the registry", FeatureCloudflareEdge)
 		}
 		if got := f.stackName(defaultNamespace, tc.tier); got != tc.want {
 			t.Errorf("stackName(%q) = %q, want %q", tc.tier, got, tc.want)
@@ -28,14 +28,14 @@ func TestFeatureStackName(t *testing.T) {
 	}
 }
 
-func TestEveryEdgeKindHasAFeatureOfItsOwn(t *testing.T) {
+func TestOnlyTheCloudflareEdgeHasAFeatureOfItsOwn(t *testing.T) {
 	for kind, want := range map[edge.Kind]string{
 		KindCloudflare: FeatureCloudflareEdge,
-		KindCloudFront: FeatureCloudFrontEdge,
-		KindAPIGateway: FeatureAPIGatewayEdge,
+		"cloudfront":   "",
+		"api-gateway":  "",
 	} {
 		if got := bootstrapplan.FeatureNeedingEdge(Catalogue(), kind); got != want {
-			t.Errorf("FeatureNeedingEdge(%q) = %q, want %q: nothing else tells a run which stack the edge it fronts with is installed in", kind, got, want)
+			t.Errorf("FeatureNeedingEdge(%q) = %q, want %q: an edge whose pieces a deploy adds on first use has no feature", kind, got, want)
 		}
 	}
 }
@@ -49,47 +49,24 @@ func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "a project whose builds use neither needs nothing",
-			apps: []buildoutput.Uses{{}},
-		},
-		{
-			name: "a build using revalidation and image optimization needs both features",
+			name: "a project using revalidation and image optimization needs no feature: a deploy adds both parts",
 			apps: []buildoutput.Uses{{}, next},
-			want: []string{FeatureISR, FeatureImageOptimization},
 		},
 		{
-			name: "a build using revalidation alone needs no image optimizer",
-			apps: []buildoutput.Uses{{Revalidation: true}},
-			want: []string{FeatureISR},
-		},
-		{
-			name: "a Cloudflare front needs its feature and what it depends on",
-			edge: "cloudflare",
-			want: []string{FeatureISR, FeatureCloudflareEdge},
-		},
-		{
-			name: "a Cloudflare-fronted project using both needs all three, named once",
+			name: "a Cloudflare front needs its feature alone",
 			apps: []buildoutput.Uses{next},
 			edge: "cloudflare",
-			want: []string{FeatureISR, FeatureImageOptimization, FeatureCloudflareEdge},
+			want: []string{FeatureCloudflareEdge},
 		},
 		{
-			name: "a CloudFront-fronted project needs the CloudFront edge feature",
-			apps: []buildoutput.Uses{{}},
+			name: "a CloudFront-fronted project needs no feature: a deploy adds the cloudfront part",
+			apps: []buildoutput.Uses{next},
 			edge: "cloudfront",
-			want: []string{FeatureCloudFrontEdge},
 		},
 		{
-			name: "an API Gateway-fronted project needs the API Gateway edge feature",
+			name: "an API Gateway-fronted project needs no feature",
 			apps: []buildoutput.Uses{{}},
 			edge: "api-gateway",
-			want: []string{FeatureAPIGatewayEdge},
-		},
-		{
-			name: "a CloudFront-fronted project using both needs its edge and both features",
-			apps: []buildoutput.Uses{next},
-			edge: "cloudfront",
-			want: []string{FeatureISR, FeatureImageOptimization, FeatureCloudFrontEdge},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

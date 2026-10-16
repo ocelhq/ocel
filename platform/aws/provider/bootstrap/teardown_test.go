@@ -515,15 +515,11 @@ func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
 	}
 	want := []string{
 		defaultNamespace.FeatureStackName(FeatureCloudflareEdge, environment.TierProduction),
-		defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction),
-		defaultNamespace.FeatureStackName(FeatureImageOptimization, environment.TierProduction),
-		defaultNamespace.FeatureStackName(FeatureCloudFrontEdge, environment.TierProduction),
-		defaultNamespace.FeatureStackName(FeatureAPIGatewayEdge, environment.TierProduction),
 		defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction),
 		coreStackName,
 	}
 	if !slices.Equal(cfnc.deleted, want) {
-		t.Errorf("deleted %v, want %v: a dependent goes first and core goes last", cfnc.deleted, want)
+		t.Errorf("deleted %v, want %v: every feature stack goes first and core goes last", cfnc.deleted, want)
 	}
 }
 
@@ -532,7 +528,7 @@ func TestTeardownLeavesAFeatureStackThatWasNeverThere(t *testing.T) {
 
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
 		coreStackName: {},
-		defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction): {},
+		defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction): {},
 	}}
 	apis := TeardownAPIs{
 		RemoveBastion:       removeNoBastion,
@@ -548,7 +544,7 @@ func TestTeardownLeavesAFeatureStackThatWasNeverThere(t *testing.T) {
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	want := []string{defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction), coreStackName}
+	want := []string{defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction), coreStackName}
 	if !slices.Equal(stacks.deleted, want) {
 		t.Errorf("deleted %v, want %v", stacks.deleted, want)
 	}
@@ -559,7 +555,7 @@ func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
 
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
 		coreStackName: {},
-		defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction): {status: cfntypes.StackStatusRollbackComplete},
+		defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction): {status: cfntypes.StackStatusRollbackComplete},
 	}}
 	apis := TeardownAPIs{
 		RemoveBastion:       removeNoBastion,
@@ -575,7 +571,7 @@ func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	want := []string{defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction), coreStackName}
+	want := []string{defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction), coreStackName}
 	if !slices.Equal(stacks.deleted, want) {
 		t.Errorf("deleted %v, want %v: a stack that rolled back still has to go", stacks.deleted, want)
 	}
@@ -584,7 +580,7 @@ func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
 func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 	t.Parallel()
 
-	feature := defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction)
+	feature := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction)
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
 		coreStackName: {status: cfntypes.StackStatusRollbackComplete},
 		feature:       {},
@@ -616,7 +612,7 @@ func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 func TestTeardownWalksEverythingBesideACoreStackThatIsGone(t *testing.T) {
 	t.Parallel()
 
-	feature := defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction)
+	feature := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction)
 	stacks := &teardownCFN{stacks: map[string]teardownStack{feature: {}}}
 	apis := TeardownAPIs{
 		RemoveBastion:       removeNoBastion,

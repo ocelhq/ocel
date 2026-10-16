@@ -19,12 +19,10 @@ import (
 )
 
 var variablesKeyFeature = feature{
-	name:       provider.FeatureVariablesKey,
-	summary:    "a KMS key to encrypt variables under, the one bootstrap item with a recurring cost, about $1 a month prorated hourly",
-	template:   variablesKeyTemplate,
-	payloads:   noPayloads,
-	placements: noPlacements,
-	afterPlan:  validateBroughtKey,
+	name:      provider.FeatureVariablesKey,
+	summary:   "a KMS key to encrypt variables under, the one bootstrap item with a recurring cost, about $1 a month prorated hourly",
+	template:  variablesKeyTemplate,
+	afterPlan: validateBroughtKey,
 }
 
 func variablesKeyTemplate(in featureInputs) (featureStack, error) {

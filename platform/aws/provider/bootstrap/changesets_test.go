@@ -184,7 +184,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		err := cfn.Update(ctx, stacks, defaultNamespace.ChangeSetNameFor, isrStack(environment.TierProduction), staleBody, nil, nil, staleTags,
+		err := cfn.Update(ctx, stacks, defaultNamespace.ChangeSetNameFor, keyStack(environment.TierProduction), staleBody, nil, nil, staleTags,
 			func(string, []cfntypes.ResourceChange) error {
 				cancel()
 				return errors.New("this run stops here")
@@ -202,7 +202,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 
 		func() {
 			defer func() { _ = recover() }()
-			_ = cfn.Update(context.Background(), stacks, defaultNamespace.ChangeSetNameFor, isrStack(environment.TierProduction), staleBody, nil, nil, staleTags,
+			_ = cfn.Update(context.Background(), stacks, defaultNamespace.ChangeSetNameFor, keyStack(environment.TierProduction), staleBody, nil, nil, staleTags,
 				func(string, []cfntypes.ResourceChange) error { panic("the run came apart") })
 		}()
 		if left := stacks.leftBehind(); len(left) != 0 {
@@ -240,7 +240,7 @@ func (deniedChangeSets) CreateChangeSet(context.Context, *cloudformation.CreateC
 
 func TestRepairRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
-	stacks.fallBehind(isrStack(environment.TierProduction))
+	stacks.fallBehind(keyStack(environment.TierProduction))
 	apis.CFN = deniedChangeSets{stacks}
 	var log repairLog
 
@@ -259,7 +259,7 @@ func TestRepairRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 func TestWaitingOnABusyStackIsBoundedAndReported(t *testing.T) {
 	waits := recordWaits(t)
 	stacks, apis := installedBootstrap(t)
-	stack := isrStack(environment.TierProduction)
+	stack := keyStack(environment.TierProduction)
 	stacks.fallBehind(stack)
 	stacks.busy(stack, idleAttempts*4)
 	var log repairLog
@@ -322,7 +322,7 @@ func TestAPrincipalWhoseShapeChangesStillStopsARepair(t *testing.T) {
 
 func TestAChangeSetIsNamedAfterTheStackItPlansAgainst(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
-	stacks.fallBehind(isrStack(environment.TierProduction))
+	stacks.fallBehind(keyStack(environment.TierProduction))
 
 	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 		t.Fatalf("Run: %v", err)

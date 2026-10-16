@@ -11,7 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -23,6 +25,9 @@ const (
 	containerOriginKeepaliveTimeoutSeconds = 5
 
 	maxDistributionNameLen = 128
+
+	managedByTagKey   = "ocel:managed-by"
+	managedByTagValue = "ocel"
 )
 
 type front struct {
@@ -32,6 +37,7 @@ type front struct {
 
 type distributionSpec struct {
 	name          string
+	tier          environment.Tier
 	assetOrigin   string
 	function      string
 	emptyBody     string
@@ -108,6 +114,7 @@ func (p distributionSpec) ready() error {
 		"cache policy":            p.cachePolicy,
 		"response headers policy": p.headersPolicy,
 		"origin access control":   p.oac,
+		"tier":                    string(p.tier),
 	} {
 		if value == "" {
 			missing = append(missing, name)
@@ -129,7 +136,7 @@ func (p distributionSpec) config(aliases []string, certificate string) *cftypes.
 		HttpVersion:                  cftypes.HttpVersionHttp2and3,
 		IsIPV6Enabled:                ptr(true),
 		PriceClass:                   cftypes.PriceClassPriceClassAll,
-		CacheTagConfig:               &cftypes.CacheTagConfig{HeaderName: aws.String(bootstrap.EdgeCacheTagHeader)},
+		CacheTagConfig:               &cftypes.CacheTagConfig{HeaderName: aws.String(cloudfrontpart.CacheTagHeader)},
 		DefaultRootObject:            aws.String(""),
 		WebACLId:                     aws.String(""),
 		ContinuousDeploymentPolicyId: aws.String(""),
@@ -342,8 +349,14 @@ func createDistribution(ctx context.Context, c Clients, spec distributionSpec, a
 	if err := spec.ready(); err != nil {
 		return front{}, err
 	}
-	out, err := c.CloudFront.CreateDistribution(ctx, &cloudfront.CreateDistributionInput{
-		DistributionConfig: spec.config(aliases, certificate),
+	out, err := c.CloudFront.CreateDistributionWithTags(ctx, &cloudfront.CreateDistributionWithTagsInput{
+		DistributionConfigWithTags: &cftypes.DistributionConfigWithTags{
+			DistributionConfig: spec.config(aliases, certificate),
+			Tags: &cftypes.Tags{Items: []cftypes.Tag{
+				{Key: aws.String(managedByTagKey), Value: aws.String(managedByTagValue)},
+				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(spec.tier))},
+			}},
+		},
 	})
 	if err != nil {
 		return front{}, createError("distribution", spec.name, err)

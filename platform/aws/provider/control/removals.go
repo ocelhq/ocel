@@ -28,6 +28,13 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if len(params.Changes) > 0 {
 		stacks = append(stacks, params)
 	}
+	if b.PlanPartRemoval != nil {
+		parts, err := b.PlanPartRemoval(ctx, tier)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		stacks = append(parts, stacks...)
+	}
 
 	plan := provider.Plan{Groups: bootstrapplan.PrefixWithVendor(groupVendor, stacks)}
 	fronts, err := b.installedEdges(ctx, tier, read.Deployed)

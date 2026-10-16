@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
 )
 
 type parsedPolicy struct {
@@ -57,6 +58,17 @@ var actionsNoTagScopes = []string{
 }
 
 var actionsAWSGivesNoScopingKey = []string{
+	"cloudfront:CreateCachePolicy",
+	"cloudfront:CreateKeyValueStore",
+	"cloudfront:CreateOriginAccessControl",
+	"cloudfront:CreateResponseHeadersPolicy",
+	"cloudfront:DeleteCachePolicy",
+	"cloudfront:DeleteKeyValueStore",
+	"cloudfront:DeleteOriginAccessControl",
+	"cloudfront:DeleteResponseHeadersPolicy",
+	"cloudfront:UpdateCachePolicy",
+	"cloudfront:UpdateOriginAccessControl",
+	"cloudfront:UpdateResponseHeadersPolicy",
 	"ecs:DeregisterTaskDefinition",
 }
 
@@ -569,25 +581,9 @@ func mustRender(t *testing.T, render func(Namespace, environment.Tier, string) (
 	return document
 }
 
-func TestTheBootstrapCredentialOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
+func TestTheBootstrapCredentialReachesNoLogGroupBeyondWhatADeployMay(t *testing.T) {
 	bootstrapDoc, deployDoc := renderedCredentials(t)
 	bootstrapGrants, deployGrants := grantsOf(t, bootstrapDoc), grantsOf(t, deployDoc)
-	scopes := defaultNamespace.ScopedARNs(environment.TierProduction).bootstrapLogGroups
-	unconditional := conditionJSON(t, nil)
-	want := map[string]string{
-		"logs:CreateLogGroup":      unconditional,
-		"logs:DeleteLogGroup":      unconditional,
-		"logs:ListTagsForResource": unconditional,
-		"logs:PutRetentionPolicy":  unconditional,
-		"logs:TagResource":         unconditional,
-		"logs:UntagResource":       unconditional,
-	}
-	for _, f := range featureRegistry {
-		scope := "arn:aws:logs:*:*:log-group:/aws/lambda/" + f.stackName(defaultNamespace, environment.TierProduction) + "-*"
-		if got := logsGrantsOn(bootstrapGrants, scope); !maps.Equal(got, want) {
-			t.Errorf("the bootstrap credential grants %v on %s, want exactly %v, so a bootstrap stack either cannot create, bound and reclaim its functions' log groups or reaches beyond them", got, scope, want)
-		}
-	}
 	for _, resource := range []string{appLogGroupARN, functionLogGroupARN} {
 		if got, deploy := logsGrantsOn(bootstrapGrants, resource), logsGrantsOn(deployGrants, resource); !maps.Equal(got, deploy) {
 			t.Errorf("the bootstrap credential grants %v on %s, want the deploy credential's %v, so bootstrapping widens what a deploy may do to a log group", got, resource, deploy)
@@ -597,14 +593,14 @@ func TestTheBootstrapCredentialOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T
 		if !strings.HasPrefix(g.action, "logs:") {
 			continue
 		}
-		switch {
-		case slices.Contains(scopes, g.resource), g.resource == appLogGroupARN, g.resource == functionLogGroupARN:
-		case g.resource == UnscopedResource:
+		switch g.resource {
+		case appLogGroupARN, functionLogGroupARN:
+		case UnscopedResource:
 			if g.action != "logs:DescribeLogGroups" {
 				t.Errorf("the bootstrap credential grants %s on %q, which reaches every log group in the account", g.action, g.resource)
 			}
 		default:
-			t.Errorf("the bootstrap credential grants %s on %s, beyond the log groups a bootstrap or a deploy owns", g.action, g.resource)
+			t.Errorf("the bootstrap credential grants %s on %s, beyond the log groups a deploy owns: no bootstrap stack declares a function", g.action, g.resource)
 		}
 	}
 }
@@ -708,12 +704,12 @@ func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatW
 	}
 }
 
-func TestEveryCredentialTouchesOnlyEventSourceMappingsOfTheBootstrapsFunctionsOrOcelTaggedOnesOfAppWorkers(t *testing.T) {
+func TestEveryCredentialTouchesOnlyEventSourceMappingsOfItsTagInvalidatorOrOcelTaggedOnesOfAppWorkers(t *testing.T) {
 	ofAppWorkers := map[string]any{"lambda:FunctionArn": "arn:aws:lambda:*:*:function:ocel-app-*"}
 	for _, tier := range bothTiers {
-		r := defaultNamespace.ScopedARNs(tier)
+		invalidator := "arn:aws:lambda:*:*:function:" + taginvalidator.NamesFor(string(defaultNamespace), tier).Function
 		allowed := map[string]bool{
-			conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}}): true,
+			conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": []string{invalidator, invalidator + ":*"}}}): true,
 			conditionJSON(t, map[string]any{
 				"StringEquals": map[string]any{"aws:RequestTag/ocel:managed-by": "ocel", "aws:RequestTag/ocel:env-tier": string(tier)},
 				"ArnLike":      ofAppWorkers,
@@ -729,7 +725,7 @@ func TestEveryCredentialTouchesOnlyEventSourceMappingsOfTheBootstrapsFunctionsOr
 					continue
 				}
 				if !allowed[g.condition] {
-					t.Errorf("the %s %s credential grants %s on %s under %s, want it pinned to the bootstrap's own functions or to its own tier's Ocel-tagged mappings of app worker functions", tier, purpose, g.action, g.resource, g.condition)
+					t.Errorf("the %s %s credential grants %s on %s under %s, want it pinned to its own tier's tag invalidator or its own tier's Ocel-tagged mappings of app worker functions", tier, purpose, g.action, g.resource, g.condition)
 				}
 			}
 		}
@@ -1576,10 +1572,9 @@ func taggedWithTier(tier environment.Tier, also requestContext) requestContext {
 	return request
 }
 
-func TestABootstrapCredentialReachesTheRolesAndFunctionsOfOnlyItsOwnTier(t *testing.T) {
-	const function = "arn:aws:lambda:us-east-1:111122223333:function:ocel-bootstrap-image-optim-ImageOptimizer-A1B2C3D4E5F6"
+func TestABootstrapCredentialReachesTheBaseRolesOfOnlyItsOwnTier(t *testing.T) {
 	roleOf := func(tier environment.Tier) string {
-		return "arn:aws:iam::111122223333:role" + defaultNamespace.bootstrapRolePathFor(tier) + "ocel-bootstrap-image-optim-ImageOptimizerRo-A1B2C3D4E5F6"
+		return defaultNamespace.TagInvalidatorRoleARN("111122223333", tier)
 	}
 	toLambda := requestContext{"iam:PassedToService": LambdaServicePrincipal}
 	for _, tier := range bothTiers {
@@ -1599,11 +1594,6 @@ func TestABootstrapCredentialReachesTheRolesAndFunctionsOfOnlyItsOwnTier(t *test
 			{"iam:TagRole", role, siblingRole, nil},
 			{"iam:AttachRolePolicy", role, siblingRole, requestContext{"iam:PolicyARN": LambdaBasicExecutionPolicyARN}},
 			{"iam:PassRole", role, siblingRole, toLambda},
-			{"lambda:UpdateFunctionCode", function, function, nil},
-			{"lambda:UpdateFunctionConfiguration", function, function, nil},
-			{"lambda:AddPermission", function, function, nil},
-			{"lambda:DeleteFunction", function, function, nil},
-			{"lambda:TagResource", function, function, nil},
 		} {
 			if !allows(t, bootstrapDoc, c.action, c.arn, taggedWithTier(tier, c.also)) {
 				t.Errorf("the %s bootstrap credential cannot %s on %s, which its own stacks made", tier, c.action, c.arn)
@@ -1614,7 +1604,6 @@ func TestABootstrapCredentialReachesTheRolesAndFunctionsOfOnlyItsOwnTier(t *test
 		}
 		for _, c := range []struct{ action, arn string }{
 			{"iam:CreateRole", role},
-			{"lambda:CreateFunction", function},
 		} {
 			creating := func(of environment.Tier) requestContext {
 				return requestContext{"aws:RequestTag/" + naming.EnvTierTagKey: string(of)}
@@ -1627,7 +1616,7 @@ func TestABootstrapCredentialReachesTheRolesAndFunctionsOfOnlyItsOwnTier(t *test
 			}
 		}
 		retag := taggedWithTier(tier, requestContext{"aws:RequestTag/" + naming.EnvTierTagKey: string(sibling)})
-		for _, c := range []struct{ action, arn string }{{"iam:TagRole", role}, {"lambda:TagResource", function}} {
+		for _, c := range []struct{ action, arn string }{{"iam:TagRole", role}} {
 			if allows(t, bootstrapDoc, c.action, c.arn, retag) {
 				t.Errorf("the %s bootstrap credential can %s on its own %s as the %s tier's", tier, c.action, c.arn, sibling)
 			}
@@ -1638,13 +1627,12 @@ func TestABootstrapCredentialReachesTheRolesAndFunctionsOfOnlyItsOwnTier(t *test
 func TestABootstrapCredentialReachesTheNamedBootstrapResourcesOfOnlyItsOwnTier(t *testing.T) {
 	const account = "us-east-1:111122223333"
 	named := func(tier environment.Tier) map[string]string {
-		feature := defaultNamespace.featureStackName(FeatureImageOptimization, tier)
+		feature := defaultNamespace.featureStackName(FeatureCloudflareEdge, tier)
 		core, _ := defaultNamespace.StackNameFor(tier)
 		edgeUser, _ := defaultNamespace.EdgeUserNameFor(tier)
 		return map[string]string{
 			"cloudformation:DeleteStack":     "arn:aws:cloudformation:" + account + ":stack/" + core + "/0a1b",
 			"cloudformation:CreateChangeSet": "arn:aws:cloudformation:" + account + ":stack/" + feature + "/0a1b",
-			"logs:DeleteLogGroup":            "arn:aws:logs:" + account + ":log-group:/aws/lambda/" + feature + "-ImageOptimizer",
 			"iam:PutUserPolicy":              "arn:aws:iam::111122223333:user/" + edgeUser,
 			"lambda:PublishLayerVersion":     "arn:aws:lambda:" + account + ":layer:" + runtimeLayerName(defaultNamespace, tier, arch.ARM64, "0123456789abcdef"),
 		}
@@ -1804,29 +1792,6 @@ func TestACredentialReachesTheParametersOfOnlyItsOwnTier(t *testing.T) {
 	}
 }
 
-func TestABootstrapCredentialReachesTheQueuesOfOnlyItsOwnTier(t *testing.T) {
-	const account = "arn:aws:sqs:us-east-1:111122223333:"
-	named := func(tier environment.Tier) []string {
-		return []string{defaultNamespace.featureStackName(FeatureISR, tier) + "-TagInvalidatorDeadLetterQueue-A1B2C3D4E5F6"}
-	}
-	for _, tier := range bothTiers {
-		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
-		for _, name := range named(tier) {
-			if !allows(t, bootstrapDoc, "sqs:SetQueueAttributes", account+name, nil) {
-				t.Errorf("the %s bootstrap credential cannot sqs:SetQueueAttributes on %s, its own", tier, name)
-			}
-		}
-		if tier != environment.TierPreview {
-			continue
-		}
-		for _, name := range named(tier.Sibling()) {
-			if allows(t, bootstrapDoc, "sqs:SetQueueAttributes", account+name, nil) {
-				t.Errorf("the preview bootstrap credential can sqs:SetQueueAttributes on %s, the production tier's", name)
-			}
-		}
-	}
-}
-
 func TestABootstrapCredentialMakesTheEdgeInvokeRoleOfOnlyItsOwnTier(t *testing.T) {
 	role := func(tier environment.Tier) string {
 		return "arn:aws:iam::111122223333:role/" + defaultNamespace.EdgeInvokeRoleName(tier)
@@ -1838,7 +1803,7 @@ func TestABootstrapCredentialMakesTheEdgeInvokeRoleOfOnlyItsOwnTier(t *testing.T
 		sibling := tier.Sibling()
 		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
 		if !allows(t, bootstrapDoc, "iam:CreateRole", role(tier), creating(tier)) {
-			t.Errorf("the %s bootstrap credential cannot create %s, which the %s stack declares", tier, role(tier), FeatureAPIGatewayEdge)
+			t.Errorf("the %s bootstrap credential cannot create %s, which the core declares", tier, role(tier))
 		}
 		if !allows(t, bootstrapDoc, "iam:PutRolePolicy", role(tier), taggedWithTier(tier, nil)) {
 			t.Errorf("the %s bootstrap credential cannot write the policy of %s", tier, role(tier))
@@ -1907,6 +1872,106 @@ func TestEveryCredentialTagsTheObjectsItPutsInTheAssetBucket(t *testing.T) {
 	for purpose, document := range credentialsOfTier(t, environment.TierProduction) {
 		if !reaches(t, document, "s3:PutObjectTagging", object) {
 			t.Errorf("the %s credential cannot tag %s, so a put that tags it edge-readable is refused", purpose, object)
+		}
+	}
+}
+
+func tagInvalidatorRoleOf(tier environment.Tier) string {
+	return "arn:aws:iam::111122223333:role/ocel/" + string(tier) + "/bootstrap/" + taginvalidator.NamesFor(string(defaultNamespace), tier).Role
+}
+
+func tagInvalidatorFunctionOf(tier environment.Tier) string {
+	return "arn:aws:lambda:us-east-1:111122223333:function:" + taginvalidator.NamesFor(string(defaultNamespace), tier).Function
+}
+
+func TestBothCredentialsPassTheTagInvalidatorRoleOfOnlyTheirOwnTierToLambda(t *testing.T) {
+	toLambda := requestContext{"iam:PassedToService": LambdaServicePrincipal}
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		for purpose, document := range credentialsOfTier(t, tier) {
+			if !allows(t, document, "iam:PassRole", tagInvalidatorRoleOf(tier), toLambda) {
+				t.Errorf("the %s %s credential cannot pass %s to Lambda, so the first deploy that revalidates cannot make the invalidator", tier, purpose, tagInvalidatorRoleOf(tier))
+			}
+			if allows(t, document, "iam:PassRole", tagInvalidatorRoleOf(sibling), toLambda) {
+				t.Errorf("the %s %s credential can pass %s, the %s tier's invalidator role", tier, purpose, tagInvalidatorRoleOf(sibling), sibling)
+			}
+		}
+	}
+}
+
+func TestBothCredentialsMapTheStreamOntoTheTagInvalidatorOfOnlyTheirOwnTier(t *testing.T) {
+	const mapping = "arn:aws:lambda:us-east-1:111122223333:event-source-mapping:1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+	invoking := func(function string) requestContext { return requestContext{"lambda:FunctionArn": function} }
+	for _, tier := range bothTiers {
+		own, other := tagInvalidatorFunctionOf(tier), tagInvalidatorFunctionOf(tier.Sibling())
+		for purpose, document := range credentialsOfTier(t, tier) {
+			for _, function := range []string{own, own + ":$LATEST"} {
+				if !allows(t, document, "lambda:CreateEventSourceMapping", "*", invoking(function)) {
+					t.Errorf("the %s %s credential cannot map the stream onto %s; Lambda authorizes the function name and qualifier the call names", tier, purpose, function)
+				}
+				if !allows(t, document, "lambda:UpdateEventSourceMapping", mapping, invoking(function)) {
+					t.Errorf("the %s %s credential cannot update the mapping onto %s", tier, purpose, function)
+				}
+			}
+			for _, function := range []string{other, other + ":$LATEST"} {
+				if allows(t, document, "lambda:CreateEventSourceMapping", "*", invoking(function)) {
+					t.Errorf("the %s %s credential can map a stream onto %s, the %s tier's invalidator", tier, purpose, function, tier.Sibling())
+				}
+			}
+		}
+	}
+}
+
+func TestBothCredentialsUpdateOnlyTheirOwnTiersEdgeFunctionsAndOnlyTheBootstrapCredentialDeletesACachePolicy(t *testing.T) {
+	resolverOf := func(tier environment.Tier) string {
+		return "arn:aws:cloudfront::111122223333:function/" + defaultNamespace.EdgeResolverName(tier)
+	}
+	const cachePolicy = "arn:aws:cloudfront::111122223333:cache-policy/658327ea-f89d-4fab-a63d-7e88639e58f6"
+	for _, tier := range bothTiers {
+		bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
+		for purpose, document := range map[string]string{"bootstrap": bootstrapDoc, "deploy": deployDoc} {
+			if !allows(t, document, "cloudfront:UpdateFunction", resolverOf(tier), nil) {
+				t.Errorf("the %s %s credential cannot update %s, its own tier's resolver", tier, purpose, resolverOf(tier))
+			}
+			if allows(t, document, "cloudfront:UpdateFunction", resolverOf(tier.Sibling()), nil) {
+				t.Errorf("the %s %s credential can update %s, the %s tier's resolver", tier, purpose, resolverOf(tier.Sibling()), tier.Sibling())
+			}
+		}
+		if !allows(t, bootstrapDoc, "cloudfront:DeleteCachePolicy", cachePolicy, nil) {
+			t.Errorf("the %s bootstrap credential cannot delete the cache policy a removal reclaims", tier)
+		}
+		if allows(t, deployDoc, "cloudfront:DeleteCachePolicy", cachePolicy, nil) {
+			t.Errorf("the %s deploy credential can delete a cache policy, which every CloudFront deploy of the tier shares", tier)
+		}
+	}
+}
+
+func TestTheDeployCredentialCreatesARestAPIOnlyTaggedAsOcelsAndItsOwnTiers(t *testing.T) {
+	const restAPIs = "arn:aws:apigateway:us-east-1::/restapis"
+	tagging := func(managedBy, tier string) requestContext {
+		request := requestContext{}
+		if managedBy != "" {
+			request["aws:RequestTag/"+managedByTagKey] = managedBy
+		}
+		if tier != "" {
+			request["aws:RequestTag/"+naming.EnvTierTagKey] = tier
+		}
+		return request
+	}
+	for _, tier := range bothTiers {
+		_, deployDoc := renderedCredentialsOf(t, tier)
+		if !allows(t, deployDoc, "apigateway:POST", restAPIs, tagging(managedByTagValue, string(tier))) {
+			t.Errorf("the %s deploy credential cannot create a REST API tagged as Ocel's and its own tier's", tier)
+		}
+		for name, request := range map[string]requestContext{
+			"untagged":                     tagging("", ""),
+			"without the managed-by tag":   tagging("", string(tier)),
+			"without the tier tag":         tagging(managedByTagValue, ""),
+			"tagged as the sibling tier's": tagging(managedByTagValue, string(tier.Sibling())),
+		} {
+			if allows(t, deployDoc, "apigateway:POST", restAPIs, request) {
+				t.Errorf("the %s deploy credential can create a REST API %s", tier, name)
+			}
 		}
 	}
 }

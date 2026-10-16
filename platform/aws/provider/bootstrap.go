@@ -16,6 +16,7 @@ func (p *Provider) forget() {
 	p.deployed.forget()
 	p.params.forget()
 	p.layers.forget()
+	p.parts.forget()
 }
 
 type forgetting struct {
@@ -27,6 +28,7 @@ type forgetting struct {
 
 	envSourceSync func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)
 	repairParts   func(ctx context.Context, tier environment.Tier) ([]string, error)
+	addedParts    func(ctx context.Context, tier environment.Tier) ([]provider.BootstrapPart, error)
 }
 
 func (s forgetting) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
@@ -48,7 +50,11 @@ func (s forgetting) DescribeParts(ctx context.Context, described provider.Bootst
 	if present {
 		parts = append(parts, sync)
 	}
-	return parts, nil
+	added, err := s.addedParts(ctx, described.Tier)
+	if err != nil {
+		return nil, err
+	}
+	return append(parts, added...), nil
 }
 
 func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
@@ -96,7 +102,11 @@ func (p *Provider) repairParts(ctx context.Context, tier environment.Tier) ([]st
 	if keyed {
 		works = append(works, sync)
 	}
-	return stackrecords.RepairBootstrapParts(ctx, p.KeyValues(), tier, works)
+	added, err := p.addedPartWorks(ctx, tier)
+	if err != nil {
+		return nil, err
+	}
+	return stackrecords.RepairBootstrapParts(ctx, p.KeyValues(), tier, append(works, added...))
 }
 
 func (s forgetting) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {

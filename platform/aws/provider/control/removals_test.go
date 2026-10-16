@@ -41,10 +41,10 @@ func removingBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 	if err != nil {
 		t.Fatalf("StackNameFor(%s): %v", tier, err)
 	}
-	isrStack := defaultNamespace.FeatureStackName(bootstrap.FeatureISR, tier)
+	edgeStack := defaultNamespace.FeatureStackName(bootstrap.FeatureCloudflareEdge, tier)
 	variablesKeyStack := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, tier)
 	cfn := b.CFN.(*teardownCFN)
-	cfn.present[isrStack] = bootstrap.Deployed{Present: true}
+	cfn.present[edgeStack] = bootstrap.Deployed{Present: true}
 	cfn.present[variablesKeyStack] = bootstrap.Deployed{Present: true}
 	cfn.resources = map[string][]cfntypes.StackResourceSummary{
 		stackName: {
@@ -52,7 +52,7 @@ func removingBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 			summary("StateTable", "AWS::DynamoDB::Table"),
 			summary("AssetBucket", "AWS::S3::Bucket"),
 		},
-		isrStack:          {summary("RevalidationQueue", "AWS::SQS::Queue")},
+		edgeStack:         {summary("EdgeUser", "AWS::IAM::User")},
 		variablesKeyStack: {summary("VariablesKey", "AWS::KMS::Key")},
 	}
 	b.Edge = &planningEdge{removals: []edge.PlanChange{
@@ -103,18 +103,18 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 		t.Fatalf("PlanRemove: %v", err)
 	}
 
-	isr := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureISR, environment.TierProduction))
+	featured := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureCloudflareEdge, environment.TierProduction))
 	core := groupNamed(plan, "aws/"+coreStackName)
-	if isr == nil || core == nil {
-		t.Fatalf("plan groups = %s, want the isr stack and the core it depends on", groupNames(plan))
+	if featured == nil || core == nil {
+		t.Fatalf("plan groups = %s, want the edge feature stack and the core it depends on", groupNames(plan))
 	}
-	if isr.Feature != bootstrap.FeatureISR {
-		t.Errorf("the isr group's feature = %q, want it tagged with the feature it provisions", isr.Feature)
+	if featured.Feature != bootstrap.FeatureCloudflareEdge {
+		t.Errorf("the feature group's feature = %q, want it tagged with the feature it provisions", featured.Feature)
 	}
-	if plan.Groups[0].Name != isr.Name {
+	if plan.Groups[0].Kind != provider.StackGroupKind || plan.Groups[0].Name == core.Name {
 		t.Errorf("the plan opens with %q, want the feature stacks ahead of the core they depend on", plan.Groups[0].Name)
 	}
-	for _, group := range []*provider.ChangeGroup{isr, core} {
+	for _, group := range []*provider.ChangeGroup{featured, core} {
 		if group.Kind != provider.StackGroupKind || group.Action != provider.ActionDelete {
 			t.Errorf("group %+v, want a stack planned for deletion", group)
 		}
@@ -255,8 +255,8 @@ func TestPlanRemovalNamesEveryInstalledEdgeByItsOwnKind(t *testing.T) {
 	}
 
 	front := groupNamed(plan, string(cloudfrontKind)+"/edge")
-	if front == nil || front.Feature != bootstrap.FeatureCloudFrontEdge {
-		t.Fatalf("plan groups = %s, want the selected edge under its own kind and feature", groupNames(plan))
+	if front == nil || front.Feature != "" {
+		t.Fatalf("plan groups = %s, want the selected edge under its own kind, with no feature of its own", groupNames(plan))
 	}
 	if changeNamed(front, "ocel-routes") == nil {
 		t.Errorf("the %s group has %+v, want the rows that edge planned", front.Name, front.Changes)
@@ -392,5 +392,43 @@ func TestPlanRemovalSaysWhatDroppingTheVariablesKeyStrands(t *testing.T) {
 	key := changeNamed(group, "VariablesKey")
 	if key == nil || key.Reason == "" {
 		t.Errorf("the variables key row = %+v, want the note that every value sealed under it is stranded", key)
+	}
+}
+
+func TestRemoveTakesDownThePartsDeploysAddedBeforeTheCore(t *testing.T) {
+	t.Parallel()
+
+	b := installedBootstrapper(t, environment.TierPreview)
+	var removed []environment.Tier
+	b.RemoveParts = func(_ context.Context, tier environment.Tier) error {
+		removed = append(removed, tier)
+		return nil
+	}
+
+	if err := b.Remove(context.Background(), environment.TierPreview, nil); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+
+	if !slices.Equal(removed, []environment.Tier{environment.TierPreview}) {
+		t.Errorf("parts removed for %v, want the preview tier's once", removed)
+	}
+}
+
+func TestPlanRemovalListsThePartsDeploysAddedAheadOfTheCore(t *testing.T) {
+	t.Parallel()
+
+	b := removingBootstrapper(t, environment.TierProduction)
+	part := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: "bootstrap part image-optimizer", Action: provider.ActionDelete}
+	b.PlanPartRemoval = func(context.Context, environment.Tier) ([]provider.ChangeGroup, error) {
+		return []provider.ChangeGroup{part}, nil
+	}
+
+	plan, err := b.PlanRemove(context.Background(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("PlanRemove: %v", err)
+	}
+
+	if len(plan.Groups) == 0 || plan.Groups[0].Name != "aws/"+part.Name {
+		t.Errorf("plan groups = %s, want the part first, named under the vendor that hosts it", groupNames(plan))
 	}
 }

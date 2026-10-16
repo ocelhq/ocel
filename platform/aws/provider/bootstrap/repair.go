@@ -192,13 +192,12 @@ func repairStack(ctx context.Context, apis APIs, ns Namespace, tier environment.
 		return false, waitOutRun(ctx, apis.CFN, stale, progress)
 	}
 
-	stack, err := f.staged(ctx, apis.Store, featureInputs{
-		ns:             ns,
-		tier:           tier,
-		artifactBucket: deployed.ArtifactBucket,
-		refs:           refs,
-		alongside:      deployed.Features,
-		variablesKey:   broughtVariablesKey(deployed.Outputs),
+	stack, err := f.template(featureInputs{
+		ns:           ns,
+		tier:         tier,
+		refs:         refs,
+		alongside:    deployed.Features,
+		variablesKey: broughtVariablesKey(deployed.Outputs),
 	})
 	if err != nil {
 		return false, err

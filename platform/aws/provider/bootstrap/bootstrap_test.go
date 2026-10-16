@@ -392,11 +392,7 @@ func TestCheckDeployed(t *testing.T) {
 					Intended:  cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierProduction, "")),
 					WrittenBy: "1.4.0",
 				},
-				{Name: coreStackName + "-" + FeatureISR, Feature: FeatureISR},
-				{Name: coreStackName + "-" + FeatureImageOptimization, Feature: FeatureImageOptimization},
 				{Name: coreStackName + "-" + FeatureCloudflareEdge, Feature: FeatureCloudflareEdge},
-				{Name: coreStackName + "-" + FeatureCloudFrontEdge, Feature: FeatureCloudFrontEdge},
-				{Name: coreStackName + "-" + FeatureAPIGatewayEdge, Feature: FeatureAPIGatewayEdge},
 				{Name: coreStackName + "-" + provider.FeatureVariablesKey, Feature: provider.FeatureVariablesKey},
 			},
 		}
@@ -420,20 +416,32 @@ func TestCheckDeployed(t *testing.T) {
 	t.Run("a feature stack is what says the feature is on", func(t *testing.T) {
 		api := stubStacksAPI{
 			coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).stamped(Stamp{}),
-			coreStackName + "-" + FeatureImageOptimization: outputs(map[string]string{
-				outputImageOptimizerURL: "https://optimizer.lambda-url.test/",
-			}).stamped(Stamp{}),
+			coreStackName + "-" + FeatureCloudflareEdge: outputs(nil).stamped(Stamp{}),
 		}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if want := []string{FeatureImageOptimization}; !reflect.DeepEqual(got.Features.Names(), want) {
+		if want := []string{FeatureCloudflareEdge}; !reflect.DeepEqual(got.Features.Names(), want) {
 			t.Errorf("Features = %v, want %v", got.Features.Names(), want)
 		}
-		if got.ImageOptimizerURL == "" {
-			t.Error("the optimizer URL its own stack outputs did not reach the flat field a deploy reads")
+	})
+
+	t.Run("the base roles the parts run as reach the flat fields a deploy reads", func(t *testing.T) {
+		api := stubStacksAPI{coreStackName: outputs(map[string]string{
+			outputInfraTier:             string(environment.TierProduction),
+			outputTagInvalidatorRoleARN: "arn:aws:iam::111122223333:role/ocel/production/bootstrap/ocel-invalidator",
+			OutputEdgeInvokeRoleARN:     "arn:aws:iam::111122223333:role/ocel-edge-invoke",
+			outputStateTableStreamARN:   "arn:aws:dynamodb:us-east-1:111122223333:table/state/stream/1",
+		}).stamped(Stamp{})}
+
+		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
+		if err != nil {
+			t.Fatalf("CheckDeployed: %v", err)
+		}
+		if got.TagInvalidatorRoleARN == "" || got.EdgeInvokeRoleARN == "" || got.StateTableStreamARN == "" {
+			t.Errorf("CheckDeployed = %+v, want the invalidator role, the invoke role and the state table stream read off the core", got)
 		}
 	})
 

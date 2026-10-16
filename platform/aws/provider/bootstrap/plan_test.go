@@ -101,26 +101,26 @@ func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {
 
 func TestPlanReadsAnUpdateOffAChangeSetItNeverExecutes(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(environment.TierProduction)
+	stack := keyStack(environment.TierProduction)
 	stacks.fallBehind(stack)
 	stacks.plan(stack,
-		change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue),
-		change(cfntypes.ChangeActionAdd, "TagInvalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse))
+		change(cfntypes.ChangeActionModify, "VariablesKey", "AWS::KMS::Key", cfntypes.ReplacementTrue),
+		change(cfntypes.ChangeActionAdd, "VariablesKeyAlias", "AWS::KMS::Alias", cfntypes.ReplacementFalse))
 	before := stacks.updates
 
 	group := groupNamed(t, planned(t, stacks, environment.TierProduction, everything()), stack)
 	if group.Action != provider.ActionUpdate {
 		t.Fatalf("%s is %q, want it updated where its content is behind", stack, group.Action)
 	}
-	queue := changeNamed(t, group, "TagInvalidatorDeadLetterQueue")
-	if queue.Action != provider.ActionReplace {
-		t.Errorf("TagInvalidatorDeadLetterQueue = %q, want a replacement where CloudFormation cannot change it in place", queue.Action)
+	key := changeNamed(t, group, "VariablesKey")
+	if key.Action != provider.ActionReplace {
+		t.Errorf("VariablesKey = %q, want a replacement where CloudFormation cannot change it in place", key.Action)
 	}
-	if queue.Reason == "" {
-		t.Error("the replacement says nothing about why the queue cannot be changed in place")
+	if key.Reason == "" {
+		t.Error("the replacement says nothing about why the key cannot be changed in place")
 	}
-	if added := changeNamed(t, group, "TagInvalidator"); added.Action != provider.ActionCreate {
-		t.Errorf("TagInvalidator = %q, want it created", added.Action)
+	if added := changeNamed(t, group, "VariablesKeyAlias"); added.Action != provider.ActionCreate {
+		t.Errorf("VariablesKeyAlias = %q, want it created", added.Action)
 	}
 	if stacks.updates != before {
 		t.Errorf("planning executed %d change sets; a plan writes nothing", stacks.updates-before)
@@ -132,27 +132,27 @@ func TestPlanReadsAnUpdateOffAChangeSetItNeverExecutes(t *testing.T) {
 
 func TestPlanNamesTheTargetThatForcesAReplacement(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(environment.TierProduction)
+	stack := keyStack(environment.TierProduction)
 	stacks.fallBehind(stack)
-	replacing := change(cfntypes.ChangeActionModify, "TagInvalidatorDeadLetterQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue)
+	replacing := change(cfntypes.ChangeActionModify, "VariablesKey", "AWS::KMS::Key", cfntypes.ReplacementTrue)
 	replacing.Details = []cfntypes.ResourceChangeDetail{{
 		Target: &cfntypes.ResourceTargetDefinition{
 			Attribute:          cfntypes.ResourceAttributeProperties,
-			Name:               aws.String("FifoQueue"),
+			Name:               aws.String("KeySpec"),
 			RequiresRecreation: cfntypes.RequiresRecreationAlways,
 		},
 	}}
 	stacks.plan(stack, replacing)
 
 	group := groupNamed(t, planned(t, stacks, environment.TierProduction, everything()), stack)
-	if reason := changeNamed(t, group, "TagInvalidatorDeadLetterQueue").Reason; !strings.Contains(reason, "FifoQueue") {
+	if reason := changeNamed(t, group, "VariablesKey").Reason; !strings.Contains(reason, "KeySpec") {
 		t.Errorf("the replacement reads %q, want it to name the property that forces it", reason)
 	}
 }
 
 func TestPlanStillUpdatesAStackWhoseStampAloneIsBehind(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(environment.TierProduction)
+	stack := keyStack(environment.TierProduction)
 	stacks.misstamp(stack)
 
 	groups := planned(t, stacks, environment.TierProduction, everything())
@@ -265,7 +265,7 @@ func (unplannable) CreateChangeSet(context.Context, *cloudformation.CreateChange
 
 func TestPlanSaysSoWhenItCannotDiffAnUpdate(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(environment.TierProduction)
+	stack := keyStack(environment.TierProduction)
 	stacks.fallBehind(stack)
 
 	group := groupNamed(t, planned(t, unplannable{stacks}, environment.TierProduction, everything()), stack)
@@ -282,19 +282,19 @@ func TestPlanSaysSoWhenItCannotDiffAnUpdate(t *testing.T) {
 
 func TestPlanListsWhatADroppedFeatureTakesWithIt(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(environment.TierProduction)
+	stack := edgeStack(environment.TierProduction)
 
 	groups := planned(t, stacks, environment.TierProduction, Request{
-		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
-		Remove:   []string{FeatureISR},
+		Features: []string{provider.FeatureVariablesKey},
+		Remove:   []string{FeatureCloudflareEdge},
 	})
 	group := groupNamed(t, groups, stack)
-	if group.Action != provider.ActionDelete || group.Feature != FeatureISR {
+	if group.Action != provider.ActionDelete || group.Feature != FeatureCloudflareEdge {
 		t.Fatalf("%s = %+v, want the dropped feature deleted", stack, group)
 	}
-	queue := changeNamed(t, group, "TagInvalidatorDeadLetterQueue")
-	if queue.Action != provider.ActionDelete || queue.Kind == "" {
-		t.Errorf("TagInvalidatorDeadLetterQueue = %+v, want the queue the stack contains deleted", queue)
+	user := changeNamed(t, group, "EdgeUser")
+	if user.Action != provider.ActionDelete || user.Kind == "" {
+		t.Errorf("EdgeUser = %+v, want the user the stack contains deleted", user)
 	}
 }
 
@@ -308,20 +308,20 @@ func (f *fakeCFN) setTemplate(stackName, body string) {
 
 func TestPlanListsTheResourcesTheProvisionedStackContainsNotTheOnesThisBuildWouldRender(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(environment.TierProduction)
+	stack := edgeStack(environment.TierProduction)
 	stacks.setTemplate(stack, leftoverTemplate)
 
 	group := groupNamed(t, planned(t, stacks, environment.TierProduction, Request{
-		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
-		Remove:   []string{FeatureISR},
+		Features: []string{provider.FeatureVariablesKey},
+		Remove:   []string{FeatureCloudflareEdge},
 	}), stack)
 	leftover := changeNamed(t, group, "LeftoverQueue")
 	if leftover.Kind != "AWS::SQS::Queue" || leftover.Action != provider.ActionDelete {
 		t.Errorf("LeftoverQueue = %+v, want what the account contains, deleted", leftover)
 	}
 	for _, change := range group.Changes {
-		if change.Name == "TagInvalidatorDeadLetterQueue" {
-			t.Error("the plan lists TagInvalidatorDeadLetterQueue, which this build's template declares and the provisioned stack does not contain")
+		if change.Name == "EdgeUser" {
+			t.Error("the plan lists EdgeUser, which this build's template declares and the provisioned stack does not contain")
 		}
 	}
 }
@@ -334,14 +334,14 @@ func (unlistable) ListStackResources(context.Context, *cloudformation.ListStackR
 
 func TestPlanFallsBackToTheTemplateWhenItCannotReadTheProvisionedStack(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(environment.TierProduction)
+	stack := edgeStack(environment.TierProduction)
 
 	group := groupNamed(t, planned(t, unlistable{stacks}, environment.TierProduction, Request{
-		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
-		Remove:   []string{FeatureISR},
+		Features: []string{provider.FeatureVariablesKey},
+		Remove:   []string{FeatureCloudflareEdge},
 	}), stack)
-	if queue := changeNamed(t, group, "TagInvalidatorDeadLetterQueue"); queue.Action != provider.ActionDelete {
-		t.Errorf("TagInvalidatorDeadLetterQueue = %+v, want the template's best guess at what goes", queue)
+	if user := changeNamed(t, group, "EdgeUser"); user.Action != provider.ActionDelete {
+		t.Errorf("EdgeUser = %+v, want the template's best guess at what goes", user)
 	}
 	if !strings.Contains(group.Reason, provider.DetailUnavailable) {
 		t.Errorf("%s reads %q, want it to own up to reading the listing off a template rather than the account", stack, group.Reason)
@@ -378,7 +378,7 @@ func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
 	ctx := context.Background()
 	stacks := newFakeCFN()
 	core := defaultNamespace.CoreStackName()
-	feature := defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction)
+	feature := defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, environment.TierProduction)
 	for _, name := range []string{core, feature} {
 		stacks.templates[name] = "Resources: {}"
 	}
@@ -400,8 +400,8 @@ func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
 		}
 		names = append(names, group.Name)
 	}
-	if got := groupNamed(t, groups, feature).Feature; got != FeatureISR {
-		t.Errorf("%s is labelled feature %q, want %q", feature, got, FeatureISR)
+	if got := groupNamed(t, groups, feature).Feature; got != provider.FeatureVariablesKey {
+		t.Errorf("%s is labelled feature %q, want %q", feature, got, provider.FeatureVariablesKey)
 	}
 	if want := []string{feature, core}; !slices.Equal(names, want) {
 		t.Errorf("PlanRemove() plans %v, want %v: a destroy that plans nothing never runs the teardown that removes them", names, want)

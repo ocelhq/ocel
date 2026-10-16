@@ -17,13 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 )
 
-const (
-	FeatureISR               = "isr"
-	FeatureImageOptimization = "image-optimization"
-	FeatureCloudflareEdge    = "cloudflare-edge"
-	FeatureCloudFrontEdge    = "cloudfront-edge"
-	FeatureAPIGatewayEdge    = "apigateway-edge"
-)
+const FeatureCloudflareEdge = "cloudflare-edge"
 
 type stackRefs struct {
 	assetBucket         string
@@ -31,17 +25,14 @@ type stackRefs struct {
 	stateTable          string
 	stateTableARN       string
 	stateTableStreamARN string
-	imageOptimizerARN   string
 }
 
 type featureInputs struct {
-	ns             Namespace
-	tier           environment.Tier
-	artifactBucket string
-	code           stackPayloads
-	refs           stackRefs
-	alongside      FeatureSet
-	variablesKey   string
+	ns           Namespace
+	tier         environment.Tier
+	refs         stackRefs
+	alongside    FeatureSet
+	variablesKey string
 }
 
 type featureStack struct {
@@ -64,31 +55,11 @@ type feature struct {
 	serves    buildoutput.Uses
 	edges     []edge.Kind
 
-	template   func(featureInputs) (featureStack, error)
-	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
-	placements func(string) stackPayloads
-	after      func(context.Context, stepDeps) error
-	afterPlan  func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
-	drop       func(context.Context, stepDeps) error
-	dropPlan   func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
-}
-
-func (f feature) planned(in featureInputs) (featureStack, error) {
-	if f.placements != nil {
-		in.code = f.placements(in.artifactBucket)
-	}
-	return f.template(in)
-}
-
-func (f feature) staged(ctx context.Context, store ObjectStore, in featureInputs) (featureStack, error) {
-	if f.payloads != nil {
-		code, err := f.payloads(ctx, store, in.artifactBucket)
-		if err != nil {
-			return featureStack{}, err
-		}
-		in.code = code
-	}
-	return f.template(in)
+	template  func(featureInputs) (featureStack, error)
+	after     func(context.Context, stepDeps) error
+	afterPlan func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
+	drop      func(context.Context, stepDeps) error
+	dropPlan  func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
 }
 
 func (f feature) edgeKind() (edge.Kind, bool) {
@@ -103,11 +74,7 @@ func (f feature) stackName(ns Namespace, tier environment.Tier) string {
 }
 
 var featureRegistry = []feature{
-	isrFeature,
-	imageOptimizationFeature,
 	cloudflareEdgeFeature,
-	cloudFrontEdgeFeature,
-	apiGatewayEdgeFeature,
 	variablesKeyFeature,
 }
 
@@ -193,7 +160,6 @@ const (
 	paramStateTableName      = "StateTableName"
 	paramStateTableARN       = "StateTableArn"
 	paramStateTableStreamARN = "StateTableStreamArn"
-	paramImageOptimizerARN   = "ImageOptimizerArn"
 )
 
 type crossStackParam struct {

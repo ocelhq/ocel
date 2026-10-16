@@ -29,10 +29,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
+	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -73,6 +75,71 @@ type world struct {
 	ssm    *fakeSSM
 	cfn    *fakeCFN
 	trail  *trail
+	parts  *fakeParts
+}
+
+type fakeParts struct {
+	mu      sync.Mutex
+	absent  bool
+	ensured []string
+}
+
+func (w *world) records() keyvalue.Store {
+	return awsports.KeyValues{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
+}
+
+func fakePartResources(tier environment.Tier) []provider.PartResource {
+	return []provider.PartResource{
+		{Kind: cloudfrontpart.KindRoutesStore, ID: fakeRoutesARN(tier)},
+		{Kind: cloudfrontpart.KindFunction, ID: fakeResolverARN(tier)},
+		{Kind: cloudfrontpart.KindFunction, ID: fakeEmptyBodyARN(tier)},
+		{Kind: cloudfrontpart.KindCachePolicy, ID: "cache-" + string(tier)},
+		{Kind: cloudfrontpart.KindHeadersPolicy, ID: "headers-" + string(tier)},
+		{Kind: cloudfrontpart.KindAssetAccess, ID: "oac-" + string(tier)},
+	}
+}
+
+func (w *world) ensurePart(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error) {
+	w.parts.mu.Lock()
+	defer w.parts.mu.Unlock()
+	w.parts.ensured = append(w.parts.ensured, part+" for "+addedBy)
+	if w.parts.absent {
+		return nil, nil
+	}
+	if say != nil {
+		say("added the " + part + " part")
+	}
+	resources := fakePartResources(tier)
+	if err := stackrecords.MarkBootstrapPartReady(ctx, w.records(), tier, part, stackrecords.BootstrapPart{AddedBy: addedBy, Resources: resources}); err != nil {
+		return nil, err
+	}
+	return resources, nil
+}
+
+func (w *world) ledgerItems() int {
+	n := 0
+	for key := range w.dynamo.items {
+		recorded := false
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+			recorded = recorded || strings.HasPrefix(key, awsports.PartitionKey(keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}))
+		}
+		if !recorded {
+			n++
+		}
+	}
+	return n
+}
+
+func (w *world) forgetPart(t *testing.T) {
+	t.Helper()
+	w.parts.mu.Lock()
+	defer w.parts.mu.Unlock()
+	w.parts.absent = true
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if err := stackrecords.ForgetBootstrapPart(context.Background(), w.records(), tier, cloudfrontpart.Part); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func newWorld() *world {
@@ -84,6 +151,7 @@ func newWorld() *world {
 		ssm:    newFakeSSM(),
 		cfn:    &fakeCFN{},
 		trail:  shared,
+		parts:  &fakeParts{},
 	}
 }
 
@@ -112,8 +180,9 @@ func (w *world) invalidationTargets(in keyvalue.Partition) []string {
 
 func (w *world) edge() *cloudFront {
 	return &cloudFront{
-		ns:   defaultNamespace,
-		open: func(context.Context) (Clients, error) { return w.clients(), nil },
+		ns:         defaultNamespace,
+		ensurePart: w.ensurePart,
+		open:       func(context.Context) (Clients, error) { return w.clients(), nil },
 		pacing: Rollout{
 			Wait:     func(context.Context, time.Duration) error { return nil },
 			Attempts: 5,
@@ -124,19 +193,16 @@ func (w *world) edge() *cloudFront {
 }
 
 type fakeCFN struct {
-	absent               bool
-	otherEdge            bool
-	resolverPredatesGate bool
+	absent bool
 }
 
 func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	tier := environment.TierProduction
 	name := aws.ToString(in.StackName)
 	if trimmed, preview := strings.CutSuffix(name, "-"+string(environment.TierPreview)); preview {
-		tier, name = environment.TierPreview, trimmed
+		name = trimmed
 	}
 	var outputs map[string]string
 	switch name {
@@ -144,14 +210,6 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 		outputs = map[string]string{
 			"StateTableName":  fakeStateTable,
 			"AssetBucketName": fakeAssetBucket,
-		}
-	case coreStackName + "-" + bootstrap.FeatureCloudFrontEdge:
-		if f.otherEdge {
-			return &cloudformation.DescribeStacksOutput{}, nil
-		}
-		outputs = fakeEdgeOutputs(tier)
-		if f.resolverPredatesGate {
-			delete(outputs, bootstrap.OutputEdgeGateDigest)
 		}
 	default:
 		return &cloudformation.DescribeStacksOutput{}, nil
@@ -196,6 +254,7 @@ type fakeDistribution struct {
 	domain  string
 	etag    string
 	config  *cftypes.DistributionConfig
+	tags    map[string]string
 	rollout int
 	polls   int
 }
@@ -247,18 +306,6 @@ func fakeResolverARN(tier environment.Tier) string {
 
 func fakeEmptyBodyARN(tier environment.Tier) string {
 	return "arn:aws:cloudfront::123456789012:function/" + defaultNamespace.EdgeEmptyBodyName(tier)
-}
-
-func fakeEdgeOutputs(tier environment.Tier) map[string]string {
-	return map[string]string{
-		bootstrap.OutputEdgeRoutesStoreARN: fakeRoutesARN(tier),
-		bootstrap.OutputEdgeResolverARN:    fakeResolverARN(tier),
-		bootstrap.OutputEdgeEmptyBodyARN:   fakeEmptyBodyARN(tier),
-		bootstrap.OutputEdgeCachePolicy:    "cache-" + string(tier),
-		bootstrap.OutputEdgeHeadersPolicy:  "headers-" + string(tier),
-		bootstrap.OutputEdgeAssetAccess:    "oac-" + string(tier),
-		bootstrap.OutputEdgeGateDigest:     resolver.GateDigest(),
-	}
 }
 
 func (f *fakeCloudFront) record(call string) {
@@ -337,10 +384,11 @@ func (f *fakeCloudFront) ListDistributions(_ context.Context, _ *cloudfront.List
 	return &cloudfront.ListDistributionsOutput{DistributionList: &cftypes.DistributionList{Items: items}}, nil
 }
 
-func (f *fakeCloudFront) CreateDistribution(_ context.Context, in *cloudfront.CreateDistributionInput, _ ...func(*cloudfront.Options)) (*cloudfront.CreateDistributionOutput, error) {
+func (f *fakeCloudFront) CreateDistributionWithTags(_ context.Context, in *cloudfront.CreateDistributionWithTagsInput, _ ...func(*cloudfront.Options)) (*cloudfront.CreateDistributionWithTagsOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	comment := aws.ToString(in.DistributionConfig.Comment)
+	config := in.DistributionConfigWithTags.DistributionConfig
+	comment := aws.ToString(config.Comment)
 	f.record("CreateDistribution " + comment)
 	if f.createDistributionErr != nil {
 		return nil, f.createDistributionErr
@@ -350,17 +398,23 @@ func (f *fakeCloudFront) CreateDistribution(_ context.Context, in *cloudfront.Cr
 		id:      id,
 		domain:  strings.ToLower(id) + ".cloudfront.net",
 		etag:    f.id("dist-"),
-		config:  in.DistributionConfig,
+		config:  config,
+		tags:    map[string]string{},
 		rollout: f.rollout,
 	}
+	if tags := in.DistributionConfigWithTags.Tags; tags != nil {
+		for _, tag := range tags.Items {
+			created.tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+		}
+	}
 	f.distributions[id] = created
-	return &cloudfront.CreateDistributionOutput{
+	return &cloudfront.CreateDistributionWithTagsOutput{
 		ETag: aws.String(created.etag),
 		Distribution: &cftypes.Distribution{
 			Id:                 aws.String(created.id),
 			DomainName:         aws.String(created.domain),
 			Status:             aws.String(created.status()),
-			DistributionConfig: in.DistributionConfig,
+			DistributionConfig: config,
 		},
 	}, nil
 }

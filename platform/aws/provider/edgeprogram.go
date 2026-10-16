@@ -17,8 +17,12 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 	if err != nil {
 		return provider.EdgeProgram{}, err
 	}
+	optimizer, err := p.imageOptimizerURL(ctx, req.Tier)
+	if err != nil {
+		return provider.EdgeProgram{}, err
+	}
 	values := deploy.WorkerValues{
-		ImageOptimizerURL: deployed.ImageOptimizerURL,
+		ImageOptimizerURL: optimizer,
 		AssetBucket:       deployed.AssetBucket,
 		Region:            p.aws.Region,
 	}

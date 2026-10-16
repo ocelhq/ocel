@@ -15,12 +15,7 @@ export const SLUG_PREFIX = "e2e-";
 
 export const ENTRY_SLUG = "e2e-edge";
 
-export const PREVIEW_BOOTSTRAP_FEATURES = [
-  "cloudflare-edge",
-  "image-optimization",
-  "isr",
-  "variables-key",
-];
+export const PREVIEW_BOOTSTRAP_FEATURES = ["cloudflare-edge", "variables-key"];
 
 export const DEPLOYED_PARTITIONS = ["projects", "edgestacks"];
 

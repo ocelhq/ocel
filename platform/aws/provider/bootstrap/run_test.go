@@ -414,35 +414,10 @@ func sameParams(a, b []cfntypes.Parameter) bool {
 	return true
 }
 
-func (f *fakeCFN) seed(stackName, body string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.record(stackName, body, nil, nil)
-	f.applied = f.applied[:len(f.applied)-1]
-	f.statuses[stackName] = cfntypes.StackStatusCreateComplete
-}
-
-func (f *fakeCFN) output(stackName, key string) string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.outputs[stackName][key]
-}
-
 func (f *fakeCFN) template(stackName string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.templates[stackName]
-}
-
-func (f *fakeCFN) parameter(stackName, key string) string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for _, p := range f.params[stackName] {
-		if aws.ToString(p.ParameterKey) == key {
-			return aws.ToString(p.ParameterValue)
-		}
-	}
-	return ""
 }
 
 func (f *fakeCFN) stacks() []string {
@@ -454,17 +429,6 @@ func (f *fakeCFN) stacks() []string {
 	}
 	slices.Sort(names)
 	return names
-}
-
-func (f *fakeCFN) lastEvent(event string) int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for i := len(f.events) - 1; i >= 0; i-- {
-		if f.events[i] == event {
-			return i
-		}
-	}
-	return -1
 }
 
 func (f *fakeCFN) firstApplied(stackName string) int {
@@ -663,18 +627,11 @@ func apisAcross(stacks *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore
 
 func everything() Request { return Request{Features: featureNames()} }
 
-func runAll(ctx context.Context, apis APIs, target spec) error {
-	return run(ctx, apis, target, everything(), progress.Discard())
-}
-
-func isrStack(tier environment.Tier) string {
-	return defaultNamespace.FeatureStackName(FeatureISR, tier)
-}
 func edgeStack(tier environment.Tier) string {
 	return defaultNamespace.FeatureStackName(FeatureCloudflareEdge, tier)
 }
-func optStack(tier environment.Tier) string {
-	return defaultNamespace.FeatureStackName(FeatureImageOptimization, tier)
+func keyStack(tier environment.Tier) string {
+	return defaultNamespace.FeatureStackName(provider.FeatureVariablesKey, tier)
 }
 
 func TestRun(t *testing.T) {
@@ -698,23 +655,23 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("asking for the cloudflare edge pulls in what it depends on", func(t *testing.T) {
+	t.Run("asking for the cloudflare edge provisions its stack beside the core alone", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction,
-			Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil)
+			Request{Features: []string{FeatureCloudflareEdge}}, nil)
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		want := []string{coreStackName, isrStack(environment.TierProduction), edgeStack(environment.TierProduction)}
+		want := []string{coreStackName, edgeStack(environment.TierProduction)}
 		slices.Sort(want)
 		if got := stacks.stacks(); !slices.Equal(got, want) {
 			t.Errorf("stacks = %v, want %v", got, want)
 		}
 	})
 
-	t.Run("a stack is never applied before what feeds it", func(t *testing.T) {
+	t.Run("the core is applied before every feature stack", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
@@ -722,26 +679,23 @@ func TestRun(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 		core := stacks.firstApplied(coreStackName)
-		isr := stacks.firstApplied(isrStack(environment.TierProduction))
-		front := stacks.firstApplied(edgeStack(environment.TierProduction))
-		if core < 0 || isr < 0 || front < 0 {
-			t.Fatalf("applied %v, want core, isr and the cloudflare edge among them", stacks.applied)
-		}
-		if core >= isr || isr >= front {
-			t.Errorf("applied in order %v, want core before isr before the cloudflare edge", stacks.applied)
+		for _, name := range []string{edgeStack(environment.TierProduction), keyStack(environment.TierProduction)} {
+			feature := stacks.firstApplied(name)
+			if core < 0 || feature < 0 {
+				t.Fatalf("applied %v, want the core and %s among them", stacks.applied, name)
+			}
+			if core >= feature {
+				t.Errorf("applied in order %v, want the core before %s", stacks.applied, name)
+			}
 		}
 	})
 
-	t.Run("a feature reads its upstream by parameter, never by import", func(t *testing.T) {
+	t.Run("no stack reaches across stacks with an export", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
-		}
-		front := edgeStack(environment.TierProduction)
-		if got := stacks.parameter(front, paramImageOptimizerARN); got != stacks.output(optStack(environment.TierProduction), outputImageOptimizerARN) {
-			t.Errorf("%s was handed optimizer ARN %q, want the one the image-optimization stack output", front, got)
 		}
 		for _, name := range stacks.stacks() {
 			if body := stacks.template(name); strings.Contains(body, "ImportValue") || strings.Contains(body, "Export:") {
@@ -816,7 +770,7 @@ func TestRun(t *testing.T) {
 				stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				frontedBy(t, &fakeEdge{})
 
-				req := Request{Features: []string{FeatureISR, FeatureImageOptimization}}
+				req := Request{Features: []string{provider.FeatureVariablesKey}}
 				if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, tc.tier, req, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
@@ -1000,7 +954,7 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("a dropped name takes its stack with it, in the order it was handed", func(t *testing.T) {
+	t.Run("dropped names take their stacks with them and leave the core", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(stacks, ssmc, iamc, preloadedStore())
@@ -1008,22 +962,18 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		dropped := Request{
-			Features: []string{FeatureImageOptimization},
-			Remove:   []string{FeatureCloudflareEdge, FeatureISR},
-		}
+		dropped := Request{Remove: []string{provider.FeatureVariablesKey, FeatureCloudflareEdge}}
 		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, dropped, nil); err != nil {
-			t.Fatalf("Run without the edge: %v", err)
+			t.Fatalf("Run without the features: %v", err)
 		}
-		want := []string{edgeStack(environment.TierProduction), isrStack(environment.TierProduction)}
+		want := []string{edgeStack(environment.TierProduction), keyStack(environment.TierProduction)}
 		if !slices.Equal(stacks.deleted, want) {
-			t.Errorf("deleted %v, want %v: a dependent goes before what it depends on", stacks.deleted, want)
+			t.Errorf("deleted %v, want %v", stacks.deleted, want)
 		}
-		if !slices.Contains(stacks.stacks(), optStack(environment.TierProduction)) {
-			t.Errorf("stacks left = %v, want the feature that stayed in the set", stacks.stacks())
+		if got := stacks.stacks(); !slices.Equal(got, []string{coreStackName}) {
+			t.Errorf("stacks left = %v, want the core alone", got)
 		}
 	})
-
 }
 
 func TestRunPreview(t *testing.T) {
@@ -1152,7 +1102,7 @@ func TestRunDefaultEdge(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected Run to fail when the default edge cannot be bootstrapped")
 		}
-		if slices.Contains(stacks.stacks(), isrStack(environment.TierProduction)) {
+		if slices.Contains(stacks.stacks(), keyStack(environment.TierProduction)) {
 			t.Error("provisioned feature stacks on top of an edge that never came up")
 		}
 	})
@@ -1190,7 +1140,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 				}
 
 				req := Request{
-					Features: []string{FeatureISR, FeatureImageOptimization},
+					Features: []string{provider.FeatureVariablesKey},
 					Remove:   []string{FeatureCloudflareEdge},
 				}
 				if err := Run(context.Background(), apis, defaultNamespace, tc.tier, req, nil); err != nil {
@@ -1213,26 +1163,6 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 			})
 		}
 	})
-
-	t.Run("dropping isr takes the edge that depends on it down first", func(t *testing.T) {
-		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		frontedBy(t, &fakeEdge{kind: "cloudflare"})
-		apis := apisOf(stacks, ssmc, iamc, preloadedStore())
-
-		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		req := Request{
-			Features: []string{FeatureImageOptimization},
-			Remove:   []string{FeatureCloudflareEdge, FeatureISR},
-		}
-		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, req, nil); err != nil {
-			t.Fatalf("dropping isr: %v", err)
-		}
-		if len(iamc.keys) != 0 {
-			t.Errorf("the edge reader still has %v after the closure took its stack", iamc.keys)
-		}
-	})
 }
 
 func originSecretFor(t *testing.T, tier environment.Tier) string {
@@ -1249,19 +1179,19 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		stacks.blockName(isrStack(environment.TierProduction), 1)
+		stacks.blockName(keyStack(environment.TierProduction), 1)
 		recordWaits(t)
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction,
-			Request{Features: []string{FeatureISR}}, nil); err != nil {
+			Request{Features: []string{provider.FeatureVariablesKey}}, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		stacks.wedge(isrStack(environment.TierProduction))
+		stacks.wedge(keyStack(environment.TierProduction))
 		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if deployed.Features.Has(FeatureISR) {
+		if deployed.Features.Has(provider.FeatureVariablesKey) {
 			t.Error("a stack that rolled back and contains nothing reads as an enabled feature; every deploy that needs it is waved through")
 		}
 	})
@@ -1272,23 +1202,23 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		apis := apisOf(stacks, ssmc, iamc, preloadedStore())
 		recordWaits(t)
 
-		req := Request{Features: []string{FeatureISR}}
+		req := Request{Features: []string{provider.FeatureVariablesKey}}
 		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		stacks.wedge(isrStack(environment.TierProduction))
+		stacks.wedge(keyStack(environment.TierProduction))
 
 		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, req, nil); err != nil {
 			t.Fatalf("re-run over a wedged stack: %v", err)
 		}
-		if !slices.Contains(stacks.deleted, isrStack(environment.TierProduction)) {
+		if !slices.Contains(stacks.deleted, keyStack(environment.TierProduction)) {
 			t.Errorf("deleted %v, want the wedged stack replaced rather than updated", stacks.deleted)
 		}
 		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if !deployed.Features.Has(FeatureISR) {
+		if !deployed.Features.Has(provider.FeatureVariablesKey) {
 			t.Error("the re-run left the feature missing")
 		}
 	})
@@ -1299,27 +1229,27 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		apis := apisOf(stacks, ssmc, iamc, preloadedStore())
 		recordWaits(t)
 
-		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Features: []string{FeatureISR}}, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Features: []string{provider.FeatureVariablesKey}}, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		stacks.wedge(isrStack(environment.TierProduction))
+		stacks.wedge(keyStack(environment.TierProduction))
 
-		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Remove: []string{FeatureISR}}, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Remove: []string{provider.FeatureVariablesKey}}, nil); err != nil {
 			t.Fatalf("dropping a wedged stack: %v", err)
 		}
-		if slices.Contains(stacks.stacks(), isrStack(environment.TierProduction)) {
+		if slices.Contains(stacks.stacks(), keyStack(environment.TierProduction)) {
 			t.Errorf("stacks left = %v, want the wedged stack gone rather than orphaned", stacks.stacks())
 		}
 	})
 
-	t.Run("a queue name still blocked is waited out, not surfaced", func(t *testing.T) {
+	t.Run("a name still blocked is waited out, not surfaced", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		waits := recordWaits(t)
-		stacks.blockName(isrStack(environment.TierProduction), 2)
+		stacks.blockName(keyStack(environment.TierProduction), 2)
 
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction,
-			Request{Features: []string{FeatureISR}}, nil); err != nil {
+			Request{Features: []string{provider.FeatureVariablesKey}}, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if len(*waits) != 2 {
@@ -1336,11 +1266,11 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		recordWaits(t)
-		stacks.blockName(isrStack(environment.TierProduction), 1)
-		stacks.reason(isrStack(environment.TierProduction), "Resource handler returned message: Access denied")
+		stacks.blockName(keyStack(environment.TierProduction), 1)
+		stacks.reason(keyStack(environment.TierProduction), "Resource handler returned message: Access denied")
 
 		err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction,
-			Request{Features: []string{FeatureISR}}, nil)
+			Request{Features: []string{provider.FeatureVariablesKey}}, nil)
 		if err == nil {
 			t.Fatal("retried a failure that will never succeed on retry")
 		}

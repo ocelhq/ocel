@@ -102,116 +102,6 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_sqs_queue:TagInvalidatorDeadLetterQueue",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_sqs_queue",
-      "name": "TagInvalidatorDeadLetterQueue",
-      "region": "us-east-1",
-      "properties": {
-        "fifo_queue": false
-      }
-    },
-    {
-      "id": "project:shop/shared:preview/aws_lambda_function:TagInvalidator",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_lambda_function",
-      "name": "TagInvalidator",
-      "region": "us-east-1",
-      "properties": {
-        "architectures": [
-          "arm64"
-        ],
-        "memory_size": 512,
-        "runtime": "nodejs24.x",
-        "timeout": 60
-      }
-    },
-    {
-      "id": "project:shop/shared:preview/aws_lambda_event_source_mapping:TagInvalidatorStream",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_lambda_event_source_mapping",
-      "name": "TagInvalidatorStream",
-      "region": "us-east-1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:TagInvalidatorLogGroup",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_cloudwatch_log_group",
-      "name": "TagInvalidatorLogGroup",
-      "region": "us-east-1",
-      "properties": {
-        "retention_in_days": 14
-      }
-    },
-    {
-      "id": "project:shop/shared:preview/aws_lambda_function:ImageOptimizer",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_lambda_function",
-      "name": "ImageOptimizer",
-      "region": "us-east-1",
-      "properties": {
-        "architectures": [
-          "arm64"
-        ],
-        "memory_size": 1769,
-        "runtime": "nodejs24.x",
-        "timeout": 20
-      }
-    },
-    {
-      "id": "project:shop/shared:preview/aws_lambda_function_url:ImageOptimizerUrl",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_lambda_function_url",
-      "name": "ImageOptimizerUrl",
-      "region": "us-east-1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:ImageOptimizerLogGroup",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_cloudwatch_log_group",
-      "name": "ImageOptimizerLogGroup",
-      "region": "us-east-1",
-      "properties": {
-        "retention_in_days": 14
-      }
-    },
-    {
-      "id": "project:shop/shared:preview/aws_cloudfront_key_value_store:EdgeRoutes",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_cloudfront_key_value_store",
-      "name": "EdgeRoutes",
-      "region": "us-east-1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:preview/aws_cloudfront_function:EdgeResolver",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_cloudfront_function",
-      "name": "EdgeResolver",
-      "region": "us-east-1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:preview/aws_cloudfront_function:EdgeEmptyBody",
-      "scope": "project:shop/shared:preview",
-      "vendor": "aws",
-      "type": "aws_cloudfront_function",
-      "name": "EdgeEmptyBody",
-      "region": "us-east-1",
-      "properties": {}
-    },
-    {
       "id": "project:shop/shared:preview/aws_kms_key:VariablesKey",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
@@ -242,6 +132,116 @@
       "vendor": "aws",
       "type": "aws_cloudwatch_log_group",
       "name": "/aws/lambda/ocel-env-sync-preview",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/shared:preview/aws_cloudfront_key_value_store:ocel-routes-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_cloudfront_key_value_store",
+      "name": "ocel-routes-preview",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_cloudfront_function:ocel-resolver-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_cloudfront_function",
+      "name": "ocel-resolver-preview",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_cloudfront_function:ocel-empty-body-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_cloudfront_function",
+      "name": "ocel-empty-body-preview",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_lambda_function:ocel-optimizer-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "ocel-optimizer-preview",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 1769,
+        "runtime": "nodejs24.x",
+        "timeout": 20
+      }
+    },
+    {
+      "id": "project:shop/shared:preview/aws_lambda_function_url:ocel-optimizer-preview-url",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_lambda_function_url",
+      "name": "ocel-optimizer-preview-url",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:/aws/lambda/ocel-optimizer-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "/aws/lambda/ocel-optimizer-preview",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/shared:preview/aws_sqs_queue:ocel-app-ocel-invalidator-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_sqs_queue",
+      "name": "ocel-app-ocel-invalidator-preview",
+      "region": "us-east-1",
+      "properties": {
+        "fifo_queue": false
+      }
+    },
+    {
+      "id": "project:shop/shared:preview/aws_lambda_function:ocel-invalidator-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "ocel-invalidator-preview",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 512,
+        "runtime": "nodejs24.x",
+        "timeout": 60
+      }
+    },
+    {
+      "id": "project:shop/shared:preview/aws_lambda_event_source_mapping:ocel-invalidator-preview-stream",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_lambda_event_source_mapping",
+      "name": "ocel-invalidator-preview-stream",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:/aws/lambda/ocel-invalidator-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "/aws/lambda/ocel-invalidator-preview",
       "region": "us-east-1",
       "properties": {
         "retention_in_days": 14

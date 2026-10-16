@@ -28,7 +28,8 @@ prepared:
    (orange cloud)**, since an unproxied hostname never reaches a worker.
 2. Nothing else in AWS is made by hand. Every run's sweep job bootstraps the
    preview tier of its namespace with the features `PREVIEW_BOOTSTRAP_FEATURES`
-   in `lib.mjs` names, then runs `ocel domain use` on the wildcard. No project
+   in `lib.mjs` names, then runs `ocel domain use` on the wildcard. The first
+   deploy that optimizes images or revalidates adds that part itself. No project
    declares a preview domain of its own; every run's previews serve on this one,
    at `<slug>--<name>.ocel.site`.
 3. Create the **AWS role the workflow assumes** — no access key is stored. It

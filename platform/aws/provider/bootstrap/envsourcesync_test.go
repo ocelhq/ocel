@@ -14,7 +14,7 @@ func TestTheVariablesKeyStackMakesNoEnvSourceSync(t *testing.T) {
 	for _, tier := range bothTiers {
 		for name, body := range map[string]string{
 			"made":    featureTemplate(provider.FeatureVariablesKey, tier),
-			"brought": renderedTemplate(variablesKeyFeature, featureInputs{ns: defaultNamespace, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), variablesKey: broughtKeyARN}).body,
+			"brought": renderedTemplate(variablesKeyFeature, featureInputs{ns: defaultNamespace, tier: tier, refs: fixtureRefs(), variablesKey: broughtKeyARN}).body,
 		} {
 			if strings.Contains(body, "EnvSourceSync") || strings.Contains(body, "AWS::Scheduler::") {
 				t.Errorf("the %s %s variables-key stack still makes the env source sync, which the first scheduled env source adds as its own part", name, tier)

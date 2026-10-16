@@ -8,7 +8,7 @@ import (
 )
 
 func ShapeParts(ns Namespace, tier environment.Tier, features []string, options ...ShapeOption) (map[string][]pricing.Shaped, error) {
-	in := featureInputs{ns: ns, tier: tier, artifactBucket: shapedArtifactBucket, alongside: FeatureSet{}}
+	in := featureInputs{ns: ns, tier: tier, alongside: FeatureSet{}}
 	for _, option := range options {
 		option(&in)
 	}
@@ -24,7 +24,7 @@ func ShapeParts(ns Namespace, tier environment.Tier, features []string, options 
 		if !known {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "this provider has no bootstrap feature named %q", name)
 		}
-		stack, err := f.planned(in)
+		stack, err := f.template(in)
 		if err != nil {
 			return nil, err
 		}
