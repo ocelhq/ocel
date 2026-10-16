@@ -80,7 +80,7 @@ func readStateDirIgnoreStatus(projectDir string) ignoreStatus {
 
 func listsStateDir(content []byte) bool {
 	for line := range strings.Lines(string(content)) {
-		if slices.Contains(stateDirPatterns, strings.TrimSpace(line)) {
+		if slices.Contains(stateDirPatterns, strings.TrimRight(strings.TrimRight(line, "\r\n"), " ")) {
 			return true
 		}
 	}

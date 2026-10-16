@@ -100,6 +100,21 @@ func TestInitIgnoresTheStateDirectory(t *testing.T) {
 			wantExists: true,
 		},
 		{
+			name:       "a .gitignore that lists the state directory indented ignores nothing, so it gains a line of its own",
+			repository: true,
+			existing:   "  " + statedir.Name + "/\n",
+			exists:     true,
+			want:       "  " + statedir.Name + "/\n" + statedir.Name + "/\n",
+			wantExists: true,
+		},
+		{
+			name:       "a .gitignore outside a git repository that lists it with trailing spaces is left alone",
+			existing:   "/" + statedir.Name + "/  \r\n",
+			exists:     true,
+			want:       "/" + statedir.Name + "/  \r\n",
+			wantExists: true,
+		},
+		{
 			name: "a directory outside a git repository with no .gitignore gets none",
 		},
 	} {
