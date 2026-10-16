@@ -548,5 +548,8 @@ func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress prog
 	if err := keyvalue.Forget(ctx, r.provider.KeyValues(), stackrecords.EdgeStackKey(r.tier, r.slug)); err != nil {
 		return err
 	}
+	if err := stackrecords.ForgetProjectWants(ctx, r.provider.KeyValues(), r.tier, r.slug); err != nil {
+		return err
+	}
 	return keyvalue.Forget(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.tier, r.slug))
 }
