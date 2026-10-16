@@ -305,13 +305,22 @@ func appsCheck(cfg *project.Project, roots []discovery.Root, rootsErr error) che
 	}
 	folders := make([]string, 0, len(roots))
 	for _, root := range roots {
-		folder, err := filepath.Rel(cfg.Dir, root.Dir)
-		if err != nil {
-			folder = root.Dir
-		}
-		folders = append(folders, filepath.ToSlash(folder))
+		folders = append(folders, rootName(cfg.Dir, root))
 	}
 	return check{verdict: verdictPass, text: "config loads — no apps declared, so a deploy carries only the resources declared in " + english.And(folders)}
+}
+
+func rootName(projectDir string, root discovery.Root) string {
+	folder, err := filepath.Rel(projectDir, root.Dir)
+	switch {
+	case err != nil:
+		return root.Dir
+	case folder != ".":
+		return filepath.ToSlash(folder)
+	case root.Language == language.Rust:
+		return "the root crate"
+	}
+	return "the project root"
 }
 
 func providerText(descriptor *project.Provider) string {

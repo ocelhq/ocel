@@ -104,3 +104,26 @@ func TestDoctorFailsAProjectWhoseDiscoveryFolderADeployCouldNotRead(t *testing.T
 		t.Errorf("check = %+v, want a failure naming the missing discovery path", got)
 	}
 }
+
+func TestDoctorNamesTheRootCrateWhereItDeclaresTheResources(t *testing.T) {
+	t.Parallel()
+
+	cfg := projectWith(t, `{"slug":"shop"}`, map[string]string{
+		"Cargo.toml": "[package]\nname = \"shop\"\n\n[dependencies]\nocel-sdk = \"0.1\"\n",
+		"src/lib.rs": "\n",
+	})
+	want := "config loads — no apps declared, so a deploy carries only the resources declared in the root crate"
+	if got := checkApps(cfg); got.verdict != verdictPass || got.text != want {
+		t.Errorf("check = %+v, want a pass saying %q", got, want)
+	}
+}
+
+func TestDoctorNamesTheProjectRootWhereItIsTheDiscoveryFolder(t *testing.T) {
+	t.Parallel()
+
+	cfg := projectWith(t, `{"slug":"shop","discovery":{"paths":["."]}}`, map[string]string{"package.json": `{"dependencies":{"ocel":"0.0.2"}}`, "resources.ts": "export {}\n"})
+	want := "config loads — no apps declared, so a deploy carries only the resources declared in the project root"
+	if got := checkApps(cfg); got.verdict != verdictPass || got.text != want {
+		t.Errorf("check = %+v, want a pass saying %q", got, want)
+	}
+}
