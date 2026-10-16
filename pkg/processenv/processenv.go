@@ -31,6 +31,8 @@ const NextPublicURLEnvVar = "NEXT_PUBLIC_OCEL_URL"
 
 const SvelteKitPublicURLEnvVar = "PUBLIC_OCEL_URL"
 
+const NextMetadataBaseHostEnvVar = "VERCEL_PROJECT_PRODUCTION_URL"
+
 const PublicKeysEnvVar = "OCEL_PUBLIC_KEYS"
 
 const NextAdapterPathEnvVar = "NEXT_ADAPTER_PATH"
@@ -55,7 +57,7 @@ func IsInjected(framework, key string) bool {
 	switch key {
 	case AppURLEnvVar:
 		return true
-	case NextPublicURLEnvVar:
+	case NextPublicURLEnvVar, NextMetadataBaseHostEnvVar:
 		return framework == buildoutput.FrameworkNext
 	case SvelteKitPublicURLEnvVar:
 		return framework == buildoutput.FrameworkSvelteKit

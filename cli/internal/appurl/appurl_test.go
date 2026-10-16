@@ -113,6 +113,9 @@ func TestPrepend(t *testing.T) {
 	if got, want := variables[processenv.NextPublicURLEnvVar].Value, "https://acme.com"; got != want {
 		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", processenv.NextPublicURLEnvVar, got)
 	}
+	if got, want := variables[processenv.NextMetadataBaseHostEnvVar].Value, "acme.com"; got != want {
+		t.Errorf("%s = %q, want %q: next prefixes it with https:// and resolves a relative og:image or twitter:image against it when metadataBase is unset", processenv.NextMetadataBaseHostEnvVar, got, want)
+	}
 	if variables["LOG_LEVEL"].Value != "info" {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
 	}
@@ -121,6 +124,9 @@ func TestPrepend(t *testing.T) {
 	}
 	if got := keys(byApp["kit"]); !slices.Equal(got, []string{processenv.AppURLEnvVar, processenv.SvelteKitPublicURLEnvVar}) {
 		t.Errorf("kit variables = %v, want the deployment url under its own name and the one sveltekit hands the browser, and no other framework's", got)
+	}
+	if got := keys(byApp["kit"]); slices.Contains(got, processenv.NextMetadataBaseHostEnvVar) {
+		t.Errorf("kit variables = %v, want no %s: only next reads it", got, processenv.NextMetadataBaseHostEnvVar)
 	}
 	if got := keys(byApp["web"]); slices.Contains(got, processenv.SvelteKitPublicURLEnvVar) {
 		t.Errorf("web variables = %v, want no %s: only a sveltekit app reads it", got, processenv.SvelteKitPublicURLEnvVar)

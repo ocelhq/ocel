@@ -1,6 +1,8 @@
 package appurl
 
 import (
+	"net/url"
+
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
@@ -41,15 +43,16 @@ func byApp(cfg *project.Project, projectHosts []string, declared func(project.Ap
 	return urls
 }
 
-func Variables(framework, url string) []variables.Variable {
-	if url == "" {
+func Variables(framework, appURL string) []variables.Variable {
+	if appURL == "" {
 		return nil
 	}
 	var written []variables.Variable
 	for _, v := range []variables.Variable{
-		{Key: processenv.AppURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
-		{Key: processenv.NextPublicURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
-		{Key: processenv.SvelteKitPublicURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
+		{Key: processenv.AppURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: appURL},
+		{Key: processenv.NextPublicURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: appURL},
+		{Key: processenv.SvelteKitPublicURLEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: appURL},
+		{Key: processenv.NextMetadataBaseHostEnvVar, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: hostOf(appURL)},
 	} {
 		if processenv.IsInjected(framework, v.Key) {
 			written = append(written, v)
@@ -67,6 +70,14 @@ func Prepend(cfg *project.Project, byApp map[string][]variables.Variable, byURL 
 		a := scoped[app]
 		byApp[app] = append(Variables(a.Framework, byURL[app]), variables...)
 	}
+}
+
+func hostOf(appURL string) string {
+	parsed, err := url.Parse(appURL)
+	if err != nil {
+		return ""
+	}
+	return parsed.Host
 }
 
 func first(hosts []string) string {
