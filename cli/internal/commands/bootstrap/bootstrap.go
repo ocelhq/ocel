@@ -45,7 +45,8 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 		Short: "Set up the shared infrastructure deploys run on",
 		Long:  "Set up the shared infrastructure deploys run on.",
 		Example: "  $ ocel bootstrap production\n" +
-			"  $ ocel bootstrap preview --features all",
+			"  $ ocel bootstrap preview --features all\n" +
+			"  $ ocel bootstrap status",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
 			return &clierror.Error{Code: clierror.CodeUsage, Cause: &exitcode.ExitError{Code: 1}}
@@ -56,6 +57,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 		newProvisionCommand(invocation, environmentv1.Tier_TIER_PRODUCTION, []string{"prod"}),
 		newProvisionCommand(invocation, environmentv1.Tier_TIER_PREVIEW, nil),
 		newDestroyCommand(invocation),
+		newStatusCommand(invocation),
 	)
 
 	return commands.DeclareReadOnly(cmd)
@@ -74,8 +76,8 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 			"and a feature they leave out stays included. --remove is the only way anything goes.\n\n" +
 			"Every run prints the changes it would make before asking; --dry prints them and stops.",
 		Example: fmt.Sprintf("  $ ocel bootstrap %s\n", name) +
-			fmt.Sprintf("  $ ocel bootstrap %s --features core,queues\n", name) +
-			fmt.Sprintf("  $ ocel bootstrap %s --remove queues\n", name) +
+			fmt.Sprintf("  $ ocel bootstrap %s --features isr,image-optimization\n", name) +
+			fmt.Sprintf("  $ ocel bootstrap %s --remove image-optimization\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --dry\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --repair", name),
 		Args: cobra.NoArgs,
@@ -142,15 +144,17 @@ func environmentArg(args []string) (environmentv1.Tier, error) {
 	if len(args) == 0 {
 		return environmentv1.Tier_TIER_UNSPECIFIED, errors.New("name the environment to tear down, production or preview")
 	}
-	switch args[0] {
+	return tierNamed(args[0], "tear down")
+}
+
+func tierNamed(name, purpose string) (environmentv1.Tier, error) {
+	switch name {
 	case "preview":
 		return environmentv1.Tier_TIER_PREVIEW, nil
 	case "production", "prod":
 		return environmentv1.Tier_TIER_PRODUCTION, nil
-	default:
-		return environmentv1.Tier_TIER_UNSPECIFIED,
-			fmt.Errorf("the environment to tear down is production or preview, not %q", args[0])
 	}
+	return environmentv1.Tier_TIER_UNSPECIFIED, fmt.Errorf("the environment to %s is production or preview, not %q", purpose, name)
 }
 
 func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
