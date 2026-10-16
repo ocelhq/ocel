@@ -71,6 +71,56 @@ func TestAProjectNamingNoAppsHasTheNextAppAtItsRootBesideAPyprojectWithNoMainPy(
 	}
 }
 
+func TestAProjectNamingNoAppsSaysWhyNoAppIsDetectedAtARootHoldingTwoApps(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, DefaultFileName), `{"slug":"shop"}`)
+	write(t, filepath.Join(dir, nodeManifest), `{"dependencies":{"next":"15"}}`)
+	write(t, filepath.Join(dir, "pyproject.toml"), "[project]\nname = \"api\"\n")
+	write(t, filepath.Join(dir, "main.py"), "app = None\n")
+
+	cfg, err := Load(context.Background(), dir, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Apps) != 0 {
+		t.Errorf("Apps = %+v, want none: nothing says which of the two is the app", cfg.Apps)
+	}
+	if cfg.RootAppUndetected == nil {
+		t.Fatal("RootAppUndetected = nil, want why no app is detected at the project root")
+	}
+	if want := "no app is detected at the project root, which holds both a python app (main.py) and a Next.js app"; cfg.RootAppUndetected.Error() != want {
+		t.Errorf("RootAppUndetected = %q, want %q", cfg.RootAppUndetected, want)
+	}
+}
+
+func TestAProjectNamingNoAppsWithNothingAtItsRootGivesNoReasonForIt(t *testing.T) {
+	t.Parallel()
+
+	cfg := mustLoadJSON(t, `{"slug":"shop"}`)
+	if cfg.RootAppUndetected != nil {
+		t.Errorf("RootAppUndetected = %v, want nil: no manifest at the root holds an app", cfg.RootAppUndetected)
+	}
+}
+
+func TestAProjectWithNoConfigSaysWhyNoAppIsDetectedAtARootHoldingTwoApps(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, nodeManifest), `{"dependencies":{"next":"15"}}`)
+	write(t, filepath.Join(dir, "requirements.txt"), "fastapi\n")
+	write(t, filepath.Join(dir, "main.py"), "app = None\n")
+
+	cfg, err := LoadOptional(context.Background(), dir, "")
+	if err != nil {
+		t.Fatalf("LoadOptional: %v", err)
+	}
+	if len(cfg.Apps) != 0 || cfg.RootAppUndetected == nil {
+		t.Errorf("Apps = %+v, RootAppUndetected = %v, want no app and why", cfg.Apps, cfg.RootAppUndetected)
+	}
+}
+
 func TestARootWithAGoModuleBesideAPackageJSONIsReadAsGoWhetherOrNotItNamesApps(t *testing.T) {
 	t.Parallel()
 

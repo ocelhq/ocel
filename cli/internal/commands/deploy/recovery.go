@@ -68,6 +68,9 @@ func buildTitle(cfg *project.Project, prebuilt bool) progress.Title {
 }
 
 func nothingToDeploy(cfg *project.Project) string {
+	if len(cfg.Apps) == 0 && cfg.RootAppUndetected != nil {
+		return "Nothing to deploy: " + cfg.Slug + " declares no apps or resources, and " + cfg.RootAppUndetected.Error() + `: name the app to deploy under "apps"`
+	}
 	if len(cfg.Apps) == 0 {
 		return "Nothing to deploy: " + cfg.Slug + " declares no apps or resources"
 	}

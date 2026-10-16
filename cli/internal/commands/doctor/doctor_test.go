@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/skill"
@@ -718,6 +719,7 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 
 	root := t.TempDir()
 	clitest.WriteFile(t, filepath.Join(root, "go.mod"), "module fixture\n\ngo 1.24\n")
+	clitest.WriteFile(t, filepath.Join(root, discovery.DefaultRootDirName, "resources.go"), "package resources\n")
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{
   "slug": "go-shop",
   "provider": { "fake": {} },

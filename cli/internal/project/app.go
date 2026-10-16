@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -217,10 +218,18 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 	return nil
 }
 
-func rootApp(name, dir string) ([]App, error) {
+func rootApp(name, dir string) (apps []App, undetected error, err error) {
+	_, _, err = language.Detect(dir)
+	var ambiguity *language.AmbiguityError
+	if errors.As(err, &ambiguity) {
+		return nil, fmt.Errorf("no app is detected at the project root, which holds %s", ambiguity.Holdings()), nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
 	framework, found, err := language.DetectFramework(dir)
 	if err != nil || !found || language.OfApp(framework, dir) != language.JS {
-		return nil, err
+		return nil, nil, err
 	}
 	return []App{{
 		Name:       name,
@@ -229,7 +238,7 @@ func rootApp(name, dir string) ([]App, error) {
 		Container:  &Container{},
 
 		BuildsWithResources: true,
-	}}, nil
+	}}, nil, nil
 }
 
 func normalizeContainer(app string, raw *configdoc.ContainerCompute) (*Container, error) {

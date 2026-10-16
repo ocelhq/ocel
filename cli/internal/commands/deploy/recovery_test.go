@@ -1393,6 +1393,16 @@ func TestAProjectWithoutAppsOrResourcesHasNothingToDeploy(t *testing.T) {
 	}
 }
 
+func TestNothingToDeploySaysWhyNoAppIsDetectedAtTheProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{Slug: "shop", RootAppUndetected: errors.New("no app is detected at the project root, which holds both a python app (main.py) and a Next.js app")}
+	want := `Nothing to deploy: shop declares no apps or resources, and no app is detected at the project root, which holds both a python app (main.py) and a Next.js app: name the app to deploy under "apps"`
+	if got := nothingToDeploy(cfg); got != want {
+		t.Errorf("nothingToDeploy = %q, want %q", got, want)
+	}
+}
+
 func TestAppsThatBuildNoFunctionOrImageAreNamedWhenNothingIsLeftToDeploy(t *testing.T) {
 	headline := nothingToDeployHeadline(t, `  apps: [
     { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -151,7 +152,7 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 		checked.checks = append(checked.checks, needed)
 	}
 	checked.identity = join(cfg.Slug, filepath.Base(cfg.Path))
-	checked.pass(appsText(cfg))
+	checked.checks = append(checked.checks, appsCheck(cfg))
 
 	descriptor, providerErr := cfg.RequireProvider()
 	if providerErr != nil {
@@ -272,15 +273,30 @@ func splitHint(message string) (string, string, bool) {
 	return message, "", false
 }
 
-func appsText(cfg *project.Project) string {
-	if len(cfg.Apps) == 0 {
-		return "config loads — no apps declared"
+func appsCheck(cfg *project.Project) check {
+	if len(cfg.Apps) > 0 {
+		names := make([]string, 0, len(cfg.Apps))
+		for _, app := range cfg.Apps {
+			names = append(names, app.Name)
+		}
+		return check{verdict: verdictPass, text: fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))}
 	}
-	names := make([]string, 0, len(cfg.Apps))
-	for _, app := range cfg.Apps {
-		names = append(names, app.Name)
+	config := filepath.Base(cfg.Path)
+	if cfg.RootAppUndetected != nil {
+		return check{
+			verdict: verdictWarn,
+			text:    "config loads — no apps declared, and " + cfg.RootAppUndetected.Error(),
+			fix:     `name the app to deploy under "apps" in ` + config + " with its name and path",
+		}
 	}
-	return fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))
+	if roots, err := discovery.RootsOf(cfg); err == nil && len(roots) == 0 {
+		return check{
+			verdict: verdictWarn,
+			text:    "config loads — nothing to deploy: no apps declared, none detected at the project root, and no resources declared",
+			fix:     `name each app under "apps" in ` + config + " with its name and path",
+		}
+	}
+	return check{verdict: verdictPass, text: "config loads — no apps declared"}
 }
 
 func providerText(descriptor *project.Provider) string {
