@@ -286,3 +286,20 @@ func TestAMakeThatFinishesAsItsCallerIsCancelledStillRecordsThePartReady(t *test
 }
 
 func waitBriefly() { time.Sleep(time.Millisecond) }
+
+func TestAPartIsCurrentForABuildWhenReadyAtItsDigestOrWrittenByANewerBuild(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		part stackrecords.BootstrapPart
+		want bool
+	}{
+		{stackrecords.BootstrapPart{State: stackrecords.PartReady, WrittenBy: "1.2.0", Digest: "d1"}, true},
+		{stackrecords.BootstrapPart{State: stackrecords.PartReady, WrittenBy: "1.3.0", Digest: "d0"}, true},
+		{stackrecords.BootstrapPart{State: stackrecords.PartReady, WrittenBy: "1.1.0", Digest: "d0"}, false},
+		{stackrecords.BootstrapPart{State: stackrecords.PartCreating, WrittenBy: "1.2.0", Digest: "d1"}, false},
+	} {
+		if got := c.part.CurrentFor("1.2.0", "d1"); got != c.want {
+			t.Errorf("%+v.CurrentFor(1.2.0, d1) = %v, want %v", c.part, got, c.want)
+		}
+	}
+}

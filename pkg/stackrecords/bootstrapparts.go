@@ -135,6 +135,10 @@ func decodeBootstrapPart(entry keyvalue.Entry) (BootstrapPart, error) {
 	return part, nil
 }
 
+func (p BootstrapPart) CurrentFor(writtenBy, digest string) bool {
+	return p.State == PartReady && (p.Digest == digest || provider.WrittenBy(p.WrittenBy).Newer(provider.WrittenBy(writtenBy)))
+}
+
 type PartWork struct {
 	Name      string
 	WrittenBy string
@@ -166,7 +170,7 @@ func EnsureBootstrapPart(ctx context.Context, store keyvalue.Store, tier environ
 				return err
 			}
 			switch {
-			case part.State == PartReady && (part.Digest == work.Digest || provider.WrittenBy(part.WrittenBy).Newer(provider.WrittenBy(work.WrittenBy))):
+			case part.CurrentFor(work.WrittenBy, work.Digest):
 				return nil
 			case part.State != PartReady:
 				if recorded.Revision != seen {
