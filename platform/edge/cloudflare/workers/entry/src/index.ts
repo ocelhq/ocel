@@ -365,7 +365,7 @@ export default {
     if (!releases.slug) return deploymentNotFoundResponse();
 
     const gated = await passGate(request, env, releases.slug);
-    if (gated instanceof Response) return gated;
+    if (gated instanceof Response) return withRouterHeader(gated);
     const { request: visitor, responseHeaders: gateHeaders } = gated;
 
     const serve = ctx.exports?.Serve as ServeFactory | undefined;
