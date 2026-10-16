@@ -11,6 +11,7 @@ const (
 	wildcardKey      = "preview"
 	previewKeyRecord = "previewkey"
 	gatesRecord      = "gates"
+	partsSegment     = "parts"
 )
 
 func ProjectsPartition(tier environment.Tier) keyvalue.Partition {
@@ -23,6 +24,14 @@ func ProjectKey(tier environment.Tier, slug string) keyvalue.Key {
 
 func BootstrapKey(tier environment.Tier) keyvalue.Key {
 	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}.Key(bootstrapKey)
+}
+
+func bootstrapPartition(tier environment.Tier) keyvalue.Partition {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}
+}
+
+func BootstrapPartKey(tier environment.Tier, name string) keyvalue.Key {
+	return bootstrapPartition(tier).Key(partsSegment, name)
 }
 
 func NewPreviewKeyRecordKey() keyvalue.Key {
