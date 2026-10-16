@@ -469,6 +469,7 @@ type teardownCFN struct {
 	present   map[string]bootstrap.Deployed
 	resources map[string][]cfntypes.StackResourceSummary
 	listing   error
+	tags      map[string][]cfntypes.Tag
 	deleted   []string
 	describes int
 	described []string
@@ -493,6 +494,7 @@ func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 		StackName:   in.StackName,
 		StackStatus: cfntypes.StackStatusCreateComplete,
 		Outputs:     outputs,
+		Tags:        c.tags[name],
 	}}}, nil
 }
 

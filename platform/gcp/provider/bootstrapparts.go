@@ -62,12 +62,13 @@ func (b bootstrap) surveyedParts(read survey, stacks []provider.BootstrapStack) 
 	base := provider.BootstrapPart{
 		Name:    provider.BasePart,
 		Summary: baseSummary,
+		Digest:  read.Stamp.Digest,
 		Shape:   &provider.PartShape{Vendor: string(Vendor), Region: read.Region},
 	}
 	for _, item := range bootstrapItems(read.Names, read.Tier, read.Emulated) {
 		base.Resources = append(base.Resources, provider.PartResource{Kind: string(item.Kind), ID: item.Name})
-		if typ, priced := itemTypes[item.Kind]; priced {
-			base.Shape.Resources = append(base.Shape.Resources, pricing.Shaped{Name: item.Name, Type: typ, Properties: itemProperties(item, read.Region)})
+		if resourceType, priced := itemTypes[item.Kind]; priced {
+			base.Shape.Resources = append(base.Shape.Resources, pricing.Shaped{Name: item.Name, Type: resourceType, Properties: itemProperties(item, read.Region)})
 		}
 	}
 	parts := []provider.BootstrapPart{base}
