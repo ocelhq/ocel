@@ -161,6 +161,22 @@ func TestBootstrapStatusSaysAPartWithAnIdleCostRetiresWithTheProjectsThatUseIt(t
 	}
 }
 
+func TestBootstrapStatusSaysWhoWantsAPartTheBootstrapLacksAndTheCommandThatAddsIt(t *testing.T) {
+	project, invocation := statusProject(t)
+	for _, wanting := range []string{"web", "api"} {
+		if err := stackrecords.RecordBootstrapWant(context.Background(), project.Provider.KeyValues(), environment.TierProduction, featureImageOptimization, wanting); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	out := runStatus(t, invocation, project.Root, production, StatusOptions{})
+
+	want := featureImageOptimization + " — — — wanted by api, web, run `ocel bootstrap production`"
+	if got := strings.Join(rowOf(t, out, featureImageOptimization), " "); got != want {
+		t.Errorf("%s row = %q, want %q", featureImageOptimization, got, want)
+	}
+}
+
 func TestBootstrapStatusWithResourcesListsWhatEachPartHolds(t *testing.T) {
 	project, invocation := statusProject(t)
 

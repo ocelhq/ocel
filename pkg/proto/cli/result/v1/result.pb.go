@@ -686,6 +686,7 @@ type BootstrapPartStatus struct {
 	Resources           []*BootstrapPartResource `protobuf:"bytes,10,rep,name=resources,proto3" json:"resources,omitempty"`
 	AddedWith           string                   `protobuf:"bytes,11,opt,name=added_with,json=addedWith,proto3" json:"added_with,omitempty"`
 	RetiresWithLastUser bool                     `protobuf:"varint,12,opt,name=retires_with_last_user,json=retiresWithLastUser,proto3" json:"retires_with_last_user,omitempty"`
+	WantedBy            []string                 `protobuf:"bytes,13,rep,name=wanted_by,json=wantedBy,proto3" json:"wanted_by,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -802,6 +803,13 @@ func (x *BootstrapPartStatus) GetRetiresWithLastUser() bool {
 		return x.RetiresWithLastUser
 	}
 	return false
+}
+
+func (x *BootstrapPartStatus) GetWantedBy() []string {
+	if x != nil {
+		return x.WantedBy
+	}
+	return nil
 }
 
 type BootstrapPartResource struct {
@@ -4072,7 +4080,7 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x13BootstrapTierStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
 	"\apresent\x18\x02 \x01(\bR\apresent\x128\n" +
-	"\x05parts\x18\x03 \x03(\v2\".cli.result.v1.BootstrapPartStatusR\x05parts\"\xc0\x03\n" +
+	"\x05parts\x18\x03 \x03(\v2\".cli.result.v1.BootstrapPartStatusR\x05parts\"\xdd\x03\n" +
 	"\x13BootstrapPartStatus\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x19\n" +
@@ -4087,7 +4095,8 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	" \x03(\v2$.cli.result.v1.BootstrapPartResourceR\tresources\x12\x1d\n" +
 	"\n" +
 	"added_with\x18\v \x01(\tR\taddedWith\x123\n" +
-	"\x16retires_with_last_user\x18\f \x01(\bR\x13retiresWithLastUserB\x15\n" +
+	"\x16retires_with_last_user\x18\f \x01(\bR\x13retiresWithLastUser\x12\x1b\n" +
+	"\twanted_by\x18\r \x03(\tR\bwantedByB\x15\n" +
 	"\x13_idle_monthly_fixed\";\n" +
 	"\x15BootstrapPartResource\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +

@@ -38,6 +38,7 @@ const (
 	BootstrapPartState_BOOTSTRAP_PART_STATE_UNSPECIFIED BootstrapPartState = 0
 	BootstrapPartState_BOOTSTRAP_PART_STATE_CREATING    BootstrapPartState = 1
 	BootstrapPartState_BOOTSTRAP_PART_STATE_READY       BootstrapPartState = 2
+	BootstrapPartState_BOOTSTRAP_PART_STATE_WANTED      BootstrapPartState = 3
 )
 
 // Enum value maps for BootstrapPartState.
@@ -46,11 +47,13 @@ var (
 		0: "BOOTSTRAP_PART_STATE_UNSPECIFIED",
 		1: "BOOTSTRAP_PART_STATE_CREATING",
 		2: "BOOTSTRAP_PART_STATE_READY",
+		3: "BOOTSTRAP_PART_STATE_WANTED",
 	}
 	BootstrapPartState_value = map[string]int32{
 		"BOOTSTRAP_PART_STATE_UNSPECIFIED": 0,
 		"BOOTSTRAP_PART_STATE_CREATING":    1,
 		"BOOTSTRAP_PART_STATE_READY":       2,
+		"BOOTSTRAP_PART_STATE_WANTED":      3,
 	}
 )
 
@@ -3033,6 +3036,7 @@ type BootstrapPart struct {
 	IdleMonthlyFixed    *string                  `protobuf:"bytes,9,opt,name=idle_monthly_fixed,json=idleMonthlyFixed,proto3,oneof" json:"idle_monthly_fixed,omitempty"`
 	Currency            string                   `protobuf:"bytes,10,opt,name=currency,proto3" json:"currency,omitempty"`
 	RetiresWithLastUser bool                     `protobuf:"varint,11,opt,name=retires_with_last_user,json=retiresWithLastUser,proto3" json:"retires_with_last_user,omitempty"`
+	WantedBy            []string                 `protobuf:"bytes,12,rep,name=wanted_by,json=wantedBy,proto3" json:"wanted_by,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -3149,6 +3153,13 @@ func (x *BootstrapPart) GetRetiresWithLastUser() bool {
 		return x.RetiresWithLastUser
 	}
 	return false
+}
+
+func (x *BootstrapPart) GetWantedBy() []string {
+	if x != nil {
+		return x.WantedBy
+	}
+	return nil
 }
 
 type BootstrapPartResource struct {
@@ -7668,7 +7679,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x19DescribeBootstrapResponse\x129\n" +
 	"\bfeatures\x18\x01 \x03(\v2\x1d.provider.contract.v1.FeatureR\bfeatures\x12C\n" +
 	"\tbootstrap\x18\x02 \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\x129\n" +
-	"\x05parts\x18\x03 \x03(\v2#.provider.contract.v1.BootstrapPartR\x05parts\"\xeb\x03\n" +
+	"\x05parts\x18\x03 \x03(\v2#.provider.contract.v1.BootstrapPartR\x05parts\"\x88\x04\n" +
 	"\rBootstrapPart\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x19\n" +
@@ -7683,7 +7694,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x12idle_monthly_fixed\x18\t \x01(\tH\x00R\x10idleMonthlyFixed\x88\x01\x01\x12\x1a\n" +
 	"\bcurrency\x18\n" +
 	" \x01(\tR\bcurrency\x123\n" +
-	"\x16retires_with_last_user\x18\v \x01(\bR\x13retiresWithLastUserB\x15\n" +
+	"\x16retires_with_last_user\x18\v \x01(\bR\x13retiresWithLastUser\x12\x1b\n" +
+	"\twanted_by\x18\f \x03(\tR\bwantedByB\x15\n" +
 	"\x13_idle_monthly_fixed\";\n" +
 	"\x15BootstrapPartResource\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
@@ -8040,11 +8052,12 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\fBindingProxy\x12\x18\n" +
 	"\agrantee\x18\x01 \x01(\tR\agrantee\x12!\n" +
 	"\aaddress\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aaddress\x12,\n" +
-	"\rsession_token\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsessionToken*}\n" +
+	"\rsession_token\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsessionToken*\x9e\x01\n" +
 	"\x12BootstrapPartState\x12$\n" +
 	" BOOTSTRAP_PART_STATE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dBOOTSTRAP_PART_STATE_CREATING\x10\x01\x12\x1e\n" +
-	"\x1aBOOTSTRAP_PART_STATE_READY\x10\x02*x\n" +
+	"\x1aBOOTSTRAP_PART_STATE_READY\x10\x02\x12\x1f\n" +
+	"\x1bBOOTSTRAP_PART_STATE_WANTED\x10\x03*x\n" +
 	"\x11CredentialPurpose\x12\"\n" +
 	"\x1eCREDENTIAL_PURPOSE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cCREDENTIAL_PURPOSE_BOOTSTRAP\x10\x01\x12\x1d\n" +

@@ -79,6 +79,8 @@ message BootstrapPartStatus {
   string added_with = 11;
 
   bool retires_with_last_user = 12;
+
+  repeated string wanted_by = 13;
 }
 
 message BootstrapPartResource {

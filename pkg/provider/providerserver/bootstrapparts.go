@@ -46,9 +46,16 @@ func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price esti
 	if err != nil {
 		return nil, err
 	}
+	catalogue := r.Bootstrap.Catalogue()
+	wants, err := r.wantedParts(ctx, status.Tier, catalogue, nil)
+	if err != nil {
+		return nil, err
+	}
 	catalogued := map[string]bool{}
-	for _, feature := range r.Bootstrap.Catalogue() {
+	summaries := map[string]string{}
+	for _, feature := range catalogue {
 		catalogued[feature.Name] = true
+		summaries[feature.Name] = feature.Summary
 	}
 
 	slices.SortStableFunc(described, func(a, b provider.BootstrapPart) int {
@@ -75,6 +82,7 @@ func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price esti
 			applyRecord(out, record)
 			delete(records, part.Name)
 		}
+		delete(wants, part.Name)
 		parts = append(parts, out)
 	}
 	for _, name := range slices.Sorted(maps.Keys(records)) {
@@ -83,7 +91,16 @@ func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price esti
 		for _, resource := range records[name].Resources {
 			out.Resources = append(out.Resources, &contractv1.BootstrapPartResource{Kind: resource.Kind, Id: resource.ID})
 		}
+		delete(wants, name)
 		parts = append(parts, out)
+	}
+	for _, name := range slices.Sorted(maps.Keys(wants)) {
+		parts = append(parts, &contractv1.BootstrapPart{
+			Name:     name,
+			Summary:  summaries[name],
+			State:    contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_WANTED,
+			WantedBy: slices.Sorted(slices.Values(wants[name])),
+		})
 	}
 	return parts, nil
 }

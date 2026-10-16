@@ -28,6 +28,7 @@ const (
 	usersShown    = 3
 	partCreating  = "creating"
 	partReady     = "ready"
+	partWanted    = "wanted"
 	partCurrent   = "current"
 	partBehind    = "behind"
 	partRetires   = "retires with"
@@ -146,6 +147,7 @@ func statusResult(read []tierStatus) *resultv1.BootstrapStatusResult {
 				Currency:         part.GetCurrency(),
 
 				RetiresWithLastUser: part.GetRetiresWithLastUser(),
+				WantedBy:            part.GetWantedBy(),
 			}
 			for _, resource := range part.GetResources() {
 				out.Resources = append(out.Resources, &resultv1.BootstrapPartResource{Kind: resource.GetKind(), Id: resource.GetId()})
@@ -158,8 +160,11 @@ func statusResult(read []tierStatus) *resultv1.BootstrapStatusResult {
 }
 
 func partState(part *contractv1.BootstrapPart) string {
-	if part.GetState() == contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_CREATING {
+	switch part.GetState() {
+	case contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_CREATING:
 		return partCreating
+	case contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_WANTED:
+		return partWanted
 	}
 	return partReady
 }
@@ -271,6 +276,8 @@ func stateCell(part *contractv1.BootstrapPart, tier environmentv1.Tier) string {
 	switch {
 	case part.GetState() == contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_CREATING:
 		return partCreating
+	case part.GetState() == contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_WANTED:
+		return partWanted + " by " + strings.Join(part.GetWantedBy(), ", ") + ", run `" + readiness.BootstrapCommand(tier) + "`"
 	case part.GetCurrent() && part.GetRetiresWithLastUser() && len(part.GetUsedBy()) > 0:
 		return partRetires + " " + strings.Join(part.GetUsedBy(), ", ")
 	case part.GetCurrent():

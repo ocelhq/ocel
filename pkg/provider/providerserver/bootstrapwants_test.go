@@ -99,6 +99,36 @@ func TestABootstrapRemovingAPartAProjectWantsRemovesItAndAddsNothing(t *testing.
 	}
 }
 
+func TestAPartProjectsWantThatTheBootstrapLacksIsDescribedAsWantedByThem(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	recordWant(t, vendor, fake.FeatureCache, "shop")
+	recordWant(t, vendor, fake.FeatureCache, "blog")
+
+	cache := describedParts(t, client)[fake.FeatureCache]
+
+	if cache.GetState() != contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_WANTED || !slices.Equal(cache.GetWantedBy(), []string{"blog", "shop"}) {
+		t.Errorf("%s = %+v, want blog and shop to want it", fake.FeatureCache, cache)
+	}
+	if cache.GetSummary() == "" || cache.GetAddedAt() != 0 || len(cache.GetUsedBy()) != 0 {
+		t.Errorf("%s = %+v, want its summary, and nobody to have added or to use it", fake.FeatureCache, cache)
+	}
+}
+
+func TestAWantOfAPartTheBootstrapHoldsDescribesThePartAlone(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct, Features: []string{fake.FeatureCache}})
+	recordWant(t, vendor, fake.FeatureCache, "shop")
+
+	cache := describedParts(t, client)[fake.FeatureCache]
+
+	if cache.GetState() != contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_READY || len(cache.GetWantedBy()) != 0 {
+		t.Errorf("%s = %+v, want it ready and wanted by nobody: it is there", fake.FeatureCache, cache)
+	}
+}
+
 func TestAWantOfAPartTheProviderNoLongerOffersIsLeftOut(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")

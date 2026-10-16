@@ -483,6 +483,8 @@ enum BootstrapPartState {
   BOOTSTRAP_PART_STATE_CREATING = 1;
 
   BOOTSTRAP_PART_STATE_READY = 2;
+
+  BOOTSTRAP_PART_STATE_WANTED = 3;
 }
 
 message BootstrapPart {
@@ -509,6 +511,8 @@ message BootstrapPart {
   string currency = 10;
 
   bool retires_with_last_user = 11;
+
+  repeated string wanted_by = 12;
 }
 
 message BootstrapPartResource {
