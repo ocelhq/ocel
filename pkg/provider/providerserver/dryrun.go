@@ -39,7 +39,13 @@ func (d *dryRunPlan) plan() provider.Plan {
 		plan.Groups = append(plan.Groups, d.parameters)
 	}
 	for _, app := range d.apps {
-		plan.Groups = append(plan.Groups, app.Groups...)
+		for _, group := range app.Groups {
+			if !slices.ContainsFunc(plan.Groups, func(drawn provider.ChangeGroup) bool {
+				return drawn.Kind == group.Kind && drawn.Name == group.Name && drawn.Action == group.Action
+			}) {
+				plan.Groups = append(plan.Groups, group)
+			}
+		}
 	}
 	plan.Groups = append(plan.Groups, d.edge, d.promotion)
 	return plan
