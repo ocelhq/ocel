@@ -314,6 +314,53 @@ func TestInitReadsACrateBesideAPackageJSONAsANodeProject(t *testing.T) {
 	}
 }
 
+func TestInitReadsANextAppBesideAPyprojectWithNoMainPyAsANodeProject(t *testing.T) {
+	dir := manifestDir(t, "")
+	for name, body := range map[string]string{
+		"package.json":   `{"dependencies":{"next":"15"}}`,
+		"next.config.ts": "export default {}\n",
+		"pyproject.toml": "[project]\nname = \"helpers\"\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	dependencies := newTestDependencies()
+	argv := stubPackageManager(&dependencies, nil)
+
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
+		t.Fatalf("runInit: %v", err)
+	}
+	if want := "npm install ocel"; strings.Join(*argv, " ") != want {
+		t.Fatalf("added the sdk with %v, want %q: the pyproject.toml holds no app python serves", *argv, want)
+	}
+}
+
+func TestInitRefusesANextAppBesideAPythonApp(t *testing.T) {
+	dir := manifestDir(t, "")
+	for name, body := range map[string]string{
+		"package.json":   `{"dependencies":{"next":"15"}}`,
+		"pyproject.toml": "[project]\nname = \"api\"\n",
+		"main.py":        "app = None\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+
+	_, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"})
+	if err == nil {
+		t.Fatal("init picked a language between a next app and a python app")
+	}
+	for _, want := range []string{"a python app (main.py) and a Next.js app", "--lang python"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
 func TestInitTakesTheLanguageItIsGiven(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
 	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("\n"), 0o644); err != nil {

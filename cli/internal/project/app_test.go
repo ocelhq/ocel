@@ -47,6 +47,30 @@ func TestTheRootAppOfANextProjectIsBuiltWithNext(t *testing.T) {
 	}
 }
 
+func TestAProjectNamingNoAppsHasTheNextAppAtItsRootBesideAPyprojectWithNoMainPy(t *testing.T) {
+	t.Parallel()
+
+	for _, config := range []string{`{"slug":"shop"}`, `{"slug":"shop","apps":[]}`} {
+		t.Run(config, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			write(t, filepath.Join(dir, DefaultFileName), config)
+			write(t, filepath.Join(dir, nodeManifest), `{"dependencies":{"next":"15","react":"19"}}`)
+			write(t, filepath.Join(dir, "next.config.mjs"), "export default {}\n")
+			write(t, filepath.Join(dir, "app", "page.tsx"), "export default function Page() { return null }\n")
+			write(t, filepath.Join(dir, "pyproject.toml"), "[project]\nname = \"helpers\"\n")
+
+			cfg, err := Load(context.Background(), dir, "")
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if len(cfg.Apps) != 1 || cfg.Apps[0].Name != "shop" || cfg.Apps[0].Framework() != buildoutput.FrameworkNext {
+				t.Errorf("Apps = %+v, want the next app at the project root: the pyproject.toml holds no app python serves", cfg.Apps)
+			}
+		})
+	}
+}
+
 func TestARootWithAGoModuleBesideAPackageJSONIsReadAsGoWhetherOrNotItNamesApps(t *testing.T) {
 	t.Parallel()
 

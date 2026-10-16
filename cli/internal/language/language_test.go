@@ -1,6 +1,7 @@
 package language_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -103,5 +104,130 @@ func TestOfAppReadsAnAppWithNoManifestAsJS(t *testing.T) {
 
 	if got := language.OfApp("", dirContaining(t, "Dockerfile")); got != language.JS {
 		t.Errorf("OfApp = %q, want %q", got, language.JS)
+	}
+}
+
+func dirWithFiles(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, body := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir for %s: %v", name, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	return dir
+}
+
+const nextPackageJSON = `{"dependencies":{"next":"15","react":"19"}}`
+
+func TestANextAppWinsOverAPythonProjectWithNoMainPy(t *testing.T) {
+	t.Parallel()
+
+	dir := dirWithFiles(t, map[string]string{
+		"package.json":    nextPackageJSON,
+		"next.config.ts":  "export default {}\n",
+		"app/page.tsx":    "export default function Page() { return null }\n",
+		"pyproject.toml":  "[project]\nname = \"helpers\"\n",
+		"scripts/seed.py": "print('seed')\n",
+	})
+
+	if got, ok := language.Of(dir); !ok || got != language.JS {
+		t.Errorf("Of = %q, %v, want %q: the pyproject.toml holds no app python serves", got, ok, language.JS)
+	}
+	got, ok, err := language.Detect(dir)
+	if err != nil || !ok || got != language.JS {
+		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.JS)
+	}
+	framework, found, err := language.DetectFramework(dir)
+	if err != nil || !found || framework != "next" {
+		t.Errorf("DetectFramework = %q, %v, %v, want next", framework, found, err)
+	}
+}
+
+func TestASvelteKitAppWinsOverARequirementsTxtWithNoMainPy(t *testing.T) {
+	t.Parallel()
+
+	dir := dirWithFiles(t, map[string]string{
+		"package.json":     `{"devDependencies":{"@sveltejs/kit":"2"}}`,
+		"requirements.txt": "black\n",
+	})
+
+	if got, ok, err := language.Detect(dir); err != nil || !ok || got != language.JS {
+		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.JS)
+	}
+}
+
+func TestDetectRefusesToChooseBetweenTwoLanguagesThatEachHoldAnApp(t *testing.T) {
+	t.Parallel()
+
+	dir := dirWithFiles(t, map[string]string{
+		"package.json":   nextPackageJSON,
+		"pyproject.toml": "[project]\nname = \"api\"\n",
+		"main.py":        "app = None\n",
+	})
+
+	_, _, err := language.Detect(dir)
+	var ambiguity *language.AmbiguityError
+	if !errors.As(err, &ambiguity) {
+		t.Fatalf("Detect err = %v, want an AmbiguityError", err)
+	}
+	if !slices.Equal(ambiguity.Languages, []language.Language{language.Python, language.JS}) {
+		t.Errorf("Languages = %v, want python and js", ambiguity.Languages)
+	}
+	if want := "both a python app (main.py) and a Next.js app"; ambiguity.Holdings() != want {
+		t.Errorf("Holdings = %q, want %q", ambiguity.Holdings(), want)
+	}
+	if got, ok := language.Of(dir); !ok || got != language.Python {
+		t.Errorf("Of = %q, %v, want %q: between two apps the precedence decides what an image is built in", got, ok, language.Python)
+	}
+}
+
+func TestDetectRefusesToChooseBetweenManifestsNoneOfWhichHoldsAnApp(t *testing.T) {
+	t.Parallel()
+
+	dir := dirWithFiles(t, map[string]string{
+		"package.json":   `{"dependencies":{"express":"5"}}`,
+		"pyproject.toml": "[project]\nname = \"helpers\"\n",
+	})
+
+	_, _, err := language.Detect(dir)
+	var ambiguity *language.AmbiguityError
+	if !errors.As(err, &ambiguity) {
+		t.Fatalf("Detect err = %v, want an AmbiguityError", err)
+	}
+	if want := "both a pyproject.toml and a package.json"; ambiguity.Holdings() != want {
+		t.Errorf("Holdings = %q, want %q", ambiguity.Holdings(), want)
+	}
+}
+
+func TestAGoModuleBesideANextPackageJSONIsAmbiguousAndReadAsGo(t *testing.T) {
+	t.Parallel()
+
+	dir := dirWithFiles(t, map[string]string{
+		"package.json": nextPackageJSON,
+		"go.mod":       "module example.com/shop\n",
+	})
+
+	if got, ok := language.Of(dir); !ok || got != language.Go {
+		t.Errorf("Of = %q, %v, want %q: a go module builds whether or not its main package sits beside go.mod", got, ok, language.Go)
+	}
+	var ambiguity *language.AmbiguityError
+	if _, _, err := language.Detect(dir); !errors.As(err, &ambiguity) {
+		t.Errorf("Detect err = %v, want an AmbiguityError", err)
+	}
+}
+
+func TestDetectReadsADirectoryOfOneLanguageAsThatLanguage(t *testing.T) {
+	t.Parallel()
+
+	if got, ok, err := language.Detect(dirContaining(t, "pyproject.toml")); err != nil || !ok || got != language.Python {
+		t.Errorf("Detect = %q, %v, %v, want %q", got, ok, err, language.Python)
+	}
+	if got, ok, err := language.Detect(dirContaining(t, "Dockerfile")); err != nil || ok {
+		t.Errorf("Detect = %q, %v, %v, want no language", got, ok, err)
 	}
 }

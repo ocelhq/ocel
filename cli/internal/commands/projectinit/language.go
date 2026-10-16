@@ -1,10 +1,12 @@
 package projectinit
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 )
 
@@ -49,26 +51,26 @@ func sdkLanguageOf(written language.Language) sdkLanguage {
 }
 
 func detectLanguage(dir string) (sdkLanguage, bool, error) {
-	found := language.Manifested(dir)
-	switch len(found) {
-	case 0:
-		return sdkLanguage{}, false, nil
-	case 1:
-		return sdkLanguageOf(found[0]), true, nil
-	default:
-		names := make([]string, 0, len(found))
-		for _, l := range found {
+	written, found, err := language.Detect(dir)
+	var ambiguity *language.AmbiguityError
+	if errors.As(err, &ambiguity) {
+		names := make([]string, 0, len(ambiguity.Languages))
+		for _, l := range ambiguity.Languages {
 			names = append(names, sdkLanguageOf(l).name)
 		}
 		return sdkLanguage{}, false, &clierror.Error{
 			Code: clierror.CodeInitAmbiguousLanguage,
 			Hint: "--lang",
 			Cause: fmt.Errorf(
-				"this directory contains the manifests of %s at once, so it could be a %s project: name the one this is with `--lang %s`",
-				strings.Join(names, " and "), strings.Join(names, " or "), names[0],
+				"this directory holds %s, so it could be a %s project: name the one this is with `--lang %s`",
+				ambiguity.Holdings(), english.Or(names), names[0],
 			),
 		}
 	}
+	if err != nil || !found {
+		return sdkLanguage{}, false, err
+	}
+	return sdkLanguageOf(written), true, nil
 }
 
 func languageOfProject(projectDir string, opts initOptions) (sdkLanguage, bool, error) {
