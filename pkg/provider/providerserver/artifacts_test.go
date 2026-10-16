@@ -403,8 +403,7 @@ func TestAnUnchangedBuildIsNotUploadedTwice(t *testing.T) {
 	vendor.WithArtifactStore(countedArtifacts{ArtifactStore: vendor.Artifacts(), on: vendor})
 	client := servedBy(t, vendor)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PREVIEW,
-		Features: []string{fake.FeatureCache, fake.FeatureImages},
+		Tier: environmentv1.Tier_TIER_PREVIEW,
 	})
 
 	for range 2 {

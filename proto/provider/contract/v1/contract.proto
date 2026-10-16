@@ -439,40 +439,31 @@ message ImageRegistry {
 message BootstrapRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
-  repeated string features = 2;
+  bool force = 2;
 
-  bool force = 3;
+  bool accept_replacements = 3;
 
-  bool accept_replacements = 4;
+  EdgeSelection edge = 4;
 
-  EdgeSelection edge = 5;
+  repeated string remove = 5;
 
-  repeated string remove = 6;
+  bool dry = 6;
 
-  // Draw the plan, emit it as a plan event and stop: the stream changes nothing.
-  bool dry = 7;
-
-  // An apply that sends a consented plan emits no plan of its own and refuses
-  // work that plan never showed.
-  common.plan.v1.ChangePlan consented = 8;
+  common.plan.v1.ChangePlan consented = 7;
 }
 
 message DescribeBootstrapRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
-  bool with_dependents = 2;
+  EdgeSelection edge = 2;
 
-  EdgeSelection edge = 3;
-
-  bool with_parts = 4;
+  bool with_parts = 3;
 }
 
 message DescribeBootstrapResponse {
-  repeated Feature features = 1;
+  BootstrapStatus bootstrap = 1;
 
-  BootstrapStatus bootstrap = 2;
-
-  repeated BootstrapPart parts = 3;
+  repeated BootstrapPart parts = 2;
 }
 
 enum BootstrapPartState {
@@ -573,20 +564,6 @@ message CredentialGroup {
   string heading = 1;
 
   string document = 2;
-}
-
-message Feature {
-  string name = 1;
-
-  string summary = 2;
-
-  repeated string depends_on = 3;
-
-  bool enabled = 4;
-
-  repeated string dependents = 5;
-
-  repeated string edges = 6;
 }
 
 message Dns {
@@ -775,21 +752,19 @@ message PreflightRequest {
 
   EdgeSelection edge = 4;
 
-  repeated string frameworks = 6;
+  bool check_hosts = 5;
 
-  bool check_hosts = 7;
+  repeated string host_check_domains = 6;
 
-  repeated string host_check_domains = 8;
+  repeated ContainerApp containers = 7;
 
-  repeated ContainerApp containers = 9;
+  ImageRegistry project_registry = 8;
 
-  ImageRegistry project_registry = 10;
+  bool check_preview_route = 9;
 
-  bool check_preview_route = 11;
+  bool record_wants = 10;
 
-  bool record_wants = 12;
-
-  repeated string wanted_parts = 13;
+  repeated string wanted_parts = 11;
 }
 
 message ContainerApp {

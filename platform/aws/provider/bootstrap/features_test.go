@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -41,41 +40,33 @@ func TestOnlyTheCloudflareEdgeHasAFeatureOfItsOwn(t *testing.T) {
 }
 
 func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
-	next := buildoutput.Uses{Revalidation: true, ImageOptimization: true}
 	for _, tc := range []struct {
 		name string
-		apps []buildoutput.Uses
 		edge edge.Kind
 		want []string
 	}{
+		{name: "a project with no edge needs no part only the bootstrap credential may add"},
 		{
-			name: "a project using revalidation and image optimization needs no feature: a deploy adds both parts",
-			apps: []buildoutput.Uses{{}, next},
-		},
-		{
-			name: "a Cloudflare front needs its feature alone",
-			apps: []buildoutput.Uses{next},
+			name: "a Cloudflare front needs its part alone",
 			edge: "cloudflare",
 			want: []string{FeatureCloudflareEdge},
 		},
 		{
-			name: "a CloudFront-fronted project needs no feature: a deploy adds the cloudfront part",
-			apps: []buildoutput.Uses{next},
+			name: "a CloudFront-fronted project needs no such part: a deploy adds the cloudfront part",
 			edge: "cloudfront",
 		},
 		{
-			name: "an API Gateway-fronted project needs no feature",
-			apps: []buildoutput.Uses{{}},
+			name: "an API Gateway-fronted project needs no such part",
 			edge: "api-gateway",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := bootstrapplan.RequiredFeatures(Catalogue(), tc.apps, tc.edge)
+			got, err := bootstrapplan.RequiredFeatures(Catalogue(), tc.edge)
 			if err != nil {
 				t.Fatalf("RequiredFeatures: %v", err)
 			}
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("RequiredFeatures(%+v, %q) = %v, want %v", tc.apps, tc.edge, got, tc.want)
+				t.Errorf("RequiredFeatures(%q) = %v, want %v", tc.edge, got, tc.want)
 			}
 		})
 	}

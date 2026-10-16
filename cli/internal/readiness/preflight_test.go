@@ -22,9 +22,6 @@ func TestAFrameworkAppThatFallsBackToAContainerIsPreflightedAsAContainer(t *test
 			t.Fatalf("ResolveComputes: %v", err)
 		}
 		sent := newPreflightRequest(resolved, Request{Tier: environmentv1.Tier_TIER_PRODUCTION})
-		if len(sent.GetFrameworks()) != 0 {
-			t.Errorf("preflight names frameworks %v, want none: web runs a container", sent.GetFrameworks())
-		}
 		if named := sent.GetContainers(); len(named) != 1 || named[0].GetApp() != "web" {
 			t.Errorf("preflight names containers %v, want web, so its architecture is read in the same call", named)
 		}
@@ -38,9 +35,6 @@ func TestAFrameworkAppThatFallsBackToAContainerIsPreflightedAsAContainer(t *test
 			t.Fatalf("ResolveComputes: %v", err)
 		}
 		sent := newPreflightRequest(resolved, Request{Tier: environmentv1.Tier_TIER_PRODUCTION})
-		if got := sent.GetFrameworks(); len(got) != 1 || got[0] != "next" {
-			t.Errorf("preflight names frameworks %v, want [next]", got)
-		}
 		if named := sent.GetContainers(); len(named) != 0 {
 			t.Errorf("preflight names containers %v, want none: web runs serverless", named)
 		}

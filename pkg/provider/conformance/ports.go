@@ -16,7 +16,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -580,7 +579,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 }
 
 func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) {
-	required, err := bootstrapplan.RequiredFeatures(catalogue, nil, kind)
+	required, err := bootstrapplan.RequiredFeatures(catalogue, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -589,7 +588,7 @@ func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) 
 		applies[name] = true
 	}
 	for _, f := range catalogue {
-		if f.Serves == (buildoutput.Uses{}) && len(f.Edges) == 0 {
+		if len(f.Edges) == 0 {
 			applies[f.Name] = true
 		}
 	}

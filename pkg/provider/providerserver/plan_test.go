@@ -20,7 +20,7 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 	readiness, p := newReadiness(t, "1.2.3")
 	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache)
 
-	req := providerserver.ApplyRequest{Features: []string{fake.FeatureCache}}
+	req := providerserver.ApplyRequest{}
 	shown, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
@@ -47,7 +47,7 @@ func TestApplyRunsThePlanItWasShown(t *testing.T) {
 	ctx := context.Background()
 	readiness, vendor := newReadiness(t, "1.2.3")
 
-	req := providerserver.ApplyRequest{Features: []string{fake.FeatureCache}}
+	req := providerserver.ApplyRequest{}
 	shown, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
@@ -76,9 +76,7 @@ func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryFeature(t *testing.T) {
 	t.Parallel()
 
 	readiness, _ := newReadiness(t, "1.2.3")
-	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
-		Features: []string{fake.FeatureImages},
-	})
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -105,9 +103,7 @@ func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
 	p.FakeBootstrap().MarkStale(fake.FeatureImages)
 
-	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
-		Features: []string{fake.FeatureImages},
-	})
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -128,6 +124,7 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 
 	ctx := context.Background()
 	readiness, p := newReadiness(t, "1.2.3")
+	readiness.Edge = fake.KindDirect
 	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
 	recordProject(t, p, "shop", fake.FeatureImages)
 
@@ -145,43 +142,6 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 	}
 	if err := readiness.Apply(ctx, plan, environment.TierProduction, req, nil); err == nil {
 		t.Error("Apply() took the removal the plan warned about without --force")
-	}
-}
-
-func TestPlanLeavesAnInstalledFeatureNoRunNamed(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	readiness, vendor := newReadiness(t, "1.2.3")
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
-
-	plan, err := readiness.Plan(ctx, environment.TierProduction, providerserver.ApplyRequest{Features: []string{fake.FeatureCache}})
-	if err != nil {
-		t.Fatalf("Plan() error = %v", err)
-	}
-	for _, group := range plan.Groups {
-		if group.Feature == fake.FeatureImages {
-			t.Fatalf("a run naming only %s plans %+v for %s, want a feature it never mentioned left out of the plan entirely",
-				fake.FeatureCache, group, fake.FeatureImages)
-		}
-	}
-}
-
-func TestPlanRefusesToEnsureAndRemoveTheSameFeature(t *testing.T) {
-	t.Parallel()
-
-	readiness, vendor := newReadiness(t, "1.2.3")
-	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
-
-	_, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
-		Features: []string{fake.FeatureCache},
-		Remove:   []string{fake.FeatureCache},
-	})
-	if err == nil {
-		t.Fatal("Plan() took a run that both installs a feature and takes it down")
-	}
-	if !strings.Contains(err.Error(), fake.FeatureCache) {
-		t.Errorf("err = %v, want it to name the feature asked for both ways", err)
 	}
 }
 

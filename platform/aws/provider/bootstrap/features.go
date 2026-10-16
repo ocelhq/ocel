@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -52,7 +51,6 @@ type feature struct {
 	name      string
 	summary   string
 	dependsOn []string
-	serves    buildoutput.Uses
 	edges     []edge.Kind
 
 	template  func(featureInputs) (featureStack, error)
@@ -85,7 +83,6 @@ func Catalogue() []provider.Feature {
 			Name:      f.name,
 			Summary:   f.summary,
 			DependsOn: slices.Clone(f.dependsOn),
-			Serves:    f.serves,
 			Edges:     slices.Clone(f.edges),
 		})
 	}

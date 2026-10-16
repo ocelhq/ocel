@@ -283,7 +283,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
-	features, err := bootstrapplan.RequiredFeatures(readiness.Bootstrap.Catalogue(), uses, readiness.Edge)
+	features, err := bootstrapplan.RequiredFeatures(readiness.Bootstrap.Catalogue(), readiness.Edge)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}

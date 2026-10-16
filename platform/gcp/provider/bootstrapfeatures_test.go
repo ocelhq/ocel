@@ -17,7 +17,7 @@ func TestTheLoadBalancerBehindTheALBEdgeIsAPartNoBootstrapRequires(t *testing.T)
 
 	catalogue := bootstrap{}.Catalogue()
 	for _, kind := range []edge.Kind{alb.Kind, edge.None} {
-		required, err := bootstrapplan.RequiredFeatures(catalogue, nil, kind)
+		required, err := bootstrapplan.RequiredFeatures(catalogue, kind)
 		if err != nil {
 			t.Fatalf("RequiredFeatures(%s) = %v", kind, err)
 		}
@@ -48,14 +48,14 @@ func TestTheShieldedLoadBalancerIsAFeatureOnlyTheCloudflareEdgePullsIn(t *testin
 	if !strings.Contains(catalogue[at].Summary, "$18") {
 		t.Errorf("the %q feature reads %q, want the price in the plan", albShieldedFeature, catalogue[at].Summary)
 	}
-	proxied, err := bootstrapplan.RequiredFeatures(catalogue, nil, "cloudflare")
+	proxied, err := bootstrapplan.RequiredFeatures(catalogue, "cloudflare")
 	if err != nil {
 		t.Fatalf("RequiredFeatures(cloudflare) = %v", err)
 	}
 	if !slices.Contains(proxied, albShieldedFeature) {
 		t.Errorf("a cloudflare bootstrap requires %v, want %q and not the front browsers reach directly", proxied, albShieldedFeature)
 	}
-	fronted, err := bootstrapplan.RequiredFeatures(catalogue, nil, alb.Kind)
+	fronted, err := bootstrapplan.RequiredFeatures(catalogue, alb.Kind)
 	if err != nil {
 		t.Fatalf("RequiredFeatures(alb) = %v", err)
 	}

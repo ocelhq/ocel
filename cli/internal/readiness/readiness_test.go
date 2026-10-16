@@ -3,6 +3,7 @@ package readiness
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -139,8 +140,8 @@ func TestATierWithNoInfrastructureIsABootstrapToSetUpNamingItsCommand(t *testing
 	if !errors.As(missing, &absent) {
 		t.Fatalf("missing = %T, want a NoInfrastructureError", missing)
 	}
-	if req := absent.BootstrapRequest(); req.GetTier() != environmentv1.Tier_TIER_PRODUCTION || strings.Join(req.GetFeatures(), ",") != "isr" {
-		t.Errorf("bootstrap request = %v, want production with isr", req)
+	if req := absent.BootstrapRequest(); req.GetTier() != environmentv1.Tier_TIER_PRODUCTION {
+		t.Errorf("bootstrap request = %v, want production", req)
 	}
 }
 
@@ -184,8 +185,8 @@ func TestABootstrapLackingAFeatureTheProjectNeedsIsABootstrapToSetUp(t *testing.
 		t.Errorf("hint = %q, want the bootstrap that adds isr as typed", missing.Hint())
 	}
 	var lacking MissingFeaturesError
-	if !errors.As(missing, &lacking) || strings.Join(lacking.BootstrapRequest().GetFeatures(), ",") != "isr" {
-		t.Errorf("missing = %#v, want a MissingFeaturesError asking for isr", missing)
+	if !errors.As(missing, &lacking) || !slices.Equal(lacking.Gap.Missing, []string{"isr"}) {
+		t.Errorf("missing = %#v, want a MissingFeaturesError naming isr", missing)
 	}
 }
 
@@ -299,7 +300,7 @@ func TestABootstrapLackingAFeatureReportsBootstrapFeaturesMissingHintingTheRepai
 }
 
 func TestAGapRefusingMissingFeaturesReportsBootstrapFeaturesMissing(t *testing.T) {
-	gap := Gap{Missing: []string{"isr"}, Features: []string{"isr"}}
+	gap := Gap{Missing: []string{"isr"}}
 	for name, err := range map[string]error{
 		"RefuseMissing":    gap.RefuseMissing(environmentv1.Tier_TIER_PRODUCTION),
 		"RefuseIncomplete": gap.RefuseIncomplete(environmentv1.Tier_TIER_PRODUCTION),

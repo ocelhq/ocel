@@ -32,14 +32,6 @@ func usesOf(root string, manifest *contractv1.Manifest) ([]buildoutput.Uses, err
 	return apps, nil
 }
 
-func presumedUses(frameworks []string) []buildoutput.Uses {
-	apps := make([]buildoutput.Uses, 0, len(frameworks))
-	for _, framework := range frameworks {
-		apps = append(apps, buildoutput.PresumeUses(framework))
-	}
-	return apps
-}
-
 func buildUses(root, app, framework string, hosting buildoutput.Hosting, present bool) (buildoutput.Uses, error) {
 	if !present {
 		return buildoutput.PresumeUses(framework), nil

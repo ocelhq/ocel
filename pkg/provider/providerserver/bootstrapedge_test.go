@@ -107,9 +107,7 @@ func TestAnUnrequestedInstalledEdgeFeatureIsKept(t *testing.T) {
 	readiness, p := fronting(t, fake.KindDirect)
 	bootstrapped(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
 
-	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
-		Features: []string{fake.FeatureCache, fake.FeatureImages},
-	})
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}

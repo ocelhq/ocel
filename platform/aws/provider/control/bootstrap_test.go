@@ -625,9 +625,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 		t.Fatal("Status described no stack at all")
 	}
 
-	if _, err := readiness.PlanFrom(context.Background(), status, providerserver.ApplyRequest{
-		Features: []string{bootstrap.FeatureCloudflareEdge},
-	}); err != nil {
+	if _, err := readiness.PlanFrom(context.Background(), status, providerserver.ApplyRequest{}); err != nil {
 		t.Fatalf("PlanFrom: %v", err)
 	}
 	if cfn.describes != read {

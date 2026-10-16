@@ -674,8 +674,7 @@ func deployServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.
 func bootstrappedOverRPC(t *testing.T, client contractv1connect.ProviderServiceClient) {
 	t.Helper()
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PRODUCTION,
-		Features: []string{fake.FeatureCache, fake.FeatureImages},
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 }
 
@@ -932,22 +931,6 @@ func TestDeployRecordsTheFeaturesItsProjectDependsOn(t *testing.T) {
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
-	}
-
-	planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
-		Tier:           environmentv1.Tier_TIER_PRODUCTION,
-		WithDependents: true,
-	})
-	if err != nil {
-		t.Fatalf("DescribeBootstrap() error = %v", err)
-	}
-	for _, feature := range planned.GetFeatures() {
-		if feature.GetName() != fake.FeatureCache {
-			continue
-		}
-		if !slices.Contains(feature.GetDependents(), "shop") {
-			t.Errorf("%s reports dependents %v, want the project deployed against it", fake.FeatureCache, feature.GetDependents())
-		}
 	}
 
 	stream, err := client.Bootstrap(ctx, &contractv1.BootstrapRequest{

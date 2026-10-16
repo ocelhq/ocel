@@ -91,8 +91,6 @@ func (s BootstrapStatus) Downgrade(writing provider.WrittenBy) bool {
 }
 
 type ApplyRequest struct {
-	Features []string
-
 	Remove []string
 
 	Force bool
@@ -110,15 +108,8 @@ type featureChange struct {
 
 func (r Readiness) resolveFeatureChange(ctx context.Context, status BootstrapStatus, req ApplyRequest) (featureChange, error) {
 	catalogue := r.Bootstrap.Catalogue()
-	asked, err := bootstrapplan.FeaturesWithDependencies(catalogue, req.Features)
-	if err != nil {
-		return featureChange{}, err
-	}
 	removing, err := bootstrapplan.FeaturesToRemove(catalogue, status.Features, req.Remove)
 	if err != nil {
-		return featureChange{}, err
-	}
-	if err := bootstrapplan.RefuseEnsuringAndRemoving(asked, removing); err != nil {
 		return featureChange{}, err
 	}
 	if err := r.refuseRemovingEdgeFeature(catalogue, req.Remove, removing); err != nil {
@@ -128,7 +119,7 @@ func (r Readiness) resolveFeatureChange(ctx context.Context, status BootstrapSta
 	if err != nil {
 		return featureChange{}, err
 	}
-	named := r.withEdgeFeature(catalogue, req.Features)
+	named := r.withEdgeFeature(catalogue, nil)
 	for _, part := range slices.Sorted(maps.Keys(wants)) {
 		if !slices.Contains(named, part) {
 			named = append(slices.Clone(named), part)

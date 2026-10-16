@@ -3,6 +3,7 @@ package providerserver_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,7 +102,8 @@ func TestADryBootstrapPlansTheWantedPartsAndRecordsNothing(t *testing.T) {
 func TestABootstrapRemovingAPartAProjectWantsRemovesItAndAddsNothing(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
-	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct, Features: []string{fake.FeatureCache}})
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
 	recordWant(t, vendor, fake.FeatureCache, "shop")
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct, Remove: []string{fake.FeatureCache}, Force: true})
@@ -132,7 +134,8 @@ func TestAPartProjectsWantThatTheBootstrapLacksIsDescribedAsWantedByThem(t *test
 func TestAWantOfAPartTheBootstrapHoldsDescribesThePartAlone(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
-	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct, Features: []string{fake.FeatureCache}})
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
 	recordWant(t, vendor, fake.FeatureCache, "shop")
 
 	cache := describedParts(t, client)[fake.FeatureCache]
@@ -173,5 +176,41 @@ func TestRemovingABootstrapForgetsWhatProjectsWantedOfIt(t *testing.T) {
 
 	if wants := wantedParts(t, vendor, environment.TierProduction); len(wants) != 0 {
 		t.Errorf("wants = %v, want none: the next bootstrap of this tier starts from nothing", wants)
+	}
+}
+
+func TestADeployThroughAnEdgeIsRefusedByABootstrapLackingThePartsThatEdgeRequires(t *testing.T) {
+	builtApps(t, "web")
+	client, _ := contractServed(t, "1.0.0")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}})
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+	result, _ := deploy(t, client, req)
+	if result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want it refused for the parts its edge requires")
+	}
+	if want := "lacks a part this project wants: " + fake.FeatureCache + ", " + fake.FeatureImages; !strings.Contains(result.GetError(), want) {
+		t.Errorf("Deploy() error = %q, want it to name %q", result.GetError(), want)
+	}
+}
+
+func TestARefusedDeployLeavesTheWantForTheBootstrapCommandToAdd(t *testing.T) {
+	builtApps(t, "web")
+	client, vendor := contractServed(t, "1.0.0")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}})
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+	if result, _ := deploy(t, client, req); result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want it refused for the parts its edge requires")
+	}
+
+	wants, err := stackrecords.ListBootstrapWants(context.Background(), vendor.KeyValues(), environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := wants[fake.FeatureImages]; !slices.Equal(got, []string{"shop"}) {
+		t.Errorf("projects wanting %s = %v, want [shop]", fake.FeatureImages, got)
 	}
 }

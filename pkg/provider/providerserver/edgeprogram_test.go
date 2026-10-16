@@ -46,8 +46,7 @@ func previewDeployRequest() *contractv1.DeployRequest {
 func previewBootstrapped(t *testing.T, client contractv1connect.ProviderServiceClient) {
 	t.Helper()
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PREVIEW,
-		Features: []string{fake.FeatureCache, fake.FeatureImages},
+		Tier: environmentv1.Tier_TIER_PREVIEW,
 	})
 }
 

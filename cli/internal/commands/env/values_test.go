@@ -1021,12 +1021,12 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if strings.Contains(stdout.String(), "Run `ocel bootstrap") {
 			t.Errorf("stdout = %q, want the offer kept off the stream a script reads", stdout.String())
 		}
-		requested := bootstrapsRequested(t, project)
-		if len(requested) == 0 {
+		applied := project.Provider.FakeBootstrap().Applied()
+		if len(applied) == 0 {
 			t.Fatal("the bootstrap the offer accepted never reached the provider")
 		}
-		if got := requested[len(requested)-1].GetFeatures(); !slices.Equal(got, []string{provider.FeatureVariablesKey}) {
-			t.Errorf("the provider was asked for %q, want the key alone", got)
+		if got := applied[len(applied)-1].Features; !slices.Equal(got, []string{provider.FeatureVariablesKey}) {
+			t.Errorf("the provider was asked for %q, want the key alone, which the refused write recorded", got)
 		}
 	})
 }
