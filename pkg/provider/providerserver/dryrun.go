@@ -25,6 +25,7 @@ const (
 )
 
 type dryRunPlan struct {
+	parts      []provider.ChangeGroup
 	infra      provider.Plan
 	parameters provider.ChangeGroup
 	apps       []provider.Plan
@@ -33,7 +34,7 @@ type dryRunPlan struct {
 }
 
 func (d *dryRunPlan) plan() provider.Plan {
-	var plan provider.Plan
+	plan := provider.Plan{Groups: slices.Clone(d.parts)}
 	plan.Groups = append(plan.Groups, d.infra.Groups...)
 	if len(d.parameters.Changes) > 0 {
 		plan.Groups = append(plan.Groups, d.parameters)
