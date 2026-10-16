@@ -97,6 +97,15 @@ type BootstrapRequest struct {
 	VendorState any
 }
 
+type WantedPartError struct {
+	Part string
+	Err  error
+}
+
+func (e WantedPartError) Error() string { return e.Err.Error() }
+
+func (e WantedPartError) Unwrap() error { return e.Err }
+
 const FeatureVariablesKey = "variables-key"
 
 func BootstrapCommand(tier environment.Tier) string {

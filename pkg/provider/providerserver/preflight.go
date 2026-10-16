@@ -110,6 +110,12 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 		return resp, nil
 	}
 	resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
+	if req.GetRecordWants() {
+		wanted := append(slices.Clone(required), bootstrapplan.InCatalogueOrder(readiness.Bootstrap.Catalogue(), req.GetWantedParts())...)
+		if err := readiness.RecordWants(ctx, tier, req.GetSlug(), bootstrapplan.MissingFeatures(status.own.Features, wanted)); err != nil {
+			return nil, provider.RefusalError(err)
+		}
+	}
 	resp.KnownSlugs, resp.PreviewWildcard = status.knownSlugs, status.previewWildcard
 	if err := verifyOwnPushAccess(ctx, steps, p, tier, req, resp); err != nil {
 		return nil, err

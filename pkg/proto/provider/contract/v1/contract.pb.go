@@ -5019,6 +5019,8 @@ type PreflightRequest struct {
 	Containers        []*ContainerApp        `protobuf:"bytes,9,rep,name=containers,proto3" json:"containers,omitempty"`
 	ProjectRegistry   *ImageRegistry         `protobuf:"bytes,10,opt,name=project_registry,json=projectRegistry,proto3" json:"project_registry,omitempty"`
 	CheckPreviewRoute bool                   `protobuf:"varint,11,opt,name=check_preview_route,json=checkPreviewRoute,proto3" json:"check_preview_route,omitempty"`
+	RecordWants       bool                   `protobuf:"varint,12,opt,name=record_wants,json=recordWants,proto3" json:"record_wants,omitempty"`
+	WantedParts       []string               `protobuf:"bytes,13,rep,name=wanted_parts,json=wantedParts,proto3" json:"wanted_parts,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -5121,6 +5123,20 @@ func (x *PreflightRequest) GetCheckPreviewRoute() bool {
 		return x.CheckPreviewRoute
 	}
 	return false
+}
+
+func (x *PreflightRequest) GetRecordWants() bool {
+	if x != nil {
+		return x.RecordWants
+	}
+	return false
+}
+
+func (x *PreflightRequest) GetWantedParts() []string {
+	if x != nil {
+		return x.WantedParts
+	}
+	return nil
 }
 
 type ContainerApp struct {
@@ -7807,7 +7823,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\f(\x80\x02R\bpassword\"\x14\n" +
 	"\x12CreateBypassSecret\";\n" +
 	"\x12RevokeBypassSecret\x12%\n" +
-	"\x02id\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{12}$R\x02id\"\x9e\x04\n" +
+	"\x02id\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{12}$R\x02id\"\xe4\x04\n" +
 	"\x10PreflightRequest\x12J\n" +
 	"\rrequired_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\frequiredTier\x128\n" +
 	"\x04slug\x18\x02 \x01(\tB$\xbaH!\xd8\x01\x01r\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x18\n" +
@@ -7824,7 +7840,9 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"containers\x12N\n" +
 	"\x10project_registry\x18\n" +
 	" \x01(\v2#.provider.contract.v1.ImageRegistryR\x0fprojectRegistry\x12.\n" +
-	"\x13check_preview_route\x18\v \x01(\bR\x11checkPreviewRoute\"V\n" +
+	"\x13check_preview_route\x18\v \x01(\bR\x11checkPreviewRoute\x12!\n" +
+	"\frecord_wants\x18\f \x01(\bR\vrecordWants\x12!\n" +
+	"\fwanted_parts\x18\r \x03(\tR\vwantedParts\"V\n" +
 	"\fContainerApp\x12\x19\n" +
 	"\x03app\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03app\x12+\n" +
 	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xa8\x01\n" +

@@ -1,6 +1,7 @@
 package providerserver_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,12 +10,16 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func serverlessApp(name, framework string) *contractv1.ManifestApp {
@@ -127,8 +132,33 @@ func TestADeployWhoseBuildDeclaresISRIsRefusedByABootstrapLackingTheFeatureThatS
 	if result.GetSuccess() {
 		t.Fatal("Deploy() succeeded, want it refused for the ISR feature its build declares")
 	}
-	if want := "lacks the features this project needs: " + fake.FeatureCache; !strings.Contains(result.GetError(), want) {
+	if want := "lacks a part this project wants: " + fake.FeatureCache; !strings.Contains(result.GetError(), want) {
 		t.Errorf("Deploy() error = %q, want it to name %q", result.GetError(), want)
+	}
+}
+
+func TestARefusedDeployLeavesTheWantForTheBootstrapCommandToAdd(t *testing.T) {
+	builtApps(t, "web")
+	declaresISR(t, "web", buildoutput.FrameworkSvelteKit)
+	client, vendor := contractServed(t, "1.0.0")
+	direct := &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+
+	req := deployRequest()
+	req.Edge = direct
+	app := req.GetManifest().GetApps()[0]
+	app.Framework = &contractv1.Framework{Name: buildoutput.FrameworkSvelteKit}
+	app.GetServerless().GetFunctions()[0].Framework = app.GetFramework()
+	if result, _ := deploy(t, client, req); result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want it refused for the ISR feature its build declares")
+	}
+
+	wants, err := stackrecords.ListBootstrapWants(context.Background(), vendor.KeyValues(), environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := wants[fake.FeatureCache]; !slices.Equal(got, []string{"shop"}) {
+		t.Errorf("projects wanting %s = %v, want [shop]", fake.FeatureCache, got)
 	}
 }
 
@@ -144,5 +174,59 @@ func declaresISR(t *testing.T, app, framework string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, buildoutput.HostingFile), raw, 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestADryDeployRefusedForAPartRecordsNothingAndSaysToDeployWithoutDry(t *testing.T) {
+	builtApps(t, "web")
+	declaresISR(t, "web", buildoutput.FrameworkSvelteKit)
+	client, vendor := contractServed(t, "1.0.0")
+	direct := &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+
+	req := deployRequest()
+	req.Edge = direct
+	req.Dry = true
+	app := req.GetManifest().GetApps()[0]
+	app.Framework = &contractv1.Framework{Name: buildoutput.FrameworkSvelteKit}
+	app.GetServerless().GetFunctions()[0].Framework = app.GetFramework()
+	result, _ := deploy(t, client, req)
+	if result.GetSuccess() {
+		t.Fatal("Deploy(dry) succeeded, want it refused for the ISR feature its build declares")
+	}
+
+	if want := "deploy without --dry, which records what this project wants, then run `ocel bootstrap production`"; !strings.Contains(result.GetError(), want) {
+		t.Errorf("Deploy(dry) error = %q, want it to say %q: a dry run recorded nothing for the bootstrap to add", result.GetError(), want)
+	}
+	if wants := wantedParts(t, vendor, environment.TierProduction); len(wants) != 0 {
+		t.Errorf("wants = %v, want none: a dry run records nothing", wants)
+	}
+}
+
+func TestADeployItsVendorRefusesForAWantedPartLeavesTheWantForTheBootstrapToAdd(t *testing.T) {
+	builtApps(t, "web")
+	vendor := &preflighting{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))}
+	client := servedProvider(t, "1.0.0", vendor)
+	direct := &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	vendor.RefusePreflight(provider.WantedPartError{Part: fake.FeatureCache, Err: refusal.Refuse(refusal.CodeNotReady, "no cache to seal under")})
+
+	req := deployRequest()
+	req.Edge = direct
+	app := req.GetManifest().GetApps()[0]
+	app.Framework = &contractv1.Framework{Name: buildoutput.FrameworkSvelteKit}
+	app.GetServerless().GetFunctions()[0].Framework = app.GetFramework()
+	result, _ := deploy(t, client, req)
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "no cache to seal under") {
+		t.Fatalf("Deploy() = %q, want it refused for the part its vendor wants", result.GetError())
+	}
+	if wants := wantedParts(t, vendor.Provider, environment.TierProduction); !slices.Equal(wants[fake.FeatureCache], []string{"shop"}) {
+		t.Fatalf("wants = %v, want shop's want of %s", wants, fake.FeatureCache)
+	}
+
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	applied := vendor.FakeBootstrap().Applied()
+	if last := applied[len(applied)-1]; !slices.Contains(last.Features, fake.FeatureCache) {
+		t.Errorf("Apply() features = %v, want %s, which shop's deploy was refused for", last.Features, fake.FeatureCache)
 	}
 }

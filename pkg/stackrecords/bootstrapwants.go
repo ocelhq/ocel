@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type BootstrapWant struct {
@@ -28,6 +29,17 @@ func RecordBootstrapWant(ctx context.Context, store keyvalue.Store, tier environ
 		return fmt.Errorf("record that %s wants the %s bootstrap part %s: %w", project, tier, part, err)
 	}
 	return nil
+}
+
+func RecordWantedPart(ctx context.Context, store keyvalue.Store, tier environment.Tier, project string, refused error) error {
+	var wanted provider.WantedPartError
+	if project == "" || !errors.As(refused, &wanted) {
+		return refused
+	}
+	if err := RecordBootstrapWant(ctx, store, tier, wanted.Part, project); err != nil {
+		return errors.Join(refused, err)
+	}
+	return refused
 }
 
 func ListBootstrapWants(ctx context.Context, store keyvalue.Store, tier environment.Tier) (map[string][]string, error) {
