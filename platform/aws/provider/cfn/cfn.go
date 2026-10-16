@@ -186,7 +186,7 @@ func Update(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, te
 	executed := false
 	defer func() {
 		if !executed {
-			DiscardChangeSet(ctx, cfn, id)
+			DiscardChangeSet(ctx, cfn, stackName, id)
 		}
 	}()
 
@@ -195,7 +195,7 @@ func Update(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, te
 			return err
 		}
 	}
-	if _, err := cfn.ExecuteChangeSet(ctx, &cloudformation.ExecuteChangeSetInput{ChangeSetName: aws.String(id)}); err != nil {
+	if _, err := cfn.ExecuteChangeSet(ctx, &cloudformation.ExecuteChangeSetInput{StackName: aws.String(stackName), ChangeSetName: aws.String(id)}); err != nil {
 		return fmt.Errorf("update %s stack: %w", stackName, err)
 	}
 	executed = true
@@ -266,13 +266,13 @@ func Plan(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, temp
 	}
 	id := aws.ToString(out.Id)
 
-	changes, reason, err := AwaitChangeSet(ctx, cfn, id)
+	changes, reason, err := AwaitChangeSet(ctx, cfn, stackName, id)
 	if err != nil {
-		DiscardChangeSet(ctx, cfn, id)
+		DiscardChangeSet(ctx, cfn, stackName, id)
 		return "", nil, fmt.Errorf("plan the %s update: %w", stackName, err)
 	}
 	if reason != "" {
-		DiscardChangeSet(ctx, cfn, id)
+		DiscardChangeSet(ctx, cfn, stackName, id)
 		if changeSetEmpty(reason) {
 			return "", nil, nil
 		}
@@ -281,12 +281,13 @@ func Plan(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, temp
 	return id, changes, nil
 }
 
-func AwaitChangeSet(ctx context.Context, cfn API, id string) ([]cfntypes.ResourceChange, string, error) {
+func AwaitChangeSet(ctx context.Context, cfn API, stackName, id string) ([]cfntypes.ResourceChange, string, error) {
 	for attempt := 0; ; attempt++ {
 		var changes []cfntypes.ResourceChange
 		var token *string
 		for {
 			out, err := cfn.DescribeChangeSet(ctx, &cloudformation.DescribeChangeSetInput{
+				StackName:     aws.String(stackName),
 				ChangeSetName: aws.String(id),
 				NextToken:     token,
 			})
@@ -340,10 +341,10 @@ func ChangeSetDelay(attempt int) time.Duration {
 	return step + time.Duration(mathrand.Float64()*changeSetJitter*float64(step))
 }
 
-func DiscardChangeSet(ctx context.Context, cfn API, id string) {
+func DiscardChangeSet(ctx context.Context, cfn API, stackName, id string) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), discardGrace)
 	defer cancel()
-	_, _ = cfn.DeleteChangeSet(ctx, &cloudformation.DeleteChangeSetInput{ChangeSetName: aws.String(id)})
+	_, _ = cfn.DeleteChangeSet(ctx, &cloudformation.DeleteChangeSetInput{StackName: aws.String(stackName), ChangeSetName: aws.String(id)})
 }
 
 func Create(ctx context.Context, cfn API, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) error {

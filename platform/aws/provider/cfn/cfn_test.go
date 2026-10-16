@@ -2,6 +2,9 @@ package cfn
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -157,6 +160,58 @@ func TestUpdateReportsTheReasonThisRunFailedOnRatherThanAnOlderOne(t *testing.T)
 	}
 	if strings.Contains(err.Error(), ancient) {
 		t.Errorf("Update = %v, want this run's failure rather than one the stack recorded from an earlier operation", err)
+	}
+}
+
+type stackScopedChangeSets struct {
+	failedStack
+	discarded []string
+}
+
+func (f *stackScopedChangeSets) unscoped(call string, stackName *string) error {
+	if aws.ToString(stackName) == "" {
+		return fmt.Errorf("%s: ValidationError: Stack with id null does not exist", call)
+	}
+	return nil
+}
+
+func (f *stackScopedChangeSets) DescribeChangeSet(ctx context.Context, in *cloudformation.DescribeChangeSetInput, opts ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error) {
+	if err := f.unscoped("DescribeChangeSet", in.StackName); err != nil {
+		return nil, err
+	}
+	return f.failedStack.DescribeChangeSet(ctx, in, opts...)
+}
+
+func (f *stackScopedChangeSets) ExecuteChangeSet(ctx context.Context, in *cloudformation.ExecuteChangeSetInput, opts ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error) {
+	if err := f.unscoped("ExecuteChangeSet", in.StackName); err != nil {
+		return nil, err
+	}
+	return f.failedStack.ExecuteChangeSet(ctx, in, opts...)
+}
+
+func (f *stackScopedChangeSets) DeleteChangeSet(_ context.Context, in *cloudformation.DeleteChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error) {
+	if err := f.unscoped("DeleteChangeSet", in.StackName); err != nil {
+		return nil, err
+	}
+	f.discarded = append(f.discarded, aws.ToString(in.ChangeSetName))
+	return &cloudformation.DeleteChangeSetOutput{}, nil
+}
+
+func TestUpdateNamesTheStackOnEveryCallThatReachesItsChangeSet(t *testing.T) {
+	api := &stackScopedChangeSets{failedStack: failedStack{status: cfntypes.StackStatusUpdateComplete}}
+
+	if err := Update(context.Background(), api, changeSetName, "ocel-bootstrap", "{}", nil, nil, nil, nil); err != nil {
+		t.Fatalf("Update against an API that finds a change set only within its stack = %v, want nil", err)
+	}
+
+	refused := errors.New("refused")
+	err := Update(context.Background(), api, changeSetName, "ocel-bootstrap", "{}", nil, nil, nil,
+		func(string, []cfntypes.ResourceChange) error { return refused })
+	if !errors.Is(err, refused) {
+		t.Fatalf("Update with a review that refuses = %v, want the refusal", err)
+	}
+	if want := []string{"ocel-bootstrap/changes"}; !slices.Equal(api.discarded, want) {
+		t.Errorf("change sets discarded = %v, want %v", api.discarded, want)
 	}
 }
 
