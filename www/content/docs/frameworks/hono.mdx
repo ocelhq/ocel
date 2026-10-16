@@ -40,8 +40,9 @@ serverless compute, ocel serves the default export through its `fetch` method.
 
 ## Entrypoint
 
-On serverless, ocel serves the first of these that exists: `src/server`, `src/index`, `src/app`,
-`index`, `server`, `app`, each as `.ts` or `.js`. Any other file, name it with
+On serverless, ocel serves the first of the
+[entrypoints it looks for](/docs/configuration#the-app-at-the-project-root), and the same file
+makes a project root naming no `apps` this app. Any other file, name it with
 [`entrypoint`](/docs/configuration#entrypoint).
 
 ## Containers

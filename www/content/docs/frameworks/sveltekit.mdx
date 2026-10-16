@@ -27,7 +27,8 @@ export default { kit: { adapter: ocel() } };
 ocel deploy
 ```
 
-Ocel recognises the app by its `@sveltejs/kit` dependency and runs its `build` script. Every
+Ocel recognises the app by its `@sveltejs/kit` dependency, which also makes a project root naming
+no `apps` [the app](/docs/configuration#the-app-at-the-project-root), and runs its `build` script. Every
 route renders in one function. Prerendered pages and `static/` are served beside it. Files under
 `/_app/immutable/` are cached for a year, and everything else is revalidated on each request, so
 an open tab sees a new deployment through `/_app/version.json`.

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
@@ -271,5 +272,19 @@ func TestOnlyTheConfigurationPageNamesTheDefaultDiscoveryDirectory(t *testing.T)
 		if !strings.Contains(pages[page], link) {
 			t.Errorf("%s does not link to %s", page, link)
 		}
+	}
+}
+
+func TestTheConfigurationPageListsTheNodeEntrypointsTheBuildLooksForInItsOrder(t *testing.T) {
+	pages := mdxPages(t, fixturetest.RepoDir(t))
+	quoted := make([]string, 0, len(language.NodeEntrypoints))
+	for _, candidate := range language.NodeEntrypoints {
+		quoted = append(quoted, "`"+candidate+"`")
+	}
+	if listed := strings.Join(quoted, ", "); !strings.Contains(pages["configuration.mdx"], listed) {
+		t.Errorf("configuration.mdx does not list the node entrypoints as the build looks for them: %s", listed)
+	}
+	if !strings.Contains(pages["configuration.mdx"], "`"+language.PythonEntryFile+"`") {
+		t.Errorf("configuration.mdx does not name %s", language.PythonEntryFile)
 	}
 }
