@@ -287,7 +287,10 @@ previews is an exact host rule under it.
 
 [`cloudflare`](/docs/providers/cloudflare) is the edge bought independently of Google.
 Name it and a hostname is forwarded through Cloudflare to a load balancer of its own, which
-`ocel bootstrap` provisions per tier at the same price as the `alb` one. That load balancer
+`ocel bootstrap` provisions per tier at the same price as the `alb` one, as the
+`cloudflare-origin` part. Only the bootstrap credential may make it, so the first deploy through
+Cloudflare records that its project wants it and stops: in a terminal Ocel offers to add it there
+and then, and a script or CI is refused with `ocel bootstrap <tier>`, which adds it. That load balancer
 refuses any client that does not present the certificate your Cloudflare zone presents to
 origins, so a request that skips Cloudflare is turned away. On port 80 it answers every
 hostname with a redirect to https and forwards nothing, so a visitor who opens `http://`
