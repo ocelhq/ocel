@@ -2,378 +2,495 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
+	"maps"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
-type runtimeLayerTemplateShape struct {
-	Resources map[string]struct {
-		Type       string `yaml:"Type"`
-		Properties struct {
-			LayerName string `yaml:"LayerName"`
-			Content   struct {
-				S3Bucket string `yaml:"S3Bucket"`
-				S3Key    string `yaml:"S3Key"`
-			} `yaml:"Content"`
-			CompatibleArchitectures []string `yaml:"CompatibleArchitectures"`
-			CompatibleRuntimes      []string `yaml:"CompatibleRuntimes"`
-		} `yaml:"Properties"`
-	} `yaml:"Resources"`
-	Outputs map[string]struct {
-		Value string `yaml:"Value"`
-	} `yaml:"Outputs"`
+const fakeLayerAccount = "arn:aws:lambda:us-east-1:111122223333:layer:"
+
+type fakeLayers struct {
+	mu        sync.Mutex
+	versions  map[string][]int64
+	next      map[string]int64
+	published []*lambda.PublishLayerVersionInput
+	deleted   []string
+	lists     int
+	staleFor  int
+
+	beforePublish func(name string)
 }
 
-func parseRuntimeLayerTemplate(t *testing.T, body string) runtimeLayerTemplateShape {
-	t.Helper()
-	var tmpl runtimeLayerTemplateShape
-	if err := yaml.Unmarshal([]byte(body), &tmpl); err != nil {
-		t.Fatalf("the runtime layer template is not valid YAML: %v", err)
+func newFakeLayers() *fakeLayers {
+	return &fakeLayers{versions: map[string][]int64{}, next: map[string]int64{}}
+}
+
+func layerVersionARN(name string, version int64) string {
+	return fmt.Sprintf("%s%s:%d", fakeLayerAccount, name, version)
+}
+
+func (f *fakeLayers) seed(name string, version int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.versions[name] = append(f.versions[name], version)
+	f.next[name] = max(f.next[name], version)
+}
+
+func (f *fakeLayers) resolves(arn string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for name, versions := range f.versions {
+		for _, version := range versions {
+			if layerVersionARN(name, version) == arn {
+				return true
+			}
+		}
 	}
-	return tmpl
+	return false
 }
 
-func runtimeLayerBody(t *testing.T, tier environment.Tier) string {
-	t.Helper()
-	body, err := runtimeLayerTemplateAt(defaultNamespace, tier, fixtureBucket)
-	if err != nil {
-		t.Fatalf("runtimeLayerTemplateAt: %v", err)
+func (f *fakeLayers) ListLayerVersions(_ context.Context, in *lambda.ListLayerVersionsInput, _ ...func(*lambda.Options)) (*lambda.ListLayerVersionsOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lists++
+	if f.lists <= f.staleFor {
+		return &lambda.ListLayerVersionsOutput{}, nil
 	}
-	return body
-}
-
-func TestRuntimeLayerTemplate(t *testing.T) {
-	t.Run("one layer version per architecture, named after the payload it contains", func(t *testing.T) {
-		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-			t.Run(string(tier), func(t *testing.T) {
-				tmpl := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, tier))
-				if len(tmpl.Resources) != len(runtimeArches()) {
-					t.Fatalf("the runtime stack declares %d resources, want one layer version per architecture (%d)",
-						len(tmpl.Resources), len(runtimeArches()))
-				}
-				for _, architecture := range runtimeArches() {
-					shipped, err := payloads.RuntimeLayer(architecture)
-					if err != nil {
-						t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
-					}
-					layer, ok := tmpl.Resources[runtimeLayerResourceID(architecture)]
-					if !ok {
-						t.Fatalf("the runtime stack declares no %s layer", architecture)
-					}
-					if layer.Type != "AWS::Lambda::LayerVersion" {
-						t.Errorf("%s Type = %q, want AWS::Lambda::LayerVersion", architecture, layer.Type)
-					}
-					if !strings.Contains(layer.Properties.LayerName, shortRuntimeDigest(shipped.SHA256)) {
-						t.Errorf("%s LayerName = %q, want the payload digest %s in it",
-							architecture, layer.Properties.LayerName, shortRuntimeDigest(shipped.SHA256))
-					}
-					if !strings.Contains(layer.Properties.LayerName, runtimeArchTokens[architecture]) {
-						t.Errorf("%s LayerName = %q, names no architecture, so the two arches would collide",
-							architecture, layer.Properties.LayerName)
-					}
-					if want := payloads.Key(runtimeLayerKeyPrefix, shipped.SHA256); layer.Properties.Content.S3Key != want {
-						t.Errorf("%s S3Key = %q, want %q", architecture, layer.Properties.Content.S3Key, want)
-					}
-					if layer.Properties.Content.S3Bucket != fixtureBucket {
-						t.Errorf("%s S3Bucket = %q, want the bootstrap's artifact bucket %q", architecture, layer.Properties.Content.S3Bucket, fixtureBucket)
-					}
-					if len(layer.Properties.CompatibleArchitectures) != 1 || layer.Properties.CompatibleArchitectures[0] != architecture {
-						t.Errorf("%s CompatibleArchitectures = %v, want [%s]", architecture, layer.Properties.CompatibleArchitectures, architecture)
-					}
-					if len(layer.Properties.CompatibleRuntimes) != 0 {
-						t.Errorf("%s CompatibleRuntimes = %v, want none listed: Lambda refuses the layer to any function whose runtime is left off the list, and one runtime serves them all",
-							architecture, layer.Properties.CompatibleRuntimes)
-					}
-					out, ok := tmpl.Outputs[runtimeLayerOutputKey(architecture, shipped.SHA256)]
-					if !ok {
-						t.Fatalf("the runtime stack publishes no %s output, so no release can reach the layer", runtimeLayerOutputKey(architecture, shipped.SHA256))
-					}
-					if !strings.Contains(out.Value, runtimeLayerResourceID(architecture)) {
-						t.Errorf("%s output = %q, want the version ARN of %s", architecture, out.Value, runtimeLayerResourceID(architecture))
-					}
-				}
-			})
-		}
-	})
-
-	t.Run("production and preview name different layers", func(t *testing.T) {
-		production := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, environment.TierProduction))
-		preview := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, environment.TierPreview))
-		for _, architecture := range runtimeArches() {
-			id := runtimeLayerResourceID(architecture)
-			if production.Resources[id].Properties.LayerName == preview.Resources[id].Properties.LayerName {
-				t.Errorf("both tiers publish the %s runtime as %q, so one tier's bootstrap writes the other's layer",
-					architecture, production.Resources[id].Properties.LayerName)
-			}
-		}
-	})
-}
-
-func TestRunRuntimeLayers(t *testing.T) {
-	t.Run("a first bootstrap places both payloads and publishes the layers", func(t *testing.T) {
-		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		store := newFakeObjectStore()
-		frontedBy(t, &fakeEdge{kind: "cloudflare"})
-
-		if err := runAll(context.Background(), apisOf(stacks, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
-			t.Fatalf("run: %v", err)
-		}
-		body := stacks.template(runtimeStack(environment.TierProduction))
-		if body == "" {
-			t.Fatal("a first bootstrap created no runtime stack, so its releases have nothing to boot through")
-		}
-		for _, architecture := range runtimeArches() {
-			shipped, err := payloads.RuntimeLayer(architecture)
-			if err != nil {
-				t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
-			}
-			key := payloads.Key(runtimeLayerKeyPrefix, shipped.SHA256)
-			if !store.has(key) {
-				t.Errorf("the %s runtime payload was never placed at %s", architecture, key)
-			}
-			if !strings.Contains(body, key) {
-				t.Errorf("the runtime stack does not point at the placed %s payload %s", architecture, key)
-			}
-		}
-	})
-
-	t.Run("a second bootstrap over the same payloads writes nothing again", func(t *testing.T) {
-		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		store := preloadedStore()
-		frontedBy(t, &fakeEdge{kind: "cloudflare"})
-
-		if err := runAll(context.Background(), apisOf(stacks, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
-			t.Fatalf("first run: %v", err)
-		}
-		if store.puts != 0 {
-			t.Errorf("placed %d payloads into an account that already stores them", store.puts)
-		}
-		creates := stacks.creates
-		if err := runAll(context.Background(), apisOf(stacks, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
-			t.Fatalf("second run: %v", err)
-		}
-		if stacks.creates != creates {
-			t.Errorf("the second bootstrap created %d more stacks, want none", stacks.creates-creates)
-		}
-	})
-}
-
-func TestReadRuntimeLayers(t *testing.T) {
-	t.Run("the ARNs this build's runtime is published under are read back", func(t *testing.T) {
-		stacks := newFakeCFN()
-		stacks.seed(coreStackName, "Outputs:\n")
-		stacks.seed(runtimeStack(environment.TierProduction), runtimeLayerBody(t, environment.TierProduction))
-
-		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
-		if err != nil {
-			t.Fatalf("CheckDeployed: %v", err)
-		}
-		for _, architecture := range runtimeArches() {
-			shipped, err := payloads.RuntimeLayer(architecture)
-			if err != nil {
-				t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
-			}
-			want := stacks.output(runtimeStack(environment.TierProduction), runtimeLayerOutputKey(architecture, shipped.SHA256))
-			if want == "" {
-				t.Fatalf("the seeded runtime stack published no %s ARN", architecture)
-			}
-			if got := deployed.RuntimeLayers[architecture]; got != want {
-				t.Errorf("RuntimeLayers[%s] = %q, want %q", architecture, got, want)
-			}
-		}
-	})
-
-	t.Run("a runtime published from another build is not read as this one", func(t *testing.T) {
-		stacks := newFakeCFN()
-		stacks.seed(coreStackName, "Outputs:\n")
-		stacks.seed(runtimeStack(environment.TierProduction), "Outputs:\n  "+
-			runtimeLayerOutputKey(arch.X8664, strings.Repeat("a", 64))+":\n    Value: !Ref RuntimeLayerX8664\n")
-
-		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
-		if err != nil {
-			t.Fatalf("CheckDeployed: %v", err)
-		}
-		if arn, found := deployed.RuntimeLayers[arch.X8664]; found {
-			t.Errorf("read %q as this build's runtime, and it is another build's", arn)
-		}
-	})
-
-	t.Run("the runtime stack is stamped and read back as current", func(t *testing.T) {
-		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		frontedBy(t, &fakeEdge{kind: "cloudflare"})
-		if err := runAll(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), productionBootstrap(defaultNamespace)); err != nil {
-			t.Fatalf("run: %v", err)
-		}
-		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
-		if err != nil {
-			t.Fatalf("CheckDeployed: %v", err)
-		}
-		if !deployed.RuntimeStack.Present {
-			t.Fatal("the runtime stack was applied and reads back as absent")
-		}
-		if !deployed.RuntimeStack.Current() {
-			t.Errorf("the runtime stack reads back as behind: digest %q, intended %q",
-				deployed.RuntimeStack.Digest, deployed.RuntimeStack.Intended)
-		}
-	})
-}
-
-func runtimeLayerDigestFor(t *testing.T, tier environment.Tier, bucket string) string {
-	t.Helper()
-	body, err := runtimeLayerTemplateAt(defaultNamespace, tier, bucket)
-	if err != nil {
-		t.Fatalf("runtimeLayerTemplateAt: %v", err)
+	name := aws.ToString(in.LayerName)
+	versions := slices.Clone(f.versions[name])
+	slices.Sort(versions)
+	slices.Reverse(versions)
+	out := &lambda.ListLayerVersionsOutput{}
+	for _, version := range versions {
+		out.LayerVersions = append(out.LayerVersions, lambdatypes.LayerVersionsListItem{
+			LayerVersionArn: aws.String(layerVersionARN(name, version)),
+			Version:         version,
+		})
 	}
-	return cfn.TemplateDigest(body)
+	return out, nil
 }
 
-func staleRuntimeBody() string {
-	return "AWSTemplateFormatVersion: '2010-09-09'\nOutputs:\n  " +
-		runtimeLayerOutputKey(arch.X8664, strings.Repeat("b", 64)) +
-		":\n    Value: !Ref RuntimeLayerX8664\n"
+func (f *fakeLayers) PublishLayerVersion(_ context.Context, in *lambda.PublishLayerVersionInput, _ ...func(*lambda.Options)) (*lambda.PublishLayerVersionOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	name := aws.ToString(in.LayerName)
+	if f.beforePublish != nil {
+		f.beforePublish(name)
+	}
+	f.next[name]++
+	version := f.next[name]
+	f.versions[name] = append(f.versions[name], version)
+	f.published = append(f.published, in)
+	return &lambda.PublishLayerVersionOutput{
+		LayerVersionArn: aws.String(layerVersionARN(name, version)),
+		Version:         version,
+	}, nil
 }
 
-func ensuringAPIs(stacks *fakeCFN, store ObjectStore) APIs {
-	return apisOf(stacks, newFakeSSM(), &fakeIAM{}, store)
+func (f *fakeLayers) DeleteLayerVersion(_ context.Context, in *lambda.DeleteLayerVersionInput, _ ...func(*lambda.Options)) (*lambda.DeleteLayerVersionOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	name := aws.ToString(in.LayerName)
+	f.versions[name] = slices.DeleteFunc(f.versions[name], func(v int64) bool { return v == aws.ToInt64(in.VersionNumber) })
+	f.deleted = append(f.deleted, layerVersionARN(name, aws.ToInt64(in.VersionNumber)))
+	return &lambda.DeleteLayerVersionOutput{}, nil
 }
 
-func ensureRuntimeRequest() RuntimeLayerRequest {
-	return RuntimeLayerRequest{ArtifactBucket: fixtureBucket, Writer: "1.4.0"}
-}
-
-func assertShipsThisBuild(t *testing.T, stacks *fakeCFN, layers map[string]string) {
-	t.Helper()
+func shippedRuntime(label string) map[string]payloads.Payload {
+	shipped := map[string]payloads.Payload{}
 	for _, architecture := range runtimeArches() {
-		shipped, err := payloads.RuntimeLayer(architecture)
-		if err != nil {
-			t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
-		}
-		want := stacks.output(runtimeStack(environment.TierProduction), runtimeLayerOutputKey(architecture, shipped.SHA256))
-		if want == "" {
-			t.Fatalf("the runtime stack publishes no %s ARN", architecture)
-		}
-		if layers[architecture] != want {
-			t.Errorf("layers[%s] = %q, want %q", architecture, layers[architecture], want)
+		shipped[architecture] = payloads.Of([]byte(label + " runtime for " + architecture))
+	}
+	return shipped
+}
+
+const fixtureStateTable = "ocel-state-table"
+
+type fakeRecords struct {
+	mu     sync.Mutex
+	rows   map[string]keyvalue.Entry
+	rev    int
+	writes int
+	tables []string
+}
+
+func newFakeRecords() *fakeRecords {
+	return &fakeRecords{rows: map[string]keyvalue.Entry{}}
+}
+
+func (f *fakeRecords) in(table string) keyvalue.Store {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tables = append(f.tables, table)
+	return f
+}
+
+func (f *fakeRecords) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	recorded, ok := f.rows[key.String()]
+	if !ok {
+		return keyvalue.Entry{}, keyvalue.ErrNotFound
+	}
+	return recorded, nil
+}
+
+func (f *fakeRecords) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := keyvalue.RefuseUnwritable(entry); err != nil {
+		return "", err
+	}
+	f.writes++
+	if f.rows[entry.Key.String()].Revision != entry.Revision {
+		return "", keyvalue.ErrStale
+	}
+	f.rev++
+	entry.Revision = keyvalue.Revision(fmt.Sprint(f.rev))
+	f.rows[entry.Key.String()] = entry
+	return entry.Revision, nil
+}
+
+func (f *fakeRecords) WritePair(context.Context, keyvalue.Entry, keyvalue.Entry) error {
+	return fmt.Errorf("fakeRecords: no runtime layer write spans two entries")
+}
+
+func (f *fakeRecords) Remove(_ context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	recorded, ok := f.rows[key.String()]
+	if !ok {
+		return keyvalue.ErrNotFound
+	}
+	if recorded.Revision != expected {
+		return keyvalue.ErrStale
+	}
+	delete(f.rows, key.String())
+	return nil
+}
+
+func (f *fakeRecords) List(context.Context, keyvalue.Partition, ...string) ([]keyvalue.Entry, error) {
+	return nil, fmt.Errorf("fakeRecords: the runtime layers are reached by key, never listed")
+}
+
+func (f *fakeRecords) recorded(t *testing.T, tier environment.Tier) []string {
+	t.Helper()
+	names, err := readRecordedRuntimeLayers(context.Background(), f, tier)
+	if err != nil {
+		t.Fatalf("readRecordedRuntimeLayers: %v", err)
+	}
+	return names
+}
+
+func (f *fakeRecords) record(t *testing.T, tier environment.Tier, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		if err := recordRuntimeLayer(context.Background(), f, tier, name); err != nil {
+			t.Fatalf("recordRuntimeLayer: %v", err)
 		}
 	}
+}
+
+func layeringAPIs(layers *fakeLayers, store ObjectStore, records *fakeRecords) APIs {
+	return APIs{Layers: layers, Store: store, Records: records.in}
+}
+
+func shippedLayerNames(shipped map[string]payloads.Payload) []string {
+	names := make([]string, 0, len(shipped))
+	for _, architecture := range runtimeArches() {
+		names = append(names, runtimeLayerName(defaultNamespace, environment.TierProduction, architecture, shipped[architecture].SHA256))
+	}
+	slices.Sort(names)
+	return names
+}
+
+func ensureBuild(t *testing.T, apis APIs, shipped map[string]payloads.Payload, log *repairLog) map[string]string {
+	t.Helper()
+	req := RuntimeLayerRequest{ArtifactBucket: fixtureBucket, StateTable: fixtureStateTable}
+	got, err := ensureRuntimeLayers(context.Background(), apis, defaultNamespace, environment.TierProduction, req, shipped, log)
+	if err != nil {
+		t.Fatalf("ensureRuntimeLayers: %v", err)
+	}
+	return got
 }
 
 func TestEnsureRuntimeLayers(t *testing.T) {
-	t.Run("an account bootstrapped by an older build has this build's runtime published for it", func(t *testing.T) {
-		recordWaits(t)
-		stacks, store := newFakeCFN(), newFakeObjectStore()
-		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
+	t.Run("a deploy from another Ocel version keeps the runtime layer the first version's releases boot through", func(t *testing.T) {
+		layers, store := newFakeLayers(), newFakeObjectStore()
+		apis := layeringAPIs(layers, store, newFakeRecords())
 		var log repairLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
-		if err != nil {
-			t.Fatalf("EnsureRuntimeLayers: %v", err)
+		first := ensureBuild(t, apis, shippedRuntime("ocel v1"), &log)
+		second := ensureBuild(t, apis, shippedRuntime("ocel v2"), &log)
+
+		if len(layers.deleted) != 0 {
+			t.Errorf("deleted layer versions %v, and a release deployed from the first Ocel version still boots through them", layers.deleted)
 		}
-		assertShipsThisBuild(t, stacks, layers)
 		for _, architecture := range runtimeArches() {
-			shipped, err := payloads.RuntimeLayer(architecture)
-			if err != nil {
-				t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
+			if first[architecture] == "" || second[architecture] == "" {
+				t.Fatalf("%s runtime: the first Ocel version got %q, the second %q, want an ARN for each", architecture, first[architecture], second[architecture])
 			}
-			if !store.has(payloads.Key(runtimeLayerKeyPrefix, shipped.SHA256)) {
-				t.Errorf("the %s runtime payload the stack points at was never placed", architecture)
+			if first[architecture] == second[architecture] {
+				t.Errorf("both Ocel versions boot their %s functions through %s, want a layer per runtime", architecture, first[architecture])
+			}
+			if !layers.resolves(first[architecture]) {
+				t.Errorf("the first Ocel version's %s runtime %s no longer resolves after the second deployed", architecture, first[architecture])
 			}
 		}
-		if !log.says("INFO This deploy published this build's runtime") {
+		reread, err := readRuntimeLayers(context.Background(), layers, defaultNamespace, environment.TierProduction, shippedRuntime("ocel v1"))
+		if err != nil {
+			t.Fatalf("readRuntimeLayers: %v", err)
+		}
+		if !maps.Equal(reread, first) {
+			t.Errorf("the first Ocel version reads its runtime back as %v, want %v", reread, first)
+		}
+	})
+
+	t.Run("two deploys publishing the same runtime at once each get a version of their own that resolves", func(t *testing.T) {
+		layers, store := newFakeLayers(), newFakeObjectStore()
+		layers.staleFor = 2 * len(runtimeArches())
+		apis := layeringAPIs(layers, store, newFakeRecords())
+		shipped := shippedRuntime("ocel v1")
+		var log repairLog
+
+		one := ensureBuild(t, apis, shipped, &log)
+		other := ensureBuild(t, apis, shipped, &log)
+
+		for _, architecture := range runtimeArches() {
+			if one[architecture] == other[architecture] {
+				t.Errorf("both racing deploys boot their %s functions through %q, want each its own published version", architecture, one[architecture])
+			}
+			for _, arn := range []string{one[architecture], other[architecture]} {
+				if !layers.resolves(arn) {
+					t.Errorf("a deploy racing another for the %s runtime boots through %q, which does not resolve", architecture, arn)
+				}
+			}
+		}
+		if len(layers.deleted) != 0 {
+			t.Errorf("deleted layer versions %v while two deploys published the same runtime", layers.deleted)
+		}
+	})
+
+	t.Run("a runtime already published is neither published nor recorded again", func(t *testing.T) {
+		layers := newFakeLayers()
+		shipped := shippedRuntime("ocel v1")
+		for _, name := range shippedLayerNames(shipped) {
+			layers.seed(name, 1)
+			layers.seed(name, 3)
+		}
+		store, records := newFakeObjectStore(), newFakeRecords()
+		var log repairLog
+
+		got := ensureBuild(t, layeringAPIs(layers, store, records), shipped, &log)
+
+		if len(layers.published) != 0 {
+			t.Errorf("published %d layer versions of a runtime the account already has", len(layers.published))
+		}
+		if store.puts != 0 {
+			t.Errorf("placed %d payloads for a runtime the account already has", store.puts)
+		}
+		if records.writes != 0 {
+			t.Errorf("wrote the runtime layer record %d times for a runtime the account already has", records.writes)
+		}
+		for _, architecture := range runtimeArches() {
+			want := layerVersionARN(runtimeLayerName(defaultNamespace, environment.TierProduction, architecture, shipped[architecture].SHA256), 3)
+			if got[architecture] != want {
+				t.Errorf("the %s runtime is %q, want the latest version %q", architecture, got[architecture], want)
+			}
+		}
+	})
+
+	t.Run("a first publish records the layer in the tier's state table before it publishes it", func(t *testing.T) {
+		layers, store, records := newFakeLayers(), newFakeObjectStore(), newFakeRecords()
+		layers.beforePublish = func(name string) {
+			if !slices.Contains(records.recorded(t, environment.TierProduction), name) {
+				t.Errorf("published %s before recording it, and a destroy finds only the layers it recorded", name)
+			}
+		}
+		shipped := shippedRuntime("ocel v1")
+		var log repairLog
+
+		ensureBuild(t, layeringAPIs(layers, store, records), shipped, &log)
+		ensureBuild(t, layeringAPIs(layers, store, records), shippedRuntime("ocel v2"), &log)
+
+		want := slices.Concat(shippedLayerNames(shipped), shippedLayerNames(shippedRuntime("ocel v2")))
+		slices.Sort(want)
+		if got := records.recorded(t, environment.TierProduction); !slices.Equal(got, want) {
+			t.Errorf("the tier records runtime layers %v, want %v", got, want)
+		}
+		for _, table := range records.tables {
+			if table != fixtureStateTable {
+				t.Errorf("recorded the runtime layers in table %q, want the tier's state table %q", table, fixtureStateTable)
+			}
+		}
+	})
+
+	t.Run("a first publish places the payload and publishes it for its architecture", func(t *testing.T) {
+		layers, store := newFakeLayers(), newFakeObjectStore()
+		shipped := shippedRuntime("ocel v1")
+		var log repairLog
+
+		ensureBuild(t, layeringAPIs(layers, store, newFakeRecords()), shipped, &log)
+
+		if len(layers.published) != len(runtimeArches()) {
+			t.Fatalf("published %d layer versions, want one per architecture", len(layers.published))
+		}
+		for _, in := range layers.published {
+			architecture := arch.X8664
+			if strings.Contains(aws.ToString(in.LayerName), runtimeArchTokens[arch.ARM64]) {
+				architecture = arch.ARM64
+			}
+			key := payloads.Key(runtimeLayerKeyPrefix, shipped[architecture].SHA256)
+			if !store.has(key) {
+				t.Errorf("the %s runtime was published before its payload was placed at %s", architecture, key)
+			}
+			if aws.ToString(in.Content.S3Bucket) != fixtureBucket || aws.ToString(in.Content.S3Key) != key {
+				t.Errorf("the %s layer is published from s3://%s/%s, want s3://%s/%s", architecture, aws.ToString(in.Content.S3Bucket), aws.ToString(in.Content.S3Key), fixtureBucket, key)
+			}
+			if !slices.Equal(in.CompatibleArchitectures, []lambdatypes.Architecture{lambdatypes.Architecture(architecture)}) {
+				t.Errorf("the %s layer is compatible with %v, want only %s", architecture, in.CompatibleArchitectures, architecture)
+			}
+		}
+		if !log.says("INFO Published the ") {
 			t.Errorf("the deploy said %v, want it to say it published the runtime", log.Lines())
 		}
 	})
+}
 
-	t.Run("an account that already has this build's runtime is written to again by nothing", func(t *testing.T) {
-		recordWaits(t)
-		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.seed(runtimeStack(environment.TierProduction), runtimeLayerBody(t, environment.TierProduction))
-		creates, updates := stacks.creates, stacks.updates
-		var log repairLog
+func seedTiersRuntimeLayers(t *testing.T, layers *fakeLayers, records *fakeRecords) (own, kept []string) {
+	t.Helper()
+	own = []string{
+		runtimeLayerName(defaultNamespace, environment.TierProduction, arch.X8664, strings.Repeat("a", 64)),
+		runtimeLayerName(defaultNamespace, environment.TierProduction, arch.ARM64, strings.Repeat("b", 64)),
+	}
+	preview := runtimeLayerName(defaultNamespace, environment.TierPreview, arch.X8664, strings.Repeat("a", 64))
+	kept = []string{
+		preview,
+		runtimeLayerName(Namespace("other"), environment.TierProduction, arch.X8664, strings.Repeat("a", 64)),
+		"customer-layer",
+	}
+	for _, name := range append(slices.Clone(own), kept...) {
+		layers.seed(name, 1)
+		layers.seed(name, 2)
+	}
+	records.record(t, environment.TierProduction, own...)
+	records.record(t, environment.TierPreview, preview)
+	return own, kept
+}
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
-		if err != nil {
-			t.Fatalf("EnsureRuntimeLayers: %v", err)
-		}
-		assertShipsThisBuild(t, stacks, layers)
-		if stacks.creates != creates || stacks.updates != updates {
-			t.Errorf("wrote the runtime stack %d creates and %d updates over a runtime this build already published",
-				stacks.creates-creates, stacks.updates-updates)
-		}
-		if store.puts != 0 {
-			t.Errorf("placed %d payloads the account already stores", store.puts)
-		}
-	})
+func TestTeardownDeletesOnlyTheRuntimeLayersItsTierRecorded(t *testing.T) {
+	apis, _, _, _ := teardownFakes(t)
+	layers, records := newFakeLayers(), newFakeRecords()
+	apis.Layers, apis.Records = layers, records.in
+	own, kept := seedTiersRuntimeLayers(t, layers, records)
 
-	t.Run("a runtime another deploy is publishing is waited out rather than raced", func(t *testing.T) {
-		recordWaits(t)
-		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
-		stacks.busyWriting(runtimeStack(environment.TierProduction), 4, runtimeLayerBody(t, environment.TierProduction))
-		var log repairLog
+	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	for _, name := range own {
+		for _, version := range []int64{1, 2} {
+			if layers.resolves(layerVersionARN(name, version)) {
+				t.Errorf("a destroy of the production tier left its runtime layer version %s:%d behind", name, version)
+			}
+		}
+	}
+	for _, name := range kept {
+		if !layers.resolves(layerVersionARN(name, 2)) {
+			t.Errorf("a destroy of the production tier deleted %s, a layer it never published", name)
+		}
+	}
+	if left := records.recorded(t, environment.TierProduction); len(left) != 0 {
+		t.Errorf("a destroy of the production tier left its runtime layer record naming %v", left)
+	}
+	if got := records.recorded(t, environment.TierPreview); len(got) != 1 {
+		t.Errorf("a destroy of the production tier changed the preview tier's runtime layer record to %v", got)
+	}
+}
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
-		if err != nil {
-			t.Fatalf("EnsureRuntimeLayers over a stack another deploy is writing: %v", err)
-		}
-		assertShipsThisBuild(t, stacks, layers)
-		if stacks.updates != 0 {
-			t.Errorf("executed %d change sets against a stack another deploy was writing", stacks.updates)
-		}
-		if !log.says("INFO Stack " + runtimeStack(environment.TierProduction) + " is") {
-			t.Errorf("the deploy said %v, want it to say it waited while another run wrote the runtime", log.Lines())
-		}
-	})
+func TestADestroyPlanListsTheRuntimeLayerVersionsItsTierRecorded(t *testing.T) {
+	layers, records := newFakeLayers(), newFakeRecords()
+	own, _ := seedTiersRuntimeLayers(t, layers, records)
 
-	t.Run("a runtime another deploy created first is booted through rather than created twice", func(t *testing.T) {
-		recordWaits(t)
-		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.claimedMidCreate(runtimeStack(environment.TierProduction), runtimeLayerBody(t, environment.TierProduction))
-		var log repairLog
+	group, found := removeRuntimeLayers(context.Background(), layers, records.in(fixtureStateTable), defaultNamespace, environment.TierProduction)
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
-		if err != nil {
-			t.Fatalf("EnsureRuntimeLayers against a runtime another deploy created: %v", err)
-		}
-		assertShipsThisBuild(t, stacks, layers)
-	})
+	if !found {
+		t.Fatal("the destroy plan shows no runtime layers, and the tier recorded two")
+	}
+	var want []string
+	for _, name := range own {
+		want = append(want, name+":1", name+":2")
+	}
+	var got []string
+	for _, change := range group.Changes {
+		got = append(got, change.Name)
+	}
+	slices.Sort(want)
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Errorf("the destroy plan deletes %v, want %v", got, want)
+	}
+}
 
-	t.Run("a runtime this build cannot publish is a warning naming its stack", func(t *testing.T) {
-		recordWaits(t)
-		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
-		apis := ensuringAPIs(stacks, store)
-		apis.CFN = deniedChangeSets{stacks}
-		var log repairLog
+func TestABootstrapPlanShowsTheRuntimeLayersItWouldPublish(t *testing.T) {
+	layers := newFakeLayers()
+	shipped, err := shippedRuntimeLayers()
+	if err != nil {
+		t.Fatalf("shippedRuntimeLayers: %v", err)
+	}
+	published := runtimeLayerName(defaultNamespace, environment.TierProduction, arch.X8664, shipped[arch.X8664].SHA256)
+	layers.seed(published, 1)
 
-		if _, err := EnsureRuntimeLayers(context.Background(), apis, defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log); err != nil {
-			t.Fatalf("EnsureRuntimeLayers with credentials that may not write: %v", err)
-		}
-		if !log.says("WARN Could not publish this build's runtime into stack " + runtimeStack(environment.TierProduction)) {
-			t.Errorf("the deploy said %v, want a warning that names the runtime stack it could not write", log.Lines())
-		}
-	})
+	group := planRuntimeLayers(context.Background(), layers, Reading{ns: defaultNamespace, tier: environment.TierProduction})
 
-	t.Run("a runtime whose stack stays busy and behind is left for the deploy to refuse", func(t *testing.T) {
-		recordWaits(t)
-		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
-		stacks.busyWriting(runtimeStack(environment.TierProduction), idleAttempts*4, staleRuntimeBody())
-		var log repairLog
+	want := map[string]provider.ChangeAction{
+		published: provider.ActionKeep,
+		runtimeLayerName(defaultNamespace, environment.TierProduction, arch.ARM64, shipped[arch.ARM64].SHA256): provider.ActionCreate,
+	}
+	got := map[string]provider.ChangeAction{}
+	for _, change := range group.Changes {
+		got[change.Name] = change.Action
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("the plan shows %v, want %v", got, want)
+	}
+	if group.Action != provider.ActionUpdate {
+		t.Errorf("the plan's runtime group is %q, want %q while one architecture is still to publish", group.Action, provider.ActionUpdate)
+	}
+}
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
-		if err != nil {
-			t.Fatalf("EnsureRuntimeLayers over a stack that never goes idle: %v", err)
-		}
-		if len(layers) != 0 {
-			t.Errorf("read %v as this build's runtime, and no run published it", layers)
-		}
-	})
+func TestADryPlanBootsThroughTheRuntimeLayerTheDeployWouldPublish(t *testing.T) {
+	layers := newFakeLayers()
+	shipped := shippedRuntime("ocel v1")
+	published := runtimeLayerName(defaultNamespace, environment.TierProduction, arch.X8664, shipped[arch.X8664].SHA256)
+	layers.seed(published, 2)
+
+	got, err := readRuntimeLayersToPlan(context.Background(), layers, defaultNamespace, environment.TierProduction, shipped)
+	if err != nil {
+		t.Fatalf("readRuntimeLayersToPlan: %v", err)
+	}
+
+	want := map[string]string{
+		arch.X8664: layerVersionARN(published, 2),
+		arch.ARM64: awsports.RuntimeLayerToPublish,
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("a dry plan boots through %v, want %v: the published runtime, and the one the deploy would publish", got, want)
+	}
+	if len(layers.published) != 0 {
+		t.Errorf("a dry plan published %d layer versions", len(layers.published))
+	}
 }

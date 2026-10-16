@@ -109,8 +109,6 @@ type ScopedARNs struct {
 	BootstrapTables      []string
 	BootstrapStacks      []string
 	bootstrapChangeSets  []string
-	runtimeStack         string
-	runtimeChangeSet     string
 	runtimeLayers        []string
 	runtimeLayerVersions []string
 	bootstrapRoles       []string
@@ -136,7 +134,6 @@ var (
 
 func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 	core, _ := n.StackNameFor(tier)
-	runtime := n.runtimeStackName(tier)
 	group := n.envSourceSyncScheduleGroupName(tier)
 	edgeUser, _ := n.EdgeUserNameFor(tier)
 	origin, _ := n.OriginSecretParamFor(tier)
@@ -145,8 +142,6 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		variablesKeyAlias: n.variablesKeyAliasFor(tier),
 		appBoundary:       appBoundaryARNFor(n, tier),
 		appBoundaryPolicy: policyARN(n.AppBoundaryNameFor(tier)),
-		runtimeStack:      "arn:aws:cloudformation:*:*:stack/" + runtime + "/*",
-		runtimeChangeSet:  "arn:aws:cloudformation:*:*:changeSet/" + runtime + "-*/*",
 		bootstrapRoles:    []string{"arn:aws:iam::*:role" + n.bootstrapRolePathFor(tier) + "*", "arn:aws:iam::*:role/" + n.EdgeInvokeRoleName(tier)},
 		appRoles:          "arn:aws:iam::*:role" + n.AppRolePathFor(tier) + "*",
 		bastionRole:       "arn:aws:iam::*:role/" + bastion.NameFor(tier),
@@ -168,7 +163,7 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		named := "arn:aws:dynamodb:*:*:table/" + core + "-" + table + "-*"
 		a.BootstrapTables = append(a.BootstrapTables, named, named+"/*")
 	}
-	stacks := []string{core, runtime}
+	stacks := []string{core}
 	for _, f := range featureRegistry {
 		stack := f.stackName(n, tier)
 		stacks = append(stacks, stack)
@@ -1066,29 +1061,21 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 func runtimeProvisioning(r ScopedARNs) []GrantStatement {
 	return []GrantStatement{
 		{
-			Actions: []string{
-				"lambda:DeleteLayerVersion",
-				"lambda:GetLayerVersion",
-				"lambda:ListLayerVersions",
-				"lambda:PublishLayerVersion",
-			},
+			Actions:   []string{"lambda:GetLayerVersion", "lambda:PublishLayerVersion"},
 			Resources: slices.Concat(r.runtimeLayers, r.runtimeLayerVersions),
 		},
 		{
-			Actions: []string{
-				"cloudformation:CreateChangeSet",
-				"cloudformation:CreateStack",
-				"cloudformation:DescribeStackEvents",
-			},
-			Resources: []string{r.runtimeStack},
+			Actions:   []string{"lambda:ListLayerVersions"},
+			Resources: []string{UnscopedResource},
 		},
+	}
+}
+
+func runtimeReclaiming(r ScopedARNs) []GrantStatement {
+	return []GrantStatement{
 		{
-			Actions: []string{
-				"cloudformation:DeleteChangeSet",
-				"cloudformation:DescribeChangeSet",
-				"cloudformation:ExecuteChangeSet",
-			},
-			Resources: []string{r.runtimeStack, r.runtimeChangeSet},
+			Actions:   []string{"lambda:DeleteLayerVersion"},
+			Resources: slices.Concat(r.runtimeLayers, r.runtimeLayerVersions),
 		},
 	}
 }
@@ -1423,7 +1410,7 @@ func deployGrants(r ScopedARNs, broughtKey string) []GrantStatement {
 }
 
 func bootstrapGrants(r ScopedARNs, broughtKey string) []GrantStatement {
-	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r), bootstrapProvisioning(r), edgePrincipal(r))
+	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r), runtimeReclaiming(r), bootstrapProvisioning(r), edgePrincipal(r))
 }
 
 func refuseUnservedTier(tier environment.Tier) error {

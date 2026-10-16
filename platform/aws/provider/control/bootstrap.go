@@ -7,8 +7,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
@@ -35,10 +37,17 @@ type IAMAPI interface {
 	bootstrap.IAMBoundaryAPI
 }
 
+type LayerAPI interface {
+	bootstrap.LayerAPI
+	bootstrap.LayerTeardownAPI
+}
+
 type Bootstrap struct {
 	CFN          cfn.API
 	SSM          SSMAPI
 	IAM          IAMAPI
+	Layers       LayerAPI
+	Records      bootstrap.RecordStore
 	KMS          bootstrap.KeyAPI
 	Store        bootstrap.ObjectStore
 	Buckets      cfn.BucketEmptierAPI
@@ -58,6 +67,8 @@ func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kind
 		CFN:          cloudformation.NewFromConfig(cfg),
 		SSM:          ssm.NewFromConfig(cfg),
 		IAM:          iam.NewFromConfig(cfg),
+		Layers:       lambda.NewFromConfig(cfg),
+		Records:      bootstrap.DynamoRecords(dynamodb.NewFromConfig(cfg)),
 		KMS:          kms.NewFromConfig(cfg),
 		Store:        s3.NewFromConfig(cfg),
 		Buckets:      s3.NewFromConfig(cfg),
@@ -123,7 +134,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read, b.request(req),
+	groups, err := bootstrap.PlanChanges(ctx, b.CFN, b.Layers, read, b.request(req),
 		bootstrapplan.ChangeGroups(bootstrap.WithDefaultStackNames(b.Namespace, described(req.Tier, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
 		return provider.Plan{}, err
@@ -327,6 +338,8 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		CFN:     b.CFN,
 		SSM:     b.SSM,
 		IAM:     b.IAM,
+		Layers:  b.Layers,
+		Records: b.Records,
 		Buckets: b.Buckets,
 
 		RemoveBastion: b.removeBastion,
@@ -338,7 +351,7 @@ func (b Bootstrap) removeBastion(ctx context.Context, tier environment.Tier) err
 }
 
 func (b Bootstrap) apis() bootstrap.APIs {
-	return bootstrap.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Store: b.Store, Edge: b.Edge, Edges: b.Edges}
+	return bootstrap.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Layers: b.Layers, Store: b.Store, Records: b.Records, Edge: b.Edge, Edges: b.Edges}
 }
 
 var _ provider.Bootstrap = Bootstrap{}

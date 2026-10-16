@@ -58,8 +58,6 @@ type Deployed struct {
 	ImageOptimizerURL string
 	AppBoundaryARN    string
 	Tier              environment.Tier
-	RuntimeLayers     map[string]string
-	RuntimeStack      StackStamp
 	Outputs           map[string]string
 }
 
@@ -71,12 +69,14 @@ type SSMAPI interface {
 }
 
 type APIs struct {
-	CFN   cfn.API
-	SSM   SSMAPI
-	IAM   IAMAPI
-	Store ObjectStore
-	Edge  edge.Edge
-	Edges provider.Edges
+	CFN     cfn.API
+	SSM     SSMAPI
+	IAM     IAMAPI
+	Layers  LayerAPI
+	Store   ObjectStore
+	Records RecordStore
+	Edge    edge.Edge
+	Edges   provider.Edges
 }
 
 type Request struct {
@@ -140,16 +140,12 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 		return Deployed{Present: false, Features: FeatureSet{}}, stackRefs{}, nil
 	}
 
-	d := Deployed{Present: true, Features: FeatureSet{}, RuntimeLayers: map[string]string{}, Outputs: cfn.OutputsOf(core)}
+	d := Deployed{Present: true, Features: FeatureSet{}, Outputs: cfn.OutputsOf(core)}
 	var refs stackRefs
 	if err := absorb(&d, &refs, d.Outputs); err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
 	coreStamp := readStamp(core.Tags)
-
-	if err := readRuntimeLayers(ctx, api, &d, &refs, ns, tier); err != nil {
-		return Deployed{}, stackRefs{}, err
-	}
 
 	stamps := make(map[string]Stamp, len(featureRegistry))
 	for _, f := range featureRegistry {
@@ -209,28 +205,6 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 	return d, refs, nil
 }
 
-func readRuntimeLayers(ctx context.Context, api cfn.StacksAPI, d *Deployed, refs *stackRefs, ns Namespace, tier environment.Tier) error {
-	intended, err := runtimeLayerTemplateAt(ns, tier, d.ArtifactBucket)
-	if err != nil {
-		return err
-	}
-	stackName := ns.runtimeStackName(tier)
-	d.RuntimeStack = StackStamp{Name: stackName, Intended: cfn.TemplateDigest(intended)}
-	stack, err := cfn.DescribeStack(ctx, api, stackName)
-	if err != nil || stack == nil || cfn.Unusable(stack.StackStatus) {
-		return err
-	}
-	out := cfn.OutputsOf(stack)
-	maps.Copy(d.Outputs, out)
-	if err := absorb(d, refs, out); err != nil {
-		return err
-	}
-	stamp := readStamp(stack.Tags)
-	d.RuntimeStack.Present = true
-	d.RuntimeStack.Digest, d.RuntimeStack.WrittenBy = stamp.Digest, stamp.WrittenBy
-	return nil
-}
-
 func broughtVariablesKey(outputs map[string]string) string {
 	if outputs[outputVariablesKeyBrought] != "true" {
 		return ""
@@ -253,7 +227,6 @@ func installedFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, tie
 }
 
 func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
-	layers := runtimeLayerArches()
 	for key, value := range out {
 		switch key {
 		case outputStateBucket:
@@ -284,13 +257,6 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 			d.AppBoundaryARN = value
 		case outputInfraTier:
 			d.Tier = environment.Tier(value)
-		default:
-			if arch, isLayer := layers[key]; isLayer {
-				if d.RuntimeLayers == nil {
-					d.RuntimeLayers = map[string]string{}
-				}
-				d.RuntimeLayers[arch] = value
-			}
 		}
 	}
 	return nil
@@ -408,7 +374,8 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	if err != nil {
 		return err
 	}
-	if err := applyRuntimeLayers(ctx, apis, target, req, deployed.ArtifactBucket, progress); err != nil {
+	progress.Say(runtimeLayerStep)
+	if _, err := EnsureRuntimeLayers(ctx, apis, target.ns, target.tier, RuntimeLayerRequest{ArtifactBucket: deployed.ArtifactBucket, StateTable: deployed.StateTable}, progress); err != nil {
 		return err
 	}
 	steps := stepDeps{ns: target.ns, tier: target.tier, ssm: apis.SSM, iam: apis.IAM, progress: progress}

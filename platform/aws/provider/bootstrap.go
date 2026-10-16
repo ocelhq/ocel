@@ -13,6 +13,7 @@ import (
 func (p *Provider) forget() {
 	p.deployed.forget()
 	p.params.forget()
+	p.layers.forget()
 }
 
 type forgetting struct {

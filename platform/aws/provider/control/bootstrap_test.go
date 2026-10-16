@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -64,6 +66,8 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		CFN:     &teardownCFN{present: map[string]bootstrap.Deployed{stackName: deployed}},
 		SSM:     &teardownSSM{params: stored},
 		IAM:     &teardownIAM{keys: map[string][]string{userName: {"AKIAOLD"}}},
+		Layers:  noLayers{},
+		Records: noRecords,
 		Buckets: &teardownBuckets{},
 		Bastion: bastion.Clients{ECS: &absentBastion{}, IAM: &absentBastion{}, EC2: &absentBastion{}},
 		Edge:    front,
@@ -149,7 +153,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	if len(plan.Groups) != 6 {
 		t.Fatalf("plan = %v, want the core stack, the isr and edge stacks, the runtime, the parameters and the edge", plan.Groups)
 	}
-	for _, group := range plan.Groups[:4] {
+	for _, group := range plan.Groups[:3] {
 		if group.Kind != provider.StackGroupKind || !strings.HasPrefix(group.Name, "aws/") {
 			t.Errorf("group %+v, want a stack named under the vendor that hosts it", group)
 		}
@@ -157,7 +161,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	if got := plan.Groups[0].Name; got != "aws/"+coreStackName {
 		t.Errorf("the core group is %q, want %q", got, "aws/"+coreStackName)
 	}
-	if got, want := plan.Groups[3].Name, "aws/"+defaultNamespace.CoreStackName()+"-runtime"; got != want {
+	if got, want := plan.Groups[3].Name, "aws/"+string(defaultNamespace)+"-runtime"; got != want {
 		t.Errorf("the runtime group is %q, want %q", got, want)
 	}
 	params := plan.Groups[4]
@@ -315,11 +319,13 @@ func TestPlanPassesTheEdgesRefusalOut(t *testing.T) {
 
 func planningBootstrapper(front edge.Edge) Bootstrap {
 	return Bootstrap{
-		CFN:   &teardownCFN{present: map[string]bootstrap.Deployed{}},
-		SSM:   &teardownSSM{params: map[string]string{}},
-		IAM:   &teardownIAM{keys: map[string][]string{}},
-		Edge:  front,
-		Edges: registryOf(front),
+		CFN:     &teardownCFN{present: map[string]bootstrap.Deployed{}},
+		SSM:     &teardownSSM{params: map[string]string{}},
+		IAM:     &teardownIAM{keys: map[string][]string{}},
+		Layers:  noLayers{},
+		Records: noRecords,
+		Edge:    front,
+		Edges:   registryOf(front),
 
 		Namespace: defaultNamespace,
 	}
@@ -622,4 +628,40 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 		t.Errorf("planning described %d stacks on top of the %d the status read cost, want it to plan from the read it was handed",
 			cfn.describes-read, read)
 	}
+}
+
+type emptyRecords struct{}
+
+func noRecords(string) keyvalue.Store { return emptyRecords{} }
+
+func (emptyRecords) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
+	return keyvalue.Entry{}, keyvalue.ErrNotFound
+}
+
+func (emptyRecords) Write(context.Context, keyvalue.Entry) (keyvalue.Revision, error) {
+	return "1", nil
+}
+
+func (emptyRecords) WritePair(context.Context, keyvalue.Entry, keyvalue.Entry) error { return nil }
+
+func (emptyRecords) Remove(context.Context, keyvalue.Key, keyvalue.Revision) error {
+	return keyvalue.ErrNotFound
+}
+
+func (emptyRecords) List(context.Context, keyvalue.Partition, ...string) ([]keyvalue.Entry, error) {
+	return nil, nil
+}
+
+type noLayers struct{}
+
+func (noLayers) ListLayerVersions(context.Context, *lambda.ListLayerVersionsInput, ...func(*lambda.Options)) (*lambda.ListLayerVersionsOutput, error) {
+	return &lambda.ListLayerVersionsOutput{}, nil
+}
+
+func (noLayers) PublishLayerVersion(_ context.Context, in *lambda.PublishLayerVersionInput, _ ...func(*lambda.Options)) (*lambda.PublishLayerVersionOutput, error) {
+	return &lambda.PublishLayerVersionOutput{LayerVersionArn: aws.String("arn:aws:lambda:us-east-1:111122223333:layer:" + aws.ToString(in.LayerName) + ":1"), Version: 1}, nil
+}
+
+func (noLayers) DeleteLayerVersion(context.Context, *lambda.DeleteLayerVersionInput, ...func(*lambda.Options)) (*lambda.DeleteLayerVersionOutput, error) {
+	return &lambda.DeleteLayerVersionOutput{}, nil
 }

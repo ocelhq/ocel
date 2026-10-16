@@ -341,8 +341,8 @@ func TestRunOptimizer(t *testing.T) {
 		if err := runAll(context.Background(), apisOf(stacks, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
 			t.Fatalf("run: %v", err)
 		}
-		if want := 2 + len(featureNames()); stacks.creates != want || stacks.updates != 0 {
-			t.Errorf("installed the bootstrap in %d creates + %d updates, want one create each for core, its runtime and its %d features", stacks.creates, stacks.updates, len(featureNames()))
+		if want := 1 + len(featureNames()); stacks.creates != want || stacks.updates != 0 {
+			t.Errorf("installed the bootstrap in %d creates + %d updates, want one create each for core and its %d features", stacks.creates, stacks.updates, len(featureNames()))
 		}
 		final := stacks.template(optStack(environment.TierProduction))
 		if !strings.Contains(final, "AWS::Lambda::Url") {

@@ -20,6 +20,8 @@ const (
 	PublicListenerPort = 443
 
 	containerFrontSegment = "front"
+
+	RuntimeLayerToPublish = "ocel:runtime-layer-to-publish"
 )
 
 type ContainerFront struct {

@@ -37,7 +37,7 @@ func planned(t *testing.T, stacks cfn.API, tier environment.Tier, req Request) [
 			DigestCurrent: stack.Current(),
 		})
 	}
-	groups, err := PlanChanges(ctx, stacks, read, req, bootstrapplan.ChangeGroups(
+	groups, err := PlanChanges(ctx, stacks, newFakeLayers(), read, req, bootstrapplan.ChangeGroups(
 		WithDefaultStackNames(defaultNamespace, described), Catalogue(),
 		provider.BootstrapRequest{Tier: tier, Features: req.Features, Remove: req.Remove}))
 	if err != nil {
@@ -234,15 +234,15 @@ func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	}
 	gate := gateOf(stacks, min(len(groups), planFanOut))
 
-	plan, err := PlanChanges(ctx, gate, read, everything(), groups)
+	plan, err := PlanChanges(ctx, gate, newFakeLayers(), read, everything(), groups)
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)
 	}
 	if len(plan) != len(groups)+1 {
 		t.Fatalf("the plan has %d groups, want %d: every stack asked for, plus the runtime", len(plan), len(groups)+1)
 	}
-	if last := plan[len(plan)-1]; last.Name != runtimeStack(environment.TierProduction) {
-		t.Errorf("the plan's last group is %s, want the runtime stack %s", last.Name, runtimeStack(environment.TierProduction))
+	if last := plan[len(plan)-1]; last.Kind != runtimeLayerGroupKind {
+		t.Errorf("the plan's last group is %s %s, want the runtime layers", last.Kind, last.Name)
 	}
 	for i, group := range plan[:len(groups)] {
 		if group.Name != groups[i].Name {
@@ -362,7 +362,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	groups, err := PlanRemove(ctx, unlistable{stacks}, read)
+	groups, err := PlanRemove(ctx, unlistable{stacks}, newFakeLayers(), newFakeRecords().in, read)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	groups, err := PlanRemove(ctx, stacks, read)
+	groups, err := PlanRemove(ctx, stacks, newFakeLayers(), newFakeRecords().in, read)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -415,7 +415,7 @@ func TestRemovalPlansNothingWhereNoStackStands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	groups, err := PlanRemove(ctx, newFakeCFN(), read)
+	groups, err := PlanRemove(ctx, newFakeCFN(), newFakeLayers(), newFakeRecords().in, read)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}

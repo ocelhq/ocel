@@ -43,6 +43,10 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	if err != nil {
 		return deploy.Config{}, err
 	}
+	layers, err := p.runtimeLayers(ctx, scope.Tier)
+	if err != nil {
+		return deploy.Config{}, err
+	}
 	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
 	referenced, err := store.ReferenceOwners(ctx, variablestore.Scope{Project: scope.Slug, Tier: scope.Tier})
 	if err != nil {
@@ -81,7 +85,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		AppRolePath:         p.namespace.AppRolePathFor(scope.Tier),
 		VariablesReferenced: referenced,
 
-		RuntimeLayers: deployed.RuntimeLayers,
+		RuntimeLayers: layers,
 
 		ArtifactRoot:      artifactRoot,
 		ArtifactBucket:    deployed.ArtifactBucket,

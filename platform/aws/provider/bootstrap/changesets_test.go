@@ -323,7 +323,6 @@ func TestAPrincipalWhoseShapeChangesStillStopsARepair(t *testing.T) {
 func TestAChangeSetIsNamedAfterTheStackItPlansAgainst(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
 	stacks.fallBehind(isrStack(environment.TierProduction))
-	stacks.fallBehind(runtimeStack(environment.TierProduction))
 
 	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 		t.Fatalf("Run: %v", err)

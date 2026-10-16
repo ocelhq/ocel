@@ -36,6 +36,7 @@ type Provider struct {
 
 	deployed memo[environment.Tier, bootstrap.Reading]
 	params   memo[tierEdge, bootstrap.TierParams]
+	layers   memo[environment.Tier, map[string]string]
 	identity memo[struct{}, *sts.GetCallerIdentityOutput]
 	opened   edges.Opened
 	sts      control.STSAPI

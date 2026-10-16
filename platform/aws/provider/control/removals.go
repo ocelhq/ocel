@@ -17,7 +17,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	stacks, err := bootstrap.PlanRemove(ctx, b.CFN, read)
+	stacks, err := bootstrap.PlanRemove(ctx, b.CFN, b.Layers, b.Records, read)
 	if err != nil {
 		return provider.Plan{}, err
 	}

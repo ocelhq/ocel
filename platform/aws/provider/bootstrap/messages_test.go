@@ -31,10 +31,21 @@ func TestABootstrapRunSaysWhatItWroteAndKeepsWhatItReusedAtDebug(t *testing.T) {
 		"INFO Generated a new Pulumi passphrase",
 		"INFO Minted a new edge reader access key",
 		"INFO Applied stack " + isrStack(environment.TierProduction),
-		"INFO Applied stack " + runtimeStack(environment.TierProduction),
 	} {
 		if !slices.Contains(first.Lines(), want) {
 			t.Errorf("the first bootstrap said %v, want %q", first.Lines(), want)
+		}
+	}
+	for _, architecture := range runtimeArches() {
+		published := "INFO Published the " + architecture + " runtime this Ocel version ships as Lambda layer "
+		saysPublished := func(lines []string) bool {
+			return slices.ContainsFunc(lines, func(line string) bool { return strings.HasPrefix(line, published) })
+		}
+		if !saysPublished(first.Lines()) {
+			t.Errorf("the first bootstrap said %v, want a line starting %q", first.Lines(), published)
+		}
+		if saysPublished(again.Lines()) {
+			t.Errorf("the second bootstrap said %v, and it published no runtime the first had not", again.Lines())
 		}
 	}
 	for _, want := range []string{

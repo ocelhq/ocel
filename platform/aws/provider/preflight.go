@@ -2,10 +2,10 @@ package aws
 
 import (
 	"context"
-	"maps"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -35,7 +35,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := p.nagStaleOriginSecret(ctx, pre); err != nil {
 		return err
 	}
-	if err := p.publishRuntimeLayers(ctx, pre); err != nil {
+	if err := p.resolveRuntimeLayers(ctx, pre); err != nil {
 		return err
 	}
 	return p.stacks.Preflight(ctx, pre)
@@ -80,29 +80,24 @@ func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre provider.Deploy
 	return nil
 }
 
-func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.DeployPreflight) error {
-	if pre.Dry {
-		return nil
-	}
+func (p *Provider) resolveRuntimeLayers(ctx context.Context, pre provider.DeployPreflight) error {
 	tier := pre.Deploy.Tier
 	deployed, err := p.bootstrapped(ctx, tier)
 	if err != nil || !deployed.Present {
 		return err
 	}
-	published, err := bootstrap.EnsureRuntimeLayers(ctx, bootstrap.APIs{
-		CFN:   cloudformation.NewFromConfig(p.aws),
-		Store: s3.NewFromConfig(p.aws),
-	}, p.namespace, tier, bootstrap.RuntimeLayerRequest{
-		ArtifactBucket: deployed.ArtifactBucket,
-		Writer:         pre.WrittenBy,
-	}, pre.Progress)
-	if err != nil {
-		return err
-	}
-	if !maps.Equal(published, deployed.RuntimeLayers) {
-		p.deployed.forget()
-	}
-	return nil
+	p.layers.forget()
+	_, err = p.layers.resolve(tier, func() (map[string]string, error) {
+		if pre.Dry {
+			return bootstrap.ReadRuntimeLayersToPlan(ctx, lambda.NewFromConfig(p.aws), p.namespace, tier)
+		}
+		return bootstrap.EnsureRuntimeLayers(ctx, bootstrap.APIs{
+			Layers:  lambda.NewFromConfig(p.aws),
+			Store:   s3.NewFromConfig(p.aws),
+			Records: bootstrap.DynamoRecords(dynamodb.NewFromConfig(p.aws)),
+		}, p.namespace, tier, bootstrap.RuntimeLayerRequest{ArtifactBucket: deployed.ArtifactBucket, StateTable: deployed.StateTable}, pre.Progress)
+	})
+	return err
 }
 
 func refusePublicBuckets(pre provider.DeployPreflight) error {
