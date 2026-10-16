@@ -16,7 +16,7 @@ func TestAGCPBootstrapsPartsAreTheBaseItemsEachInstalledFeatureAndEachEdgePart(t
 	stacks := []provider.BootstrapStack{
 		{Name: "acme-prod/production", Present: true, DigestCurrent: true},
 		{Name: "acme-prod/production/" + albFeature, Feature: albFeature, Present: true, DigestCurrent: true},
-		{Name: "acme-prod/production/" + networkFeature, Feature: networkFeature},
+		{Name: "acme-prod/production/" + tasksFeature, Feature: tasksFeature},
 		{Name: "cloudflare/ocel-releases-store", Feature: albFeature, Present: true, DigestCurrent: true},
 	}
 

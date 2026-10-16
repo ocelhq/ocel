@@ -46,7 +46,6 @@ import {
   createTimesIn,
   deleteStore,
   listStores,
-  NETWORK_FEATURE,
   simulateMaintenance,
   storeFilter,
   strayStores,
@@ -173,7 +172,7 @@ export function laneFeatures(env: NodeJS.ProcessEnv, emulated: boolean): string[
   if (emulated) {
     return [TASKS_FEATURE];
   }
-  return [NETWORK_FEATURE, TASKS_FEATURE, ...(hasCloudflareZone(env) ? [ALB_FEATURE] : [])];
+  return [TASKS_FEATURE, ...(hasCloudflareZone(env) ? [ALB_FEATURE] : [])];
 }
 
 export function previewBootstrapArgs(

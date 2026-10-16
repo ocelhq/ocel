@@ -190,6 +190,10 @@
       "status": "STATUS_FREE"
     },
     {
+      "resource": "project:shop/shared:production/google_project_iam_custom_role:ocel_parts",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/google_service_account:ocel-ce6fea64cc",
       "status": "STATUS_FREE"
     },
@@ -210,6 +214,10 @@
       ],
       "monthlyFixed": "0.00",
       "monthlyUsage": "0.45"
+    },
+    {
+      "resource": "project:shop/shared:production/google_project_iam_member:roles/compute.networkUser",
+      "status": "STATUS_FREE"
     },
     {
       "resource": "project:shop/shared:production/google_service_account:ocel-2ac8a6fee9",
@@ -511,7 +519,7 @@
   ],
   "coverage": {
     "supported": 14,
-    "free": 15,
+    "free": 17,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",

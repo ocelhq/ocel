@@ -108,6 +108,15 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/google_project_iam_custom_role:ocel_parts",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_project_iam_custom_role",
+      "name": "ocel_parts",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_service_account:ocel-345a57cc3f",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
@@ -127,6 +136,15 @@
         "format": "DOCKER",
         "location": "europe-west1"
       }
+    },
+    {
+      "id": "project:shop/shared:preview/google_project_iam_member:roles/compute.networkUser",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_project_iam_member",
+      "name": "roles/compute.networkUser",
+      "region": "europe-west1",
+      "properties": {}
     },
     {
       "id": "project:shop/shared:preview/google_service_account:ocel-bf6a3118ee",

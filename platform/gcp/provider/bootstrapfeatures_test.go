@@ -136,7 +136,7 @@ func TestAnAlbBootstrapChecksTheComputeAndCertificateManagerPermissionsAndNamesT
 		}
 	}
 	if slices.ContainsFunc(rolesCovering(nil), func(role string) bool {
-		return strings.HasPrefix(role, "roles/compute.") || strings.HasPrefix(role, "roles/certificatemanager.")
+		return role == "roles/compute.loadBalancerAdmin" || strings.HasPrefix(role, "roles/certificatemanager.")
 	}) {
 		t.Errorf("the refusal for a plain bootstrap names %v, and a role for a front nothing provisions is one more than the credential needs", rolesCovering(nil))
 	}

@@ -384,6 +384,8 @@ func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 		return b.makeRole(ctx, role)
 	case KindServiceAccount:
 		return b.makeAccount(ctx, read, target.Name)
+	case KindGrant:
+		return b.bindProjectGrant(ctx, target.Name, true)
 	default:
 		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing provisions a %s", target.Kind)
 	}
@@ -840,6 +842,13 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if err := b.featuresFree(ctx, tier, read.Stamp.Features); err != nil {
 		return provider.Plan{}, err
 	}
+	if err := b.refusePartsInUse(ctx, tier); err != nil {
+		return provider.Plan{}, err
+	}
+	parts, err := b.listPartRemovals(ctx, tier)
+	if err != nil {
+		return provider.Plan{}, err
+	}
 	stack, params := provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,
 		Name:   read.Project + "/" + string(tier),
@@ -877,11 +886,11 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, append([]provider.ChangeGroup{stack, params}, fronts...))}, nil
+	return provider.Plan{Groups: slices.Concat(parts, bootstrapplan.PrefixWithVendor(Vendor, append([]provider.ChangeGroup{stack, params}, fronts...)))}, nil
 }
 
 var removalOrder = []Kind{
-	KindSecret, KindKey, KindKeyRing, KindRole, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
+	KindSecret, KindGrant, KindKey, KindKeyRing, KindRole, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
 }
 
 func removals(read survey) []removal {
@@ -941,6 +950,9 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 	if err := b.featuresFree(ctx, tier, read.Stamp.Features); err != nil {
 		return err
 	}
+	if err := b.refusePartsInUse(ctx, tier); err != nil {
+		return err
+	}
 	if read.Present {
 		leaving := read.Stamp
 		leaving.State = stateRemoving
@@ -949,6 +961,9 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		}
 	}
 	if err := b.tearFeatures(ctx, tier, read.Stamp.Features); err != nil {
+		return err
+	}
+	if err := b.removeParts(ctx, tier, progress); err != nil {
 		return err
 	}
 	if err := b.removeEnvSourceSync(ctx, tier, progress); err != nil {
@@ -1011,6 +1026,8 @@ func (b bootstrap) take(ctx context.Context, read survey, target item) (destroyA
 		return 0, b.takeRepository(ctx, target.Name)
 	case KindServiceAccount:
 		return 0, b.takeAccount(ctx, read.Tier, target.Name)
+	case KindGrant:
+		return 0, b.bindProjectGrant(ctx, target.Name, false)
 	default:
 		return 0, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", target.Kind)
 	}

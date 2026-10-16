@@ -22,6 +22,7 @@ const (
 	KindRole           Kind = "iam:role"
 	KindService        Kind = "run:service"
 	KindSchedule       Kind = "cloudscheduler:job"
+	KindGrant          Kind = "resourcemanager:grant"
 )
 
 const StampObject = "ocel/bootstrap.json"
@@ -58,12 +59,13 @@ var kindNouns = map[Kind]string{
 	KindRepository:     "Artifact Registry repository",
 	KindServiceAccount: "service account",
 	KindRole:           "custom role",
+	KindGrant:          "project grant of",
 }
 
 func (i item) phrase() string { return kindNouns[i.Kind] + " " + i.Name }
 
 func provisioned(kind Kind, emulated bool) bool {
-	return !emulated || (kind != KindRepository && kind != KindRole)
+	return !emulated || (kind != KindRepository && kind != KindRole && kind != KindGrant)
 }
 
 func stackItems(names Names, tier environment.Tier, emulated bool) []item {
@@ -97,12 +99,20 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Note: "the role a deploy credential is granted to create the service accounts its apps run as and to set who may act as them, and no more",
 		},
 		{
+			Kind: KindRole, Name: names.PartsRole(), Shared: true,
+			Note: "the role a deploy credential is granted to add the parts of a bootstrap Google names no condition for, such as a tier's private network, and no more",
+		},
+		{
 			Kind: KindServiceAccount, Name: names.RealtimeAccount(tier),
 			Note: "the identity this tier's realtime gateways run as, which may read this tier's realtime keys and no other secret",
 		},
 		{
 			Kind: KindRepository, Name: names.Repository(tier),
 			Note: "the images this tier runs, and an untagged image lives at least a week",
+		},
+		{
+			Kind: KindGrant, Name: networkUserRole, Shared: true,
+			Note: "lets the Cloud Run service agent attach services to the subnetwork of a tier's private network, which a deploy adds with its first database or kv store and may not grant on",
 		},
 		{
 			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier),

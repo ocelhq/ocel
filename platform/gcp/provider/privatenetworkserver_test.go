@@ -52,6 +52,12 @@ func servingNetworks(t *testing.T) (bootstrap, *networkServer) {
 	return bootstrap{clients: &clients{Names: names, region: "europe-west1", endpoint: served.URL}, fronts: registry}, server
 }
 
+func deployingNetworks(t *testing.T) (*Provider, *networkServer) {
+	t.Helper()
+	b, server := servingNetworks(t)
+	return pushing(t, b.clients.endpoint), server
+}
+
 func (s *networkServer) serve(t *testing.T) http.HandlerFunc {
 	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -61,6 +67,8 @@ func (s *networkServer) serve(t *testing.T) http.HandlerFunc {
 		at := r.URL.Path
 		name := path.Base(at)
 		switch {
+		case r.Method == http.MethodGet && strings.Contains(at, "/projects/acme-prod/services/"):
+			writeBody(w, map[string]any{"name": at, "state": enabledService})
 		case strings.Contains(at, "/instances"):
 			s.databases.serve(w, r)
 		case strings.Contains(at, "/operations/"):

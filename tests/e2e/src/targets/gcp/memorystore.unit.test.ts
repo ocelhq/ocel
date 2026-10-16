@@ -6,7 +6,6 @@ import {
   createTimesIn,
   deleteStore,
   listStores,
-  NETWORK_FEATURE,
   storeFilter,
   storesIn,
   strayStores,
@@ -103,16 +102,6 @@ describe("strayStores", () => {
       { name: "c", project: "customer-shop" },
     ];
     expect(strayStores(stores, ["j-2-kv-node"])).toEqual(["a"]);
-  });
-});
-
-describe("the private network feature", () => {
-  it("is the one the provider installs", async () => {
-    const go = await readFile(
-      path.join(repoRoot, "platform", "gcp", "provider", "bootstrapfeatures.go"),
-      "utf8",
-    );
-    expect(go).toContain(`networkFeature     = "${NETWORK_FEATURE}"`);
   });
 });
 
