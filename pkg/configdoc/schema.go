@@ -187,6 +187,9 @@ func fieldSchema(field jsonField) object {
 			property["enum"] = toAny(field.enum)
 		}
 	}
+	if len(field.examples) > 0 {
+		property["examples"] = toAny(field.examples)
+	}
 	return describedAs(property, field.doc)
 }
 

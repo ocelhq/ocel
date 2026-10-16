@@ -85,6 +85,31 @@ func TestProviderSchemaIncludesTheOptionsAndWhatTheProviderFrontsAndWritesWith(t
 	}
 }
 
+func TestProviderSchemaOffersExamplesWithoutConfiningTheValueToThem(t *testing.T) {
+	type options struct {
+		Region string `json:"region" examples:"us-central1,europe-west1"`
+	}
+	generated, err := ProviderSchema[string, string]("acme", options{}, nil, nil)
+	if err != nil {
+		t.Fatalf("provider schema: %v", err)
+	}
+	var fragment struct {
+		Options struct {
+			Properties map[string]map[string]any `json:"properties"`
+		} `json:"options"`
+	}
+	if err := json.Unmarshal(generated, &fragment); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	region := fragment.Options.Properties["region"]
+	if !reflect.DeepEqual(region["examples"], []any{"us-central1", "europe-west1"}) {
+		t.Errorf("region examples = %v, want the tagged values for an editor to offer", region["examples"])
+	}
+	if region["type"] != "string" || region["enum"] != nil || region["anyOf"] != nil {
+		t.Errorf("region = %v, want any string admitted: a region launched after this schema still deploys", region)
+	}
+}
+
 func TestProviderSchemaRequiresNoOptionTaggedOmitzero(t *testing.T) {
 	type nested struct {
 		Quiet bool `json:"quiet,omitempty"`

@@ -204,6 +204,7 @@ type jsonField struct {
 	name     string
 	doc      string
 	enum     []string
+	examples []string
 	pattern  string
 	minimum  *int
 	secret   string
@@ -220,9 +221,12 @@ func jsonFields(target reflect.Type) []jsonField {
 		if name == "" || name == "-" {
 			continue
 		}
-		var enum []string
+		var enum, examples []string
 		if raw := field.Tag.Get("enum"); raw != "" {
 			enum = strings.Split(raw, ",")
+		}
+		if raw := field.Tag.Get("examples"); raw != "" {
+			examples = strings.Split(raw, ",")
 		}
 		minimum, err := minimumOf(field)
 		if err != nil {
@@ -233,6 +237,7 @@ func jsonFields(target reflect.Type) []jsonField {
 			minimum:  minimum,
 			doc:      field.Tag.Get("doc"),
 			enum:     enum,
+			examples: examples,
 			pattern:  field.Tag.Get("pattern"),
 			secret:   field.Tag.Get("secret"),
 			unless:   field.Tag.Get("unless"),
