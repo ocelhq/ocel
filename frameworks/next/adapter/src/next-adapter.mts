@@ -547,6 +547,7 @@ const adapter = {
       }),
     };
 
+    const revalidateTokenDigest = await readRevalidateTokenDigest(distDir);
     output.writeHosting({
       framework: "next",
       frameworkBuildId: buildId,
@@ -554,6 +555,7 @@ const adapter = {
       routeTable: "next",
       static: deriveNextStatic(outputs.staticFiles.map(servedPathname)),
       needs,
+      ...(revalidateTokenDigest && { revalidateTokenDigest }),
     });
 
     if (images) {
@@ -568,6 +570,16 @@ const adapter = {
     );
   },
 } satisfies NextAdapter;
+
+async function readRevalidateTokenDigest(distDir: string): Promise<string | undefined> {
+  const text = await readFile(join(distDir, "prerender-manifest.json"), "utf8").catch(
+    (err: NodeJS.ErrnoException) => (err.code === "ENOENT" ? null : Promise.reject(err)),
+  );
+  if (text === null) return undefined;
+  const previewModeId: unknown = JSON.parse(text)?.preview?.previewModeId;
+  if (typeof previewModeId !== "string" || previewModeId === "") return undefined;
+  return createHash("sha256").update(previewModeId).digest("hex");
+}
 
 type NodeRoute =
   | AdapterOutput["PAGES"]

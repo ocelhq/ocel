@@ -216,6 +216,29 @@ func TestTheStagedRecordSaysWhetherTheBuildCachesAnyRoute(t *testing.T) {
 	}
 }
 
+func TestTheStagedRecordCarriesTheRevalidateTokenDigestItsBuildStates(t *testing.T) {
+	builtProject(t)
+	const digest = "8f0a88218e0b3a8c717eb9d90e7e0f2e12bddeb3121a11d9cdbae1737c08a384"
+	declaresHosting(t, "web", buildoutput.Hosting{RevalidateTokenDigest: digest})
+	client, provider := deployServed(t)
+	stager := staging(t, provider)
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := stager.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	if staged[0].RevalidateTokenDigest != digest {
+		t.Errorf("the staged record carries revalidate token digest %q, want %q: every gate admits a revalidating HEAD on the digest of the release its host serves", staged[0].RevalidateTokenDigest, digest)
+	}
+}
+
 func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 	builtProject(t)
 	builtEdgeBundle(t, "web", []byte(`{"version":1}`))

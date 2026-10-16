@@ -20,6 +20,7 @@ import {
   edgeCacheHeader,
   readEdgeCacheMode,
 } from "@platform/edge-contract/edge-cache";
+import { hashRevalidateToken } from "@platform/edge-contract/gate";
 import { purgeHeader, purgeHeaderFor } from "@platform/edge-contract/purge";
 import { installCacheHandlers } from "./cache-handlers.mjs";
 import {
@@ -114,6 +115,10 @@ async function boot(): Promise<void> {
     );
   };
 
+  const previewModeId: string | undefined = manifest?.prerender?.preview?.previewModeId;
+  const revalidateTokenDigest = previewModeId
+    ? await hashRevalidateToken(previewModeId)
+    : undefined;
   const { bind, newOriginInvoke } = getNextHost();
   if (!dispatchesAtOrigin(process.env)) {
     await serveInvoke(
@@ -122,6 +127,7 @@ async function boot(): Promise<void> {
         process.env.__NEXT_PRIVATE_ORIGIN = `http://127.0.0.1:${port}`;
       },
       bind,
+      revalidateTokenDigest,
     );
     return;
   }
@@ -130,7 +136,7 @@ async function boot(): Promise<void> {
   process.env.__NEXT_PRIVATE_ORIGIN = localOrigin;
 
   const { newDispatchInvoke } = getNextHost();
-  await serveEntry(await newDispatchInvoke!(localOrigin), bind);
+  await serveEntry(await newDispatchInvoke!(localOrigin), bind, revalidateTokenDigest);
 }
 
 boot().catch((err) => {

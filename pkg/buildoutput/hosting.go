@@ -22,13 +22,14 @@ type NeedDetail struct {
 }
 
 type Hosting struct {
-	Version          int                      `json:"version"`
-	Framework        string                   `json:"framework"`
-	FrameworkBuildID string                   `json:"frameworkBuildId"`
-	RootFunction     string                   `json:"rootFunction"`
-	RouteTable       edge.RouteTableFormat    `json:"routeTable,omitempty"`
-	Static           *edge.Static             `json:"static,omitempty"`
-	Needs            map[edge.Need]NeedDetail `json:"needs"`
+	Version               int                      `json:"version"`
+	Framework             string                   `json:"framework"`
+	FrameworkBuildID      string                   `json:"frameworkBuildId"`
+	RootFunction          string                   `json:"rootFunction"`
+	RouteTable            edge.RouteTableFormat    `json:"routeTable,omitempty"`
+	Static                *edge.Static             `json:"static,omitempty"`
+	Needs                 map[edge.Need]NeedDetail `json:"needs"`
+	RevalidateTokenDigest string                   `json:"revalidateTokenDigest,omitempty"`
 }
 
 func ReadHosting(root, app string) (Hosting, bool, error) {

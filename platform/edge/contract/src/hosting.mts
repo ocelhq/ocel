@@ -27,4 +27,5 @@ export type Hosting = {
   routeTable?: RouteTableFormat;
   static?: Static;
   needs: Partial<Record<Need, NeedDetail>>;
+  revalidateTokenDigest?: string;
 };
