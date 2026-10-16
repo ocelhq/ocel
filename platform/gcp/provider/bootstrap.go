@@ -197,6 +197,7 @@ func (b bootstrap) surveyFor(ctx context.Context, req provider.BootstrapRequest)
 }
 
 func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
+	named, req := splitRemovals(req)
 	read, err := b.surveyFor(ctx, req)
 	if err != nil {
 		return provider.Plan{}, err
@@ -211,7 +212,7 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups := bootstrapplan.ChangeGroups(current, b.Parts(), req)
+	groups := bootstrapplan.ChangeGroups(current, credentialParts(), req)
 	groups[0].Changes = planned(read, stackItems(read.Names, read.Tier, read.Emulated))
 
 	params := provider.ChangeGroup{
@@ -224,7 +225,11 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, append(append(groups, fronts...), params))}, nil
+	removed, err := b.planRemovedParts(ctx, req.Tier, named, req.Force)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	return provider.Plan{Groups: slices.Concat(bootstrapplan.PrefixWithVendor(Vendor, append(append(groups, fronts...), params)), removed)}, nil
 }
 
 func planned(read survey, items []item) []provider.Change {
@@ -257,6 +262,7 @@ func sharedWith(tier environment.Tier) string {
 }
 
 func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+	named, req := splitRemovals(req)
 	read, err := b.surveyFor(ctx, req)
 	if err != nil {
 		return err
@@ -273,12 +279,15 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := b.dropParts(ctx, read, req, progress); err != nil {
 		return err
 	}
+	if err := b.removeNamedParts(ctx, req.Tier, named, req.Force, progress); err != nil {
+		return err
+	}
 
 	written := stamp{
 		State:  stateApplying,
 		Writer: req.WrittenBy.String(),
 		Digest: digestOf(read.Names.Namespace(), items),
-		Parts:  installedParts(b.Parts(), read.Stamp.Parts, req),
+		Parts:  installedParts(credentialParts(), read.Stamp.Parts, req),
 	}
 	generation, err := b.stampWith(ctx, read, written, read.Generation)
 	if err != nil {

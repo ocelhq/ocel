@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -101,5 +102,45 @@ func TestTheFirstDeployThatRevalidatesRecordsTheTagDatabasePart(t *testing.T) {
 	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), environment.TierProduction, tagDatabasePart)
 	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" {
 		t.Errorf("the part record = %+v, %t, %v, want it ready and added by shop", recorded, present, err)
+	}
+}
+
+func tagDatabaseUsers(t *testing.T, p *Provider) []string {
+	t.Helper()
+	ctx := context.Background()
+	b, err := bootstrapGate{p}.openBootstrap(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts, err := b.listDescribedParts(ctx, environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := slices.IndexFunc(parts, func(part provider.BootstrapPart) bool { return part.Name == tagDatabasePart })
+	if at < 0 {
+		t.Fatalf("listDescribedParts() = %+v, want the %s part described", parts, tagDatabasePart)
+	}
+	return parts[at].UsedBy
+}
+
+func TestTheTagDatabaseIsUsedByTheProjectsWhoseLastDeployRevalidated(t *testing.T) {
+	p, _ := deployingNetworks(t)
+	ctx := context.Background()
+	if _, err := p.KeyValues().Write(ctx, keyvalue.Entry{Key: stackrecords.ProjectKey(environment.TierProduction, "shop"), Value: []byte(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := p.PreflightDeploy(ctx, revalidating(true)); err != nil {
+		t.Fatalf("PreflightDeploy() = %v", err)
+	}
+	if got := tagDatabaseUsers(t, p); !slices.Equal(got, []string{"shop"}) {
+		t.Errorf("the tag database is used by %v, want shop, whose deploy revalidates, so removing it is refused while shop needs it", got)
+	}
+
+	if err := p.PreflightDeploy(ctx, revalidating(false)); err != nil {
+		t.Fatalf("PreflightDeploy() = %v", err)
+	}
+	if got := tagDatabaseUsers(t, p); got == nil || len(got) != 0 {
+		t.Errorf("the tag database is used by %#v, want a known empty list once shop deploys a build that revalidates nothing", got)
 	}
 }

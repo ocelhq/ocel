@@ -68,7 +68,7 @@ func (b bootstrap) tasksPart(tier environment.Tier) part {
 		shape:       tasksShape(b.clients.Names, tier, b.clients.region),
 		make:        func(ctx context.Context) error { return b.makeTasks(ctx, tier) },
 		users:       func(ctx context.Context) ([]string, error) { return b.listTaskUsers(ctx, tier) },
-		refuseInUse: func(ctx context.Context) error { return b.refuseTasksInUse(ctx, tier) },
+		refuseInUse: func(ctx context.Context, removal partRemoval) error { return b.refuseTasksInUse(ctx, tier, removal) },
 		remove:      func(ctx context.Context) error { return b.removeTasks(ctx, tier) },
 	}
 }
@@ -137,7 +137,10 @@ func (b bootstrap) listTaskUsers(ctx context.Context, tier environment.Tier) ([]
 	return slices.Compact(users), nil
 }
 
-func (b bootstrap) refuseTasksInUse(ctx context.Context, tier environment.Tier) error {
+func (b bootstrap) refuseTasksInUse(ctx context.Context, tier environment.Tier, removal partRemoval) error {
+	if removal.force {
+		return nil
+	}
 	held, err := b.listTaskHolders(ctx, tier)
 	if err != nil || len(held) == 0 {
 		return err
@@ -147,9 +150,9 @@ func (b bootstrap) refuseTasksInUse(ctx context.Context, tier environment.Tier) 
 		named = append(named, each.named)
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"tier %s still runs %s, and removing its bootstrap deletes the task database their runs are kept in and the account Pub/Sub pushes to their workers as.\n"+
-			"Remove those topics and tasks from their projects and deploy them, or destroy their environments, then remove the %s bootstrap again",
-		tier, strings.Join(named, ", "), tier)
+		"tier %s still runs %s, and removing the %s part deletes the task database their runs are kept in.\n"+
+			"Remove those topics and tasks from their projects and deploy them, or destroy their environments, then run `%s` again",
+		tier, strings.Join(named, ", "), tasksPart, removal.retry)
 }
 
 func (b bootstrap) removeTasks(ctx context.Context, tier environment.Tier) error {

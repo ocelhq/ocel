@@ -77,7 +77,7 @@ func (b bootstrap) albPart(tier environment.Tier) part {
 		shape:       shape,
 		make:        func(ctx context.Context) error { return b.makeALB(ctx, tier) },
 		users:       func(ctx context.Context) ([]string, error) { return b.listALBUsers(ctx, tier) },
-		refuseInUse: func(ctx context.Context) error { return b.refuseALBInUse(ctx, tier) },
+		refuseInUse: func(ctx context.Context, removal partRemoval) error { return b.refuseALBInUse(ctx, tier, removal) },
 		remove:      func(ctx context.Context) error { return b.removeALB(ctx, tier) },
 	}
 }
@@ -111,15 +111,15 @@ func (b bootstrap) listALBBound(ctx context.Context, tier environment.Tier) ([]s
 	return bound(ctx, tier)
 }
 
-func (b bootstrap) refuseALBInUse(ctx context.Context, tier environment.Tier) error {
+func (b bootstrap) refuseALBInUse(ctx context.Context, tier environment.Tier, removal partRemoval) error {
 	bound, err := b.listALBBound(ctx, tier)
 	if err != nil || len(bound) == 0 {
 		return err
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s is still served by the %s load balancer of tier %s, and the load balancer owns the certificate map those hostnames are entries in, "+
-			"which Google will not delete while it contains any.\nRelease them with `ocel domain remove` in the projects that bound them, then remove this bootstrap",
-		strings.Join(bound, ", "), alb.Kind, tier)
+			"which Google will not delete while it contains any.\nRelease them with `ocel domain remove` in the projects that bound them, then run `%s` again",
+		strings.Join(bound, ", "), alb.Kind, tier, removal.retry)
 }
 
 func (b bootstrap) listALBUsers(ctx context.Context, tier environment.Tier) ([]string, error) {

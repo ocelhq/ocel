@@ -23,7 +23,7 @@ var (
 	albShieldedAPIs = slices.Concat(albBaseAPIs, []string{"networksecurity.googleapis.com"})
 )
 
-func (bootstrap) Parts() []provider.Part {
+func credentialParts() []provider.Part {
 	return []provider.Part{{
 		Name: cloudflareOriginPart,
 		Summary: "a global external Application Load Balancer that Cloudflare forwards to and that refuses any client without the certificate the zone presents — " +
@@ -46,7 +46,7 @@ func installedParts(offered []provider.Part, recorded []string, req provider.Boo
 
 func (b bootstrap) fronted(parts []string) []provider.Part {
 	var wanted []provider.Part
-	for _, part := range b.Parts() {
+	for _, part := range credentialParts() {
 		if slices.Contains(parts, part.Name) && len(part.Edges) > 0 {
 			wanted = append(wanted, part)
 		}
@@ -82,7 +82,7 @@ func (b bootstrap) raiseParts(ctx context.Context, req provider.BootstrapRequest
 }
 
 func (b bootstrap) summaryOf(name string) string {
-	for _, part := range b.Parts() {
+	for _, part := range credentialParts() {
 		if part.Name == name {
 			return part.Summary
 		}

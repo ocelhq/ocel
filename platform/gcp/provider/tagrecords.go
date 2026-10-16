@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -66,8 +67,17 @@ func (b bootstrap) tagDatabasePart(tier environment.Tier) part {
 		resources: resources,
 		shape:     tagDatabaseShape(b.clients.Names, tier, b.clients.region),
 		make:      func(ctx context.Context) error { return b.makeTagDatabase(ctx, tier) },
+		users:     func(ctx context.Context) ([]string, error) { return b.listTagDatabaseUsers(ctx, tier) },
 		remove:    func(ctx context.Context) error { return b.removeTagDatabase(ctx, tier) },
 	}
+}
+
+func (b bootstrap) listTagDatabaseUsers(ctx context.Context, tier environment.Tier) ([]string, error) {
+	users, err := stackrecords.ListPartUsers(ctx, b.records, tier)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string{}, users[tagDatabasePart]...), nil
 }
 
 func tagDatabaseShape(names Names, tier environment.Tier, region string) []pricing.Shaped {

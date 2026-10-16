@@ -38,7 +38,7 @@ func TestRemovingATierWhileAnEnvironmentDeclaresATaskIsRefusedNamingIt(t *testin
 		provider.Binding{Type: provider.BindingTask, Name: "task--resize", Properties: map[string]string{stackrecords.PropertyDeclared: "resize"}},
 	)}
 
-	err := b.refuseTasksInUse(context.Background(), environment.TierProduction)
+	err := b.refuseTasksInUse(context.Background(), environment.TierProduction, partRemoval{})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "task resize of project shop environment prod") {
 		t.Fatalf("refuseTasksInUse() while a task is declared = %v, want a refusal naming the task, its project and environment", err)
@@ -57,16 +57,16 @@ func TestRemovingATierIgnoresATopicOnAnotherTier(t *testing.T) {
 	b := bootstrap{clients: grantedIAM().open(t), records: recordingTopics(t, environment.TierPreview,
 		provider.Binding{Type: provider.BindingTopic, Name: "topic--orders", Properties: map[string]string{stackrecords.PropertyDeclared: "orders"}},
 	)}
-	if err := b.refuseTasksInUse(context.Background(), environment.TierProduction); err != nil {
+	if err := b.refuseTasksInUse(context.Background(), environment.TierProduction, partRemoval{}); err != nil {
 		t.Errorf("refuseTasksInUse() with a topic only on another tier = %v, want the part free", err)
 	}
 }
 
-func TestTopicsAndTasksRunOnAPartAndNoLongerOnABootstrapPart(t *testing.T) {
+func TestTopicsAndTasksRunOnAPartADeployAdds(t *testing.T) {
 	t.Parallel()
 
-	if slices.ContainsFunc(bootstrap{}.Parts(), func(f provider.Part) bool { return f.Name == tasksPart }) {
-		t.Errorf("Parts() = %v, want no %q part: the first deploy declaring a topic or a task adds what they run on", bootstrap{}.Parts(), tasksPart)
+	if slices.ContainsFunc(credentialParts(), func(f provider.Part) bool { return f.Name == tasksPart }) {
+		t.Errorf("credentialParts() = %v, want no %q part only the bootstrap credential adds: the first deploy declaring a topic or a task adds what they run on", credentialParts(), tasksPart)
 	}
 	names := Names{namespace: "ocel", project: "acme-prod"}
 	push := item{Kind: KindServiceAccount, Name: names.PushAccount(environment.TierProduction)}

@@ -30,7 +30,7 @@ type part struct {
 	shape       []pricing.Shaped
 	make        func(ctx context.Context) error
 	users       func(ctx context.Context) ([]string, error)
-	refuseInUse func(ctx context.Context) error
+	refuseInUse func(ctx context.Context, removal partRemoval) error
 	remove      func(ctx context.Context) error
 }
 
@@ -43,17 +43,12 @@ func (p part) digest() string {
 	return hex.EncodeToString(sum.Sum(nil))
 }
 
-var deployedParts = []func(bootstrap, environment.Tier) part{
-	bootstrap.networkPart,
-	bootstrap.tasksPart,
-	bootstrap.tagDatabasePart,
-	bootstrap.albPart,
-}
-
 func (b bootstrap) listDeployedParts(tier environment.Tier) []part {
-	parts := make([]part, 0, len(deployedParts))
-	for _, each := range deployedParts {
-		parts = append(parts, each(b, tier))
+	var parts []part
+	for _, each := range removableParts {
+		if each.deployed != nil {
+			parts = append(parts, each.deployed(b, tier))
+		}
 	}
 	return parts
 }
@@ -90,7 +85,7 @@ func (b bootstrap) planPart(ctx context.Context, tier environment.Tier, want par
 	}
 	group := provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,
-		Name:   string(Vendor) + "/" + b.clients.project + "/" + string(tier) + "/" + want.name,
+		Name:   b.partGroupName(tier, want.name),
 		Part:   want.name,
 		Action: provider.ActionCreate,
 		Reason: fmt.Sprintf(reasonPartFirstUse, want.summary),
@@ -167,7 +162,7 @@ func (b bootstrap) refusePartsInUse(ctx context.Context, tier environment.Tier) 
 		if each.refuseInUse == nil {
 			continue
 		}
-		if err := each.refuseInUse(ctx); err != nil {
+		if err := each.refuseInUse(ctx, partRemoval{retry: "ocel bootstrap destroy " + string(tier)}); err != nil {
 			return err
 		}
 	}
@@ -181,18 +176,26 @@ func (b bootstrap) listPartRemovals(ctx context.Context, tier environment.Tier) 
 	}
 	groups := make([]provider.ChangeGroup, 0, len(recorded))
 	for _, each := range recorded {
-		group := provider.ChangeGroup{
-			Kind:   provider.StackGroupKind,
-			Name:   string(Vendor) + "/" + b.clients.project + "/" + string(tier) + "/" + each.name,
-			Part:   each.name,
-			Action: provider.ActionDelete,
-		}
-		for _, resource := range each.resources {
-			group.Changes = append(group.Changes, provider.Change{Kind: resource.Kind, Name: resource.ID, Action: provider.ActionDelete})
-		}
-		groups = append(groups, group)
+		groups = append(groups, b.removalGroup(tier, each))
 	}
 	return groups, nil
+}
+
+func (b bootstrap) partGroupName(tier environment.Tier, name string) string {
+	return string(Vendor) + "/" + b.clients.project + "/" + string(tier) + "/" + name
+}
+
+func (b bootstrap) removalGroup(tier environment.Tier, each part) provider.ChangeGroup {
+	group := provider.ChangeGroup{
+		Kind:   provider.StackGroupKind,
+		Name:   b.partGroupName(tier, each.name),
+		Part:   each.name,
+		Action: provider.ActionDelete,
+	}
+	for _, resource := range each.resources {
+		group.Changes = append(group.Changes, provider.Change{Kind: resource.Kind, Name: resource.ID, Action: provider.ActionDelete})
+	}
+	return group
 }
 
 func (b bootstrap) removeParts(ctx context.Context, tier environment.Tier, progress progress.Log) error {
@@ -201,13 +204,9 @@ func (b bootstrap) removeParts(ctx context.Context, tier environment.Tier, progr
 		return err
 	}
 	for _, each := range slices.Backward(recorded) {
-		if err := each.remove(ctx); err != nil {
-			return fmt.Errorf("remove the %s part of the %s bootstrap: %w", each.name, tier, err)
-		}
-		if err := stackrecords.ForgetBootstrapPart(ctx, b.records, tier, each.name); err != nil {
+		if err := b.removePart(ctx, tier, each, progress); err != nil {
 			return err
 		}
-		ensureProgress(progress).Say("Removed the " + each.name + " part of the " + string(tier) + " bootstrap")
 	}
 	return nil
 }
