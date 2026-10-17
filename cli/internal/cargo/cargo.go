@@ -17,24 +17,16 @@ type Target struct {
 	SrcPath string   `json:"src_path"`
 }
 
-type Package struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	ManifestPath string   `json:"manifest_path"`
-	Targets      []Target `json:"targets"`
-}
-
 type Dependency struct {
-	Pkg string `json:"pkg"`
+	Path string `json:"path"`
 }
 
-type Node struct {
-	ID   string       `json:"id"`
-	Deps []Dependency `json:"deps"`
-}
-
-type Resolve struct {
-	Nodes []Node `json:"nodes"`
+type Package struct {
+	ID           string       `json:"id"`
+	Name         string       `json:"name"`
+	ManifestPath string       `json:"manifest_path"`
+	Targets      []Target     `json:"targets"`
+	Dependencies []Dependency `json:"dependencies"`
 }
 
 type Workspace struct {
@@ -42,7 +34,6 @@ type Workspace struct {
 	MemberIDs []string  `json:"workspace_members"`
 	Root      string    `json:"workspace_root"`
 	Target    string    `json:"target_directory"`
-	Resolve   *Resolve  `json:"resolve"`
 }
 
 func (p Package) Dir() string { return filepath.Dir(p.ManifestPath) }

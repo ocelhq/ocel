@@ -15,7 +15,7 @@ func readRustImports(ctx context.Context, root string, app App) (map[string]Reac
 		root = resolved
 	}
 	dir := filepath.Join(root, filepath.FromSlash(app.Path))
-	workspace, err := cargo.Metadata(ctx, dir, "--offline")
+	workspace, err := cargo.Metadata(ctx, dir, "--offline", "--no-deps")
 	if err != nil {
 		return nil, fmt.Errorf("attribution: app %q: %w", app.Name, err)
 	}
@@ -57,36 +57,28 @@ func reachedDirs(root string, workspace cargo.Workspace, crate cargo.Package) []
 }
 
 func workspaceDependencies(workspace cargo.Workspace, crate cargo.Package) []cargo.Package {
-	if workspace.Resolve == nil {
-		return nil
-	}
-	nodes := make(map[string]cargo.Node, len(workspace.Resolve.Nodes))
-	for _, node := range workspace.Resolve.Nodes {
-		nodes[node.ID] = node
-	}
-	inWorkspace := map[string]bool{}
+	members := map[string]cargo.Package{}
 	for _, member := range workspace.Members() {
-		inWorkspace[member.ID] = true
+		members[member.Dir()] = member
 	}
 
-	var members []cargo.Package
-	seen := map[string]bool{crate.ID: true}
-	queue := []string{crate.ID}
+	var reached []cargo.Package
+	seen := map[string]bool{crate.Dir(): true}
+	queue := []cargo.Package{crate}
 	for len(queue) > 0 {
-		id := queue[0]
+		pkg := queue[0]
 		queue = queue[1:]
-		for _, dep := range nodes[id].Deps {
-			if seen[dep.Pkg] || !inWorkspace[dep.Pkg] {
+		for _, dep := range pkg.Dependencies {
+			member, ok := members[dep.Path]
+			if !ok || seen[dep.Path] {
 				continue
 			}
-			seen[dep.Pkg] = true
-			queue = append(queue, dep.Pkg)
-			if member, ok := workspace.PackageByID(dep.Pkg); ok {
-				members = append(members, member)
-			}
+			seen[dep.Path] = true
+			queue = append(queue, member)
+			reached = append(reached, member)
 		}
 	}
-	return members
+	return reached
 }
 
 func under(dirs []string, file string) bool {
