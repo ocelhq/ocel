@@ -185,7 +185,7 @@ jobs:
           ZONE=${ZONE#\*.}
           echo "OCEL_E2E_ZONE=$ZONE" >> "$GITHUB_ENV"
 
-      - name: Reclaim the records and origin certificates a dead vps run left in the zone
+      - name: Reclaim the records, origin certificates and tunnels a dead vps run left in the zone and its account
         run: pnpm --filter @ocel-tests/e2e sweep:zone --target vps
 
   previews:

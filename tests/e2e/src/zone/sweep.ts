@@ -9,7 +9,10 @@ import {
   type DnsRecord,
   type NameFilter,
   OCEL_RECORD_COMMENT,
+  OCEL_TUNNEL_PREFIX,
   type OriginCertificate,
+  type Tunnel,
+  type TunnelStatus,
   type Zone,
 } from "./cloudflare";
 
@@ -20,6 +23,8 @@ const OCEL_CERTIFICATE_TYPE = "origin-ecc";
 const OCEL_CERTIFICATE_ORGANIZATION = "ocel";
 const ORGANIZATION_ATTRIBUTE = [0x06, 0x03, 0x55, 0x04, 0x0a];
 const STRING_TYPES = [0x0c, 0x13];
+const RUN_WINDOW_MS = 3 * 60 * 60_000;
+const DISCONNECTED: ReadonlySet<TunnelStatus> = new Set(["inactive", "down"]);
 
 type Leftovers = {
   records: { record: DnsRecord; slug: string }[];
@@ -176,6 +181,39 @@ async function reclaim(
   }
 }
 
+function isAbandoned(tunnel: Tunnel, createdBefore: Date): boolean {
+  return (
+    tunnel.name.startsWith(OCEL_TUNNEL_PREFIX) &&
+    tunnel.deleted_at === null &&
+    DISCONNECTED.has(tunnel.status) &&
+    Date.parse(tunnel.created_at) < createdBefore.getTime()
+  );
+}
+
+async function sweepAbandonedTunnels(
+  api: CloudflareApi,
+  zone: Zone,
+  cells: Cell[],
+  now: Date,
+  complaints: string[],
+): Promise<void> {
+  if (!cells.some((cell) => cell.variant.config.tunnel)) {
+    return;
+  }
+  const createdBefore = new Date(now.getTime() - RUN_WINDOW_MS);
+  await despite(complaints, `the tunnels of the account ${zone.accountId}`, async () => {
+    for (const tunnel of await api.listOcelTunnels(zone.accountId, createdBefore)) {
+      if (!isAbandoned(tunnel, createdBefore)) {
+        continue;
+      }
+      await despite(complaints, `the tunnel ${tunnel.name}`, async () => {
+        await api.deleteTunnel(zone.accountId, tunnel.id);
+        process.stdout.write(`deleted the tunnel ${tunnel.name}\n`);
+      });
+    }
+  });
+}
+
 function report(zone: Zone, complaints: string[]): void {
   if (complaints.length > 0) {
     throw new Error(`the ${zone.name} sweep left work behind:\n${complaints.join("\n")}`);
@@ -188,6 +226,7 @@ export async function sweepStaleFromZone(
   cells: Cell[],
   runId: string,
   look: LookRun,
+  now = new Date(),
 ): Promise<void> {
   const parts = new Map<string, Listing>();
   for (const cell of cells) {
@@ -221,6 +260,7 @@ export async function sweepStaleFromZone(
     { records: found.records.filter(dead), certificates: found.certificates.filter(dead) },
     complaints,
   );
+  await sweepAbandonedTunnels(api, zone, cells, now, complaints);
   report(zone, complaints);
 }
 

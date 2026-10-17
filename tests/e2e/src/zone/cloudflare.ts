@@ -2,10 +2,12 @@ import { type HttpIo, LIVE_IO, sendWithRetry } from "../retry";
 
 const API = "https://api.cloudflare.com/client/v4";
 const RECORDS_PER_PAGE = 100;
+const TUNNELS_PER_PAGE = 1000;
 
 export const OCEL_RECORD_COMMENT = "managed by ocel";
+export const OCEL_TUNNEL_PREFIX = "ocel-";
 
-export type Zone = { id: string; name: string };
+export type Zone = { id: string; name: string; accountId: string };
 
 export type DnsRecord = {
   id: string;
@@ -20,6 +22,16 @@ export type OriginCertificate = {
   hostnames: string[];
   request_type: string;
   csr: string;
+};
+
+export type TunnelStatus = "inactive" | "down" | "healthy" | "degraded";
+
+export type Tunnel = {
+  id: string;
+  name: string;
+  created_at: string;
+  deleted_at: string | null;
+  status: TunnelStatus;
 };
 
 export type NameFilter = { exact: string } | { endsWith: string };
@@ -38,7 +50,7 @@ export class CloudflareApi {
     if (!zone || found.length !== 1) {
       throw new Error(`the Cloudflare account ${accountId} has no zone named ${name}`);
     }
-    return { id: zone.id, name: zone.name };
+    return { id: zone.id, name: zone.name, accountId };
   }
 
   listOcelRecords(zoneId: string, name: NameFilter, proxied: boolean): Promise<DnsRecord[]> {
@@ -55,12 +67,25 @@ export class CloudflareApi {
     return this.list<OriginCertificate>("/certificates", { zone_id: zoneId });
   }
 
+  listOcelTunnels(accountId: string, createdBefore: Date): Promise<Tunnel[]> {
+    return this.list<Tunnel>(`/accounts/${accountId}/cfd_tunnel`, {
+      include_prefix: OCEL_TUNNEL_PREFIX,
+      is_deleted: "false",
+      existed_at: createdBefore.toISOString(),
+      per_page: String(TUNNELS_PER_PAGE),
+    });
+  }
+
   deleteRecord(zoneId: string, id: string): Promise<void> {
     return this.delete(`/zones/${zoneId}/dns_records/${id}`);
   }
 
   revokeOriginCertificate(id: string): Promise<void> {
     return this.delete(`/certificates/${id}`);
+  }
+
+  deleteTunnel(accountId: string, id: string): Promise<void> {
+    return this.delete(`/accounts/${accountId}/cfd_tunnel/${id}`);
   }
 
   private send(method: string, path: string): Promise<Response> {
@@ -81,7 +106,9 @@ export class CloudflareApi {
         throw new Error(`GET ${asked} answered ${answered.status}: ${text}`);
       }
       found.push(...body.result);
-      if (body.result.length === 0 || page >= (body.result_info?.total_pages ?? page)) {
+      const pages = body.result_info?.total_pages;
+      const fullPage = body.result.length >= Number(query.per_page);
+      if (body.result.length === 0 || (pages === undefined ? !fullPage : page >= pages)) {
         return found;
       }
     }
