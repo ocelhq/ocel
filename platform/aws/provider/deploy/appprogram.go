@@ -3,6 +3,7 @@ package deploy
 import (
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -395,6 +396,9 @@ func isForwardedPastEdge(spec provider.StackSpec) bool {
 func planBindingPolicies(grants []provider.Binding) ([]bindingPolicy, error) {
 	out := make([]bindingPolicy, 0, len(grants))
 	for _, binding := range grants {
+		if slices.ContainsFunc(out, func(planned bindingPolicy) bool { return planned.Binding == binding.Name }) {
+			continue
+		}
 		policy, err := bindingPolicyDocument(binding.Name, grantMessages(binding.Grants))
 		if err != nil {
 			return nil, err
