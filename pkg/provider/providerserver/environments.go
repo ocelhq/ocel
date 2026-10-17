@@ -196,7 +196,7 @@ func (h *handlers) removePreview(ctx context.Context, req *contractv1.RemoveEnvi
 		return err
 	}
 	if len(removed.RemovedPromotionIDs) > 0 {
-		progress.Say("Reclaimed " + namedList("promotion", "promotions", removed.RemovedPromotionIDs))
+		progress.Say(reclaimedPromotionsLine(removed.RemovedPromotionIDs))
 	}
 	return nil
 }
