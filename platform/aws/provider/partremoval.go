@@ -124,7 +124,18 @@ func (p *Provider) planPartRemoval(ctx context.Context, tier environment.Tier, n
 	if err != nil || !present {
 		return nil, err
 	}
-	return partDeletion(name, "added by "+recorded.AddedBy+" on first use; "+why, recorded.Resources), nil
+	return addedPartDeletion(name, why, recorded), nil
+}
+
+func addedPartDeletion(name, why string, recorded stackrecords.BootstrapPart) *provider.ChangeGroup {
+	by := recorded.AddedBy
+	switch {
+	case recorded.AddedWith != "" && by != "":
+		by = "`" + recorded.AddedWith + "` for " + by
+	case recorded.AddedWith != "":
+		by = "`" + recorded.AddedWith + "`"
+	}
+	return partDeletion(name, "added by "+by+" on first use; "+why, recorded.Resources)
 }
 
 func (p *Provider) planContainersRemoval(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
