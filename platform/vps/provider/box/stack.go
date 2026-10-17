@@ -121,7 +121,7 @@ func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, r
 			"promote %s: the record for %s/%s (container %s) lacks an image (%q) or health path (%q)",
 			promotionID, app, release, record.Physical, record.Image, record.HealthPath)
 	}
-	hasImage, err := s.e.machine.HasImage(ctx, record.Image)
+	hasImage, err := s.e.machine.EnsureImage(ctx, s.state.Slug, app, record.Image)
 	if err != nil {
 		return promotable{}, false, err
 	}

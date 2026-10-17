@@ -182,7 +182,7 @@ func (h *Host) stopRetired(ctx context.Context, rollout Rollout, cut cutover, pr
 	refused := map[string]error{}
 	for _, retiree := range idle {
 		say(progress, "Stopping retired container "+containerOf(retiree))
-		if err := h.StopContainer(ctx, containerOf(retiree)); err != nil {
+		if err := h.RetireContainer(ctx, containerOf(retiree)); err != nil {
 			unstopped = append(unstopped, retiree)
 			refused[retiree] = err
 		}
@@ -842,7 +842,7 @@ func (h *Host) discard(ctx context.Context, rollout Rollout, elevation string) s
 			continue
 		}
 		if app.Run == RunRestarted {
-			if err := h.StopContainer(ctx, app.name()); err != nil {
+			if err := h.RetireContainer(ctx, app.name()); err != nil {
 				fmt.Fprintf(&left, "\n%s left running: %v", app.name(), err)
 				continue
 			}

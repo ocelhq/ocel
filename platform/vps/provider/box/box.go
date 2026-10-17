@@ -22,7 +22,7 @@ const (
 
 type Machine interface {
 	Address(ctx context.Context) (string, error)
-	HasImage(ctx context.Context, imageRef string) (bool, error)
+	EnsureImage(ctx context.Context, project, app, imageRef string) (bool, error)
 	RunContainer(ctx context.Context, spec host.Container) (host.Run, error)
 	ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error
 	Promote(ctx context.Context, tier environment.Tier, project, app, imageRef string) error

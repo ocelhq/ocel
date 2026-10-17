@@ -243,6 +243,8 @@ func (b *bench) rendered(command string) session.Result {
 		return session.Result{}
 	case strings.HasPrefix(command, ownersCommand):
 		return session.Result{}
+	case strings.Contains(command, quoted(releaseSelectors())):
+		return session.Result{Stdout: "shop web " + appImage + "\n"}
 	case strings.HasPrefix(command, "cat ") && !strings.HasPrefix(command, "cat | "):
 		for _, items := range b.installed {
 			for _, item := range items {

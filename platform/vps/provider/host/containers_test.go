@@ -495,3 +495,39 @@ func TestReadContainerLogsRefusesAnyOtherDockerFailure(t *testing.T) {
 		t.Errorf("ReadContainerLogs() error = %v, want a failure that is not ErrContainerMissing", err)
 	}
 }
+
+func TestARetiredContainersImageIsArchivedBeforeTheContainerStops(t *testing.T) {
+	rig := machine(nil)
+
+	if err := rig.host().RetireContainer(context.Background(), physical); err != nil {
+		t.Fatalf("RetireContainer() = %v", err)
+	}
+
+	archived := rig.at(quoted(releasesHelper) + " " + quoted("shop/web") + " " + quoted("archive") + " " + quoted(appImage))
+	stopped := rig.at("docker stop ")
+	if archived < 0 {
+		t.Fatalf("the retiree's image was never archived, so a nightly prune of stopped containers and unused images leaves `ocel rollback` nothing to start:\n%s", strings.Join(rig.commands(), "\n"))
+	}
+	if stopped < archived {
+		t.Errorf("the container stopped before its image was archived, so a prune between the two takes the only copy:\n%s", strings.Join(rig.commands(), "\n"))
+	}
+}
+
+func TestARetiredContainerWhoseImageCouldNotBeArchivedIsLeftRunning(t *testing.T) {
+	rig := machine(nil)
+	rig.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, quoted(releasesHelper)) {
+			return session.Result{Code: 1, Stderr: "write /var/lib/ocel/releases/.staging.7.tar: no space left on device"}, true
+		}
+		return session.Result{}, false
+	}
+
+	err := rig.host().RetireContainer(context.Background(), physical)
+
+	if err == nil || !strings.Contains(err.Error(), "no space left on device") {
+		t.Errorf("RetireContainer() = %v, want the reason the archive failed", err)
+	}
+	if rig.at("docker stop ") >= 0 {
+		t.Error("the container was stopped with no archive of its image, and a running container is what keeps its image from a prune")
+	}
+}

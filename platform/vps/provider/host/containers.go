@@ -348,9 +348,30 @@ func (h *Host) TakeDown(ctx context.Context, tier environment.Tier, name string)
 	return err
 }
 
-func (h *Host) StopContainer(ctx context.Context, name string) error {
+func releaseSelectors() string {
+	return LabelSelector(LabelProject) + " " + LabelSelector(LabelApp) + " " + LabelSelector(LabelRef)
+}
+
+func releaseCommand(name string) string {
+	return "docker inspect --type container --format " + quoted(releaseSelectors()) + " " + quoted(name)
+}
+
+func (h *Host) RetireContainer(ctx context.Context, name string) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
+		return err
+	}
+	said, err := h.ran(ctx, "read which release "+name+" runs", releaseCommand(name), nil, elevation)
+	if err != nil {
+		return err
+	}
+	release := strings.Fields(said)
+	if len(release) != 3 {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s lacks the %s, %s or %s label every app container carries, so its image cannot be archived for a rollback: %q",
+			name, LabelProject, LabelApp, LabelRef, strings.TrimSpace(said))
+	}
+	if err := h.archive(ctx, release[0], release[1], release[2]); err != nil {
 		return err
 	}
 	_, err = h.ran(ctx, "stop "+name, boundedStep(dockerStepSeconds, "docker stop of "+name, "docker stop "+quoted(name)+" >/dev/null"), nil, elevation)
