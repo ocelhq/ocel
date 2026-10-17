@@ -3,10 +3,12 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readDocsOrigin } from "./docs-origin.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const VERSION = readFileSync(join(root, "VERSION"), "utf8").trim();
+const DOCS_ORIGIN = readDocsOrigin(root);
 
 const SCHEMA_OUT = join(root, "www", "public", "schema", "ocel.schema.json");
 const TYPES_OUT = join(root, "packages", "ocel", "src", "generated", "config.ts");
@@ -15,11 +17,11 @@ const read = (path) => JSON.parse(readFileSync(path, "utf8"));
 
 const MESSAGE_SCHEMAS_OUT = join(root, "www", "public", "schema", VERSION, "cli");
 const EMBEDDED_SCHEMAS_OUT = join(root, "cli", "internal", "outputschema", "schemas");
-const MESSAGE_SCHEMA_ORIGIN = `https://ocel.dev/schema/${VERSION}/cli`;
+const MESSAGE_SCHEMA_ORIGIN = `${DOCS_ORIGIN}/schema/${VERSION}/cli`;
 const BUNDLE_SUFFIX = ".jsonschema.bundle.json";
 const DEFINITION_SUFFIX = ".jsonschema.json";
 
-const SCHEMA_URL = "https://ocel.dev/schema/ocel.schema.json";
+const SCHEMA_URL = `${DOCS_ORIGIN}/schema/ocel.schema.json`;
 
 const SELECTORS_OUT = join(root, "pkg", "configdoc", "selectors.json");
 
