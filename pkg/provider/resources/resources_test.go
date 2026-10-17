@@ -139,6 +139,27 @@ func TestHookStacksFanEachResourceOutToItsPrimitive(t *testing.T) {
 	}
 }
 
+func TestHookStacksProvisionNothingForAResourceOcelJSONBindsToAPublishedRecord(t *testing.T) {
+	t.Parallel()
+
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), neon{&buckets{}}.hooks())
+
+	result, err := stacks.Provision(context.Background(), provider.StackSpec{
+		Ref:  infraRef(),
+		Kind: provider.StackInfra,
+		Resources: []provider.Resource{
+			{Name: "orders", Type: provider.BindingPostgres, Binding: "orders"},
+			{Name: "uploads", Type: provider.BindingBucket},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(result.Bindings) != 1 || result.Bindings[0].Name != "uploads" {
+		t.Fatalf("Provision() returned %v, want only the uploads bucket: a publisher runs the orders database ocel.json binds", result.Bindings)
+	}
+}
+
 func TestHookStacksRefuseAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
@@ -224,9 +245,57 @@ func TestHookStacksRemoveAResourceTheSpecNoLongerDeclares(t *testing.T) {
 	saysRemoving(t, progress, "bucket exports")
 }
 
+func TestHookStacksRemoveAResourceTheyProvisionedOnceOcelJSONBindsItToAPublishedRecord(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	own := &buckets{}
+	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	ref := infraRef()
+
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+		Kind:     provider.StackInfra,
+		Bindings: []provider.Binding{{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{provider.PropertyBucket: "shop-uploads"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	spec := provider.StackSpec{
+		Ref:       ref,
+		Kind:      provider.StackInfra,
+		Resources: []provider.Resource{{Name: "uploads", Type: provider.BindingBucket, Binding: "uploads"}},
+	}
+
+	plan, err := stacks.Plan(ctx, spec, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if action := rowsOf(plan)["uploads"]; action != provider.ActionDelete {
+		t.Errorf("uploads reads %q, want it deleted: the release that follows takes down the bucket a publisher now runs in its place", action)
+	}
+
+	progress := &fake.Log{}
+	result, err := stacks.Provision(ctx, spec, progress)
+	if err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(result.Bindings) != 0 {
+		t.Errorf("Provision() returned %v, want nothing: a publisher runs the bucket ocel.json binds", result.Bindings)
+	}
+	if len(own.removed) != 1 || own.removed[0].Name != "uploads" {
+		t.Fatalf("the fan-out removed %v, want the uploads bucket it provisioned, which no record would own once this release drops it", own.removed)
+	}
+	saysRemovingBecause(t, progress, "bucket uploads", "ocel.json binds it to a published record")
+}
+
 func saysRemoving(t *testing.T, progress *fake.Log, what string) {
 	t.Helper()
-	want := "INFO Removing " + what + ": this release no longer declares it"
+	saysRemovingBecause(t, progress, what, "this release no longer declares it")
+}
+
+func saysRemovingBecause(t *testing.T, progress *fake.Log, what, because string) {
+	t.Helper()
+	want := "INFO Removing " + what + ": " + because
 	if lines := progress.Lines(); !slices.Contains(lines, want) {
 		t.Errorf("the fan-out said %q, want %q: a sentence is said rather than shown as tool output, and names what kind of thing goes", lines, want)
 	}
@@ -303,6 +372,29 @@ func TestPlanOverAStackNothingRecordedCreatesEveryResourceItDeclares(t *testing.
 		if rows[name] != provider.ActionCreate {
 			t.Errorf("%s reads %q, want it created: nothing is recorded yet", name, rows[name])
 		}
+	}
+}
+
+func TestPlanShowsNothingProvisionedForAResourceOcelJSONBindsToAPublishedRecord(t *testing.T) {
+	t.Parallel()
+
+	plan, err := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), neon{&buckets{}}.hooks()).Plan(context.Background(), provider.StackSpec{
+		Ref:  infraRef(),
+		Kind: provider.StackInfra,
+		Resources: []provider.Resource{
+			{Name: "orders", Type: provider.BindingPostgres, Binding: "orders"},
+			{Name: "uploads", Type: provider.BindingBucket},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	rows := rowsOf(plan)
+	if action, shown := rows["orders"]; shown {
+		t.Errorf("orders reads %q, want no row: a publisher runs the database ocel.json binds, so this release provisions nothing for it", action)
+	}
+	if rows["uploads"] != provider.ActionCreate {
+		t.Errorf("uploads reads %q, want it created", rows["uploads"])
 	}
 }
 

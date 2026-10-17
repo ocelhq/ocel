@@ -13,6 +13,7 @@ const (
 	containerKind = "app container"
 
 	reasonUndeclared = "this release no longer declares it"
+	reasonBound      = "ocel.json binds it to a published record"
 )
 
 func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec provider.StackSpec, deployed provider.StackResult) (provider.Plan, error) {
@@ -32,6 +33,9 @@ func synthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec pro
 	changes = append(changes, images...)
 	changes = append(changes, uploads...)
 	for _, resource := range spec.Resources {
+		if resource.Binding != "" {
+			continue
+		}
 		changes = append(changes, provider.Change{
 			Kind:   string(resource.Type),
 			Name:   resource.Name,
@@ -55,10 +59,11 @@ func synthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec pro
 		})
 	}
 	for _, binding := range deployed.Bindings {
-		if slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool { return BindingFor(resource)(binding) }) {
+		reason, going := findRemovalReason(spec.Resources, binding)
+		if !going {
 			continue
 		}
-		changes = append(changes, provider.Change{Kind: string(binding.Type), Name: binding.Name, Action: provider.ActionDelete, Reason: reasonUndeclared})
+		changes = append(changes, provider.Change{Kind: string(binding.Type), Name: binding.Name, Action: provider.ActionDelete, Reason: reason})
 	}
 	for _, function := range deployed.Functions {
 		if slices.Contains(declared, function.Name) {
@@ -142,6 +147,18 @@ func declaredWorkers(app *provider.AppSpec) []string {
 func BindingFor(resource provider.Resource) func(provider.Binding) bool {
 	return func(binding provider.Binding) bool {
 		return binding.Name == resource.Name && binding.Type == resource.Type
+	}
+}
+
+func findRemovalReason(declared []provider.Resource, binding provider.Binding) (string, bool) {
+	at := slices.IndexFunc(declared, func(resource provider.Resource) bool { return BindingFor(resource)(binding) })
+	switch {
+	case at < 0:
+		return reasonUndeclared, true
+	case declared[at].Binding != "":
+		return reasonBound, true
+	default:
+		return "", false
 	}
 }
 
