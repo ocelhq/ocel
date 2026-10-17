@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -23,7 +22,22 @@ const warmPayload = `{"ocel":{"warm":1}}`
 
 const warmConcurrency = 4
 
-const warmPassDeadline = 3 * time.Minute
+const warmBundleDeadline = 3 * time.Minute
+
+var warmSlots = make(chan struct{}, warmConcurrency)
+
+func takeSlot(ctx context.Context, slots chan struct{}) (func(), error) {
+	select {
+	case slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		<-slots
+		return nil, err
+	}
+	return func() { <-slots }, nil
+}
 
 type InvokeAPI interface {
 	Invoke(ctx context.Context, in *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error)
@@ -54,10 +68,10 @@ func warmTargets(manifest *contractv1.Manifest, bytecode map[string]*bytecodeCon
 }
 
 type warmPass struct {
-	invoker  InvokeAPI
-	targets  []warmTarget
-	budget   time.Duration
-	progress progress.Log
+	invoker        InvokeAPI
+	targets        []warmTarget
+	bundleDeadline time.Duration
+	progress       progress.Log
 }
 
 func (p warmPass) run(ctx context.Context) []warmResult {
@@ -66,9 +80,6 @@ func (p warmPass) run(ctx context.Context) []warmResult {
 	}
 	p.progress.Say(fmt.Sprintf("Warming %s, %d at a time", plural(len(p.targets), "bundle", "bundles"), warmConcurrency))
 
-	ctx, cancel := context.WithTimeout(ctx, p.budget)
-	defer cancel()
-
 	start := time.Now()
 	var (
 		mu      sync.Mutex
@@ -76,16 +87,19 @@ func (p warmPass) run(ctx context.Context) []warmResult {
 		skipped = make([]bool, len(p.targets))
 		replies = make([]warmReply, len(p.targets))
 	)
-	var g errgroup.Group
-	g.SetLimit(warmConcurrency)
+	var group sync.WaitGroup
 	for i, target := range p.targets {
-		g.Go(func() error {
-			if ctx.Err() != nil {
+		group.Go(func() {
+			release, err := takeSlot(ctx, warmSlots)
+			if err != nil {
 				skipped[i] = true
-				return nil
+				return
 			}
+			defer release()
+			warming, cancel := context.WithTimeout(ctx, p.bundleDeadline)
+			defer cancel()
 			at := time.Now()
-			outcome, reply, ok := p.warmOne(ctx, target)
+			outcome, reply, ok := p.warmOne(warming, target)
 			replies[i] = reply
 			mu.Lock()
 			defer mu.Unlock()
@@ -93,15 +107,14 @@ func (p warmPass) run(ctx context.Context) []warmResult {
 				warmed++
 			}
 			bundleOutcome(p.progress, ok)(fmt.Sprintf("%s of app %s: %s in %.1fs", target.LogicalName, target.App, outcome, time.Since(at).Seconds()))
-			return nil
 		})
 	}
-	_ = g.Wait()
+	group.Wait()
 
 	var results []warmResult
 	for i, target := range p.targets {
 		if skipped[i] {
-			p.progress.Warn(fmt.Sprintf("%s of app %s: the warm pass ran out of time; not warmed", target.LogicalName, target.App))
+			p.progress.Warn(fmt.Sprintf("%s of app %s: the deploy stopped before its turn to warm; not warmed", target.LogicalName, target.App))
 			continue
 		}
 		results = append(results, warmResult{Target: target, Reply: replies[i]})
