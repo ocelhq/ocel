@@ -47,6 +47,8 @@ type Spec struct {
 	Table     string
 	TableARN  string
 	Key       string
+
+	UpdatesTrust bool
 }
 
 type Names struct {

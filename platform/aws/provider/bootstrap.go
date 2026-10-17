@@ -89,7 +89,7 @@ func (s forgetting) repair(ctx context.Context, tier environment.Tier, progress 
 
 func (p *Provider) repairParts(ctx context.Context, tier environment.Tier) ([]string, error) {
 	var works []stackrecords.PartWork
-	sync, keyed, err := p.envSourceSyncWork(ctx, tier, "")
+	sync, keyed, err := p.envSourceSyncWork(ctx, tier, "", true)
 	if err != nil {
 		return nil, err
 	}

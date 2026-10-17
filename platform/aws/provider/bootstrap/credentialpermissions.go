@@ -116,6 +116,7 @@ type ScopedARNs struct {
 	runtimeLayerVersions []string
 	bootstrapRoles       []string
 	appRoles             string
+	partRoles            []string
 	bastionRole          string
 	bootstrapFunction    string
 	bootstrapLogGroups   []string
@@ -145,6 +146,10 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		appBoundaryPolicy: policyARN(n.AppBoundaryNameFor(tier)),
 		bootstrapRoles:    []string{"arn:aws:iam::*:role" + n.bootstrapRolePathFor(tier) + "*", "arn:aws:iam::*:role/" + n.EdgeInvokeRoleName(tier)},
 		appRoles:          "arn:aws:iam::*:role" + n.AppRolePathFor(tier) + "*",
+		partRoles: []string{
+			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + envsourcesync.NamesFor(string(n), tier).Role,
+			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + envsourcesync.NamesFor(string(n), tier).ScheduleRole,
+		},
 		bastionRole:       "arn:aws:iam::*:role/" + bastion.NameFor(tier),
 		bootstrapFunction: "arn:aws:lambda:*:*:function:" + n.CoreStackName() + "*",
 		envSyncFunction:   "arn:aws:lambda:*:*:function:" + envsourcesync.NamesFor(string(n), tier).Function,
@@ -1201,6 +1206,11 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 			Actions:   []string{"iam:DeleteRolePermissionsBoundary"},
 			Resources: []string{appRoleARN},
 			Condition: r.taggedByOcelForItsTier(),
+		},
+		{
+			Actions:   []string{"iam:UpdateAssumeRolePolicy"},
+			Resources: r.partRoles,
+			Condition: mergeConditions(r.taggedByOcelForItsTier(), r.withinAppBoundary()),
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
