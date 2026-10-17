@@ -43,28 +43,8 @@ type promotable struct {
 }
 
 func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []promotable, progress progress.Log) error {
-	claims, err := s.listPreviewClaims(ctx, move.Pointer, move.Hosts)
-	if err != nil {
-		return router.Unserved{Err: err}
-	}
-	if len(claims) > 0 || len(ready) > 0 {
-		if err := s.putRecordedGate(ctx); err != nil {
-			return router.Unserved{Err: err}
-		}
-	}
-	if err := s.claim(ctx, claims); err != nil {
-		return router.Unserved{Err: err}
-	}
-	if len(claims) > 0 {
-		if err := s.disclaimUnnamed(ctx, move.Pointer, claims); err != nil {
-			return router.Unserved{Err: err}
-		}
-	}
 	apps := make([]host.AppRollout, 0, len(ready))
 	for _, release := range ready {
-		if err := s.rerun(ctx, release, progress); err != nil {
-			return router.Unserved{Err: err}
-		}
 		apps = append(apps, host.AppRollout{
 			RouteKey:             release.key,
 			Target:               release.record.Physical + ":" + containerimage.PortText,
@@ -72,12 +52,60 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 			HealthPathDiscovered: release.record.HealthPathDiscovered,
 		})
 	}
-	return s.e.machine.RollOut(ctx, host.Rollout{
+	claims, err := s.listPreviewClaims(ctx, move.Pointer, move.Hosts)
+	if err != nil {
+		return s.refuse(ctx, move, apps, nil, err)
+	}
+	if len(claims) > 0 || len(ready) > 0 {
+		if err := s.putRecordedGate(ctx); err != nil {
+			return s.refuse(ctx, move, apps, nil, err)
+		}
+	}
+	added, err := s.claimPreview(ctx, claims)
+	if err != nil {
+		return s.refuse(ctx, move, apps, added, err)
+	}
+	for _, release := range ready {
+		if err := s.rerun(ctx, release, progress); err != nil {
+			return s.refuse(ctx, move, apps, added, err)
+		}
+	}
+	err = s.e.machine.RollOut(ctx, host.Rollout{
 		Apps:          apps,
 		DeployTimeout: host.DeployWindow,
 		DrainTimeout:  host.DrainWindow,
 		StillActive:   move.RefuseInactive,
 	}, progress)
+	if unserved := (router.Unserved{}); errors.As(err, &unserved) {
+		return s.refuse(ctx, move, nil, added, err)
+	}
+	if err != nil {
+		return err
+	}
+	return s.recordServed(ctx, move, claims, ready)
+}
+
+func (s *stack) refuse(ctx context.Context, move router.PointerMove, stood []host.AppRollout, added []host.HostClaim, why error) error {
+	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), host.UnwindWindow)
+	defer stop()
+	if len(stood) > 0 {
+		why = fmt.Errorf("%w%s", why, s.e.machine.Discard(ctx, host.Rollout{Apps: stood}))
+	}
+	return router.Unserved{Err: errors.Join(why, s.disclaimAdded(ctx, move, added))}
+}
+
+func (s *stack) recordServed(ctx context.Context, move router.PointerMove, claims []host.HostClaim, ready []promotable) error {
+	var errs []error
+	if len(claims) > 0 {
+		errs = append(errs, s.disclaimUnnamed(ctx, move.Pointer, claims))
+	}
+	for _, release := range ready {
+		errs = append(errs, s.e.machine.Promote(ctx, s.state.Tier, s.state.Slug, release.app, release.record.Image))
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("promotion %s serves on this box, but the box did not record all of it: %w", move.Promotion.PromotionID, err)
+	}
+	return nil
 }
 
 func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, record router.ReleaseRecord) (promotable, bool, error) {
@@ -119,13 +147,10 @@ func (s *stack) rerun(ctx context.Context, release promotable, progress progress
 	if progress != nil {
 		progress.Say("Starting " + release.app + "'s container " + record.Physical + " again")
 	}
-	if err := s.e.machine.RunContainer(ctx, host.Container{
+	return s.e.machine.RunContainer(ctx, host.Container{
 		Name: record.Physical, Project: s.state.Slug, App: release.app, Image: record.Image, Tier: s.state.Tier,
 		HealthPath: record.HealthPath, Declared: declaredBy(record),
-	}); err != nil {
-		return err
-	}
-	return s.e.machine.Promote(ctx, s.state.Tier, s.state.Slug, release.app, record.Image)
+	})
 }
 
 func (s *stack) listPreviewClaims(ctx context.Context, pointer string, hosts []edge.PreviewHost) ([]host.HostClaim, error) {
@@ -160,6 +185,41 @@ func formatPreviewStoreHostname(hosts []edge.PreviewHost) (string, error) {
 			"the preview hostname %s ends in no %d-character token to name its store after", first.Hostname, edge.PreviewTailLen)
 	}
 	return tail + "-" + switchboard.StoreLabel + "." + base, nil
+}
+
+func (s *stack) claimPreview(ctx context.Context, claims []host.HostClaim) ([]host.HostClaim, error) {
+	if len(claims) == 0 {
+		return nil, nil
+	}
+	current, err := s.e.machine.Claims(ctx)
+	if err != nil {
+		return nil, err
+	}
+	added := slices.DeleteFunc(slices.Clone(claims), func(claim host.HostClaim) bool { return slices.Contains(current, claim) })
+	return added, s.claim(ctx, claims)
+}
+
+func (s *stack) disclaimAdded(ctx context.Context, move router.PointerMove, added []host.HostClaim) error {
+	if len(added) == 0 {
+		return nil
+	}
+	hostnames := make([]string, 0, len(added))
+	for _, claim := range added {
+		hostnames = append(hostnames, claim.Hostname)
+	}
+	if err := move.RefuseInactive(ctx); err != nil {
+		return fmt.Errorf("%s left claimed: %w", strings.Join(hostnames, ", "), err)
+	}
+	var errs []error
+	for _, claim := range added {
+		if err := s.e.machine.DisclaimHost(ctx, claim.Hostname, s.surface()); err != nil {
+			errs = append(errs, fmt.Errorf("%s left claimed: %w", claim.Hostname, err))
+		}
+	}
+	if err := s.applyOrigins(ctx); err != nil {
+		errs = append(errs, s.released(strings.Join(hostnames, ", "), err))
+	}
+	return errors.Join(errs...)
 }
 
 func (s *stack) disclaimUnnamed(ctx context.Context, pointer string, claims []host.HostClaim) error {
