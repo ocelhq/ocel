@@ -911,7 +911,7 @@ export default {
   provider: { fake: {} },
   apps: [
     { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { production: "acme.com" } },
-    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "node" } } },
+    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "node" } }, domains: { production: "admin.acme.com" } },
   ],
 };
 `)
@@ -928,8 +928,8 @@ export default {
 		if len(manifest.GetApps()) != 2 {
 			t.Fatalf("the manifest carries %d apps, want exactly 2", len(manifest.GetApps()))
 		}
-		if hostnames := productionHostnames(manifestApp(t, manifest, "admin")); len(hostnames) != 0 {
-			t.Errorf("admin serves %v, want no domain of its own", hostnames)
+		if hostnames := productionHostnames(manifestApp(t, manifest, "admin")); !slices.Equal(hostnames, []string{"admin.acme.com"}) {
+			t.Errorf("admin serves %v, want its own production domain", hostnames)
 		}
 		if hostnames := productionHostnames(manifestApp(t, manifest, "web")); !slices.Equal(hostnames, []string{"acme.com"}) {
 			t.Errorf("web serves %v, want its own production domain", hostnames)
@@ -977,7 +977,7 @@ func twoAppProject(t *testing.T) (Dependencies, clitest.FakeProject) {
 	useJSONFormat(t, &dependencies)
 	fixture := setUpDeployProject(t)
 	writeAppsConfig(t, fixture.Root, `
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { production: "web.acme.com" } },
     { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
   `)
 	writeAppSource(t, fixture.Root, "web", "api")
@@ -1518,7 +1518,7 @@ func writeSharedResourceMonorepo(t *testing.T, root string) {
 	clitest.WriteUsageMonorepo(t, root)
 	writeAppsConfig(t, root, `
     { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { production: "web.acme.com" } },
   `)
 	clitest.WriteFile(t, filepath.Join(root, "shared", "files.ts"), `
 import { declareBucket } from "./declare.js";
@@ -1699,7 +1699,7 @@ func TestADeployRevealsSecretsOnlyForTheAppsWhoseBuildReadsThem(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), "{}\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "jobs", "Cargo.toml"), "[package]\nname = \"jobs\"\nversion = \"0.1.0\"\n\n[workspace]\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "jobs", "src", "main.rs"), "fn main() {}\n")
-	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", compute: { serverless: { framework: "next" } } }, { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }, { name: "jobs", path: "apps/jobs", compute: { serverless: { framework: "rust" } } }`)
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", compute: { serverless: { framework: "next" } }, domains: { production: "web.acme.com" } }, { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }, { name: "jobs", path: "apps/jobs", compute: { serverless: { framework: "rust" } }, domains: { production: "jobs.acme.com" } }`)
 	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
 	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
 
@@ -1748,7 +1748,7 @@ func TestADeployWarnsOfTheValuesAnImageBuildGetsNoneOfAndHandsItTheSensitiveAndS
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "web", "package.json"), "{}\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "web", "next.config.mjs"), "export default {}\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), "{}\n")
-	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", compute: "container" }, { name: "api", path: "apps/api", compute: "container" }`)
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", compute: "container", domains: { production: "web.acme.com" } }, { name: "api", path: "apps/api", compute: "container" }`)
 	envSet(t, fixture, "PAGE_ID", "page-123", envOptions{})
 	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
 	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})

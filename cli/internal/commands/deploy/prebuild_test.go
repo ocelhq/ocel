@@ -440,7 +440,7 @@ func TestADeployWarnsOnceThatNpmRunsAPrebuildScriptPerAppWhenAPreBuildIsSet(t *t
 	clitest.WriteFile(t, filepath.Join(root, "apps", "worker", "package.json"), `{"scripts":{"prebuild":"drizzle-kit migrate"}}`)
 	writeConfig(t, root, `  apps: [
     { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
-    { name: "worker", path: "apps/worker", compute: { serverless: { framework: "node" } } },
+    { name: "worker", path: "apps/worker", compute: { serverless: { framework: "node" } }, domains: { production: "worker.acme.com" } },
   ],
   lifecycle: { preBuild: "true" },
 `)
