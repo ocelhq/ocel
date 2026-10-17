@@ -363,3 +363,46 @@ func TestThePreviewEntryThroughATunnelIsTunneledOnTheBoxAndReleasedWithIt(t *tes
 		t.Errorf("the box tunnels %+v and the edge saw %v, want the wildcard off the tunnel and the tunnel deleted", m.tunneled, m.tunnelEvents.opened)
 	}
 }
+
+func TestTheStoreOfATunneledHostnameIsTunneledWithItAndReleasedWithIt(t *testing.T) {
+	m, routed := routedOn(t)
+	storeRouted(m, slug)
+	ctx := context.Background()
+
+	if _, err := routed.Claim(ctx, tunneledClaim("shop.example.com")); err != nil {
+		t.Fatalf("Claim through a tunnel: %v", err)
+	}
+
+	surface := box.Surface(slug, environment.TierProduction)
+	if !slices.Contains(m.tunneled, host.TunneledHost{Hostname: "storage.shop.example.com", Owner: surface}) {
+		t.Errorf("the box tunnels %+v, want storage.shop.example.com for %s: a store nothing tunnels is answered by the proxy on the box, around the tunnel", m.tunneled, surface)
+	}
+	tunneled, claimed := slices.Index(m.calls, "tunnel storage.shop.example.com"), slices.Index(m.calls, "claim storage.shop.example.com")
+	if tunneled < 0 || claimed < 0 || tunneled > claimed {
+		t.Errorf("calls = %v, want the store's hostname tunneled before it is claimed", m.calls)
+	}
+
+	if err := routed.Disclaim(ctx, "shop.example.com"); err != nil {
+		t.Fatalf("Disclaim: %v", err)
+	}
+	if len(m.tunneled) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
+		t.Errorf("the box still tunnels %+v, and the edge saw %v, want the store off the tunnel with its hostname and the tunnel deleted", m.tunneled, m.tunnelEvents.opened)
+	}
+}
+
+func TestTheStoreOfAHostnameClaimedAgainWithoutTheTunnelStopsGoingThroughIt(t *testing.T) {
+	m, routed := routedOn(t)
+	storeRouted(m, slug)
+	ctx := context.Background()
+	if _, err := routed.Claim(ctx, tunneledClaim("shop.example.com")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("Claim without the tunnel: %v", err)
+	}
+
+	if len(m.tunneled) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
+		t.Errorf("the box still tunnels %+v, and the edge saw %v, want the store off the tunnel with its hostname and the tunnel deleted", m.tunneled, m.tunnelEvents.opened)
+	}
+}
