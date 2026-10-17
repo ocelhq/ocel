@@ -6,60 +6,19 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
-	"time"
 
 	connect "connectrpc.com/connect"
-	"github.com/lestrrat-go/jwx/v3/jwk"
-	"github.com/lestrrat-go/jwx/v3/jws"
-	"github.com/lestrrat-go/jwx/v3/jwt"
 
+	"github.com/ocelhq/ocel/pkg/consoletoken"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 )
 
-const skew = 30 * time.Second
-
-const refetchFloor = 5 * time.Second
-
-type Keyring struct {
-	url string
-
-	mu        sync.Mutex
-	set       jwk.Set
-	fetchedAt time.Time
-}
-
-func NewKeyring(url string) *Keyring { return &Keyring{url: url} }
-
-func (k *Keyring) Read(ctx context.Context, kid string) (jwk.Set, error) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-
-	if k.set != nil {
-		if _, found := k.set.LookupKeyID(kid); found {
-			return k.set, nil
-		}
-		if time.Since(k.fetchedAt) < refetchFloor {
-			return k.set, nil
-		}
-	}
-
-	fetched, err := jwk.Fetch(ctx, k.url)
-	if err != nil {
-		return nil, err
-	}
-	k.set = fetched
-	k.fetchedAt = time.Now()
-	return fetched, nil
-}
-
 type trust struct {
-	issuer      string
 	connectorID string
 	subject     string
 	grants      []string
-	keys        *Keyring
+	console     *consoletoken.Issuer
 }
 
 func newTrust(spec Spec) (*trust, error) {
@@ -68,11 +27,10 @@ func newTrust(spec Spec) (*trust, error) {
 		return nil, err
 	}
 	return &trust{
-		issuer:      origin,
 		connectorID: spec.ConnectorID,
 		subject:     "org:" + spec.OrganizationID,
 		grants:      spec.Grants,
-		keys:        NewKeyring(origin + "/api/auth/jwks"),
+		console:     consoletoken.NewIssuer(origin),
 	}, nil
 }
 
@@ -125,71 +83,18 @@ type claims struct {
 }
 
 func (t *trust) caller(ctx context.Context, authorization string) (claims, error) {
-	raw, found := strings.CutPrefix(authorization, "Bearer ")
-	if !found || raw == "" {
-		return claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("no bearer token"))
+	token, err := t.console.Verify(ctx, authorization, t.connectorID)
+	if errors.Is(err, consoletoken.ErrNoScope) {
+		return claims{}, connect.NewError(connect.CodePermissionDenied, err)
 	}
-
-	message, err := jws.ParseString(raw)
 	if err != nil {
-		return claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("the bearer token is not a signed jwt"))
+		return claims{}, connect.NewError(connect.CodeUnauthenticated, err)
 	}
-	signatures := message.Signatures()
-	if len(signatures) != 1 {
-		return claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("the bearer token does not have exactly one signature"))
-	}
-	kid, _ := signatures[0].ProtectedHeaders().KeyID()
-
-	set, err := t.keys.Read(ctx, kid)
-	if err != nil {
-		return claims{}, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("reach the console keys: %w", err))
-	}
-
-	token, err := jwt.ParseString(raw,
-		jwt.WithKeySet(set),
-		jwt.WithIssuer(t.issuer),
-		jwt.WithAudience(t.connectorID),
-		jwt.WithAcceptableSkew(skew),
-	)
-	if err != nil {
-		return claims{}, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("verify the bearer token: %w", err))
-	}
-
-	subject, _ := token.Subject()
-	if subject != t.subject {
+	if token.Subject != t.subject {
 		return claims{}, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("the token speaks for %q, not for this account", subject))
+			fmt.Errorf("the token speaks for %q, not for this account", token.Subject))
 	}
-
-	var claimed any
-	if err := token.Get("scope", &claimed); err != nil {
-		return claims{}, connect.NewError(connect.CodePermissionDenied, errors.New("the token has no scope"))
-	}
-	scopes, ok := stringsOf(claimed)
-	if !ok {
-		return claims{}, connect.NewError(connect.CodePermissionDenied, errors.New("the token's scope is not a list of names"))
-	}
-	var act string
-	_ = token.Get("act", &act)
-	return claims{act: act, scopes: scopes}, nil
-}
-
-func stringsOf(claimed any) ([]string, bool) {
-	switch value := claimed.(type) {
-	case []string:
-		return value, true
-	case []any:
-		out := make([]string, 0, len(value))
-		for _, entry := range value {
-			name, ok := entry.(string)
-			if !ok {
-				return nil, false
-			}
-			out = append(out, name)
-		}
-		return out, true
-	}
-	return nil, false
+	return claims{act: token.Act, scopes: token.Scopes}, nil
 }
 
 func scopeOf(procedure string, message any) (string, bool) {
