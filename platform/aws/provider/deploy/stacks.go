@@ -474,11 +474,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		defer func() {
 			_ = resources.ReconcileImages(ctx, r.cfg.Retention, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress)
 		}()
-		container, err := r.provisionContainer(ctx, spec, progress)
-		if err != nil {
-			return provider.StackResult{}, err
-		}
-		return container, r.removeIdleWorkers(ctx, spec, progress)
+		return r.provisionContainer(ctx, spec, progress)
 	}
 	prepared, work, err := r.prepare(ctx, spec, runProvision)
 	if err != nil {
