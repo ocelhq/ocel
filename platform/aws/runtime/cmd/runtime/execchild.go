@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 )
 
 const listenPollInterval = 20 * time.Millisecond
@@ -26,7 +27,8 @@ type execChild struct {
 func startExecutable(command []string, port int, extraEnv []string, budget time.Duration) (*execChild, error) {
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = taskRoot()
-	cmd.Env = executableEnv(port, extraEnv)
+	guard, env := originguard.GuardFromEnv(executableEnv(port, extraEnv))
+	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -37,7 +39,7 @@ func startExecutable(command []string, port int, extraEnv []string, budget time.
 	go func() { exited <- cmd.Wait() }()
 
 	what := strings.Join(command, " ")
-	c := &execChild{upstream: upstream{port: port, client: newLoopbackClient()}, ready: make(chan struct{})}
+	c := &execChild{upstream: upstream{port: port, client: newLoopbackClient(), guard: guard}, ready: make(chan struct{})}
 	listening := watchListening(port, exited)
 
 	select {

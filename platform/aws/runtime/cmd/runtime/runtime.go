@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
 )
@@ -299,6 +300,7 @@ type controlledChild interface {
 type upstream struct {
 	port   int
 	client *http.Client
+	guard  *originguard.Guard
 }
 
 func (u upstream) endpoint() upstream { return u }
@@ -326,6 +328,9 @@ func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWrit
 	ev, err := parseEvent(inv.Payload)
 	if err != nil {
 		return false, u.fail(rw, http.StatusBadGateway, fmt.Sprintf("bad event payload: %v", err))
+	}
+	if !u.guard.Admits(&http.Request{Header: ev.header()}) {
+		return false, u.relay(ctx, rw, &http.Response{StatusCode: http.StatusForbidden, Header: http.Header{}, Body: http.NoBody})
 	}
 	resp, err := u.forwardToApp(ctx, ev)
 	if err != nil {
@@ -375,7 +380,7 @@ func (u upstream) relay(ctx context.Context, rw *responseWriter, resp *http.Resp
 }
 
 func (u upstream) forwardToApp(ctx context.Context, ev *httpEvent) (*http.Response, error) {
-	req, err := buildForwardRequest(ctx, u.port, ev)
+	req, err := u.buildForwardRequest(ctx, ev)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +389,7 @@ func (u upstream) forwardToApp(ctx context.Context, ev *httpEvent) (*http.Respon
 		return resp, err
 	}
 
-	req, buildErr := buildForwardRequest(ctx, u.port, ev)
+	req, buildErr := u.buildForwardRequest(ctx, ev)
 	if buildErr != nil {
 		return nil, err
 	}
@@ -392,10 +397,13 @@ func (u upstream) forwardToApp(ctx context.Context, ev *httpEvent) (*http.Respon
 	return resp, err
 }
 
-func buildForwardRequest(ctx context.Context, port int, ev *httpEvent) (*http.Request, error) {
-	req, err := buildLoopbackRequest(ctx, port, ev)
+func (u upstream) buildForwardRequest(ctx context.Context, ev *httpEvent) (*http.Request, error) {
+	req, err := buildLoopbackRequest(ctx, u.port, ev)
 	if err != nil {
 		return nil, err
+	}
+	if u.guard != nil {
+		req.Header.Del(originguard.OriginSecretHeader)
 	}
 	if lc, ok := lambdacontext.FromContext(ctx); ok {
 		req.Header.Set("x-ocel-request-id", lc.AwsRequestID)
