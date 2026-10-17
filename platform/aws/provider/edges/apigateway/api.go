@@ -133,6 +133,16 @@ func createAPI(ctx context.Context, c Clients, spec apiSpec) (string, error) {
 	return aws.ToString(out.Id), nil
 }
 
+func tagAPI(ctx context.Context, c Clients, spec apiSpec, id string) error {
+	if _, err := c.APIGateway.TagResource(ctx, &apigateway.TagResourceInput{
+		ResourceArn: aws.String("arn:aws:apigateway:" + spec.region + "::" + restAPIPathPrefix + id),
+		Tags:        spec.tags,
+	}); err != nil {
+		return fmt.Errorf("tag REST API %s: %w", id, err)
+	}
+	return nil
+}
+
 func shapeAPI(ctx context.Context, c Clients, spec apiSpec, id string) error {
 	resources, err := apiResources(ctx, c, id)
 	if err != nil {

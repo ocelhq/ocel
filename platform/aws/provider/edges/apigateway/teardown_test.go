@@ -3,6 +3,7 @@ package apigateway
 import (
 	"context"
 	"errors"
+	"maps"
 	"strconv"
 	"strings"
 	"testing"
@@ -43,6 +44,42 @@ func TestTeardownRefusesWhileAProjectStillHasARestAPI(t *testing.T) {
 	}
 	if err := e.Teardown(ctx, environment.TierProduction); err != nil {
 		t.Errorf("Teardown after the project's destroy = %v, want nil", err)
+	}
+}
+
+func TestTeardownRefusesWhileAProjectStillHasAnUntaggedRestAPIItsStackRecorded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(ctx, testSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	api := w.gateway.named(productionAPIName())
+	if api == nil {
+		t.Fatalf("Reconcile created no API named %s", productionAPIName())
+	}
+	api.tags = nil
+
+	if _, err := e.Reconcile(ctx, testSpec(), stack.State()); err != nil {
+		t.Fatalf("Reconcile over the untagged API: %v", err)
+	}
+
+	want := map[string]string{
+		"ocel:managed-by": "ocel",
+		"ocel:namespace":  string(defaultNamespace),
+		"ocel:project":    conformanceSlug,
+		"ocel:env-tier":   string(environment.TierProduction),
+	}
+	if !maps.Equal(api.tags, want) {
+		t.Errorf("the recorded API carries the tags %v after Reconcile, want %v", api.tags, want)
+	}
+	err = e.Teardown(ctx, environment.TierProduction)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("Teardown = %v, want a refusal while %s still has the REST API its stack recorded", err, conformanceSlug)
 	}
 }
 

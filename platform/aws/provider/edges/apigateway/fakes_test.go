@@ -287,6 +287,26 @@ func (f *fakeGateway) CreateRestApi(_ context.Context, in *apigateway.CreateRest
 	return &apigateway.CreateRestApiOutput{Id: aws.String(id), Name: in.Name}, nil
 }
 
+func (f *fakeGateway) TagResource(_ context.Context, in *apigateway.TagResourceInput, _ ...func(*apigateway.Options)) (*apigateway.TagResourceOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	arn := aws.ToString(in.ResourceArn)
+	f.record("TagResource " + arn)
+	id, ok := parseRestAPIID(arn)
+	if !ok || !strings.HasPrefix(arn, "arn:aws:apigateway:"+fakeRegion+"::") {
+		return nil, &agtypes.BadRequestException{Message: aws.String("not a REST API ARN: " + arn)}
+	}
+	api, ok := f.apis[id]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api " + id)}
+	}
+	if api.tags == nil {
+		api.tags = map[string]string{}
+	}
+	maps.Copy(api.tags, in.Tags)
+	return &apigateway.TagResourceOutput{}, nil
+}
+
 func (f *fakeGateway) DeleteRestApi(_ context.Context, in *apigateway.DeleteRestApiInput, _ ...func(*apigateway.Options)) (*apigateway.DeleteRestApiOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
