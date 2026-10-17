@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -352,6 +353,53 @@ func TestDestroyHandsTheEngineTheSameWorkspaceRunDoes(t *testing.T) {
 	}
 	if engine.down.Project.Backend == nil || engine.down.Project.Backend.URL != backend().URL {
 		t.Errorf("the teardown points at %+v, want the backend the provider named", engine.down.Project.Backend)
+	}
+}
+
+type componentProgram struct{ name string }
+
+func (c componentProgram) Run(ctx *sdk.Context, _ provider.StackSpec) error {
+	var component struct{ sdk.ResourceState }
+	return ctx.RegisterComponentResource("ocel:probe:Component", c.name, &component)
+}
+
+type spans struct {
+	progress.Log
+	changed []string
+}
+
+func (s *spans) Span(_ string, _, _ time.Time, _ error, attrs ...progress.Attr) {
+	values := map[progress.AttrKey]string{}
+	for _, attr := range attrs {
+		values[attr.Key] = attr.Value
+	}
+	if action := values[progress.AttrKeyResourceAction]; action != "" {
+		s.changed = append(s.changed, action+" "+values[progress.AttrKeyResourceType]+" "+values[progress.AttrKeyResourceName])
+	}
+}
+
+func TestDestroyReportsEveryResourceItTookDownWithItsAction(t *testing.T) {
+	if testing.Short() {
+		t.Skip("this drives the real engine, which installs and runs the pinned Pulumi runtime")
+	}
+
+	ctx := context.Background()
+	dir := t.TempDir()
+	automation := pulumi.New(pulumi.Config{
+		Backend: pulumi.Backend{URL: "file://" + dir, Passphrase: "a-passphrase", Project: "ocel-destroy-probe"},
+		Program: componentProgram{name: "assets"}.Run,
+	})
+	ref := lockProbeRef("pr-9")
+	if _, err := automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+
+	reported := &spans{Log: progress.Discard()}
+	if err := automation.Destroy(ctx, ref, reported); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if want := []string{"delete ocel:probe:Component assets"}; !slices.Equal(reported.changed, want) {
+		t.Errorf("Destroy() reported changes %q, want %q", reported.changed, want)
 	}
 }
 
