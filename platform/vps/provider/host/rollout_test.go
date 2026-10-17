@@ -597,6 +597,14 @@ func TestAReleaseWithNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing.T) 
 			if box.at(quoted("gate")) >= 0 || box.after(-1, writesProxy) >= 0 {
 				t.Errorf("a release with %s reached the helper or rewrote %s: %v", what, ProxyConfig, box.commands())
 			}
+			for _, name := range []string{physical, apiCurrent} {
+				if box.at("docker rm --force "+quoted(name)) < 0 {
+					t.Errorf("a release with %s left %s running with nothing routed to it: %v", what, name, box.commands())
+				}
+				if !strings.Contains(err.Error(), name+" removed") {
+					t.Errorf("a release with %s is refused with\n%s\nwhich never says %s was removed", what, err, name)
+				}
+			}
 		})
 	}
 }
