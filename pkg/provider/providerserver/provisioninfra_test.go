@@ -444,6 +444,57 @@ func TestProvisionInfraKeepsAResourceDeclaredAsAnotherTypeUntilTheDeployOverItRe
 	}
 }
 
+func lastInfraBindings(vendor *fake.Provider) map[string]string {
+	var bound map[string]string
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.Kind != provider.StackInfra {
+			continue
+		}
+		bound = map[string]string{}
+		for _, resource := range spec.Resources {
+			bound[resource.Name] = resource.Binding
+		}
+	}
+	return bound
+}
+
+func TestProvisionInfraKeepsAResourceOcelJSONNewlyBindsToAPublishedRecordUntilTheDeployOverItRemovesIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	before := deployRequest()
+	before.Manifest.Resources = append(before.Manifest.Resources, legacyResource())
+	provisionedInfra(t, client, infraRequest(before))
+	before.InfraProvisioned, before.LeaseToken = true, infraLease
+	if result, _ := deploy(t, client, before); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	publishRecord(t, vendor, environment.TierProduction, "terraform", postgresRecord("legacy-db", "terraform"))
+
+	after := deployRequest()
+	bound := legacyResource()
+	bound.Binding = "legacy-db"
+	after.Manifest.Resources = append(after.Manifest.Resources, bound)
+	provisionedInfra(t, client, infraRequest(after))
+
+	if binding, held := lastInfraBindings(vendor)["legacy"]; !held || binding != "" {
+		t.Errorf("ProvisionInfra() left the infra stack holding legacy bound to %q (held: %v), want the postgres it provisioned kept: a build that fails next leaves the live release reading it", binding, held)
+	}
+	if _, published := storedBindings(t, vendor)["legacy"]; !published {
+		t.Error("ProvisionInfra() pruned legacy's binding, which the live release still reads until a deploy replaces it")
+	}
+
+	after.InfraProvisioned, after.LeaseToken = true, infraLease
+	if result, _ := deploy(t, client, after); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if binding := lastInfraBindings(vendor)["legacy"]; binding != "legacy-db" {
+		t.Errorf("the deploy over the infra left legacy bound to %q, want legacy-db: the deploy that binds legacy removes the postgres Ocel provisioned for it", binding)
+	}
+	if _, published := storedBindings(t, vendor)["legacy"]; published {
+		t.Error("the deploy that removed legacy's postgres left its binding published")
+	}
+}
+
 func TestADeployOverInfraHoldingOnlyWhatItDeclaresProvisionsNoInfra(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)

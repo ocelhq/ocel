@@ -232,13 +232,18 @@ func (r *deployRun) listUndeclaredResources(recorded stackrecords.Stack) ([]*con
 	if err := proto.Unmarshal(recorded.Resources, &held); err != nil {
 		return nil, fmt.Errorf("read the resources %s holds: %w", r.spec.Infra, err)
 	}
-	declared := map[typedResourceName]bool{}
+	declared := map[typedResourceName]*contractv1.ManifestResource{}
 	for _, resource := range r.manifest.GetResources() {
-		declared[newTypedResourceName(resource)] = true
+		declared[newTypedResourceName(resource)] = resource
 	}
 	return slices.DeleteFunc(held.GetResources(), func(resource *contractv1.ManifestResource) bool {
-		return declared[newTypedResourceName(resource)]
+		declaration, found := declared[newTypedResourceName(resource)]
+		return found && !isNewlyBound(resource, declaration)
 	}), nil
+}
+
+func isNewlyBound(recorded, declared *contractv1.ManifestResource) bool {
+	return recorded.GetBinding() == "" && declared.GetBinding() != ""
 }
 
 type typedResourceName struct {
