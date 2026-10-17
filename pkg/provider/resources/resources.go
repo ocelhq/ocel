@@ -145,6 +145,9 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 
 	var result provider.StackResult
 	for _, resource := range spec.Resources {
+		if resource.Binding != "" {
+			continue
+		}
 		action := provider.KeepOrCreate(slices.ContainsFunc(recorded.Bindings, BindingFor(resource)))
 		start := time.Now()
 		binding, err := f.provision(ctx, spec, resource, progress)
@@ -396,12 +399,11 @@ func refuseOrphans(ref provider.StackRef, going int, noun, because, hook string)
 
 func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, images provider.ImageStore, progress progress.Log) error {
 	for _, binding := range recorded.Bindings {
-		if slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool {
-			return resource.Name == binding.Name && resource.Type == binding.Type
-		}) {
+		reason, going := findRemovalReason(spec.Resources, binding)
+		if !going {
 			continue
 		}
-		reportUndeclared(progress, string(binding.Type), binding.Name)
+		reportRemoving(progress, string(binding.Type), binding.Name, reason)
 		if err := f.remove(ctx, spec.Ref, binding, progress); err != nil {
 			return err
 		}
@@ -419,7 +421,7 @@ func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.St
 		if slices.Contains(declared, function.Name) {
 			continue
 		}
-		reportUndeclared(progress, "function", function.Name)
+		reportRemoving(progress, "function", function.Name, reasonUndeclared)
 		orphans = append(orphans, function)
 	}
 	return f.removeFunctions(ctx, spec.Ref, orphans, undeclared, images, progress)
@@ -432,17 +434,17 @@ func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.S
 		if slices.Contains(declared, container.Name) {
 			continue
 		}
-		reportUndeclared(progress, "container", container.Name)
+		reportRemoving(progress, "container", container.Name, reasonUndeclared)
 		orphans = append(orphans, container)
 	}
 	return f.removeContainers(ctx, spec.Ref, orphans, undeclared, images, progress)
 }
 
-func reportUndeclared(progress progress.Log, kind, name string) {
+func reportRemoving(progress progress.Log, kind, name, reason string) {
 	if progress == nil {
 		return
 	}
-	progress.Say(fmt.Sprintf("Removing %s %s: this release no longer declares it", kind, name))
+	progress.Say(fmt.Sprintf("Removing %s %s: %s", kind, name, reason))
 }
 
 func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
