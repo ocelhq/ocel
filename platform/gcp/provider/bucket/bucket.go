@@ -20,6 +20,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -67,15 +68,16 @@ func Open(ctx context.Context, endpoint string) (Store, error) {
 		return account, nil
 	}
 	store.SignBlob = func(ctx context.Context, account string, payload []byte) ([]byte, error) {
-		return retried(ctx, func() ([]byte, int, error) {
+		blob, _, err := googleretry.Asked(ctx, func() ([]byte, int, error) {
 			signed, err := signing.Projects.ServiceAccounts.SignBlob("projects/-/serviceAccounts/"+account,
 				&iamcredentials.SignBlobRequest{Payload: base64.StdEncoding.EncodeToString(payload)}).Context(ctx).Do()
 			if err != nil {
-				return nil, answeredStatus(err), err
+				return nil, googleretry.AnsweredCode(err), err
 			}
 			blob, err := base64.StdEncoding.DecodeString(signed.SignedBlob)
 			return blob, http.StatusOK, err
 		})
+		return blob, err
 	}
 	return store, nil
 }
