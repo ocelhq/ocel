@@ -59,7 +59,7 @@ func requirePreviewTier(command string, preview bool) error {
 }
 
 func globalPreviewBaseDomain(wildcard string) (string, error) {
-	host := strings.ToLower(strings.TrimSpace(wildcard))
+	host := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(wildcard)), ".")
 	if err := project.ValidatePreviewDomain(host); err != nil {
 		return "", err
 	}
