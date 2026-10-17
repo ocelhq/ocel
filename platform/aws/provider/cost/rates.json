@@ -447,6 +447,57 @@
       }
     },
     {
+      "id": "aws/nat/hours",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.045"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261009203134/us-east-1/index.json#M2YSHUBETB3JX4M4",
+      "verified": "2026-10-12",
+      "query": {
+        "service": "AmazonEC2",
+        "usagetype": "NatGateway-Hours"
+      }
+    },
+    {
+      "id": "aws/nat/processed",
+      "region": "us-east-1",
+      "unit": "GB",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.045"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261009203134/us-east-1/index.json#59S5R83GFPUAGVR5",
+      "verified": "2026-10-12",
+      "query": {
+        "service": "AmazonEC2",
+        "usagetype": "NatGateway-Bytes"
+      }
+    },
+    {
+      "id": "aws/vpc/public-ipv4",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/us-east-1/index.json#4GQUNXTFWVSGPUZK",
+      "verified": "2026-10-12",
+      "query": {
+        "service": "AmazonVPC",
+        "usagetype": "USE1-PublicIPv4:InUseAddress"
+      }
+    },
+    {
       "id": "aws/dynamodb/write",
       "region": "us-east-1",
       "unit": "WriteRequestUnits",

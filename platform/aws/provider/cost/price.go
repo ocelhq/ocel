@@ -39,6 +39,7 @@ const (
 	usageSnapshotStorage   = "snapshot_storage_gb"
 	usageEventOperations   = "monthly_operations"
 	usageConnectionMinutes = "monthly_connection_minutes"
+	usageDataProcessed     = "monthly_data_processed_gb"
 
 	elastiCacheFreeSnapshots = 1
 
@@ -93,6 +94,8 @@ var formulas = pricing.Table{
 	"aws_ecs_task_definition":         free,
 	"aws_ecs_service":                 fargateService,
 	"aws_lb":                          loadBalancer,
+	"aws_nat_gateway":                 natGateway,
+	"aws_eip":                         publicAddress,
 	"aws_dynamodb_table":              dynamoTable,
 	"aws_kms_key":                     kmsKey,
 	"aws_sqs_queue":                   queue,
@@ -223,6 +226,15 @@ func loadBalancer(r *pricing.Subject) {
 		r.Usage(usageRuleEvaluations, ruleBand).Div(decimal.NewFromInt(lcuRuleEvaluationsPerSecond)),
 	)
 	r.Add(pricing.Component{Name: "Load balancer capacity units", Unit: "LCU-hours", Rate: "aws/alb/lcu", Quantity: lcu.Mul(pricing.MonthlyHours), UsageBased: true})
+}
+
+func natGateway(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "NAT gateway", Unit: "hours", Rate: "aws/nat/hours", Quantity: pricing.MonthlyHours})
+	r.Add(pricing.Component{Name: "Data processed", Unit: "GB", Rate: "aws/nat/processed", Quantity: r.Usage(usageDataProcessed, egressBand), UsageBased: true})
+}
+
+func publicAddress(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "Public IPv4 address", Unit: "hours", Rate: "aws/vpc/public-ipv4", Quantity: pricing.MonthlyHours})
 }
 
 func dynamoTable(r *pricing.Subject) {
