@@ -11,7 +11,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -83,6 +83,10 @@ func queuedAppRequest(apps []string) *contractv1.DeployRequest {
 			Name:      app,
 			Framework: &contractv1.Framework{Name: "next"},
 			BuildId:   fmt.Sprintf("%032x", slot+1),
+			Domains: []*contractv1.TierDomains{{
+				Tier:      environmentv1.Tier_TIER_PRODUCTION,
+				Hostnames: []string{app + ".shop.example"},
+			}},
 			Artifact: serverless(&contractv1.ManifestFunction{
 				LogicalName:  app + "-server",
 				Framework:    &contractv1.Framework{Name: "next"},
@@ -200,7 +204,7 @@ func TestDeployFinishesASiblingOfAFailedAppAndWithholdsPromotion(t *testing.T) {
 	}
 }
 
-func TestDeployServesAProjectHostnameOnTheFirstAppAlone(t *testing.T) {
+func TestDeployServesAProjectHostnameOnTheFirstAppAndEachOtherAppOnItsOwn(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -211,12 +215,11 @@ func TestDeployServesAProjectHostnameOnTheFirstAppAlone(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	served := edge.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
-	if want := []string{"https://" + served[0][0]}; !slices.Equal(servedAppURLs(result, "web"), want) {
-		t.Errorf("web is served %v, want %v", servedAppURLs(result, "web"), want)
+	if got, want := servedAppURLs(result, "web"), []string{"https://shop.example"}; !slices.Equal(got, want) {
+		t.Errorf("web is served %v, want %v: the project hostname goes to the first app", got, want)
 	}
-	if got := servedAppURLs(result, "admin"); len(got) != 0 {
-		t.Errorf("admin is served %v, want nothing: one app answers for a project hostname, and appurl hands admin no url either", got)
+	if got, want := servedAppURLs(result, "admin"), []string{"https://admin.shop.example"}; !slices.Equal(got, want) {
+		t.Errorf("admin is served %v, want %v: an app after the first is served only its own hostname", got, want)
 	}
 }
 

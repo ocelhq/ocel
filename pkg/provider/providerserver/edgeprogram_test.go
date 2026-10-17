@@ -365,23 +365,7 @@ func productionStack(t *testing.T, vendor *fake.Provider) edge.StackSpec {
 }
 
 func TestDeployTellsTheEdgeWhichAppEachProductionHostnameAnswersFrom(t *testing.T) {
-	t.Run("a project hostname answers from the first app alone", func(t *testing.T) {
-		builtProject(t)
-		client, vendor := deployServed(t)
-
-		req := twoAppRequest()
-		req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
-		if result, _ := deploy(t, client, req); !result.GetSuccess() {
-			t.Fatalf("Deploy() = %q", result.GetError())
-		}
-
-		want := map[string]string{"shop.example": "web"}
-		if got := productionStack(t, vendor).DomainApps; !maps.Equal(got, want) {
-			t.Errorf("DomainApps = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("an app hostname answers from the app that declares it", func(t *testing.T) {
+	t.Run("a project hostname answers from the first app and an app hostname from the app that declares it", func(t *testing.T) {
 		builtProject(t)
 		client, vendor := deployServed(t)
 

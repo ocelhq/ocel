@@ -305,6 +305,10 @@ func twoAppRequest() *contractv1.DeployRequest {
 		Name:      "admin",
 		Framework: &contractv1.Framework{Name: "next"},
 		BuildId:   adminBuildID,
+		Domains: []*contractv1.TierDomains{{
+			Tier:      environmentv1.Tier_TIER_PRODUCTION,
+			Hostnames: []string{"admin.shop.example"},
+		}},
 		Artifact: serverless(&contractv1.ManifestFunction{
 			LogicalName:  "admin-server",
 			Framework:    &contractv1.Framework{Name: "next"},
@@ -1954,6 +1958,47 @@ func TestDeployAnnouncesEachAppsOwnHostnameUnderThatApp(t *testing.T) {
 	}
 	if got := servedAppURLs(result, "admin"); !slices.Equal(got, []string{"https://admin.shop.example"}) {
 		t.Errorf("admin has %v, want the hostname admin itself declares", got)
+	}
+}
+
+func TestDeployRefusesAnAppServedOnNoProductionHostname(t *testing.T) {
+	production := func(hosts ...string) []*contractv1.TierDomains {
+		if len(hosts) == 0 {
+			return nil
+		}
+		return []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: hosts}}
+	}
+	for _, tc := range []struct {
+		name                string
+		project, web, admin []string
+	}{
+		{name: "web declares one and the project none", web: []string{"shop.example"}},
+		{name: "the project declares one and neither app does", project: []string{"shop.example"}},
+		{name: "the project and web each declare one", project: []string{"shop.example"}, web: []string{"www.shop.example"}},
+		{name: "admin declares only the hostname web is served on", web: []string{"shop.example"}, admin: []string{"shop.example"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := twoAppRequest()
+			req.Manifest.Domains = production(tc.project...)
+			req.Manifest.Apps[0].Domains = production(tc.web...)
+			req.Manifest.Apps[1].Domains = production(tc.admin...)
+			req.Edge = writtenBy("shop.example")
+
+			said := refusedDeploy(t, req, nil)
+			if !strings.Contains(said, `app "admin" on no hostname`) || !strings.Contains(said, `declare domains.production on app "admin"`) {
+				t.Errorf("Deploy() was refused with %q, want it to name admin, which no hostname is served to, and the domains.production on admin that fixes it", said)
+			}
+			projectServesWeb := strings.Contains(said, `the project's domains.production serves app "web"`)
+			if declared := len(tc.project) > 0; projectServesWeb != declared {
+				t.Errorf("Deploy() was refused with %q, want it to name web as the one app the project's domains.production serves exactly when the project declares one (%v)", said, declared)
+			}
+			if !projectServesWeb && strings.Contains(said, `"web"`) {
+				t.Errorf("Deploy() was refused with %q, want no mention of web, which is served its own hostname, when the project declares none", said)
+			}
+			if strings.Contains(said, "every app") || strings.Contains(said, "first app") {
+				t.Errorf("Deploy() was refused with %q, want the app the project's domains.production serves named, not described by its position", said)
+			}
+		})
 	}
 }
 

@@ -1184,7 +1184,7 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("each app is built with its own diverged value", func(t *testing.T) {
 		fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 		writeAppsConfig(t, fixture.Root, `
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, folder: "/web" },
+    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, folder: "/web", domains: { production: "web.acme.com" } },
     { name: "admin", path: "apps/admin", compute: { serverless: { framework: "node" } }, folder: "/admin" }`)
 		writeAppSource(t, fixture.Root, "web", "admin")
 		envSet(t, fixture, "PAGE_ID", "page_web", envOptions{folder: "/web"})

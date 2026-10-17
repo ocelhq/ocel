@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -488,8 +489,14 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 		}
 		return refuseNoPreviewDomain()
 	}
+	addressesItself := r.edgeRouter().Facts().AddressesItself
+	if !addressesItself {
+		if err := r.refuseAppsWithoutHostname(); err != nil {
+			return err
+		}
+	}
 	if len(hosts) == 0 {
-		if r.edgeRouter().Facts().AddressesItself {
+		if addressesItself {
 			return nil
 		}
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -507,6 +514,29 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 	r.installDNSCutover(writer, r.selection.GetDns().GetZone())
 	r.cutover.manual = failOnManualRecords(r.sender, r.spans.Hostnames)
 	return nil
+}
+
+func (r *deployRun) refuseAppsWithoutHostname() error {
+	var unserved []string
+	for slot, hosts := range r.listServedHostnames() {
+		entry := r.spec.Apps[slot]
+		if len(hosts) == 0 && !provider.IsWorkerApp(entry.App, entry.Workers) {
+			unserved = append(unserved, strconv.Quote(entry.App))
+		}
+	}
+	if len(unserved) == 0 {
+		return nil
+	}
+	named := namedList("app", "apps", unserved)
+	var projectServes string
+	if len(tierHostnames(r.manifest.GetDomains(), encodeTier(r.spec.Tier))) > 0 {
+		projectServes = fmt.Sprintf(" (the project's domains.production serves app %q alone)", r.spec.Apps[0].App)
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"this deploy serves %[1]s on no hostname, so nothing would route to %[1]s: "+
+			"declare domains.production on %[1]s with a hostname no other app is served on%[2]s, "+
+			"and the deploy that reads it attaches it",
+		named, projectServes)
 }
 
 func refuseNoPreviewDomain() error {
