@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
@@ -160,6 +161,7 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 		partRoles: []string{
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + envsourcesync.NamesFor(string(n), tier).Role,
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + envsourcesync.NamesFor(string(n), tier).ScheduleRole,
+			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + imageoptimizer.NamesFor(string(n), tier).Role,
 		},
 		bastionRole:         "arn:aws:iam::*:role/" + bastion.NameFor(tier),
 		envSyncFunction:     "arn:aws:lambda:*:*:function:" + envsourcesync.NamesFor(string(n), tier).Function,

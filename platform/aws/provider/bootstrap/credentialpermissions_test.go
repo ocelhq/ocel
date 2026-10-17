@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
 )
 
@@ -284,7 +285,7 @@ func partRoleOf(tier environment.Tier) requestContext {
 func partRolesOf(tier environment.Tier) []string {
 	path := "arn:aws:iam::111122223333:role" + defaultNamespace.AppRolePathFor(tier)
 	sync := envsourcesync.NamesFor(string(defaultNamespace), tier)
-	return []string{path + sync.Role, path + sync.ScheduleRole}
+	return []string{path + sync.Role, path + sync.ScheduleRole, path + imageoptimizer.NamesFor(string(defaultNamespace), tier).Role}
 }
 
 func TestNoCredentialRepointsTheTrustPolicyOfAnAppRole(t *testing.T) {

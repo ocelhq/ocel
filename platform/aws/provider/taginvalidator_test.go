@@ -41,7 +41,7 @@ func TestTheTagInvalidatorIsRefusedAsNotReadyOnABootstrapThatPredatesItsRole(t *
 	if err != nil {
 		t.Fatalf("partWorkFor() = %v", err)
 	}
-	_, err = work.make(ctx, nil)
+	_, err = work.make(ctx, nil, false)
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {

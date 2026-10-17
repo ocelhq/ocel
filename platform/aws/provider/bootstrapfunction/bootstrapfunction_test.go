@@ -3,10 +3,12 @@ package bootstrapfunction_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrapfunction"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrapfunction/functiontest"
 )
@@ -91,6 +93,75 @@ func TestEnsureRoleMakesARoleUnderItsBoundaryAndPutsItsPolicy(t *testing.T) {
 	}
 	if made.Path != role.Path || made.Boundary != role.Boundary || made.Policies["p"] != role.Policy || made.Tags["ocel:env-tier"] != "production" {
 		t.Errorf("role = %+v, want it at its path under its boundary with its policy and tags", made)
+	}
+}
+
+func driftedRole(t *testing.T) (role bootstrapfunction.Role, freshTrust string, account *functiontest.Account, id int) {
+	t.Helper()
+	role = bootstrapfunction.Role{
+		Name: "ocel-thing", Path: "/ocel/production/app/", Boundary: "arn:aws:iam::123456789012:policy/b",
+		Description: "d", Service: "lambda.amazonaws.com", PolicyName: "p", Policy: `{"Statement":[]}`,
+		Tags: map[string]string{"ocel:env-tier": "production"},
+	}
+	fresh := functiontest.New()
+	if err := bootstrapfunction.EnsureRole(context.Background(), fresh.Clients().IAM, role); err != nil {
+		t.Fatal(err)
+	}
+	account = functiontest.New()
+	if err := bootstrapfunction.EnsureRole(context.Background(), account.Clients().IAM, role); err != nil {
+		t.Fatal(err)
+	}
+	if err := bootstrapfunction.Ensure(context.Background(), account.Clients(), function("one")); err != nil {
+		t.Fatal(err)
+	}
+	account.Roles["ocel-thing"].Trust = `{"Version":"2012-10-17","Statement":[]}`
+	account.Roles["ocel-thing"].Boundary = "arn:aws:iam::123456789012:policy/an-older-boundary"
+	account.Roles["ocel-thing"].Policies["p"] = `{"Statement":["an older policy"]}`
+	return role, fresh.Roles["ocel-thing"].Trust, account, account.Roles["ocel-thing"].ID
+}
+
+func keptTheRole(t *testing.T, account *functiontest.Account, id int) {
+	t.Helper()
+	if account.Called("DeleteRole") > 0 || account.Roles["ocel-thing"] == nil || account.Roles["ocel-thing"].ID != id {
+		t.Errorf("calls = %v, want the role kept: a role made again is a new identity", account.Calls)
+	}
+	if !account.RunsAsItsRole("ocel-thing") {
+		t.Error("the function no longer runs as the role it was given, so Lambda's grant to decrypt its variables is gone")
+	}
+}
+
+func TestEnsureRoleWithoutUpdatesTrustLeavesADriftedTrustPolicyAndSaysThePartIsBehind(t *testing.T) {
+	t.Parallel()
+	role, freshTrust, account, id := driftedRole(t)
+
+	err := bootstrapfunction.EnsureRole(context.Background(), account.Clients().IAM, role)
+	if !errors.Is(err, stackrecords.ErrPartBehind) {
+		t.Fatalf("EnsureRole() over a role whose trust drifted = %v, want the part said to be behind", err)
+	}
+
+	keptTheRole(t, account, id)
+	got := account.Roles["ocel-thing"]
+	if account.Called("UpdateAssumeRolePolicy") > 0 || got.Trust == freshTrust {
+		t.Error("a deploy changed a role's trust policy")
+	}
+	if got.Boundary != role.Boundary || got.Policies["p"] != role.Policy {
+		t.Errorf("role under %s with policy %s, want its boundary and policy put back", got.Boundary, got.Policies["p"])
+	}
+}
+
+func TestEnsureRoleWithUpdatesTrustPutsBackTheTrustPolicyAndBoundaryInPlace(t *testing.T) {
+	t.Parallel()
+	role, freshTrust, account, id := driftedRole(t)
+	role.UpdatesTrust = true
+
+	if err := bootstrapfunction.EnsureRole(context.Background(), account.Clients().IAM, role); err != nil {
+		t.Fatalf("EnsureRole() over a drifted role = %v", err)
+	}
+
+	keptTheRole(t, account, id)
+	got := account.Roles["ocel-thing"]
+	if got.Trust != freshTrust || got.Boundary != role.Boundary || got.Policies["p"] != role.Policy {
+		t.Errorf("role trusts %s under %s, want %s under %s with its policy, as a fresh role's", got.Trust, got.Boundary, freshTrust, role.Boundary)
 	}
 }
 

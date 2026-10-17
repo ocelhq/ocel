@@ -41,7 +41,7 @@ func (p *Provider) tagInvalidatorWork(ctx context.Context, tier environment.Tier
 		summary: taginvalidator.Summary,
 		digest:  taginvalidator.Digest(spec),
 		shape:   taginvalidator.Shape(spec.Namespace, tier),
-		make: func(ctx context.Context, _ []provider.PartResource) ([]provider.PartResource, error) {
+		make: func(ctx context.Context, _ []provider.PartResource, _ bool) ([]provider.PartResource, error) {
 			if spec.Role == "" {
 				return nil, refusal.Refuse(refusal.CodeNotReady, "the %s bootstrap predates the role its tag invalidator runs as, so the %s part has no role to make its function under: run `%s` and deploy again", tier, taginvalidator.Part, provider.BootstrapCommand(tier))
 			}

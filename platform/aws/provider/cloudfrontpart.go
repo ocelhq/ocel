@@ -19,7 +19,7 @@ func (p *Provider) cloudFrontWork(tier environment.Tier) partWork {
 		summary: cloudfrontpart.Summary,
 		digest:  cloudfrontpart.Digest(spec),
 		shape:   cloudfrontpart.Shape(p.namespace, tier),
-		make: func(ctx context.Context, prior []provider.PartResource) ([]provider.PartResource, error) {
+		make: func(ctx context.Context, prior []provider.PartResource, _ bool) ([]provider.PartResource, error) {
 			api, err := p.cloudFrontAPI(ctx)
 			if err != nil {
 				return nil, err

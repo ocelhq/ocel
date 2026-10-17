@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -16,6 +18,8 @@ import (
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 var pollInterval = 2 * time.Second
@@ -26,14 +30,16 @@ const (
 )
 
 type Role struct {
-	Name        string
-	Path        string
-	Boundary    string
-	Description string
-	Service     string
-	PolicyName  string
-	Policy      string
-	Tags        map[string]string
+	Name         string
+	Path         string
+	Boundary     string
+	Description  string
+	Service      string
+	Condition    map[string]any
+	UpdatesTrust bool
+	PolicyName   string
+	Policy       string
+	Tags         map[string]string
 }
 
 type Function struct {
@@ -58,12 +64,31 @@ func Document(statements ...map[string]any) (string, error) {
 }
 
 func EnsureRole(ctx context.Context, c IAMAPI, role Role) error {
-	trust, err := Document(map[string]any{
+	statement := map[string]any{
 		"Effect": "Allow", "Principal": map[string]any{"Service": role.Service}, "Action": "sts:AssumeRole",
-	})
+	}
+	if role.Condition != nil {
+		statement["Condition"] = role.Condition
+	}
+	trust, err := Document(statement)
 	if err != nil {
 		return err
 	}
+	behind := createRole(ctx, c, role, trust)
+	if behind != nil && !errors.Is(behind, stackrecords.ErrPartBehind) {
+		return behind
+	}
+	if _, err := c.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
+		RoleName:       aws.String(role.Name),
+		PolicyName:     aws.String(role.PolicyName),
+		PolicyDocument: aws.String(role.Policy),
+	}); err != nil {
+		return fmt.Errorf("put policy %s on role %s: %w", role.PolicyName, role.Name, err)
+	}
+	return behind
+}
+
+func createRole(ctx context.Context, c IAMAPI, role Role, trust string) error {
 	in := &iam.CreateRoleInput{
 		RoleName:                 aws.String(role.Name),
 		Path:                     aws.String(role.Path),
@@ -74,19 +99,69 @@ func EnsureRole(ctx context.Context, c IAMAPI, role Role) error {
 	if role.Boundary != "" {
 		in.PermissionsBoundary = aws.String(role.Boundary)
 	}
-	_, err = c.CreateRole(ctx, in)
+	_, err := c.CreateRole(ctx, in)
 	var exists *iamtypes.EntityAlreadyExistsException
-	if err != nil && !errors.As(err, &exists) {
-		return fmt.Errorf("create role %s: %w", role.Name, err)
+	if err == nil || !errors.As(err, &exists) {
+		return wrapped("create role "+role.Name, err)
 	}
-	if _, err := c.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
-		RoleName:       aws.String(role.Name),
-		PolicyName:     aws.String(role.PolicyName),
-		PolicyDocument: aws.String(role.Policy),
-	}); err != nil {
-		return fmt.Errorf("put policy %s on role %s: %w", role.PolicyName, role.Name, err)
+	current, err := c.GetRole(ctx, &iam.GetRoleInput{RoleName: aws.String(role.Name)})
+	if err != nil {
+		return fmt.Errorf("read role %s: %w", role.Name, err)
 	}
-	return nil
+	if role.Boundary != "" && boundaryOf(current.Role) != role.Boundary {
+		if _, err := c.PutRolePermissionsBoundary(ctx, &iam.PutRolePermissionsBoundaryInput{
+			RoleName:            aws.String(role.Name),
+			PermissionsBoundary: aws.String(role.Boundary),
+		}); err != nil {
+			return fmt.Errorf("bound role %s by %s: %w", role.Name, role.Boundary, err)
+		}
+	}
+	trusted, err := sameDocument(aws.ToString(current.Role.AssumeRolePolicyDocument), trust)
+	if err != nil {
+		return fmt.Errorf("read the trust policy of role %s: %w", role.Name, err)
+	}
+	switch {
+	case trusted:
+		return nil
+	case role.UpdatesTrust:
+		if _, err := c.UpdateAssumeRolePolicy(ctx, &iam.UpdateAssumeRolePolicyInput{
+			RoleName:       aws.String(role.Name),
+			PolicyDocument: aws.String(trust),
+		}); err != nil {
+			return fmt.Errorf("put back the trust policy of role %s: %w", role.Name, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("role %s trusts other than this build gives it, and only a bootstrap changes a role's trust: %w", role.Name, stackrecords.ErrPartBehind)
+}
+
+func boundaryOf(role *iamtypes.Role) string {
+	if role == nil || role.PermissionsBoundary == nil {
+		return ""
+	}
+	return aws.ToString(role.PermissionsBoundary.PermissionsBoundaryArn)
+}
+
+func sameDocument(recorded, want string) (bool, error) {
+	decoded, err := url.QueryUnescape(recorded)
+	if err != nil {
+		return false, err
+	}
+	var got, wanted any
+	if err := json.Unmarshal([]byte(decoded), &got); err != nil {
+		return false, err
+	}
+	if err := json.Unmarshal([]byte(want), &wanted); err != nil {
+		return false, err
+	}
+	return reflect.DeepEqual(got, wanted), nil
+}
+
+func wrapped(doing string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", doing, err)
 }
 
 func iamTags(tags map[string]string) []iamtypes.Tag {
