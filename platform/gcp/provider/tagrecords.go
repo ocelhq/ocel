@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -109,7 +110,7 @@ func (b bootstrap) ensureTagIndexes(ctx context.Context, tier environment.Tier) 
 	database := databasePath(b.clients, b.clients.TagDatabase(tier))
 	for _, field := range unindexedTagFields() {
 		name := database + "/collectionGroups/" + tagCollection + "/fields/" + field
-		operation, err := attempted(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(name,
+		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(name,
 			&firestoreadmin.GoogleFirestoreAdminV1Field{IndexConfig: &firestoreadmin.GoogleFirestoreAdminV1IndexConfig{
 				Indexes:         []*firestoreadmin.GoogleFirestoreAdminV1Index{},
 				ForceSendFields: []string{"Indexes"},
@@ -123,7 +124,7 @@ func (b bootstrap) ensureTagIndexes(ctx context.Context, tier environment.Tier) 
 	}
 	parent := database + "/collectionGroups/" + tagCollection
 	for _, index := range tagIndexes() {
-		operation, err := attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(parent, index).Context(ctx).Do)
+		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(parent, index).Context(ctx).Do)
 		if taken(err) {
 			continue
 		}

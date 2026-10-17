@@ -10,6 +10,7 @@ import (
 	"google.golang.org/api/artifactregistry/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -38,12 +39,12 @@ func (i pluginImages) Ensure(ctx context.Context, tier environment.Tier, plugin 
 	}
 	digest := sha256.Sum256(plugin)
 	version := hex.EncodeToString(digest[:])[:pluginVersionLen]
-	_, err = attempted(ctx, service.Projects.Locations.Repositories.Packages.Versions.Get(path+"/packages/"+pluginPackage+"/versions/"+version).Context(ctx).Do)
+	_, err = googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Packages.Versions.Get(path+"/packages/"+pluginPackage+"/versions/"+version).Context(ctx).Do)
 	if err != nil && !absent(err) {
 		return "", fmt.Errorf("look for version %s of the gate plugin in %s: %w", version, repository, err)
 	}
 	if err != nil {
-		if _, err := attempted(ctx, service.Projects.Locations.Repositories.GenericArtifacts.Upload(path, &artifactregistry.UploadGenericArtifactRequest{
+		if _, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.GenericArtifacts.Upload(path, &artifactregistry.UploadGenericArtifactRequest{
 			Filename:  pluginFile,
 			PackageId: pluginPackage,
 			VersionId: version,
@@ -64,7 +65,7 @@ func (i pluginImages) Delete(ctx context.Context, tier environment.Tier) error {
 		return err
 	}
 	repository := c.Repository(tier) + pluginRepository
-	deleting, err := attempted(ctx, service.Projects.Locations.Repositories.Delete(repositoryPath(c, repository)).Context(ctx).Do)
+	deleting, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Delete(repositoryPath(c, repository)).Context(ctx).Do)
 	if absent(err) {
 		return nil
 	}
@@ -75,14 +76,14 @@ func (i pluginImages) Delete(ctx context.Context, tier environment.Tier) error {
 }
 
 func ensurePluginRepository(ctx context.Context, c *clients, service *artifactregistry.Service, name, path string) error {
-	_, err := attempted(ctx, service.Projects.Locations.Repositories.Get(path).Context(ctx).Do)
+	_, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Get(path).Context(ctx).Do)
 	if err == nil {
 		return nil
 	}
 	if !absent(err) {
 		return fmt.Errorf("look for the %s repository: %w", name, err)
 	}
-	creating, err := attempted(ctx, service.Projects.Locations.Repositories.Create(repositoryParent(c), &artifactregistry.Repository{
+	creating, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Create(repositoryParent(c), &artifactregistry.Repository{
 		Format:      genericArtifacts,
 		Description: "the plugin that runs the gate on the load balancer",
 	}).RepositoryId(name).Context(ctx).Do)

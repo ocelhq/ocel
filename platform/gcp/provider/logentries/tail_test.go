@@ -28,6 +28,8 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 type tailServer struct {
@@ -382,8 +384,8 @@ func TestTailWaitsBeforeReconnecting(t *testing.T) {
 	cancel()
 	<-done
 
-	if gap := starts[1].Sub(starts[0]); gap < retryBackoff/2 {
-		t.Errorf("reconnected after %v, want at least %v", gap, retryBackoff/2)
+	if gap := starts[1].Sub(starts[0]); gap < 50*time.Millisecond {
+		t.Errorf("reconnected after %v, want at least 50ms", gap)
 	}
 }
 
@@ -425,8 +427,8 @@ func TestTailFailsWhenEveryAttemptIsThrottled(t *testing.T) {
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("Tail = %v, want the throttle", err)
 	}
-	if n := len(fake.received()); n != retryAttempts {
-		t.Errorf("sessions opened = %d, want %d", n, retryAttempts)
+	if n := len(fake.received()); n != googleretry.Attempts {
+		t.Errorf("sessions opened = %d, want %d", n, googleretry.Attempts)
 	}
 }
 

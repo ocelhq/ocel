@@ -28,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -417,7 +418,7 @@ func onlyWriter(generation int64) storage.Conditions {
 }
 
 func (b bootstrap) stampRefusal(ctx context.Context, read survey, err error) error {
-	if answeredCode(err) != http.StatusPreconditionFailed {
+	if googleretry.AnsweredCode(err) != http.StatusPreconditionFailed {
 		return fmt.Errorf("write %s: %w", StampObject, err)
 	}
 	read.Stamp.Writer = b.writerNow(ctx, read)
@@ -480,14 +481,14 @@ func (b bootstrap) lockBucket(ctx context.Context, name string) error {
 	return nil
 }
 
-func taken(err error) bool { return answeredCode(err) == http.StatusConflict }
+func taken(err error) bool { return googleretry.AnsweredCode(err) == http.StatusConflict }
 
 func (b bootstrap) makeKeyRing(ctx context.Context) error {
 	client, err := b.clients.KMS()
 	if err != nil {
 		return err
 	}
-	_, err = dialled(ctx, func() (*kmspb.KeyRing, error) {
+	_, err = googleretry.Called(ctx, func() (*kmspb.KeyRing, error) {
 		return client.CreateKeyRing(ctx, &kmspb.CreateKeyRingRequest{
 			Parent:    fmt.Sprintf("projects/%s/locations/%s", b.clients.project, b.clients.region),
 			KeyRingId: b.clients.KeyRing(),
@@ -505,7 +506,7 @@ func (b bootstrap) makeKey(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = dialled(ctx, func() (*kmspb.CryptoKey, error) {
+	_, err = googleretry.Called(ctx, func() (*kmspb.CryptoKey, error) {
 		return client.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
 			Parent:      keyRingPath(b.clients),
 			CryptoKeyId: name,
@@ -518,7 +519,7 @@ func (b bootstrap) makeKey(ctx context.Context, name string) error {
 		}
 		return nil
 	}
-	minted, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
+	minted, err := googleretry.Called(ctx, func() (*kmspb.CryptoKeyVersion, error) {
 		return client.CreateCryptoKeyVersion(ctx, &kmspb.CreateCryptoKeyVersionRequest{
 			Parent:           keyPath(b.clients, name),
 			CryptoKeyVersion: &kmspb.CryptoKeyVersion{},
@@ -529,7 +530,7 @@ func (b bootstrap) makeKey(ctx context.Context, name string) error {
 	}
 	if _, err := until(ctx, fmt.Sprintf("the material the %s key seals under", name),
 		func() (*kmspb.CryptoKeyVersion, error) {
-			return dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
+			return googleretry.Called(ctx, func() (*kmspb.CryptoKeyVersion, error) {
 				return client.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: minted.GetName()})
 			})
 		},
@@ -538,7 +539,7 @@ func (b bootstrap) makeKey(ctx context.Context, name string) error {
 		}); err != nil {
 		return err
 	}
-	if _, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
+	if _, err := googleretry.Called(ctx, func() (*kmspb.CryptoKey, error) {
 		return client.UpdateCryptoKeyPrimaryVersion(ctx, &kmspb.UpdateCryptoKeyPrimaryVersionRequest{
 			Name:               keyPath(b.clients, name),
 			CryptoKeyVersionId: path.Base(minted.GetName()),
@@ -555,7 +556,7 @@ func (b bootstrap) makeSecret(ctx context.Context, name string) error {
 		return err
 	}
 	parent := "projects/" + b.clients.project
-	_, err = attempted(ctx, service.Projects.Secrets.Create(parent, &secretmanager.Secret{
+	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.Create(parent, &secretmanager.Secret{
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
 	}).SecretId(name).Context(ctx).Do)
 	if err != nil && !taken(err) {
@@ -574,7 +575,7 @@ func (b bootstrap) makeSecret(ctx context.Context, name string) error {
 	if _, err := rand.Read(minted); err != nil {
 		return fmt.Errorf("mint the passphrase %s stores: %w", name, err)
 	}
-	_, err = attempted(ctx, service.Projects.Secrets.AddVersion(secretPath(b.clients.project, name), &secretmanager.AddSecretVersionRequest{
+	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.AddVersion(secretPath(b.clients.project, name), &secretmanager.AddSecretVersionRequest{
 		Payload: &secretmanager.SecretPayload{Data: base64.StdEncoding.EncodeToString(minted)},
 	}).Context(ctx).Do)
 	if err != nil {
@@ -613,7 +614,7 @@ func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) er
 	if err != nil {
 		return err
 	}
-	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.clients.project, &iam.CreateServiceAccountRequest{
+	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.clients.project, &iam.CreateServiceAccountRequest{
 		AccountId: name,
 		ServiceAccount: &iam.ServiceAccount{
 			DisplayName: purpose.displayName,
@@ -652,7 +653,7 @@ func (b bootstrap) takeAccount(ctx context.Context, tier environment.Tier, name 
 	if err != nil {
 		return err
 	}
-	if _, err := attempted(ctx, service.Projects.ServiceAccounts.Delete(accountPath(b.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
+	if _, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Delete(accountPath(b.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s service account: %w", name, err)
 	}
 	return nil
@@ -663,7 +664,7 @@ func (b bootstrap) makeRepository(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	creating, err := attempted(ctx, service.Projects.Locations.Repositories.Create(
+	creating, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Create(
 		repositoryParent(b.clients), imageRepository()).RepositoryId(name).Context(ctx).Do)
 	if taken(err) {
 		return b.pruneRepository(ctx, name)
@@ -679,7 +680,7 @@ func (b bootstrap) pruneRepository(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := attempted(ctx, service.Projects.Locations.Repositories.Patch(repositoryPath(b.clients, name),
+	if _, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Patch(repositoryPath(b.clients, name),
 		&artifactregistry.Repository{CleanupPolicies: pruningUntaggedImages()}).
 		UpdateMask("cleanup_policies").Context(ctx).Do); err != nil {
 		return fmt.Errorf("set the %s image repository's cleanup policy to the one this bootstrap names: %w", name, err)
@@ -714,7 +715,7 @@ func (b bootstrap) takeRepository(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	deleting, err := attempted(ctx, service.Projects.Locations.Repositories.Delete(repositoryPath(b.clients, name)).Context(ctx).Do)
+	deleting, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Delete(repositoryPath(b.clients, name)).Context(ctx).Do)
 	if absent(err) {
 		return nil
 	}
@@ -733,7 +734,7 @@ func (b bootstrap) repositoryAwaited(ctx context.Context, doing string, operatio
 		return err
 	}
 	finished, err := until(ctx, doing, func() (*artifactregistry.Operation, error) {
-		return attempted(ctx, service.Projects.Locations.Operations.Get(operation.Name).Context(ctx).Do)
+		return googleretry.Attempted(ctx, service.Projects.Locations.Operations.Get(operation.Name).Context(ctx).Do)
 	}, func(polled *artifactregistry.Operation) bool { return polled.Done })
 	if err != nil {
 		return err
@@ -753,7 +754,7 @@ func (b bootstrap) makeDatabase(ctx context.Context, read survey, id string) err
 	if err != nil {
 		return err
 	}
-	operation, err := attempted(ctx, service.Projects.Databases.Create("projects/"+read.Project, &firestoreadmin.GoogleFirestoreAdminV1Database{
+	operation, err := googleretry.Attempted(ctx, service.Projects.Databases.Create("projects/"+read.Project, &firestoreadmin.GoogleFirestoreAdminV1Database{
 		LocationId:            read.Region,
 		Type:                  nativeFirestore,
 		DeleteProtectionState: protectionOn,
@@ -772,7 +773,7 @@ func (b bootstrap) databaseServesThisRegion(ctx context.Context, read survey, id
 	if err != nil {
 		return err
 	}
-	database, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients, id)).Context(ctx).Do)
+	database, err := googleretry.Attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients, id)).Context(ctx).Do)
 	if err != nil {
 		return fmt.Errorf("read the %q Firestore database that already exists: %w", id, err)
 	}
@@ -791,7 +792,7 @@ func (b bootstrap) protectDatabase(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	operation, err := attempted(ctx, service.Projects.Databases.Patch(databasePath(b.clients, id),
+	operation, err := googleretry.Attempted(ctx, service.Projects.Databases.Patch(databasePath(b.clients, id),
 		&firestoreadmin.GoogleFirestoreAdminV1Database{DeleteProtectionState: protectionOn}).
 		UpdateMask("deleteProtectionState").Context(ctx).Do)
 	if err != nil {
@@ -809,7 +810,7 @@ func (b bootstrap) awaited(ctx context.Context, doing string, operation *firesto
 		return err
 	}
 	finished, err := until(ctx, doing, func() (*firestoreadmin.GoogleLongrunningOperation, error) {
-		return attempted(ctx, service.Projects.Databases.Operations.Get(operation.Name).Context(ctx).Do)
+		return googleretry.Attempted(ctx, service.Projects.Databases.Operations.Get(operation.Name).Context(ctx).Do)
 	}, func(polled *firestoreadmin.GoogleLongrunningOperation) bool { return polled.Done })
 	if err != nil {
 		return fmt.Errorf("wait for %s: %w", doing, err)
@@ -1057,7 +1058,7 @@ func (b bootstrap) takeSecret(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := attempted(ctx, service.Projects.Secrets.Delete(secretPath(b.clients.project, name)).Context(ctx).Do); err != nil && !absent(err) {
+	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(secretPath(b.clients.project, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
 	return nil
@@ -1088,7 +1089,7 @@ func (b bootstrap) takeKey(ctx context.Context, name string) (destroyAfter time.
 		listed = append(listed, version)
 	}
 	for _, version := range destroyable(listed) {
-		if _, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
+		if _, err := googleretry.Called(ctx, func() (*kmspb.CryptoKeyVersion, error) {
 			return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{Name: version})
 		}); err != nil {
 			return 0, fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
@@ -1114,7 +1115,7 @@ func (b bootstrap) takeDatabase(ctx context.Context, id string) error {
 		return err
 	}
 	path := databasePath(b.clients, id)
-	lifting, err := attempted(ctx, service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
+	lifting, err := googleretry.Attempted(ctx, service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
 		DeleteProtectionState: protectionOff,
 	}).UpdateMask("deleteProtectionState").Context(ctx).Do)
 	if absent(err) {
@@ -1128,7 +1129,7 @@ func (b bootstrap) takeDatabase(ctx context.Context, id string) error {
 		return err
 	}
 
-	deleting, err := attempted(ctx, service.Projects.Databases.Delete(path).Context(ctx).Do)
+	deleting, err := googleretry.Attempted(ctx, service.Projects.Databases.Delete(path).Context(ctx).Do)
 	if absent(err) {
 		return nil
 	}
@@ -1153,7 +1154,7 @@ func (b bootstrap) takeKeyValues(ctx context.Context, tier environment.Tier) err
 		if err != nil {
 			return fmt.Errorf("list the entries the %s tier keeps: %w", tier, err)
 		}
-		if err := done(ctx, func() error {
+		if err := googleretry.Done(ctx, func() error {
 			_, err := kept.Ref.Delete(ctx)
 			return err
 		}); err != nil {
@@ -1184,12 +1185,12 @@ func (b bootstrap) takeBucket(ctx context.Context, name string) error {
 		if attrs.Generation != 0 {
 			object = object.Generation(attrs.Generation)
 		}
-		if err := done(ctx, func() error { return object.Delete(ctx) }); err != nil &&
+		if err := googleretry.Done(ctx, func() error { return object.Delete(ctx) }); err != nil &&
 			!errors.Is(err, storage.ErrObjectNotExist) && !absent(err) {
 			return fmt.Errorf("empty %s: %w", name, err)
 		}
 	}
-	if err := done(ctx, func() error { return bucket.Delete(ctx) }); err != nil &&
+	if err := googleretry.Done(ctx, func() error { return bucket.Delete(ctx) }); err != nil &&
 		!errors.Is(err, storage.ErrBucketNotExist) && !absent(err) {
 		return fmt.Errorf("delete the %s bucket: %w", name, err)
 	}

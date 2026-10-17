@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"google.golang.org/api/logging/v2"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const maxPageSize = 1000
@@ -49,7 +51,7 @@ func Read(ctx context.Context, logs *logging.Service, project string, q Query) (
 	}
 	var events []Event
 	for len(events) < q.Limit {
-		page, err := listed(ctx, logs, req)
+		page, err := googleretry.Attempted(ctx, logs.Entries.List(req).Context(ctx).Do)
 		if err != nil {
 			return nil, fmt.Errorf("read log entries of project %s: %w", project, err)
 		}

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -31,7 +32,7 @@ func (d Delays) Ensure(ctx context.Context, clients *ports.Clients) error {
 		return err
 	}
 	parent, _, _ := strings.Cut(d.Queue, "/queues/")
-	err = retried(ctx, func() error {
+	err = googleretry.Done(ctx, func() error {
 		_, err := client.CreateQueue(ctx, &cloudtaskspb.CreateQueueRequest{Parent: parent, Queue: &cloudtaskspb.Queue{Name: d.Queue}})
 		return err
 	})
@@ -72,7 +73,7 @@ func (d Deployment) schedule(ctx context.Context, p publication, name string) er
 			}},
 		}},
 	}
-	err = retried(ctx, func() error {
+	err = googleretry.Done(ctx, func() error {
 		_, err := client.CreateTask(ctx, &cloudtaskspb.CreateTaskRequest{Parent: d.Delays.Queue, Task: task})
 		return err
 	})

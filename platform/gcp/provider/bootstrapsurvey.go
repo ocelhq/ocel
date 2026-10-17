@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const enabledVersion = "ENABLED"
@@ -209,7 +210,7 @@ func (b bootstrap) databasePresence(ctx context.Context, id string) (presence, e
 	if err != nil {
 		return presence{}, err
 	}
-	database, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients, id)).Context(ctx).Do)
+	database, err := googleretry.Attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients, id)).Context(ctx).Do)
 	if absent(err) {
 		return presence{}, nil
 	}
@@ -253,7 +254,7 @@ func (b bootstrap) keyRingExists(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if _, err := dialled(ctx, func() (*kmspb.KeyRing, error) {
+	if _, err := googleretry.Called(ctx, func() (*kmspb.KeyRing, error) {
 		return client.GetKeyRing(ctx, &kmspb.GetKeyRingRequest{Name: keyRingPath(b.clients)})
 	}); err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -277,7 +278,7 @@ func (b bootstrap) readKey(ctx context.Context, name string) (*kmspb.CryptoKey, 
 	if err != nil {
 		return nil, err
 	}
-	key, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
+	key, err := googleretry.Called(ctx, func() (*kmspb.CryptoKey, error) {
 		return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: keyPath(b.clients, name)})
 	})
 	if status.Code(err) == codes.NotFound {
@@ -303,7 +304,7 @@ func (b bootstrap) secretExists(ctx context.Context, name string) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	_, err = attempted(ctx, service.Projects.Secrets.Get(secretPath(b.clients.project, name)).Context(ctx).Do)
+	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.Get(secretPath(b.clients.project, name)).Context(ctx).Do)
 	if absent(err) {
 		return false, nil
 	}
@@ -318,7 +319,7 @@ func (b bootstrap) passphraseExists(ctx context.Context, name string) (bool, err
 	if err != nil {
 		return false, err
 	}
-	version, err := attempted(ctx, service.Projects.Secrets.Versions.Get(
+	version, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.Get(
 		secretPath(b.clients.project, name)+"/versions/latest").Context(ctx).Do)
 	if absent(err) {
 		return false, nil
@@ -334,7 +335,7 @@ func (b bootstrap) repositoryPresence(ctx context.Context, name string) (presenc
 	if err != nil {
 		return presence{}, err
 	}
-	repository, err := attempted(ctx, service.Projects.Locations.Repositories.Get(repositoryPath(b.clients, name)).Context(ctx).Do)
+	repository, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Get(repositoryPath(b.clients, name)).Context(ctx).Do)
 	if absent(err) {
 		return presence{}, nil
 	}
@@ -372,7 +373,7 @@ func (b bootstrap) accountPresence(ctx context.Context, tier environment.Tier, n
 	if err != nil {
 		return presence{}, err
 	}
-	_, err = attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(b.clients, name)).Context(ctx).Do)
+	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(b.clients, name)).Context(ctx).Do)
 	if absent(err) {
 		return presence{}, nil
 	}
@@ -409,7 +410,7 @@ func (b bootstrap) accountPolicy(ctx context.Context, name string) (*iam.Policy,
 	if err != nil {
 		return nil, err
 	}
-	policy, err := attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(b.clients, name)).Context(ctx).Do)
+	policy, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(b.clients, name)).Context(ctx).Do)
 	if err != nil {
 		return nil, fmt.Errorf("read who may run apps as the %s service account: %w", name, err)
 	}

@@ -8,8 +8,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/provider"
 	pubsub "google.golang.org/api/pubsub/v1"
+
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 type publication struct {
@@ -55,7 +57,7 @@ func (d Deployment) publishNow(ctx context.Context, p publication) error {
 		return err
 	}
 	topic := TopicPath(d.Clients.Project, d.Names.Topic(p.topicName))
-	err = retried(ctx, func() error {
+	err = googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Topics.Publish(topic, &pubsub.PublishRequest{Messages: []*pubsub.PubsubMessage{p.message()}}).Context(ctx).Do()
 		return err
 	})

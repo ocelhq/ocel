@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
@@ -117,7 +118,7 @@ func (c Credentials) principal(ctx context.Context, token string) (string, error
 }
 
 func principalNamed(ctx context.Context, endpoint, token string) (string, error) {
-	principal, status, err := asked(ctx, func() (string, int, error) {
+	principal, status, err := googleretry.Asked(ctx, func() (string, int, error) {
 		return askTokenInfo(ctx, endpoint, token)
 	})
 	if err == nil && status == http.StatusOK {
@@ -125,9 +126,13 @@ func principalNamed(ctx context.Context, endpoint, token string) (string, error)
 	}
 	if isThrottledOrDown(status) {
 		return "", refusal.Refuse(refusal.CodeBusy,
-			"Google's token endpoint is throttling or down: it answered neither a principal nor a refusal in %d attempts, and this credential may well be good", askAttempts)
+			"Google's token endpoint is throttling or down: it answered neither a principal nor a refusal in %d attempts, and this credential may well be good", googleretry.Attempts)
 	}
 	return "", unauthenticated()
+}
+
+func isThrottledOrDown(status int) bool {
+	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
 func askTokenInfo(ctx context.Context, endpoint, token string) (string, int, error) {

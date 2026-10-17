@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -140,7 +141,7 @@ func (i postgresInstances) filter(database string) string {
 }
 
 func (i postgresInstances) findInstance(ctx context.Context, database string) (*sqladmin.DatabaseInstance, error) {
-	listed, err := attempted(ctx, i.sql.Instances.List(i.clients.project).Filter(i.filter(database)).Context(ctx).Do)
+	listed, err := googleretry.Attempted(ctx, i.sql.Instances.List(i.clients.project).Filter(i.filter(database)).Context(ctx).Do)
 	if err != nil {
 		return nil, fmt.Errorf("find the Cloud SQL instance postgres %s runs on: %w", database, err)
 	}
@@ -254,7 +255,7 @@ func (i postgresInstances) create(ctx context.Context, database string, spec pos
 	name := i.clients.PostgresInstance(i.ref.Project, i.ref.Name.Env, database) + "-" + hex.EncodeToString(suffix)
 	ensureProgress(progress).Say("Creating postgres " + database + " as Cloud SQL instance " + name + " in " + i.clients.region +
 		": a new instance takes several minutes")
-	started, err := attempted(ctx, i.sql.Instances.Insert(i.clients.project, i.desiredInstance(name, spec, database)).Context(ctx).Do)
+	started, err := googleretry.Attempted(ctx, i.sql.Instances.Insert(i.clients.project, i.desiredInstance(name, spec, database)).Context(ctx).Do)
 	if err != nil {
 		return nil, fmt.Errorf("create the Cloud SQL instance postgres %s runs on: %w", database, err)
 	}
@@ -265,7 +266,7 @@ func (i postgresInstances) create(ctx context.Context, database string, spec pos
 }
 
 func (i postgresInstances) readInstance(ctx context.Context, database, name string) (*sqladmin.DatabaseInstance, error) {
-	instance, err := attempted(ctx, i.sql.Instances.Get(i.clients.project, name).Context(ctx).Do)
+	instance, err := googleretry.Attempted(ctx, i.sql.Instances.Get(i.clients.project, name).Context(ctx).Do)
 	if err != nil {
 		return nil, fmt.Errorf("read the Cloud SQL instance postgres %s runs on: %w", database, err)
 	}
@@ -334,7 +335,7 @@ func (i postgresInstances) awaitAddress(ctx context.Context, database string, cu
 func (i postgresInstances) awaited(ctx context.Context, doing string, started *sqladmin.Operation) error {
 	_, err := awaitOperation(ctx, cloudSQLPatience, "Cloud SQL", doing, started, cloudSQLOutcome,
 		func(name string) (*sqladmin.Operation, error) {
-			return attempted(ctx, i.sql.Operations.Get(i.clients.project, name).Context(ctx).Do)
+			return googleretry.Attempted(ctx, i.sql.Operations.Get(i.clients.project, name).Context(ctx).Do)
 		})
 	return err
 }
@@ -349,14 +350,14 @@ func cloudSQLOutcome(operation *sqladmin.Operation) operationOutcome {
 }
 
 func (i postgresInstances) ensureDatabase(ctx context.Context, instance string) error {
-	_, err := attempted(ctx, i.sql.Databases.Get(i.clients.project, instance, postgresDatabaseName).Context(ctx).Do)
+	_, err := googleretry.Attempted(ctx, i.sql.Databases.Get(i.clients.project, instance, postgresDatabaseName).Context(ctx).Do)
 	if err == nil {
 		return nil
 	}
 	if !absent(err) {
 		return fmt.Errorf("read the %s database on Cloud SQL instance %s: %w", postgresDatabaseName, instance, err)
 	}
-	started, err := attempted(ctx, i.sql.Databases.Insert(i.clients.project, instance, &sqladmin.Database{Name: postgresDatabaseName}).Context(ctx).Do)
+	started, err := googleretry.Attempted(ctx, i.sql.Databases.Insert(i.clients.project, instance, &sqladmin.Database{Name: postgresDatabaseName}).Context(ctx).Do)
 	if taken(err) {
 		return nil
 	}
@@ -367,10 +368,10 @@ func (i postgresInstances) ensureDatabase(ctx context.Context, instance string) 
 }
 
 func (i postgresInstances) setUserPassword(ctx context.Context, instance, password string) error {
-	_, err := attempted(ctx, i.sql.Users.Get(i.clients.project, instance, postgresAccount).Context(ctx).Do)
+	_, err := googleretry.Attempted(ctx, i.sql.Users.Get(i.clients.project, instance, postgresAccount).Context(ctx).Do)
 	switch {
 	case absent(err):
-		started, err := attempted(ctx, i.sql.Users.Insert(i.clients.project, instance, &sqladmin.User{Name: postgresAccount, Password: password}).Context(ctx).Do)
+		started, err := googleretry.Attempted(ctx, i.sql.Users.Insert(i.clients.project, instance, &sqladmin.User{Name: postgresAccount, Password: password}).Context(ctx).Do)
 		if err != nil {
 			return fmt.Errorf("create the %s user on Cloud SQL instance %s: %w", postgresAccount, instance, err)
 		}
@@ -378,7 +379,7 @@ func (i postgresInstances) setUserPassword(ctx context.Context, instance, passwo
 	case err != nil:
 		return fmt.Errorf("read the %s user on Cloud SQL instance %s: %w", postgresAccount, instance, err)
 	}
-	started, err := attempted(ctx, i.sql.Users.Update(i.clients.project, instance, &sqladmin.User{Password: password}).Name(postgresAccount).Context(ctx).Do)
+	started, err := googleretry.Attempted(ctx, i.sql.Users.Update(i.clients.project, instance, &sqladmin.User{Password: password}).Name(postgresAccount).Context(ctx).Do)
 	if err != nil {
 		return fmt.Errorf("set the %s user's password on Cloud SQL instance %s: %w", postgresAccount, instance, err)
 	}
@@ -461,7 +462,7 @@ func (i postgresInstances) remove(ctx context.Context, binding provider.Binding,
 	}
 	if current != nil {
 		ensureProgress(progress).Say("Removing postgres " + binding.Name + ", its Cloud SQL instance " + current.Name + " and its data")
-		started, err := attempted(ctx, i.sql.Instances.Delete(i.clients.project, current.Name).Context(ctx).Do)
+		started, err := googleretry.Attempted(ctx, i.sql.Instances.Delete(i.clients.project, current.Name).Context(ctx).Do)
 		switch {
 		case absent(err):
 		case err != nil:

@@ -10,6 +10,7 @@ import (
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const probeTokenBytes = 32
@@ -27,7 +28,7 @@ func (c *clients) readProbeToken(ctx context.Context, service string) (string, e
 	if err != nil {
 		return "", err
 	}
-	current, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(c.servicePath(service)).Context(ctx).Do(call...)
 	})
 	switch {

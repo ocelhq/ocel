@@ -13,6 +13,8 @@ import (
 
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/secretmanager/v1"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -22,7 +24,7 @@ const (
 )
 
 func (c *clients) ensureSecret(ctx context.Context, service *secretmanager.Service, name string) error {
-	_, err := attempted(ctx, service.Projects.Secrets.Create("projects/"+c.project, &secretmanager.Secret{
+	_, err := googleretry.Attempted(ctx, service.Projects.Secrets.Create("projects/"+c.project, &secretmanager.Secret{
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
 	}).SecretId(name).Context(ctx).Do)
 	if err != nil && !taken(err) {
@@ -32,7 +34,7 @@ func (c *clients) ensureSecret(ctx context.Context, service *secretmanager.Servi
 }
 
 func (c *clients) readSecretVersion(ctx context.Context, service *secretmanager.Service, name, version string) ([]byte, bool, error) {
-	read, err := attempted(ctx, service.Projects.Secrets.Versions.Access(secretPath(c.project, name)+"/versions/"+version).Context(ctx).Do)
+	read, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.Access(secretPath(c.project, name)+"/versions/"+version).Context(ctx).Do)
 	switch {
 	case absent(err):
 		return nil, false, nil
@@ -64,7 +66,7 @@ func unreadableVersion(err error) bool {
 }
 
 func (c *clients) addSecretVersion(ctx context.Context, service *secretmanager.Service, name string, payload []byte) (*secretmanager.SecretVersion, error) {
-	added, err := attempted(ctx, service.Projects.Secrets.AddVersion(secretPath(c.project, name), &secretmanager.AddSecretVersionRequest{
+	added, err := googleretry.Attempted(ctx, service.Projects.Secrets.AddVersion(secretPath(c.project, name), &secretmanager.AddSecretVersionRequest{
 		Payload: &secretmanager.SecretPayload{Data: base64.StdEncoding.EncodeToString(payload)},
 	}).Context(ctx).Do)
 	if err != nil {
@@ -92,7 +94,7 @@ func (c *clients) destroyVersionsSparing(ctx context.Context, service *secretman
 	}
 	var older []numbered
 	for token := ""; ; {
-		page, err := attempted(ctx, service.Projects.Secrets.Versions.List(secretPath(c.project, name)).
+		page, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.List(secretPath(c.project, name)).
 			Filter(enabledVersions).PageToken(token).Context(ctx).Do)
 		if err != nil {
 			return fmt.Errorf("list the versions of the %s secret: %w", name, err)
@@ -109,7 +111,7 @@ func (c *clients) destroyVersionsSparing(ctx context.Context, service *secretman
 	}
 	slices.SortFunc(older, func(a, b numbered) int { return b.number - a.number })
 	for _, version := range older[min(spared, len(older)):] {
-		if _, err := attempted(ctx, service.Projects.Secrets.Versions.Destroy(version.name, &secretmanager.DestroySecretVersionRequest{}).Context(ctx).Do); err != nil && !absent(err) && !unreadableVersion(err) {
+		if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.Destroy(version.name, &secretmanager.DestroySecretVersionRequest{}).Context(ctx).Do); err != nil && !absent(err) && !unreadableVersion(err) {
 			return fmt.Errorf("destroy %s, which a newer version of the %s secret replaces: %w", version.name, name, err)
 		}
 	}
@@ -125,7 +127,7 @@ func versionNumber(name string) (int, error) {
 }
 
 func (c *clients) deleteSecret(ctx context.Context, service *secretmanager.Service, name string) error {
-	if _, err := attempted(ctx, service.Projects.Secrets.Delete(secretPath(c.project, name)).Context(ctx).Do); err != nil && !absent(err) {
+	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(secretPath(c.project, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
 	return nil

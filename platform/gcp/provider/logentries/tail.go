@@ -15,6 +15,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -84,14 +86,14 @@ func Tail(ctx context.Context, client *logging.Client, project string, q Query, 
 	}
 	reconnected := false
 	for attempt := 0; ; attempt++ {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return nil
 		}
 		err := followStream(ctx, client, req, q.Sources, backfill, emitUnread, notice)
 		switch {
 		case err == nil:
 			return nil
-		case errors.Is(err, errThrottled) && attempt+1 < retryAttempts:
+		case errors.Is(err, errThrottled) && attempt+1 < googleretry.Attempts:
 			continue
 		case errors.Is(err, errStreamEnded) && !reconnected:
 			reconnected = true

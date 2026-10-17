@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -268,7 +269,7 @@ func (b bootstrap) servicesOn(ctx context.Context, apis []string) error {
 	var off []string
 	for _, api := range apis {
 		name := "projects/" + b.clients.project + "/services/" + api
-		apiService, err := attempted(ctx, service.Services.Get(name).Context(ctx).Do)
+		apiService, err := googleretry.Attempted(ctx, service.Services.Get(name).Context(ctx).Do)
 		if err != nil {
 			return fmt.Errorf("read whether %s is on in project %s: %w", api, b.clients.project, err)
 		}
@@ -293,7 +294,7 @@ func (b bootstrap) permitted(ctx context.Context, parts []string) error {
 	needed := permissionsFor(parts)
 	var granted []string
 	for asked := range slices.Chunk(needed, testedPermissionsPerRequest) {
-		answer, err := attempted(ctx, service.Projects.TestIamPermissions(b.clients.project,
+		answer, err := googleretry.Attempted(ctx, service.Projects.TestIamPermissions(b.clients.project,
 			&cloudresourcemanager.TestIamPermissionsRequest{Permissions: asked}).Context(ctx).Do)
 		if err != nil {
 			return fmt.Errorf("ask project %s what this credential may do in it: %w", b.clients.project, err)
@@ -323,7 +324,7 @@ func (b bootstrap) regionServed(ctx context.Context, read survey) error {
 	if err != nil {
 		return err
 	}
-	listed, err := attempted(ctx, service.Projects.Locations.List("projects/"+b.clients.project).Context(ctx).Do)
+	listed, err := googleretry.Attempted(ctx, service.Projects.Locations.List("projects/"+b.clients.project).Context(ctx).Do)
 	if err != nil {
 		return fmt.Errorf("ask which locations Firestore serves project %s from: %w", b.clients.project, err)
 	}

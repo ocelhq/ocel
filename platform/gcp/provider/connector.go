@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -181,7 +182,7 @@ func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2S
 		return nil, err
 	}
 	path := clients.servicePath(clients.Connector())
-	found, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
 	})
 	if absent(err) {
@@ -245,7 +246,7 @@ func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, 
 	if err != nil {
 		return err
 	}
-	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+names.project,
+	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+names.project,
 		&iam.CreateServiceAccountRequest{
 			AccountId: names.Connector(),
 			ServiceAccount: &iam.ServiceAccount{
@@ -343,7 +344,7 @@ func (p *Provider) takeConnectorAccount(ctx context.Context, progress progress.L
 		return err
 	}
 	name := clients.Connector()
-	if _, err := attempted(ctx, service.Projects.ServiceAccounts.Delete(
+	if _, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Delete(
 		accountPath(clients, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s service account: %w", name, err)
 	}
@@ -362,7 +363,7 @@ func (p *Provider) takeConnectorImages(ctx context.Context, progress progress.Lo
 	}
 	packagePath := repositoryPath(clients, clients.Repository(environment.TierProduction)) +
 		"/packages/" + connectorImageName
-	if _, err := attempted(ctx, service.Projects.Locations.Repositories.Packages.Delete(
+	if _, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Packages.Delete(
 		packagePath).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the connector images at %s: %w", packagePath, err)
 	}

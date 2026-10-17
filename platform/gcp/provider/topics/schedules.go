@@ -9,6 +9,7 @@ import (
 
 	cloudscheduler "google.golang.org/api/cloudscheduler/v1"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -35,7 +36,7 @@ func (t Topology) ensureSchedule(ctx context.Context, clients *ports.Clients, ta
 		},
 	}
 	parent := "projects/" + clients.Project + "/locations/" + clients.Region
-	err = retried(ctx, func() error {
+	err = googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Locations.Jobs.Create(parent, desired).Context(ctx).Do()
 		return err
 	})
@@ -46,7 +47,7 @@ func (t Topology) ensureSchedule(ctx context.Context, clients *ports.Clients, ta
 		return fmt.Errorf("create Cloud Scheduler job %s: %w", path, err)
 	}
 	desired.Name = ""
-	err = retried(ctx, func() error {
+	err = googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Locations.Jobs.Patch(path, desired).UpdateMask("schedule,timeZone,pubsubTarget").Context(ctx).Do()
 		return err
 	})
@@ -62,7 +63,7 @@ func (t Topology) removeSchedule(ctx context.Context, clients *ports.Clients, ta
 		return err
 	}
 	path := t.jobPath(clients, task)
-	if err := retried(ctx, func() error {
+	if err := googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Locations.Jobs.Delete(path).Context(ctx).Do()
 		return err
 	}); err != nil && !isAnswered(err, http.StatusNotFound) {

@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
 )
@@ -75,7 +76,7 @@ func (b bastion) read(ctx context.Context, tier environment.Tier) (*run.GoogleCl
 		return nil, err
 	}
 	name := b.clients.Bastion(tier)
-	found, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(b.clients.servicePath(name)).Context(ctx).Do(call...)
 	})
 	if absent(err) {

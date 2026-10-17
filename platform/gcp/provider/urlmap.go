@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 func matcherFor(hostname string) string { return "host-" + naming.Sanitize(hostname) }
@@ -45,7 +46,7 @@ func (p *Provider) CountHostRules(ctx context.Context, urlMap string) (int, erro
 	if err != nil {
 		return 0, err
 	}
-	current, err := attempted(ctx, func(call ...googleapi.CallOption) (*compute.UrlMap, error) {
+	current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.UrlMap, error) {
 		return engine.UrlMaps.Get(clients.project, urlMap).Context(ctx).Do(call...)
 	})
 	if err != nil {
@@ -73,7 +74,7 @@ func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change fun
 		return err
 	}
 	return p.retryWrite(ctx, doing, func() error {
-		current, err := attempted(ctx, func(call ...googleapi.CallOption) (*compute.UrlMap, error) {
+		current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.UrlMap, error) {
 			return engine.UrlMaps.Get(clients.project, urlMap).Context(ctx).Do(call...)
 		})
 		if err != nil {
@@ -183,7 +184,7 @@ func (p *Provider) runOperation(
 	doing string,
 	call func(...googleapi.CallOption) (*compute.Operation, error),
 ) error {
-	started, err := attempted(ctx, call)
+	started, err := googleretry.Attempted(ctx, call)
 	if err != nil {
 		return fmt.Errorf("ask Compute Engine to %s: %w", doing, err)
 	}
@@ -191,7 +192,7 @@ func (p *Provider) runOperation(
 		if started.Status == operationDone {
 			return started, nil
 		}
-		return attempted(ctx, func(opt ...googleapi.CallOption) (*compute.Operation, error) {
+		return googleretry.Attempted(ctx, func(opt ...googleapi.CallOption) (*compute.Operation, error) {
 			return engine.GlobalOperations.Get(clients.project, started.Name).Context(ctx).Do(opt...)
 		})
 	}, func(op *compute.Operation) bool { return op != nil && op.Status == operationDone })
@@ -218,7 +219,7 @@ func (p *Provider) ReadBackendServiceQuota(ctx context.Context) (alb.BackendServ
 	if err != nil {
 		return alb.BackendServiceQuota{}, false, err
 	}
-	project, err := attempted(ctx, func(call ...googleapi.CallOption) (*compute.Project, error) {
+	project, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.Project, error) {
 		return engine.Projects.Get(clients.project).Fields("quotas").Context(ctx).Do(call...)
 	})
 	if err != nil {

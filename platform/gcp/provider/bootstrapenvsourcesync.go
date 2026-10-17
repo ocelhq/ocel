@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -171,7 +172,7 @@ func (b bootstrap) readService(ctx context.Context, name string) (*run.GoogleClo
 	if err != nil {
 		return nil, err
 	}
-	found, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(b.clients.servicePath(name)).Context(ctx).Do(call...)
 	})
 	if absent(err) {
@@ -231,7 +232,7 @@ func (b bootstrap) servicePolicy(ctx context.Context, name string) (*run.GoogleI
 	if err != nil {
 		return nil, err
 	}
-	policy, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
+	policy, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
 		return services.Projects.Locations.Services.GetIamPolicy(b.clients.servicePath(name)).
 			OptionsRequestedPolicyVersion(conditionalPolicyVersion).Context(ctx).Do(call...)
 	})
@@ -258,7 +259,7 @@ func (b bootstrap) letSyncCall(ctx context.Context, tier environment.Tier, name 
 	member := syncMember(b.clients, tier)
 	var refused error
 	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return ctx.Err()
 		}
 		policy, err := b.servicePolicy(ctx, name)
@@ -271,7 +272,7 @@ func (b bootstrap) letSyncCall(ctx context.Context, tier environment.Tier, name 
 		}
 		policy.Bindings = bindings
 		policy.Version = conditionalPolicyVersion
-		_, refused = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
+		_, refused = googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
 			return services.Projects.Locations.Services.SetIamPolicy(b.clients.servicePath(name),
 				&run.GoogleIamV1SetIamPolicyRequest{Policy: policy}).Context(ctx).Do(call...)
 		})
@@ -343,7 +344,7 @@ func (b bootstrap) schedulePresence(ctx context.Context, tier environment.Tier, 
 	if err != nil {
 		return presence{}, err
 	}
-	current, err := attempted(ctx, service.Projects.Locations.Jobs.Get(schedulePath(b.clients, name)).Context(ctx).Do)
+	current, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Get(schedulePath(b.clients, name)).Context(ctx).Do)
 	if absent(err) {
 		return presence{}, nil
 	}
@@ -378,13 +379,13 @@ func (b bootstrap) makeSchedule(ctx context.Context, tier environment.Tier, name
 	}
 	path := schedulePath(b.clients, name)
 	create := func() (*cloudscheduler.Job, error) {
-		return attempted(ctx, service.Projects.Locations.Jobs.Create(b.clients.location(), b.syncSchedule(tier, name, called.Uri)).Context(ctx).Do)
+		return googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Create(b.clients.location(), b.syncSchedule(tier, name, called.Uri)).Context(ctx).Do)
 	}
 	job, err := create()
 	if taken(err) {
 		desired := b.syncSchedule(tier, name, called.Uri)
 		desired.Name = ""
-		job, err = attempted(ctx, service.Projects.Locations.Jobs.Patch(path, desired).
+		job, err = googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Patch(path, desired).
 			UpdateMask(syncScheduleUpdateMask).Context(ctx).Do)
 	}
 	if err != nil {
@@ -392,7 +393,7 @@ func (b bootstrap) makeSchedule(ctx context.Context, tier environment.Tier, name
 	}
 	switch job.State {
 	case schedulePaused:
-		if _, err := attempted(ctx, service.Projects.Locations.Jobs.Resume(path, &cloudscheduler.ResumeJobRequest{}).Context(ctx).Do); err != nil {
+		if _, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Resume(path, &cloudscheduler.ResumeJobRequest{}).Context(ctx).Do); err != nil {
 			return fmt.Errorf("resume the paused Cloud Scheduler job %s: %w", name, err)
 		}
 	case scheduleDisabled:
@@ -411,7 +412,7 @@ func (b bootstrap) takeSchedule(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := attempted(ctx, service.Projects.Locations.Jobs.Delete(schedulePath(b.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
+	if _, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Delete(schedulePath(b.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the Cloud Scheduler job %s: %w", name, err)
 	}
 	return nil

@@ -9,6 +9,7 @@ import (
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -25,9 +26,9 @@ func (r resourceManager) Reaches(ctx context.Context, project string) error {
 	if err != nil {
 		return unauthenticated()
 	}
-	_, _, err = asked(ctx, func() (*cloudresourcemanager.Project, int, error) {
+	_, _, err = googleretry.Asked(ctx, func() (*cloudresourcemanager.Project, int, error) {
 		found, err := service.Projects.Get(project).Context(ctx).Do()
-		return found, answeredCode(err), err
+		return found, googleretry.AnsweredCode(err), err
 	})
 	if err != nil {
 		return unreachableProject(project, err)

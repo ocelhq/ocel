@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const cloudStorageScheme = "gs"
@@ -133,7 +134,7 @@ func (s albStacks) passphrase(ctx context.Context, clients *clients, tier enviro
 	}
 	secret := clients.PassphraseSecret(tier)
 	name := "projects/" + clients.project + "/secrets/" + secret + "/versions/latest"
-	version, err := attempted(ctx, func(call ...googleapi.CallOption) (*secretmanager.AccessSecretVersionResponse, error) {
+	version, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*secretmanager.AccessSecretVersionResponse, error) {
 		return secrets.Projects.Secrets.Versions.Access(name).Context(ctx).Do(call...)
 	})
 	if err != nil {

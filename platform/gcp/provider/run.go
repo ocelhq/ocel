@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
@@ -314,7 +315,7 @@ func servesLatest(current *run.GoogleCloudRunV2Service) bool {
 
 func (p *Provider) writeRelease(ctx context.Context, clients *clients, services *run.Service, s serving, desired *run.GoogleCloudRunV2Service, progress progress.Log) error {
 	path := clients.servicePath(s.service)
-	_, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	_, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
 	})
 	switch {
@@ -500,7 +501,7 @@ func (p *Provider) route(
 }
 
 func (p *Provider) read(ctx context.Context, services *run.Service, path, service string) (*run.GoogleCloudRunV2Service, error) {
-	found, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
 	})
 	if err != nil {
@@ -512,7 +513,7 @@ func (p *Provider) read(ctx context.Context, services *run.Service, path, servic
 func (p *Provider) retryWrite(ctx context.Context, doing string, write func() error) error {
 	var refused error
 	for attempt := range releaseAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return ctx.Err()
 		}
 		if refused = write(); refused == nil || !stale(refused) {
@@ -523,7 +524,7 @@ func (p *Provider) retryWrite(ctx context.Context, doing string, write func() er
 }
 
 func stale(err error) bool {
-	switch answeredCode(err) {
+	switch googleretry.AnsweredCode(err) {
 	case http.StatusConflict, http.StatusPreconditionFailed:
 		return true
 	}
@@ -554,7 +555,7 @@ func revisionName(path string) string {
 }
 
 func (p *Provider) await(ctx context.Context, services *run.Service, call func(...googleapi.CallOption) (*run.GoogleLongrunningOperation, error)) error {
-	started, err := attempted(ctx, call)
+	started, err := googleretry.Attempted(ctx, call)
 	if err != nil {
 		return fmt.Errorf("ask Cloud Run to release: %w", err)
 	}
@@ -562,7 +563,7 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 		if started.Done {
 			return started, nil
 		}
-		return attempted(ctx, func(opt ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+		return googleretry.Attempted(ctx, func(opt ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Operations.Get(started.Name).Context(ctx).Do(opt...)
 		})
 	}, func(op *run.GoogleLongrunningOperation) bool { return op != nil && op.Done })

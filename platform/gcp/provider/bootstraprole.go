@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -78,7 +79,7 @@ func (b bootstrap) readRole(ctx context.Context, id string) (*iam.Role, error) {
 	if err != nil {
 		return nil, err
 	}
-	return attempted(ctx, service.Projects.Roles.Get(b.clients.roleName(id)).Context(ctx).Do)
+	return googleretry.Attempted(ctx, service.Projects.Roles.Get(b.clients.roleName(id)).Context(ctx).Do)
 }
 
 func (c *clients) roleName(id string) string { return "projects/" + c.project + "/roles/" + id }
@@ -103,8 +104,8 @@ func (b bootstrap) makeRole(ctx context.Context, want customRole) error {
 	}
 	name := b.clients.roleName(id)
 	if role.Deleted {
-		if role, err = attempted(ctx, service.Projects.Roles.Undelete(name, &iam.UndeleteRoleRequest{Etag: role.Etag}).Context(ctx).Do); err != nil {
-			if answeredCode(err) == http.StatusBadRequest || absent(err) {
+		if role, err = googleretry.Attempted(ctx, service.Projects.Roles.Undelete(name, &iam.UndeleteRoleRequest{Etag: role.Etag}).Context(ctx).Do); err != nil {
+			if googleretry.AnsweredCode(err) == http.StatusBadRequest || absent(err) {
 				return refusePurgedRole(name)
 			}
 			return fmt.Errorf("undelete the %s custom role: %w", id, err)
@@ -113,7 +114,7 @@ func (b bootstrap) makeRole(ctx context.Context, want customRole) error {
 	if !roleDrifted(role, want) {
 		return nil
 	}
-	if _, err := attempted(ctx, service.Projects.Roles.Patch(name, &iam.Role{
+	if _, err := googleretry.Attempted(ctx, service.Projects.Roles.Patch(name, &iam.Role{
 		IncludedPermissions: want.permissions,
 		Stage:               roleStageGA,
 		Etag:                role.Etag,
@@ -129,7 +130,7 @@ func (b bootstrap) createRole(ctx context.Context, want customRole) (*iam.Role, 
 	if err != nil {
 		return nil, err
 	}
-	created, err := attempted(ctx, service.Projects.Roles.Create("projects/"+b.clients.project, &iam.CreateRoleRequest{
+	created, err := googleretry.Attempted(ctx, service.Projects.Roles.Create("projects/"+b.clients.project, &iam.CreateRoleRequest{
 		RoleId: id,
 		Role: &iam.Role{
 			Title:               want.title,

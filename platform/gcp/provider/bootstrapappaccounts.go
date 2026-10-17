@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const serviceAccountListPage = 100
@@ -86,7 +87,7 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 	var candidates []appAccount
 	var retired []string
 	for token := ""; ; {
-		page, err := attempted(ctx, service.Projects.ServiceAccounts.List("projects/"+b.clients.project).
+		page, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.List("projects/"+b.clients.project).
 			PageSize(serviceAccountListPage).PageToken(token).Context(ctx).Do)
 		if err != nil {
 			return fmt.Errorf("list the service accounts of project %s: %w", b.clients.project, err)
@@ -176,7 +177,7 @@ func (b bootstrap) deleteRetiredWorkloadAccount(ctx context.Context, tier enviro
 		return err
 	}
 	id := string(b.clients.namespace) + "-" + string(tier)
-	account, err := attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(b.clients, id)).Context(ctx).Do)
+	account, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(b.clients, id)).Context(ctx).Do)
 	if absent(err) {
 		return nil
 	}
