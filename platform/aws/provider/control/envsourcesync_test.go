@@ -16,13 +16,14 @@ import (
 	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrapfunction"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 )
 
 type absentEnvSync struct {
-	envsourcesync.IAMAPI
+	bootstrapfunction.IAMAPI
 	envsourcesync.LambdaAPI
-	envsourcesync.LogsAPI
+	bootstrapfunction.LogsAPI
 	envsourcesync.SchedulerAPI
 
 	deleted []string

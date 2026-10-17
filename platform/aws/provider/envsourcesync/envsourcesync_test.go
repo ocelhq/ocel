@@ -267,13 +267,23 @@ func TestABootstrapOverSyncRolesWhoseTrustDriftedPutsBackTheirTrustAndBoundaryIn
 func TestEnsureWaitsOutARoleLambdaCannotAssumeYet(t *testing.T) {
 	t.Parallel()
 	account := newAccount()
-	account.unassumable = 2
+	account.unassumable = 1
 
 	if _, err := envsourcesync.Ensure(context.Background(), account.clients(), spec(environment.TierProduction)); err != nil {
 		t.Fatalf("Ensure() while the new role propagates = %v, want it waited out", err)
 	}
 	if _, ok := account.functions[envsourcesync.NamesFor("ocel", environment.TierProduction).Function]; !ok {
 		t.Error("no function once the role could be assumed")
+	}
+}
+
+func TestEnsureWaitsOutLambdaThrottlingIt(t *testing.T) {
+	t.Parallel()
+	account := newAccount()
+	account.throttled = 1
+
+	if _, err := envsourcesync.Ensure(context.Background(), account.clients(), spec(environment.TierProduction)); err != nil {
+		t.Fatalf("Ensure() while Lambda throttles it = %v, want the throttle waited out", err)
 	}
 }
 
