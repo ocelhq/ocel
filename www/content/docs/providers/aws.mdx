@@ -53,13 +53,15 @@ rest is added by the first deploy that needs it, with the deploy credential, and
 | `image-optimizer` | the first deploy of an app whose build optimizes images |
 | `tag-invalidator` | the first deploy of an app that revalidates |
 | `apigateway-preview` | the first `ocel domain use --preview` behind API Gateway: the REST API that answers 404 for a preview host no preview claims |
+| `function-network` | the first deploy of a serverless app that uses a `postgres` or `kv` ocel provisions: the [private subnets and NAT gateway](#serverless-apps-and-the-vpc) its functions run in, about $36.50 a month idle. The last app out takes it down |
 
 A dry deploy lists the parts it would add. `ocel bootstrap production` makes each recorded part
 again, and `ocel bootstrap destroy production` removes them with the rest.
 `ocel bootstrap production --remove <part>` takes one part down, whichever added it, and refuses
 while a project here uses it unless you pass `--force`; the next deploy that needs a part a deploy
-adds adds it back. `--force` never takes `containers` down while a container app still runs on it:
-remove those apps or destroy their environments, and the last one to leave takes it down.
+adds adds it back. `--force` never takes `containers` or `function-network` down while an app still
+runs in it: remove those apps or destroy their environments, and the last one to leave takes it
+down.
 
 Two parts only the bootstrap credential may make, so no deploy adds them:
 
@@ -132,9 +134,9 @@ export default defineConfig({
 replica in another availability zone that takes over if the primary fails. Two
 `cache.t4g.micro` nodes cost about $18.69 a month in us-east-1.
 
-- **Container apps only.** The group sits in the default VPC's subnets and admits port 6379
-  from inside that VPC only. A deploy refuses a serverless app that uses a store until functions
-  can join the VPC ([#1473](https://github.com/ocelhq/ocel/issues/1473)).
+- **In the VPC.** The group sits in the default VPC's subnets and admits port 6379 from inside
+  that VPC only. A container app runs there; a serverless app joins it through the
+  [function network](#serverless-apps-and-the-vpc).
 - **Auth.** TLS, encrypted at rest, and an AUTH token ocel generates, kept in SSM Parameter Store
   under `/<namespace>/kv/`.
 - **`memory`** picks the cheapest node that holds it: `cache.t4g.micro` up to 256mb, then
@@ -166,6 +168,38 @@ With no replica and no append-only file, a replaced node comes back empty.
 
 `ocel destroy` takes the replication group, its snapshots, parameter and subnet groups,
 security group and token.
+
+## Serverless apps and the VPC
+
+Aurora and ElastiCache answer inside the default VPC only, and a Lambda function runs outside
+any VPC. A serverless app that uses a `postgres` or `kv` ocel provisions is attached to the VPC
+with no transform: every function and worker of the app runs in the tier's `function-network`
+part, and the app's role gets `AWSLambdaVPCAccessExecutionRole`. An app that uses neither, or
+only a binding another project or your own infrastructure provisioned, stays outside the VPC.
+
+A function in a VPC has no internet access of its own, so the part holds:
+
+- **Two private subnets** in two availability zones, the first free `/20` blocks counting down
+  from the top of the default VPC's address range, so they never overlap a subnet already there.
+  A deploy refuses a VPC with no free block. No database, cache, cluster or load balancer is
+  placed in them.
+- **One NAT gateway** and its elastic IP, in a default subnet: about $32.85 a month (730 hours at
+  $0.045), $3.65 for the public IPv4 address, and $0.045 per GB it processes, in us-east-1. One
+  per tier, priced by `ocel cost scan` and `ocel bootstrap status`.
+- **Gateway endpoints** for S3 and DynamoDB, at no charge, so ocel's own runtime traffic stays off
+  the NAT gateway.
+- **A security group** that lets functions call out and admits nothing.
+
+The first deploy that attaches can take several minutes longer while Lambda builds its network
+interfaces, and a dry deploy lists the part as a slow create. Lambda reclaims an attachment
+idle for 14 days, and the next invocation waits for it to be rebuilt. The last app or worker to
+leave takes the part down once its functions have left the subnets, which waits for Lambda to
+release their interfaces. A takedown that fails leaves the part recorded with no user:
+`ocel bootstrap production --remove function-network` finishes it.
+
+To place a function in subnets of your own, set `vpcConfig` in a
+[transform](/docs/transforms#placing-a-function-in-your-own-vpc). It takes the place of the
+automatic attach for the functions it names.
 
 ## Topics, tasks and workers
 

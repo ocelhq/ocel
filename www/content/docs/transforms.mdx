@@ -140,6 +140,15 @@ export default defineTransform([
 ]);
 ```
 
+## Placing a function in your own VPC
+
+On AWS, a serverless app that uses a `postgres` or `kv` ocel provisions joins the default VPC
+through the [function network](/docs/providers/aws#serverless-apps-and-the-vpc). A transform that
+sets `vpcConfig` on a function overrides that: the function runs in the subnets and security
+groups the transform names, as in the example below, and ocel adds nothing to it. A function the
+transform does not name keeps the automatic attach. A `vpcConfig` needs at least one subnet and
+one security group.
+
 ## Reading what your own infrastructure published
 
 The callback form fills a field from a record your own infrastructure published:
