@@ -6,12 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand/v2"
-	"net"
 	"net/http"
-	"slices"
 	"strconv"
-	"syscall"
 	"time"
 
 	"cloud.google.com/go/auth"
@@ -19,25 +15,15 @@ import (
 	"golang.org/x/oauth2/google"
 
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const userLoginType = "authorized_user"
 
 const (
-	tokenAttempts = 4
-	tokenBackoff  = 200 * time.Millisecond
-	tokenCeiling  = 5 * time.Second
-	tokenTimeout  = time.Minute
+	retryAfterCeiling = 5 * time.Second
+	tokenTimeout      = time.Minute
 )
-
-var tokenRetryAnswers = []int{
-	http.StatusRequestTimeout,
-	http.StatusTooManyRequests,
-	http.StatusInternalServerError,
-	http.StatusBadGateway,
-	http.StatusServiceUnavailable,
-	http.StatusGatewayTimeout,
-}
 
 func ProveIdentity(ctx context.Context, audience string) (envsource.IdentityProof, error) {
 	credentials, err := idtoken.NewCredentials(&idtoken.Options{
@@ -59,36 +45,19 @@ func ProveIdentity(ctx context.Context, audience string) (envsource.IdentityProo
 }
 
 func issued(ctx context.Context, credentials *auth.Credentials) (*auth.Token, error) {
-	for attempt := 1; ; attempt++ {
+	token, _, err := googleretry.Asked(ctx, func() (*auth.Token, int, error) {
 		token, err := credentials.Token(ctx)
-		if err == nil || attempt == tokenAttempts || !unanswered(err) {
-			return token, err
-		}
-		if !waited(ctx, jittered(attempt)) {
-			return nil, ctx.Err()
-		}
-	}
+		return token, refusedCode(err), err
+	})
+	return token, err
 }
 
-func unanswered(err error) bool {
+func refusedCode(err error) int {
 	var refused *auth.Error
-	if errors.As(err, &refused) {
-		return refused.Temporary()
+	if errors.As(err, &refused) && refused.Response != nil {
+		return refused.Response.StatusCode
 	}
-	var reached net.Error
-	return errors.As(err, &reached) || errors.Is(err, io.ErrUnexpectedEOF) ||
-		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED)
-}
-
-func waited(ctx context.Context, wait time.Duration) bool {
-	timer := time.NewTimer(min(wait, tokenCeiling))
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
+	return 0
 }
 
 type retriedTransport struct {
@@ -102,14 +71,14 @@ func (t retriedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 		resp, err := t.base.RoundTrip(sent)
-		if err != nil || attempt == tokenAttempts || !slices.Contains(tokenRetryAnswers, resp.StatusCode) ||
+		if err != nil || attempt == googleretry.Attempts || !googleretry.IsRetryableAnswer(resp.StatusCode) ||
 			(req.Body != nil && req.GetBody == nil) {
 			return resp, err
 		}
-		wait := max(jittered(attempt), retryAfter(resp))
+		after := retryAfter(resp)
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
-		if !waited(req.Context(), wait) {
+		if !waitedToRetry(req.Context(), attempt, after) {
 			return nil, req.Context().Err()
 		}
 	}
@@ -128,9 +97,18 @@ func rewound(req *http.Request, attempt int) (*http.Request, error) {
 	return again, nil
 }
 
-func jittered(attempt int) time.Duration {
-	backoff := min(tokenBackoff<<(attempt-1), tokenCeiling)
-	return backoff/2 + rand.N(backoff/2)
+func waitedToRetry(ctx context.Context, attempt int, after time.Duration) bool {
+	if after == 0 {
+		return googleretry.Waited(ctx, attempt)
+	}
+	timer := time.NewTimer(min(after, retryAfterCeiling))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 func retryAfter(resp *http.Response) time.Duration {

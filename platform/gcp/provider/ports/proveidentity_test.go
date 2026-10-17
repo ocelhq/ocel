@@ -4,19 +4,27 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
+
+	"cloud.google.com/go/auth"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 func isolated(t *testing.T) string {
@@ -159,6 +167,49 @@ func TestAThrottledOrFailingTokenEndpointIsAskedAgainAndARefusalIsNot(t *testing
 			defer mu.Unlock()
 			if asked != tc.want {
 				t.Errorf("Google was asked %d times, want %d", asked, tc.want)
+			}
+		})
+	}
+}
+
+type tokenFunc func(context.Context) (*auth.Token, error)
+
+func (f tokenFunc) Token(ctx context.Context) (*auth.Token, error) { return f(ctx) }
+
+func timesAsked(failure error) int {
+	calls := 0
+	credentials := auth.NewCredentials(&auth.CredentialsOptions{
+		TokenProvider: tokenFunc(func(context.Context) (*auth.Token, error) { calls++; return nil, failure }),
+	})
+	_, _ = issued(context.Background(), credentials)
+	return calls
+}
+
+func TestATokenFailureThatWillFailAgainIsAskedOnce(t *testing.T) {
+	for name, failure := range map[string]error{
+		"untrusted certificate": &url.Error{Op: "Post", URL: "https://oauth2.googleapis.com/token", Err: &tls.CertificateVerificationError{Err: x509.UnknownAuthorityError{}}},
+		"no such host":          &url.Error{Op: "Post", URL: "https://oauth2.googleapis.com/token", Err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "oauth2.example", IsNotFound: true}}},
+		"connection refused":    &url.Error{Op: "Post", URL: "https://oauth2.googleapis.com/token", Err: &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}},
+		"refused grant":         &auth.Error{Response: &http.Response{StatusCode: http.StatusBadRequest}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if calls := timesAsked(failure); calls != 1 {
+				t.Errorf("%s was asked %d times, want 1", name, calls)
+			}
+		})
+	}
+}
+
+func TestATokenFailureThatMayPassIsAskedAgain(t *testing.T) {
+	for name, failure := range map[string]error{
+		"timed out":                 &url.Error{Op: "Post", URL: "https://oauth2.googleapis.com/token", Err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}},
+		"connection reset":          &url.Error{Op: "Post", URL: "https://oauth2.googleapis.com/token", Err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}},
+		"token endpoint down":       &auth.Error{Response: &http.Response{StatusCode: http.StatusServiceUnavailable}},
+		"token endpoint throttling": &auth.Error{Response: &http.Response{StatusCode: http.StatusTooManyRequests}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if calls := timesAsked(failure); calls != googleretry.Attempts {
+				t.Errorf("%s was asked %d times, want %d", name, calls, googleretry.Attempts)
 			}
 		})
 	}
