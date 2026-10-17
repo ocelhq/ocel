@@ -26,11 +26,12 @@ type BootstrapPart struct {
 	Digest    string                  `json:"digest,omitempty"`
 	AddedBy   string                  `json:"added_by,omitempty"`
 	AddedAt   time.Time               `json:"added_at"`
+	ClaimedAt time.Time               `json:"claimed_at,omitzero"`
 	Resources []provider.PartResource `json:"resources,omitempty"`
 }
 
 func ClaimBootstrapPart(ctx context.Context, store keyvalue.Store, tier environment.Tier, name string, claim BootstrapPart) (BootstrapPart, bool, error) {
-	claim.State = PartCreating
+	claim.State, claim.ClaimedAt = PartCreating, time.Now().UTC()
 	value, err := json.Marshal(claim)
 	if err != nil {
 		return BootstrapPart{}, false, fmt.Errorf("record the %s bootstrap part %s: %w", tier, name, err)
@@ -174,8 +175,6 @@ func RepairBootstrapParts(ctx context.Context, store keyvalue.Store, tier enviro
 
 func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier, work PartWork, repairing bool) (bool, error) {
 	key := BootstrapPartKey(tier, work.Name)
-	var seen keyvalue.Revision
-	var since time.Time
 	waited := false
 	for attempt := 0; ; attempt++ {
 		recorded, err := keyvalue.ReadOrEmpty(ctx, store, key)
@@ -185,7 +184,8 @@ func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier
 		if repairing && len(recorded.Value) == 0 {
 			return false, nil
 		}
-		claim := BootstrapPart{State: PartCreating, WrittenBy: work.WrittenBy, Digest: work.Digest, AddedBy: work.AddedBy, AddedAt: time.Now().UTC()}
+		now := time.Now().UTC()
+		claim := BootstrapPart{State: PartCreating, WrittenBy: work.WrittenBy, Digest: work.Digest, AddedBy: work.AddedBy, AddedAt: now, ClaimedAt: now}
 		var prior []byte
 		if len(recorded.Value) > 0 {
 			part, err := decodeBootstrapPart(recorded)
@@ -195,18 +195,13 @@ func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier
 			switch {
 			case part.settledFor(work, repairing && !waited):
 				return false, nil
-			case part.State != PartReady:
-				if recorded.Revision != seen {
-					seen, since = recorded.Revision, time.Now()
+			case part.State != PartReady && now.Sub(part.ClaimedAt) < partLease:
+				if err := pausePart(ctx, attempt); err != nil {
+					return false, fmt.Errorf("wait for the %s bootstrap part %s another run is adding: %w", tier, work.Name, err)
 				}
-				if time.Since(since) < partLease {
-					if err := pausePart(ctx, attempt); err != nil {
-						return false, fmt.Errorf("wait for the %s bootstrap part %s another run is adding: %w", tier, work.Name, err)
-					}
-					waited = true
-					continue
-				}
-			default:
+				waited = true
+				continue
+			case part.State == PartReady:
 				prior = recorded.Value
 			}
 			claim.AddedBy, claim.AddedAt = part.AddedBy, part.AddedAt

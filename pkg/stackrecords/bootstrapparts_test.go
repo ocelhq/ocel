@@ -30,6 +30,10 @@ func TestClaimingAMissingPartRecordsItAsCreatingByWhoeverAddedIt(t *testing.T) {
 
 	read, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, "containers")
 	want := stackrecords.BootstrapPart{State: stackrecords.PartCreating, WrittenBy: "1.2.0", AddedBy: "web", AddedAt: addedAt}
+	if read.ClaimedAt.IsZero() {
+		t.Errorf("ReadBootstrapPart() = %+v, want the time it was claimed, which its lease runs from", read)
+	}
+	read.ClaimedAt = time.Time{}
 	if err != nil || !present || !reflect.DeepEqual(read, want) {
 		t.Errorf("ReadBootstrapPart() = %+v, %v, %v, want %+v", read, present, err, want)
 	}
