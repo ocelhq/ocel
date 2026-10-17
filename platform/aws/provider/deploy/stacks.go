@@ -632,7 +632,7 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images prov
 	if err := opened.destroyWorkersOfLastRelease(ctx, ref, progress); err != nil {
 		return err
 	}
-	if err := opened.liftDeletionProtection(ctx, ref, progress); err != nil {
+	if err := opened.disableDeletionProtection(ctx, ref, progress); err != nil {
 		return err
 	}
 	if err := opened.automation.Destroy(ctx, ref, progress); err != nil {

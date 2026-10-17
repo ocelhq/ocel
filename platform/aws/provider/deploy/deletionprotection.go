@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const reasonProtectionLifted = "its deletion protection is lifted first, and a final snapshot keeps its data"
+const reasonProtectionDisabled = "its deletion protection is disabled first, and a final snapshot keeps its data"
 
 type ClustersAPI interface {
 	ModifyDBCluster(ctx context.Context, in *rds.ModifyDBClusterInput, optFns ...func(*rds.Options)) (*rds.ModifyDBClusterOutput, error)
@@ -36,14 +36,14 @@ func markProtectedClusters(plan provider.Plan, ref provider.StackRef) provider.P
 				continue
 			}
 			group.Changes[i].Action = provider.ActionDisableThenDelete
-			group.Changes[i].Reason = reasonProtectionLifted
+			group.Changes[i].Reason = reasonProtectionDisabled
 			group.Changes[i].Slow = true
 		}
 	}
 	return plan
 }
 
-func (r *release) liftDeletionProtection(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+func (r *release) disableDeletionProtection(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	if !isProtectedTeardown(ref) {
 		return nil
 	}
@@ -61,7 +61,7 @@ func (r *release) liftDeletionProtection(ctx context.Context, ref provider.Stack
 			return errors.New("no RDS client configured")
 		}
 		if progress != nil {
-			progress.Say("Lifting the deletion protection of " + cluster + ", the " + name + " database")
+			progress.Say("Disabling the deletion protection of " + cluster + ", the " + name + " database")
 		}
 		_, err := r.cfg.Clusters.ModifyDBCluster(ctx, &rds.ModifyDBClusterInput{
 			DBClusterIdentifier: aws.String(cluster),
@@ -73,7 +73,7 @@ func (r *release) liftDeletionProtection(ctx context.Context, ref provider.Stack
 			continue
 		}
 		if err != nil {
-			return fmt.Errorf("lift the deletion protection of %s, the %s database: %w", cluster, name, err)
+			return fmt.Errorf("disable the deletion protection of %s, the %s database: %w", cluster, name, err)
 		}
 	}
 	return nil
