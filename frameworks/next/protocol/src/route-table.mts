@@ -106,7 +106,6 @@ export interface NextRouteTable {
   dispatch: Record<string, DispatchTarget>;
   errorRoutes?: {
     notFound?: string;
-    notFoundFlight?: string;
     serverError?: string;
   };
   middleware?: MiddlewareEntry;

@@ -840,15 +840,6 @@ async function renderDispatchTarget(
   }
 }
 
-function notFoundRoute(request: Request, manifest: NextRouteTable): string | undefined {
-  const routes = manifest.errorRoutes;
-  if (!routes) return undefined;
-  if (isFlightRequest(request.headers) && routes.notFoundFlight) {
-    return routes.notFoundFlight;
-  }
-  return routes.notFound;
-}
-
 async function notFoundResponse(
   request: Request,
   url: URL,
@@ -858,7 +849,7 @@ async function notFoundResponse(
   fallback: () => Response | Promise<Response>,
   staticAsset: (at?: URL) => Promise<Response>,
 ): Promise<Response> {
-  const notFoundPathname = notFoundRoute(request, deps.manifest);
+  const notFoundPathname = deps.manifest.errorRoutes?.notFound;
   const notFoundTarget = notFoundPathname ? deps.manifest.dispatch[notFoundPathname] : undefined;
   if (!notFoundPathname || !notFoundTarget) return fallback();
   if (notFoundTarget.kind === "function" && !deps.functionUrls[notFoundTarget.id]) {
