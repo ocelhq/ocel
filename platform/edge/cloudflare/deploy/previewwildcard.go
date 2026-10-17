@@ -59,6 +59,25 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	return "", nil
 }
 
+func (p *cloudflare) PreviewWildcardBehind(ctx context.Context, spec edge.PreviewWildcardSpec) (bool, error) {
+	accountID, err := requireAccountID("read the shared preview entry worker")
+	if err != nil {
+		return false, err
+	}
+	if spec.Program == nil {
+		return false, errors.New("the Cloudflare edge runs the preview entry worker; this wildcard has no program")
+	}
+	state, err := p.readWorkerState(ctx, accountID, bootstrapWorker{
+		scriptName: previewEntryScript,
+		worker:     previewEntryWorker(spec),
+		what:       "shared preview entry worker",
+	})
+	if err != nil {
+		return false, err
+	}
+	return !state.upToDate(), nil
+}
+
 func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
 	accountID, err := requireAccountID("destroy the shared preview entry worker")
 	if err != nil {
