@@ -26,7 +26,7 @@ const LIVE_DIR_ENV = "OCEL_LIVE_DIR";
 const MAX_LINE_CHARS = 64 * 1024;
 
 export interface BuildLog {
-  print(line: string): void;
+  print(text: string, partial?: boolean): void;
 }
 
 export interface BuildNode {
@@ -122,29 +122,33 @@ async function spawnBuild(
 }
 
 function printLines(stream: Readable, log: BuildLog): void {
-  let partial = "";
+  let pending = "";
   stream.setEncoding("utf8");
   stream.on("data", (chunk: string) => {
-    const lines = (partial + chunk).split("\n");
-    partial = lines.pop() ?? "";
-    for (const line of lines) printPieces(line.replace(/\r$/, ""), log);
-    const whole = partial.length - (partial.length % MAX_LINE_CHARS);
-    if (whole > 0) {
-      printPieces(partial.slice(0, whole), log);
-      partial = partial.slice(whole);
-    }
+    const lines = (pending + chunk).split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) log.print(printAllButLastPiece(line.replace(/\r$/, ""), log));
+    pending = printAllButLastPiece(pending, log);
   });
   stream.on("end", () => {
-    if (partial) log.print(partial);
+    if (pending) log.print(pending);
   });
 }
 
-function printPieces(line: string, log: BuildLog): void {
-  let start = 0;
-  do {
-    log.print(line.slice(start, start + MAX_LINE_CHARS));
-    start += MAX_LINE_CHARS;
-  } while (start < line.length);
+function printAllButLastPiece(text: string, log: BuildLog): string {
+  let rest = text;
+  while (rest.length > MAX_LINE_CHARS) {
+    const cut = isHighSurrogate(rest.charCodeAt(MAX_LINE_CHARS - 1))
+      ? MAX_LINE_CHARS - 1
+      : MAX_LINE_CHARS;
+    log.print(rest.slice(0, cut), true);
+    rest = rest.slice(cut);
+  }
+  return rest;
+}
+
+function isHighSurrogate(unit: number): boolean {
+  return unit >= 0xd800 && unit <= 0xdbff;
 }
 
 export interface OutputBuild extends ScriptBuild {

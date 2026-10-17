@@ -290,6 +290,20 @@ func TestAnOutputLineForAnAppWithNoOpenBuildIsSharedOutput(t *testing.T) {
 	}
 }
 
+func TestAnOutputLineSentInPiecesReachesItsBuildWholeWithAValueTheCutSplitsHidden(t *testing.T) {
+	var builds appBuilds
+	p := &Processor{AppBuild: builds.open, Hide: redaction.NewValues([]string{"sk_live", "sk_live_sensitive"})}
+
+	send(p, record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
+	send(p, record{Type: typeOutput, App: "web", Message: "key sk_live_sens", Partial: true})
+	send(p, record{Type: typeOutput, App: "web", Message: "itive set"})
+	send(p, record{Type: typeSpanEnd, ID: "1", OK: new(true)})
+
+	if got, want := builds.logs["web"].String(), "key [secret] set\n"; got != want {
+		t.Errorf("web's log = %q, want %q", got, want)
+	}
+}
+
 func TestAFailedBuildEndsWithItsOwnAppsErrorNotAnotherAppsReportedSinceItStarted(t *testing.T) {
 	var builds appBuilds
 	p := &Processor{AppBuild: builds.open}
@@ -307,14 +321,15 @@ func TestAFailedBuildEndsWithItsOwnAppsErrorNotAnotherAppsReportedSinceItStarted
 	}
 }
 
-func TestProcessorErrReturnsTheLastErrorRecord(t *testing.T) {
+func TestTheFailureIsTheFirstErrorReportedWhenBuildsOverlap(t *testing.T) {
 	_, run := newRun(t)
 	p := &Processor{Span: run.build}
 
 	send(p, record{Type: typeError, App: "api", Stage: "build", Message: "no entrypoint resolved"})
+	send(p, record{Type: typeError, App: "web", Stage: "build", Message: "next build exited with code 1"})
 
 	if got, want := p.Failure(), "no entrypoint resolved"; got != want {
-		t.Errorf("Err() = %q, want %q", got, want)
+		t.Errorf("Failure() = %q, want %q", got, want)
 	}
 }
 

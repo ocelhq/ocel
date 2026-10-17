@@ -41,7 +41,9 @@ export async function buildApps(
 }
 
 function buildApp(app: AppBuild, adapters: Adapters): Promise<void> {
-  const log: BuildLog = { print: (line) => printOutput(app.name, line) };
+  const log: BuildLog = {
+    print: (text, partial) => printOutput(app.name, text, partial),
+  };
   switch (app.framework) {
     case "next":
       return adapters.next(app, log);

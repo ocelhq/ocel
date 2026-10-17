@@ -169,6 +169,31 @@ process.exitCode = 1;
 	}
 }
 
+func TestALiveValueAJavaScriptAppsLongLineCutsBetweenPiecesIsHiddenInItsLog(t *testing.T) {
+	t.Parallel()
+	cfg := nodeBuilder(t, `
+const app = req.apps[0].name;
+const line = "x".repeat(65530) + "sk_live_sensitive and more";
+emit({type: "span_start", id: "1", stage: "build", app});
+emit({type: "output", app, message: line.slice(0, 65536), partial: true});
+emit({type: "output", app, message: line.slice(65536)});
+emit({type: "span_end", id: "1", ok: true});
+`)
+	cfg.Apps = cfg.Apps[:1]
+
+	var spans appSpans
+	if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, map[string]AppVariables{
+		"web": {Live: map[string]string{"STRIPE_API_KEY": "sk_live_sensitive"}},
+	}, spans.output()); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	want := strings.Repeat("x", 65530) + "[secret] and more\n"
+	if got := spans.log("web"); got != want {
+		t.Errorf("web's log ends %q, want the line whole with the value hidden, ending %q", got[max(len(got)-40, 0):], want[len(want)-40:])
+	}
+}
+
 func TestAJavaScriptAppsSpanStillEndsWhenTheBuilderDiesMidBuild(t *testing.T) {
 	t.Parallel()
 	cfg := nodeBuilder(t, `
