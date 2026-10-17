@@ -1656,7 +1656,7 @@ func TestARefusedRollbackStopsTheContainerItStartedAgainRatherThanRemovingIt(t *
 	}
 }
 
-func TestARefusedRollOutLeavesAContainerItKeptRunningWhereNothingRoutesToIt(t *testing.T) {
+func TestARefusedRollOutRemovesAContainerItKeptWhereNothingRoutesToIt(t *testing.T) {
 	t.Parallel()
 
 	kept := aRollout()
