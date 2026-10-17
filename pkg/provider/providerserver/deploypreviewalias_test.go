@@ -483,3 +483,37 @@ func TestDeployAnnouncesEachAppsOwnHostnameUnderThatApp(t *testing.T) {
 		t.Errorf("admin has %v, want the hostname admin itself declares", got)
 	}
 }
+
+func TestDeployRefusesAnAppServedOnNoProductionHostname(t *testing.T) {
+	production := func(hosts ...string) []*contractv1.TierDomains {
+		if len(hosts) == 0 {
+			return nil
+		}
+		return []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: hosts}}
+	}
+	for _, tc := range []struct {
+		name                string
+		project, web, admin []string
+	}{
+		{name: "web declares one and the project none", web: []string{"shop.example"}},
+		{name: "the project declares one and neither app does", project: []string{"shop.example"}},
+		{name: "the project and web each declare one", project: []string{"shop.example"}, web: []string{"www.shop.example"}},
+		{name: "admin declares only the hostname web is served on", web: []string{"shop.example"}, admin: []string{"shop.example"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := twoAppRequest()
+			req.Manifest.Domains = production(tc.project...)
+			req.Manifest.Apps[0].Domains = production(tc.web...)
+			req.Manifest.Apps[1].Domains = production(tc.admin...)
+			req.Edge = writtenBy("shop.example")
+
+			said := refusedDeploy(t, req, nil)
+			if !strings.Contains(said, `"admin"`) || !strings.Contains(said, "domains.production") || strings.Contains(said, `"web"`) {
+				t.Errorf("Deploy() was refused with %q, want it to name admin, which no hostname is served to, and the domains.production that fixes it, and not web, which is served one", said)
+			}
+			if strings.Contains(said, "every app") {
+				t.Errorf("Deploy() was refused with %q, want no claim that a project's domains.production serves every app: it serves only the first", said)
+			}
+		})
+	}
+}

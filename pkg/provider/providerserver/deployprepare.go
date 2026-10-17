@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -124,8 +125,14 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 		}
 		return refuseNoPreviewDomain()
 	}
+	addressesItself := r.edgeRouter().Facts().AddressesItself
+	if !addressesItself {
+		if err := r.refuseAppsWithoutHostname(); err != nil {
+			return err
+		}
+	}
 	if len(hosts) == 0 {
-		if r.edgeRouter().Facts().AddressesItself {
+		if addressesItself {
 			return nil
 		}
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -143,6 +150,25 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 	r.installDNSCutover(writer, r.selection.GetDns().GetZone())
 	r.cutover.manual = failOnManualRecords(r.sender, r.spans.Hostnames)
 	return nil
+}
+
+func (r *deployRun) refuseAppsWithoutHostname() error {
+	var unserved []string
+	for slot, hosts := range r.listServedHostnames() {
+		entry := r.spec.Apps[slot]
+		if len(hosts) == 0 && !provider.IsWorkerApp(entry.App, entry.Workers) {
+			unserved = append(unserved, strconv.Quote(entry.App))
+		}
+	}
+	if len(unserved) == 0 {
+		return nil
+	}
+	named := namedList("app", "apps", unserved)
+	return refusal.Refuse(refusal.CodeNotReady,
+		"this deploy serves %[1]s on no hostname, so nothing would route to %[1]s: "+
+			"declare domains.production on %[1]s with a hostname no other app is served on, as a project's domains.production serves only the first app, "+
+			"and the deploy that reads it attaches it",
+		named)
 }
 
 func refuseNoPreviewDomain() error {
