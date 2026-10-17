@@ -195,8 +195,8 @@ func (h *handlers) removePreview(ctx context.Context, req *contractv1.RemoveEnvi
 	if err := keyvalue.Forget(ctx, session.provider.KeyValues(), stackrecords.EnvironmentKey(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
 		return err
 	}
-	for _, line := range pruneLines(removed) {
-		progress.Say(line)
+	if len(removed.RemovedPromotionIDs) > 0 {
+		progress.Say("Reclaimed " + namedList("promotion", "promotions", removed.RemovedPromotionIDs))
 	}
 	return nil
 }
