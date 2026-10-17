@@ -712,6 +712,18 @@ describe("sdk/go, sdk/python and sdk/rust", () => {
     }
   });
 
+  it("publishes from python as a container on aws behind cloudflare, expecting nothing red, and skips it where no zone or Cloudflare API is", () => {
+    const cell = "sdk/python-cloudflare-container";
+    const planned = planOn("aws", ZONED_RUN);
+    expect(planned.cells.map((one) => one.name)).toContain(cell);
+    expect(planned.skipped[cell]).toBeUndefined();
+    expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
+    expect(skippedBy(planOn("aws"), cell)).toEqual(["no-cloudflare-zone"]);
+    expect(skippedBy(planOn("aws.floci"), cell)).toEqual(
+      ["floci-runs-no-event-api", "no-cloudflare-api"].sort(),
+    );
+  });
+
   it("skips every language on a box under the tickets for their images", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
       expect(
