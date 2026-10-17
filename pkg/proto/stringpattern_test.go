@@ -21,6 +21,7 @@ import (
 	_ "github.com/ocelhq/ocel/pkg/proto/cli/help/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"

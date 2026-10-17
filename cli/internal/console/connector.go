@@ -42,6 +42,8 @@ func ComputeNameOf(kind consolev1.ComputeKind) string {
 		return "serverless"
 	case consolev1.ComputeKind_COMPUTE_KIND_CONTAINER:
 		return "container"
+	case consolev1.ComputeKind_COMPUTE_KIND_MICROVM:
+		return "microvm"
 	default:
 		return ""
 	}
@@ -53,6 +55,8 @@ func computeKindOf(name string) (consolev1.ComputeKind, bool) {
 		return consolev1.ComputeKind_COMPUTE_KIND_SERVERLESS, true
 	case "container":
 		return consolev1.ComputeKind_COMPUTE_KIND_CONTAINER, true
+	case "microvm":
+		return consolev1.ComputeKind_COMPUTE_KIND_MICROVM, true
 	default:
 		return consolev1.ComputeKind_COMPUTE_KIND_UNSPECIFIED, false
 	}
