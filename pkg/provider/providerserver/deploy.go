@@ -528,11 +528,15 @@ func (r *deployRun) refuseAppsWithoutHostname() error {
 		return nil
 	}
 	named := namedList("app", "apps", unserved)
+	var projectServes string
+	if len(tierHostnames(r.manifest.GetDomains(), encodeTier(r.spec.Tier))) > 0 {
+		projectServes = fmt.Sprintf(" (the project's domains.production serves app %q alone)", r.spec.Apps[0].App)
+	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this deploy serves %[1]s on no hostname, so nothing would route to %[1]s: "+
-			"declare domains.production on %[1]s with a hostname no other app is served on, as a project's domains.production serves only the first app, "+
+			"declare domains.production on %[1]s with a hostname no other app is served on%[2]s, "+
 			"and the deploy that reads it attaches it",
-		named)
+		named, projectServes)
 }
 
 func refuseNoPreviewDomain() error {

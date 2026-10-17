@@ -1985,11 +1985,18 @@ func TestDeployRefusesAnAppServedOnNoProductionHostname(t *testing.T) {
 			req.Edge = writtenBy("shop.example")
 
 			said := refusedDeploy(t, req, nil)
-			if !strings.Contains(said, `"admin"`) || !strings.Contains(said, "domains.production") || strings.Contains(said, `"web"`) {
-				t.Errorf("Deploy() was refused with %q, want it to name admin, which no hostname is served to, and the domains.production that fixes it, and not web, which is served one", said)
+			if !strings.Contains(said, `app "admin" on no hostname`) || !strings.Contains(said, `declare domains.production on app "admin"`) {
+				t.Errorf("Deploy() was refused with %q, want it to name admin, which no hostname is served to, and the domains.production on admin that fixes it", said)
 			}
-			if strings.Contains(said, "every app") {
-				t.Errorf("Deploy() was refused with %q, want no claim that a project's domains.production serves every app: it serves only the first", said)
+			projectServesWeb := strings.Contains(said, `the project's domains.production serves app "web"`)
+			if declared := len(tc.project) > 0; projectServesWeb != declared {
+				t.Errorf("Deploy() was refused with %q, want it to name web as the one app the project's domains.production serves exactly when the project declares one (%v)", said, declared)
+			}
+			if !projectServesWeb && strings.Contains(said, `"web"`) {
+				t.Errorf("Deploy() was refused with %q, want no mention of web, which is served its own hostname, when the project declares none", said)
+			}
+			if strings.Contains(said, "every app") || strings.Contains(said, "first app") {
+				t.Errorf("Deploy() was refused with %q, want the app the project's domains.production serves named, not described by its position", said)
 			}
 		})
 	}
