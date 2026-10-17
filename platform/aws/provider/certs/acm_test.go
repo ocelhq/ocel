@@ -184,6 +184,22 @@ func TestIssuerRequest(t *testing.T) {
 		}
 	})
 
+	t.Run("tags the certificate as Ocel's when it is requested", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{}
+		if _, err := testIssuer(api, 1).Request(t.Context(), []string{"*.preview.acme.com"}); err != nil {
+			t.Fatalf("Request: %v", err)
+		}
+		tags := map[string]string{}
+		for _, tag := range api.requested[0].Tags {
+			tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+		}
+		if tags["ocel:managed-by"] != "ocel" {
+			t.Errorf("request tags = %v, want ocel:managed-by=ocel: the deploy credential requests, deletes and tags only certificates carrying it", tags)
+		}
+	})
+
 	t.Run("a refusal names the hostname and the region", func(t *testing.T) {
 		t.Parallel()
 

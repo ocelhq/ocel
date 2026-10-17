@@ -161,6 +161,7 @@ func (i ACM) Request(ctx context.Context, hostnames []string) (Certificate, erro
 		SubjectAlternativeNames: alternates,
 		ValidationMethod:        acmtypes.ValidationMethodDns,
 		IdempotencyToken:        aws.String(idempotencyToken(strings.Join(hostnames, ","))),
+		Tags:                    []acmtypes.Tag{{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")}},
 	})
 	if err != nil {
 		return Certificate{}, fmt.Errorf("request a certificate for %s in %s: %w", strings.Join(hostnames, ", "), i.Region, err)

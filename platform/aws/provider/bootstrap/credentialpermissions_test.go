@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
@@ -1120,21 +1121,20 @@ func TestEveryManagedByConditionAdmitsTheTagOcelWrites(t *testing.T) {
 	}
 }
 
-func TestEveryCredentialImportsAndReclaimsOnlyTheCertificatesItTagged(t *testing.T) {
+func TestEveryCredentialChangesOnlyTheCertificatesItTagged(t *testing.T) {
 	want := map[grant]bool{
 		{action: "acm:ImportCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedOnCreate())}: true,
+		{action: "acm:RequestCertificate", resource: UnscopedResource, condition: conditionJSON(t, taggedOnCreate())}: true,
 		{action: "acm:AddTagsToCertificate", resource: appCertificateARN, condition: conditionJSON(t, map[string]any{
 			"StringEquals":         map[string]any{"aws:RequestTag/ocel:managed-by": "ocel"},
 			"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"},
 		})}: true,
-		{action: "acm:DescribeCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:       true,
 		{action: "acm:ListTagsForCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:    true,
 		{action: "acm:AddTagsToCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:      true,
 		{action: "acm:RemoveTagsFromCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}: true,
-		{action: "acm:DeleteCertificate", resource: appCertificateARN, condition: conditionJSON(t, map[string]any{
-			"StringEquals":         map[string]any{"aws:ResourceTag/ocel:managed-by": "ocel"},
-			"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"},
-		})}: true,
+		{action: "acm:DeleteCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:         true,
+		{action: "acm:DescribeCertificate", resource: appCertificateARN, condition: conditionJSON(t, nil)}:                  true,
+		{action: "acm:ListCertificates", resource: UnscopedResource, condition: conditionJSON(t, nil)}:                      true,
 	}
 	for purpose, document := range bothCredentials(t) {
 		granted := map[grant]bool{}
@@ -1145,12 +1145,63 @@ func TestEveryCredentialImportsAndReclaimsOnlyTheCertificatesItTagged(t *testing
 		}
 		for wanted := range want {
 			if !granted[wanted] {
-				t.Errorf("the %s credential does not grant %s on %s under %s: the public load balancer's default certificate is imported into ACM", purpose, wanted.action, wanted.resource, wanted.condition)
+				t.Errorf("the %s credential does not grant %s on %s under %s: the public load balancer's default certificate is imported into ACM, and every custom hostname's is requested there", purpose, wanted.action, wanted.resource, wanted.condition)
 			}
 		}
 		for g := range granted {
 			if !want[g] {
-				t.Errorf("the %s credential grants %s on %s under %s, which reaches certificates Ocel never imported", purpose, g.action, g.resource, g.condition)
+				t.Errorf("the %s credential grants %s on %s under %s, which reaches certificates Ocel never imported or requested", purpose, g.action, g.resource, g.condition)
+			}
+		}
+	}
+}
+
+func TestEveryCredentialGrantsEveryACMCallACustomHostnameCertificateMakes(t *testing.T) {
+	calls := reflect.TypeFor[certs.ACMAPI]()
+	for purpose, document := range bothCredentials(t) {
+		granted := map[string]bool{}
+		for g := range grantsOf(t, document) {
+			granted[g.action] = true
+		}
+		for i := range calls.NumMethod() {
+			if action := "acm:" + calls.Method(i).Name; !granted[action] {
+				t.Errorf("the %s credential does not grant %s, which certs.ACM calls for every custom hostname", purpose, action)
+			}
+		}
+	}
+}
+
+func TestEveryCredentialRequestsAndDeletesOnlyTheCertificatesOcelTagged(t *testing.T) {
+	const certificate = "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234"
+	requestedByOcel := requestContext{"aws:RequestTag/ocel:managed-by": "ocel", "acm:CertificateKeyPairOrigin": "AWS_MANAGED"}
+	cases := []struct {
+		name     string
+		action   string
+		resource string
+		request  requestContext
+		allowed  bool
+	}{
+		{"requests a certificate tagged as Ocel's", "acm:RequestCertificate", UnscopedResource, requestedByOcel, true},
+		{"requests a certificate with no Ocel tag", "acm:RequestCertificate", UnscopedResource, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
+		{"tags the certificate it requests with Ocel's tag", "acm:AddTagsToCertificate", certificate, requestContext{
+			"aws:RequestTag/ocel:managed-by":  "ocel",
+			"aws:ResourceTag/ocel:managed-by": "ocel",
+			"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
+		}, true},
+		{"tags an ACM-issued certificate Ocel never requested", "acm:AddTagsToCertificate", certificate, requestedByOcel, false},
+		{"describes a certificate the account made itself", "acm:DescribeCertificate", certificate, requestContext{}, true},
+		{"lists the account's issued certificates", "acm:ListCertificates", UnscopedResource, requestContext{}, true},
+		{"deletes an ACM-issued certificate Ocel requested", "acm:DeleteCertificate", certificate, requestContext{
+			"aws:ResourceTag/ocel:managed-by": "ocel",
+			"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
+		}, true},
+		{"deletes an ACM-issued certificate Ocel never requested", "acm:DeleteCertificate", certificate, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
+		{"deletes a certificate the account imported itself", "acm:DeleteCertificate", certificate, requestContext{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"}, false},
+	}
+	for purpose, document := range bothCredentials(t) {
+		for _, c := range cases {
+			if got := allows(t, document, c.action, c.resource, c.request); got != c.allowed {
+				t.Errorf("the %s credential %s: allowed = %t, want %t", purpose, c.name, got, c.allowed)
 			}
 		}
 	}
