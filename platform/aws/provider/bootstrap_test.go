@@ -104,11 +104,11 @@ func TestRemovingAPartADeployAddedTakesItDownAndForgetsItsRecord(t *testing.T) {
 	}
 }
 
-func TestTheContainerInfrastructureAndTheBastionAreOfferedForRemovalByName(t *testing.T) {
+func TestTheContainerInfrastructureTheFunctionNetworkAndTheBastionAreOfferedForRemovalByName(t *testing.T) {
 	t.Parallel()
 
 	removable := (&Provider{}).removableParts()
-	for _, name := range []string{deploy.ContainersPart, bastion.Part} {
+	for _, name := range []string{deploy.ContainersPart, deploy.FunctionNetworkPart, bastion.Part} {
 		at := slices.IndexFunc(removable, func(each removablePart) bool { return each.Name == name })
 		if at < 0 {
 			t.Errorf("removableParts() offers no %s, want `ocel bootstrap <tier> --remove %s` to take it down", name, name)

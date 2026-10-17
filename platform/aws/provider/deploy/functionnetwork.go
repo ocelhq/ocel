@@ -197,6 +197,27 @@ func listFunctionNetworkResources(tier environment.Tier, network functionNetwork
 	return append(resources, provider.PartResource{Kind: "AWS::EC2::SecurityGroup", ID: network.SecurityGroup})
 }
 
+func ReadFunctionNetworkPart(ctx context.Context, store keyvalue.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, tier, FunctionNetworkPart)
+	if err != nil || !present {
+		return provider.BootstrapPart{}, false, err
+	}
+	users, err := functionNetworkShare.listUsers(ctx, store, tier)
+	if err != nil {
+		return provider.BootstrapPart{}, false, err
+	}
+	return provider.BootstrapPart{
+		Name:      FunctionNetworkPart,
+		Summary:   FunctionNetworkSummary,
+		Current:   recorded.State == stackrecords.PartReady,
+		Resources: recorded.Resources,
+		UsedBy:    users,
+		Shape:     &provider.PartShape{Vendor: vendor, Region: region, Resources: ShapeFunctionNetwork()},
+
+		RetiresWithLastUser: true,
+	}, true, nil
+}
+
 func (r *Stacks) RemoveFunctionNetwork(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	return r.removeShared(ctx, functionNetworkShare, tier, progress)
 }

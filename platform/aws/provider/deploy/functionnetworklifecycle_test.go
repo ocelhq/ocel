@@ -434,3 +434,39 @@ func TestAnAppReachingAPostgresAfterAFailedTakedownRepairsTheFunctionNetwork(t *
 		t.Errorf("ran %v, want the function network run again before admin: the failed takedown may have removed part of it", ran)
 	}
 }
+
+func TestTheFunctionNetworkIsDescribedAsAPartWithTheProjectsInItAndTheIdleCostOfItsGateway(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stacks, _, store := functionNetworkStacks(t, "web")
+	tier := environment.TierProduction
+	if _, present, err := ReadFunctionNetworkPart(ctx, store, "us-east-1", tier); err != nil || present {
+		t.Fatalf("ReadFunctionNetworkPart() before any app reached a postgres = %v, %v, want none", present, err)
+	}
+	web := usingPostgres(t, "web")
+	web.App.Workers = []provider.WorkerSpec{{Name: "media"}}
+	if _, err := stacks.Provision(ctx, web, progress.Discard()); err != nil {
+		t.Fatalf("Provision(web) = %v", err)
+	}
+
+	part, present, err := ReadFunctionNetworkPart(ctx, store, "us-east-1", tier)
+	if err != nil || !present {
+		t.Fatalf("ReadFunctionNetworkPart() = %v, %v, want the function network", present, err)
+	}
+	if part.Name != FunctionNetworkPart || !slices.Equal(part.UsedBy, []string{web.Ref.Project}) || !part.RetiresWithLastUser {
+		t.Errorf("function network = %+v, want it named %s, used by %s once for its app and workers, and retiring with its last user", part, FunctionNetworkPart, web.Ref.Project)
+	}
+	if !slices.ContainsFunc(part.Resources, func(resource provider.PartResource) bool { return resource.Kind == "AWS::EC2::NatGateway" }) {
+		t.Errorf("function network resources = %v, want its NAT gateway", part.Resources)
+	}
+	priced := []string{}
+	if part.Shape != nil {
+		for _, shaped := range part.Shape.Resources {
+			priced = append(priced, shaped.Type)
+		}
+	}
+	if !slices.Contains(priced, "aws_nat_gateway") || !slices.Contains(priced, "aws_eip") {
+		t.Errorf("function network priced as %v, want its NAT gateway and elastic IP: they bill by the hour whether or not a function runs", priced)
+	}
+}
