@@ -147,7 +147,7 @@ func TestRemovingTheContainersPartIsRefusedWhileAContainerAppRunsInItAndTakesItD
 		t.Fatalf("a refused removal tore down %v, want nothing", torn)
 	}
 
-	if err := keyvalue.Forget(ctx, cfg.KeyValues, consumerAt(spec.Ref)); err != nil {
+	if err := keyvalue.Forget(ctx, cfg.KeyValues, containerShare.consumerAt(spec.Ref)); err != nil {
 		t.Fatal(err)
 	}
 	if err := stacks.RemoveContainerInfrastructure(ctx, tier, progress.Discard()); err != nil {
