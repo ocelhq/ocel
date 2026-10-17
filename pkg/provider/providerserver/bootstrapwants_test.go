@@ -69,6 +69,21 @@ func TestAPartABootstrapAddsForAProjectReadsAsAddedByTheBootstrapForThatProject(
 	}
 }
 
+func TestABootstrapNamingNoPartKeepsAndMovesForwardEveryPartItHolds(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	recordWant(t, vendor, fake.PartCache, "shop")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+
+	applied := vendor.FakeBootstrap().Applied()
+	if last := applied[len(applied)-1]; !slices.Contains(last.Parts, fake.PartCache) {
+		t.Errorf("Apply() parts = %v, want %s kept: a bootstrap only ever builds up", last.Parts, fake.PartCache)
+	}
+}
+
 func TestAPartABootstrapAddedIsNoLongerWanted(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
