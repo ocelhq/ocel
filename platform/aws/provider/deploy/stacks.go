@@ -216,6 +216,7 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 		case provider.BindingPostgres:
 			args := translatePostgres(resource.Postgres)
 			args.Tags = transformed.tagsFor(transformTypePostgres, resource.Name)
+			args.Protected = spec.Ref.Tier == environment.TierProduction
 			err = registerPostgres(pctx, project, env, resource.Name, args, vpc.Id, vpc.CidrBlock, subnetIDs)
 		case provider.BindingBucket:
 			args := translateBucket(resource.Bucket)
@@ -463,7 +464,7 @@ func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progres
 		return provider.Plan{}, err
 	}
 	removal.Groups = append(removal.Groups, workerGroups...)
-	return removal, nil
+	return markProtectedClusters(removal, ref), nil
 }
 
 func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
@@ -624,6 +625,9 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images prov
 		return err
 	}
 	if err := opened.destroyWorkersOfLastRelease(ctx, ref, progress); err != nil {
+		return err
+	}
+	if err := opened.liftDeletionProtection(ctx, ref, progress); err != nil {
 		return err
 	}
 	if err := opened.automation.Destroy(ctx, ref, progress); err != nil {

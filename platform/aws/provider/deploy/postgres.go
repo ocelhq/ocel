@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"fmt"
+	"time"
 
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	rds "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/rds"
@@ -28,6 +29,8 @@ const (
 
 	maxSecurityGroupDescriptionLen = 255
 	maxSubnetGroupDescriptionLen   = 255
+
+	finalSnapshotTimeLayout = "20060102150405"
 )
 
 type postgresArgs struct {
@@ -42,8 +45,7 @@ type postgresArgs struct {
 	DatabaseName         string
 	ManageMasterPassword bool
 	PubliclyAccessible   bool
-	DeletionProtection   bool
-	SkipFinalSnapshot    bool
+	Protected            bool
 
 	Tags map[string]string
 }
@@ -65,9 +67,14 @@ func translatePostgres(spec *provider.PostgresSpec) postgresArgs {
 		DatabaseName:         postgresDatabaseName,
 		ManageMasterPassword: true,
 		PubliclyAccessible:   false,
-		DeletionProtection:   false,
-		SkipFinalSnapshot:    true,
 	}
+}
+
+func finalSnapshotIdentifier(at naming.Coordinate, protected bool, now time.Time) pulumi.StringPtrInput {
+	if !protected {
+		return nil
+	}
+	return pulumi.String(rdsIdentifierPrefix(at, "final") + now.UTC().Format(finalSnapshotTimeLayout))
 }
 
 func rdsIdentifierPrefix(at naming.Coordinate, role string) string {
@@ -121,14 +128,15 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		ManageMasterUserPassword: pulumi.Bool(args.ManageMasterPassword),
 		DbSubnetGroupName:        subnetGroup.Name,
 		VpcSecurityGroupIds:      pulumi.StringArray{securityGroup.ID()},
-		DeletionProtection:       pulumi.Bool(args.DeletionProtection),
-		SkipFinalSnapshot:        pulumi.Bool(args.SkipFinalSnapshot),
+		DeletionProtection:       pulumi.Bool(args.Protected),
+		SkipFinalSnapshot:        pulumi.Bool(!args.Protected),
+		FinalSnapshotIdentifier:  finalSnapshotIdentifier(at, args.Protected, time.Now()),
 		Serverlessv2ScalingConfiguration: &rds.ClusterServerlessv2ScalingConfigurationArgs{
 			MinCapacity: pulumi.Float64(args.MinCapacity),
 			MaxCapacity: pulumi.Float64(args.MaxCapacity),
 		},
 		Tags: resourceTags(at.Kind, "", args.Tags),
-	})
+	}, pulumi.IgnoreChanges([]string{"finalSnapshotIdentifier"}))
 	if err != nil {
 		return err
 	}
@@ -158,6 +166,8 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		outputKeyDatabase:  pulumi.String(args.DatabaseName),
 		outputKeyUsername:  cluster.MasterUsername,
 		outputKeySecretARN: secretARN,
+
+		outputKeyClusterIdentifier: cluster.ID(),
 	})
 
 	return nil
@@ -169,4 +179,6 @@ const (
 	outputKeyDatabase  = "database"
 	outputKeyUsername  = "username"
 	outputKeySecretARN = "secretArn"
+
+	outputKeyClusterIdentifier = "clusterIdentifier"
 )
