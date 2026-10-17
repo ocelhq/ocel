@@ -13,12 +13,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
@@ -205,7 +207,7 @@ func (p *Provider) addedPartWorks(ctx context.Context, tier environment.Tier) ([
 }
 
 func (p *Provider) describeAddedParts(ctx context.Context, tier environment.Tier) ([]provider.BootstrapPart, error) {
-	users, err := stackrecords.ListPartUsers(ctx, p.KeyValues(), tier)
+	users, err := addedPartUsers(ctx, p.KeyValues(), tier)
 	if err != nil {
 		return nil, err
 	}
@@ -225,6 +227,23 @@ func (p *Provider) describeAddedParts(ctx context.Context, tier environment.Tier
 	}
 	return parts, nil
 }
+
+func addedPartUsers(ctx context.Context, store keyvalue.Store, tier environment.Tier) (map[string][]string, error) {
+	users, err := stackrecords.ListPartUsers(ctx, store, tier)
+	if err != nil || tier != environment.TierPreview {
+		return users, err
+	}
+	wildcard, err := stackrecords.ReadWildcard(ctx, store)
+	if err != nil {
+		return nil, err
+	}
+	if part, serves := wildcardParts[wildcard.Edge]; serves && wildcard.IsRecorded() {
+		users[part] = append(users[part], wildcard.Hostname())
+	}
+	return users, nil
+}
+
+var wildcardParts = map[edge.Kind]string{cloudfront.Kind: cloudfrontpart.Part, apigateway.Kind: notfoundapi.Part}
 
 func (p *Provider) describePart(ctx context.Context, tier environment.Tier, work partWork, users []string) (provider.BootstrapPart, bool, error) {
 	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), tier, work.name)

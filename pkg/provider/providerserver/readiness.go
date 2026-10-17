@@ -185,22 +185,22 @@ func refuseRemovingUsedParts(removing []string, users map[string][]string, force
 	if force || len(users) == 0 {
 		return nil
 	}
-	var used, projects []string
+	var used, using []string
 	for _, name := range removing {
 		if len(users[name]) == 0 {
 			continue
 		}
 		used = append(used, name)
-		for _, project := range users[name] {
-			if !slices.Contains(projects, project) {
-				projects = append(projects, project)
+		for _, user := range users[name] {
+			if !slices.Contains(using, user) {
+				using = append(using, user)
 			}
 		}
 	}
-	slices.Sort(projects)
+	slices.Sort(using)
 	return refusal.Refuse(refusal.CodeNotReady,
-		"removing %s would break %d project(s) here that use it: %s — re-run with --force to remove it anyway, or leave it in place",
-		strings.Join(used, ", "), len(projects), strings.Join(projects, ", "))
+		"removing %s would break what uses it here: %s — re-run with --force to remove it anyway, or leave it in place",
+		strings.Join(used, ", "), strings.Join(using, ", "))
 }
 
 func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, offered []provider.Part, removing []string) (map[string][]string, error) {
