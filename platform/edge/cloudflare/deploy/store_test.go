@@ -332,7 +332,7 @@ func TestStoreRequest(t *testing.T) {
 
 		_, err := stackOn(&cloudflare{}, edge.StackState{}).readServedPromotion(t.Context(), "")
 		if err == nil {
-			t.Fatal("expected an error when the root-stack state has no endpoint")
+			t.Fatal("expected an error when the edge stack state has no endpoint")
 		}
 	})
 
