@@ -275,13 +275,13 @@ export async function readSdkDirs(appDir: string): Promise<string[]> {
   return dirs;
 }
 
-async function linkSdks(root: string, apps: string[]): Promise<void> {
-  const linked = new Set<string>();
+export async function copySdks(source: string, root: string, apps: string[]): Promise<void> {
+  const copied = new Set<string>();
   for (const app of apps) {
     for (const sdkDir of await readSdkDirs(path.join(root, app))) {
-      if (!linked.has(sdkDir)) {
-        linked.add(sdkDir);
-        await symlink(path.join(repoRoot, sdkDir), path.join(root, sdkDir), "dir");
+      if (!copied.has(sdkDir)) {
+        copied.add(sdkDir);
+        await copyTree(path.join(source, sdkDir), path.join(root, sdkDir));
       }
     }
   }
@@ -333,7 +333,7 @@ export async function writeTree(root: string, name: string, apps: string[]): Pro
   await writeWorkspace(root, name, [...apps, ...nested, ...packages]);
   await writeLockfile(root);
   await writeGoWorkspace(root, apps);
-  await linkSdks(root, apps);
+  await copySdks(repoRoot, root, apps);
   await writePythonEnvironments(root, apps);
   return packages;
 }
