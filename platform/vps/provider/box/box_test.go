@@ -635,6 +635,29 @@ func TestAPromotionThatFailedAfterTheCutoverKeepsThePointerOnTheReleaseTheBoxSer
 	}
 }
 
+func TestAPromotionThatFailedAfterTheCutoverHeadsTheWindowAtTheReleaseTheBoxServes(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote(p1): %v", err)
+	}
+	m.refuseOn("Release", refusal.Refuse(refusal.CodeNotReady, "cut over to shop-web-2222, which now serve, but shop-web-1111 was drained and unrouted but not stopped"))
+
+	err := promoted(t, stack, "p2", "web", "b2")
+	if err == nil {
+		t.Fatal("a promotion whose retiree would not stop after the cutover reported success")
+	}
+	if !strings.Contains(err.Error(), "shop-web-1111 was drained and unrouted but not stopped") {
+		t.Errorf("the promotion failed with\n%s\nand never says what past the cutover did not finish", err)
+	}
+	if len(m.headed) == 0 || m.headed[len(m.headed)-1] != imageFor("web", "b2") {
+		t.Errorf("the box serves p2 (b2) but its window heads at %v: the next deploy's reconcile sweeps the image the box serves", m.headed)
+	}
+}
+
 func TestAPromotionRefusedBeforeItsRollOutRemovesTheContainersNothingRoutesTo(t *testing.T) {
 	t.Parallel()
 
