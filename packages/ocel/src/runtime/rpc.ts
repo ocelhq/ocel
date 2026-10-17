@@ -1,5 +1,5 @@
 import { createClient, type Interceptor } from "@connectrpc/connect";
-import { createConnectTransport } from "@connectrpc/connect-node";
+import { createConnectTransport } from "#connect-transport";
 import { ResourceService } from "../gen/proto/app/resources/v1/resources_pb.js";
 import { SDK_VERSION } from "../version.js";
 import { getDevServerToken, OCEL_DEV_SERVER, SDK_VERSION_HEADER } from "./dev-server.js";
@@ -13,7 +13,6 @@ export const authorized: Interceptor = (next) => (req) => {
 
 const _rpc = () => {
   const transport = createConnectTransport({
-    httpVersion: "1.1",
     baseUrl: OCEL_DEV_SERVER!,
     interceptors: [authorized],
   });
