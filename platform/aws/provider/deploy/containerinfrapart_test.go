@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -97,6 +98,28 @@ func TestAContainerDeployRecordsTheContainersPartAsWrittenByItsOwnRelease(t *tes
 	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, ContainersPart)
 	if err != nil || recorded.WrittenBy != "v1.0.0" {
 		t.Errorf("containers record written by %q (%v), want the deploying release v1.0.0", recorded.WrittenBy, err)
+	}
+}
+
+func TestAContainerDeployWhoseInfrastructureFailsLeavesNoContainersPartCreating(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	ctx := context.Background()
+	infra := containerInfraRef(environment.TierProduction).Name.String()
+	engine := &mockedEngine{outputs: containerPartOutputs(), upErr: func(stack string) error {
+		if stack == infra {
+			return errors.New("the load balancer quota is spent")
+		}
+		return nil
+	}}
+
+	if _, err := stacksWith(cfg, engine).Provision(ctx, spec, progress.Discard()); err == nil {
+		t.Fatal("Provision(shop) succeeded, want the failed container infrastructure to fail it")
+	}
+
+	if recorded, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, ContainersPart); err != nil || present {
+		t.Errorf("containers record = %+v, %v, %v after its infrastructure failed, want no claim left creating", recorded, present, err)
 	}
 }
 
