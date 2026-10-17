@@ -514,10 +514,10 @@ func TestTheScheduleIsCreatedAndMendedThroughCloudScheduler(t *testing.T) {
 		t.Errorf("schedulePresence() = %+v, %v, want a schedule calling a URL the service no longer answers on mended", found, err)
 	}
 
-	if err := b.takeSchedule(ctx, name); err != nil {
+	if err := b.clients.takeSchedule(ctx, name); err != nil {
 		t.Fatalf("takeSchedule() = %v", err)
 	}
-	if err := b.takeSchedule(ctx, name); err != nil {
+	if err := b.clients.takeSchedule(ctx, name); err != nil {
 		t.Errorf("takeSchedule() of one already gone = %v, want nothing to do", err)
 	}
 }

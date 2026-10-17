@@ -373,10 +373,10 @@ func (b bootstrap) makeSchedule(ctx context.Context, tier environment.Tier, name
 		return refusal.Refuse(refusal.CodeNotReady,
 			"the Cloud Scheduler job %s calls the Cloud Run service of the same name, and that service has no URL yet", name)
 	}
-	return b.clients.ensureSchedule(ctx, name, b.syncSchedule(tier, name, called.Uri))
+	return b.clients.putSchedule(ctx, name, b.syncSchedule(tier, name, called.Uri))
 }
 
-func (c *clients) ensureSchedule(ctx context.Context, name string, desired *cloudscheduler.Job) error {
+func (c *clients) putSchedule(ctx context.Context, name string, desired *cloudscheduler.Job) error {
 	service, err := c.Scheduler()
 	if err != nil {
 		return err
@@ -409,10 +409,6 @@ func (c *clients) ensureSchedule(ctx context.Context, name string, desired *clou
 		}
 	}
 	return nil
-}
-
-func (b bootstrap) takeSchedule(ctx context.Context, name string) error {
-	return b.clients.takeSchedule(ctx, name)
 }
 
 func (c *clients) takeSchedule(ctx context.Context, name string) error {

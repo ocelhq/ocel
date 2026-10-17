@@ -179,7 +179,7 @@ func Mux(spec Spec) (*http.ServeMux, error) {
 	})
 
 	if spec.VerifyHeartbeat != nil {
-		mux.HandleFunc("POST "+HeartbeatPath, heartbeatRequest(spec))
+		mux.HandleFunc("POST "+HeartbeatPath, serveHeartbeat(spec))
 	}
 
 	return mux, nil
