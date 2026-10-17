@@ -35,7 +35,7 @@ func TestAPreviewBaseTheSwitchboardCouldNotAnswerUnderIsRefused(t *testing.T) {
 				base)
 		}
 	}
-	if err := PreviewBaseUsable(""); err == nil {
+	if err := RefuseInvalidPreviewBase(""); err == nil {
 		t.Error("an empty base is a usable one, and the route it would install has no host matcher: it receives every hostname pointed at this machine, a mistyped production hostname included")
 	}
 }

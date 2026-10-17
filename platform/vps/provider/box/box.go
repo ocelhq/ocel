@@ -150,7 +150,7 @@ func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
 }
 
 func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
-	if err := host.PreviewBaseUsable(spec.BaseDomain); err != nil {
+	if err := host.RefuseInvalidPreviewBase(spec.BaseDomain); err != nil {
 		return "", err
 	}
 	address, err := e.machine.Address(ctx)

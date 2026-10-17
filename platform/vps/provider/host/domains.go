@@ -175,7 +175,7 @@ func (h *Host) PreviewEntry(ctx context.Context) (string, error) {
 }
 
 func (h *Host) InstallPreviewEntry(ctx context.Context, base string) error {
-	if err := PreviewBaseUsable(base); err != nil {
+	if err := RefuseInvalidPreviewBase(base); err != nil {
 		return err
 	}
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
