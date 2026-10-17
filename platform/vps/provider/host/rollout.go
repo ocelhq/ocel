@@ -101,9 +101,9 @@ func containerOf(address string) string {
 func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.Log) error {
 	for _, app := range rollout.Apps {
 		if strings.TrimSpace(app.HealthPath) == "" {
-			return router.Unserved{Err: refusal.Refuse(refusal.CodeInvalid,
+			return router.Unserved{Err: fmt.Errorf("%w%s", refusal.Refuse(refusal.CodeInvalid,
 				"release %s onto %s: no health check path\nSet %q in your project configuration",
-				app.App, h.named(), healthKey)}
+				app.App, h.named(), healthKey), h.Discard(ctx, rollout))}
 		}
 	}
 	if len(rollout.Apps) == 0 {
@@ -111,7 +111,7 @@ func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.L
 	}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
-		return router.Unserved{Err: err}
+		return router.Unserved{Err: fmt.Errorf("%w%s", err, h.Discard(ctx, rollout))}
 	}
 
 	gates := make([]string, 0, len(rollout.Apps))
@@ -699,10 +699,10 @@ func seconds(window time.Duration) string {
 	return strconv.Itoa(int(window.Round(time.Second).Seconds()))
 }
 
-const unwindWindow = 60 * time.Second
+const UnwindWindow = 60 * time.Second
 
 func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
+	return context.WithTimeout(context.WithoutCancel(ctx), UnwindWindow)
 }
 
 func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, said, elevation string) error {
@@ -814,6 +814,16 @@ func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool
 	_, err = h.ran(ctx, "put the proxy back onto the previous release",
 		words(switchboardCommand("cutover", live.RoutingTable)), nil, elevation)
 	return true, errors.Join(back.failedPlace, err)
+}
+
+func (h *Host) Discard(ctx context.Context, rollout Rollout) string {
+	ctx, stop := sparing(ctx)
+	defer stop()
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return fmt.Sprintf("\n%s left running: %v", rollout.names(), err)
+	}
+	return h.discard(ctx, rollout, elevation)
 }
 
 func (h *Host) discard(ctx context.Context, rollout Rollout, elevation string) string {
