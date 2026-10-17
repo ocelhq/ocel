@@ -20,6 +20,7 @@ import (
 	"google.golang.org/api/googleapi"
 	storage "google.golang.org/api/storage/v1"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -78,10 +79,7 @@ func storeError(err error) error {
 }
 
 func asked[T any](ctx context.Context, call func(...googleapi.CallOption) (T, error)) (T, error) {
-	value, err := retried(ctx, func() (T, int, error) {
-		value, err := call()
-		return value, answeredStatus(err), err
-	})
+	value, err := googleretry.Attempted(ctx, call)
 	return value, storeError(err)
 }
 

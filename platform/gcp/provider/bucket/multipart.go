@@ -13,6 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const answerReadCapBytes = 1 << 20
@@ -98,7 +100,7 @@ func (m multipart) abort(ctx context.Context, bucket, key, uploadID string) erro
 }
 
 func (m multipart) ask(ctx context.Context, method, target string, header http.Header, body []byte) ([]byte, error) {
-	return retried(ctx, func() ([]byte, int, error) {
+	answer, _, err := googleretry.Asked(ctx, func() ([]byte, int, error) {
 		req, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
 		if err != nil {
 			return nil, http.StatusBadRequest, err
@@ -120,6 +122,7 @@ func (m multipart) ask(ctx context.Context, method, target string, header http.H
 		}
 		return nil, resp.StatusCode, refusedAnswer(resp.StatusCode, answer)
 	})
+	return answer, err
 }
 
 func refusedAnswer(status int, answer []byte) error {
