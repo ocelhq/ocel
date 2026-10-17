@@ -2463,7 +2463,7 @@ test("resolves the App Router not-found page (/_not-found) as errorRoutes.notFou
   expect(manifest.errorRoutes).toMatchObject({ notFound: "/_not-found" });
 });
 
-test("names /_not-found as errorRoutes.notFoundFlight even when /404 wins notFound", async () => {
+test("names the app-router /_not-found page as errorRoutes.notFound over a /404 page, as next start serves it", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticPage(projectDir, args, "/404", "not found");
   const notFoundHandler = join(projectDir, ".next/server/app/_not-found.js");
@@ -2484,7 +2484,7 @@ test("names /_not-found as errorRoutes.notFoundFlight even when /404 wins notFou
 
   const manifest = await readManifest(projectDir);
   expect(manifest.errorRoutes).toMatchObject({
-    notFound: "/404",
+    notFound: "/_not-found",
     notFoundFlight: "/_not-found",
   });
 });

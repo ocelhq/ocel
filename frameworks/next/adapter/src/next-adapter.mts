@@ -445,7 +445,7 @@ const adapter = {
     };
     const firstDispatchedErrorPage = (candidates: string[]): string | undefined =>
       candidates.find(isDispatchedErrorPage);
-    const notFoundKey = firstDispatchedErrorPage([`${basePath}/404`, `${basePath}/_not-found`]);
+    const notFoundKey = firstDispatchedErrorPage([`${basePath}/_not-found`, `${basePath}/404`]);
     const notFoundFlightKey = firstDispatchedErrorPage([`${basePath}/_not-found`]);
     const serverErrorKey = firstDispatchedErrorPage([`${basePath}/500`]);
     const errorRoutes: NonNullable<NextRouteTable["errorRoutes"]> = {};
