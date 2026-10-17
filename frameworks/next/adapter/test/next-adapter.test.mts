@@ -2483,13 +2483,10 @@ test("names the app-router /_not-found page as errorRoutes.notFound over a /404 
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.errorRoutes).toMatchObject({
-    notFound: "/_not-found",
-    notFoundFlight: "/_not-found",
-  });
+  expect(manifest.errorRoutes).toMatchObject({ notFound: "/_not-found" });
 });
 
-test("names no notFoundFlight when the build has no app-router not-found page", async () => {
+test("names the /404 page as errorRoutes.notFound when the build has no app-router not-found page", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticPage(projectDir, args, "/404", "not found");
   const adapter = await loadAdapterIn(projectDir);
@@ -2498,7 +2495,6 @@ test("names no notFoundFlight when the build has no app-router not-found page", 
 
   const manifest = await readManifest(projectDir);
   expect(manifest.errorRoutes).toMatchObject({ notFound: "/404" });
-  expect(manifest.errorRoutes.notFoundFlight).toBeUndefined();
 });
 
 test("resolves a static-kind /500 page as errorRoutes.serverError", async () => {

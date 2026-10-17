@@ -2503,10 +2503,11 @@ describe("custom error page substitution", () => {
   });
 });
 
-describe("not-found for an unresolved pathname under a flight header", () => {
+describe("not-found for an unresolved pathname in an app-router build", () => {
   const flightBody = '1:"$Sreact.fragment"\n';
+  const htmlBody = "<html>app not-found</html>";
 
-  function notFoundDeps(overrides: { flightRoute?: boolean } = {}) {
+  function notFoundDeps() {
     const entries: string[] = [];
     return {
       entries: () => entries,
@@ -2514,10 +2515,9 @@ describe("not-found for an unresolved pathname under a flight header", () => {
         manifest: {
           buildId: "t",
           basePath: "",
-          pathnames: ["/404"],
+          pathnames: ["/_not-found"],
           routes: {},
           dispatch: {
-            "/404": { kind: "static" },
             "/_not-found": {
               kind: "function",
               id: "page",
@@ -2525,19 +2525,20 @@ describe("not-found for an unresolved pathname under a flight header", () => {
               page: true,
             },
           },
-          errorRoutes: {
-            notFound: "/404",
-            ...(overrides.flightRoute === false ? {} : { notFoundFlight: "/_not-found" }),
-          },
+          errorRoutes: { notFound: "/_not-found" },
         },
         functionUrls: { page: "https://fn.example.com" },
-        assetStore: assetStoreServing({ "/404.html": "<html>static 404</html>" }),
         fetch: (async (req: Request) => {
           entries.push(req.headers.get("x-ocel-entry") ?? "");
-          return new Response(flightBody, {
-            status: 200,
-            headers: { "content-type": "text/x-component" },
-          });
+          return req.headers.get("rsc") === "1"
+            ? new Response(flightBody, {
+                status: 200,
+                headers: { "content-type": "text/x-component" },
+              })
+            : new Response(htmlBody, {
+                status: 200,
+                headers: { "content-type": "text/html; charset=utf-8" },
+              });
         }) as unknown as typeof fetch,
       }),
     };
@@ -2548,7 +2549,7 @@ describe("not-found for an unresolved pathname under a flight header", () => {
       headers,
     });
 
-  it("renders the flight not-found route instead of the prerendered HTML 404", async () => {
+  it("renders /_not-found as flight with status 404 to a flight request", async () => {
     const { deps, entries } = notFoundDeps();
 
     const res = await dispatchResult({}, unresolved({ rsc: "1" }), deps);
@@ -2559,25 +2560,15 @@ describe("not-found for an unresolved pathname under a flight header", () => {
     expect(entries()).toEqual(["/_not-found"]);
   });
 
-  it("still serves the prerendered HTML 404 to a document request", async () => {
+  it("renders /_not-found as HTML with status 404 to a document request", async () => {
     const { deps, entries } = notFoundDeps();
 
     const res = await dispatchResult({}, unresolved(), deps);
 
     expect(res.status).toBe(404);
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
-    expect(await res.text()).toBe("<html>static 404</html>");
-    expect(entries()).toEqual([]);
-  });
-
-  it("serves the HTML 404 when the build names no flight not-found route", async () => {
-    const { deps, entries } = notFoundDeps({ flightRoute: false });
-
-    const res = await dispatchResult({}, unresolved({ rsc: "1" }), deps);
-
-    expect(res.status).toBe(404);
-    expect(await res.text()).toBe("<html>static 404</html>");
-    expect(entries()).toEqual([]);
+    expect(await res.text()).toBe(htmlBody);
+    expect(entries()).toEqual(["/_not-found"]);
   });
 
   it("leaves a missing /_next/static asset a plain 404, flight header or not", async () => {

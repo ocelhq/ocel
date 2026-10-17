@@ -446,13 +446,9 @@ const adapter = {
     const firstDispatchedErrorPage = (candidates: string[]): string | undefined =>
       candidates.find(isDispatchedErrorPage);
     const notFoundKey = firstDispatchedErrorPage([`${basePath}/_not-found`, `${basePath}/404`]);
-    const notFoundFlightKey = firstDispatchedErrorPage([`${basePath}/_not-found`]);
     const serverErrorKey = firstDispatchedErrorPage([`${basePath}/500`]);
     const errorRoutes: NonNullable<NextRouteTable["errorRoutes"]> = {};
     if (notFoundKey !== undefined) errorRoutes.notFound = notFoundKey;
-    if (notFoundFlightKey !== undefined) {
-      errorRoutes.notFoundFlight = notFoundFlightKey;
-    }
     if (serverErrorKey !== undefined) errorRoutes.serverError = serverErrorKey;
 
     const imagesField: Partial<Pick<NextRouteTable, "images">> = images
