@@ -1233,7 +1233,7 @@ type PromotionSummary struct {
 	PromotionId   string                 `protobuf:"bytes,1,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	Tag           string                 `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
 	CreatedAt     string                 `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Builds        map[string]string      `protobuf:"bytes,4,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Releases      map[string]string      `protobuf:"bytes,4,rep,name=releases,proto3" json:"releases,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	State         PromotionState         `protobuf:"varint,5,opt,name=state,proto3,enum=cli.result.v1.PromotionState" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1290,9 +1290,9 @@ func (x *PromotionSummary) GetCreatedAt() string {
 	return ""
 }
 
-func (x *PromotionSummary) GetBuilds() map[string]string {
+func (x *PromotionSummary) GetReleases() map[string]string {
 	if x != nil {
-		return x.Builds
+		return x.Releases
 	}
 	return nil
 }
@@ -4131,15 +4131,15 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x13PromotionListResult\x12?\n" +
 	"\n" +
 	"promotions\x18\x01 \x03(\v2\x1f.cli.result.v1.PromotionSummaryR\n" +
-	"promotions\"\x9b\x02\n" +
+	"promotions\"\xa3\x02\n" +
 	"\x10PromotionSummary\x12!\n" +
 	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\x12\x10\n" +
 	"\x03tag\x18\x02 \x01(\tR\x03tag\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\tR\tcreatedAt\x12C\n" +
-	"\x06builds\x18\x04 \x03(\v2+.cli.result.v1.PromotionSummary.BuildsEntryR\x06builds\x123\n" +
-	"\x05state\x18\x05 \x01(\x0e2\x1d.cli.result.v1.PromotionStateR\x05state\x1a9\n" +
-	"\vBuildsEntry\x12\x10\n" +
+	"created_at\x18\x03 \x01(\tR\tcreatedAt\x12I\n" +
+	"\breleases\x18\x04 \x03(\v2-.cli.result.v1.PromotionSummary.ReleasesEntryR\breleases\x123\n" +
+	"\x05state\x18\x05 \x01(\x0e2\x1d.cli.result.v1.PromotionStateR\x05state\x1a;\n" +
+	"\rReleasesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"N\n" +
 	"\x11PreviewListResult\x129\n" +
@@ -4487,7 +4487,7 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*ListedCommand)(nil),          // 60: cli.result.v1.ListedCommand
 	(*SkillInstallResult)(nil),     // 61: cli.result.v1.SkillInstallResult
 	(*SkillTarget)(nil),            // 62: cli.result.v1.SkillTarget
-	nil,                            // 63: cli.result.v1.PromotionSummary.BuildsEntry
+	nil,                            // 63: cli.result.v1.PromotionSummary.ReleasesEntry
 	nil,                            // 64: cli.result.v1.PinnedExecutable.DigestsEntry
 	(v1.Tier)(0),                   // 65: common.environment.v1.Tier
 	(*v11.ResourceSet)(nil),        // 66: provider.cost.v1.ResourceSet
@@ -4508,7 +4508,7 @@ var file_cli_result_v1_result_proto_depIdxs = []int32{
 	66, // 8: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
 	67, // 9: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
 	19, // 10: cli.result.v1.PromotionListResult.promotions:type_name -> cli.result.v1.PromotionSummary
-	63, // 11: cli.result.v1.PromotionSummary.builds:type_name -> cli.result.v1.PromotionSummary.BuildsEntry
+	63, // 11: cli.result.v1.PromotionSummary.releases:type_name -> cli.result.v1.PromotionSummary.ReleasesEntry
 	0,  // 12: cli.result.v1.PromotionSummary.state:type_name -> cli.result.v1.PromotionState
 	21, // 13: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
 	68, // 14: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle

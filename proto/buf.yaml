@@ -20,6 +20,7 @@ breaking:
   use:
     - FILE
   ignore:
+    - cli/result
     - common/progress
     - provider/contract
     - provider/cost
