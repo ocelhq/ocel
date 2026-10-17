@@ -217,7 +217,12 @@ export const sdk = {
     apps: ["web"],
     devCommands: { web: [".venv/bin/python", "main.py"] },
     checks: REALTIME_CHECKS,
-    on: { dev: [defaults], aws: [defaults], vps: [defaults], gcp: [defaults] },
+    on: {
+      dev: [defaults],
+      aws: [defaults, cloudflareInFrontOfContainers],
+      vps: [defaults],
+      gcp: [defaults],
+    },
   }),
   rust: fixture("sdk/rust", {
     apps: ["web"],
