@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -144,11 +145,14 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 
 	var result provider.StackResult
 	for _, resource := range spec.Resources {
+		action := provider.KeepOrCreate(slices.ContainsFunc(recorded.Bindings, BindingFor(resource)))
+		start := time.Now()
 		binding, err := f.provision(ctx, spec, resource, progress)
-		if err != nil {
-			return provider.StackResult{}, err
+		if err == nil {
+			err = provider.VerifyProperties(binding)
 		}
-		if err := provider.VerifyProperties(binding); err != nil {
+		reportChange(progress, string(resource.Type), resource.Name, action, start, err)
+		if err != nil {
 			return provider.StackResult{}, err
 		}
 		result.Bindings = append(result.Bindings, binding)
@@ -156,10 +160,12 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 	if provisionCompute == nil {
 		return result, nil
 	}
+	start := time.Now()
 	provisioned, err := provisionCompute(ctx, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
+	reportCreatedCompute(progress, recorded, provisioned, start)
 	result.Functions, result.Containers = provisioned.Functions, provisioned.Containers
 	return result, nil
 }
@@ -341,7 +347,14 @@ func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef,
 	if f.hooks.Functions == nil {
 		return refuseOrphans(ref, len(going), "function", because, "Functions")
 	}
-	return removeCompute(ctx, f, ref, going, functionCompute(f.hooks.Functions), images, progress)
+	start := time.Now()
+	if err := removeCompute(ctx, f, ref, going, functionCompute(f.hooks.Functions), images, progress); err != nil {
+		return err
+	}
+	for _, function := range going {
+		reportChange(progress, functionKind, function.Name, provider.ActionDelete, start, nil)
+	}
+	return nil
 }
 
 func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef, going []provider.AppContainer, because string, images provider.ImageStore, progress progress.Log) error {
@@ -351,7 +364,14 @@ func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef
 	if f.hooks.Containers == nil {
 		return refuseOrphans(ref, len(going), "container", because, "Containers")
 	}
-	return removeCompute(ctx, f, ref, going, containerCompute(f.hooks.Containers), images, progress)
+	start := time.Now()
+	if err := removeCompute(ctx, f, ref, going, containerCompute(f.hooks.Containers), images, progress); err != nil {
+		return err
+	}
+	for _, container := range going {
+		reportChange(progress, containerKind, container.Name, provider.ActionDelete, start, nil)
+	}
+	return nil
 }
 
 func removeAll[T any](
@@ -431,7 +451,10 @@ func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding 
 			"binding %s is no longer declared and this provider removes no resource, so it would be left in place and unowned",
 			binding.Name)
 	}
-	return f.hooks.RemoveResource(ctx, ref, binding, progress)
+	start := time.Now()
+	err := f.hooks.RemoveResource(ctx, ref, binding, progress)
+	reportChange(progress, string(binding.Type), binding.Name, provider.ActionDelete, start, err)
+	return err
 }
 
 func (f *hookStacks) recorded(ctx context.Context, ref provider.StackRef) (stackrecords.Stack, error) {
