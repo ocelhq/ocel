@@ -31,7 +31,7 @@ func backends(records Records, callbacks Poster) ([]*Service, error) {
 		if !Endpointed(bucket) {
 			continue
 		}
-		backends = append(backends, Bound(bindingTag(l.Key), l.Key, bucket, callbacks))
+		backends = append(backends, Bound(bindingTag(l.Key), l.Key, bucket, "", callbacks))
 	}
 	return backends, nil
 }

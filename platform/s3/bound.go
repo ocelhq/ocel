@@ -1,14 +1,15 @@
 package s3
 
 import (
+	"cmp"
 	"context"
 	"strings"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
-func Bound(tag, name string, record *bindingsv1.BucketProperties, callbacks Poster) *Service {
-	return bound(tag, name, record, callbacks, storeOf(record).Client())
+func Bound(tag, name string, record *bindingsv1.BucketProperties, internalEndpoint string, callbacks Poster) *Service {
+	return bound(tag, name, record, internalEndpoint, callbacks, storeOf(record).Client())
 }
 
 func storeOf(record *bindingsv1.BucketProperties) Store {
@@ -21,8 +22,11 @@ func storeOf(record *bindingsv1.BucketProperties) Store {
 	}
 }
 
-func bound(tag, name string, record *bindingsv1.BucketProperties, callbacks Poster, objects ObjectAPI) *Service {
-	signer := storeOf(record).Presigner()
+func bound(tag, name string, record *bindingsv1.BucketProperties, internalEndpoint string, callbacks Poster, objects ObjectAPI) *Service {
+	external := storeOf(record)
+	internal := external
+	internal.Endpoint = cmp.Or(internalEndpoint, external.Endpoint)
+	signer := external.Presigner()
 	granted := scope{bucket: record.GetBucket()}
 	if prefix := strings.Trim(record.GetPrefix(), "/"); prefix != "" {
 		granted.prefix = prefix + "/"
@@ -30,7 +34,7 @@ func bound(tag, name string, record *bindingsv1.BucketProperties, callbacks Post
 	svc := New(Config{
 		Tag:          tag,
 		Objects:      objects,
-		Internal:     signer,
+		Internal:     internal.Presigner(),
 		External:     func(context.Context) (PresignAPI, string) { return signer, record.GetEndpoint() },
 		Callbacks:    callbacks,
 		SweepUploads: true,
