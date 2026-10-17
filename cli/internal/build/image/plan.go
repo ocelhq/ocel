@@ -32,6 +32,8 @@ const (
 	pythonProvider = "python"
 	rustProvider   = "rust"
 	providerKey    = "provider"
+	packagesKey    = "packages"
+	goPackage      = "go"
 )
 
 func Plan(loc workspace.Location) ([]byte, error) {
@@ -52,7 +54,7 @@ func Plan(loc workspace.Location) ([]byte, error) {
 		StartCommand: commands.Start,
 	}
 	if provider := providerFor(loc); provider != "" {
-		named, done, err := providerConfigFile(loc.Root, provider)
+		named, done, err := providerConfigFile(loc, provider)
 		if err != nil {
 			return nil, err
 		}
@@ -96,12 +98,18 @@ func providerFor(loc workspace.Location) string {
 	}
 }
 
-func providerConfigFile(root, provider string) (string, func(), error) {
+func providerConfigFile(loc workspace.Location, provider string) (string, func(), error) {
+	root := loc.Root
 	config, err := configuredIn(root)
 	if err != nil {
 		return "", nil, err
 	}
 	config[providerKey] = json.RawMessage(`"` + provider + `"`)
+	if loc.Language == language.Go && loc.ModuleDir != "." && loc.GoVersion != "" {
+		if err := pinGo(config, loc.GoVersion, root); err != nil {
+			return "", nil, err
+		}
+	}
 	written, err := json.Marshal(config)
 	if err != nil {
 		return "", nil, err
@@ -122,6 +130,25 @@ func providerConfigFile(root, provider string) (string, func(), error) {
 		return "", nil, err
 	}
 	return named, discard, nil
+}
+
+func pinGo(config map[string]json.RawMessage, version, root string) error {
+	packages := map[string]string{}
+	if declared, ok := config[packagesKey]; ok {
+		if err := json.Unmarshal(declared, &packages); err != nil {
+			return fmt.Errorf("read the %s of the %s in %s: %w", packagesKey, ConfigFileName, root, err)
+		}
+	}
+	if _, pinned := packages[goPackage]; pinned {
+		return nil
+	}
+	packages[goPackage] = version
+	pinned, err := json.Marshal(packages)
+	if err != nil {
+		return err
+	}
+	config[packagesKey] = pinned
+	return nil
 }
 
 func configuredIn(root string) (map[string]json.RawMessage, error) {
@@ -172,7 +199,7 @@ func replaceInstall(step *railpackplan.Step, loc workspace.Location, scoped stri
 	if scoped == "" {
 		return nil
 	}
-	replaceable := workspace.ReplaceableInstalls(loc.PackageManager)
+	replaceable := loc.ReplaceableInstalls()
 	var ran []string
 	for i, command := range step.Commands {
 		exec, ok := command.(railpackplan.ExecCommand)

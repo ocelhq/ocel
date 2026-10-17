@@ -601,3 +601,149 @@ func TestAGlobTheWorkspaceNegatesLeavesTheAppOutOfIt(t *testing.T) {
 		})
 	}
 }
+
+func TestAGoAppIsBuiltFromTheModuleItsPackageBelongsTo(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		".git/HEAD":      "ref: refs/heads/main\n",
+		"go.mod":         "module example.com/web\n\ngo 1.27.0\n",
+		"lib/lib.go":     "package lib\n",
+		"server/main.go": "package main\n\nfunc main() {}\n",
+	})
+
+	got := located(t, filepath.Join(dir, "server"))
+
+	if got.Root != dir || got.Path != "server" || got.ModuleDir != "." || got.Language != language.Go {
+		t.Errorf("Locate() = %+v, want the app at server inside the Go module rooted at %s — go build in the image reads the go.mod above the package", got, dir)
+	}
+}
+
+func TestAGoAppIsBuiltFromTheDirectoryHoldingItsModuleAndEveryModuleItReplacesLocally(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		".git/HEAD":  "ref: refs/heads/main\n",
+		"sdk/go.mod": "module ocel.dev\n\ngo 1.27.0\n",
+		"tests/fixtures/web/go.mod": "module example.com/web\n\ngo 1.27.0\n\n" +
+			"require ocel.dev v0.0.0\n\n" +
+			"replace ocel.dev => ../../../sdk\n\n" +
+			"replace example.com/pinned => example.com/fork v1.2.3\n",
+		"tests/fixtures/web/server/main.go": "package main\n\nfunc main() {}\n",
+	})
+
+	got := located(t, filepath.Join(dir, "tests", "fixtures", "web", "server"))
+
+	if got.Root != dir || got.Path != "tests/fixtures/web/server" || got.ModuleDir != "tests/fixtures/web" {
+		t.Errorf("Locate() = %+v, want the context %s, the nearest directory holding both the module and the sdk it replaces ocel.dev with", got, dir)
+	}
+	if got.GoVersion != "1.27.0" {
+		t.Errorf("Locate().GoVersion = %q, want the go directive of the app's own module", got.GoVersion)
+	}
+}
+
+func TestAGoAppBuildsItsOwnPackageWithTheModuleItBelongsTo(t *testing.T) {
+	module := map[string]string{
+		".git/HEAD":  "ref: refs/heads/main\n",
+		"sdk/go.mod": "module ocel.dev\n\ngo 1.27.0\n",
+		"apps/web/go.mod": "module example.com/web\n\ngo 1.27.0\n\n" +
+			"require ocel.dev v0.0.0\n\nreplace ocel.dev => ../../sdk\n",
+		"apps/web/server/main.go": "package main\n\nfunc main() {}\n",
+	}
+	const build = `cd apps/web/server && GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o ../../../out .`
+
+	t.Run("built from the package's own directory into the binary railpack starts", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, module)
+
+		commands, err := located(t, filepath.Join(dir, "apps", "web", "server")).Commands()
+		if err != nil {
+			t.Fatalf("Commands() = %v", err)
+		}
+		if commands != (workspace.Commands{Build: build}) {
+			t.Errorf("Commands() = %+v, want only the build %q — railpack's own go build runs at the context root, which holds no go.mod", commands, build)
+		}
+	})
+
+	t.Run("a go.work at the context root downloads only what the app's module requires", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, module)
+		write(t, dir, map[string]string{"go.work": "go 1.27.0\n\nuse (\n\t./sdk\n\t./tools\n)\n"})
+
+		commands, err := located(t, filepath.Join(dir, "apps", "web", "server")).Commands()
+		if err != nil {
+			t.Fatalf("Commands() = %+v", err)
+		}
+		if want := "sh -c 'cd apps/web && GOWORK=off go mod download'"; commands.Install != want {
+			t.Errorf("Commands().Install = %q, want %q — railpack downloads every module the go.work uses, and the serverless build compiles with GOWORK=off", commands.Install, want)
+		}
+	})
+
+	t.Run("a module rooted in the app's own directory is left to railpack", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, map[string]string{
+			".git/HEAD": "ref: refs/heads/main\n",
+			"go.mod":    "module example.com/web\n\ngo 1.27.0\n",
+			"main.go":   "package main\n\nfunc main() {}\n",
+		})
+
+		commands, err := located(t, dir).Commands()
+		if err != nil {
+			t.Fatalf("Commands() = %v", err)
+		}
+		if commands != (workspace.Commands{}) {
+			t.Errorf("Commands() = %+v, want nothing — railpack builds a module at the context root itself", commands)
+		}
+	})
+}
+
+func TestAGoModuleReplacingADirectoryOutsideTheRepositoryIsRefusedRatherThanBuiltFromAboveIt(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		"elsewhere/sdk/go.mod": "module ocel.dev\n\ngo 1.27.0\n",
+		"repo/.git/HEAD":       "ref: refs/heads/main\n",
+		"repo/web/go.mod":      "module example.com/web\n\ngo 1.27.0\n\nrequire ocel.dev v0.0.0\n\nreplace ocel.dev => ../../elsewhere/sdk\n",
+		"repo/web/main.go":     "package main\n\nfunc main() {}\n",
+		"repo/web/lib/doc.go":  "package lib\n",
+	})
+
+	_, err := workspace.Locate(filepath.Join(dir, "repo", "web"))
+	if err == nil {
+		t.Fatal("Locate() took a context above the repository the app is checked out in, so the image would be built from whatever else sits beside it")
+	}
+	if !strings.Contains(err.Error(), filepath.Join(dir, "elsewhere", "sdk")) || !strings.Contains(err.Error(), filepath.Join(dir, "repo")) {
+		t.Errorf("Locate() = %v, and the reader is never told which replaced directory lies outside which repository", err)
+	}
+}
+
+func TestANodeAppInsideAGoModuleIsStillBuiltAsNodeFromItsOwnDirectory(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		".git/HEAD":        "ref: refs/heads/main\n",
+		"go.mod":           "module example.com/api\n\ngo 1.27.0\n",
+		"web/package.json": `{"name":"web","scripts":{"start":"node server.js"}}`,
+		"web/tools.go":     "package tools\n",
+	})
+
+	got := located(t, filepath.Join(dir, "web"))
+
+	if got.Root != filepath.Join(dir, "web") || got.Language != language.JS {
+		t.Errorf("Locate() = %+v, want the node app built from its own directory — the go.mod above it is another app's module", got)
+	}
+}
+
+func TestAGoAppPointedAtAWiderContextStillBuildsItsPackageWithItsModule(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		"repo/.git/HEAD":          "ref: refs/heads/main\n",
+		"repo/web/go.mod":         "module example.com/web\n\ngo 1.27.0\n",
+		"repo/web/server/main.go": "package main\n\nfunc main() {}\n",
+	})
+
+	rebased, err := located(t, filepath.Join(dir, "repo", "web", "server")).Rebase(filepath.Join(dir, "repo"))
+	if err != nil {
+		t.Fatalf("Rebase() = %v", err)
+	}
+
+	if rebased.Root != filepath.Join(dir, "repo") || rebased.Path != "web/server" || rebased.ModuleDir != "web" || rebased.Language != language.Go || rebased.GoVersion != "1.27.0" {
+		t.Errorf("Rebase() = %+v, want the app and its module addressed from the context image.context names", rebased)
+	}
+}

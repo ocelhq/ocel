@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/ocelhq/ocel/cli/internal/language"
 )
 
 type PackageManager string
@@ -178,6 +180,9 @@ func yarnGeneration(version string) PackageManager {
 
 func (l Location) Commands() (Commands, error) {
 	var commands Commands
+	if l.Language == language.Go {
+		commands = l.planGoCommands()
+	}
 	if l.Member {
 		start := l.start()
 		if start == "" {
@@ -261,6 +266,9 @@ func (l Location) runtime() string {
 	return "node"
 }
 
-func ReplaceableInstalls(manager PackageManager) []string {
-	return behaviours[manager].replaces
+func (l Location) ReplaceableInstalls() []string {
+	if l.Language == language.Go {
+		return []string{goModDownload}
+	}
+	return behaviours[l.PackageManager].replaces
 }
