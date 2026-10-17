@@ -97,6 +97,7 @@ type functionArgs struct {
 	TimeoutSeconds int
 	InvokeMode     string
 	Tags           map[string]string
+	Network        *functionNetwork
 }
 
 type isrConfig struct {
@@ -537,6 +538,8 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		Architectures: pulumi.StringArray{pulumi.String(args.Arch)},
 
 		Layers: layers,
+
+		VpcConfig: args.Network.vpcConfig(),
 	}, opts...)
 	if err != nil {
 		return none, err

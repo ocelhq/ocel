@@ -43,7 +43,7 @@ func newReleaseHostingWorkers(t *testing.T, workers ...string) (*release, provid
 	}
 	engine := &mockedEngine{}
 	release := releasingOn(t, cfg, engine)
-	work, err := release.appWork(spec, nil)
+	work, err := release.appWork(spec, nil, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}

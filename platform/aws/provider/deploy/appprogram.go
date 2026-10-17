@@ -29,6 +29,10 @@ type appWork struct {
 	sets        []assetSet
 	delivery    edgeDelivery
 	stack       string
+	network     *functionNetwork
+
+	networkPending  bool
+	functionsAttach bool
 }
 
 func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error {
@@ -48,7 +52,7 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	return stack.register(pctx)
 }
 
-func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches) (*appWork, error) {
+func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches, network *functionNetwork) (*appWork, error) {
 	app := spec.App
 	project, stack := naming.Sanitize(spec.Ref.Project), spec.Ref.Name
 	sessions := newSessionScope(project, stack.Env, r.cfg.StateTableARN)
@@ -89,8 +93,11 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 			return nil, err
 		}
 		declared.Tags = transformed.tagsFor(transformTypeFunction, spec.Name)
+		if !transformed.placesInVPC(spec.Name) {
+			declared.Network = network
+		}
 		args[spec.Name] = declared
-		vpcAccess = vpcAccess || transformed.placesInVPC(spec.Name)
+		vpcAccess = vpcAccess || transformed.placesInVPC(spec.Name) || declared.Network != nil
 		functions = append(functions, appFunction{Logical: spec.Name, RouteID: spec.Route})
 		artifact, err := r.artifactAt(spec.Artifact)
 		if err != nil {
@@ -99,6 +106,8 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		artifacts[spec.Name] = artifact
 		logical = append(logical, spec.Name)
 	}
+
+	vpcAccess = vpcAccess || (network != nil && len(app.Workers) > 0)
 
 	env := r.appEnv(spec, bundle, sessions)
 	for i, fn := range functions {
@@ -155,6 +164,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		sets:        sets,
 		delivery:    delivery,
 		stack:       stack.String(),
+		network:     network,
 		roleCoord:   roleCoordinate(project, stack),
 		role:        role,
 		functions: appStackFunctions{

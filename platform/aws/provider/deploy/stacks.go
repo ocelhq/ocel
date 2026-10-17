@@ -65,7 +65,8 @@ type Stacks struct {
 	mu     sync.Mutex
 	opened map[Scope]*release
 
-	containerInfraLock sync.Mutex
+	containerInfraLock  sync.Mutex
+	functionNetworkLock sync.Mutex
 
 	PlanParts func(ctx context.Context, spec provider.StackSpec) ([]provider.ChangeGroup, error)
 }
@@ -174,6 +175,8 @@ func (r *release) Run(pctx *sdk.Context, spec provider.StackSpec) error {
 	case *containerWork:
 		return work.run(pctx)
 	case *containerInfraWork:
+		return work.run(pctx)
+	case *functionNetworkWork:
 		return work.run(pctx)
 	case *workersWork:
 		return work.run(pctx)
@@ -291,6 +294,10 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 		return provider.StackResult{}, nil
 	}
 	if work, ok := spec.VendorState.(*containerInfraWork); ok {
+		work.outputs = outputs
+		return provider.StackResult{}, nil
+	}
+	if work, ok := spec.VendorState.(*functionNetworkWork); ok {
 		work.outputs = outputs
 		return provider.StackResult{}, nil
 	}
@@ -475,7 +482,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		}()
 		return r.provisionContainer(ctx, spec, progress)
 	}
-	prepared, work, err := r.prepare(ctx, spec, runProvision)
+	prepared, work, err := r.prepare(ctx, spec, runProvision, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -499,6 +506,11 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
 		return provider.StackResult{}, err
 	}
+	if work != nil && !work.functionsAttach {
+		if err := r.releaseFunctionNetwork(ctx, r.cfg.KeyValues, spec.Ref, progress); err != nil {
+			return provider.StackResult{}, err
+		}
+	}
 	if err := deleteKVTokens(ctx, r.cfg.Parameters, r.findUndeclaredKVTokens(listedTokens, spec)); err != nil {
 		return provider.StackResult{}, err
 	}
@@ -517,7 +529,7 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	if runsContainer(spec) {
 		return r.planContainer(ctx, spec, progress)
 	}
-	prepared, work, err := r.prepare(ctx, spec, runPreview)
+	prepared, work, err := r.prepare(ctx, spec, runPreview, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -527,6 +539,9 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	}
 	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
 		return provider.Plan{}, err
+	}
+	if work != nil && work.networkPending {
+		previewed.Groups = append([]provider.ChangeGroup{functionNetworkGroup(spec.Ref.Tier)}, previewed.Groups...)
 	}
 	workerGroups, err := r.previewWorkers(ctx, prepared, work, progress)
 	if err != nil {
@@ -553,7 +568,7 @@ const (
 	runPreview
 )
 
-func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind runKind) (provider.StackSpec, *appWork, error) {
+func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind runKind, progress progress.Log) (provider.StackSpec, *appWork, error) {
 	if spec.VendorState != nil {
 		return spec, nil, nil
 	}
@@ -583,10 +598,22 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 		spec.VendorState = work
 		return spec, nil, nil
 	}
-	work, err := r.appWork(spec, transformed)
+	var network *functionNetwork
+	var pending, functionsAttach bool
+	if kind == runPreview {
+		network, pending, err = r.readFunctionNetworkFor(ctx, spec, transformed)
+	} else {
+		network, functionsAttach, err = r.claimFunctionNetworkFor(ctx, spec, transformed, progress)
+	}
 	if err != nil {
 		return provider.StackSpec{}, nil, err
 	}
+	work, err := r.appWork(spec, transformed, network)
+	if err != nil {
+		return provider.StackSpec{}, nil, err
+	}
+	work.networkPending = pending
+	work.functionsAttach = functionsAttach
 	spec.VendorState = work
 	return spec, work, nil
 }
@@ -624,6 +651,9 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images prov
 		}
 	}
 	if err := r.releaseContainerInfra(ctx, opened.cfg.KeyValues, ref, progress); err != nil {
+		return err
+	}
+	if err := r.releaseFunctionNetwork(ctx, opened.cfg.KeyValues, ref, progress); err != nil {
 		return err
 	}
 	if ref.Name.IsInfra() {

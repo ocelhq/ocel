@@ -31,7 +31,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	spec.App.EdgeRouteTable = edgeRouteTable(appCoordinate(spec).RouteTableKey("ab"))
 
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil)
+	work, err := release.appWork(spec, nil, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -70,7 +70,7 @@ func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 
 	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil)
+	work, err := release.appWork(spec, nil, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}

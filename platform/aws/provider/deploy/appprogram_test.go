@@ -62,7 +62,7 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 
 	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil)
+	work, err := release.appWork(spec, nil, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -104,7 +104,7 @@ func TestThePlannedAppBootsThroughTheRuntimeItWasHandedAndNoOther(t *testing.T) 
 
 	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil)
+	work, err := release.appWork(spec, nil, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestAnAppIsRefusedRatherThanDeployedAgainstARuntimeTheAccountDoesNotHave(t 
 	cfg, spec := appStackSpec(t)
 	cfg.RuntimeLayers = nil
 	release := releasing(t, cfg)
-	_, err := release.appWork(spec, nil)
+	_, err := release.appWork(spec, nil, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("appWork() = %v, want a %s refusal naming the bootstrap to re-run", err, refusal.CodeNotReady)
@@ -138,7 +138,7 @@ func TestAPlannedAppWithNoISRAsksForNoRevalidationLedger(t *testing.T) {
 	cfg, spec := appStackSpec(t)
 	spec.App.ISR = nil
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil)
+	work, err := release.appWork(spec, nil, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -154,12 +154,12 @@ func TestAPlannedAppGuardsItsOriginOnlyWithASecretToDemand(t *testing.T) {
 	spec.App.Guard = &provider.OriginGuard{RootFunction: "fn--web--entry"}
 	release := releasing(t, cfg)
 
-	if _, err := release.appWork(spec, nil); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
+	if _, err := release.appWork(spec, nil, nil); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
 		t.Fatalf("appWork() = %v, want it to say the bootstrap has no origin secret", err)
 	}
 
 	cfg.OriginSecret = "s3cret"
-	work, err := releasing(t, cfg).appWork(spec, nil)
+	work, err := releasing(t, cfg).appWork(spec, nil, nil)
 	if err != nil {
 		t.Fatalf("appWork() with a secret = %v", err)
 	}
@@ -181,7 +181,7 @@ func TestAPlannedAppTakesItsGrantsFromTheBindingsItWasGranted(t *testing.T) {
 			Resources: []string{"arn:aws:s3:::uploads/*"},
 		}},
 	}}
-	work, err := releasing(t, cfg).appWork(spec, nil)
+	work, err := releasing(t, cfg).appWork(spec, nil, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -213,7 +213,7 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackDeployed(t *testing.T) 
 
 	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	if _, err := release.appWork(spec, nil); err != nil {
+	if _, err := release.appWork(spec, nil, nil); err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
 	release.served.realized("fn--web--entry", "shop-prod-web-entry")
@@ -242,7 +242,7 @@ func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
 		cfg, spec := appStackSpec(t)
 		spec.App.Values.Plain = map[string]string{"AWS_REGION": "us-west-2"}
 
-		_, err := releasing(t, cfg).appWork(spec, nil)
+		_, err := releasing(t, cfg).appWork(spec, nil, nil)
 		if err == nil || !strings.Contains(err.Error(), "AWS_REGION") {
 			t.Fatalf("appWork() = %v, want the deploy refused before the role is built", err)
 		}

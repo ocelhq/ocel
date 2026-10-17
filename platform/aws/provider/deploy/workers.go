@@ -48,6 +48,7 @@ type workersWork struct {
 	artifact artifactRef
 	env      map[string]string
 	role     executionRole
+	network  *functionNetwork
 	layer    string
 	kms      string
 	region   string
@@ -82,6 +83,7 @@ func (r *release) workersWork(spec provider.StackSpec, work *appWork) (*workersW
 		artifact: work.functions.Artifacts[entry.Logical],
 		env:      work.functions.Env,
 		role:     work.role,
+		network:  work.network,
 		layer:    work.functions.Layers[args.Arch],
 		kms:      work.functions.KmsKeyARN,
 		region:   r.cfg.Region,
@@ -109,12 +111,22 @@ func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec,
 		return nil, err
 	}
 	ref := workersRef(spec.Ref)
+	if work.network != nil {
+		if err := r.recordFunctionNetworkConsumer(ctx, ref); err != nil {
+			return nil, err
+		}
+	}
 	if err := r.recordWorkers(ctx, ref); err != nil {
 		return nil, fmt.Errorf("record the workers of %s: %w", spec.App.App, err)
 	}
 	result, err := r.automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: workers}, progress)
 	if err != nil {
 		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
+	}
+	if work.network == nil {
+		if err := r.releaseFunctionNetwork(ctx, r.cfg.KeyValues, ref, progress); err != nil {
+			return nil, err
+		}
 	}
 	return result.Functions, nil
 }
@@ -159,7 +171,10 @@ func (r *release) destroyWorkersStack(ctx context.Context, ref provider.StackRef
 	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("take down the workers of %s: %w", ref.Name.App, err)
 	}
-	return keyvalue.Forget(ctx, r.cfg.KeyValues, workersAt(ref))
+	if err := keyvalue.Forget(ctx, r.cfg.KeyValues, workersAt(ref)); err != nil {
+		return err
+	}
+	return r.releaseFunctionNetwork(ctx, r.cfg.KeyValues, ref, progress)
 }
 
 func (r *release) previewWorkers(ctx context.Context, spec provider.StackSpec, work *appWork, progress progress.Log) ([]provider.ChangeGroup, error) {
@@ -390,6 +405,7 @@ func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerS
 	env := pulumi.StringMap{}
 	args := w.args
 	args.TimeoutSeconds = int(workerTimeout(w.topics, worker.Name) / time.Second)
+	args.Network = w.network
 	for key, value := range functionEnv(w.env, args, nil, nil) {
 		env[key] = pulumi.String(value)
 	}
@@ -417,6 +433,7 @@ func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerS
 		Tags:          resourceTags(at.Kind, "", args.Tags),
 		Architectures: pulumi.StringArray{pulumi.String(args.Arch)},
 		Layers:        runtimeLayerInput(w.layer),
+		VpcConfig:     args.Network.vpcConfig(),
 	})
 	if err != nil {
 		return nil, err
