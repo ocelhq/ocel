@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
@@ -39,6 +40,7 @@ type Config struct {
 	KeyValues keyvalue.Store
 	WrittenBy provider.WrittenBy
 	Rules     RulesAPI
+	Subnets   awsec2.DescribeSubnetsAPIClient
 
 	RequiredParts []string
 

@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -77,6 +78,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		KeyValues: p.KeyValues(),
 		WrittenBy: p.writtenBy,
 		Rules:     elasticloadbalancingv2.NewFromConfig(p.aws),
+		Subnets:   ec2.NewFromConfig(p.aws),
 
 		Tier:                scope.Tier,
 		Slug:                scope.Slug,

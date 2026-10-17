@@ -32,6 +32,7 @@ type mockedEngine struct {
 	mu        sync.Mutex
 	ran       []string
 	torndown  []string
+	sequence  []string
 	previewed []provider.Change
 	upErr     func(stack string) error
 	downErr   func(stack string) error
@@ -93,6 +94,7 @@ func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progr
 	}
 	e.mu.Lock()
 	e.ran = append(e.ran, setup.Stack)
+	e.sequence = append(e.sequence, "up "+setup.Stack)
 	e.mu.Unlock()
 	return e.outputs, nil
 }
@@ -147,7 +149,14 @@ func (e *mockedEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ 
 		}
 	}
 	e.torndown = append(e.torndown, setup.Stack)
+	e.sequence = append(e.sequence, "destroy "+setup.Stack)
 	return nil
+}
+
+func (e *mockedEngine) operations() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.sequence)
 }
 
 func (e *mockedEngine) torn() []string {

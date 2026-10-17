@@ -116,7 +116,7 @@ func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
 
 	cfg, spec := containerStackSpec(t)
 	spec.App.Compute = provider.ComputeServerless
-	if _, _, err := releasing(t, cfg).prepare(context.Background(), spec, runProvision); err == nil || !strings.Contains(err.Error(), "serverless") {
+	if _, _, err := releasing(t, cfg).prepare(context.Background(), spec, runProvision, nil); err == nil || !strings.Contains(err.Error(), "serverless") {
 		t.Fatalf("prepare() of a serverless app that pushes an image = %v, want it refused: functions run no image", err)
 	}
 }
@@ -764,7 +764,7 @@ func TestADeployThatRunsNoContainerReconcilesNoImage(t *testing.T) {
 	spec.Images = provider.ImagePushes{}
 	spec.App.Image = ""
 
-	_, _, _ = releasing(t, cfg).prepare(context.Background(), spec, runProvision)
+	_, _, _ = releasing(t, cfg).prepare(context.Background(), spec, runProvision, nil)
 
 	if len(retained.reconciled) != 0 {
 		t.Errorf("a serverless release reconciled %v, want no image", retained.reconciled)
