@@ -34,6 +34,7 @@ type mockedEngine struct {
 	torndown  []string
 	previewed []provider.Change
 	upErr     func(stack string) error
+	downErr   func(stack string) error
 }
 
 type pushingAssetSets struct {
@@ -140,6 +141,11 @@ func (p *previewing) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
 func (e *mockedEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Log) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.downErr != nil {
+		if err := e.downErr(setup.Stack); err != nil {
+			return err
+		}
+	}
 	e.torndown = append(e.torndown, setup.Stack)
 	return nil
 }
