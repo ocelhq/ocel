@@ -28,15 +28,7 @@
         }
       },
       "properties": {
-        "createdAt": {
-          "default": "",
-          "type": "string"
-        },
-        "promotionId": {
-          "default": "",
-          "type": "string"
-        },
-        "releases": {
+        "builds": {
           "additionalProperties": {
             "type": "string"
           },
@@ -44,6 +36,14 @@
             "type": "string"
           },
           "type": "object"
+        },
+        "createdAt": {
+          "default": "",
+          "type": "string"
+        },
+        "promotionId": {
+          "default": "",
+          "type": "string"
         },
         "state": {
           "anyOf": [
