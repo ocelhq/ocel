@@ -2123,7 +2123,7 @@ func TestEveryCredentialCreatesTheContainerFrontsVPCOriginOnlyTaggedAsOcels(t *t
 	}
 }
 
-func TestEveryCredentialFindsRestAPIsByTagAndTagsThemOnCreateOnlyAsItsOwnTiers(t *testing.T) {
+func TestEveryCredentialFindsRestAPIsByTagAndTagsOnlyItsOwnTiers(t *testing.T) {
 	const restAPITags = "arn:aws:apigateway:eu-west-1::/tags/arn%3Aaws%3Aapigateway%3Aeu-west-1%3A%3A%2Frestapis%2Fabc123"
 	creating := func(tier environment.Tier) requestContext {
 		return requestContext{
@@ -2141,6 +2141,12 @@ func TestEveryCredentialFindsRestAPIsByTagAndTagsThemOnCreateOnlyAsItsOwnTiers(t
 			}
 			if allows(t, document, "apigateway:PUT", restAPITags, creating(tier.Sibling())) {
 				t.Errorf("the %s %s credential can tag a REST API as the %s tier's", tier, purpose, tier.Sibling())
+			}
+			siblings := creating(tier)
+			siblings["aws:ResourceTag/"+managedByTagKey] = managedByTagValue
+			siblings["aws:ResourceTag/"+naming.EnvTierTagKey] = string(tier.Sibling())
+			if allows(t, document, "apigateway:PUT", restAPITags, siblings) {
+				t.Errorf("the %s %s credential can retag the %s tier's REST API as its own", tier, purpose, tier.Sibling())
 			}
 		}
 	}

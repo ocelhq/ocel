@@ -1519,7 +1519,7 @@ func partProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"apigateway:PUT"},
 			Resources: []string{apiGatewayTagsARN},
-			Condition: r.taggedOnCreateForItsTier(),
+			Condition: mergeConditions(r.taggedOnCreateForItsTier(), r.taggedOnlyAsItsTier()),
 		},
 		{
 			Actions:   []string{"apigateway:GET", "apigateway:POST", "apigateway:PUT"},
