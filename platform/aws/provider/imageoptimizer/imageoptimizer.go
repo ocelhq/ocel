@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrapfunction"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -59,6 +60,8 @@ type Spec struct {
 	RolePath       string
 	AssetBucket    string
 	AssetBucketARN string
+
+	UpdatesTrust bool
 }
 
 type Names struct {
@@ -127,17 +130,19 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 	if err != nil {
 		return nil, err
 	}
-	if err := bootstrapfunction.EnsureRole(ctx, c.IAM, bootstrapfunction.Role{
-		Name:        names.Role,
-		Path:        spec.RolePath,
-		Boundary:    spec.Boundary,
-		Description: "Ocel: the role the " + string(spec.Tier) + " image optimizer runs as, reading the asset bucket's assets and image config",
-		Service:     lambdaPrincipal,
-		PolicyName:  policyName,
-		Policy:      policy,
-		Tags:        tags(spec.Tier),
-	}); err != nil {
-		return nil, err
+	behind := bootstrapfunction.EnsureRole(ctx, c.IAM, bootstrapfunction.Role{
+		Name:         names.Role,
+		Path:         spec.RolePath,
+		Boundary:     spec.Boundary,
+		Description:  "Ocel: the role the " + string(spec.Tier) + " image optimizer runs as, reading the asset bucket's assets and image config",
+		Service:      lambdaPrincipal,
+		PolicyName:   policyName,
+		Policy:       policy,
+		Tags:         tags(spec.Tier),
+		UpdatesTrust: spec.UpdatesTrust,
+	})
+	if behind != nil && !errors.Is(behind, stackrecords.ErrPartBehind) {
+		return nil, behind
 	}
 	functionTags := tags(spec.Tier)
 	functionTags[ComponentTagKey] = ComponentTagValue
@@ -167,7 +172,7 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 		{Kind: kindLogGroup, ID: names.LogGroup},
 		{Kind: kindFunction, ID: names.Function},
 		{Kind: kindURL, ID: url},
-	}, nil
+	}, behind
 }
 
 func accountOf(boundary string) (string, error) {

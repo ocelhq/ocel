@@ -34,7 +34,7 @@ type partWork struct {
 	summary string
 	digest  string
 	shape   []pricing.Shaped
-	make    func(ctx context.Context, prior []provider.PartResource) ([]provider.PartResource, error)
+	make    func(ctx context.Context, prior []provider.PartResource, updatesTrust bool) ([]provider.PartResource, error)
 }
 
 type tierPart struct {
@@ -65,7 +65,7 @@ func (p *Provider) ensurePart(ctx context.Context, tier environment.Tier, work p
 	}
 	store := p.KeyValues()
 	prior := recorded.Resources
-	if err := stackrecords.EnsureBootstrapPart(ctx, store, tier, stackrecords.PartWork{
+	err = stackrecords.EnsureBootstrapPart(ctx, store, tier, stackrecords.PartWork{
 		Name:      work.name,
 		WrittenBy: string(p.writtenBy),
 		Digest:    work.digest,
@@ -74,9 +74,13 @@ func (p *Provider) ensurePart(ctx context.Context, tier environment.Tier, work p
 			if say != nil {
 				say(fmt.Sprintf("Adding the %s tier's %s bootstrap part: %s", tier, work.name, work.summary))
 			}
-			return work.make(ctx, prior)
+			return work.make(ctx, prior, false)
 		},
-	}); err != nil {
+	})
+	if errors.Is(err, stackrecords.ErrPartBehind) && say != nil {
+		say(fmt.Sprintf("%v: run `%s` to bring the %s tier's %s part forward", err, provider.BootstrapCommand(tier), tier, work.name))
+	}
+	if err != nil && !errors.Is(err, stackrecords.ErrPartBehind) {
 		return nil, fmt.Errorf("add the %s tier's %s bootstrap part: %w", tier, work.name, err)
 	}
 	if recorded, present, err = stackrecords.ReadBootstrapPart(ctx, store, tier, work.name); err != nil {
@@ -196,7 +200,7 @@ func (p *Provider) addedPartWorks(ctx context.Context, tier environment.Tier) ([
 			Digest:    work.digest,
 			AddedBy:   recorded.AddedBy,
 			Make: func(ctx context.Context) ([]provider.PartResource, error) {
-				return work.make(ctx, prior)
+				return work.make(ctx, prior, true)
 			},
 		})
 	}

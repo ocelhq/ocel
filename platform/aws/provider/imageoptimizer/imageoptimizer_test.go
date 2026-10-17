@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrapfunction/functiontest"
 	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -114,6 +116,34 @@ func TestEnsureAgainLeavesOneOptimizerAtTheSameURL(t *testing.T) {
 	}
 	if account.Called("UpdateFunctionUrlConfig") != 1 {
 		t.Errorf("UpdateFunctionUrlConfig called %d times, want the second run to update the url it found", account.Called("UpdateFunctionUrlConfig"))
+	}
+}
+
+func TestEnsuringAnOptimizerWhoseRoleTrustDriftedMovesTheRestForwardAndSaysItIsBehind(t *testing.T) {
+	t.Parallel()
+	account := functiontest.New()
+	names := imageoptimizer.NamesFor("ocel", environment.TierProduction)
+	if _, err := imageoptimizer.Ensure(context.Background(), clients(account), spec(environment.TierProduction)); err != nil {
+		t.Fatal(err)
+	}
+	account.Roles[names.Role].Trust = `{"Version":"2012-10-17","Statement":[]}`
+	account.Functions[names.Function].Code = []byte("an older build's optimizer")
+
+	resources, err := imageoptimizer.Ensure(context.Background(), clients(account), spec(environment.TierProduction))
+	if !errors.Is(err, stackrecords.ErrPartBehind) || imageoptimizer.URLOf(resources) == "" {
+		t.Fatalf("Ensure() = %v, %v; want the optimizer's resources and the part said to be behind", resources, err)
+	}
+	if !bytes.Equal(account.Functions[names.Function].Code, payloads.ImageOptimizer().Bytes) || !account.RunsAsItsRole(names.Function) {
+		t.Error("the optimizer was not moved forward as the role it runs as")
+	}
+
+	bootstrapping := spec(environment.TierProduction)
+	bootstrapping.UpdatesTrust = true
+	if _, err := imageoptimizer.Ensure(context.Background(), clients(account), bootstrapping); err != nil {
+		t.Fatalf("Ensure() by a bootstrap = %v", err)
+	}
+	if account.Called("DeleteRole") > 0 || !account.RunsAsItsRole(names.Function) || account.Called("UpdateAssumeRolePolicy") != 1 {
+		t.Errorf("calls = %v, want the bootstrap to put back the role's trust in place", account.Calls)
 	}
 }
 

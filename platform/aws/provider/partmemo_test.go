@@ -78,7 +78,7 @@ func TestADeployReadsACurrentPartRecordOnceHoweverManyStepsNeedIt(t *testing.T) 
 		t.Fatal(err)
 	}
 	table.record = string(record)
-	work.make = func(context.Context, []provider.PartResource) ([]provider.PartResource, error) {
+	work.make = func(context.Context, []provider.PartResource, bool) ([]provider.PartResource, error) {
 		t.Error("the part was made again, though its record is current for this build")
 		return nil, nil
 	}

@@ -31,7 +31,9 @@ func (p *Provider) imageOptimizerWork(ctx context.Context, tier environment.Tier
 		summary: imageoptimizer.Summary,
 		digest:  imageoptimizer.Digest(spec),
 		shape:   imageoptimizer.Shape(spec.Namespace, tier),
-		make: func(ctx context.Context, _ []provider.PartResource) ([]provider.PartResource, error) {
+		make: func(ctx context.Context, _ []provider.PartResource, updatesTrust bool) ([]provider.PartResource, error) {
+			spec := spec
+			spec.UpdatesTrust = updatesTrust
 			return imageoptimizer.Ensure(ctx, imageoptimizer.NewClients(p.aws), spec)
 		},
 	}, nil

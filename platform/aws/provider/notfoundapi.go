@@ -17,7 +17,7 @@ func (p *Provider) notFoundAPIWork(tier environment.Tier) partWork {
 		summary: notfoundapi.Summary,
 		digest:  notfoundapi.Digest(namespace, tier),
 		shape:   notfoundapi.Shape(namespace, tier),
-		make: func(ctx context.Context, prior []provider.PartResource) ([]provider.PartResource, error) {
+		make: func(ctx context.Context, prior []provider.PartResource, _ bool) ([]provider.PartResource, error) {
 			return notfoundapi.Ensure(ctx, apigateway.NewFromConfig(p.aws), namespace, tier, prior)
 		},
 	}

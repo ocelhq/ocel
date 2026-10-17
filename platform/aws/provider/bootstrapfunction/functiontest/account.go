@@ -2,6 +2,9 @@ package functiontest
 
 import (
 	"context"
+	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -21,18 +24,21 @@ const (
 )
 
 type Role struct {
-	Path     string
-	Boundary string
-	Trust    string
-	Tags     map[string]string
-	Policies map[string]string
+	ID        int
+	Path      string
+	Boundary  string
+	MadeUnder string
+	Trust     string
+	Tags      map[string]string
+	Policies  map[string]string
 }
 
 type Function struct {
-	Input lambda.CreateFunctionInput
-	Code  []byte
-	Tags  map[string]string
-	URL   *lambda.CreateFunctionUrlConfigInput
+	Input  lambda.CreateFunctionInput
+	RoleID int
+	Code   []byte
+	Tags   map[string]string
+	URL    *lambda.CreateFunctionUrlConfigInput
 }
 
 type Mapping struct {
@@ -51,6 +57,7 @@ type Account struct {
 
 	Unassumable int
 	Updating    int
+	RoleIDs     int
 	Calls       []string
 }
 
@@ -84,6 +91,20 @@ func (a *Account) Called(call string) int {
 
 func (a *Account) record(call string) { a.Calls = append(a.Calls, call) }
 
+func (a *Account) idOfRole(arn string) int {
+	if r, ok := a.Roles[arn[strings.LastIndex(arn, "/")+1:]]; ok {
+		return r.ID
+	}
+	return 0
+}
+
+func (a *Account) RunsAsItsRole(function string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	f, ok := a.Functions[function]
+	return ok && f.RoleID != 0 && f.RoleID == a.idOfRole(aws.ToString(f.Input.Role))
+}
+
 func FunctionARN(name string) string {
 	return "arn:aws:lambda:" + Region + ":" + AccountID + ":function:" + name
 }
@@ -106,7 +127,8 @@ func (a IAM) CreateRole(_ context.Context, in *iam.CreateRoleInput, _ ...func(*i
 	for _, tag := range in.Tags {
 		tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 	}
-	a.Roles[name] = &Role{Path: aws.ToString(in.Path), Boundary: aws.ToString(in.PermissionsBoundary), Trust: aws.ToString(in.AssumeRolePolicyDocument), Tags: tags, Policies: map[string]string{}}
+	a.RoleIDs++
+	a.Roles[name] = &Role{ID: a.RoleIDs, Path: aws.ToString(in.Path), Boundary: aws.ToString(in.PermissionsBoundary), MadeUnder: aws.ToString(in.PermissionsBoundary), Trust: aws.ToString(in.AssumeRolePolicyDocument), Tags: tags, Policies: map[string]string{}}
 	return &iam.CreateRoleOutput{Role: &iamtypes.Role{RoleName: in.RoleName, Arn: aws.String(RoleARN(aws.ToString(in.Path), name))}}, nil
 }
 
@@ -120,6 +142,48 @@ func (a IAM) PutRolePolicy(_ context.Context, in *iam.PutRolePolicyInput, _ ...f
 	}
 	r.Policies[aws.ToString(in.PolicyName)] = aws.ToString(in.PolicyDocument)
 	return &iam.PutRolePolicyOutput{}, nil
+}
+
+func (a IAM) GetRole(_ context.Context, in *iam.GetRoleInput, _ ...func(*iam.Options)) (*iam.GetRoleOutput, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.record("GetRole")
+	r, ok := a.Roles[aws.ToString(in.RoleName)]
+	if !ok {
+		return nil, &iamtypes.NoSuchEntityException{Message: aws.String("no role")}
+	}
+	role := &iamtypes.Role{RoleName: in.RoleName, AssumeRolePolicyDocument: aws.String(url.QueryEscape(r.Trust))}
+	if r.Boundary != "" {
+		role.PermissionsBoundary = &iamtypes.AttachedPermissionsBoundary{PermissionsBoundaryArn: aws.String(r.Boundary)}
+	}
+	return &iam.GetRoleOutput{Role: role}, nil
+}
+
+func (a IAM) UpdateAssumeRolePolicy(_ context.Context, in *iam.UpdateAssumeRolePolicyInput, _ ...func(*iam.Options)) (*iam.UpdateAssumeRolePolicyOutput, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.record("UpdateAssumeRolePolicy")
+	r, ok := a.Roles[aws.ToString(in.RoleName)]
+	if !ok {
+		return nil, &iamtypes.NoSuchEntityException{Message: aws.String("no role")}
+	}
+	if r.Boundary != r.MadeUnder {
+		return nil, fmt.Errorf("AccessDenied: role %s is not under %s, the boundary iam:UpdateAssumeRolePolicy is granted under", aws.ToString(in.RoleName), r.MadeUnder)
+	}
+	r.Trust = aws.ToString(in.PolicyDocument)
+	return &iam.UpdateAssumeRolePolicyOutput{}, nil
+}
+
+func (a IAM) PutRolePermissionsBoundary(_ context.Context, in *iam.PutRolePermissionsBoundaryInput, _ ...func(*iam.Options)) (*iam.PutRolePermissionsBoundaryOutput, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.record("PutRolePermissionsBoundary")
+	r, ok := a.Roles[aws.ToString(in.RoleName)]
+	if !ok {
+		return nil, &iamtypes.NoSuchEntityException{Message: aws.String("no role")}
+	}
+	r.Boundary = aws.ToString(in.PermissionsBoundary)
+	return &iam.PutRolePermissionsBoundaryOutput{}, nil
 }
 
 func (a IAM) ListRolePolicies(_ context.Context, in *iam.ListRolePoliciesInput, _ ...func(*iam.Options)) (*iam.ListRolePoliciesOutput, error) {
@@ -176,7 +240,7 @@ func (a Lambda) CreateFunction(_ context.Context, in *lambda.CreateFunctionInput
 	if _, ok := a.Functions[name]; ok {
 		return nil, &lambdatypes.ResourceConflictException{Message: aws.String("exists")}
 	}
-	a.Functions[name] = &Function{Input: *in, Code: in.Code.ZipFile, Tags: in.Tags}
+	a.Functions[name] = &Function{Input: *in, RoleID: a.idOfRole(aws.ToString(in.Role)), Code: in.Code.ZipFile, Tags: in.Tags}
 	return &lambda.CreateFunctionOutput{FunctionArn: aws.String(FunctionARN(name))}, nil
 }
 
@@ -213,6 +277,9 @@ func (a Lambda) UpdateFunctionConfiguration(_ context.Context, in *lambda.Update
 	f, ok := a.Functions[aws.ToString(in.FunctionName)]
 	if !ok {
 		return nil, &lambdatypes.ResourceNotFoundException{Message: aws.String("no function")}
+	}
+	if in.Role != nil && aws.ToString(in.Role) != aws.ToString(f.Input.Role) {
+		f.RoleID = a.idOfRole(aws.ToString(in.Role))
 	}
 	f.Input.Environment, f.Input.MemorySize, f.Input.Timeout, f.Input.Role = in.Environment, in.MemorySize, in.Timeout, in.Role
 	f.Input.Description, f.Input.Handler, f.Input.Runtime, f.Input.LoggingConfig = in.Description, in.Handler, in.Runtime, in.LoggingConfig
