@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -393,6 +394,66 @@ func TestAPreviewDeploymentClaimsNoStoreOfItsOwn(t *testing.T) {
 
 	if claimed := claimedHosts(m, switchboard.StoreLabel); len(claimed) != 1 {
 		t.Errorf("the box claims %v for stores, want the preview's one: its deployments share it", claimed)
+	}
+}
+
+func TestAFirstPreviewTheBoxRefusedLeavesNoHostnameClaimed(t *testing.T) {
+	t.Parallel()
+
+	for what, refuse := range map[string]func(*machine){
+		"a container that would not run": func(m *machine) {
+			m.refuseOn("RunContainer", errors.New("docker run failed"))
+		},
+		"a release the box kept off": func(m *machine) {
+			m.refuseOn("Release", router.Unserved{Err: errors.New("the gate exited 4; the previous release is still live")})
+		},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			m := aMachine()
+			stack := previewStack(t, m)
+			staged(t, stack, "web", "b-pr-7", slug+"-web-pr-7")
+			refuse(m)
+
+			err := stack.MovePointer(context.Background(), router.PointerMove{Pointer: "pr-7", Hosts: listPreviewHosts("pr-7", "web"), Promotion: router.Promotion{
+				PromotionID: "p-pr-7", Ts: 1, Releases: map[string]string{"web": "b-pr-7"},
+			}}, progress.Discard())
+			if err == nil {
+				t.Fatalf("a preview refused by %s succeeded", what)
+			}
+			if claimed := claimedOn(t, m); len(claimed) != 0 {
+				t.Errorf("after %s the box still claims %v: a hostname claimed for a preview nothing routes is answered with no app behind it", what, claimed)
+			}
+		})
+	}
+}
+
+func TestARefusedPreviewMoveKeepsTheHostnamesOfTheReleaseStillServing(t *testing.T) {
+	t.Parallel()
+
+	m := aMachine()
+	stack := previewStack(t, m)
+	previewed(t, stack, "pr-7", "api", "web")
+	staged(t, stack, "web", "b-2", slug+"-web-2")
+	m.refuseOn("Release", router.Unserved{Err: errors.New("the gate exited 4; the previous release is still live")})
+
+	err := stack.MovePointer(context.Background(), router.PointerMove{Pointer: "pr-7", Hosts: listPreviewHosts("pr-7", "web"), Promotion: router.Promotion{
+		PromotionID: "p-2", Ts: 2, Releases: map[string]string{"web": "b-2"},
+	}}, progress.Discard())
+	if err == nil {
+		t.Fatal("a preview move whose release was refused succeeded")
+	}
+	want := map[string]bool{}
+	for _, served := range listPreviewHosts("pr-7", "api", "web") {
+		want[served.Hostname] = true
+	}
+	claimed := map[string]bool{}
+	for _, claim := range claimedOn(t, m) {
+		claimed[claim.Hostname] = true
+	}
+	if !maps.Equal(claimed, want) {
+		t.Errorf("after a refused move the box claims %v, want %v: the box still serves api and web on pr-7", claimed, want)
 	}
 }
 

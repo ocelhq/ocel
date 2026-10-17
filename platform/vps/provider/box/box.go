@@ -28,6 +28,7 @@ type Machine interface {
 	Promote(ctx context.Context, tier environment.Tier, project, app, imageRef string) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)
 	RollOut(ctx context.Context, rollout host.Rollout, progress progress.Log) error
+	Discard(ctx context.Context, rollout host.Rollout) string
 	UnroutePointer(ctx context.Context, owner, pointer string) error
 	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)

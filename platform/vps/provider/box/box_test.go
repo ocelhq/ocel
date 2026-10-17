@@ -47,6 +47,8 @@ type machine struct {
 	refusals    map[string]error
 	visited     []string
 	rollingOut  func(host.Rollout) error
+	discarded   []string
+	leftRunning string
 	byHand      int
 	tables      int
 
@@ -163,6 +165,16 @@ func (m *machine) RollOut(_ context.Context, rollout host.Rollout, _ progress.Lo
 		m.tables++
 		return nil
 	}
+}
+
+func (m *machine) Discard(_ context.Context, rollout host.Rollout) string {
+	targets := make([]string, 0, len(rollout.Apps))
+	for _, app := range rollout.Apps {
+		targets = append(targets, app.Target)
+	}
+	m.calls = append(m.calls, "discard "+strings.Join(targets, ", "))
+	m.discarded = append(m.discarded, targets...)
+	return m.leftRunning
 }
 
 func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error {
@@ -517,9 +529,9 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItCutsOver(t *testing.T) {
 		t.Fatalf("Promote: %v", err)
 	}
 
-	want := []string{"gate " + box.Surface(slug, environment.TierProduction), "run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + containerimage.PortText}
+	want := []string{"gate " + box.Surface(slug, environment.TierProduction), "run shop-web-1111", "release web onto shop-web-1111:" + containerimage.PortText, "head shop/web at " + imageFor("web", "b1")}
 	if !slices.Equal(m.calls, want) {
-		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then cuts over", m.calls, want)
+		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running, then cuts over, and heads the window only at what now serves", m.calls, want)
 	}
 	if m.rollouts[0].Apps[0].HealthPath != "/healthz" {
 		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the deploy request named", m.rollouts[0].Apps[0].HealthPath)
@@ -563,9 +575,9 @@ func TestAPromotionOfSeveralAppsCutsOverThemAllInOneRelease(t *testing.T) {
 
 	want := []string{
 		"gate " + box.Surface(slug, environment.TierProduction),
-		"run shop-api-1111", "head shop/api at " + imageFor("api", "b1"),
-		"run shop-web-1111", "head shop/web at " + imageFor("web", "b1"),
+		"run shop-api-1111", "run shop-web-1111",
 		"release api onto shop-api-1111:" + containerimage.PortText + ", web onto shop-web-1111:" + containerimage.PortText,
+		"head shop/api at " + imageFor("api", "b1"), "head shop/web at " + imageFor("web", "b1"),
 	}
 	if !slices.Equal(m.calls, want) {
 		t.Fatalf("a promotion of two apps drove the box as %v, want %v: every container is running before one release cuts over them all, so a failure on either leaves the box on the promotion it was serving", m.calls, want)
@@ -620,6 +632,109 @@ func TestAPromotionThatFailedAfterTheCutoverKeepsThePointerOnTheReleaseTheBoxSer
 	}
 	if active := activePromotion(t, stack); active != "p2" {
 		t.Errorf("after a failure past the cutover the pointer is at %q, want p2: the box is serving p2", active)
+	}
+}
+
+func TestAPromotionRefusedBeforeItsRollOutRemovesTheContainersNothingRoutesTo(t *testing.T) {
+	t.Parallel()
+
+	for what, refuse := range map[string]func(*machine){
+		"a container that would not run": func(m *machine) {
+			m.refuseOn("RunContainer", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
+		},
+		"a gate the box would not take": func(m *machine) {
+			m.refuseOn("PutGate", refusal.Refuse(refusal.CodeNotReady, "the routing table could not be written"))
+		},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			m, _, stack := reconciled(t)
+			staged(t, stack, "web", "b1", "shop-web-1111")
+			staged(t, stack, "api", "b1", "shop-api-1111")
+			refuse(m)
+			m.leftRunning = "\nshop-api-1111 left running: the daemon went away"
+
+			err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
+				PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": "b1", "api": "b1"},
+			}}, progress.Discard())
+			if err == nil {
+				t.Fatalf("a promotion refused by %s succeeded", what)
+			}
+			want := []string{"shop-api-1111:" + containerimage.PortText, "shop-web-1111:" + containerimage.PortText}
+			if !slices.Equal(m.discarded, want) {
+				t.Errorf("after %s the box discarded %v, want %v: a refused promotion leaves no container of its own running with nothing routed to it", what, m.discarded, want)
+			}
+			if !strings.Contains(err.Error(), "shop-api-1111 left running: the daemon went away") {
+				t.Errorf("the refusal reads\n%s\nand never names the container the box could not remove", err)
+			}
+		})
+	}
+}
+
+func TestARefusedPromotionLeavesTheBoxsWindowHeadedWhereItWas(t *testing.T) {
+	t.Parallel()
+
+	for what, refuse := range map[string]func(*machine){
+		"a container that would not run": func(m *machine) {
+			m.refuseOn("RunContainer", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
+		},
+		"a release the box kept off": func(m *machine) {
+			m.refuseOn("Release", router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate exited 4; the previous release is still live")})
+		},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			m, _, stack := reconciled(t)
+			staged(t, stack, "web", "b1", "shop-web-1111")
+			staged(t, stack, "web", "b2", "shop-web-2222")
+			if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+				t.Fatalf("Promote(p1): %v", err)
+			}
+			refuse(m)
+
+			if err := promoted(t, stack, "p2", "web", "b2"); err == nil {
+				t.Fatalf("a promotion refused by %s succeeded", what)
+			}
+			if want := []string{imageFor("web", "b1")}; !slices.Equal(m.headed, want) {
+				t.Errorf("after %s the box's window was headed at %v, want %v: the box still serves b1, and a window heading a release that never served disagrees with the proxy and the ledger", what, m.headed, want)
+			}
+		})
+	}
+}
+
+func TestARollOutTheHostRefusedIsNotDiscardedASecondTimeByTheBox(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	m.refuseOn("Release", router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate exited 4; the previous release is still live\nshop-web-1111 removed")})
+
+	if err := promoted(t, stack, "p1", "web", "b1"); err == nil {
+		t.Fatal("a promotion whose roll-out was refused succeeded")
+	}
+	if len(m.discarded) != 0 {
+		t.Errorf("the box discarded %v after the host refused the roll-out, which removes what it stood itself", m.discarded)
+	}
+}
+
+func TestAPromotionTheBoxServesButCannotHeadItsWindowAtKeepsThePointerOnIt(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	m.refuseOn("Promote", refusal.Refuse(refusal.CodeNotReady, "the releases helper failed"))
+
+	err := promoted(t, stack, "p1", "web", "b1")
+	if err == nil {
+		t.Fatal("a promotion whose window could not be headed reported success")
+	}
+	if unserved := (router.Unserved{}); errors.As(err, &unserved) {
+		t.Errorf("the promotion failed with %v, which says the box never served it, yet the proxy routes to shop-web-1111", err)
+	}
+	if active := activePromotion(t, stack); active != "p1" {
+		t.Errorf("the pointer is at %q, want p1: the box serves p1", active)
 	}
 }
 
@@ -706,7 +821,7 @@ func TestARollbackRestartsThePreviousContainerAndCutsOverToIt(t *testing.T) {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	want := []string{"gate " + box.Surface(slug, environment.TierProduction), "run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + containerimage.PortText}
+	want := []string{"gate " + box.Surface(slug, environment.TierProduction), "run shop-web-1111", "release web onto shop-web-1111:" + containerimage.PortText, "head shop/web at " + imageFor("web", "b1")}
 	if !slices.Equal(m.calls, want) {
 		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", m.calls, want)
 	}
