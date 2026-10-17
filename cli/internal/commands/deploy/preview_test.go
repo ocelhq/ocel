@@ -442,18 +442,18 @@ func TestPreviewRemoveTearsDownThePreviewItsNameNames(t *testing.T) {
 		assertEnvironment(t, removed[0], environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, "release-v2")
 	})
 
-	t.Run("a preview nothing was ever deployed to is torn down without asking", func(t *testing.T) {
+	t.Run("a preview nothing was ever deployed to is refused by name without asking", func(t *testing.T) {
 		fixture := setUpPreviewProject(t)
 		dependencies := previewDependencies("feature/login", "")
 		previewUp(t, fixture, dependencies, previewUpOptions{})
 		terminalStdin(&dependencies)
 
 		out, err := runPreviewCommand(t, fixture, dependencies, "", "rm", "never-deployed")
-		if err != nil {
-			t.Fatalf("ocel preview rm never-deployed err = %v; out=%s", err, out)
+		if err == nil || !strings.Contains(err.Error(), "no preview named never-deployed") || !strings.Contains(err.Error(), "nothing was torn down") {
+			t.Fatalf("ocel preview rm never-deployed err = %v, want a refusal naming never-deployed: a teardown that removed nothing exits 0 only to have every caller believe it; out=%s", err, out)
 		}
-		if removed := removedEnvironments(t, fixture); len(removed) != 1 || removed[0].GetIdentity() != "never-deployed" {
-			t.Errorf("the CLI removed %v, want never-deployed reclaimed", removed)
+		if strings.Contains(out, "[y/N]") || strings.Contains(out, "Tore down") {
+			t.Errorf("out = %q, want no question and no claim that never-deployed was torn down", out)
 		}
 	})
 

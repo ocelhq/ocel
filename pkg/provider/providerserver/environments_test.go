@@ -777,6 +777,52 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftInPlace(t *testing.T) 
 	}
 }
 
+func TestRemovingAPreviewNothingIsRecordedForIsRefusedNamingItAndThePreviewsThatExist(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedEnvironment(t, vendor, "shop", naming.InfraStack("pr-7"))
+	recordLabelledEnvironment(t, vendor, "pr-8", "", stackrecords.LifecycleEphemeral)
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-9"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	result, err := drain(stream)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("removing pr-9, which nothing records, = %v, %v; want it refused as an invalid argument: a teardown that removed nothing must not say it tore a preview down", result, err)
+	}
+	for _, want := range []string{"pr-9", "nothing was torn down", "pr-7, pr-8"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("RemoveEnvironment() = %q, want it to name %q", err, want)
+		}
+	}
+	if journal := vendor.Journal(); slices.ContainsFunc(journal, func(entry string) bool { return strings.HasPrefix(entry, "destroy ") }) {
+		t.Errorf("the refused removal reached %v, want no stack destroyed", journal)
+	}
+}
+
+func TestRemovingAPreviewWhoseRecordIsGoneStillTakesDownTheStacksAndPromotionsLeftUnderIt(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-6", "p1")
+	stack := naming.InfraStack("pr-7")
+	seedEnvironment(t, vendor, "shop", stack)
+
+	for _, pointer := range []string{"pr-6", "pr-7"} {
+		if result := removeEnvironment(t, client, "shop", pointer); !result.GetSuccess() {
+			t.Errorf("removing %s = %q, want what is left under it taken down", pointer, result.GetError())
+		}
+	}
+	if !slices.Contains(vendor.Journal(), "destroy "+stack.String()) {
+		t.Errorf("the teardown reached %v, want %s destroyed", vendor.Journal(), stack)
+	}
+}
+
 func TestRemoveEnvironmentRefusesProduction(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
