@@ -16,7 +16,19 @@ const (
 	workersGroupKind    = "workers"
 	workerContainerKind = "worker container"
 	retiredAppTemplate  = "app %s is no longer deployed to %s"
+	droppedTemplate     = "app %s no longer hosts these workers"
 )
+
+func retiredReason(apps provider.LiveApps, name string, worker live.QueueWorker) (string, bool) {
+	deployed, found := apps.Find(worker.App)
+	if !found {
+		return fmt.Sprintf(retiredAppTemplate, worker.App, apps.Env), true
+	}
+	if slices.Contains(deployed.Workers, name) {
+		return "", false
+	}
+	return fmt.Sprintf(droppedTemplate, worker.App), true
+}
 
 func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _ progress.Log) (provider.Plan, error) {
 	partition, under := live.QueueWorkersUnder(apps.Tier, apps.Slug, apps.Env)
@@ -27,13 +39,17 @@ func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _
 	var plan provider.Plan
 	for _, entry := range entries {
 		var worker live.QueueWorker
-		if err := json.Unmarshal(entry.Value, &worker); err != nil || apps.Has(worker.App) {
+		if err := json.Unmarshal(entry.Value, &worker); err != nil {
+			continue
+		}
+		reason, retired := retiredReason(apps, entry.Key.Path[len(entry.Key.Path)-1], worker)
+		if !retired {
 			continue
 		}
 		at := slices.IndexFunc(plan.Groups, func(group provider.ChangeGroup) bool { return group.Name == worker.App })
 		if at < 0 {
 			plan.Groups = append(plan.Groups, provider.ChangeGroup{
-				Kind: workersGroupKind, Name: worker.App, Action: provider.ActionDelete, Reason: fmt.Sprintf(retiredAppTemplate, worker.App, apps.Env),
+				Kind: workersGroupKind, Name: worker.App, Action: provider.ActionDelete, Reason: reason,
 			})
 			at = len(plan.Groups) - 1
 		}
@@ -45,12 +61,10 @@ func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _
 func (p *Provider) Retire(ctx context.Context, apps provider.LiveApps, progress progress.Log) error {
 	ref := provider.StackRef{Project: apps.Slug, Tier: apps.Tier, Name: naming.StackName{Env: apps.Env}}
 	return p.retireWorkers(ctx, ref, func(name string, worker live.QueueWorker) bool {
-		if apps.Has(worker.App) {
-			return false
+		reason, retired := retiredReason(apps, name, worker)
+		if retired && progress != nil {
+			progress.Say(fmt.Sprintf("Taking down worker %s's container %s: %s", name, worker.Container, reason))
 		}
-		if progress != nil {
-			progress.Say(fmt.Sprintf("Taking down worker %s's container %s: "+retiredAppTemplate, name, worker.Container, worker.App, apps.Env))
-		}
-		return true
+		return retired
 	})
 }
