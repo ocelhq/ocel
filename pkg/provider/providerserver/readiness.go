@@ -134,8 +134,8 @@ func (r Readiness) resolvePartChange(ctx context.Context, status BootstrapStatus
 	if edgePart := bootstrapplan.PartFrontingEdge(offered, r.Edge); edgePart != "" {
 		requested = append(requested, edgePart)
 	}
-	for _, part := range slices.Sorted(maps.Keys(wants)) {
-		if !slices.Contains(requested, part) {
+	for _, part := range append(slices.Clone(status.Parts), slices.Sorted(maps.Keys(wants))...) {
+		if !slices.Contains(requested, part) && !slices.Contains(removing, part) {
 			requested = append(requested, part)
 		}
 	}
