@@ -451,21 +451,32 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress
 		return nil, err
 	}
 
-	lines := engineLines(progress)
-	opts := []optup.Option{optup.Parallel(setup.Parallel)}
-	if lines != nil {
-		opts = append(opts, optup.ProgressStreams(lines))
+	var res auto.UpResult
+	err = runReportingResourceOps(setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
+		opts := []optup.Option{optup.Parallel(setup.Parallel), optup.EventStreams(engineEvents)}
+		if lines != nil {
+			opts = append(opts, optup.ProgressStreams(lines))
+		}
+		if setup.Refresh {
+			opts = append(opts, optup.Refresh())
+		}
+		var err error
+		res, err = stack.Up(ctx, opts...)
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("provision stack %s: %w", setup.Stack, err)
 	}
-	if setup.Refresh {
-		opts = append(opts, optup.Refresh())
-	}
+	return res.Outputs, nil
+}
 
+func runReportingResourceOps(setup WorkspaceSpec, progress progress.Log, run func(engineEvents chan<- events.EngineEvent, lines *lineLog) error) error {
+	lines := engineLines(progress)
 	engineEvents := make(chan events.EngineEvent, 256)
 	traced := drainTrace(engineEvents, resourceLatencyOutlierThreshold, setup.Secrets)
-	opts = append(opts, optup.EventStreams(engineEvents))
 
 	start := time.Now()
-	res, upErr := stack.Up(ctx, opts...)
+	err := run(engineEvents, lines)
 	end := time.Now()
 	lines.Flush()
 
@@ -473,12 +484,8 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress
 	if trace.Start.IsZero() {
 		trace.Start, trace.End = start, end
 	}
-	reportTrace(progress, trace, upErr)
-
-	if upErr != nil {
-		return nil, fmt.Errorf("provision stack %s: %w", setup.Stack, upErr)
-	}
-	return res.Outputs, nil
+	reportTrace(progress, trace, err)
+	return err
 }
 
 func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress progress.Log) error {
@@ -496,19 +503,20 @@ func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress pro
 	if progress != nil {
 		progress.Say("Destroying every resource in stack " + setup.Stack + ", which can take several minutes")
 	}
-	lines := engineLines(progress)
-	opts := []optdestroy.Option{optdestroy.Parallel(setup.Parallel)}
-	if lines != nil {
-		opts = append(opts, optdestroy.ProgressStreams(lines))
-	}
-	if setup.Refresh {
-		opts = append(opts, optdestroy.Refresh())
-	}
-	if _, err := stack.Destroy(ctx, opts...); err != nil {
-		lines.Flush()
+	err = runReportingResourceOps(setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
+		opts := []optdestroy.Option{optdestroy.Parallel(setup.Parallel), optdestroy.EventStreams(engineEvents)}
+		if lines != nil {
+			opts = append(opts, optdestroy.ProgressStreams(lines))
+		}
+		if setup.Refresh {
+			opts = append(opts, optdestroy.Refresh())
+		}
+		_, err := stack.Destroy(ctx, opts...)
+		return err
+	})
+	if err != nil {
 		return fmt.Errorf("destroy stack %s: %w", setup.Stack, err)
 	}
-	lines.Flush()
 
 	if err := stack.Workspace().RemoveStack(ctx, setup.Stack); err != nil {
 		return fmt.Errorf("remove stack %s: %w", setup.Stack, err)
