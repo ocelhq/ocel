@@ -30,7 +30,7 @@ func (r *interceptedRecords) List(ctx context.Context, in keyvalue.Partition, un
 }
 
 func listConsumers(ctx context.Context, store keyvalue.Store) ([]keyvalue.Entry, error) {
-	consumers := consumersPrefix(environment.TierProduction)
+	consumers := containerShare.consumersPrefix(environment.TierProduction)
 	return store.List(ctx, consumers.Partition, consumers.Path...)
 }
 
@@ -65,7 +65,7 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 	blog.Ref = provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	claimed := false
 	store.afterList = func(under keyvalue.Key) {
-		if claimed || under.String() != consumersPrefix(environment.TierProduction).String() {
+		if claimed || under.String() != containerShare.consumersPrefix(environment.TierProduction).String() {
 			return
 		}
 		claimed = true
@@ -103,11 +103,11 @@ func TestAContainerDeployIsRefusedWhileTheContainerInfraIsGoingDown(t *testing.T
 	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	leased, err := keyvalue.ReadOrEmpty(ctx, shared, leaseAt(environment.TierProduction))
+	leased, err := keyvalue.ReadOrEmpty(ctx, shared, containerShare.leaseAt(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := writeLease(ctx, shared, leased, lease{Destroying: true}); err != nil {
+	if err := containerShare.writeLease(ctx, shared, leased, lease{Destroying: true}); err != nil {
 		t.Fatal(err)
 	}
 
