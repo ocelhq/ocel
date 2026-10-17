@@ -79,10 +79,7 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	if unserved := (router.Unserved{}); errors.As(err, &unserved) {
 		return s.refuse(ctx, move, nil, added, err)
 	}
-	if err != nil {
-		return err
-	}
-	return s.recordServed(ctx, move, claims, ready)
+	return errors.Join(err, s.recordServed(ctx, move, claims, ready))
 }
 
 func (s *stack) refuse(ctx context.Context, move router.PointerMove, stood []host.AppRollout, added []host.HostClaim, why error) error {
