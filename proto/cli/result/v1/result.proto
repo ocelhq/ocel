@@ -152,7 +152,7 @@ message PromotionSummary {
 
   string created_at = 3;
 
-  map<string, string> builds = 4;
+  map<string, string> releases = 4;
 
   PromotionState state = 5;
 }

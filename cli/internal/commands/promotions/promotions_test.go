@@ -174,8 +174,8 @@ func TestPromotionsListAsJSONPrintsOneEnvelopeOfPromotionsNewestFirst(t *testing
 	if newest.GetPromotionId() != "promo-2" || newest.GetState() != resultv1.PromotionState_PROMOTION_STATE_ACTIVE {
 		t.Errorf("newest = %v, want promo-2 active", newest)
 	}
-	if got := newest.GetBuilds(); got["web"] != "build-2~fp2" || got["admin"] != "build-2~fp3" {
-		t.Errorf("newest builds = %v, want each app's shipped identity", got)
+	if got := newest.GetReleases(); got["web"] != "build-2~fp2" || got["admin"] != "build-2~fp3" {
+		t.Errorf("newest releases = %v, want each app's release", got)
 	}
 	if newest.GetCreatedAt() != "1970-01-01T00:00:02Z" {
 		t.Errorf("newest createdAt = %q, want an RFC 3339 timestamp", newest.GetCreatedAt())

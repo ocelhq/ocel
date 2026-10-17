@@ -97,7 +97,7 @@ func promotionListResult(promotions []*contractv1.PromotionHistoryEntry) *result
 			PromotionId: p.GetPromotionId(),
 			Tag:         p.GetTag(),
 			CreatedAt:   terminal.EpochRFC3339(p.GetTs()),
-			Builds:      p.GetReleases(),
+			Releases:    p.GetReleases(),
 			State:       promotionState(entry),
 		})
 	}
