@@ -104,9 +104,6 @@ func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec,
 	if !hostsWorkersStack(spec, work) {
 		return nil, nil
 	}
-	if len(spec.App.Workers) == 0 {
-		return nil, r.removeIdleWorkers(ctx, spec, progress)
-	}
 	workers, err := r.workersWork(spec, work)
 	if err != nil {
 		return nil, err
@@ -123,7 +120,11 @@ func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec,
 }
 
 func hostsWorkersStack(spec provider.StackSpec, work *appWork) bool {
-	return spec.App != nil && work != nil && spec.Ref.Name.Env != ""
+	return spec.App != nil && work != nil && spec.Ref.Name.Env != "" && len(spec.App.Workers) > 0
+}
+
+func needsWorkersStack(app provider.LiveApp) bool {
+	return app.Compute != provider.ComputeContainer && len(app.Workers) > 0
 }
 
 func workersRef(app provider.StackRef) provider.StackRef {
@@ -154,19 +155,6 @@ func (r *release) hasRecordedWorkers(ctx context.Context, ref provider.StackRef)
 	return err == nil, err
 }
 
-func (r *release) removeIdleWorkers(ctx context.Context, spec provider.StackSpec, progress progress.Log) error {
-	if spec.Ref.Name.Env == "" {
-		return nil
-	}
-	ref := workersRef(spec.Ref)
-	recorded, err := r.hasRecordedWorkers(ctx, ref)
-	if err != nil || !recorded {
-		return err
-	}
-	say(progress, fmt.Sprintf("Removing stack %s: app %s hosts no workers any more", ref.Name, spec.Ref.Name.App))
-	return r.destroyWorkersStack(ctx, ref, progress)
-}
-
 func (r *release) destroyWorkersStack(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("take down the workers of %s: %w", ref.Name.App, err)
@@ -178,18 +166,11 @@ func (r *release) previewWorkers(ctx context.Context, spec provider.StackSpec, w
 	if !hostsWorkersStack(spec, work) {
 		return nil, nil
 	}
-	ref := workersRef(spec.Ref)
-	if len(spec.App.Workers) == 0 {
-		if recorded, err := r.hasRecordedWorkers(ctx, ref); err != nil || !recorded {
-			return nil, err
-		}
-		planned, err := r.automation.PreviewDestroy(ctx, ref, progress)
-		return planned.Groups, err
-	}
 	workers, err := r.workersWork(spec, work)
 	if err != nil {
 		return nil, err
 	}
+	ref := workersRef(spec.Ref)
 	planned, err := r.automation.Preview(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: workers}, progress)
 	return planned.Groups, err
 }
@@ -259,9 +240,9 @@ func (r *Stacks) PlanWorkersRetirement(ctx context.Context, live provider.LiveAp
 	for _, stack := range retired {
 		plan.Groups = append(plan.Groups, provider.ChangeGroup{
 			Kind:   provider.StackGroupKind,
-			Name:   stack.Name.String(),
+			Name:   stack.ref.Name.String(),
 			Action: provider.ActionDelete,
-			Reason: retiredReason(live, stack),
+			Reason: stack.reason,
 		})
 	}
 	return plan, nil
@@ -273,19 +254,20 @@ func (r *Stacks) RetireWorkers(ctx context.Context, live provider.LiveApps, prog
 		return err
 	}
 	for _, stack := range retired {
-		say(progress, fmt.Sprintf("Removing stack %s: %s", stack.Name, retiredReason(live, stack)))
-		if err := opened.destroyWorkersStack(ctx, stack, progress); err != nil {
+		say(progress, fmt.Sprintf("Removing stack %s: %s", stack.ref.Name, stack.reason))
+		if err := opened.destroyWorkersStack(ctx, stack.ref, progress); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func retiredReason(live provider.LiveApps, stack provider.StackRef) string {
-	return fmt.Sprintf("app %s is no longer deployed to %s", stack.Name.App, live.Env)
+type retiredWorkersStack struct {
+	ref    provider.StackRef
+	reason string
 }
 
-func (r *Stacks) listRetiredWorkers(ctx context.Context, live provider.LiveApps) (*release, []provider.StackRef, error) {
+func (r *Stacks) listRetiredWorkers(ctx context.Context, live provider.LiveApps) (*release, []retiredWorkersStack, error) {
 	infra := provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: naming.InfraStack(live.Env)}
 	opened, err := r.at(ctx, infra, "")
 	if err != nil || opened.cfg.KeyValues == nil {
@@ -295,12 +277,21 @@ func (r *Stacks) listRetiredWorkers(ctx context.Context, live provider.LiveApps)
 	if err != nil {
 		return nil, nil, err
 	}
-	var retired []provider.StackRef
+	var retired []retiredWorkersStack
 	for _, entry := range recorded {
-		if len(entry.Key.Path) != 3 || live.Has(entry.Key.Path[2]) {
+		if len(entry.Key.Path) != 3 {
 			continue
 		}
-		retired = append(retired, provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: workersStack(entry.Key.Path[1], entry.Key.Path[2])})
+		app := entry.Key.Path[2]
+		reason := fmt.Sprintf("app %s is no longer deployed to %s", app, live.Env)
+		if deployed, found := live.Find(app); found {
+			if needsWorkersStack(deployed) {
+				continue
+			}
+			reason = fmt.Sprintf("app %s hosts no workers on functions any more", app)
+		}
+		ref := provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: workersStack(entry.Key.Path[1], app)}
+		retired = append(retired, retiredWorkersStack{ref: ref, reason: reason})
 	}
 	return opened, retired, nil
 }
