@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -229,4 +231,86 @@ func TestAnSSHFailureShowsTheLineItEndedOnPastTheWarningsBeforeIt(t *testing.T) 
 
 func quotedForTest(said string) string {
 	return "'" + strings.ReplaceAll(said, "'", `'\''`) + "'"
+}
+
+func TestASessionNeverRunsAsManyCommandsAtOnceAsSSHDAllowsOneConnection(t *testing.T) {
+	scratch := t.TempDir()
+	running, counts := filepath.Join(scratch, "running"), filepath.Join(scratch, "counts")
+	if err := os.Mkdir(running, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	box := newSessionRunning(t, fmt.Sprintf("touch %[1]s/$$; sleep 0.5; ls %[1]s | wc -l >> %[2]s; rm %[1]s/$$",
+		quotedForTest(running), quotedForTest(counts)))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var commands sync.WaitGroup
+	for i := range 20 {
+		commands.Go(func() {
+			var err error
+			switch i % 3 {
+			case 0:
+				_, err = box.Run(ctx, "seal-helper open")
+			case 1:
+				_, err = box.Stream(ctx, "seal-helper open", nil)
+			default:
+				err = box.RunLines(ctx, "seal-helper open", func(Line) error { return nil })
+			}
+			if err != nil {
+				t.Errorf("command %d = %v", i, err)
+			}
+		})
+	}
+	commands.Wait()
+
+	said, err := os.ReadFile(counts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	most := 0
+	for line := range strings.Lines(string(said)) {
+		count, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil {
+			t.Fatal(err)
+		}
+		most = max(most, count)
+	}
+	if most >= 10 {
+		t.Errorf("the session ran %d commands at once over its master, and sshd refuses a connection more than its default MaxSessions of 10", most)
+	}
+}
+
+func TestACommandWaitingForTheSessionGivesUpWhenItsContextEnds(t *testing.T) {
+	box := newSessionRunning(t, "exec sleep 30")
+
+	holding, release := context.WithCancel(context.Background())
+	var holders sync.WaitGroup
+	t.Cleanup(func() {
+		release()
+		holders.Wait()
+	})
+	for range 10 {
+		holders.Go(func() { _ = box.RunLines(holding, "logs --follow", func(Line) error { return nil }) })
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	for name, command := range map[string]func(context.Context) error{
+		"Run":      func(ctx context.Context) error { _, err := box.Run(ctx, "true"); return err },
+		"Stream":   func(ctx context.Context) error { _, err := box.Stream(ctx, "true", nil); return err },
+		"RunLines": func(ctx context.Context) error { return box.RunLines(ctx, "true", func(Line) error { return nil }) },
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		returned := make(chan error, 1)
+		go func() { returned <- command(ctx) }()
+		select {
+		case err := <-returned:
+			if err == nil {
+				t.Errorf("%s() = nil, want an error once its context ended while every slot was held", name)
+			}
+		case <-time.After(2 * time.Second):
+			t.Errorf("%s() was still waiting for the session two seconds after its context ended", name)
+		}
+		cancel()
+	}
 }

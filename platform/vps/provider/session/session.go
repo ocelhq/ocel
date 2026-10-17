@@ -28,6 +28,8 @@ const (
 	aliveInterval = 15 * time.Second
 	aliveProbes   = 4
 	masterIdle    = "60s"
+
+	concurrentCommandLimit = 8
 )
 
 type Session struct {
@@ -35,6 +37,9 @@ type Session struct {
 	dest    Destination
 	anchor  HostKey
 	control string
+
+	commandSlotsMade sync.Once
+	commandSlots     chan struct{}
 }
 
 func Open(ctx context.Context, target Target) (*Session, error) {
@@ -136,6 +141,12 @@ const (
 )
 
 func (s *Session) RunLines(ctx context.Context, command string, each func(Line) error) error {
+	release, err := s.takeCommandSlot(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+
 	commandCtx, stop := context.WithCancel(ctx)
 	defer stop()
 
@@ -254,11 +265,26 @@ func keepTail(kept []byte, limitBytes int) []byte {
 }
 
 func (s *Session) Stream(ctx context.Context, command string, stdin io.Reader) (Result, error) {
+	release, err := s.takeCommandSlot(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
 	stdout, stderr, code, err := collectOutput(s.newSSHCommand(ctx, command), stdin)
 	if err == nil && code != transportFailure {
 		return Result{Stdout: stdout, Stderr: stderr, Code: code}, nil
 	}
 	return Result{}, s.refuseUnreached(ctx, err, stderr)
+}
+
+func (s *Session) takeCommandSlot(ctx context.Context) (func(), error) {
+	s.commandSlotsMade.Do(func() { s.commandSlots = make(chan struct{}, concurrentCommandLimit) })
+	select {
+	case s.commandSlots <- struct{}{}:
+		return func() { <-s.commandSlots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (s *Session) newSSHCommand(ctx context.Context, command string) *exec.Cmd {
