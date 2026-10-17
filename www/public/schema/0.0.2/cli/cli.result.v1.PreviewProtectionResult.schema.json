@@ -20,30 +20,48 @@
       "title": "Preview Edge Result",
       "type": "object"
     },
-    "cli.result.v1.PreviewPasswordResult.jsonschema.json": {
+    "cli.result.v1.PreviewProtectionResult.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
+      "patternProperties": {
+        "^(bypass_secret_ids)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
       "properties": {
+        "bypassSecretIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "edges": {
           "items": {
             "$ref": "#/$defs/cli.result.v1.PreviewEdgeResult.jsonschema.json"
           },
           "type": "array"
         },
-        "password": {
-          "default": "",
-          "type": "string"
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "recorded": {
+          "default": false,
+          "type": "boolean"
         },
         "slug": {
           "default": "",
           "type": "string"
         }
       },
-      "title": "Preview Password Result",
+      "title": "Preview Protection Result",
       "type": "object"
     }
   },
-  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.PreviewPasswordResult.schema.json",
-  "$ref": "#/$defs/cli.result.v1.PreviewPasswordResult.jsonschema.json",
+  "$id": "https://ocel.dev/schema/0.0.2/cli/cli.result.v1.PreviewProtectionResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.PreviewProtectionResult.jsonschema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema"
 }
