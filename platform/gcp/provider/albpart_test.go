@@ -246,6 +246,86 @@ func TestALoadBalancerWhoseTeardownFailedIsRaisedAgainByTheNextDeployBehindIt(t 
 	}
 }
 
+func failingALBTeardown(t *testing.T) (bootstrap, *countingFront) {
+	t.Helper()
+	b, front := frontingALB(t)
+	ctx := context.Background()
+	if err := b.addParts(ctx, deployingBehindALB("shop"), []string{albPart}); err != nil {
+		t.Fatal(err)
+	}
+	front.refusal = errors.New("google refused to delete the url map")
+	if err := b.removePartUser(ctx, environment.TierProduction, "shop", nil); err == nil {
+		t.Fatal("removePartUser() with a failing teardown = nil, want the failure")
+	}
+	front.refusal = nil
+	return b, front
+}
+
+func TestALoadBalancerWhoseTeardownFailedStaysListedAsBehind(t *testing.T) {
+	t.Parallel()
+	b, _ := failingALBTeardown(t)
+
+	parts, err := b.listDescribedParts(context.Background(), environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := slices.IndexFunc(parts, func(part provider.BootstrapPart) bool { return part.Name == albPart })
+	if at < 0 {
+		t.Fatalf("listDescribedParts() after a failed teardown = %+v, want the %s part still listed", parts, albPart)
+	}
+	if got := parts[at]; got.Current || len(got.Resources) == 0 {
+		t.Errorf("the %s part after a failed teardown = %+v, want it behind and naming its resources", albPart, got)
+	}
+}
+
+func TestDestroyingTheBootstrapTakesDownALoadBalancerWhoseTeardownFailed(t *testing.T) {
+	t.Parallel()
+	b, front := failingALBTeardown(t)
+	ctx := context.Background()
+	tier := environment.TierProduction
+
+	if err := b.removeParts(ctx, tier, nil); err != nil {
+		t.Fatalf("removeParts() = %v", err)
+	}
+	if !slices.Equal(front.torn, []environment.Tier{tier}) {
+		t.Errorf("destroying the bootstrap tore down %v, want the load balancer whose teardown failed taken down", front.torn)
+	}
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.records, tier, albPart); err != nil || present {
+		t.Errorf("the %s part record outlived its load balancer: %t, %v", albPart, present, err)
+	}
+}
+
+func TestRemovingTheALBPartTakesDownALoadBalancerWhoseTeardownFailed(t *testing.T) {
+	t.Parallel()
+	b, front := failingALBTeardown(t)
+	ctx := context.Background()
+	tier := environment.TierProduction
+
+	if err := b.removeNamedParts(ctx, tier, []string{albPart}, false, nil); err != nil {
+		t.Fatalf("removeNamedParts(%s) = %v", albPart, err)
+	}
+	if !slices.Equal(front.torn, []environment.Tier{tier}) {
+		t.Errorf("--remove %s tore down %v, want the load balancer whose teardown failed taken down", albPart, front.torn)
+	}
+}
+
+func TestRemovingTheLastProjectAgainRetriesALoadBalancerTeardownThatFailed(t *testing.T) {
+	t.Parallel()
+	b, front := failingALBTeardown(t)
+	ctx := context.Background()
+	tier := environment.TierProduction
+
+	if err := b.removePartUser(ctx, tier, "shop", nil); err != nil {
+		t.Fatalf("removePartUser() again = %v", err)
+	}
+	if users, _ := b.listALBUsers(ctx, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
+		t.Errorf("removing shop again tore down %v and left users %v, want the teardown retried and shop forgotten", front.torn, users)
+	}
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.records, tier, albPart); err != nil || present {
+		t.Errorf("the %s part record outlived its load balancer: %t, %v", albPart, present, err)
+	}
+}
+
 func TestARetireCancelledMidwayLeavesTheNextDeployBehindTheALBUnrefused(t *testing.T) {
 	t.Parallel()
 	b, front := frontingALB(t)
