@@ -876,6 +876,35 @@ func TestRemovingAPreviewSaysWhichPointerAndStacksItRemovesAndHowFarAlongItIs(t 
 	}
 }
 
+func TestRemovingAPreviewWithNoPromotionSaysNothingAboutPruning(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedEnvironment(t, vendor, "shop", naming.InfraStack("pr-7"))
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	var said []string
+	for _, event := range recorded(stream) {
+		if line := saidLine(event); line != "" {
+			said = append(said, line)
+		}
+	}
+	if !slices.Contains(said, "Destroying stack "+naming.InfraStack("pr-7").String()+" (1 of 1)") {
+		t.Fatalf("the removal said %q, want it to destroy pr-7's infra stack", said)
+	}
+	for _, line := range said {
+		if strings.Contains(line, "prune") || strings.Contains(line, "kept") {
+			t.Errorf("the removal said %q: a teardown keeps no promotion, so a line about what it kept claims something it did not do", line)
+		}
+	}
+}
+
 func TestRemovingAPreviewDestroysItsAppStacksConcurrentlyButNeverMoreThanTheBoundAtOnce(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
