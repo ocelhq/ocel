@@ -684,6 +684,7 @@ type BootstrapPartStatus struct {
 	IdleMonthlyFixed *string                  `protobuf:"bytes,8,opt,name=idle_monthly_fixed,json=idleMonthlyFixed,proto3,oneof" json:"idle_monthly_fixed,omitempty"`
 	Currency         string                   `protobuf:"bytes,9,opt,name=currency,proto3" json:"currency,omitempty"`
 	Resources        []*BootstrapPartResource `protobuf:"bytes,10,rep,name=resources,proto3" json:"resources,omitempty"`
+	AddedWith        string                   `protobuf:"bytes,11,opt,name=added_with,json=addedWith,proto3" json:"added_with,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -786,6 +787,13 @@ func (x *BootstrapPartStatus) GetResources() []*BootstrapPartResource {
 		return x.Resources
 	}
 	return nil
+}
+
+func (x *BootstrapPartStatus) GetAddedWith() string {
+	if x != nil {
+		return x.AddedWith
+	}
+	return ""
 }
 
 type BootstrapPartResource struct {
@@ -4056,7 +4064,7 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x13BootstrapTierStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
 	"\apresent\x18\x02 \x01(\bR\apresent\x128\n" +
-	"\x05parts\x18\x03 \x03(\v2\".cli.result.v1.BootstrapPartStatusR\x05parts\"\xec\x02\n" +
+	"\x05parts\x18\x03 \x03(\v2\".cli.result.v1.BootstrapPartStatusR\x05parts\"\x8b\x03\n" +
 	"\x13BootstrapPartStatus\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x19\n" +
@@ -4068,7 +4076,9 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x12idle_monthly_fixed\x18\b \x01(\tH\x00R\x10idleMonthlyFixed\x88\x01\x01\x12\x1a\n" +
 	"\bcurrency\x18\t \x01(\tR\bcurrency\x12B\n" +
 	"\tresources\x18\n" +
-	" \x03(\v2$.cli.result.v1.BootstrapPartResourceR\tresourcesB\x15\n" +
+	" \x03(\v2$.cli.result.v1.BootstrapPartResourceR\tresources\x12\x1d\n" +
+	"\n" +
+	"added_with\x18\v \x01(\tR\taddedWithB\x15\n" +
 	"\x13_idle_monthly_fixed\";\n" +
 	"\x15BootstrapPartResource\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +

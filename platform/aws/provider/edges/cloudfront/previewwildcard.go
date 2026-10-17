@@ -23,7 +23,7 @@ import (
 
 const previewSweepPage = 50
 
-const previewWildcardAddedBy = "ocel domain use --preview"
+const previewWildcardAddedWith = "ocel domain use --preview"
 
 func previewWildcardName(baseDomain string) string {
 	return naming.Fit(maxDistributionNameLen, naming.FieldSeparator,
@@ -133,7 +133,7 @@ func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDom
 	if !deployed.Present {
 		return distributionSpec{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not installed, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
 	}
-	set, err := p.ensureEdgeSet(ctx, environment.TierPreview, previewWildcardAddedBy, say)
+	set, err := p.ensureEdgeSet(ctx, environment.TierPreview, "", previewWildcardAddedWith, say)
 	if err != nil {
 		return distributionSpec{}, bootstrap.Deployed{}, err
 	}

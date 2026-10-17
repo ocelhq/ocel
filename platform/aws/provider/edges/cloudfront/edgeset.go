@@ -48,11 +48,11 @@ func (p *cloudFront) readEdgeSet(ctx context.Context, c Clients, deployed bootst
 	return edgeSetFrom(set), nil
 }
 
-func (p *cloudFront) ensureEdgeSet(ctx context.Context, tier environment.Tier, addedBy string, say func(string)) (edgeSet, error) {
+func (p *cloudFront) ensureEdgeSet(ctx context.Context, tier environment.Tier, addedBy, addedWith string, say func(string)) (edgeSet, error) {
 	if p.ensurePart == nil {
 		return edgeSet{}, fmt.Errorf("the %q edge was built without a way to add the %s bootstrap part", Kind, cloudfrontpart.Part)
 	}
-	resources, err := p.ensurePart(ctx, tier, cloudfrontpart.Part, addedBy, say)
+	resources, err := p.ensurePart(ctx, tier, cloudfrontpart.Part, addedBy, addedWith, say)
 	if err != nil {
 		return edgeSet{}, err
 	}

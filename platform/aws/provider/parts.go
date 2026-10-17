@@ -55,7 +55,7 @@ func (p *Provider) readPart(ctx context.Context, tier environment.Tier, name str
 	return read.record, read.present, err
 }
 
-func (p *Provider) ensurePart(ctx context.Context, tier environment.Tier, work partWork, addedBy string, say func(string)) ([]provider.PartResource, error) {
+func (p *Provider) ensurePart(ctx context.Context, tier environment.Tier, work partWork, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error) {
 	recorded, present, err := p.readPart(ctx, tier, work.name)
 	if err != nil {
 		return nil, err
@@ -70,6 +70,7 @@ func (p *Provider) ensurePart(ctx context.Context, tier environment.Tier, work p
 		WrittenBy: string(p.writtenBy),
 		Digest:    work.digest,
 		AddedBy:   addedBy,
+		AddedWith: addedWith,
 		Make: func(ctx context.Context) ([]provider.PartResource, error) {
 			if say != nil {
 				say(fmt.Sprintf("Adding the %s tier's %s bootstrap part: %s", tier, work.name, work.summary))
@@ -90,7 +91,7 @@ func (p *Provider) ensurePart(ctx context.Context, tier environment.Tier, work p
 	return recorded.Resources, nil
 }
 
-func (p *Provider) ensurePartNamed(ctx context.Context, tier environment.Tier, name, addedBy string, say func(string)) ([]provider.PartResource, error) {
+func (p *Provider) ensurePartNamed(ctx context.Context, tier environment.Tier, name, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error) {
 	deployed, err := p.bootstrapped(ctx, tier)
 	if err != nil {
 		return nil, err
@@ -102,7 +103,7 @@ func (p *Provider) ensurePartNamed(ctx context.Context, tier environment.Tier, n
 	if err != nil {
 		return nil, err
 	}
-	return p.ensurePart(ctx, tier, work, addedBy, say)
+	return p.ensurePart(ctx, tier, work, addedBy, addedWith, say)
 }
 
 func (p *Provider) partWorkFor(ctx context.Context, tier environment.Tier, name string) (partWork, error) {

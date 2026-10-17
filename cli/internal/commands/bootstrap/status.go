@@ -136,6 +136,7 @@ func statusResult(read []tierStatus) *resultv1.BootstrapStatusResult {
 				Name:             part.GetName(),
 				Summary:          part.GetSummary(),
 				AddedBy:          part.GetAddedBy(),
+				AddedWith:        part.GetAddedWith(),
 				AddedAt:          terminal.EpochRFC3339(part.GetAddedAt()),
 				State:            partState(part),
 				Current:          part.GetCurrent(),
@@ -217,11 +218,19 @@ func addedCell(part *contractv1.BootstrapPart) string {
 	if part.GetAddedAt() == 0 {
 		return unknownCell
 	}
-	by := "ocel bootstrap"
-	if part.GetAddedBy() != "" {
-		by = "deploy " + part.GetAddedBy()
+	return addedByCell(part) + " · " + time.Unix(part.GetAddedAt(), 0).UTC().Format(addedDate)
+}
+
+func addedByCell(part *contractv1.BootstrapPart) string {
+	switch with, by := part.GetAddedWith(), part.GetAddedBy(); {
+	case with != "" && by != "":
+		return with + " for " + by
+	case with != "":
+		return with
+	case by != "":
+		return "deploy " + by
 	}
-	return by + " · " + time.Unix(part.GetAddedAt(), 0).UTC().Format(addedDate)
+	return "ocel bootstrap"
 }
 
 func usedByCell(part *contractv1.BootstrapPart) string {

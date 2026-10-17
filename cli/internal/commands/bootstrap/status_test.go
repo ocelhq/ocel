@@ -94,6 +94,57 @@ func TestBootstrapStatusShowsOneRowPerPartWithWhoAddedItWhoUsesItItsIdleCostAndI
 	}
 }
 
+func TestBootstrapStatusSaysACommandAddedAPartRatherThanADeploy(t *testing.T) {
+	project, invocation := statusProject(t)
+	if err := stackrecords.EnsureBootstrapPart(context.Background(), project.Provider.KeyValues(), environment.TierProduction, stackrecords.PartWork{
+		Name:      "edge-kit",
+		WrittenBy: "1.2.3",
+		AddedWith: "ocel domain use --preview",
+		Make:      func(context.Context) ([]provider.PartResource, error) { return nil, nil },
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := runStatus(t, invocation, project.Root, production, StatusOptions{})
+
+	if got := strings.Join(rowOf(t, out, "edge-kit"), " "); !strings.HasPrefix(got, "edge-kit ocel domain use --preview · ") {
+		t.Errorf("edge-kit row = %q, want it added by `ocel domain use --preview`, no deploy", got)
+	}
+}
+
+func TestBootstrapStatusAsJSONSaysWhichCommandAddedAPart(t *testing.T) {
+	project, invocation := statusProject(t)
+	if err := stackrecords.EnsureBootstrapPart(context.Background(), project.Provider.KeyValues(), environment.TierProduction, stackrecords.PartWork{
+		Name:      "edge-kit",
+		WrittenBy: "1.2.3",
+		AddedBy:   "web",
+		AddedWith: "ocel domain use --preview",
+		Make:      func(context.Context) ([]provider.PartResource, error) { return nil, nil },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
+	}
+
+	report := clitest.DecodeResult(t, runStatus(t, invocation, project.Root, production, StatusOptions{}))
+
+	tiers, _ := report["tiers"].([]any)
+	tier, _ := tiers[0].(map[string]any)
+	parts, _ := tier["parts"].([]any)
+	for _, each := range parts {
+		part, _ := each.(map[string]any)
+		if part["name"] != "edge-kit" {
+			continue
+		}
+		if part["addedWith"] != "ocel domain use --preview" || part["addedBy"] != "web" {
+			t.Errorf("json edge-kit = %v, want it added with `ocel domain use --preview` for web", part)
+		}
+		return
+	}
+	t.Fatalf("json parts = %v, want an edge-kit part", parts)
+}
+
 func TestBootstrapStatusWithResourcesListsWhatEachPartHolds(t *testing.T) {
 	project, invocation := statusProject(t)
 

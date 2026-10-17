@@ -3025,6 +3025,7 @@ type BootstrapPart struct {
 	Summary          string                   `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
 	AddedBy          string                   `protobuf:"bytes,3,opt,name=added_by,json=addedBy,proto3" json:"added_by,omitempty"`
 	AddedAt          int64                    `protobuf:"varint,4,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
+	AddedWith        string                   `protobuf:"bytes,13,opt,name=added_with,json=addedWith,proto3" json:"added_with,omitempty"`
 	State            BootstrapPartState       `protobuf:"varint,5,opt,name=state,proto3,enum=provider.contract.v1.BootstrapPartState" json:"state,omitempty"`
 	Current          bool                     `protobuf:"varint,6,opt,name=current,proto3" json:"current,omitempty"`
 	Resources        []*BootstrapPartResource `protobuf:"bytes,7,rep,name=resources,proto3" json:"resources,omitempty"`
@@ -3091,6 +3092,13 @@ func (x *BootstrapPart) GetAddedAt() int64 {
 		return x.AddedAt
 	}
 	return 0
+}
+
+func (x *BootstrapPart) GetAddedWith() string {
+	if x != nil {
+		return x.AddedWith
+	}
+	return ""
 }
 
 func (x *BootstrapPart) GetState() BootstrapPartState {
@@ -7636,12 +7644,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x19DescribeBootstrapResponse\x129\n" +
 	"\bfeatures\x18\x01 \x03(\v2\x1d.provider.contract.v1.FeatureR\bfeatures\x12C\n" +
 	"\tbootstrap\x18\x02 \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\x129\n" +
-	"\x05parts\x18\x03 \x03(\v2#.provider.contract.v1.BootstrapPartR\x05parts\"\x97\x03\n" +
+	"\x05parts\x18\x03 \x03(\v2#.provider.contract.v1.BootstrapPartR\x05parts\"\xb6\x03\n" +
 	"\rBootstrapPart\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x19\n" +
 	"\badded_by\x18\x03 \x01(\tR\aaddedBy\x12\x19\n" +
-	"\badded_at\x18\x04 \x01(\x03R\aaddedAt\x12>\n" +
+	"\badded_at\x18\x04 \x01(\x03R\aaddedAt\x12\x1d\n" +
+	"\n" +
+	"added_with\x18\r \x01(\tR\taddedWith\x12>\n" +
 	"\x05state\x18\x05 \x01(\x0e2(.provider.contract.v1.BootstrapPartStateR\x05state\x12\x18\n" +
 	"\acurrent\x18\x06 \x01(\bR\acurrent\x12I\n" +
 	"\tresources\x18\a \x03(\v2+.provider.contract.v1.BootstrapPartResourceR\tresources\x12\x17\n" +

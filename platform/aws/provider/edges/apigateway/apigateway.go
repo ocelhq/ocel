@@ -90,7 +90,7 @@ type Clients struct {
 
 type apiGateway struct {
 	ns         bootstrap.Namespace
-	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error)
+	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
 	open       func(context.Context) (Clients, error)
 
 	mu        sync.Mutex
@@ -99,7 +99,7 @@ type apiGateway struct {
 	leaseWait func(context.Context, time.Duration) error
 }
 
-func New(ns bootstrap.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error)) edge.Edge {
+func New(ns bootstrap.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error)) edge.Edge {
 	front := newAPIGateway(ns, open)
 	front.ensurePart = ensurePart
 	return front

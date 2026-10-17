@@ -75,6 +75,8 @@ message BootstrapPartStatus {
   string currency = 9;
 
   repeated BootstrapPartResource resources = 10;
+
+  string added_with = 11;
 }
 
 message BootstrapPartResource {
