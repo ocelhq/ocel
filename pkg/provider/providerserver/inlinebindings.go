@@ -26,7 +26,7 @@ type inlineBinding struct {
 }
 
 func readInlineBindings(req *contractv1.DeployRequest) ([]inlineBinding, error) {
-	resources, err := manifestResources(req.GetManifest())
+	resources, err := ReadResources(req.GetManifest())
 	if err != nil {
 		return nil, err
 	}

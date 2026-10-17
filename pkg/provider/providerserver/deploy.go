@@ -948,7 +948,7 @@ func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error 
 	if preflightDeploy == nil {
 		return nil
 	}
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return err
 	}
@@ -987,7 +987,7 @@ func (r *deployRun) refuseUnsupportedDeclarations(ctx context.Context) error {
 	if err := RefuseUnsupportedRealtime(r.provider.Facts(), r.manifest); err != nil {
 		return err
 	}
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return err
 	}
@@ -1030,13 +1030,6 @@ func usedResources(used map[string]bool, resources []provider.Resource) []provid
 		}
 	}
 	return out
-}
-
-func boundName(resource provider.Resource) string {
-	if resource.Binding != "" {
-		return resource.Binding
-	}
-	return resource.Name
 }
 
 func (r *deployRun) provision(ctx context.Context) error {
@@ -1083,7 +1076,7 @@ func appOutcome(app string, err error) *progressv1.AppResult {
 }
 
 func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1.ManifestResource) error {
-	declaredResources, err := manifestResources(r.manifest)
+	declaredResources, err := ReadResources(r.manifest)
 	if err != nil {
 		return err
 	}
@@ -1350,39 +1343,15 @@ func (r *deployRun) ref(stack naming.StackName) provider.StackRef {
 func (r *deployRun) publishedBindings() *publishedBindings { return r.published }
 
 func (r *deployRun) boundNamesUsedBy(app string) (map[string]bool, error) {
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return nil, err
 	}
-	return boundNamesUsedBy(r.manifest, resources, app), nil
-}
-
-func boundNamesUsedBy(manifest *contractv1.Manifest, resources []provider.Resource, app string) map[string]bool {
-	names := map[string]bool{}
-	for _, resource := range resourcesUsedBy(manifest, resources, app) {
-		names[boundName(resource)] = true
-	}
-	return names
-}
-
-func resourcesUsedBy(manifest *contractv1.Manifest, resources []provider.Resource, app string) []provider.Resource {
-	edges := map[string]bool{}
-	for _, usage := range manifest.GetUsages() {
-		if usage.GetApp() == app {
-			edges[usage.GetResource()] = true
-		}
-	}
-	var used []provider.Resource
-	for _, resource := range resources {
-		if edges[resource.Name] {
-			used = append(used, resource)
-		}
-	}
-	return used
+	return ReadBoundNamesUsedBy(r.manifest, resources, app), nil
 }
 
 func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]provider.Binding, error) {
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return nil, err
 	}

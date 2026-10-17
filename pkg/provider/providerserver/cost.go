@@ -32,7 +32,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	resources, err := manifestResources(req.GetManifest())
+	resources, err := ReadResources(req.GetManifest())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -81,7 +81,7 @@ func shapedFunctions(manifest *contractv1.Manifest) map[string][]provider.Functi
 func shapedUsages(spec provider.DeploySpec, manifest *contractv1.Manifest, resources []provider.Resource) []provider.AppUsage {
 	usages := make([]provider.AppUsage, 0, len(spec.Apps))
 	for _, entry := range spec.Apps {
-		used := boundNamesUsedBy(manifest, resources, entry.App)
+		used := ReadBoundNamesUsedBy(manifest, resources, entry.App)
 		usages = append(usages, provider.AppUsage{App: entry.App, Resources: usedResources(used, resources)})
 	}
 	return usages
