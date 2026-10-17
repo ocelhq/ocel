@@ -43,7 +43,6 @@ const (
 const (
 	managedByTagKey = "ocel:managed-by"
 	managedByOcel   = "ocel"
-	projectTagKey   = "ocel:project"
 	envTagKey       = "ocel:env"
 
 	restAPIResourceType    = "apigateway:restapis"
@@ -92,11 +91,10 @@ func taggedAPIs(ctx context.Context, c Clients, tags map[string]string) (map[str
 			if !ok {
 				continue
 			}
-			carried := map[string]string{}
+			found[id] = map[string]string{}
 			for _, tag := range mapping.Tags {
-				carried[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+				found[id][aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 			}
-			found[id] = carried
 		}
 		if aws.ToString(page.PaginationToken) == "" {
 			return found, nil

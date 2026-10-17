@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
 	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
 const Kind edge.Kind = "api-gateway"
@@ -271,7 +272,7 @@ func (p *apiGateway) Teardown(ctx context.Context, tier environment.Tier) error 
 	}
 	var projects []string
 	for _, tags := range tagged {
-		if project := tags[projectTagKey]; project != "" && !slices.Contains(projects, project) {
+		if project := tags[registry.ProjectTag]; project != "" && !slices.Contains(projects, project) {
 			projects = append(projects, project)
 		}
 	}
