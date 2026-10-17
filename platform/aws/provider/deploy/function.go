@@ -47,7 +47,7 @@ const (
 	functionURLAuthNone = "NONE"
 
 	tagComponent = "ocel:component"
-	tagRoute     = "ocel:route"
+	tagBundle    = "ocel:bundle"
 	tagResource  = "ocel:resource"
 
 	tagImageOptimizer = "image-optimizer"
@@ -290,14 +290,14 @@ func logicalLocalName(logicalName string) string {
 	return fields[len(fields)-1]
 }
 
-func resourceTags(kind naming.Kind, route string, extra map[string]string) pulumi.StringMap {
+func resourceTags(kind naming.Kind, bundle string, extra map[string]string) pulumi.StringMap {
 	tags := pulumi.StringMap{}
 	for key, value := range extra {
 		tags[key] = pulumi.String(value)
 	}
 	tags[tagComponent] = pulumi.String(kind.Component())
-	if route != "" {
-		tags[tagRoute] = pulumi.String(route)
+	if bundle != "" {
+		tags[tagBundle] = pulumi.String(bundle)
 	}
 	return tags
 }
@@ -475,11 +475,11 @@ func lambdaLogGroupPrefixFor(base string) string {
 	return lambdaLogGroupPrefix + base + naming.WordSeparator
 }
 
-func newLambdaLogGroup(ctx *pulumi.Context, id, base string, kind naming.Kind, route string, tags map[string]string, opts ...pulumi.ResourceOption) (*cloudwatch.LogGroup, error) {
+func newLambdaLogGroup(ctx *pulumi.Context, id, base string, kind naming.Kind, bundle string, tags map[string]string, opts ...pulumi.ResourceOption) (*cloudwatch.LogGroup, error) {
 	return cloudwatch.NewLogGroup(ctx, id, &cloudwatch.LogGroupArgs{
 		NamePrefix:      pulumi.String(lambdaLogGroupPrefixFor(base)),
 		RetentionInDays: pulumi.Int(lambdaLogRetentionDays),
-		Tags:            resourceTags(kind, route, tags),
+		Tags:            resourceTags(kind, bundle, tags),
 	}, opts...)
 }
 
@@ -497,7 +497,7 @@ func runtimeLayerInput(arn string) pulumi.StringArrayInput {
 	return pulumi.StringArray{pulumi.String(arn)}
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth, kmsKeyARN string, opts ...pulumi.ResourceOption) (functionRef, error) {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, bundle string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth, kmsKeyARN string, opts ...pulumi.ResourceOption) (functionRef, error) {
 	var none functionRef
 
 	env := pulumi.StringMap{}
@@ -509,17 +509,17 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 	}
 
 	resourceName := coord.PhysicalName(maxLambdaBaseNameLen)
-	if route == "" {
-		route = naming.PathSeparator + coord.Name
+	if bundle == "" {
+		bundle = naming.PathSeparator + coord.Name
 	}
 
-	logs, err := newLambdaLogGroup(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "logs"), resourceName, coord.Kind, route, args.Tags, opts...)
+	logs, err := newLambdaLogGroup(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "logs"), resourceName, coord.Kind, bundle, args.Tags, opts...)
 	if err != nil {
 		return none, err
 	}
 
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
-		Description: describe(coord, "route "+route),
+		Description: describe(coord, "bundle "+bundle),
 		Runtime:     pulumi.String(args.Runtime),
 		Handler:     pulumi.String(lambdaHandler(args)),
 		Role:        roleArn,
@@ -533,7 +533,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		KmsKeyArn:     optionalARN(kmsKeyARN),
 		LoggingConfig: lambdaLogging(logs),
 
-		Tags: resourceTags(coord.Kind, route, args.Tags),
+		Tags: resourceTags(coord.Kind, bundle, args.Tags),
 
 		Architectures: pulumi.StringArray{pulumi.String(args.Arch)},
 

@@ -272,6 +272,17 @@ func TestTheTierADeployServesIsTaggedAsItsEnvTier(t *testing.T) {
 	}
 }
 
+func TestAFunctionIsTaggedWithTheBundleItWasBuiltFrom(t *testing.T) {
+	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "bundle-0", Release: NewReleaseToken("b", "")}
+	tags := c.Tags(TagValues{Bundle: "bundle-0"})
+	if tags["ocel:bundle"] != "bundle-0" {
+		t.Errorf("ocel:bundle = %q, want %q", tags["ocel:bundle"], "bundle-0")
+	}
+	if route, ok := tags["ocel:route"]; ok {
+		t.Errorf("ocel:route = %q, want no route tag: one bundle serves many routes", route)
+	}
+}
+
 func TestADigestBecomesATagUnderOneRule(t *testing.T) {
 	if got, want := DigestTag("sha256:abc"), "sha256-abc"; got != want {
 		t.Errorf("DigestTag() = %q, want %q", got, want)
