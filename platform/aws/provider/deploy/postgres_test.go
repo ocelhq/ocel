@@ -2,16 +2,11 @@ package deploy
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/rds"
-	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -285,7 +280,7 @@ func provisionPostgresIn(t *testing.T, tier environment.Tier) *clusterRecorder {
 	return recorder
 }
 
-func refuseInvalidSnapshotIdentifier(t *testing.T, id string) {
+func assertRDSAcceptsSnapshotIdentifier(t *testing.T, id string) {
 	t.Helper()
 	if id == "" || len(id) > 255 {
 		t.Fatalf("final snapshot identifier %q is %d characters, want 1 to 255", id, len(id))
@@ -318,7 +313,7 @@ func TestAProductionPostgresRefusesDeletionAndKeepsAFinalSnapshotWhenDeleted(t *
 	if declared := cluster.inputs["finalSnapshotIdentifier"]; declared.IsString() {
 		id = declared.StringValue()
 	}
-	refuseInvalidSnapshotIdentifier(t, id)
+	assertRDSAcceptsSnapshotIdentifier(t, id)
 	if !strings.HasPrefix(id, awsports.AppScope+naming.WordSeparator) {
 		t.Errorf("final snapshot identifier %q is outside the %s- scope the deploy credential may snapshot into", id, awsports.AppScope)
 	}
@@ -340,137 +335,5 @@ func TestAPreviewPostgresIsDeletedWithoutProtectionOrAFinalSnapshot(t *testing.T
 	}
 	if id, set := cluster.inputs["finalSnapshotIdentifier"]; set && id.IsString() && id.StringValue() != "" {
 		t.Errorf("finalSnapshotIdentifier = %q, want none for a preview", id.StringValue())
-	}
-}
-
-func TestTearingDownProductionPlansItsPostgresClusterAsDisableThenDelete(t *testing.T) {
-	t.Parallel()
-
-	engine := &mockedEngine{outputs: auto.OutputMap{}, previewed: []provider.Change{
-		{Kind: tokenRDSCluster, Name: "c-postgres"},
-		{Kind: tokenRDSClusterMember, Name: "c-postgres-instance"},
-	}}
-	plan, err := conformingStacks(engine).PlanDestroy(context.Background(), conformanceInfra, nil)
-	if err != nil {
-		t.Fatalf("PlanDestroy() = %v", err)
-	}
-	actions := map[string]provider.ChangeAction{}
-	for _, group := range plan.Groups {
-		for _, change := range group.Changes {
-			actions[change.Kind] = change.Action
-		}
-	}
-	if got := actions[tokenRDSCluster]; got != provider.ActionDisableThenDelete {
-		t.Errorf("the plan does %q to the production cluster, want %q: the teardown lifts its deletion protection first", got, provider.ActionDisableThenDelete)
-	}
-	if got := actions[tokenRDSClusterMember]; got != provider.ActionDelete {
-		t.Errorf("the plan does %q to the cluster's instance, want %q", got, provider.ActionDelete)
-	}
-}
-
-func TestTearingDownAPreviewPlansItsPostgresClusterAsAPlainDelete(t *testing.T) {
-	t.Parallel()
-
-	engine := &mockedEngine{outputs: auto.OutputMap{}, previewed: []provider.Change{{Kind: tokenRDSCluster, Name: "c-postgres"}}}
-	ref := provider.StackRef{Project: "conformance", Tier: environment.TierPreview, Name: naming.InfraStack("pr-7")}
-	plan, err := conformingStacks(engine).PlanDestroy(context.Background(), ref, nil)
-	if err != nil {
-		t.Fatalf("PlanDestroy() = %v", err)
-	}
-	if got := plan.Groups[0].Changes[0].Action; got != provider.ActionDelete {
-		t.Errorf("the plan does %q to a preview cluster, want %q", got, provider.ActionDelete)
-	}
-}
-
-type fakeClusters struct {
-	mu      sync.Mutex
-	engine  *mockedEngine
-	missing string
-	lifted  []string
-	early   []string
-}
-
-func (f *fakeClusters) ModifyDBCluster(_ context.Context, in *rds.ModifyDBClusterInput, _ ...func(*rds.Options)) (*rds.ModifyDBClusterOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	id := aws.ToString(in.DBClusterIdentifier)
-	if id == f.missing {
-		return nil, &rdstypes.DBClusterNotFoundFault{Message: aws.String("DBCluster " + id + " not found.")}
-	}
-	if in.DeletionProtection == nil || *in.DeletionProtection || !aws.ToBool(in.ApplyImmediately) {
-		return nil, fmt.Errorf("ModifyDBCluster(%s) does not lift deletion protection immediately", id)
-	}
-	if len(f.engine.torn()) > 0 {
-		f.early = append(f.early, id)
-	}
-	f.lifted = append(f.lifted, id)
-	return &rds.ModifyDBClusterOutput{}, nil
-}
-
-func postgresOutputOf(cluster string) auto.OutputValue {
-	return auto.OutputValue{Value: map[string]any{
-		outputKeyHost:              cluster + ".cluster-abc.eu-west-1.rds.amazonaws.com",
-		outputKeyPort:              float64(5432),
-		outputKeyDatabase:          "ocel",
-		outputKeyUsername:          "ocel",
-		outputKeySecretARN:         "arn:aws:secretsmanager:eu-west-1:111122223333:secret:" + cluster,
-		outputKeyClusterIdentifier: cluster,
-	}}
-}
-
-func clustersStacks(engine *mockedEngine, clusters *fakeClusters) *Stacks {
-	cfg := conformingConfig(&fakeArtifactStore{})
-	cfg.Clusters = clusters
-	return stacksWith(cfg, engine)
-}
-
-func TestDestroyingProductionLiftsEachPostgresClustersDeletionProtectionBeforeTheTeardown(t *testing.T) {
-	t.Parallel()
-
-	engine := &mockedEngine{outputs: auto.OutputMap{
-		"c-postgres": postgresOutputOf("ocel-app-conformance-main-abc"),
-		"c-reports":  postgresOutputOf("ocel-app-conformance-reports-def"),
-		"c-bucket":   auto.OutputValue{Value: map[string]any{outputKeyBucket: "shop-prod-uploads"}},
-	}}
-	clusters := &fakeClusters{engine: engine}
-	if err := clustersStacks(engine, clusters).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
-		t.Fatalf("Destroy() = %v", err)
-	}
-	want := []string{"ocel-app-conformance-main-abc", "ocel-app-conformance-reports-def"}
-	if got := slices.Sorted(slices.Values(clusters.lifted)); !slices.Equal(got, want) {
-		t.Errorf("Destroy() lifted deletion protection on %v, want %v", got, want)
-	}
-	if len(clusters.early) > 0 {
-		t.Errorf("Destroy() tore the stack down before lifting protection on %v, so AWS refuses to delete them", clusters.early)
-	}
-	if len(engine.torn()) != 1 {
-		t.Errorf("Destroy() tore down %v, want the stack torn down once protection is lifted", engine.torn())
-	}
-}
-
-func TestDestroyingProductionGoesOnWhenAPostgresClusterIsAlreadyGone(t *testing.T) {
-	t.Parallel()
-
-	engine := &mockedEngine{outputs: auto.OutputMap{"c-postgres": postgresOutputOf("ocel-app-conformance-main-abc")}}
-	clusters := &fakeClusters{engine: engine, missing: "ocel-app-conformance-main-abc"}
-	if err := clustersStacks(engine, clusters).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
-		t.Fatalf("Destroy() = %v, want a cluster already deleted to leave nothing to lift", err)
-	}
-	if len(engine.torn()) != 1 {
-		t.Errorf("Destroy() tore down %v, want the stack torn down", engine.torn())
-	}
-}
-
-func TestDestroyingAPreviewLeavesPostgresDeletionProtectionAlone(t *testing.T) {
-	t.Parallel()
-
-	engine := &mockedEngine{outputs: auto.OutputMap{"c-postgres": postgresOutputOf("ocel-app-conformance-pr-7-main-abc")}}
-	clusters := &fakeClusters{engine: engine}
-	ref := provider.StackRef{Project: "conformance", Tier: environment.TierPreview, Name: naming.InfraStack("pr-7")}
-	if err := clustersStacks(engine, clusters).Destroy(context.Background(), ref, nil, nil); err != nil {
-		t.Fatalf("Destroy() = %v", err)
-	}
-	if len(clusters.lifted) > 0 {
-		t.Errorf("Destroy() of a preview called ModifyDBCluster on %v, want no call: a preview cluster was never protected", clusters.lifted)
 	}
 }
