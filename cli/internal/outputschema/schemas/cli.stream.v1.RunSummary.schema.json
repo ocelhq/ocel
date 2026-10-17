@@ -382,7 +382,7 @@
       "type": "object"
     }
   },
-  "$id": "https://ocel.dev/schema/0.0.2/cli/cli.stream.v1.RunSummary.schema.json",
+  "$id": "https://ocel.dev/schema/cli/cli.stream.v1.RunSummary.schema.json",
   "$ref": "#/$defs/cli.stream.v1.RunSummary.jsonschema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema"
 }

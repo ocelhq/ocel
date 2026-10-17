@@ -1,0 +1,23 @@
+{
+  "$defs": {
+    "cli.result.v1.BootstrapPartResource.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "kind": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Bootstrap Part Resource",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/cli/cli.result.v1.BootstrapPartResource.schema.json",
+  "$ref": "#/$defs/cli.result.v1.BootstrapPartResource.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

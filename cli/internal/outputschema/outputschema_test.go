@@ -200,12 +200,7 @@ func TestTheRunEventSchemaAcceptsEveryLineTheNDJSONStreamPrints(t *testing.T) {
 }
 
 func TestTheEmbeddedSchemasAreByteForByteThePublishedOnes(t *testing.T) {
-	root := filepath.Join("..", "..", "..")
-	version, err := os.ReadFile(filepath.Join(root, "VERSION"))
-	if err != nil {
-		t.Fatalf("read the release version: %v", err)
-	}
-	published := filepath.Join(root, "www", "public", "schema", strings.TrimSpace(string(version)), "cli")
+	published := filepath.Join("..", "..", "..", "www", "public", "schema", "cli")
 	embedded, err := os.ReadDir("schemas")
 	if err != nil {
 		t.Fatal(err)

@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "cli.result.v1.EdgeResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "default": "",
+          "type": "string"
+        },
+        "kind": {
+          "default": "",
+          "type": "string"
+        },
+        "published": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Edge Result",
+      "type": "object"
+    },
+    "cli.result.v1.TierProtection.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(bypass_secret_ids)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "bypassSecretIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.EdgeResult.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "recorded": {
+          "default": false,
+          "type": "boolean"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "pattern": "^TIER_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Tier"
+        }
+      },
+      "title": "Tier Protection",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/cli/cli.result.v1.TierProtection.schema.json",
+  "$ref": "#/$defs/cli.result.v1.TierProtection.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

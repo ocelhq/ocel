@@ -152,7 +152,7 @@ describe("derivesFrom", () => {
     for (const file of [
       "pkg/proto/app/v1/app.pb.go",
       "pkg/configdoc/selectors.json",
-      "www/public/schema/0.1.0/ocel.schema.json",
+      "www/public/schema/cli/cli.result.v1.EnvListResult.schema.json",
       "packages/ocel/src/generated/config.ts",
       "www/content/docs/cli/env/set.mdx",
     ]) {
