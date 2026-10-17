@@ -27,7 +27,7 @@ func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _
 	var plan provider.Plan
 	for _, entry := range entries {
 		var worker live.QueueWorker
-		if err := json.Unmarshal(entry.Value, &worker); err != nil || slices.Contains(apps.Apps, worker.App) {
+		if err := json.Unmarshal(entry.Value, &worker); err != nil || apps.Has(worker.App) {
 			continue
 		}
 		at := slices.IndexFunc(plan.Groups, func(group provider.ChangeGroup) bool { return group.Name == worker.App })
@@ -45,7 +45,7 @@ func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _
 func (p *Provider) Retire(ctx context.Context, apps provider.LiveApps, progress progress.Log) error {
 	ref := provider.StackRef{Project: apps.Slug, Tier: apps.Tier, Name: naming.StackName{Env: apps.Env}}
 	return p.retireWorkers(ctx, ref, func(name string, worker live.QueueWorker) bool {
-		if slices.Contains(apps.Apps, worker.App) {
+		if apps.Has(worker.App) {
 			return false
 		}
 		if progress != nil {

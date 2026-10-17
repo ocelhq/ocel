@@ -53,7 +53,7 @@ func (p *Provider) listRemovedApps(live provider.LiveApps) []string {
 			continue
 		}
 		app := spec.Ref.Name.App
-		if slices.Contains(live.Apps, app) || slices.Contains(removed, app) || slices.ContainsFunc(p.retired, func(r retiredApp) bool {
+		if live.Has(app) || slices.Contains(removed, app) || slices.ContainsFunc(p.retired, func(r retiredApp) bool {
 			return r.slug == live.Slug && r.env == live.Env && r.app == app && r.after > at
 		}) {
 			continue

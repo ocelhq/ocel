@@ -16,7 +16,7 @@ func RunRetirement(t *testing.T, hooks *provider.RetirementHooks) {
 	if hooks.Plan == nil || hooks.Retire == nil {
 		t.Fatal("Retirement leaves Plan or Retire nil, and a deploy retires only what its dry run showed")
 	}
-	untouched := provider.LiveApps{Slug: "conformance-untouched", Tier: environment.TierPreview, Env: "pr-0", Apps: []string{"web"}}
+	untouched := provider.LiveApps{Slug: "conformance-untouched", Tier: environment.TierPreview, Env: "pr-0", Apps: []provider.LiveApp{{App: "web", Compute: provider.ComputeServerless}}}
 
 	t.Run("an environment nothing was deployed to plans nothing", func(t *testing.T) {
 		plan, err := hooks.Plan(ctx, untouched, progress.Discard())

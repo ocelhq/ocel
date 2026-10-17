@@ -292,7 +292,7 @@ func recordWorkersStacks(t *testing.T, store keyvalue.Store, stacks ...naming.St
 	}
 }
 
-func liveInProd(apps ...string) provider.LiveApps {
+func liveInProd(apps ...provider.LiveApp) provider.LiveApps {
 	return provider.LiveApps{Slug: "conformance", Tier: environment.TierProduction, Env: "prod", Apps: apps}
 }
 
@@ -305,7 +305,7 @@ func TestRetiringWorkersTakesDownTheWorkersStackOfEachAppNoLongerDeployedToTheEn
 	recordWorkersStacks(t, cfg.KeyValues, workersStack("prod", "web"), workersStack("prod", "jobs"), workersStack("staging", "jobs"))
 	log := &fake.Log{}
 
-	if err := stacksWith(cfg, engine).RetireWorkers(context.Background(), liveInProd("web"), log); err != nil {
+	if err := stacksWith(cfg, engine).RetireWorkers(context.Background(), liveInProd(provider.LiveApp{App: "web", Compute: provider.ComputeServerless, Workers: []string{"media"}}), log); err != nil {
 		t.Fatalf("RetireWorkers() = %v", err)
 	}
 

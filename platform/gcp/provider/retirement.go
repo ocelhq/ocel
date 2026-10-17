@@ -62,7 +62,7 @@ func (p *Provider) listRetiredWorkers(ctx context.Context, live provider.LiveApp
 	}
 	var recorded []retiredWorker
 	for _, entry := range entries {
-		if entry.Name.IsInfra() || entry.Name.Env != live.Env || slices.Contains(live.Apps, entry.Name.App) {
+		if entry.Name.IsInfra() || entry.Name.Env != live.Env || live.Has(entry.Name.App) {
 			continue
 		}
 		for _, physical := range recordedWorkerServices(entry.Stack) {

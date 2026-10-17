@@ -3,6 +3,7 @@ package providerserver_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
@@ -30,8 +32,29 @@ func TestADeployRetiresWhatTheAppsItNoLongerDeploysLeftBehindOnceItsPromotionSer
 		t.Fatalf("the deploys retired %v, want one retirement per promotion", retirements)
 	}
 	last := retirements[1]
-	if last.Slug != "shop" || last.Tier != environment.TierProduction || !slices.Equal(last.Apps, []string{"web"}) {
+	if last.Slug != "shop" || last.Tier != environment.TierProduction || !reflect.DeepEqual(last.Apps, []provider.LiveApp{{App: "web", Compute: provider.ComputeServerless}}) {
 		t.Errorf("the deploy of web alone retired %+v, want shop's production with web the one live app", last)
+	}
+}
+
+func TestADeployTellsRetirementTheComputeAndWorkersOfEachAppItMakesLive(t *testing.T) {
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{}).WithFacts(runningWorkers)
+	client := servedBy(t, vendor)
+	bootstrappedOverRPC(t, client)
+	req := deployRequest()
+	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "media", App: "web", Compute: string(provider.ComputeServerless)}}
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	retirements := vendor.Retirements()
+	if len(retirements) != 1 {
+		t.Fatalf("the deploy retired %v, want one retirement", retirements)
+	}
+	if want := []provider.LiveApp{{App: "web", Compute: provider.ComputeServerless, Workers: []string{"media"}}}; !reflect.DeepEqual(retirements[0].Apps, want) {
+		t.Errorf("the deploy retired with live apps %+v, want %+v, so a provider can retire the workers a live app stopped hosting", retirements[0].Apps, want)
 	}
 }
 
