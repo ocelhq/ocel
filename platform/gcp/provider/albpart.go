@@ -257,7 +257,22 @@ func (b bootstrap) releaseALB(ctx context.Context, tier environment.Tier, user s
 		return fmt.Errorf("mark the %s load balancer of tier %s as going down: %w", alb.Kind, tier, err)
 	}
 	ensureProgress(progress).Say("Taking down the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": " + user + " was the last user it served")
-	return b.retireALB(ctx, tier, revision, nil)
+	if err := b.retireALB(ctx, tier, revision, nil); err != nil {
+		settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), albSettleTimeout)
+		defer cancel()
+		return errors.Join(err, b.restoreALBUser(settle, tier, user))
+	}
+	return nil
+}
+
+func (b bootstrap) restoreALBUser(ctx context.Context, tier environment.Tier, user string) error {
+	err := keyvalue.Change(ctx, b.records, albConsumerAt(tier, user), func(recorded keyvalue.Entry) ([]byte, bool, error) {
+		return []byte("{}"), len(recorded.Value) == 0, nil
+	})
+	if err != nil {
+		return fmt.Errorf("record %s again as a user of the %s load balancer of tier %s it could not take down: %w", user, alb.Kind, tier, err)
+	}
+	return nil
 }
 
 func sayALBKept(progress progress.Log, tier environment.Tier, bound []string) {
@@ -268,12 +283,19 @@ func sayALBKept(progress progress.Log, tier environment.Tier, bound []string) {
 func (b bootstrap) retireALB(ctx context.Context, tier environment.Tier, retiring keyvalue.Revision, users []string) error {
 	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), albSettleTimeout)
 	defer cancel()
-	if err := stackrecords.ForgetBootstrapPart(ctx, b.records, tier, albPart); err != nil {
+	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, b.records, tier, albPart)
+	if err == nil {
+		err = stackrecords.ForgetBootstrapPart(ctx, b.records, tier, albPart)
+	}
+	if err != nil {
 		return errors.Join(err, b.liftALBLease(settle, tier, retiring))
 	}
 	front, err := b.openALB()
 	if err == nil {
 		err = front.Teardown(ctx, tier)
+	}
+	if err != nil {
+		return errors.Join(err, b.keepALBRecorded(settle, tier, recorded), b.liftALBLease(settle, tier, retiring))
 	}
 	for _, user := range users {
 		if err != nil {
@@ -281,10 +303,27 @@ func (b bootstrap) retireALB(ctx context.Context, tier environment.Tier, retirin
 		}
 		err = keyvalue.Forget(ctx, b.records, albConsumerAt(tier, user))
 	}
-	if err != nil {
-		return errors.Join(err, b.liftALBLease(settle, tier, retiring))
+	return errors.Join(err, b.liftALBLease(settle, tier, retiring))
+}
+
+func (b bootstrap) keepALBRecorded(ctx context.Context, tier environment.Tier, recorded stackrecords.BootstrapPart) error {
+	ready := stackrecords.BootstrapPart{
+		State:     stackrecords.PartReady,
+		AddedBy:   recorded.AddedBy,
+		AddedWith: recorded.AddedWith,
+		AddedAt:   recorded.AddedAt,
+		Resources: b.albPart(tier).resources,
 	}
-	return b.liftALBLease(settle, tier, retiring)
+	value, err := json.Marshal(ready)
+	if err == nil {
+		err = keyvalue.Change(ctx, b.records, stackrecords.BootstrapPartKey(tier, albPart), func(prior keyvalue.Entry) ([]byte, bool, error) {
+			return value, len(prior.Value) == 0, nil
+		})
+	}
+	if err != nil {
+		return fmt.Errorf("record the %s load balancer of tier %s again after its teardown failed: %w", alb.Kind, tier, err)
+	}
+	return nil
 }
 
 func (b bootstrap) liftALBLease(ctx context.Context, tier environment.Tier, retiring keyvalue.Revision) error {
