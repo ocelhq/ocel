@@ -135,6 +135,15 @@
     },
     "./package.json": "./package.json"
   },
+  "imports": {
+    "#connect-transport": {
+      "types": "./dist/runtime/connect-transport.d.ts",
+      "edge-light": "./dist/runtime/connect-transport-edge.js",
+      "workerd": "./dist/runtime/connect-transport-edge.js",
+      "worker": "./dist/runtime/connect-transport-edge.js",
+      "import": "./dist/runtime/connect-transport.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",

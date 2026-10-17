@@ -1,5 +1,5 @@
 import type { Interceptor, Transport } from "@connectrpc/connect";
-import { createConnectTransport } from "@connectrpc/connect-node";
+import { createConnectTransport } from "#connect-transport";
 
 /** The env key the ocel runtime's address is delivered under. */
 export const RUNTIME_ADDRESS = "OCEL_RUNTIME_ADDRESS";
@@ -43,7 +43,6 @@ function createAuthorizationInterceptor(token: string): Interceptor {
 /** A transport to the ocel runtime that presents the session token on every call. Throws when the address or token was not delivered. */
 export function createRuntimeTransport(): Transport {
   return createConnectTransport({
-    httpVersion: "1.1",
     baseUrl: getRuntimeAddress(),
     interceptors: [createAuthorizationInterceptor(getSessionToken())],
   });
