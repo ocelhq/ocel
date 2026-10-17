@@ -2,10 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { fixtures } from "../matrix/fixtures";
 import type { HttpIo } from "../retry";
 import type { LookRun, Verdict } from "../targets/aws/runs";
-import { CloudflareApi, type DnsRecord, type OriginCertificate } from "./cloudflare";
+import { CloudflareApi, type DnsRecord, type OriginCertificate, type Tunnel } from "./cloudflare";
 import { journeySlugOf, sweepRunFromZone, sweepStaleFromZone, zoneCellsOn } from "./sweep";
 
-const ZONE = { id: "z1", name: "j.example" };
+const ZONE = { id: "z1", name: "j.example", accountId: "acc0unt" };
 const CELLS = zoneCellsOn(fixtures, "vps");
 const GCP_CELLS = zoneCellsOn(fixtures, "gcp");
 
@@ -89,10 +89,33 @@ const ALB_RECORDS: DnsRecord[] = [
   }),
 ];
 
+const NOW = new Date("2026-10-17T12:00:00Z");
+
+function tunnel(id: string, name: string, change: Partial<Tunnel> = {}): Tunnel {
+  return {
+    id,
+    name,
+    created_at: "2026-10-17T06:00:00Z",
+    deleted_at: null,
+    status: "down",
+    ...change,
+  };
+}
+
+const TUNNELS: Tunnel[] = [
+  tunnel("abandoned", "ocel-203-0-113-7-a1b2c3d4"),
+  tunnel("never-ran", "ocel-203-0-113-8-e5f6a7b8", { status: "inactive" }),
+  tunnel("connected", "ocel-203-0-113-9-c9d0e1f2", { status: "healthy" }),
+  tunnel("degraded", "ocel-203-0-113-10-a3b4c5d6", { status: "degraded" }),
+  tunnel("concurrent", "ocel-203-0-113-11-e7f8a9b0", { created_at: "2026-10-17T11:00:00Z" }),
+  tunnel("by-hand", "staging-tunnel"),
+  tunnel("gone", "ocel-203-0-113-12-c1d2e3f4", { deleted_at: "2026-10-17T07:00:00Z" }),
+];
+
 type Asked = { method: string; url: URL; authorization: string | null };
 
 function cloudflare(
-  answers: { records?: DnsRecord[]; certificates?: OriginCertificate[] } = {},
+  answers: { records?: DnsRecord[]; certificates?: OriginCertificate[]; tunnels?: Tunnel[] } = {},
   override: (asked: Asked) => Response | undefined = () => undefined,
 ) {
   const asked: Asked[] = [];
@@ -115,7 +138,9 @@ function cloudflare(
       ? (answers.records ?? RECORDS)
       : one.url.pathname.endsWith("/certificates")
         ? (answers.certificates ?? CERTIFICATES)
-        : [ZONE];
+        : one.url.pathname.endsWith("/cfd_tunnel")
+          ? (answers.tunnels ?? [])
+          : [ZONE];
     return Response.json({
       success: true,
       result: listed,
@@ -239,6 +264,43 @@ describe("sweepStaleFromZone", () => {
     await sweepStaleFromZone(client, ZONE, CELLS, "444", async (id) =>
       id === "111" ? { state: "done" } : { state: "live" },
     );
+  });
+});
+
+describe("sweepStaleFromZone on a target with a tunnel cell", () => {
+  it("deletes the ocel tunnels older than a run that no box is connected to", async () => {
+    const { client, asked } = cloudflare({ records: [], certificates: [], tunnels: TUNNELS });
+    await sweepStaleFromZone(client, ZONE, CELLS, "444", look, NOW);
+    expect(deleted(asked)).toEqual([
+      "/accounts/acc0unt/cfd_tunnel/abandoned",
+      "/accounts/acc0unt/cfd_tunnel/never-ran",
+    ]);
+  });
+
+  it("keeps a tunnel a box is connected to, one younger than a run, and one ocel did not name", async () => {
+    const { client, asked } = cloudflare({ records: [], certificates: [], tunnels: TUNNELS });
+    await sweepStaleFromZone(client, ZONE, CELLS, "444", look, NOW);
+    for (const kept of ["connected", "degraded", "concurrent", "by-hand", "gone"]) {
+      expect(deleted(asked)).not.toContain(`/accounts/acc0unt/cfd_tunnel/${kept}`);
+    }
+  });
+
+  it("lists only the account's live ocel tunnels created before the run window", async () => {
+    const { client, asked } = cloudflare({ records: [], certificates: [], tunnels: [] });
+    await sweepStaleFromZone(client, ZONE, CELLS, "444", look, NOW);
+    const listings = asked.filter((one) => one.url.pathname.endsWith("/cfd_tunnel"));
+    expect(listings).toHaveLength(1);
+    const [listing] = listings;
+    expect(listing?.url.pathname).toBe("/client/v4/accounts/acc0unt/cfd_tunnel");
+    expect(listing?.url.searchParams.get("include_prefix")).toBe("ocel-");
+    expect(listing?.url.searchParams.get("is_deleted")).toBe("false");
+    expect(listing?.url.searchParams.get("existed_at")).toBe("2026-10-17T09:00:00.000Z");
+  });
+
+  it("asks nothing about tunnels on a target with no tunnel cell", async () => {
+    const { client, asked } = cloudflare({ records: [], certificates: [], tunnels: TUNNELS });
+    await sweepStaleFromZone(client, ZONE, GCP_CELLS, "444", look, NOW);
+    expect(asked.some((one) => one.url.pathname.endsWith("/cfd_tunnel"))).toBe(false);
   });
 });
 
@@ -368,6 +430,25 @@ describe("CloudflareApi", () => {
     });
     const listed = await client.listOriginCertificates("z1");
     expect(listed.map((one) => one.id)).toEqual(["c1", "c2"]);
+    expect(asked).toHaveLength(2);
+  });
+
+  it("reads pages until one comes back short when a listing names no page count", async () => {
+    const { client, asked } = cloudflare({}, (one) => {
+      if (!one.url.pathname.endsWith("/cfd_tunnel")) {
+        return undefined;
+      }
+      const page = Number(one.url.searchParams.get("page"));
+      const perPage = Number(one.url.searchParams.get("per_page"));
+      const size = page === 1 ? perPage : 1;
+      return Response.json({
+        success: true,
+        result: Array.from({ length: size }, (_, i) => tunnel(`t${page}-${i}`, "ocel-a-b")),
+        result_info: { page, per_page: perPage, count: size },
+      });
+    });
+    const listed = await client.listOcelTunnels("acc0unt", NOW);
+    expect(listed).toHaveLength(Number(asked[0]?.url.searchParams.get("per_page")) + 1);
     expect(asked).toHaveLength(2);
   });
 
