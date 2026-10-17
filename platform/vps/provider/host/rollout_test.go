@@ -1612,6 +1612,33 @@ func TestAFailedReleaseThatCannotAskWhetherItsTargetIsIdleRemovesNothingAndSaysS
 	}
 }
 
+func TestAReleaseThatCannotReachDockerStillRemovesTheContainersItWouldHaveServed(t *testing.T) {
+	t.Parallel()
+
+	box := benched(t, session.Result{}, session.Result{})
+	answered := box.answer
+	var reaches int
+	box.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, dockerReach) {
+			reaches++
+			if reaches == 1 {
+				return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true
+			}
+		}
+		return answered(command)
+	}
+	err := box.host().RollOut(context.Background(), aRollout(), nil)
+	if !unserved(err) {
+		t.Fatalf("RollOut() over an unreachable daemon = %v, want a refusal that says the box never served it", err)
+	}
+	if box.at("docker rm --force "+quoted(physical)) < 0 {
+		t.Errorf("the release left %s running with nothing routed to it: %v", physical, box.commands())
+	}
+	if !strings.Contains(err.Error(), physical+" removed") {
+		t.Errorf("the refusal reads\n%s\nand never says %s was removed", err, physical)
+	}
+}
+
 func TestAReleaseOfNoAppsTouchesNothing(t *testing.T) {
 	t.Parallel()
 
