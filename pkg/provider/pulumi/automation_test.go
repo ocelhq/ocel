@@ -527,3 +527,46 @@ func TestASecretInsideALongerSecretLeavesNoPartOfTheLongerOneBehind(t *testing.T
 		t.Errorf("Run() reads %q, want %q", got, want)
 	}
 }
+
+func TestPreviewOfAConvergedStackShowsEachResourceKeptOnThePinnedRuntime(t *testing.T) {
+	if testing.Short() {
+		t.Skip("this drives the real engine, which installs and runs the pinned Pulumi runtime")
+	}
+
+	ctx := context.Background()
+	automation := pulumi.New(pulumi.Config{
+		Backend: pulumi.Backend{URL: "file://" + t.TempDir(), Passphrase: "a-passphrase", Project: "ocel-plugin-probe"},
+		Program: pushing{}.Run,
+		Plugins: []pulumi.Plugin{probePlugin(t, &pushCounter{})},
+	})
+	ref := provider.StackRef{Project: "probe", Tier: environment.TierProduction, Name: naming.InfraStack("prod")}
+	spec := provider.StackSpec{Ref: ref, Kind: provider.StackInfra}
+	if _, err := automation.Run(ctx, spec, nil); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := automation.Destroy(ctx, ref, nil); err != nil {
+			t.Errorf("Destroy() = %v", err)
+		}
+	})
+
+	planned, err := automation.Preview(ctx, spec, nil)
+	if err != nil {
+		t.Fatalf("Preview() of a converged stack on Pulumi %s = %v", pulumi.PinnedVersion, err)
+	}
+	want := provider.Change{Kind: "probe:index:Push", Name: "assets", Action: provider.ActionKeep}
+	if len(planned.Groups) != 1 || !slices.Contains(planned.Groups[0].Changes, want) {
+		t.Fatalf("Preview() of a converged stack on Pulumi %s = %+v, want %+v among its rows: "+
+			"keeps come only from the engine's outputs events for unchanged resources, "+
+			"and without them a converged deploy plans as though it had nothing to keep",
+			pulumi.PinnedVersion, planned.Groups, want)
+	}
+	for _, change := range planned.Groups[0].Changes {
+		if change.Action != provider.ActionKeep {
+			t.Errorf("Preview() of a converged stack shows %s as %q, and nothing changed since it converged", change.Name, change.Action)
+		}
+	}
+	if planned.Groups[0].Action != provider.ActionKeep {
+		t.Errorf("Preview() of a converged stack rolls up to %q, want %q", planned.Groups[0].Action, provider.ActionKeep)
+	}
+}
