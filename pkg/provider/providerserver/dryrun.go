@@ -29,7 +29,7 @@ type dryRunPlan struct {
 	infra      provider.Plan
 	parameters provider.ChangeGroup
 	apps       []provider.Plan
-	removed    provider.Plan
+	retired    provider.Plan
 	edge       provider.ChangeGroup
 	promotion  provider.ChangeGroup
 }
@@ -49,7 +49,7 @@ func (d *dryRunPlan) plan() provider.Plan {
 			}
 		}
 	}
-	plan.Groups = append(plan.Groups, d.removed.Groups...)
+	plan.Groups = append(plan.Groups, d.retired.Groups...)
 	plan.Groups = append(plan.Groups, d.edge, d.promotion)
 	return plan
 }

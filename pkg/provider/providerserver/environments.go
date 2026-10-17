@@ -176,7 +176,7 @@ func (h *handlers) removePreview(ctx context.Context, req *contractv1.RemoveEnvi
 	if err := session.checkpoint(ctx); err != nil {
 		return err
 	}
-	if err := retireRemovedApps(ctx, session.provider, noAppLive(req.GetSlug(), environment.TierPreview, pointer), progress); err != nil {
+	if err := retire(ctx, session.provider, noAppLive(req.GetSlug(), environment.TierPreview, pointer), progress); err != nil {
 		return err
 	}
 	if err := ReclaimPreview(ctx, session.provider, removalImages(ctx, session.provider, req.GetProjectRegistry(), progress), req.GetSlug(), pointer, removed, progress); err != nil {

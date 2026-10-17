@@ -35,7 +35,7 @@ type Hooks struct {
 	ServeBindingProxy     func(ctx context.Context, req BindingProxyRequest, progress progress.Log) (BindingProxy, error)
 	Cost                  *CostHooks
 	FunctionImages        *FunctionImageHooks
-	RemovedApps           *RemovedAppHooks
+	Retirement            *RetirementHooks
 }
 
 type CostHooks struct {
@@ -43,7 +43,7 @@ type CostHooks struct {
 	Estimate func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
 }
 
-type RemovedAppHooks struct {
+type RetirementHooks struct {
 	Plan   func(ctx context.Context, live LiveApps, progress progress.Log) (Plan, error)
 	Retire func(ctx context.Context, live LiveApps, progress progress.Log) error
 }

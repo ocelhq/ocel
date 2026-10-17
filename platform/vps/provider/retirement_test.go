@@ -17,7 +17,7 @@ func takenDown(machine *box, container string) bool {
 	})
 }
 
-func TestRetiringRemovedAppsTakesDownTheWorkersOfAnAppNoLongerDeployed(t *testing.T) {
+func TestRetiringTakesDownTheWorkersOfAnAppNoLongerDeployed(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -26,9 +26,9 @@ func TestRetiringRemovedAppsTakesDownTheWorkersOfAnAppNoLongerDeployed(t *testin
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	worker, _ := recordedWorker(t, store, "worker")
-	hooks := p.Hooks().RemovedApps
+	hooks := p.Hooks().Retirement
 	if hooks == nil {
-		t.Fatal("the box's hooks leave RemovedApps nil, so an app removed from config keeps its workers consuming its topics")
+		t.Fatal("the box's hooks leave Retirement nil, so an app removed from config keeps its workers consuming its topics")
 	}
 	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []string{"admin"}}
 
@@ -59,7 +59,7 @@ func TestRetiringRemovedAppsTakesDownTheWorkersOfAnAppNoLongerDeployed(t *testin
 	}
 }
 
-func TestRetiringRemovedAppsKeepsTheWorkersOfALiveApp(t *testing.T) {
+func TestRetiringKeepsTheWorkersOfALiveApp(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -69,11 +69,11 @@ func TestRetiringRemovedAppsKeepsTheWorkersOfALiveApp(t *testing.T) {
 	}
 	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []string{"web"}}
 
-	plan, err := p.Hooks().RemovedApps.Plan(context.Background(), live, progress.Discard())
+	plan, err := p.Hooks().Retirement.Plan(context.Background(), live, progress.Discard())
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
-	if err := p.Hooks().RemovedApps.Retire(context.Background(), live, progress.Discard()); err != nil {
+	if err := p.Hooks().Retirement.Retire(context.Background(), live, progress.Discard()); err != nil {
 		t.Fatalf("Retire() = %v", err)
 	}
 

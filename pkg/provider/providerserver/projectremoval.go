@@ -129,7 +129,7 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 		})
 	}
 	for _, env := range r.environments() {
-		removed, err := planRemovedApps(ctx, r.provider, noAppLive(r.slug, r.tier, env), progress.Discard())
+		removed, err := planRetirement(ctx, r.provider, noAppLive(r.slug, r.tier, env), progress.Discard())
 		if err != nil {
 			return nil, err
 		}
@@ -335,7 +335,7 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 		errs = append(errs, err)
 	}
 	for _, env := range r.environments() {
-		if err := retireRemovedApps(ctx, r.provider, noAppLive(r.slug, r.tier, env), progress); err != nil {
+		if err := retire(ctx, r.provider, noAppLive(r.slug, r.tier, env), progress); err != nil {
 			errs = append(errs, err)
 		}
 	}

@@ -95,7 +95,7 @@ func NewProvider(options Options) *Provider {
 		ProgramEdge:        p.ProgramEdge,
 		OpenRegistryImages: p.OpenRegistryImages,
 		Cost:               &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
-		RemovedApps:        &provider.RemovedAppHooks{Plan: p.PlanRemovedApps, Retire: p.RetireRemovedApps},
+		Retirement:         &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
 	}
 	return p
 }
