@@ -632,7 +632,7 @@ func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppSc
 					t.Errorf("the %s credential grants %s on %s, a bucket name a deploy never creates: S3 evaluates no Ocel tag on a bucket, so the name prefix is the only scope", purpose, g.action, g.resource)
 				}
 			case strings.HasPrefix(g.action, "rds:") && !readOnly(g.action):
-				for _, kind := range []string{"cluster:", "db:", "subgrp:"} {
+				for _, kind := range []string{"cluster:", "cluster-snapshot:", "db:", "subgrp:"} {
 					if strings.Contains(g.resource, ":"+kind) && !strings.Contains(g.resource, ":"+kind+appScopePrefix) {
 						t.Errorf("the %s credential grants %s on %s, an identifier a deploy never mints", purpose, g.action, g.resource)
 					}
@@ -642,6 +642,19 @@ func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppSc
 					t.Errorf("the %s credential grants %s on %s under %s, want the secret pinned to a cluster in the app scope through the tag RDS stamps on it, or the credential reads every Aurora master password in the account", purpose, g.action, g.resource, g.condition)
 				}
 			}
+		}
+	}
+}
+
+func TestEveryCredentialMayDeleteAClusterIntoAFinalSnapshotUnderTheAppScope(t *testing.T) {
+	want := grant{
+		action:    "rds:DeleteDBCluster",
+		resource:  "arn:aws:rds:*:*:cluster-snapshot:" + appScopePrefix + "*",
+		condition: conditionJSON(t, nil),
+	}
+	for purpose, document := range bothCredentials(t) {
+		if !grantsOf(t, document)[want] {
+			t.Errorf("the %s credential cannot delete a cluster into a final snapshot: RDS authorizes DeleteDBCluster on the snapshot it creates as well, and that snapshot carries no tag yet", purpose)
 		}
 	}
 }

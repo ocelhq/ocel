@@ -32,6 +32,7 @@ type Config struct {
 	Secrets       SecretsAPI
 	Parameters    ParametersAPI
 	KVTokenRoot   string
+	Clusters      ClustersAPI
 
 	SigningKeys    SigningKeysAPI
 	SigningKeyRoot string

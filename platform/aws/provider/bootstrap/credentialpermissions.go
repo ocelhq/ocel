@@ -52,6 +52,8 @@ const (
 	appInstanceARN       = "arn:aws:rds:*:*:db:" + appScopePrefix + "*"
 	appSubnetGroupARN    = "arn:aws:rds:*:*:subgrp:" + appScopePrefix + "*"
 
+	appClusterSnapshotARN = "arn:aws:rds:*:*:cluster-snapshot:" + appScopePrefix + "*"
+
 	appQueueARN         = "arn:aws:sqs:*:*:" + appScopePrefix + "*"
 	appTopicARN         = "arn:aws:sns:*:*:" + appScopePrefix + "*"
 	appSubscriptionARN  = "arn:aws:sns:*:*:" + appScopePrefix + "*:*"
@@ -980,6 +982,10 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 			},
 			Resources: []string{appClusterARN, appInstanceARN, appSubnetGroupARN},
 			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"rds:DeleteDBCluster"},
+			Resources: []string{appClusterSnapshotARN},
 		},
 		{
 			Actions: []string{
