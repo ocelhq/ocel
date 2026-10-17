@@ -65,14 +65,15 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	if err != nil {
 		return s.refuse(ctx, move, nil, added, err)
 	}
-	var created []host.AppRollout
+	var touched []host.AppRollout
 	for at, release := range ready {
-		fresh, err := s.rerun(ctx, release, progress)
-		if fresh {
-			created = append(created, apps[at])
+		ran, err := s.rerun(ctx, release, progress)
+		apps[at].Run = ran
+		if ran != host.RunKept {
+			touched = append(touched, apps[at])
 		}
 		if err != nil {
-			return s.refuse(ctx, move, created, added, err)
+			return s.refuse(ctx, move, touched, added, err)
 		}
 	}
 	err = s.e.machine.RollOut(ctx, host.Rollout{
@@ -87,11 +88,11 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	return errors.Join(err, s.recordServed(ctx, move, claims, ready))
 }
 
-func (s *stack) refuse(ctx context.Context, move router.PointerMove, created []host.AppRollout, added []host.HostClaim, why error) error {
+func (s *stack) refuse(ctx context.Context, move router.PointerMove, touched []host.AppRollout, added []host.HostClaim, why error) error {
 	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), host.UnwindWindow)
 	defer stop()
-	if len(created) > 0 {
-		why = fmt.Errorf("%w%s", why, s.e.machine.Discard(ctx, host.Rollout{Apps: created}))
+	if len(touched) > 0 {
+		why = fmt.Errorf("%w%s", why, s.e.machine.Discard(ctx, host.Rollout{Apps: touched}))
 	}
 	return router.Unserved{Err: errors.Join(why, s.disclaimAdded(ctx, move, added))}
 }
@@ -144,7 +145,7 @@ func declaredBy(record router.ReleaseRecord) []string {
 	return declared
 }
 
-func (s *stack) rerun(ctx context.Context, release promotable, progress progress.Log) (created bool, err error) {
+func (s *stack) rerun(ctx context.Context, release promotable, progress progress.Log) (host.Run, error) {
 	record := release.record
 	if progress != nil {
 		progress.Say("Starting " + release.app + "'s container " + record.Physical + " again")

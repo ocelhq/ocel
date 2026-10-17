@@ -110,30 +110,31 @@ func TestAContainerAlreadyServingTheReleasesImageIsKeptRatherThanRecreated(t *te
 	}
 }
 
-func TestRunningAContainerSaysItCreatedOneOnlyWhenNoneWasThereToKeep(t *testing.T) {
+func TestRunningAContainerSaysWhetherItCreatedItStartedItAgainOrKeptIt(t *testing.T) {
 	t.Parallel()
 
 	for what, run := range map[string]struct {
-		spec    Container
-		served  string
-		created bool
+		spec   Container
+		served string
+		want   Run
 	}{
-		"a release already running":    {spec: aContainer(), served: "running " + appImage + " " + handedTo(aContainer()).digest},
-		"a stopped container":          {spec: promoted(), served: "exited " + appImage + " 7f3a9c1e2b4d"},
-		"a release with no container":  {spec: aContainer(), served: "", created: true},
-		"a container of another image": {spec: aContainer(), served: "running ocel/shop/web:sha256-older", created: true},
+		"a release already running":    {spec: aContainer(), served: "running " + appImage + " " + handedTo(aContainer()).digest, want: RunKept},
+		"a stopped container":          {spec: promoted(), served: "exited " + appImage + " 7f3a9c1e2b4d", want: RunRestarted},
+		"a paused container":           {spec: promoted(), served: "paused " + appImage + " 7f3a9c1e2b4d", want: RunRestarted},
+		"a release with no container":  {spec: aContainer(), served: "", want: RunCreated},
+		"a container of another image": {spec: aContainer(), served: "running ocel/shop/web:sha256-older", want: RunCreated},
 	} {
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
 			box := machine(nil)
 			imaging(box, run.served)
-			created, err := box.host().RunContainer(context.Background(), run.spec)
+			ran, err := box.host().RunContainer(context.Background(), run.spec)
 			if err != nil {
 				t.Fatalf("RunContainer() of %s = %v", what, err)
 			}
-			if created != run.created {
-				t.Errorf("RunContainer() of %s says it created one: %v, want %v: a refused promotion removes only the containers it created, and a container it kept may be the only one holding a rollback's values", what, created, run.created)
+			if ran != run.want {
+				t.Errorf("RunContainer() of %s = %v, want %v: a refused promotion removes the containers it created, stops the ones it started again, and leaves the ones it kept, since those two may be the only ones holding a rollback's values", what, ran, run.want)
 			}
 		})
 	}

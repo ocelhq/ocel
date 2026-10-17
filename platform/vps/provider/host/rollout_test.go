@@ -1620,6 +1620,56 @@ func TestAFailedReleaseThatCannotAskWhetherItsTargetIsIdleRemovesNothingAndSaysS
 	}
 }
 
+func TestARefusedRollbackStopsTheContainerItStartedAgainRatherThanRemovingIt(t *testing.T) {
+	t.Parallel()
+
+	for what, refused := range map[string]struct {
+		gate   session.Result
+		refuse func(context.Context) error
+	}{
+		"a gate that failed": {gate: session.Result{Code: 3, Stderr: "answered /healthz with status 503"}},
+		"a promotion overtaken": {refuse: func(context.Context) error {
+			return errors.New("promotion p4 took the pointer")
+		}},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			rollback := aRollout()
+			rollback.Apps[0].Run = RunRestarted
+			rollback.StillActive = refused.refuse
+			box := benched(t, refused.gate, session.Result{})
+			err := box.host().RollOut(context.Background(), rollback, nil)
+			if !unserved(err) {
+				t.Fatalf("RollOut() refused by %s = %v, want a refusal that says the box never served it", what, err)
+			}
+			if box.at("docker rm --force "+quoted(physical)) >= 0 {
+				t.Errorf("after %s the rollback removed %s, the container it rolled back to, and with it the values its own deploy handed it: %v", what, physical, box.commands())
+			}
+			if box.at("docker stop "+quoted(physical)) < 0 {
+				t.Errorf("after %s the rollback left %s running with nothing routed to it, where it found it stopped: %v", what, physical, box.commands())
+			}
+			if !strings.Contains(err.Error(), physical+" stopped") {
+				t.Errorf("the refusal reads\n%s\nand never says %s was stopped", err, physical)
+			}
+		})
+	}
+}
+
+func TestARefusedRollOutLeavesAContainerItKeptRunningWhereNothingRoutesToIt(t *testing.T) {
+	t.Parallel()
+
+	kept := aRollout()
+	kept.Apps[0].Run = RunKept
+	box := benched(t, session.Result{Code: 3, Stderr: "answered /healthz with status 503"}, session.Result{})
+	if err := box.host().RollOut(context.Background(), kept, nil); !unserved(err) {
+		t.Fatalf("RollOut() whose gate failed = %v, want a refusal that says the box never served it", err)
+	}
+	if box.at("docker rm --force "+quoted(physical)) < 0 {
+		t.Errorf("a refused roll-out left %s, the container its deploy ran for it, running with nothing routed to it: %v", physical, box.commands())
+	}
+}
+
 func TestAReleaseThatCannotReachDockerStillRemovesTheContainersItWouldHaveServed(t *testing.T) {
 	t.Parallel()
 
