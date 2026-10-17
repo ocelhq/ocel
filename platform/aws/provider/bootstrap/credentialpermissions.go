@@ -900,19 +900,27 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 			Condition: mergeConditions(taggedOnCreate(), keyPairSuppliedByCaller()),
 		},
 		{
-			Actions:   []string{"acm:DeleteCertificate"},
-			Resources: []string{appCertificateARN},
-			Condition: mergeConditions(taggedByOcel(), keyPairSuppliedByCaller()),
+			Actions:   []string{"acm:RequestCertificate"},
+			Resources: []string{UnscopedResource},
+			Condition: taggedOnCreate(),
 		},
 		{
 			Actions: []string{
 				"acm:AddTagsToCertificate",
-				"acm:DescribeCertificate",
+				"acm:DeleteCertificate",
 				"acm:ListTagsForCertificate",
 				"acm:RemoveTagsFromCertificate",
 			},
 			Resources: []string{appCertificateARN},
 			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"acm:DescribeCertificate"},
+			Resources: []string{appCertificateARN},
+		},
+		{
+			Actions:   []string{"acm:ListCertificates"},
+			Resources: []string{UnscopedResource},
 		},
 		{
 			Actions:   []string{"s3:CreateBucket"},
