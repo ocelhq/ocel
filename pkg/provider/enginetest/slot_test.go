@@ -166,3 +166,22 @@ func TestASlotNetworkSomethingElseCreatedIsEmptiedWithTheRest(t *testing.T) {
 		t.Errorf("%s is still on %s after the slot was emptied: a slot network the box's write created carries no slot label, and what is on it outlives every run", left, box)
 	}
 }
+
+func TestAnInternalSlotNetworkGivesTheHostNoAddressToLoseWhenItIsRemoved(t *testing.T) {
+	internal := InternalNetwork(t, "box")
+	if internal == Network(t, "box") {
+		t.Fatalf("the internal network and the addressed one are both %s", internal)
+	}
+	id, err := exec.Command(engine, "network", "inspect", "--format", "{{.Id}}", internal).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bridge := "br-" + strings.TrimSpace(string(id))[:12]
+	said, err := exec.Command("ip", "-o", "-4", "addr", "show", "dev", bridge).Output()
+	if err != nil {
+		t.Skipf("read %s's addresses: %v", bridge, err)
+	}
+	if strings.TrimSpace(string(said)) != "" {
+		t.Errorf("%s holds a host address:\n%s\nevery time the network is removed or created again, a browser on the machine reads the address going or coming as the network changing and fails its requests", bridge, said)
+	}
+}
