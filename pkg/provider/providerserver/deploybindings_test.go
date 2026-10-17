@@ -1,6 +1,7 @@
 package providerserver_test
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"strings"
@@ -286,6 +287,40 @@ func TestDeployDeliversOneRecordUnderEachNameThatBindsIt(t *testing.T) {
 	}
 	if want := []string{"OCEL_RESOURCE_POSTGRES_main", "OCEL_RESOURCE_POSTGRES_reports"}; !slices.Equal(keys, want) {
 		t.Errorf("web is handed shared-db under %v, want %v: postgres(\"main\") and postgres(\"reports\") each read their own key", keys, want)
+	}
+}
+
+func TestDeployDeliversARecordTheProjectPublishesUnderEachNameThatBindsIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	req := deployRequest()
+	req.Manifest.Resources = append(req.Manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "main",
+		Binding:     "orders",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"},
+	})
+	req.Manifest.Usages = append(req.Manifest.Usages, &contractv1.ManifestUsage{App: "web", Resource: "main"})
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	var keys []string
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.App == nil || spec.App.App != "web" {
+			continue
+		}
+		keys = keys[:0]
+		for _, binding := range spec.App.Values.Bindings {
+			keys = append(keys, provider.ResourceEnvName(binding.Type, cmp.Or(binding.Resource, binding.Name)))
+		}
+	}
+	slices.Sort(keys)
+	if want := []string{"OCEL_RESOURCE_POSTGRES_main", "OCEL_RESOURCE_POSTGRES_orders"}; !slices.Equal(keys, want) {
+		t.Errorf("the second deploy hands web orders under %v, want %v: postgres(\"orders\") and postgres(\"main\") each read their own key", keys, want)
 	}
 }
 
