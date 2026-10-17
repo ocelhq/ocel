@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -57,12 +60,18 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 	}
 	at := placed{spec: spec, names: NamesFor(spec.Namespace, spec.Tier), partition: boundary.Partition, account: boundary.AccountID}
 	steps := []func(context.Context, Clients, placed) error{ensureRoles, ensureLogGroup, ensureFunction, ensureSchedule}
+	var behind error
 	for _, step := range steps {
-		if err := step(ctx, c, at); err != nil {
+		err := step(ctx, c, at)
+		if errors.Is(err, stackrecords.ErrPartBehind) {
+			behind = err
+			continue
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
-	return Resources(spec.Namespace, spec.Tier), nil
+	return Resources(spec.Namespace, spec.Tier), behind
 }
 
 func Resources(namespace string, tier environment.Tier) []provider.PartResource {
@@ -97,8 +106,9 @@ func ensureRoles(ctx context.Context, c Clients, at placed) error {
 	if err != nil {
 		return err
 	}
-	if err := ensureRole(ctx, c, at, at.names.Role, "Ocel: the role the "+string(at.spec.Tier)+" env source sync runs as", syncTrust, syncPolicyName, syncPolicy); err != nil {
-		return err
+	behind := ensureRole(ctx, c, at, at.names.Role, "Ocel: the role the "+string(at.spec.Tier)+" env source sync runs as", syncTrust, syncPolicyName, syncPolicy)
+	if behind != nil && !errors.Is(behind, stackrecords.ErrPartBehind) {
+		return behind
 	}
 	scheduleTrust, err := document(map[string]any{
 		"Effect": "Allow", "Principal": map[string]any{"Service": schedulerPrincipal}, "Action": "sts:AssumeRole",
@@ -114,21 +124,17 @@ func ensureRoles(ctx context.Context, c Clients, at placed) error {
 	if err != nil {
 		return err
 	}
-	return ensureRole(ctx, c, at, at.names.ScheduleRole, "Ocel: the role EventBridge Scheduler invokes the "+string(at.spec.Tier)+" env source sync through, and nothing else", scheduleTrust, invokePolicyName, invokePolicy)
+	err = ensureRole(ctx, c, at, at.names.ScheduleRole, "Ocel: the role EventBridge Scheduler invokes the "+string(at.spec.Tier)+" env source sync through, and nothing else", scheduleTrust, invokePolicyName, invokePolicy)
+	if err != nil && !errors.Is(err, stackrecords.ErrPartBehind) {
+		return err
+	}
+	return errors.Join(behind, err)
 }
 
 func ensureRole(ctx context.Context, c Clients, at placed, name, description, trust, policyName, policy string) error {
-	_, err := c.IAM.CreateRole(ctx, &iam.CreateRoleInput{
-		RoleName:                 aws.String(name),
-		Path:                     aws.String(at.spec.RolePath),
-		Description:              aws.String(description),
-		AssumeRolePolicyDocument: aws.String(trust),
-		PermissionsBoundary:      aws.String(at.spec.Boundary),
-		Tags:                     iamTags(at),
-	})
-	var exists *iamtypes.EntityAlreadyExistsException
-	if err != nil && !errors.As(err, &exists) {
-		return fmt.Errorf("create role %s: %w", name, err)
+	behind := createRole(ctx, c, at, name, description, trust)
+	if behind != nil && !errors.Is(behind, stackrecords.ErrPartBehind) {
+		return behind
 	}
 	if _, err := c.IAM.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
 		RoleName:       aws.String(name),
@@ -137,7 +143,68 @@ func ensureRole(ctx context.Context, c Clients, at placed, name, description, tr
 	}); err != nil {
 		return fmt.Errorf("put policy %s on role %s: %w", policyName, name, err)
 	}
-	return nil
+	return behind
+}
+
+func createRole(ctx context.Context, c Clients, at placed, name, description, trust string) error {
+	in := &iam.CreateRoleInput{
+		RoleName:                 aws.String(name),
+		Path:                     aws.String(at.spec.RolePath),
+		Description:              aws.String(description),
+		AssumeRolePolicyDocument: aws.String(trust),
+		PermissionsBoundary:      aws.String(at.spec.Boundary),
+		Tags:                     iamTags(at),
+	}
+	_, err := c.IAM.CreateRole(ctx, in)
+	var exists *iamtypes.EntityAlreadyExistsException
+	if err == nil || !errors.As(err, &exists) {
+		return wrapped("create role "+name, err)
+	}
+	current, err := c.IAM.GetRole(ctx, &iam.GetRoleInput{RoleName: aws.String(name)})
+	if err != nil {
+		return fmt.Errorf("read role %s: %w", name, err)
+	}
+	if boundary := current.Role.PermissionsBoundary; boundary == nil || aws.ToString(boundary.PermissionsBoundaryArn) != at.spec.Boundary {
+		if _, err := c.IAM.PutRolePermissionsBoundary(ctx, &iam.PutRolePermissionsBoundaryInput{
+			RoleName:            aws.String(name),
+			PermissionsBoundary: aws.String(at.spec.Boundary),
+		}); err != nil {
+			return fmt.Errorf("bound role %s by %s: %w", name, at.spec.Boundary, err)
+		}
+	}
+	trusted, err := sameDocument(aws.ToString(current.Role.AssumeRolePolicyDocument), trust)
+	if err != nil {
+		return fmt.Errorf("read the trust policy of role %s: %w", name, err)
+	}
+	switch {
+	case trusted:
+		return nil
+	case at.spec.UpdatesTrust:
+		if _, err := c.IAM.UpdateAssumeRolePolicy(ctx, &iam.UpdateAssumeRolePolicyInput{
+			RoleName:       aws.String(name),
+			PolicyDocument: aws.String(trust),
+		}); err != nil {
+			return fmt.Errorf("put back the trust policy of role %s: %w", name, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("role %s trusts other than this build gives it, and a deploy never changes a role's trust: run `%s` to put it back: %w",
+		name, provider.BootstrapCommand(at.spec.Tier), stackrecords.ErrPartBehind)
+}
+
+func sameDocument(recorded, want string) (bool, error) {
+	decoded, err := url.QueryUnescape(recorded)
+	if err != nil {
+		return false, err
+	}
+	var got, wanted any
+	if err := json.Unmarshal([]byte(decoded), &got); err != nil {
+		return false, err
+	}
+	if err := json.Unmarshal([]byte(want), &wanted); err != nil {
+		return false, err
+	}
+	return reflect.DeepEqual(got, wanted), nil
 }
 
 func tags(at placed) map[string]string {

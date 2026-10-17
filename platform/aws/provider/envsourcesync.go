@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -32,21 +33,25 @@ func (p *Provider) envSourceSyncSpec(ctx context.Context, tier environment.Tier)
 }
 
 func (p *Provider) EnsureEnvSourceSync(ctx context.Context, tier environment.Tier, project string) error {
-	work, keyed, err := p.envSourceSyncWork(ctx, tier, project)
+	work, keyed, err := p.envSourceSyncWork(ctx, tier, project, false)
 	if err != nil {
 		return err
 	}
 	if !keyed {
 		return awsports.RefuseUnkeyed(tier)
 	}
-	return stackrecords.EnsureBootstrapPart(ctx, p.KeyValues(), tier, work)
+	if err := stackrecords.EnsureBootstrapPart(ctx, p.KeyValues(), tier, work); err != nil && !errors.Is(err, stackrecords.ErrPartBehind) {
+		return err
+	}
+	return nil
 }
 
-func (p *Provider) envSourceSyncWork(ctx context.Context, tier environment.Tier, project string) (stackrecords.PartWork, bool, error) {
+func (p *Provider) envSourceSyncWork(ctx context.Context, tier environment.Tier, project string, updatesTrust bool) (stackrecords.PartWork, bool, error) {
 	spec, err := p.envSourceSyncSpec(ctx, tier)
 	if err != nil || spec.Key == "" {
 		return stackrecords.PartWork{}, false, err
 	}
+	spec.UpdatesTrust = updatesTrust
 	return stackrecords.PartWork{
 		Name:      envsourcesync.Part,
 		WrittenBy: string(p.writtenBy),

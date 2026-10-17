@@ -3,6 +3,7 @@ package envsourcesync_test
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -22,6 +23,7 @@ import (
 const testAccount = "123456789012"
 
 type role struct {
+	id       int
 	path     string
 	boundary string
 	trust    string
@@ -31,6 +33,7 @@ type role struct {
 
 type function struct {
 	input       lambda.CreateFunctionInput
+	roleID      int
 	code        []byte
 	invokeRetry *int32
 	invokeAge   *int32
@@ -52,6 +55,7 @@ type account struct {
 	schedules map[string]*schedule
 
 	unassumable int
+	roleIDs     int
 	calls       []string
 }
 
@@ -72,6 +76,18 @@ func (a *account) clients() envsourcesync.Clients {
 
 func (a *account) record(call string) {
 	a.calls = append(a.calls, call)
+}
+
+func (a *account) idOfRole(arn string) int {
+	if r, ok := a.roles[arn[strings.LastIndex(arn, "/")+1:]]; ok {
+		return r.id
+	}
+	return 0
+}
+
+func (a *account) functionRunsAsItsRole(name string) bool {
+	f, ok := a.functions[name]
+	return ok && f.roleID != 0 && f.roleID == a.idOfRole(aws.ToString(f.input.Role))
 }
 
 func iamTags(tags []iamtypes.Tag) map[string]string {
@@ -96,7 +112,8 @@ func (a iamAPI) CreateRole(_ context.Context, in *iam.CreateRoleInput, _ ...func
 	if _, ok := a.roles[name]; ok {
 		return nil, &iamtypes.EntityAlreadyExistsException{Message: aws.String("exists")}
 	}
-	a.roles[name] = &role{path: aws.ToString(in.Path), boundary: aws.ToString(in.PermissionsBoundary), trust: aws.ToString(in.AssumeRolePolicyDocument), tags: iamTags(in.Tags), policies: map[string]string{}}
+	a.roleIDs++
+	a.roles[name] = &role{id: a.roleIDs, path: aws.ToString(in.Path), boundary: aws.ToString(in.PermissionsBoundary), trust: aws.ToString(in.AssumeRolePolicyDocument), tags: iamTags(in.Tags), policies: map[string]string{}}
 	return &iam.CreateRoleOutput{Role: &iamtypes.Role{RoleName: in.RoleName, Arn: aws.String(roleARN(aws.ToString(in.Path), name))}}, nil
 }
 
@@ -110,6 +127,48 @@ func (a iamAPI) PutRolePolicy(_ context.Context, in *iam.PutRolePolicyInput, _ .
 	}
 	r.policies[aws.ToString(in.PolicyName)] = aws.ToString(in.PolicyDocument)
 	return &iam.PutRolePolicyOutput{}, nil
+}
+
+func (a iamAPI) GetRole(_ context.Context, in *iam.GetRoleInput, _ ...func(*iam.Options)) (*iam.GetRoleOutput, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.record("GetRole")
+	r, ok := a.roles[aws.ToString(in.RoleName)]
+	if !ok {
+		return nil, &iamtypes.NoSuchEntityException{Message: aws.String("no role")}
+	}
+	return &iam.GetRoleOutput{Role: &iamtypes.Role{
+		RoleName:                 in.RoleName,
+		AssumeRolePolicyDocument: aws.String(url.QueryEscape(r.trust)),
+		PermissionsBoundary:      &iamtypes.AttachedPermissionsBoundary{PermissionsBoundaryArn: aws.String(r.boundary)},
+	}}, nil
+}
+
+func (a iamAPI) UpdateAssumeRolePolicy(_ context.Context, in *iam.UpdateAssumeRolePolicyInput, _ ...func(*iam.Options)) (*iam.UpdateAssumeRolePolicyOutput, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.record("UpdateAssumeRolePolicy")
+	r, ok := a.roles[aws.ToString(in.RoleName)]
+	if !ok {
+		return nil, &iamtypes.NoSuchEntityException{Message: aws.String("no role")}
+	}
+	if r.boundary != testBoundary {
+		return nil, fmt.Errorf("AccessDenied: role %s is not under the app boundary, which iam:UpdateAssumeRolePolicy is granted on", aws.ToString(in.RoleName))
+	}
+	r.trust = aws.ToString(in.PolicyDocument)
+	return &iam.UpdateAssumeRolePolicyOutput{}, nil
+}
+
+func (a iamAPI) PutRolePermissionsBoundary(_ context.Context, in *iam.PutRolePermissionsBoundaryInput, _ ...func(*iam.Options)) (*iam.PutRolePermissionsBoundaryOutput, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.record("PutRolePermissionsBoundary")
+	r, ok := a.roles[aws.ToString(in.RoleName)]
+	if !ok {
+		return nil, &iamtypes.NoSuchEntityException{Message: aws.String("no role")}
+	}
+	r.boundary = aws.ToString(in.PermissionsBoundary)
+	return &iam.PutRolePermissionsBoundaryOutput{}, nil
 }
 
 func (a iamAPI) ListRolePolicies(_ context.Context, in *iam.ListRolePoliciesInput, _ ...func(*iam.Options)) (*iam.ListRolePoliciesOutput, error) {
@@ -170,7 +229,7 @@ func (a lambdaAPI) CreateFunction(_ context.Context, in *lambda.CreateFunctionIn
 	if _, ok := a.functions[name]; ok {
 		return nil, &lambdatypes.ResourceConflictException{Message: aws.String("exists")}
 	}
-	a.functions[name] = &function{input: *in, code: in.Code.ZipFile, tags: in.Tags}
+	a.functions[name] = &function{input: *in, roleID: a.idOfRole(aws.ToString(in.Role)), code: in.Code.ZipFile, tags: in.Tags}
 	return &lambda.CreateFunctionOutput{FunctionArn: aws.String(functionARN(name))}, nil
 }
 
@@ -193,6 +252,9 @@ func (a lambdaAPI) UpdateFunctionConfiguration(_ context.Context, in *lambda.Upd
 	f, ok := a.functions[aws.ToString(in.FunctionName)]
 	if !ok {
 		return nil, &lambdatypes.ResourceNotFoundException{Message: aws.String("no function")}
+	}
+	if in.Role != nil && aws.ToString(in.Role) != aws.ToString(f.input.Role) {
+		f.roleID = a.idOfRole(aws.ToString(in.Role))
 	}
 	f.input.Environment, f.input.MemorySize, f.input.Timeout, f.input.Role = in.Environment, in.MemorySize, in.Timeout, in.Role
 	return &lambda.UpdateFunctionConfigurationOutput{}, nil

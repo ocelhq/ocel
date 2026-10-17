@@ -148,6 +148,8 @@ type PartWork struct {
 	Make      func(ctx context.Context) ([]provider.PartResource, error)
 }
 
+var ErrPartBehind = errors.New("the part is left behind this build")
+
 var (
 	partPoll        = time.Second
 	partPollCeiling = 10 * time.Second
@@ -221,16 +223,21 @@ func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier
 		resources, err := work.Make(ctx)
 		settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), partSettleTimeout)
 		defer cancel()
-		if err != nil {
+		behind := errors.Is(err, ErrPartBehind)
+		if err != nil && !behind {
 			return false, errors.Join(err, releaseClaim(settle, store, keyvalue.Entry{Key: key, Value: prior, Revision: revision}))
 		}
-		return true, MarkBootstrapPartReady(settle, store, tier, work.Name, BootstrapPart{
+		digest := work.Digest
+		if behind {
+			digest = ""
+		}
+		return true, errors.Join(err, MarkBootstrapPartReady(settle, store, tier, work.Name, BootstrapPart{
 			WrittenBy: work.WrittenBy,
-			Digest:    work.Digest,
+			Digest:    digest,
 			AddedBy:   claim.AddedBy,
 			AddedAt:   claim.AddedAt,
 			Resources: resources,
-		})
+		}))
 	}
 }
 

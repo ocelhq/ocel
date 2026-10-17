@@ -3,6 +3,7 @@ package stackrecords_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -94,6 +95,29 @@ func TestEnsuringAPartBehindThisBuildMakesItAgainInPlaceKeepingWhoAddedIt(t *tes
 	got, _, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, "env-source-sync")
 	if moved.calls.Load() != 1 || err != nil || got.State != stackrecords.PartReady || got.Digest != "d2" || got.WrittenBy != "1.3.0" || got.AddedBy != "web" {
 		t.Errorf("made %d times, record = %+v, %v; want it made once more, ready at d2 by 1.3.0, still added by web", moved.calls.Load(), got, err)
+	}
+}
+
+func TestAMakeThatLeavesAPartBehindRecordsItReadyWithItsResourcesButNotCurrent(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	if err := stackrecords.EnsureBootstrapPart(ctx, store, environment.TierProduction, (&making{}).work("web", "1.2.0", "d1")); err != nil {
+		t.Fatal(err)
+	}
+
+	partly := &making{resources: syncResources, err: fmt.Errorf("role ocel-env-sync trusts other than this build: %w", stackrecords.ErrPartBehind)}
+	err := stackrecords.EnsureBootstrapPart(ctx, store, environment.TierProduction, partly.work("api", "1.3.0", "d2"))
+	if !errors.Is(err, stackrecords.ErrPartBehind) {
+		t.Fatalf("EnsureBootstrapPart() = %v, want it to say the part is behind", err)
+	}
+
+	got, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, "env-source-sync")
+	if err != nil || !present || got.State != stackrecords.PartReady || len(got.Resources) != 1 || got.AddedBy != "web" {
+		t.Fatalf("record = %+v, %v, %v; want it ready with what was made, still added by web", got, present, err)
+	}
+	if got.CurrentFor("1.3.0", "d2") {
+		t.Errorf("record = %+v reads current for the build that left it behind", got)
 	}
 }
 

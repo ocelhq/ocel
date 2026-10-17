@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
+	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 )
 
 type parsedPolicy struct {
@@ -238,7 +239,10 @@ func TestNoCredentialMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 					continue
 				}
 				for _, resource := range stringsOf(t, statement.Resource, "Resource") {
-					if slices.Contains(defaultNamespace.ScopedARNs(environment.TierProduction).bootstrapRoles, resource) || slices.Contains(defaultNamespace.ScopedARNs(environment.TierPreview).bootstrapRoles, resource) {
+					if slices.ContainsFunc(bothTiers, func(tier environment.Tier) bool {
+						scoped := defaultNamespace.ScopedARNs(tier)
+						return slices.Contains(scoped.bootstrapRoles, resource)
+					}) {
 						continue
 					}
 					if !boundaryScopes(statement.Condition) {
@@ -253,10 +257,54 @@ func TestNoCredentialMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 	}
 }
 
+func ocelRoleOf(tier environment.Tier) requestContext {
+	return taggedWithTier(tier, requestContext{"aws:ResourceTag/" + managedByTagKey: managedByTagValue})
+}
+
+func partRoleOf(tier environment.Tier) requestContext {
+	return taggedWithTier(tier, requestContext{
+		"aws:ResourceTag/" + managedByTagKey: managedByTagValue,
+		"aws:PrincipalAccount":               "111122223333",
+		"iam:PermissionsBoundary":            "arn:aws:iam::111122223333:policy/" + defaultNamespace.AppBoundaryNameFor(tier),
+	})
+}
+
+func partRolesOf(tier environment.Tier) []string {
+	path := "arn:aws:iam::111122223333:role" + defaultNamespace.AppRolePathFor(tier)
+	sync := envsourcesync.NamesFor(string(defaultNamespace), tier)
+	return []string{path + sync.Role, path + sync.ScheduleRole}
+}
+
 func TestNoCredentialRepointsTheTrustPolicyOfAnAppRole(t *testing.T) {
-	deployActions := actionsOf(t, mustRender(t, DeployCredentialPermissions))
-	if deployActions["iam:UpdateAssumeRolePolicy"] {
-		t.Error("the deploy credential grants iam:UpdateAssumeRolePolicy, which hands an app role's trust policy to whoever has the credential")
+	for _, tier := range bothTiers {
+		bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
+		if actionsOf(t, deployDoc)["iam:UpdateAssumeRolePolicy"] {
+			t.Errorf("the %s deploy credential grants iam:UpdateAssumeRolePolicy, which hands an app role's trust policy to whoever has the credential", tier)
+		}
+		appRole := "arn:aws:iam::111122223333:role" + defaultNamespace.AppRolePathFor(tier) + "ocel-app-web-production"
+		if allows(t, bootstrapDoc, "iam:UpdateAssumeRolePolicy", appRole, ocelRoleOf(tier)) {
+			t.Errorf("the %s bootstrap credential can repoint the trust policy of %s, an app role no bootstrap part runs as", tier, appRole)
+		}
+	}
+}
+
+func TestABootstrapCredentialRepointsTheTrustPolicyOfOnlyItsOwnTiersPartRoles(t *testing.T) {
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		for _, role := range partRolesOf(tier) {
+			if !allows(t, bootstrapDoc, "iam:UpdateAssumeRolePolicy", role, partRoleOf(tier)) {
+				t.Errorf("the %s bootstrap credential cannot put back the trust policy of %s, a role one of its parts runs as", tier, role)
+			}
+			if allows(t, bootstrapDoc, "iam:UpdateAssumeRolePolicy", role, ocelRoleOf(tier)) {
+				t.Errorf("the %s bootstrap credential can repoint the trust policy of %s while the role is not under the app boundary", tier, role)
+			}
+		}
+		for _, role := range partRolesOf(sibling) {
+			if allows(t, bootstrapDoc, "iam:UpdateAssumeRolePolicy", role, partRoleOf(sibling)) {
+				t.Errorf("the %s bootstrap credential can repoint the trust policy of %s, a role of the %s tier's parts", tier, role, sibling)
+			}
+		}
 	}
 }
 

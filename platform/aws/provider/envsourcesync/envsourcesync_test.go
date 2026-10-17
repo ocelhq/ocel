@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -187,6 +189,78 @@ func TestEnsuringASyncThatExistsUpdatesItInPlace(t *testing.T) {
 	fn := account.functions[names.Function]
 	if !bytes.Equal(fn.code, payloads.EnvSourceSync().Bytes) || fn.input.Environment.Variables["OCEL_VARIABLES_KEY"] != moved.Key {
 		t.Errorf("the sync was not moved forward in place: key %s", fn.input.Environment.Variables["OCEL_VARIABLES_KEY"])
+	}
+}
+
+func driftedSync(t *testing.T) (fresh, drifted *account, ids map[string]int) {
+	t.Helper()
+	fresh, drifted = newAccount(), newAccount()
+	for _, a := range []*account{fresh, drifted} {
+		if _, err := envsourcesync.Ensure(context.Background(), a.clients(), spec(environment.TierProduction)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ids = map[string]int{}
+	for name, r := range drifted.roles {
+		r.trust = `{"Version":"2012-10-17","Statement":[]}`
+		r.boundary = "arn:aws:iam::" + testAccount + ":policy/an-older-boundary"
+		ids[name] = r.id
+	}
+	drifted.calls = nil
+	return fresh, drifted, ids
+}
+
+func keptItsRoles(t *testing.T, a *account, ids map[string]int) {
+	t.Helper()
+	if slices.Contains(a.calls, "DeleteRole") {
+		t.Errorf("calls = %v, want no role deleted: a role made again is a new identity", a.calls)
+	}
+	for name, id := range ids {
+		if a.roles[name] == nil || a.roles[name].id != id {
+			t.Errorf("role %s is no longer the role it was", name)
+		}
+	}
+	if !a.functionRunsAsItsRole(envsourcesync.NamesFor("ocel", environment.TierProduction).Function) {
+		t.Error("the sync no longer runs as the role it was given, so Lambda's grant to decrypt its variables is gone")
+	}
+}
+
+func TestADeployOverSyncRolesWhoseTrustDriftedLeavesTheirTrustAndSaysThePartIsBehind(t *testing.T) {
+	t.Parallel()
+	fresh, drifted, ids := driftedSync(t)
+
+	resources, err := envsourcesync.Ensure(context.Background(), drifted.clients(), spec(environment.TierProduction))
+	if !errors.Is(err, stackrecords.ErrPartBehind) || len(resources) == 0 {
+		t.Fatalf("Ensure() over drifted roles = %d resources, %v; want the sync's resources and the part said to be behind", len(resources), err)
+	}
+
+	keptItsRoles(t, drifted, ids)
+	if slices.Contains(drifted.calls, "UpdateAssumeRolePolicy") {
+		t.Error("a deploy changed a role's trust policy")
+	}
+	for name, r := range drifted.roles {
+		if r.trust == fresh.roles[name].trust || r.boundary != testBoundary {
+			t.Errorf("role %s trusts %s under %s, want its trust left as it was and the app boundary put back", name, r.trust, r.boundary)
+		}
+	}
+}
+
+func TestABootstrapOverSyncRolesWhoseTrustDriftedPutsBackTheirTrustAndBoundaryInPlace(t *testing.T) {
+	t.Parallel()
+	fresh, drifted, ids := driftedSync(t)
+	bootstrapping := spec(environment.TierProduction)
+	bootstrapping.UpdatesTrust = true
+
+	if _, err := envsourcesync.Ensure(context.Background(), drifted.clients(), bootstrapping); err != nil {
+		t.Fatalf("Ensure() over drifted roles = %v", err)
+	}
+
+	keptItsRoles(t, drifted, ids)
+	for name, r := range drifted.roles {
+		want := fresh.roles[name]
+		if r.trust != want.trust || r.boundary != want.boundary {
+			t.Errorf("role %s trusts %s under %s, want %s under %s, as a fresh sync's", name, r.trust, r.boundary, want.trust, want.boundary)
+		}
 	}
 }
 
