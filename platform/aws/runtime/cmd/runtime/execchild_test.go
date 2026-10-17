@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
@@ -43,6 +44,10 @@ func TestHTTPChildHelper(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "served by %s with %s", filepath.Base(os.Args[0]), os.Getenv(helperSaidVar))
+	})
+	mux.HandleFunc("/origin-secret", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "env %q, previous %q, header %q",
+			os.Getenv(originguard.OriginSecretVar), os.Getenv(originguard.OriginSecretPreviousVar), r.Header.Get(originguard.OriginSecretHeader))
 	})
 	if err := http.ListenAndServe("127.0.0.1:"+os.Getenv("PORT"), mux); err != nil {
 		os.Exit(1)
@@ -205,6 +210,67 @@ func TestStartExecutable(t *testing.T) {
 		_, err := startExecutable([]string{"./nothing-was-built"}, freePort(t), nil, time.Second)
 		if err == nil || !strings.Contains(err.Error(), "nothing-was-built") {
 			t.Fatalf("error = %v, want a refusal naming the command the artifact declared", err)
+		}
+	})
+}
+
+func TestAnExecutedAppIsReachedOnlyWithTheOriginSecret(t *testing.T) {
+	const secretEvent = `{"version":"2.0","rawPath":"/origin-secret","requestContext":{"http":{"method":"GET"}}`
+
+	t.Run("refuses a request that presents no origin secret before it reaches the app", func(t *testing.T) {
+		t.Setenv(originguard.OriginSecretVar, "the-secret")
+		child, err := startExecutable(httpChildCommand(t), freePort(t), helperEnv(), 20*time.Second)
+		if err != nil {
+			t.Fatalf("startExecutable: %v", err)
+		}
+
+		rt, captured := fakeRuntime(t, []byte(secretEvent+`}`))
+		if err := handleInvocation(t.Context(), rt, child); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+		p, body := splitPrelude(t, captured.body)
+		if p.StatusCode != http.StatusForbidden {
+			t.Errorf("status = %d, want %d: the function URL is public and the edge is the only caller holding the secret", p.StatusCode, http.StatusForbidden)
+		}
+		if strings.Contains(string(body), "env") {
+			t.Errorf("body = %q, want the app never reached", body)
+		}
+	})
+
+	t.Run("refuses a request that presents the wrong origin secret", func(t *testing.T) {
+		t.Setenv(originguard.OriginSecretVar, "the-secret")
+		child, err := startExecutable(httpChildCommand(t), freePort(t), helperEnv(), 20*time.Second)
+		if err != nil {
+			t.Fatalf("startExecutable: %v", err)
+		}
+
+		rt, captured := fakeRuntime(t, []byte(secretEvent+`,"headers":{"x-ocel-origin-secret":"a-guess"}}`))
+		if err := handleInvocation(t.Context(), rt, child); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+		if p, _ := splitPrelude(t, captured.body); p.StatusCode != http.StatusForbidden {
+			t.Errorf("status = %d, want %d", p.StatusCode, http.StatusForbidden)
+		}
+	})
+
+	t.Run("serves a request that presents the previous origin secret, with the secret in neither the app's environment nor its request", func(t *testing.T) {
+		t.Setenv(originguard.OriginSecretVar, "the-secret")
+		t.Setenv(originguard.OriginSecretPreviousVar, "the-old-secret")
+		child, err := startExecutable(httpChildCommand(t), freePort(t), helperEnv(), 20*time.Second)
+		if err != nil {
+			t.Fatalf("startExecutable: %v", err)
+		}
+
+		rt, captured := fakeRuntime(t, []byte(secretEvent+`,"headers":{"x-ocel-origin-secret":"the-old-secret"}}`))
+		if err := handleInvocation(t.Context(), rt, child); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+		p, body := splitPrelude(t, captured.body)
+		if p.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d: the previous secret is still presented while the edge rotates", p.StatusCode, http.StatusOK)
+		}
+		if want := `env "", previous "", header ""`; string(body) != want {
+			t.Errorf("the app saw %s, want %s: a secret the app can read can reach its logs", body, want)
 		}
 	})
 }
