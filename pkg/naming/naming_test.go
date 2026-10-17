@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestIsResourceNameAcceptsHyphenatedLowercaseWordsOfAtMostSixtyThreeCharacters(t *testing.T) {
+	for name, want := range map[string]bool{
+		"orders":                true,
+		"order-emails":          true,
+		"v2":                    true,
+		strings.Repeat("a", 63): true,
+		strings.Repeat("a", 64): false,
+		"":                      false,
+		"Orders":                false,
+		"order--emails":         false,
+		"-orders":               false,
+		"orders-":               false,
+		"order_emails":          false,
+	} {
+		if got := IsResourceName(name); got != want {
+			t.Errorf("IsResourceName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
 func TestSanitizeKeepsTheAlphabet(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
 		{"Web/API/Users", "web-api-users"},
