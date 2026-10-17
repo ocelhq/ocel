@@ -189,10 +189,10 @@ func InspectBuiltImage(ctx context.Context, repository, digest string) (ImageIns
 	return host.Inspect(ctx, &http.Client{Transport: transport}, repository+":"+naming.DigestTag(digest))
 }
 
-func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []byte, next *NextServerRuntime) (v1.Image, func(), error) {
+func SaveFromDaemon(ctx context.Context, repository, digest string, w io.Writer) error {
 	host, err := DockerHostFromEnv()
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 	transport := host.Transport()
 	defer transport.CloseIdleConnections()
@@ -200,31 +200,40 @@ func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []by
 	ref := repository + ":" + naming.DigestTag(digest)
 	stream, err := host.Export(ctx, &http.Client{Transport: transport}, ref)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 	defer func() { _ = stream.Close() }()
 
+	checked := NewVerifiedExport(stream, host.Address, ref)
+	_, copyErr := io.Copy(w, checked)
+	if incomplete := checked.VerifyErr(); incomplete != nil {
+		return incomplete
+	}
+	if copyErr != nil {
+		return fmt.Errorf("save %s out of the daemon at %s: %w", ref, host.Address, copyErr)
+	}
+	return nil
+}
+
+func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []byte, next *NextServerRuntime) (v1.Image, func(), error) {
 	saved, err := os.CreateTemp("", "ocel-image-")
 	if err != nil {
 		return nil, nil, err
 	}
 	discard := func() { _ = os.Remove(saved.Name()) }
-	checked := NewVerifiedExport(stream, host.Address, ref)
-	_, copyErr := io.Copy(saved, checked)
-	closeErr := saved.Close()
-	if incomplete := checked.VerifyErr(); incomplete != nil {
-		discard()
-		return nil, nil, incomplete
+	saveErr := SaveFromDaemon(ctx, repository, digest, saved)
+	if closeErr := saved.Close(); saveErr == nil && closeErr != nil {
+		saveErr = fmt.Errorf("save %s@%s: %w", repository, digest, closeErr)
 	}
-	if copyErr != nil || closeErr != nil {
+	if saveErr != nil {
 		discard()
-		return nil, nil, fmt.Errorf("save %s out of the daemon at %s: %w", ref, host.Address, cmpErr(copyErr, closeErr))
+		return nil, nil, saveErr
 	}
 
 	base, err := tarball.ImageFromPath(saved.Name(), nil)
 	if err != nil {
 		discard()
-		return nil, nil, fmt.Errorf("read %s as the daemon at %s exported it: %w", ref, host.Address, err)
+		return nil, nil, fmt.Errorf("read %s@%s as the daemon exported it: %w", repository, digest, err)
 	}
 	wrapped, err := WrapContainer(base, runtime, next)
 	if err != nil {
@@ -232,13 +241,4 @@ func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []by
 		return nil, nil, err
 	}
 	return wrapped, discard, nil
-}
-
-func cmpErr(errs ...error) error {
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
