@@ -165,7 +165,7 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	reportCreatedCompute(progress, recorded, provisioned, start)
+	reportProvisionedCompute(progress, recorded, provisioned, start)
 	result.Functions, result.Containers = provisioned.Functions, provisioned.Containers
 	return result, nil
 }
