@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 func artifactTag(image string) (string, bool) {
@@ -51,7 +52,7 @@ func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, _
 }
 
 func isRunByARevision(ctx context.Context, revisions *runv1.APIService, project, image string) (bool, error) {
-	running, err := attempted(ctx, func(call ...googleapi.CallOption) (*runv1.ListRevisionsResponse, error) {
+	running, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*runv1.ListRevisionsResponse, error) {
 		return revisions.Namespaces.Revisions.List("namespaces/" + project).
 			LabelSelector(imageLabel + "=" + imageLabelValue(image)).Limit(1).Context(ctx).Do(call...)
 	})
@@ -74,7 +75,7 @@ func imagesOf(revisions ...*run.GoogleCloudRunV2Revision) []string {
 }
 
 func (p *Provider) readRevisionImages(ctx context.Context, services *run.Service, path string) ([]string, error) {
-	revision, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Revision, error) {
+	revision, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Revision, error) {
 		return services.Projects.Locations.Services.Revisions.Get(path).Context(ctx).Do(call...)
 	})
 	if err != nil {
@@ -87,7 +88,7 @@ func (p *Provider) listServiceImages(ctx context.Context, services *run.Service,
 	var images []string
 	page := ""
 	for {
-		listed, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2ListRevisionsResponse, error) {
+		listed, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2ListRevisionsResponse, error) {
 			return services.Projects.Locations.Services.Revisions.List(path).PageToken(page).Context(ctx).Do(call...)
 		})
 		if err != nil {
@@ -184,13 +185,13 @@ func (p *Provider) removeUnrunImages(ctx context.Context, app string, ran []stri
 }
 
 func untag(ctx context.Context, repositories *artifactregistry.Service, name string, progress progress.Log) {
-	_, err := attempted(ctx, func(call ...googleapi.CallOption) (*struct{}, error) {
+	_, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*struct{}, error) {
 		_, err := repositories.Projects.Locations.Repositories.Packages.Tags.Delete(name).Context(ctx).Do(call...)
 		return nil, err
 	})
 	switch {
 	case err == nil, absent(err):
-	case answeredCode(err) == http.StatusForbidden:
+	case googleretry.AnsweredCode(err) == http.StatusForbidden:
 		ensureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as this credential may not untag it, so the repository keeps the image until it is untagged: "+
 			"grant roles/artifactregistry.repoAdmin on the repository, as `ocel permissions deploy` prints", name))
 	default:
@@ -221,7 +222,7 @@ func (p *Provider) ensureImageTag(ctx context.Context, c *clients, image, versio
 	if err != nil {
 		return "", err
 	}
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Tag, error) {
+	held, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Tag, error) {
 		return repositories.Projects.Locations.Repositories.Packages.Tags.Get(name).Context(ctx).Do(call...)
 	})
 	if err == nil {
@@ -236,7 +237,7 @@ func (p *Provider) ensureImageTag(ctx context.Context, c *clients, image, versio
 		}
 		version = packageName + "/versions/sha256:" + digest
 	}
-	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Tag, error) {
+	_, err = googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*artifactregistry.Tag, error) {
 		return repositories.Projects.Locations.Repositories.Packages.Tags.
 			Create(packageName, &artifactregistry.Tag{Version: version}).TagId(tag).Context(ctx).Do(call...)
 	})

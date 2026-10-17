@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -90,10 +91,10 @@ func (c *clients) bindGateReader(ctx context.Context, tier environment.Tier, slu
 	path := secretPath(c.project, c.GateSecret(tier, slug))
 	var refused error
 	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return false, ctx.Err()
 		}
-		policy, err := attempted(ctx, service.Projects.Secrets.GetIamPolicy(path).Context(ctx).Do)
+		policy, err := googleretry.Attempted(ctx, service.Projects.Secrets.GetIamPolicy(path).Context(ctx).Do)
 		if absent(err) && !granting {
 			return false, nil
 		}
@@ -105,7 +106,7 @@ func (c *clients) bindGateReader(ctx context.Context, tier environment.Tier, slu
 			return false, nil
 		}
 		policy.Bindings = bindings
-		_, refused = attempted(ctx, service.Projects.Secrets.SetIamPolicy(path,
+		_, refused = googleretry.Attempted(ctx, service.Projects.Secrets.SetIamPolicy(path,
 			&secretmanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
 		if refused == nil {
 			return true, nil

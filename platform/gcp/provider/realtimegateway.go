@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
@@ -75,7 +76,7 @@ func (r realtimeEnvironment) readGateway(ctx context.Context) (*run.GoogleCloudR
 		return nil, err
 	}
 	name := r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
-	found, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(r.clients.servicePath(name)).Context(ctx).Do(call...)
 	})
 	if absent(err) {
@@ -152,7 +153,7 @@ func (r realtimeEnvironment) refuseUnbootstrappedTier(ctx context.Context) error
 		return err
 	}
 	account := r.clients.RealtimeAccount(r.ref.Tier)
-	_, err = attempted(ctx, accounts.Projects.ServiceAccounts.Get(accountPath(r.clients, account)).Context(ctx).Do)
+	_, err = googleretry.Attempted(ctx, accounts.Projects.ServiceAccounts.Get(accountPath(r.clients, account)).Context(ctx).Do)
 	if absent(err) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"the realtime gateways of tier %s run as the %s service account, and project %s has none: the tier was bootstrapped before realtime was served here.\n"+

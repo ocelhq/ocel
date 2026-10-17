@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -84,14 +85,14 @@ func (p *Provider) connectorKey(ctx context.Context, progress progress.Log) (str
 	}
 	name := clients.ConnectorKeySecret()
 	path := secretPath(clients.project, name)
-	_, err = attempted(ctx, service.Projects.Secrets.Create("projects/"+clients.project, &secretmanager.Secret{
+	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.Create("projects/"+clients.project, &secretmanager.Secret{
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
 	}).SecretId(name).Context(ctx).Do)
 	if err != nil && !taken(err) {
 		return "", fmt.Errorf("create the %s secret the connector's key is kept in: %w", name, err)
 	}
 
-	latest, err := attempted(ctx, service.Projects.Secrets.Versions.Access(path+"/versions/latest").Context(ctx).Do)
+	latest, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.Access(path+"/versions/latest").Context(ctx).Do)
 	switch {
 	case err == nil && latest.Payload != nil:
 		payload, err := base64.StdEncoding.DecodeString(latest.Payload.Data)
@@ -113,7 +114,7 @@ func (p *Provider) connectorKey(ctx context.Context, progress progress.Log) (str
 		return "", fmt.Errorf("mint the connector's key: %w", err)
 	}
 	payload := keyPayload(seed)
-	if _, err := attempted(ctx, service.Projects.Secrets.AddVersion(path, &secretmanager.AddSecretVersionRequest{
+	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.AddVersion(path, &secretmanager.AddSecretVersionRequest{
 		Payload: &secretmanager.SecretPayload{Data: base64.StdEncoding.EncodeToString(payload)},
 	}).Context(ctx).Do); err != nil {
 		return "", fmt.Errorf("write the connector's key into %s: %w", name, err)
@@ -133,7 +134,7 @@ func (p *Provider) bindConnectorKeySecret(ctx context.Context, granting bool) er
 	}
 	path := secretPath(clients.project, clients.ConnectorKeySecret())
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
-	policy, err := attempted(ctx, service.Projects.Secrets.GetIamPolicy(path).Context(ctx).Do)
+	policy, err := googleretry.Attempted(ctx, service.Projects.Secrets.GetIamPolicy(path).Context(ctx).Do)
 	if absent(err) && !granting {
 		return nil
 	}
@@ -145,7 +146,7 @@ func (p *Provider) bindConnectorKeySecret(ctx context.Context, granting bool) er
 		return nil
 	}
 	policy.Bindings = bindings
-	if _, err := attempted(ctx, service.Projects.Secrets.SetIamPolicy(path,
+	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.SetIamPolicy(path,
 		&secretmanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do); err != nil {
 		return fmt.Errorf("let %s read the connector's key: %w", member, err)
 	}
@@ -177,7 +178,7 @@ func (p *Provider) takeConnectorKey(ctx context.Context, progress progress.Log) 
 		return err
 	}
 	name := clients.ConnectorKeySecret()
-	if _, err := attempted(ctx, service.Projects.Secrets.Delete(secretPath(clients.project, name)).Context(ctx).Do); err != nil && !absent(err) {
+	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(secretPath(clients.project, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
 	ensureProgress(progress).Say("Deleted secret " + name + ", the connector's key")

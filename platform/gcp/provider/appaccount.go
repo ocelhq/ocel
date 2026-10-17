@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -112,7 +113,7 @@ func (c *clients) accountExists(ctx context.Context, account string) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	_, err = attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(c, account)).Context(ctx).Do)
+	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(c, account)).Context(ctx).Do)
 	if absent(err) {
 		return false, nil
 	}
@@ -131,14 +132,14 @@ func (c *clients) createAccount(ctx context.Context, account, displayName, descr
 	if err != nil {
 		return err
 	}
-	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+c.project, &iam.CreateServiceAccountRequest{
+	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+c.project, &iam.CreateServiceAccountRequest{
 		AccountId:      account,
 		ServiceAccount: &iam.ServiceAccount{DisplayName: displayName, Description: description},
 	}).Context(ctx).Do)
 	switch {
 	case err == nil, taken(err):
 		return nil
-	case answeredCode(err) == http.StatusTooManyRequests || strings.Contains(err.Error(), accountQuotaMessage):
+	case googleretry.AnsweredCode(err) == http.StatusTooManyRequests || strings.Contains(err.Error(), accountQuotaMessage):
 		return refusal.Refuse(refusal.CodeNotReady,
 			"project %s has as many service accounts as its Service Account Count quota allows, and every app ocel deploys runs as one of its own.\n"+
 				"Delete accounts nothing uses or raise the quota in the console, then deploy again", c.project)
@@ -151,7 +152,7 @@ func (c *clients) deleteAccount(ctx context.Context, id string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if _, err := attempted(ctx, service.Projects.ServiceAccounts.Delete(accountPath(c, id)).Context(ctx).Do); err != nil {
+	if _, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Delete(accountPath(c, id)).Context(ctx).Do); err != nil {
 		if absent(err) {
 			return false, nil
 		}
@@ -175,7 +176,7 @@ func clipped(text string, maxBytes int) string {
 func untilVisible(ctx context.Context, grant func() error) error {
 	var err error
 	for attempt := range appAccountVisibleAttempts {
-		if attempt > 0 && !waitedFor(ctx, attempt, waitCeiling) {
+		if attempt > 0 && !googleretry.WaitedFor(ctx, attempt, waitCeiling) {
 			return ctx.Err()
 		}
 		if err = grant(); !isUnseenAccount(err) {
@@ -201,7 +202,7 @@ func isUnseenAccount(err error) bool {
 	if err == nil || !strings.Contains(err.Error(), "does not exist") {
 		return false
 	}
-	return answeredCode(err) == http.StatusBadRequest || status.Code(err) == codes.InvalidArgument
+	return googleretry.AnsweredCode(err) == http.StatusBadRequest || status.Code(err) == codes.InvalidArgument
 }
 
 func explainMissingGrant(err error, grant string) error {
@@ -209,7 +210,7 @@ func explainMissingGrant(err error, grant string) error {
 		return nil
 	}
 	var coded interface{ GRPCStatus() *status.Status }
-	if answeredCode(err) == http.StatusForbidden || errors.As(err, &coded) && coded.GRPCStatus().Code() == codes.PermissionDenied {
+	if googleretry.AnsweredCode(err) == http.StatusForbidden || errors.As(err, &coded) && coded.GRPCStatus().Code() == codes.PermissionDenied {
 		return fmt.Errorf("the deploy credential lacks %s: %w", grant, err)
 	}
 	return err

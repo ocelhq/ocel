@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const bucketObjectsRole = "roles/storage.objectAdmin"
@@ -52,7 +53,7 @@ func (c *clients) bindBucketRole(ctx context.Context, bucket, member string, gra
 	handle := client.Bucket(bucket).IAM().V3()
 	var refused error
 	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return false, ctx.Err()
 		}
 		policy, err := handle.Policy(ctx)

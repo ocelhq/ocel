@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 
 	certmanager "google.golang.org/api/certificatemanager/v1"
 	"google.golang.org/api/googleapi"
@@ -84,7 +85,7 @@ func (p *Provider) authorized(
 	}
 	id := authorizationID(req.Hostname)
 	name := clients.certificatesGlobal() + "/dnsAuthorizations/" + id
-	authorization, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
+	authorization, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
 		return certificates.Projects.Locations.DnsAuthorizations.Get(name).Context(ctx).Do(call...)
 	})
 	switch {
@@ -105,7 +106,7 @@ func (p *Provider) authorized(
 	if err != nil {
 		return nil, err
 	}
-	authorization, err = attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
+	authorization, err = googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
 		return certificates.Projects.Locations.DnsAuthorizations.Get(name).Context(ctx).Do(call...)
 	})
 	if err != nil {
@@ -141,7 +142,7 @@ func (p *Provider) certified(
 	if err != nil {
 		return err
 	}
-	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
+	_, err = googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(name).Context(ctx).Do(call...)
 	})
 	switch {
@@ -178,7 +179,7 @@ func (p *Provider) issued(
 ) error {
 	certificate, err := waiting(ctx, issuance, "Certificate Manager to issue a certificate for "+req.Hostname,
 		func() (*certmanager.Certificate, error) {
-			return attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
+			return googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 				return certificates.Projects.Locations.Certificates.Get(name).Context(ctx).Do(call...)
 			})
 		},
@@ -224,7 +225,7 @@ func (p certificates) Inspect(
 	if err != nil {
 		return provider.CertificateHealth{}, err
 	}
-	current, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
+	current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(cert.ID).Context(ctx).Do(call...)
 	})
 	if absent(err) {
@@ -269,7 +270,7 @@ func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string
 	parent := clients.certificatesGlobal() + "/certificateMaps/" + certificateMap
 	var bound []string
 	for page := ""; ; {
-		entries, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.ListCertificateMapEntriesResponse, error) {
+		entries, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.ListCertificateMapEntriesResponse, error) {
 			return certificates.Projects.Locations.CertificateMaps.CertificateMapEntries.
 				List(parent).PageToken(page).Context(ctx).Do(call...)
 		})
@@ -315,7 +316,7 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	if err != nil {
 		return err
 	}
-	current, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
+	current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(cert.ID).Context(ctx).Do(call...)
 	})
 	if absent(err) {
@@ -351,7 +352,7 @@ func (p *Provider) awaitCertificates(
 	doing string,
 	call func(...googleapi.CallOption) (*certmanager.Operation, error),
 ) error {
-	started, err := attempted(ctx, call)
+	started, err := googleretry.Attempted(ctx, call)
 	if err != nil {
 		return fmt.Errorf("ask Certificate Manager to %s: %w", doing, err)
 	}
@@ -359,7 +360,7 @@ func (p *Provider) awaitCertificates(
 		if started.Done {
 			return started, nil
 		}
-		return attempted(ctx, func(opt ...googleapi.CallOption) (*certmanager.Operation, error) {
+		return googleretry.Attempted(ctx, func(opt ...googleapi.CallOption) (*certmanager.Operation, error) {
 			return certificates.Projects.Locations.Operations.Get(started.Name).Context(ctx).Do(opt...)
 		})
 	}, func(op *certmanager.Operation) bool { return op != nil && op.Done })

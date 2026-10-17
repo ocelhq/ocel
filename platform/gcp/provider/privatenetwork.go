@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -125,7 +126,7 @@ func (b bootstrap) makeNetwork(ctx context.Context, tier environment.Tier) error
 
 func (b bootstrap) ensureNetwork(ctx context.Context, engine *compute.Service, tier environment.Tier) error {
 	name := b.clients.Network(tier)
-	_, err := attempted(ctx, engine.Networks.Get(b.clients.project, name).Context(ctx).Do)
+	_, err := googleretry.Attempted(ctx, engine.Networks.Get(b.clients.project, name).Context(ctx).Do)
 	if err == nil {
 		return nil
 	}
@@ -145,7 +146,7 @@ func (b bootstrap) ensureNetwork(ctx context.Context, engine *compute.Service, t
 
 func (b bootstrap) ensureSubnetwork(ctx context.Context, engine *compute.Service, tier environment.Tier) error {
 	name := b.clients.Subnetwork(tier)
-	_, err := attempted(ctx, engine.Subnetworks.Get(b.clients.project, b.clients.region, name).Context(ctx).Do)
+	_, err := googleretry.Attempted(ctx, engine.Subnetworks.Get(b.clients.project, b.clients.region, name).Context(ctx).Do)
 	if err == nil {
 		return nil
 	}
@@ -174,14 +175,14 @@ func (b bootstrap) ensureConnectionPolicy(ctx context.Context, tier environment.
 	}
 	policies := service.Projects.Locations.ServiceConnectionPolicies
 	named := b.clients.ConnectionPolicy(tier, policy.name)
-	_, err = attempted(ctx, policies.Get(b.connectionPolicyPath(tier, policy)).Context(ctx).Do)
+	_, err = googleretry.Attempted(ctx, policies.Get(b.connectionPolicyPath(tier, policy)).Context(ctx).Do)
 	if err == nil {
 		return nil
 	}
 	if !absent(err) {
 		return fmt.Errorf("read the %s service connection policy: %w", named, err)
 	}
-	started, err := attempted(ctx, policies.Create(b.clients.location(), &networkconnectivity.ServiceConnectionPolicy{
+	started, err := googleretry.Attempted(ctx, policies.Create(b.clients.location(), &networkconnectivity.ServiceConnectionPolicy{
 		Description:  "lets " + policy.service + " connect ocel's " + string(tier) + " resources into " + b.clients.Network(tier),
 		Network:      b.clients.NetworkPath(tier),
 		ServiceClass: policy.class,
@@ -279,7 +280,7 @@ func (b bootstrap) listDatabasesOn(ctx context.Context, tier environment.Tier) (
 	if err != nil {
 		return nil, err
 	}
-	listed, err := attempted(ctx, service.Instances.List(b.clients.project).Filter(databasesFilter(b.clients.namespace, tier)).
+	listed, err := googleretry.Attempted(ctx, service.Instances.List(b.clients.project).Filter(databasesFilter(b.clients.namespace, tier)).
 		MaxResults(resourcesNamedOnNetwork).Context(ctx).Do)
 	if err != nil {
 		return nil, fmt.Errorf("read which databases are on the %s network: %w", b.clients.Network(tier), err)
@@ -317,7 +318,7 @@ func (b bootstrap) removeNetwork(ctx context.Context, tier environment.Tier) err
 	}
 	for _, policy := range connectionPolicies {
 		named := b.clients.ConnectionPolicy(tier, policy.name)
-		deleting, err := attempted(ctx, service.Projects.Locations.ServiceConnectionPolicies.Delete(b.connectionPolicyPath(tier, policy)).Context(ctx).Do)
+		deleting, err := googleretry.Attempted(ctx, service.Projects.Locations.ServiceConnectionPolicies.Delete(b.connectionPolicyPath(tier, policy)).Context(ctx).Do)
 		switch {
 		case absent(err):
 		case err != nil:
@@ -353,7 +354,7 @@ func (b bootstrap) computeAwaited(
 	region, doing string,
 	call func(...googleapi.CallOption) (*compute.Operation, error),
 ) error {
-	started, err := attempted(ctx, call)
+	started, err := googleretry.Attempted(ctx, call)
 	if err != nil {
 		return fmt.Errorf("%s: %w", doing, err)
 	}
@@ -362,9 +363,9 @@ func (b bootstrap) computeAwaited(
 			return started, nil
 		}
 		if region == "" {
-			return attempted(ctx, engine.GlobalOperations.Get(b.clients.project, started.Name).Context(ctx).Do)
+			return googleretry.Attempted(ctx, engine.GlobalOperations.Get(b.clients.project, started.Name).Context(ctx).Do)
 		}
-		return attempted(ctx, engine.RegionOperations.Get(b.clients.project, region, started.Name).Context(ctx).Do)
+		return googleretry.Attempted(ctx, engine.RegionOperations.Get(b.clients.project, region, started.Name).Context(ctx).Do)
 	}, func(op *compute.Operation) bool { return op != nil && op.Status == operationDone })
 	if err != nil {
 		return err
@@ -378,7 +379,7 @@ func (b bootstrap) computeAwaited(
 func (b bootstrap) connectivityAwaited(ctx context.Context, service *networkconnectivity.Service, doing string, started *networkconnectivity.GoogleLongrunningOperation) error {
 	_, err := awaitOperation(ctx, patience{attempts: waitAttempts, ceiling: waitCeiling}, "Network Connectivity", doing, started, connectivityOutcome,
 		func(name string) (*networkconnectivity.GoogleLongrunningOperation, error) {
-			return attempted(ctx, service.Projects.Locations.Operations.Get(name).Context(ctx).Do)
+			return googleretry.Attempted(ctx, service.Projects.Locations.Operations.Get(name).Context(ctx).Do)
 		})
 	return err
 }

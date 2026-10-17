@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
 )
@@ -56,7 +57,7 @@ func (p *Provider) newBastion(c *clients) bastion {
 		grantInvoker:   p.grantInvoker,
 		prove:          ports.ProveIdentity,
 		open:           relay.OpenForward,
-		waited:         waited,
+		waited:         googleretry.Waited,
 	}
 }
 

@@ -29,6 +29,7 @@ import (
 	sqladmin "google.golang.org/api/sqladmin/v1"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -221,7 +222,7 @@ func (c *clients) ReadProjectNumber(ctx context.Context) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		project, err := attempted(ctx, service.Projects.Get(c.project).Context(ctx).Do)
+		project, err := googleretry.Attempted(ctx, service.Projects.Get(c.project).Context(ctx).Do)
 		if err != nil {
 			return 0, fmt.Errorf("read project %s's number, which names its service agents and its resources in IAM conditions: %w", c.project, err)
 		}

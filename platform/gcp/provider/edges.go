@@ -12,6 +12,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -128,5 +129,5 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 }
 
 func waitBeforeRetry(ctx context.Context, attempt int) bool {
-	return waitedFor(ctx, attempt, waitCeiling)
+	return googleretry.WaitedFor(ctx, attempt, waitCeiling)
 }

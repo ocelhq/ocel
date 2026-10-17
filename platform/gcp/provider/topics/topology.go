@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -181,7 +182,7 @@ func durationText(d time.Duration) string {
 }
 
 func ensureTopic(ctx context.Context, service *pubsub.Service, path string) error {
-	err := retried(ctx, func() error {
+	err := googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Topics.Create(path, &pubsub.Topic{}).Context(ctx).Do()
 		return err
 	})
@@ -192,7 +193,7 @@ func ensureTopic(ctx context.Context, service *pubsub.Service, path string) erro
 }
 
 func ensureSubscription(ctx context.Context, service *pubsub.Service, path string, desired *pubsub.Subscription) error {
-	err := retried(ctx, func() error {
+	err := googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Subscriptions.Create(path, desired).Context(ctx).Do()
 		return err
 	})
@@ -203,7 +204,7 @@ func ensureSubscription(ctx context.Context, service *pubsub.Service, path strin
 		return fmt.Errorf("create Pub/Sub subscription %s: %w", path, err)
 	}
 	var current *pubsub.Subscription
-	err = retried(ctx, func() error {
+	err = googleretry.Done(ctx, func() error {
 		var readErr error
 		current, readErr = service.Projects.Subscriptions.Get(path).Context(ctx).Do()
 		return readErr
@@ -214,7 +215,7 @@ func ensureSubscription(ctx context.Context, service *pubsub.Service, path strin
 	if current.EnableMessageOrdering != desired.EnableMessageOrdering {
 		return fmt.Errorf("subscription %s has message ordering %t and its topic now declares %t, and Pub/Sub cannot change ordering on a subscription that exists: rename the consumer to start a new subscription", path, current.EnableMessageOrdering, desired.EnableMessageOrdering)
 	}
-	err = retried(ctx, func() error {
+	err = googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Subscriptions.Patch(path, &pubsub.UpdateSubscriptionRequest{Subscription: desired, UpdateMask: mutableSubscription}).Context(ctx).Do()
 		return err
 	})
@@ -257,7 +258,7 @@ func grantPubSubRole(ctx context.Context, path, role, member string, calls iamPo
 	}
 	var refused error
 	for attempt := range grantAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return ctx.Err()
 		}
 		policy, err := readPolicy(ctx, calls)
@@ -268,7 +269,7 @@ func grantPubSubRole(ctx context.Context, path, role, member string, calls iamPo
 			return nil
 		}
 		policy.Bindings = withMember(policy.Bindings, role, member)
-		refused = retried(ctx, func() error { return calls.write(policy) })
+		refused = googleretry.Done(ctx, func() error { return calls.write(policy) })
 		if refused == nil || !stale(refused) {
 			break
 		}
@@ -282,7 +283,7 @@ func grantPubSubRole(ctx context.Context, path, role, member string, calls iamPo
 func revokePubSubRole(ctx context.Context, path, role, member string, calls iamPolicyCalls) (bool, error) {
 	var refused error
 	for attempt := range grantAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return false, ctx.Err()
 		}
 		policy, err := readPolicy(ctx, calls)
@@ -297,7 +298,7 @@ func revokePubSubRole(ctx context.Context, path, role, member string, calls iamP
 			return false, nil
 		}
 		policy.Bindings = bindings
-		refused = retried(ctx, func() error { return calls.write(policy) })
+		refused = googleretry.Done(ctx, func() error { return calls.write(policy) })
 		if refused == nil {
 			return true, nil
 		}
@@ -313,7 +314,7 @@ func revokePubSubRole(ctx context.Context, path, role, member string, calls iamP
 
 func readPolicy(ctx context.Context, calls iamPolicyCalls) (*pubsub.Policy, error) {
 	var policy *pubsub.Policy
-	err := retried(ctx, func() error {
+	err := googleretry.Done(ctx, func() error {
 		var readErr error
 		policy, readErr = calls.read()
 		return readErr
@@ -436,7 +437,7 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 }
 
 func deleteIgnoringMissing(ctx context.Context, what string, call func() error) error {
-	if err := retried(ctx, call); err != nil && !isAnswered(err, http.StatusNotFound) {
+	if err := googleretry.Done(ctx, call); err != nil && !isAnswered(err, http.StatusNotFound) {
 		return fmt.Errorf("delete Pub/Sub %s: %w", what, err)
 	}
 	return nil
@@ -445,3 +446,5 @@ func deleteIgnoringMissing(ctx context.Context, what string, call func() error) 
 func stale(err error) bool {
 	return isAnswered(err, http.StatusConflict) || isAnswered(err, http.StatusPreconditionFailed)
 }
+
+func isAnswered(err error, code int) bool { return googleretry.AnsweredCode(err) == code }

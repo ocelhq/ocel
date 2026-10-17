@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -206,7 +207,7 @@ func (b bootstrap) readDelayQueue(ctx context.Context, tier environment.Tier) (*
 	if err != nil {
 		return nil, err
 	}
-	queue, err := dialled(ctx, func() (*cloudtaskspb.Queue, error) {
+	queue, err := googleretry.Called(ctx, func() (*cloudtaskspb.Queue, error) {
 		return client.GetQueue(ctx, &cloudtaskspb.GetQueueRequest{Name: b.delayQueuePath(tier)})
 	})
 	if status.Code(err) == codes.NotFound {
@@ -233,10 +234,10 @@ func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, mem
 	path := c.DelayQueuePath(c.region, tier)
 	var refused error
 	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return ctx.Err()
 		}
-		policy, err := dialled(ctx, func() (*iampb.Policy, error) {
+		policy, err := googleretry.Called(ctx, func() (*iampb.Policy, error) {
 			return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: path})
 		})
 		if err != nil {
@@ -247,7 +248,7 @@ func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, mem
 			return nil
 		}
 		policy.Bindings = bindings
-		_, refused = dialled(ctx, func() (*iampb.Policy, error) {
+		_, refused = googleretry.Called(ctx, func() (*iampb.Policy, error) {
 			return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: path, Policy: policy})
 		})
 		if refused == nil {
@@ -265,7 +266,7 @@ func (b bootstrap) purgeDelayQueue(ctx context.Context, tier environment.Tier) e
 	if err != nil {
 		return err
 	}
-	_, err = dialled(ctx, func() (*cloudtaskspb.Queue, error) {
+	_, err = googleretry.Called(ctx, func() (*cloudtaskspb.Queue, error) {
 		return client.PurgeQueue(ctx, &cloudtaskspb.PurgeQueueRequest{Name: b.delayQueuePath(tier)})
 	})
 	if err != nil && status.Code(err) != codes.NotFound {
@@ -308,7 +309,7 @@ func (b bootstrap) ensureRunIndexes(ctx context.Context, tier environment.Tier) 
 	database := databasePath(b.clients, b.clients.TaskDatabase(tier))
 	for group, field := range map[string]string{runsCollectionGroup: runPurgeField, recordsCollectionGroup: recordExpiryField} {
 		name := database + "/collectionGroups/" + group + "/fields/" + field
-		operation, err := attempted(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(name,
+		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(name,
 			&firestoreadmin.GoogleFirestoreAdminV1Field{TtlConfig: &firestoreadmin.GoogleFirestoreAdminV1TtlConfig{}}).
 			UpdateMask("ttlConfig").Context(ctx).Do)
 		if err != nil {
@@ -320,7 +321,7 @@ func (b bootstrap) ensureRunIndexes(ctx context.Context, tier environment.Tier) 
 	}
 	parent := database + "/collectionGroups/" + runsCollectionGroup
 	for _, index := range runIndexes() {
-		operation, err := attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(parent, index).Context(ctx).Do)
+		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(parent, index).Context(ctx).Do)
 		if taken(err) {
 			continue
 		}

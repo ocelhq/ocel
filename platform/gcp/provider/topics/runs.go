@@ -13,6 +13,7 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -74,7 +75,7 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 func (t Tasks) move(ctx context.Context, id string, due time.Time, keepTTL bool) error {
 	var err error
 	for attempt := range moveAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return ctx.Err()
 		}
 		if err = t.moveOnce(ctx, id, due, keepTTL); connect.CodeOf(err) != connect.CodeAborted {

@@ -9,6 +9,8 @@ import (
 
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const invalidateTagsPerRequest = 10
@@ -26,7 +28,7 @@ func (p *Provider) InvalidateTags(ctx context.Context, urlMap string, tags []str
 		return err
 	}
 	for chunk := range slices.Chunk(tags, invalidateTagsPerRequest) {
-		_, err := attempted(ctx, func(call ...googleapi.CallOption) (*compute.Operation, error) {
+		_, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.Operation, error) {
 			return engine.UrlMaps.InvalidateCache(clients.project, urlMap, &compute.CacheInvalidationRule{CacheTags: chunk}).Context(ctx).Do(call...)
 		})
 		if err != nil {
@@ -50,7 +52,7 @@ func (p *Provider) InvalidateHostnames(ctx context.Context, urlMap string, hostn
 	}
 	var failed []error
 	for _, hostname := range hostnames {
-		_, err := attempted(ctx, func(call ...googleapi.CallOption) (*compute.Operation, error) {
+		_, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.Operation, error) {
 			return engine.UrlMaps.InvalidateCache(clients.project, urlMap, &compute.CacheInvalidationRule{Host: hostname, Path: "/*"}).Context(ctx).Do(call...)
 		})
 		if err != nil {

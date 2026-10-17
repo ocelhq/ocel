@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -51,7 +52,7 @@ func (c *clients) projectPolicy(ctx context.Context) (*cloudresourcemanager.Poli
 	if err != nil {
 		return nil, err
 	}
-	policy, err := attempted(ctx, service.Projects.GetIamPolicy(c.project,
+	policy, err := googleretry.Attempted(ctx, service.Projects.GetIamPolicy(c.project,
 		&cloudresourcemanager.GetIamPolicyRequest{
 			Options: &cloudresourcemanager.GetPolicyOptions{RequestedPolicyVersion: conditionalPolicyVersion},
 		}).Context(ctx).Do)
@@ -81,7 +82,7 @@ func (c *clients) bindProjectRole(ctx context.Context, member, role string, cond
 	}
 	var refused error
 	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return ctx.Err()
 		}
 		policy, err := c.projectPolicy(ctx)
@@ -94,7 +95,7 @@ func (c *clients) bindProjectRole(ctx context.Context, member, role string, cond
 		}
 		policy.Bindings = bindings
 		policy.Version = conditionalPolicyVersion
-		_, refused = attempted(ctx, service.Projects.SetIamPolicy(c.project,
+		_, refused = googleretry.Attempted(ctx, service.Projects.SetIamPolicy(c.project,
 			&cloudresourcemanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
 		if refused == nil {
 			return nil
@@ -112,7 +113,7 @@ func (c *clients) keyPolicy(ctx context.Context, tier environment.Tier) (*iampb.
 		return nil, err
 	}
 	key := keyPath(c, string(tier))
-	if _, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
+	if _, err := googleretry.Called(ctx, func() (*kmspb.CryptoKey, error) {
 		return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: key})
 	}); err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -120,7 +121,7 @@ func (c *clients) keyPolicy(ctx context.Context, tier environment.Tier) (*iampb.
 		}
 		return nil, fmt.Errorf("read the %s key: %w", tier, err)
 	}
-	policy, err := dialled(ctx, func() (*iampb.Policy, error) {
+	policy, err := googleretry.Called(ctx, func() (*iampb.Policy, error) {
 		return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: key})
 	})
 	if err != nil {
@@ -151,7 +152,7 @@ func (c *clients) bindKeyRoles(ctx context.Context, tier environment.Tier, membe
 	}
 	var refused error
 	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return false, ctx.Err()
 		}
 		policy, err := c.keyPolicy(ctx, tier)
@@ -163,7 +164,7 @@ func (c *clients) bindKeyRoles(ctx context.Context, tier environment.Tier, membe
 			return false, nil
 		}
 		policy.Bindings = bindings
-		_, refused = dialled(ctx, func() (*iampb.Policy, error) {
+		_, refused = googleretry.Called(ctx, func() (*iampb.Policy, error) {
 			return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: keyPath(c, string(tier)), Policy: policy})
 		})
 		if refused == nil {
@@ -238,7 +239,7 @@ func (c *clients) accountRoleGranted(ctx context.Context, account, role, member 
 	if err != nil {
 		return false, err
 	}
-	policy, err := attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(c, account)).Context(ctx).Do)
+	policy, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(c, account)).Context(ctx).Do)
 	if absent(err) {
 		return false, nil
 	}
@@ -257,10 +258,10 @@ func (c *clients) bindAccountRole(ctx context.Context, account, role, member str
 	}
 	var refused error
 	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return ctx.Err()
 		}
-		policy, err := attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(c, account)).Context(ctx).Do)
+		policy, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(c, account)).Context(ctx).Do)
 		if absent(err) && !granting {
 			return nil
 		}
@@ -272,7 +273,7 @@ func (c *clients) bindAccountRole(ctx context.Context, account, role, member str
 			return nil
 		}
 		policy.Bindings = bindings
-		_, refused = attempted(ctx, service.Projects.ServiceAccounts.SetIamPolicy(accountPath(c, account),
+		_, refused = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.SetIamPolicy(accountPath(c, account),
 			&iam.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
 		if refused == nil || !stale(refused) {
 			break
@@ -291,10 +292,10 @@ func (c *clients) unbindAccountRole(ctx context.Context, account, role string) (
 	}
 	var refused error
 	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return nil, ctx.Err()
 		}
-		policy, err := attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(c, account)).Context(ctx).Do)
+		policy, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(c, account)).Context(ctx).Do)
 		if absent(err) {
 			return nil, nil
 		}
@@ -312,7 +313,7 @@ func (c *clients) unbindAccountRole(ctx context.Context, account, role string) (
 		if len(removed) == 0 {
 			return nil, nil
 		}
-		_, refused = attempted(ctx, service.Projects.ServiceAccounts.SetIamPolicy(accountPath(c, account),
+		_, refused = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.SetIamPolicy(accountPath(c, account),
 			&iam.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
 		if refused == nil {
 			return removed, nil
@@ -369,7 +370,7 @@ func (c *clients) unbindProjectMember(ctx context.Context, member string) ([]*cl
 	}
 	var refused error
 	for attempt := range bindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
+		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return nil, ctx.Err()
 		}
 		policy, err := c.projectPolicy(ctx)
@@ -382,7 +383,7 @@ func (c *clients) unbindProjectMember(ctx context.Context, member string) ([]*cl
 		}
 		policy.Bindings = bindings
 		policy.Version = conditionalPolicyVersion
-		_, refused = attempted(ctx, service.Projects.SetIamPolicy(c.project,
+		_, refused = googleretry.Attempted(ctx, service.Projects.SetIamPolicy(c.project,
 			&cloudresourcemanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
 		if refused == nil {
 			return removed, nil

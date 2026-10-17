@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -184,7 +185,7 @@ func (p *Provider) grantInvoker(ctx context.Context, c *clients, service, member
 	}
 	path := c.servicePath(service)
 	return p.retryWrite(ctx, "let "+member+" invoke "+service, func() error {
-		policy, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
+		policy, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
 			return services.Projects.Locations.Services.GetIamPolicy(path).Context(ctx).Do(call...)
 		})
 		if err != nil {
@@ -196,7 +197,7 @@ func (p *Provider) grantInvoker(ctx context.Context, c *clients, service, member
 			return nil
 		}
 		policy.Bindings = append(policy.Bindings, &run.GoogleIamV1Binding{Role: invokerRole, Members: []string{member}})
-		_, err = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
+		_, err = googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
 			return services.Projects.Locations.Services.SetIamPolicy(path, &run.GoogleIamV1SetIamPolicyRequest{Policy: policy}).Context(ctx).Do(call...)
 		})
 		return err

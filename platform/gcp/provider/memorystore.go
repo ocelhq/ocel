@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/api/googleapi"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const memorystoreHost = "https://memorystore.googleapis.com"
@@ -202,7 +204,7 @@ func (m memorystore) call(ctx context.Context, method, name string, query url.Va
 	if len(query) > 0 {
 		target += "?" + query.Encode()
 	}
-	answer, _, err := asked(ctx, func() ([]byte, int, error) {
+	answer, _, err := googleretry.Asked(ctx, func() ([]byte, int, error) {
 		return m.send(ctx, method, target, sent)
 	})
 	if err != nil {
