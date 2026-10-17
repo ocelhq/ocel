@@ -1,0 +1,12 @@
+[package]
+name = "web"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+store = { package = "storage", path = "../storage", optional = true }
+extra = { path = "../extra", optional = true }
+
+[features]
+default = ["store/db", "extra?/loud"]
+bonus = ["dep:extra"]
