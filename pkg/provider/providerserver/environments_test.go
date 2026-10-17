@@ -837,7 +837,7 @@ func TestRemovingAPreviewWhoseRecordIsGoneStillTakesDownTheStacksAndPromotionsLe
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
 	deployed(t, vendor, environment.TierPreview, "shop")
-	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-6", "p1")
+	releases := seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-6", "p1")
 	stack := naming.InfraStack("pr-7")
 	seedEnvironment(t, vendor, "shop", stack)
 
@@ -845,6 +845,9 @@ func TestRemovingAPreviewWhoseRecordIsGoneStillTakesDownTheStacksAndPromotionsLe
 		if result := removeEnvironment(t, client, "shop", pointer); !result.GetSuccess() {
 			t.Errorf("removing %s = %q, want what is left under it taken down", pointer, result.GetError())
 		}
+	}
+	if history, err := releases.History(context.Background(), "pr-6"); err != nil || len(history) != 0 {
+		t.Errorf("pr-6's promotions after its removal = %v, %v; want p1 reclaimed", history, err)
 	}
 	if !slices.Contains(vendor.Journal(), "destroy "+stack.String()) {
 		t.Errorf("the teardown reached %v, want %s destroyed", vendor.Journal(), stack)
