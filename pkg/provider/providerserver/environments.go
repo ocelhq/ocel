@@ -3,7 +3,6 @@ package providerserver
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -246,21 +245,18 @@ func refuseUnrecordedPreview(ctx context.Context, store keyvalue.Store, slug, pr
 	if held {
 		return nil
 	}
-	metas, err := stackrecords.EnvironmentMetas(ctx, store, environment.TierPreview, slug)
+	environments, err := stackrecords.PreviewEnvironments(ctx, store, slug)
 	if err != nil {
 		return err
 	}
-	previews := slices.Collect(maps.Keys(metas))
-	for _, stack := range stacks {
-		if stack.Env != "" && stack.Env != stackrecords.ProductionEnv && !slices.Contains(previews, stack.Env) {
-			previews = append(previews, stack.Env)
-		}
+	previews := make([]string, 0, len(environments))
+	for _, each := range environments {
+		previews = append(previews, each.Identity)
 	}
 	if len(previews) == 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"no preview named %s is recorded for %s, so nothing was torn down: %s has no previews", preview, slug, slug)
 	}
-	slices.Sort(previews)
 	return refusal.Refuse(refusal.CodeInvalid,
 		"no preview named %s is recorded for %s, so nothing was torn down: its previews are %s", preview, slug, strings.Join(previews, ", "))
 }

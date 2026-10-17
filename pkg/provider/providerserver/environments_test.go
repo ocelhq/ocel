@@ -781,7 +781,7 @@ func TestRemovingAPreviewNothingIsRecordedForIsRefusedNamingItAndThePreviewsThat
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
 	deployed(t, vendor, environment.TierPreview, "shop")
-	seedEnvironment(t, vendor, "shop", naming.InfraStack("pr-7"))
+	seedEnvironment(t, vendor, "shop", naming.InfraStack("pr-7"), naming.InfraStack("pr-8"))
 	recordLabelledEnvironment(t, vendor, "pr-8", "", stackrecords.LifecycleEphemeral)
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
@@ -802,6 +802,34 @@ func TestRemovingAPreviewNothingIsRecordedForIsRefusedNamingItAndThePreviewsThat
 	}
 	if journal := vendor.Journal(); slices.ContainsFunc(journal, func(entry string) bool { return strings.HasPrefix(entry, "destroy ") }) {
 		t.Errorf("the refused removal reached %v, want no stack destroyed", journal)
+	}
+}
+
+func TestARefusedPreviewRemovalNamesThePreviewsListEnvironmentsLists(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedEnvironment(t, vendor, "shop", naming.InfraStack("pr-7"))
+	recordLabelledEnvironment(t, vendor, "pr-10", "", stackrecords.LifecycleEphemeral)
+	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatalf("ListEnvironments() error = %v", err)
+	}
+	var previews []string
+	for _, each := range listed.GetEnvironments() {
+		previews = append(previews, each.GetIdentity())
+	}
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-9"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	_, err = drain(stream)
+	if want := "its previews are " + strings.Join(previews, ", "); err == nil || !strings.HasSuffix(err.Error(), want) {
+		t.Errorf("RemoveEnvironment() = %v, want it to end %q: the previews a refusal names and the previews `ocel preview ls` shows are one list", err, want)
 	}
 }
 
