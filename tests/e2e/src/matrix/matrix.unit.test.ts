@@ -22,6 +22,7 @@ import {
   prerenderBucketChecks,
   prerenderChecks,
   taskConcurrencyCheck,
+  tasksWireChecks,
   todoAndDocumentChecks,
 } from "../checks";
 import { PREVIEW_TITLES } from "../checks/previews";
@@ -711,16 +712,16 @@ describe("sdk/go, sdk/python and sdk/rust", () => {
     }
   });
 
-  it("publishes from python as a container on aws behind cloudflare, expecting nothing red, and skips it where no zone or Cloudflare API is", () => {
+  it("skips python as a container on aws behind cloudflare under #1551, whose worker aws refuses on container compute, and where no zone or Cloudflare API is", () => {
     const cell = "sdk/python-cloudflare-container";
-    const planned = planOn("aws", ZONED_RUN);
-    expect(planned.cells.map((one) => one.name)).toContain(cell);
-    expect(planned.skipped[cell]).toBeUndefined();
-    expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
-    expect(skippedBy(planOn("aws"), cell)).toEqual(["no-cloudflare-zone"]);
-    expect(skippedBy(planOn("aws.floci"), cell)).toEqual(
-      ["floci-runs-no-event-api", "no-cloudflare-api"].sort(),
+    expect(skippedBy(planOn("aws", ZONED_RUN), cell)).toEqual(["aws-container-hosts-no-worker"]);
+    expect(skippedBy(planOn("aws"), cell)).toEqual(
+      ["aws-container-hosts-no-worker", "no-cloudflare-zone"].sort(),
     );
+    expect(skippedBy(planOn("aws.floci"), cell)).toEqual(
+      ["aws-container-hosts-no-worker", "floci-runs-no-event-api", "no-cloudflare-api"].sort(),
+    );
+    expect(gaps.find((gap) => gap.id === "aws-container-hosts-no-worker")?.issue).toBe(1551);
   });
 
   it("skips every language on a box under the tickets for their images", () => {
@@ -747,6 +748,38 @@ describe("sdk/go, sdk/python and sdk/rust", () => {
     const skipped = planOn("gcp.floci").skipped;
     for (const cell of CELLS) {
       expect(skipped[cell]?.map((gap) => gap.id)).toContain("floci-serves-no-cloud-sql");
+    }
+  });
+});
+
+describe("a Python worker and a Next.js worker", () => {
+  const WIRE_TITLES = tasksWireChecks({
+    task: "verbatim",
+    topic: "notices",
+    consumer: "notice-log",
+  }).map((one) => one.title);
+  const WORKER_FIXTURES = ["sdk/python", "sdk/next"];
+
+  it("run the wire checks in every cell of sdk/python and sdk/next a lane plans", () => {
+    const driven = LANES.flatMap((lane) =>
+      planOn(lane).cells.filter((cell) => WORKER_FIXTURES.includes(cell.fixture)),
+    );
+    expect(driven.length).toBeGreaterThan(0);
+    for (const cell of driven) {
+      expect(cell.steps.map((step) => step.title)).toEqual(expect.arrayContaining(WIRE_TITLES));
+    }
+  });
+
+  it("expect none of the wire checks red on dev or aws", () => {
+    for (const lane of ["dev", "aws"] as const) {
+      const { cells, expectedFailures } = planOn(lane);
+      for (const fixture of WORKER_FIXTURES) {
+        expect(cells.map((cell) => cell.name)).toContain(fixture);
+        const listed = Object.keys(expectedFailures[`${fixture}/web`] ?? {});
+        expect(listed.filter((title) => WIRE_TITLES.some((one) => title.endsWith(one)))).toEqual(
+          [],
+        );
+      }
     }
   });
 });

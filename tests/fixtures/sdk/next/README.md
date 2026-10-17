@@ -9,6 +9,14 @@ completes, and one environment through `ocel/env/next`: a plain `GREETING`, a se
 `NEXT_PUBLIC_GREETING` with a sensitive `SENSITIVE_TOKEN` that `/` renders on the server and in
 the browser. The declarations sit in the default discovery directory.
 
+`wire.ts`, beside the other declarations, is what the wire checks read, as in `sdk/node`: the
+task `verbatim` and the topic `notices` with its consumer `notice-log`, whose handlers trigger
+`sighting` with the kind, name and topic their run context reports and the payload's JSON text.
+The route handlers under `app/api/wire` send the request body as the payload's JSON text, and
+answer the run's or message's id, a run's payload and output as JSON text, and what a handler
+recorded under a tag. The default worker serves them from the function or image that carries
+the worker entry the build bundles.
+
 `next build` reads both resources while it prerenders: `/prerender` and
 `/prerender/rows/[n]` from postgres, and `/prerender/bucket` from `uploads`, so the app builds
 only when the build is handed their bindings. `prerender.Dockerfile` builds the same app in an
