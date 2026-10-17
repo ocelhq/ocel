@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"maps"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 )
@@ -176,6 +178,42 @@ func TestShapeOfAnEphemeralPreviewPricesTheDatabaseAndBucketItProvisions(t *test
 	}
 	if counts := typeCounts(set); counts["aws_rds_cluster"] == 0 {
 		t.Error("an ephemeral preview priced no aurora cluster, want the one it provisions")
+	}
+}
+
+func TestShapeOfAnEphemeralPreviewPricesTheContainerWorkersAndSchedulesItDeclares(t *testing.T) {
+	client, _ := costServed(t)
+
+	manifest := shopManifest()
+	manifest.Workers = []*contractv1.ManifestWorker{{Name: "media", App: "api", Compute: string(provider.ComputeContainer)}}
+	manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "task--nightly-report",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "nightly-report"},
+		Config: &contractv1.ManifestResource_Topic{Topic: &contractv1.ManifestTopic{
+			Cron:      "0 3 * * *",
+			Consumers: []*contractv1.ManifestConsumer{{Name: "nightly-report", Worker: "media", Exclusive: true}},
+		}},
+	})
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest: manifest,
+		Environment: &environmentv1.Environment{
+			Tier:      environmentv1.Tier_TIER_PREVIEW,
+			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+			Identity:  "pr-42",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+
+	priced := map[string]bool{}
+	for _, resource := range set.GetResources() {
+		priced[resource.GetType()+":"+resource.GetName()] = true
+	}
+	for _, want := range []string{"aws_ecs_service:" + resources.WorkerName("media"), "aws_sqs_queue:nightly-report/nightly-report", "aws_scheduler_schedule:nightly-report"} {
+		if !priced[want] {
+			t.Errorf("an ephemeral preview priced %v, want %s: it runs its container workers and their schedules as a persistent environment does", slices.Sorted(maps.Keys(priced)), want)
+		}
 	}
 }
 
