@@ -1673,6 +1673,21 @@ func TestValidatePreviewDomain(t *testing.T) {
 	})
 }
 
+func TestAPreviewDomainWhoseBaseTheBoxWouldRefuseIsRefusedAtPreflight(t *testing.T) {
+	t.Parallel()
+
+	for what, domain := range map[string]string{
+		"an underscore in a label":   "*.exam_ple.com",
+		"an empty label":             "*.a..com",
+		"a label over 63 bytes":      "*." + strings.Repeat("a", 64) + ".example.com",
+		"a base the probe overflows": "*." + strings.Repeat(strings.Repeat("a", 63)+".", 3) + strings.Repeat("b", 55) + ".com",
+	} {
+		if err := ValidatePreviewDomain(domain); err == nil {
+			t.Errorf("ValidatePreviewDomain(%q) = nil (%s): the provider refuses this base mid-deploy, so preflight passing it only moves the refusal past the point the user typed it", domain, what)
+		}
+	}
+}
+
 func TestPreviewBaseDomain(t *testing.T) {
 	t.Parallel()
 

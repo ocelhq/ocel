@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net"
 	"path"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -153,7 +152,7 @@ func Read(document []byte) (*Table, error) {
 	}
 	lowered(&read)
 	if read.PreviewBase != "" {
-		if err := PreviewBaseUsable(read.PreviewBase); err != nil {
+		if err := edge.RefuseUnusablePreviewBase(read.PreviewBase); err != nil {
 			return nil, err
 		}
 	}
@@ -324,35 +323,6 @@ func UpstreamAddress(dial string) (string, error) {
 		return "", fmt.Errorf("%q does not name one host and one port", dial)
 	}
 	return net.JoinHostPort(host, strconv.FormatUint(number, 10)), nil
-}
-
-const (
-	dnsLabelMax = 63
-	dnsNameMax  = 253
-)
-
-var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
-
-func DNSName(name string) bool {
-	named := strings.ToLower(name)
-	if len(named) > dnsNameMax {
-		return false
-	}
-	for _, label := range strings.Split(named, ".") {
-		if len(label) > dnsLabelMax || !dnsLabel.MatchString(label) {
-			return false
-		}
-	}
-	return true
-}
-
-func PreviewBaseUsable(base string) error {
-	dotted := strings.Contains(base, ".") && len(base)+len(edge.LivenessProbeLabel)+1 <= dnsNameMax
-	if !dotted || !DNSName(base) {
-		return fmt.Errorf("%q is not a usable preview base: want dotted dns labels of ≤%d bytes, with %s ≤%d bytes",
-			base, dnsLabelMax, edge.ProbeHostname(edge.PreviewWildcard(base)), dnsNameMax)
-	}
-	return nil
 }
 
 func (t *Table) Forward(host, requested string) (Forward, bool) {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -100,7 +101,7 @@ func PreviewBaseUsable(base string) error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the preview entry on this box has no base domain")
 	}
-	if err := switchboard.PreviewBaseUsable(base); err != nil {
+	if err := edge.RefuseUnusablePreviewBase(base); err != nil {
 		return refusal.Refuse(refusal.CodeInvalid, "%v", err)
 	}
 	return nil
