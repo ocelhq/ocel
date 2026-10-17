@@ -443,7 +443,7 @@ func TestADeployWarnsOnceThatNpmRunsAPrebuildScriptPerAppWhenAPreBuildIsSet(t *t
 	clitest.WriteFile(t, filepath.Join(root, "apps", "worker", "index.ts"), "export {}\n")
 	writeConfig(t, root, `  apps: [
     { name: "api", path: "apps/api", framework: "node", compute: "serverless" },
-    { name: "worker", path: "apps/worker", framework: "node", compute: "serverless" },
+    { name: "worker", path: "apps/worker", framework: "node", compute: "serverless", domains: { production: "worker.acme.com" } },
   ],
   lifecycle: { preBuild: "true" },
 `)
