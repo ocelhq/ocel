@@ -218,6 +218,28 @@ func TestAFailedTakeoverOfAStaleClaimLeavesNoClaimForOthersToWaitOn(t *testing.T
 	}
 }
 
+func TestAClaimWrittenLongerAgoThanTheLeaseIsTakenOverWithoutWaiting(t *testing.T) {
+	t.Parallel()
+	store := fake.NewKeyValues()
+	claimed := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
+	if _, err := store.Write(context.Background(), keyvalue.Entry{
+		Key:   stackrecords.BootstrapPartKey(environment.TierProduction, "env-source-sync"),
+		Value: []byte(`{"state":"creating","written_by":"1.2.0","added_by":"web","added_at":"` + claimed + `","claimed_at":"` + claimed + `"}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+
+	made := &making{resources: syncResources}
+	if err := stackrecords.EnsureBootstrapPart(ctx, store, environment.TierProduction, made.work("api", "1.2.0", "d1")); err != nil {
+		t.Fatalf("EnsureBootstrapPart() = %v, want a claim an hour old taken over at once rather than waited on for a lease from first sight", err)
+	}
+	if made.calls.Load() != 1 {
+		t.Errorf("made %d times, want once", made.calls.Load())
+	}
+}
+
 type cancelRefusing struct{ keyvalue.Store }
 
 func (s cancelRefusing) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
