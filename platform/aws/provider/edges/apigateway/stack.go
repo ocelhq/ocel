@@ -79,6 +79,11 @@ func (s *stack) reconcileAPI(ctx context.Context, c Clients, pointer string) (st
 	if err != nil {
 		return "", err
 	}
+	if id == s.own.API {
+		if err := tagAPI(ctx, c, spec, id); err != nil {
+			return "", err
+		}
+	}
 	if err := shapeAPI(ctx, c, spec, id); err != nil {
 		return "", err
 	}
