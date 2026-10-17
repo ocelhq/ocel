@@ -366,6 +366,22 @@ func (a addressless) Destination() session.Destination {
 	return destination
 }
 
+func TestABoxReportsARollbackTargetWhoseContainerAndArchiveAreBothGone(t *testing.T) {
+	t.Parallel()
+
+	checks := checksOver(boxSaying(map[string]answer{`"$scope" lost `: {stdout: "shop/web ocel/shop/web:one\n"}}))
+
+	for _, check := range checks {
+		if check.Subject == host.ReleasesDir() {
+			if check.Verdict != provider.HostNeedsAction || !strings.Contains(check.Finding, "ocel/shop/web:one") {
+				t.Errorf("check = %+v, want needs-action naming ocel/shop/web:one", check)
+			}
+			return
+		}
+	}
+	t.Fatalf("CheckHost() answered %+v and none of it is about the releases `ocel rollback` returns to", checks)
+}
+
 func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
 	t.Parallel()
 

@@ -48,7 +48,7 @@ func grants(tier environment.Tier, arch string, front Front) []Grant {
 	if helper := written(items, KindFile, releasesHelper); helper.Name != "" {
 		grants = append(grants, Grant{
 			Name:   "runs " + helper.Name,
-			Detail: fmt.Sprintf("root-owned at %04o, run without sudo; %s runs it to record releases and remove images no release or running container names. It never forces or prunes", helper.Mode, deployer.name),
+			Detail: fmt.Sprintf("root-owned at %04o, run without sudo; %s runs it to record releases, archive a retired release's image under %s and load it back for a rollback, and remove the images and archives no release or running container names. It never forces or prunes", helper.Mode, deployer.name, releasesRoot),
 		})
 	}
 	if board := written(items, KindFile, SwitchboardBinary); board.Name != "" {

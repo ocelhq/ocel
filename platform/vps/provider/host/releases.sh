@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository> | <project>/<app> settle <ref>... | <project>/<app> claimed <ref>..." >&2
+	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository> | <project>/<app> settle <ref>... | <project>/<app> claimed <ref>... | <project>/<app> archive <ref> | <project>/<app> restore <ref> | <project>/<app> lost <tier>" >&2
 	exit 2
 }
 
@@ -45,6 +45,11 @@ reached "$root"
 
 dir="$root/$project/$app"
 dropped="$dir/.dropped"
+archives="$dir/.images"
+
+archive_of() {
+	printf '%s/%s.tar' "$archives" "$(printf '%s' "$1" | tr / +)"
+}
 
 lock() {
 	tries=0
@@ -65,6 +70,7 @@ lock() {
 
 remove_emptied_scope() {
 	if [ -z "$(find "$dir" -type f)" ]; then
+		rmdir "$archives" 2>/dev/null || true
 		rmdir "$dir" 2>/dev/null || true
 		rmdir "$root/$project" 2>/dev/null || true
 	fi
@@ -72,7 +78,7 @@ remove_emptied_scope() {
 
 read_desired() {
 	: >"$scratch".desired
-	find "$dir" -type f ! -name '.*' -exec cat {} + >>"$scratch".desired
+	find "$dir" -maxdepth 1 -type f ! -name '.*' -exec cat {} + >>"$scratch".desired
 
 	docker ps --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".running
 	while IFS= read -r running; do
@@ -90,7 +96,7 @@ coordinate() {
 scratch="$root/.staging.$$"
 clean() {
 	rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged "$scratch".kept "$scratch".unnamed \
-		"$scratch".removed "$scratch".pending "$scratch".settled
+		"$scratch".removed "$scratch".pending "$scratch".settled "$scratch".tar "$scratch".containers
 }
 trap clean EXIT
 trap 'clean; exit 129' HUP
@@ -159,6 +165,13 @@ reconcile)
 		printf 'removed %s\n' "$going"
 	done <"$scratch".going
 
+	for file in "$archives"/*.tar; do
+		[ -e "$file" ] || continue
+		archived=${file##*/}
+		archived=$(printf '%s' "${archived%.tar}" | tr + /)
+		grep -F -x -q -e "$archived" "$scratch".desired || rm -f "$file"
+	done
+
 	: >>"$dropped"
 	cat "$dropped" "$scratch".removed | grep -F -x -v -f "$scratch".desired | sort -u >"$scratch".unnamed || true
 	: >"$scratch".pending
@@ -200,6 +213,52 @@ claimed)
 			printf '%s\n' "$ref"
 		fi
 	done
+	remove_emptied_scope
+	;;
+archive)
+	[ $# -eq 1 ] || usage
+	ref=$1
+	coordinate "$ref"
+	lock
+	file=$(archive_of "$ref")
+	if [ ! -f "$file" ]; then
+		mkdir -p "$archives"
+		docker save -o "$scratch".tar "$ref"
+		mv -f "$scratch".tar "$file"
+	fi
+	;;
+restore)
+	[ $# -eq 1 ] || usage
+	ref=$1
+	coordinate "$ref"
+	lock
+	file=$(archive_of "$ref")
+	if said=$(docker image inspect "$ref" 2>&1 >/dev/null); then
+		printf 'present %s\n' "$ref"
+	elif ! printf '%s' "$said" | grep -q -i 'no such image'; then
+		abort "ask the engine whether it has $ref: $said"
+	elif [ -f "$file" ]; then
+		docker load -i "$file" >/dev/null
+		printf 'loaded %s\n' "$ref"
+	fi
+	remove_emptied_scope
+	;;
+lost)
+	[ $# -eq 1 ] || usage
+	tier=$1
+	case $tier in
+	'' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
+	esac
+	lock
+	if [ -f "$dir/$tier" ]; then
+		docker ps --all --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".containers
+		while IFS= read -r ref; do
+			[ -n "$ref" ] || continue
+			grep -F -x -q -e "$ref" "$scratch".containers && continue
+			[ -f "$(archive_of "$ref")" ] && continue
+			printf 'lost %s\n' "$ref"
+		done <"$dir/$tier"
+	fi
 	remove_emptied_scope
 	;;
 *)

@@ -194,7 +194,7 @@ func TestEveryDockerCallThatTakesAContainerDownIsBounded(t *testing.T) {
 		"TakeDown": func(h *Host) error {
 			return h.TakeDown(context.Background(), environment.TierProduction, physical)
 		},
-		"StopContainer":   func(h *Host) error { return h.StopContainer(context.Background(), physical) },
+		"RetireContainer": func(h *Host) error { return h.RetireContainer(context.Background(), physical) },
 		"RemoveContainer": func(h *Host) error { return h.RemoveContainer(context.Background(), physical) },
 		"RemoveResource": func(h *Host) error {
 			return h.RemoveResource(context.Background(), ResourceRef{

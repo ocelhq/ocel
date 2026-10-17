@@ -41,6 +41,7 @@ type machine struct {
 	swept       map[string]bool
 	present     map[string]bool
 	runs        map[string]host.Run
+	archived    map[string]bool
 	calls       []string
 	rollouts    []host.Rollout
 	started     []host.Container
@@ -73,6 +74,7 @@ func aMachine() *machine {
 		swept:    map[string]bool{},
 		present:  map[string]bool{},
 		runs:     map[string]host.Run{},
+		archived: map[string]bool{},
 		refusals: map[string]error{},
 
 		recordedGates: map[string]gate.Gate{},
@@ -104,11 +106,11 @@ func (m *machine) RouteBy(hostname string) string {
 	return manual.Route(hostname, m.byHand)
 }
 
-func (m *machine) HasImage(_ context.Context, coordinate string) (bool, error) {
-	if err := m.refuse("HasImage"); err != nil {
+func (m *machine) EnsureImage(_ context.Context, project, app, coordinate string) (bool, error) {
+	if err := m.refuse("EnsureImage"); err != nil {
 		return false, err
 	}
-	return !m.swept[coordinate], nil
+	return !m.swept[coordinate] || m.archived[project+"/"+app+" "+coordinate], nil
 }
 
 func (m *machine) RunContainer(_ context.Context, spec host.Container) (host.Run, error) {
@@ -1309,6 +1311,34 @@ func TestTwoProjectsRunningTheSameAppNameOnOneBoxAreReleasedSeparately(t *testin
 	}
 	if len(keys) != 2 {
 		t.Fatalf("the two projects released under %v, want a route apiece: a route named by the app alone is one project's deploy stopping the other's live container", keys)
+	}
+}
+
+func TestARollbackOntoAnImageAPruneRemovedIsServedFromItsArchive(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote(p1): %v", err)
+	}
+	if err := promoted(t, stack, "p2", "web", "b2"); err != nil {
+		t.Fatalf("Promote(p2): %v", err)
+	}
+	m.swept[imageFor("web", "b1")] = true
+	m.archived[slug+"/web "+imageFor("web", "b1")] = true
+	m.started = nil
+
+	err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
+		PromotionID: "p3", Ts: 3, Releases: map[string]string{"web": "b1"},
+	}}, progress.Discard())
+
+	if err != nil {
+		t.Fatalf("a rollback onto a release whose image a prune removed and whose archive remains = %v, want it served from the archive", err)
+	}
+	if len(m.started) != 1 || m.started[0].Image != imageFor("web", "b1") {
+		t.Errorf("the rollback started %+v, want shop-web-1111 on %s", m.started, imageFor("web", "b1"))
 	}
 }
 

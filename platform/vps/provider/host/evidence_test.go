@@ -26,6 +26,7 @@ func inspecting() map[string]string {
 		"what a claim through a tunnel reads to tell whether the tunnel runs":    renderTunnelInspect(),
 		"what a release reads to tell whether the tunnel it retires still runs":  renderTunnelRemoval(Tunnel{Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}),
 		"what a port forward reads its container's address with":                 containerAddressCommand(physical),
+		"what a release reads to archive the image of the container it retires":  releaseCommand(physical),
 	}
 }
 
@@ -80,7 +81,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"caddyReloadCommand", "containerAddressCommand", "probe", "renderTunnelInspect", "renderTunnelRemoval", "restoredCommand", "restoring", "rising", "renderLastRunLogs", "runningCommand", "servingCommand", "stateCommand", "renderStartWatch"},
+		"docker inspect":         {"caddyReloadCommand", "containerAddressCommand", "probe", "renderTunnelInspect", "renderTunnelRemoval", "releaseCommand", "restoredCommand", "restoring", "rising", "renderLastRunLogs", "runningCommand", "servingCommand", "stateCommand", "renderStartWatch"},
 		"docker network inspect": {"command", "joinNetworkScript", "networkCreating", "networkEnsured", "networkForgetting", "networkProbe", "networksPresent"},
 		"docker image inspect":   {"imagePulled"},
 	}

@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -12,6 +13,10 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 func releasesDir(t *testing.T) string {
@@ -292,10 +297,14 @@ func TestForgettingATierAndReconcilingLeavesTheBoxAsItWasBeforeTheFirstPromote(t
 
 	root := releasesDir(t)
 	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	dock := fakeDocker(t, nil, []string{"ocel/shop/web:one"})
+	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:one"); code != 0 {
+		t.Fatalf("archive exited %d", code)
+	}
 	if _, code := releases(t, root, "", "shop/web", "forget", "production"); code != 0 {
 		t.Fatalf("forget exited %d", code)
 	}
-	if _, code := fakeDocker(t, nil, nil).reconcile(t, root, "shop/web", "ocel/shop/web"); code != 0 {
+	if _, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web"); code != 0 {
 		t.Fatalf("reconcile exited %d", code)
 	}
 	settle(t, root, "shop/web", "ocel/shop/web:one")
@@ -571,12 +580,22 @@ func fakeDocker(t *testing.T, running, images []string) dockerStub {
 		"reference=*) reference=${arg#reference=} ;;\n" +
 		"esac; done\n" +
 		"case \"$1\" in\n" +
-		"ps) awk -v p=\"$project\" -v a=\"$app\" '$1 == p && $2 == a { print substr($0, length($1) + length($2) + 3) }' " +
-		filepath.Join(dir, "running") + " ;;\n" +
+		"ps) listed=" + filepath.Join(dir, "running") + "\n" +
+		"    case \" $* \" in *' --all '*) listed=\"$listed " + filepath.Join(dir, "stopped") + "\" ;; esac\n" +
+		"    touch " + filepath.Join(dir, "stopped") + "\n" +
+		"    awk -v p=\"$project\" -v a=\"$app\" '$1 == p && $2 == a { print substr($0, length($1) + length($2) + 3) }' $listed ;;\n" +
 		"images) awk -v r=\"${reference%\\*}\" 'index($0, r) == 1' " + filepath.Join(dir, "images") + " ;;\n" +
 		"rmi) if [ -f " + filepath.Join(dir, "refuse") + " ]; then echo 'image is in use' >&2; exit 1; fi\n" +
 		"    grep -F -x -v -e \"$2\" " + filepath.Join(dir, "images") + " >" + filepath.Join(dir, "images.next") + " || true\n" +
 		"    mv -f " + filepath.Join(dir, "images.next") + " " + filepath.Join(dir, "images") + " ;;\n" +
+		"save) [ \"$2\" = -o ] || exit 2\n" +
+		"    grep -F -x -q -e \"$4\" " + filepath.Join(dir, "images") + " || { echo \"No such image: $4\" >&2; exit 1; }\n" +
+		"    printf '%s\\n' \"$4\" >\"$3\" ;;\n" +
+		"load) [ \"$2\" = -i ] || exit 2\n" +
+		"    cat \"$3\" >>" + filepath.Join(dir, "images") + "\n" +
+		"    printf 'Loaded image: %s\\n' \"$(cat \"$3\")\" ;;\n" +
+		"image) [ \"$2\" = inspect ] || exit 2\n" +
+		"    grep -F -x -q -e \"$3\" " + filepath.Join(dir, "images") + " || { echo \"No such image: $3\" >&2; exit 1; } ;;\n" +
 		"esac\n"
 	executable(t, filepath.Join(dir, "docker"), script)
 	return dockerStub{dir: dir}
@@ -806,5 +825,236 @@ func TestARefOnlyARunningContainerNamesIsClaimed(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "shop")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("asking what is claimed left the scope behind: %v", err)
+	}
+}
+
+func (d dockerStub) prune(t *testing.T) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(d.dir, "images"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (d dockerStub) images(t *testing.T) []string {
+	t.Helper()
+	listed, err := os.ReadFile(filepath.Join(d.dir, "images"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Fields(string(listed))
+}
+
+func TestAnArchivedReleaseIsLoadedBackOnceAPruneRemovedItsImage(t *testing.T) {
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "production", "ocel/shop/web:two")
+	dock := fakeDocker(t, []string{"shop web ocel/shop/web:two"}, []string{"ocel/shop/web:one", "ocel/shop/web:two"})
+
+	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:one"); code != 0 {
+		t.Fatalf("archive exited %d", code)
+	}
+	dock.prune(t)
+	said, code := releases(t, root, dock.dir, "shop/web", "restore", "ocel/shop/web:one")
+
+	if code != 0 {
+		t.Fatalf("restore exited %d", code)
+	}
+	if !slices.Contains(dock.images(t), "ocel/shop/web:one") {
+		t.Errorf("the engine lists %v after the restore, want ocel/shop/web:one loaded back: no registry holds an image loaded straight onto the box, so its archive is the only copy a rollback has", dock.images(t))
+	}
+	if strings.TrimSpace(said) != "loaded ocel/shop/web:one" {
+		t.Errorf("restore said %q, want the load reported", said)
+	}
+}
+
+func TestARestoreOfAnImageTheEngineStillHasLoadsNothing(t *testing.T) {
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	dock := fakeDocker(t, nil, []string{"ocel/shop/web:one"})
+	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:one"); code != 0 {
+		t.Fatalf("archive exited %d", code)
+	}
+
+	said, code := releases(t, root, dock.dir, "shop/web", "restore", "ocel/shop/web:one")
+
+	if code != 0 || strings.TrimSpace(said) != "present ocel/shop/web:one" {
+		t.Errorf("restore said %q and exited %d, want the image reported present", said, code)
+	}
+	if strings.Contains(dock.log(t), "load ") {
+		t.Errorf("restore loaded an image the engine already had, streaming the whole archive for nothing:\n%s", dock.log(t))
+	}
+}
+
+func TestAReleaseTheWindowDropsLosesItsImageAndItsArchiveInOneReconcile(t *testing.T) {
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	dock := fakeDocker(t, nil, []string{"ocel/shop/web:one"})
+	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:one"); code != 0 {
+		t.Fatalf("archive exited %d", code)
+	}
+	for _, ref := range []string{"ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"} {
+		promote(t, root, "shop/web", "production", ref)
+	}
+
+	rendered, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
+	if code != 0 {
+		t.Fatalf("reconcile exited %d", code)
+	}
+
+	if removedFromBox(rendered) != "ocel/shop/web:one" {
+		t.Errorf("reconcile removed %q, want ocel/shop/web:one: the window dropped it, and its archive is no ref a window names", removedFromBox(rendered))
+	}
+	dock.prune(t)
+	if said, _ := releases(t, root, dock.dir, "shop/web", "restore", "ocel/shop/web:one"); strings.TrimSpace(said) != "" {
+		t.Errorf("restore of a dropped release said %q, want nothing: its archive goes with the release, or every release ever retired stays on disk", said)
+	}
+}
+
+func restoring(rig *bench, said string) {
+	rig.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, quoted(releasesHelper)) {
+			return session.Result{Stdout: said}, true
+		}
+		return session.Result{}, false
+	}
+}
+
+func TestARollbackWhoseImageWasPrunedLoadsItFromItsArchiveOneLoadAtATime(t *testing.T) {
+	rig := machine(nil)
+	restoring(rig, "loaded "+appImage+"\n")
+
+	has, err := rig.host().EnsureImage(context.Background(), "shop", "web", appImage)
+
+	if err != nil {
+		t.Fatalf("EnsureImage() = %v", err)
+	}
+	if !has {
+		t.Error("EnsureImage() says the box lacks an image it just loaded from its archive")
+	}
+	restore := quoted(releasesHelper) + " " + quoted("shop/web") + " " + quoted("restore") + " " + quoted(appImage)
+	at := rig.at(restore)
+	if at < 0 {
+		t.Fatalf("no command asked the releases helper to restore %s:\n%s", appImage, strings.Join(rig.commands(), "\n"))
+	}
+	if !strings.Contains(rig.commands()[at], "flock -x "+quoted(imagesLock)) {
+		t.Errorf("the restore ran outside %s, and images are loaded onto a box one at a time: %s", imagesLock, rig.commands()[at])
+	}
+}
+
+func TestARollbackWhoseImageAndArchiveAreBothGoneFindsNoImage(t *testing.T) {
+	rig := machine(nil)
+	restoring(rig, "")
+
+	has, err := rig.host().EnsureImage(context.Background(), "shop", "web", appImage)
+
+	if err != nil {
+		t.Fatalf("EnsureImage() = %v", err)
+	}
+	if has {
+		t.Error("EnsureImage() says the box has an image that neither the engine nor an archive holds")
+	}
+}
+
+func (d dockerStub) stopped(t *testing.T, containers ...string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(d.dir, "stopped"), []byte(joined(containers)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestARetainedReleaseWithNeitherAContainerNorAnArchiveIsLost(t *testing.T) {
+	root := releasesDir(t)
+	for _, ref := range []string{"ocel/shop/web:archived", "ocel/shop/web:stopped", "ocel/shop/web:pruned", "ocel/shop/web:live"} {
+		promote(t, root, "shop/web", "production", ref)
+	}
+	promote(t, root, "shop/web", "preview", "ocel/shop/web:elsewhere")
+	dock := fakeDocker(t, []string{"shop web ocel/shop/web:live"}, []string{"ocel/shop/web:archived"})
+	dock.stopped(t, "shop web ocel/shop/web:stopped")
+	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:archived"); code != 0 {
+		t.Fatalf("archive exited %d", code)
+	}
+
+	said, code := releases(t, root, dock.dir, "shop/web", "lost", "production")
+
+	if code != 0 {
+		t.Fatalf("lost exited %d", code)
+	}
+	if got := reported(said, "lost"); got != "ocel/shop/web:pruned" {
+		t.Errorf("lost named %q, want ocel/shop/web:pruned alone: a stopped container keeps its image, an archive loads it back, and only a release with neither is one `ocel rollback` cannot reach", got)
+	}
+}
+
+func TestTheLostReleasesOfEveryAppOnTheBoxAreNamedWithTheirApp(t *testing.T) {
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "production", "ocel/shop/web:pruned")
+	promote(t, root, "shop/web", "production", "ocel/shop/web:live")
+	promote(t, root, "blog/api", "production", "ocel/blog/api:pruned")
+	promote(t, root, "blog/api", "production", "ocel/blog/api:live")
+	promote(t, root, "docs/site", "production", "ocel/docs/site:live")
+	dock := fakeDocker(t, []string{"shop web ocel/shop/web:live", "blog api ocel/blog/api:live", "docs site ocel/docs/site:live"}, nil)
+	helper := filepath.Join(t.TempDir(), "releases")
+	if err := os.WriteFile(helper, releasesScript, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("/bin/sh", "-c", lostCommand(root, helper, environment.TierProduction))
+	cmd.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root, "PATH="+dock.dir+":"+os.Getenv("PATH"))
+	said, err := cmd.Output()
+
+	if err != nil {
+		t.Fatalf("the lost releases could not be read: %v", err)
+	}
+	if got, want := strings.TrimSpace(string(said)), "blog/api ocel/blog/api:pruned\nshop/web ocel/shop/web:pruned"; got != want {
+		t.Errorf("the box named %q lost, want %q: each app's window is asked, and each lost release is named with the app that keeps it", got, want)
+	}
+}
+
+func readingLost(rig *bench, result session.Result) {
+	rig.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "lost") {
+			return result, true
+		}
+		return session.Result{}, false
+	}
+}
+
+func TestARollbackTargetWithNeitherContainerNorArchiveNeedsAction(t *testing.T) {
+	rig := machine(nil)
+	readingLost(rig, session.Result{Stdout: "shop/web ocel/shop/web:one\n"})
+
+	check := rig.host().CheckReleases(context.Background(), environment.TierProduction)
+
+	if check.Verdict != provider.HostNeedsAction {
+		t.Errorf("verdict = %v (%q), want needs-action: the box serves, and `ocel rollback` to that release cannot", check.Verdict, check.Finding)
+	}
+	for _, named := range []string{"shop/web", "ocel/shop/web:one"} {
+		if !strings.Contains(check.Finding, named) {
+			t.Errorf("finding = %q, want %s named", check.Finding, named)
+		}
+	}
+	if check.Fix == "" {
+		t.Error("a lost rollback target is reported with no fix")
+	}
+}
+
+func TestEveryRollbackTargetWithAContainerOrAnArchivePasses(t *testing.T) {
+	rig := machine(nil)
+	readingLost(rig, session.Result{})
+
+	check := rig.host().CheckReleases(context.Background(), environment.TierProduction)
+
+	if check.Verdict != provider.HostPass || check.Fix != "" {
+		t.Errorf("check = %+v, want a pass with no fix", check)
+	}
+}
+
+func TestRollbackTargetsThatCouldNotBeReadFail(t *testing.T) {
+	rig := machine(nil)
+	readingLost(rig, session.Result{Code: 1, Stderr: "releases: /var/lib/ocel/releases is missing; run ocel bootstrap"})
+
+	check := rig.host().CheckReleases(context.Background(), environment.TierProduction)
+
+	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "is missing") {
+		t.Errorf("check = %+v, want a failure carrying the box's own reason rather than a pass over nothing read", check)
 	}
 }
