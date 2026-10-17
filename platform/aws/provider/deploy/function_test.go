@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func fixedRelease(t *testing.T) naming.ReleaseToken {
@@ -75,13 +76,13 @@ func TestFunctionCoordinate(t *testing.T) {
 		}
 	})
 
-	t.Run("the description names project, env, app, route and release", func(t *testing.T) {
+	t.Run("the description names project, env, app, bundle and release", func(t *testing.T) {
 		t.Parallel()
 
-		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--api-users")
+		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--bundle-0")
 
-		got := string(describe(coord, "route /api/users"))
-		if want := "shop / prod / web - route /api/users - release r3f8a1c90"; got != want {
+		got := string(describe(coord, "bundle bundle-0"))
+		if want := "shop / prod / web - bundle bundle-0 - release r3f8a1c90"; got != want {
 			t.Fatalf("description = %q, want %q", got, want)
 		}
 	})
@@ -91,7 +92,7 @@ func TestFunctionCoordinate(t *testing.T) {
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--index")
 
-		got := string(describe(coord, "route /"+strings.Repeat("segment/", 60)))
+		got := string(describe(coord, "bundle "+strings.Repeat("segment-", 60)))
 		if len(got) > maxDescriptionLen {
 			t.Errorf("description is %d chars, over the %d-character limit", len(got), maxDescriptionLen)
 		}
@@ -144,11 +145,11 @@ func TestRolePrefixLeavesRoomForTheSuffix(t *testing.T) {
 func TestResourceTags(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a function is tagged with its component and route", func(t *testing.T) {
+	t.Run("a function is tagged with its component and bundle", func(t *testing.T) {
 		t.Parallel()
 
-		tags := resourceTags(naming.KindFunction, "/api/users", nil)
-		want := pulumi.StringMap{tagComponent: pulumi.String("function"), tagRoute: pulumi.String("/api/users")}
+		tags := resourceTags(naming.KindFunction, "bundle-0", nil)
+		want := pulumi.StringMap{"ocel:component": pulumi.String("function"), "ocel:bundle": pulumi.String("bundle-0")}
 		if !maps.Equal(tags, want) {
 			t.Errorf("tags = %v, want %v", tags, want)
 		}
@@ -157,7 +158,7 @@ func TestResourceTags(t *testing.T) {
 	t.Run("transform tags join the tags ocel writes itself", func(t *testing.T) {
 		t.Parallel()
 
-		tags := resourceTags(naming.KindFunction, "/api/users", map[string]string{"acme:team": "platform"})
+		tags := resourceTags(naming.KindFunction, "bundle-0", map[string]string{"acme:team": "platform"})
 
 		if got := tags["acme:team"]; got != pulumi.String("platform") {
 			t.Errorf("acme:team = %v, want the transform's value", got)
@@ -165,28 +166,28 @@ func TestResourceTags(t *testing.T) {
 		if got := tags[tagComponent]; got != pulumi.String(naming.KindFunction.Component()) {
 			t.Errorf("%s = %v, want ocel's own component tag", tagComponent, got)
 		}
-		if got := tags[tagRoute]; got != pulumi.String("/api/users") {
-			t.Errorf("%s = %v, want ocel's own route tag", tagRoute, got)
+		if got := tags[tagBundle]; got != pulumi.String("bundle-0") {
+			t.Errorf("%s = %v, want ocel's own bundle tag", tagBundle, got)
 		}
 	})
 
 	t.Run("a transform cannot displace a tag ocel writes itself", func(t *testing.T) {
 		t.Parallel()
 
-		tags := resourceTags(naming.KindFunction, "/api/users", map[string]string{
+		tags := resourceTags(naming.KindFunction, "bundle-0", map[string]string{
 			tagComponent: "mine",
-			tagRoute:     "mine",
+			tagBundle:    "mine",
 		})
 
 		if got := tags[tagComponent]; got != pulumi.String(naming.KindFunction.Component()) {
 			t.Errorf("%s = %v, want ocel's own value kept", tagComponent, got)
 		}
-		if got := tags[tagRoute]; got != pulumi.String("/api/users") {
-			t.Errorf("%s = %v, want ocel's own value kept", tagRoute, got)
+		if got := tags[tagBundle]; got != pulumi.String("bundle-0") {
+			t.Errorf("%s = %v, want ocel's own value kept", tagBundle, got)
 		}
 	})
 
-	t.Run("a role has no route", func(t *testing.T) {
+	t.Run("a role has no bundle", func(t *testing.T) {
 		t.Parallel()
 
 		tags := resourceTags(naming.KindRole, "", nil)
@@ -199,15 +200,59 @@ func TestResourceTags(t *testing.T) {
 	t.Run("the keys agree with the coordinate's own tag set", func(t *testing.T) {
 		t.Parallel()
 
-		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--api-users")
-		all := coord.Tags(naming.TagValues{Route: "/api/users"})
+		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--bundle-0")
+		all := coord.Tags(naming.TagValues{Bundle: "bundle-0"})
 		if got, want := all[tagComponent], "function"; got != want {
 			t.Errorf("Tags[%s] = %q, want %q", tagComponent, got, want)
 		}
-		if got, want := all[tagRoute], "/api/users"; got != want {
-			t.Errorf("Tags[%s] = %q, want %q", tagRoute, got, want)
+		if got, want := all[tagBundle], "bundle-0"; got != want {
+			t.Errorf("Tags[%s] = %q, want %q", tagBundle, got, want)
 		}
 	})
+}
+
+func TestAFunctionNamesTheBundleItWasBuiltFromNotARoute(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	program := func(pctx *pulumi.Context) error {
+		stack := testStack(t, "prod", "web")
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN})
+		if err != nil {
+			return err
+		}
+		args, err := translateFunctionSpec("", provider.FunctionSpec{})
+		if err != nil {
+			return err
+		}
+		_, err = registerFunction(pctx, "fn--web--bundle-0", functionCoordinate("shop", stack, "fn--web--bundle-0"),
+			"bundle-0", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
+			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionURLAuthIAM, "")
+		return err
+	}
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--web", rec)); err != nil {
+		t.Fatalf("run program: %v", err)
+	}
+
+	fn := rec.inputs("aws:lambda/function:Function", "shop-prod-web-bundle-0-r3f8a1c90")
+	if len(fn) == 0 {
+		t.Fatal("no function was registered")
+	}
+	tags := fn["tags"].ObjectValue()
+	if got := tags["ocel:bundle"]; !got.IsString() || got.StringValue() != "bundle-0" {
+		t.Errorf("tags[ocel:bundle] = %v, want the bundle id %q", got, "bundle-0")
+	}
+	if got, set := tags["ocel:route"]; set {
+		t.Errorf("tags[ocel:route] = %v, want no route tag: one bundle serves many routes", got)
+	}
+	if got, want := fn["description"].StringValue(), "shop / prod / web - bundle bundle-0 - release r3f8a1c90"; got != want {
+		t.Errorf("description = %q, want %q", got, want)
+	}
+
+	logs := rec.inputs("aws:cloudwatch/logGroup:LogGroup", naming.ResourceID(naming.KindFunction, "bundle-0", "logs"))
+	if got := logs["tags"].ObjectValue()["ocel:bundle"]; !got.IsString() || got.StringValue() != "bundle-0" {
+		t.Errorf("log group tags[ocel:bundle] = %v, want the bundle id %q", got, "bundle-0")
+	}
 }
 
 func TestFunctionEnv(t *testing.T) {

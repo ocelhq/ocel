@@ -142,7 +142,7 @@ type TagValues struct {
 	EnvTier   environment.Tier
 	BuildID   string
 	Promotion string
-	Route     string
+	Bundle    string
 	ExpiresAt string
 }
 
@@ -157,7 +157,7 @@ func (c Coordinate) Tags(v TagValues) map[string]string {
 		"ocel:build":      v.BuildID,
 		"ocel:promotion":  v.Promotion,
 		"ocel:component":  c.Kind.Component(),
-		"ocel:route":      v.Route,
+		"ocel:bundle":     v.Bundle,
 		"ocel:stack":      c.Stack().String(),
 		"ocel:expires-at": v.ExpiresAt,
 	}
