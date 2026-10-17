@@ -230,6 +230,65 @@ func TestDeployBindsByTheExternalName(t *testing.T) {
 	})
 }
 
+func TestDeployDeliversABoundRecordUnderTheNameTheAppDeclares(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	publishRecord(t, vendor, environment.TierProduction, "terraform", postgresRecord("shared-db", "terraform"))
+
+	req := externalBindingRequest("main", "shared-db", bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+	req.Manifest.Usages = []*contractv1.ManifestUsage{{App: "web", Resource: "main"}}
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	var delivered []provider.Binding
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.App != nil && spec.App.App == "web" {
+			delivered = spec.App.Values.Bindings
+		}
+	}
+	if len(delivered) != 1 {
+		t.Fatalf("web is handed %+v, want the one record it binds", delivered)
+	}
+	binding := delivered[0]
+	if key := provider.ResourceEnvName(binding.Type, binding.Resource); key != "OCEL_RESOURCE_POSTGRES_main" {
+		t.Errorf("web is handed the record under %q, want OCEL_RESOURCE_POSTGRES_main, the key postgres(\"main\") reads", key)
+	}
+	if binding.Name != "shared-db" || binding.Properties[provider.PropertyHost] != "db.example" {
+		t.Errorf("web is handed %+v, want the record published as shared-db", binding)
+	}
+}
+
+func TestDeployDeliversOneRecordUnderEachNameThatBindsIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	publishRecord(t, vendor, environment.TierProduction, "terraform", postgresRecord("shared-db", "terraform"))
+
+	req := externalBindingRequest("main", "shared-db", bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+	req.Manifest.Resources = append(req.Manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "reports",
+		Binding:     "shared-db",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "reports"},
+	})
+	req.Manifest.Usages = []*contractv1.ManifestUsage{{App: "web", Resource: "main"}, {App: "web", Resource: "reports"}}
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	var keys []string
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.App == nil || spec.App.App != "web" {
+			continue
+		}
+		for _, binding := range spec.App.Values.Bindings {
+			keys = append(keys, provider.ResourceEnvName(binding.Type, binding.Resource))
+		}
+	}
+	if want := []string{"OCEL_RESOURCE_POSTGRES_main", "OCEL_RESOURCE_POSTGRES_reports"}; !slices.Equal(keys, want) {
+		t.Errorf("web is handed shared-db under %v, want %v: postgres(\"main\") and postgres(\"reports\") each read their own key", keys, want)
+	}
+}
+
 func TestADryRunAdmitsTheRecordAnInlineBindingWritesOnlyAtDeploy(t *testing.T) {
 	t.Run("a dry run plans with the record the request carries", func(t *testing.T) {
 		builtProject(t)

@@ -1,6 +1,7 @@
 package providerserver
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -1357,52 +1358,64 @@ func (r *deployRun) boundNamesUsedBy(app string) (map[string]bool, error) {
 }
 
 func boundNamesUsedBy(manifest *contractv1.Manifest, resources []provider.Resource, app string) map[string]bool {
+	names := map[string]bool{}
+	for _, resource := range resourcesUsedBy(manifest, resources, app) {
+		names[boundName(resource)] = true
+	}
+	return names
+}
+
+func resourcesUsedBy(manifest *contractv1.Manifest, resources []provider.Resource, app string) []provider.Resource {
 	edges := map[string]bool{}
 	for _, usage := range manifest.GetUsages() {
 		if usage.GetApp() == app {
 			edges[usage.GetResource()] = true
 		}
 	}
-	names := map[string]bool{}
+	var used []provider.Resource
 	for _, resource := range resources {
 		if edges[resource.Name] {
-			names[boundName(resource)] = true
+			used = append(used, resource)
 		}
 	}
-	return names
+	return used
 }
 
 func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]provider.Binding, error) {
-	used, err := r.boundNamesUsedBy(entry.App)
+	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return nil, err
 	}
+	used := resourcesUsedBy(r.manifest, resources, entry.App)
+	names := boundNamesUsedBy(r.manifest, resources, entry.App)
 	var grants []provider.Binding
 	for _, binding := range r.bindings {
-		if used[binding.Name] {
+		if names[binding.Name] {
 			grants = append(grants, binding)
 		}
 	}
+	provisioned := slices.Clone(grants)
 	consumed, err := r.publishedBindings().Published(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, binding := range consumed {
-		if !used[binding.Name] {
+	for _, resource := range used {
+		name := boundName(resource)
+		if slices.ContainsFunc(provisioned, func(grant provider.Binding) bool { return grant.Name == name }) {
 			continue
 		}
-		if !slices.ContainsFunc(grants, func(grant provider.Binding) bool { return grant.Name == binding.Name }) {
-			grants = append(grants, binding)
+		at := slices.IndexFunc(consumed, func(binding provider.Binding) bool { return binding.Name == name })
+		if at < 0 {
+			continue
 		}
+		binding := consumed[at]
+		if resource.Binding != "" {
+			binding.Resource = resource.Declared
+		}
+		grants = append(grants, binding)
 	}
 	slices.SortFunc(grants, func(a, b provider.Binding) int {
-		if a.Name < b.Name {
-			return -1
-		}
-		if a.Name > b.Name {
-			return 1
-		}
-		return 0
+		return cmp.Or(strings.Compare(a.Name, b.Name), strings.Compare(a.Resource, b.Resource))
 	})
 	if verifyGrants := r.provider.Hooks().VerifyGrants; verifyGrants != nil {
 		for _, binding := range grants {
