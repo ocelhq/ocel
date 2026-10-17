@@ -20,6 +20,8 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
+	rgttypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -43,6 +45,7 @@ const (
 type world struct {
 	gateway *fakeGateway
 	routing *fakeRouting
+	tagging *fakeTagging
 	dynamo  *fakeDynamo
 	cfn     *fakeCFN
 	ensured []string
@@ -53,13 +56,14 @@ func newWorld() *world {
 	return &world{
 		gateway: gateway,
 		routing: &fakeRouting{g: gateway},
+		tagging: &fakeTagging{g: gateway},
 		dynamo:  newFakeDynamo(),
 		cfn:     &fakeCFN{},
 	}
 }
 
 func (w *world) clients() Clients {
-	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion}
+	return Clients{APIGateway: w.gateway, Routing: w.routing, Tagging: w.tagging, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion}
 }
 
 func (w *world) edge() *apiGateway {
@@ -139,6 +143,7 @@ type fakeMethod struct {
 type fakeAPI struct {
 	id        string
 	name      string
+	tags      map[string]string
 	binary    []string
 	resources map[string]string
 	methods   map[string]*fakeMethod
@@ -248,20 +253,16 @@ func (f *fakeGateway) named(name string) *fakeAPI {
 	return nil
 }
 
-func (f *fakeGateway) GetRestApis(_ context.Context, in *apigateway.GetRestApisInput, _ ...func(*apigateway.Options)) (*apigateway.GetRestApisOutput, error) {
+func (f *fakeGateway) GetRestApi(_ context.Context, in *apigateway.GetRestApiInput, _ ...func(*apigateway.Options)) (*apigateway.GetRestApiOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.record("GetRestApis")
-	items := make([]agtypes.RestApi, 0, len(f.apis))
-	for _, id := range slices.Sorted(maps.Keys(f.apis)) {
-		api := f.apis[id]
-		items = append(items, agtypes.RestApi{Id: aws.String(api.id), Name: aws.String(api.name)})
+	id := aws.ToString(in.RestApiId)
+	f.record("GetRestApi " + id)
+	api, ok := f.apis[id]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api " + id)}
 	}
-	items, position, err := page(items, in.Position, f.pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return &apigateway.GetRestApisOutput{Items: items, Position: position}, nil
+	return &apigateway.GetRestApiOutput{Id: aws.String(api.id), Name: aws.String(api.name), Tags: maps.Clone(api.tags)}, nil
 }
 
 func (f *fakeGateway) CreateRestApi(_ context.Context, in *apigateway.CreateRestApiInput, _ ...func(*apigateway.Options)) (*apigateway.CreateRestApiOutput, error) {
@@ -277,6 +278,7 @@ func (f *fakeGateway) CreateRestApi(_ context.Context, in *apigateway.CreateRest
 	f.apis[id] = &fakeAPI{
 		id:        id,
 		name:      name,
+		tags:      maps.Clone(in.Tags),
 		binary:    in.BinaryMediaTypes,
 		resources: map[string]string{id + "-root": "/"},
 		methods:   map[string]*fakeMethod{},
@@ -685,6 +687,41 @@ func regionalFront(name string) string {
 
 type fakeRouting struct {
 	g *fakeGateway
+}
+
+type fakeTagging struct {
+	g *fakeGateway
+}
+
+func (f *fakeTagging) GetResources(_ context.Context, in *resourcegroupstaggingapi.GetResourcesInput, _ ...func(*resourcegroupstaggingapi.Options)) (*resourcegroupstaggingapi.GetResourcesOutput, error) {
+	f.g.mu.Lock()
+	defer f.g.mu.Unlock()
+	f.g.record("GetTaggedResources")
+	if !slices.Equal(in.ResourceTypeFilters, []string{"apigateway:restapis"}) {
+		return nil, fmt.Errorf("fake tagging answers only for REST APIs, not %v", in.ResourceTypeFilters)
+	}
+	var items []rgttypes.ResourceTagMapping
+	for _, id := range slices.Sorted(maps.Keys(f.g.apis)) {
+		api := f.g.apis[id]
+		if !slices.ContainsFunc(in.TagFilters, func(filter rgttypes.TagFilter) bool {
+			value, ok := api.tags[aws.ToString(filter.Key)]
+			return !ok || (len(filter.Values) > 0 && !slices.Contains(filter.Values, value))
+		}) {
+			tags := make([]rgttypes.Tag, 0, len(api.tags))
+			for _, key := range slices.Sorted(maps.Keys(api.tags)) {
+				tags = append(tags, rgttypes.Tag{Key: aws.String(key), Value: aws.String(api.tags[key])})
+			}
+			items = append(items, rgttypes.ResourceTagMapping{
+				ResourceARN: aws.String("arn:aws:apigateway:" + fakeRegion + "::/restapis/" + id),
+				Tags:        tags,
+			})
+		}
+	}
+	items, token, err := page(items, in.PaginationToken, f.g.pageSize)
+	if err != nil {
+		return nil, err
+	}
+	return &resourcegroupstaggingapi.GetResourcesOutput{ResourceTagMappingList: items, PaginationToken: token}, nil
 }
 
 func (f *fakeRouting) ListRoutingRules(_ context.Context, in *apigatewayv2.ListRoutingRulesInput, _ ...func(*apigatewayv2.Options)) (*apigatewayv2.ListRoutingRulesOutput, error) {

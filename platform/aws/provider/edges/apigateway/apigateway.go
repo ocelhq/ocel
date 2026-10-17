@@ -3,7 +3,6 @@ package apigateway
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -15,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -45,7 +45,7 @@ const (
 )
 
 type APIGatewayAPI interface {
-	GetRestApis(context.Context, *apigateway.GetRestApisInput, ...func(*apigateway.Options)) (*apigateway.GetRestApisOutput, error)
+	GetRestApi(context.Context, *apigateway.GetRestApiInput, ...func(*apigateway.Options)) (*apigateway.GetRestApiOutput, error)
 	CreateRestApi(context.Context, *apigateway.CreateRestApiInput, ...func(*apigateway.Options)) (*apigateway.CreateRestApiOutput, error)
 	DeleteRestApi(context.Context, *apigateway.DeleteRestApiInput, ...func(*apigateway.Options)) (*apigateway.DeleteRestApiOutput, error)
 	GetResources(context.Context, *apigateway.GetResourcesInput, ...func(*apigateway.Options)) (*apigateway.GetResourcesOutput, error)
@@ -80,9 +80,14 @@ type RoutingAPI interface {
 	DeleteRoutingRule(context.Context, *apigatewayv2.DeleteRoutingRuleInput, ...func(*apigatewayv2.Options)) (*apigatewayv2.DeleteRoutingRuleOutput, error)
 }
 
+type TaggingAPI interface {
+	GetResources(context.Context, *resourcegroupstaggingapi.GetResourcesInput, ...func(*resourcegroupstaggingapi.Options)) (*resourcegroupstaggingapi.GetResourcesOutput, error)
+}
+
 type Clients struct {
 	APIGateway APIGatewayAPI
 	Routing    RoutingAPI
+	Tagging    TaggingAPI
 	Dynamo     awsports.DynamoAPI
 	CFN        cfn.StacksAPI
 	Region     string
@@ -121,6 +126,7 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 		return Clients{
 			APIGateway: apigateway.NewFromConfig(awscfg),
 			Routing:    apigatewayv2.NewFromConfig(awscfg),
+			Tagging:    resourcegroupstaggingapi.NewFromConfig(awscfg),
 			Dynamo:     dynamodb.NewFromConfig(awscfg),
 			CFN:        cloudformation.NewFromConfig(awscfg),
 			Region:     awscfg.Region,
@@ -258,11 +264,17 @@ func (p *apiGateway) Teardown(ctx context.Context, tier environment.Tier) error 
 	if err != nil {
 		return err
 	}
-	names, err := restAPIs(ctx, c)
+	tagged, err := taggedAPIs(ctx, c, namespaceTags(p.ns, tier))
 	if err != nil {
 		return err
 	}
-	projects := surface.ProjectsNamed(p.ns, slices.Sorted(maps.Values(names)), tier)
+	var projects []string
+	for _, tags := range tagged {
+		if project := tags[projectTagKey]; project != "" && !slices.Contains(projects, project) {
+			projects = append(projects, project)
+		}
+	}
+	slices.Sort(projects)
 	if len(projects) == 0 {
 		return nil
 	}
@@ -352,16 +364,19 @@ func (p *apiGateway) DomainOwner(ctx context.Context, hostname string) (string, 
 	if len(mappings) == 0 {
 		return "", nil
 	}
-	names, err := restAPIs(ctx, c)
-	if err != nil {
-		return "", err
-	}
 	for _, mapping := range mappings {
 		id := aws.ToString(mapping.RestApiId)
 		if id == "" {
 			continue
 		}
-		if name := names[id]; name != "" {
+		api, err := c.APIGateway.GetRestApi(ctx, &apigateway.GetRestApiInput{RestApiId: aws.String(id)})
+		if isNotFound(err) {
+			return id, nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("read REST API %s, which %s is mapped to: %w", id, hostname, err)
+		}
+		if name := aws.ToString(api.Name); name != "" {
 			return name, nil
 		}
 		return id, nil

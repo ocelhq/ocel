@@ -48,11 +48,26 @@ func (s *stack) tier() environment.Tier { return s.state.Tier }
 func (s *stack) spec(pointer string) apiSpec {
 	return apiSpec{
 		name:        apiName(s.p.ns, s.slug(), s.tier(), pointer),
+		tags:        s.apiTags(pointer),
 		region:      s.own.Region,
 		account:     accountOf(s.own.Role),
 		role:        s.own.Role,
 		assetBucket: s.own.AssetBucket,
 	}
+}
+
+func (s *stack) projectTags() map[string]string {
+	tags := namespaceTags(s.p.ns, s.tier())
+	tags[projectTagKey] = s.slug()
+	return tags
+}
+
+func (s *stack) apiTags(pointer string) map[string]string {
+	tags := s.projectTags()
+	if !router.IsDefaultPointer(pointer) {
+		tags[envTagKey] = pointer
+	}
+	return tags
 }
 
 func (s *stack) openLedger(c Clients) *ledger.Ledger {
@@ -89,7 +104,7 @@ func (s *stack) ensureAPI(ctx context.Context, c Clients, pointer string) (strin
 
 func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiSpec, string, error) {
 	spec := s.spec(pointer)
-	id, found, err := s.findAPIFor(ctx, c, pointer, spec.name)
+	id, found, err := s.findAPIFor(ctx, c, pointer)
 	if err != nil {
 		return apiSpec{}, "", err
 	}
@@ -106,13 +121,32 @@ func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiSpec,
 	return spec, id, nil
 }
 
-func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string) (string, bool, error) {
+func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer string) (string, bool, error) {
 	if router.IsDefaultPointer(pointer) {
 		if id := s.own.API; id != "" {
 			return id, true, nil
 		}
 	}
-	return findAPI(ctx, c, name)
+	ids, err := s.findPointerAPIs(ctx, c, pointer)
+	if err != nil || len(ids) == 0 {
+		return "", false, err
+	}
+	return ids[0], true, nil
+}
+
+func (s *stack) findPointerAPIs(ctx context.Context, c Clients, pointer string) ([]string, error) {
+	wanted := s.apiTags(pointer)
+	tagged, err := taggedAPIs(ctx, c, wanted)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, id := range slices.Sorted(maps.Keys(tagged)) {
+		if tagged[id][envTagKey] == wanted[envTagKey] {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
 }
 
 func moveStage(ctx context.Context, c Clients, id, promotionID string, patch []agtypes.PatchOperation) error {
@@ -130,7 +164,7 @@ func moveStage(ctx context.Context, c Clients, id, promotionID string, patch []a
 }
 
 func (s *stack) unsetStage(ctx context.Context, c Clients) error {
-	id, found, err := s.findAPIFor(ctx, c, "", s.spec("").name)
+	id, found, err := s.findAPIFor(ctx, c, "")
 	if err != nil || !found {
 		return err
 	}
@@ -376,21 +410,14 @@ func (s *stack) Destroy(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
 	}
-	pointers, err := s.openLedger(c).Pointers(ctx)
-	if err != nil {
-		return errors.Join(append(errs, err)...)
-	}
-	names := []string{apiName(s.p.ns, s.slug(), s.tier(), "")}
-	for _, pointer := range pointers {
-		names = append(names, apiName(s.p.ns, s.slug(), s.tier(), pointer))
-	}
 	if err := s.unrouteProject(ctx, c); err != nil {
 		errs = append(errs, err)
 	}
-	ids, err := findAPIs(ctx, c, names)
+	tagged, err := taggedAPIs(ctx, c, s.projectTags())
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
+	ids := slices.Sorted(maps.Keys(tagged))
 	if s.own.API != "" && !slices.Contains(ids, s.own.API) {
 		ids = append(ids, s.own.API)
 	}
