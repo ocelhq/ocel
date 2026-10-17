@@ -96,7 +96,7 @@ func Covering(pins []Pin, hostname string) string {
 	return ""
 }
 
-func PreviewBaseUsable(base string) error {
+func RefuseInvalidPreviewBase(base string) error {
 	if base == "" {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the preview entry on this box has no base domain")

@@ -19,7 +19,7 @@ func (r Router) claimPreviewEntry(ctx context.Context, claim router.Claim) (edge
 	if !wild {
 		return edge.Origin{}, refusal.Refuse(refusal.CodeInvalid, "a preview entry is a wildcard, and %q is none", claim.Hostname)
 	}
-	if err := host.PreviewBaseUsable(base); err != nil {
+	if err := host.RefuseInvalidPreviewBase(base); err != nil {
 		return edge.Origin{}, err
 	}
 	if claim.Tunnel != edge.None {
