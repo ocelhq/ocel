@@ -371,3 +371,78 @@ func TestOnlyARefusalTheConsoleAnsweredCountsAsOne(t *testing.T) {
 		}
 	}
 }
+
+func heartbeatRequested(t *testing.T, spec Spec) *http.Response {
+	t.Helper()
+	mux, err := Mux(spec)
+	if err != nil {
+		t.Fatalf("Mux: %v", err)
+	}
+	served := httptest.NewServer(mux)
+	t.Cleanup(served.Close)
+	response, err := served.Client().Post(served.URL+HeartbeatPath, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { response.Body.Close() })
+	return response
+}
+
+func scheduledSpec(t *testing.T, origin string, verify func(*http.Request) error) Spec {
+	t.Helper()
+	identity, err := IdentityFromSeed(make([]byte, ed25519.SeedSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return Spec{
+		Config:          Config{Console: origin, ConnectorID: connectorID, OrganizationID: "org-1", Grants: []string{CapabilityVariablesRead}},
+		Version:         "0.0.0-alpha",
+		Identity:        identity,
+		VerifyHeartbeat: verify,
+	}
+}
+
+func TestAHeartbeatRequestTheVendorAdmitsSendsTheConsoleOneBeat(t *testing.T) {
+	server, service := console(t, accepted)
+
+	response := heartbeatRequested(t, scheduledSpec(t, server.URL, func(*http.Request) error { return nil }))
+	if response.StatusCode != http.StatusNoContent {
+		t.Errorf("an admitted heartbeat request answered %d, want 204", response.StatusCode)
+	}
+	if service.count.Load() != 1 {
+		t.Errorf("the console read %d beats, want the one the request asked for", service.count.Load())
+	}
+}
+
+func TestAHeartbeatRequestTheVendorRefusesSendsNoBeat(t *testing.T) {
+	server, service := console(t, accepted)
+
+	response := heartbeatRequested(t, scheduledSpec(t, server.URL, func(*http.Request) error { return errors.New("a stranger's token") }))
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Errorf("a refused heartbeat request answered %d, want 401", response.StatusCode)
+	}
+	if service.count.Load() != 0 {
+		t.Errorf("the console read %d beats, and a stranger may not make the connector beat on their schedule", service.count.Load())
+	}
+}
+
+func TestAHeartbeatTheConsoleRefusesAnswersBadGateway(t *testing.T) {
+	server, _ := console(t, refused(connect.CodeUnauthenticated))
+
+	response := heartbeatRequested(t, scheduledSpec(t, server.URL, func(*http.Request) error { return nil }))
+	if response.StatusCode != http.StatusBadGateway {
+		t.Errorf("a heartbeat the console refused answered %d, want 502 so the schedule's log shows the beat failed", response.StatusCode)
+	}
+}
+
+func TestAConnectorWithNoHeartbeatCheckServesNoHeartbeatRoute(t *testing.T) {
+	server, service := console(t, accepted)
+
+	response := heartbeatRequested(t, scheduledSpec(t, server.URL, nil))
+	if response.StatusCode != http.StatusNotFound {
+		t.Errorf("a connector with no heartbeat check answered %d on %s, want 404: an unchecked route lets anyone make it beat", response.StatusCode, HeartbeatPath)
+	}
+	if service.count.Load() != 0 {
+		t.Errorf("the console read %d beats", service.count.Load())
+	}
+}
