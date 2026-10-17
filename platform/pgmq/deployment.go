@@ -1,6 +1,7 @@
 package pgmq
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -39,7 +40,7 @@ func DeploymentOf(manifest *contractv1.Manifest, workerURLs map[string]string) D
 	deployment := Deployment{Slug: manifest.GetSlug(), Topics: map[string]*contractv1.ManifestTopic{}, Workers: map[string]Worker{}}
 	for _, resource := range manifest.GetResources() {
 		if topic := resource.GetTopic(); topic != nil {
-			deployment.Topics[resource.GetLogicalName()] = topic
+			deployment.Topics[cmp.Or(resource.GetResource().GetName(), resource.GetLogicalName())] = topic
 		}
 	}
 	for _, worker := range manifest.GetWorkers() {

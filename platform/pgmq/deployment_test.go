@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
@@ -24,8 +25,16 @@ func TestADeploymentTakesTheManifestsTopicsAndTheWorkersThatHaveAnAddress(t *tes
 	manifest := &contractv1.Manifest{
 		Slug: "shop",
 		Resources: []*contractv1.ManifestResource{
-			{LogicalName: "orders", Config: &contractv1.ManifestResource_Topic{Topic: orders}},
-			{LogicalName: "resize", Config: &contractv1.ManifestResource_Topic{Topic: resize}},
+			{
+				LogicalName: "topic--orders",
+				Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC, Name: "orders"},
+				Config:      &contractv1.ManifestResource_Topic{Topic: orders},
+			},
+			{
+				LogicalName: "task--resize",
+				Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "resize"},
+				Config:      &contractv1.ManifestResource_Topic{Topic: resize},
+			},
 			{LogicalName: "main"},
 		},
 		Workers: []*contractv1.ManifestWorker{{Name: "mail", Concurrency: 4}, {Name: "worker"}, {Name: "idle"}},
@@ -34,7 +43,7 @@ func TestADeploymentTakesTheManifestsTopicsAndTheWorkersThatHaveAnAddress(t *tes
 	got := DeploymentOf(manifest, map[string]string{"mail": "http://127.0.0.1:4001", "worker": "http://127.0.0.1:4002"})
 
 	if names := slices.Sorted(maps.Keys(got.Topics)); !slices.Equal(names, []string{"orders", "resize"}) || got.Topics["orders"] != orders {
-		t.Errorf("topics = %v, want orders and resize as declared", names)
+		t.Errorf("topics = %v, want orders and resize by the names the SDK publishes to", names)
 	}
 	if got.Slug != "shop" {
 		t.Errorf("slug = %q, want the manifest's shop", got.Slug)
@@ -42,6 +51,20 @@ func TestADeploymentTakesTheManifestsTopicsAndTheWorkersThatHaveAnAddress(t *tes
 	want := map[string]Worker{"mail": {URL: "http://127.0.0.1:4001", Concurrency: 4}, "worker": {URL: "http://127.0.0.1:4002"}}
 	if !maps.EqualFunc(got.Workers, want, func(a, b Worker) bool { return reflect.DeepEqual(a, b) }) {
 		t.Errorf("workers = %v, want %v: a worker with no address is not served", got.Workers, want)
+	}
+}
+
+func TestADeploymentKeysATopicWithNoDeclaredNameByItsLogicalName(t *testing.T) {
+	t.Parallel()
+
+	orders := aTopic(&contractv1.ManifestConsumer{Name: "email", Worker: "mail"})
+	manifest := &contractv1.Manifest{
+		Slug:      "shop",
+		Resources: []*contractv1.ManifestResource{{LogicalName: "orders", Config: &contractv1.ManifestResource_Topic{Topic: orders}}},
+	}
+
+	if got := DeploymentOf(manifest, nil); got.Topics["orders"] != orders {
+		t.Errorf("topics = %v, want orders by its logical name", slices.Sorted(maps.Keys(got.Topics)))
 	}
 }
 
