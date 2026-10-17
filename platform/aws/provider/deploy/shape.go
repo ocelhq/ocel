@@ -33,6 +33,8 @@ const (
 	tfECSTaskDefinition  = "aws_ecs_task_definition"
 	tfECSService         = "aws_ecs_service"
 	tfLoadBalancer       = "aws_lb"
+	tfNATGateway         = "aws_nat_gateway"
+	tfElasticIP          = "aws_eip"
 	tfECRRepository      = "aws_ecr_repository"
 
 	tfElastiCacheReplicationGroup = "aws_elasticache_replication_group"
@@ -101,6 +103,9 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 	}
 	if hasContainers {
 		shape.containerInfra(scopes.Shared, req.Deploy.Tier)
+	}
+	if reachesVPCFromFunctions(req) {
+		shape.functionNetwork(scopes.Shared)
 	}
 	return nil
 }
@@ -265,6 +270,36 @@ func ShapeContainerInfrastructure(tier environment.Tier) []pricing.Shaped {
 		{Name: ContainersSlug, Type: tfECSCluster, Properties: map[string]any{}},
 		{Name: ContainersSlug, Type: tfLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}},
 		{Name: ContainersSlug, Type: tfLogGroup, Properties: map[string]any{"retention_in_days": containerLogRetentionDays, "name": logevents.NameContainerGroup(tier)}},
+	}
+}
+
+func reachesVPCFromFunctions(req provider.ShapeRequest) bool {
+	serverless := map[string]bool{}
+	for _, app := range req.Deploy.Apps {
+		serverless[app.App] = app.Compute() != provider.ComputeContainer
+	}
+	for _, usage := range req.Usages {
+		if !serverless[usage.App] {
+			continue
+		}
+		provisioned := slices.ContainsFunc(usage.Resources, func(resource provider.Resource) bool {
+			return joinsFunctionNetwork(resource.Type, resource.Binding)
+		})
+		if provisioned {
+			return true
+		}
+	}
+	return false
+}
+
+func (s costShape) functionNetwork(scope string) {
+	s.tree.AddShaped(scope, vendor, s.region, ShapeFunctionNetwork())
+}
+
+func ShapeFunctionNetwork() []pricing.Shaped {
+	return []pricing.Shaped{
+		{Name: FunctionNetworkSlug, Type: tfNATGateway, Properties: map[string]any{}},
+		{Name: FunctionNetworkSlug, Type: tfElasticIP, Properties: map[string]any{}},
 	}
 }
 

@@ -32,6 +32,8 @@ var pulumiTokens = map[string]string{
 	"aws:ecs/taskDefinition:TaskDefinition":   "aws_ecs_task_definition",
 	"aws:ecs/service:Service":                 "aws_ecs_service",
 	"aws:lb/loadBalancer:LoadBalancer":        "aws_lb",
+	"aws:ec2/natGateway:NatGateway":           "aws_nat_gateway",
+	"aws:ec2/eip:Eip":                         "aws_eip",
 
 	"aws:elasticache/replicationGroup:ReplicationGroup": "aws_elasticache_replication_group",
 	"aws:elasticache/parameterGroup:ParameterGroup":     "aws_elasticache_parameter_group",
@@ -71,6 +73,7 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 		Functions: map[string][]provider.FunctionSpec{
 			"web": {{Name: "fn--web--entry"}, {Name: "fn--web--admin", Route: "/admin"}},
 		},
+		Usages: []provider.AppUsage{{App: "web", Resources: []provider.Resource{{Name: "main", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}}}}},
 	}
 }
 
@@ -122,6 +125,10 @@ func (s secretedCluster) NewResource(args pulumi.MockResourceArgs) (string, reso
 	return id, state, err
 }
 
+func (s secretedCluster) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
+	return (&functionNetworkCloud{inputRecorder: s.inputRecorder, vpcCIDR: "172.31.0.0/16", subnets: defaultVPCSubnets()}).Call(args)
+}
+
 func everyProgramRecorded(t *testing.T) *inputRecorder {
 	t.Helper()
 	rec := &inputRecorder{}
@@ -143,6 +150,7 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 		t.Fatal(err)
 	}
 	run("container", containerWork.run)
+	run("function-network", (&functionNetworkWork{tier: environment.TierProduction, region: "us-east-1", tags: functionNetworkTags(environment.TierProduction), subnets: &functionNetworkCloud{subnets: defaultVPCSubnets()}}).run)
 	run("container-infra", (&containerInfraWork{tier: environment.TierProduction, boundary: containerCfg.AppBoundaryARN, rolePath: containerCfg.AppRolePath}).run)
 	topicsRelease := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
 	req := shapeRequest(t)
