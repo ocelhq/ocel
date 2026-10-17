@@ -389,6 +389,9 @@ func busy(err error, setup WorkspaceSpec) error {
 type autoEngine struct{}
 
 func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation, progress progress.Log) ([]provider.Change, error) {
+	if op == OperationDestroy {
+		return previewDestroy(ctx, setup)
+	}
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -399,12 +402,26 @@ func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation
 
 	engineEvents := make(chan events.EngineEvent, 256)
 	rows := drainRows(engineEvents)
+	_, err = stack.Preview(ctx, optpreview.EventStreams(engineEvents), optpreview.Parallel(setup.Parallel))
+	return awaitPlan(rows, setup, err)
+}
 
-	if op == OperationDestroy {
-		_, err = stack.PreviewDestroy(ctx, optdestroy.EventStreams(engineEvents), optdestroy.Parallel(setup.Parallel))
-	} else {
-		_, err = stack.Preview(ctx, optpreview.EventStreams(engineEvents), optpreview.Parallel(setup.Parallel))
+func previewDestroy(ctx context.Context, setup WorkspaceSpec) ([]provider.Change, error) {
+	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
+	if auto.IsSelectStack404Error(err) {
+		return nil, nil
 	}
+	if err != nil {
+		return nil, fmt.Errorf("select stack %s: %w", setup.Stack, err)
+	}
+
+	engineEvents := make(chan events.EngineEvent, 256)
+	rows := drainRows(engineEvents)
+	_, err = stack.PreviewDestroy(ctx, optdestroy.EventStreams(engineEvents), optdestroy.Parallel(setup.Parallel))
+	return awaitPlan(rows, setup, err)
+}
+
+func awaitPlan(rows <-chan []provider.Change, setup WorkspaceSpec, err error) ([]provider.Change, error) {
 	if err != nil {
 		return nil, fmt.Errorf("plan stack %s: %w", setup.Stack, err)
 	}

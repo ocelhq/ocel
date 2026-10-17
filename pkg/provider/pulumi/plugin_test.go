@@ -2,6 +2,8 @@ package pulumi_test
 
 import (
 	"context"
+	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -102,6 +104,70 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 
 	if err := automation.Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() of the stack the plugin wrote into = %v", err)
+	}
+}
+
+func TestPreviewDestroyOfAProvisionedStackShowsEachResourceGoingOnThePinnedRuntime(t *testing.T) {
+	if testing.Short() {
+		t.Skip("this drives the real engine, which installs and runs the pinned Pulumi runtime")
+	}
+
+	ctx := context.Background()
+	automation := pulumi.New(pulumi.Config{
+		Backend: pulumi.Backend{URL: "file://" + t.TempDir(), Passphrase: "a-passphrase", Project: "ocel-plugin-probe"},
+		Program: pushing{}.Run,
+		Plugins: []pulumi.Plugin{probePlugin(t, &pushCounter{})},
+	})
+	ref := provider.StackRef{Project: "probe", Tier: environment.TierProduction, Name: naming.InfraStack("prod")}
+	if _, err := automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+
+	planned, err := automation.PreviewDestroy(ctx, ref, nil)
+	if err != nil {
+		t.Fatalf("PreviewDestroy() on Pulumi %s = %v", pulumi.PinnedVersion, err)
+	}
+	if len(planned.Groups) != 1 || planned.Groups[0].Action != provider.ActionDelete {
+		t.Fatalf("PreviewDestroy() = %+v, want the stack shown as going", planned.Groups)
+	}
+	going := planned.Groups[0].Changes
+	want := provider.Change{Kind: "probe:index:Push", Name: "assets", Action: provider.ActionDelete}
+	if !slices.Contains(going, want) {
+		t.Errorf("PreviewDestroy() shows %+v, want %+v among them: a teardown is consented to by what it shows", going, want)
+	}
+	for _, change := range going {
+		if change.Action != provider.ActionDelete {
+			t.Errorf("PreviewDestroy() shows %s as %q, and a teardown takes everything down", change.Name, change.Action)
+		}
+	}
+
+	if err := automation.Destroy(ctx, ref, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+}
+
+func TestPreviewDestroyOfAStackNeverProvisionedShowsNothingAndWritesNoStack(t *testing.T) {
+	if testing.Short() {
+		t.Skip("this drives the real engine, which installs and runs the pinned Pulumi runtime")
+	}
+
+	dir := t.TempDir()
+	automation := pulumi.New(pulumi.Config{
+		Backend: pulumi.Backend{URL: "file://" + dir, Passphrase: "a-passphrase", Project: "ocel-plugin-probe"},
+		Program: pushing{}.Run,
+		Plugins: []pulumi.Plugin{probePlugin(t, &pushCounter{})},
+	})
+	ref := provider.StackRef{Project: "probe", Tier: environment.TierProduction, Name: naming.InfraStack("prod")}
+
+	planned, err := automation.PreviewDestroy(context.Background(), ref, nil)
+	if err != nil {
+		t.Fatalf("PreviewDestroy() = %v", err)
+	}
+	if len(planned.Groups) != 0 {
+		t.Errorf("PreviewDestroy() = %+v, want nothing: a stack never provisioned has nothing to take down", planned.Groups)
+	}
+	if written, _ := filepath.Glob(filepath.Join(dir, ".pulumi", "stacks", "*", "*")); len(written) != 0 {
+		t.Errorf("planning a teardown wrote %v, want no stack: a plan writes nothing", written)
 	}
 }
 
