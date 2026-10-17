@@ -3,6 +3,9 @@ package providerserver
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 
 	connect "connectrpc.com/connect"
 
@@ -15,6 +18,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -161,6 +165,9 @@ func (h *handlers) removePreview(ctx context.Context, req *contractv1.RemoveEnvi
 	if err := refuseUnconfirmedLifecycle(ctx, session.provider.KeyValues(), req.GetSlug(), pointer, req.GetEnvironment().GetLifecycle()); err != nil {
 		return err
 	}
+	if err := refuseUnrecordedPreview(ctx, session.provider.KeyValues(), req.GetSlug(), pointer); err != nil {
+		return err
+	}
 	removal, err := readPreviewRemoval(ctx, session.provider.KeyValues(), req.GetSlug(), pointer)
 	if err != nil {
 		return err
@@ -206,6 +213,47 @@ func refuseUnconfirmedLifecycle(ctx context.Context, store keyvalue.Store, slug,
 			preview, describeLifecycle(recorded), describeLifecycle(confirmed), preview)
 	}
 	return nil
+}
+
+func refuseUnrecordedPreview(ctx context.Context, store keyvalue.Store, slug, preview string) error {
+	record, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.EnvironmentKey(environment.TierPreview, slug, preview))
+	if err != nil {
+		return err
+	}
+	if record.Revision != "" {
+		return nil
+	}
+	history, err := ledger.New(store, environment.TierPreview, slug).History(ctx, preview)
+	if err != nil {
+		return err
+	}
+	if len(history) > 0 {
+		return nil
+	}
+	stacks, err := stackrecords.StackNames(ctx, store, environment.TierPreview, slug)
+	if err != nil {
+		return err
+	}
+	if slices.ContainsFunc(stacks, func(stack naming.StackName) bool { return stack.Env == preview }) {
+		return nil
+	}
+	metas, err := stackrecords.EnvironmentMetas(ctx, store, environment.TierPreview, slug)
+	if err != nil {
+		return err
+	}
+	previews := slices.Collect(maps.Keys(metas))
+	for _, stack := range stacks {
+		if stack.Env != "" && stack.Env != stackrecords.ProductionEnv && !slices.Contains(previews, stack.Env) {
+			previews = append(previews, stack.Env)
+		}
+	}
+	if len(previews) == 0 {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"no preview named %s is recorded for %s, so nothing was torn down: %s has no previews", preview, slug, slug)
+	}
+	slices.Sort(previews)
+	return refusal.Refuse(refusal.CodeInvalid,
+		"no preview named %s is recorded for %s, so nothing was torn down: its previews are %s", preview, slug, strings.Join(previews, ", "))
 }
 
 func describeLifecycle(lifecycle environmentv1.Lifecycle) string {
