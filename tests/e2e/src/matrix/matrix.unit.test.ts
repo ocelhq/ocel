@@ -712,16 +712,16 @@ describe("sdk/go, sdk/python and sdk/rust", () => {
     }
   });
 
-  it("skips python as a container on aws behind cloudflare under #1551, whose worker aws refuses on container compute, and where no zone or Cloudflare API is", () => {
+  it("publishes from python as a container on aws behind cloudflare, expecting nothing red, and skips it where no zone or Cloudflare API is", () => {
     const cell = "sdk/python-cloudflare-container";
-    expect(skippedBy(planOn("aws", ZONED_RUN), cell)).toEqual(["aws-container-hosts-no-worker"]);
-    expect(skippedBy(planOn("aws"), cell)).toEqual(
-      ["aws-container-hosts-no-worker", "no-cloudflare-zone"].sort(),
-    );
+    const planned = planOn("aws", ZONED_RUN);
+    expect(planned.cells.map((one) => one.name)).toContain(cell);
+    expect(planned.skipped[cell]).toBeUndefined();
+    expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
+    expect(skippedBy(planOn("aws"), cell)).toEqual(["no-cloudflare-zone"]);
     expect(skippedBy(planOn("aws.floci"), cell)).toEqual(
-      ["aws-container-hosts-no-worker", "floci-runs-no-event-api", "no-cloudflare-api"].sort(),
+      ["floci-runs-no-event-api", "no-cloudflare-api"].sort(),
     );
-    expect(gaps.find((gap) => gap.id === "aws-container-hosts-no-worker")?.issue).toBe(1551);
   });
 
   it("runs Go on a box and skips Python and Rust under the ticket for their images", () => {
