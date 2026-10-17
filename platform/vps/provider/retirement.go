@@ -18,7 +18,7 @@ const (
 	retiredAppTemplate  = "app %s is no longer deployed to %s"
 )
 
-func (p *Provider) PlanRemovedApps(ctx context.Context, apps provider.LiveApps, _ progress.Log) (provider.Plan, error) {
+func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _ progress.Log) (provider.Plan, error) {
 	partition, under := live.QueueWorkersUnder(apps.Tier, apps.Slug, apps.Env)
 	entries, err := p.keyValues.List(ctx, partition, under...)
 	if err != nil {
@@ -42,7 +42,7 @@ func (p *Provider) PlanRemovedApps(ctx context.Context, apps provider.LiveApps, 
 	return plan, nil
 }
 
-func (p *Provider) RetireRemovedApps(ctx context.Context, apps provider.LiveApps, progress progress.Log) error {
+func (p *Provider) Retire(ctx context.Context, apps provider.LiveApps, progress progress.Log) error {
 	ref := provider.StackRef{Project: apps.Slug, Tier: apps.Tier, Name: naming.StackName{Env: apps.Env}}
 	return p.retireWorkers(ctx, ref, func(name string, worker live.QueueWorker) bool {
 		if slices.Contains(apps.Apps, worker.App) {

@@ -9,12 +9,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func RunRemovedApps(t *testing.T, hooks *provider.RemovedAppHooks) {
+func RunRetirement(t *testing.T, hooks *provider.RetirementHooks) {
 	t.Helper()
 
 	ctx := context.Background()
 	if hooks.Plan == nil || hooks.Retire == nil {
-		t.Fatal("RemovedApps leaves Plan or Retire nil, and a deploy retires only what its dry run showed")
+		t.Fatal("Retirement leaves Plan or Retire nil, and a deploy retires only what its dry run showed")
 	}
 	untouched := provider.LiveApps{Slug: "conformance-untouched", Tier: environment.TierPreview, Env: "pr-0", Apps: []string{"web"}}
 

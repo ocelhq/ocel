@@ -80,8 +80,8 @@ type refusingRetirement struct{ *fake.Provider }
 
 func (r refusingRetirement) Hooks() provider.Hooks {
 	hooks := r.Provider.Hooks()
-	hooks.RemovedApps = &provider.RemovedAppHooks{
-		Plan: r.PlanRemovedApps,
+	hooks.Retirement = &provider.RetirementHooks{
+		Plan: r.PlanRetirement,
 		Retire: func(context.Context, provider.LiveApps, progress.Log) error {
 			return errors.New("the workers stack is locked")
 		},

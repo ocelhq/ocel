@@ -9,16 +9,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func planRemovedApps(ctx context.Context, p provider.Provider, live provider.LiveApps, progress progress.Log) (provider.Plan, error) {
-	hooks := p.Hooks().RemovedApps
+func planRetirement(ctx context.Context, p provider.Provider, live provider.LiveApps, progress progress.Log) (provider.Plan, error) {
+	hooks := p.Hooks().Retirement
 	if hooks == nil {
 		return provider.Plan{}, nil
 	}
 	return hooks.Plan(ctx, live, progress)
 }
 
-func retireRemovedApps(ctx context.Context, p provider.Provider, live provider.LiveApps, progress progress.Log) error {
-	hooks := p.Hooks().RemovedApps
+func retire(ctx context.Context, p provider.Provider, live provider.LiveApps, progress progress.Log) error {
+	hooks := p.Hooks().Retirement
 	if hooks == nil {
 		return nil
 	}

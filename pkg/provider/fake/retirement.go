@@ -10,7 +10,7 @@ import (
 
 const AppGroupKind = "app"
 
-func (p *Provider) PlanRemovedApps(_ context.Context, live provider.LiveApps, _ progress.Log) (provider.Plan, error) {
+func (p *Provider) PlanRetirement(_ context.Context, live provider.LiveApps, _ progress.Log) (provider.Plan, error) {
 	var plan provider.Plan
 	for _, app := range p.listRemovedApps(live) {
 		plan.Groups = append(plan.Groups, provider.ChangeGroup{Kind: AppGroupKind, Name: app, Action: provider.ActionDelete, Reason: "no longer deployed to " + live.Env})
@@ -18,7 +18,7 @@ func (p *Provider) PlanRemovedApps(_ context.Context, live provider.LiveApps, _ 
 	return plan, nil
 }
 
-func (p *Provider) RetireRemovedApps(_ context.Context, live provider.LiveApps, progress progress.Log) error {
+func (p *Provider) Retire(_ context.Context, live provider.LiveApps, progress progress.Log) error {
 	removed := p.listRemovedApps(live)
 	p.mu.Lock()
 	defer p.mu.Unlock()

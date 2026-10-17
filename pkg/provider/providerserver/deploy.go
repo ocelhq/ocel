@@ -1693,11 +1693,11 @@ func loaderID(bundle []byte, compatDate string, compatFlags []string) string {
 
 func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, error) {
 	if r.dry {
-		removed, err := planRemovedApps(ctx, r.provider, r.liveApps(), progress.Discard())
+		retired, err := planRetirement(ctx, r.provider, r.liveApps(), progress.Discard())
 		if err != nil {
 			return nil, err
 		}
-		r.dryRunPlan.removed = removed
+		r.dryRunPlan.retired = retired
 		r.dryRunPlan.promotion = r.planPromotionGroup()
 		r.sender.send(planEvent(r.dryRunPlanProto()))
 		return okResult(), nil
@@ -1744,7 +1744,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if err := r.reclaimDropped(ctx, r.images, r.spec.Pointer, dropped, progress); err != nil {
 				progress.Warn(unreclaimedWarning(promotion.PromotionID, err))
 			}
-			if err := retireRemovedApps(ctx, r.provider, r.liveApps(), progress); err != nil {
+			if err := retire(ctx, r.provider, r.liveApps(), progress); err != nil {
 				progress.Warn(unretiredWarning(promotion.PromotionID, err))
 			}
 			r.pruneInlineBindings(ctx, progress)

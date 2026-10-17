@@ -64,11 +64,11 @@ func runHooks(t *testing.T, suite Suite) {
 			t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and nothing reached", forwards, err)
 		}
 	})
-	t.Run("RemovedApps", func(t *testing.T) {
-		if hooks.RemovedApps == nil {
+	t.Run("Retirement", func(t *testing.T) {
+		if hooks.Retirement == nil {
 			t.Skip("this provider keeps nothing per app outside its releases, so an app removed from config leaves nothing behind")
 		}
-		RunRemovedApps(t, hooks.RemovedApps)
+		RunRetirement(t, hooks.Retirement)
 	})
 	t.Run("NextServerRuntime", func(t *testing.T) {
 		if hooks.ReadNextServerRuntime == nil {

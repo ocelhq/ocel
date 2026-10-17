@@ -22,7 +22,7 @@ type retiredWorker struct {
 	service string
 }
 
-func (p *Provider) PlanRemovedApps(ctx context.Context, live provider.LiveApps, _ progress.Log) (provider.Plan, error) {
+func (p *Provider) PlanRetirement(ctx context.Context, live provider.LiveApps, _ progress.Log) (provider.Plan, error) {
 	retired, err := p.listRetiredWorkers(ctx, live)
 	if err != nil {
 		return provider.Plan{}, err
@@ -41,7 +41,7 @@ func (p *Provider) PlanRemovedApps(ctx context.Context, live provider.LiveApps, 
 	return plan, nil
 }
 
-func (p *Provider) RetireRemovedApps(ctx context.Context, live provider.LiveApps, progress progress.Log) error {
+func (p *Provider) Retire(ctx context.Context, live provider.LiveApps, progress progress.Log) error {
 	retired, err := p.listRetiredWorkers(ctx, live)
 	if err != nil {
 		return err

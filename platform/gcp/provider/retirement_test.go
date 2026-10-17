@@ -53,7 +53,7 @@ func recordWorkerRelease(t *testing.T, p *Provider, env, app, release string, wo
 	}
 }
 
-func TestRetiringRemovedAppsDeletesTheWorkerServicesOfEachAppNoLongerDeployed(t *testing.T) {
+func TestRetiringDeletesTheWorkerServicesOfEachAppNoLongerDeployed(t *testing.T) {
 	t.Parallel()
 
 	server := &deletingRun{}
@@ -65,12 +65,12 @@ func TestRetiringRemovedAppsDeletesTheWorkerServicesOfEachAppNoLongerDeployed(t 
 	recordWorkerRelease(t, p, "staging", "jobs", "r00000001", map[string]string{"mail": "ocel-shop-staging-w-mail"})
 	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []string{"web"}}
 
-	plan, err := p.PlanRemovedApps(context.Background(), live, progress.Discard())
+	plan, err := p.PlanRetirement(context.Background(), live, progress.Discard())
 	if err != nil {
-		t.Fatalf("PlanRemovedApps() = %v", err)
+		t.Fatalf("PlanRetirement() = %v", err)
 	}
-	if err := p.RetireRemovedApps(context.Background(), live, progress.Discard()); err != nil {
-		t.Fatalf("RetireRemovedApps() = %v", err)
+	if err := p.Retire(context.Background(), live, progress.Discard()); err != nil {
+		t.Fatalf("Retire() = %v", err)
 	}
 
 	if !slices.Equal(server.deleted, []string{"ocel-shop-prod-w-mail"}) {
@@ -89,7 +89,7 @@ func TestRetiringRemovedAppsDeletesTheWorkerServicesOfEachAppNoLongerDeployed(t 
 	}
 }
 
-func TestRetiringRemovedAppsPassesOverAWorkerServiceAlreadyGone(t *testing.T) {
+func TestRetiringPassesOverAWorkerServiceAlreadyGone(t *testing.T) {
 	t.Parallel()
 
 	server := &deletingRun{}
@@ -97,12 +97,12 @@ func TestRetiringRemovedAppsPassesOverAWorkerServiceAlreadyGone(t *testing.T) {
 	recordWorkerRelease(t, p, "prod", "jobs", "r00000001", map[string]string{"mail": "ocel-shop-prod-w-mail"})
 	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod"}
 
-	plan, err := p.PlanRemovedApps(context.Background(), live, progress.Discard())
+	plan, err := p.PlanRetirement(context.Background(), live, progress.Discard())
 	if err != nil {
-		t.Fatalf("PlanRemovedApps() = %v", err)
+		t.Fatalf("PlanRetirement() = %v", err)
 	}
-	if err := p.RetireRemovedApps(context.Background(), live, progress.Discard()); err != nil {
-		t.Fatalf("RetireRemovedApps() = %v", err)
+	if err := p.Retire(context.Background(), live, progress.Discard()); err != nil {
+		t.Fatalf("Retire() = %v", err)
 	}
 
 	if len(plan.Groups) != 0 || len(server.deleted) != 0 {
