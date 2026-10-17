@@ -67,6 +67,7 @@ type record struct {
 	Message string     `json:"message,omitempty"`
 	ID      string     `json:"id,omitempty"`
 	OK      *bool      `json:"ok,omitempty"`
+	Partial bool       `json:"partial,omitempty"`
 }
 
 type openSpan struct {
@@ -76,8 +77,13 @@ type openSpan struct {
 
 type appBuild struct {
 	app   string
-	log   io.Writer
+	log   *redaction.Writer
 	ended func(error)
+}
+
+func (b appBuild) end(err error) {
+	_ = b.log.Flush()
+	b.ended(err)
 }
 
 type Processor struct {
@@ -184,16 +190,16 @@ func (p *Processor) line(token string) {
 	if len(rec.App) > maxAppBytes {
 		rec.App = rec.App[:maxAppBytes]
 	}
-	rec.Message = p.hide(rec.Message)
+	if rec.Type != typeOutput {
+		rec.Message = p.hide(rec.Message)
+	}
 	p.apply(rec)
 }
 
 func (p *Processor) forward(line string) {
-	// TODO: this re-emits a trailing \n on every line it holds whole, so CRLF fidelity
-	// and byte-for-byte streaming are lost (a bare-\r spinner now flushes
-	// only at the next real newline), and a final partial line gets a \n
-	// the source never wrote. Fixing it needs Scan to thread raw bytes
-	// rather than bufio.Scanner tokens.
+	// TODO: this re-emits a trailing \n on every line it holds whole, so CRLF fidelity is
+	// lost and a final partial line gets a \n the source never wrote. Fixing it needs Scan
+	// to thread raw bytes rather than bufio.Scanner tokens.
 	_, _ = io.WriteString(p.forwarded(), line+"\n")
 }
 
@@ -211,7 +217,9 @@ func (p *Processor) apply(rec record) {
 		p.endSpan(rec)
 	case typeError:
 		p.mu.Lock()
-		p.err = rec.Message
+		if p.err == "" {
+			p.err = rec.Message
+		}
 		if rec.App != "" {
 			if p.errByApp == nil {
 				p.errByApp = make(map[string]string)
@@ -227,11 +235,15 @@ func (p *Processor) output(rec record) {
 	p.mu.Lock()
 	build, found := p.buildByApp[rec.App]
 	p.mu.Unlock()
+	text := rec.Message
+	if !rec.Partial {
+		text += "\n"
+	}
 	if !found {
-		p.forward(rec.Message)
+		_, _ = io.WriteString(p.forwarded(), text)
 		return
 	}
-	_, _ = io.WriteString(build.log, rec.Message+"\n")
+	_, _ = io.WriteString(build.log, text)
 }
 
 func (p *Processor) log(rec record) {
@@ -251,7 +263,7 @@ func (p *Processor) startBuild(rec record) {
 		return
 	}
 	log, ended := p.AppBuild(rec.App)
-	build := appBuild{app: rec.App, log: log, ended: ended}
+	build := appBuild{app: rec.App, log: p.Hide.Writer(log), ended: ended}
 	p.mu.Lock()
 	if p.builds == nil {
 		p.builds = make(map[string]appBuild)
@@ -277,12 +289,12 @@ func (p *Processor) endBuild(rec record) {
 	}
 	switch {
 	case rec.OK == nil || *rec.OK:
-		build.ended(nil)
+		build.end(nil)
 	case failure != "":
 		first, _, _ := strings.Cut(failure, "\n")
-		build.ended(errors.New(first))
+		build.end(errors.New(first))
 	default:
-		build.ended(errBuildFailed)
+		build.end(errBuildFailed)
 	}
 }
 
@@ -353,7 +365,7 @@ func (p *Processor) Abort(ctx context.Context) error {
 		cause = errBuilderExited
 	}
 	for _, build := range builds {
-		build.ended(cause)
+		build.end(cause)
 	}
 	return cause
 }

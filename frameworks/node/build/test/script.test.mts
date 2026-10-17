@@ -36,19 +36,57 @@ describe("buildProcess.spawn", () => {
     expect(printed).toContain("a warning");
   });
 
-  it("prints a line too long to hold whole in pieces, losing none of it", async () => {
-    const printed: string[] = [];
+  it("prints a line too long to hold whole in pieces, each but the last marked partial, losing none of it", async () => {
+    const printed: { piece: string; partial: boolean }[] = [];
 
     await buildProcess.spawn(
       "node",
       ["-e", 'process.stdout.write("x".repeat(200000) + "\\n")'],
       tmpdir(),
       { PATH: process.env.PATH ?? "" },
-      { print: (line) => printed.push(line) },
+      { print: (piece, partial = false) => printed.push({ piece, partial }) },
     );
 
     expect(printed.length).toBeGreaterThan(1);
-    expect(printed.join("")).toBe("x".repeat(200000));
+    expect(printed.map(({ piece }) => piece).join("")).toBe("x".repeat(200000));
+    expect(printed.map(({ partial }) => partial)).toEqual([
+      ...Array(printed.length - 1).fill(true),
+      false,
+    ]);
+  });
+
+  it("prints in pieces a line too long to hold whole that the build never ends", async () => {
+    const printed: { piece: string; partial: boolean }[] = [];
+
+    await buildProcess.spawn(
+      "node",
+      ["-e", 'process.stdout.write("x".repeat(200000))'],
+      tmpdir(),
+      { PATH: process.env.PATH ?? "" },
+      { print: (piece, partial = false) => printed.push({ piece, partial }) },
+    );
+
+    expect(printed.map(({ piece }) => piece).join("")).toBe("x".repeat(200000));
+    expect(Math.max(...printed.map(({ piece }) => piece.length))).toBeLessThanOrEqual(64 * 1024);
+    expect(printed.map(({ partial }) => partial)).toEqual([
+      ...Array(printed.length - 1).fill(true),
+      false,
+    ]);
+  });
+
+  it("never cuts a character outside the basic plane in two between pieces", async () => {
+    const printed: string[] = [];
+
+    await buildProcess.spawn(
+      "node",
+      ["-e", 'process.stdout.write("x".repeat(65535) + "\\u{1F600}\\n")'],
+      tmpdir(),
+      { PATH: process.env.PATH ?? "" },
+      { print: (piece) => printed.push(piece) },
+    );
+
+    expect(printed.join("")).toBe(`${"x".repeat(65535)}\u{1F600}`);
+    expect(printed.map((piece) => piece.isWellFormed())).not.toContain(false);
   });
 });
 

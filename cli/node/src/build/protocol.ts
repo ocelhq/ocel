@@ -12,6 +12,7 @@ interface ProtocolRecord {
   message?: string;
   id?: string;
   ok?: boolean;
+  partial?: boolean;
 }
 
 function emit(record: ProtocolRecord): void {
@@ -22,8 +23,8 @@ export function log(level: Level, message: string, app?: string, stage?: string)
   emit({ type: "log", level, message, app, stage });
 }
 
-export function printOutput(app: string, line: string): void {
-  emit({ type: "output", app, message: line });
+export function printOutput(app: string, text: string, partial?: boolean): void {
+  emit({ type: "output", app, message: text, partial });
 }
 
 export function reportError(message: string, app?: string, stage?: string): void {

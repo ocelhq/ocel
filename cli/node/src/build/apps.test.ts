@@ -7,6 +7,7 @@ interface SeenRecord {
   app?: string;
   ok?: boolean;
   message?: string;
+  partial?: boolean;
 }
 
 function records(): SeenRecord[] {
@@ -135,6 +136,22 @@ describe("buildApps", () => {
       ]),
     );
     expect(output).toHaveLength(2);
+  });
+
+  it("marks a piece of a line its build prints partial while more of the line follows", async () => {
+    const seen = records();
+    const adapters = recording();
+    adapters.next = async (_app, log) => {
+      log.print("the first half", true);
+      log.print(" and the rest");
+    };
+
+    await buildApps([next], adapters, 1);
+
+    expect(seen.filter((r) => r.type === "output")).toEqual([
+      { type: "output", app: "web", message: "the first half", partial: true },
+      { type: "output", app: "web", message: " and the rest" },
+    ]);
   });
 
   it("builds apps that share a directory one after another, since their builds write into it", async () => {
