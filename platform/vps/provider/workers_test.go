@@ -124,7 +124,7 @@ func TestAWorkerNeverReachesTheRoutingTable(t *testing.T) {
 	}
 }
 
-func TestANewReleaseTakesDownTheWorkersItReplacesAndTheOnesNoLongerDeclared(t *testing.T) {
+func TestANewReleaseTakesDownTheWorkersItReplacesAndLeavesTheOnesNoLongerDeclaredUntilRetirement(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -133,7 +133,7 @@ func TestANewReleaseTakesDownTheWorkersItReplacesAndTheOnesNoLongerDeclared(t *t
 		t.Fatal(err)
 	}
 	old, _ := recordedWorker(t, store, "worker")
-	retired, _ := recordedWorker(t, store, "ledger")
+	dropped, _ := recordedWorker(t, store, "ledger")
 
 	next := aWorkerApp()
 	next.BuildID = "fedcba9876543210fedcba9876543210"
@@ -147,13 +147,14 @@ func TestANewReleaseTakesDownTheWorkersItReplacesAndTheOnesNoLongerDeclared(t *t
 		t.Fatalf("the new release recorded the old worker container %s", old.Container)
 	}
 	joined := strings.Join(machine.commands()[before:], "\n")
-	for _, gone := range []string{old.Container, retired.Container} {
-		if !strings.Contains(joined, "docker rm --force '"+gone+"'") {
-			t.Errorf("the new release left %s running:\n%s", gone, joined)
-		}
+	if !strings.Contains(joined, "docker rm --force '"+old.Container+"'") {
+		t.Errorf("the new release left %s running:\n%s", old.Container, joined)
 	}
-	if _, found := recordedWorker(t, store, "ledger"); found {
-		t.Error("ledger is still recorded after the release that dropped it, so the engine keeps delivering to a container that is gone")
+	if strings.Contains(joined, "docker rm --force '"+dropped.Container+"'") {
+		t.Errorf("the new release took down %s before any promotion stopped needing it, so a deploy that fails before promote leaves the live release without it:\n%s", dropped.Container, joined)
+	}
+	if after, found := recordedWorker(t, store, "ledger"); !found || after != dropped {
+		t.Errorf("ledger is recorded as %+v, %v after a release that is not live yet dropped it, want %+v", after, found, dropped)
 	}
 }
 

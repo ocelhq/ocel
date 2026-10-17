@@ -84,3 +84,45 @@ func TestRetiringKeepsTheWorkersOfALiveApp(t *testing.T) {
 		t.Error("the live app's worker is no longer recorded")
 	}
 }
+
+func TestRetiringTakesDownTheWorkersALiveAppNoLongerHosts(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	p, store := recording(machine)
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	dropped, _ := recordedWorker(t, store, "ledger")
+	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.LiveApp{{App: "web", Workers: []string{"worker"}}}}
+
+	plan, err := p.Hooks().Retirement.Plan(context.Background(), live, progress.Discard())
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	before := len(machine.commands())
+	if err := p.Hooks().Retirement.Retire(context.Background(), live, progress.Discard()); err != nil {
+		t.Fatalf("Retire() = %v", err)
+	}
+
+	var planned []string
+	for _, group := range plan.Groups {
+		for _, change := range group.Changes {
+			planned = append(planned, change.Name)
+		}
+	}
+	if !slices.Equal(planned, []string{dropped.Container}) {
+		t.Errorf("the plan removes %v, want ledger's container %s alone", planned, dropped.Container)
+	}
+	if !slices.ContainsFunc(machine.commands()[before:], func(command string) bool {
+		return strings.Contains(command, "docker rm --force '"+dropped.Container+"'")
+	}) {
+		t.Errorf("ledger's container %s was never taken down", dropped.Container)
+	}
+	if _, found := recordedWorker(t, store, "ledger"); found {
+		t.Error("ledger is still recorded after the promotion that dropped it, so the engine keeps delivering to it")
+	}
+	if _, found := recordedWorker(t, store, "worker"); !found {
+		t.Error("the worker web still hosts is no longer recorded")
+	}
+}

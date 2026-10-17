@@ -72,9 +72,7 @@ func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, mani
 			return err
 		}
 	}
-	declared := make([]string, 0, len(app.Workers))
 	for _, worker := range app.Workers {
-		declared = append(declared, worker.Name)
 		name := host.ContainerName(ref.Name.String(), app.App+"-"+worker.Name, app.BuildID, app.Image)
 		if progress != nil {
 			progress.Say("Starting worker " + worker.Name + " from " + app.App + "'s image as " + name)
@@ -97,9 +95,7 @@ func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, mani
 			}
 		}
 	}
-	return p.retireWorkers(ctx, ref, func(name string, worker live.QueueWorker) bool {
-		return worker.App == app.App && !slices.Contains(declared, name)
-	})
+	return nil
 }
 
 func (p *Provider) recordWorker(ctx context.Context, ref provider.StackRef, name string, worker live.QueueWorker) (string, error) {
