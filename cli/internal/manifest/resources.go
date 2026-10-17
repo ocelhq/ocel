@@ -2,7 +2,6 @@ package manifest
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -99,15 +98,11 @@ func (e *InvalidDeclarationError) Error() string {
 	return sourceOrUnknown(e.Source) + ": " + e.Reason
 }
 
-const maxNameBytes = 63
-
-var namePattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
-
 func refuseInvalidName(d declaredResource, name string) error {
-	if len(name) <= maxNameBytes && namePattern.MatchString(name) {
+	if naming.IsResourceName(name) {
 		return nil
 	}
-	return refuse(d, "is named %q, and a name is lowercase letters and digits in words joined by single hyphens, at most %d characters", name, maxNameBytes)
+	return refuse(d, "is named %q, and a name is lowercase letters and digits in words joined by single hyphens, at most %d characters", name, naming.MaxResourceNameBytes)
 }
 
 func refuseDuplicate(prior, d declaredResource, key namespacedName) error {
