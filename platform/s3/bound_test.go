@@ -21,9 +21,32 @@ func boundRecord() *bindingsv1.BucketProperties {
 	}
 }
 
+func TestABoundBucketSignsTheAppsOwnURLsForTheEndpointTheAppReachesTheStoreAt(t *testing.T) {
+	svc := bound("b0", "OCEL_RESOURCE_BUCKET_uploads", boundRecord(), "http://127.0.0.1:7071", &recordingPoster{}, newFakeStore())
+
+	for audience, host := range map[bucketv1.SignedAudience]string{
+		bucketv1.SignedAudience_SIGNED_AUDIENCE_INTERNAL: "127.0.0.1:7071",
+		bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL: "abc.r2.cloudflarestorage.com",
+	} {
+		signed, err := svc.Sign(context.Background(), &bucketv1.SignRequest{
+			Bucket:    "OCEL_RESOURCE_BUCKET_uploads",
+			Key:       "a.png",
+			Operation: bucketv1.SignedOperation_SIGNED_OPERATION_GET,
+			Audience:  audience,
+		})
+		if err != nil {
+			t.Fatalf("Sign(%v): %v", audience, err)
+		}
+		target, err := url.Parse(signed.GetTarget().GetUrl())
+		if err != nil || !strings.HasSuffix(target.Host, host) {
+			t.Errorf("Sign(%v) = %v, want it signed for %s", audience, target, host)
+		}
+	}
+}
+
 func TestABoundBucketIsServedUnderItsBindingsKeyAndThePrefixItNames(t *testing.T) {
 	store := newFakeStore()
-	svc := bound("b0", "OCEL_RESOURCE_BUCKET_uploads", boundRecord(), &recordingPoster{}, store)
+	svc := bound("b0", "OCEL_RESOURCE_BUCKET_uploads", boundRecord(), "", &recordingPoster{}, store)
 
 	if !svc.hasBucket("OCEL_RESOURCE_BUCKET_uploads") {
 		t.Fatal("the backend stores nothing under the binding's key, the name the app reads off the record")
