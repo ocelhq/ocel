@@ -185,6 +185,7 @@ const (
 	ComputeKind_COMPUTE_KIND_UNSPECIFIED ComputeKind = 0
 	ComputeKind_COMPUTE_KIND_SERVERLESS  ComputeKind = 1
 	ComputeKind_COMPUTE_KIND_CONTAINER   ComputeKind = 2
+	ComputeKind_COMPUTE_KIND_MICROVM     ComputeKind = 3
 )
 
 // Enum value maps for ComputeKind.
@@ -193,11 +194,13 @@ var (
 		0: "COMPUTE_KIND_UNSPECIFIED",
 		1: "COMPUTE_KIND_SERVERLESS",
 		2: "COMPUTE_KIND_CONTAINER",
+		3: "COMPUTE_KIND_MICROVM",
 	}
 	ComputeKind_value = map[string]int32{
 		"COMPUTE_KIND_UNSPECIFIED": 0,
 		"COMPUTE_KIND_SERVERLESS":  1,
 		"COMPUTE_KIND_CONTAINER":   2,
+		"COMPUTE_KIND_MICROVM":     3,
 	}
 )
 
@@ -1786,11 +1789,12 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\x17APP_OUTCOME_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15APP_OUTCOME_SUCCEEDED\x10\x01\x12\x16\n" +
 	"\x12APP_OUTCOME_FAILED\x10\x02\x12\x17\n" +
-	"\x13APP_OUTCOME_SKIPPED\x10\x03*d\n" +
+	"\x13APP_OUTCOME_SKIPPED\x10\x03*~\n" +
 	"\vComputeKind\x12\x1c\n" +
 	"\x18COMPUTE_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17COMPUTE_KIND_SERVERLESS\x10\x01\x12\x1a\n" +
-	"\x16COMPUTE_KIND_CONTAINER\x10\x02*l\n" +
+	"\x16COMPUTE_KIND_CONTAINER\x10\x02\x12\x18\n" +
+	"\x14COMPUTE_KIND_MICROVM\x10\x03*l\n" +
 	"\vTriggerKind\x12\x1c\n" +
 	"\x18TRIGGER_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10TRIGGER_KIND_CLI\x10\x01\x12\x13\n" +
