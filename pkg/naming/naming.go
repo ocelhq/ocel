@@ -20,10 +20,17 @@ const (
 	truncationLen    = len(truncationMarker) + truncationDigits
 )
 
+const MaxResourceNameBytes = 63
+
 var (
-	ingestPattern     = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
-	repositoryPattern = regexp.MustCompile(`^[a-z0-9]+([._-][a-z0-9]+)*$`)
+	ingestPattern       = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+	repositoryPattern   = regexp.MustCompile(`^[a-z0-9]+([._-][a-z0-9]+)*$`)
+	resourceNamePattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 )
+
+func IsResourceName(name string) bool {
+	return len(name) <= MaxResourceNameBytes && resourceNamePattern.MatchString(name)
+}
 
 func IsRepositorySegment(value string) bool {
 	return repositoryPattern.MatchString(value)

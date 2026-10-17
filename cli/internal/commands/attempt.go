@@ -15,6 +15,7 @@ func (p ProviderRun) NewAttempt(ctx context.Context, kind consolev1.DeploymentKi
 	return &deployreport.Attempt{
 		Kind:        kind,
 		Project:     cfg,
+		Provider:    providerID(cfg),
 		Environment: env,
 		Target:      deployreport.ReadTarget(ctx, p.Provider),
 		TraceID:     p.Run.TraceID(),

@@ -39,7 +39,7 @@ func TestAStoreTakesThePutTheServiceSignedWithMetadataAndCacheControl(t *testing
 	svc := New(Config{
 		Objects:  store.Client(),
 		Internal: store.Presigner(),
-		Granted:  []string{"uploads"},
+		Granted:  NewGrantsByOwnName("uploads"),
 		Sessions: "uploads/" + ReservedKeyPrefix,
 	})
 

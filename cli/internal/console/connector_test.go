@@ -191,9 +191,16 @@ func TestComputeNameOfSpellsTheWordsTheProviderUses(t *testing.T) {
 		consolev1.ComputeKind_COMPUTE_KIND_UNSPECIFIED: "",
 		consolev1.ComputeKind_COMPUTE_KIND_SERVERLESS:  "serverless",
 		consolev1.ComputeKind_COMPUTE_KIND_CONTAINER:   "container",
+		consolev1.ComputeKind_COMPUTE_KIND_MICROVM:     "microvm",
 	} {
 		if got := ComputeNameOf(kind); got != want {
 			t.Errorf("ComputeNameOf(%v) = %q, want %q", kind, got, want)
+		}
+		if want == "" {
+			continue
+		}
+		if got, ok := computeKindOf(want); !ok || got != kind {
+			t.Errorf("computeKindOf(%q) = %v, %v, want %v, true", want, got, ok, kind)
 		}
 	}
 }

@@ -45,7 +45,7 @@ func boundBackend(t *testing.T, tag, granted string) *Service {
 		External:  func(context.Context) (PresignAPI, string) { return externalPresigner(), "https://r2.example.com" },
 		Callbacks: &recordingPoster{},
 		Sessions:  granted,
-		Granted:   []string{granted},
+		Granted:   NewGrantsByOwnName(granted),
 	})
 }
 

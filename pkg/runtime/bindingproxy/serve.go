@@ -1,8 +1,6 @@
 package bindingproxy
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -54,10 +52,7 @@ func ServeGrants(grants []Grant, report func(error)) (ServedGrants, error) {
 	sessions := make([]Session, 0, len(grants))
 	muxes := make([]tokenMux, 0, len(grants))
 	for _, grant := range grants {
-		token, err := mintToken()
-		if err != nil {
-			return ServedGrants{}, err
-		}
+		token := localrpc.NewSessionToken()
 		sessions = append(sessions, Session{Grantee: grant.Grantee, Token: token})
 		muxes = append(muxes, tokenMux{token: token, mux: NewMux(token, grant.Services)})
 	}
@@ -76,11 +71,7 @@ func ServeGrants(grants []Grant, report func(error)) (ServedGrants, error) {
 }
 
 func Serve(services Services) (Served, error) {
-	token, err := mintToken()
-	if err != nil {
-		return Served{}, err
-	}
-
+	token := localrpc.NewSessionToken()
 	srv, address, errs, err := listen(NewMux(token, services))
 	if err != nil {
 		return Served{}, err
@@ -107,12 +98,4 @@ func listen(handler http.Handler) (*http.Server, string, <-chan error, error) {
 	errs := make(chan error, 1)
 	go func() { errs <- srv.Serve(ln) }()
 	return srv, "http://" + ln.Addr().String(), errs, nil
-}
-
-func mintToken() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("draw a proxy session token: %w", err)
-	}
-	return hex.EncodeToString(b), nil
 }

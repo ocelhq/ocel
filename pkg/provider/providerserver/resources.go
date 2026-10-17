@@ -19,7 +19,7 @@ var resourceTypes = map[resourcesv1.ResourceType]provider.BindingType{
 	resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME: provider.BindingRealtime,
 }
 
-func manifestResources(manifest *contractv1.Manifest) ([]provider.Resource, error) {
+func ReadResources(manifest *contractv1.Manifest) ([]provider.Resource, error) {
 	declared := manifest.GetResources()
 	resources := make([]provider.Resource, 0, len(declared))
 	for _, resource := range declared {
@@ -111,4 +111,35 @@ func kvSpec(config *resourcesv1.KvConfig) (*provider.KVSpec, error) {
 		return nil, err
 	}
 	return &provider.KVSpec{Version: settings.Version, Eviction: settings.Eviction, MemoryBytes: settings.MemoryBytes}, nil
+}
+
+func ReadBoundNamesUsedBy(manifest *contractv1.Manifest, resources []provider.Resource, app string) map[string]bool {
+	names := map[string]bool{}
+	for _, resource := range resourcesUsedBy(manifest, resources, app) {
+		names[boundName(resource)] = true
+	}
+	return names
+}
+
+func resourcesUsedBy(manifest *contractv1.Manifest, resources []provider.Resource, app string) []provider.Resource {
+	edges := map[string]bool{}
+	for _, usage := range manifest.GetUsages() {
+		if usage.GetApp() == app {
+			edges[usage.GetResource()] = true
+		}
+	}
+	var used []provider.Resource
+	for _, resource := range resources {
+		if edges[resource.Name] {
+			used = append(used, resource)
+		}
+	}
+	return used
+}
+
+func boundName(resource provider.Resource) string {
+	if resource.Binding != "" {
+		return resource.Binding
+	}
+	return resource.Name
 }

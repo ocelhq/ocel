@@ -42,7 +42,7 @@ func refuseInvalidWorkers(manifest *contractv1.Manifest) error {
 	return nil
 }
 
-func readWorkers(manifest *contractv1.Manifest) ([]provider.WorkerSpec, error) {
+func ReadWorkers(manifest *contractv1.Manifest) ([]provider.WorkerSpec, error) {
 	if err := refuseInvalidWorkers(manifest); err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func refuseWorkersOnUnservedComputes(facts provider.Facts, manifest *contractv1.
 }
 
 func (r *deployRun) declaredTopics() ([]provider.Resource, error) {
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return nil, err
 	}

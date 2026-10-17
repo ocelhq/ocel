@@ -64,14 +64,14 @@ func TestAConsumerOnAWorkerTheManifestDoesNotDeclareIsRefusedAsInvalid(t *testin
 			}},
 		}},
 	}
-	_, err := manifestResources(manifest)
+	_, err := ReadResources(manifest)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("manifestResources() = %v, want a refusal with code %s", err, refusal.CodeInvalid)
+		t.Fatalf("ReadResources() = %v, want a refusal with code %s", err, refusal.CodeInvalid)
 	}
 	for _, said := range []string{`"thumbnails"`, `worker "media"`} {
 		if !strings.Contains(err.Error(), said) {
-			t.Errorf("manifestResources() = %q, want it to say %s", err, said)
+			t.Errorf("ReadResources() = %q, want it to say %s", err, said)
 		}
 	}
 }

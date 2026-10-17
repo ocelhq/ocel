@@ -21,6 +21,9 @@ const (
 
 	defaultLease = 60 * time.Second
 
+	defaultMaxConns = 4
+	maxConnsSetting = "pool_max_conns"
+
 	minimumPgmq = "1.11.1"
 	openLock    = "ocel.pgmq.open"
 )
@@ -55,12 +58,12 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 	if cfg.ReportAttempt == nil {
 		cfg.ReportAttempt = func(Attempt) {}
 	}
-	if err := ensureDatabase(ctx, cfg); err != nil {
+	parsed, err := readPoolConfig(cfg.ServerURL)
+	if err != nil {
 		return nil, err
 	}
-	parsed, err := pgxpool.ParseConfig(cfg.ServerURL)
-	if err != nil {
-		return nil, fmt.Errorf("read the queue database's address: %w", err)
+	if err := ensureDatabase(ctx, parsed.ConnConfig.Copy(), cfg.Database); err != nil {
+		return nil, err
 	}
 	parsed.ConnConfig.Database = cfg.Database
 	pool, err := pgxpool.NewWithConfig(ctx, parsed)
@@ -119,8 +122,23 @@ func (e *Engine) signal(queue string) {
 	}
 }
 
-func ensureDatabase(ctx context.Context, cfg Config) error {
-	conn, err := pgx.Connect(ctx, cfg.ServerURL)
+func readPoolConfig(serverURL string) (*pgxpool.Config, error) {
+	parsed, err := pgxpool.ParseConfig(serverURL)
+	if err != nil {
+		return nil, fmt.Errorf("read the queue database's address: %w", err)
+	}
+	given, err := pgx.ParseConfig(serverURL)
+	if err != nil {
+		return nil, fmt.Errorf("read the queue database's address: %w", err)
+	}
+	if _, sized := given.RuntimeParams[maxConnsSetting]; !sized {
+		parsed.MaxConns = defaultMaxConns
+	}
+	return parsed, nil
+}
+
+func ensureDatabase(ctx context.Context, server *pgx.ConnConfig, database string) error {
+	conn, err := pgx.ConnectConfig(ctx, server)
 	if err != nil {
 		return fmt.Errorf("connect to the queue database's server: %w", err)
 	}
@@ -129,14 +147,14 @@ func ensureDatabase(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("wait for other engines creating databases: %w", err)
 	}
 	var exists bool
-	if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)", cfg.Database).Scan(&exists); err != nil {
-		return fmt.Errorf("look for database %s: %w", cfg.Database, err)
+	if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)", database).Scan(&exists); err != nil {
+		return fmt.Errorf("look for database %s: %w", database, err)
 	}
 	if exists {
 		return nil
 	}
-	if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{cfg.Database}.Sanitize()); err != nil && !isDuplicateDatabase(err) {
-		return fmt.Errorf("create database %s: %w", cfg.Database, err)
+	if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{database}.Sanitize()); err != nil && !isDuplicateDatabase(err) {
+		return fmt.Errorf("create database %s: %w", database, err)
 	}
 	return nil
 }

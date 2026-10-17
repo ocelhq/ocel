@@ -1,0 +1,167 @@
+syntax = "proto3";
+package cloud.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/cloud/v1;cloudv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "provider/contract/v1/contract.proto";
+
+message App {
+  string name = 1;
+
+  string url = 2;
+
+  AppState state = 3;
+
+  string deployment_id = 4;
+
+  string connector_id = 5;
+
+  google.protobuf.Timestamp created_at = 6;
+}
+
+enum AppState {
+  APP_STATE_UNSPECIFIED = 0;
+  APP_STATE_NOT_DEPLOYED = 1;
+  APP_STATE_RUNNING = 2;
+  APP_STATE_SLEEPING = 3;
+}
+
+message CreateAppRequest {
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 40
+    pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+  }];
+}
+
+message CreateAppResponse {
+  App app = 1;
+}
+
+message ListAppsRequest {}
+
+message ListAppsResponse {
+  repeated App apps = 1;
+}
+
+message GetAppRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetAppResponse {
+  App app = 1;
+}
+
+message DeleteAppRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message DeleteAppResponse {}
+
+service AppService {
+  rpc CreateApp(CreateAppRequest) returns (CreateAppResponse);
+  rpc ListApps(ListAppsRequest) returns (ListAppsResponse);
+  rpc GetApp(GetAppRequest) returns (GetAppResponse);
+  rpc DeleteApp(DeleteAppRequest) returns (DeleteAppResponse);
+}
+
+message Deployment {
+  string id = 1;
+
+  string app = 2;
+
+  DeploymentOutcome outcome = 4;
+
+  string error = 5;
+
+  google.protobuf.Timestamp started_at = 6;
+
+  google.protobuf.Timestamp finished_at = 7;
+
+  repeated string variables = 8;
+
+  map<string, string> images = 9;
+}
+
+enum DeploymentOutcome {
+  DEPLOYMENT_OUTCOME_UNSPECIFIED = 0;
+  DEPLOYMENT_OUTCOME_SUCCEEDED = 1;
+  DEPLOYMENT_OUTCOME_FAILED = 2;
+}
+
+message DeployRequest {
+  string app = 1 [(buf.validate.field).string.min_len = 1];
+
+  provider.contract.v1.Manifest manifest = 3;
+
+  map<string, string> images = 4 [(buf.validate.field).map = {
+    min_pairs: 1
+    keys: {string: {min_len: 1}}
+    values: {string: {pattern: "^sha256:[0-9a-f]{64}$"}}
+  }];
+}
+
+message DeployResponse {
+  Deployment deployment = 1;
+
+  string url = 2;
+
+  map<string, string> urls = 3;
+}
+
+message ListDeploymentsRequest {
+  string app = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListDeploymentsResponse {
+  repeated Deployment deployments = 1;
+}
+
+service DeployService {
+  rpc Deploy(DeployRequest) returns (DeployResponse);
+  rpc ListDeployments(ListDeploymentsRequest) returns (ListDeploymentsResponse);
+}
+
+message Plan {
+  string name = 1;
+
+  int32 max_apps = 2;
+
+  int32 memory_mib = 3;
+
+  int32 sleep_after_seconds = 4;
+}
+
+message Usage {
+  int32 apps = 1;
+}
+
+message GetPlanRequest {}
+
+message GetPlanResponse {
+  Plan plan = 1;
+
+  Usage usage = 2;
+}
+
+service PlanService {
+  rpc GetPlan(GetPlanRequest) returns (GetPlanResponse);
+}
+
+message InstallConnectorRequest {
+  string connector_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message InstallConnectorResponse {
+  string url = 1;
+
+  string public_key = 2;
+
+  repeated string capabilities = 3;
+}
+
+service ConnectorService {
+  rpc InstallConnector(InstallConnectorRequest) returns (InstallConnectorResponse);
+}

@@ -48,6 +48,7 @@ type Dependencies struct {
 	ServeVariableEditor     func(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
 	ReadGitBranch           func(dir string) (string, error)
 	DiscoverPRNumber        func() string
+	SaveImage               func(ctx context.Context, repository, digest string, w io.Writer) error
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
@@ -90,6 +91,9 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", cwd, opts.yes, opts.dry, stdout, stdin)
 	if err != nil || cfg == nil {
 		return err
+	}
+	if cfg.Provider == nil {
+		return deployToOcelCloud(ctx, dependencies, cfg, opts, stderr)
 	}
 
 	if !opts.dry {

@@ -28,6 +28,7 @@ func productionAttempt() Attempt {
 	return Attempt{
 		Kind:        consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY,
 		Project:     &project.Project{Slug: "shop", Provider: &project.Provider{ID: "aws"}},
+		Provider:    "aws",
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Target:      targetAccount,
 		TraceID:     traceID,
