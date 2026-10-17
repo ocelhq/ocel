@@ -53,6 +53,7 @@ type recordType string
 
 const (
 	typeLog       recordType = "log"
+	typeOutput    recordType = "output"
 	typeSpanStart recordType = "span_start"
 	typeSpanEnd   recordType = "span_end"
 	typeError     recordType = "error"
@@ -73,20 +74,28 @@ type openSpan struct {
 	app  string
 }
 
+type appBuild struct {
+	app   string
+	log   io.Writer
+	ended func(error)
+}
+
 type Processor struct {
 	Span     *run.Span
 	Forward  io.Writer
-	AppBuild func(app string) (ended func(error))
+	AppBuild func(app string) (log io.Writer, ended func(error))
 	Hide     redaction.Values
 
 	forwarding *redaction.Writer
 
-	mu        sync.Mutex
-	spans     map[string]openSpan
-	spanByApp map[string]*run.Span
-	builds    map[string]func(error)
-	err       string
-	unread    error
+	mu         sync.Mutex
+	spans      map[string]openSpan
+	spanByApp  map[string]*run.Span
+	builds     map[string]appBuild
+	buildByApp map[string]appBuild
+	err        string
+	errByApp   map[string]string
+	unread     error
 }
 
 const buildStage = "build"
@@ -192,6 +201,8 @@ func (p *Processor) apply(rec record) {
 	switch rec.Type {
 	case typeLog:
 		p.log(rec)
+	case typeOutput:
+		p.output(rec)
 	case typeSpanStart:
 		p.startBuild(rec)
 		p.startSpan(rec)
@@ -201,9 +212,26 @@ func (p *Processor) apply(rec record) {
 	case typeError:
 		p.mu.Lock()
 		p.err = rec.Message
+		if rec.App != "" {
+			if p.errByApp == nil {
+				p.errByApp = make(map[string]string)
+			}
+			p.errByApp[rec.App] = rec.Message
+		}
 		p.mu.Unlock()
 		p.log(rec)
 	}
+}
+
+func (p *Processor) output(rec record) {
+	p.mu.Lock()
+	build, found := p.buildByApp[rec.App]
+	p.mu.Unlock()
+	if !found {
+		p.forward(rec.Message)
+		return
+	}
+	_, _ = io.WriteString(build.log, rec.Message+"\n")
 }
 
 func (p *Processor) log(rec record) {
@@ -222,32 +250,39 @@ func (p *Processor) startBuild(rec record) {
 	if p.AppBuild == nil || rec.Stage != buildStage || rec.App == "" || rec.ID == "" {
 		return
 	}
-	ended := p.AppBuild(rec.App)
+	log, ended := p.AppBuild(rec.App)
+	build := appBuild{app: rec.App, log: log, ended: ended}
 	p.mu.Lock()
 	if p.builds == nil {
-		p.builds = make(map[string]func(error))
+		p.builds = make(map[string]appBuild)
+		p.buildByApp = make(map[string]appBuild)
 	}
-	p.builds[rec.ID] = ended
+	p.builds[rec.ID] = build
+	p.buildByApp[rec.App] = build
 	p.mu.Unlock()
 }
 
 func (p *Processor) endBuild(rec record) {
 	p.mu.Lock()
-	ended, found := p.builds[rec.ID]
+	build, found := p.builds[rec.ID]
 	delete(p.builds, rec.ID)
-	failure := p.err
+	failure := p.errByApp[build.app]
+	if found {
+		delete(p.buildByApp, build.app)
+		delete(p.errByApp, build.app)
+	}
 	p.mu.Unlock()
 	if !found {
 		return
 	}
 	switch {
 	case rec.OK == nil || *rec.OK:
-		ended(nil)
+		build.ended(nil)
 	case failure != "":
 		first, _, _ := strings.Cut(failure, "\n")
-		ended(errors.New(first))
+		build.ended(errors.New(first))
 	default:
-		ended(errBuildFailed)
+		build.ended(errBuildFailed)
 	}
 }
 
@@ -303,6 +338,7 @@ func (p *Processor) Abort(ctx context.Context) error {
 	p.spans = nil
 	p.spanByApp = nil
 	p.builds = nil
+	p.buildByApp = nil
 	p.mu.Unlock()
 	for _, s := range spans {
 		s.span.End(errStageAbandoned)
@@ -316,8 +352,8 @@ func (p *Processor) Abort(ctx context.Context) error {
 	case cause == nil:
 		cause = errBuilderExited
 	}
-	for _, ended := range builds {
-		ended(cause)
+	for _, build := range builds {
+		build.ended(cause)
 	}
 	return cause
 }

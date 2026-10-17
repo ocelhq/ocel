@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import { promisify } from "node:util";
 import type { Hosting } from "@platform/edge-contract/hosting";
 import { detect, resolveCommand } from "package-manager-detector";
@@ -21,6 +22,12 @@ export interface ScriptBuild {
 }
 
 const LIVE_DIR_ENV = "OCEL_LIVE_DIR";
+
+const MAX_LINE_CHARS = 64 * 1024;
+
+export interface BuildLog {
+  print(line: string): void;
+}
 
 export interface BuildNode {
   version: string;
@@ -51,6 +58,7 @@ export function prependScriptBins(cwd: string, inherited = ""): string {
 export async function runBuildScript(
   app: ScriptBuild,
   owned: Record<string, string>,
+  log: BuildLog,
   refuseBuild?: (env: Record<string, string>) => Promise<void>,
 ): Promise<void> {
   for (const name of Object.keys(owned)) {
@@ -86,7 +94,7 @@ export async function runBuildScript(
     }
   }
   await refuseBuild?.(env);
-  await buildProcess.spawn(resolved.command, resolved.args, app.cwd, env);
+  await buildProcess.spawn(resolved.command, resolved.args, app.cwd, env, log);
 }
 
 async function spawnBuild(
@@ -94,20 +102,49 @@ async function spawnBuild(
   args: string[],
   cwd: string,
   env: Record<string, string>,
+  log: BuildLog,
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       env,
-      stdio: ["ignore", "inherit", "inherit"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
+    printLines(child.stdout, log);
+    printLines(child.stderr, log);
     child.on("error", reject);
-    child.on("exit", (code) =>
+    child.on("close", (code) =>
       code === 0
         ? resolve()
         : reject(new Refusal(`${command} ${args.join(" ")} exited with code ${code}`)),
     );
   });
+}
+
+function printLines(stream: Readable, log: BuildLog): void {
+  let partial = "";
+  stream.setEncoding("utf8");
+  stream.on("data", (chunk: string) => {
+    const lines = (partial + chunk).split("\n");
+    partial = lines.pop() ?? "";
+    for (const line of lines) printPieces(line.replace(/\r$/, ""), log);
+    const whole = partial.length - (partial.length % MAX_LINE_CHARS);
+    if (whole > 0) {
+      printPieces(partial.slice(0, whole), log);
+      partial = partial.slice(whole);
+    }
+  });
+  stream.on("end", () => {
+    if (partial) log.print(partial);
+  });
+}
+
+function printPieces(line: string, log: BuildLog): void {
+  let start = 0;
+  do {
+    log.print(line.slice(start, start + MAX_LINE_CHARS));
+    start += MAX_LINE_CHARS;
+  } while (start < line.length);
 }
 
 export interface OutputBuild extends ScriptBuild {
@@ -127,6 +164,7 @@ export async function runAdapterBuild(
   app: OutputBuild,
   adapter: Adapter,
   env: Record<string, string>,
+  log: BuildLog,
 ): Promise<Hosting> {
   await runBuildScript(
     app,
@@ -137,6 +175,7 @@ export async function runAdapterBuild(
       [APP_FOLDER_ENV]: app.folder ?? "",
       ...env,
     },
+    log,
     adapter.refuseBuild,
   );
   return readHosting(app, adapter);

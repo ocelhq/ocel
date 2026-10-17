@@ -3,16 +3,52 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Refusal } from "../src/refusal.mjs";
-import { buildProcess, runAdapterBuild } from "../src/script.mjs";
+import { type BuildLog, buildProcess, runAdapterBuild } from "../src/script.mjs";
+
+const quiet: BuildLog = { print: () => {} };
 
 describe("buildProcess.spawn", () => {
   it("refuses a build command that exits non-zero, naming the command and its code", async () => {
-    const failed = buildProcess.spawn("node", ["-e", "process.exit(3)"], tmpdir(), {
-      PATH: process.env.PATH ?? "",
-    });
+    const failed = buildProcess.spawn(
+      "node",
+      ["-e", "process.exit(3)"],
+      tmpdir(),
+      { PATH: process.env.PATH ?? "" },
+      quiet,
+    );
 
     await expect(failed).rejects.toThrow(/node -e process\.exit\(3\) exited with code 3/);
     await expect(failed).rejects.toBeInstanceOf(Refusal);
+  });
+
+  it("prints each line the build writes to stdout or stderr, a last unterminated one too", async () => {
+    const printed: string[] = [];
+
+    await buildProcess.spawn(
+      "node",
+      ["-e", 'process.stdout.write("compiled\\npages: 3"); process.stderr.write("a warning\\n")'],
+      tmpdir(),
+      { PATH: process.env.PATH ?? "" },
+      { print: (line) => printed.push(line) },
+    );
+
+    expect(printed.filter((line) => line !== "a warning")).toEqual(["compiled", "pages: 3"]);
+    expect(printed).toContain("a warning");
+  });
+
+  it("prints a line too long to hold whole in pieces, losing none of it", async () => {
+    const printed: string[] = [];
+
+    await buildProcess.spawn(
+      "node",
+      ["-e", 'process.stdout.write("x".repeat(200000) + "\\n")'],
+      tmpdir(),
+      { PATH: process.env.PATH ?? "" },
+      { print: (line) => printed.push(line) },
+    );
+
+    expect(printed.length).toBeGreaterThan(1);
+    expect(printed.join("")).toBe("x".repeat(200000));
   });
 });
 
@@ -48,7 +84,7 @@ describe("runAdapterBuild", () => {
       );
     };
 
-    const hosting = await runAdapterBuild(built, adapter, { OCEL_BUILD_ID: "b1" });
+    const hosting = await runAdapterBuild(built, adapter, { OCEL_BUILD_ID: "b1" }, quiet);
 
     expect(env).toMatchObject({
       NODE_ENV: "production",
@@ -63,7 +99,7 @@ describe("runAdapterBuild", () => {
   it("says how to set the adapter up when the build wrote no hosting", async () => {
     buildProcess.spawn = async () => {};
 
-    const refused = runAdapterBuild(app(), adapter, {});
+    const refused = runAdapterBuild(app(), adapter, {}, quiet);
 
     await expect(refused).rejects.toThrow(
       /nothing wrote hosting\.json.*@ocel\/sveltekit\. Add it as the adapter/,
@@ -77,7 +113,7 @@ describe("runAdapterBuild", () => {
       buildProcess.spawn = async () =>
         writeFileSync(path.join(built.outputDir, "hosting.json"), body);
 
-      await expect(runAdapterBuild(built, adapter, {})).rejects.toThrow(
+      await expect(runAdapterBuild(built, adapter, {}, quiet)).rejects.toThrow(
         /hosting\.json it wrote is not an object/,
       );
     });
@@ -88,7 +124,9 @@ describe("runAdapterBuild", () => {
     buildProcess.spawn = async () =>
       writeFileSync(path.join(built.outputDir, "hosting.json"), '{"framework":"node"}');
 
-    await expect(runAdapterBuild(built, adapter, {})).rejects.toThrow(/names framework "node"/);
+    await expect(runAdapterBuild(built, adapter, {}, quiet)).rejects.toThrow(
+      /names framework "node"/,
+    );
   });
 
   it("refuses hosting of a version this CLI does not read, saying how to match it", async () => {
@@ -99,7 +137,7 @@ describe("runAdapterBuild", () => {
         '{"version":2,"framework":"sveltekit"}',
       );
 
-    const refused = runAdapterBuild(built, adapter, {});
+    const refused = runAdapterBuild(built, adapter, {}, quiet);
 
     await expect(refused).rejects.toThrow(/version 2.*Install the @ocel\/sveltekit release/);
     await expect(refused).rejects.toBeInstanceOf(Refusal);

@@ -3,9 +3,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Refusal } from "@framework/node-build/refusal";
-import { buildProcess } from "@framework/node-build/script";
+import { type BuildLog, buildProcess } from "@framework/node-build/script";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { buildNext, type NextBuild } from "../src/build.mjs";
+
+const quiet: BuildLog = { print: () => {} };
 
 const roots: string[] = [];
 afterAll(() => {
@@ -57,14 +59,14 @@ async function envOf(build: NextBuild): Promise<Record<string, string>> {
     env = e;
     writeNextHosting(e);
   };
-  await buildNext(build, ADAPTER);
+  await buildNext(build, ADAPTER, quiet);
   return env;
 }
 
 describe("buildNext", () => {
   it("throws when there is no build script", async () => {
     const cwd = nextApp({ dependencies: { next: "16" } });
-    const refused = buildNext(app({ cwd }), ADAPTER);
+    const refused = buildNext(app({ cwd }), ADAPTER, quiet);
 
     await expect(refused).rejects.toThrow(/no "build" script/);
     await expect(refused).rejects.toBeInstanceOf(Refusal);
@@ -73,7 +75,7 @@ describe("buildNext", () => {
   it("names the next release that runs the adapter when the build wrote no hosting", async () => {
     buildProcess.spawn = async () => {};
 
-    await expect(buildNext(app(), ADAPTER)).rejects.toThrow(
+    await expect(buildNext(app(), ADAPTER, quiet)).rejects.toThrow(
       /nothing wrote hosting\.json.*upgrade next to 16\.2\.10/,
     );
   });
@@ -86,7 +88,7 @@ describe("buildNext", () => {
     };
     const build = app();
 
-    await buildNext(build, ADAPTER);
+    await buildNext(build, ADAPTER, quiet);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.[0]).toBe(build.cwd);
@@ -135,7 +137,7 @@ describe("buildNext", () => {
       let ran = false;
       buildProcess.spawn = async () => void (ran = true);
 
-      const refused = buildNext(app({ env: { [owned]: "hijacked" } }), ADAPTER);
+      const refused = buildNext(app({ env: { [owned]: "hijacked" } }), ADAPTER, quiet);
 
       await expect(refused).rejects.toThrow(owned);
       await expect(refused).rejects.toBeInstanceOf(Refusal);
@@ -225,7 +227,7 @@ describe("buildNext", () => {
       buildProcess.spawn = async () => void (ran = true);
       const build = app({ env: { OCEL_LIVE_DIR: "/tmp/ocel-live-1", PATH: "/app/bin" } });
 
-      const refused = buildNext(build, ADAPTER);
+      const refused = buildNext(build, ADAPTER, quiet);
 
       await expect(refused).rejects.toThrow(/Node 20\.16\+ or 22\.3\+/);
       await expect(refused).rejects.toThrow(/20\.11\.0/);
@@ -298,7 +300,7 @@ describe("buildNext", () => {
         ran = true;
         writeNextHosting(e);
       };
-      const result = buildNext(app({ cwd, env }), adapter).then(() => ran);
+      const result = buildNext(app({ cwd, env }), adapter, quiet).then(() => ran);
       return { result, ran: () => ran };
     }
 

@@ -1,4 +1,4 @@
-import { type OutputBuild, runAdapterBuild } from "@framework/node-build/script";
+import { type BuildLog, type OutputBuild, runAdapterBuild } from "@framework/node-build/script";
 
 export interface SvelteKitBuild extends OutputBuild {
   buildId: string;
@@ -6,7 +6,7 @@ export interface SvelteKitBuild extends OutputBuild {
 
 const ADAPTER = "@ocel/sveltekit";
 
-export async function buildSvelteKit(app: SvelteKitBuild): Promise<void> {
+export async function buildSvelteKit(app: SvelteKitBuild, log: BuildLog): Promise<void> {
   await runAdapterBuild(
     app,
     {
@@ -18,6 +18,7 @@ export async function buildSvelteKit(app: SvelteKitBuild): Promise<void> {
       upgrade: `Install the ${ADAPTER} release that matches this CLI`,
     },
     { OCEL_BUILD_ID: app.buildId },
+    log,
   );
-  process.stderr.write(`ocel: SvelteKit app "${app.name}" built\n`);
+  log.print(`ocel: SvelteKit app "${app.name}" built`);
 }
