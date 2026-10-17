@@ -41,12 +41,12 @@ func (e *Edge) openTunnel(ctx context.Context, kind edge.Kind) (host.Tunnel, err
 	return reserved, nil
 }
 
-func (e *Edge) tunnelHost(ctx context.Context, claim string, stores []string, kind edge.Kind, owner string) (edge.Origin, error) {
+func (e *Edge) tunnelHost(ctx context.Context, claim string, storeHostnames []string, kind edge.Kind, owner string) (edge.Origin, error) {
 	tunnel, err := e.openTunnel(ctx, kind)
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	for _, hostname := range append([]string{claim}, stores...) {
+	for _, hostname := range append([]string{claim}, storeHostnames...) {
 		if err := e.machine.TunnelHost(ctx, host.TunneledHost{Hostname: hostname, Owner: owner}, tunnel.Name); err != nil {
 			if errors.Is(err, host.ErrTunnelReleased) {
 				return edge.Origin{}, errors.Join(err, e.machine.StopTunnel(ctx, tunnel))
