@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import { chmod, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { deploy, sdk } from "./matrix/fixtures";
@@ -8,6 +8,7 @@ import { appDirs, configTree, treeRoot } from "./ocel";
 import { outputRoot } from "./paths";
 import type { CellUnderTest } from "./run/cellRun";
 import {
+  copySdks,
   copyTree,
   formatGoWork,
   lockfileInstallArgs,
@@ -232,7 +233,7 @@ describe("the go workspace a tree gets", () => {
   });
 });
 
-describe("the SDKs a tree links beside an app", () => {
+describe("the SDKs a tree copies beside an app", () => {
   async function appWith(files: string[]): Promise<string> {
     const dir = await mkdtemp(path.join(tmpdir(), "journey-sdks-"));
     for (const file of files) {
@@ -241,14 +242,26 @@ describe("the SDKs a tree links beside an app", () => {
     return dir;
   }
 
-  it("links the SDK of each language whose project file the app holds", async () => {
+  it("names the SDK of each language whose project file the app holds", async () => {
     expect(await readSdkDirs(await appWith(["go.mod"]))).toEqual(["sdk"]);
     expect(await readSdkDirs(await appWith(["Cargo.toml"]))).toEqual(["crates"]);
     expect(await readSdkDirs(await appWith(["pyproject.toml", "main.py"]))).toEqual(["python"]);
   });
 
-  it("links none for an app of node alone", async () => {
+  it("names none for an app of node alone", async () => {
     expect(await readSdkDirs(await appWith(["package.json"]))).toEqual([]);
+  });
+
+  it("holds a copy of the SDK rather than a link to it, so an image build context carries it", async () => {
+    const source = await mkdtemp(path.join(tmpdir(), "journey-sdk-source-"));
+    await mkdir(path.join(source, "sdk"));
+    await writeFile(path.join(source, "sdk/go.mod"), "module ocel.dev\n");
+    const root = await mkdtemp(path.join(tmpdir(), "journey-sdk-tree-"));
+    await mkdir(path.join(root, "apps/web"), { recursive: true });
+    await writeFile(path.join(root, "apps/web/go.mod"), "module example.com/web\n");
+    await copySdks(source, root, ["apps/web"]);
+    expect((await lstat(path.join(root, "sdk"))).isSymbolicLink()).toBe(false);
+    expect(await readFile(path.join(root, "sdk/go.mod"), "utf8")).toBe("module ocel.dev\n");
   });
 });
 
