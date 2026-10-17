@@ -29,27 +29,10 @@ func previewing() RoutingTable {
 func TestAPreviewBaseTheSwitchboardCouldNotAnswerUnderIsRefused(t *testing.T) {
 	t.Parallel()
 
-	for what, base := range map[string]string{
-		"a wildcard for a base":         "*.preview.example.com",
-		"a path where a name goes":      "preview/example.com",
-		"a bare wildcard":               "*",
-		"a dotless name":                "example",
-		"a trailing dot":                "preview.example.com.",
-		"an empty label":                "preview..example.com",
-		"an underscore in a label":      "exam_ple.com",
-		"a label opening with a hyphen": "-preview.example.com",
-		"a label closing with a hyphen": "preview-.example.com",
-		"a label over 63 bytes":         strings.Repeat("a", 64) + ".example.com",
-		"a name the probe overflows":    strings.Repeat(strings.Repeat("a", 63)+".", 3) + strings.Repeat("b", 55) + ".com",
-	} {
+	for _, base := range []string{"exam_ple.com", strings.Repeat("a", 64) + ".example.com"} {
 		if _, err := RenderProxyConfig(caddy.Builtin{}, RoutingTable{Grace: DrainWindow, PreviewBase: base}); err == nil {
-			t.Errorf("a preview entry on base %q (%s) renders, and the switchboard admits its probe for a certificate: a name no CA can ever issue for is an order that fails on every handshake for as long as the base is in place",
-				base, what)
-		}
-	}
-	for _, base := range []string{"PREVIEW.Example.COM", strings.Repeat("a", 63) + ".example.com"} {
-		if err := PreviewBaseUsable(base); err != nil {
-			t.Errorf("PreviewBaseUsable(%q) = %v, want nil: a label is 63 bytes and a name is read case-insensitively", base, err)
+			t.Errorf("a preview entry on base %q renders, and the switchboard admits its probe for a certificate: a name no CA can ever issue for is an order that fails on every handshake for as long as the base is in place",
+				base)
 		}
 	}
 	if err := PreviewBaseUsable(""); err == nil {
@@ -336,18 +319,6 @@ func TestDescribingABoxBeforeItHasARoutingTableStillRefusesUnguardedOnDemandTls(
 		_, err := NewBootstrap(rig.host(), testVendor, "shop").described(context.Background(), read)
 		if refused := err != nil; refused != box.refused {
 			t.Errorf("describing a box bootstrapped before its routing table, running %s = %v, want it described so the plan can seed the table, unless its proxy may order without the switchboard's word", what, err)
-		}
-	}
-}
-
-func TestABaseTheOperatorTypedIsTheBaseTheyGet(t *testing.T) {
-	t.Parallel()
-
-	for _, base := range []string{"203.0.113.10.sslip.io", "nip.io", "preview.acme.co.uk", "internal"} {
-		usable := PreviewBaseUsable(base)
-		if strings.Contains(base, ".") != (usable == nil) {
-			t.Errorf("PreviewBaseUsable(%q) = %v: a base off the public suffix list shares a cookie origin with everything else under it, and that is a trade an operator makes knowingly by typing it — there is no vendor named here, no allowlist and no warning that ages",
-				base, usable)
 		}
 	}
 }

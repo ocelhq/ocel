@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 type Domains struct {
@@ -59,6 +60,9 @@ func ValidatePreviewDomain(domain string) error {
 	}
 	if labels[0] != "*" {
 		return fmt.Errorf("preview domain %q must have its wildcard as the whole leftmost label (e.g. \"*.preview.example.com\")", domain)
+	}
+	if err := edge.RefuseUnusablePreviewBase(PreviewBaseDomain(domain)); err != nil {
+		return fmt.Errorf("preview domain %q: %w", domain, err)
 	}
 	return nil
 }
