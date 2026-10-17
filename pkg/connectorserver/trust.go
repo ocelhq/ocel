@@ -22,7 +22,7 @@ const skew = 30 * time.Second
 
 const refetchFloor = 5 * time.Second
 
-type keyring struct {
+type Keyring struct {
 	url string
 
 	mu        sync.Mutex
@@ -30,7 +30,9 @@ type keyring struct {
 	fetchedAt time.Time
 }
 
-func (k *keyring) forKeyID(ctx context.Context, kid string) (jwk.Set, error) {
+func NewKeyring(url string) *Keyring { return &Keyring{url: url} }
+
+func (k *Keyring) Read(ctx context.Context, kid string) (jwk.Set, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
@@ -57,7 +59,7 @@ type trust struct {
 	connectorID string
 	subject     string
 	grants      []string
-	keys        *keyring
+	keys        *Keyring
 }
 
 func newTrust(spec Spec) (*trust, error) {
@@ -70,7 +72,7 @@ func newTrust(spec Spec) (*trust, error) {
 		connectorID: spec.ConnectorID,
 		subject:     "org:" + spec.OrganizationID,
 		grants:      spec.Grants,
-		keys:        &keyring{url: origin + "/api/auth/jwks"},
+		keys:        NewKeyring(origin + "/api/auth/jwks"),
 	}, nil
 }
 
@@ -138,7 +140,7 @@ func (t *trust) caller(ctx context.Context, authorization string) (claims, error
 	}
 	kid, _ := signatures[0].ProtectedHeaders().KeyID()
 
-	set, err := t.keys.forKeyID(ctx, kid)
+	set, err := t.keys.Read(ctx, kid)
 	if err != nil {
 		return claims{}, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("reach the console keys: %w", err))
 	}

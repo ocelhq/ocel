@@ -23,6 +23,8 @@ const (
 	beatLifetime = 5 * time.Minute
 
 	connectRoute = "/api/connect"
+
+	HeartbeatPath = "/v1/heartbeat"
 )
 
 func originOf(raw string) (string, error) {
@@ -85,6 +87,22 @@ func Heartbeat(ctx context.Context, spec Spec) error {
 		return err
 	}
 	return beating.once(ctx)
+}
+
+func heartbeatRequest(spec Spec) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := spec.VerifyHeartbeat(r); err != nil {
+			fmt.Printf("connector %s: a heartbeat request was refused: %v\n", spec.ConnectorID, err)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if err := Heartbeat(r.Context(), spec); err != nil {
+			fmt.Printf("connector %s: heartbeat did not go through: %v\n", spec.ConnectorID, err)
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func (b *beat) token() (string, error) {

@@ -39,6 +39,8 @@ type Spec struct {
 	Identity Identity
 
 	ConfigPath string
+
+	VerifyHeartbeat func(*http.Request) error
 }
 
 func Serve(spec Spec) error {
@@ -175,6 +177,10 @@ func Mux(spec Spec) (*http.ServeMux, error) {
 			"capabilities": spec.Grants,
 		})
 	})
+
+	if spec.VerifyHeartbeat != nil {
+		mux.HandleFunc("POST "+HeartbeatPath, heartbeatRequest(spec))
+	}
 
 	return mux, nil
 }
