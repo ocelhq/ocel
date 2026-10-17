@@ -41,7 +41,7 @@ func runningContainer(t *testing.T, served string) *bench {
 	t.Helper()
 	box := machine(nil)
 	imaging(box, served)
-	if err := box.host().RunContainer(context.Background(), aContainer()); err != nil {
+	if _, err := box.host().RunContainer(context.Background(), aContainer()); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	return box
@@ -107,6 +107,35 @@ func TestAContainerAlreadyServingTheReleasesImageIsKeptRatherThanRecreated(t *te
 		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
 			t.Errorf("a redeploy of a release already running ran %q, and the container serving live traffic is torn down for one that is the same", command)
 		}
+	}
+}
+
+func TestRunningAContainerSaysItCreatedOneOnlyWhenNoneWasThereToKeep(t *testing.T) {
+	t.Parallel()
+
+	for what, run := range map[string]struct {
+		spec    Container
+		served  string
+		created bool
+	}{
+		"a release already running":    {spec: aContainer(), served: "running " + appImage + " " + handedTo(aContainer()).digest},
+		"a stopped container":          {spec: promoted(), served: "exited " + appImage + " 7f3a9c1e2b4d"},
+		"a release with no container":  {spec: aContainer(), served: "", created: true},
+		"a container of another image": {spec: aContainer(), served: "running ocel/shop/web:sha256-older", created: true},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			box := machine(nil)
+			imaging(box, run.served)
+			created, err := box.host().RunContainer(context.Background(), run.spec)
+			if err != nil {
+				t.Fatalf("RunContainer() of %s = %v", what, err)
+			}
+			if created != run.created {
+				t.Errorf("RunContainer() of %s says it created one: %v, want %v: a refused promotion removes only the containers it created, and a container it kept may be the only one holding a rollback's values", what, created, run.created)
+			}
+		})
 	}
 }
 

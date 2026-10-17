@@ -160,7 +160,7 @@ func TestEveryFileALoginWithSudoWritesAsTheDeployLoginHoldsWhatItWasFed(t *testi
 		return served(command)
 	}
 	container, resource := valued(), resourced()
-	if err := rig.host().RunContainer(context.Background(), container); err != nil {
+	if _, err := rig.host().RunContainer(context.Background(), container); err != nil {
 		t.Fatalf("RunContainer() as a login with sudo = %v", err)
 	}
 	if err := rig.host().RunResource(context.Background(), resource, "secret"); err != nil {

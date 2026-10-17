@@ -39,6 +39,7 @@ type machine struct {
 	shields     []host.Shield
 	upstream    map[host.RouteKey]string
 	swept       map[string]bool
+	present     map[string]bool
 	calls       []string
 	rollouts    []host.Rollout
 	started     []host.Container
@@ -68,6 +69,7 @@ func aMachine() *machine {
 	return &machine{
 		upstream: map[host.RouteKey]string{},
 		swept:    map[string]bool{},
+		present:  map[string]bool{},
 		refusals: map[string]error{},
 
 		recordedGates: map[string]gate.Gate{},
@@ -106,10 +108,15 @@ func (m *machine) HasImage(_ context.Context, coordinate string) (bool, error) {
 	return !m.swept[coordinate], nil
 }
 
-func (m *machine) RunContainer(_ context.Context, spec host.Container) error {
+func (m *machine) RunContainer(_ context.Context, spec host.Container) (bool, error) {
 	m.calls = append(m.calls, "run "+spec.Name)
 	m.started = append(m.started, spec)
-	return m.refuse("RunContainer")
+	created := !m.present[spec.Name]
+	if err := errors.Join(m.refuse("RunContainer"), m.refuse("RunContainer "+spec.Name)); err != nil {
+		return created, err
+	}
+	m.present[spec.Name] = true
+	return created, nil
 }
 
 func (m *machine) ForgetNetwork(_ context.Context, tier environment.Tier, project string) error {
@@ -658,15 +665,23 @@ func TestAPromotionThatFailedAfterTheCutoverHeadsTheWindowAtTheReleaseTheBoxServ
 	}
 }
 
-func TestAPromotionRefusedBeforeItsRollOutRemovesTheContainersNothingRoutesTo(t *testing.T) {
+func TestAPromotionRefusedBeforeItsRollOutRemovesOnlyTheContainersItCreated(t *testing.T) {
 	t.Parallel()
 
-	for what, refuse := range map[string]func(*machine){
-		"a container that would not run": func(m *machine) {
-			m.refuseOn("RunContainer", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
+	for what, refused := range map[string]struct {
+		refuse func(*machine)
+		want   []string
+	}{
+		"a container that would not run": {
+			refuse: func(m *machine) {
+				m.refuseOn("RunContainer", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
+			},
+			want: []string{"shop-api-1111:" + containerimage.PortText},
 		},
-		"a gate the box would not take": func(m *machine) {
-			m.refuseOn("PutGate", refusal.Refuse(refusal.CodeNotReady, "the routing table could not be written"))
+		"a gate the box would not take": {
+			refuse: func(m *machine) {
+				m.refuseOn("PutGate", refusal.Refuse(refusal.CodeNotReady, "the routing table could not be written"))
+			},
 		},
 	} {
 		t.Run(what, func(t *testing.T) {
@@ -675,7 +690,7 @@ func TestAPromotionRefusedBeforeItsRollOutRemovesTheContainersNothingRoutesTo(t 
 			m, _, stack := reconciled(t)
 			staged(t, stack, "web", "b1", "shop-web-1111")
 			staged(t, stack, "api", "b1", "shop-api-1111")
-			refuse(m)
+			refused.refuse(m)
 			m.leftRunning = "\nshop-api-1111 left running: the daemon went away"
 
 			err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
@@ -684,12 +699,53 @@ func TestAPromotionRefusedBeforeItsRollOutRemovesTheContainersNothingRoutesTo(t 
 			if err == nil {
 				t.Fatalf("a promotion refused by %s succeeded", what)
 			}
-			want := []string{"shop-api-1111:" + containerimage.PortText, "shop-web-1111:" + containerimage.PortText}
-			if !slices.Equal(m.discarded, want) {
-				t.Errorf("after %s the box discarded %v, want %v: a refused promotion leaves no container of its own running with nothing routed to it", what, m.discarded, want)
+			if !slices.Equal(m.discarded, refused.want) {
+				t.Errorf("after %s the box discarded %v, want %v: a refused promotion removes the containers it created and nothing it never reached", what, m.discarded, refused.want)
 			}
-			if !strings.Contains(err.Error(), "shop-api-1111 left running: the daemon went away") {
+			if len(refused.want) > 0 && !strings.Contains(err.Error(), "shop-api-1111 left running: the daemon went away") {
 				t.Errorf("the refusal reads\n%s\nand never names the container the box could not remove", err)
+			}
+		})
+	}
+}
+
+func TestARollbackRefusedBeforeItsRollOutKeepsTheContainersItRollsBackTo(t *testing.T) {
+	t.Parallel()
+
+	for what, refuse := range map[string]func(*machine){
+		"a gate the box would not take": func(m *machine) {
+			m.refuseOn("PutGate", refusal.Refuse(refusal.CodeNotReady, "the routing table could not be written"))
+		},
+		"a container that would not run again": func(m *machine) {
+			m.refuseOn("RunContainer shop-web-1111", refusal.Refuse(refusal.CodeNotReady, "docker start failed"))
+		},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			m, _, stack := reconciled(t)
+			for _, app := range []string{"api", "web"} {
+				staged(t, stack, app, "b1", "shop-"+app+"-1111")
+				staged(t, stack, app, "b2", "shop-"+app+"-2222")
+			}
+			for _, promotion := range []router.Promotion{
+				{PromotionID: "p1", Ts: 1, Releases: map[string]string{"api": "b1", "web": "b1"}},
+				{PromotionID: "p2", Ts: 2, Releases: map[string]string{"api": "b2", "web": "b2"}},
+			} {
+				if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress.Discard()); err != nil {
+					t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
+				}
+			}
+			refuse(m)
+
+			err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
+				PromotionID: "p3", Ts: 3, Releases: map[string]string{"api": "b1", "web": "b1"},
+			}}, progress.Discard())
+			if err == nil {
+				t.Fatalf("a rollback refused by %s succeeded", what)
+			}
+			if len(m.discarded) != 0 {
+				t.Errorf("after %s the box discarded %v: the rollback created neither, and a retired container removed is a release that can never be rolled back to", what, m.discarded)
 			}
 		})
 	}
