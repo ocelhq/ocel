@@ -452,7 +452,7 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress
 	}
 
 	var res auto.UpResult
-	err = runReportingResourceOps(setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
+	err = runReportingResourceOperations(setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
 		opts := []optup.Option{optup.Parallel(setup.Parallel), optup.EventStreams(engineEvents)}
 		if lines != nil {
 			opts = append(opts, optup.ProgressStreams(lines))
@@ -470,7 +470,7 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress
 	return res.Outputs, nil
 }
 
-func runReportingResourceOps(setup WorkspaceSpec, progress progress.Log, run func(engineEvents chan<- events.EngineEvent, lines *lineLog) error) error {
+func runReportingResourceOperations(setup WorkspaceSpec, progress progress.Log, run func(engineEvents chan<- events.EngineEvent, lines *lineLog) error) error {
 	lines := engineLines(progress)
 	engineEvents := make(chan events.EngineEvent, 256)
 	traced := drainTrace(engineEvents, resourceLatencyOutlierThreshold, setup.Secrets)
@@ -503,7 +503,7 @@ func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress pro
 	if progress != nil {
 		progress.Say("Destroying every resource in stack " + setup.Stack + ", which can take several minutes")
 	}
-	err = runReportingResourceOps(setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
+	err = runReportingResourceOperations(setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
 		opts := []optdestroy.Option{optdestroy.Parallel(setup.Parallel), optdestroy.EventStreams(engineEvents)}
 		if lines != nil {
 			opts = append(opts, optdestroy.ProgressStreams(lines))
