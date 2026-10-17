@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudfront"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
@@ -131,6 +132,10 @@ func (r *Stacks) readContainerInfra(ctx context.Context, tier environment.Tier) 
 	}
 	_, present, err := stackrecords.Read(ctx, owner.cfg.KeyValues, tier, ContainersSlug, containerInfraRef(tier).Name)
 	if err != nil || !present {
+		return containerInfra{}, false, err
+	}
+	state, err := containerShare.readLease(ctx, owner.cfg.KeyValues, tier)
+	if err != nil || state.isPartlyDown(time.Now()) {
 		return containerInfra{}, false, err
 	}
 	outputs, err := owner.automation.Outputs(ctx, containerInfraRef(tier), nil)

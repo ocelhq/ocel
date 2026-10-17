@@ -23,6 +23,7 @@ const (
 	leaseAttempts = 5
 
 	sharedClaimReleaseTimeout = 30 * time.Second
+	sharedTakedownLimit       = time.Hour
 )
 
 type sharedStack struct {
@@ -50,7 +51,21 @@ func (s sharedStack) leaseAt(tier environment.Tier) keyvalue.Key {
 }
 
 type lease struct {
-	Destroying bool `json:"destroying,omitempty"`
+	Destroying      bool      `json:"destroying,omitempty"`
+	DestroyingSince time.Time `json:"destroying_since,omitzero"`
+	DestroyFailed   bool      `json:"destroy_failed,omitempty"`
+}
+
+func (l lease) isGoingDown(now time.Time) bool {
+	return l.Destroying && now.Sub(l.DestroyingSince) < sharedTakedownLimit
+}
+
+func (l lease) isPartlyDown(now time.Time) bool {
+	return l.DestroyFailed || (l.Destroying && !l.isGoingDown(now))
+}
+
+func goingDownFrom(now time.Time) lease {
+	return lease{Destroying: true, DestroyingSince: now.UTC()}
 }
 
 func (s sharedStack) leaseOf(entry keyvalue.Entry) (lease, error) {
@@ -62,6 +77,14 @@ func (s sharedStack) leaseOf(entry keyvalue.Entry) (lease, error) {
 		return lease{}, fmt.Errorf("read the %s lease %s: %w", s.subject, entry.Key, err)
 	}
 	return state, nil
+}
+
+func (s sharedStack) readLease(ctx context.Context, store keyvalue.Store, tier environment.Tier) (lease, error) {
+	leased, err := keyvalue.ReadOrEmpty(ctx, store, s.leaseAt(tier))
+	if err != nil {
+		return lease{}, err
+	}
+	return s.leaseOf(leased)
 }
 
 func (s sharedStack) writeLease(ctx context.Context, store keyvalue.Store, entry keyvalue.Entry, state lease) error {
@@ -132,7 +155,7 @@ func (r *Stacks) claimShared(ctx context.Context, share sharedStack, ref provide
 		if err != nil {
 			return err
 		}
-		if state.Destroying {
+		if state.isGoingDown(time.Now()) {
 			return errors.Join(
 				refusal.Refuse(refusal.CodeBusy,
 					"the shared %s for the %s tier is being taken down by another deploy whose last %s just left; re-run this deploy once it has gone and it will provision a fresh one", share.subject, ref.Tier, share.consumer),
@@ -146,7 +169,7 @@ func (r *Stacks) claimShared(ctx context.Context, share sharedStack, ref provide
 		if _, err := store.Write(ctx, entry); err != nil && !errors.Is(err, keyvalue.ErrStale) {
 			return fmt.Errorf("record %s as a consumer of the shared %s: %w", ref.Name, share.subject, err)
 		}
-		err = share.writeLease(ctx, store, leased, state)
+		err = share.writeLease(ctx, store, leased, lease{})
 		if err == nil {
 			return nil
 		}
@@ -176,10 +199,6 @@ func (r *Stacks) releaseShared(ctx context.Context, share sharedStack, store key
 	if err != nil {
 		return err
 	}
-	state, err := share.leaseOf(leased)
-	if err != nil {
-		return err
-	}
 	if err := keyvalue.Forget(ctx, store, share.consumerAt(ref)); err != nil {
 		return err
 	}
@@ -195,8 +214,7 @@ func (r *Stacks) releaseShared(ctx context.Context, share sharedStack, store key
 	if len(remaining) > 0 {
 		return nil
 	}
-	state.Destroying = true
-	if err := share.writeLease(ctx, store, leased, state); err != nil {
+	if err := share.writeLease(ctx, store, leased, goingDownFrom(time.Now())); err != nil {
 		if errors.Is(err, keyvalue.ErrStale) {
 			return nil
 		}
@@ -232,8 +250,10 @@ func (r *Stacks) removeShared(ctx context.Context, share sharedStack, tier envir
 	if err != nil {
 		return err
 	}
-	state.Destroying = true
-	if err := share.writeLease(ctx, store, leased, state); err != nil {
+	if state.isGoingDown(time.Now()) {
+		return refusal.Refuse(refusal.CodeBusy, "the shared %s of the %s tier is being taken down by the deploy its last %s left with; run the removal again once it has gone", share.subject, tier, share.consumer)
+	}
+	if err := share.writeLease(ctx, store, leased, goingDownFrom(time.Now())); err != nil {
 		if errors.Is(err, keyvalue.ErrStale) {
 			return refusal.Refuse(refusal.CodeBusy, "a deploy took the shared %s of the %s tier while this run was removing it; run the removal again", share.subject, tier)
 		}
@@ -245,7 +265,10 @@ func (r *Stacks) removeShared(ctx context.Context, share sharedStack, tier envir
 func retireShared(ctx context.Context, share sharedStack, owner *release, store keyvalue.Store, tier environment.Tier, progress progress.Log) error {
 	stack := share.ref(tier)
 	if err := owner.automation.Destroy(ctx, stack, progress); err != nil {
-		return fmt.Errorf("take down the shared %s for the %s tier: %w", share.subject, tier, err)
+		failed := fmt.Errorf("take down the shared %s for the %s tier: %w\n"+
+			"It stays recorded as the %s part, used by no project: run `%s --remove %s` to take it down again, or deploy a %s and it raises it again",
+			share.subject, tier, err, share.part, provider.BootstrapCommand(tier), share.part, share.consumer)
+		return errors.Join(failed, share.markDestroyFailed(ctx, store, tier))
 	}
 	if err := stackrecords.Forget(ctx, store, tier, share.slug, stack.Name); err != nil {
 		return err
@@ -259,4 +282,17 @@ func retireShared(ctx context.Context, share sharedStack, owner *release, store 
 		return err
 	}
 	return keyvalue.Forget(ctx, store, share.leaseAt(tier))
+}
+
+func (s sharedStack) markDestroyFailed(ctx context.Context, store keyvalue.Store, tier environment.Tier) error {
+	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), sharedClaimReleaseTimeout)
+	defer cancel()
+	leased, err := keyvalue.ReadOrEmpty(settle, store, s.leaseAt(tier))
+	if err != nil {
+		return err
+	}
+	if err := s.writeLease(settle, store, leased, lease{DestroyFailed: true}); err != nil {
+		return fmt.Errorf("record that the shared %s for the %s tier failed to go down: %w", s.subject, tier, err)
+	}
+	return nil
 }
