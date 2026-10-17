@@ -3,30 +3,17 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readDocsOrigin } from "./docs-origin.mjs";
+import { readPublishedSchemas } from "./published-schemas.mjs";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-
-const VERSION = readFileSync(join(root, "VERSION"), "utf8").trim();
-const DOCS_ORIGIN = readDocsOrigin(root);
-
-const SCHEMA_OUT = join(root, "www", "public", "schema", "ocel.schema.json");
-const TYPES_OUT = join(root, "packages", "ocel", "src", "generated", "config.ts");
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
 
-const MESSAGE_SCHEMAS_OUT = join(root, "www", "public", "schema", VERSION, "cli");
-const EMBEDDED_SCHEMAS_OUT = join(root, "cli", "internal", "outputschema", "schemas");
-const MESSAGE_SCHEMA_ORIGIN = `${DOCS_ORIGIN}/schema/${VERSION}/cli`;
 const BUNDLE_SUFFIX = ".jsonschema.bundle.json";
 const DEFINITION_SUFFIX = ".jsonschema.json";
 
-const SCHEMA_URL = `${DOCS_ORIGIN}/schema/ocel.schema.json`;
-
-const SELECTORS_OUT = join(root, "pkg", "configdoc", "selectors.json");
-
 function providerFragments() {
-  const platform = join(root, "platform");
+  const platform = join(REPO_ROOT, "platform");
   return readdirSync(platform, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => join(platform, entry.name, "provider", "schema.provider.json"))
@@ -43,7 +30,7 @@ function providerFragments() {
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function edgeFragments(dir = join(root, "platform")) {
+function edgeFragments(dir = join(REPO_ROOT, "platform")) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -136,7 +123,7 @@ function withEdgeAndDNS(fragment, templates, edges) {
 }
 
 function schema() {
-  const core = read(join(root, "pkg", "configdoc", "schema.core.json"));
+  const core = read(join(REPO_ROOT, "pkg", "configdoc", "schema.core.json"));
   const { provider } = core.properties;
   const templates = provider.oneOf[1].additionalProperties.properties;
   const edges = edgeOptions(providerFragments());
@@ -144,7 +131,6 @@ function schema() {
     withEdgeAndDNS(fragment, templates, edges),
   );
   return {
-    $id: SCHEMA_URL,
     ...core,
     properties: {
       ...core.properties,
@@ -373,7 +359,7 @@ function generateMessageSchemas() {
     execFileSync(
       "pnpm",
       ["exec", "buf", "generate", "--template", "proto/buf.gen.schema.yaml", "--output", scratch],
-      { cwd: root, stdio: "inherit" },
+      { cwd: REPO_ROOT, stdio: "inherit" },
     );
     const oneofs = readOneofs(scratch);
     return readdirSync(scratch)
@@ -384,10 +370,7 @@ function generateMessageSchemas() {
         const bundle = read(join(scratch, file));
         refuseNonECMAScriptPatterns(name, bundle);
         constrainOneofs(name, bundle, oneofs);
-        return {
-          file: `${name}.schema.json`,
-          schema: { ...bundle, $id: `${MESSAGE_SCHEMA_ORIGIN}/${name}.schema.json` },
-        };
+        return { name, bundle };
       });
   } finally {
     rmSync(scratch, { recursive: true, force: true });
@@ -397,7 +380,7 @@ function generateMessageSchemas() {
 function readOneofs(scratch) {
   const image = join(scratch, "image.json");
   execFileSync("pnpm", ["exec", "buf", "build", "proto", "--output", image], {
-    cwd: root,
+    cwd: REPO_ROOT,
     stdio: "inherit",
   });
   const oneofs = new Map();
@@ -456,27 +439,45 @@ function refuseNonECMAScriptPatterns(name, node) {
   for (const value of Object.values(node)) refuseNonECMAScriptPatterns(name, value);
 }
 
-function writeMessageSchemas(generated) {
-  const outputs = [MESSAGE_SCHEMAS_OUT, EMBEDDED_SCHEMAS_OUT];
-  for (const out of outputs) {
-    rmSync(out, { recursive: true, force: true });
-    mkdirSync(out, { recursive: true });
+function writeFile(path, text) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+}
+
+function writeMessageSchemas(dirs, url, messages) {
+  for (const dir of dirs) {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
   }
-  for (const { file, schema: document } of generated) {
-    const text = `${JSON.stringify(document, null, 2)}\n`;
-    for (const out of outputs) writeFileSync(join(out, file), text);
+  for (const { name, bundle } of messages) {
+    const file = `${name}.schema.json`;
+    const text = `${JSON.stringify({ ...bundle, $id: `${url}/${file}` }, null, 2)}\n`;
+    for (const dir of dirs) writeFileSync(join(dir, file), text);
   }
 }
 
-const merged = schema();
-const messageSchemas = generateMessageSchemas();
-mkdirSync(dirname(SCHEMA_OUT), { recursive: true });
-writeFileSync(SCHEMA_OUT, `${JSON.stringify(merged, null, 2)}\n`);
-mkdirSync(dirname(TYPES_OUT), { recursive: true });
-writeFileSync(TYPES_OUT, types(merged));
-writeFileSync(SELECTORS_OUT, `${JSON.stringify(selectors(merged), null, 2)}\n`);
-writeMessageSchemas(messageSchemas);
-execFileSync("pnpm", ["exec", "biome", "format", "--write", SCHEMA_OUT, TYPES_OUT, SELECTORS_OUT], {
-  cwd: root,
-  stdio: "inherit",
-});
+export function writeSchemas(root, merged, messages) {
+  const published = readPublishedSchemas(root);
+  const config = published.config.path;
+  const configTypes = join(root, "packages", "ocel", "src", "generated", "config.ts");
+  const configSelectors = join(root, "pkg", "configdoc", "selectors.json");
+  writeFile(config, `${JSON.stringify({ $id: published.config.url, ...merged }, null, 2)}\n`);
+  writeFile(configTypes, types(merged));
+  writeFile(configSelectors, `${JSON.stringify(selectors(merged), null, 2)}\n`);
+  writeMessageSchemas(
+    [published.messages.dir, join(root, "cli", "internal", "outputschema", "schemas")],
+    published.messages.url,
+    messages,
+  );
+  return [config, configTypes, configSelectors];
+}
+
+function build() {
+  const formatted = writeSchemas(REPO_ROOT, schema(), generateMessageSchemas());
+  execFileSync("pnpm", ["exec", "biome", "format", "--write", ...formatted], {
+    cwd: REPO_ROOT,
+    stdio: "inherit",
+  });
+}
+
+if (import.meta.main) build();

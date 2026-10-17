@@ -1,0 +1,175 @@
+{
+  "$defs": {
+    "cli.result.v1.BootstrapPartResource.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "kind": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Bootstrap Part Resource",
+      "type": "object"
+    },
+    "cli.result.v1.BootstrapPartStatus.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(added_at)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(added_by)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(added_with)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(idle_monthly_fixed)$": {
+          "type": "string"
+        },
+        "^(retires_with_last_user)$": {
+          "default": false,
+          "type": "boolean"
+        },
+        "^(used_by)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(wanted_by)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "addedAt": {
+          "default": "",
+          "type": "string"
+        },
+        "addedBy": {
+          "default": "",
+          "type": "string"
+        },
+        "addedWith": {
+          "default": "",
+          "type": "string"
+        },
+        "currency": {
+          "default": "",
+          "type": "string"
+        },
+        "current": {
+          "default": false,
+          "type": "boolean"
+        },
+        "idleMonthlyFixed": {
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.BootstrapPartResource.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "retiresWithLastUser": {
+          "default": false,
+          "type": "boolean"
+        },
+        "state": {
+          "default": "",
+          "type": "string"
+        },
+        "summary": {
+          "default": "",
+          "type": "string"
+        },
+        "usedBy": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "wantedBy": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Bootstrap Part Status",
+      "type": "object"
+    },
+    "cli.result.v1.BootstrapStatusResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "tiers": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.BootstrapTierStatus.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Bootstrap Status Result",
+      "type": "object"
+    },
+    "cli.result.v1.BootstrapTierStatus.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "parts": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.BootstrapPartStatus.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "present": {
+          "default": false,
+          "type": "boolean"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "pattern": "^TIER_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Tier"
+        }
+      },
+      "title": "Bootstrap Tier Status",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/cli/cli.result.v1.BootstrapStatusResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.BootstrapStatusResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
