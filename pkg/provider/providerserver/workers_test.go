@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -153,6 +154,27 @@ func TestADeployHandsEachAppStackTheWorkersThatJoinIt(t *testing.T) {
 	want := map[string][]provider.WorkerSpec{"web": nil, "admin": {{Name: "media", Concurrency: 4, App: "admin", Compute: provider.ComputeServerless}}}
 	if !reflect.DeepEqual(workers, want) {
 		t.Errorf("app stacks were handed workers %+v, want %+v", workers, want)
+	}
+}
+
+func TestADeployAdmitsAnAppAWorkerJoinsByNameWithNoProductionHostname(t *testing.T) {
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)).WithFacts(func(facts *provider.Facts) {
+		facts.WorkerCeilings = []provider.WorkerCeiling{{Compute: provider.ComputeServerless, MaxDuration: 15 * time.Minute}}
+	})
+	client := servedBy(t, vendor)
+
+	req := twoAppRequest()
+	req.Manifest.Domains = nil
+	req.Manifest.Apps[0].Domains = []*contractv1.TierDomains{{
+		Tier:      environmentv1.Tier_TIER_PRODUCTION,
+		Hostnames: []string{"shop.example"},
+	}}
+	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "admin", App: "admin", Compute: string(provider.ComputeServerless)}}
+	req.Edge = writtenBy("shop.example")
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it admitted: admin is the app worker admin joins by name, which takes no public traffic and needs no hostname", result.GetError())
 	}
 }
 
