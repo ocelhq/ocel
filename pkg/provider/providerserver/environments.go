@@ -19,6 +19,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -230,11 +231,19 @@ func refuseUnrecordedPreview(ctx context.Context, store keyvalue.Store, slug, pr
 	if len(history) > 0 {
 		return nil
 	}
+	under := func(stack naming.StackName) bool { return stack.Env == preview }
 	stacks, err := stackrecords.StackNames(ctx, store, environment.TierPreview, slug)
 	if err != nil {
 		return err
 	}
-	if slices.ContainsFunc(stacks, func(stack naming.StackName) bool { return stack.Env == preview }) {
+	if slices.ContainsFunc(stacks, under) {
+		return nil
+	}
+	held, err := resources.HasHolder(ctx, store, environment.TierPreview, slug, under)
+	if err != nil {
+		return err
+	}
+	if held {
 		return nil
 	}
 	metas, err := stackrecords.EnvironmentMetas(ctx, store, environment.TierPreview, slug)
