@@ -1387,10 +1387,15 @@ func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]prov
 		return nil, err
 	}
 	used := resourcesUsedBy(r.manifest, resources, entry.App)
-	names := boundNamesUsedBy(r.manifest, resources, entry.App)
+	unbound := map[string]bool{}
+	for _, resource := range used {
+		if resource.Binding == "" {
+			unbound[resource.Name] = true
+		}
+	}
 	var grants []provider.Binding
 	for _, binding := range r.bindings {
-		if names[binding.Name] {
+		if unbound[binding.Name] {
 			grants = append(grants, binding)
 		}
 	}
@@ -1401,7 +1406,7 @@ func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]prov
 	}
 	for _, resource := range used {
 		name := boundName(resource)
-		if slices.ContainsFunc(provisioned, func(grant provider.Binding) bool { return grant.Name == name }) {
+		if resource.Binding == "" && slices.ContainsFunc(provisioned, func(grant provider.Binding) bool { return grant.Name == name }) {
 			continue
 		}
 		at := slices.IndexFunc(consumed, func(binding provider.Binding) bool { return binding.Name == name })
