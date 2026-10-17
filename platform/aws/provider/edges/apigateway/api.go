@@ -14,8 +14,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
+	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
+	rgttypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -34,62 +40,87 @@ const (
 	integrationProxyPathParameter = "integration.request.path.proxy"
 )
 
+const (
+	managedByTagKey = "ocel:managed-by"
+	managedByOcel   = "ocel"
+	projectTagKey   = "ocel:project"
+	envTagKey       = "ocel:env"
+
+	restAPIResourceType    = "apigateway:restapis"
+	restAPIPathPrefix      = "/restapis/"
+	taggedResourcesPerPage = 100
+)
+
 type apiSpec struct {
 	name        string
+	tags        map[string]string
 	region      string
 	account     string
 	role        string
 	assetBucket string
 }
 
-func restAPIs(ctx context.Context, c Clients) (map[string]string, error) {
-	names := map[string]string{}
-	var position *string
+func namespaceTags(ns bootstrap.Namespace, tier environment.Tier) map[string]string {
+	return map[string]string{
+		managedByTagKey:      managedByOcel,
+		cfn.TagNamespace:     string(ns),
+		naming.EnvTierTagKey: string(tier),
+	}
+}
+
+func taggedAPIs(ctx context.Context, c Clients, tags map[string]string) (map[string]map[string]string, error) {
+	filters := make([]rgttypes.TagFilter, 0, len(tags))
+	described := make([]string, 0, len(tags))
+	for _, key := range slices.Sorted(maps.Keys(tags)) {
+		filters = append(filters, rgttypes.TagFilter{Key: aws.String(key), Values: []string{tags[key]}})
+		described = append(described, key+"="+tags[key])
+	}
+	found := map[string]map[string]string{}
+	var token *string
 	for {
-		page, err := c.APIGateway.GetRestApis(ctx, &apigateway.GetRestApisInput{Position: position})
+		page, err := c.Tagging.GetResources(ctx, &resourcegroupstaggingapi.GetResourcesInput{
+			ResourceTypeFilters: []string{restAPIResourceType},
+			TagFilters:          filters,
+			ResourcesPerPage:    aws.Int32(taggedResourcesPerPage),
+			PaginationToken:     token,
+		})
 		if err != nil {
-			return nil, fmt.Errorf("list the REST APIs this account already serves: %w", err)
+			return nil, fmt.Errorf("find the REST APIs tagged %s: %w", strings.Join(described, ", "), err)
 		}
-		for _, api := range page.Items {
-			names[aws.ToString(api.Id)] = aws.ToString(api.Name)
+		for _, mapping := range page.ResourceTagMappingList {
+			id, ok := parseRestAPIID(aws.ToString(mapping.ResourceARN))
+			if !ok {
+				continue
+			}
+			carried := map[string]string{}
+			for _, tag := range mapping.Tags {
+				carried[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+			}
+			found[id] = carried
 		}
-		if aws.ToString(page.Position) == "" {
-			return names, nil
+		if aws.ToString(page.PaginationToken) == "" {
+			return found, nil
 		}
-		position = page.Position
+		token = page.PaginationToken
 	}
 }
 
-func findAPI(ctx context.Context, c Clients, name string) (string, bool, error) {
-	names, err := restAPIs(ctx, c)
-	if err != nil {
-		return "", false, err
+func parseRestAPIID(arn string) (string, bool) {
+	fields := strings.SplitN(arn, ":", 6)
+	if len(fields) < 6 {
+		return "", false
 	}
-	for _, id := range slices.Sorted(maps.Keys(names)) {
-		if names[id] == name {
-			return id, true, nil
-		}
+	id, ok := strings.CutPrefix(fields[5], restAPIPathPrefix)
+	if !ok || id == "" || strings.Contains(id, rootPath) {
+		return "", false
 	}
-	return "", false, nil
-}
-
-func findAPIs(ctx context.Context, c Clients, wanted []string) ([]string, error) {
-	names, err := restAPIs(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	var ids []string
-	for _, id := range slices.Sorted(maps.Keys(names)) {
-		if slices.Contains(wanted, names[id]) {
-			ids = append(ids, id)
-		}
-	}
-	return ids, nil
+	return id, true
 }
 
 func createAPI(ctx context.Context, c Clients, spec apiSpec) (string, error) {
 	out, err := c.APIGateway.CreateRestApi(ctx, &apigateway.CreateRestApiInput{
 		Name:             aws.String(spec.name),
+		Tags:             spec.tags,
 		Description:      aws.String("Ocel serves this project's requests through this API; the stage variables name the release in effect."),
 		BinaryMediaTypes: []string{"*/*"},
 		EndpointConfiguration: &agtypes.EndpointConfiguration{

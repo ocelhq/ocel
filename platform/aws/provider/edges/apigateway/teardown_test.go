@@ -3,6 +3,7 @@ package apigateway
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -77,11 +78,107 @@ func TestTeardownLeavesTheRestAPIsAnotherNamespaceFronts(t *testing.T) {
 	e := bootstrapped(t, w)
 	if _, err := w.gateway.CreateRestApi(ctx, &apigateway.CreateRestApiInput{
 		Name: aws.String(apiName("other", "shop", environment.TierProduction, "")),
+		Tags: map[string]string{
+			"ocel:managed-by": "ocel",
+			"ocel:namespace":  "other",
+			"ocel:project":    "shop",
+			"ocel:env-tier":   string(environment.TierProduction),
+		},
 	}); err != nil {
 		t.Fatalf("CreateRestApi: %v", err)
 	}
 
 	if err := e.Teardown(ctx, environment.TierProduction); err != nil {
 		t.Errorf("Teardown = %v, want nil: shop is fronted by the other namespace's bootstrap, not this one", err)
+	}
+}
+
+func seedOtherProjectsAPIs(t *testing.T, w *world, tier environment.Tier, count int) []string {
+	t.Helper()
+	var ids []string
+	for i := range count {
+		slug := "other" + strconv.Itoa(i)
+		created, err := w.gateway.CreateRestApi(context.Background(), &apigateway.CreateRestApiInput{
+			Name: aws.String(apiName(defaultNamespace, slug, tier, previewPoint)),
+			Tags: map[string]string{
+				"ocel:managed-by": "ocel",
+				"ocel:namespace":  string(defaultNamespace),
+				"ocel:project":    slug,
+				"ocel:env-tier":   string(tier),
+				"ocel:env":        previewPoint,
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateRestApi: %v", err)
+		}
+		ids = append(ids, aws.ToString(created.Id))
+	}
+	return ids
+}
+
+func seedCustomerAPIs(t *testing.T, w *world, count int) {
+	t.Helper()
+	for i := range count {
+		if _, err := w.gateway.CreateRestApi(context.Background(), &apigateway.CreateRestApiInput{
+			Name: aws.String("customer-api-" + strconv.Itoa(i)),
+		}); err != nil {
+			t.Fatalf("CreateRestApi: %v", err)
+		}
+	}
+}
+
+func TestTeardownListsAsMuchHoweverManyRestAPIsTheAccountHolds(t *testing.T) {
+	t.Parallel()
+
+	teardownAmong := func(others int) int {
+		w := newWorld()
+		e := bootstrapped(t, w)
+		seedCustomerAPIs(t, w, others)
+		w.gateway.calls = nil
+
+		if err := e.Teardown(context.Background(), environment.TierProduction); err != nil {
+			t.Fatalf("Teardown = %v, want nil: no project of this namespace holds a REST API", err)
+		}
+		return countListings(w)
+	}
+
+	alone, among := teardownAmong(0), teardownAmong(20)
+	if alone != among {
+		t.Errorf("Teardown lists %d times beside no other REST APIs and %d times beside 20 of them; its listing must be bounded by its own namespace", alone, among)
+	}
+}
+
+func countListings(w *world) int {
+	return w.gateway.count("GetTaggedResources")
+}
+
+func TestDestroyListsAsMuchHoweverManyRestAPIsOtherProjectsHold(t *testing.T) {
+	t.Parallel()
+
+	destroyAmong := func(others int) int {
+		ctx := context.Background()
+		w := newWorld()
+		_, stack := previewing(t, w)
+		promotePreview(t, stack, previewPoint)
+		kept := seedOtherProjectsAPIs(t, w, environment.TierPreview, others)
+		w.gateway.calls = nil
+
+		if err := stack.Destroy(ctx); err != nil {
+			t.Fatalf("Destroy: %v", err)
+		}
+		if w.gateway.named(previewAPIName) != nil {
+			t.Errorf("the REST API for %s survived the destroy", previewPoint)
+		}
+		for _, id := range kept {
+			if w.gateway.apis[id] == nil {
+				t.Errorf("Destroy deleted %s, which another project holds", id)
+			}
+		}
+		return countListings(w)
+	}
+
+	alone, among := destroyAmong(0), destroyAmong(20)
+	if alone != among {
+		t.Errorf("Destroy lists %d times beside no other project's REST APIs and %d times beside 20 of them; its listing must be bounded by its own project", alone, among)
 	}
 }

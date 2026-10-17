@@ -123,11 +123,11 @@ func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRe
 	if err := s.unroutePreview(ctx, c, removal.Hosts); err != nil {
 		return err
 	}
-	id, found, err := findAPI(ctx, c, apiName(s.p.ns, s.slug(), s.tier(), pointer))
-	if err != nil || !found {
+	ids, err := s.findPointerAPIs(ctx, c, pointer)
+	if err != nil || len(ids) == 0 {
 		return err
 	}
-	return s.p.deletion().drain(ctx, c, []string{id})
+	return s.p.deletion().drain(ctx, c, ids)
 }
 
 func (r routerStack) Destroy(context.Context) error { return nil }

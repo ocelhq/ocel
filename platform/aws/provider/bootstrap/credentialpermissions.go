@@ -1205,6 +1205,10 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 			Actions:   []string{"logs:DescribeLogGroups"},
 			Resources: []string{UnscopedResource},
 		},
+		{
+			Actions:   []string{"tag:GetResources"},
+			Resources: []string{UnscopedResource},
+		},
 	}
 }
 

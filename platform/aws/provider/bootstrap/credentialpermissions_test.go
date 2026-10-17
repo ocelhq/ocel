@@ -2122,3 +2122,26 @@ func TestEveryCredentialCreatesTheContainerFrontsVPCOriginOnlyTaggedAsOcels(t *t
 		}
 	}
 }
+
+func TestEveryCredentialFindsRestAPIsByTagAndTagsThemOnCreateOnlyAsItsOwnTiers(t *testing.T) {
+	const restAPITags = "arn:aws:apigateway:eu-west-1::/tags/arn%3Aaws%3Aapigateway%3Aeu-west-1%3A%3A%2Frestapis%2Fabc123"
+	creating := func(tier environment.Tier) requestContext {
+		return requestContext{
+			"aws:RequestTag/" + managedByTagKey:      managedByTagValue,
+			"aws:RequestTag/" + naming.EnvTierTagKey: string(tier),
+		}
+	}
+	for _, tier := range bothTiers {
+		for purpose, document := range credentialsOfTier(t, tier) {
+			if !allows(t, document, "tag:GetResources", UnscopedResource, requestContext{}) {
+				t.Errorf("the %s %s credential cannot find REST APIs by their tags, so the API Gateway edge cannot reach a project's APIs", tier, purpose)
+			}
+			if !allows(t, document, "apigateway:PUT", restAPITags, creating(tier)) {
+				t.Errorf("the %s %s credential cannot tag a REST API it creates as its own tier's", tier, purpose)
+			}
+			if allows(t, document, "apigateway:PUT", restAPITags, creating(tier.Sibling())) {
+				t.Errorf("the %s %s credential can tag a REST API as the %s tier's", tier, purpose, tier.Sibling())
+			}
+		}
+	}
+}
