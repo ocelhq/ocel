@@ -7,6 +7,8 @@ import (
 	"io"
 	"maps"
 	"strings"
+	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -15,7 +17,10 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-const timeLayout = "2006-01-02T15:04:05.000Z07:00"
+const (
+	timeLayout    = "2006-01-02T15:04:05.000Z07:00"
+	openGroupIdle = 500 * time.Millisecond
+)
 
 type format interface {
 	writeEntry(entry *contractv1.LogEntry, parsed logview.Entry) error
@@ -24,9 +29,15 @@ type format interface {
 
 type output struct {
 	format
-	raw         bool
-	joinsTraces bool
-	minLevel    logview.Level
+	raw       bool
+	tail      bool
+	minLevel  logview.Level
+	mu        sync.Mutex
+	open      *openGroup
+	live      bool
+	lastBatch time.Time
+	idle      *time.Timer
+	idleErr   error
 }
 
 type outputMode struct {
@@ -60,44 +71,99 @@ func (n notices) report(notice *contractv1.LogNotice) error {
 }
 
 func newOutput(stdout io.Writer, present terminal.Presentation, mode outputMode, notices notices) *output {
-	out := &output{format: plainFormat{stdout: stdout, notices: notices}, raw: mode.raw, minLevel: mode.minLevel}
+	out := &output{format: plainFormat{stdout: stdout, notices: notices}, raw: mode.raw, tail: mode.tail, minLevel: mode.minLevel}
 	switch {
 	case mode.json:
 		out.format = jsonFormat{stdout: stdout}
 	case present.TTY && !mode.raw:
 		out.format = terminalFormat{view: logview.NewTerminalView(stdout, present), tail: mode.tail, notices: notices}
-		out.joinsTraces = true
+		out.open = &openGroup{}
 	}
 	return out
 }
 
 func (o *output) printResponse(resp *contractv1.ReadLogsResponse) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.idleErr != nil {
+		return o.idleErr
+	}
 	switch body := resp.GetBody().(type) {
 	case *contractv1.ReadLogsResponse_Batch:
-		for _, group := range o.groupEntries(body.Batch.GetEntries()) {
-			entry, parsed := o.mergeGroup(group)
-			if parsed.Level < o.minLevel {
-				continue
-			}
-			if err := o.writeEntry(entry, parsed); err != nil {
+		for _, entry := range body.Batch.GetEntries() {
+			if err := o.addEntry(entry); err != nil {
 				return err
 			}
 		}
+		o.resetIdle()
 	case *contractv1.ReadLogsResponse_Notice:
+		if err := o.writeOpenGroup(); err != nil {
+			return err
+		}
+		if o.tail && body.Notice.GetKind() == contractv1.LogNotice_KIND_CAUGHT_UP {
+			o.live = true
+		}
 		return o.writeNotice(body.Notice)
 	}
 	return nil
 }
 
-func (o *output) groupEntries(entries []*contractv1.LogEntry) [][]*contractv1.LogEntry {
-	if o.joinsTraces {
-		return groupTraces(entries)
+func (o *output) finish() error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.idle != nil {
+		o.idle.Stop()
 	}
-	groups := make([][]*contractv1.LogEntry, len(entries))
-	for i := range entries {
-		groups[i] = entries[i : i+1]
+	if o.idleErr != nil {
+		return o.idleErr
 	}
-	return groups
+	return o.writeOpenGroup()
+}
+
+func (o *output) resetIdle() {
+	if !o.live || o.open == nil {
+		return
+	}
+	o.lastBatch = time.Now()
+	if o.idle == nil {
+		o.idle = time.AfterFunc(openGroupIdle, o.writeIdleGroup)
+		return
+	}
+	o.idle.Reset(openGroupIdle)
+}
+
+func (o *output) writeIdleGroup() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.idleErr != nil || time.Since(o.lastBatch) < openGroupIdle {
+		return
+	}
+	o.idleErr = o.writeOpenGroup()
+}
+
+func (o *output) addEntry(entry *contractv1.LogEntry) error {
+	if o.open == nil {
+		return o.writeGroup([]*contractv1.LogEntry{entry})
+	}
+	return o.writeGroup(o.open.add(entry))
+}
+
+func (o *output) writeOpenGroup() error {
+	if o.open == nil {
+		return nil
+	}
+	return o.writeGroup(o.open.take())
+}
+
+func (o *output) writeGroup(group []*contractv1.LogEntry) error {
+	if len(group) == 0 {
+		return nil
+	}
+	entry, parsed := o.mergeGroup(group)
+	if parsed.Level < o.minLevel {
+		return nil
+	}
+	return o.writeEntry(entry, parsed)
 }
 
 func (o *output) mergeGroup(group []*contractv1.LogEntry) (*contractv1.LogEntry, logview.Entry) {
