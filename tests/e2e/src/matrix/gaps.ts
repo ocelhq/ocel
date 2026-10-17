@@ -1,7 +1,6 @@
 import {
   batchCheck,
   bindingCheck,
-  bindingQueryCheck,
   clientAddressCheck,
   clientEnvDeploymentUrlCheck,
   corsCheck,
@@ -247,20 +246,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "binding-query-hangs",
-    reason:
-      "a select through the postgres binding answers an HTML error after ~15s on a real account",
-    issue: 925,
-    where: [
-      {
-        on: ["aws"],
-        fixtures: [sdk.node],
-        variants: [apiGateway],
-        fails: [check(bindingQueryCheck)],
-      },
-    ],
-  },
-  {
     id: "stale-release-after-deploy",
     reason:
       "the first request after ocel deploy still answers with the previous release's environment",
@@ -271,21 +256,6 @@ export const gaps: Gap[] = [
         fixtures: [sdk.node],
         variants: [apiGateway],
         fails: [check(bindingCheck, ["redeploy"])],
-      },
-    ],
-  },
-  {
-    id: "aws-functions-reach-no-kv",
-    reason:
-      "the aws provider runs a function app outside the VPC a kv store answers in, so it refuses a function app that uses kv before it deploys",
-    issue: 1473,
-    where: [
-      {
-        on: ["aws", "aws.floci"],
-        fixtures: [sdk.node],
-        variants: [defaults, apiGateway],
-        fails: [step.deploy],
-        skipsCell: true,
       },
     ],
   },

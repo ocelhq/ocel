@@ -4,6 +4,7 @@ import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import {
   batchCheck,
+  bindingQueryCheck,
   buildVariablesChecks,
   clientEnvDeploymentUrlCheck,
   imageShowsNoBindingCheck,
@@ -319,13 +320,11 @@ describe("sdk/node", () => {
     ]);
   });
 
-  it("skips every function cell on aws, whose functions reach no kv store", () => {
-    for (const lane of ["aws", "aws.floci"] as const) {
-      const skipped = planOn(lane).skipped;
-      for (const cell of ["sdk/node", "sdk/node-api-gateway"]) {
-        expect(skipped[cell]?.map((gap) => gap.issue)).toContain(1473);
-      }
-      expect(skipped["sdk/node-container"]?.map((gap) => gap.issue)).not.toContain(1473);
+  it("runs every function cell on aws, whose functions join the VPC its postgres and kv answer in", () => {
+    const planned = planOn("aws");
+    for (const cell of ["sdk/node", "sdk/node-api-gateway"]) {
+      expect(planned.skipped[cell]).toBeUndefined();
+      expect(planned.expectedFailures[`${cell}/web`]?.[bindingQueryCheck.title]).toBeUndefined();
     }
   });
 
