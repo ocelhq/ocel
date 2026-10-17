@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 )
 
@@ -38,5 +39,28 @@ func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleA
 	}
 	if want := len(permissionsFor(parts)); asked != want {
 		t.Errorf("asked about %d permissions, want %d", asked, want)
+	}
+}
+
+func TestAProjectOwnerIsPermittedABootstrapThoughOnlyTheBucketsItCreatesGrantItTheirObjects(t *testing.T) {
+	t.Parallel()
+
+	bucketOnly := []string{"storage.buckets.get", "storage.objects.create", "storage.objects.list", "storage.objects.delete"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ Permissions []string }
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode testIamPermissions: %v", err)
+		}
+		granted := slices.DeleteFunc(request.Permissions, func(permission string) bool {
+			return slices.Contains(bucketOnly, permission)
+		})
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string][]string{"permissions": granted})
+	}))
+	t.Cleanup(server.Close)
+	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1", endpoint: server.URL}}
+
+	if err := b.permitted(context.Background(), []string{albShieldedFeature}); err != nil {
+		t.Fatalf("permitted: %v", err)
 	}
 }
