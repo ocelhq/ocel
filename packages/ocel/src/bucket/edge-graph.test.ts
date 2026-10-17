@@ -19,18 +19,18 @@ function readManifest(dir: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
 }
 
-function edgeTarget(target: unknown): string | undefined {
+function resolveEdgeTarget(target: unknown): string | undefined {
   if (typeof target === "string") return target;
   if (!target || typeof target !== "object" || Array.isArray(target)) return undefined;
   for (const [condition, value] of Object.entries(target)) {
     if (!edgeConditions.has(condition)) continue;
-    const resolved = edgeTarget(value);
+    const resolved = resolveEdgeTarget(value);
     if (resolved) return resolved;
   }
   return undefined;
 }
 
-function relativeModule(specifier: string, from: string): string | undefined {
+function resolveRelativeModule(specifier: string, from: string): string | undefined {
   const base = resolve(dirname(from), specifier);
   if (from.startsWith(src) && !from.includes("node_modules")) {
     const source = base.replace(/\.js$/, "");
@@ -39,7 +39,7 @@ function relativeModule(specifier: string, from: string): string | undefined {
   return [base, `${base}.js`, join(base, "index.js")].find(isFile);
 }
 
-function sourceOf(distTarget: string): string | undefined {
+function findSourceFile(distTarget: string): string | undefined {
   const source = resolve(packageRoot, distTarget.replace(/^\.\/dist\//, "./src/")).replace(
     /\.js$/,
     ".ts",
@@ -47,13 +47,13 @@ function sourceOf(distTarget: string): string | undefined {
   return isFile(source) ? source : undefined;
 }
 
-function packageImport(specifier: string): string | undefined {
+function resolvePackageImport(specifier: string): string | undefined {
   const imports = readManifest(packageRoot).imports as Record<string, unknown> | undefined;
-  const target = edgeTarget(imports?.[specifier]);
-  return target ? sourceOf(target) : undefined;
+  const target = resolveEdgeTarget(imports?.[specifier]);
+  return target ? findSourceFile(target) : undefined;
 }
 
-function packageDir(name: string, from: string): string | undefined {
+function findPackageDir(name: string, from: string): string | undefined {
   let dir = dirname(realpathSync(from));
   for (;;) {
     const candidate = join(dir, "node_modules", name);
@@ -64,10 +64,10 @@ function packageDir(name: string, from: string): string | undefined {
   }
 }
 
-function thirdParty(specifier: string, from: string): string | undefined {
+function resolveThirdPartyModule(specifier: string, from: string): string | undefined {
   const segments = specifier.split("/");
   const name = segments.slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
-  const dir = packageDir(name, from);
+  const dir = findPackageDir(name, from);
   if (!dir) return undefined;
 
   const manifest = readManifest(dir);
@@ -84,7 +84,7 @@ function thirdParty(specifier: string, from: string): string | undefined {
       Object.keys(exports).some((key) => key.startsWith("."))
         ? (exports as Record<string, unknown>)
         : { ".": exports };
-    target = edgeTarget(map[subpath]);
+    target = resolveEdgeTarget(map[subpath]);
   }
   if (!target) return undefined;
   const entry = resolve(dir, target);
@@ -92,16 +92,16 @@ function thirdParty(specifier: string, from: string): string | undefined {
 }
 
 function resolveModule(specifier: string, from: string): string | undefined {
-  if (specifier.startsWith(".")) return relativeModule(specifier, from);
-  if (specifier.startsWith("#")) return packageImport(specifier);
-  return thirdParty(specifier, from);
+  if (specifier.startsWith(".")) return resolveRelativeModule(specifier, from);
+  if (specifier.startsWith("#")) return resolvePackageImport(specifier);
+  return resolveThirdPartyModule(specifier, from);
 }
 
 function isBuiltin(specifier: string): boolean {
   return specifier.startsWith("node:") || builtinModules.includes(specifier);
 }
 
-function displayPath(file: string): string {
+function formatDisplayPath(file: string): string {
   const marker = file.lastIndexOf("node_modules/");
   return marker === -1 ? relative(src, file) : file.slice(marker + "node_modules/".length);
 }
@@ -161,13 +161,13 @@ function nodeBuiltins(entry: string): string[] {
 
     for (const specifier of loaded(file)) {
       if (isBuiltin(specifier)) {
-        found.push(`${displayPath(file)} loads ${specifier}`);
+        found.push(`${formatDisplayPath(file)} loads ${specifier}`);
         continue;
       }
       const next = resolveModule(specifier, file);
       if (!next) {
         found.push(
-          `${displayPath(file)} loads ${specifier}, which does not resolve for an edge bundle`,
+          `${formatDisplayPath(file)} loads ${specifier}, which does not resolve for an edge bundle`,
         );
         continue;
       }
