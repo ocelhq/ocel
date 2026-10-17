@@ -338,6 +338,10 @@ func twoAppRequest() *contractv1.DeployRequest {
 		Name:      "admin",
 		Framework: &contractv1.Framework{Name: "next"},
 		BuildId:   adminBuildID,
+		Domains: []*contractv1.TierDomains{{
+			Tier:      environmentv1.Tier_TIER_PRODUCTION,
+			Hostnames: []string{"admin.shop.example"},
+		}},
 		Artifact: serverless(&contractv1.ManifestFunction{
 			LogicalName:  "admin-server",
 			Framework:    &contractv1.Framework{Name: "next"},

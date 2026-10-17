@@ -286,7 +286,7 @@ func TestADeployThatMovesAContainerAppsHostnameToAnotherContainerAppClaimsItForT
 		Artifact:  admin.Artifact,
 		Domains:   admin.Domains,
 	})
-	admin.Domains = nil
+	admin.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{"backoffice.shop.example"}}}
 	second, _ := deploy(t, client, moved)
 	if second == nil || !second.GetSuccess() {
 		t.Fatalf("the second Deploy() = %q", second.GetError())
