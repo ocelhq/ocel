@@ -15,6 +15,40 @@ import (
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
 
+func TestAnEnginesPoolHoldsAtMostFourConnectionsUnlessTheServerURLSaysOtherwise(t *testing.T) {
+	t.Parallel()
+
+	for url, want := range map[string]int32{
+		"postgres://ocel@db.internal/postgres":                        4,
+		"postgres://ocel@db.internal/postgres?pool_max_conns=2":       2,
+		"postgres://ocel@db.internal/postgres?pool_max_conns=16":      16,
+		"host=db.internal user=ocel dbname=postgres":                  4,
+		"host=db.internal user=ocel dbname=postgres pool_max_conns=3": 3,
+	} {
+		got, err := readPoolConfig(url)
+		if err != nil {
+			t.Fatalf("readPoolConfig(%s): %v", url, err)
+		}
+		if got.MaxConns != want {
+			t.Errorf("readPoolConfig(%s).MaxConns = %d, want %d", url, got.MaxConns, want)
+		}
+		if _, passed := got.ConnConfig.RuntimeParams["pool_max_conns"]; passed {
+			t.Errorf("readPoolConfig(%s) passes pool_max_conns on to the server, which refuses it", url)
+		}
+	}
+}
+
+func TestOpeningAcceptsPoolSettingsInTheServerURL(t *testing.T) {
+	cfg := aDatabase(t)
+	cfg.ServerURL += "&pool_max_conns=2&pool_max_conn_idle_time=1m"
+
+	engine, err := Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Open with pool settings in the server URL: %v", err)
+	}
+	engine.Close()
+}
+
 func aDatabase(t *testing.T) Config {
 	t.Helper()
 	server := enginetest.SharedQueueDatabase(t)
