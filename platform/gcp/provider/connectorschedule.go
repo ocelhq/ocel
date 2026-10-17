@@ -12,7 +12,7 @@ import (
 
 const connectorBeatSchedule = "* * * * *"
 
-func (c *clients) connectorSchedule(url string) *cloudscheduler.Job {
+func (c *clients) buildConnectorSchedule(url string) *cloudscheduler.Job {
 	return &cloudscheduler.Job{
 		Name:        schedulePath(c, c.Connector()),
 		Description: "wakes the ocel connector once a minute to send the console a heartbeat",
@@ -31,7 +31,7 @@ func (c *clients) connectorSchedule(url string) *cloudscheduler.Job {
 }
 
 func (c *clients) scheduleConnectorHeartbeat(ctx context.Context, url string) error {
-	return c.ensureSchedule(ctx, c.Connector(), c.connectorSchedule(url))
+	return c.putSchedule(ctx, c.Connector(), c.buildConnectorSchedule(url))
 }
 
 func (c *clients) takeConnectorSchedule(ctx context.Context, progress progress.Log) error {

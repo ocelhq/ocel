@@ -89,7 +89,7 @@ func Heartbeat(ctx context.Context, spec Spec) error {
 	return beating.once(ctx)
 }
 
-func heartbeatRequest(spec Spec) http.HandlerFunc {
+func serveHeartbeat(spec Spec) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := spec.VerifyHeartbeat(r); err != nil {
 			fmt.Printf("connector %s: a heartbeat request was refused: %v\n", spec.ConnectorID, err)

@@ -134,7 +134,7 @@ func (b bootstrap) envSourceSyncRemovals(ctx context.Context, tier environment.T
 
 func (b bootstrap) removeEnvSourceSync(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	name := b.clients.EnvSourceSync(tier)
-	if err := b.takeSchedule(ctx, name); err != nil {
+	if err := b.clients.takeSchedule(ctx, name); err != nil {
 		return err
 	}
 	service, err := b.readService(ctx, name)

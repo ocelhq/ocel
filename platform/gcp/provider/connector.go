@@ -121,7 +121,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	}
 
 	released, err := p.deployAndRoute(ctx,
-		connectorServing(names, p.options.Region, image, install.Version, publicKey, config), progress)
+		buildConnectorServing(names, p.options.Region, image, install.Version, publicKey, config), progress)
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
@@ -140,7 +140,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	return provider.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
 }
 
-func connectorServing(names Names, region, image, version, publicKey string, config []byte) serving {
+func buildConnectorServing(names Names, region, image, version, publicKey string, config []byte) serving {
 	return serving{
 		service:   names.Connector(),
 		image:     image,
