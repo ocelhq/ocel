@@ -14,23 +14,29 @@ func originOf(entry *contractv1.LogEntry) lineOrigin {
 	return lineOrigin{entry.GetApp(), entry.GetSource(), entry.GetRelease(), entry.GetInstance(), entry.GetStream()}
 }
 
-func groupTraces(entries []*contractv1.LogEntry) [][]*contractv1.LogEntry {
-	var groups [][]*contractv1.LogEntry
-	for start := 0; start < len(entries); {
-		end := start + 1
-		for end < len(entries) && originOf(entries[end]) == originOf(entries[start]) {
-			end++
-		}
-		run := entries[start:end]
-		messages := make([]string, len(run))
-		for i, entry := range run {
-			messages[i] = entry.GetMessage()
-		}
-		for _, joined := range logview.Join(messages) {
-			groups = append(groups, run[:len(joined)])
-			run = run[len(joined):]
-		}
-		start = end
+type openGroup struct {
+	origin  lineOrigin
+	lines   logview.LineStream
+	entries []*contractv1.LogEntry
+}
+
+func (g *openGroup) add(entry *contractv1.LogEntry) (closed []*contractv1.LogEntry) {
+	origin := originOf(entry)
+	sameOrigin := origin == g.origin
+	if !sameOrigin {
+		g.lines = logview.LineStream{}
 	}
-	return groups
+	if g.lines.Add(entry.GetMessage()) && sameOrigin && len(g.entries) > 0 {
+		g.entries = append(g.entries, entry)
+		return nil
+	}
+	closed = g.entries
+	g.origin, g.entries = origin, []*contractv1.LogEntry{entry}
+	return closed
+}
+
+func (g *openGroup) take() []*contractv1.LogEntry {
+	closed := g.entries
+	*g = openGroup{}
+	return closed
 }

@@ -1078,6 +1078,99 @@ func TestLogsTailOnATerminalMarksWhereHistoryEndsAndLiveBegins(t *testing.T) {
 	}
 }
 
+var cardDeclinedTrace = []string{"Error: card declined", "    at charge (payments.js:12)", "    at handler (index.js:4)"}
+
+func appendLiveErrorsOneBatchEach(project clitest.FakeProject, messages []string) {
+	for _, message := range messages {
+		entry := liveEntry(message)
+		entry.Severity = "ERROR"
+		project.Provider.FakeLogs().Append("web-live", entry)
+	}
+}
+
+func requireTraceBoxedAsOneEntry(t *testing.T, stdout string, trace []string) {
+	t.Helper()
+	if strings.Count(stdout, "ERROR") != 1 {
+		t.Errorf("stdout = %q, want the trace as one ERROR entry", stdout)
+	}
+	for _, frame := range trace {
+		if !strings.Contains(stdout, "│ "+frame) {
+			t.Errorf("stdout = %q, want %q inside the box", stdout, frame)
+		}
+	}
+}
+
+func TestLogsTailOnATerminalBoxesAStackTraceWhoseLinesArriveInSeparateBatches(t *testing.T) {
+	project := deployedWithLogs(t)
+	run := startTail(t, project, terminalDependencies, nil)
+	run.waitFor(run.stdout, "── live ──")
+	run.waitForTailOpened(project)
+
+	appendLiveErrorsOneBatchEach(project, cardDeclinedTrace)
+	project.Provider.FakeLogs().Append("web-live", liveEntry("recovered"))
+	run.waitFor(run.stdout, "recovered")
+	if err := run.interrupt(); err != nil {
+		t.Fatalf("runLogs err = %v", err)
+	}
+
+	requireTraceBoxedAsOneEntry(t, run.stdout.String(), cardDeclinedTrace)
+}
+
+func TestLogsTailOnATerminalPrintsAStackTraceNoLineFollowsOnceTheStreamGoesQuiet(t *testing.T) {
+	project := deployedWithLogs(t)
+	run := startTail(t, project, terminalDependencies, nil)
+	run.waitFor(run.stdout, "── live ──")
+	run.waitForTailOpened(project)
+
+	appendLiveErrorsOneBatchEach(project, cardDeclinedTrace)
+	run.waitFor(run.stdout, "│ "+cardDeclinedTrace[len(cardDeclinedTrace)-1])
+	if err := run.interrupt(); err != nil {
+		t.Fatalf("runLogs err = %v", err)
+	}
+
+	requireTraceBoxedAsOneEntry(t, run.stdout.String(), cardDeclinedTrace)
+}
+
+func TestLogsTailOnATerminalPrintsAStackTraceEndingTheHistoryBeforeTheLiveLine(t *testing.T) {
+	project := deployedWithLogs(t)
+	for i, message := range cardDeclinedTrace {
+		entry := line(4*time.Minute+time.Duration(i)*time.Millisecond, message)
+		entry.Severity = "ERROR"
+		project.Provider.FakeLogs().Append("web-live", entry)
+	}
+	run := startTail(t, project, terminalDependencies, nil)
+
+	run.waitFor(run.stdout, "── live ──")
+	got := run.stdout.String()
+	if err := run.interrupt(); err != nil {
+		t.Fatalf("runLogs err = %v", err)
+	}
+
+	requireTraceBoxedAsOneEntry(t, got, cardDeclinedTrace)
+	if strings.Index(got, cardDeclinedTrace[len(cardDeclinedTrace)-1]) > strings.Index(got, "── live ──") {
+		t.Errorf("stdout = %q, want the trace before the live line", got)
+	}
+}
+
+func TestLogsOnATerminalPrintsAStackTraceStillOpenWhenTheStreamEnds(t *testing.T) {
+	var stdout bytes.Buffer
+	present := terminal.Resolve(terminal.Conditions{TTY: true, ColorAsked: terminal.ColorNever})
+	out := newOutput(&stdout, present, outputMode{}, newNotices(io.Discard, terminal.Palette{}, func(string) {}))
+	var entries []*contractv1.LogEntry
+	for _, message := range cardDeclinedTrace {
+		entries = append(entries, &contractv1.LogEntry{App: "web", Source: "http", Message: message, Severity: "ERROR"})
+	}
+
+	if err := out.printResponse(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Batch{Batch: &contractv1.LogBatch{Entries: entries}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.finish(); err != nil {
+		t.Fatal(err)
+	}
+
+	requireTraceBoxedAsOneEntry(t, stdout.String(), cardDeclinedTrace)
+}
+
 func TestLogsOnATerminalPrintsNoLiveLineWithoutTail(t *testing.T) {
 	project := deployedWithLogs(t)
 

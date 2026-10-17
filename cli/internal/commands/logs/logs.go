@@ -129,6 +129,15 @@ func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []
 }
 
 func (q logsQuery) read(ctx context.Context, provider *providerprocess.Provider, out *output) error {
+	err := q.readUntilStopped(ctx, provider, out)
+	finishErr := out.finish()
+	if err != nil {
+		return err
+	}
+	return finishErr
+}
+
+func (q logsQuery) readUntilStopped(ctx context.Context, provider *providerprocess.Provider, out *output) error {
 	if !q.request.GetTail() {
 		return providerprocess.ReadLogs(ctx, provider, q.request, out.printResponse)
 	}

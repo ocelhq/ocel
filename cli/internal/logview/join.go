@@ -23,20 +23,13 @@ var (
 	rustThread = regexp.MustCompile(`^thread '.*' panicked at `)
 )
 
-func Join(lines []string) [][]string {
-	var groups [][]string
-	mode := plain
-	for _, line := range lines {
-		next, joins := nextMode(mode, line)
-		if joins && len(groups) > 0 {
-			last := len(groups) - 1
-			groups[last] = append(groups[last], line)
-		} else {
-			groups = append(groups, []string{line})
-		}
-		mode = next
-	}
-	return groups
+type LineStream struct {
+	mode traceMode
+}
+
+func (s *LineStream) Add(line string) (continuesEntry bool) {
+	s.mode, continuesEntry = nextMode(s.mode, line)
+	return continuesEntry
 }
 
 func nextMode(mode traceMode, line string) (traceMode, bool) {

@@ -7,7 +7,21 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/logview"
 )
 
-func TestJoinGroupsStackTraceLinesWithTheirEntry(t *testing.T) {
+func joinLines(lines []string) [][]string {
+	var stream logview.LineStream
+	var entries [][]string
+	for _, line := range lines {
+		if stream.Add(line) && len(entries) > 0 {
+			last := len(entries) - 1
+			entries[last] = append(entries[last], line)
+		} else {
+			entries = append(entries, []string{line})
+		}
+	}
+	return entries
+}
+
+func TestLineStreamJoinsStackTraceLinesWithTheirEntry(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -263,8 +277,8 @@ func TestJoinGroupsStackTraceLinesWithTheirEntry(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := logview.Join(tc.lines); !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("Join =\n got  %q\n want %q", got, tc.want)
+			if got := joinLines(tc.lines); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("entries =\n got  %q\n want %q", got, tc.want)
 			}
 		})
 	}
