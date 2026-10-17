@@ -9,7 +9,18 @@ from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 import ocel
-from infra import Env, deploys, live, orders, rooms, status
+from infra import (
+    Env,
+    deploys,
+    json_text,
+    live,
+    notices,
+    orders,
+    rooms,
+    sighting,
+    status,
+    verbatim,
+)
 
 DEFAULT_PORT = "3104"
 BINDING_KEY = f"OCEL_RESOURCE_REALTIME_{live.name}"
@@ -105,6 +116,35 @@ def sign_token(environ, start_response):
     return answer(start_response, "200 OK", {"token": f"{signing_input}.{signature}"})
 
 
+def wire(environ, start_response, path, method):
+    try:
+        if path == "/api/wire/trigger" and method == "POST":
+            return answer(start_response, "200 OK", {"id": verbatim.trigger(read_json(environ)).id})
+        if path == "/api/wire/send" and method == "POST":
+            return answer(start_response, "200 OK", {"messageId": notices.send(read_json(environ))})
+        if path.startswith("/api/wire/runs/") and method == "GET":
+            run = ocel.runs.retrieve(path.removeprefix("/api/wire/runs/"))
+            return answer(
+                start_response,
+                "200 OK",
+                {
+                    "id": run.id,
+                    "task": run.task,
+                    "status": run.status,
+                    "payload": json_text(run.payload),
+                    "output": "" if run.output is None else json_text(run.output),
+                    "error": run.error,
+                },
+            )
+        if path.startswith("/api/wire/sightings/") and method == "GET":
+            tag = path.removeprefix("/api/wire/sightings/")
+            page = ocel.runs.list(task=sighting, tags=[tag], status=ocel.RunStatus.COMPLETED)
+            return answer(start_response, "200 OK", [run.output for run in page.runs])
+    except Exception as error:
+        return answer(start_response, "400 Bad Request", {"error": str(error)})
+    return answer(start_response, "404 Not Found", {"error": f"no route {method} {path}"})
+
+
 def app(environ, start_response):
     path, method = environ["PATH_INFO"], environ["REQUEST_METHOD"]
     if path == "/health" and method == "GET":
@@ -115,6 +155,8 @@ def app(environ, start_response):
         return publish(environ, start_response)
     if path == "/api/tokens" and method == "POST":
         return sign_token(environ, start_response)
+    if path.startswith("/api/wire/"):
+        return wire(environ, start_response, path, method)
     return answer(start_response, "404 Not Found", {"error": f"no route {method} {path}"})
 
 

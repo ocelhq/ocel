@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from urllib.parse import parse_qs
 
@@ -79,3 +80,31 @@ def rooms(ctx: ocel.RuleContext) -> bool:
 
 
 status = live.channel("status", schema=Note, subscribe="public")
+
+
+def json_text(payload) -> str:
+    return json.dumps(payload, separators=(",", ":"))
+
+
+@ocel.task("sighting")
+async def sighting(seen: dict, ctx: ocel.RunContext) -> dict:
+    return seen
+
+
+async def record_sighting(tag: str, payload, ctx: ocel.RunContext) -> None:
+    seen = {"kind": ctx.kind, "name": ctx.name, "topic": ctx.topic, "payload": json_text(payload)}
+    await sighting.trigger_async(seen, tags=[tag])
+
+
+@ocel.task("verbatim")
+async def verbatim(payload: object, ctx: ocel.RunContext) -> object:
+    await record_sighting(ctx.id, payload, ctx)
+    return payload
+
+
+notices = ocel.topic("notices")
+
+
+@notices.consumer("notice-log")
+async def notice_log(payload: object, ctx: ocel.RunContext) -> None:
+    await record_sighting(ctx.message.id, payload, ctx)

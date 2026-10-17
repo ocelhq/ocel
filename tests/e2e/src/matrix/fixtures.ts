@@ -80,6 +80,7 @@ const SVELTEKIT_CHECKS = [
 ];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 const REALTIME_CHECKS = [...healthChecks, ...realtimeChecks];
+const WIRE_CHECKS = tasksWireChecks({ task: "verbatim", topic: "notices", consumer: "notice-log" });
 const SDK_GO_CHECKS = [
   ...REALTIME_CHECKS,
   ...tasksWireChecks({ task: "exact-echo", topic: "exact-orders", consumer: "exact-audit" }),
@@ -195,7 +196,7 @@ export const sdk = {
       ...bindingChecks,
       ...kvChecks,
       ...tasksChecks,
-      ...tasksWireChecks({ task: "verbatim", topic: "notices", consumer: "notice-log" }),
+      ...WIRE_CHECKS,
       ...realtimeChecks,
     ],
     on: {
@@ -216,7 +217,7 @@ export const sdk = {
   python: fixture("sdk/python", {
     apps: ["web"],
     devCommands: { web: [".venv/bin/python", "main.py"] },
-    checks: REALTIME_CHECKS,
+    checks: [...REALTIME_CHECKS, ...WIRE_CHECKS],
     on: {
       dev: [defaults],
       aws: [defaults, cloudflareInFrontOfContainers],
@@ -240,6 +241,7 @@ export const sdk = {
       ...nextClientEnvChecks,
       ...prerenderChecks,
       ...prerenderBucketChecks,
+      ...WIRE_CHECKS,
     ],
     on: {
       dev: [defaults],
