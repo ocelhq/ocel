@@ -70,6 +70,11 @@ const (
 
 	appSecurityGroupARN  = "arn:aws:ec2:*:*:security-group/*"
 	appVPCARN            = "arn:aws:ec2:*:*:vpc/*"
+	appSubnetARN         = "arn:aws:ec2:*:*:subnet/*"
+	appElasticIPARN      = "arn:aws:ec2:*:*:elastic-ip/*"
+	appNATGatewayARN     = "arn:aws:ec2:*:*:natgateway/*"
+	appRouteTableARN     = "arn:aws:ec2:*:*:route-table/*"
+	appVPCEndpointARN    = "arn:aws:ec2:*:*:vpc-endpoint/*"
 	appRepositoryARN     = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
 	appLogGroupARN       = "arn:aws:logs:*:*:log-group:/ocel/*"
 	functionLogGroupARN  = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
@@ -1041,6 +1046,89 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"ec2:RevokeSecurityGroupIngress",
 			},
 			Resources: []string{appSecurityGroupARN},
+			Condition: taggedByOcel(),
+		},
+		{
+			Actions: []string{
+				"ec2:DescribeAddresses",
+				"ec2:DescribeAddressesAttribute",
+				"ec2:DescribeNatGateways",
+				"ec2:DescribePrefixLists",
+				"ec2:DescribeRouteTables",
+				"ec2:DescribeVpcEndpoints",
+			},
+			Resources: []string{UnscopedResource},
+		},
+		{
+			Actions:   []string{"ec2:CreateSubnet"},
+			Resources: []string{appSubnetARN, appVPCARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"ec2:AllocateAddress"},
+			Resources: []string{appElasticIPARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"ec2:CreateNatGateway"},
+			Resources: []string{appNATGatewayARN, appSubnetARN, appElasticIPARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"ec2:CreateRouteTable"},
+			Resources: []string{appRouteTableARN, appVPCARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"ec2:CreateVpcEndpoint"},
+			Resources: []string{appVPCEndpointARN, appVPCARN, appRouteTableARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"ec2:CreateTags"},
+			Resources: []string{appSubnetARN, appElasticIPARN, appNATGatewayARN, appRouteTableARN, appVPCEndpointARN},
+			Condition: map[string]any{
+				"StringEquals": map[string]any{"ec2:CreateAction": []string{
+					"AllocateAddress", "CreateNatGateway", "CreateRouteTable", "CreateSubnet", "CreateVpcEndpoint",
+				}},
+			},
+		},
+		{
+			Actions: []string{
+				"ec2:AssociateRouteTable",
+				"ec2:DisassociateRouteTable",
+			},
+			Resources: []string{appRouteTableARN, appSubnetARN},
+			Condition: taggedByOcel(),
+		},
+		{
+			Actions: []string{
+				"ec2:CreateRoute",
+				"ec2:DeleteRoute",
+				"ec2:DeleteRouteTable",
+				"ec2:ReplaceRoute",
+			},
+			Resources: []string{appRouteTableARN},
+			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"ec2:DeleteSubnet", "ec2:ModifySubnetAttribute"},
+			Resources: []string{appSubnetARN},
+			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"ec2:DisassociateAddress", "ec2:ReleaseAddress"},
+			Resources: []string{appElasticIPARN},
+			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"ec2:DeleteNatGateway"},
+			Resources: []string{appNATGatewayARN},
+			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"ec2:DeleteVpcEndpoints", "ec2:ModifyVpcEndpoint"},
+			Resources: []string{appVPCEndpointARN, appRouteTableARN},
 			Condition: taggedByOcel(),
 		},
 		{
