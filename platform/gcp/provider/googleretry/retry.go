@@ -84,10 +84,12 @@ func AnsweredCode(err error) int {
 
 func isRetryable(code int, err error) bool {
 	if code != 0 {
-		return slices.Contains(retryableAnswers, code)
+		return IsRetryableAnswer(code)
 	}
 	return err != nil && (slices.Contains(retryableStatuses, status.Code(err)) || isRetryableTransport(err))
 }
+
+func IsRetryableAnswer(code int) bool { return slices.Contains(retryableAnswers, code) }
 
 func isRetryableTransport(err error) bool {
 	var timed net.Error
