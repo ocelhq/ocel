@@ -34,7 +34,7 @@ var recordedParts = []provider.Part{
 }
 
 func (p *Provider) removableParts() []removablePart {
-	removable := make([]removablePart, 0, len(recordedParts)+2)
+	removable := make([]removablePart, 0, len(recordedParts)+3)
 	for _, part := range recordedParts {
 		removable = append(removable, removablePart{
 			Part: part,
@@ -51,6 +51,11 @@ func (p *Provider) removableParts() []removablePart {
 			Part:   provider.Part{Name: deploy.ContainersPart, Summary: deploy.ContainersSummary},
 			plan:   p.planContainersRemoval,
 			remove: p.stacks.RemoveContainerInfrastructure,
+		},
+		removablePart{
+			Part:   provider.Part{Name: deploy.FunctionNetworkPart, Summary: deploy.FunctionNetworkSummary},
+			plan:   p.planFunctionNetworkRemoval,
+			remove: p.stacks.RemoveFunctionNetwork,
 		},
 		removablePart{
 			Part:   provider.Part{Name: bastion.Part, Summary: bastion.Summary},
@@ -147,6 +152,17 @@ func (p *Provider) planContainersRemoval(ctx context.Context, tier environment.T
 		return nil, deploy.RefuseContainerInfrastructureInUse(tier, part.UsedBy)
 	}
 	return partDeletion(part.Name, "this run removes it; the next container deploy adds it again", part.Resources), nil
+}
+
+func (p *Provider) planFunctionNetworkRemoval(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
+	part, present, err := deploy.ReadFunctionNetworkPart(ctx, p.KeyValues(), p.aws.Region, tier)
+	if err != nil || !present {
+		return nil, err
+	}
+	if len(part.UsedBy) > 0 {
+		return nil, deploy.RefuseFunctionNetworkInUse(tier, part.UsedBy)
+	}
+	return partDeletion(part.Name, "this run removes it; the next deploy of a serverless app that reaches a postgres or kv Ocel provisions adds it again", part.Resources), nil
 }
 
 func (p *Provider) planBastionRemoval(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {

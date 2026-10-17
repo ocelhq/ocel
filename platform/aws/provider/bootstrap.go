@@ -87,6 +87,13 @@ func (s forgetting) DescribeParts(ctx context.Context, described provider.Bootst
 	if present {
 		parts = append(parts, containers)
 	}
+	network, present, err := deploy.ReadFunctionNetworkPart(ctx, s.keyValues, s.region, described.Tier)
+	if err != nil {
+		return nil, err
+	}
+	if present {
+		parts = append(parts, network)
+	}
 	sync, present, err := s.envSourceSync(ctx, described.Tier)
 	if err != nil {
 		return nil, err
