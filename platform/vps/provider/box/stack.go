@@ -299,13 +299,13 @@ func (s *stack) claimTunneled(ctx context.Context, claim router.Claim) (edge.Ori
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	var stores []string
+	var storeHostnames []string
 	for _, claimed := range served {
 		if claimed.App == switchboard.StoreLabel {
-			stores = append(stores, claimed.Hostname)
+			storeHostnames = append(storeHostnames, claimed.Hostname)
 		}
 	}
-	origin, err := s.e.tunnelHost(ctx, claim.Hostname, stores, claim.Tunnel, s.surface())
+	origin, err := s.e.tunnelHost(ctx, claim.Hostname, storeHostnames, claim.Tunnel, s.surface())
 	if err != nil {
 		return edge.Origin{}, err
 	}
