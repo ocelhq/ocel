@@ -276,10 +276,14 @@ func (s *stack) claimHostname(ctx context.Context, claim router.Claim) (edge.Ori
 			return edge.Origin{}, err
 		}
 	}
-	if err := s.claimUnlessWildcard(ctx, claim); err != nil {
+	served, err := s.listServed(ctx, claim)
+	if err != nil {
 		return edge.Origin{}, err
 	}
-	if err := s.e.removeTunneledHost(ctx, claim.Hostname, s.surface()); err != nil {
+	if err := s.claim(ctx, served); err != nil {
+		return edge.Origin{}, err
+	}
+	if err := s.e.removeTunneledHosts(ctx, s.surface(), claim.Hostname, live.StoreHostname(claim.Hostname)); err != nil {
 		return edge.Origin{}, err
 	}
 	if shielded {
@@ -291,35 +295,38 @@ func (s *stack) claimHostname(ctx context.Context, claim router.Claim) (edge.Ori
 }
 
 func (s *stack) claimTunneled(ctx context.Context, claim router.Claim) (edge.Origin, error) {
-	origin, err := s.e.tunnelHost(ctx, claim.Hostname, claim.Tunnel, s.surface())
+	served, err := s.listServed(ctx, claim)
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	return origin, s.claimUnlessWildcard(ctx, claim)
-}
-
-func (s *stack) claimUnlessWildcard(ctx context.Context, claim router.Claim) error {
-	if strings.HasPrefix(claim.Hostname, "*.") {
-		return nil
+	var stores []string
+	for _, claimed := range served {
+		if claimed.App == switchboard.StoreLabel {
+			stores = append(stores, claimed.Hostname)
+		}
 	}
-	return s.claimServed(ctx, claim)
+	origin, err := s.e.tunnelHost(ctx, claim.Hostname, stores, claim.Tunnel, s.surface())
+	if err != nil {
+		return edge.Origin{}, err
+	}
+	return origin, s.claim(ctx, served)
 }
 
-func (s *stack) claimServed(ctx context.Context, claim router.Claim) error {
-	claims := []host.HostClaim{{
+func (s *stack) listServed(ctx context.Context, claim router.Claim) ([]host.HostClaim, error) {
+	if strings.HasPrefix(claim.Hostname, "*.") {
+		return nil, nil
+	}
+	served := []host.HostClaim{{
 		Hostname: claim.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: claim.App,
 	}}
 	stores, err := s.stores(ctx, router.DefaultPointer)
-	if err != nil {
-		return err
+	if err != nil || !stores {
+		return served, err
 	}
-	if stores {
-		claims = append(claims, host.HostClaim{
-			Hostname: live.StoreHostname(claim.Hostname), Owner: s.surface(),
-			Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
-		})
-	}
-	return s.claim(ctx, claims)
+	return append(served, host.HostClaim{
+		Hostname: live.StoreHostname(claim.Hostname), Owner: s.surface(),
+		Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
+	}), nil
 }
 
 func (e *Edge) putShield(ctx context.Context, claim router.Claim, owner string) (certified bool, err error) {

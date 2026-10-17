@@ -41,16 +41,18 @@ func (e *Edge) openTunnel(ctx context.Context, kind edge.Kind) (host.Tunnel, err
 	return reserved, nil
 }
 
-func (e *Edge) tunnelHost(ctx context.Context, claim string, kind edge.Kind, owner string) (edge.Origin, error) {
+func (e *Edge) tunnelHost(ctx context.Context, claim string, stores []string, kind edge.Kind, owner string) (edge.Origin, error) {
 	tunnel, err := e.openTunnel(ctx, kind)
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	if err := e.machine.TunnelHost(ctx, host.TunneledHost{Hostname: claim, Owner: owner}, tunnel.Name); err != nil {
-		if errors.Is(err, host.ErrTunnelReleased) {
-			return edge.Origin{}, errors.Join(err, e.machine.StopTunnel(ctx, tunnel))
+	for _, hostname := range append([]string{claim}, stores...) {
+		if err := e.machine.TunnelHost(ctx, host.TunneledHost{Hostname: hostname, Owner: owner}, tunnel.Name); err != nil {
+			if errors.Is(err, host.ErrTunnelReleased) {
+				return edge.Origin{}, errors.Join(err, e.machine.StopTunnel(ctx, tunnel))
+			}
+			return edge.Origin{}, err
 		}
-		return edge.Origin{}, err
 	}
 	if err := e.machine.RemoveShield(ctx, claim, owner); err != nil {
 		return edge.Origin{}, err
@@ -58,9 +60,11 @@ func (e *Edge) tunnelHost(ctx context.Context, claim string, kind edge.Kind, own
 	return edge.Origin{Address: tunnel.Address, Certified: true, Tunneled: true}, nil
 }
 
-func (e *Edge) removeTunneledHost(ctx context.Context, hostname, owner string) error {
-	if err := e.machine.RemoveTunneledHost(ctx, host.TunneledHost{Hostname: hostname, Owner: owner}); err != nil {
-		return err
+func (e *Edge) removeTunneledHosts(ctx context.Context, owner string, hostnames ...string) error {
+	for _, hostname := range hostnames {
+		if err := e.machine.RemoveTunneledHost(ctx, host.TunneledHost{Hostname: hostname, Owner: owner}); err != nil {
+			return err
+		}
 	}
 	return e.releaseTunnel(ctx)
 }
