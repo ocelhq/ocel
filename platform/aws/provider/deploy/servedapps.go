@@ -82,7 +82,7 @@ func (r *Stacks) Warm(ctx context.Context, targets []string, progress progress.L
 			warmTarget{App: fn.App, LogicalName: fn.Logical, FunctionName: physical})
 	}
 	for from, batch := range warming {
-		for _, result := range (warmPass{invoker: from.cfg.Invoker, targets: batch, budget: warmPassDeadline, progress: progress}).run(ctx) {
+		for _, result := range (warmPass{invoker: from.cfg.Invoker, targets: batch, bundleDeadline: warmBundleDeadline, progress: progress}).run(ctx) {
 			r.served.warmed(result.Target.FunctionName, result.Reply)
 		}
 	}
@@ -124,9 +124,9 @@ func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provid
 			CacheKey:     fn.Warmed.Key,
 			TreeBytes:    fn.Warmed.Bytes,
 		}},
-		budget:     embedPassDeadline,
-		updateWait: embedUpdateWait,
-		progress:   progress,
+		bundleDeadline: embedBundleDeadline,
+		updateWait:     embedUpdateWait,
+		progress:       progress,
 	}.run(ctx)
 	return nil
 }

@@ -354,9 +354,9 @@ func embedTestPass(t *testing.T, putter *fakePutter, code *fakeFunctionCode, inv
 			CacheKey:     embedTestCacheKey,
 			TreeBytes:    1 << 20,
 		}},
-		budget:     time.Minute,
-		updateWait: embedUpdateWait,
-		progress:   log,
+		bundleDeadline: time.Minute,
+		updateWait:     embedUpdateWait,
+		progress:       log,
 	}, out
 }
 
@@ -494,7 +494,7 @@ func TestEmbedPass(t *testing.T) {
 	t.Run("declines an update it cannot wait out", func(t *testing.T) {
 		putter, code := &fakePutter{}, &fakeFunctionCode{}
 		pass, out := embedTestPass(t, putter, code, embeddedReply())
-		pass.budget = 250 * time.Millisecond
+		pass.bundleDeadline = 250 * time.Millisecond
 		pass.updateWait = time.Minute
 		pass.run(context.Background())
 
@@ -530,6 +530,71 @@ func TestEmbedPass(t *testing.T) {
 			t.Errorf("the pass verified a function mid-update: %v", calls)
 		}
 	})
+}
+
+const embeddedAnswer = `{"state":"already-cached","source":"embedded"}`
+
+func newAppEmbedPass(t *testing.T, app string, bundles int, invoker InvokeAPI) (embedPass, func() string) {
+	t.Helper()
+	pass, out := embedTestPass(t, &fakePutter{}, &fakeFunctionCode{}, nil)
+	pass.invoke = invoker
+	template := pass.targets[0]
+	pass.targets = nil
+	for i := range bundles {
+		target := template
+		target.App = app
+		target.LogicalName = fmt.Sprintf("%s_bundle_%d", app, i)
+		target.FunctionName = fmt.Sprintf("ocel-%s-%d", app, i)
+		pass.targets = append(pass.targets, target)
+	}
+	return pass, out
+}
+
+func TestEmbeddingSharesOneWidthAcrossTheAppsEmbeddingAtOnce(t *testing.T) {
+	apps := []string{"web", "admin"}
+	invoker := newQueueingInvoke(len(apps)*embedConcurrency, embeddedAnswer)
+
+	var group sync.WaitGroup
+	for _, app := range apps {
+		pass, _ := newAppEmbedPass(t, app, embedConcurrency, invoker)
+		group.Go(func() { pass.run(context.Background()) })
+	}
+
+	invoker.waitArrivals(t, embedConcurrency)
+	invoker.expectNoArrivalWithin(t, 200*time.Millisecond, "a bundle reached its verify while the embed width was already full: each app took a width of its own")
+	close(invoker.release)
+	group.Wait()
+
+	if invoker.peak > embedConcurrency {
+		t.Errorf("%d embeds were in flight at once, want at most %d: the apps embedding side by side share one width", invoker.peak, embedConcurrency)
+	}
+}
+
+func TestQueueingForTheEmbedWidthSpendsNoneOfABundlesDeadline(t *testing.T) {
+	const bundleDeadline = 100 * time.Millisecond
+	invoker := newQueueingInvoke(embedConcurrency, embeddedAnswer)
+	pass, out := newAppEmbedPass(t, "web", embedConcurrency+1, invoker)
+	pass.bundleDeadline = bundleDeadline
+	pass.updateWait = 10 * time.Millisecond
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		pass.run(context.Background())
+	}()
+
+	invoker.waitArrivals(t, embedConcurrency)
+	time.Sleep(3 * bundleDeadline)
+	close(invoker.release)
+	<-done
+
+	log := out()
+	if strings.Contains(log, "WARN") {
+		t.Errorf("embed log = %s, want no bundle skipped or failed for the time it spent queueing", log)
+	}
+	if want := fmt.Sprintf("Embedded %d/%d compile caches", embedConcurrency+1, embedConcurrency+1); !strings.Contains(log, want) {
+		t.Errorf("embed log = %s, want %q: a bundle's deadline starts when it starts embedding", log, want)
+	}
 }
 
 type testZipEntry struct {

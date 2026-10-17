@@ -20,7 +20,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/statedir"
@@ -33,7 +32,9 @@ const embedUnzippedCeiling = 200 << 20
 
 const embedConcurrency = 4
 
-const embedPassDeadline = 3 * time.Minute
+const embedBundleDeadline = 3 * time.Minute
+
+var embedSlots = make(chan struct{}, embedConcurrency)
 
 const embedUpdatePoll = 500 * time.Millisecond
 
@@ -78,14 +79,14 @@ func missingEmbedClients(cfg Config) string {
 }
 
 type embedPass struct {
-	objects    ObjectsAPI
-	store      payloads.ObjectStore
-	code       FunctionCodeAPI
-	invoke     InvokeAPI
-	targets    []embedTarget
-	budget     time.Duration
-	updateWait time.Duration
-	progress   progress.Log
+	objects        ObjectsAPI
+	store          payloads.ObjectStore
+	code           FunctionCodeAPI
+	invoke         InvokeAPI
+	targets        []embedTarget
+	bundleDeadline time.Duration
+	updateWait     time.Duration
+	progress       progress.Log
 }
 
 func (p embedPass) run(ctx context.Context) {
@@ -94,39 +95,38 @@ func (p embedPass) run(ctx context.Context) {
 	}
 	p.progress.Say(fmt.Sprintf("Embedding compile caches into %s, %d at a time", plural(len(p.targets), "bundle", "bundles"), embedConcurrency))
 
-	ctx, cancel := context.WithTimeout(ctx, p.budget)
-	defer cancel()
-
 	start := time.Now()
 	var (
 		mu       sync.Mutex
 		embedded int
 		skipped  = make([]bool, len(p.targets))
 	)
-	var g errgroup.Group
-	g.SetLimit(embedConcurrency)
+	var group sync.WaitGroup
 	for i, target := range p.targets {
-		g.Go(func() error {
-			if ctx.Err() != nil {
+		group.Go(func() {
+			release, err := takeSlot(ctx, embedSlots)
+			if err != nil {
 				skipped[i] = true
-				return nil
+				return
 			}
+			defer release()
+			embedding, cancel := context.WithTimeout(ctx, p.bundleDeadline)
+			defer cancel()
 			at := time.Now()
-			outcome, ok := p.embedOne(ctx, target)
+			outcome, ok := p.embedOne(embedding, target)
 			mu.Lock()
 			defer mu.Unlock()
 			if ok {
 				embedded++
 			}
 			bundleOutcome(p.progress, ok)(fmt.Sprintf("%s of app %s: %s in %.1fs", target.LogicalName, target.App, outcome, time.Since(at).Seconds()))
-			return nil
 		})
 	}
-	_ = g.Wait()
+	group.Wait()
 
 	for i, target := range p.targets {
 		if skipped[i] {
-			p.progress.Warn(fmt.Sprintf("%s of app %s: the embed pass ran out of time; not embedded", target.LogicalName, target.App))
+			p.progress.Warn(fmt.Sprintf("%s of app %s: the deploy stopped before its turn to embed; not embedded", target.LogicalName, target.App))
 		}
 	}
 	passOutcome(p.progress, embedded, len(p.targets))(fmt.Sprintf("Embedded %d/%d compile caches in %.0fs", embedded, len(p.targets), time.Since(start).Seconds()))
@@ -335,7 +335,7 @@ var errUpdateUnfinished = errors.New("the code update did not finish in time")
 
 func (p embedPass) updateCode(ctx context.Context, target embedTarget, key string) error {
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < p.updateWait {
-		return fmt.Errorf("the embed pass has under %s left, too little to finish a code update", p.updateWait)
+		return fmt.Errorf("the bundle has under %s left of its embed deadline, too little to finish a code update", p.updateWait)
 	}
 	if _, err := p.code.UpdateFunctionCode(ctx, &lambda.UpdateFunctionCodeInput{
 		FunctionName: aws.String(target.FunctionName),

@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -77,10 +78,10 @@ func warmTestTargets(n int) []warmTarget {
 	return targets
 }
 
-func runWarm(t *testing.T, invoker InvokeAPI, targets []warmTarget, budget time.Duration) string {
+func runWarm(t *testing.T, invoker InvokeAPI, targets []warmTarget, bundleDeadline time.Duration) string {
 	t.Helper()
 	log, dump := collectLog()
-	warmPass{invoker: invoker, targets: targets, budget: budget, progress: log}.run(context.Background())
+	warmPass{invoker: invoker, targets: targets, bundleDeadline: bundleDeadline, progress: log}.run(context.Background())
 	return dump()
 }
 
@@ -333,24 +334,40 @@ func TestWarmPass(t *testing.T) {
 		}
 	})
 
-	t.Run("deadline names what it skipped", func(t *testing.T) {
+	t.Run("a bundle's deadline bounds its own invoke", func(t *testing.T) {
 		invoker := &fakeInvoke{respond: func(ctx context.Context, _ string) (*lambda.InvokeOutput, error) {
 			<-ctx.Done()
 			return nil, ctx.Err()
 		}}
 
-		out := runWarm(t, invoker, warmTestTargets(8), 20*time.Millisecond)
+		out := runWarm(t, invoker, warmTestTargets(1), 20*time.Millisecond)
 
-		if !strings.Contains(out, "Warmed 0/8 bundles") {
-			t.Errorf("warm log = %s, want nothing warmed", out)
+		if !strings.Contains(out, "deadline exceeded") || !strings.Contains(out, "Warmed 0/1 bundles") {
+			t.Errorf("warm log = %s, want the bundle reported cold at its deadline", out)
 		}
-		for _, target := range warmTestTargets(8)[warmConcurrency:] {
-			if !strings.Contains(out, target.LogicalName) {
-				t.Errorf("warm log never names the skipped bundle %s:\n%s", target.LogicalName, out)
-			}
+	})
+
+	t.Run("a deploy that stops names the bundles still queued", func(t *testing.T) {
+		invoker := newQueueingInvoke(warmConcurrency, `{"state":"already-cached"}`)
+		log, dump := collectLog()
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			warmPass{invoker: invoker, targets: warmTestTargets(8), bundleDeadline: time.Minute, progress: log}.run(ctx)
+		}()
+
+		invoker.waitArrivals(t, warmConcurrency)
+		cancel()
+		close(invoker.release)
+		<-done
+
+		out := dump()
+		if got := strings.Count(out, "the deploy stopped before its turn to warm; not warmed"); got != 8-warmConcurrency {
+			t.Errorf("warm log names %d queued bundles as never warmed, want %d:\n%s", got, 8-warmConcurrency, out)
 		}
-		if !strings.Contains(out, "ran out of time") {
-			t.Errorf("warm log = %s, want the deadline named as the reason", out)
+		if want := fmt.Sprintf("Warmed %d/8 bundles", warmConcurrency); !strings.Contains(out, want) {
+			t.Errorf("warm log = %s, want %q", out, want)
 		}
 	})
 
@@ -430,4 +447,123 @@ func TestParseWarmReply(t *testing.T) {
 			t.Error("parseWarmReply() err = nil, want an unreadable payload reported")
 		}
 	})
+}
+
+type queueingInvoke struct {
+	hold    int
+	reply   string
+	arrived chan struct{}
+	release chan struct{}
+
+	mu       sync.Mutex
+	arrivals int
+	live     int
+	peak     int
+}
+
+func newQueueingInvoke(hold int, reply string) *queueingInvoke {
+	return &queueingInvoke{
+		hold:    hold,
+		reply:   reply,
+		arrived: make(chan struct{}, 64),
+		release: make(chan struct{}),
+	}
+}
+
+func (q *queueingInvoke) Invoke(ctx context.Context, _ *lambda.InvokeInput, _ ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	q.mu.Lock()
+	q.arrivals++
+	held := q.arrivals <= q.hold
+	q.live++
+	q.peak = max(q.peak, q.live)
+	q.mu.Unlock()
+	defer func() {
+		q.mu.Lock()
+		q.live--
+		q.mu.Unlock()
+	}()
+
+	q.arrived <- struct{}{}
+	if held {
+		<-q.release
+	}
+	return &lambda.InvokeOutput{StatusCode: 200, Payload: []byte(q.reply)}, nil
+}
+
+func (q *queueingInvoke) waitArrivals(t *testing.T, n int) {
+	t.Helper()
+	for range n {
+		select {
+		case <-q.arrived:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("fewer than %d invokes arrived", n)
+		}
+	}
+}
+
+func (q *queueingInvoke) expectNoArrivalWithin(t *testing.T, wait time.Duration, why string) {
+	t.Helper()
+	select {
+	case <-q.arrived:
+		t.Error(why)
+	case <-time.After(wait):
+	}
+}
+
+func newAppWarmTargets(app string, n int) []warmTarget {
+	targets := warmTestTargets(n)
+	for i := range targets {
+		targets[i].App = app
+		targets[i].FunctionName = app + "-" + targets[i].FunctionName
+	}
+	return targets
+}
+
+func TestWarmingSharesOneWidthAcrossTheAppsWarmingAtOnce(t *testing.T) {
+	apps := []string{"web", "admin"}
+	invoker := newQueueingInvoke(len(apps)*warmConcurrency, `{"state":"already-cached"}`)
+
+	var group sync.WaitGroup
+	for _, app := range apps {
+		group.Go(func() {
+			warmPass{invoker: invoker, targets: newAppWarmTargets(app, warmConcurrency), bundleDeadline: time.Minute, progress: &fake.Log{}}.run(context.Background())
+		})
+	}
+
+	invoker.waitArrivals(t, warmConcurrency)
+	invoker.expectNoArrivalWithin(t, 200*time.Millisecond, "a warm invoke started while the width was already full: each app took a width of its own")
+	close(invoker.release)
+	group.Wait()
+
+	if invoker.peak > warmConcurrency {
+		t.Errorf("%d warm invokes were in flight at once, want at most %d: the apps warming side by side share one width", invoker.peak, warmConcurrency)
+	}
+}
+
+func TestQueueingForTheWarmWidthSpendsNoneOfABundlesDeadline(t *testing.T) {
+	const bundleDeadline = 50 * time.Millisecond
+	invoker := newQueueingInvoke(warmConcurrency, `{"state":"already-cached"}`)
+	log, dump := collectLog()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		warmPass{invoker: invoker, targets: warmTestTargets(warmConcurrency + 1), bundleDeadline: bundleDeadline, progress: log}.run(context.Background())
+	}()
+
+	invoker.waitArrivals(t, warmConcurrency)
+	time.Sleep(3 * bundleDeadline)
+	close(invoker.release)
+	<-done
+
+	out := dump()
+	if strings.Contains(out, "WARN") {
+		t.Errorf("warm log = %s, want no bundle skipped or failed for the time it spent queueing", out)
+	}
+	if want := fmt.Sprintf("Warmed %d/%d bundles", warmConcurrency+1, warmConcurrency+1); !strings.Contains(out, want) {
+		t.Errorf("warm log = %s, want %q: a bundle's deadline starts when it starts warming", out, want)
+	}
 }
