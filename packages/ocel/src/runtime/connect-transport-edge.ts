@@ -37,16 +37,21 @@ async function* streamChunks(stream: ReadableStream<Uint8Array> | null): AsyncIt
   }
 }
 
-async function fetchClient(req: UniversalClientRequest): Promise<UniversalClientResponse> {
+async function sendFetchRequest(req: UniversalClientRequest): Promise<UniversalClientResponse> {
   const res = await fetch(req.url, {
     method: req.method,
     headers: req.header,
     signal: req.signal,
     body: req.body === undefined ? undefined : await readBody(req.body),
   });
+  const header = new Headers(res.headers);
+  if (header.has("content-encoding")) {
+    header.delete("content-encoding");
+    header.delete("content-length");
+  }
   return {
     status: res.status,
-    header: res.headers,
+    header,
     body: streamChunks(res.body),
     trailer: new Headers(),
   };
@@ -56,7 +61,7 @@ async function fetchClient(req: UniversalClientRequest): Promise<UniversalClient
 export function createConnectTransport(options: ConnectTransportOptions): Transport {
   return createTransport({
     ...options,
-    httpClient: fetchClient,
+    httpClient: sendFetchRequest,
     useBinaryFormat: true,
     acceptCompression: [],
     sendCompression: null,
