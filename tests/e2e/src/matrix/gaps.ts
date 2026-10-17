@@ -488,21 +488,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "aws-container-hosts-no-worker",
-    reason:
-      "sdk/python declares a task and a consumer, so its one app hosts their worker, and aws refuses a worker on container compute before it deploys anything",
-    issue: 1551,
-    where: [
-      {
-        on: ["aws", "aws.floci"],
-        fixtures: [sdk.python],
-        variants: [cloudflareInFrontOfContainers],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
-  },
-  {
     id: "rust-attribution-resolves-offline",
     reason:
       "attribution resolves a rust app's whole lockfile with cargo metadata --offline, and the build downloaded only what its musl target builds, so a crate only another platform builds is missing and the manifest is never assembled",
