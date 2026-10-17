@@ -195,7 +195,7 @@ func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier
 			switch {
 			case part.settledFor(work, repairing && !waited):
 				return false, nil
-			case part.State != PartReady && now.Sub(part.ClaimedAt) < partLease:
+			case part.claimed() && now.Sub(part.ClaimedAt) < partLease:
 				if err := pausePart(ctx, attempt); err != nil {
 					return false, fmt.Errorf("wait for the %s bootstrap part %s another run is adding: %w", tier, work.Name, err)
 				}
@@ -203,6 +203,8 @@ func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier
 				continue
 			case part.State == PartReady:
 				prior = recorded.Value
+				claim = part
+				claim.ClaimedAt = now
 			}
 			claim.AddedBy, claim.AddedAt = part.AddedBy, part.AddedAt
 		}
@@ -222,9 +224,18 @@ func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier
 		if err != nil {
 			return false, errors.Join(err, releaseClaim(settle, store, keyvalue.Entry{Key: key, Value: prior, Revision: revision}))
 		}
-		claim.Resources = resources
-		return true, MarkBootstrapPartReady(settle, store, tier, work.Name, claim)
+		return true, MarkBootstrapPartReady(settle, store, tier, work.Name, BootstrapPart{
+			WrittenBy: work.WrittenBy,
+			Digest:    work.Digest,
+			AddedBy:   claim.AddedBy,
+			AddedAt:   claim.AddedAt,
+			Resources: resources,
+		})
 	}
+}
+
+func (p BootstrapPart) claimed() bool {
+	return p.State != PartReady || !p.ClaimedAt.IsZero()
 }
 
 func (p BootstrapPart) settledFor(work PartWork, remaking bool) bool {

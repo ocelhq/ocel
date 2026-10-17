@@ -218,6 +218,30 @@ func TestAFailedTakeoverOfAStaleClaimLeavesNoClaimForOthersToWaitOn(t *testing.T
 	}
 }
 
+func TestAPartBeingMadeAgainStaysReadyWithItsResourcesUntilTheNewOneIsRecorded(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	if err := stackrecords.EnsureBootstrapPart(ctx, store, environment.TierProduction, (&making{resources: syncResources}).work("web", "1.2.0", "d1")); err != nil {
+		t.Fatal(err)
+	}
+
+	var during stackrecords.BootstrapPart
+	work := (&making{resources: syncResources}).work("api", "1.3.0", "d2")
+	work.Make = func(ctx context.Context) ([]provider.PartResource, error) {
+		var err error
+		during, _, err = stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, "env-source-sync")
+		return syncResources, err
+	}
+	if err := stackrecords.EnsureBootstrapPart(ctx, store, environment.TierProduction, work); err != nil {
+		t.Fatalf("EnsureBootstrapPart() = %v", err)
+	}
+
+	if during.State != stackrecords.PartReady || during.Digest != "d1" || len(during.Resources) != 1 {
+		t.Errorf("record while the part was made again = %+v, want it still ready at d1 with what it holds, for readers and for a removal should the run stop", during)
+	}
+}
+
 func TestAClaimWrittenLongerAgoThanTheLeaseIsTakenOverWithoutWaiting(t *testing.T) {
 	t.Parallel()
 	store := fake.NewKeyValues()
