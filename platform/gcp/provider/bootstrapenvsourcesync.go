@@ -36,12 +36,12 @@ const (
 	syncOpeningRole = "roles/cloudkms.cryptoKeyDecrypter"
 	syncInvokerRole = "roles/run.invoker"
 
-	syncSchedule           = "* * * * *"
-	syncRequestsPerHour    = 60
-	syncBilledSecondsEach  = 2
-	syncScheduleTimeZone   = "Etc/UTC"
-	syncScheduleMethod     = "POST"
-	syncScheduleUpdateMask = "description,schedule,timeZone,httpTarget,retryConfig"
+	syncSchedule          = "* * * * *"
+	syncRequestsPerHour   = 60
+	syncBilledSecondsEach = 2
+	scheduleTimeZone      = "Etc/UTC"
+	syncScheduleMethod    = "POST"
+	scheduleUpdateMask    = "description,schedule,timeZone,httpTarget,retryConfig"
 
 	reasonUnwritable      = "it exists, and it may not write this project's records or seal under the tier key, so the env source sync running as it would write nothing"
 	reasonServiceChanged  = "it runs another env source sync than the one this provider embeds, runs it as another account, or is billed, scaled, cut off or reached otherwise than this bootstrap deploys it"
@@ -308,7 +308,7 @@ func (b bootstrap) syncSchedule(tier environment.Tier, name, uri string) *clouds
 		Name:        schedulePath(b.clients, name),
 		Description: "calls the ocel env source sync of the " + string(tier) + " tier",
 		Schedule:    syncSchedule,
-		TimeZone:    syncScheduleTimeZone,
+		TimeZone:    scheduleTimeZone,
 		HttpTarget: &cloudscheduler.HttpTarget{
 			Uri:        uri + "/",
 			HttpMethod: syncScheduleMethod,
@@ -373,20 +373,24 @@ func (b bootstrap) makeSchedule(ctx context.Context, tier environment.Tier, name
 		return refusal.Refuse(refusal.CodeNotReady,
 			"the Cloud Scheduler job %s calls the Cloud Run service of the same name, and that service has no URL yet", name)
 	}
-	service, err := b.clients.Scheduler()
+	return b.clients.ensureSchedule(ctx, name, b.syncSchedule(tier, name, called.Uri))
+}
+
+func (c *clients) ensureSchedule(ctx context.Context, name string, desired *cloudscheduler.Job) error {
+	service, err := c.Scheduler()
 	if err != nil {
 		return err
 	}
-	path := schedulePath(b.clients, name)
+	path := schedulePath(c, name)
 	create := func() (*cloudscheduler.Job, error) {
-		return googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Create(b.clients.location(), b.syncSchedule(tier, name, called.Uri)).Context(ctx).Do)
+		return googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Create(c.location(), desired).Context(ctx).Do)
 	}
 	job, err := create()
 	if taken(err) {
-		desired := b.syncSchedule(tier, name, called.Uri)
-		desired.Name = ""
-		job, err = googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Patch(path, desired).
-			UpdateMask(syncScheduleUpdateMask).Context(ctx).Do)
+		patched := *desired
+		patched.Name = ""
+		job, err = googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Patch(path, &patched).
+			UpdateMask(scheduleUpdateMask).Context(ctx).Do)
 	}
 	if err != nil {
 		return fmt.Errorf("create the Cloud Scheduler job %s: %w", name, err)
@@ -397,7 +401,7 @@ func (b bootstrap) makeSchedule(ctx context.Context, tier environment.Tier, name
 			return fmt.Errorf("resume the paused Cloud Scheduler job %s: %w", name, err)
 		}
 	case scheduleDisabled:
-		if err := b.takeSchedule(ctx, name); err != nil {
+		if err := c.takeSchedule(ctx, name); err != nil {
 			return err
 		}
 		if _, err := create(); err != nil {
@@ -408,11 +412,15 @@ func (b bootstrap) makeSchedule(ctx context.Context, tier environment.Tier, name
 }
 
 func (b bootstrap) takeSchedule(ctx context.Context, name string) error {
-	service, err := b.clients.Scheduler()
+	return b.clients.takeSchedule(ctx, name)
+}
+
+func (c *clients) takeSchedule(ctx context.Context, name string) error {
+	service, err := c.Scheduler()
 	if err != nil {
 		return err
 	}
-	if _, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Delete(schedulePath(b.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
+	if _, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Delete(schedulePath(c, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the Cloud Scheduler job %s: %w", name, err)
 	}
 	return nil

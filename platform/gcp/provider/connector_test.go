@@ -1,11 +1,13 @@
 package gcp
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *testing.T) {
@@ -359,5 +362,80 @@ func TestASecretGrantIsAddedOnceAndTakenAwayOnce(t *testing.T) {
 	}
 	if _, again := boundSecretMember(bindings, connectorKeyRole, member, false); again {
 		t.Error("revoking twice rewrote the policy")
+	}
+}
+
+func TestTheConnectorsHeartbeatScheduleCallsItEveryMinuteWithAnIDTokenForItsOwnAccount(t *testing.T) {
+	t.Parallel()
+
+	c := &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}
+	url := servedAt(c.Connector())
+	schedule := c.connectorSchedule(url)
+	if schedule.Name != "projects/acme-prod/locations/europe-west1/jobs/ocel-connector" {
+		t.Errorf("the schedule is named %q, want it beside the connector's service in its region", schedule.Name)
+	}
+	if schedule.Schedule != "* * * * *" || schedule.TimeZone != "Etc/UTC" {
+		t.Errorf("the schedule fires on %q in %q, want every minute: the console reads a connector silent for ninety seconds as offline", schedule.Schedule, schedule.TimeZone)
+	}
+	if schedule.HttpTarget.HttpMethod != http.MethodPost || schedule.HttpTarget.Uri != url+"/v1/heartbeat" {
+		t.Errorf("the schedule calls %s %s, want POST on the connector's heartbeat route", schedule.HttpTarget.HttpMethod, schedule.HttpTarget.Uri)
+	}
+	token := schedule.HttpTarget.OidcToken
+	if token == nil || token.ServiceAccountEmail != "ocel-connector@acme-prod.iam.gserviceaccount.com" || token.Audience != url {
+		t.Errorf("the schedule logs in as %+v, want an ID token for the connector's own account with the service's URL as its audience: that is all the connector admits", token)
+	}
+	if schedule.HttpTarget.OauthToken != nil {
+		t.Errorf("the schedule sends an OAuth token %+v, and the connector verifies an ID token", schedule.HttpTarget.OauthToken)
+	}
+	if schedule.RetryConfig == nil || schedule.RetryConfig.RetryCount != 0 || !slices.Contains(schedule.RetryConfig.ForceSendFields, "RetryCount") {
+		t.Errorf("the schedule retries %+v, want an explicit 0: the next minute is the retry", schedule.RetryConfig)
+	}
+}
+
+func TestTheConnectorsHeartbeatScheduleIsCreatedMendedAndTakenThroughCloudScheduler(t *testing.T) {
+	t.Parallel()
+
+	server := newSyncServer()
+	c := server.open(t).clients
+	ctx := context.Background()
+	url := servedAt(c.Connector())
+	path := schedulePath(c, c.Connector())
+
+	if err := c.scheduleConnectorHeartbeat(ctx, url); err != nil {
+		t.Fatalf("scheduleConnectorHeartbeat() = %v", err)
+	}
+	if created := server.schedule(path); created == nil || created.HttpTarget.Uri != url+"/v1/heartbeat" {
+		t.Fatalf("the schedule is %s, want one calling the connector's heartbeat route", encoded(t, created))
+	}
+
+	server.change(func() { server.schedules[path].State = "PAUSED" })
+	if err := c.scheduleConnectorHeartbeat(ctx, url); err != nil {
+		t.Fatalf("scheduleConnectorHeartbeat() over a paused schedule = %v, want a reinstall to mend it", err)
+	}
+	if !server.wasPatched(path) || server.schedule(path).State != "ENABLED" {
+		t.Errorf("the schedule after a reinstall is %s, want it patched and calling again", encoded(t, server.schedule(path)))
+	}
+
+	if err := c.takeConnectorSchedule(ctx, nil); err != nil {
+		t.Fatalf("takeConnectorSchedule() = %v", err)
+	}
+	if server.schedule(path) != nil {
+		t.Error("the schedule outlived the connector, and it would call a service that is gone every minute")
+	}
+	if err := c.takeConnectorSchedule(ctx, nil); err != nil {
+		t.Errorf("takeConnectorSchedule() of one already gone = %v, want nothing to do", err)
+	}
+}
+
+func TestTheConnectorServiceNamesTheAccountItAdmitsHeartbeatsFrom(t *testing.T) {
+	t.Parallel()
+
+	names := Names{namespace: "ocel", project: "acme-prod"}
+	served := connectorServing(names, "europe-west1", "example.com/ocel-connector:sha256-abc", "0.9.9", "cHVibGlj", []byte("{}\n"))
+	if got := served.env[ports.ConnectorAccountEnvVar]; got != names.ConnectorAccountEmail() {
+		t.Errorf("the connector reads %s = %q, want %s, the account its schedule's ID token is minted for", ports.ConnectorAccountEnvVar, got, names.ConnectorAccountEmail())
+	}
+	if served.account != names.ConnectorAccountEmail() {
+		t.Errorf("the connector runs as %q, want its own account", served.account)
 	}
 }

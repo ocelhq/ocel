@@ -38,7 +38,7 @@ func (b bootstrap) syncDigest(tier environment.Tier) string {
 		env = append(env, key+"="+s.env[key])
 	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		s.service, s.image, s.account, s.cpu, s.timeout.String(), syncGeneration, syncSchedule, syncScheduleTimeZone, strings.Join(env, ","),
+		s.service, s.image, s.account, s.cpu, s.timeout.String(), syncGeneration, syncSchedule, scheduleTimeZone, strings.Join(env, ","),
 	}, "\n")))
 	return hex.EncodeToString(sum[:])
 }

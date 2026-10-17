@@ -120,7 +120,28 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 		return provider.ConnectorAddress{}, err
 	}
 
-	released, err := p.deployAndRoute(ctx, serving{
+	released, err := p.deployAndRoute(ctx,
+		connectorServing(names, p.options.Region, image, install.Version, publicKey, config), progress)
+	if err != nil {
+		return provider.ConnectorAddress{}, err
+	}
+	if released.url == "" {
+		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
+			"%s is deployed and published no url, so the console has nothing to dial", names.Connector())
+	}
+	clients, err := p.openClients(ctx)
+	if err != nil {
+		return provider.ConnectorAddress{}, err
+	}
+	if err := clients.scheduleConnectorHeartbeat(ctx, released.url); err != nil {
+		return provider.ConnectorAddress{}, err
+	}
+	ensureProgress(progress).Say("Scheduled Cloud Scheduler job " + names.Connector() + " to wake the connector for a heartbeat every minute")
+	return provider.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
+}
+
+func connectorServing(names Names, region, image, version, publicKey string, config []byte) serving {
+	return serving{
 		service:   names.Connector(),
 		image:     image,
 		account:   names.ConnectorAccountEmail(),
@@ -134,29 +155,23 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 		env: map[string]string{
 			provider.NamespaceEnvVar:       string(names.Namespace()),
 			ports.ProjectEnvVar:            names.project,
-			ports.RegionEnvVar:             p.options.Region,
-			connectorVersionEnv:            install.Version,
+			ports.RegionEnvVar:             region,
+			ports.ConnectorAccountEnvVar:   names.ConnectorAccountEmail(),
+			connectorVersionEnv:            version,
 			connectorPublicKeyEnv:          publicKey,
 			provider.ConnectorConfigEnvVar: string(config),
 		},
-	}, progress)
-	if err != nil {
-		return provider.ConnectorAddress{}, err
 	}
-	if released.url == "" {
-		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s is deployed and published no url, so the console has nothing to dial", names.Connector())
-	}
-	return provider.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
 }
 
 func (p connector) Remove(ctx context.Context, progress progress.Log) error {
-	names, err := p.Names(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}
 	return everyStep(
-		func() error { return p.tearDown(ctx, names.Connector(), progress) },
+		func() error { return clients.takeConnectorSchedule(ctx, progress) },
+		func() error { return p.tearDown(ctx, clients.Connector(), progress) },
 		func() error { return p.forgetConnectorGrants(ctx, progress) },
 		func() error { return p.takeConnectorKey(ctx, progress) },
 		func() error { return p.takeConnectorAccount(ctx, progress) },
