@@ -38,6 +38,8 @@ type Location struct {
 	PackageManager PackageManager
 	Package        Package
 	BuildCommand   string
+	ModuleDir      string
+	GoVersion      string
 }
 
 func (l Location) Dir() string { return filepath.Join(l.Root, filepath.FromSlash(l.Path)) }
@@ -49,11 +51,16 @@ func (l Location) Rebase(context string) (Location, error) {
 	}
 	if !under(root, l.Root) {
 		return Location{}, fmt.Errorf(
-			"%s is neither %s nor a directory it sits under: an image is built from a context containing everything the install reads, so image.context may name the app's workspace root, a directory above it, or — for an app in no workspace — a directory above the app itself",
-			root, l.Root,
+			"%s is neither %s nor a directory it sits under: an image is built from a context containing everything the build reads, so image.context may name %s — the app's own directory, the workspace it is a member of, or the directory holding its Go module and every module that module replaces — or a directory above it",
+			root, l.Root, l.Root,
 		)
 	}
-	rebased, err := locatedAt(l.Dir(), root)
+	var rebased Location
+	if l.ModuleDir != "" {
+		rebased, err = locateGoApp(l.Dir(), filepath.Join(l.Root, filepath.FromSlash(l.ModuleDir)), l.GoVersion, root)
+	} else {
+		rebased, err = locatedAt(l.Dir(), root)
+	}
 	if err != nil {
 		return Location{}, err
 	}
@@ -84,6 +91,17 @@ func Locate(appDir string) (Location, error) {
 	dir, err := filepath.Abs(appDir)
 	if err != nil {
 		return Location{}, err
+	}
+	module, ok, err := findGoModule(dir)
+	if err != nil {
+		return Location{}, err
+	}
+	if ok {
+		root, err := findGoContext(module)
+		if err != nil {
+			return Location{}, err
+		}
+		return locateGoApp(dir, module.Dir, module.GoVersion, root)
 	}
 	root := dir
 	if !isStandalone(dir) {

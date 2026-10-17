@@ -723,7 +723,7 @@ describe("sdk/go, sdk/python and sdk/rust", () => {
     );
   });
 
-  it("skips every language on a box under the tickets for their images", () => {
+  it("runs Go on a box and skips Python and Rust under the ticket for their images", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
       expect(
         Object.fromEntries(
@@ -731,7 +731,7 @@ describe("sdk/go, sdk/python and sdk/rust", () => {
             .filter(([cell]) => CELLS.includes(cell))
             .map(([cell, gaps]) => [cell, gaps.map((gap) => gap.issue)]),
         ),
-      ).toEqual({ "sdk/go": [1550], "sdk/python": [1598], "sdk/rust": [1598] });
+      ).toEqual({ "sdk/python": [1598], "sdk/rust": [1598] });
     }
   });
 
@@ -780,7 +780,12 @@ describe("the fixtures a lane deploys", () => {
           const appDir = path.join(dir, app.path ?? ".");
           const framework =
             typeof app.compute === "object" ? app.compute.serverless?.framework : undefined;
-          if (!framework && !MARKERS.some((marker) => existsSync(path.join(appDir, marker)))) {
+          const goSource = readdirSync(appDir).some((name) => name.endsWith(".go"));
+          if (
+            !framework &&
+            !goSource &&
+            !MARKERS.some((marker) => existsSync(path.join(appDir, marker)))
+          ) {
             undetectable.add(`${lane}: ${cell.fixture} on ${target} app ${app.name}`);
           }
         }

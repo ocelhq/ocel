@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 
+	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
@@ -57,28 +57,20 @@ func writeGoEntry(moduleRoot, dir, source string) error {
 	return nil
 }
 
-var goModulePathRE = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
-
 func goModule(configDir, dir string) (string, string, error) {
-	var declaration []byte
-	moduleRoot, found, err := walkUp(configDir, dir, func(at string) bool {
-		contents, err := os.ReadFile(filepath.Join(at, "go.mod"))
-		if err != nil {
-			return false
-		}
-		declaration = contents
-		return true
-	})
+	stop, err := filepath.Abs(configDir)
 	if err != nil {
 		return "", "", err
 	}
+	module, found, err := gomodule.FindEnclosing(dir, func(at string) bool { return at == stop })
+	if err != nil {
+		return "", "", fmt.Errorf("discovery: %w", err)
+	}
 	if !found {
-		return "", "", fmt.Errorf("discovery: %s is a go folder, but neither it nor any folder up to %s has a go.mod", dir, configDir)
+		return "", "", fmt.Errorf("discovery: %s is a go folder, but neither it nor any folder up to %s has a %s", dir, configDir, gomodule.File)
 	}
-
-	match := goModulePathRE.FindSubmatch(declaration)
-	if match == nil {
-		return "", "", fmt.Errorf("discovery: the go.mod at %s names no module", moduleRoot)
+	if module.Path == "" {
+		return "", "", fmt.Errorf("discovery: the %s at %s names no module", gomodule.File, module.Dir)
 	}
-	return moduleRoot, string(match[1]), nil
+	return module.Dir, module.Path, nil
 }

@@ -80,6 +80,23 @@ func TestADockerfileInAWorkspaceIsToldWhereItsCopiesAreReadFrom(t *testing.T) {
 	}
 }
 
+func TestADockerfileBesideAGoAppBelowItsModuleIsToldWhereItsCopiesAreReadFrom(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	write(t, filepath.Join(root, "web", "server", image.DockerfileName))
+	below := workspace.Location{Root: root, Path: "web/server", ModuleDir: "web"}
+
+	notice := chosen(t, image.App{Name: "web", Workspace: below}).Notice()
+
+	if strings.Count(notice, "\n") != 0 {
+		t.Errorf("the notice is %q, want one line", notice)
+	}
+	if !strings.Contains(notice, "copies from "+root) || !strings.Contains(notice, "build context") {
+		t.Errorf("the notice is %q, and never says the build context is %s — a COPY go.mod . now reads the directory holding the module, and nothing else says so", notice, root)
+	}
+}
+
 func TestAnAppWithNoDockerfileIsBuiltByRailpackAndAnnouncesNothing(t *testing.T) {
 	t.Parallel()
 

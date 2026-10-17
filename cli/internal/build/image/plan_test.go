@@ -407,6 +407,49 @@ func TestTheRootsOwnRailpackFileStillShapesAPlanOcelForcesTheProviderOn(t *testi
 	}
 }
 
+func TestAGoAppBelowItsModuleIsBuiltFromThePackageWithTheModulesItReplacesAndNothingTheGoWorkUses(t *testing.T) {
+	root := t.TempDir()
+	for path, body := range map[string]string{
+		".git/HEAD":               "ref: refs/heads/main\n",
+		"go.work":                 "go 1.25.0\n\nuse (\n\t./sdk\n\t./tools\n)\n",
+		"sdk/go.mod":              "module ocel.dev\n\ngo 1.25.0\n",
+		"sdk/sdk.go":              "package ocel\n",
+		"tools/go.mod":            "module example.com/tools\n\ngo 1.25.0\n",
+		"apps/web/go.mod":         "module example.com/web\n\ngo 1.27.0\n\nrequire ocel.dev v0.0.0\n\nreplace ocel.dev => ../../sdk\n",
+		"apps/web/server/main.go": "package main\n\nfunc main() {}\n",
+	} {
+		named := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(named), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(named, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	plan := planned(t, filepath.Join(root, "apps", "web", "server"))
+
+	build := strings.Join(plan.step(t, "build"), "\n")
+	if !strings.Contains(build, "cd apps/web/server && GOWORK=off CGO_ENABLED=0 go build") {
+		t.Errorf("the build step runs:\n%s\nwant go build run in the app's package, where go finds the module above it", build)
+	}
+	install := plan.step(t, "install")
+	if !contains(install, "sh -c 'cd apps/web && GOWORK=off go mod download'") || contains(install, "go mod download") {
+		t.Errorf("the install step runs %q, want only the app's module downloaded — the go.work at the context root uses modules the app never imports", install)
+	}
+	for _, want := range []string{"apps/web/go.mod", "sdk/go.mod"} {
+		if !contains(plan.copied("install"), want) {
+			t.Errorf("the install step copies %v, and %q is not among them — the module and every module it replaces are read by go mod download", plan.copied("install"), want)
+		}
+	}
+	if !strings.Contains(assets(t, plan), `go = "1.27.0"`) {
+		t.Errorf("the plan installs go as:\n%s\nwant the 1.27.0 the app's own module asks for, not the go.work's", assets(t, plan))
+	}
+	if plan.Deploy.StartCommand != "./out" {
+		t.Errorf("the plan starts the app with %q, want the binary the build step writes at the context root", plan.Deploy.StartCommand)
+	}
+}
+
 func contains(haystack []string, needle string) bool {
 	for _, straw := range haystack {
 		if straw == needle {
