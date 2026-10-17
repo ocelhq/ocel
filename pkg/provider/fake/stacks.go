@@ -31,6 +31,7 @@ type Stacks struct {
 	destroyedWith []provider.ImageStore
 	entered       func(provider.StackSpec) error
 	destroying    func(provider.StackRef) error
+	teardown      func(provider.StackRef) provider.Plan
 
 	routeTables          map[string][]byte
 	withholdsRouteTables bool
@@ -70,6 +71,12 @@ func (r *Stacks) Destroying(hook func(provider.StackRef) error) {
 	r.destroying = hook
 }
 
+func (r *Stacks) PlanningDestroy(teardown func(provider.StackRef) provider.Plan) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.teardown = teardown
+}
+
 func (r *Stacks) Provisioned() []provider.StackSpec {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -81,6 +88,12 @@ func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.L
 }
 
 func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Log) (provider.Plan, error) {
+	r.mu.Lock()
+	teardown := r.teardown
+	r.mu.Unlock()
+	if teardown != nil {
+		return teardown(ref), nil
+	}
 	return resources.SynthesizedRemoval(ref, r.Inspect(ref).Result), nil
 }
 

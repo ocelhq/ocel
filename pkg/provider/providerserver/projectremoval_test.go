@@ -119,6 +119,94 @@ func TestPlanRemoveProjectOfAProjectNothingDeployedNamesNoStack(t *testing.T) {
 	}
 }
 
+func protectedDatabaseTeardown(ref provider.StackRef) provider.Plan {
+	if !ref.Name.IsInfra() {
+		return provider.Plan{}
+	}
+	return provider.Plan{Groups: []provider.ChangeGroup{{
+		Kind:   provider.StackGroupKind,
+		Name:   ref.Name.String(),
+		Action: provider.ActionDelete,
+		Changes: []provider.Change{
+			{Kind: "database cluster", Name: "db", Action: provider.ActionDisableThenDelete, Reason: "its deletion protection is disabled first", Slow: true},
+			{Kind: "bucket", Name: "uploads", Action: provider.ActionDelete},
+		},
+	}}}
+}
+
+func TestPlanRemoveProjectShowsAProductionDatabaseDisabledBeforeItIsDeleted(t *testing.T) {
+	client, vendor := deployedProject(t)
+	vendor.FakeStacks().PlanningDestroy(protectedDatabaseTeardown)
+
+	plan, err := client.PlanRemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+
+	var rows []string
+	for _, group := range plan.GetGroups() {
+		if group.GetKind() != provider.StackGroupKind {
+			continue
+		}
+		for _, change := range group.GetChanges() {
+			rows = append(rows, change.GetName()+" "+change.GetAction().String())
+		}
+	}
+	for _, want := range []string{"db ACTION_DISABLE_THEN_DELETE", "uploads ACTION_DELETE"} {
+		if !slices.Contains(rows, want) {
+			t.Errorf("the plan's stack rows are %v, want %q: a destroy that disables a deletion protection is consented to by the plan that shows it", rows, want)
+		}
+	}
+}
+
+func TestARemovalRunsAConsentedProductionPlanThatShowsADatabaseDisabledBeforeItIsDeleted(t *testing.T) {
+	ctx := context.Background()
+	client, vendor := deployedProject(t)
+	vendor.FakeStacks().PlanningDestroy(protectedDatabaseTeardown)
+
+	consented, err := client.PlanRemoveProject(ctx, projectRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	req := projectRequest()
+	req.Consented = consented
+	if result := removeProject(t, client, req); !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the plan the human saw to run", result.GetError())
+	}
+}
+
+func TestPlanRemoveProjectOfPreviewsNamesTheirStacksWithoutPlanningEachTeardown(t *testing.T) {
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+	previewBootstrapped(t, client)
+	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
+	if result, _ := deploy(t, client, previewRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	var mu sync.Mutex
+	var planned []string
+	vendor.FakeStacks().PlanningDestroy(func(ref provider.StackRef) provider.Plan {
+		mu.Lock()
+		defer mu.Unlock()
+		planned = append(planned, ref.Name.String())
+		return provider.Plan{}
+	})
+
+	plan, err := client.PlanRemoveProject(context.Background(), &contractv1.ProjectRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
+	})
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	if !slices.Contains(kinds(plan), provider.StackGroupKind) {
+		t.Fatalf("the plan names %v, want the preview's stacks among them", kinds(plan))
+	}
+	if len(planned) > 0 {
+		t.Errorf("the plan previewed the teardown of %v, want a preview, which protects nothing from deletion, planned from its records alone", planned)
+	}
+}
+
 func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 	client, vendor := deployedProject(t)
 
