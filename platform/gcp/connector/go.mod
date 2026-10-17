@@ -3,6 +3,7 @@ module github.com/ocelhq/ocel/platform/gcp/connector
 go 1.27.0
 
 require (
+	github.com/lestrrat-go/jwx/v3 v3.3.0
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/gcp/provider v0.0.0
 )
@@ -40,7 +41,6 @@ require (
 	github.com/lestrrat-go/dsig-secp256k1 v1.0.0 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc/v3 v3.0.6 // indirect
-	github.com/lestrrat-go/jwx/v3 v3.3.0 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect

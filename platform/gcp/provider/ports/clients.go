@@ -28,6 +28,8 @@ const (
 	RegionEnvVar  = "OCEL_GCP_REGION"
 	TierEnvVar    = "OCEL_INFRA_TIER"
 
+	ConnectorAccountEnvVar = "OCEL_GCP_CONNECTOR_ACCOUNT"
+
 	CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 
 	credentialHint = "authenticate with Google Cloud: run `gcloud auth application-default login`"

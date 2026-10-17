@@ -58,6 +58,11 @@ func run(listen, config string, reporting bool) error {
 		return fmt.Errorf("%s and %s name the project and region this connector reads records in, and one of them is unset",
 			ports.ProjectEnvVar, ports.RegionEnvVar)
 	}
+	account := os.Getenv(ports.ConnectorAccountEnvVar)
+	if account == "" {
+		return fmt.Errorf("%s names the service account Cloud Scheduler calls this connector as to make it beat, and it is unset",
+			ports.ConnectorAccountEnvVar)
+	}
 	trust.Target, err = target.Fingerprint(vendor, project, region, string(ns))
 	if err != nil {
 		return err
@@ -65,12 +70,13 @@ func run(listen, config string, reporting bool) error {
 
 	bindings := &ports.Clients{Namespace: ns, Project: project, Region: region}
 	return connectorserver.Serve(connectorserver.Spec{
-		Config:        trust,
-		Version:       version,
-		Vendor:        vendor,
-		Addr:          listen,
-		ConfigPath:    config,
-		VariableStore: variableStore(bindings),
+		Config:          trust,
+		Version:         version,
+		Vendor:          vendor,
+		Addr:            listen,
+		ConfigPath:      config,
+		VariableStore:   variableStore(bindings),
+		VerifyHeartbeat: scheduledCaller{keys: connectorserver.NewKeyring(googleCertsURL), account: account}.verify,
 	})
 }
 
