@@ -105,3 +105,14 @@ func TestOfAppReadsAnAppWithNoManifestAsJS(t *testing.T) {
 		t.Errorf("OfApp = %q, want %q", got, language.JS)
 	}
 }
+
+func TestOfAppReadsAGoPackageWithNoManifestBesideItAsGo(t *testing.T) {
+	t.Parallel()
+
+	if got := language.OfApp("", dirContaining(t, "main.go", "wire.go")); got != language.Go {
+		t.Errorf("OfApp = %q, want %q: a main package below its module's go.mod has no manifest of its own", got, language.Go)
+	}
+	if got := language.OfApp("", dirContaining(t, "package.json", "tools.go")); got != language.JS {
+		t.Errorf("OfApp = %q, want %q: a package.json claims the directory before a Go file beside it", got, language.JS)
+	}
+}

@@ -154,7 +154,20 @@ func OfApp(framework, dir string) Language {
 	if language, ok := Of(dir); ok {
 		return language
 	}
+	if HasGoSource(dir) {
+		return Go
+	}
 	return JS
+}
+
+func HasGoSource(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(entries, func(entry os.DirEntry) bool {
+		return !entry.IsDir() && filepath.Ext(entry.Name()) == ".go"
+	})
 }
 
 func isRegularFile(path string) bool {
