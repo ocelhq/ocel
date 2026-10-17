@@ -395,6 +395,36 @@ func (f *hookStacks) writeShared(ctx context.Context, stored keyvalue.Entry, ent
 	return err
 }
 
+func (s sharedPhysical) holdersAndRemoving() map[string]string {
+	holders := maps.Clone(s.Holders)
+	if holders == nil {
+		holders = map[string]string{}
+	}
+	if s.Removing != nil {
+		holders[s.Removing.Stack] = ""
+	}
+	return holders
+}
+
+func HasHolder(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, within func(naming.StackName) bool) (bool, error) {
+	entries, err := store.List(ctx, sharedPhysicalPartition(tier, slug))
+	if err != nil {
+		return false, fmt.Errorf("read the physical resources %s's releases share: %w", slug, err)
+	}
+	for _, stored := range entries {
+		var entry sharedPhysical
+		if err := json.Unmarshal(stored.Value, &entry); err != nil {
+			return false, fmt.Errorf("decode %s: %w", stored.Key, err)
+		}
+		for stack := range entry.holdersAndRemoving() {
+			if name, err := naming.ParseStackName(stack); err == nil && within(name) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 func RecordUnrecordedHolders(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, within func(naming.StackName) bool) ([]naming.StackName, error) {
 	entries, err := store.List(ctx, sharedPhysicalPartition(tier, slug))
 	if err != nil {
@@ -407,14 +437,7 @@ func RecordUnrecordedHolders(ctx context.Context, store keyvalue.Store, tier env
 		if err := json.Unmarshal(stored.Value, &entry); err != nil {
 			return nil, fmt.Errorf("decode %s: %w", stored.Key, err)
 		}
-		holders := maps.Clone(entry.Holders)
-		if holders == nil {
-			holders = map[string]string{}
-		}
-		if entry.Removing != nil {
-			holders[entry.Removing.Stack] = ""
-		}
-		for stack, revision := range holders {
+		for stack, revision := range entry.holdersAndRemoving() {
 			name, err := naming.ParseStackName(stack)
 			if err != nil || !within(name) || recorded[name] {
 				continue

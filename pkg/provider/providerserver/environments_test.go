@@ -823,6 +823,28 @@ func TestRemovingAPreviewWhoseRecordIsGoneStillTakesDownTheStacksAndPromotionsLe
 	}
 }
 
+func TestRemovingAPreviewWhoseOnlyTraceIsAStackHoldingASharedResourceDestroysThatStack(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	stack := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
+	shared := keyvalue.Partition{Tier: environment.TierPreview, Root: keyvalue.RootSharedPhysicals, Path: []string{"shop"}}
+	if _, err := vendor.KeyValues().Write(ctx, keyvalue.Entry{
+		Key:   shared.Key("shop-web-server"),
+		Value: []byte(`{"kind":"function","name":"server","holders":{"` + stack.String() + `":"rev1"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if result := removeEnvironment(t, client, "shop", "pr-7"); !result.GetSuccess() {
+		t.Fatalf("removing pr-7 = %q, want the stack still holding shop-web-server taken down", result.GetError())
+	}
+	if !slices.Contains(vendor.Journal(), "destroy "+stack.String()) {
+		t.Errorf("the teardown reached %v, want %s destroyed", vendor.Journal(), stack)
+	}
+}
+
 func TestRemoveEnvironmentRefusesProduction(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
