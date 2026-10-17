@@ -139,14 +139,20 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 		}
 	}
 	for _, stack := range r.infra {
-		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
+		group := &planv1.ChangeGroup{
 			Kind:   provider.StackGroupKind,
 			Name:   vendor + "/" + stack.String(),
 			Part:   stack.Env,
 			Action: planv1.Change_ACTION_DELETE,
 			Reason: "the resources every app in " + stack.Env + " binds to",
 			Slow:   true,
-		})
+		}
+		changes, err := r.planProductionTeardown(ctx, stack)
+		if err != nil {
+			return nil, err
+		}
+		group.Changes = changes
+		plan.Groups = append(plan.Groups, group)
 	}
 	scope := edge.ProjectScope{
 		Slug:      r.slug,
@@ -189,6 +195,22 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 			Reason: "the artifacts, assets and cache entries every release of this project wrote",
 		})
 	return plan, nil
+}
+
+func (r *projectRemoval) planProductionTeardown(ctx context.Context, stack naming.StackName) ([]*planv1.Change, error) {
+	if r.tier != environment.TierProduction {
+		return nil, nil
+	}
+	ref := provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}
+	teardown, err := r.provider.Stacks().PlanDestroy(ctx, ref, nil)
+	if err != nil {
+		return nil, fmt.Errorf("plan the teardown of %s: %w", stack, err)
+	}
+	var changes []*planv1.Change
+	for _, group := range teardown.Groups {
+		changes = append(changes, GroupProto(group).GetChanges()...)
+	}
+	return changes, nil
 }
 
 func (r *projectRemoval) recordGroups() []*planv1.ChangeGroup {
