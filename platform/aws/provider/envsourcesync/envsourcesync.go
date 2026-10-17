@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -33,9 +32,6 @@ const (
 	managedByTagKey   = "ocel:managed-by"
 	managedByTagValue = "ocel"
 	tierTagKey        = "ocel:env-tier"
-
-	pollCeiling     = 10 * time.Second
-	maxRoleAttempts = 12
 )
 
 type Spec struct {

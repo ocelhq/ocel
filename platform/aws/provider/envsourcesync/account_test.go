@@ -56,6 +56,7 @@ type account struct {
 
 	unassumable int
 	roleIDs     int
+	throttled   int
 	calls       []string
 }
 
@@ -264,6 +265,10 @@ func (a lambdaAPI) PutFunctionEventInvokeConfig(_ context.Context, in *lambda.Pu
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.record("PutFunctionEventInvokeConfig")
+	if a.throttled > 0 {
+		a.throttled--
+		return nil, &lambdatypes.TooManyRequestsException{Message: aws.String("Rate exceeded")}
+	}
 	f, ok := a.functions[aws.ToString(in.FunctionName)]
 	if !ok {
 		return nil, &lambdatypes.ResourceNotFoundException{Message: aws.String("no function")}
