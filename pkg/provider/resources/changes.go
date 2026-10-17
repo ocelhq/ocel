@@ -14,6 +14,7 @@ var errResourceOperationFailed = errors.New("resource operation failed")
 
 var changeSpanNames = map[provider.ChangeAction]string{
 	provider.ActionCreate: "create resource",
+	provider.ActionUpdate: "update resource",
 	provider.ActionDelete: "delete resource",
 }
 
@@ -32,13 +33,35 @@ func reportChange(log progress.Log, kind, name string, action provider.ChangeAct
 	log.Span(changeSpanNames[action], start, time.Now(), nil, attrs...)
 }
 
-func reportCreatedCompute(log progress.Log, recorded stackrecords.Stack, provisioned provider.StackResult, start time.Time) {
+func reportProvisionedCompute(log progress.Log, recorded stackrecords.Stack, provisioned provider.StackResult, start time.Time) {
 	for _, function := range provisioned.Functions {
-		held := slices.ContainsFunc(recorded.Functions, functionNamed(function.Name))
-		reportChange(log, functionKind, function.Name, provider.KeepOrCreate(held), start, nil)
+		reportChange(log, functionKind, function.Name, classifyFunctionChange(recorded.Functions, function), start, nil)
 	}
 	for _, container := range provisioned.Containers {
-		held := slices.ContainsFunc(recorded.Containers, containerNamed(container.Name))
-		reportChange(log, containerKind, container.Name, provider.KeepOrCreate(held), start, nil)
+		reportChange(log, containerKind, container.Name, classifyContainerChange(recorded.Containers, container), start, nil)
+	}
+}
+
+func classifyFunctionChange(recorded []provider.Function, provisioned provider.Function) provider.ChangeAction {
+	i := slices.IndexFunc(recorded, functionNamed(provisioned.Name))
+	switch {
+	case i < 0:
+		return provider.ActionCreate
+	case recorded[i].Physical != provisioned.Physical || recorded[i].Revision != provisioned.Revision:
+		return provider.ActionUpdate
+	default:
+		return provider.ActionKeep
+	}
+}
+
+func classifyContainerChange(recorded []provider.AppContainer, provisioned provider.AppContainer) provider.ChangeAction {
+	i := slices.IndexFunc(recorded, containerNamed(provisioned.Name))
+	switch {
+	case i < 0:
+		return provider.ActionCreate
+	case recorded[i].Physical != provisioned.Physical || recorded[i].Image != provisioned.Image || recorded[i].Revision != provisioned.Revision:
+		return provider.ActionUpdate
+	default:
+		return provider.ActionKeep
 	}
 }

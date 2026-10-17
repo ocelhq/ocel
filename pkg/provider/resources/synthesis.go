@@ -51,7 +51,7 @@ func synthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec pro
 		changes = append(changes, provider.Change{
 			Kind:   containerKind,
 			Name:   container,
-			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Containers, containerNamed(container))),
+			Action: planContainerChange(deployed.Containers, container, spec.App.Image),
 		})
 	}
 	for _, binding := range deployed.Bindings {
@@ -73,6 +73,18 @@ func synthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec pro
 		changes = append(changes, provider.Change{Kind: containerKind, Name: container.Name, Action: provider.ActionDelete, Reason: reasonUndeclared})
 	}
 	return stackPlan(spec.Ref, changes), nil
+}
+
+func planContainerChange(deployed []provider.AppContainer, container, image string) provider.ChangeAction {
+	i := slices.IndexFunc(deployed, containerNamed(container))
+	switch {
+	case i < 0:
+		return provider.ActionCreate
+	case deployed[i].Image != image:
+		return provider.ActionUpdate
+	default:
+		return provider.ActionKeep
+	}
 }
 
 func SynthesizedRemoval(ref provider.StackRef, deployed provider.StackResult) provider.Plan {

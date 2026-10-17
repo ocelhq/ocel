@@ -633,7 +633,9 @@ func recordContainers(t *testing.T, store keyvalue.Store, ref provider.StackRef,
 
 	stack := stackrecords.Stack{Kind: provider.StackApp}
 	for _, name := range names {
-		stack.Containers = append(stack.Containers, container(ref, name))
+		running := container(ref, name)
+		running.Image = testImage
+		stack.Containers = append(stack.Containers, running)
 	}
 	if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name, stack); err != nil {
 		t.Fatal(err)
@@ -782,6 +784,32 @@ func TestTheFanOutTakesDownTheContainerItsPlanShowsGoing(t *testing.T) {
 		t.Fatalf("the fan-out took down %v, want the legacy container its plan showed going", own.removed)
 	}
 	saysRemoving(t, progress, "container legacy")
+}
+
+func TestThePlanShowsAHeldContainerUpdatedWhenTheReleaseRunsAnotherImageAndKeptWhenItRunsTheSameOne(t *testing.T) {
+	t.Parallel()
+
+	ref := appRef()
+	for recorded, want := range map[string]provider.ChangeAction{
+		"ocel/web@sha256:b0": provider.ActionUpdate,
+		testImage:            provider.ActionKeep,
+	} {
+		store := fake.NewKeyValues()
+		running := provider.AppContainer{Name: "web", Physical: ref.Name.String() + "-web", Image: recorded}
+		if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name,
+			stackrecords.Stack{Kind: provider.StackApp, Containers: []provider.AppContainer{running}}); err != nil {
+			t.Fatal(err)
+		}
+
+		shown, err := resources.NewHookStacks(store, fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks()).
+			Plan(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: containerApp("web")}, nil)
+		if err != nil {
+			t.Fatalf("Plan() = %v", err)
+		}
+		if rows := rowsOf(shown); rows["web"] != want {
+			t.Errorf("Plan() over a container running %s shows web %q, want %q", recorded, rows["web"], want)
+		}
+	}
 }
 
 func TestAProviderProvisioningNoContainersRefusesToOrphanTheOnesItRecorded(t *testing.T) {

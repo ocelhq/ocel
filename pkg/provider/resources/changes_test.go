@@ -177,3 +177,70 @@ func TestProvisionReportsEveryFunctionItCreatedAndTookDown(t *testing.T) {
 		t.Errorf("Provision() reported changes %q, want %q", reported.changes, want)
 	}
 }
+
+func TestProvisionReportsAnUpdateForAHeldFunctionItServesFromANewRevisionAndNothingForOneItLeftOnItsRevision(t *testing.T) {
+	t.Parallel()
+
+	ref := appRef()
+	served := provider.Function{Name: "api", Physical: ref.Name.String() + "-api", Revision: "api-00002"}
+	for name, test := range map[string]struct {
+		recorded provider.Function
+		want     []string
+	}{
+		"a new revision":    {recorded: provider.Function{Name: "api", Physical: served.Physical, Revision: "api-00001"}, want: []string{"update function api"}},
+		"the same revision": {recorded: served},
+	} {
+		store := fake.NewKeyValues()
+		if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name,
+			stackrecords.Stack{Kind: provider.StackApp, Functions: []provider.Function{test.recorded}}); err != nil {
+			t.Fatal(err)
+		}
+
+		hooks := (&buckets{}).hooks()
+		hooks.Functions = &resources.FunctionHooks{
+			Provision: func(context.Context, provider.StackSpec, progress.Log) ([]provider.Function, error) {
+				return []provider.Function{served}, nil
+			},
+		}
+		reported := newChangeLog()
+		app := &provider.AppSpec{App: "web", Compute: provider.ComputeServerless, Functions: []provider.FunctionSpec{{Name: "api"}}}
+		if _, err := resources.NewHookStacks(store, fake.NewArtifacts(), hooks).
+			Provision(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: app}, reported); err != nil {
+			t.Fatalf("%s: Provision() = %v", name, err)
+		}
+		if !slices.Equal(reported.changes, test.want) {
+			t.Errorf("%s: Provision() reported changes %q, want %q", name, reported.changes, test.want)
+		}
+	}
+}
+
+func TestProvisionReportsAnUpdateForAHeldAppContainerItStartedFromAnotherBuildAndNothingForOneItLeftRunning(t *testing.T) {
+	t.Parallel()
+
+	ref := appRef()
+	for name, test := range map[string]struct {
+		recorded provider.AppContainer
+		want     []string
+	}{
+		"another build": {
+			recorded: provider.AppContainer{Name: "web", Physical: ref.Name.String() + "-web-b0", Image: "ocel/web@sha256:b0"},
+			want:     []string{"update app container web"},
+		},
+		"the same build": {recorded: container(ref, "web")},
+	} {
+		store := fake.NewKeyValues()
+		if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name,
+			stackrecords.Stack{Kind: provider.StackApp, Containers: []provider.AppContainer{test.recorded}}); err != nil {
+			t.Fatal(err)
+		}
+
+		reported := newChangeLog()
+		if _, err := resources.NewHookStacks(store, fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks()).
+			Provision(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: containerApp("web")}, reported); err != nil {
+			t.Fatalf("%s: Provision() = %v", name, err)
+		}
+		if !slices.Equal(reported.changes, test.want) {
+			t.Errorf("%s: Provision() reported changes %q, want %q", name, reported.changes, test.want)
+		}
+	}
+}
