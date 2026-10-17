@@ -1,0 +1,6 @@
+[workspace]
+members = ["app", "shared"]
+resolver = "2"
+
+[patch.crates-io]
+shared = { path = "shared" }

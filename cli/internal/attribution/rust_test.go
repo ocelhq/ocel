@@ -144,10 +144,11 @@ func TestRustReachGrantsASharedCrateResourceToEveryAppThatLinksIt(t *testing.T) 
 	}
 }
 
-func TestRustReachGrantsAWorkspaceDependencyResourceWhenTheRegistryHoldsNoneOfTheLockedCrates(t *testing.T) {
+func coldRegistryUsages(t *testing.T, fixture, source string) []Usage {
+	t.Helper()
 	needsCargo(t)
 	t.Setenv("CARGO_HOME", t.TempDir())
-	root, err := filepath.Abs(filepath.Join("testdata", "rust-cold-registry"))
+	root, err := filepath.Abs(filepath.Join("testdata", fixture))
 	if err != nil {
 		t.Fatalf("locate the fixture: %v", err)
 	}
@@ -156,11 +157,37 @@ func TestRustReachGrantsAWorkspaceDependencyResourceWhenTheRegistryHoldsNoneOfTh
 	usages, err := FindUsages(t.Context(), root, []App{app}, []Declaration{{
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "shared", "src", "lib.rs") + ":1",
+		Source: filepath.Join(root, filepath.FromSlash(source)) + ":1",
 	}})
 	if err != nil {
 		t.Fatalf("FindUsages: %v", err)
 	}
+	return usages
+}
+
+func TestRustReachGrantsAWorkspaceDependencyResourceWhenTheRegistryHoldsNoneOfTheLockedCrates(t *testing.T) {
+	usages := coldRegistryUsages(t, "rust-cold-registry", "shared/src/lib.rs")
+	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"app/src/main.rs"}) {
+		t.Errorf("usages = %+v, want main granted to web from entry app/src/main.rs", usages)
+	}
+}
+
+func TestRustReachGrantsNothingFromAnOptionalWorkspaceDependencyNoEnabledFeatureTurnsOn(t *testing.T) {
+	usages := coldRegistryUsages(t, "rust-optional-dependencies", "extra/src/lib.rs")
+	if len(usages) != 0 {
+		t.Errorf("usages = %+v, want none: only the feature bonus, off by default, turns extra on", usages)
+	}
+}
+
+func TestRustReachGrantsAResourceOfAnOptionalWorkspaceDependencyADefaultFeatureTurnsOn(t *testing.T) {
+	usages := coldRegistryUsages(t, "rust-optional-dependencies", "db/src/lib.rs")
+	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"app/src/main.rs"}) {
+		t.Errorf("usages = %+v, want main granted to web from entry app/src/main.rs", usages)
+	}
+}
+
+func TestRustReachGrantsAResourceOfAWorkspaceMemberAPatchSubstitutesForARegistryDependency(t *testing.T) {
+	usages := coldRegistryUsages(t, "rust-patched-member", "shared/src/lib.rs")
 	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"app/src/main.rs"}) {
 		t.Errorf("usages = %+v, want main granted to web from entry app/src/main.rs", usages)
 	}

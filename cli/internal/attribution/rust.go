@@ -24,12 +24,17 @@ func readRustImports(ctx context.Context, root string, app App) (map[string]Reac
 		return nil, fmt.Errorf("attribution: app %q: the Cargo.toml at %s names no package", app.Name, dir)
 	}
 
+	patchedDirs, err := cargo.ReadPatchedDirs(workspace.Root)
+	if err != nil {
+		return nil, fmt.Errorf("attribution: app %q: %w", app.Name, err)
+	}
+
 	bins := crate.Bins()
 	if len(bins) > 1 {
 		return nil, fmt.Errorf("attribution: app %q builds %d binaries, and ocel attributes one binary per app", app.Name, len(bins))
 	}
 
-	reached := reachedDirs(root, workspace, crate)
+	reached := reachedDirs(root, workspace, crate, patchedDirs)
 	entries := map[string]Reachability{}
 	for _, bin := range bins {
 		entry, inside := relativeToRoot(root, bin.SrcPath)
@@ -41,9 +46,9 @@ func readRustImports(ctx context.Context, root string, app App) (map[string]Reac
 	return entries, nil
 }
 
-func reachedDirs(root string, workspace cargo.Workspace, crate cargo.Package) []string {
+func reachedDirs(root string, workspace cargo.Workspace, crate cargo.Package, patchedDirs []string) []string {
 	dirs := []string{crate.Dir()}
-	for _, member := range workspaceDependencies(workspace, crate) {
+	for _, member := range workspaceDependencies(workspace, crate, patchedDirs) {
 		dirs = append(dirs, member.Dir())
 	}
 
@@ -56,29 +61,89 @@ func reachedDirs(root string, workspace cargo.Workspace, crate cargo.Package) []
 	return relative
 }
 
-func workspaceDependencies(workspace cargo.Workspace, crate cargo.Package) []cargo.Package {
+func workspaceDependencies(workspace cargo.Workspace, crate cargo.Package, patchedDirs []string) []cargo.Package {
 	members := map[string]cargo.Package{}
 	for _, member := range workspace.Members() {
 		members[member.Dir()] = member
 	}
+	patched := map[string]string{}
+	for _, dir := range patchedDirs {
+		if member, ok := members[dir]; ok {
+			patched[member.Name] = dir
+		}
+	}
 
 	var reached []cargo.Package
-	seen := map[string]bool{crate.Dir(): true}
+	requested := map[string]map[string]bool{crate.Dir(): {"default": true}}
 	queue := []cargo.Package{crate}
 	for len(queue) > 0 {
 		pkg := queue[0]
 		queue = queue[1:]
+		enabled, depFeatures := resolveFeatures(pkg, requested[pkg.Dir()])
 		for _, dep := range pkg.Dependencies {
-			member, ok := members[dep.Path]
-			if !ok || seen[dep.Path] {
+			dir := dep.Path
+			if dir == "" {
+				dir = patched[dep.Name]
+			}
+			member, ok := members[dir]
+			if !ok || dep.Optional && !enabled[dep.Key()] {
 				continue
 			}
-			seen[dep.Path] = true
-			queue = append(queue, member)
-			reached = append(reached, member)
+			features := append(slices.Clone(dep.Features), depFeatures[dep.Key()]...)
+			if dep.UsesDefaultFeatures {
+				features = append(features, "default")
+			}
+			first := requested[dir] == nil
+			if first {
+				requested[dir] = map[string]bool{}
+				reached = append(reached, member)
+			}
+			grew := false
+			for _, feature := range features {
+				if !requested[dir][feature] {
+					requested[dir][feature] = true
+					grew = true
+				}
+			}
+			if first || grew {
+				queue = append(queue, member)
+			}
 		}
 	}
 	return reached
+}
+
+func resolveFeatures(pkg cargo.Package, requested map[string]bool) (map[string]bool, map[string][]string) {
+	enabled := map[string]bool{}
+	depFeatures := map[string][]string{}
+	seen := map[string]bool{}
+	var pending []string
+	for feature := range requested {
+		pending = append(pending, feature)
+	}
+	for len(pending) > 0 {
+		value := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		if dep, ok := strings.CutPrefix(value, "dep:"); ok {
+			enabled[dep] = true
+			continue
+		}
+		if dep, feature, ok := strings.Cut(value, "/"); ok {
+			if name, weak := strings.CutSuffix(dep, "?"); weak {
+				dep = name
+			} else {
+				enabled[dep] = true
+			}
+			depFeatures[dep] = append(depFeatures[dep], feature)
+			continue
+		}
+		pending = append(pending, pkg.Features[value]...)
+	}
+	return enabled, depFeatures
 }
 
 func under(dirs []string, file string) bool {

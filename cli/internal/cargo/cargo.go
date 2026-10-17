@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 type Target struct {
@@ -18,15 +21,28 @@ type Target struct {
 }
 
 type Dependency struct {
-	Path string `json:"path"`
+	Name                string   `json:"name"`
+	Rename              string   `json:"rename"`
+	Path                string   `json:"path"`
+	Optional            bool     `json:"optional"`
+	UsesDefaultFeatures bool     `json:"uses_default_features"`
+	Features            []string `json:"features"`
+}
+
+func (d Dependency) Key() string {
+	if d.Rename != "" {
+		return d.Rename
+	}
+	return d.Name
 }
 
 type Package struct {
-	ID           string       `json:"id"`
-	Name         string       `json:"name"`
-	ManifestPath string       `json:"manifest_path"`
-	Targets      []Target     `json:"targets"`
-	Dependencies []Dependency `json:"dependencies"`
+	ID           string              `json:"id"`
+	Name         string              `json:"name"`
+	ManifestPath string              `json:"manifest_path"`
+	Targets      []Target            `json:"targets"`
+	Dependencies []Dependency        `json:"dependencies"`
+	Features     map[string][]string `json:"features"`
 }
 
 type Workspace struct {
@@ -100,4 +116,34 @@ func Metadata(ctx context.Context, dir string, opts ...string) (Workspace, error
 		return Workspace{}, fmt.Errorf("cargo metadata in %s: read what cargo said: %w", dir, err)
 	}
 	return workspace, nil
+}
+
+func ReadPatchedDirs(workspaceRoot string) ([]string, error) {
+	path := filepath.Join(workspaceRoot, "Cargo.toml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read the patches of %s: %w", path, err)
+	}
+	var manifest struct {
+		Patch map[string]map[string]any `toml:"patch"`
+	}
+	if err := toml.Unmarshal(data, &manifest); err != nil {
+		return nil, fmt.Errorf("read the patches of %s: %w", path, err)
+	}
+
+	var dirs []string
+	for _, source := range manifest.Patch {
+		for _, entry := range source {
+			table, _ := entry.(map[string]any)
+			dir, ok := table["path"].(string)
+			if !ok {
+				continue
+			}
+			if !filepath.IsAbs(dir) {
+				dir = filepath.Join(workspaceRoot, dir)
+			}
+			dirs = append(dirs, filepath.Clean(dir))
+		}
+	}
+	return dirs, nil
 }
