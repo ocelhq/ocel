@@ -258,13 +258,14 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 	if req.RepairOnDeploy != nil {
 		repairOnDeploy = *req.RepairOnDeploy
 	}
-	if err := r.claimParts(ctx, change.status, change.requested); err != nil {
-		return err
+	claimed, err := r.claimParts(ctx, change.status, change.requested)
+	if err != nil {
+		return errors.Join(err, r.releaseParts(ctx, tier, claimed))
 	}
 	err = r.Bootstrap.Apply(ctx, change.request(tier, req, r.WrittenBy), progress)
 	r.Statuses.forget()
 	if err != nil {
-		return err
+		return errors.Join(err, r.releaseParts(ctx, tier, claimed))
 	}
 	if err := r.recordParts(ctx, tier, change.requested, change.removing); err != nil {
 		return err

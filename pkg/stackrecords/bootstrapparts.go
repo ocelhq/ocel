@@ -54,6 +54,17 @@ func ClaimBootstrapPart(ctx context.Context, store keyvalue.Store, tier environm
 
 const claimAttempts = 5
 
+func ReleaseBootstrapPart(ctx context.Context, store keyvalue.Store, tier environment.Tier, name string, claim BootstrapPart) error {
+	err := keyvalue.ForgetMatching(ctx, store, BootstrapPartKey(tier, name), func(recorded keyvalue.Entry) (bool, error) {
+		part, err := decodeBootstrapPart(recorded)
+		return err == nil && part.State == PartCreating && part.WrittenBy == claim.WrittenBy && part.AddedAt.Equal(claim.AddedAt), err
+	})
+	if err != nil {
+		return fmt.Errorf("release the claim on the %s bootstrap part %s: %w", tier, name, err)
+	}
+	return nil
+}
+
 func MarkBootstrapPartReady(ctx context.Context, store keyvalue.Store, tier environment.Tier, name string, ready BootstrapPart) error {
 	return keyvalue.Change(ctx, store, BootstrapPartKey(tier, name), func(recorded keyvalue.Entry) ([]byte, bool, error) {
 		part := ready

@@ -2,6 +2,7 @@ package providerserver
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"time"
@@ -166,7 +167,7 @@ func idleCosts(ctx context.Context, parts []provider.BootstrapPart, price estima
 	return idle, estimated.GetCurrency(), nil
 }
 
-func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, adding []string) error {
+func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, adding []string) (map[string]stackrecords.BootstrapPart, error) {
 	var names []string
 	if !status.Present {
 		names = append(names, provider.BasePart)
@@ -176,20 +177,36 @@ func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, addin
 			names = append(names, feature)
 		}
 	}
+	claimed := map[string]stackrecords.BootstrapPart{}
 	for _, name := range names {
-		_, _, err := stackrecords.ClaimBootstrapPart(ctx, r.KeyValues, status.Tier, name, stackrecords.BootstrapPart{
+		claim, won, err := stackrecords.ClaimBootstrapPart(ctx, r.KeyValues, status.Tier, name, stackrecords.BootstrapPart{
 			WrittenBy: string(r.WrittenBy),
 			AddedAt:   time.Now().UTC(),
 		})
 		if storeAbsent(err) {
-			return nil
+			return claimed, nil
 		}
 		if err != nil {
-			return err
+			return claimed, err
+		}
+		if won {
+			claimed[name] = claim
 		}
 	}
-	return nil
+	return claimed, nil
 }
+
+func (r Readiness) releaseParts(ctx context.Context, tier environment.Tier, claimed map[string]stackrecords.BootstrapPart) error {
+	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), claimReleaseTimeout)
+	defer cancel()
+	var errs []error
+	for _, name := range slices.Sorted(maps.Keys(claimed)) {
+		errs = append(errs, stackrecords.ReleaseBootstrapPart(settle, r.KeyValues, tier, name, claimed[name]))
+	}
+	return errors.Join(errs...)
+}
+
+const claimReleaseTimeout = 30 * time.Second
 
 func (r Readiness) recordParts(ctx context.Context, tier environment.Tier, features, removed []string) error {
 	status, err := r.Status(ctx, tier)

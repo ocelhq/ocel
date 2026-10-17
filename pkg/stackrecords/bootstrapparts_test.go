@@ -166,3 +166,34 @@ func TestAForgottenPartIsMissingAndCanBeClaimedAgain(t *testing.T) {
 		t.Errorf("ClaimBootstrapPart() after ForgetBootstrapPart() = %v, %v, want it claimed", claimed, err)
 	}
 }
+
+func TestReleasingAClaimForgetsItButLeavesAPartAnotherRunMadeReady(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	claim, _, err := stackrecords.ClaimBootstrapPart(ctx, store, environment.TierProduction, "containers", claimOf("web"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := stackrecords.ReleaseBootstrapPart(ctx, store, environment.TierProduction, "containers", claim); err != nil {
+		t.Fatalf("ReleaseBootstrapPart() error = %v", err)
+	}
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, "containers"); err != nil || present {
+		t.Errorf("ReadBootstrapPart() present = %v, %v after the claim was released, want it forgotten", present, err)
+	}
+
+	claim, _, err = stackrecords.ClaimBootstrapPart(ctx, store, environment.TierProduction, "containers", claimOf("web"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stackrecords.MarkBootstrapPartReady(ctx, store, environment.TierProduction, "containers", claimOf("api")); err != nil {
+		t.Fatal(err)
+	}
+	if err := stackrecords.ReleaseBootstrapPart(ctx, store, environment.TierProduction, "containers", claim); err != nil {
+		t.Fatalf("ReleaseBootstrapPart() error = %v", err)
+	}
+	if read, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, "containers"); err != nil || !present || read.State != stackrecords.PartReady {
+		t.Errorf("ReadBootstrapPart() = %+v, %v, %v, want the ready part kept", read, present, err)
+	}
+}

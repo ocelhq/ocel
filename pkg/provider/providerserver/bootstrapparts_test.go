@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -142,6 +143,26 @@ func TestAPartClaimedButNotYetCreatedReadsAsCreatingByWhoeverClaimedIt(t *testin
 
 	if containers.GetState() != contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_CREATING || containers.GetAddedBy() != "web" {
 		t.Errorf("containers = %+v, want it creating, claimed by web", containers)
+	}
+}
+
+func TestABootstrapThatFailsLeavesNoPartItClaimedCreating(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	vendor.FakeBootstrap().Offers(append(vendor.FakeBootstrap().Catalogue(), provider.Feature{Name: "queue"})...)
+	vendor.FakeBootstrap().RefuseApply(errors.New("the stack update timed out"))
+
+	stream, err := client.Bootstrap(context.Background(), &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Features: []string{"queue"}})
+	if err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+	if result, _ := drain(stream); result.GetSuccess() {
+		t.Fatal("Bootstrap() succeeded, want the refused apply to fail it")
+	}
+
+	if part, present := describedParts(t, client)["queue"]; present {
+		t.Errorf("parts hold %+v after the bootstrap adding it failed, want no claim left behind", part)
 	}
 }
 
