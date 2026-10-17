@@ -188,6 +188,25 @@ func TestBindingPoliciesRenderOnlyForAGrantingBinding(t *testing.T) {
 	})
 }
 
+func TestARecordGrantedUnderTwoDeclaredNamesGetsOneRolePolicy(t *testing.T) {
+	t.Parallel()
+
+	granted := plannedBindings(grantsBindings()[:1])
+	main, reports := granted[0], granted[0]
+	main.Resource, reports.Resource = "main", "reports"
+
+	policies, err := planBindingPolicies([]provider.Binding{main, reports})
+	if err != nil {
+		t.Fatalf("planBindingPolicies: %v", err)
+	}
+	if len(policies) != 1 || policies[0].Binding != "bucket--uploads" {
+		t.Fatalf("policies = %+v, want one for bucket--uploads: both grants carry the same record's grants", policies)
+	}
+	if rendered := renderAppRole(t, "web", policies).named("binding"); len(rendered) != 1 {
+		t.Fatalf("rendered binding policies = %v, want exactly one", rendered)
+	}
+}
+
 func TestUnscopedGrantsAreRejected(t *testing.T) {
 	t.Parallel()
 
