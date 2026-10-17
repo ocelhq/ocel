@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
 type private struct {
@@ -58,7 +59,7 @@ func (s *stack) spec(pointer string) apiSpec {
 
 func (s *stack) projectTags() map[string]string {
 	tags := namespaceTags(s.p.ns, s.tier())
-	tags[projectTagKey] = s.slug()
+	tags[registry.ProjectTag] = s.slug()
 	return tags
 }
 
