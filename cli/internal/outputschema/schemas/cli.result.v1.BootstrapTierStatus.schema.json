@@ -28,6 +28,10 @@
           "default": "",
           "type": "string"
         },
+        "^(added_with)$": {
+          "default": "",
+          "type": "string"
+        },
         "^(idle_monthly_fixed)$": {
           "type": "string"
         },
@@ -44,6 +48,10 @@
           "type": "string"
         },
         "addedBy": {
+          "default": "",
+          "type": "string"
+        },
+        "addedWith": {
           "default": "",
           "type": "string"
         },

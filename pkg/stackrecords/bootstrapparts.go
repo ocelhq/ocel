@@ -25,6 +25,7 @@ type BootstrapPart struct {
 	WrittenBy string                  `json:"written_by,omitempty"`
 	Digest    string                  `json:"digest,omitempty"`
 	AddedBy   string                  `json:"added_by,omitempty"`
+	AddedWith string                  `json:"added_with,omitempty"`
 	AddedAt   time.Time               `json:"added_at"`
 	ClaimedAt time.Time               `json:"claimed_at,omitzero"`
 	Resources []provider.PartResource `json:"resources,omitempty"`
@@ -78,7 +79,7 @@ func MarkBootstrapPartReady(ctx context.Context, store keyvalue.Store, tier envi
 			if provider.WrittenBy(prior.WrittenBy).Newer(provider.WrittenBy(ready.WrittenBy)) {
 				return nil, false, nil
 			}
-			part.AddedBy, part.AddedAt = prior.AddedBy, prior.AddedAt
+			part.AddedBy, part.AddedWith, part.AddedAt = prior.AddedBy, prior.AddedWith, prior.AddedAt
 		}
 		part.State = PartReady
 		value, err := json.Marshal(part)
@@ -145,6 +146,7 @@ type PartWork struct {
 	WrittenBy string
 	Digest    string
 	AddedBy   string
+	AddedWith string
 	Make      func(ctx context.Context) ([]provider.PartResource, error)
 }
 
@@ -187,7 +189,7 @@ func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier
 			return false, nil
 		}
 		now := time.Now().UTC()
-		claim := BootstrapPart{State: PartCreating, WrittenBy: work.WrittenBy, Digest: work.Digest, AddedBy: work.AddedBy, AddedAt: now, ClaimedAt: now}
+		claim := BootstrapPart{State: PartCreating, WrittenBy: work.WrittenBy, Digest: work.Digest, AddedBy: work.AddedBy, AddedWith: work.AddedWith, AddedAt: now, ClaimedAt: now}
 		var prior []byte
 		if len(recorded.Value) > 0 {
 			part, err := decodeBootstrapPart(recorded)
@@ -208,7 +210,7 @@ func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier
 				claim = part
 				claim.ClaimedAt = now
 			}
-			claim.AddedBy, claim.AddedAt = part.AddedBy, part.AddedAt
+			claim.AddedBy, claim.AddedWith, claim.AddedAt = part.AddedBy, part.AddedWith, part.AddedAt
 		}
 		if recorded.Value, err = json.Marshal(claim); err != nil {
 			return false, fmt.Errorf("record the %s bootstrap part %s: %w", tier, work.Name, err)
@@ -235,6 +237,7 @@ func ensurePart(ctx context.Context, store keyvalue.Store, tier environment.Tier
 			WrittenBy: work.WrittenBy,
 			Digest:    digest,
 			AddedBy:   claim.AddedBy,
+			AddedWith: claim.AddedWith,
 			AddedAt:   claim.AddedAt,
 			Resources: resources,
 		}))

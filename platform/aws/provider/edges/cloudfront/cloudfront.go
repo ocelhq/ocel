@@ -75,7 +75,7 @@ type Clients struct {
 
 type cloudFront struct {
 	ns         bootstrap.Namespace
-	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error)
+	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
 	open       func(context.Context) (Clients, error)
 	options    Options
 	pacing     Rollout
@@ -84,7 +84,7 @@ type cloudFront struct {
 	clients *Clients
 }
 
-func New(ns bootstrap.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error), options Options) edge.Edge {
+func New(ns bootstrap.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error), options Options) edge.Edge {
 	front := newCloudFront(ns, open, options)
 	front.ensurePart = ensurePart
 	return front
@@ -289,7 +289,7 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if err := prior.Private.Into(&own); err != nil {
 		return nil, err
 	}
-	set, err := p.ensureEdgeSet(ctx, spec.Tier, spec.Slug, spec.Warn)
+	set, err := p.ensureEdgeSet(ctx, spec.Tier, spec.Slug, "", spec.Warn)
 	if err != nil {
 		return nil, err
 	}

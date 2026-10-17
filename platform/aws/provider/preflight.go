@@ -63,7 +63,7 @@ func (p *Provider) ensureDeployParts(ctx context.Context, pre provider.DeployPre
 		if err != nil {
 			return err
 		}
-		if _, err := p.ensurePart(ctx, tier, work, pre.Deploy.Slug, say); err != nil {
+		if _, err := p.ensurePart(ctx, tier, work, pre.Deploy.Slug, "", say); err != nil {
 			return err
 		}
 	}

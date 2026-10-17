@@ -102,7 +102,7 @@ func (r Readiness) recordedParts(ctx context.Context, tier environment.Tier) (ma
 }
 
 func applyRecord(out *contractv1.BootstrapPart, record stackrecords.BootstrapPart) {
-	out.AddedBy = record.AddedBy
+	out.AddedBy, out.AddedWith = record.AddedBy, record.AddedWith
 	if !record.AddedAt.IsZero() {
 		out.AddedAt = record.AddedAt.Unix()
 	}

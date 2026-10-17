@@ -494,6 +494,8 @@ message BootstrapPart {
 
   int64 added_at = 4;
 
+  string added_with = 13;
+
   BootstrapPartState state = 5;
 
   bool current = 6;

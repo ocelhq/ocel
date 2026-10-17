@@ -8,13 +8,13 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 )
 
-const notFoundAddedBy = "ocel domain use --preview"
+const notFoundAddedWith = "ocel domain use --preview"
 
 func (p *apiGateway) ensureNotFoundAPI(ctx context.Context, say func(string)) (string, error) {
 	if p.ensurePart == nil {
 		return "", fmt.Errorf("the %q edge was built without a way to add the %s bootstrap part", Kind, notfoundapi.Part)
 	}
-	resources, err := p.ensurePart(ctx, environment.TierPreview, notfoundapi.Part, notFoundAddedBy, say)
+	resources, err := p.ensurePart(ctx, environment.TierPreview, notfoundapi.Part, "", notFoundAddedWith, say)
 	if err != nil {
 		return "", err
 	}

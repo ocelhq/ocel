@@ -72,8 +72,8 @@ func (w *world) edge() *apiGateway {
 	}
 }
 
-func (w *world) ensurePart(_ context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error) {
-	w.ensured = append(w.ensured, string(tier)+" "+part+" for "+addedBy)
+func (w *world) ensurePart(_ context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error) {
+	w.ensured = append(w.ensured, string(tier)+" "+part+" for "+addedBy+addedWith)
 	if w.cfn.absent {
 		return nil, fmt.Errorf("the %s tier is not bootstrapped: run `%s`", tier, provider.BootstrapCommand(tier))
 	}

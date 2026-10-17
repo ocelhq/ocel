@@ -40,7 +40,7 @@ func (p *cloudFront) publishGate(ctx context.Context, publication edge.GatePubli
 		return err
 	}
 	if publication.Gate != nil {
-		if _, err := p.ensureEdgeSet(ctx, publication.State.Tier, publication.State.Slug, publication.Say); err != nil {
+		if _, err := p.ensureEdgeSet(ctx, publication.State.Tier, publication.State.Slug, "", publication.Say); err != nil {
 			return err
 		}
 	}

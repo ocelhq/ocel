@@ -99,10 +99,10 @@ func fakePartResources(tier environment.Tier) []provider.PartResource {
 	}
 }
 
-func (w *world) ensurePart(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error) {
+func (w *world) ensurePart(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error) {
 	w.parts.mu.Lock()
 	defer w.parts.mu.Unlock()
-	w.parts.ensured = append(w.parts.ensured, part+" for "+addedBy)
+	w.parts.ensured = append(w.parts.ensured, part+" for "+addedBy+addedWith)
 	if w.parts.absent {
 		return nil, nil
 	}
@@ -110,7 +110,7 @@ func (w *world) ensurePart(ctx context.Context, tier environment.Tier, part, add
 		say("added the " + part + " part")
 	}
 	resources := fakePartResources(tier)
-	if err := stackrecords.MarkBootstrapPartReady(ctx, w.records(), tier, part, stackrecords.BootstrapPart{AddedBy: addedBy, Resources: resources}); err != nil {
+	if err := stackrecords.MarkBootstrapPartReady(ctx, w.records(), tier, part, stackrecords.BootstrapPart{AddedBy: addedBy, AddedWith: addedWith, Resources: resources}); err != nil {
 		return nil, err
 	}
 	return resources, nil

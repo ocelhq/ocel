@@ -83,7 +83,7 @@ func TestADeployReadsACurrentPartRecordOnceHoweverManyStepsNeedIt(t *testing.T) 
 		return nil, nil
 	}
 
-	if _, err := p.ensurePart(ctx, tier, work, "web", nil); err != nil {
+	if _, err := p.ensurePart(ctx, tier, work, "web", "", nil); err != nil {
 		t.Fatalf("ensurePart() = %v", err)
 	}
 	for range 2 {

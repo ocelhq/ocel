@@ -33,7 +33,7 @@ type Deps struct {
 
 	Namespace bootstrap.Namespace
 
-	EnsurePart func(ctx context.Context, tier environment.Tier, part, addedBy string, say func(string)) ([]provider.PartResource, error)
+	EnsurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
 
 	ArtifactBucket func(ctx context.Context, tier environment.Tier) (string, error)
 }
