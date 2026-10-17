@@ -67,7 +67,7 @@ type Config struct {
 	PostPolicies bool
 	SweepUploads bool
 	Sessions     string
-	Granted      []string
+	Granted      map[string]string
 
 	MetadataPrefix string
 }
@@ -99,8 +99,8 @@ var _ bucketv1connect.BucketServiceHandler = (*Service)(nil)
 
 func New(cfg Config) *Service {
 	granted := make(map[string]scope, len(cfg.Granted))
-	for _, name := range cfg.Granted {
-		granted[name] = scopeOf(name)
+	for name, spec := range cfg.Granted {
+		granted[name] = scopeOf(spec)
 	}
 	return &Service{
 		cfg:       cfg,
@@ -111,6 +111,14 @@ func New(cfg Config) *Service {
 		newSecret: func() string { return randomHex(32) },
 		sweeping:  func(run func()) { go run() },
 	}
+}
+
+func NewGrantsByOwnName(specs ...string) map[string]string {
+	granted := make(map[string]string, len(specs))
+	for _, spec := range specs {
+		granted[spec] = spec
+	}
+	return granted
 }
 
 func sessionIDPrefix(tag string) string {

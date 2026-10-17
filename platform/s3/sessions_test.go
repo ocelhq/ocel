@@ -13,13 +13,13 @@ func TestAnUploadSessionAnswersOnlyACallerGrantedItsBucket(t *testing.T) {
 	t.Parallel()
 	owner := newHarness(t, func(cfg *Config) {
 		cfg.Sessions = "shared/build"
-		cfg.Granted = []string{"mine"}
+		cfg.Granted = NewGrantsByOwnName("mine")
 	})
 	other := New(Config{
 		Objects:  owner.store,
 		Internal: presigner(),
 		Sessions: "shared/build",
-		Granted:  []string{"theirs"},
+		Granted:  NewGrantsByOwnName("theirs"),
 	})
 	ctx := context.Background()
 	opened, err := owner.svc.PresignUpload(ctx, &bucketv1.PresignUploadRequest{

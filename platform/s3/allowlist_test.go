@@ -13,7 +13,7 @@ import (
 func neighbours(t *testing.T) *harness {
 	t.Helper()
 	h := newHarness(t, func(cfg *Config) {
-		cfg.Granted = []string{"customer/shop/production/uploads"}
+		cfg.Granted = NewGrantsByOwnName("customer/shop/production/uploads")
 		cfg.Sessions = "customer/shop/production/web"
 	})
 	h.store.put("customer", "shop/production/uploads/mine.png", []byte("abc"), "image/png")
@@ -118,6 +118,26 @@ func TestTheGrantedBucketIsReachedUnderTheBoxsOwnPrefix(t *testing.T) {
 	if out.GetObject().GetKey() != "mine.png" || out.GetObject().GetSize() != 3 {
 		t.Fatalf("Head() = %+v, want the object the app put there, named as the app named it", out.GetObject())
 	}
+}
+
+func TestABucketGrantedByItsDeclaredNameIsReachedByThatNameAlone(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, func(cfg *Config) {
+		cfg.Granted = map[string]string{"uploads": "customer/shop/production/uploads"}
+		cfg.Sessions = "customer/shop/production/web"
+	})
+	h.store.put("customer", "shop/production/uploads/mine.png", []byte("abc"), "image/png")
+
+	out, err := h.svc.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "uploads", Key: "mine.png"})
+	if err != nil {
+		t.Fatalf("Head(uploads): %v", err)
+	}
+	if out.GetObject().GetKey() != "mine.png" {
+		t.Fatalf("Head(uploads) = %+v, want the object under the bucket and prefix uploads names", out.GetObject())
+	}
+	_, err = h.svc.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "customer/shop/production/uploads", Key: "mine.png"})
+	denied(t, "head by the bucket and prefix rather than the declared name", err)
 }
 
 func TestTheStoresOwnBookkeepingIsNoKeyAnAppCanName(t *testing.T) {
