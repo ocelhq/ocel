@@ -71,7 +71,7 @@ func TestAPromotionOfAnAppHandedABakedValueWhoseContainerIsGoneIsRefusedByName(t
 	box := machine(nil)
 	imaging(box, "false ")
 	noted(box, "known\n"+`{"handed":["API_TOKEN"],"live":{"slug":"shop","tier":"production","keys":[{"key":"DATABASE_URL"}]}}`+"\n")
-	err := box.host().RunContainer(context.Background(), promoted())
+	_, err := box.host().RunContainer(context.Background(), promoted())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("a promotion of an app whose record declares no variable started it without the value its deploy baked in: %v\n%v", err, box.commands())
@@ -99,7 +99,7 @@ func TestAPromotionOfALiveOnlyAppWhoseContainerIsGoneRunsItAgainWithTheManifestI
 	spec := promoted()
 	spec.HealthPath = "/healthz"
 	spec.Declared = []string{"DATABASE_URL"}
-	if err := box.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := box.host().RunContainer(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() of an app that reads everything live = %v, want it running again: the values reach it from the box, not from the deploy", err)
 	}
 	command := ranContainer(t, box)
@@ -121,7 +121,7 @@ func TestAPromotionOfAContainerThisBoxHasNoNoteForIsRefusedRatherThanGuessedEmpt
 	box := machine(nil)
 	imaging(box, "false ")
 	noted(box, "unknown\n")
-	err := box.host().RunContainer(context.Background(), promoted())
+	_, err := box.host().RunContainer(context.Background(), promoted())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("a promotion of a container nothing on this box describes started it: %v\n%v", err, box.commands())
@@ -142,7 +142,7 @@ func TestAPromotionWhoseRecordDeclaresNamesIsRefusedByThemWhenTheBoxHasNoNote(t 
 	box := machine(nil)
 	imaging(box, "false ")
 	noted(box, "unknown\n")
-	err := box.host().RunContainer(context.Background(), spec)
+	_, err := box.host().RunContainer(context.Background(), spec)
 	if err == nil {
 		t.Fatal("a promotion of a gone container that declares a variable started it")
 	}

@@ -60,7 +60,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if healthPath == "" {
 		healthPath, discovered = app.DiscoveredHealthCheckPath, app.DiscoveredHealthCheckPath
 	}
-	if err := p.host.RunContainer(ctx, host.Container{
+	if _, err := p.host.RunContainer(ctx, host.Container{
 		Name: physical, Project: spec.Ref.Project, App: app.App, Image: app.Image,
 		Tier: spec.Ref.Tier, Env: app.Values.ContainerEnv, HealthPath: healthPath, Manifest: manifest, Resolved: true,
 	}); err != nil {

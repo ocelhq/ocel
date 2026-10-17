@@ -37,7 +37,7 @@ func runningWith(t *testing.T, spec Container) *bench {
 	t.Helper()
 	rig := machine(nil)
 	imaging(rig, "false ")
-	if err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	return rig
@@ -97,7 +97,7 @@ func TestTheEnvFileIsWrittenAtSixHundredToTheDeployPrincipalWithNoElevation(t *t
 	rig := machine(nil)
 	rig.facts.Root = false
 	denyingDocker(rig, "false ")
-	if err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 
@@ -168,7 +168,7 @@ func TestTheEnvFileIsTakenBackWhenTheContainerCannotBeStarted(t *testing.T) {
 		}
 		return session.Result{}, false
 	}
-	err := rig.host().RunContainer(context.Background(), spec)
+	_, err := rig.host().RunContainer(context.Background(), spec)
 	if err == nil {
 		t.Fatal("RunContainer() over a daemon that refused the run = nil")
 	}
@@ -197,7 +197,7 @@ func TestTheEnvFileIsTakenBackWhenTheWriteItselfFallsOver(t *testing.T) {
 		}
 		return session.Result{}, false
 	}
-	if err := rig.host().RunContainer(context.Background(), spec); err == nil {
+	if _, err := rig.host().RunContainer(context.Background(), spec); err == nil {
 		t.Fatal("RunContainer() over a write that fell over = nil")
 	}
 	if rig.at("install -m 0600") < 0 {
@@ -221,7 +221,7 @@ func TestTheEnvFileIsTakenBackWhenTheDeployIsInterrupted(t *testing.T) {
 			stop()
 		}
 	}
-	if err := rig.host().RunContainer(ctx, spec); err == nil {
+	if _, err := rig.host().RunContainer(ctx, spec); err == nil {
 		t.Fatal("RunContainer() over a deploy interrupted after the write = nil")
 	}
 	if rig.at("install -m 0600") < 0 {
@@ -328,7 +328,7 @@ func TestAContainerRunningTheSameImageWithOtherValuesIsReplaced(t *testing.T) {
 	}
 	rig := machine(nil)
 	imaging(rig, "running "+appImage+" "+delivery.digest)
-	if err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	for _, command := range rig.commands() {
@@ -339,7 +339,7 @@ func TestAContainerRunningTheSameImageWithOtherValuesIsReplaced(t *testing.T) {
 
 	moved := machine(nil)
 	imaging(moved, "running "+appImage+" 0000000000000000")
-	if err := moved.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := moved.host().RunContainer(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	if ranContainer(t, moved) == "" {
@@ -360,7 +360,7 @@ func TestADeployThatResolvedNoValueReplacesAContainerRunningWithTheOnesItDropped
 
 	rig := machine(nil)
 	imaging(rig, "running "+appImage+" "+delivery.digest)
-	if err := rig.host().RunContainer(context.Background(), emptied); err != nil {
+	if _, err := rig.host().RunContainer(context.Background(), emptied); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	joined := strings.Join(rig.commands(), "\n")
@@ -379,7 +379,7 @@ func TestAPromotionKeepsTheContainerItRePointsAtRatherThanReRenderingIt(t *testi
 	spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
 	rig := machine(nil)
 	imaging(rig, "running "+appImage+" 7f3a9c1e2b4d")
-	if err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	for _, command := range rig.commands() {
@@ -397,7 +397,7 @@ func TestAPromotionIsRefusedByNameRatherThanStartingAnAppWithNoValues(t *testing
 	rig := machine(nil)
 	imaging(rig, "false ")
 
-	err := rig.host().RunContainer(context.Background(), spec)
+	_, err := rig.host().RunContainer(context.Background(), spec)
 	if err == nil {
 		t.Fatalf("a promotion that had to put %s back started it with none of the values it declares: %v", spec.Name, rig.commands())
 	}
@@ -419,7 +419,7 @@ func TestAPromotionOfAnAppDeclaringNoValueStartsItBackUp(t *testing.T) {
 	rig := machine(nil)
 	imaging(rig, "false ")
 	noted(rig, handedKnown+"\n"+`{"handed":[]}`+"\n")
-	if err := rig.host().RunContainer(context.Background(), promoted()); err != nil {
+	if _, err := rig.host().RunContainer(context.Background(), promoted()); err != nil {
 		t.Fatalf("RunContainer() of an app that declares no value = %v, want a rollback of it to start it back up", err)
 	}
 	if ranContainer(t, rig) == "" {
@@ -434,7 +434,7 @@ func TestAPromotionStartsTheStoppedContainerItRePointsAtRatherThanRefusingIt(t *
 	spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
 	rig := machine(nil)
 	imaging(rig, "exited "+appImage+" 7f3a9c1e2b4d")
-	if err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() of a stopped container = %v, want it started back up: a deploy stops the container it replaces and never removes it, so a rollback re-points at the one that still has the values its own deploy handed it", err)
 	}
 	joined := strings.Join(rig.commands(), "\n")
@@ -460,7 +460,7 @@ func TestAPromotionStartsEveryStateDockerCanStartRatherThanRefusingIt(t *testing
 		spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
 		rig := machine(nil)
 		imaging(rig, state+" "+appImage+" 7f3a9c1e2b4d")
-		if err := rig.host().RunContainer(context.Background(), spec); err != nil {
+		if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
 			t.Errorf("RunContainer() of a %s container = %v, want it put back into service: the container object still has the environment its own deploy baked into it, and a promotion that refuses it loses every value a rollback exists to preserve", state, err)
 			continue
 		}

@@ -96,7 +96,7 @@ func TestAnEngineOutOfSubnetsIsRefusedWithTheDaemonSettingThatGivesItMore(t *tes
 		}
 		return proxied(command)
 	}
-	err := box.host().RunContainer(context.Background(), spec)
+	_, err := box.host().RunContainer(context.Background(), spec)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("RunContainer() on an engine with no subnet left = %v, want a not-ready refusal", err)
@@ -304,7 +304,7 @@ func TestAnAppAlreadyServingStillPutsTheSwitchboardBackOnItsNetwork(t *testing.T
 	} {
 		box := machine(nil)
 		imaging(box, serving)
-		if err := box.host().RunContainer(context.Background(), spec); err != nil {
+		if _, err := box.host().RunContainer(context.Background(), spec); err != nil {
 			t.Fatalf("%s: RunContainer() = %v", what, err)
 		}
 		if box.at(quoted("run")+" "+quoted("--detach")) >= 0 {
