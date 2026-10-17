@@ -55,6 +55,19 @@ func TestAPartABootstrapAddsIsAddedByTheFirstProjectThatWantedIt(t *testing.T) {
 	}
 }
 
+func TestAPartABootstrapAddsForAProjectReadsAsAddedByTheBootstrapForThatProject(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+	recordWant(t, vendor, fake.FeatureCache, "shop")
+
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: direct})
+
+	if part := describedParts(t, client)[fake.FeatureCache]; part.GetAddedWith() != "ocel bootstrap" || part.GetAddedBy() != "shop" {
+		t.Errorf("%s added with %q for %q, want `ocel bootstrap` for shop: no deploy of shop added it", fake.FeatureCache, part.GetAddedWith(), part.GetAddedBy())
+	}
+}
+
 func TestAPartABootstrapAddedIsNoLongerWanted(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")

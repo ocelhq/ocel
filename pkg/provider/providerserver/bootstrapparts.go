@@ -198,7 +198,7 @@ func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, addin
 	}
 	claimed := map[string]stackrecords.BootstrapPart{}
 	for _, name := range names {
-		claim := stackrecords.BootstrapPart{WrittenBy: string(r.WrittenBy), AddedAt: time.Now().UTC()}
+		claim := stackrecords.BootstrapPart{WrittenBy: string(r.WrittenBy), AddedWith: addedWithBootstrap, AddedAt: time.Now().UTC()}
 		if wanting := wants[name]; len(wanting) > 0 {
 			claim.AddedBy = wanting[0]
 		}
@@ -227,6 +227,8 @@ func (r Readiness) releaseParts(ctx context.Context, tier environment.Tier, clai
 }
 
 const claimReleaseTimeout = 30 * time.Second
+
+const addedWithBootstrap = "ocel bootstrap"
 
 func (r Readiness) recordParts(ctx context.Context, tier environment.Tier, features, removed []string) error {
 	status, err := r.Status(ctx, tier)
