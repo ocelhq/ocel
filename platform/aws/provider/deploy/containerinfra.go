@@ -209,16 +209,37 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 		VendorState: work,
 	}
 	writer := owner.cfg.WrittenBy
-	if _, _, err := stackrecords.ClaimBootstrapPart(ctx, owner.cfg.KeyValues, tier, ContainersPart, stackrecords.BootstrapPart{
+	claim, claimed, err := stackrecords.ClaimBootstrapPart(ctx, owner.cfg.KeyValues, tier, ContainersPart, stackrecords.BootstrapPart{
 		WrittenBy: string(writer),
 		AddedBy:   ref.Project,
 		AddedAt:   time.Now().UTC(),
+	})
+	if err != nil {
+		return containerInfra{}, err
+	}
+	decoded, err := provisionContainerInfra(ctx, owner, spec, work, progress)
+	if err != nil && claimed {
+		return containerInfra{}, errors.Join(err, releaseContainersClaim(ctx, owner.cfg.KeyValues, tier, claim))
+	}
+	if err != nil {
+		return containerInfra{}, err
+	}
+	if err := stackrecords.MarkBootstrapPartReady(ctx, owner.cfg.KeyValues, tier, ContainersPart, stackrecords.BootstrapPart{
+		WrittenBy: string(writer),
+		AddedBy:   ref.Project,
+		AddedAt:   time.Now().UTC(),
+		Resources: listContainerInfrastructureResources(tier, decoded.front()),
 	}); err != nil {
 		return containerInfra{}, err
 	}
-	if err := stackrecords.Write(ctx, owner.cfg.KeyValues, tier, ContainersSlug, containerInfraRef(tier).Name, stackrecords.Stack{
+	return decoded, r.claimContainerInfra(ctx, ref)
+}
+
+func provisionContainerInfra(ctx context.Context, owner *release, spec provider.StackSpec, work *containerInfraWork, progress progress.Log) (containerInfra, error) {
+	tier := spec.Ref.Tier
+	if err := stackrecords.Write(ctx, owner.cfg.KeyValues, tier, ContainersSlug, spec.Ref.Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
-		WrittenBy: writer,
+		WrittenBy: owner.cfg.WrittenBy,
 	}); err != nil {
 		return containerInfra{}, err
 	}
@@ -232,16 +253,16 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 	if err := awsports.WriteContainerFront(ctx, owner.cfg.KeyValues, tier, decoded.front()); err != nil {
 		return containerInfra{}, err
 	}
-	if err := stackrecords.MarkBootstrapPartReady(ctx, owner.cfg.KeyValues, tier, ContainersPart, stackrecords.BootstrapPart{
-		WrittenBy: string(writer),
-		AddedBy:   ref.Project,
-		AddedAt:   time.Now().UTC(),
-		Resources: listContainerInfrastructureResources(tier, decoded.front()),
-	}); err != nil {
-		return containerInfra{}, err
-	}
-	return decoded, r.claimContainerInfra(ctx, ref)
+	return decoded, nil
 }
+
+func releaseContainersClaim(ctx context.Context, store keyvalue.Store, tier environment.Tier, claim stackrecords.BootstrapPart) error {
+	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), containersClaimReleaseTimeout)
+	defer cancel()
+	return stackrecords.ReleaseBootstrapPart(settle, store, tier, ContainersPart, claim)
+}
+
+const containersClaimReleaseTimeout = 30 * time.Second
 
 func (s containerInfra) front() awsports.ContainerFront {
 	return awsports.ContainerFront{VPCOrigin: s.VPCOrigin, Host: s.OriginHost}
