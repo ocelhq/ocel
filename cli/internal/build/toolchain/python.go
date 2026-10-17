@@ -13,11 +13,12 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/arch"
 )
 
 const (
-	pythonEntryFile        = "main.py"
+	pythonEntryFile        = language.PythonEntryFile
 	pythonRequirementsFile = "requirements.txt"
 	pythonRuntimeCommand   = "python3"
 	pythonBytecodeDir      = "__pycache__"

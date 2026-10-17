@@ -1,10 +1,12 @@
 ---
 title: init.ambiguous_language
-description: The directory holds the manifests of more than one language.
+description: The directory holds the manifests of more than one language, and none of them alone holds the app.
 ---
 
-`ocel init` picks the SDK to install from the manifests in the directory, such as `package.json` or `go.mod`. Finding the manifests of several languages, it cannot tell which one the project is.
+`ocel init` picks the SDK to install from the manifests in the directory, such as `package.json` or `go.mod`. When it finds the manifests of several languages, the one that holds [what its build serves](/docs/configuration#the-app-at-the-project-root) wins: a Next.js or SvelteKit app, a node entrypoint, a `main.py`, `package main` in the directory itself, or a crate building one binary. A `pyproject.toml` that holds only helper scripts holds no app, so a Next.js app beside it is a node project.
+
+This error means more than one language holds an app, or none does, or a manifest it needs to decide cannot be read, so `ocel init` cannot tell which one the project is. The message names what it found.
 
 ## Fix
 
-Name the language with `ocel init --lang <language>`. The message lists the ones it found.
+Name the language with `ocel init --lang <language>`.

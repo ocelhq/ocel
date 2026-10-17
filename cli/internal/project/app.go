@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -187,7 +188,7 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 			return newInvalidConfigError(err, "")
 		}
 		if isDir(dir) {
-			framework, _, err := language.DetectFramework(dir)
+			framework, _, err := language.DetectFramework(dir, "")
 			if err != nil {
 				return fmt.Errorf("app %q: %w", a.Name, err)
 			}
@@ -199,13 +200,13 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 	case compute.Serverless != nil:
 		app.Compute = provider.ComputeServerless
 		named := strings.TrimSpace(compute.Serverless.Framework)
-		framework, err := frameworkOf(a.Name, dir, named)
+		framework, err := frameworkOf(a.Name, dir, named, compute.Serverless.Entrypoint)
 		if err != nil {
 			return err
 		}
 		app.Serverless = &Serverless{Framework: framework, Entrypoint: compute.Serverless.Entrypoint}
 	default:
-		framework, err := frameworkOf(a.Name, dir, "")
+		framework, err := frameworkOf(a.Name, dir, "", "")
 		switch {
 		case err != nil:
 			app.undetected = err
@@ -217,10 +218,27 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 	return nil
 }
 
+type undetectedRootAppError struct {
+	cause interface {
+		error
+		Holdings() string
+	}
+}
+
+func (e *undetectedRootAppError) Error() string {
+	return "no app is detected at the project root, which holds " + e.cause.Holdings()
+}
+
+func (e *undetectedRootAppError) Unwrap() error { return e.cause }
+
 func rootApp(name, dir string) ([]App, error) {
-	framework, found, err := language.DetectFramework(dir)
-	if err != nil || !found || language.OfApp(framework, dir) != language.JS {
-		return nil, err
+	framework, err := language.DetectApp(dir)
+	var undetected interface {
+		error
+		Holdings() string
+	}
+	if errors.As(err, &undetected) {
+		return nil, &undetectedRootAppError{cause: undetected}
 	}
 	return []App{{
 		Name:       name,

@@ -30,7 +30,7 @@ export default defineConfig({
 | --- | --- | --- |
 | `slug` | Yes | The project's identity in your provider account. Every stack and resource is keyed on it, so changing it starts a new project. |
 | [`provider`](#provider) | | Where `ocel deploy` provisions, with its [edge](#edge) and [DNS](#dns). |
-| [`apps`](#apps) | | The apps to deploy. Left off, ocel detects one at the project root. |
+| [`apps`](#apps) | | The apps to deploy. Left off, the project root is the app when it holds [what a build serves](#the-app-at-the-project-root). |
 | `domains` | | `production`: the hostname or hostnames production serves. `preview`: the wildcard previews are served under, such as `*.preview.example.com`. See [Environments](/docs/environments). |
 | [`discovery`](#discoverypaths) | | Where resource declarations are found. |
 | [`bindings`](#bindings) | | Resources to bind to instead of provisioning. |
@@ -247,6 +247,28 @@ Each takes a `zone`. Left off, ocel picks the zone that covers the hostname.
 A provider that forwards no ports and serves no binding proxy builds without resources, and
 the deploy says so.
 
+### The app at the project root
+
+With no `apps`, the project root is the app, named after the `slug`, when it holds what that
+framework's build serves:
+
+| Framework | The project root holds |
+| --- | --- |
+| `next` | a `package.json` naming `next`, or a `next.config.js`, `.mjs` or `.ts` |
+| `sveltekit` | a `package.json` naming `@sveltejs/kit` |
+| `node` | a `package.json` and the first of `src/server.ts`, `src/server.js`, `src/index.ts`, `src/index.js`, `src/app.ts`, `src/app.js`, `index.ts`, `index.js`, `server.ts`, `server.js`, `app.ts`, `app.js` |
+| `python` | a `pyproject.toml` or `requirements.txt`, and a `main.py` |
+| `go` | a `go.mod`, and `package main` in the root directory itself, not under `cmd/`, built with cgo off |
+| `rust` | a `Cargo.toml` whose crate builds one binary: `src/main.rs` or a single `[[bin]]`, which in edition 2015 replaces `src/main.rs` |
+
+A `package.json` with none of these is tooling, such as the SDK of a project that declares only
+resources. A manifest that cannot be read holds no app. A `Cargo.toml` beside a `package.json` or
+`pyproject.toml` is that app's native extension, not a rust app.
+
+When the root holds the manifests of several languages, the one that holds an app is the app. When
+two languages hold an app, or none does, no app is detected, and `ocel deploy` and `ocel doctor`
+say what the root holds. Name the app under `apps` then.
+
 ### compute
 
 `serverless` packs functions per route that scale themselves. `container` runs one image
@@ -347,6 +369,10 @@ With no `framework`, ocel reads the app's directory, in this order:
 | `Cargo.toml` | `rust` |
 
 A `Cargo.toml` beside a node or python manifest is that app's native extension, not a rust app.
+When the directory holds the manifests of several languages and only one of them holds
+[what its build serves](#the-app-at-the-project-root), that one decides, whatever this order says.
+An `entrypoint` decides it the same way: a directory holding `package main` is go, and a
+JavaScript or TypeScript file is node.
 
 A rust app builds as a static musl binary for its `arch`, so install the target:
 

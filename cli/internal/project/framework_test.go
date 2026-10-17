@@ -112,9 +112,14 @@ func TestDetectFramework(t *testing.T) {
 			want:  "go",
 		},
 		{
-			name:  "a next manifest beside a go module is still the go app's tooling",
-			files: map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n"},
+			name:  "a next manifest beside a go main package is still the go app's tooling",
+			files: map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n", "main.go": "package main\n\nfunc main() {}\n"},
 			want:  "go",
+		},
+		{
+			name:  "a next manifest beside a go module with no main package is the app",
+			files: map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n"},
+			want:  "next",
 		},
 		{
 			name:  "a go module comes before a cargo manifest beside it",
@@ -132,7 +137,7 @@ func TestDetectFramework(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := detectFramework(appDir(t, tc.files))
+			got, err := detectFramework(appDir(t, tc.files), "")
 			if err != nil {
 				t.Fatalf("detectFramework = %v", err)
 			}
@@ -151,7 +156,7 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 
 		dir := appDir(t, map[string]string{"main.rb": "puts 1\n"})
 
-		_, err := detectFramework(dir)
+		_, err := detectFramework(dir, "")
 		if err == nil {
 			t.Fatal("detectFramework = nil error, want a refusal: nothing here says what the app is")
 		}
@@ -167,7 +172,7 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 
 		dir := appDir(t, map[string]string{"package.json": "{ not json"})
 
-		_, err := detectFramework(dir)
+		_, err := detectFramework(dir, "")
 		if err == nil {
 			t.Fatal("detectFramework = nil error, want a refusal: the manifest cannot be read")
 		}

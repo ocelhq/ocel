@@ -27,8 +27,10 @@ var manifests = []struct {
 	{"pyproject.toml", Python},
 	{"requirements.txt", Python},
 	{nodeManifest, JS},
-	{"Cargo.toml", Rust},
+	{rustManifest, Rust},
 }
+
+const rustManifest = "Cargo.toml"
 
 var extendedByRust = []Language{JS, Python}
 
@@ -52,6 +54,11 @@ const svelteKitDependency = "@sveltejs/kit"
 
 var nextConfigNames = []string{"next.config.js", "next.config.mjs", "next.config.ts"}
 
+var frameworkLabels = map[string]string{
+	buildoutput.FrameworkNext:      "a Next.js app",
+	buildoutput.FrameworkSvelteKit: "a SvelteKit app",
+}
+
 func ManifestNames() []string {
 	names := make([]string, 0, len(manifests))
 	for _, m := range manifests {
@@ -61,25 +68,27 @@ func ManifestNames() []string {
 }
 
 func Manifested(dir string) []Language {
-	var found []Language
+	found, _ := manifested(dir)
+	return found
+}
+
+func manifested(dir string) (found []Language, extension bool) {
 	for _, m := range manifests {
 		if slices.Contains(found, m.language) || !isRegularFile(filepath.Join(dir, m.name)) {
 			continue
 		}
 		if m.language == Rust && slices.ContainsFunc(found, func(l Language) bool { return slices.Contains(extendedByRust, l) }) {
+			extension = true
 			continue
 		}
 		found = append(found, m.language)
 	}
-	return found
+	return found, extension
 }
 
 func Of(dir string) (Language, bool) {
-	found := Manifested(dir)
-	if len(found) == 0 {
-		return "", false
-	}
-	return found[0], true
+	chosen, found := choose(dir, "")
+	return chosen.language, found
 }
 
 func ofFramework(framework string) (Language, bool) {
@@ -91,60 +100,51 @@ func ofFramework(framework string) (Language, bool) {
 	return "", false
 }
 
-func DetectFramework(dir string) (framework string, found bool, err error) {
-	written, ok := Of(dir)
-	if !ok {
-		return "", false, nil
-	}
-	if written == JS {
-		next, err := isNextApp(dir)
-		if err != nil {
-			return "", false, err
-		}
-		if next {
-			return buildoutput.FrameworkNext, true, nil
-		}
-		svelteKit, err := dependsOn(dir, svelteKitDependency)
-		if err != nil {
-			return "", false, err
-		}
-		if svelteKit {
-			return buildoutput.FrameworkSvelteKit, true, nil
-		}
-	}
+func frameworkOfLanguage(l Language) string {
 	for _, f := range frameworks {
-		if f.language == written {
-			return f.name, true, nil
+		if f.language == l {
+			return f.name
 		}
 	}
-	return "", false, nil
+	return ""
 }
 
-func isNextApp(dir string) (bool, error) {
-	for _, name := range nextConfigNames {
-		if isRegularFile(filepath.Join(dir, name)) {
-			return true, nil
-		}
+func DetectFramework(dir, entrypoint string) (string, bool, error) {
+	chosen, found := choose(dir, entrypoint)
+	if chosen.err != nil {
+		return "", false, chosen.err
 	}
-	return dependsOn(dir, nextDependency)
+	return chosen.framework, found, nil
 }
 
-func dependsOn(dir, dependency string) (bool, error) {
+func nodeFramework(dir string) (string, error) {
+	if slices.ContainsFunc(nextConfigNames, func(name string) bool { return isRegularFile(filepath.Join(dir, name)) }) {
+		return buildoutput.FrameworkNext, nil
+	}
 	path := filepath.Join(dir, nodeManifest)
 	body, err := os.ReadFile(path)
 	if err != nil {
-		return false, fmt.Errorf("read %s: %w", path, err)
+		return "", fmt.Errorf("read %s: %w", path, err)
 	}
 	var manifest struct {
 		Dependencies    map[string]string `json:"dependencies"`
 		DevDependencies map[string]string `json:"devDependencies"`
 	}
 	if err := json.Unmarshal(body, &manifest); err != nil {
-		return false, fmt.Errorf("%s is not JSON: %w", path, err)
+		return "", fmt.Errorf("%s is not JSON: %w", path, err)
 	}
-	_, runtime := manifest.Dependencies[dependency]
-	_, development := manifest.DevDependencies[dependency]
-	return runtime || development, nil
+	dependsOn := func(dependency string) bool {
+		_, runtime := manifest.Dependencies[dependency]
+		_, development := manifest.DevDependencies[dependency]
+		return runtime || development
+	}
+	switch {
+	case dependsOn(nextDependency):
+		return buildoutput.FrameworkNext, nil
+	case dependsOn(svelteKitDependency):
+		return buildoutput.FrameworkSvelteKit, nil
+	}
+	return buildoutput.FrameworkNode, nil
 }
 
 func OfApp(framework, dir string) Language {

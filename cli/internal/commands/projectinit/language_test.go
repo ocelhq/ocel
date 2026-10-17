@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -20,8 +22,12 @@ import (
 func manifestDir(t *testing.T, manifest string) string {
 	t.Helper()
 	dir := t.TempDir()
+	body := "{}\n"
+	if manifest == "Cargo.toml" {
+		body = "[package]\nname = \"acme\"\n"
+	}
 	if manifest != "" {
-		if err := os.WriteFile(filepath.Join(dir, manifest), []byte("{}\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, manifest), []byte(body), 0o644); err != nil {
 			t.Fatalf("write %s: %v", manifest, err)
 		}
 	}
@@ -311,6 +317,73 @@ func TestInitReadsACrateBesideAPackageJSONAsANodeProject(t *testing.T) {
 	}
 	if want := "npm install ocel"; strings.Join(*argv, " ") != want {
 		t.Fatalf("added the sdk with %v, want %q: the crate is the node app's native addon", *argv, want)
+	}
+}
+
+func TestInitReadsANextAppBesideAPyprojectWithNoMainPyAsANodeProject(t *testing.T) {
+	dir := manifestDir(t, "")
+	for name, body := range map[string]string{
+		"package.json":   `{"dependencies":{"next":"15"}}`,
+		"next.config.ts": "export default {}\n",
+		"pyproject.toml": "[project]\nname = \"helpers\"\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	dependencies := newTestDependencies()
+	argv := stubPackageManager(&dependencies, nil)
+
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
+		t.Fatalf("runInit: %v", err)
+	}
+	if want := "npm install ocel"; strings.Join(*argv, " ") != want {
+		t.Fatalf("added the sdk with %v, want %q: the pyproject.toml holds no app python serves", *argv, want)
+	}
+}
+
+func TestInitRefusesANextAppBesideAPythonApp(t *testing.T) {
+	dir := manifestDir(t, "")
+	for name, body := range map[string]string{
+		"package.json":   `{"dependencies":{"next":"15"}}`,
+		"pyproject.toml": "[project]\nname = \"api\"\n",
+		"main.py":        "app = None\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+
+	_, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"})
+	if err == nil {
+		t.Fatal("init picked a language between a next app and a python app")
+	}
+	for _, want := range []string{"a python app (main.py) and a Next.js app", "--lang python"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+func TestInitPointsAtLangWhereAManifestItNeedsCannotBeRead(t *testing.T) {
+	dir := manifestDir(t, "go.mod")
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte("{"), 0o644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+
+	_, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"})
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeInitAmbiguousLanguage || coded.Hint != "--lang" {
+		t.Fatalf("err = %v, want %s with the --lang hint", err, clierror.CodeInitAmbiguousLanguage)
+	}
+	for _, want := range []string{"is not JSON", "--lang"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not mention %q", err, want)
+		}
 	}
 }
 

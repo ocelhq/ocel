@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 )
@@ -28,39 +29,18 @@ const PreferTracingEnv = "OCEL_BUILD_PREFER_TRACING"
 
 const tracingHint = "set " + PreferTracingEnv + "=1 to build this app by tracing instead of bundling"
 
-var entrypointCandidates = []string{
-	"src/server.ts",
-	"src/server.js",
-	"src/index.ts",
-	"src/index.js",
-	"src/app.ts",
-	"src/app.js",
-	"index.ts",
-	"index.js",
-	"server.ts",
-	"server.js",
-	"app.ts",
-	"app.js",
-}
-
 func NodeEntrypoint(source, declared string) (string, error) {
 	if declared != "" {
-		path := filepath.FromSlash(declared)
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(source, path)
-		}
+		path := language.NodeEntrypointPath(source, declared)
 		if !regularFile(path) {
 			return "", fmt.Errorf("entrypoint %q not found in %s", declared, source)
 		}
 		return path, nil
 	}
-	for _, candidate := range entrypointCandidates {
-		path := filepath.Join(source, filepath.FromSlash(candidate))
-		if regularFile(path) {
-			return path, nil
-		}
+	if candidate, ok := language.NodeEntrypoint(source); ok {
+		return filepath.Join(source, filepath.FromSlash(candidate)), nil
 	}
-	return "", fmt.Errorf("no entrypoint found in %s; tried: %s", source, strings.Join(entrypointCandidates, ", "))
+	return "", fmt.Errorf("no entrypoint found in %s; tried: %s", source, strings.Join(language.NodeEntrypoints, ", "))
 }
 
 func regularFile(path string) bool {

@@ -89,6 +89,25 @@ func TestTheBuildIsHandedTheWorkersEachAppHosts(t *testing.T) {
 	}
 }
 
+func TestADeployOfResourcesAloneWarnsWhyNoAppIsDetectedAtTheProjectRoot(t *testing.T) {
+	root := t.TempDir()
+	dependencies := newTestDependencies()
+	dependencies.CollectDeclarations = func(context.Context, *project.Project, *variables.Declarations, io.Writer, io.Writer) ([]declaration.Resource, error) {
+		return []declaration.Resource{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Bucket: &resourcesv1.BucketConfig{}, Source: filepath.Join(root, discovery.DefaultRootDirName, "files.ts") + ":1"}}, nil
+	}
+	recordBuildApp(&dependencies)
+
+	reason := "no app is detected at the project root, which holds both a python app (main.py) and a Next.js app"
+	cfg := &project.Project{Dir: root, Slug: "shop", RootAppUndetected: errors.New(reason)}
+	s, out := newBuildSpan(t)
+	if _, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: cfg, declarations: emptyDeclarations(cfg), phase: s, span: s}); err != nil {
+		t.Fatalf("collectBuildAndAssemble: %v", err)
+	}
+	if !strings.Contains(out.String(), reason) {
+		t.Errorf("output = %q, want a warning saying %q", out.String(), reason)
+	}
+}
+
 func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")

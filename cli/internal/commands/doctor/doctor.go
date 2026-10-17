@@ -15,8 +15,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -147,11 +149,12 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 		return found
 	}
 
-	if needed, applies := nodeCheck(ctx, cfg); applies {
+	roots, rootsErr := discovery.RootsOf(cfg)
+	if needed, applies := nodeCheck(ctx, cfg, roots, rootsErr); applies {
 		checked.checks = append(checked.checks, needed)
 	}
 	checked.identity = join(cfg.Slug, filepath.Base(cfg.Path))
-	checked.pass(appsText(cfg))
+	checked.checks = append(checked.checks, appsCheck(cfg, roots, rootsErr))
 
 	descriptor, providerErr := cfg.RequireProvider()
 	if providerErr != nil {
@@ -272,15 +275,55 @@ func splitHint(message string) (string, string, bool) {
 	return message, "", false
 }
 
-func appsText(cfg *project.Project) string {
-	if len(cfg.Apps) == 0 {
-		return "config loads — no apps declared"
+func appsCheck(cfg *project.Project, roots []discovery.Root, rootsErr error) check {
+	if rootsErr != nil {
+		return check{verdict: verdictFail, text: "config loads — " + firstLine(rootsErr.Error())}
 	}
-	names := make([]string, 0, len(cfg.Apps))
-	for _, app := range cfg.Apps {
-		names = append(names, app.Name)
+	if len(cfg.Apps) > 0 {
+		names := make([]string, 0, len(cfg.Apps))
+		for _, app := range cfg.Apps {
+			names = append(names, app.Name)
+		}
+		return check{verdict: verdictPass, text: fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))}
 	}
-	return fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))
+	config := filepath.Base(cfg.Path)
+	undetected := "no app is detected at the project root"
+	if cfg.RootAppUndetected != nil {
+		undetected = cfg.RootAppUndetected.Error()
+	}
+	if len(roots) == 0 {
+		return check{
+			verdict: verdictWarn,
+			text:    "config loads — nothing to deploy: no apps or resources declared, and " + undetected,
+			fix:     `name each app under "apps" in ` + config + " with its name and path",
+		}
+	}
+	var ambiguity *language.AmbiguityError
+	if errors.As(cfg.RootAppUndetected, &ambiguity) {
+		return check{
+			verdict: verdictWarn,
+			text:    "config loads — no apps declared, and " + undetected,
+			fix:     `name the app to deploy under "apps" in ` + config + " with its name and path",
+		}
+	}
+	folders := make([]string, 0, len(roots))
+	for _, root := range roots {
+		folders = append(folders, rootName(cfg.Dir, root))
+	}
+	return check{verdict: verdictPass, text: "config loads — no apps declared, so a deploy carries only the resources declared in " + english.And(folders)}
+}
+
+func rootName(projectDir string, root discovery.Root) string {
+	folder, err := filepath.Rel(projectDir, root.Dir)
+	switch {
+	case err != nil:
+		return root.Dir
+	case folder != ".":
+		return filepath.ToSlash(folder)
+	case root.Language == language.Rust:
+		return "the root crate"
+	}
+	return "the project root"
 }
 
 func providerText(descriptor *project.Provider) string {

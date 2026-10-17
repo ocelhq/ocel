@@ -1388,8 +1388,18 @@ func nothingToDeployHeadline(t *testing.T, fields string) string {
 
 func TestAProjectWithoutAppsOrResourcesHasNothingToDeploy(t *testing.T) {
 	headline := nothingToDeployHeadline(t, "")
-	if want := "Nothing to deploy: test-app declares no apps or resources"; headline != want {
+	if want := `Nothing to deploy: test-app declares no apps or resources, and no app is detected at the project root, which holds none of go.mod, pyproject.toml, requirements.txt, package.json or Cargo.toml: name the app to deploy under "apps"`; headline != want {
 		t.Errorf("headline = %q, want %q", headline, want)
+	}
+}
+
+func TestNothingToDeploySaysWhyNoAppIsDetectedAtTheProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{Slug: "shop", RootAppUndetected: errors.New("no app is detected at the project root, which holds both a python app (main.py) and a Next.js app")}
+	want := `Nothing to deploy: shop declares no apps or resources, and no app is detected at the project root, which holds both a python app (main.py) and a Next.js app: name the app to deploy under "apps"`
+	if got := nothingToDeploy(cfg); got != want {
+		t.Errorf("nothingToDeploy = %q, want %q", got, want)
 	}
 }
 

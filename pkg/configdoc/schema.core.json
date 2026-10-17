@@ -22,7 +22,7 @@
       "type": "array"
     },
     "apps": {
-      "description": "The apps this project deploys. Left off, ocel detects one at the project root.",
+      "description": "The apps this project deploys. Left off, the project root is the app when it holds what a build serves: a next or @sveltejs/kit dependency, a node entrypoint such as src/server.ts, a main.py, package main in the root directory, or a crate building one binary. https://ocel.dev/docs/configuration#the-app-at-the-project-root lists each.",
       "items": {
         "additionalProperties": false,
         "properties": {
