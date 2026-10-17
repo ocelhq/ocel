@@ -122,7 +122,7 @@ func NewDispatch(ctx context.Context, store Store, records s3store.Records, call
 			Callbacks:      callbacks,
 			PostPolicies:   true,
 			Sessions:       name,
-			Granted:        []string{name},
+			Granted:        s3store.NewGrantsByOwnName(name),
 			MetadataPrefix: metadataHeader,
 			EtagHeader:     strings.ToLower(generationAnswer),
 		}))

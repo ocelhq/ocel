@@ -266,7 +266,7 @@ func newBuckets(manifest boxapi.Manifest, values *live.Values, socket, app strin
 		PostPolicies: true,
 		SweepUploads: manifest.Store.SweepUploads,
 		Sessions:     manifest.Store.Sessions,
-		Granted:      manifest.Store.Granted,
+		Granted:      s3store.NewGrantsByOwnName(manifest.Store.Granted...),
 	}
 	if manifest.Store.Volume != "" {
 		cfg.RefuseWrite = source.RefuseFullVolume(socket)

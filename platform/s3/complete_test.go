@@ -35,7 +35,7 @@ func TestAReplicaThatLosesTheRaceToSettleASessionDeletesNothing(t *testing.T) {
 			t.Errorf("the prompt replica's CompleteUpload: %v", err)
 		}
 	}}
-	late := New(Config{Objects: interleaved, Internal: presigner(), Callbacks: h.poster, Sessions: "store", Granted: []string{"store"}})
+	late := New(Config{Objects: interleaved, Internal: presigner(), Callbacks: h.poster, Sessions: "store", Granted: NewGrantsByOwnName("store")})
 	expiredAt := h.now.Add(3 * time.Hour)
 	late.now = func() time.Time { return expiredAt }
 

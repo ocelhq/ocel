@@ -45,7 +45,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 				Callbacks:    s3store.HTTPPoster{},
 				PostPolicies: true,
 				Sessions:     bucket.SessionsPrefix(ref, buildSessions),
-				Granted:      buildproxy.ListBucketNames(grant),
+				Granted:      s3store.NewGrantsByOwnName(buildproxy.ListBucketNames(grant)...),
 			})}})
 		}
 		proxy, err := bindingproxy.Serve(served, req.ReportFailure)

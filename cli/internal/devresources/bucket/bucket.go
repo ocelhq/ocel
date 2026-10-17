@@ -202,7 +202,7 @@ func serve(store s3store.Store, buckets map[string][]string) *s3store.Service {
 		SweepUploads: true,
 		PostPolicies: true,
 		Sessions:     s3store.SessionsBucket(),
-		Granted:      slices.Sorted(maps.Keys(buckets)),
+		Granted:      s3store.NewGrantsByOwnName(slices.Collect(maps.Keys(buckets))...),
 	})
 }
 

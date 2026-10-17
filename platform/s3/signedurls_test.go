@@ -19,7 +19,7 @@ func (finishedUploads) AbortMultipartUpload(context.Context, *s3.AbortMultipartU
 func TestAbortingAnUploadTheStoreNoLongerHasSucceeds(t *testing.T) {
 	t.Parallel()
 
-	service := New(Config{Objects: finishedUploads{newFakeStore()}, Granted: []string{"store"}})
+	service := New(Config{Objects: finishedUploads{newFakeStore()}, Granted: NewGrantsByOwnName("store")})
 	_, err := service.AbortMultipart(context.Background(), &bucketv1.AbortMultipartRequest{
 		Bucket: "store", Key: "a.bin", UploadId: "gone",
 	})

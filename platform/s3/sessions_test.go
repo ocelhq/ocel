@@ -15,13 +15,13 @@ func TestAnUploadSessionAnswersOnlyACallerGrantedItsBucket(t *testing.T) {
 	t.Parallel()
 	owner := newHarness(t, func(cfg *Config) {
 		cfg.Sessions = "shared/build"
-		cfg.Granted = []string{"mine"}
+		cfg.Granted = NewGrantsByOwnName("mine")
 	})
 	other := New(Config{
 		Objects:  owner.store,
 		Internal: presigner(),
 		Sessions: "shared/build",
-		Granted:  []string{"theirs"},
+		Granted:  NewGrantsByOwnName("theirs"),
 	})
 	ctx := context.Background()
 	opened, err := owner.svc.PresignUpload(ctx, &bucketv1.PresignUploadRequest{
@@ -156,7 +156,7 @@ func TestASessionOfABucketThisAppWasNotGrantedIsLeftForItsOwner(t *testing.T) {
 	t.Parallel()
 	owner := newHarness(t, func(cfg *Config) {
 		cfg.Sessions = "shared/build"
-		cfg.Granted = []string{"mine"}
+		cfg.Granted = NewGrantsByOwnName("mine")
 	})
 	sessionsInSequence(owner)
 	ctx := context.Background()
@@ -172,7 +172,7 @@ func TestASessionOfABucketThisAppWasNotGrantedIsLeftForItsOwner(t *testing.T) {
 		Internal: presigner(),
 		External: func(context.Context) (PresignAPI, string) { return externalPresigner(), "https://storage.example.com" },
 		Sessions: "shared/build",
-		Granted:  []string{"theirs"},
+		Granted:  NewGrantsByOwnName("theirs"),
 	})
 	other.now = func() time.Time { return owner.now.Add(5 * time.Hour) }
 	other.newID = func(string, time.Time) string { return "sess_theirs" }

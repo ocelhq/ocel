@@ -64,7 +64,7 @@ func sweeping(t *testing.T, store Store, bucket string, now func() time.Time) *S
 		Objects:      store.Client(),
 		Internal:     store.Presigner(),
 		SweepUploads: true,
-		Granted:      []string{bucket + "/app"},
+		Granted:      NewGrantsByOwnName(bucket + "/app"),
 	})
 	service.now = now
 	service.sweeping = func(run func()) { run() }
@@ -121,7 +121,7 @@ func TestABucketIsSweptAtMostOnceAnHourHoweverOftenItIsWrittenTo(t *testing.T) {
 	t.Parallel()
 
 	counted := &countingStore{fakeStore: newFakeStore()}
-	service := New(Config{Objects: counted, SweepUploads: true, Granted: []string{"counted/app"}})
+	service := New(Config{Objects: counted, SweepUploads: true, Granted: NewGrantsByOwnName("counted/app")})
 	clock := time.Now().UTC()
 	service.now = func() time.Time { return clock }
 	service.sweeping = func(run func()) { run() }
@@ -152,7 +152,7 @@ func TestAStoreThatExpiresItsOwnUploadsIsNeverSwept(t *testing.T) {
 	t.Parallel()
 
 	counted := &countingStore{fakeStore: newFakeStore()}
-	service := New(Config{Objects: counted, Granted: []string{"counted/app"}})
+	service := New(Config{Objects: counted, Granted: NewGrantsByOwnName("counted/app")})
 	service.sweeping = func(run func()) { run() }
 
 	if _, err := service.CreateMultipart(context.Background(), &bucketv1.CreateMultipartRequest{
@@ -169,7 +169,7 @@ func TestASweepTheStoreRefusesLeavesTheUploadItWasOpeningInPlace(t *testing.T) {
 	t.Parallel()
 
 	counted := &countingStore{fakeStore: newFakeStore(), refuses: true}
-	service := New(Config{Objects: counted, SweepUploads: true, Granted: []string{"counted/app"}})
+	service := New(Config{Objects: counted, SweepUploads: true, Granted: NewGrantsByOwnName("counted/app")})
 	service.sweeping = func(run func()) { run() }
 
 	resp, err := service.CreateMultipart(context.Background(), &bucketv1.CreateMultipartRequest{
@@ -213,7 +213,7 @@ func TestOneAbandonedUploadTheStoreRefusesToAbortLeavesTheSweepGoing(t *testing.
 	t.Parallel()
 
 	store := &abandonedUploads{fakeStore: newFakeStore(), refused: "app/first.bin"}
-	service := New(Config{Objects: store, SweepUploads: true, Granted: []string{"counted/app"}})
+	service := New(Config{Objects: store, SweepUploads: true, Granted: NewGrantsByOwnName("counted/app")})
 	service.sweepUploads(context.Background(), scopeOf("counted/app"))
 
 	if len(store.aborted) != 1 || store.aborted[0] != "app/second.bin" {
