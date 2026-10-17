@@ -144,6 +144,28 @@ func TestRustReachGrantsASharedCrateResourceToEveryAppThatLinksIt(t *testing.T) 
 	}
 }
 
+func TestRustReachGrantsAWorkspaceDependencyResourceWhenTheRegistryHoldsNoneOfTheLockedCrates(t *testing.T) {
+	needsCargo(t)
+	t.Setenv("CARGO_HOME", t.TempDir())
+	root, err := filepath.Abs(filepath.Join("testdata", "rust-cold-registry"))
+	if err != nil {
+		t.Fatalf("locate the fixture: %v", err)
+	}
+
+	app := App{Name: "web", Path: "app", Language: language.Rust}
+	usages, err := FindUsages(t.Context(), root, []App{app}, []Declaration{{
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "shared", "src", "lib.rs") + ":1",
+	}})
+	if err != nil {
+		t.Fatalf("FindUsages: %v", err)
+	}
+	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"app/src/main.rs"}) {
+		t.Errorf("usages = %+v, want main granted to web from entry app/src/main.rs", usages)
+	}
+}
+
 func TestRustReachReadsCargoMetadataWithoutReachingTheRegistry(t *testing.T) {
 	bin := t.TempDir()
 	recorded := filepath.Join(bin, "args")
