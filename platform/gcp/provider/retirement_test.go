@@ -63,7 +63,7 @@ func TestRetiringDeletesTheWorkerServicesOfEachAppNoLongerDeployed(t *testing.T)
 	recordWorkerRelease(t, p, "prod", "jobs", "r00000001", map[string]string{"mail": "ocel-shop-prod-w-mail"})
 	recordWorkerRelease(t, p, "prod", "jobs", "r00000002", map[string]string{"mail": "ocel-shop-prod-w-mail"})
 	recordWorkerRelease(t, p, "staging", "jobs", "r00000001", map[string]string{"mail": "ocel-shop-staging-w-mail"})
-	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []string{"web"}}
+	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.LiveApp{{App: "web", Workers: []string{"media"}}}}
 
 	plan, err := p.PlanRetirement(context.Background(), live, progress.Discard())
 	if err != nil {

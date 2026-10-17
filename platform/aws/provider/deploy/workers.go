@@ -297,7 +297,7 @@ func (r *Stacks) listRetiredWorkers(ctx context.Context, live provider.LiveApps)
 	}
 	var retired []provider.StackRef
 	for _, entry := range recorded {
-		if len(entry.Key.Path) != 3 || slices.Contains(live.Apps, entry.Key.Path[2]) {
+		if len(entry.Key.Path) != 3 || live.Has(entry.Key.Path[2]) {
 			continue
 		}
 		retired = append(retired, provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: workersStack(entry.Key.Path[1], entry.Key.Path[2])})

@@ -26,9 +26,13 @@ func retire(ctx context.Context, p provider.Provider, live provider.LiveApps, pr
 }
 
 func (r *deployRun) liveApps() provider.LiveApps {
-	apps := make([]string, 0, len(r.spec.Apps))
+	apps := make([]provider.LiveApp, 0, len(r.spec.Apps))
 	for _, entry := range r.spec.Apps {
-		apps = append(apps, entry.App)
+		var workers []string
+		for _, worker := range entry.Workers {
+			workers = append(workers, worker.Name)
+		}
+		apps = append(apps, provider.LiveApp{App: entry.App, Compute: entry.Compute(), Workers: workers})
 	}
 	return provider.LiveApps{Slug: r.spec.Slug, Tier: r.spec.Tier, Env: r.spec.Env, Apps: apps}
 }

@@ -30,7 +30,7 @@ func TestRetiringTakesDownTheWorkersOfAnAppNoLongerDeployed(t *testing.T) {
 	if hooks == nil {
 		t.Fatal("the box's hooks leave Retirement nil, so an app removed from config keeps its workers consuming its topics")
 	}
-	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []string{"admin"}}
+	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.LiveApp{{App: "admin"}}}
 
 	plan, err := hooks.Plan(context.Background(), live, progress.Discard())
 	if err != nil {
@@ -67,7 +67,7 @@ func TestRetiringKeepsTheWorkersOfALiveApp(t *testing.T) {
 	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []string{"web"}}
+	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.LiveApp{{App: "web", Workers: []string{"worker", "ledger"}}}}
 
 	plan, err := p.Hooks().Retirement.Plan(context.Background(), live, progress.Discard())
 	if err != nil {
