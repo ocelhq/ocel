@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider/spelling"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -44,8 +45,8 @@ func (c *clients) listRunRegions(ctx context.Context) ([]string, error) {
 		if token != "" {
 			call = call.PageToken(token)
 		}
-		page, err := attempted(ctx, call.Do)
-		if answeredCode(err) == http.StatusForbidden {
+		page, err := googleretry.Attempted(ctx, call.Do)
+		if googleretry.AnsweredCode(err) == http.StatusForbidden {
 			return nil, refusal.Refuse(refusal.CodeDenied,
 				"this credential may not list the regions Cloud Run serves project %s from, which every run checks its region against: it lacks %s.\n"+
 					"Granting %s covers it, but the permission is what is checked",
