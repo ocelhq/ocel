@@ -249,76 +249,84 @@ func servingCommand(name string) string {
 		quoted(name) + " 2>/dev/null || true"
 }
 
-func (h *Host) RunContainer(ctx context.Context, spec Container) (created bool, err error) {
+type Run uint8
+
+const (
+	RunKept Run = iota
+	RunCreated
+	RunRestarted
+)
+
+func (h *Host) RunContainer(ctx context.Context, spec Container) (ran Run, err error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
-		return false, err
+		return RunKept, err
 	}
 	if err := h.join(ctx, spec, elevation); err != nil {
-		return false, err
+		return RunKept, err
 	}
 	said := h.said(ctx, servingCommand(spec.Name), elevation)
 	if spec.Resolved {
 		env, err := handing(spec)
 		if err != nil {
-			return false, err
+			return RunKept, err
 		}
 		if stillServing(said, spec.Image, env.digest) {
-			return false, nil
+			return RunKept, nil
 		}
 	} else {
 		if runningImage(said, spec.Image) {
-			return false, nil
+			return RunKept, nil
 		}
 		if startableImage(said, spec.Image) {
 			_, err := h.ran(ctx, "start "+spec.App+" back up as "+spec.Name,
 				restartCommand(said, spec.Name), nil, elevation)
-			return false, err
+			return RunRestarted, err
 		}
 		note, known, err := h.handed(ctx, spec)
 		if err != nil {
-			return false, err
+			return RunKept, err
 		}
 		switch {
 		case known && len(note.Handed) > 0:
-			return false, refusal.Refuse(refusal.CodeNotReady,
+			return RunKept, refusal.Refuse(refusal.CodeNotReady,
 				"%s is gone from this box and was handed %s, which a promotion cannot pass on\nRun `ocel deploy`",
 				spec.Name, strings.Join(note.Handed, ", "))
 		case known:
 			spec.Manifest = note.Live
 		case len(spec.Declared) > 0:
-			return false, refusal.Refuse(refusal.CodeNotReady,
+			return RunKept, refusal.Refuse(refusal.CodeNotReady,
 				"%s is gone from this box, %s declares %s, and no note of its values remains\nRun `ocel deploy`",
 				spec.Name, spec.App, strings.Join(spec.Declared, ", "))
 		default:
-			return false, refusal.Refuse(refusal.CodeNotReady,
+			return RunKept, refusal.Refuse(refusal.CodeNotReady,
 				"%s is gone from this box and no note of its values remains\nRun `ocel deploy`",
 				spec.Name)
 		}
 	}
 	env, err := handing(spec)
 	if err != nil {
-		return false, err
+		return RunKept, err
 	}
 	if _, err := h.ran(ctx, "clear the name "+spec.Name,
 		"docker rm --force "+quoted(spec.Name)+" >/dev/null 2>&1 || true", nil, elevation); err != nil {
-		return true, err
+		return RunCreated, err
 	}
 	if err := h.sweep(ctx, elevation); err != nil {
-		return true, err
+		return RunCreated, err
 	}
 	defer func() { err = errors.Join(err, h.forget(ctx, env)) }()
 	if err := h.hand(ctx, env, spec); err != nil {
-		return true, err
+		return RunCreated, err
 	}
 	if spec.Resolved {
 		if err := h.note(ctx, spec); err != nil {
-			return true, err
+			return RunCreated, err
 		}
 	}
 	_, err = h.ran(ctx, "run "+spec.App+" as "+spec.Name,
 		runContainerScript(spec, env), nil, elevation)
-	return true, err
+	return RunCreated, err
 }
 
 func (h *Host) TakeDown(ctx context.Context, tier environment.Tier, name string) error {

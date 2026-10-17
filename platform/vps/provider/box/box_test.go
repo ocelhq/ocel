@@ -40,6 +40,7 @@ type machine struct {
 	upstream    map[host.RouteKey]string
 	swept       map[string]bool
 	present     map[string]bool
+	runs        map[string]host.Run
 	calls       []string
 	rollouts    []host.Rollout
 	started     []host.Container
@@ -49,6 +50,7 @@ type machine struct {
 	visited     []string
 	rollingOut  func(host.Rollout) error
 	discarded   []string
+	discards    []host.Rollout
 	leftRunning string
 	byHand      int
 	tables      int
@@ -70,6 +72,7 @@ func aMachine() *machine {
 		upstream: map[host.RouteKey]string{},
 		swept:    map[string]bool{},
 		present:  map[string]bool{},
+		runs:     map[string]host.Run{},
 		refusals: map[string]error{},
 
 		recordedGates: map[string]gate.Gate{},
@@ -108,15 +111,18 @@ func (m *machine) HasImage(_ context.Context, coordinate string) (bool, error) {
 	return !m.swept[coordinate], nil
 }
 
-func (m *machine) RunContainer(_ context.Context, spec host.Container) (bool, error) {
+func (m *machine) RunContainer(_ context.Context, spec host.Container) (host.Run, error) {
 	m.calls = append(m.calls, "run "+spec.Name)
 	m.started = append(m.started, spec)
-	created := !m.present[spec.Name]
+	ran, told := m.runs[spec.Name]
+	if !told && !m.present[spec.Name] {
+		ran = host.RunCreated
+	}
 	if err := errors.Join(m.refuse("RunContainer"), m.refuse("RunContainer "+spec.Name)); err != nil {
-		return created, err
+		return ran, err
 	}
 	m.present[spec.Name] = true
-	return created, nil
+	return ran, nil
 }
 
 func (m *machine) ForgetNetwork(_ context.Context, tier environment.Tier, project string) error {
@@ -181,6 +187,7 @@ func (m *machine) Discard(_ context.Context, rollout host.Rollout) string {
 	}
 	m.calls = append(m.calls, "discard "+strings.Join(targets, ", "))
 	m.discarded = append(m.discarded, targets...)
+	m.discards = append(m.discards, rollout)
 	return m.leftRunning
 }
 
@@ -748,6 +755,62 @@ func TestARollbackRefusedBeforeItsRollOutKeepsTheContainersItRollsBackTo(t *test
 				t.Errorf("after %s the box discarded %v: the rollback created neither, and a retired container removed is a release that can never be rolled back to", what, m.discarded)
 			}
 		})
+	}
+}
+
+func TestARollbackRefusedBeforeItsRollOutStopsTheContainersItStartedAgain(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	for _, app := range []string{"api", "web"} {
+		staged(t, stack, app, "b1", "shop-"+app+"-1111")
+		staged(t, stack, app, "b2", "shop-"+app+"-2222")
+	}
+	for _, promotion := range []router.Promotion{
+		{PromotionID: "p1", Ts: 1, Releases: map[string]string{"api": "b1", "web": "b1"}},
+		{PromotionID: "p2", Ts: 2, Releases: map[string]string{"api": "b2", "web": "b2"}},
+	} {
+		if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress.Discard()); err != nil {
+			t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
+		}
+	}
+	m.runs["shop-api-1111"] = host.RunRestarted
+	m.refuseOn("RunContainer shop-web-1111", refusal.Refuse(refusal.CodeNotReady, "docker start failed"))
+
+	err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
+		PromotionID: "p3", Ts: 3, Releases: map[string]string{"api": "b1", "web": "b1"},
+	}}, progress.Discard())
+	if err == nil {
+		t.Fatal("a rollback whose second container would not start again succeeded")
+	}
+	if len(m.discards) != 1 || len(m.discards[0].Apps) != 1 ||
+		m.discards[0].Apps[0].Target != "shop-api-1111:"+containerimage.PortText || m.discards[0].Apps[0].Run != host.RunRestarted {
+		t.Errorf("the refused rollback discarded %+v, want only shop-api-1111, as a container it started again: the box found it stopped, so it stops it again and keeps the values a later rollback needs", m.discards)
+	}
+}
+
+func TestARollbackTellsItsRollOutWhichContainersItStartedAgain(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	for _, promotion := range []router.Promotion{
+		{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": "b1"}},
+		{PromotionID: "p2", Ts: 2, Releases: map[string]string{"web": "b2"}},
+	} {
+		if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress.Discard()); err != nil {
+			t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
+		}
+	}
+	m.runs["shop-web-1111"] = host.RunRestarted
+
+	if err := promoted(t, stack, "p3", "web", "b1"); err != nil {
+		t.Fatalf("Promote(rollback): %v", err)
+	}
+	last := m.rollouts[len(m.rollouts)-1]
+	if len(last.Apps) != 1 || last.Apps[0].Run != host.RunRestarted {
+		t.Errorf("the rollback handed its roll-out %+v, which does not say shop-web-1111 was started again: a roll-out refused at its gate then removes the container a rollback exists to keep", last.Apps)
 	}
 }
 

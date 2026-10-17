@@ -41,6 +41,7 @@ type AppRollout struct {
 	Target               string
 	HealthPath           string
 	HealthPathDiscovered bool
+	Run                  Run
 }
 
 func (a AppRollout) path() string { return "/" + strings.TrimPrefix(a.HealthPath, "/") }
@@ -838,6 +839,14 @@ func (h *Host) discard(ctx context.Context, rollout Rollout, elevation string) s
 	var left strings.Builder
 	for _, app := range rollout.Apps {
 		if !slices.Contains(idle, app.Target) {
+			continue
+		}
+		if app.Run == RunRestarted {
+			if err := h.StopContainer(ctx, app.name()); err != nil {
+				fmt.Fprintf(&left, "\n%s left running: %v", app.name(), err)
+				continue
+			}
+			fmt.Fprintf(&left, "\n%s stopped", app.name())
 			continue
 		}
 		if err := h.RemoveContainer(ctx, app.name()); err != nil {
