@@ -222,7 +222,7 @@ func pruneLines(result router.PruneResult) []string {
 	kept := len(result.KeptPromotionIDs)
 	switch {
 	case len(result.RemovedPromotionIDs) > 0:
-		reclaimed := "Reclaimed " + namedList("promotion", "promotions", result.RemovedPromotionIDs)
+		reclaimed := reclaimedPromotionsLine(result.RemovedPromotionIDs)
 		if kept == 0 {
 			return []string{reclaimed}
 		}
@@ -232,6 +232,10 @@ func pruneLines(result router.PruneResult) []string {
 	default:
 		return []string{fmt.Sprintf("Nothing to prune: all %d promotions are kept", kept)}
 	}
+}
+
+func reclaimedPromotionsLine(ids []string) string {
+	return "Reclaimed " + namedList("promotion", "promotions", ids)
 }
 
 func promotionHistoryProto(history []router.HistoryEntry) []*contractv1.PromotionHistoryEntry {
