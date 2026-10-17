@@ -1008,12 +1008,7 @@ func (r *deployRun) usage(resources []provider.Resource, published []provider.Bi
 		if err != nil {
 			return nil, err
 		}
-		usage := provider.AppUsage{App: entry.App}
-		for _, resource := range resources {
-			if used[boundName(resource)] {
-				usage.Resources = append(usage.Resources, resource)
-			}
-		}
+		usage := provider.AppUsage{App: entry.App, Resources: usedResources(used, resources)}
 		for _, binding := range published {
 			if used[binding.Name] {
 				usage.Grants = append(usage.Grants, binding)
@@ -1022,6 +1017,16 @@ func (r *deployRun) usage(resources []provider.Resource, published []provider.Bi
 		apps = append(apps, usage)
 	}
 	return apps, nil
+}
+
+func usedResources(used map[string]bool, resources []provider.Resource) []provider.Resource {
+	var out []provider.Resource
+	for _, resource := range resources {
+		if used[boundName(resource)] {
+			out = append(out, resource)
+		}
+	}
+	return out
 }
 
 func boundName(resource provider.Resource) string {
@@ -1348,8 +1353,12 @@ func (r *deployRun) boundNamesUsedBy(app string) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
+	return boundNamesUsedBy(r.manifest, resources, app), nil
+}
+
+func boundNamesUsedBy(manifest *contractv1.Manifest, resources []provider.Resource, app string) map[string]bool {
 	edges := map[string]bool{}
-	for _, usage := range r.manifest.GetUsages() {
+	for _, usage := range manifest.GetUsages() {
 		if usage.GetApp() == app {
 			edges[usage.GetResource()] = true
 		}
@@ -1360,7 +1369,7 @@ func (r *deployRun) boundNamesUsedBy(app string) (map[string]bool, error) {
 			names[boundName(resource)] = true
 		}
 	}
-	return names, nil
+	return names
 }
 
 func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]provider.Binding, error) {

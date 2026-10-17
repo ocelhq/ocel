@@ -13,6 +13,7 @@ type ShapeRequest struct {
 	Parts      []string
 	Resources  []Resource
 	Functions  map[string][]FunctionSpec
+	Usages     []AppUsage
 	Transforms []string
 }
 

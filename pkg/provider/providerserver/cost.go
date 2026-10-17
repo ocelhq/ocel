@@ -32,9 +32,13 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	resources, err := listProvisionedResources(spec, req.GetManifest())
+	declared, err := manifestResources(req.GetManifest())
 	if err != nil {
 		return nil, provider.RefusalError(err)
+	}
+	resources := declared
+	if isEphemeralPreview(spec) {
+		resources = nil
 	}
 	parts := bootstrapplan.RequiredParts(readiness.Bootstrap.Parts(), readiness.Edge)
 	set, err := cost.Shape(ctx, provider.ShapeRequest{
@@ -43,6 +47,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 		Parts:      parts,
 		Resources:  resources,
 		Functions:  shapedFunctions(req.GetManifest()),
+		Usages:     shapedUsages(spec, req.GetManifest(), declared),
 		Transforms: h.session.transforms(),
 	})
 	if err != nil {
@@ -50,13 +55,6 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	}
 	set.Source = provider.CostSource
 	return set, nil
-}
-
-func listProvisionedResources(spec provider.DeploySpec, manifest *contractv1.Manifest) ([]provider.Resource, error) {
-	if isEphemeralPreview(spec) {
-		return nil, nil
-	}
-	return manifestResources(manifest)
 }
 
 const (
@@ -87,6 +85,15 @@ func shapedFunctions(manifest *contractv1.Manifest) map[string][]provider.Functi
 		}
 	}
 	return specs
+}
+
+func shapedUsages(spec provider.DeploySpec, manifest *contractv1.Manifest, resources []provider.Resource) []provider.AppUsage {
+	usages := make([]provider.AppUsage, 0, len(spec.Apps))
+	for _, entry := range spec.Apps {
+		used := boundNamesUsedBy(manifest, resources, entry.App)
+		usages = append(usages, provider.AppUsage{App: entry.App, Resources: usedResources(used, resources)})
+	}
+	return usages
 }
 
 func (h *handlers) Price(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
