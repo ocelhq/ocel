@@ -194,7 +194,7 @@ describe("authenticated endpoints", () => {
     expect(await res.json()).toEqual(["admin", "web"]);
   });
 
-  it("reads and updates the root-stack version stamp", async () => {
+  it("reads and updates the edge stack's version stamp", async () => {
     await initialize();
     const initial = await SELF.fetch(authedReq("/version-stamp"));
     expect(await initial.json()).toEqual({ version: null });
