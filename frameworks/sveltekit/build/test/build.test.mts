@@ -1,9 +1,11 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildProcess } from "@framework/node-build/script";
+import { type BuildLog, buildProcess } from "@framework/node-build/script";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildSvelteKit, type SvelteKitBuild } from "../src/build.mjs";
+
+const quiet: BuildLog = { print: () => {} };
 
 const realSpawn = buildProcess.spawn;
 afterEach(() => {
@@ -27,7 +29,7 @@ describe("buildSvelteKit", () => {
       writeFileSync(join(built.outputDir, "hosting.json"), '{"version":1,"framework":"sveltekit"}');
     };
 
-    await buildSvelteKit(built);
+    await buildSvelteKit(built, quiet);
 
     expect(env).toMatchObject({
       NODE_ENV: "production",
@@ -40,7 +42,9 @@ describe("buildSvelteKit", () => {
   it("names the adapter to add when the build wrote no hosting", async () => {
     buildProcess.spawn = async () => {};
 
-    await expect(buildSvelteKit(app())).rejects.toThrow(/sveltekit\(\{ adapter: ocel\(\) \}\)/);
+    await expect(buildSvelteKit(app(), quiet)).rejects.toThrow(
+      /sveltekit\(\{ adapter: ocel\(\) \}\)/,
+    );
   });
 
   it("refuses hosting another adapter wrote", async () => {
@@ -48,7 +52,7 @@ describe("buildSvelteKit", () => {
     buildProcess.spawn = async () =>
       writeFileSync(join(built.outputDir, "hosting.json"), '{"framework":"node"}');
 
-    await expect(buildSvelteKit(built)).rejects.toThrow(/names framework "node"/);
+    await expect(buildSvelteKit(built, quiet)).rejects.toThrow(/names framework "node"/);
   });
 
   it("refuses hosting of a version this CLI does not read, naming the adapter release", async () => {
@@ -56,6 +60,6 @@ describe("buildSvelteKit", () => {
     buildProcess.spawn = async () =>
       writeFileSync(join(built.outputDir, "hosting.json"), '{"version":2,"framework":"sveltekit"}');
 
-    await expect(buildSvelteKit(built)).rejects.toThrow(/version 2.*@ocel\/sveltekit/);
+    await expect(buildSvelteKit(built, quiet)).rejects.toThrow(/version 2.*@ocel\/sveltekit/);
   });
 });

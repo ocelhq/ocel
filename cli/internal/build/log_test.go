@@ -88,16 +88,15 @@ const req = JSON.parse(require("fs").readFileSync(0, "utf8"));
 	}
 }
 
-func TestEachJavaScriptAppsBuildOutputReachesTheSpanOpenedForThatApp(t *testing.T) {
+func TestEachJavaScriptAppsBuildOutputReachesTheSpanOpenedForThatAppWhileTheBuildsOverlap(t *testing.T) {
 	t.Parallel()
 	cfg := nodeBuilder(t, `
 console.log("before any app");
-for (const app of req.apps) {
-  emit({type: "span_start", id: app.name, stage: "build", app: app.name});
-  console.log("compiling " + app.name);
-  console.error("a warning while building " + app.name);
-  emit({type: "span_end", id: app.name, ok: true});
-}
+for (const app of req.apps) emit({type: "span_start", id: app.name, stage: "build", app: app.name});
+for (const app of req.apps) emit({type: "output", app: app.name, message: "compiling " + app.name});
+console.log("said by no app");
+for (const app of req.apps) emit({type: "output", app: app.name, message: "a warning while building " + app.name});
+for (const app of req.apps) emit({type: "span_end", id: app.name, ok: true});
 `)
 
 	var spans appSpans
@@ -110,14 +109,14 @@ for (const app of req.apps) {
 	}
 	for _, app := range []string{"web", "api"} {
 		want := "compiling " + app + "\na warning while building " + app + "\n"
-		if got := strings.TrimLeft(spans.log(app), "\n"); !strings.HasPrefix(got, want) {
-			t.Errorf("%s's log = %q, want its own stdout and stderr lines %q", app, spans.log(app), want)
+		if got := spans.log(app); got != want {
+			t.Errorf("%s's log = %q, want only its own lines %q", app, got, want)
 		}
 		if err, ok := spans.ended[app]; !ok || err != nil {
 			t.Errorf("%s ended = %v (ended %t), want it ended without error", app, err, ok)
 		}
 	}
-	if got := spans.shared.String(); !strings.Contains(got, "before any app") || strings.Contains(got, "compiling") {
+	if got := spans.shared.String(); !strings.Contains(got, "before any app") || !strings.Contains(got, "said by no app") || strings.Contains(got, "compiling") {
 		t.Errorf("shared output = %q, want only what no app's build said", got)
 	}
 }

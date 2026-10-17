@@ -1,9 +1,12 @@
+import { availableParallelism } from "node:os";
 import path from "node:path";
 import { buildNext } from "@framework/next-build";
 import { traceFunction } from "@framework/node-build/trace";
 import { buildSvelteKit } from "@framework/sveltekit-build";
 import { type AppBuild, buildApps } from "./apps.js";
 import { reportFailure } from "./protocol.js";
+
+const MAX_CONCURRENT_BUILDS = 4;
 
 interface BuildRequest {
   apps: AppBuild[];
@@ -23,11 +26,15 @@ async function main(): Promise<void> {
     "next-adapter.mjs",
   );
   const req = await readRequest();
-  await buildApps(req.apps, {
-    next: (app) => buildNext(app, adapterPath),
-    sveltekit: buildSvelteKit,
-    node: traceFunction,
-  });
+  await buildApps(
+    req.apps,
+    {
+      next: (app, log) => buildNext(app, adapterPath, log),
+      sveltekit: buildSvelteKit,
+      node: traceFunction,
+    },
+    Math.min(MAX_CONCURRENT_BUILDS, Math.floor(availableParallelism() / 2)),
+  );
 }
 
 main().catch((err) => {

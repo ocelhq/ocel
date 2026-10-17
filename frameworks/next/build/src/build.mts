@@ -2,7 +2,12 @@ import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import path from "node:path";
 import { Refusal } from "@framework/node-build/refusal";
-import { type OutputBuild, prependScriptBins, runAdapterBuild } from "@framework/node-build/script";
+import {
+  type BuildLog,
+  type OutputBuild,
+  prependScriptBins,
+  runAdapterBuild,
+} from "@framework/node-build/script";
 
 export interface NextBuild extends OutputBuild {
   buildId: string;
@@ -15,7 +20,7 @@ export interface NextBuild extends OutputBuild {
 const ADAPTER_PATH_ENV = "NEXT_ADAPTER_PATH";
 const DEPLOYMENT_ID_ENV = "NEXT_DEPLOYMENT_ID";
 
-export async function buildNext(app: NextBuild, adapterPath: string): Promise<void> {
+export async function buildNext(app: NextBuild, adapterPath: string, log: BuildLog): Promise<void> {
   await runAdapterBuild(
     app,
     {
@@ -33,8 +38,9 @@ export async function buildNext(app: NextBuild, adapterPath: string): Promise<vo
       [ADAPTER_PATH_ENV]: adapterPath,
       [DEPLOYMENT_ID_ENV]: app.buildId,
     },
+    log,
   );
-  process.stderr.write(`ocel: Next app "${app.name}" built\n`);
+  log.print(`ocel: Next app "${app.name}" built`);
 }
 
 async function refuseOwnAdapter(

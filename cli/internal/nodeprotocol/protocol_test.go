@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -198,7 +199,7 @@ func (r *failingReader) Read(b []byte) (int, error) {
 
 func TestABuildStillOpenWhenTheBuildersOutputCannotBeReadEndsWithTheReadError(t *testing.T) {
 	var ended error
-	p := &Processor{AppBuild: func(string) func(error) { return func(err error) { ended = err } }}
+	p := &Processor{AppBuild: func(string) (io.Writer, func(error)) { return io.Discard, func(err error) { ended = err } }}
 	unread := errors.New("the pipe broke")
 
 	p.Scan(context.Background(), &failingReader{
@@ -215,7 +216,7 @@ func TestABuildStillOpenWhenTheBuildersOutputCannotBeReadEndsWithTheReadError(t 
 
 func TestABuildStillOpenWhenTheRunIsCancelledEndsSayingItWasCancelled(t *testing.T) {
 	var ended error
-	p := &Processor{AppBuild: func(string) func(error) { return func(err error) { ended = err } }}
+	p := &Processor{AppBuild: func(string) (io.Writer, func(error)) { return io.Discard, func(err error) { ended = err } }}
 	send(p, record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -227,11 +228,82 @@ func TestABuildStillOpenWhenTheRunIsCancelledEndsSayingItWasCancelled(t *testing
 }
 
 func TestAbortReportsNothingWhenNoBuildIsOpen(t *testing.T) {
-	p := &Processor{AppBuild: func(string) func(error) { return func(error) {} }}
+	p := &Processor{AppBuild: func(string) (io.Writer, func(error)) { return io.Discard, func(error) {} }}
 	send(p, record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
 	send(p, record{Type: typeSpanEnd, ID: "1", OK: new(true)})
 	if err := p.Abort(context.Background()); err != nil {
 		t.Errorf("Abort() = %v, want nil: every build ended", err)
+	}
+}
+
+type appBuilds struct {
+	logs  map[string]*strings.Builder
+	ended map[string]error
+}
+
+func (b *appBuilds) open(app string) (io.Writer, func(error)) {
+	if b.logs == nil {
+		b.logs, b.ended = map[string]*strings.Builder{}, map[string]error{}
+	}
+	log := &strings.Builder{}
+	b.logs[app] = log
+	return log, func(err error) { b.ended[app] = err }
+}
+
+func TestEachOutputLineReachesTheBuildOfTheAppItNamesWhileBuildsOverlap(t *testing.T) {
+	var builds appBuilds
+	var shared strings.Builder
+	p := &Processor{Forward: &shared, AppBuild: builds.open}
+	rec := func(r string) string { return Prefix + r + "\n" }
+
+	p.Scan(context.Background(), strings.NewReader(
+		rec(`{"type":"span_start","id":"1","stage":"build","app":"web"}`)+
+			rec(`{"type":"span_start","id":"2","stage":"build","app":"api"}`)+
+			rec(`{"type":"output","app":"web","message":"compiling web"}`)+
+			rec(`{"type":"output","app":"api","message":"compiling api"}`)+
+			"said by no app\n"+
+			rec(`{"type":"output","app":"web","message":"web compiled"}`)+
+			rec(`{"type":"span_end","id":"2","ok":true}`)+
+			rec(`{"type":"span_end","id":"1","ok":true}`),
+	))
+
+	if got, want := builds.logs["web"].String(), "compiling web\nweb compiled\n"; got != want {
+		t.Errorf("web's log = %q, want %q", got, want)
+	}
+	if got, want := builds.logs["api"].String(), "compiling api\n"; got != want {
+		t.Errorf("api's log = %q, want %q", got, want)
+	}
+	if got, want := shared.String(), "said by no app\n"; got != want {
+		t.Errorf("shared output = %q, want %q", got, want)
+	}
+}
+
+func TestAnOutputLineForAnAppWithNoOpenBuildIsSharedOutput(t *testing.T) {
+	var builds appBuilds
+	var shared strings.Builder
+	p := &Processor{Forward: &shared, AppBuild: builds.open}
+
+	p.Scan(context.Background(), strings.NewReader(Prefix+`{"type":"output","app":"web","message":"late line"}`+"\n"))
+
+	if got, want := shared.String(), "late line\n"; got != want {
+		t.Errorf("shared output = %q, want %q", got, want)
+	}
+}
+
+func TestAFailedBuildEndsWithItsOwnAppsErrorNotAnotherAppsReportedSinceItStarted(t *testing.T) {
+	var builds appBuilds
+	p := &Processor{AppBuild: builds.open}
+	send(p, record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
+	send(p, record{Type: typeSpanStart, ID: "2", App: "api", Stage: "build"})
+	send(p, record{Type: typeError, App: "api", Stage: "build", Message: "Error: no entrypoint resolved\n    at trace"})
+	send(p, record{Type: typeSpanEnd, ID: "1", OK: new(false)})
+	send(p, record{Type: typeSpanEnd, ID: "2", OK: new(false)})
+
+	if err := builds.ended["web"]; !errors.Is(err, errBuildFailed) {
+		t.Errorf("web ended with %v, want %v: the error the builder reported was api's", err, errBuildFailed)
+	}
+	if err := builds.ended["api"]; err == nil || err.Error() != "Error: no entrypoint resolved" {
+		t.Errorf("api ended with %v, want the first line of its own error", err)
 	}
 }
 

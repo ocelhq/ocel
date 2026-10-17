@@ -5,7 +5,7 @@ export const PROTOCOL_PREFIX = "@@OCEL_V1@@";
 type Level = "debug" | "info" | "warn" | "error";
 
 interface ProtocolRecord {
-  type: "log" | "span_start" | "span_end" | "error";
+  type: "log" | "output" | "span_start" | "span_end" | "error";
   app?: string;
   stage?: string;
   level?: Level;
@@ -20,6 +20,10 @@ function emit(record: ProtocolRecord): void {
 
 export function log(level: Level, message: string, app?: string, stage?: string): void {
   emit({ type: "log", level, message, app, stage });
+}
+
+export function printOutput(app: string, line: string): void {
+  emit({ type: "output", app, message: line });
 }
 
 export function reportError(message: string, app?: string, stage?: string): void {

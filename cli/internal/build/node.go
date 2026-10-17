@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"unicode"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
@@ -54,48 +53,11 @@ func failureSummary(output string) string {
 	return strings.Join(lines, "\n")
 }
 
-type appRouting struct {
-	log Log
-
-	mu      sync.Mutex
-	current *appLog
-}
-
-type appLog struct {
-	w io.Writer
-}
-
-func (r *appRouting) Write(p []byte) (int, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.current == nil {
-		return r.log.shared().Write(p)
-	}
-	return r.current.w.Write(p)
-}
-
-func (r *appRouting) begin(app string) func(error) {
-	w, ended := r.log.App(app)
-	log := &appLog{w: w}
-	r.mu.Lock()
-	r.current = log
-	r.mu.Unlock()
-	return func(err error) {
-		r.mu.Lock()
-		if r.current == log {
-			r.current = nil
-		}
-		r.mu.Unlock()
-		ended(err)
-	}
-}
-
 func runNode(ctx context.Context, scriptPath string, request []byte, log Log) error {
 	if _, err := exec.LookPath("node"); err != nil {
 		return fmt.Errorf("node not found on PATH: %w", err)
 	}
 
-	routing := &appRouting{log: log}
 	var captured bytes.Buffer
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
@@ -107,7 +69,11 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 	}
 	cmd.Stdout, cmd.Stderr = writer, writer
 
-	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: io.MultiWriter(routing, &captured), AppBuild: routing.begin, Hide: log.hidden}
+	appBuild := func(app string) (io.Writer, func(error)) {
+		w, ended := log.App(app)
+		return io.MultiWriter(w, &captured), ended
+	}
+	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: io.MultiWriter(log.shared(), &captured), AppBuild: appBuild, Hide: log.hidden}
 
 	group, startErr := childprocess.StartGroup(cmd)
 	_ = writer.Close()

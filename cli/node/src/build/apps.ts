@@ -1,7 +1,8 @@
 import type { NextBuild } from "@framework/next-build";
+import type { BuildLog } from "@framework/node-build/script";
 import type { TraceRequest } from "@framework/node-build/trace";
 import type { SvelteKitBuild } from "@framework/sveltekit-build";
-import { withSpan } from "./protocol.js";
+import { printOutput, withSpan } from "./protocol.js";
 
 export type AppBuild =
   | ({ framework: "next" } & NextBuild)
@@ -9,23 +10,43 @@ export type AppBuild =
   | ({ framework: "node"; name: string } & TraceRequest);
 
 export interface Adapters {
-  next(app: NextBuild): Promise<void>;
-  sveltekit(app: SvelteKitBuild): Promise<void>;
+  next(app: NextBuild, log: BuildLog): Promise<void>;
+  sveltekit(app: SvelteKitBuild, log: BuildLog): Promise<void>;
   node(trace: TraceRequest): Promise<void>;
 }
 
-export async function buildApps(apps: AppBuild[], adapters: Adapters): Promise<void> {
-  for (const app of apps) {
-    await withSpan("build", app.name, () => buildApp(app, adapters));
-  }
+export async function buildApps(
+  apps: AppBuild[],
+  adapters: Adapters,
+  concurrency: number,
+): Promise<void> {
+  const byDir = new Map<string, AppBuild[]>();
+  for (const app of apps) byDir.set(app.cwd, [...(byDir.get(app.cwd) ?? []), app]);
+  const queue = [...byDir.values()];
+  let failure: { err: unknown } | undefined;
+  const buildQueued = async (): Promise<void> => {
+    for (let sameDir = queue.shift(); sameDir; sameDir = queue.shift()) {
+      for (const app of sameDir) {
+        if (failure) return;
+        try {
+          await withSpan("build", app.name, () => buildApp(app, adapters));
+        } catch (err) {
+          failure ??= { err };
+        }
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, concurrency) }, buildQueued));
+  if (failure) throw failure.err;
 }
 
 function buildApp(app: AppBuild, adapters: Adapters): Promise<void> {
+  const log: BuildLog = { print: (line) => printOutput(app.name, line) };
   switch (app.framework) {
     case "next":
-      return adapters.next(app);
+      return adapters.next(app, log);
     case "sveltekit":
-      return adapters.sveltekit(app);
+      return adapters.sveltekit(app, log);
     case "node":
       return adapters.node(app);
     default: {
