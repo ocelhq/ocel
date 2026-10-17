@@ -47,6 +47,18 @@ func TestTheGlobalPreviewDomainIsASingleLeadingWildcard(t *testing.T) {
 		}
 	})
 
+	t.Run("a trailing dot is dropped as the provider drops it", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := globalPreviewBaseDomain("*.preview.acme.com.")
+		if err != nil {
+			t.Fatalf("globalPreviewBaseDomain(%q) err = %v", "*.preview.acme.com.", err)
+		}
+		if got != "preview.acme.com" {
+			t.Errorf("globalPreviewBaseDomain(%q) = %q, want %q", "*.preview.acme.com.", got, "preview.acme.com")
+		}
+	})
+
 	t.Run("anything but a single leading wildcard label is refused", func(t *testing.T) {
 		t.Parallel()
 
