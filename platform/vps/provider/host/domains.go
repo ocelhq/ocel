@@ -49,8 +49,16 @@ func (h *Host) RouteResource(ctx context.Context, route AppRoute) error {
 func (h *Host) UnrouteApp(ctx context.Context, key RouteKey) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		state.Routes = Unrouting(state.Routes, func(route AppRoute) bool { return route.RouteKey == key })
+		var dropped []string
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool {
-			return claim.Owner == key.Owner && claim.Pointer == key.Pointer && claim.App == key.App
+			drops := claim.Owner == key.Owner && claim.Pointer == key.Pointer && claim.App == key.App
+			if drops {
+				dropped = append(dropped, claim.Hostname)
+			}
+			return drops
+		})
+		state.Tunneled = dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool {
+			return held.Owner == key.Owner && slices.Contains(dropped, held.Hostname)
 		})
 		return state, nil
 	})

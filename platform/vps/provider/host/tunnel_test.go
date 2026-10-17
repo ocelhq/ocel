@@ -289,6 +289,34 @@ func TestDisclaimingAHostnameOrASurfaceStopsTunnelingIt(t *testing.T) {
 	}
 }
 
+func TestADroppedStoreStopsTunnelingItsHostnameSoAnotherSurfaceCanClaimIt(t *testing.T) {
+	t.Parallel()
+	storeHostname := live.StoreHostname(claimed)
+	state := routed()
+	state.Routes = append(state.Routes, AppRoute{RouteKey: keyed(switchboard.StoreLabel), Upstream: "shop-store:9000"})
+	state.Claims = []HostClaim{
+		{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web"},
+		{Hostname: storeHostname, Owner: surface, Pointer: pointed, App: switchboard.StoreLabel},
+	}
+	state.Tunnel = &Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1", Address: "5a6b7c8d-1.cfargotunnel.com"}
+	state.Tunneled = []TunneledHost{{Hostname: claimed, Owner: surface}, {Hostname: storeHostname, Owner: surface}}
+	box := claimingBox(t, state)
+
+	if err := box.host().UnrouteApp(context.Background(), keyed(switchboard.StoreLabel)); err != nil {
+		t.Fatalf("UnrouteApp() = %v", err)
+	}
+	if tunneled := readBack(t, box).Tunneled; !slices.Equal(tunneled, []TunneledHost{{Hostname: claimed, Owner: surface}}) {
+		t.Errorf("dropping the store left %v tunneled, want only %s: nothing of %s answers %s any more", tunneled, claimed, surface, storeHostname)
+	}
+
+	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: storeHostname, Owner: otherSurface, Pointer: pointed, App: switchboard.StoreLabel}}); err != nil {
+		t.Fatalf("ClaimHosts() by %s = %v", otherSurface, err)
+	}
+	if tunneled, err := box.host().IsTunneled(context.Background(), storeHostname); err != nil || tunneled {
+		t.Errorf("IsTunneled(%s) once %s claims it directly = %v, %v; want false: the switchboard refuses a tunneled hostname at the box", storeHostname, otherSurface, tunneled, err)
+	}
+}
+
 func TestTheTunnelListenerIsBoundOnANetworkOnlyTheSwitchboardAndTheTunnelJoin(t *testing.T) {
 	t.Parallel()
 	joined := quoted("--network") + " " + quoted(TunnelNetwork)
