@@ -21,6 +21,17 @@ globalThis.__ocelRegister.push(Promise.resolve());
 export {};
 `
 
+func bundled(t *testing.T, root string, files []string) string {
+	t.Helper()
+	entry := filepath.Join(root, "out", "entry.mjs")
+	bundle, err := Bundle(root, files, entry)
+	if err != nil {
+		t.Fatalf("Bundle: %v", err)
+	}
+	write(t, entry, string(bundle))
+	return entry
+}
+
 func TestBundle(t *testing.T) {
 	t.Run("runs its imports and leaves sync to the caller", func(t *testing.T) {
 		root := t.TempDir()
@@ -33,10 +44,7 @@ console.log("declared");
 			t.Fatalf("Discover: %v", err)
 		}
 
-		entry, err := Bundle(root, files)
-		if err != nil {
-			t.Fatalf("Bundle: %v", err)
-		}
+		entry := bundled(t, root, files)
 
 		var calls int32
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -75,10 +83,7 @@ module.exports = { emitter: new EventEmitter() };
 			t.Fatalf("Discover: %v", err)
 		}
 
-		entry, err := Bundle(root, files)
-		if err != nil {
-			t.Fatalf("Bundle: %v", err)
-		}
+		entry := bundled(t, root, files)
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)

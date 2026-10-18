@@ -37,7 +37,7 @@ func spawnOrphan(t *testing.T, ctx context.Context, mode string, spec LaunchSpec
 	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
 	spec.Env = append([]string{fakeProviderGrandchildPidFileEnvVar + "=" + pidFile}, spec.Env...)
 
-	r, _ := spawnFake(t, ctx, mode, spec)
+	r, _ := spawnFake(t, mode, spec)
 	return r, pidFile
 }
 
@@ -81,7 +81,7 @@ func TestCloseGivesTheProviderLongerThanTwoSecondsToFinishItsCleanup(t *testing.
 	t.Parallel()
 
 	dir := t.TempDir()
-	r, _ := spawnFake(t, context.Background(), "slow-cleanup", LaunchSpec{Env: []string{fakeProviderCleanupDirEnvVar + "=" + dir}})
+	r, _ := spawnFake(t, "slow-cleanup", LaunchSpec{Env: []string{fakeProviderCleanupDirEnvVar + "=" + dir}})
 
 	deadline := time.Now().Add(5 * time.Second)
 	for {

@@ -6,27 +6,47 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+
+	"github.com/ocelhq/ocel/cli/internal/workdir"
 
 	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-const goEntryDir = buildoutput.StateDir + "/discovery"
-
-func goCommand(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
-	moduleRoot, pkg, err := goPackage(configDir, root)
-	if err != nil {
-		return nil, err
+func goCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*exec.Cmd, error) {
+	var modules []string
+	imports := map[string][]string{}
+	for _, root := range roots {
+		moduleRoot, pkg, err := goPackage(configDir, root)
+		if err != nil {
+			return nil, err
+		}
+		if _, seen := imports[moduleRoot]; !seen {
+			modules = append(modules, moduleRoot)
+		}
+		imports[moduleRoot] = append(imports[moduleRoot], pkg)
 	}
-	source := fmt.Sprintf("package main\n\nimport _ %q\n\nfunc main() {}\n", pkg)
-	if err := writeGoEntry(moduleRoot, goEntryDir, source); err != nil {
-		return nil, err
-	}
 
-	cmd := exec.CommandContext(ctx, "go", "run", "-trimpath=false", "./"+goEntryDir)
-	cmd.Dir = moduleRoot
-	cmd.Env = append(os.Environ(), server.Env()...)
-	return cmd, nil
+	commands := make([]*exec.Cmd, 0, len(modules))
+	for _, moduleRoot := range modules {
+		var source strings.Builder
+		source.WriteString("package main\n\nimport (\n")
+		for _, pkg := range imports[moduleRoot] {
+			fmt.Fprintf(&source, "\t_ %q\n", pkg)
+		}
+		source.WriteString(")\n\nfunc main() {}\n")
+		pkg, err := writeGoEntry(moduleRoot, "discovery", source.String())
+		if err != nil {
+			return nil, err
+		}
+
+		cmd := exec.CommandContext(ctx, "go", "run", "-trimpath=false", pkg)
+		cmd.Dir = moduleRoot
+		cmd.Env = append(os.Environ(), server.Env()...)
+		commands = append(commands, cmd)
+	}
+	return commands, nil
 }
 
 func goPackage(configDir string, root Root) (string, string, error) {
@@ -46,15 +66,16 @@ func goPackage(configDir string, root Root) (string, string, error) {
 	return moduleRoot, pkg, nil
 }
 
-func writeGoEntry(moduleRoot, dir, source string) error {
-	entry := filepath.Join(moduleRoot, filepath.FromSlash(dir), "main.go")
-	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
-		return fmt.Errorf("discovery: %w", err)
+func writeGoEntry(moduleRoot, role, source string) (string, error) {
+	entry, err := workdir.WriteShared(filepath.Join(moduleRoot, buildoutput.StateDir, role), "main.go", []byte(source))
+	if err != nil {
+		return "", fmt.Errorf("discovery: %w", err)
 	}
-	if err := os.WriteFile(entry, []byte(source), 0o644); err != nil {
-		return fmt.Errorf("discovery: %w", err)
+	rel, err := filepath.Rel(moduleRoot, filepath.Dir(entry))
+	if err != nil {
+		return "", fmt.Errorf("discovery: %w", err)
 	}
-	return nil
+	return "./" + filepath.ToSlash(rel), nil
 }
 
 func goModule(configDir, dir string) (string, string, error) {

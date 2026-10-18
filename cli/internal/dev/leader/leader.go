@@ -17,8 +17,8 @@ var ErrAlreadyRunning = errors.New("another ocel dev already leads this project"
 
 const probeTimeout = 2 * time.Second
 
-func Find(root string) (Leader, bool, error) {
-	leader, err := Read(root)
+func Find(configPath string) (Leader, bool, error) {
+	leader, err := Read(configPath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist), errors.Is(err, ErrMalformed):
 		return Leader{}, false, nil
@@ -28,18 +28,18 @@ func Find(root string) (Leader, bool, error) {
 	return leader, isAnswering(leader), nil
 }
 
-func Claim(root string, leader Leader) error {
-	lock, err := lockRecord(root)
+func Claim(configPath string, leader Leader) error {
+	lock, err := lockRecord(configPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lock.Unlock() }()
 
-	current, err := Read(root)
+	current, err := Read(configPath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 	case errors.Is(err, ErrMalformed):
-		if err := removeRecord(root); err != nil {
+		if err := removeRecord(configPath); err != nil {
 			return err
 		}
 	case err != nil:
@@ -47,12 +47,12 @@ func Claim(root string, leader Leader) error {
 	case isAnswering(current):
 		return ErrAlreadyRunning
 	default:
-		if err := removeRecord(root); err != nil {
+		if err := removeRecord(configPath); err != nil {
 			return err
 		}
 	}
 
-	if err := writeRecord(root, leader); err != nil {
+	if err := writeRecord(configPath, leader); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			return ErrAlreadyRunning
 		}
@@ -61,14 +61,14 @@ func Claim(root string, leader Leader) error {
 	return nil
 }
 
-func Release(root, token string) error {
-	lock, err := lockRecord(root)
+func Release(configPath, token string) error {
+	lock, err := lockRecord(configPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lock.Unlock() }()
 
-	current, err := Read(root)
+	current, err := Read(configPath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist), errors.Is(err, ErrMalformed):
 		return nil
@@ -77,7 +77,7 @@ func Release(root, token string) error {
 	case current.Token != token:
 		return nil
 	}
-	return removeRecord(root)
+	return removeRecord(configPath)
 }
 
 func isAnswering(leader Leader) bool {

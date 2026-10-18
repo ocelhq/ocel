@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -109,7 +108,7 @@ func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 		renderEnvSource(stdout, tierName(opts), described.GetStatus(), time.Now())
 		renderConfiguredEnvSource(stdout, described.GetStatus(), configured, opts)
-		fmt.Fprintf(stdout, "dev reads from %s, then %s on top\n", cfg.EnvSource.Dev.ID(), dotfile.LocalFileName)
+		fmt.Fprintf(stdout, "dev reads from %s, then %s on top\n", cfg.EnvSource.Dev.ID(), project.LocalDotenvFileName)
 		return nil
 	})
 }
@@ -129,7 +128,7 @@ func writeEnvSourceJSON(stdout io.Writer, req *variablestorev1.DescribeEnvSource
 		Credentials:         status.GetCredentials(),
 		ConfiguredEnvSource: configured.ID(),
 		DevEnvSource:        devEnvSource,
-		DevLocalFile:        dotfile.LocalFileName,
+		DevLocalFile:        project.LocalDotenvFileName,
 	}
 	for _, link := range status.GetLinks() {
 		result.Links = append(result.Links, &resultv1.EnvSourceLink{Folder: link.GetFolder(), Url: link.GetUrl()})

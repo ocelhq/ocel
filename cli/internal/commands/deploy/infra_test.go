@@ -256,6 +256,53 @@ func TestStoppingLeaseRenewalCancelsARenewalTheProviderNeverAnswers(t *testing.T
 	}
 }
 
+func TestABuildWhoseLeaseRenewalIsRefusedStopsAndSaysTheLeaseWasLost(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	ctx := context.Background()
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	orders := declaration.Resource{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "src/db.ts:1"}
+	var stopped bool
+	var lost error
+
+	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
+		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project}, false, false)
+		infra.renewal = time.Millisecond
+		defer infra.abandon(ctx, p.Project.Slug)
+		building, release := infra.holdLease(ctx)
+		defer release()
+		if err := infra.provision(building, []declaration.Resource{orders}, nil); err != nil {
+			return err
+		}
+		if err := stackrecords.ForgetEnvironmentLease(ctx, fixture.Provider.KeyValues(), environment.TierProduction, clitest.FixtureSlug, stackrecords.ProductionEnv, infra.leaseToken); err != nil {
+			return err
+		}
+		select {
+		case <-building.Done():
+			stopped = true
+		case <-time.After(10 * time.Second):
+		}
+		lost = infra.lostLease(building, building.Err())
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WithProvider() error = %v; stdout=%s", err, stdout.String())
+	}
+
+	if !stopped {
+		t.Fatal("the build went on after the provider refused to renew its lease, want it stopped: whatever it ships is no longer guarded")
+	}
+	if lost == nil || !strings.Contains(lost.Error(), "lease") {
+		t.Errorf("the build stopped with %v, want the refused renewal named", lost)
+	}
+}
+
 func TestADeployHoldsTheEnvironmentUnderOneLeaseFromItsInfraToItsApps(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)

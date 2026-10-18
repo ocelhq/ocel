@@ -24,10 +24,10 @@ describe("writeSchemas", () => {
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "ocel-schema-build-"));
-    mkdirSync(join(root, "cli", "internal", "docsurl"), { recursive: true });
+    mkdirSync(join(root, "cli", "internal", "commands", "projectinit"), { recursive: true });
     writeFileSync(
-      join(root, "cli", "internal", "docsurl", "docsurl.go"),
-      'package docsurl\n\nconst Origin = "https://docs.example.test"\n',
+      join(root, "cli", "internal", "commands", "projectinit", "init.go"),
+      'package projectinit\n\nconst configSchema = "https://docs.example.test/schema/ocel.schema.json"\n',
     );
     writeFileSync(join(root, "VERSION"), "9.9.9\n");
   });

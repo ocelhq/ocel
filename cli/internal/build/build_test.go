@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -23,9 +22,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+func testBuildScript(projectDir string) string {
+	return filepath.Join(projectDir, "build-script.cjs")
+}
+
 func writeBuildScript(t *testing.T, projectDir string) string {
 	t.Helper()
-	path := node.BuildScriptPath(projectDir)
+	path := testBuildScript(projectDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -79,9 +82,6 @@ func expressFixture(t *testing.T) string {
 		t.Skipf("fixture not available: %v", err)
 	}
 	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, buildoutput.StateDir)) })
-	if err := node.Ensure(fixtureRoot); err != nil {
-		t.Fatalf("node.Ensure: %v", err)
-	}
 	return fixtureRoot
 }
 
@@ -410,7 +410,7 @@ func TestBuild(t *testing.T) {
 		if err == nil {
 			t.Fatal("Build succeeded with no materialized build script, want error")
 		}
-		if !strings.Contains(err.Error(), node.BuildScriptPath(root)) {
+		if !strings.Contains(err.Error(), testBuildScript(root)) {
 			t.Errorf("error = %q, want it to name the missing build script", err)
 		}
 	})
@@ -579,7 +579,7 @@ func TestBuild(t *testing.T) {
 		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}}}}
 
 		var stderr bytes.Buffer
-		if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
+		if err := (tools{node: runNode, buildScript: installedBuildScript}).functions(context.Background(), cfg, nil, Host{}, Log{Shared: &stderr}); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -733,7 +733,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}}}}
 
 		var stderr bytes.Buffer
-		if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
+		if err := (tools{node: runNode, buildScript: installedBuildScript}).functions(context.Background(), cfg, nil, Host{}, Log{Shared: &stderr}); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -831,7 +831,7 @@ type nodeOnly struct {
 }
 
 func (n nodeOnly) Build(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, log Log) error {
-	return tools{node: n.node}.functions(ctx, cfg, variables, n.host, log)
+	return tools{node: n.node, buildScript: func() (string, error) { return testBuildScript(cfg.Dir), nil }}.functions(ctx, cfg, variables, n.host, log)
 }
 
 func outputRoot(t *testing.T, projectDir string) string {

@@ -1,8 +1,11 @@
+import asyncio
+
 import ocel
 
 starts = 0
 wrapped_by = ""
 audited = ""
+cancelled = ""
 
 
 def count_start() -> None:
@@ -26,7 +29,18 @@ async def greet(payload: dict, ctx: ocel.RunContext) -> dict:
         "starts": starts,
         "wrappedBy": wrapped_by,
         "audited": audited,
+        "cancelled": cancelled,
     }
+
+
+def record_cancel(payload: dict, ctx: ocel.RunContext) -> None:
+    global cancelled
+    cancelled = f"{ctx.name} {payload['name']}"
+
+
+@ocel.task("linger", worker=background, on_cancel=record_cancel)
+async def linger(payload: dict, ctx: ocel.RunContext) -> None:
+    await asyncio.sleep(3600)
 
 
 orders = ocel.topic("orders")

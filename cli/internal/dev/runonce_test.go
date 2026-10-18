@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/project"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 )
@@ -67,7 +68,7 @@ export default { slug: "test-app" };
 		})
 
 		t.Run("it leaves no leader record behind, having never advertised itself as leader", func(t *testing.T) {
-			if _, err := leader.Read(root); !errors.Is(err, fs.ErrNotExist) {
+			if _, err := leader.Read(leaderOf(root)); !errors.Is(err, fs.ErrNotExist) {
 				t.Fatalf("leader.Read err = %v, want a not-exist error (ocel run must not advertise as leader)", err)
 			}
 		})
@@ -132,6 +133,47 @@ export default { slug: "test-app" };
 		}
 	})
 
+	t.Run("a leader running another config in the same directory is not followed", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
+		}
+
+		deps := devDeps()
+
+		root := t.TempDir()
+		other := leaderKey(&project.Project{Dir: root, Path: filepath.Join(root, "ocel.vps.config.ts")})
+		t.Cleanup(func() {
+			if running, err := leader.Read(other); err == nil {
+				_ = leader.Release(other, running.Token)
+			}
+		})
+
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		server := devserver.New("http://"+listener.Addr().String(), devresources.New("another-target", devresources.Options{}))
+		server.PushEnv(map[string]string{"FROM_THE_OTHER_TARGET": "yes"})
+		httpServer := &http.Server{Handler: server.Mux()}
+		go httpServer.Serve(listener)
+		defer httpServer.Close()
+		if err := leader.Claim(other, leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
+			t.Fatalf("leader.Claim: %v", err)
+		}
+
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+		envDumpPath := filepath.Join(root, "env.out")
+		var stdout, stderr bytes.Buffer
+		if err := runRun(context.Background(), deps, root, []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath)}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runRun err = %v; stderr=%s", err, stderr.String())
+		}
+		if _, followed := readDump(t, envDumpPath)["FROM_THE_OTHER_TARGET"]; followed {
+			t.Errorf("ocel run for ocel.config.ts took the env of the dev leader running ocel.vps.config.ts, want each config its own leader")
+		}
+	})
+
 	t.Run("with a running leader it waits on neither follower updates nor a disconnect", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
@@ -153,13 +195,13 @@ export default { slug: "test-app" };
 		go httpServer.Serve(listener)
 		defer httpServer.Close()
 
-		if err := leader.Claim(root, leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
-			t.Fatalf("leader.Claim: %v", err)
-		}
-
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
+
+		if err := leader.Claim(leaderOf(root), leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
+			t.Fatalf("leader.Claim: %v", err)
+		}
 
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)

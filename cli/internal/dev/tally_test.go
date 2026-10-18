@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/project"
+
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 )
@@ -123,7 +124,7 @@ func TestADevSessionCountsTheCodedRefusalsAReloadRaised(t *testing.T) {
 export default { slug: "test-app" };
 `)
 	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
-	clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\n")
+	clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "API_TOKEN=first\n")
 	var log sessionLog
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -135,9 +136,9 @@ export default { slug: "test-app" };
 	}()
 	waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
 
-	clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "# the value the run needs, deleted\n")
+	clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "# the value the run needs, deleted\n")
 	waitForOutput(t, &stderr, "not ready")
-	clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=restored\n")
+	clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "API_TOKEN=restored\n")
 	waitForEnvValue(t, envDumpPath, "API_TOKEN", "restored")
 	stopAndWait(t, cancel, done)
 

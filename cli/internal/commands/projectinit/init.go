@@ -20,7 +20,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/language"
@@ -394,8 +393,10 @@ func configTemplate(name, slug, provider string, settings []providerSetting) str
   "slug": %q,
   "provider": %s
 }
-`, docsurl.Schema, slug, selected)
+`, configSchema, slug, selected)
 }
+
+const configSchema = "https://ocel.dev/schema/ocel.schema.json"
 
 func yamlTemplate(slug, provider string, settings []providerSetting) string {
 	selected := fmt.Sprintf("\n  %s: {}", provider)
@@ -408,7 +409,7 @@ func yamlTemplate(slug, provider string, settings []providerSetting) string {
 	return fmt.Sprintf(`# yaml-language-server: $schema=%s
 slug: %q
 provider:%s
-`, docsurl.Schema, slug, selected)
+`, configSchema, slug, selected)
 }
 
 func typescriptTemplate(slug, provider string, settings []providerSetting) string {

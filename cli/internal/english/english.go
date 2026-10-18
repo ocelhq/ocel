@@ -13,6 +13,17 @@ func Or(items []string) string {
 	return joined(items, "or")
 }
 
+func Count(n int, noun string) string {
+	return fmt.Sprintf("%d %s", n, Number(n, noun, noun+"s"))
+}
+
+func Number(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
 func Quoted(values []string) []string {
 	quoted := make([]string, 0, len(values))
 	for _, value := range values {

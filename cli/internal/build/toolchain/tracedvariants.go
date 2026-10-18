@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
+
 	"github.com/ocelhq/ocel/pkg/arch"
 )
 
@@ -183,7 +185,7 @@ func installVariants(ctx context.Context, app, staging string, parent manifest, 
 	var npmOutput bytes.Buffer
 	cmd.Stdout = &npmOutput
 	cmd.Stderr = &npmOutput
-	if err := cmd.Run(); err != nil {
+	if err := childprocess.Run(ctx, cmd); err != nil {
 		return stagedVariants{}, fmt.Errorf("install %s for app %q on %s/%s with %s (%w):\n%s",
 			parent.Name, app, arch.NodePackageOS, cpu, describeNpmConfig(config, hasConfig), err, npmOutput.String())
 	}

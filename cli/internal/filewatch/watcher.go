@@ -2,9 +2,12 @@ package filewatch
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -25,17 +28,22 @@ func (p Paths) covers(path string) bool {
 }
 
 func (p Paths) coversTree(path string) bool {
+	return p.treeOf(path) != ""
+}
+
+func (p Paths) treeOf(path string) string {
 	for _, dir := range p.Dirs {
 		if strings.HasPrefix(path, dir+string(filepath.Separator)) {
-			return true
+			return dir
 		}
 	}
-	return false
+	return ""
 }
 
 type Config struct {
 	Paths    Paths
 	Debounce time.Duration
+	SkipDir  func(name string) bool
 	OnChange func()
 	OnError  func(error)
 
@@ -69,6 +77,9 @@ func Start(ctx context.Context, cfg Config) (*Watcher, error) {
 	if cfg.newTimer == nil {
 		cfg.newTimer = newRealTimer
 	}
+	if cfg.SkipDir == nil {
+		cfg.SkipDir = func(string) bool { return false }
+	}
 
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -89,14 +100,29 @@ func Start(ctx context.Context, cfg Config) (*Watcher, error) {
 	}
 
 	w := &Watcher{fsw: fsw, done: make(chan struct{})}
+	changed := make(chan struct{}, 1)
+	var handlers sync.WaitGroup
+	handlers.Go(func() { handle(ctx, changed, cfg.OnChange) })
 	go func() {
 		defer close(w.done)
-		run(ctx, fsw, cfg)
+		run(ctx, fsw, cfg, changed)
+		handlers.Wait()
 	}()
 	return w, nil
 }
 
-func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config) {
+func handle(ctx context.Context, changed <-chan struct{}, onChange func()) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-changed:
+			onChange()
+		}
+	}
+}
+
+func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config, changed chan<- struct{}) {
 	defer fsw.Close()
 
 	t := cfg.newTimer(cfg.Debounce)
@@ -113,10 +139,15 @@ func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config) {
 			if !ok {
 				return
 			}
-			if event.Has(fsnotify.Create) && cfg.Paths.coversTree(event.Name) {
-				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-					_ = fsw.Add(event.Name)
-				}
+			createdDir := event.Has(fsnotify.Create) && isDir(event.Name)
+			if isSkipped(cfg, event.Name, createdDir) {
+				continue
+			}
+			if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
+				forgetTree(fsw, event.Name)
+			}
+			if createdDir && cfg.Paths.coversTree(event.Name) {
+				watchTree(fsw, cfg, event.Name)
 			}
 			if !cfg.Paths.covers(event.Name) {
 				continue
@@ -128,7 +159,10 @@ func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config) {
 			armed = true
 		case <-t.C():
 			armed = false
-			cfg.OnChange()
+			select {
+			case changed <- struct{}{}:
+			default:
+			}
 		case err, ok := <-fsw.Errors:
 			if !ok {
 				return
@@ -136,6 +170,51 @@ func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config) {
 			if cfg.OnError != nil {
 				cfg.OnError(err)
 			}
+		}
+	}
+}
+
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func isSkipped(cfg Config, path string, dir bool) bool {
+	if slices.Contains(cfg.Paths.Files, path) {
+		return false
+	}
+	tree := cfg.Paths.treeOf(path)
+	if tree == "" {
+		return false
+	}
+	rel, err := filepath.Rel(tree, path)
+	if err != nil {
+		return false
+	}
+	segments := strings.Split(rel, string(filepath.Separator))
+	if !dir {
+		segments = segments[:len(segments)-1]
+	}
+	return slices.ContainsFunc(segments, cfg.SkipDir)
+}
+
+func watchTree(fsw *fsnotify.Watcher, cfg Config, root string) {
+	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || !entry.IsDir() {
+			return nil
+		}
+		if path != root && cfg.SkipDir(entry.Name()) {
+			return filepath.SkipDir
+		}
+		_ = fsw.Add(path)
+		return nil
+	})
+}
+
+func forgetTree(fsw *fsnotify.Watcher, root string) {
+	for _, watched := range fsw.WatchList() {
+		if watched == root || strings.HasPrefix(watched, root+string(filepath.Separator)) {
+			_ = fsw.Remove(watched)
 		}
 	}
 }

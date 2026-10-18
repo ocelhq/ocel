@@ -10,45 +10,66 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/workdir"
+
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-const (
-	pythonEntryFile = buildoutput.StateDir + "/discovery.py"
-	pythonOnPath    = "python3"
-)
+const pythonOnPath = "python3"
 
 var pythonProjectFiles = []string{"pyproject.toml", "requirements.txt"}
 
 var pythonInterpreters = []string{".venv/bin/python", "venv/bin/python"}
 
-func pythonCommand(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
-	runRoot, err := pythonRunRoot(configDir, root.Dir)
-	if err != nil {
-		return nil, err
-	}
-	pkg, err := pythonPackage(runRoot, root.Dir)
-	if err != nil {
-		return nil, err
-	}
-
-	entry := filepath.Join(runRoot, filepath.FromSlash(pythonEntryFile))
-	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
-		return nil, fmt.Errorf("discovery: %w", err)
-	}
-	source := fmt.Sprintf(
-		"import sys\nfrom importlib import import_module\n\nsys.path.insert(0, %s)\nimport_module(%s)\n",
-		strconv.Quote(runRoot), strconv.Quote(pkg),
-	)
-	if err := os.WriteFile(entry, []byte(source), 0o644); err != nil {
-		return nil, fmt.Errorf("discovery: %w", err)
+func pythonCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*exec.Cmd, error) {
+	var runRoots []string
+	imports := map[string][]string{}
+	for _, root := range roots {
+		runRoot, err := pythonRunRoot(configDir, root.Dir)
+		if err != nil {
+			return nil, err
+		}
+		pkg, err := pythonPackage(runRoot, root.Dir)
+		if err != nil {
+			return nil, err
+		}
+		if _, seen := imports[runRoot]; !seen {
+			runRoots = append(runRoots, runRoot)
+		}
+		imports[runRoot] = append(imports[runRoot], pkg)
 	}
 
-	cmd := exec.CommandContext(ctx, PythonInterpreter(runRoot), "./"+pythonEntryFile)
-	cmd.Dir = runRoot
-	cmd.Env = append(append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1"), server.Env()...)
-	return cmd, nil
+	commands := make([]*exec.Cmd, 0, len(runRoots))
+	for _, runRoot := range runRoots {
+		var source strings.Builder
+		fmt.Fprintf(&source, "import sys\nfrom importlib import import_module\n\nsys.path.insert(0, %s)\n", strconv.Quote(runRoot))
+		for _, pkg := range imports[runRoot] {
+			fmt.Fprintf(&source, "import_module(%s)\n", strconv.Quote(pkg))
+		}
+		entry, err := writePythonEntry(runRoot, "discovery", source.String())
+		if err != nil {
+			return nil, err
+		}
+
+		cmd := exec.CommandContext(ctx, PythonInterpreter(runRoot), entry)
+		cmd.Dir = runRoot
+		cmd.Env = append(append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1"), server.Env()...)
+		commands = append(commands, cmd)
+	}
+	return commands, nil
+}
+
+func writePythonEntry(runRoot, role, source string) (string, error) {
+	entry, err := workdir.WriteShared(filepath.Join(runRoot, buildoutput.StateDir, role), role+".py", []byte(source))
+	if err != nil {
+		return "", fmt.Errorf("discovery: %w", err)
+	}
+	rel, err := filepath.Rel(runRoot, entry)
+	if err != nil {
+		return "", fmt.Errorf("discovery: %w", err)
+	}
+	return "./" + filepath.ToSlash(rel), nil
 }
 
 func pythonRunRoot(configDir, dir string) (string, error) {

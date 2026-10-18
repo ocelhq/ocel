@@ -11,14 +11,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/dotfile"
+	"github.com/ocelhq/ocel/cli/internal/project"
+
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func dotfileValues(values map[string]string) valueLayers {
-	return valueLayers{{from: dotfile.FileName, file: true, values: values}}
+	return valueLayers{{from: project.DotenvFileName, file: true, values: values}}
 }
 
 func spanWriting(t *testing.T, w io.Writer) *run.Span {
@@ -54,7 +55,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		reportValues(spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}), true)
 		got := out.String()
 
-		for _, want := range []string{"API_TOKEN", "DATABASE_URL", dotfile.FileName} {
+		for _, want := range []string{"API_TOKEN", "DATABASE_URL", project.DotenvFileName} {
 			if !strings.Contains(got, want) {
 				t.Errorf("notice = %q, want it to mention %q", got, want)
 			}
@@ -96,7 +97,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		}
 	})
 
-	t.Run("it names where each value came from, and checks "+dotfile.LocalFileName+" against .gitignore on its own", func(t *testing.T) {
+	t.Run("it names where each value came from, and checks "+project.LocalDotenvFileName+" against .gitignore on its own", func(t *testing.T) {
 		t.Parallel()
 
 		dir := gitRepository(t)
@@ -106,11 +107,11 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		var out bytes.Buffer
 		reportValues(spanWriting(t, &out), dir, valueLayers{
 			{from: "infisical:p-1/dev", values: map[string]string{"API_TOKEN": "sk-live-must-not-appear"}},
-			{from: dotfile.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}},
+			{from: project.LocalDotenvFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}},
 		}, true)
 		got := out.String()
 
-		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + dotfile.LocalFileName, dotfile.LocalFileName + " is not ignored by git", "editing " + dotfile.LocalFileName + " re-resolves"} {
+		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + project.LocalDotenvFileName, project.LocalDotenvFileName + " is not ignored by git", "editing " + project.LocalDotenvFileName + " re-resolves"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("notice = %q, want it to say %q", got, want)
 			}
@@ -123,7 +124,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 			t.Fatalf("write .gitignore: %v", err)
 		}
 		var ignored bytes.Buffer
-		reportValues(spanWriting(t, &ignored), dir, valueLayers{{from: dotfile.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
+		reportValues(spanWriting(t, &ignored), dir, valueLayers{{from: project.LocalDotenvFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
 		if strings.Contains(ignored.String(), ".gitignore") {
 			t.Errorf("notice = %q, want no warning for a file a glob ignores", ignored.String())
 		}
@@ -193,7 +194,7 @@ func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
 
 		var out bytes.Buffer
 		reportValues(spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-		if got := out.String(); !strings.Contains(got, "cannot tell whether git ignores "+dotfile.FileName) {
+		if got := out.String(); !strings.Contains(got, "cannot tell whether git ignores "+project.DotenvFileName) {
 			t.Errorf("notice = %q, want it to say it cannot tell", got)
 		}
 	})
@@ -206,10 +207,10 @@ func TestReportUnreadableLines(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		reportUnreadableLines(spanWriting(t, &out), valueLayers{{from: dotfile.FileName, file: true, unreadable: []int{2, 5}}})
+		reportUnreadableLines(spanWriting(t, &out), valueLayers{{from: project.DotenvFileName, file: true, unreadable: []int{2, 5}}})
 		got := out.String()
 
-		for _, want := range []string{dotfile.FileName, "2, 5"} {
+		for _, want := range []string{project.DotenvFileName, "2, 5"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("notice = %q, want it to mention %q", got, want)
 			}
@@ -220,8 +221,8 @@ func TestReportUnreadableLines(t *testing.T) {
 		t.Parallel()
 
 		var one bytes.Buffer
-		reportUnreadableLines(spanWriting(t, &one), valueLayers{{from: dotfile.LocalFileName, file: true, unreadable: []int{4}}})
-		if !strings.Contains(one.String(), dotfile.LocalFileName) {
+		reportUnreadableLines(spanWriting(t, &one), valueLayers{{from: project.LocalDotenvFileName, file: true, unreadable: []int{4}}})
+		if !strings.Contains(one.String(), project.LocalDotenvFileName) {
 			t.Errorf("notice = %q, want the file named", one.String())
 		}
 		if !strings.Contains(one.String(), "line 4 is") {

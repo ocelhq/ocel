@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -112,20 +111,6 @@ func stampVariableCacheEntry(fingerprint string, e variableCacheEntry) string {
 
 func (c *variableCache) path(projectDir string) string {
 	return filepath.Join(c.dir, hashString(projectDir)+".json")
-}
-
-func hashBundledEntry(entryPath string) (string, error) {
-	f, err := os.Open(entryPath)
-	if err != nil {
-		return "", fmt.Errorf("read the bundled discovery entrypoint: %w", err)
-	}
-	defer f.Close()
-
-	sum := sha256.New()
-	if _, err := io.Copy(sum, f); err != nil {
-		return "", fmt.Errorf("read the bundled discovery entrypoint: %w", err)
-	}
-	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 func hashString(s string) string {

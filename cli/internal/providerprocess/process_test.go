@@ -26,11 +26,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func spawnFake(t *testing.T, ctx context.Context, mode string, spec LaunchSpec) (*Process, string) {
+func spawnFake(t *testing.T, mode string, spec LaunchSpec) (*Process, string) {
 	t.Helper()
 
 	spec = fakeSpec(t, mode, spec)
-	r, err := Spawn(ctx, spec)
+	r, err := Spawn(spec)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -71,7 +71,7 @@ func TestSpawn(t *testing.T) {
 	t.Run("a missing binary fails with a distinct error, not a readiness one", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := Spawn(context.Background(), LaunchSpec{BinaryPath: filepath.Join(t.TempDir(), "does-not-exist")})
+		_, err := Spawn(LaunchSpec{BinaryPath: filepath.Join(t.TempDir(), "does-not-exist")})
 		if err == nil {
 			t.Fatal("Spawn() error = nil, want an error for a missing binary")
 		}
@@ -91,7 +91,7 @@ func TestReady(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "exit-before-ready", LaunchSpec{ReadyTimeout: 5 * time.Second})
+		r, _ := spawnFake(t, "exit-before-ready", LaunchSpec{ReadyTimeout: 5 * time.Second})
 
 		start := time.Now()
 		err := r.Ready(ctx)
@@ -118,7 +118,7 @@ func TestReady(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 150 * time.Millisecond})
+		r, sockPath := spawnFake(t, "never-ready", LaunchSpec{ReadyTimeout: 150 * time.Millisecond})
 
 		err := r.Ready(ctx)
 
@@ -136,7 +136,7 @@ func TestReady(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "oversized-line", LaunchSpec{ReadyTimeout: 10 * time.Second})
+		r, _ := spawnFake(t, "oversized-line", LaunchSpec{ReadyTimeout: 10 * time.Second})
 
 		start := time.Now()
 		err := r.Ready(ctx)
@@ -165,7 +165,7 @@ func TestHandshake(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "impostor-cert", LaunchSpec{
+		r, _ := spawnFake(t, "impostor-cert", LaunchSpec{
 			ProviderConfig: &contractv1.ProviderConfig{ProjectDir: t.TempDir()},
 			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
@@ -184,7 +184,7 @@ func TestHandshake(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "plaintext", LaunchSpec{
+		r, _ := spawnFake(t, "plaintext", LaunchSpec{
 			ProviderConfig: &contractv1.ProviderConfig{ProjectDir: t.TempDir()},
 			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
@@ -204,7 +204,7 @@ func TestConfigure(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "reject-config", LaunchSpec{
+		r, _ := spawnFake(t, "reject-config", LaunchSpec{
 			ProviderConfig: fakeOptionsConfig(t, map[string]any{"sizee": "large"}),
 			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
@@ -231,7 +231,7 @@ func TestConfigure(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "reject-config", LaunchSpec{
+		r, _ := spawnFake(t, "reject-config", LaunchSpec{
 			ProviderConfig: fakeOptionsConfig(t, map[string]any{"network": map[string]any{"hostt": "example.com"}}),
 			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
@@ -250,7 +250,7 @@ func TestConfigure(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "refuse-config", LaunchSpec{
+		r, _ := spawnFake(t, "refuse-config", LaunchSpec{
 			ProviderConfig: &contractv1.ProviderConfig{ProjectDir: t.TempDir()},
 			ProviderName:   "fake",
 			ReadyTimeout:   5 * time.Second,
@@ -285,7 +285,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "success", LaunchSpec{})
+		r, sockPath := spawnFake(t, "success", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -319,7 +319,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "hang-deploy", LaunchSpec{})
+		r, sockPath := spawnFake(t, "hang-deploy", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -364,7 +364,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "crash-deploy", LaunchSpec{})
+		r, _ := spawnFake(t, "crash-deploy", LaunchSpec{})
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
@@ -387,7 +387,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "hang-deploy", LaunchSpec{})
+		r, _ := spawnFake(t, "hang-deploy", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -436,7 +436,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "fail", LaunchSpec{})
+		r, _ := spawnFake(t, "fail", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -460,7 +460,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "refuse-deploy", LaunchSpec{})
+		r, _ := spawnFake(t, "refuse-deploy", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -493,7 +493,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "oversized-event", LaunchSpec{MaxMessageBytes: fakeOversizedEventBytes / 4})
+		r, _ := spawnFake(t, "oversized-event", LaunchSpec{MaxMessageBytes: fakeOversizedEventBytes / 4})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -516,7 +516,7 @@ func TestDeploy(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
+		r, _ := spawnFake(t, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
 
 		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 		if !errors.Is(err, ErrClientUnavailable) {
@@ -545,7 +545,7 @@ func TestBootstrap(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "success", LaunchSpec{})
+		r, sockPath := spawnFake(t, "success", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -572,7 +572,7 @@ func TestBootstrap(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "fail", LaunchSpec{})
+		r, _ := spawnFake(t, "fail", LaunchSpec{})
 
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
@@ -596,8 +596,7 @@ func TestTheVariableStoreAnswersOnlyAfterASuccessfulReady(t *testing.T) {
 	t.Run("reaching the store before a successful Ready refuses", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
+		r, _ := spawnFake(t, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
 
 		if _, err := r.VariableStore(); !errors.Is(err, ErrVariableStoreUnavailable) {
 			t.Fatalf("VariableStore() error = %v, want ErrVariableStoreUnavailable", err)
@@ -608,7 +607,7 @@ func TestTheVariableStoreAnswersOnlyAfterASuccessfulReady(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "success", LaunchSpec{})
+		r, _ := spawnFake(t, "success", LaunchSpec{})
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
@@ -625,40 +624,11 @@ func TestTheVariableStoreAnswersOnlyAfterASuccessfulReady(t *testing.T) {
 func TestClose(t *testing.T) {
 	t.Parallel()
 
-	t.Run("cancelling the context reaps the provider without an orphan", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		r, sockPath := spawnFake(t, ctx, "success", LaunchSpec{})
-
-		if err := r.Ready(ctx); err != nil {
-			t.Fatalf("Ready() error = %v, want nil", err)
-		}
-
-		cancel()
-
-		deadline := time.Now().Add(2 * time.Second)
-		for {
-			select {
-			case <-r.done:
-			default:
-				if time.Now().Before(deadline) {
-					time.Sleep(5 * time.Millisecond)
-					continue
-				}
-				t.Fatal("provider process still running 2s after ctx cancellation")
-			}
-			break
-		}
-
-		awaitSocketRemovedAfterReap(t, sockPath)
-	})
-
 	t.Run("closing twice is a no-op the second time", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "success", LaunchSpec{})
+		r, _ := spawnFake(t, "success", LaunchSpec{})
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
@@ -672,7 +642,7 @@ func TestClose(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		r, sockPath := spawnFake(t, ctx, "success", LaunchSpec{})
+		r, sockPath := spawnFake(t, "success", LaunchSpec{})
 		if err := r.Ready(ctx); err != nil {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
@@ -755,7 +725,7 @@ func TestAProviderThatExitsBeforeItIsReadyReportsProviderUnavailable(t *testing.
 	t.Parallel()
 
 	ctx := context.Background()
-	r, _ := spawnFake(t, ctx, "exit-before-ready", LaunchSpec{ReadyTimeout: 5 * time.Second})
+	r, _ := spawnFake(t, "exit-before-ready", LaunchSpec{ReadyTimeout: 5 * time.Second})
 
 	err := r.Ready(ctx)
 
@@ -773,7 +743,7 @@ func TestAProviderThatNeverBecomesReadyReportsProviderUnavailable(t *testing.T) 
 	t.Parallel()
 
 	ctx := context.Background()
-	r, _ := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 150 * time.Millisecond})
+	r, _ := spawnFake(t, "never-ready", LaunchSpec{ReadyTimeout: 150 * time.Millisecond})
 	t.Cleanup(r.Close)
 
 	err := r.Ready(ctx)
@@ -792,7 +762,7 @@ func TestAProviderWhoseStdoutBreaksBeforeItIsReadyReportsProviderUnavailable(t *
 	t.Parallel()
 
 	ctx := context.Background()
-	r, _ := spawnFake(t, ctx, "oversized-line", LaunchSpec{ReadyTimeout: 10 * time.Second})
+	r, _ := spawnFake(t, "oversized-line", LaunchSpec{ReadyTimeout: 10 * time.Second})
 
 	err := r.Ready(ctx)
 
@@ -808,7 +778,7 @@ func TestAProviderAnnouncingAnAddressItCannotBeReachedAtReportsProviderUnavailab
 	t.Parallel()
 
 	ctx := context.Background()
-	r, _ := spawnFake(t, ctx, "unreachable-address", LaunchSpec{ReadyTimeout: 5 * time.Second})
+	r, _ := spawnFake(t, "unreachable-address", LaunchSpec{ReadyTimeout: 5 * time.Second})
 
 	err := r.Ready(ctx)
 
@@ -824,7 +794,7 @@ func TestAProviderBinaryThatCannotStartReportsProviderUnavailable(t *testing.T) 
 	t.Parallel()
 
 	missing := filepath.Join(t.TempDir(), "ocel-provider-absent")
-	_, err := Spawn(context.Background(), LaunchSpec{BinaryPath: missing})
+	_, err := Spawn(LaunchSpec{BinaryPath: missing})
 
 	if got := clierror.NewRunError(fmt.Errorf("spawn provider: %w", err)); got.GetCode() != "provider.unavailable" {
 		t.Fatalf("run error = %s, want provider.unavailable", protojson.Format(got))

@@ -18,12 +18,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/progress"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -55,7 +53,10 @@ func (r variablesRecovery) buildManifest(ctx context.Context, phase *run.Span, p
 	case r.preBuild != nil:
 		warnNpmPrebuildScripts(child, r.cfg)
 	}
-	manifest, inline, err := r.build(ctx, phase, child, prebuilt)
+	held, release := r.infra.holdLease(ctx)
+	defer release()
+	manifest, inline, err := r.build(held, phase, child, prebuilt)
+	err = r.infra.lostLease(held, err)
 	child.End(err)
 	return manifest, inline, err
 }
@@ -105,11 +106,7 @@ func (r variablesRecovery) build(ctx context.Context, phase, span *run.Span, pre
 	}
 	manifest, inline, err := r.attempt(ctx, phase, span, declarations, prebuilt, 0)
 
-	if !errors.As(err, &refusal) {
-		return manifest, inline, err
-	}
-	if !r.enabled {
-		r.createInEnvSource(ctx, span, declarations, refusal)
+	if !errors.As(err, &refusal) || !r.enabled {
 		return manifest, inline, err
 	}
 	if err := r.fill(ctx, span, declarations, refusal); err != nil {
@@ -131,35 +128,6 @@ func (r variablesRecovery) declarations(ctx context.Context) (*variables.Declara
 		return nil, err
 	}
 	return r.newDeclarations(synced), nil
-}
-
-func (r variablesRecovery) createInEnvSource(ctx context.Context, span *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) {
-	source := declarations.Scope().EnvSource
-	if !source.CanCreate || r.dry {
-		return
-	}
-	variableStore, err := r.provider.VariableStore()
-	if err != nil {
-		return
-	}
-	for _, problem := range refusal.Problems {
-		if problem.GetKind() != resourcesv1.VariableProblem_KIND_MISSING {
-			continue
-		}
-		resp, err := variableStore.SetEnvSourceValue(ctx, &variablestorev1.SetEnvSourceValueRequest{
-			Tier:        declarations.Scope().Tier,
-			Coordinate:  &variablestorev1.Coordinate{Slug: r.cfg.Slug, Folder: problem.GetFolder(), Key: problem.GetKey()},
-			Description: refusal.Description(problem.GetKey()),
-		})
-		switch {
-		case err != nil:
-			span.Warn(fmt.Sprintf("Could not create %s empty in %s, which lacks it: %v", problem.GetKey(), source.ID, err))
-		case resp.GetAwaitingApproval():
-			span.Warn(fmt.Sprintf("Asked %s to create %s empty: the change waits for approval there, then for you to fill it in", source.ID, problem.GetKey()))
-		default:
-			span.Warn(fmt.Sprintf("Created %s empty in %s, for you to fill in there", problem.GetKey(), source.ID))
-		}
-	}
 }
 
 func (r variablesRecovery) attempt(ctx context.Context, phase, child *run.Span, declarations *variables.Declarations, prebuilt bool, retry int) (*contractv1.Manifest, []*bindingsv1.Binding, error) {

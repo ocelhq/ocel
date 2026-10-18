@@ -2,6 +2,9 @@ package discovery
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +13,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/workdir"
+
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
@@ -31,27 +37,42 @@ func (s Server) Env() []string {
 	}
 }
 
-type rootCommand func(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error)
+type programCommands func(ctx context.Context, configDir string, roots []Root, server Server) ([]*exec.Cmd, error)
 
-var rootCommands = map[language.Language]rootCommand{language.Go: goCommand, language.Python: pythonCommand, language.Rust: rustCommand}
+var languageCommands = map[language.Language]programCommands{language.Go: goCommands, language.Python: pythonCommands, language.Rust: rustCommands}
+
+const entryFileName = "entry.mjs"
 
 type Programs struct {
-	Roots []Root
-	entry string
+	Roots  []Root
+	bundle []byte
+	run    *workdir.Run
 }
 
 func Prepare(configDir string, roots []Root) (Programs, error) {
-	entry, err := BundleRoots(configDir, roots)
+	run := workdir.NewRun()
+	bundle, err := bundleRoots(configDir, roots, run.Path(configDir, entryFileName))
 	if err != nil {
 		return Programs{}, err
 	}
-	return Programs{Roots: roots, entry: entry}, nil
+	return Programs{Roots: roots, bundle: bundle, run: run}, nil
 }
 
-func (p Programs) Entry() string { return p.entry }
+func (p Programs) Fingerprint() string {
+	if p.bundle == nil {
+		return ""
+	}
+	sum := sha256.Sum256(p.bundle)
+	return hex.EncodeToString(sum[:])
+}
 
-func Run(ctx context.Context, configDir string, programs Programs, server Server, stdout, stderr io.Writer) error {
-	commands, err := commandsFor(ctx, configDir, programs.Roots, programs.entry, server)
+func Run(ctx context.Context, configDir string, programs Programs, server Server, stdout, stderr io.Writer) (err error) {
+	defer func() {
+		if programs.run != nil {
+			err = errors.Join(err, programs.run.Remove())
+		}
+	}()
+	commands, err := commandsFor(ctx, configDir, programs, server)
 	if err != nil {
 		return err
 	}
@@ -65,39 +86,50 @@ func Run(ctx context.Context, configDir string, programs Programs, server Server
 	return postSync(ctx, server)
 }
 
-func commandsFor(ctx context.Context, configDir string, roots []Root, entry string, server Server) ([]*exec.Cmd, error) {
+func commandsFor(ctx context.Context, configDir string, programs Programs, server Server) ([]*exec.Cmd, error) {
 	var commands []*exec.Cmd
-	if entry != "" {
+	if programs.bundle != nil {
+		entry, err := programs.run.Write(configDir, entryFileName, programs.bundle)
+		if err != nil {
+			return nil, fmt.Errorf("discovery: %w", err)
+		}
 		commands = append(commands, nodeCommand(ctx, entry, server))
 	}
 
-	for _, root := range roots {
+	var written []language.Language
+	byLanguage := map[language.Language][]Root{}
+	for _, root := range programs.Roots {
 		if root.Language == language.JS {
 			continue
 		}
-		command, ok := rootCommands[root.Language]
-		if !ok {
+		if _, ok := languageCommands[root.Language]; !ok {
 			return nil, fmt.Errorf("discovery: %s is a %s folder, and this build of ocel discovers only %s folders", root.Dir, root.Language, discoverable())
 		}
-		cmd, err := command(ctx, configDir, root, server)
+		if _, seen := byLanguage[root.Language]; !seen {
+			written = append(written, root.Language)
+		}
+		byLanguage[root.Language] = append(byLanguage[root.Language], root)
+	}
+	for _, lang := range written {
+		found, err := languageCommands[lang](ctx, configDir, byLanguage[lang], server)
 		if err != nil {
 			return nil, err
 		}
-		commands = append(commands, cmd)
+		commands = append(commands, found...)
 	}
 	return commands, nil
 }
 
 func discoverable() string {
 	languages := []string{string(language.JS)}
-	for written := range rootCommands {
+	for written := range languageCommands {
 		languages = append(languages, string(written))
 	}
 	slices.Sort(languages)
 	return english.And(languages)
 }
 
-func BundleRoots(configDir string, roots []Root) (string, error) {
+func bundleRoots(configDir string, roots []Root, outfile string) ([]byte, error) {
 	var files []string
 	var js bool
 	for _, root := range roots {
@@ -107,19 +139,19 @@ func BundleRoots(configDir string, roots []Root) (string, error) {
 		js = true
 		found, err := walkSourceFiles(root.Dir)
 		if err != nil {
-			return "", fmt.Errorf("discover resources: %w", err)
+			return nil, fmt.Errorf("discover resources: %w", err)
 		}
 		files = append(files, found...)
 	}
 	if !js {
-		return "", nil
+		return nil, nil
 	}
 
-	entry, err := Bundle(configDir, files)
+	bundle, err := Bundle(configDir, files, outfile)
 	if err != nil {
-		return "", fmt.Errorf("bundle discovery entrypoint: %w", err)
+		return nil, fmt.Errorf("bundle discovery entrypoint: %w", err)
 	}
-	return entry, nil
+	return bundle, nil
 }
 
 func nodeCommand(ctx context.Context, entry string, server Server) *exec.Cmd {
@@ -130,37 +162,27 @@ func nodeCommand(ctx context.Context, entry string, server Server) *exec.Cmd {
 
 const stderrTailBytes = 4 << 10
 
-type tailWriter struct {
-	limit int
-	buf   []byte
-}
-
-func (t *tailWriter) Write(p []byte) (int, error) {
-	t.buf = append(t.buf, p...)
-	if extra := len(t.buf) - t.limit; extra > 0 {
-		t.buf = t.buf[extra:]
-	}
-	return len(p), nil
-}
-
-func (t *tailWriter) String() string { return strings.TrimSpace(string(t.buf)) }
-
 func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error {
-	tail := &tailWriter{limit: stderrTailBytes}
+	tail := &childprocess.Tail{Limit: stderrTailBytes}
 	cmd.Stderr = io.MultiWriter(stderr, tail)
 
-	pipe, err := cmd.StdoutPipe()
+	reader, writer, err := os.Pipe()
 	if err != nil {
 		return fmt.Errorf("discovery failed: %w", err)
 	}
+	cmd.Stdout = writer
 
 	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: stdout}
 
-	if err := cmd.Start(); err != nil {
+	child, err := childprocess.Start(ctx, cmd, childprocess.Options{})
+	_ = writer.Close()
+	if err != nil {
+		_ = reader.Close()
 		return fmt.Errorf("discovery failed: %w", err)
 	}
-	proc.Scan(ctx, pipe)
-	runErr := cmd.Wait()
+	proc.Scan(ctx, reader)
+	_ = reader.Close()
+	runErr := child.Wait()
 	_ = proc.Abort(ctx)
 
 	if runErr != nil {

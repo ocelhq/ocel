@@ -53,7 +53,7 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
+	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return preflightFacts{}, err
 	}
 	if err := refuseStaleBootstrap(policy, check, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW); err != nil {
@@ -142,7 +142,7 @@ func preflightDeploy(ctx context.Context, dependencies Dependencies, policy cons
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
+	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return preflightFacts{}, err
 	}
 	if err := refuseStaleBootstrap(policy, check, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION); err != nil {
@@ -195,26 +195,30 @@ func guardNewProject(ctx context.Context, policy consent.Policy, check *run.Span
 	})
 }
 
-func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string, warn func(string)) error {
-	var b strings.Builder
+func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string) error {
+	var claimed, unread strings.Builder
 	for _, claim := range claims {
 		if cause := claim.GetCause(); cause != "" {
-			warn(fmt.Sprintf("Could not read who serves %s: %s\n  → this deploy continues; if another project owns that hostname, this run takes it over",
-				claim.GetHostname(), cause))
+			fmt.Fprintf(&unread, "\n  ✗ could not read who serves %s: %s", claim.GetHostname(), cause)
 			continue
 		}
 		if claim.GetStatus() != contractv1.DomainClaim_STATUS_CLAIMED {
 			continue
 		}
-		if b.Len() == 0 {
-			b.WriteString("another project already serves a hostname this project declares:")
-		}
-		fmt.Fprintf(&b, "\n  ✗ %s is owned by %s", claim.GetHostname(), claim.GetOwner())
+		fmt.Fprintf(&claimed, "\n  ✗ %s is owned by %s", claim.GetHostname(), claim.GetOwner())
 	}
-	if b.Len() == 0 {
+	var refusals []string
+	if claimed.Len() > 0 {
+		refusals = append(refusals, "another project already serves a hostname this project declares:"+claimed.String()+
+			"\n    → a hostname belongs to one project, so deploying would take it over: remove it from this project's "+
+			configName+", or tear the owning project down (`ocel destroy production` / `ocel destroy preview` in it), then deploy again")
+	}
+	if unread.Len() > 0 {
+		refusals = append(refusals, "the provider could not say whether another project serves a hostname this project declares:"+unread.String()+
+			"\n    → deploying would take the hostname over if another project owns it: deploy again once the provider can read who serves it")
+	}
+	if len(refusals) == 0 {
 		return nil
 	}
-	b.WriteString("\n    → a hostname belongs to one project, so deploying would take it over: remove it from this project's " +
-		configName + ", or tear the owning project down (`ocel destroy production` / `ocel destroy preview` in it), then deploy again")
-	return errors.New(b.String())
+	return errors.New(strings.Join(refusals, "\n"))
 }

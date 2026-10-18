@@ -9,6 +9,10 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/ocelhq/ocel/cli/internal/workdir"
+
+	"github.com/ocelhq/ocel/cli/internal/english"
+
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
@@ -22,7 +26,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
-	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -69,12 +72,6 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 		}
 	}
 
-	if declared.HasJSApp() {
-		if err := node.Ensure(declared.Dir); err != nil {
-			return err
-		}
-	}
-
 	ctx, building, err := dependencies.Events.Begin(ctx, "ocel build", declared.Dir)
 	if err != nil {
 		return err
@@ -91,6 +88,13 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 		return err
 	}
 	clients := clientenv.AppsOf(cfg, declarations.Definitions(), builtInValues(cfg, appurl.FormatProductionURLs(cfg)))
+	releaseOutput, err := workdir.LockBuildOutput(ctx, cfg.Dir, func() {
+		phase.Say("Waiting for another ocel run in " + cfg.Dir + " to finish with " + buildoutput.Dir)
+	})
+	if err != nil {
+		return err
+	}
+	defer releaseOutput()
 	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.SplitVariablesByClass(clients, nil), declaredArchs(cfg), workers, host, appBuildLog(phase))
 	if err != nil {
 		return err
@@ -167,9 +171,9 @@ func declaredArchs(cfg *project.Project) map[string]string {
 
 func builtHeadline(built build.Output) string {
 	if len(built.Functions) == 0 && len(built.Images) > 0 {
-		return fmt.Sprintf("Built %d %s", len(built.Images), plural(len(built.Images), "image", "images"))
+		return "Built " + english.Count(len(built.Images), "image")
 	}
-	return fmt.Sprintf("Built %d %s into %s", len(built.Functions), plural(len(built.Functions), "function", "functions"), buildoutput.Dir)
+	return "Built " + english.Count(len(built.Functions), "function") + " into " + buildoutput.Dir
 }
 
 func builtLines(built build.Output) []string {
@@ -178,13 +182,6 @@ func builtLines(built build.Output) []string {
 		lines = append(lines, fmt.Sprintf("Built the image of %s as %s", app, built.Images[app]))
 	}
 	return lines
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 func builtInValues(cfg *project.Project, urls map[string]string) map[string][]variables.Variable {

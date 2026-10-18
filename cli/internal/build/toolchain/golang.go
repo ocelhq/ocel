@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
+
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
@@ -64,7 +66,7 @@ func compileGo(ctx context.Context, app, dir, pkg, out, goarch string) (string, 
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said
-	if err := cmd.Run(); err != nil {
+	if err := childprocess.Run(ctx, cmd); err != nil {
 		return "", fmt.Errorf("compile %s of app %q in %s for linux/%s (%w):\n%s", pkg, app, dir, goarch, err, said.String())
 	}
 	return said.String(), nil

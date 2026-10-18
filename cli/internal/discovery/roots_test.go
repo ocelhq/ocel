@@ -177,6 +177,36 @@ func TestRoots(t *testing.T) {
 			t.Fatalf("roots = %v, want none", rootDirs(t, roots, root))
 		}
 	})
+
+	t.Run("a folder of .mts files is a js root", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, DefaultRootDirName, "infra.mts"), "export {};")
+
+		roots, err := Roots(root, nil)
+		if err != nil {
+			t.Fatalf("Roots: %v", err)
+		}
+		if len(roots) != 1 || roots[0].Language != language.JS {
+			t.Fatalf("roots = %v, want one js root", roots)
+		}
+	})
+
+	t.Run("a test file in another language does not mix the folder", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, DefaultRootDirName, "__init__.py"), "")
+		write(t, filepath.Join(root, DefaultRootDirName, "test_declarations.py"), "")
+		write(t, filepath.Join(root, DefaultRootDirName, "declarations_test.py"), "")
+		write(t, filepath.Join(root, DefaultRootDirName, "schema.test.ts"), "export {};")
+		write(t, filepath.Join(root, DefaultRootDirName, "__tests__", "fixture.js"), "")
+
+		roots, err := Roots(root, nil)
+		if err != nil {
+			t.Fatalf("Roots: %v", err)
+		}
+		if len(roots) != 1 || roots[0].Language != language.Python {
+			t.Fatalf("roots = %v, want one python root", roots)
+		}
+	})
 }
 
 const (

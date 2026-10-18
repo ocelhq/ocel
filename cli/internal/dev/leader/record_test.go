@@ -164,24 +164,24 @@ func TestRelease(t *testing.T) {
 func TestRecordPath(t *testing.T) {
 	t.Parallel()
 
-	t.Run("two project roots do not share one record", func(t *testing.T) {
+	t.Run("two configs in one directory do not share one record", func(t *testing.T) {
 		t.Parallel()
 
-		parent := t.TempDir()
-		a, err := recordPath(filepath.Join(parent, "clone-a"))
+		dir := t.TempDir()
+		a, err := recordPath(filepath.Join(dir, "ocel.json"))
 		if err != nil {
 			t.Fatalf("recordPath: %v", err)
 		}
-		b, err := recordPath(filepath.Join(parent, "clone-b"))
+		b, err := recordPath(filepath.Join(dir, "ocel.vps.json"))
 		if err != nil {
 			t.Fatalf("recordPath: %v", err)
 		}
 		if a == b {
-			t.Fatalf("recordPath(clone-a) == recordPath(clone-b) == %q, want distinct paths", a)
+			t.Fatalf("recordPath(ocel.json) == recordPath(ocel.vps.json) == %q, want distinct paths", a)
 		}
 	})
 
-	t.Run("equivalent spellings of one root agree", func(t *testing.T) {
+	t.Run("equivalent spellings of one config path agree", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()

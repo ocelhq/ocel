@@ -17,8 +17,8 @@ const recordDirName = "dev-leaders"
 
 var ErrMalformed = errors.New("the dev leader record has no address and token pair")
 
-func Read(root string) (Leader, error) {
-	path, err := recordPath(root)
+func Read(configPath string) (Leader, error) {
+	path, err := recordPath(configPath)
 	if err != nil {
 		return Leader{}, err
 	}
@@ -33,8 +33,8 @@ func Read(root string) (Leader, error) {
 	return Leader{Address: address, Token: token}, nil
 }
 
-func writeRecord(root string, leader Leader) error {
-	path, err := recordPath(root)
+func writeRecord(configPath string, leader Leader) error {
+	path, err := recordPath(configPath)
 	if err != nil {
 		return err
 	}
@@ -56,8 +56,8 @@ func writeRecord(root string, leader Leader) error {
 	return nil
 }
 
-func lockRecord(root string) (*flock.Flock, error) {
-	path, err := recordPath(root)
+func lockRecord(configPath string) (*flock.Flock, error) {
+	path, err := recordPath(configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -68,8 +68,8 @@ func lockRecord(root string) (*flock.Flock, error) {
 	return lock, nil
 }
 
-func removeRecord(root string) error {
-	path, err := recordPath(root)
+func removeRecord(configPath string) error {
+	path, err := recordPath(configPath)
 	if err != nil {
 		return err
 	}
@@ -79,10 +79,10 @@ func removeRecord(root string) error {
 	return nil
 }
 
-func recordPath(root string) (string, error) {
-	abs, err := filepath.Abs(root)
+func recordPath(configPath string) (string, error) {
+	abs, err := filepath.Abs(configPath)
 	if err != nil {
-		return "", fmt.Errorf("resolve project root %q: %w", root, err)
+		return "", fmt.Errorf("resolve the config path %q: %w", configPath, err)
 	}
 	dir, err := recordDir()
 	if err != nil {

@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
+
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -104,7 +106,7 @@ func Metadata(ctx context.Context, dir string, opts ...string) (Workspace, error
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	if err := childprocess.Run(ctx, cmd); err != nil {
 		if said := strings.TrimSpace(stderr.String()); said != "" {
 			return Workspace{}, fmt.Errorf("cargo metadata in %s: %s", dir, said)
 		}

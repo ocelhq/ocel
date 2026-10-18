@@ -502,16 +502,15 @@ export default {
 			},
 		},
 		{
-			name: "writes build artifacts under the ocel dir",
+			name: "leaves no build artifact once the config is read",
 			config: `
 export default {
   slug: "test-app",
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				artifact := filepath.Join(root, buildoutput.StateDir, "config.mjs")
-				if _, err := os.Stat(artifact); err != nil {
-					t.Fatalf("expected build artifact at %s: %v", artifact, err)
+				if entries, _ := os.ReadDir(filepath.Join(root, buildoutput.StateDir, "tmp")); len(entries) != 0 {
+					t.Fatalf("%s/tmp holds %d entries, want the bundled config removed once read", buildoutput.StateDir, len(entries))
 				}
 			},
 		},

@@ -26,16 +26,18 @@ func TestPythonDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := pythonFixture(t)
 	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Python}
 
-	cmd, err := pythonCommand(context.Background(), configDir, root, testServer)
+	commands, err := pythonCommands(context.Background(), configDir, []Root{root}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
+	cmd := commands[0]
 
 	if cmd.Dir != configDir {
 		t.Errorf("Dir = %q, want %q", cmd.Dir, configDir)
 	}
-	if want := "./" + buildoutput.StateDir + "/discovery.py"; !slices.Contains(cmd.Args, want) {
-		t.Errorf("Args = %q, want them to run %q", cmd.Args, want)
+	script := cmd.Args[len(cmd.Args)-1]
+	if !strings.HasPrefix(script, "./"+buildoutput.StateDir+"/discovery/") || !strings.HasSuffix(script, "/discovery.py") {
+		t.Errorf("Args = %q, want them to run a discovery.py under %s/discovery", cmd.Args, buildoutput.StateDir)
 	}
 	for _, want := range []string{processenv.PhaseEnvVar + "=discovery", processenv.DevServerEnvVar + "=http://127.0.0.1:1234", processenv.DevServerTokenEnvVar + "=opensesame", "PYTHONDONTWRITEBYTECODE=1"} {
 		if !slices.Contains(cmd.Env, want) {
@@ -43,7 +45,7 @@ func TestPythonDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 		}
 	}
 
-	generated, err := os.ReadFile(filepath.Join(configDir, buildoutput.StateDir, "discovery.py"))
+	generated, err := os.ReadFile(filepath.Join(configDir, filepath.FromSlash(script)))
 	if err != nil {
 		t.Fatalf("read the generated script: %v", err)
 	}
@@ -58,10 +60,11 @@ func TestPythonDiscoveryRunsFromTheNearestProjectFileAboveTheRoot(t *testing.T) 
 	write(t, filepath.Join(configDir, "server", "requirements.txt"), "")
 	write(t, filepath.Join(configDir, "server", "declarations", "__init__.py"), "")
 
-	cmd, err := pythonCommand(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "server", "declarations"), Language: language.Python}, testServer)
+	commands, err := pythonCommands(context.Background(), configDir, []Root{{Dir: filepath.Join(configDir, "server", "declarations"), Language: language.Python}}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
+	cmd := commands[0]
 	if want := filepath.Join(configDir, "server"); cmd.Dir != want {
 		t.Errorf("Dir = %q, want %q", cmd.Dir, want)
 	}
@@ -73,7 +76,7 @@ func TestPythonDiscoveryRefusesARootTooDeepToNameAPackage(t *testing.T) {
 	root := filepath.Join(configDir, "server", "declarations")
 	write(t, filepath.Join(root, "__init__.py"), "")
 
-	_, err := pythonCommand(context.Background(), configDir, Root{Dir: root, Language: language.Python}, testServer)
+	_, err := pythonCommands(context.Background(), configDir, []Root{{Dir: root, Language: language.Python}}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a root nested under the project file, want error")
 	}
@@ -244,5 +247,39 @@ func TestListingPythonPackagesRefusesAFolderThatIsItsProjectsOwnDirectory(t *tes
 	_, err := ListPythonPackages(configDir, []Root{{Dir: server, Language: language.Python}}, server)
 	if err == nil || !strings.Contains(err.Error(), server) {
 		t.Fatalf("ListPythonPackages = %v, want a refusal naming %s, which no import names", err, server)
+	}
+}
+
+func TestRunImportsEveryPythonRootThatSharesARunRootInOneProgram(t *testing.T) {
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "pyproject.toml"), "")
+	for _, pkg := range []string{"jobs", "tasks"} {
+		write(t, filepath.Join(configDir, pkg, "__init__.py"), "print(\"declared from "+pkg+"\")\n")
+	}
+	roots, err := Roots(configDir, []string{"jobs", "tasks"})
+	if err != nil {
+		t.Fatalf("Roots: %v", err)
+	}
+	prepared, err := Prepare(configDir, roots)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	commands, err := commandsFor(context.Background(), configDir, prepared, testServer)
+	if err != nil {
+		t.Fatalf("commandsFor: %v", err)
+	}
+	if len(commands) != 1 {
+		t.Errorf("commands = %d, want one program for the one run root", len(commands))
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), configDir, prepared, okServer(t), &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
+	}
+	for _, want := range []string{"declared from jobs", "declared from tasks"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want %q: every root under the run root is imported", stdout.String(), want)
+		}
 	}
 }

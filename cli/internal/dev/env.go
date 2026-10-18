@@ -50,15 +50,16 @@ func resolvedEnv(secretValues, values map[string]string, resources []binding.Res
 	return merged
 }
 
-func nextEnvOf(projectDir string, publicKeys []string) (map[string]string, error) {
+func nextEnvOf(publicKeys []string) (map[string]string, error) {
 	if len(publicKeys) == 0 {
 		return nil, nil
 	}
-	if err := node.Ensure(projectDir); err != nil {
+	bundle, err := node.Ensure()
+	if err != nil {
 		return nil, err
 	}
 	return map[string]string{
-		processenv.NextAdapterPathEnvVar: node.NextAdapterPath(projectDir),
+		processenv.NextAdapterPathEnvVar: bundle.NextAdapterPath(),
 		processenv.PublicKeysEnvVar:      strings.Join(publicKeys, ","),
 	}, nil
 }

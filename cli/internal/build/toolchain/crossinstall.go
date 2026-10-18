@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
+
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ocelhq/ocel/pkg/arch"
 )
@@ -239,7 +241,7 @@ func (p *crossInstall) installInto(ctx context.Context, app, source, functionDir
 	var npmOutput bytes.Buffer
 	cmd.Stdout = &npmOutput
 	cmd.Stderr = &npmOutput
-	if err := cmd.Run(); err != nil {
+	if err := childprocess.Run(ctx, cmd); err != nil {
 		return fmt.Errorf("install %s for app %q on %s/%s with %s (%w):\n%s", names, app, arch.NodePackageOS, cpu, describeNpmConfig(config, hasConfig), err, npmOutput.String())
 	}
 	for _, name := range slices.Sorted(maps.Keys(wanted)) {

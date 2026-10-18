@@ -1,13 +1,29 @@
 package providerprocess
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
+
+func TestLaunchingAProviderWritesNothingIntoTheProject(t *testing.T) {
+	dir := t.TempDir()
+	_, _ = newLaunchSpec(context.Background(), &project.Project{Dir: dir, Path: filepath.Join(dir, project.DefaultFileName)}, executables.ChoosePinning(true))
+
+	if _, err := os.Stat(filepath.Join(dir, buildoutput.StateDir)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("stat %s = %v, want nothing written: a provider never runs the node bundle", buildoutput.StateDir, err)
+	}
+}
 
 func TestProviderConfigIncludesTheProjectTransformModules(t *testing.T) {
 	modules := []string{"./transforms/network.transform.ts"}

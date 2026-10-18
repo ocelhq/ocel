@@ -10,7 +10,7 @@ const fakeCLIEnvVar = "OCEL_TEST_PROVIDER_PROCESS_CLI"
 
 func runFakeCLI() int {
 	env := append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=serves")
-	r, err := Spawn(context.Background(), LaunchSpec{BinaryPath: os.Args[0], Env: env, Stderr: os.Stderr})
+	r, err := Spawn(LaunchSpec{BinaryPath: os.Args[0], Env: env, Stderr: os.Stderr})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake CLI: spawn:", err)
 		return 1

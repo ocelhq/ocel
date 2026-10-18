@@ -65,7 +65,7 @@ func discoverAndSync(ctx context.Context, server *devserver.Server, cfg *project
 
 	reportSecretValues(span, result.SecretKeys)
 	env := resolvedEnv(result.SecretValues, values.merged(), result.Resources, runtimeAccess{url: result.DevServerURL, token: result.AppToken}, appFolder, scope)
-	nextEnv, err := nextEnvOf(cfg.Dir, server.PublicKeys(scope.Apps))
+	nextEnv, err := nextEnvOf(server.PublicKeys(scope.Apps))
 	if err != nil {
 		return nil, err
 	}

@@ -38,3 +38,23 @@ func TestQuotedQuotesEachValue(t *testing.T) {
 		t.Errorf("And(Quoted) = %q, want %q", got, want)
 	}
 }
+
+func TestCountNamesHowManyInTheRightNumber(t *testing.T) {
+	t.Parallel()
+	cases := map[string]int{"0 apps": 0, "1 app": 1, "2 apps": 2}
+	for want, n := range cases {
+		if got := english.Count(n, "app"); got != want {
+			t.Errorf("Count(%d, app) = %q, want %q", n, got, want)
+		}
+	}
+}
+
+func TestNumberPicksTheWordThatAgreesWithACount(t *testing.T) {
+	t.Parallel()
+	if got := english.Number(1, "it", "them"); got != "it" {
+		t.Errorf("Number(1) = %q, want it", got)
+	}
+	if got := english.Number(3, "it", "them"); got != "them" {
+		t.Errorf("Number(3) = %q, want them", got)
+	}
+}

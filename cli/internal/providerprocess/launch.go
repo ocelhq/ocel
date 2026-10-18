@@ -9,14 +9,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/node"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func newLaunchSpec(ctx context.Context, cfg *project.Project, pinning executables.Pinning) (LaunchSpec, error) {
-	if err := node.Ensure(cfg.Dir); err != nil {
-		return LaunchSpec{}, err
-	}
 	declared, err := cfg.RequireProvider()
 	if err != nil {
 		return LaunchSpec{}, err

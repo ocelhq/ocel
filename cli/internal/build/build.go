@@ -93,13 +93,22 @@ type fileAddition func(ctx context.Context, base image.Image, slug, app, files, 
 
 type tools struct {
 	node        nodeRun
+	buildScript func() (string, error)
 	image       imageBuild
 	inspection  builtImageInspection
 	addFiles    fileAddition
 	liveHashKey func() ([]byte, error)
 }
 
-var installed = tools{node: runNode, image: image.Build, inspection: images.InspectBuiltImage, addFiles: image.AddFiles, liveHashKey: userconfig.EnsureLiveHashKey}
+var installed = tools{node: runNode, buildScript: installedBuildScript, image: image.Build, inspection: images.InspectBuiltImage, addFiles: image.AddFiles, liveHashKey: userconfig.EnsureLiveHashKey}
+
+func installedBuildScript() (string, error) {
+	bundle, err := node.Ensure()
+	if err != nil {
+		return "", err
+	}
+	return bundle.BuildScriptPath(), nil
+}
 
 func Apps(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
 	return installed.apps(ctx, cfg, variables, archs, workers, host, log)
@@ -269,7 +278,10 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	}
 
 	if len(req.Apps) > 0 {
-		scriptPath := node.BuildScriptPath(cfg.Dir)
+		scriptPath, err := t.buildScript()
+		if err != nil {
+			return err
+		}
 		if _, err := os.Stat(scriptPath); err != nil {
 			return fmt.Errorf("the node build script is not at %s: %w", scriptPath, err)
 		}

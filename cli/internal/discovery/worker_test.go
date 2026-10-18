@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/workdir"
+
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -28,6 +30,9 @@ const greetEnvelope = `{"v":1,"topic":"greet","consumer":"greet","execution":"01
 
 const auditEnvelope = `{"v":1,"topic":"orders","consumer":"audit","execution":"01JZ8X6Q3V5W7Y9A1C3E5G7J9M-audit",` +
 	`"message":{"id":"01JZ8X6Q3V5W7Y9A1C3E5G7J9M"},"attempt":{"number":1,"of":3},"payload":{"name":"grace"}}`
+
+const lingerEnvelope = `{"v":1,"topic":"linger","consumer":"linger","execution":"01JZ8X6Q3V5W7Y9A1C3E5G7J9N-linger",` +
+	`"message":{"id":"01JZ8X6Q3V5W7Y9A1C3E5G7J9N"},"attempt":{"number":1,"of":3},"payload":{"name":"ada"}}`
 
 type workerAnswer struct {
 	status int
@@ -145,7 +150,9 @@ func servedFixture(t *testing.T, fixture string) string {
 		t.Fatalf("roots = %+v, want the fixture's one discovery root", roots)
 	}
 
-	cmd, err := WorkerCommand(context.Background(), configDir, roots, roots[0])
+	run := workdir.NewRun()
+	t.Cleanup(func() { _ = run.Remove() })
+	cmd, err := WorkerCommand(context.Background(), configDir, roots, roots[0], run)
 	if err != nil {
 		t.Fatalf("WorkerCommand: %v", err)
 	}
@@ -280,11 +287,13 @@ func TestAPythonWorkerInDevImportsTheFoldersItsProjectSharesAndNoOtherApps(t *te
 	t.Parallel()
 	configDir, roots := twoPythonApps(t)
 
-	cmd, err := WorkerCommand(context.Background(), configDir, roots, roots[0])
+	run := workdir.NewRun()
+	t.Cleanup(func() { _ = run.Remove() })
+	cmd, err := WorkerCommand(context.Background(), configDir, roots, roots[0], run)
 	if err != nil {
 		t.Fatalf("WorkerCommand: %v", err)
 	}
-	entry, err := os.ReadFile(filepath.Join(configDir, "a", filepath.FromSlash(pythonWorkerEntryFile)))
+	entry, err := os.ReadFile(filepath.Join(cmd.Dir, filepath.FromSlash(cmd.Args[len(cmd.Args)-1])))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,5 +313,37 @@ func TestAPythonWorkerInDevImportsTheFoldersItsProjectSharesAndNoOtherApps(t *te
 	}
 	if !slices.Contains(pythonPath, configDir) {
 		t.Errorf("the dev worker's PYTHONPATH = %q, want it to hold %s, where %s is imported from", pythonPath, configDir, DefaultRootDirName)
+	}
+}
+
+func TestTheGeneratedPythonWorkerCancelsARunWhoseCallerHungUp(t *testing.T) {
+	t.Setenv("PATH", pythonSDKEnvironment(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	url := servedFixture(t, "python")
+
+	hangUp, hungUp := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer hungUp()
+	req, err := http.NewRequestWithContext(hangUp, http.MethodPost, url, strings.NewReader(lingerEnvelope))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp, err := http.DefaultClient.Do(req); err == nil {
+		_ = resp.Body.Close()
+		t.Fatalf("the lingering run answered %d, want it still running when the caller hung up", resp.StatusCode)
+	}
+
+	var cancelled string
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		var output struct {
+			Cancelled string `json:"cancelled"`
+		}
+		if err := json.Unmarshal([]byte(deliverTo(t, url, greetEnvelope).body), &output); err != nil {
+			t.Fatal(err)
+		}
+		if cancelled = output.Cancelled; cancelled != "" {
+			break
+		}
+	}
+	if want := "linger ada"; cancelled != want {
+		t.Errorf("cancelled = %q, want %q: a run whose caller hung up is cancelled and its on_cancel hook run", cancelled, want)
 	}
 }

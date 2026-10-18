@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
-	"github.com/ocelhq/ocel/cli/node"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
 
@@ -50,10 +49,6 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := dependencies.LoadProject(ctx, cwd)
 	if err != nil {
-		return err
-	}
-
-	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 

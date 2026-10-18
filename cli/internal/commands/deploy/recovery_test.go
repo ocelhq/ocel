@@ -1611,18 +1611,15 @@ func TestADeployReadsItsTiersEnvSourceBeforeCheckingItsVariables(t *testing.T) {
 		}
 	})
 
-	t.Run("a writable env source is handed the keys it lacks, empty, for a human to fill", func(t *testing.T) {
+	t.Run("a deploy that cannot ask refuses without writing the keys it lacks into the env source", func(t *testing.T) {
 		fixture, source := setUpEnvSourceProject(t, nil, "missing")
 
 		out, err := deployWith(t, newTestDependencies(), fixture, deployOptions{yes: true})
-		if err == nil {
-			t.Fatal("runDeploy err = nil, want the variables check to refuse: an empty key is still unset")
+		if err == nil || !strings.Contains(out, "STRIPE_API_KEY") {
+			t.Fatalf("runDeploy err = %v, output = %q, want the variables check to refuse the missing STRIPE_API_KEY", err, out)
 		}
-		if created := source.createdKeys(); !slices.Equal(created, []string{"STRIPE_API_KEY="}) {
-			t.Fatalf("created = %v, want STRIPE_API_KEY created empty", created)
-		}
-		if !strings.Contains(out, "Created STRIPE_API_KEY empty in infisical:p-1/prod") {
-			t.Errorf("output = %q, want the creation reported", out)
+		if created := source.createdKeys(); len(created) != 0 {
+			t.Errorf("created = %v, want a failed deploy to leave the env source as it found it", created)
 		}
 	})
 

@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/workdir"
+
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/devresources/queue"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -33,6 +35,7 @@ type workerProcess struct {
 
 type workerProcesses struct {
 	opts  Options
+	run   *workdir.Run
 	queue *queue.Backend
 	ports map[string]int
 
@@ -45,7 +48,7 @@ type workerProcesses struct {
 }
 
 func newWorkerProcesses(opts Options, backend *queue.Backend) *workerProcesses {
-	return &workerProcesses{opts: opts, queue: backend, ports: map[string]int{}}
+	return &workerProcesses{opts: opts, run: workdir.NewRun(), queue: backend, ports: map[string]int{}}
 }
 
 func (w *workerProcesses) restart(ctx context.Context, env map[string]string) {
@@ -69,7 +72,7 @@ func (w *workerProcesses) restart(ctx context.Context, env map[string]string) {
 			w.warn(worker.Name, err)
 			continue
 		}
-		cmd, err := discovery.WorkerCommand(ctx, cfg.Dir, roots, root)
+		cmd, err := discovery.WorkerCommand(ctx, cfg.Dir, roots, root, w.run)
 		if err != nil {
 			w.warn(worker.Name, err)
 			continue
@@ -96,7 +99,7 @@ func (w *workerProcesses) start(ctx context.Context, cmd *exec.Cmd, name string,
 	workerEnv[processenv.WorkerEnvVar] = name
 	cmd.Env = applyEnv(cmd.Env, workerEnv)
 	cmd.Stdout, cmd.Stderr = w.opts.Stdout, w.opts.Stderr
-	child, err := childprocess.Start(ctx, cmd, nil, false)
+	child, err := childprocess.Start(ctx, cmd, childprocess.Options{})
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +180,13 @@ func (w *workerProcesses) stop(ctx context.Context) {
 		process.child.Stop()
 	}
 	w.running = nil
+}
+
+func (w *workerProcesses) close(ctx context.Context) {
+	w.stop(ctx)
+	if err := w.run.Remove(); err != nil {
+		w.warnAll(err)
+	}
 }
 
 func (w *workerProcesses) warn(worker string, err error) {

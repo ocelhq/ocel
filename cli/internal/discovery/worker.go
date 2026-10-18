@@ -10,16 +10,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/workdir"
+
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
-const (
-	nodeWorkerEntryFile   = "worker.mjs"
-	pythonWorkerEntryFile = buildoutput.StateDir + "/worker.py"
-	goWorkerEntryDir      = buildoutput.StateDir + "/worker"
-)
+const nodeWorkerEntryFile = "worker.mjs"
 
 const goWorkerMain = `package main
 
@@ -44,7 +41,10 @@ func main() {
 `
 
 const pythonWorkerServer = `import asyncio
+import concurrent.futures
 import os
+import select
+import socket
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -67,12 +67,31 @@ class Delivery(BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
-        status, answer = asyncio.run_coroutine_threadsafe(deliver(worker, body), loop).result()
+        run = asyncio.run_coroutine_threadsafe(deliver(worker, body), loop)
+        if not self.answered_before_hang_up(run):
+            run.cancel()
+            self.close_connection = True
+            return
+        status, answer = run.result()
         self.send_response(status)
         self.send_header("Content-Type", "application/json" if status in (200, 422) else "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(answer)))
         self.end_headers()
         self.wfile.write(answer)
+
+    def answered_before_hang_up(self, run):
+        while not run.done():
+            readable, _, _ = select.select([self.connection], [], [], 0.25)
+            if not readable:
+                continue
+            try:
+                sent = self.connection.recv(1, socket.MSG_PEEK)
+            except OSError:
+                return False
+            if not sent:
+                return False
+            concurrent.futures.wait([run])
+        return True
 
     def log_message(self, format, *args):
         pass
@@ -108,7 +127,7 @@ __ocelCreateServer(async (req, res) => {
 }).listen(Number(process.env.PORT), process.env.HOST || "127.0.0.1");
 `
 
-type workerCommand func(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error)
+type workerCommand func(ctx context.Context, configDir string, roots []Root, served Root, run *workdir.Run) (*exec.Cmd, error)
 
 var workerCommands = map[language.Language]workerCommand{
 	language.JS:     nodeWorkerCommand,
@@ -117,20 +136,21 @@ var workerCommands = map[language.Language]workerCommand{
 	language.Rust:   rustWorkerCommand,
 }
 
-func WorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
+func WorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, run *workdir.Run) (*exec.Cmd, error) {
 	command, ok := workerCommands[served.Language]
 	if !ok {
 		return nil, fmt.Errorf("discovery: %s is a %s folder, and ocel runs no worker from one", served.Dir, served.Language)
 	}
-	return command(ctx, configDir, roots, served)
+	return command(ctx, configDir, roots, served, run)
 }
 
-func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Root) (*exec.Cmd, error) {
-	entry := filepath.Join(configDir, buildoutput.StateDir, nodeWorkerEntryFile)
-	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
-		return nil, fmt.Errorf("create %s: %w", buildoutput.StateDir, err)
+func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Root, run *workdir.Run) (*exec.Cmd, error) {
+	bundle, err := bundleNodeWorker(configDir, roots, run.Path(configDir, nodeWorkerEntryFile))
+	if err != nil {
+		return nil, err
 	}
-	if err := BundleNodeWorker(configDir, roots, entry); err != nil {
+	entry, err := run.Write(configDir, nodeWorkerEntryFile, bundle)
+	if err != nil {
 		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
@@ -139,9 +159,20 @@ func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Ro
 }
 
 func BundleNodeWorker(configDir string, roots []Root, outfile string) error {
-	source, resolveDir, err := RenderNodeWorkerEntry(roots)
+	bundle, err := bundleNodeWorker(configDir, roots, outfile)
 	if err != nil {
 		return err
+	}
+	if err := os.WriteFile(outfile, bundle, 0o644); err != nil {
+		return fmt.Errorf("write the worker entry: %w", err)
+	}
+	return nil
+}
+
+func bundleNodeWorker(configDir string, roots []Root, outfile string) ([]byte, error) {
+	source, resolveDir, err := RenderNodeWorkerEntry(roots)
+	if err != nil {
+		return nil, err
 	}
 	if source == "" {
 		source = fmt.Sprintf(nodeWorkerServer, "")
@@ -149,10 +180,11 @@ func BundleNodeWorker(configDir string, roots []Root, outfile string) error {
 	if resolveDir == "" {
 		resolveDir = configDir
 	}
-	if err := bundleTo(resolveDir, outfile, "ocel-worker-entry.ts", source); err != nil {
-		return fmt.Errorf("bundle the worker entry:\n%w", err)
+	bundle, err := bundleTo(resolveDir, outfile, "ocel-worker-entry.ts", source)
+	if err != nil {
+		return nil, fmt.Errorf("bundle the worker entry:\n%w", err)
 	}
-	return nil
+	return bundle, nil
 }
 
 func RenderNodeWorkerEntry(roots []Root) (source, resolveDir string, err error) {
@@ -180,7 +212,7 @@ func RenderNodeWorkerEntry(roots []Root) (source, resolveDir string, err error) 
 	return fmt.Sprintf(nodeWorkerServer, imports.String()), resolveDir, nil
 }
 
-func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
+func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, _ *workdir.Run) (*exec.Cmd, error) {
 	moduleRoot, pkg, err := WriteGoWorkerEntry(configDir, roots, served)
 	if err != nil {
 		return nil, err
@@ -196,13 +228,14 @@ func WriteGoWorkerEntry(configDir string, roots []Root, served Root) (string, st
 	if err != nil {
 		return "", "", err
 	}
-	if _, err := writeGoWorkerEntry(configDir, roots, moduleRoot); err != nil {
+	pkg, err := writeGoWorkerEntry(configDir, roots, moduleRoot)
+	if err != nil {
 		return "", "", err
 	}
-	return moduleRoot, "./" + goWorkerEntryDir, nil
+	return moduleRoot, pkg, nil
 }
 
-func rustWorkerCommand(ctx context.Context, _ string, _ []Root, served Root) (*exec.Cmd, error) {
+func rustWorkerCommand(ctx context.Context, _ string, _ []Root, served Root, _ *workdir.Run) (*exec.Cmd, error) {
 	cmd, _, err := cargoRunCommand(ctx, served)
 	if err != nil {
 		return nil, err
@@ -216,14 +249,10 @@ func GoWorkerPackage(configDir string, roots []Root, moduleDir string) (string, 
 	if err != nil {
 		return "", err
 	}
-	written, err := writeGoWorkerEntry(configDir, roots, moduleRoot)
-	if err != nil || !written {
-		return "", err
-	}
-	return "./" + goWorkerEntryDir, nil
+	return writeGoWorkerEntry(configDir, roots, moduleRoot)
 }
 
-func writeGoWorkerEntry(configDir string, roots []Root, moduleRoot string) (bool, error) {
+func writeGoWorkerEntry(configDir string, roots []Root, moduleRoot string) (string, error) {
 	var imports strings.Builder
 	for _, root := range roots {
 		if root.Language != language.Go {
@@ -231,22 +260,19 @@ func writeGoWorkerEntry(configDir string, roots []Root, moduleRoot string) (bool
 		}
 		rootModule, pkg, err := goPackage(configDir, root)
 		if err != nil {
-			return false, err
+			return "", err
 		}
 		if rootModule == moduleRoot {
 			fmt.Fprintf(&imports, "\n\t_ %q\n", pkg)
 		}
 	}
 	if imports.Len() == 0 {
-		return false, nil
+		return "", nil
 	}
-	if err := writeGoEntry(moduleRoot, goWorkerEntryDir, fmt.Sprintf(goWorkerMain, imports.String())); err != nil {
-		return false, err
-	}
-	return true, nil
+	return writeGoEntry(moduleRoot, "worker", fmt.Sprintf(goWorkerMain, imports.String()))
 }
 
-func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
+func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, _ *workdir.Run) (*exec.Cmd, error) {
 	runRoot, err := pythonRunRoot(configDir, served.Dir)
 	if err != nil {
 		return nil, err
@@ -255,15 +281,12 @@ func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, se
 	if err != nil {
 		return nil, err
 	}
-	entry := filepath.Join(runRoot, filepath.FromSlash(pythonWorkerEntryFile))
-	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
-		return nil, fmt.Errorf("discovery: %w", err)
-	}
-	if err := os.WriteFile(entry, []byte(RenderPythonWorkerEntry(packages)), 0o644); err != nil {
-		return nil, fmt.Errorf("discovery: %w", err)
+	entry, err := writePythonEntry(runRoot, "worker", RenderPythonWorkerEntry(packages))
+	if err != nil {
+		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, PythonInterpreter(runRoot), "./"+pythonWorkerEntryFile)
+	cmd := exec.CommandContext(ctx, PythonInterpreter(runRoot), entry)
 	cmd.Dir = runRoot
 	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 	if importDirs := listImportDirsOutside(runRoot, packages); len(importDirs) > 0 {

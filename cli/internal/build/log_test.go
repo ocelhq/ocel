@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -79,7 +78,7 @@ func nodeBuilder(t *testing.T, script string) *project.Project {
 	emit := fmt.Sprintf(`const emit = (r) => process.stdout.write("\n" + %s + JSON.stringify(r) + "\n");
 const req = JSON.parse(require("fs").readFileSync(0, "utf8"));
 `, jsString(nodeprotocol.Prefix))
-	if err := os.WriteFile(node.BuildScriptPath(root), []byte(emit+script), 0o644); err != nil {
+	if err := os.WriteFile(testBuildScript(root), []byte(emit+script), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return &project.Project{

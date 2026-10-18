@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/english"
+
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
 
@@ -262,7 +264,7 @@ func renderStatus(out io.Writer, slug string, reading tierReading, configFile st
 	case 0:
 		fmt.Fprintf(out, "  Bypass secrets: none  → `ocel protection bypass create%s` makes one\n", flag)
 	default:
-		fmt.Fprintf(out, "  Bypass secrets: %d bypass secret%s (%s)\n", n, plural(n), strings.Join(result.GetBypassSecretIds(), ", "))
+		fmt.Fprintf(out, "  Bypass secrets: %s (%s)\n", english.Count(n, "bypass secret"), strings.Join(result.GetBypassSecretIds(), ", "))
 	}
 	pending := false
 	for _, front := range result.GetEdges() {
@@ -282,13 +284,6 @@ func renderStatus(out io.Writer, slug string, reading tierReading, configFile st
 	if pending {
 		fmt.Fprintf(out, "  → `ocel protection sync%s` publishes the recorded credentials again\n", flag)
 	}
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }
 
 type changeOutcome struct {

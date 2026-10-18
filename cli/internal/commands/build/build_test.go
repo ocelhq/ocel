@@ -20,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -370,29 +369,7 @@ export default {
 	}
 }
 
-func TestBuildingAGoProjectUnpacksNoNodeBundle(t *testing.T) {
-	root := t.TempDir()
-	clitest.WriteFile(t, filepath.Join(root, "go.mod"), "module fixture\n\ngo 1.24\n")
-	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{
-  "slug": "go-shop",
-  "provider": { "fake": {} }
-}
-`)
-
-	dependencies := newTestDependencies()
-	stubBuild(&dependencies, nil)
-
-	var out bytes.Buffer
-	clitest.AttachTerminalSink(dependencies.Invocation, &out)
-	if err := runBuild(context.Background(), dependencies, root); err != nil {
-		t.Fatalf("runBuild err = %v; out=%s", err, out.String())
-	}
-	if _, err := os.Stat(node.DistDir(root)); err == nil {
-		t.Fatalf("%s was unpacked for a project with no JavaScript", node.DistDir(root))
-	}
-}
-
-func TestBuildUnpacksTheNodeBundleForAJavaScriptAppBesideNoRootPackageJSON(t *testing.T) {
+func TestBuildingAJavaScriptAppLeavesNoNodeBundleInTheProject(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -409,7 +386,7 @@ export default {
 	if err := runBuild(context.Background(), dependencies, root); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
-	if _, err := os.Stat(node.BuildScriptPath(root)); err != nil {
-		t.Fatalf("the node build script is not at %s: web is a node app, and its build runs through that script: %v", node.BuildScriptPath(root), err)
+	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "dist")); err == nil {
+		t.Fatalf("the build unpacked the node bundle into %s, want it in the user cache where every project and run shares one copy", root)
 	}
 }

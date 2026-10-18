@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
-	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 )
 
@@ -25,7 +24,7 @@ func TestTheBannerNamesTheDataTheDocsAndHowToTurnItOff(t *testing.T) {
 
 	banner := printBanner(enabled)
 
-	for _, want := range []string{"anonymous usage data", docsurl.Origin + "/docs/telemetry", "OCEL_TELEMETRY=0"} {
+	for _, want := range []string{"anonymous usage data", "https://ocel.dev/docs/telemetry", "OCEL_TELEMETRY=0"} {
 		if !strings.Contains(banner, want) {
 			t.Errorf("banner = %q, want it to contain %q", banner, want)
 		}

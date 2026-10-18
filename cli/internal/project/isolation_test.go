@@ -1,4 +1,4 @@
-package dotfile_test
+package project_test
 
 import (
 	"os/exec"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const self = "github.com/ocelhq/ocel/cli/internal/dotfile"
+const self = "github.com/ocelhq/ocel/cli/internal/project"
 
 func TestDeployPathIsolation(t *testing.T) {
 	t.Parallel()
@@ -16,25 +16,15 @@ func TestDeployPathIsolation(t *testing.T) {
 		"github.com/ocelhq/ocel/cli/internal/variables",
 		"github.com/ocelhq/ocel/cli/internal/variableeditor",
 	} {
-		t.Run(path.Base(pkg)+" cannot reach the dotfile", func(t *testing.T) {
+		t.Run(path.Base(pkg)+" cannot reach the .env reader", func(t *testing.T) {
 			t.Parallel()
 			for _, dep := range list(t, "-deps", pkg) {
 				if dep == self {
-					t.Errorf("%s depends on %s — the dotfile has reached the deploy path", pkg, self)
+					t.Errorf("%s depends on %s — the .env reader has reached the deploy path", pkg, self)
 				}
 			}
 		})
 	}
-
-	t.Run("declaration cannot read the dotfile itself", func(t *testing.T) {
-		t.Parallel()
-		const pkg = "github.com/ocelhq/ocel/cli/internal/declaration"
-		for _, dep := range list(t, "-f", `{{join .Imports "\n"}}`, pkg) {
-			if dep == self {
-				t.Errorf("%s imports %s directly — the dotfile belongs to config evaluation, never to collection", pkg, self)
-			}
-		}
-	})
 }
 
 func list(t *testing.T, args ...string) []string {
