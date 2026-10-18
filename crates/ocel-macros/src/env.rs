@@ -1,4 +1,4 @@
-use crate::attribute::parse_entries;
+use crate::attribute::{parse_entries, read_container_crate_path};
 use crate::source::source;
 use crate::variable::{description, is_bool, refused, variable, Class, Shape, Variable};
 use proc_macro2::{Span, TokenStream};
@@ -22,6 +22,7 @@ impl Kind {
 
 pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream> {
     let label = kind.label();
+    let krate = &read_container_crate_path(input, label)?;
     let variables = variables(input, label)?;
     let groups = groups(input, label)?;
     let ident = &input.ident;
@@ -29,19 +30,19 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
     let declared = variables.iter().map(|variable| {
         let key = &variable.key;
         let (file, line) = source(variable.span);
-        let class = class(variable.class);
+        let class = class(variable.class, krate);
         let required = variable.required();
         let folders = variable.folders.iter();
         let description = text(variable.description.as_deref());
         let check = match variable.parsed() {
             Some(ty) => {
-                let parsed = parsed(ty);
-                quote!(::core::option::Option::Some(::ocel::check::<#parsed>))
+                let parsed = parsed(ty, krate);
+                quote!(::core::option::Option::Some(#krate::check::<#parsed>))
             }
             None => quote!(::core::option::Option::None),
         };
         quote! {
-            ::ocel::DeclaredVariable {
+            #krate::DeclaredVariable {
                 key: #key,
                 class: #class,
                 required: #required,
@@ -57,24 +58,24 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
 
     let fields = variables.iter().map(|variable| {
         let (field, key) = (&variable.ident, &variable.key);
-        let class = class(variable.class);
+        let class = class(variable.class, krate);
         let folders = variable.folders.iter();
         let fallback = text(variable.fallback.as_deref());
         let read = match &variable.shape {
-            Shape::Live => quote!(::ocel::secret(#key, &[#(#folders),*])?),
+            Shape::Live => quote!(#krate::secret(#key, &[#(#folders),*])?),
             Shape::Optional(inner) => {
-                let parsed = parsed(inner);
+                let parsed = parsed(inner, krate);
                 let read =
-                    quote!(::ocel::optional::<#parsed>(#key, #class, &[#(#folders),*], #fallback)?);
+                    quote!(#krate::optional::<#parsed>(#key, #class, &[#(#folders),*], #fallback)?);
                 match is_bool(inner) {
-                    true => quote!(#read.map(<::core::primitive::bool as ::core::convert::From<::ocel::Boolean>>::from)),
+                    true => quote!(#read.map(<::core::primitive::bool as ::core::convert::From<#krate::Boolean>>::from)),
                     false => read,
                 }
             }
             Shape::Direct(ty) => {
-                let parsed = parsed(ty);
+                let parsed = parsed(ty, krate);
                 let read =
-                    quote!(::ocel::value::<#parsed>(#key, #class, &[#(#folders),*], #fallback)?);
+                    quote!(#krate::value::<#parsed>(#key, #class, &[#(#folders),*], #fallback)?);
                 match is_bool(ty) {
                     true => quote!(#read.into()),
                     false => read,
@@ -89,11 +90,11 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
         let (file, line) = source(group.span);
         let description = text(group.description.as_deref());
         quote! {
-            ::ocel::DeclaredGroup {
+            #krate::DeclaredGroup {
                 key: #key,
                 required: #required,
                 description: #description,
-                members: <#ty as ::ocel::Declare>::declared,
+                members: <#ty as #krate::Declare>::declared,
                 file: #file,
                 line: #line,
             }
@@ -104,14 +105,14 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
         let (field, ty) = (&group.ident, &group.ty);
         match group.optional {
             true => quote! {
-                #field: match ::ocel::group_present(
-                    &<#ty as ::ocel::Declare>::declared().variables,
+                #field: match #krate::group_present(
+                    &<#ty as #krate::Declare>::declared().variables,
                 ) {
-                    true => ::core::option::Option::Some(<#ty as ::ocel::Declare>::load()?),
+                    true => ::core::option::Option::Some(<#ty as #krate::Declare>::load()?),
                     false => ::core::option::Option::None,
                 }
             },
-            false => quote!(#field: <#ty as ::ocel::Declare>::load()?),
+            false => quote!(#field: <#ty as #krate::Declare>::load()?),
         }
     });
 
@@ -122,7 +123,7 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
     let nesting = (!groups.is_empty()).then(|| {
         quote! {
             const _: () = {
-                fn one_level<T: ::ocel::Group>() {}
+                fn one_level<T: #krate::Group>() {}
                 fn nesting() {
                     #(#checks)*
                 }
@@ -134,30 +135,30 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
             satisfiable(ident, &variables)?;
             let flat = groups
                 .is_empty()
-                .then(|| quote!(impl ::ocel::Group for #ident {}));
+                .then(|| quote!(impl #krate::Group for #ident {}));
             (flat, None)
         }
         Kind::Env => (
             None,
             Some(quote! {
-                ::ocel::inventory::submit! {
-                    ::ocel::Registered(<#ident as ::ocel::Declare>::declared)
+                #krate::inventory::submit! {
+                    #krate::Registered(<#ident as #krate::Declare>::declared)
                 }
             }),
         ),
     };
 
     Ok(quote! {
-        impl ::ocel::Declare for #ident {
-            fn declared() -> ::ocel::Declared {
-                ::ocel::Declared {
+        impl #krate::Declare for #ident {
+            fn declared() -> #krate::Declared {
+                #krate::Declared {
                     resources: ::std::vec::Vec::new(),
                     variables: ::std::vec![#(#declared),*],
                     groups: ::std::vec![#(#declared_groups),*],
                 }
             }
 
-            fn load() -> ::core::result::Result<Self, ::ocel::Error> {
+            fn load() -> ::core::result::Result<Self, #krate::Error> {
                 ::core::result::Result::Ok(Self { #(#fields,)* #(#group_fields),* })
             }
         }
@@ -166,8 +167,8 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
 
         impl #ident {
             /// The struct with every field read from the value delivered for it.
-            pub fn load() -> ::core::result::Result<Self, ::ocel::Error> {
-                <Self as ::ocel::Declare>::load()
+            pub fn load() -> ::core::result::Result<Self, #krate::Error> {
+                <Self as #krate::Declare>::load()
             }
         }
 
@@ -216,18 +217,18 @@ fn text(value: Option<&str>) -> TokenStream {
     }
 }
 
-fn parsed(ty: &syn::Type) -> TokenStream {
+fn parsed(ty: &syn::Type, krate: &syn::Path) -> TokenStream {
     match is_bool(ty) {
-        true => quote!(::ocel::Boolean),
+        true => quote!(#krate::Boolean),
         false => quote!(#ty),
     }
 }
 
-fn class(class: Class) -> TokenStream {
+fn class(class: Class, krate: &syn::Path) -> TokenStream {
     match class {
-        Class::Plain => quote!(::ocel::Class::Plain),
-        Class::Sensitive => quote!(::ocel::Class::Sensitive),
-        Class::Secret => quote!(::ocel::Class::Secret),
+        Class::Plain => quote!(#krate::Class::Plain),
+        Class::Sensitive => quote!(#krate::Class::Sensitive),
+        Class::Secret => quote!(#krate::Class::Secret),
     }
 }
 

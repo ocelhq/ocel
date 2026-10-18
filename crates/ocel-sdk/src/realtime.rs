@@ -37,7 +37,7 @@ use crate::proto::app::realtime::v1::{PublishRequest, RealtimeServiceClient};
 use crate::proto::common::bindings::v1::RealtimeProperties;
 use crate::run::BoxFuture;
 use crate::runtime::read_client_config;
-use crate::Error;
+use crate::{Code, Error};
 use bytes::Bytes;
 use connectrpc::client::HttpClient;
 use futures_util::FutureExt;
@@ -399,6 +399,7 @@ impl Realtime {
             .ok_or_else(|| refuse(DenialCode::UnknownPattern))?;
         self.read_properties("publish")?;
         let failed = |said: String| Error::PublishFailed {
+            code: Code::Internal,
             name: self.inner.name.clone(),
             said,
         };
@@ -419,8 +420,9 @@ impl Realtime {
     }
 
     pub(crate) async fn publish_event(&self, wire: &str, envelope: Bytes) -> Result<(), Error> {
-        let failed = |said: String| Error::PublishFailed {
+        let failed = |code: Code, said: String| Error::PublishFailed {
             name: self.inner.name.clone(),
+            code,
             said: format!("publish on {wire}: {said}"),
         };
         let runtime = match self.inner.runtime.get() {
@@ -431,7 +433,8 @@ impl Realtime {
                 self.inner.runtime.get_or_init(|| client)
             }
         };
-        let event = String::from_utf8(envelope.to_vec()).map_err(|err| failed(err.to_string()))?;
+        let event = String::from_utf8(envelope.to_vec())
+            .map_err(|err| failed(Code::Internal, err.to_string()))?;
         runtime
             .publish(PublishRequest {
                 realtime: self.inner.name.clone(),
@@ -440,7 +443,7 @@ impl Realtime {
                 ..Default::default()
             })
             .await
-            .map_err(|err| failed(err.to_string()))?;
+            .map_err(|err| failed(Code::from_connect(err.code), err.to_string()))?;
         Ok(())
     }
 

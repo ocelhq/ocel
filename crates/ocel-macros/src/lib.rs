@@ -1,4 +1,4 @@
-//! The attribute macros of the [`ocel`](https://docs.rs/ocel) crate. Import them from
+//! The attribute macros of the [`ocel-sdk`](https://docs.rs/ocel-sdk) crate. Import them from
 //! there rather than depending on this crate directly.
 
 mod attribute;
@@ -57,6 +57,9 @@ const FIXED: &str = "what it declares is fixed once per binary";
 /// also gets an `ocel::TopicName<T>` constant on the struct, named after the field in upper
 /// case (`Infra::ORDERS` above), which `#[ocel::consumer]` and `#[ocel::batch_consumer]`
 /// name their topic by.
+///
+/// `#[ocel(crate = <PATH>)]` on the struct names the path ocel-sdk is reached by, `::ocel`
+/// unless the dependency is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_derive(Resources, attributes(ocel))]
 pub fn resources(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
@@ -83,6 +86,9 @@ pub fn resources(item: TokenStream) -> TokenStream {
 /// not decode read as `None`, and `name` names the entry, the struct's name in snake case by
 /// default. A field the pattern lacks, or a parameter no field holds, is a compile error. A
 /// field is a string or an integer, written into the key percent-encoded.
+///
+/// `#[ocel(crate = <PATH>)]` on the struct names the path ocel-sdk is reached by, `::ocel`
+/// unless the dependency is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_derive(KvKey, attributes(ocel))]
 pub fn kv_key(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
@@ -114,6 +120,9 @@ pub fn kv_key(item: TokenStream) -> TokenStream {
 /// every channel of the resource that sets it sets the same. Each field is a `String`, one
 /// for each param; a field the pattern lacks, or a param no field holds, is a compile error.
 /// It needs the `realtime` feature of ocel-sdk.
+///
+/// `#[ocel(crate = <PATH>)]` on the struct names the path ocel-sdk is reached by, `::ocel`
+/// unless the dependency is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_derive(Channel, attributes(ocel))]
 pub fn channel(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
@@ -156,6 +165,9 @@ pub fn channel(item: TokenStream) -> TokenStream {
 /// then. A group containing groups of its own is a compile error, because a group nests one
 /// level only. The field's type is read as it is written, so a type alias for an `Option`
 /// declares no optional group: spell the `Option` on the field.
+///
+/// `#[ocel(crate = <PATH>)]` on the struct names the path ocel-sdk is reached by, `::ocel`
+/// unless the dependency is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_derive(Env, attributes(ocel))]
 pub fn env(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
@@ -187,6 +199,9 @@ pub fn env(item: TokenStream) -> TokenStream {
 /// Fields are spelled as they are on an [`ocel::Env`](macro@Env) struct. What differs is
 /// that nothing is declared until a field of an `ocel::Env` struct has the group as its
 /// type: a struct that no `ocel::Env` field has as its type declares no variables of its own.
+///
+/// `#[ocel(crate = <PATH>)]` on the struct names the path ocel-sdk is reached by, `::ocel`
+/// unless the dependency is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_derive(Group, attributes(ocel))]
 pub fn group(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
@@ -212,30 +227,40 @@ pub fn group(item: TokenStream) -> TokenStream {
 /// type has to be one `ocel::Error` converts into. A `main` returning anything other than
 /// `()` or a `Result` is a compile error. It composes with a runtime's own attribute in
 /// either order, so `#[tokio::main]` may sit above it or below it.
+///
+/// `crate = <PATH>` names the path ocel-sdk is reached by, `::ocel` unless the dependency
+/// is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_attribute]
-pub fn main(_attribute: TokenStream, item: TokenStream) -> TokenStream {
+pub fn main(attribute: TokenStream, item: TokenStream) -> TokenStream {
     let mut function = parse_macro_input!(item as ItemFn);
+    let krate = match read_main_crate_path(attribute.into()) {
+        Ok(krate) => krate,
+        Err(err) => {
+            let refused = err.into_compile_error();
+            return quote!(#refused #function).into();
+        }
+    };
     let roles: [syn::Stmt; 2] = match classify_return(&function.sig.output) {
         Some(ReturnShape::Unit) => [
             syn::parse_quote! {
-                if ::ocel::discover().expect("ocel discovery") {
+                if #krate::discover().expect("ocel discovery") {
                     return;
                 }
             },
             syn::parse_quote! {
-                if ::ocel::serve_worker().expect("ocel worker") {
+                if #krate::serve_worker().expect("ocel worker") {
                     return;
                 }
             },
         ],
         Some(ReturnShape::Result) => [
             syn::parse_quote! {
-                if ::ocel::discover()? {
+                if #krate::discover()? {
                     return Ok(());
                 }
             },
             syn::parse_quote! {
-                if ::ocel::serve_worker()? {
+                if #krate::serve_worker()? {
                     return Ok(());
                 }
             },
@@ -318,6 +343,9 @@ pub fn main(_attribute: TokenStream, item: TokenStream) -> TokenStream {
 /// is `Clone`. With `batch(...)`, every hook's `P` is the `Vec<P>`. An error from
 /// `on_success`, `on_failure`, `on_complete` or `on_cancel` is written to stderr and
 /// changes nothing else.
+///
+/// `crate = <PATH>` names the path ocel-sdk is reached by, `::ocel` unless the dependency
+/// is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_attribute]
 pub fn task(attribute: TokenStream, item: TokenStream) -> TokenStream {
     let function = parse_macro_input!(item as ItemFn);
@@ -349,6 +377,9 @@ pub fn task(attribute: TokenStream, item: TokenStream) -> TokenStream {
 /// defaults to the function's name with `_` written as `-`. `name`, `retry(...)`,
 /// `concurrency`, `max_duration` and `worker` are written as on [`macro@task`], and
 /// `lanes = ["high", "default", "low"]` limits the lanes it reads.
+///
+/// `crate = <PATH>` names the path ocel-sdk is reached by, `::ocel` unless the dependency
+/// is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_attribute]
 pub fn consumer(attribute: TokenStream, item: TokenStream) -> TokenStream {
     let function = parse_macro_input!(item as ItemFn);
@@ -371,12 +402,30 @@ pub fn consumer(attribute: TokenStream, item: TokenStream) -> TokenStream {
 /// ocel::RunError>`. `batch_size = <NUMBER>` is required and is the most messages a batch
 /// holds; `batch_timeout = "<DURATION>"` is how long a batch waits to fill before it is
 /// handed over short. Every other option is written as on [`macro@consumer`].
+///
+/// `crate = <PATH>` names the path ocel-sdk is reached by, `::ocel` unless the dependency
+/// is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_attribute]
 pub fn batch_consumer(attribute: TokenStream, item: TokenStream) -> TokenStream {
     let function = parse_macro_input!(item as ItemFn);
     task::expand_batch_consumer(attribute.into(), function)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
+}
+
+fn read_main_crate_path(attribute: proc_macro2::TokenStream) -> syn::Result<syn::Path> {
+    let mut entries = attribute::parse_arguments(attribute)?;
+    let krate = attribute::take_crate_path(&mut entries)?;
+    match entries.first() {
+        Some(entry) => Err(syn::Error::new(
+            entry.span(),
+            format!(
+                "#[ocel::main] has an unknown attribute '{}'. Its only attribute is crate = <PATH>.",
+                entry.name
+            ),
+        )),
+        None => Ok(krate),
+    }
 }
 
 enum ReturnShape {

@@ -1,4 +1,4 @@
-use crate::attribute::{parse_entries, Value};
+use crate::attribute::{parse_entries, respan, take_crate_path, Value};
 use crate::options::{parse_duration, quote_none, refuse_unknown_attribute};
 use crate::source::source;
 use proc_macro2::{Span, TokenStream};
@@ -121,7 +121,9 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     let mut miss_on_invalid = false;
     let mut name = snake_case(&ident.to_string());
     let mut name_span = ident.span();
-    for entry in parse_entries(&input.attrs)? {
+    let mut entries = parse_entries(&input.attrs)?;
+    let krate = take_crate_path(&mut entries)?;
+    for entry in entries {
         let attribute = entry.name.to_string();
         let shaped = |wire: TokenStream, marker: TokenStream| -> syn::Result<_> {
             entry.expect_flag()?;
@@ -156,10 +158,10 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                 name_span = entry.span();
                 None
             }
-            "text" => Some(shaped(quote!(Text), quote!(::ocel::kv::Text))?),
-            "counter" => Some(shaped(quote!(Counter), quote!(::ocel::kv::Counter))?),
-            "list" => Some(shaped(quote!(List), quote!(::ocel::kv::List))?),
-            "set" => Some(shaped(quote!(Set), quote!(::ocel::kv::Set))?),
+            "text" => Some(shaped(quote!(Text), quote!(#krate::kv::Text))?),
+            "counter" => Some(shaped(quote!(Counter), quote!(#krate::kv::Counter))?),
+            "list" => Some(shaped(quote!(List), quote!(#krate::kv::List))?),
+            "set" => Some(shaped(quote!(Set), quote!(#krate::kv::Set))?),
             "json" => {
                 let Value::Path(value) = &entry.value else {
                     return Err(syn::Error::new(
@@ -169,7 +171,10 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                 };
                 Some((
                     quote!(Json),
-                    quote_spanned!(entry.span()=> ::ocel::kv::Json<#value>),
+                    {
+                        let krate = respan(&krate, entry.span());
+                        quote_spanned!(entry.span()=> #krate::kv::Json<#value>)
+                    },
                     entry.span(),
                 ))
             }
@@ -248,19 +253,19 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                     .iter()
                     .find(|field| **field == parameter.as_str())
                     .expect("a field for every parameter");
-                quote!(#separator ::ocel::kv::write_parameter(&mut key, &self.#field);)
+                quote!(#separator #krate::kv::write_parameter(&mut key, &self.#field);)
             }
         }
     });
     let (file, line) = source(ident.span());
     Ok(quote! {
-        impl ::ocel::KvKey for #ident {
+        impl #krate::KvKey for #ident {
             type Shape = #marker;
 
-            const ENTRY: ::ocel::kv::KvEntryDeclaration = ::ocel::kv::KvEntryDeclaration {
+            const ENTRY: #krate::kv::KvEntryDeclaration = #krate::kv::KvEntryDeclaration {
                 name: #name,
                 pattern: #pattern,
-                shape: ::ocel::kv::ShapeKind::#wire,
+                shape: #krate::kv::ShapeKind::#wire,
                 ttl: #ttl,
                 miss_on_invalid: #miss_on_invalid,
                 file: #file,

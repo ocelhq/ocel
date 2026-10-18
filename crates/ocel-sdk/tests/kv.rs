@@ -438,7 +438,7 @@ async fn a_binding_that_requires_tls_is_reached_over_tls() {
         .get()
         .await
         .expect_err("a plaintext server refuses the TLS handshake");
-    assert!(matches!(err, Error::Kv(_)), "{err}");
+    assert!(matches!(err, Error::Kv { .. }), "{err}");
 }
 
 #[tokio::test]

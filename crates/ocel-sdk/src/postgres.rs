@@ -55,7 +55,10 @@ impl Postgres {
         self.pool
             .get_or_try_init(|| async {
                 let (options, relay) = connect_options(&self.read_properties("pool")?)?;
-                Ok::<_, Error>(pool_options(relay).connect_with(options).await?)
+                pool_options(relay)
+                    .connect_with(options)
+                    .await
+                    .map_err(Error::from_pool)
             })
             .await
     }
@@ -99,7 +102,9 @@ fn build_connection_string(properties: &PostgresProperties) -> String {
 fn build_connect_options(
     properties: &PostgresProperties,
 ) -> Result<sqlx::postgres::PgConnectOptions, Error> {
-    let options: sqlx::postgres::PgConnectOptions = build_connection_string(properties).parse()?;
+    let options: sqlx::postgres::PgConnectOptions = build_connection_string(properties)
+        .parse()
+        .map_err(Error::from_pool)?;
     if properties.tls_ca.is_empty() {
         return Ok(options);
     }
@@ -149,9 +154,10 @@ struct Relay {
 impl Relay {
     fn start(target: String, port: u16, _server_name: &str) -> Result<Self, Error> {
         use std::sync::atomic::{AtomicBool, Ordering};
-        let dir = RelayDir::create().map_err(sqlx::Error::Io)?;
+        let dir = RelayDir::create().map_err(|err| Error::from_pool(sqlx::Error::Io(err)))?;
         let socket = dir.path.join(format!(".s.PGSQL.{port}"));
-        let listener = std::os::unix::net::UnixListener::bind(&socket).map_err(sqlx::Error::Io)?;
+        let listener = std::os::unix::net::UnixListener::bind(&socket)
+            .map_err(|err| Error::from_pool(sqlx::Error::Io(err)))?;
         let stopped = std::sync::Arc::new(AtomicBool::new(false));
         let stopping = stopped.clone();
         std::thread::Builder::new()
@@ -166,7 +172,7 @@ impl Relay {
                     std::thread::spawn(move || carry(accepted, &target));
                 }
             })
-            .map_err(sqlx::Error::Io)?;
+            .map_err(|err| Error::from_pool(sqlx::Error::Io(err)))?;
         Ok(Self {
             dir,
             socket,
@@ -217,10 +223,9 @@ struct RelayDir {
 #[cfg(all(feature = "postgres", not(unix)))]
 impl Relay {
     fn start(_target: String, _port: u16, server_name: &str) -> Result<Self, Error> {
-        Err(sqlx::Error::Configuration(
+        Err(Error::from_pool(sqlx::Error::Configuration(
             format!("this binding verifies its server as {server_name} through a port forward, and sqlx verifies only the host it connects to, which on this platform is the forward").into(),
-        )
-        .into())
+        )))
     }
 }
 

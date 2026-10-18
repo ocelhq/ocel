@@ -6,7 +6,8 @@ fn bound_to(binding: &str) -> &str {
     }
 }
 
-/// Everything a declared resource can fail with.
+/// Everything a declared resource can fail with. Each message starts lowercase, unless it
+/// opens with a name, and ends without punctuation.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -48,14 +49,14 @@ pub enum Error {
     },
 
     /// The address discovery was told to post declarations to is not a URL.
-    #[error("ocel: OCEL_DEV_SERVER is not a URL discovery can post to: '{server}'")]
+    #[error("OCEL_DEV_SERVER is not a URL discovery can post to: '{server}'")]
     DevServer {
         /// The address the environment set.
         server: String,
     },
 
     /// Discovery could not tell the CLI about a declaration.
-    #[error("ocel: declare {kind} '{name}': {said}")]
+    #[error("declare {kind} '{name}': {said}")]
     Declare {
         /// The kind of resource being declared.
         kind: String,
@@ -66,7 +67,7 @@ pub enum Error {
     },
 
     /// The process was run as a worker and could not listen for its deliveries.
-    #[error("ocel: worker '{worker}' cannot listen on {address}: {said}")]
+    #[error("worker '{worker}' cannot listen on {address}: {said}")]
     Listen {
         /// The worker the process was run as.
         worker: String,
@@ -77,7 +78,7 @@ pub enum Error {
     },
 
     /// Discovery could not tell the CLI about the variables a struct declares.
-    #[error("ocel: declare env: {said}")]
+    #[error("declare env: {said}")]
     DeclareEnv {
         /// What the dev server said.
         said: String,
@@ -93,7 +94,7 @@ pub enum Error {
     },
 
     /// A variable is scoped to folders this app is not bound to.
-    #[error("'{key}' is scoped to {}, but this app is bound to {}. Bind this app to one of those folders in ocel.config.ts, or widen the variable's scope.", .folders.join(", "), bound_to(.binding))]
+    #[error("'{key}' is scoped to {}, but this app is bound to {}: bind this app to one of those folders in ocel.json, or widen the variable's scope", .folders.join(", "), bound_to(.binding))]
     Scope {
         /// The scoped variable.
         key: String,
@@ -104,14 +105,14 @@ pub enum Error {
     },
 
     /// A declared variable has no value.
-    #[error("'{key}' has no value. Set one with `ocel env set {key}=<VALUE>`.")]
+    #[error("'{key}' has no value: set one with `ocel env set {key}=<VALUE>`")]
     Unset {
         /// The variable the value belongs to.
         key: String,
     },
 
     /// A declared variable has a value its field type rejects.
-    #[error("'{key}' is set but does not satisfy its type: {detail}. Fix it with `ocel env set {key}=<VALUE>`.")]
+    #[error("'{key}' is set but does not satisfy its type: {detail}; fix it with `ocel env set {key}=<VALUE>`")]
     Invalid {
         /// The variable the value belongs to.
         key: String,
@@ -120,7 +121,7 @@ pub enum Error {
     },
 
     /// The deploy gave this app no hostname to serve on.
-    #[error("'{key}' was not delivered to this app. Ocel writes it from the hostname the deploy serves the app on, and this app is served on none: add one under `domains.production` on the app, or on the project if this is the first app it names, and deploy again.")]
+    #[error("'{key}' was not delivered to this app: Ocel writes it from the hostname the deploy serves the app on, and this app is served on none, so add one under `domains.production` on the app, or on the project if this is the first app it names, and deploy again")]
     Undelivered {
         /// The variable Ocel writes the url into.
         key: String,
@@ -141,28 +142,31 @@ pub enum Error {
         key: String,
     },
 
-    /// The store refused an operation on an object.
+    /// The store, or the runtime in front of it, refused an operation on an object or
+    /// could not be reached.
     #[error("'{key}' was refused by the store: {said}")]
     Refused {
         /// The key the operation names.
         key: String,
+        /// How the refusal is classed, which says whether the same call can succeed later.
+        code: Code,
         /// What the store or the runtime said.
         said: String,
     },
 
     /// Nothing told this app where the runtime that serves its resources listens.
-    #[error("OCEL_RUNTIME_ADDRESS is not defined, so no resource the ocel runtime serves can be reached. Run `ocel dev` to serve it locally, or `ocel deploy` to have the deployed runtime's address delivered.")]
+    #[error("OCEL_RUNTIME_ADDRESS is not defined, so no resource the ocel runtime serves can be reached: run `ocel dev` to serve it locally, or `ocel deploy` to have the deployed runtime's address delivered")]
     UnreachableRuntime,
 
     /// The address the runtime was said to listen on is not a URL.
-    #[error("ocel: OCEL_RUNTIME_ADDRESS is not a URL the runtime can be reached at: '{address}'")]
+    #[error("OCEL_RUNTIME_ADDRESS is not a URL the runtime can be reached at: '{address}'")]
     RuntimeAddress {
         /// The address the environment set.
         address: String,
     },
 
     /// No session token was delivered, so every call to the runtime would be refused.
-    #[error("OCEL_SESSION_TOKEN is not defined, so the ocel runtime at OCEL_RUNTIME_ADDRESS would refuse every call. It is delivered beside the address by `ocel dev` and by the deployed runtime, never set by hand.")]
+    #[error("OCEL_SESSION_TOKEN is not defined, so the ocel runtime at OCEL_RUNTIME_ADDRESS would refuse every call: it is delivered beside the address by `ocel dev` and by the deployed runtime, never set by hand")]
     UntrustedRuntime,
 
     /// A public url was asked of a bucket that is served at no public address.
@@ -188,13 +192,16 @@ pub enum Error {
         size: usize,
     },
 
-    /// The runtime refused an operation on a topic, a task or its runs.
+    /// The runtime refused an operation on a topic, a task or its runs, or could not be
+    /// reached.
     #[error("'{resource}' {access} was refused by the runtime: {said}")]
     RuntimeRefused {
         /// The declaration or the runs the operation names.
         resource: String,
         /// The operation that was refused.
         access: String,
+        /// How the refusal is classed, which says whether the same call can succeed later.
+        code: Code,
         /// What the runtime said.
         said: String,
     },
@@ -262,7 +269,7 @@ pub enum Error {
     #[cfg(feature = "realtime")]
     /// A realtime resource's name, token TTL or rules disagree with the contract or with
     /// the channels declared under its name.
-    #[error("ocel: realtime '{name}': {detail}")]
+    #[error("realtime '{name}': {detail}")]
     RealtimeDeclaration {
         /// The name the resource was built under.
         name: String,
@@ -285,10 +292,13 @@ pub enum Error {
     #[cfg(feature = "realtime")]
     /// The ocel runtime did not publish the event: it could not be reached, or the
     /// transport behind it refused the event.
-    #[error("ocel: realtime '{name}': {said}")]
+    #[error("realtime '{name}': {said}")]
     PublishFailed {
         /// The realtime resource published on.
         name: String,
+        /// How the failure is classed, which says whether the same publish can succeed
+        /// later.
+        code: Code,
         /// What went wrong.
         said: String,
     },
@@ -304,11 +314,138 @@ pub enum Error {
 
     /// A kv store refused an operation, or could not be reached.
     #[cfg(feature = "kv")]
-    #[error("{0}")]
-    Kv(#[from] redis::RedisError),
+    #[error("the kv store refused the operation: {source}")]
+    Kv {
+        /// The kv client's own error, which a caller that depends on the same client can
+        /// downcast.
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 
     /// The pool over a delivered binding could not be opened.
     #[cfg(feature = "postgres")]
-    #[error("{0}")]
-    Pool(#[from] sqlx::Error),
+    #[error("the postgres pool could not be opened: {source}")]
+    Pool {
+        /// The postgres driver's own error, which a caller that depends on the same driver
+        /// can downcast.
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+}
+
+impl Error {
+    /// How the refusal behind this error is classed, for the errors a runtime, a store or a
+    /// realtime transport answers with: [`Error::RuntimeRefused`], [`Error::Refused`] and
+    /// [`Error::PublishFailed`]. Every other error answers `None`.
+    pub fn code(&self) -> Option<Code> {
+        match self {
+            Self::RuntimeRefused { code, .. } | Self::Refused { code, .. } => Some(*code),
+            #[cfg(feature = "realtime")]
+            Self::PublishFailed { code, .. } => Some(*code),
+            _ => None,
+        }
+    }
+
+    /// Whether the same call, made again later, can succeed: true only when the error's
+    /// [`code`](Self::code) [is retryable](Code::is_retryable).
+    pub fn is_retryable(&self) -> bool {
+        self.code().is_some_and(Code::is_retryable)
+    }
+
+    #[cfg(feature = "kv")]
+    pub(crate) fn from_kv(err: redis::RedisError) -> Self {
+        Self::Kv {
+            source: Box::new(err),
+        }
+    }
+
+    #[cfg(feature = "postgres")]
+    pub(crate) fn from_pool(err: sqlx::Error) -> Self {
+        Self::Pool {
+            source: Box::new(err),
+        }
+    }
+}
+
+/// How a refusal is classed, in the codes of the Connect protocol the ocel runtime speaks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Code {
+    /// The call was canceled, usually by its caller.
+    Canceled,
+    /// The refusal fits no other code.
+    Unknown,
+    /// The call named something invalid, whatever the state of the system.
+    InvalidArgument,
+    /// The call did not finish before its deadline.
+    DeadlineExceeded,
+    /// Something the call named does not exist.
+    NotFound,
+    /// Something the call would create already exists.
+    AlreadyExists,
+    /// The caller may not make this call.
+    PermissionDenied,
+    /// A quota or a rate limit was reached.
+    ResourceExhausted,
+    /// The system is not in the state the call requires.
+    FailedPrecondition,
+    /// The call was aborted, usually by a conflict with another.
+    Aborted,
+    /// The call named a position past the end of what it reads.
+    OutOfRange,
+    /// The runtime or the store does not serve this call.
+    Unimplemented,
+    /// The runtime broke one of its own invariants.
+    Internal,
+    /// The runtime or the store could not be reached, or could not serve the call now.
+    Unavailable,
+    /// Data was lost or corrupted.
+    DataLoss,
+    /// The call carried no valid credential.
+    Unauthenticated,
+}
+
+impl Code {
+    /// Whether a call refused with this code can succeed if made again later: true for
+    /// [`Unavailable`](Self::Unavailable), [`DeadlineExceeded`](Self::DeadlineExceeded),
+    /// [`ResourceExhausted`](Self::ResourceExhausted) and [`Aborted`](Self::Aborted).
+    pub fn is_retryable(self) -> bool {
+        matches!(
+            self,
+            Self::Unavailable | Self::DeadlineExceeded | Self::ResourceExhausted | Self::Aborted
+        )
+    }
+
+    pub(crate) fn from_connect(code: connectrpc::ErrorCode) -> Self {
+        use connectrpc::ErrorCode;
+        match code {
+            ErrorCode::Canceled => Self::Canceled,
+            ErrorCode::InvalidArgument => Self::InvalidArgument,
+            ErrorCode::DeadlineExceeded => Self::DeadlineExceeded,
+            ErrorCode::NotFound => Self::NotFound,
+            ErrorCode::AlreadyExists => Self::AlreadyExists,
+            ErrorCode::PermissionDenied => Self::PermissionDenied,
+            ErrorCode::ResourceExhausted => Self::ResourceExhausted,
+            ErrorCode::FailedPrecondition => Self::FailedPrecondition,
+            ErrorCode::Aborted => Self::Aborted,
+            ErrorCode::OutOfRange => Self::OutOfRange,
+            ErrorCode::Unimplemented => Self::Unimplemented,
+            ErrorCode::Internal => Self::Internal,
+            ErrorCode::Unavailable => Self::Unavailable,
+            ErrorCode::DataLoss => Self::DataLoss,
+            ErrorCode::Unauthenticated => Self::Unauthenticated,
+            _ => Self::Unknown,
+        }
+    }
+
+    pub(crate) fn from_store_status(status: u16) -> Self {
+        match status {
+            400 => Self::InvalidArgument,
+            401 => Self::Unauthenticated,
+            403 => Self::PermissionDenied,
+            408 => Self::DeadlineExceeded,
+            429 => Self::ResourceExhausted,
+            501 => Self::Unimplemented,
+            500 | 502 | 503 | 504 => Self::Unavailable,
+            _ => Self::Unknown,
+        }
+    }
 }

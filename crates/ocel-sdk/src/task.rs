@@ -6,7 +6,7 @@ use crate::proto::app::task::v1::{
     TriggerRequest,
 };
 use crate::runtime::read_client_config;
-use crate::{Error, Lane};
+use crate::{Code, Error, Lane};
 use connectrpc::client::HttpClient;
 use serde::Serialize;
 use std::future::{Future, IntoFuture};
@@ -77,6 +77,7 @@ impl<P, R> Task<P, R> {
         Error::RuntimeRefused {
             resource: self.describe_resource(),
             access: access.to_string(),
+            code: Code::from_connect(err.code),
             said: err.to_string(),
         }
     }
@@ -283,6 +284,7 @@ impl<'a, P, R> IntoFuture for Trigger<'a, P, R> {
                     .map_err(|err| Error::RuntimeRefused {
                         resource,
                         access: "trigger".to_string(),
+                        code: Code::from_connect(err.code),
                         said: err.to_string(),
                     })?;
             Ok(RunHandle {

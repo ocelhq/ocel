@@ -6,7 +6,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-include = ["/src", "/LICENSE", "/NOTICE"]
+readme = "README.md"
+documentation = "https://docs.rs/ocel-macros"
+keywords = ["infrastructure", "cloud", "deploy", "derive", "macros"]
+categories = ["development-tools::procedural-macro-helpers"]
+include = ["/src", "/LICENSE", "/NOTICE", "/README.md"]
 
 [lib]
 proc-macro = true
@@ -15,3 +19,8 @@ proc-macro = true
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full"] }
+
+[dev-dependencies]
+sdk = { package = "ocel-sdk", path = "../ocel-sdk", features = ["kv", "realtime", "schemars"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }

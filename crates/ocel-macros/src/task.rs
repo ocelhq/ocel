@@ -1,4 +1,4 @@
-use crate::attribute::{parse_arguments, Entry, Value};
+use crate::attribute::{parse_arguments, respan, take_crate_path, Entry, Value};
 use crate::options::{
     parse_batch, parse_batch_size, parse_count, parse_duration, parse_lanes, parse_retry,
     parse_string, quote_batch, quote_none, refuse_unknown_attribute,
@@ -101,9 +101,10 @@ fn derive_default_name(function: &ItemFn) -> String {
         .replace('_', "-")
 }
 
-fn quote_schema(entry: &Entry, payload: &Type) -> syn::Result<TokenStream> {
+fn quote_schema(entry: &Entry, payload: &Type, krate: &syn::Path) -> syn::Result<TokenStream> {
     entry.expect_flag()?;
-    Ok(quote_spanned!(entry.span()=> ::ocel::__json_schema!(#payload)))
+    let krate = respan(krate, entry.span());
+    Ok(quote_spanned!(entry.span()=> #krate::__json_schema!(#payload)))
 }
 
 struct Hook {
@@ -111,37 +112,42 @@ struct Hook {
     wrapper: TokenStream,
 }
 
-fn parse_hook(entry: &Entry, steps_payload: &Type, output: &Type) -> syn::Result<Option<Hook>> {
+fn parse_hook(
+    entry: &Entry,
+    steps_payload: &Type,
+    output: &Type,
+    krate: &syn::Path,
+) -> syn::Result<Option<Hook>> {
     let name = entry.name.to_string();
     let Some(field) = PAYLOAD_HOOKS.into_iter().find(|hook| *hook == name) else {
         return Ok(None);
     };
     let wrapper = format_ident!("__ocel_{}", field);
-    let run = quote!(::ocel::Run);
-    let failure = quote!(::core::result::Result<(), ::ocel::RunError>);
+    let run = quote!(#krate::Run);
+    let failure = quote!(::core::result::Result<(), #krate::RunError>);
     let (signature, call) = match field {
         "on_success" => (
-            quote!((payload: &'a #steps_payload, output: &'a #output, run: &'a #run) -> ::ocel::BoxFuture<'a, #failure>),
+            quote!((payload: &'a #steps_payload, output: &'a #output, run: &'a #run) -> #krate::BoxFuture<'a, #failure>),
             quote!((payload, output, run)),
         ),
         "on_failure" => (
-            quote!((payload: &'a #steps_payload, error: &'a ::ocel::RunError, run: &'a #run) -> ::ocel::BoxFuture<'a, #failure>),
+            quote!((payload: &'a #steps_payload, error: &'a #krate::RunError, run: &'a #run) -> #krate::BoxFuture<'a, #failure>),
             quote!((payload, error, run)),
         ),
         "on_complete" => (
-            quote!((payload: &'a #steps_payload, result: ::core::result::Result<&'a #output, &'a ::ocel::RunError>, run: &'a #run) -> ::ocel::BoxFuture<'a, #failure>),
+            quote!((payload: &'a #steps_payload, result: ::core::result::Result<&'a #output, &'a #krate::RunError>, run: &'a #run) -> #krate::BoxFuture<'a, #failure>),
             quote!((payload, result, run)),
         ),
         "catch_error" => (
-            quote!((payload: &'a #steps_payload, error: ::ocel::RunError, run: &'a #run) -> ::ocel::BoxFuture<'a, ::ocel::RunError>),
+            quote!((payload: &'a #steps_payload, error: #krate::RunError, run: &'a #run) -> #krate::BoxFuture<'a, #krate::RunError>),
             quote!((payload, error, run)),
         ),
         "middleware" => (
-            quote!((payload: &'a #steps_payload, run: &'a #run, next: ::ocel::Next<'a, #output>) -> ::ocel::BoxFuture<'a, ::core::result::Result<#output, ::ocel::RunError>>),
+            quote!((payload: &'a #steps_payload, run: &'a #run, next: #krate::Next<'a, #output>) -> #krate::BoxFuture<'a, ::core::result::Result<#output, #krate::RunError>>),
             quote!((payload, run, next)),
         ),
         _ => (
-            quote!((payload: &'a #steps_payload, run: &'a #run) -> ::ocel::BoxFuture<'a, #failure>),
+            quote!((payload: &'a #steps_payload, run: &'a #run) -> #krate::BoxFuture<'a, #failure>),
             quote!((payload, run)),
         ),
     };
@@ -158,7 +164,8 @@ fn parse_hook(entry: &Entry, steps_payload: &Type, output: &Type) -> syn::Result
 }
 
 pub(crate) fn expand_task(attribute: TokenStream, function: ItemFn) -> syn::Result<TokenStream> {
-    let entries = parse_arguments(attribute)?;
+    let mut entries = parse_arguments(attribute)?;
+    let krate = take_crate_path(&mut entries)?;
     let batched = entries.iter().any(|entry| entry.name == "batch");
     let Signature { payload, output } = read_signature(&function, "task", batched)?;
     let trigger_payload = match batched {
@@ -185,19 +192,19 @@ pub(crate) fn expand_task(attribute: TokenStream, function: ItemFn) -> syn::Resu
     for entry in &entries {
         match entry.name.to_string().as_str() {
             "name" => name = parse_string(entry)?,
-            "schema" => schema = quote_schema(entry, &trigger_payload)?,
+            "schema" => schema = quote_schema(entry, &trigger_payload, &krate)?,
             "ordered" => {
                 entry.expect_flag()?;
                 ordered = true;
             }
-            "retry" => retry = parse_retry(entry)?,
+            "retry" => retry = parse_retry(entry, &krate)?,
             "concurrency" => concurrency = parse_count(entry)?,
             "max_duration" => max_duration = parse_duration(entry)?,
             "ttl" => ttl = parse_duration(entry)?,
-            "batch" => batch = parse_batch(entry)?,
+            "batch" => batch = parse_batch(entry, &krate)?,
             "worker" => worker = parse_string(entry)?,
             "cron" => cron = parse_string(entry)?,
-            other => match parse_hook(entry, &payload, &output)? {
+            other => match parse_hook(entry, &payload, &output, &krate)? {
                 Some(hook) => hooks.push(hook),
                 None => {
                     return Err(refuse_unknown_attribute(
@@ -246,37 +253,37 @@ pub(crate) fn expand_task(attribute: TokenStream, function: ItemFn) -> syn::Resu
     Ok(quote! {
         #(#docs)*
         #[allow(non_upper_case_globals)]
-        #visibility static #ident: ::ocel::Task<#trigger_payload, #output> = ::ocel::Task::new(#name);
+        #visibility static #ident: #krate::Task<#trigger_payload, #output> = #krate::Task::new(#name);
 
         const _: () = {
             #inner
 
             fn __ocel_boxed<'a>(
                 payload: #payload,
-                run: &'a ::ocel::Run,
-            ) -> ::ocel::BoxFuture<'a, ::core::result::Result<#output, ::ocel::RunError>> {
+                run: &'a #krate::Run,
+            ) -> #krate::BoxFuture<'a, ::core::result::Result<#output, #krate::RunError>> {
                 ::std::boxed::Box::pin(__ocel_run(payload, run))
             }
 
             #(#wrappers)*
 
-            static __OCEL_STEPS: ::ocel::Steps<#payload, #output> = ::ocel::Steps {
+            static __OCEL_STEPS: #krate::Steps<#payload, #output> = #krate::Steps {
                 run: __ocel_boxed,
                 clone_payload: #clone_payload,
                 #(#fields),*
             };
 
             fn __ocel_deliver(
-                delivery: ::ocel::Delivery,
-            ) -> ::ocel::BoxFuture<'static, ::ocel::Outcome> {
-                ::ocel::run_attempt(&__OCEL_STEPS, delivery)
+                delivery: #krate::Delivery,
+            ) -> #krate::BoxFuture<'static, #krate::Outcome> {
+                #krate::run_attempt(&__OCEL_STEPS, delivery)
             }
 
-            fn __ocel_declared() -> ::ocel::Declared {
-                ::ocel::Declared {
-                    resources: ::std::vec![::ocel::DeclaredResource {
+            fn __ocel_declared() -> #krate::Declared {
+                #krate::Declared {
+                    resources: ::std::vec![#krate::DeclaredResource {
                         name: #name,
-                        config: ::ocel::DeclaredConfig::Task {
+                        config: #krate::DeclaredConfig::Task {
                             schema: #schema,
                             ordered: #ordered,
                             retry: #retry,
@@ -296,8 +303,8 @@ pub(crate) fn expand_task(attribute: TokenStream, function: ItemFn) -> syn::Resu
                 }
             }
 
-            ::ocel::inventory::submit! {
-                ::ocel::Registered(__ocel_declared)
+            #krate::inventory::submit! {
+                #krate::Registered(__ocel_declared)
             }
         };
     })
@@ -327,7 +334,8 @@ fn expand_topic_consumer(
         false => ("consumer", CONSUMER_ATTRIBUTES),
     };
     let owner = format!("#[ocel::{macro_name}]");
-    let entries = parse_arguments(attribute)?;
+    let mut entries = parse_arguments(attribute)?;
+    let krate = take_crate_path(&mut entries)?;
     let Signature { payload, output } = read_signature(&function, macro_name, batched)?;
     let message = match batched {
         true => read_batch_item(&payload, macro_name)?,
@@ -347,9 +355,9 @@ fn expand_topic_consumer(
         match (entry.name.to_string().as_str(), batched) {
             ("topic", _) => topic = Some(read_topic_name(entry, &owner)?),
             ("name", _) => name = parse_string(entry)?,
-            ("retry", _) => retry = parse_retry(entry)?,
+            ("retry", _) => retry = parse_retry(entry, &krate)?,
             ("concurrency", _) => concurrency = parse_count(entry)?,
-            ("lanes", _) => lanes = parse_lanes(entry)?,
+            ("lanes", _) => lanes = parse_lanes(entry, &krate)?,
             ("max_duration", _) => max_duration = parse_duration(entry)?,
             ("worker", _) => worker = parse_string(entry)?,
             ("batch_size", true) => batch_size = Some(parse_batch_size(entry)?),
@@ -365,7 +373,7 @@ fn expand_topic_consumer(
     };
     let batch = match (batched, batch_size) {
         (false, _) => quote_none(),
-        (true, Some(size)) => quote_batch(size, batch_timeout),
+        (true, Some(size)) => quote_batch(size, batch_timeout, &krate),
         (true, None) => {
             return Err(syn::Error::new(
                 Span::call_site(),
@@ -376,8 +384,9 @@ fn expand_topic_consumer(
 
     let ident = &function.sig.ident;
     let (file, line) = source(ident.span());
+    let topic_krate = respan(&krate, topic.span());
     let topic_name = quote_spanned! {topic.span()=>
-        const __OCEL_TOPIC: ::ocel::TopicName<#message> = #topic;
+        const __OCEL_TOPIC: #topic_krate::TopicName<#message> = #topic;
     };
     Ok(quote! {
         #function
@@ -387,24 +396,24 @@ fn expand_topic_consumer(
 
             fn __ocel_boxed<'a>(
                 payload: #payload,
-                run: &'a ::ocel::Run,
-            ) -> ::ocel::BoxFuture<'a, ::core::result::Result<#output, ::ocel::RunError>> {
+                run: &'a #krate::Run,
+            ) -> #krate::BoxFuture<'a, ::core::result::Result<#output, #krate::RunError>> {
                 ::std::boxed::Box::pin(#ident(payload, run))
             }
 
-            static __OCEL_STEPS: ::ocel::Steps<#payload, ()> = ::ocel::Steps::new(__ocel_boxed);
+            static __OCEL_STEPS: #krate::Steps<#payload, ()> = #krate::Steps::new(__ocel_boxed);
 
             fn __ocel_deliver(
-                delivery: ::ocel::Delivery,
-            ) -> ::ocel::BoxFuture<'static, ::ocel::Outcome> {
-                ::ocel::run_attempt(&__OCEL_STEPS, delivery)
+                delivery: #krate::Delivery,
+            ) -> #krate::BoxFuture<'static, #krate::Outcome> {
+                #krate::run_attempt(&__OCEL_STEPS, delivery)
             }
 
-            fn __ocel_declared() -> ::ocel::Declared {
-                ::ocel::Declared {
-                    resources: ::std::vec![::ocel::DeclaredResource {
+            fn __ocel_declared() -> #krate::Declared {
+                #krate::Declared {
+                    resources: ::std::vec![#krate::DeclaredResource {
                         name: #name,
-                        config: ::ocel::DeclaredConfig::Consumer {
+                        config: #krate::DeclaredConfig::Consumer {
                             topic: __OCEL_TOPIC.name(),
                             worker: #worker,
                             retry: #retry,
@@ -422,8 +431,8 @@ fn expand_topic_consumer(
                 }
             }
 
-            ::ocel::inventory::submit! {
-                ::ocel::Registered(__ocel_declared)
+            #krate::inventory::submit! {
+                #krate::Registered(__ocel_declared)
             }
         };
     })

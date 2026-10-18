@@ -98,7 +98,7 @@ fn an_optional_group_missing_one_member_names_the_one_it_is_missing() {
 
     assert_eq!(
         err.to_string(),
-        "'GITHUB_CLIENT_SECRET' has no value. Set one with `ocel env set GITHUB_CLIENT_SECRET=<VALUE>`."
+        "'GITHUB_CLIENT_SECRET' has no value: set one with `ocel env set GITHUB_CLIENT_SECRET=<VALUE>`"
     );
 }
 
@@ -171,7 +171,7 @@ fn a_live_member_switches_its_group_on_even_where_the_group_is_incomplete() {
 
     assert_eq!(
         err.to_string(),
-        "'GITHUB_CLIENT_ID' has no value. Set one with `ocel env set GITHUB_CLIENT_ID=<VALUE>`."
+        "'GITHUB_CLIENT_ID' has no value: set one with `ocel env set GITHUB_CLIENT_ID=<VALUE>`"
     );
 }
 

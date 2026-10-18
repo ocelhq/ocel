@@ -69,7 +69,7 @@ pub(crate) fn parse_string(entry: &Entry) -> syn::Result<String> {
     Ok(entry.read_literal()?.to_string())
 }
 
-pub(crate) fn parse_retry(entry: &Entry) -> syn::Result<TokenStream> {
+pub(crate) fn parse_retry(entry: &Entry, krate: &syn::Path) -> syn::Result<TokenStream> {
     let mut max_attempts = 0;
     let mut min_delay = quote_none();
     let mut max_delay = quote_none();
@@ -89,7 +89,7 @@ pub(crate) fn parse_retry(entry: &Entry) -> syn::Result<TokenStream> {
         }
     }
     Ok(quote! {
-        ::core::option::Option::Some(::ocel::Retry {
+        ::core::option::Option::Some(#krate::Retry {
             max_attempts: #max_attempts,
             min_delay: #min_delay,
             max_delay: #max_delay,
@@ -97,7 +97,7 @@ pub(crate) fn parse_retry(entry: &Entry) -> syn::Result<TokenStream> {
     })
 }
 
-pub(crate) fn parse_batch(entry: &Entry) -> syn::Result<TokenStream> {
+pub(crate) fn parse_batch(entry: &Entry, krate: &syn::Path) -> syn::Result<TokenStream> {
     let mut size = None;
     let mut timeout = quote_none();
     for inner in entry.read_nested()? {
@@ -120,22 +120,22 @@ pub(crate) fn parse_batch(entry: &Entry) -> syn::Result<TokenStream> {
             "batch(...) names how many messages a batch holds: batch(size = <NUMBER>).",
         ));
     };
-    Ok(quote_batch(size, timeout))
+    Ok(quote_batch(size, timeout, krate))
 }
 
-pub(crate) fn quote_batch(size: i32, timeout: TokenStream) -> TokenStream {
+pub(crate) fn quote_batch(size: i32, timeout: TokenStream, krate: &syn::Path) -> TokenStream {
     quote! {
-        ::core::option::Option::Some(::ocel::Batch { size: #size, timeout: #timeout })
+        ::core::option::Option::Some(#krate::Batch { size: #size, timeout: #timeout })
     }
 }
 
-pub(crate) fn parse_lanes(entry: &Entry) -> syn::Result<TokenStream> {
+pub(crate) fn parse_lanes(entry: &Entry, krate: &syn::Path) -> syn::Result<TokenStream> {
     let mut lanes = Vec::new();
     for lane in entry.read_list()? {
         lanes.push(match lane.as_str() {
-            "high" => quote!(::ocel::Lane::High),
-            "default" => quote!(::ocel::Lane::Default),
-            "low" => quote!(::ocel::Lane::Low),
+            "high" => quote!(#krate::Lane::High),
+            "default" => quote!(#krate::Lane::Default),
+            "low" => quote!(#krate::Lane::Low),
             other => {
                 return Err(syn::Error::new(
                     entry.span(),

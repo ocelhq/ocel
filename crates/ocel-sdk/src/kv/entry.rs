@@ -78,8 +78,9 @@ impl Kv {
         if !properties.password.is_empty() {
             settings = settings.set_password(properties.password.clone());
         }
-        let info =
-            redis::IntoConnectionInfo::into_connection_info(address)?.set_redis_settings(settings);
+        let info = redis::IntoConnectionInfo::into_connection_info(address)
+            .map_err(Error::from_kv)?
+            .set_redis_settings(settings);
         let client = if properties.tls && !properties.ca_pem.is_empty() {
             redis::Client::build_with_tls(
                 info,
@@ -87,9 +88,10 @@ impl Kv {
                     client_tls: None,
                     root_cert: Some(self.read_authority(&properties)?),
                 },
-            )?
+            )
+            .map_err(Error::from_kv)?
         } else {
-            redis::Client::open(info)?
+            redis::Client::open(info).map_err(Error::from_kv)?
         };
         Ok(self.client.get_or_init(|| client).clone())
     }
@@ -129,11 +131,10 @@ impl Kv {
                         port: self.read_port(&properties)?,
                     });
                 }
-                Ok::<_, Error>(
-                    client
-                        .get_multiplexed_async_connection_with_config(&config)
-                        .await?,
-                )
+                client
+                    .get_multiplexed_async_connection_with_config(&config)
+                    .await
+                    .map_err(Error::from_kv)
             })
             .await?;
         Ok(connection.clone())
@@ -183,7 +184,10 @@ impl Kv {
         for key in &built {
             pipeline.get(key);
         }
-        let values: Vec<Option<String>> = pipeline.query_async(&mut connection).await?;
+        let values: Vec<Option<String>> = pipeline
+            .query_async(&mut connection)
+            .await
+            .map_err(Error::from_kv)?;
         built
             .iter()
             .zip(values)
@@ -291,7 +295,10 @@ impl<'a, S> Entry<'a, S> {
     async fn query<T: FromRedisValue>(&self, operation: &str, command: Cmd) -> Result<T, Error> {
         self.refuse_unlisted()?;
         let mut connection = self.kv.open_connection(&self.access(operation)).await?;
-        Ok(command.query_async(&mut connection).await?)
+        command
+            .query_async(&mut connection)
+            .await
+            .map_err(Error::from_kv)
     }
 
     /// Deletes the key, answering whether it held a value.
@@ -607,7 +614,10 @@ impl<'a, T: FromRedisValue + Send + 'a> IntoFuture for Write<'a, T> {
                         Ttl::Keep => command.arg("KEEPTTL"),
                         Ttl::Clear => &mut command,
                     };
-                    Ok(command.query_async(&mut connection).await?)
+                    command
+                        .query_async(&mut connection)
+                        .await
+                        .map_err(Error::from_kv)
                 }
                 TtlPlacement::Transaction => {
                     let mut pipeline = Pipeline::new();
@@ -625,7 +635,10 @@ impl<'a, T: FromRedisValue + Send + 'a> IntoFuture for Write<'a, T> {
                         }
                         Ttl::Keep => {}
                     }
-                    let (result,): (T,) = pipeline.query_async(&mut connection).await?;
+                    let (result,): (T,) = pipeline
+                        .query_async(&mut connection)
+                        .await
+                        .map_err(Error::from_kv)?;
                     Ok(result)
                 }
             }
