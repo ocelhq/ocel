@@ -37,25 +37,29 @@ func ClaimBootstrapPart(ctx context.Context, store records.Store, tier environme
 	if err != nil {
 		return BootstrapPart{}, false, fmt.Errorf("record the %s bootstrap part %s: %w", tier, name, err)
 	}
-	for range claimAttempts {
-		_, err = store.Write(ctx, records.Entry{Key: BootstrapPartKey(tier, name), Value: value})
-		if err == nil {
-			return claim, true, nil
+	var recorded BootstrapPart
+	claimed := false
+	err = records.Change(ctx, store, BootstrapPartKey(tier, name), func(entry records.Entry) ([]byte, bool, error) {
+		if len(entry.Value) > 0 {
+			part, err := decodeBootstrapPart(entry)
+			recorded, claimed = part, false
+			return nil, false, err
 		}
-		if !errors.Is(err, records.ErrStale) {
-			return BootstrapPart{}, false, fmt.Errorf("claim the %s bootstrap part %s: %w", tier, name, err)
-		}
-		recorded, present, err := ReadBootstrapPart(ctx, store, tier, name)
-		if err != nil || present {
-			return recorded, false, err
-		}
+		claimed = true
+		return value, true, nil
+	})
+	if errors.Is(err, records.ErrContended) {
+		return BootstrapPart{}, false, fmt.Errorf(
+			"claim the %s bootstrap part %s: it was written and forgotten between every claim and the read that followed", tier, name)
 	}
-	return BootstrapPart{}, false, fmt.Errorf(
-		"claim the %s bootstrap part %s: it was written and forgotten between every claim and the read that followed, %d times over",
-		tier, name, claimAttempts)
+	if err != nil {
+		return BootstrapPart{}, false, fmt.Errorf("claim the %s bootstrap part %s: %w", tier, name, err)
+	}
+	if claimed {
+		return claim, true, nil
+	}
+	return recorded, false, nil
 }
-
-const claimAttempts = 5
 
 func ReleaseBootstrapPart(ctx context.Context, store records.Store, tier environment.Tier, name string, claim BootstrapPart) error {
 	err := records.ForgetMatching(ctx, store, BootstrapPartKey(tier, name), func(recorded records.Entry) (bool, error) {

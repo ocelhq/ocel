@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	statusAttempts      = 3
 	statusNameHashBytes = 16
 	sharersSegment      = "projects"
 )
@@ -65,38 +64,42 @@ func readStatus(ctx context.Context, store records.Store, tier environment.Tier,
 	if err != nil {
 		return Status{}, records.Entry{}, err
 	}
-	var status Status
-	if len(recorded.Value) > 0 {
-		if err := json.Unmarshal(recorded.Value, &status); err != nil {
-			return Status{}, records.Entry{}, fmt.Errorf("read %s: %w", recorded.Key, err)
-		}
+	status, err := decodeStatus(recorded)
+	if err != nil {
+		return Status{}, records.Entry{}, err
 	}
 	return status, recorded, nil
 }
 
+func decodeStatus(recorded records.Entry) (Status, error) {
+	var status Status
+	if len(recorded.Value) > 0 {
+		if err := json.Unmarshal(recorded.Value, &status); err != nil {
+			return Status{}, fmt.Errorf("read %s: %w", recorded.Key, err)
+		}
+	}
+	return status, nil
+}
+
 func writeStatus(ctx context.Context, store records.Store, tier environment.Tier, dedupeKey string, update func(*Status)) error {
-	for range statusAttempts {
-		status, recorded, err := readStatus(ctx, store, tier, dedupeKey)
+	created := false
+	err := records.Change(ctx, store, statusKey(tier, dedupeKey), func(recorded records.Entry) ([]byte, bool, error) {
+		status, err := decodeStatus(recorded)
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		update(&status)
 		encoded, err := json.Marshal(status)
-		if err != nil {
-			return err
-		}
-		created := recorded.Revision == ""
-		recorded.Value = encoded
-		_, err = store.Write(ctx, recorded)
-		if errors.Is(err, records.ErrStale) {
-			continue
-		}
-		if err != nil || !created {
-			return err
-		}
-		return forgetUnshared(ctx, store, tier, dedupeKey)
+		created = recorded.Revision == ""
+		return encoded, true, err
+	})
+	if errors.Is(err, records.ErrContended) {
+		return fmt.Errorf("the %s env source status was rewritten under every attempt to record this sync, so this sync's outcome is lost", tier)
 	}
-	return fmt.Errorf("the %s env source status was rewritten under each of %d attempts to record this sync, so this sync's outcome is lost", tier, statusAttempts)
+	if err != nil || !created {
+		return err
+	}
+	return forgetUnshared(ctx, store, tier, dedupeKey)
 }
 
 func ForgetProject(ctx context.Context, store variablestore.Store, tier environment.Tier, project string) error {

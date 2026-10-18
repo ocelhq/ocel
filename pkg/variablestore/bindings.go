@@ -15,8 +15,6 @@ import (
 
 const (
 	OwnerOcel = "OCEL"
-
-	bindingAttempts = 5
 )
 
 var (
@@ -397,46 +395,47 @@ func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment str
 
 	out := make([]StoredBinding, len(names))
 	sealed := make([][]byte, len(names))
-	for range bindingAttempts {
+	err := records.RetryWhileStale(ctx, func() (bool, error) {
 		cache := s.newRecordCache(scope)
 		if err := cache.named(ctx, names); err != nil {
-			return nil, err
+			return false, err
 		}
-		torn := ""
 		for i, name := range names {
 			resolved, value, err := s.readPair(cache, scope, environment, name)
 			if errors.Is(err, ErrTornPair) {
-				torn = name
-				break
+				return true, nil
 			}
 			if err != nil {
-				return nil, err
+				return false, err
 			}
 			out[i], sealed[i] = resolved, value
 		}
-		if torn != "" {
-			continue
-		}
-		if err := forEachConcurrently(ctx, len(names), func(ctx context.Context, i int) error {
-			bound, err := newBindingAssociatedData(scope, out[i].Environment, names[i])
-			if err != nil {
-				return err
-			}
-			plaintext, err := s.Cipher.Open(ctx, scope.Tier, bound, sealed[i])
-			if err != nil {
-				return fmt.Errorf("open binding %s's value: %w", names[i], err)
-			}
-			out[i].Value = plaintext
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		return out, nil
+		return false, nil
+	})
+	if errors.Is(err, records.ErrContended) {
+		return nil, fmt.Errorf(
+			"a binding's record and the value beside it came from different publishes under every read. "+
+				"A deploy is rewriting %s; nothing will be served half of one publish and half of another: %w",
+			describeEnvironment(environment), ErrTornPair)
 	}
-	return nil, fmt.Errorf(
-		"a binding's record and the value beside it came from different publishes, %d reads in a row. "+
-			"A deploy is rewriting %s; nothing will be served half of one publish and half of another: %w",
-		bindingAttempts, describeEnvironment(environment), ErrTornPair)
+	if err != nil {
+		return nil, err
+	}
+	if err := forEachConcurrently(ctx, len(names), func(ctx context.Context, i int) error {
+		bound, err := newBindingAssociatedData(scope, out[i].Environment, names[i])
+		if err != nil {
+			return err
+		}
+		plaintext, err := s.Cipher.Open(ctx, scope.Tier, bound, sealed[i])
+		if err != nil {
+			return fmt.Errorf("open binding %s's value: %w", names[i], err)
+		}
+		out[i].Value = plaintext
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (s Store) readPair(cache *recordCache, scope Scope, environment, name string) (StoredBinding, []byte, error) {

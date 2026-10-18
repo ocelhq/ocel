@@ -20,8 +20,6 @@ const (
 	RootDigestKey     records.Root = "envsourcedigestkey"
 )
 
-const registerAttempts = 5
-
 type Registration struct {
 	Project    string     `json:"project"`
 	Descriptor Descriptor `json:"descriptor"`
@@ -80,27 +78,21 @@ func Register(ctx context.Context, store variablestore.Store, tier environment.T
 	if err != nil {
 		return Registration{}, err
 	}
-	name := registrationKey(tier, registration.Project)
-	for range registerAttempts {
-		recorded, err := records.ReadOrEmpty(ctx, store.KeyValues, name)
-		if err != nil {
-			return Registration{}, err
+	var previous Registration
+	err = records.Change(ctx, store.KeyValues, registrationKey(tier, registration.Project), func(recorded records.Entry) ([]byte, bool, error) {
+		var err error
+		if previous, err = registrationOf(recorded); err != nil && !isUndecodable(err) {
+			return nil, false, err
 		}
-		previous, err := registrationOf(recorded)
-		if err != nil && !isUndecodable(err) {
-			return Registration{}, err
-		}
-		recorded.Value = encoded
-		_, err = store.KeyValues.Write(ctx, recorded)
-		if errors.Is(err, records.ErrStale) {
-			continue
-		}
-		if err != nil {
-			return Registration{}, err
-		}
-		return registration, moveSharer(ctx, store.KeyValues, tier, registration.Project, previous.DedupeKey, key)
+		return encoded, true, nil
+	})
+	if errors.Is(err, records.ErrContended) {
+		return Registration{}, fmt.Errorf("%s's env source registration was rewritten under every attempt to record it; another deploy of it is still running", registration.Project)
 	}
-	return Registration{}, fmt.Errorf("%s's env source registration was rewritten under every attempt to record it; another deploy of it is still running", registration.Project)
+	if err != nil {
+		return Registration{}, err
+	}
+	return registration, moveSharer(ctx, store.KeyValues, tier, registration.Project, previous.DedupeKey, key)
 }
 
 func RestoreRegistration(ctx context.Context, store variablestore.Store, tier environment.Tier, replacing Registration, previous *Registration) error {

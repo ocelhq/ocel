@@ -105,49 +105,52 @@ func (s Store) unclaim(ctx context.Context, scope Scope, owner, environment stri
 
 func (s Store) reindex(ctx context.Context, scope Scope, owner, environment string, apply func([]string) []string) error {
 	at := bindingOwnerKey(scope, owner, environment)
-	for range bindingAttempts {
+	err := records.RetryWhileStale(ctx, func() (bool, error) {
 		recorded, err := records.ReadOrEmpty(ctx, s.KeyValues, at)
 		if err != nil {
-			return fmt.Errorf("read %s's published bindings: %w", owner, err)
+			return false, fmt.Errorf("read %s's published bindings: %w", owner, err)
 		}
 		var index ownerIndex
 		if len(recorded.Value) > 0 {
 			if err := json.Unmarshal(recorded.Value, &index); err != nil {
-				return fmt.Errorf("read %s's published bindings: %w", owner, err)
+				return false, fmt.Errorf("read %s's published bindings: %w", owner, err)
 			}
 		}
 		kept := apply(index.Names)
 		if slices.Equal(kept, index.Names) {
-			return nil
+			return false, nil
 		}
 		slices.Sort(kept)
 
 		if len(kept) == 0 {
-			if err := s.KeyValues.Remove(ctx, at, recorded.Revision); err != nil {
-				if errors.Is(err, records.ErrStale) {
-					continue
-				}
-				if !errors.Is(err, records.ErrNotFound) {
-					return fmt.Errorf("record %s's published bindings: %w", owner, err)
-				}
+			err := s.KeyValues.Remove(ctx, at, recorded.Revision)
+			if errors.Is(err, records.ErrStale) {
+				return true, nil
 			}
-			return nil
+			if err != nil && !errors.Is(err, records.ErrNotFound) {
+				return false, fmt.Errorf("record %s's published bindings: %w", owner, err)
+			}
+			return false, nil
 		}
 		encoded, err := json.Marshal(ownerIndex{Names: kept})
 		if err != nil {
-			return fmt.Errorf("encode %s's published bindings: %w", owner, err)
+			return false, fmt.Errorf("encode %s's published bindings: %w", owner, err)
 		}
 		recorded.Value = encoded
-		if _, err := s.KeyValues.Write(ctx, recorded); err != nil {
-			if errors.Is(err, records.ErrStale) {
-				continue
-			}
-			return fmt.Errorf("record %s's published bindings: %w", owner, err)
+		_, err = s.KeyValues.Write(ctx, recorded)
+		if errors.Is(err, records.ErrStale) {
+			return true, nil
 		}
-		return nil
+		if err != nil {
+			return false, fmt.Errorf("record %s's published bindings: %w", owner, err)
+		}
+		return false, nil
+	})
+	if errors.Is(err, records.ErrContended) {
+		return fmt.Errorf(
+			"another deploy of %s kept rewriting its published bindings under every attempt this one made to record its own. "+
+				"Two deploys of the same environment are racing; run them one after the other",
+			scope.Project)
 	}
-	return fmt.Errorf(
-		"another deploy of %s kept rewriting its published bindings while this one tried to record its own, %d times over. "+
-			"Two deploys of the same environment are racing; run them one after the other",
-		scope.Project, bindingAttempts)
+	return err
 }
