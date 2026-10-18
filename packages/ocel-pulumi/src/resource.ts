@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
 import { checkTarget, runBindings, type Target } from "./cli.js";
 import { publishedCustom } from "./custom.js";
@@ -46,6 +47,7 @@ export interface BindOptions {
 interface BindingInputs extends Target {
   name: string;
   owner: string;
+  directory: string;
 }
 
 interface PostgresInputs extends BindingInputs, DescribedPostgres {}
@@ -80,7 +82,12 @@ function bindingProvider<I extends BindingInputs>(
   });
 
   const set = (inputs: I) =>
-    runBindings(["set", "--owner", inputs.owner], inputs, `${JSON.stringify(recordFor(inputs))}\n`);
+    runBindings(
+      ["set", "--owner", inputs.owner],
+      inputs,
+      inputs.directory,
+      `${JSON.stringify(recordFor(inputs))}\n`,
+    );
 
   return {
     async create(inputs: I) {
@@ -103,7 +110,7 @@ function bindingProvider<I extends BindingInputs>(
     },
 
     async delete(_id: string, props: BindingState) {
-      runBindings(["rm", props.name], props);
+      runBindings(["rm", props.name], props, path.resolve(process.cwd(), props.project));
     },
   };
 }
@@ -165,8 +172,9 @@ function declare(
   opts: BindOptions | undefined,
   described: object,
 ): void {
+  const directory = path.resolve(opts?.project ?? process.cwd());
   const target: Target = {
-    project: opts?.project ?? process.cwd(),
+    project: path.relative(process.cwd(), directory) || ".",
     tier: opts?.tier ?? "production",
     environment: opts?.environment,
   };
@@ -178,6 +186,7 @@ function declare(
     logical,
     {
       ...target,
+      directory,
       name,
       owner: createUrn(logical, dynamicType, opts?.parent),
       ...described,

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"ocel.dev"
@@ -100,7 +101,9 @@ func connectionString(properties *bindingsv1.PostgresProperties) string {
 // verify-full that names a CA trusts that CA for the server's certificate, and a
 // record that names a TLS server name, as one pointing at a port forward does,
 // verifies the certificate against that name instead of the host. The pool
-// is opened on the first call and the same pool is returned on every one after. It
+// is opened on the first call and the same pool is returned on every one after,
+// and each connection it opens presents the password the binding holds then, so
+// a rotated credential reaches the pool without a restart. It
 // fails when no binding was delivered for the name, and during discovery.
 func (p *DB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
 	return p.connection.Connect(p.resource(), "Pool", func() (*pgxpool.Pool, error) {
@@ -116,8 +119,22 @@ func (p *DB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
 			return nil, err
 		}
 		setTLSServerName(config, properties.GetTlsServerName())
+		config.BeforeConnect = p.presentCurrentPassword
 		return pgxpool.NewWithConfig(ctx, config)
 	})
+}
+
+func (p *DB) presentCurrentPassword(_ context.Context, next *pgx.ConnConfig) error {
+	properties, err := p.properties("Pool")
+	if err != nil {
+		return err
+	}
+	current, err := pgx.ParseConfig(connectionString(properties))
+	if err != nil {
+		return err
+	}
+	next.Password = current.Password
+	return nil
 }
 
 func trustCA(config *pgxpool.Config, ca string) error {

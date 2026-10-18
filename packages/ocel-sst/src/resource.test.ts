@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { custom, customProvider, postgres, postgresProvider } from "./resource.js";
@@ -57,12 +59,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   Reflect.deleteProperty(globalThis, "$util");
   Reflect.deleteProperty(globalThis, "$cli");
 });
 
 function declare(opts?: Parameters<typeof postgres>[2]) {
-  postgres("orders", { getSSTBinding: () => ({ properties }) }, opts);
+  postgres("orders", { getSSTLink: () => ({ properties }) }, opts);
   return latest();
 }
 
@@ -86,7 +89,7 @@ describe("declaring a postgres binding", () => {
     expect(one.props).toMatchObject({
       name: "orders",
       tier: "production",
-      project: root,
+      directory: root,
       owner:
         "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
       properties,
@@ -94,7 +97,11 @@ describe("declaring a postgres binding", () => {
   });
 
   it("takes the ocel project from the sst config root unless it is given", () => {
-    expect(declare({ project: "/repo/other" }).props.project).toBe("/repo/other");
+    expect(declare().props).toMatchObject({ project: ".", directory: root });
+    expect(declare({ project: "/repo/other" }).props).toMatchObject({
+      project: "../other",
+      directory: "/repo/other",
+    });
   });
 
   it("refuses an environment outside the preview tier", () => {
@@ -111,15 +118,15 @@ describe("declaring a postgres binding", () => {
     expect(() => declare()).toThrow(/Move the binding call into run\(\)/);
   });
 
-  it("says how to name the project when nothing supplies the config root", () => {
+  it("says where a binding call belongs when nothing names the sst config root", () => {
     Reflect.deleteProperty(globalThis, "$cli");
 
-    expect(() => declare()).toThrow(/pass `project` to say which directory contains it/);
+    expect(() => declare()).toThrow(/bind from inside the run\(\) of your sst.config.ts/);
   });
 
   it("keeps only the fields a postgres binding contains", () => {
     postgres("orders", {
-      getSSTBinding: () => ({ properties: { ...properties, extra: "dropped" } }),
+      getSSTLink: () => ({ properties: { ...properties, extra: "dropped" } }),
     });
 
     expect(built[0]?.props.properties).toEqual(properties);
@@ -179,16 +186,84 @@ describe("publishing a postgres binding", () => {
   });
 });
 
+describe("binding an sst component", () => {
+  class Aurora {
+    getSSTLink() {
+      return {
+        properties: {
+          clusterArn: "arn:aws:rds:us-east-1:1:cluster:orders",
+          secretArn: "arn:aws:secretsmanager:us-east-1:1:secret:orders",
+          ...properties,
+          reader: "orders.cluster-ro-c.us-east-1.rds.amazonaws.com",
+        },
+        include: [
+          {
+            type: "aws.permission" as const,
+            actions: ["secretsmanager:GetSecretValue"],
+            resources: ["arn:aws:secretsmanager:us-east-1:1:secret:orders"],
+          },
+          {
+            type: "aws.permission" as const,
+            actions: ["rds-data:ExecuteStatement"],
+            resources: ["arn:aws:rds:us-east-1:1:cluster:orders"],
+          },
+        ],
+      };
+    }
+  }
+
+  it("publishes the properties and the grants its link includes", async () => {
+    postgres("orders", new Aurora());
+    await postgresProvider.create(latest().props as never);
+
+    expect(JSON.parse(String(argv().options?.input))).toEqual({
+      binding: { name: "orders", postgres: properties, source: "sst" },
+      grants: [
+        {
+          actions: ["secretsmanager:GetSecretValue"],
+          resources: ["arn:aws:secretsmanager:us-east-1:1:secret:orders"],
+        },
+        {
+          actions: ["rds-data:ExecuteStatement"],
+          resources: ["arn:aws:rds:us-east-1:1:cluster:orders"],
+        },
+      ],
+    });
+  });
+});
+
 describe("changing a published postgres binding", () => {
   it("updates in place when only the record changed", async () => {
     const olds = (await postgresProvider.create(declare().props as never)).outs;
     postgres("orders", {
-      getSSTBinding: () => ({ properties: { ...properties, host: "moved" } }),
+      getSSTLink: () => ({ properties: { ...properties, host: "moved" } }),
     });
 
     const diff = await postgresProvider.diff("id", olds, latest().props as never);
 
     expect(diff).toMatchObject({ changes: true, replaces: [] });
+  });
+
+  it("updates in place when the same project is applied from another checkout", async () => {
+    Object.assign(globalThis, { $cli: { paths: { root: "/laptop/shop" } } });
+    const olds = (await postgresProvider.create(declare().props as never)).outs;
+    Object.assign(globalThis, { $cli: { paths: { root: "/ci/work/shop" } } });
+
+    const diff = await postgresProvider.diff("id", olds, declare().props as never);
+
+    expect(diff).toMatchObject({ changes: false, replaces: [] });
+  });
+
+  it("replaces when the project it lands in changed", async () => {
+    const olds = (await postgresProvider.create(declare().props as never)).outs;
+
+    const diff = await postgresProvider.diff(
+      "id",
+      olds,
+      declare({ project: "/repo/other" }).props as never,
+    );
+
+    expect(diff.replaces).toContain("project");
   });
 
   it("replaces when the tier it lands in changed", async () => {
@@ -207,7 +282,7 @@ describe("changing a published postgres binding", () => {
   it("reports a change rather than throwing while a property is still unknown", async () => {
     const olds = (await postgresProvider.create(declare().props as never)).outs;
     postgres("orders", {
-      getSSTBinding: () => ({
+      getSSTLink: () => ({
         properties: { ...properties, host: undefined },
       }),
     });
@@ -238,6 +313,22 @@ describe("removing a postgres binding", () => {
     expect(argv().args).toEqual([entry, "bindings", "rm", "orders"]);
     expect(argv().options).toMatchObject({ cwd: root });
   });
+
+  it("runs ocel bindings rm in the project under the checkout removing it", async () => {
+    const checkout = mkdtempSync(join(tmpdir(), "ocel-sst-"));
+    writeFileSync(join(checkout, "sst.config.ts"), "");
+    const platform = join(checkout, ".sst", "platform");
+    mkdirSync(platform, { recursive: true });
+    Object.assign(globalThis, { $cli: { paths: { root: "/laptop/shop" } } });
+    const created = await postgresProvider.create(declare().props as never);
+    run.mockClear();
+    Reflect.deleteProperty(globalThis, "$cli");
+    vi.spyOn(process, "cwd").mockReturnValue(platform);
+
+    await postgresProvider.delete("id", created.outs);
+
+    expect(argv().options).toMatchObject({ cwd: checkout });
+  });
 });
 
 describe("declaring a custom binding", () => {
@@ -258,7 +349,7 @@ describe("declaring a custom binding", () => {
     expect(one.props).toMatchObject({
       name: "network",
       tier: "production",
-      project: root,
+      directory: root,
       owner:
         "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-network",
       properties: network,

@@ -65,6 +65,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 function unwrap(value: unknown): Promise<unknown> {
@@ -106,7 +107,7 @@ describe("declaring a postgres binding", () => {
     expect(await inputs(one)).toMatchObject({
       name: "orders",
       tier: "production",
-      project: root,
+      directory: root,
       owner: ownerUrn,
       properties,
     });
@@ -115,7 +116,7 @@ describe("declaring a postgres binding", () => {
   it("takes the ocel project from the directory pulumi runs in unless it is given", () => {
     postgres("orders", properties);
 
-    expect(latest().props.project).toBe(process.cwd());
+    expect(latest().props).toMatchObject({ project: ".", directory: process.cwd() });
   });
 
   it("owns the binding by the urn it has under the parent it hangs from", async () => {
@@ -223,6 +224,30 @@ describe("changing a published postgres binding", () => {
     expect(diff).toMatchObject({ changes: true, replaces: [] });
   });
 
+  it("updates in place when the same project is applied from another checkout", async () => {
+    vi.spyOn(process, "cwd").mockReturnValue("/laptop/shop");
+    postgres("orders", properties);
+    const olds = (await postgresProvider.create(await inputs(latest()))).outs;
+    vi.spyOn(process, "cwd").mockReturnValue("/ci/work/shop");
+    postgres("orders", properties);
+
+    const diff = await postgresProvider.diff("id", olds, await inputs(latest()));
+
+    expect(diff).toMatchObject({ changes: false, replaces: [] });
+  });
+
+  it("replaces when the project it lands in changed", async () => {
+    const olds = (await postgresProvider.create(await inputs(declare()))).outs;
+
+    const diff = await postgresProvider.diff(
+      "id",
+      olds,
+      await inputs(declare({ project: "/repo/other" })),
+    );
+
+    expect(diff.replaces).toContain("project");
+  });
+
   it("replaces when the tier it lands in changed", async () => {
     const olds = (await postgresProvider.create(await inputs(declare()))).outs;
 
@@ -266,6 +291,18 @@ describe("removing a postgres binding", () => {
     expect(argv().args).toEqual([entry, "bindings", "rm", "orders"]);
     expect(argv().options).toMatchObject({ cwd: root });
   });
+
+  it("runs ocel bindings rm in the project under the checkout removing it", async () => {
+    vi.spyOn(process, "cwd").mockReturnValue("/laptop/shop");
+    postgres("orders", properties);
+    const created = await postgresProvider.create(await inputs(latest()));
+    run.mockClear();
+    vi.spyOn(process, "cwd").mockReturnValue("/ci/work/shop");
+
+    await postgresProvider.delete("id", created.outs);
+
+    expect(argv().options).toMatchObject({ cwd: "/ci/work/shop" });
+  });
 });
 
 describe("declaring a custom binding", () => {
@@ -289,7 +326,7 @@ describe("declaring a custom binding", () => {
     expect(await inputs(one)).toMatchObject({
       name: "network",
       tier: "production",
-      project: root,
+      directory: root,
       owner: customOwner,
       properties: network,
     });

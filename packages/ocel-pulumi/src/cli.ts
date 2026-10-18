@@ -10,14 +10,19 @@ export interface Target {
   environment?: string;
 }
 
-export function runBindings(args: string[], target: Target, input?: string): void {
+export function runBindings(
+  args: string[],
+  target: Target,
+  directory: string,
+  input?: string,
+): void {
   checkTarget(target);
-  const [runtime, entry] = ocelCommand(target.project);
+  const [runtime, entry] = ocelCommand(directory);
   const result = childProcess.spawnSync(
     runtime,
     [entry, "bindings", ...args, ...flagsFor(target)],
     {
-      cwd: target.project,
+      cwd: directory,
       input,
       encoding: "utf8",
     },

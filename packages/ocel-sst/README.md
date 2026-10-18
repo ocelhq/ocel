@@ -59,8 +59,8 @@ export const orders = postgres("orders");
 ## `bind.postgres(name, resource, opts?)`
 
 `name` is the name the app binds to. `resource` is either an SST component,
-whose own binding description is passed through, or the postgres fields written by
-hand:
+whose own link (its properties and the permissions it includes) is passed through,
+or the postgres fields written by hand:
 
 ```ts
 bind.postgres("orders", {
@@ -89,16 +89,14 @@ A name belongs to whoever published it, so two stacks publishing `orders` into
 one project is refused rather than silently handing every app bound to that name
 another database.
 
-## `bind.custom(name, { properties }, opts?)`
+## `bind.custom(name, properties, opts?)`
 
 Publishes values ocel neither types nor delivers, for a transform to read:
 
 ```ts
 bind.custom("network", {
-  properties: {
-    subnetIds: vpc.privateSubnets,
-    securityGroupIds: [vpc.securityGroup],
-  },
+  subnetIds: vpc.privateSubnets,
+  securityGroupIds: vpc.securityGroups,
 });
 ```
 
@@ -106,10 +104,14 @@ A transform module in the ocel project reads them by name:
 
 ```ts
 export default defineTransform(({ bindings }) => ({
-  function: {
-    vpc: {
-      subnetIds: bindings.network.subnetIds,
-      securityGroupIds: bindings.network.securityGroupIds,
+  aws: {
+    function: {
+      lambda: {
+        vpcConfig: {
+          subnetIds: bindings.custom.network.subnetIds,
+          securityGroupIds: bindings.custom.network.securityGroupIds,
+        },
+      },
     },
   },
 }));

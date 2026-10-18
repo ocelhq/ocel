@@ -220,3 +220,34 @@ func TestPoolOpensOnceTheBindingArrivesAfterAFailedOpen(t *testing.T) {
 	}
 	t.Cleanup(pool.Close)
 }
+
+func TestAPoolPresentsTheRotatedPasswordOnItsNextConnection(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OCEL_LIVE_DIR", dir)
+	deliver := func(password string) {
+		t.Helper()
+		record := fmt.Sprintf(`{"name":"main","postgres":{"host":"127.0.0.1","port":5432,"database":"d","username":"u","password":%q}}`, password)
+		if err := os.WriteFile(filepath.Join(dir, "OCEL_RESOURCE_POSTGRES_main"), []byte(record), 0o600); err != nil {
+			t.Fatalf("project the binding: %v", err)
+		}
+	}
+	deliver("generation-1")
+	pool, err := postgres.New("main").Pool(t.Context())
+	if err != nil {
+		t.Fatalf("Pool() error = %v", err)
+	}
+	t.Cleanup(pool.Close)
+
+	deliver("generation-2")
+	config := pool.Config()
+	if config.BeforeConnect == nil {
+		t.Fatal("pool BeforeConnect = nil, want the binding re-read before each connection")
+	}
+	next := config.ConnConfig.Copy()
+	if err := config.BeforeConnect(t.Context(), next); err != nil {
+		t.Fatalf("BeforeConnect() error = %v", err)
+	}
+	if next.Password != "generation-2" {
+		t.Errorf("next connection's password = %q, want the rotated generation-2", next.Password)
+	}
+}

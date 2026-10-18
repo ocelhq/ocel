@@ -70,13 +70,13 @@ describe("reaching what SST injects into the config bundle", () => {
 
     expect(built).toHaveLength(1);
     expect(built[0]?.name).toBe("ocel-binding-orders");
-    expect(built[0]?.props).toMatchObject({ project: root, tier: "production" });
+    expect(built[0]?.props).toMatchObject({ directory: root, tier: "production" });
   });
 
   it("declares a custom binding from the injected util", () => {
     bind.custom("network", { subnetIds: ["subnet-1"] });
 
     expect(built).toHaveLength(1);
-    expect(built[0]?.props).toMatchObject({ project: root, name: "network" });
+    expect(built[0]?.props).toMatchObject({ directory: root, name: "network" });
   });
 });
