@@ -5,10 +5,12 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -33,12 +35,86 @@ type harness struct {
 	key    ed25519.PrivateKey
 	server *httptest.Server
 	client *http.Client
-	clock  atomic.Int64
+	clock  *fakeClock
+	minted atomic.Int64
 }
 
-func (h *harness) now() time.Time { return time.Unix(h.clock.Load(), 0) }
+func (h *harness) now() time.Time { return h.clock.Now() }
 
-func (h *harness) advance(by time.Duration) { h.clock.Add(int64(by / time.Second)) }
+func (h *harness) advance(by time.Duration) { h.clock.advance(by) }
+
+type fakeClock struct {
+	mu     sync.Mutex
+	now    time.Time
+	timers map[*fakeTimer]struct{}
+}
+
+type fakeTimer struct {
+	at time.Time
+	f  func()
+}
+
+func newFakeClock(at time.Time) *fakeClock {
+	return &fakeClock{now: at, timers: map[*fakeTimer]struct{}{}}
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *fakeClock) AfterFunc(d time.Duration, f func()) func() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	timer := &fakeTimer{at: c.now.Add(d), f: f}
+	if d <= 0 {
+		go f()
+		return func() bool { return false }
+	}
+	c.timers[timer] = struct{}{}
+	return func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		_, isPending := c.timers[timer]
+		delete(c.timers, timer)
+		return isPending
+	}
+}
+
+func (c *fakeClock) advance(by time.Duration) {
+	c.mu.Lock()
+	c.now = c.now.Add(by)
+	var due []*fakeTimer
+	for timer := range c.timers {
+		if !timer.at.After(c.now) {
+			due = append(due, timer)
+			delete(c.timers, timer)
+		}
+	}
+	c.mu.Unlock()
+	slices.SortFunc(due, func(a, b *fakeTimer) int { return a.at.Compare(b.at) })
+	for _, timer := range due {
+		timer.f()
+	}
+}
+
+func (c *fakeClock) awaitTimers(t *testing.T, count int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		c.mu.Lock()
+		pending := len(c.timers)
+		c.mu.Unlock()
+		if pending >= count {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d timers are pending, want %d", pending, count)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
 
 type pipeListener struct {
 	accepted chan net.Conn
@@ -111,15 +187,14 @@ func newUnstartedHarness(t *testing.T, configure ...func(*gateway.Config)) *harn
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &harness{t: t, key: private}
-	h.clock.Store(1_790_000_000)
+	h := &harness{t: t, key: private, clock: newFakeClock(time.Unix(1_790_000_000, 0))}
 	cfg := gateway.Config{
 		Host: host,
 		Keys: func(requested string) (ed25519.PublicKey, bool) {
 			return public, requested == namespace
 		},
 		AllowedOrigins: func() []string { return []string{appOrigin} },
-		Now:            h.now,
+		Clock:          h.clock,
 	}
 	for _, change := range configure {
 		change(&cfg)
@@ -134,12 +209,16 @@ func (h *harness) mint(operation token.Operation, channel string) string {
 }
 
 func (h *harness) mintFor(subject string, operation token.Operation, channel string) string {
+	return h.mintLasting(time.Minute, subject, operation, channel)
+}
+
+func (h *harness) mintLasting(lifetime time.Duration, subject string, operation token.Operation, channel string) string {
 	return tokentest.Sign(h.t, h.key, token.Claims{
 		Audience:  host,
-		ExpiresAt: h.now().Add(time.Minute).Unix(),
+		ExpiresAt: h.now().Add(lifetime).Unix(),
 		IssuedAt:  h.now().Unix(),
 		Issuer:    "ocel:rt:" + namespace,
-		ID:        "jti-1",
+		ID:        fmt.Sprintf("jti-%d", h.minted.Add(1)),
 		Subject:   subject,
 		Ocel:      token.Grant{Channel: channel, Namespace: namespace, Operation: operation},
 	})
@@ -178,7 +257,12 @@ func (h *harness) dial(connectToken string) (*client, *http.Response, error) {
 
 func (h *harness) connect() *client {
 	h.t.Helper()
-	c, _, err := h.dial(h.mint(token.Connect, "/"+namespace))
+	return h.connectWith(h.mint(token.Connect, "/"+namespace))
+}
+
+func (h *harness) connectWith(connectToken string) *client {
+	h.t.Helper()
+	c, _, err := h.dial(connectToken)
 	if err != nil {
 		h.t.Fatalf("dial the gateway: %v", err)
 	}
@@ -373,12 +457,171 @@ func TestAnExpiredSubscribeTokenIsRefused(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	c := h.connect()
 	stale := h.mint(token.Subscribe, "/app/orders/o-1")
-	h.advance(2 * time.Minute)
+	h.advance(30 * time.Second)
+	c := h.connect()
+	h.advance(40 * time.Second)
 
 	if got := c.subscribe("s-1", "/app/orders/o-1", stale); got["type"] != "subscribe_error" {
 		t.Fatalf("subscribe answered %v, want subscribe_error", got)
+	}
+}
+
+func TestAConnectionIsClosedForPolicyWhenItsConnectTokenExpires(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	c := h.connect()
+	channel := "/app/orders/o-1"
+
+	h.advance(time.Minute - time.Second)
+	if got := c.subscribe("s-1", channel, h.mint(token.Subscribe, channel)); got["type"] != "subscribe_success" {
+		t.Fatalf("subscribe a second before the connect token expires answered %v, want subscribe_success", got)
+	}
+
+	h.advance(time.Second)
+	frame, err := c.next(2 * time.Second)
+	if status := websocket.CloseStatus(err); status != websocket.StatusPolicyViolation {
+		t.Fatalf("once the connect token expired the read got %v, %v (status %d), want the socket closed with status %d", frame, err, status, websocket.StatusPolicyViolation)
+	}
+}
+
+func TestAConnectTokenHoldsOneSocketAtATimeAndItsSlotFreesOnClose(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	connectToken := h.mint(token.Connect, "/"+namespace)
+	first, _, err := h.dial(connectToken)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	first.send(map[string]any{"type": "connection_init"})
+	if ack := first.read(); ack["type"] != "connection_ack" {
+		t.Fatalf("the first socket on a token got %v, want connection_ack", ack)
+	}
+
+	second, _, err := h.dial(connectToken)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	got := second.read()
+	errs, _ := got["errors"].([]any)
+	if first, _ := errs[0].(map[string]any); got["type"] != "connection_error" || first["errorType"] != "LimitExceededException" {
+		t.Fatalf("a second socket on the same token got %v, want a connection_error of LimitExceededException", got)
+	}
+	if _, err := second.next(5 * time.Second); websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("after connection_error the read ended with %v, want the socket closed for policy", err)
+	}
+
+	_ = first.conn.Close(websocket.StatusNormalClosure, "")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		again, _, err := h.dial(connectToken)
+		if err != nil {
+			t.Fatalf("dial: %v", err)
+		}
+		again.send(map[string]any{"type": "connection_init"})
+		got, _ := again.next(5 * time.Second)
+		_ = again.conn.CloseNow()
+		if got["type"] == "connection_ack" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a socket on the token once its first socket closed got %v, want connection_ack", got)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func pingQuickly(cfg *gateway.Config) {
+	cfg.PingInterval = 10 * time.Second
+	cfg.PongTimeout = 5 * time.Second
+}
+
+func TestAPeerThatStopsAnsweringPingsIsDisconnectedAndItsSlotFreed(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, pingQuickly, func(cfg *gateway.Config) { cfg.MaxSockets = 1 })
+	h.connectWith(h.mintLasting(time.Hour, "user-1", token.Connect, "/"+namespace))
+
+	for range 100 {
+		h.advance(10 * time.Second)
+		time.Sleep(5 * time.Millisecond)
+		h.advance(5 * time.Second)
+		c, resp, err := h.dial(h.mintLasting(time.Hour, "user-2", token.Connect, "/"+namespace))
+		if err == nil {
+			_ = c.conn.CloseNow()
+			return
+		}
+		if resp == nil || resp.StatusCode != http.StatusServiceUnavailable {
+			t.Fatalf("dial = %v, want the gateway at its cap or the socket admitted", err)
+		}
+	}
+	t.Fatal("a peer that has answered no ping for 25 minutes still holds the gateway's only socket")
+}
+
+func TestAPeerThatAnswersPingsStaysConnected(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, pingQuickly)
+	c := h.connectWith(h.mintLasting(time.Hour, "user-1", token.Connect, "/"+namespace))
+	channel := "/app/orders/o-1"
+	c.subscribe("s-1", channel, h.mint(token.Subscribe, channel))
+	frames := make(chan map[string]any)
+	go func() {
+		defer close(frames)
+		for {
+			frame, err := c.next(10 * time.Second)
+			if err != nil {
+				return
+			}
+			frames <- frame
+		}
+	}()
+
+	for range 5 {
+		h.advance(10 * time.Second)
+		time.Sleep(50 * time.Millisecond)
+	}
+	_, sent := h.serverPublish(channel, "still here")
+	if got := <-frames; got["type"] != "data" || got["event"] != sent {
+		t.Fatalf("a peer answering pings got %v, want the data frame carrying %s", got, sent)
+	}
+}
+
+func TestAPublishToOneGatewayReachesASubscriberOfAnotherGatewayOnTheSameBus(t *testing.T) {
+	t.Parallel()
+
+	bus := gateway.NewMemoryBus()
+	onBus := func(cfg *gateway.Config) { cfg.Bus = bus }
+	publishing, subscribed := newHarness(t, onBus), newHarness(t, onBus)
+	c := subscribed.connect()
+	channel := "/app/orders/o-1"
+	c.subscribe("s-1", channel, subscribed.mint(token.Subscribe, channel))
+
+	resp, sent := publishing.serverPublish(channel, "shipped")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("publish answered %s, want 204", resp.Status)
+	}
+	if got := c.read(); got["type"] != "data" || got["id"] != "s-1" || got["event"] != sent {
+		t.Fatalf("the subscriber on the other gateway got %v, want a data frame for s-1 carrying %s", got, sent)
+	}
+}
+
+type refusingBus struct{}
+
+func (refusingBus) Publish(context.Context, string, string) error {
+	return errors.New("the bus is unreachable")
+}
+
+func (refusingBus) Listen(func(channel, event string)) func() { return func() {} }
+
+func TestAServerPublishTheBusCannotCarryIsAnsweredServiceUnavailable(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, func(cfg *gateway.Config) { cfg.Bus = refusingBus{} })
+	if resp, _ := h.serverPublish("/app/orders/o-1", "lost"); resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("publish the bus refused answered %s, want 503", resp.Status)
 	}
 }
 

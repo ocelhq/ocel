@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
 const gatewayHost = "shop-production-rt-abc123-uc.a.run.app"
@@ -32,7 +33,7 @@ func serveRealtimeProxy(t *testing.T, key ed25519.PrivateKey, publishURL string)
 	t.Helper()
 	record, err := protojson.Marshal(&bindingsv1.Binding{Name: "realtime--app", Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
 		Transport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY,
-		Url:        "wss://" + gatewayHost + gateway.SocketPath,
+		Url:        "wss://" + gatewayHost + gatewayenv.SocketPath,
 		Host:       gatewayHost,
 		SigningKey: key.Seed(),
 		VerifyKey:  key.Public().(ed25519.PublicKey),
@@ -83,7 +84,7 @@ func TestTheRuntimePublishesARealtimeEventToTheGatewayServiceTheManifestNames(t 
 	}))
 	t.Cleanup(service.Close)
 
-	client := serveRealtimeProxy(t, key, service.URL+gateway.PublishPath)
+	client := serveRealtimeProxy(t, key, service.URL+gatewayenv.PublishPath)
 	event := `{"v":1,"id":"0123456789abcdef0123456789abcdef","ch":"/app/status","ts":1,"kind":"live","data":{}}`
 	if _, err := client.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "app", Channel: "/app/status", Event: event}); err != nil {
 		t.Errorf("Publish() = %v, want the gateway serving %s to take the publish", err, gatewayHost)

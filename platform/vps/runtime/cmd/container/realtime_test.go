@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -85,7 +86,7 @@ func TestTheRuntimePublishesARealtimeEventToTheBoxsGatewayAtItsInternalAddress(t
 	}))
 	t.Cleanup(box.Close)
 
-	client := serveRealtimeProxy(t, key, box.URL+gateway.PublishPath)
+	client := serveRealtimeProxy(t, key, box.URL+gatewayenv.PublishPath)
 	event := `{"v":1,"id":"0123456789abcdef0123456789abcdef","ch":"/app/status","ts":1,"kind":"live","data":{}}`
 	if _, err := client.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "app", Channel: "/app/status", Event: event}); err != nil {
 		t.Errorf("Publish() = %v, want the gateway serving shop.example to take a publish sent to its internal address", err)

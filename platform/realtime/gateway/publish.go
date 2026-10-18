@@ -11,8 +11,6 @@ import (
 	"github.com/ocelhq/ocel/platform/realtime/token"
 )
 
-const serverSubject = "server"
-
 var envelopeID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 type publishedEnvelope struct {
@@ -53,11 +51,14 @@ func (g *Gateway) servePublish(w http.ResponseWriter, r *http.Request) {
 		answerError(w, http.StatusBadRequest, errorBadRequest, "channel "+envelope.Channel+" is no channel to publish on")
 		return
 	}
-	if _, err := g.verify(credential, token.Expected{Namespace: namespace, Operation: token.Publish, Channel: envelope.Channel, Subject: serverSubject}); err != nil {
+	if _, err := g.verify(credential, token.Expected{Namespace: namespace, Operation: token.Publish, Channel: envelope.Channel, Subject: token.ServerSubject}); err != nil {
 		answerError(w, http.StatusUnauthorized, errorUnauthorized, err.Error())
 		return
 	}
-	g.hub.Publish(envelope.Channel, string(body))
+	if err := g.cfg.Bus.Publish(r.Context(), envelope.Channel, string(body)); err != nil {
+		answerError(w, http.StatusServiceUnavailable, errorServiceUnavailable, "the realtime gateway could not carry the event to its subscribers: "+err.Error())
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
 }

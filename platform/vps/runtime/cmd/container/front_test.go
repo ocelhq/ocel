@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	"github.com/ocelhq/ocel/platform/realtime/gateway"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -87,15 +87,15 @@ func upgrade(t *testing.T, front, origin string) string {
 
 func TestTheRealtimePathOnTheAppsOriginIsForwardedToTheGatewayTheRuntimePublishesTo(t *testing.T) {
 	address, seen := serveGateway(t)
-	front := httptest.NewServer(mustFront(t, realtimeManifest("http://"+address+gateway.PublishPath), originguard.Options{Upstream: serveApp(t)}))
+	front := httptest.NewServer(mustFront(t, realtimeManifest("http://"+address+gatewayenv.PublishPath), originguard.Options{Upstream: serveApp(t)}))
 	t.Cleanup(front.Close)
 
 	if status := upgrade(t, front.URL, "https://web.shop.example"); !strings.Contains(status, "101") {
 		t.Fatalf("the upgrade was answered %q, want the gateway's 101", status)
 	}
 	got := <-seen
-	if got.path != gateway.SocketPath {
-		t.Errorf("the gateway was asked for %q, want its socket at %q", got.path, gateway.SocketPath)
+	if got.path != gatewayenv.SocketPath {
+		t.Errorf("the gateway was asked for %q, want its socket at %q", got.path, gatewayenv.SocketPath)
 	}
 	if got.origin != "" {
 		t.Errorf("the gateway was handed Origin %q: the handler judged the origin when it minted the tokens, and the gateway trusts no origin of its own", got.origin)
@@ -113,7 +113,7 @@ func TestTheRealtimePathOnTheAppsOriginIsForwardedToTheGatewayTheRuntimePublishe
 
 func TestTheRealtimePathIsGuardedAsTheAppIs(t *testing.T) {
 	address, seen := serveGateway(t)
-	front := httptest.NewServer(mustFront(t, realtimeManifest("http://"+address+gateway.PublishPath),
+	front := httptest.NewServer(mustFront(t, realtimeManifest("http://"+address+gatewayenv.PublishPath),
 		originguard.Options{Upstream: serveApp(t), Guard: originguard.NewGuard("edge-secret")}))
 	t.Cleanup(front.Close)
 
@@ -149,7 +149,7 @@ func TestAContainerHandedNoGatewayLeavesTheRealtimePathToTheApp(t *testing.T) {
 
 func TestAGatewayAddressThatNamesNoGatewayKeepsTheFrontFromStarting(t *testing.T) {
 	for name, publishURL := range map[string]string{
-		"a path with no host": gateway.PublishPath,
+		"a path with no host": gatewayenv.PublishPath,
 		"no url at all":       "http://%zz",
 	} {
 		if _, err := newFront(realtimeManifest(publishURL), originguard.Options{Upstream: serveApp(t)}); err == nil {

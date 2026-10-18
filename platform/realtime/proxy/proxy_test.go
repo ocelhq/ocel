@@ -21,6 +21,7 @@ import (
 	realtimev1 "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	"github.com/ocelhq/ocel/platform/realtime/proxy"
 	"github.com/ocelhq/ocel/platform/realtime/token"
 )
@@ -80,7 +81,7 @@ func TestAPublishIsTakenByTheGatewayTheBindingNames(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	service := proxy.NewService(bindRealtime(t, properties), proxy.NewGatewayTransport(server.Client(), server.URL+gateway.PublishPath))
+	service := proxy.NewService(bindRealtime(t, properties), proxy.NewGatewayTransport(server.Client(), server.URL+gatewayenv.PublishPath))
 	if err := publish(service); err != nil {
 		t.Errorf("Publish() = %v, want the gateway serving the binding's host to take a publish sent to its internal address", err)
 	}
@@ -106,7 +107,10 @@ func TestAGatewayPublishCarriesTheEventUnderAServerTokenForItsChannel(t *testing
 	if body != event {
 		t.Errorf("the gateway was sent %s, want the event as the app encoded it", body)
 	}
-	if _, err := token.Verify(strings.TrimPrefix(authorization, "Bearer "), key.Public().(ed25519.PublicKey), time.Now(), token.Expected{
+	keys := func(namespace string) (ed25519.PublicKey, bool) {
+		return key.Public().(ed25519.PublicKey), namespace == "app"
+	}
+	if _, err := token.Verify(strings.TrimPrefix(authorization, "Bearer "), keys, time.Now(), token.Expected{
 		Audience: "realtime.shop.example", Namespace: "app", Operation: token.Publish, Channel: channel, Subject: "server",
 	}); err != nil {
 		t.Errorf("the publish carried %q, which does not verify as a server publish token for %s: %v", authorization, channel, err)

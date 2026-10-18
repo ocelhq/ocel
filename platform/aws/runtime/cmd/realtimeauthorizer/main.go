@@ -84,15 +84,10 @@ func (a *authorizer) authorize(ctx context.Context, req authorizationRequest) au
 }
 
 func (a *authorizer) verify(ctx context.Context, req authorizationRequest) error {
-	raw := req.AuthorizationToken
 	want := token.Expected{}
 	switch req.RequestContext.Operation {
 	case operationConnect:
-		namespace, err := token.ReadUnverifiedNamespace(raw)
-		if err != nil {
-			return err
-		}
-		want = token.Expected{Namespace: namespace, Operation: token.Connect, Channel: "/" + namespace}
+		want = token.Expected{Operation: token.Connect}
 	case operationSubscribe:
 		want = token.Expected{
 			Namespace: req.RequestContext.ChannelNamespaceName,
@@ -102,17 +97,18 @@ func (a *authorizer) verify(ctx context.Context, req authorizationRequest) error
 	default:
 		return fmt.Errorf("operation %q is the app role's alone", req.RequestContext.Operation)
 	}
-	key, known := a.keys[want.Namespace]
-	if !known {
-		return &token.Refusal{Reason: token.ReasonNamespace}
-	}
 	host, err := a.hosts.find(ctx, req.RequestContext.APIID)
 	if err != nil {
 		return fmt.Errorf("read the host of api %s: %w", req.RequestContext.APIID, err)
 	}
 	want.Audience = host
-	_, err = token.Verify(raw, key, a.now(), want)
+	_, err = token.Verify(req.AuthorizationToken, a.findKey, a.now(), want)
 	return err
+}
+
+func (a *authorizer) findKey(namespace string) (ed25519.PublicKey, bool) {
+	key, known := a.keys[namespace]
+	return key, known
 }
 
 func normalizeChannel(channel string) string {

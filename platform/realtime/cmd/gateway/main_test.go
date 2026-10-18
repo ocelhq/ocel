@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -73,11 +74,14 @@ func startGateway(t *testing.T, keys map[string]ed25519.PrivateKey) (string, fun
 	return listener.Addr().String(), stop
 }
 
+var minted atomic.Int64
+
 func mint(t *testing.T, key ed25519.PrivateKey, namespace string, operation token.Operation, channel, subject string) string {
 	t.Helper()
 	return tokentest.Sign(t, key, token.Claims{
 		Audience:  audience,
 		ExpiresAt: time.Now().Add(time.Minute).Unix(),
+		ID:        strconv.FormatInt(minted.Add(1), 10),
 		Subject:   subject,
 		Ocel:      token.Grant{Channel: channel, Namespace: namespace, Operation: operation},
 	})
@@ -88,7 +92,7 @@ func connect(t *testing.T, address, connectToken string) (*websocket.Conn, map[s
 	header, _ := json.Marshal(map[string]string{"Authorization": connectToken})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, _, err := websocket.Dial(ctx, "ws://"+address+gateway.SocketPath, &websocket.DialOptions{
+	conn, _, err := websocket.Dial(ctx, "ws://"+address+gatewayenv.SocketPath, &websocket.DialOptions{
 		Subprotocols: []string{gateway.Subprotocol, "header-" + base64.RawURLEncoding.EncodeToString(header)},
 	})
 	if err != nil {
@@ -150,7 +154,7 @@ func TestAServerPublishReachesTheSubscribersOfItsChannel(t *testing.T) {
 	}
 
 	event := `{"v":1,"id":"0123456789abcdef0123456789abcdef","ch":"/app/orders/o-1","ts":1790000000000,"kind":"live","data":{"status":"shipped"}}`
-	req, _ := http.NewRequest(http.MethodPost, "http://"+address+gateway.PublishPath, strings.NewReader(event))
+	req, _ := http.NewRequest(http.MethodPost, "http://"+address+gatewayenv.PublishPath, strings.NewReader(event))
 	req.Header.Set("Authorization", "Bearer "+mint(t, key, "app", token.Publish, channel, "server"))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -252,7 +256,7 @@ func dialFrom(t *testing.T, address, origin, connectToken string) (map[string]an
 	header, _ := json.Marshal(map[string]string{"Authorization": connectToken})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, resp, err := websocket.Dial(ctx, "ws://"+address+gateway.SocketPath, &websocket.DialOptions{
+	conn, resp, err := websocket.Dial(ctx, "ws://"+address+gatewayenv.SocketPath, &websocket.DialOptions{
 		Subprotocols: []string{gateway.Subprotocol, "header-" + base64.RawURLEncoding.EncodeToString(header)},
 		HTTPHeader:   http.Header{"Origin": {origin}},
 	})
