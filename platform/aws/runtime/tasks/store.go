@@ -15,8 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
 
@@ -86,7 +86,7 @@ func stringKey(pk, sk string) map[string]ddbtypes.AttributeValue {
 	}
 }
 
-func (s Store) itemOf(run runs.Run, revision keyvalue.Revision) runItem {
+func (s Store) itemOf(run runs.Run, revision records.Revision) runItem {
 	return runItem{
 		PK:                 s.runPartition(run.Topic),
 		SK:                 run.Execution,
@@ -149,7 +149,7 @@ func (item runItem) run() runs.Run {
 		StartedAt:   timeOfMicros(item.StartedAtMicros),
 		FinishedAt:  timeOfMicros(item.FinishedAtMicros),
 		ExpiresAt:   timeOfMicros(item.RunExpiresAtMicros),
-		Revision:    keyvalue.Revision(item.Revision),
+		Revision:    records.Revision(item.Revision),
 	}
 	if item.Payload != "" {
 		run.Payload = json.RawMessage(item.Payload)
@@ -163,23 +163,23 @@ func (item runItem) run() runs.Run {
 	return run
 }
 
-func (s Store) CreateRun(ctx context.Context, run runs.Run) (keyvalue.Revision, error) {
+func (s Store) CreateRun(ctx context.Context, run runs.Run) (records.Revision, error) {
 	return s.putRun(ctx, run, "attribute_not_exists(pk)", nil)
 }
 
-func (s Store) WriteRun(ctx context.Context, run runs.Run) (keyvalue.Revision, error) {
+func (s Store) WriteRun(ctx context.Context, run runs.Run) (records.Revision, error) {
 	if run.Revision == "" {
-		return "", fmt.Errorf("run %s carries no revision to write over: %w", run.Execution, keyvalue.ErrStale)
+		return "", fmt.Errorf("run %s carries no revision to write over: %w", run.Execution, records.ErrStale)
 	}
 	return s.putRun(ctx, run, "#revision = :revision", atRevision(run.Revision))
 }
 
-func atRevision(revision keyvalue.Revision) map[string]ddbtypes.AttributeValue {
+func atRevision(revision records.Revision) map[string]ddbtypes.AttributeValue {
 	return map[string]ddbtypes.AttributeValue{":revision": &ddbtypes.AttributeValueMemberS{Value: string(revision)}}
 }
 
-func (s Store) putRun(ctx context.Context, run runs.Run, condition string, values map[string]ddbtypes.AttributeValue) (keyvalue.Revision, error) {
-	revision, err := keyvalue.NewRevision()
+func (s Store) putRun(ctx context.Context, run runs.Run, condition string, values map[string]ddbtypes.AttributeValue) (records.Revision, error) {
+	revision, err := records.NewRevision()
 	if err != nil {
 		return "", err
 	}
@@ -194,7 +194,7 @@ func (s Store) putRun(ctx context.Context, run runs.Run, condition string, value
 	}
 	_, err = s.db.PutItem(ctx, in)
 	if isConditionFailed(err) {
-		return "", fmt.Errorf("run %s: %w", run.Execution, keyvalue.ErrStale)
+		return "", fmt.Errorf("run %s: %w", run.Execution, records.ErrStale)
 	}
 	if err != nil {
 		return "", fmt.Errorf("record run %s: %w", run.Execution, err)
@@ -212,7 +212,7 @@ func (s Store) ReadRun(ctx context.Context, topic, execution string) (runs.Run, 
 		return runs.Run{}, fmt.Errorf("read run %s: %w", execution, err)
 	}
 	if len(out.Item) == 0 {
-		return runs.Run{}, fmt.Errorf("run %s: %w", execution, keyvalue.ErrNotFound)
+		return runs.Run{}, fmt.Errorf("run %s: %w", execution, records.ErrNotFound)
 	}
 	var item runItem
 	if err := attributevalue.UnmarshalMap(out.Item, &item); err != nil {
@@ -223,7 +223,7 @@ func (s Store) ReadRun(ctx context.Context, topic, execution string) (runs.Run, 
 
 func (s Store) DeleteRun(ctx context.Context, run runs.Run) error {
 	if run.Revision == "" {
-		return fmt.Errorf("run %s carries no revision to delete at: %w", run.Execution, keyvalue.ErrStale)
+		return fmt.Errorf("run %s carries no revision to delete at: %w", run.Execution, records.ErrStale)
 	}
 	_, err := s.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName:                 aws.String(s.table),
@@ -233,7 +233,7 @@ func (s Store) DeleteRun(ctx context.Context, run runs.Run) error {
 		ExpressionAttributeValues: atRevision(run.Revision),
 	})
 	if isConditionFailed(err) {
-		return fmt.Errorf("run %s: %w", run.Execution, keyvalue.ErrStale)
+		return fmt.Errorf("run %s: %w", run.Execution, records.ErrStale)
 	}
 	if err != nil {
 		return fmt.Errorf("delete run %s: %w", run.Execution, err)

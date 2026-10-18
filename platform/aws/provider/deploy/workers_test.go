@@ -10,12 +10,12 @@ import (
 	pulumi "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -180,7 +180,7 @@ func TestTheWorkersProgramExportsEachWorkersLambdaNameForTheStackToDecode(t *tes
 	}
 }
 
-func countRecordedWorkerStacks(t *testing.T, store keyvalue.Store, ref provider.StackRef) int {
+func countRecordedWorkerStacks(t *testing.T, store records.Store, ref provider.StackRef) int {
 	t.Helper()
 	entries, err := store.List(context.Background(), stackrecords.StacksPartition(ref.Tier, ref.Project), workersKey)
 	if err != nil {
@@ -189,9 +189,9 @@ func countRecordedWorkerStacks(t *testing.T, store keyvalue.Store, ref provider.
 	return len(entries)
 }
 
-func recordWorkersStack(t *testing.T, store keyvalue.Store, ref provider.StackRef) {
+func recordWorkersStack(t *testing.T, store records.Store, ref provider.StackRef) {
 	t.Helper()
-	if _, err := store.Write(context.Background(), keyvalue.Entry{Key: workersAt(ref), Value: []byte("{}")}); err != nil {
+	if _, err := store.Write(context.Background(), records.Entry{Key: workersAt(ref), Value: []byte("{}")}); err != nil {
 		t.Fatalf("record the workers stack of %s: %v", ref.Name, err)
 	}
 }
@@ -279,7 +279,7 @@ func TestPlanningAnAppThatHostsWorkersIncludesTheWorkersStack(t *testing.T) {
 	}
 }
 
-func recordWorkersStacks(t *testing.T, store keyvalue.Store, stacks ...naming.StackName) {
+func recordWorkersStacks(t *testing.T, store records.Store, stacks ...naming.StackName) {
 	t.Helper()
 	for _, stack := range stacks {
 		recordWorkersStack(t, store, provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: stack})
@@ -418,7 +418,7 @@ func TestReclaimingAFailedDeploysReleaseLeavesTheWorkersTheLiveReleaseRuns(t *te
 	}
 }
 
-func recordRelease(t *testing.T, store keyvalue.Store, ref provider.StackRef) {
+func recordRelease(t *testing.T, store records.Store, ref provider.StackRef) {
 	t.Helper()
 	if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{Kind: provider.StackApp, App: ref.Name.App}); err != nil {
 		t.Fatalf("record the release %s: %v", ref.Name, err)

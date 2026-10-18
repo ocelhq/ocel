@@ -9,9 +9,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -40,9 +40,9 @@ func withoutURLs(functions []provider.Function) []provider.Function {
 	return bare
 }
 
-func recordOriginWildcard(t *testing.T, store keyvalue.Store, recorded originWildcard) {
+func recordOriginWildcard(t *testing.T, store records.Store, recorded originWildcard) {
 	t.Helper()
-	entry, err := keyvalue.ReadOrEmpty(context.Background(), store, originWildcardKey(environment.TierProduction))
+	entry, err := records.ReadOrEmpty(context.Background(), store, originWildcardKey(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}

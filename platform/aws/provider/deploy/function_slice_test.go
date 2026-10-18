@@ -13,6 +13,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -852,8 +853,8 @@ func TestFunctionEnvKey(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := naming.ResourceEnvName(tc.typ, tc.userID); got != tc.wantName {
-				t.Errorf("naming.ResourceEnvName(%v, %s) = %q, want %q", tc.typ, tc.userID, got, tc.wantName)
+			if got := bindings.ResourceEnvName(tc.typ, tc.userID); got != tc.wantName {
+				t.Errorf("bindings.ResourceEnvName(%v, %s) = %q, want %q", tc.typ, tc.userID, got, tc.wantName)
 			}
 		})
 	}

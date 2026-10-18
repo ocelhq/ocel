@@ -6,9 +6,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -45,7 +45,7 @@ func Elevating(inner provider.Bootstrap, gate func(context.Context) error, serve
 
 func (p *Provider) Host() *host.Host { return p.host }
 
-func (p *Provider) Recording(store keyvalue.Store) { p.keyValues = store }
+func (p *Provider) Recording(store records.Store) { p.keyValues = store }
 
 func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 

@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -234,7 +234,7 @@ type gatedFunction struct {
 	Function string
 }
 
-func listFunctionsIgnoringGate(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) ([]gatedFunction, error) {
+func listFunctionsIgnoringGate(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]gatedFunction, error) {
 	stacks, err := stackrecords.List(ctx, store, tier, slug)
 	if err != nil {
 		return nil, err

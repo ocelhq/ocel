@@ -15,16 +15,16 @@ import (
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
-func recordImage(t *testing.T, store keyvalue.Store, tier environment.Tier, project string, name naming.StackName, images ...string) {
+func recordImage(t *testing.T, store records.Store, tier environment.Tier, project string, name naming.StackName, images ...string) {
 	t.Helper()
 	recorded := stackrecords.Stack{Kind: provider.StackApp, App: name.App}
 	for _, image := range images {
@@ -35,7 +35,7 @@ func recordImage(t *testing.T, store keyvalue.Store, tier environment.Tier, proj
 	}
 }
 
-func shopStacks(t *testing.T) (keyvalue.Store, provider.StackRef) {
+func shopStacks(t *testing.T) (records.Store, provider.StackRef) {
 	t.Helper()
 	store := fake.NewKeyValues()
 	own := naming.AppStack("prod", "web", naming.NewReleaseToken("b2", ""))
@@ -109,12 +109,12 @@ func TestAProjectRegistryThatRefusesARemovalDoesNotFailTheDestroy(t *testing.T) 
 }
 
 type countedEntries struct {
-	keyvalue.Store
+	records.Store
 	listed   int
 	listings int
 }
 
-func (c *countedEntries) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (c *countedEntries) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	entries, err := c.Store.List(ctx, in, under...)
 	c.listed += len(entries)
 	c.listings++
@@ -168,7 +168,7 @@ func TestAProjectNothingRecordsKeepsNoImage(t *testing.T) {
 	}
 }
 
-func recordReleaseAboutToRun(t *testing.T, store keyvalue.Store, tier environment.Tier, project string, name naming.StackName, image string) {
+func recordReleaseAboutToRun(t *testing.T, store records.Store, tier environment.Tier, project string, name naming.StackName, image string) {
 	t.Helper()
 	recorded := stackrecords.Stack{Kind: provider.StackApp, App: name.App, Image: image}
 	if err := stackrecords.Write(context.Background(), store, tier, project, name, recorded); err != nil {
@@ -300,12 +300,12 @@ func TestAReclaimHandedAWrappedECRStoreStillDeletesTheRepositoryItEmpties(t *tes
 }
 
 type interleavedEntries struct {
-	keyvalue.Store
+	records.Store
 	tier    environment.Tier
 	between func()
 }
 
-func (i *interleavedEntries) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (i *interleavedEntries) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	entries, err := i.Store.List(ctx, in, under...)
 	if run := i.between; run != nil && in.Tier == i.tier {
 		i.between = nil
@@ -324,7 +324,7 @@ func TestTwoPreviewsSharingAnImageDestroyedTogetherLeaveNeitherTheImageNorItsRep
 	recordImage(t, store, first.Tier, first.Project, first.Name, "ecr/ocel/shop.web:sha256-shared")
 	recordImage(t, store, second.Tier, second.Project, second.Name, "ecr/ocel/shop.web:sha256-shared")
 	api := &repositoryECR{tags: []string{"sha256-shared"}}
-	destroy := func(store keyvalue.Store, ref provider.StackRef) {
+	destroy := func(store records.Store, ref provider.StackRef) {
 		if err := forgetImages(ctx, store, api, ref, "web", nil, progress.Discard()); err != nil {
 			t.Errorf("forgetImages(%s) = %v", ref.Name, err)
 		}

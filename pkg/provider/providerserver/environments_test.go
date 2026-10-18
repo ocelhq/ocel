@@ -11,8 +11,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -70,7 +71,7 @@ func seedEnvironment(t *testing.T, vendor *fake.Provider, slug string, stacks ..
 	t.Helper()
 	for _, stack := range stacks {
 		name := stackrecords.StackKey(environment.TierPreview, slug, stack)
-		recorded, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
+		recorded, err := records.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -294,11 +295,11 @@ func TestRecordingAPreviewUnderTheOtherLifecycleIsRefusedAndKeepsTheFirst(t *tes
 }
 
 type concurrentlyRewrittenStore struct {
-	keyvalue.Store
+	records.Store
 	rewrite func()
 }
 
-func (s *concurrentlyRewrittenStore) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s *concurrentlyRewrittenStore) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	if rewrite := s.rewrite; rewrite != nil {
 		s.rewrite = nil
 		rewrite()
@@ -335,7 +336,7 @@ func TestRecordingAPreviewRemovedWhileItIsRecordedIsRefusedAndLeavesItRemoved(t 
 	ctx := context.Background()
 	key := stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7")
 	store := &concurrentlyRewrittenStore{Store: vendor.KeyValues(), rewrite: func() {
-		if err := keyvalue.Forget(ctx, vendor.KeyValues(), key); err != nil {
+		if err := records.Forget(ctx, vendor.KeyValues(), key); err != nil {
 			t.Fatal(err)
 		}
 	}}
@@ -347,7 +348,7 @@ func TestRecordingAPreviewRemovedWhileItIsRecordedIsRefusedAndLeavesItRemoved(t 
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "pr-7") {
 		t.Errorf("RecordEnvironmentMeta() = %v, want a refusal naming pr-7: it was removed while this deploy recorded it", err)
 	}
-	if _, err := vendor.KeyValues().Read(ctx, key); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := vendor.KeyValues().Read(ctx, key); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("Read() of pr-7's record = %v, want it still removed", err)
 	}
 }
@@ -387,11 +388,11 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	inline := naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders")
-	publish("pr-7", naming.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
+	inline := bindings.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders")
+	publish("pr-7", bindings.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
 	publish("pr-7", variablestore.OwnerOcel, postgresRecord("db--cache", ""))
 	publish("pr-7", "terraform", postgresRecord("warehouse", "terraform"))
-	publish("pr-8", naming.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
+	publish("pr-8", bindings.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
 		Slug:        "shop",
@@ -531,7 +532,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 		t.Errorf("pr-7 still has %v, want its promotions gone with the pointer", history)
 	}
 	name := stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7")
-	if _, err := vendor.KeyValues().Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := vendor.KeyValues().Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading %s after the removal = %v, want it forgotten with the environment it described", name, err)
 	}
 

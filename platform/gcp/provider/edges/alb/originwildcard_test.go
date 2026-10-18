@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -212,7 +212,7 @@ func TestAnOriginWildcardWhoseLoadBalancerFailedToRaiseIsRaisedOnTheNextReconcil
 	if _, err := shielded.ReconcileOriginWildcard(ctx, originWildcardSpec(zonePull)); err != nil {
 		t.Fatal(err)
 	}
-	if err := keyvalue.Forget(ctx, shielded.deps.KeyValues, shielded.originWildcardKey(environment.TierProduction)); err != nil {
+	if err := records.Forget(ctx, shielded.deps.KeyValues, shielded.originWildcardKey(environment.TierProduction)); err != nil {
 		t.Fatal(err)
 	}
 	stack := ShieldedLoadBalancerStack(environment.TierProduction)

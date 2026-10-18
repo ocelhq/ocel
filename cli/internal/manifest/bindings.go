@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -23,7 +23,7 @@ type UndeclaredBindingError struct {
 func (e *UndeclaredBindingError) Error() string {
 	return fmt.Sprintf(
 		"`bindings.%s` binds %q, which nothing in this project declares as a %s — a binding names a resource your app already declares, so declare it or drop it",
-		naming.ResourceTypeName(e.Type), e.Name, naming.ResourceTypeName(e.Type),
+		bindings.ResourceTypeName(e.Type), e.Name, bindings.ResourceTypeName(e.Type),
 	)
 }
 
@@ -36,8 +36,8 @@ type BindingTypeError struct {
 func (e *BindingTypeError) Error() string {
 	return fmt.Sprintf(
 		"`bindings.%s` binds %q, and this project declares %q as a %s — move it to `bindings.%s`, or declare it as a %s",
-		naming.ResourceTypeName(e.Type), e.Name, e.Name, naming.ResourceTypeName(e.Declared),
-		naming.ResourceTypeName(e.Declared), naming.ResourceTypeName(e.Type),
+		bindings.ResourceTypeName(e.Type), e.Name, e.Name, bindings.ResourceTypeName(e.Declared),
+		bindings.ResourceTypeName(e.Declared), bindings.ResourceTypeName(e.Type),
 	)
 }
 

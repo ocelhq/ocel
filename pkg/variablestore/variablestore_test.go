@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
@@ -521,7 +521,7 @@ func TestTheTierWideEnvironmentIsReserved(t *testing.T) {
 }
 
 type counted struct {
-	keyvalue.Store
+	records.Store
 	seal.Cipher
 	mu     sync.Mutex
 	reads  int
@@ -530,14 +530,14 @@ type counted struct {
 	under  [][]string
 }
 
-func (c *counted) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
+func (c *counted) Read(ctx context.Context, name records.Key) (records.Entry, error) {
 	c.mu.Lock()
 	c.reads++
 	c.mu.Unlock()
 	return c.Store.Read(ctx, name)
 }
 
-func (c *counted) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (c *counted) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	c.mu.Lock()
 	c.lists++
 	c.under = append(c.under, append([]string{in.String()}, under...))

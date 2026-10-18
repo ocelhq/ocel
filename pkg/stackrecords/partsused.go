@@ -7,15 +7,15 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type partsUsed struct {
 	Parts []string `json:"parts,omitempty"`
 }
 
-func RecordPartsUsed(ctx context.Context, store keyvalue.Store, tier environment.Tier, project string, parts []string) error {
-	return keyvalue.Change(ctx, store, PartsUsedKey(tier, project), func(recorded keyvalue.Entry) ([]byte, bool, error) {
+func RecordPartsUsed(ctx context.Context, store records.Store, tier environment.Tier, project string, parts []string) error {
+	return records.Change(ctx, store, PartsUsedKey(tier, project), func(recorded records.Entry) ([]byte, bool, error) {
 		var prior partsUsed
 		if len(recorded.Value) > 0 {
 			if err := json.Unmarshal(recorded.Value, &prior); err != nil {
@@ -30,7 +30,7 @@ func RecordPartsUsed(ctx context.Context, store keyvalue.Store, tier environment
 	})
 }
 
-func ListPartUsers(ctx context.Context, store keyvalue.Store, tier environment.Tier) (map[string][]string, error) {
+func ListPartUsers(ctx context.Context, store records.Store, tier environment.Tier) (map[string][]string, error) {
 	entries, err := store.List(ctx, ProjectsPartition(tier))
 	if err != nil {
 		return nil, fmt.Errorf("read the projects of the %s tier: %w", tier, err)

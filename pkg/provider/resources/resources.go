@@ -6,9 +6,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -72,7 +72,7 @@ func ServedBindingTypes(hooks Hooks) []provider.BindingType {
 	return served
 }
 
-func NewHookStacks(store keyvalue.Store, artifacts provider.ArtifactStore, hooks Hooks) provider.Stacks {
+func NewHookStacks(store records.Store, artifacts provider.ArtifactStore, hooks Hooks) provider.Stacks {
 	return &hookStacks{keyValues: store, artifacts: artifacts, hooks: hooks}
 }
 
@@ -91,7 +91,7 @@ var primitives = []primitive{
 }
 
 type hookStacks struct {
-	keyValues keyvalue.Store
+	keyValues records.Store
 	artifacts provider.ArtifactStore
 	hooks     Hooks
 	running   RunningStacks

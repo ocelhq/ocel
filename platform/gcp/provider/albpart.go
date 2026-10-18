@@ -11,10 +11,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -45,16 +45,16 @@ type albLease struct {
 	RetiringSince time.Time `json:"retiring_since,omitzero"`
 }
 
-func albConsumers(tier environment.Tier) keyvalue.Key {
+func albConsumers(tier environment.Tier) records.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(alb.Kind), albConsumersKey)
 }
 
-func albConsumerAt(tier environment.Tier, slug string) keyvalue.Key {
+func albConsumerAt(tier environment.Tier, slug string) records.Key {
 	consumers := albConsumers(tier)
 	return consumers.Partition.Key(append(slices.Clone(consumers.Path), slug)...)
 }
 
-func albLeaseAt(tier environment.Tier) keyvalue.Key {
+func albLeaseAt(tier environment.Tier) records.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(alb.Kind), albLeaseKey)
 }
 
@@ -138,22 +138,22 @@ func (b bootstrap) listALBUsers(ctx context.Context, tier environment.Tier) ([]s
 	return users, nil
 }
 
-func readALBLease(ctx context.Context, store keyvalue.Store, tier environment.Tier) (keyvalue.Entry, albLease, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, store, albLeaseAt(tier))
+func readALBLease(ctx context.Context, store records.Store, tier environment.Tier) (records.Entry, albLease, error) {
+	entry, err := records.ReadOrEmpty(ctx, store, albLeaseAt(tier))
 	if err != nil {
-		return keyvalue.Entry{}, albLease{}, err
+		return records.Entry{}, albLease{}, err
 	}
 	var lease albLease
 	if len(entry.Value) == 0 {
 		return entry, lease, nil
 	}
 	if err := json.Unmarshal(entry.Value, &lease); err != nil {
-		return keyvalue.Entry{}, albLease{}, fmt.Errorf("read the %s load balancer lease %s: %w", alb.Kind, entry.Key, err)
+		return records.Entry{}, albLease{}, fmt.Errorf("read the %s load balancer lease %s: %w", alb.Kind, entry.Key, err)
 	}
 	return entry, lease, nil
 }
 
-func writeALBLease(ctx context.Context, store keyvalue.Store, entry keyvalue.Entry, lease albLease) (keyvalue.Revision, error) {
+func writeALBLease(ctx context.Context, store records.Store, entry records.Entry, lease albLease) (records.Revision, error) {
 	encoded, err := json.Marshal(lease)
 	if err != nil {
 		return "", fmt.Errorf("encode the %s load balancer lease: %w", alb.Kind, err)
@@ -180,10 +180,10 @@ func (b bootstrap) claimALB(ctx context.Context, tier environment.Tier, user str
 			if !wrote {
 				return refused
 			}
-			return errors.Join(refused, keyvalue.Forget(ctx, b.records, albConsumerAt(tier, user)))
+			return errors.Join(refused, records.Forget(ctx, b.records, albConsumerAt(tier, user)))
 		}
 		takeover := lease.Retiring
-		consumer, err := keyvalue.ReadOrEmpty(ctx, b.records, albConsumerAt(tier, user))
+		consumer, err := records.ReadOrEmpty(ctx, b.records, albConsumerAt(tier, user))
 		if err != nil {
 			return err
 		}
@@ -196,7 +196,7 @@ func (b bootstrap) claimALB(ctx context.Context, tier environment.Tier, user str
 			switch {
 			case err == nil:
 				wrote = true
-			case !errors.Is(err, keyvalue.ErrStale):
+			case !errors.Is(err, records.ErrStale):
 				return fmt.Errorf("record %s as a user of the %s load balancer of tier %s: %w", user, alb.Kind, tier, err)
 			}
 		}
@@ -204,7 +204,7 @@ func (b bootstrap) claimALB(ctx context.Context, tier environment.Tier, user str
 		if err == nil {
 			return nil
 		}
-		if !errors.Is(err, keyvalue.ErrStale) {
+		if !errors.Is(err, records.ErrStale) {
 			return fmt.Errorf("claim the %s load balancer of tier %s for %s: %w", alb.Kind, tier, user, err)
 		}
 	}
@@ -213,7 +213,7 @@ func (b bootstrap) claimALB(ctx context.Context, tier environment.Tier, user str
 }
 
 func (b bootstrap) releaseALB(ctx context.Context, tier environment.Tier, user string, leaving bool, progress progress.Log) error {
-	consumer, err := keyvalue.ReadOrEmpty(ctx, b.records, albConsumerAt(tier, user))
+	consumer, err := records.ReadOrEmpty(ctx, b.records, albConsumerAt(tier, user))
 	if err != nil || len(consumer.Value) == 0 {
 		return err
 	}
@@ -235,7 +235,7 @@ func (b bootstrap) releaseALB(ctx context.Context, tier environment.Tier, user s
 			return nil
 		}
 	}
-	if err := keyvalue.Forget(ctx, b.records, albConsumerAt(tier, user)); err != nil {
+	if err := records.Forget(ctx, b.records, albConsumerAt(tier, user)); err != nil {
 		return err
 	}
 	remaining, err := b.listALBUsers(ctx, tier)
@@ -250,7 +250,7 @@ func (b bootstrap) releaseALB(ctx context.Context, tier environment.Tier, user s
 		return nil
 	}
 	revision, err := writeALBLease(ctx, b.records, leased, albLease{Retiring: true, RetiringSince: time.Now().UTC()})
-	if errors.Is(err, keyvalue.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return nil
 	}
 	if err != nil {
@@ -266,7 +266,7 @@ func (b bootstrap) releaseALB(ctx context.Context, tier environment.Tier, user s
 }
 
 func (b bootstrap) restoreALBUser(ctx context.Context, tier environment.Tier, user string) error {
-	err := keyvalue.Change(ctx, b.records, albConsumerAt(tier, user), func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	err := records.Change(ctx, b.records, albConsumerAt(tier, user), func(recorded records.Entry) ([]byte, bool, error) {
 		return []byte("{}"), len(recorded.Value) == 0, nil
 	})
 	if err != nil {
@@ -280,7 +280,7 @@ func sayALBKept(progress progress.Log, tier environment.Tier, bound []string) {
 		", and it is taken down once nothing is bound to it")
 }
 
-func (b bootstrap) retireALB(ctx context.Context, tier environment.Tier, retiring keyvalue.Revision, users []string) error {
+func (b bootstrap) retireALB(ctx context.Context, tier environment.Tier, retiring records.Revision, users []string) error {
 	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), albSettleTimeout)
 	defer cancel()
 	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, b.records, tier, albPart)
@@ -301,7 +301,7 @@ func (b bootstrap) retireALB(ctx context.Context, tier environment.Tier, retirin
 		if err != nil {
 			break
 		}
-		err = keyvalue.Forget(ctx, b.records, albConsumerAt(tier, user))
+		err = records.Forget(ctx, b.records, albConsumerAt(tier, user))
 	}
 	return errors.Join(err, b.liftALBLease(settle, tier, retiring))
 }
@@ -316,7 +316,7 @@ func (b bootstrap) keepALBRecorded(ctx context.Context, tier environment.Tier, r
 	}
 	value, err := json.Marshal(ready)
 	if err == nil {
-		err = keyvalue.Change(ctx, b.records, stackrecords.BootstrapPartKey(tier, albPart), func(prior keyvalue.Entry) ([]byte, bool, error) {
+		err = records.Change(ctx, b.records, stackrecords.BootstrapPartKey(tier, albPart), func(prior records.Entry) ([]byte, bool, error) {
 			return value, len(prior.Value) == 0, nil
 		})
 	}
@@ -326,8 +326,8 @@ func (b bootstrap) keepALBRecorded(ctx context.Context, tier environment.Tier, r
 	return nil
 }
 
-func (b bootstrap) liftALBLease(ctx context.Context, tier environment.Tier, retiring keyvalue.Revision) error {
-	err := keyvalue.ForgetMatching(ctx, b.records, albLeaseAt(tier), func(recorded keyvalue.Entry) (bool, error) {
+func (b bootstrap) liftALBLease(ctx context.Context, tier environment.Tier, retiring records.Revision) error {
+	err := records.ForgetMatching(ctx, b.records, albLeaseAt(tier), func(recorded records.Entry) (bool, error) {
 		return recorded.Revision == retiring, nil
 	})
 	if err != nil {
@@ -347,7 +347,7 @@ func (b bootstrap) removeALB(ctx context.Context, tier environment.Tier) error {
 			alb.Kind, tier)
 	}
 	revision, err := writeALBLease(ctx, b.records, leased, albLease{Retiring: true, RetiringSince: time.Now().UTC()})
-	if errors.Is(err, keyvalue.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return refusal.Refuse(refusal.CodeBusy,
 			"a deploy claimed the %s load balancer of tier %s while this bootstrap was being removed; remove it again", alb.Kind, tier)
 	}

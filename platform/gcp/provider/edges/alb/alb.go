@@ -8,10 +8,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -23,7 +23,7 @@ const Kind edge.Kind = "alb"
 const BaselineCost = "about $18 a month plus Premium-tier egress"
 
 type Deps struct {
-	KeyValues keyvalue.Store
+	KeyValues records.Store
 	Stacks    Stacks
 	Routes    Routes
 	Entries   Entries
@@ -280,7 +280,7 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
-func (e *Edge) claim(tier environment.Tier, hostname string) keyvalue.Key {
+func (e *Edge) claim(tier environment.Tier, hostname string) records.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(Kind), "domains", hostname)
 }
 
@@ -296,7 +296,7 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 		return edge.PreviewEntryOwner, nil
 	}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.claim(tier, hostname))
+		entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.claim(tier, hostname))
 		if err != nil {
 			return "", fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
@@ -369,7 +369,7 @@ func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func ledgerFor(store keyvalue.Store, tier environment.Tier, slug string) *ledger.Ledger {
+func ledgerFor(store records.Store, tier environment.Tier, slug string) *ledger.Ledger {
 	return ledger.New(store, tier, slug)
 }
 

@@ -14,8 +14,8 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -93,7 +93,7 @@ func TestAnEntryIsKeptAsTheJSONItHoldsInAStringAttribute(t *testing.T) {
 	table, ddb := newKeyValues(t)
 	key := stackrecords.ProjectKey(environment.TierProduction, "shop")
 
-	if _, err := table.Write(context.Background(), keyvalue.Entry{Key: key, Value: []byte(`{"parts":["cache"]}`)}); err != nil {
+	if _, err := table.Write(context.Background(), records.Entry{Key: key, Value: []byte(`{"parts":["cache"]}`)}); err != nil {
 		t.Fatal(err)
 	}
 	item := ddb.item("projects", "shop#")
@@ -174,7 +174,7 @@ func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := table.Write(context.Background(), keyvalue.Entry{
+	if _, err := table.Write(context.Background(), records.Entry{
 		Key:   variablestore.ValuesPartition(variablestore.Scope{Project: "shop", Tier: environment.TierProduction}).Key("cells", "/web", "STRIPE_API_KEY", "staging"),
 		Value: body,
 	}); err != nil {
@@ -226,7 +226,7 @@ func TestABindingWhoseEncryptionContextNamesItOpens(t *testing.T) {
 		"records": []byte(`{"version":1,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`),
 		"values":  value,
 	} {
-		if _, err := table.Write(context.Background(), keyvalue.Entry{
+		if _, err := table.Write(context.Background(), records.Entry{
 			Key:   variablestore.ValuesPartition(scope).Key("bindings", "orders", name, "*"),
 			Value: body,
 		}); err != nil {
@@ -277,18 +277,18 @@ func TestAnAccountWithNoBootstrapHasNoEntries(t *testing.T) {
 	store := awsports.KeyValues{Dynamo: newFakeDynamo()}
 	name := stackrecords.ProjectKey(environment.TierProduction, "shop")
 
-	if _, err := store.Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := store.Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("Read() with no bootstrap installed = %v, want ErrNotFound", err)
 	}
 	listed, err := store.List(context.Background(), stackrecords.ProjectsPartition(environment.TierProduction))
 	if err != nil || len(listed) != 0 {
 		t.Errorf("List() with no bootstrap installed = %v, %v, want nothing", listed, err)
 	}
-	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, keyvalue.ErrNotFound) {
+	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("Remove() with no bootstrap installed = %v, want ErrNotFound", err)
 	}
 
-	_, err = store.Write(context.Background(), keyvalue.Entry{Key: name, Value: []byte("{}")})
+	_, err = store.Write(context.Background(), records.Entry{Key: name, Value: []byte("{}")})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Write() with no bootstrap installed = %v, want a %s refusal rather than a silent no-op", err, refusal.CodeNotReady)
@@ -306,24 +306,24 @@ func TestATableDeletedMidTeardownHasNoEntries(t *testing.T) {
 	store := awsports.KeyValues{Dynamo: dynamo, Tables: awsports.Table("ocel-bootstrap-state")}
 	name := stackrecords.ProjectKey(environment.TierProduction, "shop")
 
-	if _, err := store.Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := store.Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("Read() against a deleted table = %v, want ErrNotFound", err)
 	}
 	listed, err := store.List(context.Background(), stackrecords.ProjectsPartition(environment.TierProduction))
 	if err != nil || len(listed) != 0 {
 		t.Errorf("List() against a deleted table = %v, %v, want nothing", listed, err)
 	}
-	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, keyvalue.ErrNotFound) {
+	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("Remove() against a deleted table = %v, want ErrNotFound", err)
 	}
-	if _, err := store.Write(context.Background(), keyvalue.Entry{Key: name, Value: []byte("{}")}); err == nil {
+	if _, err := store.Write(context.Background(), records.Entry{Key: name, Value: []byte("{}")}); err == nil {
 		t.Error("Write() against a deleted table = nil, want the failure surfaced")
 	}
 }
 
 func TestAPartitionIsItsRootAndPathAndNothingElse(t *testing.T) {
 	for _, c := range []struct {
-		in   keyvalue.Partition
+		in   records.Partition
 		want string
 	}{
 		{stackrecords.ProjectsPartition(environment.TierProduction), "projects"},

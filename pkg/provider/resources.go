@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -270,11 +270,11 @@ func BindingOf(message *bindingsv1.Binding) Binding {
 		Source:     message.GetSource(),
 		Properties: map[string]string{},
 	}
-	if kind, known := BindingTypeFromProto(naming.BindingTypeOf(message)); known {
+	if kind, known := BindingTypeFromProto(bindings.TypeOf(message)); known {
 		binding.Type = kind
 	}
-	for _, name := range naming.BindingPropertyNames(message) {
-		if value, ok := naming.BindingProperty(message, name); ok {
+	for _, name := range bindings.PropertyNames(message) {
+		if value, ok := bindings.Property(message, name); ok {
 			binding.Properties[name] = fmt.Sprint(value)
 		}
 	}
@@ -337,5 +337,5 @@ func BindingTypeFromProto(encoded bindingsv1.BindingType) (BindingType, bool) {
 }
 
 func ResourceEnvName(kind BindingType, resource string) string {
-	return naming.ResourceEnvName(ProtoBindingType(kind), resource)
+	return bindings.ResourceEnvName(ProtoBindingType(kind), resource)
 }

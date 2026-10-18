@@ -11,8 +11,6 @@ import (
 
 	"buf.build/go/protovalidate"
 
-	"github.com/ocelhq/ocel/pkg/naming"
-
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -21,7 +19,7 @@ import (
 var environmentTitle = progress.Checking.Title("the bootstrap, domains and bindings for shop")
 
 func environmentSpan(phase progressv1.Phase) Span {
-	return RootSpan(naming.SpanEnvironment, "production", environmentTitle, phase)
+	return RootSpan(SpanEnvironment, "production", environmentTitle, phase)
 }
 
 func TestAStartedSpanIsTitledUnderItsParent(t *testing.T) {
@@ -79,8 +77,8 @@ func TestSpanIDsAreTheSharedNamingDigests(t *testing.T) {
 
 	tracer.Start(time.Now(),
 		environmentSpan(progressv1.Phase_PHASE_PROVISION),
-		RootSpan(naming.SpanEdge, "cloudflare", progress.Reconciling.Title("the routes for shop in production"), progressv1.Phase_PHASE_DEPLOY),
-		RootSpan(naming.SpanPromotion, "production", progress.Switching.Title("traffic to promotion p1"), progressv1.Phase_PHASE_PROMOTE),
+		RootSpan(SpanEdge, "cloudflare", progress.Reconciling.Title("the routes for shop in production"), progressv1.Phase_PHASE_DEPLOY),
+		RootSpan(SpanPromotion, "production", progress.Switching.Title("traffic to promotion p1"), progressv1.Phase_PHASE_PROMOTE),
 	)
 
 	if err := sender.close(); err != nil {
@@ -95,8 +93,8 @@ func TestSpanIDsAreTheSharedNamingDigests(t *testing.T) {
 		if got := hex.EncodeToString(events[i].GetSpanId()); got != want {
 			t.Errorf("span %d id = %s, want the naming digest %s", i, got, want)
 		}
-		if len(events[i].GetSpanId()) != naming.SpanIDLen {
-			t.Errorf("span %d id is %d bytes, want %d", i, len(events[i].GetSpanId()), naming.SpanIDLen)
+		if len(events[i].GetSpanId()) != len(SpanID{}) {
+			t.Errorf("span %d id is %d bytes, want %d", i, len(events[i].GetSpanId()), len(SpanID{}))
 		}
 	}
 }
@@ -104,7 +102,7 @@ func TestSpanIDsAreTheSharedNamingDigests(t *testing.T) {
 func TestDetailSpansMintTheirOwnIDUnderTheirSpan(t *testing.T) {
 	t.Parallel()
 
-	root := RootSpan(naming.SpanPromotion, "production", progress.Switching.Title("traffic to promotion p1"), progressv1.Phase_PHASE_PROMOTE)
+	root := RootSpan(SpanPromotion, "production", progress.Switching.Title("traffic to promotion p1"), progressv1.Phase_PHASE_PROMOTE)
 	first := NewSpan(root, "detail")
 	second := NewSpan(root, "detail")
 
@@ -260,14 +258,14 @@ func TestASucceededSpanEndsTitledWithWhatItDidAndAFailedOneWithNoTitle(t *testin
 func TestSpanTitlesAreSanitized(t *testing.T) {
 	t.Parallel()
 
-	if got := RootSpan(naming.SpanEnvironment, "production", progress.Title{Started: "\x1b[2J", Ended: "\x1b[2J"}, progressv1.Phase_PHASE_PROVISION).Title; got.Started != "[2J" || got.Ended != "[2J" {
+	if got := RootSpan(SpanEnvironment, "production", progress.Title{Started: "\x1b[2J", Ended: "\x1b[2J"}, progressv1.Phase_PHASE_PROVISION).Title; got.Started != "[2J" || got.Ended != "[2J" {
 		t.Errorf("RootSpan() title = %q, want the control characters gone", got)
 	}
-	if got := RootSpan(naming.SpanEnvironment, "production", progress.Title{Started: "   ", Ended: "   "}, progressv1.Phase_PHASE_PROVISION).Title; got.Started != "span" || got.Ended != "span" {
+	if got := RootSpan(SpanEnvironment, "production", progress.Title{Started: "   ", Ended: "   "}, progressv1.Phase_PHASE_PROVISION).Title; got.Started != "span" || got.Ended != "span" {
 		t.Errorf("RootSpan() title = %q, want a fallback title", got)
 	}
 	long := strings.Repeat("a", progress.MaxSpanNameLen*2)
-	if got := RootSpan(naming.SpanEnvironment, "production", progress.Title{Started: long, Ended: long}, progressv1.Phase_PHASE_PROVISION).Title; len(got.Started) > progress.MaxSpanNameLen || len(got.Ended) > progress.MaxSpanNameLen {
+	if got := RootSpan(SpanEnvironment, "production", progress.Title{Started: long, Ended: long}, progressv1.Phase_PHASE_PROVISION).Title; len(got.Started) > progress.MaxSpanNameLen || len(got.Ended) > progress.MaxSpanNameLen {
 		t.Errorf("RootSpan() title is %d and %d long, want each capped at %d", len(got.Started), len(got.Ended), progress.MaxSpanNameLen)
 	}
 }

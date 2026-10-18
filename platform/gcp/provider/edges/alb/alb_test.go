@@ -13,9 +13,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
@@ -638,7 +638,7 @@ func servedOnPreview(t *testing.T, balancer *Edge, slug, base string) {
 		t.Fatal(err)
 	}
 	name := stackrecords.EdgeStackKey(environment.TierPreview, slug)
-	entry, err := keyvalue.ReadOrEmpty(ctx, balancer.deps.KeyValues, name)
+	entry, err := records.ReadOrEmpty(ctx, balancer.deps.KeyValues, name)
 	if err != nil {
 		t.Fatal(err)
 	}

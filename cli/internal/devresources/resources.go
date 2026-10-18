@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/realtime"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
@@ -202,7 +202,7 @@ func (r *Resources) recordDeclaredThisPass(backend *Backend, declared bool) {
 }
 
 func label(kind resourcesv1.ResourceType) string {
-	return naming.ResourceTypeName(kind)
+	return bindings.ResourceTypeName(kind)
 }
 
 func (r *Resources) announceOnce(line string) {

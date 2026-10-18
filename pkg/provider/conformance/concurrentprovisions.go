@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -82,7 +82,7 @@ func awaitProvision(t *testing.T, done <-chan provisioned, which string) provisi
 	}
 }
 
-func runConcurrentProvisions(t *testing.T, facts provider.Facts, stacks provider.Stacks, store keyvalue.Store) {
+func runConcurrentProvisions(t *testing.T, facts provider.Facts, stacks provider.Stacks, store records.Store) {
 	t.Helper()
 
 	resources := declared(facts.Bindings)

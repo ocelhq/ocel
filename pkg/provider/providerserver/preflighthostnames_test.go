@@ -11,11 +11,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -452,7 +452,7 @@ type projectListingProvider struct {
 	listings int
 }
 
-func (p *projectListingProvider) KeyValues() keyvalue.Store {
+func (p *projectListingProvider) KeyValues() records.Store {
 	return projectListingStore{Store: p.Provider.KeyValues(), on: p}
 }
 
@@ -463,12 +463,12 @@ func (p *projectListingProvider) projectListings() int {
 }
 
 type projectListingStore struct {
-	keyvalue.Store
+	records.Store
 	on *projectListingProvider
 }
 
-func (s projectListingStore) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
-	if in.Root == keyvalue.RootProjects {
+func (s projectListingStore) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
+	if in.Root == stackrecords.RootProjects {
 		s.on.mu.Lock()
 		s.on.listings++
 		s.on.mu.Unlock()

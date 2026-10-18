@@ -12,10 +12,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
@@ -100,13 +100,13 @@ func refuseUnconfiguredRealtime(in resources.ProvisionRequest) error {
 }
 
 type realtimeNamespaceRecord struct {
-	key       keyvalue.Key
+	key       records.Key
 	namespace string
 	verifyKey string
 	value     []byte
 }
 
-func newRealtimeNamespaceKey(in resources.ProvisionRequest) (string, keyvalue.Key) {
+func newRealtimeNamespaceKey(in resources.ProvisionRequest) (string, records.Key) {
 	namespace := chooseDeclaredName(in.Resource.Declared, in.Resource.Name)
 	return namespace, live.RealtimeNamespaceKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, namespace)
 }
@@ -153,7 +153,7 @@ func (p *Provider) PlanRealtime(ctx context.Context, in resources.ProvisionReque
 		return "", "", err
 	}
 	_, key := newRealtimeNamespaceKey(in)
-	held, err := keyvalue.ReadOrEmpty(ctx, p.keyValues, key)
+	held, err := records.ReadOrEmpty(ctx, p.keyValues, key)
 	if err != nil {
 		return "", "", err
 	}
@@ -214,7 +214,7 @@ func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.Provision
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	if err := keyvalue.Change(ctx, p.keyValues, record.key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	if err := records.Change(ctx, p.keyValues, record.key, func(recorded records.Entry) ([]byte, bool, error) {
 		return record.value, string(recorded.Value) != string(record.value), nil
 	}); err != nil {
 		return provider.Binding{}, err
@@ -308,7 +308,7 @@ func (p *Provider) placeRealtimeGateway(ctx context.Context, ref provider.StackR
 
 func (p *Provider) RemoveRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	namespace := chooseDeclaredName(binding.Resource, binding.Name)
-	if err := keyvalue.Forget(ctx, p.keyValues, live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, namespace)); err != nil {
+	if err := records.Forget(ctx, p.keyValues, live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, namespace)); err != nil {
 		return err
 	}
 	if err := p.runRealtimeGateway(ctx, ref, progress); err != nil {

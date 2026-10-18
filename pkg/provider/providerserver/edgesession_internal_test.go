@@ -9,17 +9,17 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 var shopPreviewEdge = stackrecords.EdgeStackKey(environment.TierPreview, "shop")
 
-func recordEdgeState(t *testing.T, store keyvalue.Store, state stackrecords.EdgeState) {
+func recordEdgeState(t *testing.T, store records.Store, state stackrecords.EdgeState) {
 	t.Helper()
-	entry, err := keyvalue.ReadOrEmpty(context.Background(), store, shopPreviewEdge)
+	entry, err := records.ReadOrEmpty(context.Background(), store, shopPreviewEdge)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func recordEdgeState(t *testing.T, store keyvalue.Store, state stackrecords.Edge
 	}
 }
 
-func readEdgeHosts(t *testing.T, store keyvalue.Store) []string {
+func readEdgeHosts(t *testing.T, store records.Store) []string {
 	t.Helper()
 	state, err := (&edgeStateStore{keyValues: store, name: shopPreviewEdge}).read(context.Background())
 	if err != nil {
@@ -177,9 +177,9 @@ func TestEnsuringAProjectAnotherPreviewRecordedFirstKeepsThatRecord(t *testing.T
 	}
 }
 
-func writeProject(t *testing.T, store keyvalue.Store, name keyvalue.Key, parts []string) {
+func writeProject(t *testing.T, store records.Store, name records.Key, parts []string) {
 	t.Helper()
-	entry, err := keyvalue.ReadOrEmpty(context.Background(), store, name)
+	entry, err := records.ReadOrEmpty(context.Background(), store, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func writeProject(t *testing.T, store keyvalue.Store, name keyvalue.Key, parts [
 	}
 }
 
-func readProjectParts(t *testing.T, store keyvalue.Store, name keyvalue.Key) []string {
+func readProjectParts(t *testing.T, store records.Store, name records.Key) []string {
 	t.Helper()
 	entry, err := store.Read(context.Background(), name)
 	if err != nil {

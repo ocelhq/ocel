@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -227,7 +226,7 @@ func (h *handlers) PublishProtection(ctx context.Context, req *contractv1.Publis
 		return err
 	}
 	slug := req.GetSlug()
-	root := RootSpan(naming.SpanEdge, slug, progress.Updating.Title("the "+string(tier)+" protection of "+slug), progressv1.Phase_PHASE_PROVISION)
+	root := RootSpan(SpanEdge, slug, progress.Updating.Title("the "+string(tier)+" protection of "+slug), progressv1.Phase_PHASE_PROVISION)
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		outcome := &progressv1.ProtectionPublished{}
 		err := inSpan(sender, root, func(_ *eventStream, log progress.Log) error {

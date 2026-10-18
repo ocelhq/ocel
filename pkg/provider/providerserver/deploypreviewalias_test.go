@@ -10,13 +10,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -44,8 +44,8 @@ func TestADryEnsurePreviewAliasOfANewPreviewAnswersNoHostnameAndRecordsNothing(t
 	if hostnames := dryEnsurePreviewAlias(t, client); len(hostnames) != 0 {
 		t.Errorf("a dry EnsurePreviewAlias of a preview never deployed = %v, want no hostname: its alias is assigned on its first deploy, and one signed now would never exist", hostnames)
 	}
-	for _, key := range []keyvalue.Key{stackrecords.NewPreviewKeyRecordKey(), stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7")} {
-		if _, err := vendor.KeyValues().Read(context.Background(), key); !errors.Is(err, keyvalue.ErrNotFound) {
+	for _, key := range []records.Key{stackrecords.NewPreviewKeyRecordKey(), stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7")} {
+		if _, err := vendor.KeyValues().Read(context.Background(), key); !errors.Is(err, records.ErrNotFound) {
 			t.Errorf("reading %s after a dry run = %v, want nothing written", key, err)
 		}
 	}
@@ -117,7 +117,7 @@ func forgetAlias(t *testing.T, client contractv1connect.ProviderServiceClient, t
 func isPreviewRecorded(t *testing.T, vendor *fake.Provider) bool {
 	t.Helper()
 	_, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7"))
-	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+	if err != nil && !errors.Is(err, records.ErrNotFound) {
 		t.Fatal(err)
 	}
 	return err == nil
@@ -134,7 +134,7 @@ func TestAPreviewRefusedForAnOverlongLabelIsNeverRecorded(t *testing.T) {
 	recorded := func() bool {
 		t.Helper()
 		_, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, slug, "pr-7"))
-		if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+		if err != nil && !errors.Is(err, records.ErrNotFound) {
 			t.Fatal(err)
 		}
 		return err == nil

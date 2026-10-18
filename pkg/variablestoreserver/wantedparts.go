@@ -4,14 +4,14 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type wantRecordingCipher struct {
 	seal.Cipher
-	keyValues keyvalue.Store
+	keyValues records.Store
 	project   string
 }
 

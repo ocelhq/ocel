@@ -11,13 +11,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
-func digestKeyAt(tier environment.Tier) keyvalue.Key {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvSourceDigestKey}.Key("digestkey")
+func digestKeyAt(tier environment.Tier) records.Key {
+	return records.Partition{Tier: tier, Root: envsource.RootDigestKey}.Key("digestkey")
 }
 
 func unkeyedDigests(plaintext string) []string {
@@ -29,11 +29,11 @@ func unkeyedDigests(plaintext string) []string {
 func everyRecord(t *testing.T, store variablestore.Store) []byte {
 	t.Helper()
 	var all []byte
-	var partitions []keyvalue.Partition
+	var partitions []records.Partition
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		partitions = append(partitions, variablestore.ValuesPartition(variablestore.Scope{Project: "shop", Tier: tier}))
-		for _, root := range []keyvalue.Root{keyvalue.RootEnvSources, keyvalue.RootEnvSourceStatus, keyvalue.RootEnvSourceDigestKey} {
-			partitions = append(partitions, keyvalue.Partition{Tier: tier, Root: root})
+		for _, root := range []records.Root{envsource.RootRegistrations, envsource.RootStatus, envsource.RootDigestKey} {
+			partitions = append(partitions, records.Partition{Tier: tier, Root: root})
 		}
 	}
 	for _, in := range partitions {
@@ -210,7 +210,7 @@ func TestTheDigestKeyIsBoundToEveryProjectInItsTierAtTheEnvSourceBinding(t *test
 		KeyValues: fake.NewKeyValues(),
 		Cipher:    fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key}),
 	}
-	if _, err := store.KeyValues.Write(ctx, keyvalue.Entry{
+	if _, err := store.KeyValues.Write(ctx, records.Entry{
 		Key:   digestKeyAt(environment.TierProduction),
 		Value: []byte(`{"sealed":"9F/RJPgNa4porS/1Q8ItSL/KGK95oGpw8VmDf5tE0cWEbE3WkZMbSiX44Znd7nOg83GJcnPO7ZR86eqg"}`),
 	}); err != nil {

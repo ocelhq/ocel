@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type Reference struct {
@@ -98,7 +98,7 @@ func (s Store) ReferenceOwners(ctx context.Context, scope Scope) (map[Coordinate
 func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, target Target) error {
 	to := Scope{Project: target.Project, Tier: scope.Tier}
 	name := refKey(to, Coordinate{Cell: target.Cell}, scope, at)
-	recorded, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, name)
+	recorded, err := records.ReadOrEmpty(ctx, s.KeyValues, name)
 	if err != nil {
 		return fmt.Errorf("record that %s references %s: %w", at, &target, err)
 	}
@@ -111,7 +111,7 @@ func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, t
 
 func (s Store) unindexReference(ctx context.Context, scope Scope, at Coordinate, target *Target) error {
 	to := Scope{Project: target.Project, Tier: scope.Tier}
-	if err := keyvalue.Forget(ctx, s.KeyValues, refKey(to, Coordinate{Cell: target.Cell}, scope, at)); err != nil {
+	if err := records.Forget(ctx, s.KeyValues, refKey(to, Coordinate{Cell: target.Cell}, scope, at)); err != nil {
 		return fmt.Errorf("forget that %s references %s: %w", at, target, err)
 	}
 	return nil

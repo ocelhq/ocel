@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -19,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -602,7 +602,7 @@ func TestProvisionInfraAfterAFirstProvisioningFailedPartwayProvisionsTheStackItL
 
 func readProjectRecord(t *testing.T, vendor *fake.Provider) (stackrecords.Project, bool) {
 	t.Helper()
-	row, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
+	row, err := records.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
 	if err != nil {
 		t.Fatal(err)
 	}

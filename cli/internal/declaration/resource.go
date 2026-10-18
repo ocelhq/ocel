@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -26,7 +26,7 @@ type Resource struct {
 func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 	id := req.GetResource()
 	configs := req.ProtoReflect().Descriptor().Oneofs().ByName("config")
-	expected := configs.Fields().ByName(protoreflect.Name(naming.ResourceTypeName(id.GetType())))
+	expected := configs.Fields().ByName(protoreflect.Name(bindings.ResourceTypeName(id.GetType())))
 	if expected == nil {
 		return Resource{}, fmt.Errorf("unsupported resource type: %s", id.GetType())
 	}

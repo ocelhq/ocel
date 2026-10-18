@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -22,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -232,7 +232,7 @@ func recordProject(t *testing.T, vendor *fake.Provider, slug string, parts ...st
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := vendor.KeyValues().Write(context.Background(), keyvalue.Entry{
+	if _, err := vendor.KeyValues().Write(context.Background(), records.Entry{
 		Key:   stackrecords.ProjectKey(environment.TierProduction, slug),
 		Value: body,
 	}); err != nil {

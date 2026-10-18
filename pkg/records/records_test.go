@@ -1,4 +1,4 @@
-package keyvalue_test
+package records_test
 
 import (
 	"context"
@@ -8,39 +8,39 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-var values = keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootValues, Path: []string{"shop"}}
+var values = records.Partition{Tier: environment.TierProduction, Root: records.Root("values"), Path: []string{"shop"}}
 
 type movingStore struct {
-	keyvalue.Store
-	recorded keyvalue.Entry
+	records.Store
+	recorded records.Entry
 	moves    int
 	removed  bool
 }
 
-func (m *movingStore) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
+func (m *movingStore) Read(context.Context, records.Key) (records.Entry, error) {
 	if m.removed {
-		return keyvalue.Entry{}, keyvalue.ErrNotFound
+		return records.Entry{}, records.ErrNotFound
 	}
 	return m.recorded, nil
 }
 
-func (m *movingStore) Remove(context.Context, keyvalue.Key, keyvalue.Revision) error {
+func (m *movingStore) Remove(context.Context, records.Key, records.Revision) error {
 	if m.moves > 0 {
 		m.moves--
 		m.recorded.Revision += "'"
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	m.removed = true
 	return nil
 }
 
 func TestForgetReadsAgainWhenTheEntryMovedUnderIt(t *testing.T) {
-	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 2}
-	if err := keyvalue.Forget(context.Background(), moved, moved.recorded.Key); err != nil {
+	moved := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 2}
+	if err := records.Forget(context.Background(), moved, moved.recorded.Key); err != nil {
 		t.Fatalf("Forget() of an entry rewritten twice = %v, want it removed at the revision it ended at", err)
 	}
 	if !moved.removed {
@@ -49,15 +49,15 @@ func TestForgetReadsAgainWhenTheEntryMovedUnderIt(t *testing.T) {
 }
 
 func TestForgetRefusesToReportAnEntryGoneThatKeepsMoving(t *testing.T) {
-	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 100}
-	if err := keyvalue.Forget(context.Background(), moved, moved.recorded.Key); err == nil {
+	moved := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 100}
+	if err := records.Forget(context.Background(), moved, moved.recorded.Key); err == nil {
 		t.Fatal("Forget() of an entry it never removed = nil, and every caller reads that as removed")
 	}
 }
 
 func TestForgetOutlastsSevenWritersRacingItToTheEntry(t *testing.T) {
-	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 7}
-	if err := keyvalue.Forget(context.Background(), moved, moved.recorded.Key); err != nil || !moved.removed {
+	moved := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 7}
+	if err := records.Forget(context.Background(), moved, moved.recorded.Key); err != nil || !moved.removed {
 		t.Errorf("Forget() of an entry rewritten seven times = %v, removed = %v, want it removed: Forget and Change race the same writers", err, moved.removed)
 	}
 }
@@ -67,25 +67,25 @@ type rewritingStore struct {
 	rewrite json.RawMessage
 }
 
-func (r *rewritingStore) Remove(ctx context.Context, key keyvalue.Key, revision keyvalue.Revision) error {
+func (r *rewritingStore) Remove(ctx context.Context, key records.Key, revision records.Revision) error {
 	if r.rewrite != nil {
 		r.recorded.Value, r.recorded.Revision, r.rewrite = r.rewrite, r.recorded.Revision+"'", nil
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	return r.movingStore.Remove(ctx, key, revision)
 }
 
-func matchMine(seen *[]string) func(keyvalue.Entry) (bool, error) {
-	return func(recorded keyvalue.Entry) (bool, error) {
+func matchMine(seen *[]string) func(records.Entry) (bool, error) {
+	return func(recorded records.Entry) (bool, error) {
 		*seen = append(*seen, string(recorded.Value))
 		return string(recorded.Value) == `"mine"`, nil
 	}
 }
 
 func TestForgetMatchingKeepsAnEntryThatDoesNotMatch(t *testing.T) {
-	kept := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"theirs"`)}}
+	kept := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"theirs"`)}}
 	var seen []string
-	if err := keyvalue.ForgetMatching(context.Background(), kept, kept.recorded.Key, matchMine(&seen)); err != nil {
+	if err := records.ForgetMatching(context.Background(), kept, kept.recorded.Key, matchMine(&seen)); err != nil {
 		t.Fatalf("ForgetMatching() = %v", err)
 	}
 	if kept.removed {
@@ -94,9 +94,9 @@ func TestForgetMatchingKeepsAnEntryThatDoesNotMatch(t *testing.T) {
 }
 
 func TestForgetMatchingRemovesAMatchingEntryAtTheRevisionItEndedAt(t *testing.T) {
-	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 2}
+	moved := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 2}
 	var seen []string
-	if err := keyvalue.ForgetMatching(context.Background(), moved, moved.recorded.Key, matchMine(&seen)); err != nil {
+	if err := records.ForgetMatching(context.Background(), moved, moved.recorded.Key, matchMine(&seen)); err != nil {
 		t.Fatalf("ForgetMatching() of a matching entry rewritten twice = %v, want it removed", err)
 	}
 	if !moved.removed || len(seen) != 3 {
@@ -106,11 +106,11 @@ func TestForgetMatchingRemovesAMatchingEntryAtTheRevisionItEndedAt(t *testing.T)
 
 func TestForgetMatchingKeepsAnEntryRewrittenUnderItIntoOneThatNoLongerMatches(t *testing.T) {
 	moved := &rewritingStore{
-		movingStore: movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}},
+		movingStore: movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}},
 		rewrite:     []byte(`"theirs"`),
 	}
 	var seen []string
-	if err := keyvalue.ForgetMatching(context.Background(), moved, moved.recorded.Key, matchMine(&seen)); err != nil {
+	if err := records.ForgetMatching(context.Background(), moved, moved.recorded.Key, matchMine(&seen)); err != nil {
 		t.Fatalf("ForgetMatching() = %v", err)
 	}
 	if moved.removed {
@@ -122,9 +122,9 @@ func TestForgetMatchingKeepsAnEntryRewrittenUnderItIntoOneThatNoLongerMatches(t 
 }
 
 func TestForgetMatchingPassesOnTheMatchsError(t *testing.T) {
-	recorded := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}}
+	recorded := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}}
 	unreadable := errors.New("unreadable")
-	err := keyvalue.ForgetMatching(context.Background(), recorded, recorded.recorded.Key, func(keyvalue.Entry) (bool, error) { return true, unreadable })
+	err := records.ForgetMatching(context.Background(), recorded, recorded.recorded.Key, func(records.Entry) (bool, error) { return true, unreadable })
 	if !errors.Is(err, unreadable) || recorded.removed {
 		t.Errorf("ForgetMatching() = %v with removed = %v, want the match's error and the entry kept", err, recorded.removed)
 	}
@@ -134,13 +134,13 @@ func TestAValueThatIsNotJSONIsRefused(t *testing.T) {
 	t.Parallel()
 
 	for _, value := range []string{"2", `{"a":1}`, `"text"`, "[]"} {
-		if err := keyvalue.RefuseUnwritable(keyvalue.Entry{Key: values.Key("cells"), Value: json.RawMessage(value)}); err != nil {
+		if err := records.RefuseUnwritable(records.Entry{Key: values.Key("cells"), Value: json.RawMessage(value)}); err != nil {
 			t.Errorf("RefuseUnwritable(%q) = %v, want it accepted", value, err)
 		}
 	}
 	for _, value := range []string{"", "one", "{", "sk_live_secret"} {
 		var refused refusal.Refusal
-		err := keyvalue.RefuseUnwritable(keyvalue.Entry{Key: values.Key("cells"), Value: json.RawMessage(value)})
+		err := records.RefuseUnwritable(records.Entry{Key: values.Key("cells"), Value: json.RawMessage(value)})
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Errorf("RefuseUnwritable(%q) = %v, want an %s refusal", value, err, refusal.CodeInvalid)
 		}
@@ -150,20 +150,20 @@ func TestAValueThatIsNotJSONIsRefused(t *testing.T) {
 func TestAKeyMustNameATierARootAndEverySegment(t *testing.T) {
 	t.Parallel()
 
-	for _, key := range []keyvalue.Key{
-		{Partition: keyvalue.Partition{Root: keyvalue.RootValues}, Path: []string{"cells"}},
-		{Partition: keyvalue.Partition{Tier: "staging", Root: keyvalue.RootValues}, Path: []string{"cells"}},
-		{Partition: keyvalue.Partition{Tier: environment.TierPreview}, Path: []string{"cells"}},
-		{Partition: keyvalue.Partition{Tier: environment.TierPreview, Root: keyvalue.RootValues, Path: []string{""}}, Path: []string{"cells"}},
+	for _, key := range []records.Key{
+		{Partition: records.Partition{Root: records.Root("values")}, Path: []string{"cells"}},
+		{Partition: records.Partition{Tier: "staging", Root: records.Root("values")}, Path: []string{"cells"}},
+		{Partition: records.Partition{Tier: environment.TierPreview}, Path: []string{"cells"}},
+		{Partition: records.Partition{Tier: environment.TierPreview, Root: records.Root("values"), Path: []string{""}}, Path: []string{"cells"}},
 		values.Key(),
 		values.Key("cells", ""),
 	} {
 		var refused refusal.Refusal
-		if err := keyvalue.RefuseMalformedKey(key); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		if err := records.RefuseMalformedKey(key); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Errorf("RefuseMalformedKey(%s) = %v, want an %s refusal", key, err, refusal.CodeInvalid)
 		}
 	}
-	if err := keyvalue.RefuseMalformedKey(values.Key("cells", "a/b")); err != nil {
+	if err := records.RefuseMalformedKey(values.Key("cells", "a/b")); err != nil {
 		t.Errorf("RefuseMalformedKey() of a key naming every segment = %v, want it accepted", err)
 	}
 }
@@ -197,9 +197,9 @@ func TestPartitionKeyDoesNotShareItsPathWithTheKeysItNames(t *testing.T) {
 func TestTwoKeysThatDifferAreNeverWrittenTheSame(t *testing.T) {
 	t.Parallel()
 
-	for _, pair := range [][2]keyvalue.Key{
+	for _, pair := range [][2]records.Key{
 		{values.Key("cells", "/a", "b/c"), values.Key("cells", "/a/b", "c")},
-		{values.Key("a|b"), keyvalue.Partition{Tier: values.Tier, Root: values.Root, Path: []string{"shop|a"}}.Key("b")},
+		{values.Key("a|b"), records.Partition{Tier: values.Tier, Root: values.Root, Path: []string{"shop|a"}}.Key("b")},
 		{values.Key("a%2Fb"), values.Key("a/b")},
 	} {
 		if pair[0].String() == pair[1].String() {
@@ -212,11 +212,11 @@ func TestASegmentIsJoinedWholeWhateverSeparatorOrReservedCharacterItCarries(t *t
 	t.Parallel()
 
 	segments := []string{"ghcr.io/acme/web@sha256:ab", "50%#off", "a|b"}
-	joined := keyvalue.JoinSegments(segments, "#", "/|")
+	joined := records.JoinSegments(segments, "#", "/|")
 	if want := "ghcr.io%2Facme%2Fweb@sha256:ab#50%25%23off#a%7Cb"; joined != want {
 		t.Errorf("JoinSegments(%q) = %q, want %q", segments, joined, want)
 	}
-	if split, err := keyvalue.SplitSegments(joined, "#"); err != nil || !slices.Equal(split, segments) {
+	if split, err := records.SplitSegments(joined, "#"); err != nil || !slices.Equal(split, segments) {
 		t.Errorf("SplitSegments(%q) = %q, %v, want the segments it was joined from, %q", joined, split, err, segments)
 	}
 }
@@ -226,7 +226,7 @@ func TestASegmentHoldingAPercentThatEscapesNoByteIsRefused(t *testing.T) {
 
 	for _, joined := range []string{"50%", "50%2", "a#50%zzoff"} {
 		var refused refusal.Refusal
-		if split, err := keyvalue.SplitSegments(joined, "#"); !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+		if split, err := records.SplitSegments(joined, "#"); !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
 			t.Errorf("SplitSegments(%q) = %q, %v, want a %s refusal: JoinSegments escapes every %%, so ocel never wrote it", joined, split, err, refusal.CodeDenied)
 		}
 	}
@@ -237,7 +237,7 @@ func TestASegmentEscapedInLowerCaseHexIsRefused(t *testing.T) {
 
 	for _, joined := range []string{"a%2fb", "50%2a", "ghcr.io%2Facme%2fweb"} {
 		var refused refusal.Refusal
-		if split, err := keyvalue.SplitSegments(joined, "#"); !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+		if split, err := records.SplitSegments(joined, "#"); !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
 			t.Errorf("SplitSegments(%q) = %q, %v, want a %s refusal: JoinSegments escapes in upper-case hex, so one segment has one stored key", joined, split, err, refusal.CodeDenied)
 		}
 	}
@@ -246,11 +246,11 @@ func TestASegmentEscapedInLowerCaseHexIsRefused(t *testing.T) {
 func TestEveryRevisionMintedIsNew(t *testing.T) {
 	t.Parallel()
 
-	first, err := keyvalue.NewRevision()
+	first, err := records.NewRevision()
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := keyvalue.NewRevision()
+	second, err := records.NewRevision()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,24 +259,24 @@ func TestEveryRevisionMintedIsNew(t *testing.T) {
 	}
 }
 
-func (m *movingStore) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (m *movingStore) Write(_ context.Context, entry records.Entry) (records.Revision, error) {
 	if entry.Revision != m.recorded.Revision {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	if m.moves > 0 {
 		m.moves--
 		m.recorded.Revision += "'"
 		m.recorded.Value = []byte(`"theirs"`)
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	m.recorded = entry
 	return entry.Revision, nil
 }
 
 func TestChangeReadsAgainAndReappliesTheChangeWhenTheEntryMovedUnderIt(t *testing.T) {
-	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 2}
+	moved := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 2}
 	var seen []string
-	err := keyvalue.Change(context.Background(), moved, moved.recorded.Key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	err := records.Change(context.Background(), moved, moved.recorded.Key, func(recorded records.Entry) ([]byte, bool, error) {
 		seen = append(seen, string(recorded.Value))
 		return []byte(`"changed"`), true, nil
 	})
@@ -292,8 +292,8 @@ func TestChangeReadsAgainAndReappliesTheChangeWhenTheEntryMovedUnderIt(t *testin
 }
 
 func TestChangeOutlastsSevenWritersRacingItToTheEntry(t *testing.T) {
-	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 7}
-	err := keyvalue.Change(context.Background(), moved, moved.recorded.Key, func(keyvalue.Entry) ([]byte, bool, error) {
+	moved := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 7}
+	err := records.Change(context.Background(), moved, moved.recorded.Key, func(records.Entry) ([]byte, bool, error) {
 		return []byte(`"changed"`), true, nil
 	})
 	if err != nil || string(moved.recorded.Value) != `"changed"` {
@@ -302,8 +302,8 @@ func TestChangeOutlastsSevenWritersRacingItToTheEntry(t *testing.T) {
 }
 
 func TestChangeWritesNothingWhenTheChangeLeavesTheEntryAlone(t *testing.T) {
-	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 100}
-	err := keyvalue.Change(context.Background(), moved, moved.recorded.Key, func(keyvalue.Entry) ([]byte, bool, error) {
+	moved := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one", Value: []byte(`"mine"`)}, moves: 100}
+	err := records.Change(context.Background(), moved, moved.recorded.Key, func(records.Entry) ([]byte, bool, error) {
 		return nil, false, nil
 	})
 	if err != nil || moved.moves != 100 {
@@ -312,8 +312,8 @@ func TestChangeWritesNothingWhenTheChangeLeavesTheEntryAlone(t *testing.T) {
 }
 
 func TestChangeRefusesToReportAWriteThatKeepsGoingStale(t *testing.T) {
-	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 100}
-	err := keyvalue.Change(context.Background(), moved, moved.recorded.Key, func(keyvalue.Entry) ([]byte, bool, error) {
+	moved := &movingStore{recorded: records.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 100}
+	err := records.Change(context.Background(), moved, moved.recorded.Key, func(records.Entry) ([]byte, bool, error) {
 		return []byte(`"changed"`), true, nil
 	})
 	if err == nil {

@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
+
+const Root records.Root = "ledger"
 
 const (
 	casAttempts     = 8
@@ -26,12 +28,12 @@ const (
 )
 
 type Ledger struct {
-	keyValues keyvalue.Store
-	partition keyvalue.Partition
+	keyValues records.Store
+	partition records.Partition
 	wait      func(ctx context.Context, d time.Duration) error
 }
 
-func New(store keyvalue.Store, tier environment.Tier, slug string) *Ledger {
+func New(store records.Store, tier environment.Tier, slug string) *Ledger {
 	return &Ledger{keyValues: store, partition: Partition(tier, slug), wait: sleep}
 }
 
@@ -54,8 +56,8 @@ func (l *Ledger) WaitToRetry(ctx context.Context, retry int) error {
 	return l.wait(ctx, ceiling/2+time.Duration(rand.Float64()*float64(ceiling/2)))
 }
 
-func Partition(tier environment.Tier, slug string) keyvalue.Partition {
-	partition := keyvalue.Partition{Tier: tier, Root: keyvalue.RootLedger}
+func Partition(tier environment.Tier, slug string) records.Partition {
+	partition := records.Partition{Tier: tier, Root: Root}
 	if slug != "" {
 		partition.Path = []string{naming.Sanitize(slug)}
 	}
@@ -72,11 +74,11 @@ func SplitRecordKey(key string) (string, string, bool) {
 	return app, release, prefixed && split && app != "" && release != ""
 }
 
-func (l *Ledger) pointerKey(pointer string) keyvalue.Key {
+func (l *Ledger) pointerKey(pointer string) records.Key {
 	return l.partition.Key("pointers", pointer)
 }
 
-func (l *Ledger) releaseKey(app, release string) keyvalue.Key {
+func (l *Ledger) releaseKey(app, release string) records.Key {
 	return l.partition.Key("records", app, release)
 }
 
@@ -95,7 +97,7 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.ReleaseRecord) err
 		if err := l.WaitToRetry(ctx, retry); err != nil {
 			return err
 		}
-		stored, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(record.App, record.Release))
+		stored, err := records.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(record.App, record.Release))
 		if err != nil {
 			return fmt.Errorf("read the release record for %s: %w", record.App, err)
 		}
@@ -104,7 +106,7 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.ReleaseRecord) err
 		}
 		stored.Value = staging
 		_, err = l.keyValues.Write(ctx, stored)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -133,7 +135,7 @@ func refuseDifferentRecord(record router.ReleaseRecord, stored, staging []byte) 
 }
 
 func (l *Ledger) Record(ctx context.Context, app, release string) (router.ReleaseRecord, bool, error) {
-	stored, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(app, release))
+	stored, err := records.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(app, release))
 	if err != nil {
 		return router.ReleaseRecord{}, false, fmt.Errorf("read the release record for %s/%s: %w", app, release, err)
 	}
@@ -170,17 +172,17 @@ func (l *Ledger) Read(ctx context.Context, pointer string) (Pointer, error) {
 	return read, err
 }
 
-func (l *Ledger) read(ctx context.Context, name string) (Pointer, keyvalue.Entry, error) {
-	stored, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.pointerKey(name))
+func (l *Ledger) read(ctx context.Context, name string) (Pointer, records.Entry, error) {
+	stored, err := records.ReadOrEmpty(ctx, l.keyValues, l.pointerKey(name))
 	if err != nil {
-		return Pointer{}, keyvalue.Entry{}, fmt.Errorf("read the pointer %s: %w", name, err)
+		return Pointer{}, records.Entry{}, fmt.Errorf("read the pointer %s: %w", name, err)
 	}
 	read := Pointer{Name: name}
 	if len(stored.Value) == 0 {
 		return read, stored, nil
 	}
 	if err := json.Unmarshal(stored.Value, &read); err != nil {
-		return Pointer{}, keyvalue.Entry{}, fmt.Errorf("decode the pointer %s: %w", name, err)
+		return Pointer{}, records.Entry{}, fmt.Errorf("decode the pointer %s: %w", name, err)
 	}
 	return read, stored, nil
 }
@@ -199,7 +201,7 @@ func (l *Ledger) change(ctx context.Context, name string, apply func(Pointer) (P
 			return Pointer{}, nil, err
 		}
 		err = l.write(ctx, stored, next)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -210,16 +212,16 @@ func (l *Ledger) change(ctx context.Context, name string, apply func(Pointer) (P
 	return Pointer{}, nil, fmt.Errorf("write the pointer %s: it moved under %d attempts", name, casAttempts)
 }
 
-func (l *Ledger) write(ctx context.Context, stored keyvalue.Entry, next Pointer) error {
+func (l *Ledger) write(ctx context.Context, stored records.Entry, next Pointer) error {
 	if next.Active == "" && len(next.Promotions) == 0 && len(next.PendingRemovals) == 0 {
 		if len(stored.Value) == 0 {
 			return nil
 		}
 		err := l.keyValues.Remove(ctx, stored.Key, stored.Revision)
-		if errors.Is(err, keyvalue.ErrNotFound) {
-			return keyvalue.ErrStale
+		if errors.Is(err, records.ErrNotFound) {
+			return records.ErrStale
 		}
-		if err != nil && !errors.Is(err, keyvalue.ErrStale) {
+		if err != nil && !errors.Is(err, records.ErrStale) {
 			return fmt.Errorf("remove the pointer %s: %w", next.Name, err)
 		}
 		return err
@@ -229,7 +231,7 @@ func (l *Ledger) write(ctx context.Context, stored keyvalue.Entry, next Pointer)
 		return fmt.Errorf("encode the pointer %s: %w", next.Name, err)
 	}
 	_, err = l.keyValues.Write(ctx, stored)
-	if err != nil && !errors.Is(err, keyvalue.ErrStale) {
+	if err != nil && !errors.Is(err, records.ErrStale) {
 		return fmt.Errorf("write the pointer %s: %w", next.Name, err)
 	}
 	return err
@@ -371,14 +373,14 @@ func collectDeploymentRemovals(pointer string, promotions []RecordedPromotion) [
 
 func (l *Ledger) ForgetUnnamedRecords(ctx context.Context, keys []string) error {
 	var errs []error
-	var stored []keyvalue.Entry
+	var stored []records.Entry
 	for _, key := range keys {
 		app, release, ok := SplitRecordKey(key)
 		if !ok {
 			errs = append(errs, fmt.Errorf("forget the release record %q: it names no app and release", key))
 			continue
 		}
-		entry, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(app, release))
+		entry, err := records.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(app, release))
 		if err != nil {
 			errs = append(errs, fmt.Errorf("read the release record %s/%s: %w", app, release, err))
 			continue
@@ -397,7 +399,7 @@ func (l *Ledger) ForgetUnnamedRecords(ctx context.Context, keys []string) error 
 			continue
 		}
 		err := l.keyValues.Remove(ctx, entry.Key, entry.Revision)
-		if err != nil && !errors.Is(err, keyvalue.ErrStale) && !errors.Is(err, keyvalue.ErrNotFound) {
+		if err != nil && !errors.Is(err, records.ErrStale) && !errors.Is(err, records.ErrNotFound) {
 			errs = append(errs, fmt.Errorf("remove the release record %s/%s no promotion names: %w", rest[0], rest[1], err))
 		}
 	}
@@ -418,7 +420,7 @@ func (l *Ledger) rewriteRecord(ctx context.Context, promotionID, app, release st
 		if err := l.WaitToRetry(ctx, retry); err != nil {
 			return err
 		}
-		stored, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(app, release))
+		stored, err := records.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(app, release))
 		if err != nil {
 			return fmt.Errorf("read the release record %s/%s: %w", app, release, err)
 		}
@@ -428,7 +430,7 @@ func (l *Ledger) rewriteRecord(ctx context.Context, promotionID, app, release st
 				promotionID, app, release)
 		}
 		_, err = l.keyValues.Write(ctx, stored)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -492,7 +494,7 @@ func (l *Ledger) Destroy(ctx context.Context) error {
 		return fmt.Errorf("read the ledger for %s: %w", l.partition, err)
 	}
 	for _, entry := range stored {
-		if err := keyvalue.Forget(ctx, l.keyValues, entry.Key); err != nil {
+		if err := records.Forget(ctx, l.keyValues, entry.Key); err != nil {
 			return fmt.Errorf("erase the ledger for %s: %w", l.partition, err)
 		}
 	}

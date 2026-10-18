@@ -16,13 +16,13 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -53,14 +53,14 @@ func newQueueContainer(ref provider.StackRef) host.ResourceContainer {
 	return spec
 }
 
-func newTopicRecord(in resources.ProvisionRequest) (keyvalue.Key, []byte, error) {
+func newTopicRecord(in resources.ProvisionRequest) (records.Key, []byte, error) {
 	if in.Resource.Topic == nil {
-		return keyvalue.Key{}, nil, refusal.Refuse(refusal.CodeInvalid,
+		return records.Key{}, nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s %s reached the box with no topic config, so nothing knows how to deliver it", in.Resource.Type, in.Resource.Declared)
 	}
 	config, err := protojson.Marshal(encodeManifestTopic(in.Resource.Topic))
 	if err != nil {
-		return keyvalue.Key{}, nil, err
+		return records.Key{}, nil, err
 	}
 	return live.QueueTopicKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, chooseDeclaredName(in.Resource.Declared, in.Resource.Name)), config, nil
 }
@@ -74,7 +74,7 @@ func (p *Provider) PlanTopic(ctx context.Context, in resources.ProvisionRequest,
 	if err := p.planQueue(ctx, in.Ref, &change); err != nil {
 		return "", "", err
 	}
-	recorded, err := keyvalue.ReadOrEmpty(ctx, p.keyValues, key)
+	recorded, err := records.ReadOrEmpty(ctx, p.keyValues, key)
 	if err != nil {
 		return "", "", err
 	}
@@ -123,7 +123,7 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 	if err := p.ensureQueue(ctx, in.Ref, progress); err != nil {
 		return provider.Binding{}, err
 	}
-	if err := keyvalue.Change(ctx, p.keyValues, key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	if err := records.Change(ctx, p.keyValues, key, func(recorded records.Entry) ([]byte, bool, error) {
 		return config, string(recorded.Value) != string(config), nil
 	}); err != nil {
 		return provider.Binding{}, err
@@ -216,7 +216,7 @@ func (p *Provider) planQueue(ctx context.Context, ref provider.StackRef, change 
 	if err != nil {
 		return err
 	}
-	recorded, err := keyvalue.ReadOrEmpty(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
+	recorded, err := records.ReadOrEmpty(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
 	if err != nil {
 		return err
 	}
@@ -258,7 +258,7 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 		return err
 	}
 	key := live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env)
-	if err := keyvalue.Change(ctx, p.keyValues, key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	if err := records.Change(ctx, p.keyValues, key, func(recorded records.Entry) ([]byte, bool, error) {
 		return record, string(recorded.Value) != string(record), nil
 	}); err != nil {
 		return err
@@ -276,7 +276,7 @@ func nameDeliverySecret(queue host.ResourceContainer) string {
 
 func (p *Provider) RemoveTopic(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	name := chooseDeclaredName(binding.Resource, binding.Name)
-	if err := keyvalue.Forget(ctx, p.keyValues, live.QueueTopicKey(ref.Tier, ref.Project, ref.Name.Env, name)); err != nil {
+	if err := records.Forget(ctx, p.keyValues, live.QueueTopicKey(ref.Tier, ref.Project, ref.Name.Env, name)); err != nil {
 		return err
 	}
 	partition, under := live.QueueTopicsUnder(ref.Tier, ref.Project, ref.Name.Env)
@@ -298,7 +298,7 @@ func (p *Provider) RemoveTopic(ctx context.Context, ref provider.StackRef, bindi
 	p.queues.Lock()
 	delete(p.queues.ensured, spec.Name)
 	p.queues.Unlock()
-	if err := keyvalue.Forget(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env)); err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+	if err := records.Forget(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env)); err != nil && !errors.Is(err, records.ErrNotFound) {
 		return fmt.Errorf("forget the queue database %s: %w", spec.Name, err)
 	}
 	return nil

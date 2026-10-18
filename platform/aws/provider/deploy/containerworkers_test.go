@@ -14,13 +14,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
@@ -316,7 +316,7 @@ func TestAContainerWorkersStackExportsEachWorkersServiceForTheDeployToRecord(t *
 	}
 }
 
-func containerStacksHostingWorkers(t *testing.T, store keyvalue.Store) (*Stacks, *mockedEngine, provider.StackSpec) {
+func containerStacksHostingWorkers(t *testing.T, store records.Store) (*Stacks, *mockedEngine, provider.StackSpec) {
 	t.Helper()
 	cfg, spec := containerStackSpec(t)
 	cfg.KeyValues = store
@@ -483,7 +483,7 @@ func TestAContainerAppThatDropsItsWorkersLosesTheirStackOnlyOnceThePromotionServ
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slices.ContainsFunc(consumers, func(consumer keyvalue.Entry) bool { return strings.Contains(consumer.Key.String(), workers) }) {
+	if slices.ContainsFunc(consumers, func(consumer records.Entry) bool { return strings.Contains(consumer.Key.String(), workers) }) {
 		t.Errorf("container infrastructure consumers = %v, want the retired workers stack's hold let go", consumers)
 	}
 }
@@ -649,7 +649,7 @@ func TestReclaimingAFailedDeploysContainerReleaseLeavesTheContainerWorkersTheLiv
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.ContainsFunc(consumers, func(consumer keyvalue.Entry) bool { return strings.Contains(consumer.Key.String(), workers.String()) }) {
+	if !slices.ContainsFunc(consumers, func(consumer records.Entry) bool { return strings.Contains(consumer.Key.String(), workers.String()) }) {
 		t.Errorf("container infrastructure consumers = %v, want the live workers stack still holding the cluster", consumers)
 	}
 }

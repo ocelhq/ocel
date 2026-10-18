@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -31,8 +31,8 @@ type KeyValues struct {
 	Clients *Clients
 }
 
-func (s KeyValues) open(in keyvalue.Partition) (*firestore.Client, *firestore.CollectionRef, error) {
-	if err := keyvalue.RefuseMalformedPartition(in); err != nil {
+func (s KeyValues) open(in records.Partition) (*firestore.Client, *firestore.CollectionRef, error) {
+	if err := records.RefuseMalformedPartition(in); err != nil {
 		return nil, nil, err
 	}
 	client, err := s.client(in)
@@ -42,7 +42,7 @@ func (s KeyValues) open(in keyvalue.Partition) (*firestore.Client, *firestore.Co
 	return client, OpenTierCollection(client, in.Tier), nil
 }
 
-func (s KeyValues) client(in keyvalue.Partition) (*firestore.Client, error) {
+func (s KeyValues) client(in records.Partition) (*firestore.Client, error) {
 	if project, owned := ProjectOfRecords(in); owned {
 		return s.Clients.ProjectFirestore(in.Tier, project)
 	}
@@ -59,39 +59,39 @@ func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firesto
 	if _, err := documents.Next(); status.Code(err) == codes.NotFound {
 		return s.refuseUnbootstrapped(tier)
 	}
-	return keyvalue.ErrNotFound
+	return records.ErrNotFound
 }
 
-func (s KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
-	if err := keyvalue.RefuseMalformedKey(key); err != nil {
-		return keyvalue.Entry{}, err
+func (s KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
+	if err := records.RefuseMalformedKey(key); err != nil {
+		return records.Entry{}, err
 	}
 	_, collection, err := s.open(key.Partition)
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	snapshot, err := collection.Doc(documentID(key)).Get(ctx)
 	if _, owned := ProjectOfRecords(key.Partition); owned && status.Code(err) == codes.NotFound {
-		return keyvalue.Entry{}, keyvalue.ErrNotFound
+		return records.Entry{}, records.ErrNotFound
 	}
 	if status.Code(err) == codes.NotFound {
-		return keyvalue.Entry{}, s.refuseAbsentDocument(ctx, collection, key.Partition.Tier)
+		return records.Entry{}, s.refuseAbsentDocument(ctx, collection, key.Partition.Tier)
 	}
 	if err != nil {
-		return keyvalue.Entry{}, fmt.Errorf("read %s: %w", key, err)
+		return records.Entry{}, fmt.Errorf("read %s: %w", key, err)
 	}
 	return entryOf(key, snapshot)
 }
 
-func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	if err := keyvalue.RefuseUnwritable(entry); err != nil {
+func (s KeyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
+	if err := records.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
 	client, collection, err := s.open(entry.Key.Partition)
 	if err != nil {
 		return "", err
 	}
-	next, err := keyvalue.NewRevision()
+	next, err := records.NewRevision()
 	if err != nil {
 		return "", err
 	}
@@ -104,9 +104,9 @@ func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 	return next, nil
 }
 
-func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
-	for _, entry := range []keyvalue.Entry{first, second} {
-		if err := keyvalue.RefuseUnwritable(entry); err != nil {
+func (s KeyValues) WritePair(ctx context.Context, first, second records.Entry) error {
+	for _, entry := range []records.Entry{first, second} {
+		if err := records.RefuseUnwritable(entry); err != nil {
 			return err
 		}
 	}
@@ -122,14 +122,14 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s and %s are kept in different collections, and one transaction cannot span both", first.Key, second.Key)
 	}
-	revisions := make([]keyvalue.Revision, 2)
+	revisions := make([]records.Revision, 2)
 	for slot := range revisions {
-		if revisions[slot], err = keyvalue.NewRevision(); err != nil {
+		if revisions[slot], err = records.NewRevision(); err != nil {
 			return err
 		}
 	}
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		pair := []keyvalue.Entry{first, second}
+		pair := []records.Entry{first, second}
 		for _, entry := range pair {
 			if err := refuseMovedRevision(tx, collection, entry); err != nil {
 				return err
@@ -148,8 +148,8 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 	return nil
 }
 
-func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
-	if err := keyvalue.RefuseMalformedKey(key); err != nil {
+func (s KeyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
+	if err := records.RefuseMalformedKey(key); err != nil {
 		return err
 	}
 	client, collection, err := s.open(key.Partition)
@@ -163,23 +163,23 @@ func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyval
 			return err
 		}
 		if !exists {
-			return keyvalue.ErrNotFound
+			return records.ErrNotFound
 		}
 		if current != expected {
-			return keyvalue.ErrStale
+			return records.ErrStale
 		}
 		return tx.Delete(reference)
 	})
 	if err != nil {
 		if _, owned := ProjectOfRecords(key.Partition); owned && status.Code(err) == codes.NotFound {
-			return keyvalue.ErrNotFound
+			return records.ErrNotFound
 		}
 		return s.refuseFailedWrite(key, err)
 	}
 	return nil
 }
 
-func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s KeyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	_, collection, err := s.open(in)
 	if err != nil {
 		return nil, err
@@ -192,7 +192,7 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 		ceiling = at + segmentCeiling
 	}
 
-	var found []keyvalue.Entry
+	var found []records.Entry
 	documents := collection.
 		OrderBy(firestore.DocumentID, firestore.Asc).
 		StartAt(at).
@@ -221,7 +221,7 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 		if !keyed || path == "" {
 			continue
 		}
-		segments, err := keyvalue.SplitSegments(path, segmentSeparator)
+		segments, err := records.SplitSegments(path, segmentSeparator)
 		if err != nil {
 			return nil, err
 		}
@@ -233,38 +233,38 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 	}
 }
 
-func compareAndSet(tx *firestore.Transaction, collection *firestore.CollectionRef, entry keyvalue.Entry, next keyvalue.Revision) error {
+func compareAndSet(tx *firestore.Transaction, collection *firestore.CollectionRef, entry records.Entry, next records.Revision) error {
 	if err := refuseMovedRevision(tx, collection, entry); err != nil {
 		return err
 	}
 	return setEntry(tx, collection, entry, next)
 }
 
-func refuseMovedRevision(tx *firestore.Transaction, collection *firestore.CollectionRef, entry keyvalue.Entry) error {
+func refuseMovedRevision(tx *firestore.Transaction, collection *firestore.CollectionRef, entry records.Entry) error {
 	current, exists, err := currentRevision(tx, collection.Doc(documentID(entry.Key)))
 	if err != nil {
 		return err
 	}
 	if entry.Revision == "" {
 		if exists {
-			return keyvalue.ErrStale
+			return records.ErrStale
 		}
 		return nil
 	}
 	if !exists || current != entry.Revision {
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	return nil
 }
 
-func setEntry(tx *firestore.Transaction, collection *firestore.CollectionRef, entry keyvalue.Entry, next keyvalue.Revision) error {
+func setEntry(tx *firestore.Transaction, collection *firestore.CollectionRef, entry records.Entry, next records.Revision) error {
 	return tx.Set(collection.Doc(documentID(entry.Key)), map[string]any{
 		valueField:    string(entry.Value),
 		revisionField: string(next),
 	})
 }
 
-func currentRevision(tx *firestore.Transaction, reference *firestore.DocumentRef) (keyvalue.Revision, bool, error) {
+func currentRevision(tx *firestore.Transaction, reference *firestore.DocumentRef) (records.Revision, bool, error) {
 	snapshot, err := tx.Get(reference)
 	if status.Code(err) == codes.NotFound {
 		return "", false, nil
@@ -278,8 +278,8 @@ func currentRevision(tx *firestore.Transaction, reference *firestore.DocumentRef
 	return revisionOf(snapshot), true, nil
 }
 
-func (s KeyValues) refuseFailedWrite(key keyvalue.Key, err error) error {
-	if errors.Is(err, keyvalue.ErrStale) || errors.Is(err, keyvalue.ErrNotFound) {
+func (s KeyValues) refuseFailedWrite(key records.Key, err error) error {
+	if errors.Is(err, records.ErrStale) || errors.Is(err, records.ErrNotFound) {
 		return err
 	}
 	if project, owned := ProjectOfRecords(key.Partition); owned && status.Code(err) == codes.NotFound {
@@ -297,31 +297,31 @@ func (s KeyValues) refuseUnbootstrapped(tier environment.Tier) error {
 		s.Clients.Database(), provider.BootstrapCommand(tier))
 }
 
-func entryOf(key keyvalue.Key, snapshot *firestore.DocumentSnapshot) (keyvalue.Entry, error) {
+func entryOf(key records.Key, snapshot *firestore.DocumentSnapshot) (records.Entry, error) {
 	value, present := snapshot.Data()[valueField].(string)
 	if !present {
-		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s holds a document with no JSON %q field, so ocel did not write it", key, valueField)
+		return records.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s holds a document with no JSON %q field, so ocel did not write it", key, valueField)
 	}
-	return keyvalue.Entry{Key: key, Value: []byte(value), Revision: revisionOf(snapshot)}, nil
+	return records.Entry{Key: key, Value: []byte(value), Revision: revisionOf(snapshot)}, nil
 }
 
-func revisionOf(snapshot *firestore.DocumentSnapshot) keyvalue.Revision {
+func revisionOf(snapshot *firestore.DocumentSnapshot) records.Revision {
 	revision, _ := snapshot.Data()[revisionField].(string)
-	return keyvalue.Revision(revision)
+	return records.Revision(revision)
 }
 
-func partitionPrefix(in keyvalue.Partition) string {
+func partitionPrefix(in records.Partition) string {
 	return join(in.Segments()) + keySeparator
 }
 
-func partitionCeiling(in keyvalue.Partition) string {
+func partitionCeiling(in records.Partition) string {
 	return join(in.Segments()) + keyCeiling
 }
 
-func documentID(key keyvalue.Key) string {
+func documentID(key records.Key) string {
 	return partitionPrefix(key.Partition) + join(key.Path)
 }
 
 func join(segments []string) string {
-	return keyvalue.JoinSegments(segments, segmentSeparator, "/"+keySeparator)
+	return records.JoinSegments(segments, segmentSeparator, "/"+keySeparator)
 }

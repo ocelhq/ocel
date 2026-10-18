@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -32,24 +32,24 @@ func provisionedBindings() []*bindingsv1.Binding {
 
 func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 	t.Parallel()
-	bindings := []live.Binding{
+	declared := []live.Binding{
 		{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES},
 		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET},
 	}
-	published, err := publishedRecords(t, bindings)
+	published, err := publishedRecords(t, declared)
 	if err != nil {
 		t.Fatalf("publishedRecords: %v", err)
 	}
 
-	if err := live.Conform(bindings, published); err != nil {
+	if err := live.Conform(declared, published); err != nil {
 		t.Fatalf("what this deploy publishes drifts from what it tells the app to expect: %v", err)
 	}
-	for _, l := range bindings {
+	for _, l := range declared {
 		binding := &bindingsv1.Binding{}
 		if err := protojson.Unmarshal([]byte(published[l.Key]), binding); err != nil {
 			t.Fatalf("binding %s conformed to %q, which no app can parse: %v", l.Name, published[l.Key], err)
 		}
-		if got := naming.BindingTypeOf(binding); got != l.Type {
+		if got := bindings.TypeOf(binding); got != l.Type {
 			t.Errorf("binding %s delivers a %s, want the %s the app was built to read", l.Name, got, l.Type)
 		}
 	}

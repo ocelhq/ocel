@@ -14,8 +14,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/localrpc"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -120,7 +120,7 @@ func ListWholeProjectUses(infra *contractv1.Manifest) []Use {
 	var uses []Use
 	for _, resource := range infra.GetResources() {
 		declared := resource.GetResource()
-		if _, bindable := naming.BindableAs(declared.GetType()); !bindable || resource.GetBinding() != "" {
+		if _, bindable := bindings.BindableAs(declared.GetType()); !bindable || resource.GetBinding() != "" {
 			continue
 		}
 		uses = append(uses, Use{App: WholeProject, Resource: declared.GetType(), Declared: declared.GetName(), Bound: resource.GetLogicalName()})

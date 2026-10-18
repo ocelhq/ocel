@@ -8,15 +8,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func readInvalidationTargets(t *testing.T, vendor *fake.Provider, kind string) []string {
 	t.Helper()
-	partition := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootRouters, Path: []string{kind, "shop"}}
-	entry, err := keyvalue.ReadOrEmpty(t.Context(), vendor.KeyValues(), partition.Key("invalidation"))
+	partition := records.Partition{Tier: environment.TierProduction, Root: stackrecords.RootRouters, Path: []string{kind, "shop"}}
+	entry, err := records.ReadOrEmpty(t.Context(), vendor.KeyValues(), partition.Key("invalidation"))
 	if err != nil {
 		t.Fatalf("read the invalidation targets: %v", err)
 	}

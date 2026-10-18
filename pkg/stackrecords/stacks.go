@@ -13,10 +13,10 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 const (
@@ -49,9 +49,9 @@ type NamedStack struct {
 	Stack
 }
 
-func Read(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) (Stack, bool, error) {
+func Read(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName) (Stack, bool, error) {
 	name := StackKey(tier, slug, stack)
-	row, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	row, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
@@ -79,9 +79,9 @@ func (s Stack) Images() []string {
 	return images
 }
 
-func Write(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName, recorded Stack) error {
+func Write(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName, recorded Stack) error {
 	name := StackKey(tier, slug, stack)
-	row, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	row, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
@@ -99,7 +99,7 @@ func Write(ctx context.Context, store keyvalue.Store, tier environment.Tier, slu
 		}
 		return nil
 	}
-	listed, err := keyvalue.ReadOrEmpty(ctx, store, appImagesKey(tier, slug, stack))
+	listed, err := records.ReadOrEmpty(ctx, store, appImagesKey(tier, slug, stack))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", listed.Key, err)
 	}
@@ -143,21 +143,21 @@ func ListRecordedProperties(t provider.BindingType) []string {
 	return kept
 }
 
-func Forget(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) error {
+func Forget(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName) error {
 	if err := ForgetAppImages(ctx, store, tier, slug, stack); err != nil {
 		return err
 	}
-	return keyvalue.Forget(ctx, store, StackKey(tier, slug, stack))
+	return records.Forget(ctx, store, StackKey(tier, slug, stack))
 }
 
-func ForgetAppImages(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) error {
+func ForgetAppImages(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName) error {
 	if stack.IsInfra() {
 		return nil
 	}
-	return keyvalue.Forget(ctx, store, appImagesKey(tier, slug, stack))
+	return records.Forget(ctx, store, appImagesKey(tier, slug, stack))
 }
 
-func listAppImages(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, app string) (map[naming.StackName][]string, error) {
+func listAppImages(ctx context.Context, store records.Store, tier environment.Tier, slug, app string) (map[naming.StackName][]string, error) {
 	listed, err := store.List(ctx, StacksPartition(tier, slug), appImagesSegment, app)
 	if err != nil {
 		return nil, fmt.Errorf("read the images %s's %s stacks record in %s: %w", slug, app, tier, err)
@@ -180,7 +180,7 @@ func listAppImages(ctx context.Context, store keyvalue.Store, tier environment.T
 	return recorded, nil
 }
 
-func ListRecordedAppImages(ctx context.Context, store keyvalue.Store, slug, app string, except ...provider.StackRef) (map[string]bool, error) {
+func ListRecordedAppImages(ctx context.Context, store records.Store, slug, app string, except ...provider.StackRef) (map[string]bool, error) {
 	recorded := map[string]bool{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		stacks, err := listAppImages(ctx, store, tier, slug, app)
@@ -199,7 +199,7 @@ func ListRecordedAppImages(ctx context.Context, store keyvalue.Store, slug, app 
 	return recorded, nil
 }
 
-func List(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) ([]NamedStack, error) {
+func List(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]NamedStack, error) {
 	recorded, err := store.List(ctx, StacksPartition(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's stacks: %w", slug, err)

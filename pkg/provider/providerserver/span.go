@@ -2,19 +2,28 @@ package providerserver
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/progressproto"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-type SpanID [naming.SpanIDLen]byte
+const (
+	SpanEnvironment = "environment"
+	SpanEdge        = "edge"
+	SpanHostnames   = "hostnames"
+	SpanPromotion   = "promotion"
+	SpanConnector   = "connector"
+)
+
+type SpanID [8]byte
 
 func newSpanID() SpanID {
 	var id SpanID
@@ -27,9 +36,14 @@ func newSpanID() SpanID {
 	return id
 }
 
-func derivedSpanID(raw []byte) SpanID {
+func RootSpanID(name string) SpanID {
+	h := sha256.New()
+	var size [8]byte
+	binary.BigEndian.PutUint64(size[:], uint64(len(name)))
+	h.Write(size[:])
+	h.Write([]byte(name))
 	var id SpanID
-	copy(id[:], raw)
+	copy(id[:], h.Sum(nil))
 	return id
 }
 
@@ -54,7 +68,7 @@ func sanitizeTitle(title progress.Title) progress.Title {
 
 func RootSpan(name, subject string, title progress.Title, phase progressv1.Phase) Span {
 	return Span{
-		ID:      derivedSpanID(naming.SpanID(name)),
+		ID:      RootSpanID(name),
 		Title:   sanitizeTitle(title),
 		Phase:   phase,
 		Subject: subject,

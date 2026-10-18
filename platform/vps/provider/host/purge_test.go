@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -56,7 +56,7 @@ func TestPurgingAProjectsValuesLeavesNothingOfItOnTheBox(t *testing.T) {
 	}
 
 	root := keyValuesDir(t, here.root)
-	partitions := map[string]keyvalue.Partition{
+	partitions := map[string]records.Partition{
 		"the project's values":                     variablestore.ValuesPartition(purged),
 		"what references the project":              variablestore.ReferencesPartition(purged),
 		"the index of the project's own reference": variablestore.ReferencesPartition(shared),

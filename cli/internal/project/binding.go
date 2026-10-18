@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -77,12 +78,12 @@ func (p *Project) BindingsFor(tier environmentv1.Tier) []Binding {
 }
 
 func (b Binding) Group() string {
-	return naming.ResourceTypeName(b.Type) + "." + b.Name
+	return bindings.ResourceTypeName(b.Type) + "." + b.Name
 }
 
 func (b Binding) RecordName() string {
 	if b.Inline != nil {
-		return naming.InlineRecordName(b.Type, b.Name)
+		return bindings.InlineRecordName(b.Type, b.Name)
 	}
 	return b.External
 }
@@ -123,7 +124,7 @@ func normalizeBindings(raw configdoc.Bindings) ([]Binding, error) {
 	}
 	out := make([]Binding, 0, len(raw))
 	for _, key := range slices.Sorted(maps.Keys(raw)) {
-		typ, known := naming.ResourceTypeNamed(key)
+		typ, known := bindings.ResourceTypeNamed(key)
 		if !known || !slices.Contains(configdoc.BindableTypes(), key) {
 			return nil, fmt.Errorf("`bindings` is keyed by %q, and nothing publishes a record of that type — the types that can be bound are %s",
 				key, strings.Join(configdoc.BindableTypes(), ", "))
@@ -133,11 +134,11 @@ func normalizeBindings(raw configdoc.Bindings) ([]Binding, error) {
 			if strings.TrimSpace(declared) == "" {
 				return nil, fmt.Errorf("`bindings.%s` is keyed by an empty name — the key is the name an app declares the resource under, and the value is the record it binds, written as \"@<name>\"", key)
 			}
-			bindings, err := normalizeBinding(key, typ, declared, named[declared])
+			bound, err := normalizeBinding(key, typ, declared, named[declared])
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, bindings...)
+			out = append(out, bound...)
 		}
 	}
 	slices.SortFunc(out, func(a, b Binding) int {
@@ -204,8 +205,8 @@ func publishedName(path, spelled string) (string, error) {
 	if strings.Contains(external, naming.KeySeparator) {
 		return "", fmt.Errorf("published name %q may not contain %q: it separates the fields of the key the record is stored under", external, naming.KeySeparator)
 	}
-	if naming.IsInlineRecord(external) {
-		return "", fmt.Errorf("`%s` binds %q, and a name starting %q is the record ocel keeps for a binding written inline — write that binding's record itself, or publish yours under another name", path, value, naming.InlineRecordPrefix)
+	if bindings.IsInlineRecord(external) {
+		return "", fmt.Errorf("`%s` binds %q, and a name starting %q is the record ocel keeps for a binding written inline — write that binding's record itself, or publish yours under another name", path, value, bindings.InlineRecordPrefix)
 	}
 	return external, nil
 }

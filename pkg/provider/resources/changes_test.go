@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -37,7 +37,7 @@ func (c *changeLog) Span(_ string, _, _ time.Time, err error, attrs ...progress.
 	c.changes = append(c.changes, change)
 }
 
-func recordBuckets(t *testing.T, store keyvalue.Store, ref provider.StackRef, names ...string) {
+func recordBuckets(t *testing.T, store records.Store, ref provider.StackRef, names ...string) {
 	t.Helper()
 	bindings := make([]provider.Binding, 0, len(names))
 	for _, name := range names {

@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -105,7 +105,7 @@ func TestStateReadsWhatTheVendorDescribes(t *testing.T) {
 }
 
 type storeTheBootstrapCreates struct {
-	keyvalue.Store
+	records.Store
 	bootstrap provider.Bootstrap
 }
 
@@ -120,21 +120,21 @@ func (s storeTheBootstrapCreates) refuseBeforeBootstrap(ctx context.Context, tie
 	return nil
 }
 
-func (s storeTheBootstrapCreates) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s storeTheBootstrapCreates) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if err := s.refuseBeforeBootstrap(ctx, key.Partition.Tier); err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	return s.Store.Read(ctx, key)
 }
 
-func (s storeTheBootstrapCreates) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s storeTheBootstrapCreates) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	if err := s.refuseBeforeBootstrap(ctx, entry.Key.Partition.Tier); err != nil {
 		return "", err
 	}
 	return s.Store.Write(ctx, entry)
 }
 
-func (s storeTheBootstrapCreates) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s storeTheBootstrapCreates) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	if err := s.refuseBeforeBootstrap(ctx, in.Tier); err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ type vendorWithAStoreTheBootstrapCreates struct {
 	*fake.Provider
 }
 
-func (p vendorWithAStoreTheBootstrapCreates) KeyValues() keyvalue.Store {
+func (p vendorWithAStoreTheBootstrapCreates) KeyValues() records.Store {
 	return storeTheBootstrapCreates{Store: p.Provider.KeyValues(), bootstrap: p.FakeBootstrap()}
 }
 
@@ -164,13 +164,13 @@ func TestStateReportsNoBootstrapWhereTheStoreItWouldRecordInIsNotThere(t *testin
 	}
 }
 
-type missingStore struct{ keyvalue.Store }
+type missingStore struct{ records.Store }
 
-func (missingStore) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
-	return keyvalue.Entry{}, refusal.Refuse(refusal.CodeNotReady, "this project keeps no store yet")
+func (missingStore) Read(context.Context, records.Key) (records.Entry, error) {
+	return records.Entry{}, refusal.Refuse(refusal.CodeNotReady, "this project keeps no store yet")
 }
 
-func (missingStore) List(context.Context, keyvalue.Partition, ...string) ([]keyvalue.Entry, error) {
+func (missingStore) List(context.Context, records.Partition, ...string) ([]records.Entry, error) {
 	return nil, refusal.Refuse(refusal.CodeNotReady, "this project keeps no store yet")
 }
 
@@ -386,7 +386,7 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	}
 
 	for _, slug := range []string{"shop", "blog"} {
-		if _, err := vendor.KeyValues().Write(ctx, keyvalue.Entry{Key: stackrecords.ProjectKey(environment.TierPreview, slug), Value: json.RawMessage("{}")}); err != nil {
+		if _, err := vendor.KeyValues().Write(ctx, records.Entry{Key: stackrecords.ProjectKey(environment.TierPreview, slug), Value: json.RawMessage("{}")}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -394,7 +394,7 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := vendor.KeyValues().Write(ctx, keyvalue.Entry{
+	if _, err := vendor.KeyValues().Write(ctx, records.Entry{
 		Key:   stackrecords.WildcardKey(environment.TierPreview),
 		Value: wildcard,
 	}); err != nil {

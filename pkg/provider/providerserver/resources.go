@@ -3,11 +3,11 @@ package providerserver
 import (
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/kvstore"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/valkey"
 )
 
 var resourceTypes = map[resourcesv1.ResourceType]provider.BindingType{
@@ -106,7 +106,7 @@ func refuseConfigOfAnotherType(kind provider.BindingType, declared string, messa
 }
 
 func kvSpec(config *resourcesv1.KvConfig) (*provider.KVSpec, error) {
-	settings, err := kvstore.ReadSettings(config)
+	settings, err := valkey.ReadSettings(config)
 	if err != nil {
 		return nil, err
 	}

@@ -10,30 +10,30 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type countedStore struct {
-	keyvalue.Store
+	records.Store
 	mu    sync.Mutex
 	reads int
 	lists int
 }
 
-func (c *countedStore) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (c *countedStore) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	c.mu.Lock()
 	c.reads++
 	c.mu.Unlock()
 	return c.Store.Read(ctx, key)
 }
 
-func (c *countedStore) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (c *countedStore) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	c.mu.Lock()
 	c.lists++
 	c.mu.Unlock()
@@ -202,11 +202,11 @@ func releaseRef(buildID string) provider.StackRef {
 
 type releases struct {
 	t      *testing.T
-	store  keyvalue.Store
+	store  records.Store
 	stacks provider.Stacks
 }
 
-func newReleases(t *testing.T, store keyvalue.Store, hooks resources.Hooks) releases {
+func newReleases(t *testing.T, store records.Store, hooks resources.Hooks) releases {
 	return releases{t: t, store: store, stacks: resources.NewHookStacks(store, fake.NewArtifacts(), hooks)}
 }
 
@@ -242,9 +242,9 @@ func functionApp() *provider.AppSpec {
 	return &provider.AppSpec{App: "web", Compute: provider.ComputeServerless, Functions: []provider.FunctionSpec{{Name: "api"}}}
 }
 
-func sharedEntries(t *testing.T, store keyvalue.Store) []keyvalue.Entry {
+func sharedEntries(t *testing.T, store records.Store) []records.Entry {
 	t.Helper()
-	shared := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootSharedPhysicals, Path: []string{"shop"}}
+	shared := records.Partition{Tier: environment.TierProduction, Root: resources.RootSharedPhysicals, Path: []string{"shop"}}
 	left, err := store.List(context.Background(), shared)
 	if err != nil {
 		t.Fatal(err)

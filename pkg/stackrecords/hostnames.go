@@ -10,8 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -210,9 +210,9 @@ func (s *EdgeState) Forget(hostname string) {
 	}
 }
 
-func ReadWildcard(ctx context.Context, store keyvalue.Store) (Wildcard, error) {
+func ReadWildcard(ctx context.Context, store records.Store) (Wildcard, error) {
 	name := WildcardKey(environment.TierPreview)
-	entry, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	entry, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
@@ -226,7 +226,7 @@ func ReadWildcard(ctx context.Context, store keyvalue.Store) (Wildcard, error) {
 	return wildcard, nil
 }
 
-func ProjectsServedOnPreview(ctx context.Context, store keyvalue.Store, baseDomain string) ([]string, error) {
+func ProjectsServedOnPreview(ctx context.Context, store records.Store, baseDomain string) ([]string, error) {
 	if baseDomain == "" {
 		return nil, nil
 	}

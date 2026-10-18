@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
@@ -36,9 +36,9 @@ func Encode(t resourcesv1.ResourceType, binding *bindingsv1.Binding) (Resolved, 
 }
 
 func envName(t resourcesv1.ResourceType, name string) (string, error) {
-	bound, bindable := naming.BindableAs(t)
+	bound, bindable := bindings.BindableAs(t)
 	if !bindable {
 		return "", fmt.Errorf("resource has unsupported type %s", t)
 	}
-	return naming.ResourceEnvName(bound, name), nil
+	return bindings.ResourceEnvName(bound, name), nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -11,9 +12,11 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const (
@@ -35,6 +38,14 @@ type DynamoAPI interface {
 	TransactWriteItems(context.Context, *dynamodb.TransactWriteItemsInput, ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
 }
 
+var variableRoots = []records.Root{
+	variablestore.RootValues,
+	variablestore.RootValueRefs,
+	envsource.RootRegistrations,
+	envsource.RootStatus,
+	envsource.RootDigestKey,
+}
+
 type KeyValues struct {
 	Dynamo DynamoAPI
 	Tables Tables
@@ -51,17 +62,17 @@ func (t Table) Table(context.Context, environment.Tier) (string, error) { return
 
 func (t Table) ValuesTable(context.Context, environment.Tier) (string, error) { return string(t), nil }
 
-func (s KeyValues) table(ctx context.Context, in keyvalue.Partition) (string, error) {
+func (s KeyValues) table(ctx context.Context, in records.Partition) (string, error) {
 	if s.Tables == nil {
 		return "", nil
 	}
-	if in.HoldsVariables() {
+	if slices.Contains(variableRoots, in.Root) {
 		return s.Tables.ValuesTable(ctx, in.Tier)
 	}
 	return s.Tables.Table(ctx, in.Tier)
 }
 
-func PartitionKey(in keyvalue.Partition) string {
+func PartitionKey(in records.Partition) string {
 	return join(in.Segments())
 }
 
@@ -77,16 +88,16 @@ func isTableMissing(err error) bool {
 	return errors.As(err, &missing)
 }
 
-func (s KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
-	if err := keyvalue.RefuseMalformedKey(key); err != nil {
-		return keyvalue.Entry{}, err
+func (s KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
+	if err := records.RefuseMalformedKey(key); err != nil {
+		return records.Entry{}, err
 	}
 	table, err := s.table(ctx, key.Partition)
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	if table == "" {
-		return keyvalue.Entry{}, keyvalue.ErrNotFound
+		return records.Entry{}, records.ErrNotFound
 	}
 	out, err := s.Dynamo.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      aws.String(table),
@@ -95,17 +106,17 @@ func (s KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, 
 	})
 	if err != nil {
 		if isTableMissing(err) {
-			return keyvalue.Entry{}, keyvalue.ErrNotFound
+			return records.Entry{}, records.ErrNotFound
 		}
-		return keyvalue.Entry{}, fmt.Errorf("read %s: %w", key, err)
+		return records.Entry{}, fmt.Errorf("read %s: %w", key, err)
 	}
 	if len(out.Item) == 0 {
-		return keyvalue.Entry{}, keyvalue.ErrNotFound
+		return records.Entry{}, records.ErrNotFound
 	}
 	return entryOf(key, out.Item)
 }
 
-func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s KeyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	written, err := writingOf(entry)
 	if err != nil {
 		return "", err
@@ -127,17 +138,17 @@ func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 	}); err != nil {
 		var failed *ddbtypes.ConditionalCheckFailedException
 		if errors.As(err, &failed) {
-			return "", keyvalue.ErrStale
+			return "", records.ErrStale
 		}
 		return "", fmt.Errorf("write %s: %w", entry.Key, err)
 	}
 	return written.revision, nil
 }
 
-func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
+func (s KeyValues) WritePair(ctx context.Context, first, second records.Entry) error {
 	writes := make([]ddbtypes.TransactWriteItem, 0, 2)
 	tables := make([]string, 0, 2)
-	for _, entry := range []keyvalue.Entry{first, second} {
+	for _, entry := range []records.Entry{first, second} {
 		written, err := writingOf(entry)
 		if err != nil {
 			return err
@@ -166,7 +177,7 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 	if _, err := s.Dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes}); err != nil {
 		var cancelled *ddbtypes.TransactionCanceledException
 		if errors.As(err, &cancelled) && isConditionFailed(cancelled) {
-			return keyvalue.ErrStale
+			return records.ErrStale
 		}
 		return fmt.Errorf("write %s beside %s: %w", first.Key, second.Key, err)
 	}
@@ -187,14 +198,14 @@ type writing struct {
 	condition string
 	names     map[string]string
 	values    map[string]ddbtypes.AttributeValue
-	revision  keyvalue.Revision
+	revision  records.Revision
 }
 
-func writingOf(entry keyvalue.Entry) (writing, error) {
-	if err := keyvalue.RefuseUnwritable(entry); err != nil {
+func writingOf(entry records.Entry) (writing, error) {
+	if err := records.RefuseUnwritable(entry); err != nil {
 		return writing{}, err
 	}
-	next, err := keyvalue.NewRevision()
+	next, err := records.NewRevision()
 	if err != nil {
 		return writing{}, err
 	}
@@ -218,8 +229,8 @@ func writingOf(entry keyvalue.Entry) (writing, error) {
 	return written, nil
 }
 
-func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
-	if err := keyvalue.RefuseMalformedKey(key); err != nil {
+func (s KeyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
+	if err := records.RefuseMalformedKey(key); err != nil {
 		return err
 	}
 	table, err := s.table(ctx, key.Partition)
@@ -227,7 +238,7 @@ func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyval
 		return err
 	}
 	if table == "" {
-		return keyvalue.ErrNotFound
+		return records.ErrNotFound
 	}
 	_, err = s.Dynamo.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName:                           aws.String(table),
@@ -241,20 +252,20 @@ func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyval
 		return nil
 	}
 	if isTableMissing(err) {
-		return keyvalue.ErrNotFound
+		return records.ErrNotFound
 	}
 	var failed *ddbtypes.ConditionalCheckFailedException
 	if errors.As(err, &failed) {
 		if len(failed.Item) == 0 {
-			return keyvalue.ErrNotFound
+			return records.ErrNotFound
 		}
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	return fmt.Errorf("remove %s: %w", key, err)
 }
 
-func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
-	if err := keyvalue.RefuseMalformedPartition(in); err != nil {
+func (s KeyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
+	if err := records.RefuseMalformedPartition(in); err != nil {
 		return nil, err
 	}
 	table, err := s.table(ctx, in)
@@ -274,7 +285,7 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 		values[":prefix"] = &ddbtypes.AttributeValueMemberS{Value: sortKey(under)}
 	}
 
-	var out []keyvalue.Entry
+	var out []records.Entry
 	var start map[string]ddbtypes.AttributeValue
 	for {
 		page, err := s.Dynamo.Query(ctx, &dynamodb.QueryInput{
@@ -318,21 +329,21 @@ func pathOf(item map[string]ddbtypes.AttributeValue) ([]string, bool, error) {
 	if !ok || rest == "" {
 		return nil, false, nil
 	}
-	path, err := keyvalue.SplitSegments(rest, segmentSeparator)
+	path, err := records.SplitSegments(rest, segmentSeparator)
 	return path, err == nil, err
 }
 
-func entryOf(key keyvalue.Key, item map[string]ddbtypes.AttributeValue) (keyvalue.Entry, error) {
+func entryOf(key records.Key, item map[string]ddbtypes.AttributeValue) (records.Entry, error) {
 	value, ok := item[valueAttribute].(*ddbtypes.AttributeValueMemberS)
 	if !ok {
-		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s holds an item with no JSON %q attribute, so ocel did not write it", key, valueAttribute)
+		return records.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s holds an item with no JSON %q attribute, so ocel did not write it", key, valueAttribute)
 	}
-	return keyvalue.Entry{Key: key, Value: []byte(value.Value), Revision: keyvalue.Revision(stringAttribute(item, revisionAttribute))}, nil
+	return records.Entry{Key: key, Value: []byte(value.Value), Revision: records.Revision(stringAttribute(item, revisionAttribute))}, nil
 }
 
-func join(segments []string) string { return keyvalue.JoinSegments(segments, segmentSeparator, "") }
+func join(segments []string) string { return records.JoinSegments(segments, segmentSeparator, "") }
 
-func pointKey(key keyvalue.Key) map[string]ddbtypes.AttributeValue {
+func pointKey(key records.Key) map[string]ddbtypes.AttributeValue {
 	return map[string]ddbtypes.AttributeValue{
 		partitionAttribute: &ddbtypes.AttributeValueMemberS{Value: PartitionKey(key.Partition)},
 		sortAttribute:      &ddbtypes.AttributeValueMemberS{Value: sortKey(key.Path)},

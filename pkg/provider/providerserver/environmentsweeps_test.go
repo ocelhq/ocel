@@ -12,7 +12,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -23,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -306,8 +306,8 @@ func TestRemovingAPreviewWhoseOnlyTraceIsAStackHoldingASharedResourceDestroysTha
 	client, vendor := contractServed(t, "1.0.0")
 	deployed(t, vendor, environment.TierPreview, "shop")
 	stack := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
-	shared := keyvalue.Partition{Tier: environment.TierPreview, Root: keyvalue.RootSharedPhysicals, Path: []string{"shop"}}
-	if _, err := vendor.KeyValues().Write(ctx, keyvalue.Entry{
+	shared := records.Partition{Tier: environment.TierPreview, Root: resources.RootSharedPhysicals, Path: []string{"shop"}}
+	if _, err := vendor.KeyValues().Write(ctx, records.Entry{
 		Key:   shared.Key("shop-web-server"),
 		Value: []byte(`{"kind":"function","name":"server","holders":{"` + stack.String() + `":"rev1"}}`),
 	}); err != nil {

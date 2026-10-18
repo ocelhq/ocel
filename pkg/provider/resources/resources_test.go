@@ -8,12 +8,12 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -521,7 +521,7 @@ func function(ref provider.StackRef, name string) provider.Function {
 	return provider.Function{Name: name, Physical: ref.Name.String() + "-" + name}
 }
 
-func recordFunctions(t *testing.T, store keyvalue.Store, ref provider.StackRef, names ...string) {
+func recordFunctions(t *testing.T, store records.Store, ref provider.StackRef, names ...string) {
 	t.Helper()
 
 	stack := stackrecords.Stack{Kind: provider.StackApp}

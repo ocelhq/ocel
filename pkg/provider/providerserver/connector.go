@@ -5,7 +5,6 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -53,7 +52,7 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		sender.refusing(connect.CodeUnimplemented)
 		var at provider.ConnectorAddress
-		root := RootSpan(naming.SpanConnector, naming.SpanConnector, connectorInstallTitle(req), progressv1.Phase_PHASE_PROVISION)
+		root := RootSpan(SpanConnector, SpanConnector, connectorInstallTitle(req), progressv1.Phase_PHASE_PROVISION)
 		err := inSpan(sender, root, func(_ *eventStream, progress progress.Log) error {
 			at, err = connector.Install(ctx, provider.ConnectorInstall{
 				Binary:  req.GetBinary(),
@@ -75,7 +74,7 @@ func (h *handlers) RemoveConnector(ctx context.Context, _ *contractv1.RemoveConn
 	if err != nil {
 		return err
 	}
-	root := RootSpan(naming.SpanConnector, naming.SpanConnector, progress.Removing.Title("the connector from this account"), progressv1.Phase_PHASE_DESTROY)
+	root := RootSpan(SpanConnector, SpanConnector, progress.Removing.Title("the connector from this account"), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
 		sender.refusing(connect.CodeUnimplemented)
 		return connector.Remove(ctx, progress)

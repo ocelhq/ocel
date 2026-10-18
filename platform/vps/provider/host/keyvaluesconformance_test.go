@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
@@ -52,9 +52,9 @@ func (h helperHere) Run(ctx context.Context, tier environment.Tier, stdin io.Rea
 	case err == nil:
 		return string(rendered), nil
 	case errors.As(err, &exit) && exit.ExitCode() == boxstore.ExitNotFound:
-		return "", keyvalue.ErrNotFound
+		return "", records.ErrNotFound
 	case errors.As(err, &exit) && exit.ExitCode() == boxstore.ExitStale:
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	default:
 		return "", refusal.Refuse(refusal.CodeDenied, "keyvalues %s: %v: %s", argv[0], err, stderr.String())
 	}
@@ -70,7 +70,7 @@ func TestAnEntryOnTheBoxIsAJSONFileHoldingTheValueAsWritten(t *testing.T) {
 	here := newHelperHere(t)
 	store := boxstore.NewKeyValues(here)
 	key := stackrecords.ProjectKey(environment.TierProduction, "shop")
-	revision, err := store.Write(context.Background(), keyvalue.Entry{Key: key, Value: json.RawMessage(`{"parts": ["cache"]}`)})
+	revision, err := store.Write(context.Background(), records.Entry{Key: key, Value: json.RawMessage(`{"parts": ["cache"]}`)})
 	if err != nil {
 		t.Fatal(err)
 	}

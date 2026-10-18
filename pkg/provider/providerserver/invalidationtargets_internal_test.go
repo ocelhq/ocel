@@ -7,18 +7,18 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type writesUntilRefused struct {
-	keyvalue.Store
+	records.Store
 	left int
 }
 
 var errWriteRefused = errors.New("the store refused the write")
 
-func (s *writesUntilRefused) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s *writesUntilRefused) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	if s.left == 0 {
 		return "", errWriteRefused
 	}
@@ -26,7 +26,7 @@ func (s *writesUntilRefused) Write(ctx context.Context, entry keyvalue.Entry) (k
 	return s.Store.Write(ctx, entry)
 }
 
-func (s *writesUntilRefused) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (s *writesUntilRefused) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
 	if s.left == 0 {
 		return errWriteRefused
 	}
@@ -44,7 +44,7 @@ func TestMovingTheInvalidationTargetIsOneWriteThatLeavesATargetEitherWay(t *test
 
 	_ = recordInvalidationTarget(t.Context(), store, environment.TierProduction, "relay", "shop", old, moved)
 
-	entry, err := keyvalue.ReadOrEmpty(t.Context(), backing, buildInvalidationTargetsKey(environment.TierProduction, "relay", "shop"))
+	entry, err := records.ReadOrEmpty(t.Context(), backing, buildInvalidationTargetsKey(environment.TierProduction, "relay", "shop"))
 	if err != nil {
 		t.Fatalf("read the targets: %v", err)
 	}

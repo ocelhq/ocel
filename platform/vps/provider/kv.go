@@ -7,12 +7,12 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/pkg/valkey"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -26,7 +26,7 @@ const (
 )
 
 func kvAuthenticateCommand() []string {
-	probe := strings.Join(kvstore.ValkeyReadyProbe(), " ")
+	probe := strings.Join(valkey.ReadyProbe(), " ")
 	return []string{"sh", "-c",
 		"IFS= read -r password\n" +
 			"tries=0\n" +
@@ -40,7 +40,7 @@ func kvAuthenticateCommand() []string {
 type kvStore struct {
 	version string
 	image   string
-	valkey  kvstore.Valkey
+	valkey  valkey.Server
 }
 
 func readKVStore(in resources.ProvisionRequest) (kvStore, error) {
@@ -49,16 +49,16 @@ func readKVStore(in resources.ProvisionRequest) (kvStore, error) {
 		spec = *in.Resource.KV
 	}
 	if spec.MemoryBytes == 0 {
-		spec.MemoryBytes, _ = kvstore.ParseMemory(kvstore.DefaultMemory)
+		spec.MemoryBytes, _ = valkey.ParseMemory(valkey.DefaultMemory)
 	}
-	version := cmp.Or(spec.Version, kvstore.DefaultVersion)
+	version := cmp.Or(spec.Version, valkey.DefaultVersion)
 	image, pinned := images.Valkey(version)
 	if !pinned {
 		return kvStore{}, refusal.Refuse(refusal.CodeInvalid,
 			"kv %s asks for version %q; supported: %s",
 			in.Resource.Name, version, strings.Join(images.ValkeyVersions(), ", "))
 	}
-	return kvStore{version: version, image: image, valkey: kvstore.Valkey{MemoryBytes: spec.MemoryBytes, Eviction: spec.Eviction}}, nil
+	return kvStore{version: version, image: image, valkey: valkey.Server{MemoryBytes: spec.MemoryBytes, Eviction: spec.Eviction}}, nil
 }
 
 func nameKV(ref provider.StackRef, resource string) string {
@@ -74,11 +74,11 @@ func kvContainer(in resources.ProvisionRequest, store kvStore) host.ResourceCont
 
 		Image:  store.image,
 		Args:   store.valkey.Args(),
-		User:   kvstore.ValkeyRunsAs,
+		User:   valkey.RunsAs,
 		Env:    map[string]string{},
 		Memory: strconv.FormatInt(2*store.valkey.MemoryBytes+kvOverheadBytes, 10),
 
-		Volume: host.Volume{Path: kvstore.ValkeyData, Generation: store.version, CopyOnUpgrade: true},
+		Volume: host.Volume{Path: valkey.DataDir, Generation: store.version, CopyOnUpgrade: true},
 		Credential: host.Credential{
 			Reassert: func(secret string) ([]string, string) { return kvAuthenticateCommand(), secret + "\n" },
 		},
@@ -94,8 +94,8 @@ func newKVBinding(in resources.ProvisionRequest, spec host.ResourceContainer, pa
 		Resource: in.Resource.Declared,
 		Properties: map[string]string{
 			provider.PropertyHost:     spec.Name,
-			provider.PropertyPort:     strconv.Itoa(kvstore.ValkeyPort),
-			provider.PropertyUsername: kvstore.ValkeyUsername,
+			provider.PropertyPort:     strconv.Itoa(valkey.Port),
+			provider.PropertyUsername: valkey.Username,
 			provider.PropertyPassword: password,
 			provider.PropertyTLS:      "false",
 		},

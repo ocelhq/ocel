@@ -13,7 +13,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -44,9 +44,9 @@ type proxy struct {
 	engine *tasks.Engine
 }
 
-func proxyWanted(bindings []live.Binding) bool {
-	for _, l := range bindings {
-		if naming.Proxied(l.Type) {
+func proxyWanted(declared []live.Binding) bool {
+	for _, l := range declared {
+		if bindings.Proxied(l.Type) {
 			return true
 		}
 	}

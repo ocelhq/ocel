@@ -13,7 +13,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -78,7 +77,7 @@ func (h *handlers) rollBack(ctx context.Context, hold *environmentHold, req *con
 		return nil, err
 	}
 	var promoted router.Promotion
-	root := RootSpan(naming.SpanPromotion, req.GetSlug(),
+	root := RootSpan(SpanPromotion, req.GetSlug(),
 		progress.Switching.Title("production traffic back to promotion "+target.PromotionID), progressv1.Phase_PHASE_PROMOTE)
 	if err := inSpan(sender, root, func(_ *eventStream, log progress.Log) error {
 		propagation, err := session.readSlowestPropagation(slices.Collect(maps.Values(session.state.Apps)))
@@ -161,7 +160,7 @@ func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promo
 }
 
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	root := RootSpan(naming.SpanPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
+	root := RootSpan(SpanPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
 		tier, err := decodeTier(req.GetEnvironment().GetTier())
 		if err != nil {

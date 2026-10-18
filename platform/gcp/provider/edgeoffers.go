@@ -10,9 +10,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -48,14 +48,14 @@ func (c edgeCredentials) hasAssetStoreKey() bool {
 	return c.AssetStoreAccessKeyID != "" && c.AssetStoreSecretAccessKey != ""
 }
 
-func adoptedEdgeKey(tier environment.Tier, kind edge.Kind) keyvalue.Key {
+func adoptedEdgeKey(tier environment.Tier, kind edge.Kind) records.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(kind), adoptedEdgeRecord)
 }
 
 func adoptEdgeOffers(
 	ctx context.Context,
 	c *clients,
-	records keyvalue.Store,
+	store records.Store,
 	tier environment.Tier,
 	kind edge.Kind,
 	out edge.BootstrapOutput,
@@ -65,7 +65,7 @@ func adoptEdgeOffers(
 		return nil
 	}
 	say := ensureProgress(runProgress)
-	stored, storedCredentials, err := readAdoptedEdge(ctx, c, records, tier, kind)
+	stored, storedCredentials, err := readAdoptedEdge(ctx, c, store, tier, kind)
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func adoptEdgeOffers(
 	if reflect.DeepEqual(adopted, stored) {
 		return nil
 	}
-	return writeAdoptedEdge(ctx, records, tier, kind, adopted)
+	return writeAdoptedEdge(ctx, store, tier, kind, adopted)
 }
 
 func edgeCredentialUnrecorded(c *clients, tier environment.Tier, kind edge.Kind, surface, scriptName string) error {
@@ -119,9 +119,9 @@ func edgeCredentialUnrecorded(c *clients, tier environment.Tier, kind edge.Kind,
 		kind, surface, scriptName, c.EdgeCredentialsSecret(tier, kind), scriptName, kind)
 }
 
-func readAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
+func readAdoptedEdge(ctx context.Context, c *clients, store records.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
 	var adopted adoptedEdge
-	entry, err := keyvalue.ReadOrEmpty(ctx, records, adoptedEdgeKey(tier, kind))
+	entry, err := records.ReadOrEmpty(ctx, store, adoptedEdgeKey(tier, kind))
 	if err != nil {
 		return adoptedEdge{}, edgeCredentials{}, fmt.Errorf("read the %s edge's adopted workers: %w", kind, err)
 	}
@@ -194,16 +194,16 @@ func ensurePurgeSeed(ctx context.Context, c *clients, tier environment.Tier, kin
 	return err
 }
 
-func writeAdoptedEdge(ctx context.Context, records keyvalue.Store, tier environment.Tier, kind edge.Kind, adopted adoptedEdge) error {
+func writeAdoptedEdge(ctx context.Context, store records.Store, tier environment.Tier, kind edge.Kind, adopted adoptedEdge) error {
 	key := adoptedEdgeKey(tier, kind)
-	entry, err := keyvalue.ReadOrEmpty(ctx, records, key)
+	entry, err := records.ReadOrEmpty(ctx, store, key)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", key, err)
 	}
 	if entry.Value, err = json.Marshal(adopted); err != nil {
 		return fmt.Errorf("record %s: %w", key, err)
 	}
-	if _, err := records.Write(ctx, entry); err != nil {
+	if _, err := store.Write(ctx, entry); err != nil {
 		return fmt.Errorf("record %s: %w", key, err)
 	}
 	return nil
@@ -215,8 +215,8 @@ func notBootstrapped(tier environment.Tier, kind edge.Kind, missing string) erro
 		kind, missing, provider.BootstrapCommand(tier))
 }
 
-func requireAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
-	adopted, credentials, err := readAdoptedEdge(ctx, c, records, tier, kind)
+func requireAdoptedEdge(ctx context.Context, c *clients, store records.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
+	adopted, credentials, err := readAdoptedEdge(ctx, c, store, tier, kind)
 	if err != nil {
 		return adoptedEdge{}, edgeCredentials{}, err
 	}
@@ -250,8 +250,8 @@ func readPurgeSeed(ctx context.Context, c *clients, tier environment.Tier, kind 
 	return string(seed), nil
 }
 
-func forgetEdgeOffers(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) error {
-	if err := keyvalue.Forget(ctx, records, adoptedEdgeKey(tier, kind)); err != nil {
+func forgetEdgeOffers(ctx context.Context, c *clients, store records.Store, tier environment.Tier, kind edge.Kind) error {
+	if err := records.Forget(ctx, store, adoptedEdgeKey(tier, kind)); err != nil {
 		return fmt.Errorf("forget the %s edge's adopted workers: %w", kind, err)
 	}
 	service, err := c.Secrets()

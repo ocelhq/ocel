@@ -18,9 +18,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/secret"
 	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/valkey"
 )
 
 const (
@@ -53,9 +53,9 @@ func (b *Backend) Resolve(ctx context.Context, project string, resources []decla
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	wanted := make([]kvstore.Settings, 0, len(resources))
+	wanted := make([]valkey.Settings, 0, len(resources))
 	for _, resource := range resources {
-		one, err := kvstore.ReadSettings(resource.KV)
+		one, err := valkey.ReadSettings(resource.KV)
 		if err != nil {
 			return nil, fmt.Errorf("kv %q: %w", resource.Name, err)
 		}
@@ -87,23 +87,23 @@ func storeKey(name string) string {
 	return naming.Sanitize(name) + "-" + hex.EncodeToString(sum[:4])
 }
 
-func (b *Backend) runStore(ctx context.Context, engine docker.Engine, project, name string, wanted kvstore.Settings) (*store, error) {
+func (b *Backend) runStore(ctx context.Context, engine docker.Engine, project, name string, wanted valkey.Settings) (*store, error) {
 	password, err := secret.Ensure(filepath.Join(b.secretsDir, "kv-"+storeKey(name)+"-password"),
 		secret.Purpose{Owner: fmt.Sprintf("kv %q", name), Noun: "password"})
 	if err != nil {
 		return nil, err
 	}
-	valkey := kvstore.Valkey{Password: password, MemoryBytes: wanted.MemoryBytes, Eviction: wanted.Eviction}
+	server := valkey.Server{Password: password, MemoryBytes: wanted.MemoryBytes, Eviction: wanted.Eviction}
 	image, _ := images.Valkey(wanted.Version)
 	containerName := docker.Name(project, backend, storeKey(name), wanted.Version)
 	spec := docker.Spec{
 		Name:       containerName,
 		Image:      image,
-		Args:       valkey.Args(),
-		User:       kvstore.ValkeyRunsAs,
-		Port:       kvstore.ValkeyPort,
+		Args:       server.Args(),
+		User:       valkey.RunsAs,
+		Port:       valkey.Port,
 		Volume:     containerName,
-		VolumePath: kvstore.ValkeyData,
+		VolumePath: valkey.DataDir,
 		Labels:     docker.Labels(project, backend),
 	}
 	running, known := b.stores[name]
@@ -123,7 +123,7 @@ func (b *Backend) runStore(ctx context.Context, engine docker.Engine, project, n
 	container := running.container
 	if !running.ready {
 		err := docker.WaitReady(ctx, engine, container.ID, readyIn, func(ctx context.Context) error {
-			_, err := engine.ExecInput(ctx, container.ID, password, kvstore.ValkeyReadyProbe()...)
+			_, err := engine.ExecInput(ctx, container.ID, password, valkey.ReadyProbe()...)
 			return err
 		})
 		if err != nil {
@@ -146,7 +146,7 @@ func bind(resource declaration.Resource, running *store) (binding.Resolved, erro
 	return binding.Encode(resource.Type, &bindingsv1.Binding{
 		Name: resource.Name,
 		Properties: &bindingsv1.Binding_Kv{Kv: &bindingsv1.KvProperties{
-			Host: host, Port: int32(port), Username: kvstore.ValkeyUsername, Password: running.password,
+			Host: host, Port: int32(port), Username: valkey.Username, Password: running.password,
 		}},
 	})
 }

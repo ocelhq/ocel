@@ -11,9 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -38,32 +38,32 @@ type originBalancer interface {
 }
 
 type originWildcards struct {
-	keyValues     keyvalue.Store
+	keyValues     records.Store
 	certificates  provider.Certificates
 	openDNS       func() edge.DNSRecords
 	balancer      originBalancer
 	readWorkerCAs func(ctx context.Context, tier environment.Tier) ([]string, error)
 }
 
-func originWildcardKey(tier environment.Tier) keyvalue.Key {
+func originWildcardKey(tier environment.Tier) records.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(cloudflare.Kind), originWildcardRecord)
 }
 
-func (w originWildcards) read(ctx context.Context, tier environment.Tier) (keyvalue.Entry, originWildcard, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, w.keyValues, originWildcardKey(tier))
+func (w originWildcards) read(ctx context.Context, tier environment.Tier) (records.Entry, originWildcard, error) {
+	entry, err := records.ReadOrEmpty(ctx, w.keyValues, originWildcardKey(tier))
 	if err != nil {
-		return keyvalue.Entry{}, originWildcard{}, fmt.Errorf("read which origin domain tier %s reaches its deployments under: %w", tier, err)
+		return records.Entry{}, originWildcard{}, fmt.Errorf("read which origin domain tier %s reaches its deployments under: %w", tier, err)
 	}
 	var recorded originWildcard
 	if len(entry.Value) > 0 {
 		if err := json.Unmarshal(entry.Value, &recorded); err != nil {
-			return keyvalue.Entry{}, originWildcard{}, fmt.Errorf("decode which origin domain tier %s reaches its deployments under: %w", tier, err)
+			return records.Entry{}, originWildcard{}, fmt.Errorf("decode which origin domain tier %s reaches its deployments under: %w", tier, err)
 		}
 	}
 	return entry, recorded, nil
 }
 
-func (w originWildcards) write(ctx context.Context, tier environment.Tier, entry keyvalue.Entry, recorded originWildcard) error {
+func (w originWildcards) write(ctx context.Context, tier environment.Tier, entry records.Entry, recorded originWildcard) error {
 	var err error
 	if entry.Value, err = json.Marshal(recorded); err != nil {
 		return err
@@ -90,7 +90,7 @@ func (w originWildcards) update(ctx context.Context, tier environment.Tier, chan
 			return recorded, nil
 		}
 		err = w.write(ctx, tier, entry, changed)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -231,7 +231,7 @@ func (w originWildcards) destroy(ctx context.Context, tier environment.Tier) err
 	if err := w.certificates.Discard(ctx, recorded.Certificate, progress.Discard()); err != nil {
 		return err
 	}
-	return keyvalue.Forget(ctx, w.keyValues, originWildcardKey(tier))
+	return records.Forget(ctx, w.keyValues, originWildcardKey(tier))
 }
 
 func (w originWildcards) servedBehindWorker(ctx context.Context, tier environment.Tier) ([]string, error) {

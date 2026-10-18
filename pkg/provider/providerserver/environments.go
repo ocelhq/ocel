@@ -8,9 +8,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -91,7 +92,7 @@ func formatHostURLs(hostnames []string) []string {
 	return urls
 }
 
-func readPreviewRemoval(ctx context.Context, store keyvalue.Store, slug, pointer string) (router.PointerRemoval, error) {
+func readPreviewRemoval(ctx context.Context, store records.Store, slug, pointer string) (router.PointerRemoval, error) {
 	meta, err := stackrecords.ReadEnvironmentMeta(ctx, store, environment.TierPreview, slug, pointer)
 	if err != nil {
 		return router.PointerRemoval{}, err
@@ -129,7 +130,7 @@ func (h *handlers) GetEnvironment(ctx context.Context, req *contractv1.GetEnviro
 }
 
 func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	root := RootSpan(naming.SpanEnvironment, req.GetEnvironment().GetIdentity(),
+	root := RootSpan(SpanEnvironment, req.GetEnvironment().GetIdentity(),
 		progress.Removing.Title("the preview environment of "+req.GetSlug()), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
 		pointer, err := envName(req.GetEnvironment())
@@ -193,7 +194,7 @@ func (h *handlers) removePreview(ctx context.Context, lease provider.Lease, req 
 	if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {
 		return err
 	}
-	if err := keyvalue.Forget(ctx, session.provider.KeyValues(), stackrecords.EnvironmentKey(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
+	if err := records.Forget(ctx, session.provider.KeyValues(), stackrecords.EnvironmentKey(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
 		return err
 	}
 	if len(removed.RemovedPromotionIDs) > 0 {
@@ -202,7 +203,7 @@ func (h *handlers) removePreview(ctx context.Context, lease provider.Lease, req 
 	return nil
 }
 
-func refuseUnconfirmedLifecycle(ctx context.Context, store keyvalue.Store, slug, preview string, confirmed environmentv1.Lifecycle) error {
+func refuseUnconfirmedLifecycle(ctx context.Context, store records.Store, slug, preview string, confirmed environmentv1.Lifecycle) error {
 	meta, err := stackrecords.ReadEnvironmentMeta(ctx, store, environment.TierPreview, slug, preview)
 	if err != nil {
 		return err
@@ -216,8 +217,8 @@ func refuseUnconfirmedLifecycle(ctx context.Context, store keyvalue.Store, slug,
 	return nil
 }
 
-func refuseUnrecordedPreview(ctx context.Context, store keyvalue.Store, slug, preview string) error {
-	record, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.EnvironmentKey(environment.TierPreview, slug, preview))
+func refuseUnrecordedPreview(ctx context.Context, store records.Store, slug, preview string) error {
+	record, err := records.ReadOrEmpty(ctx, store, stackrecords.EnvironmentKey(environment.TierPreview, slug, preview))
 	if err != nil {
 		return err
 	}
@@ -285,7 +286,7 @@ func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, pre
 		if record.Environment != preview {
 			continue
 		}
-		if record.Owner == variablestore.OwnerOcel || record.Owner == naming.InlineRecordOwner {
+		if record.Owner == variablestore.OwnerOcel || record.Owner == bindings.InlineRecordOwner {
 			kept = append(kept, record.Name)
 		}
 	}

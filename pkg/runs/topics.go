@@ -9,10 +9,10 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 var _ topicv1connect.TopicServiceHandler = Topics{}
@@ -121,7 +121,7 @@ func (t Topics) eachDeadLetter(ctx context.Context, topic, consumer string, exec
 	if len(executions) > 0 {
 		for _, execution := range executions {
 			run, err := t.engine.cfg.Store.ReadRun(ctx, topic, execution)
-			if errors.Is(err, keyvalue.ErrNotFound) {
+			if errors.Is(err, records.ErrNotFound) {
 				continue
 			}
 			if err != nil {
@@ -166,7 +166,7 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 		again.StartedAt, again.FinishedAt, again.LeaseUntil, again.Held = time.Time{}, time.Time{}, time.Time{}, ""
 		again.Delivery = NewMessageID(now)
 		written, err := t.engine.write(ctx, again)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			return nil
 		}
 		if err != nil {
@@ -190,7 +190,7 @@ func (t Topics) PurgeDeadLetters(ctx context.Context, req *topicv1.PurgeDeadLett
 	var purged int64
 	err := t.eachDeadLetter(ctx, req.GetTopic(), req.GetConsumer(), req.GetExecutions(), func(letter Run) error {
 		err := t.engine.cfg.Store.DeleteRun(ctx, letter)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			return nil
 		}
 		if err == nil {

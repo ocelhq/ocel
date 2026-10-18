@@ -9,9 +9,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -213,7 +213,7 @@ func (r *deployRun) readPreviewHosts(ctx context.Context, progress progress.Log,
 func (r *deployRun) rememberProject(ctx context.Context) error {
 	var base []string
 	read := false
-	return keyvalue.Change(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.spec.Tier, r.spec.Slug), func(entry keyvalue.Entry) ([]byte, bool, error) {
+	return records.Change(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.spec.Tier, r.spec.Slug), func(entry records.Entry) ([]byte, bool, error) {
 		current, err := decodeProject(entry)
 		if err != nil {
 			return nil, false, err
@@ -232,7 +232,7 @@ func (r *deployRun) rememberProject(ctx context.Context) error {
 	})
 }
 
-func decodeProject(entry keyvalue.Entry) (stackrecords.Project, error) {
+func decodeProject(entry records.Entry) (stackrecords.Project, error) {
 	var project stackrecords.Project
 	if len(entry.Value) == 0 {
 		return project, nil

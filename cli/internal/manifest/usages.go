@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -47,7 +48,7 @@ func FindUsages(ctx context.Context, cfg *project.Project, resources []declarati
 	}
 	declared := make([]attribution.Declaration, 0, len(resources))
 	for _, r := range resources {
-		if _, bindable := naming.BindableAs(r.Type); bindable {
+		if _, bindable := bindings.BindableAs(r.Type); bindable {
 			declared = append(declared, attribution.Declaration{Type: r.Type, Name: r.Name, Source: r.Source})
 		}
 	}

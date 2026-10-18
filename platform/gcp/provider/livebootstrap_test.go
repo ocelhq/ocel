@@ -20,10 +20,11 @@ import (
 	"google.golang.org/api/serviceusage/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -874,15 +875,15 @@ func TestLiveRemovingATierBesideItsSiblingForgetsEveryRecordItKeptAndNoneOfTheSi
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", tier, err)
 	}
-	kept := map[environment.Tier]keyvalue.Key{}
+	kept := map[environment.Tier]records.Key{}
 	for _, each := range []environment.Tier{environment.TierProduction, tier} {
-		kept[each] = keyvalue.Partition{Tier: each, Root: keyvalue.RootEnvSourceDigestKey}.Key("digestkey")
-		if _, err := p.KeyValues().Write(ctx, keyvalue.Entry{Key: kept[each], Value: []byte(`{"sealed":"c2VhbGVk"}`)}); err != nil {
+		kept[each] = records.Partition{Tier: each, Root: envsource.RootDigestKey}.Key("digestkey")
+		if _, err := p.KeyValues().Write(ctx, records.Entry{Key: kept[each], Value: []byte(`{"sealed":"c2VhbGVk"}`)}); err != nil {
 			t.Fatalf("Write(%s) = %v", kept[each], err)
 		}
 	}
 	t.Cleanup(func() {
-		if err := keyvalue.Forget(ctx, p.KeyValues(), kept[environment.TierProduction]); err != nil {
+		if err := records.Forget(ctx, p.KeyValues(), kept[environment.TierProduction]); err != nil {
 			t.Errorf("Forget(%s) = %v", kept[environment.TierProduction], err)
 		}
 	})
@@ -890,7 +891,7 @@ func TestLiveRemovingATierBesideItsSiblingForgetsEveryRecordItKeptAndNoneOfTheSi
 	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", tier, err)
 	}
-	if _, err := p.KeyValues().Read(ctx, kept[tier]); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := p.KeyValues().Read(ctx, kept[tier]); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("Read(%s) after its tier was removed = %v, want it gone: it was sealed under the key the removal destroyed, and the database outlives the tier while %s stays",
 			kept[tier], err, environment.TierProduction)
 	}

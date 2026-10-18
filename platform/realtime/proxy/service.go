@@ -7,7 +7,7 @@ import (
 	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	realtimev1 "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/realtime/v1/realtimev1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -42,7 +42,7 @@ func (s *Service) Publish(ctx context.Context, req *realtimev1.PublishRequest) (
 }
 
 func (s *Service) readProperties(name string) (*bindingsv1.RealtimeProperties, error) {
-	key := naming.ResourceEnvName(bindingsv1.BindingType_BINDING_TYPE_REALTIME, name)
+	key := bindings.ResourceEnvName(bindingsv1.BindingType_BINDING_TYPE_REALTIME, name)
 	raw := s.records.Value(key)
 	if raw == "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this runtime holds no realtime binding for %q, so it has nowhere to publish", name))

@@ -11,20 +11,20 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type listedEntries struct {
-	keyvalue.Store
+	records.Store
 	mu     sync.Mutex
 	listed int
 }
 
-func (l *listedEntries) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (l *listedEntries) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	entries, err := l.Store.List(ctx, in, under...)
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -32,7 +32,7 @@ func (l *listedEntries) List(ctx context.Context, in keyvalue.Partition, under .
 	return entries, err
 }
 
-func writeStack(t *testing.T, store keyvalue.Store, tier environment.Tier, name naming.StackName, recorded stackrecords.Stack) {
+func writeStack(t *testing.T, store records.Store, tier environment.Tier, name naming.StackName, recorded stackrecords.Stack) {
 	t.Helper()
 	if err := stackrecords.Write(context.Background(), store, tier, "shop", name, recorded); err != nil {
 		t.Fatal(err)
@@ -152,11 +152,11 @@ func TestTheImageListOfAnAppLeavesTheStacksOfTheProjectAsTheyWere(t *testing.T) 
 }
 
 type refusingRemoval struct {
-	keyvalue.Store
-	refused func(keyvalue.Key) bool
+	records.Store
+	refused func(records.Key) bool
 }
 
-func (r refusingRemoval) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (r refusingRemoval) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
 	if r.refused(key) {
 		return errors.New("the store refused the removal")
 	}
@@ -166,11 +166,11 @@ func (r refusingRemoval) Remove(ctx context.Context, key keyvalue.Key, expected 
 func TestAForgetThatFailsLeavesTheRecordARetryFinds(t *testing.T) {
 	t.Parallel()
 	web := naming.AppStack("prod", "web", naming.NewReleaseToken("b1", ""))
-	for name, refused := range map[string]func(keyvalue.Key) bool{
-		"the record": func(key keyvalue.Key) bool {
+	for name, refused := range map[string]func(records.Key) bool{
+		"the record": func(key records.Key) bool {
 			return key.String() == stackrecords.StackKey(environment.TierProduction, "shop", web).String()
 		},
-		"the images entry": func(key keyvalue.Key) bool {
+		"the images entry": func(key records.Key) bool {
 			return key.String() != stackrecords.StackKey(environment.TierProduction, "shop", web).String()
 		},
 	} {
@@ -233,7 +233,7 @@ func TestAStackRecordHoldsNoSecretOfTheBindingsItNames(t *testing.T) {
 		t.Fatalf("Write: %v", err)
 	}
 
-	raw, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.StackKey(environment.TierProduction, "shop", name))
+	raw, err := records.ReadOrEmpty(ctx, store, stackrecords.StackKey(environment.TierProduction, "shop", name))
 	if err != nil {
 		t.Fatalf("read the raw record: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestAStackRecordKeepsOnlyTheBindingPropertiesItKnowsAreNotSecret(t *testing
 		t.Fatalf("Write: %v", err)
 	}
 
-	raw, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.StackKey(environment.TierProduction, "shop", name))
+	raw, err := records.ReadOrEmpty(ctx, store, stackrecords.StackKey(environment.TierProduction, "shop", name))
 	if err != nil {
 		t.Fatalf("read the raw record: %v", err)
 	}

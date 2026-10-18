@@ -1,10 +1,11 @@
-package naming
+package bindings
 
 import (
 	"reflect"
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -12,11 +13,11 @@ import (
 func TestKindOf(t *testing.T) {
 	for _, tc := range []struct {
 		typ  bindingsv1.BindingType
-		want Kind
+		want naming.Kind
 		ok   bool
 	}{
-		{bindingsv1.BindingType_BINDING_TYPE_POSTGRES, KindDatabase, true},
-		{bindingsv1.BindingType_BINDING_TYPE_BUCKET, KindBucket, true},
+		{bindingsv1.BindingType_BINDING_TYPE_POSTGRES, naming.KindDatabase, true},
+		{bindingsv1.BindingType_BINDING_TYPE_BUCKET, naming.KindBucket, true},
 		{bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED, "", false},
 		{bindingsv1.BindingType(99), "", false},
 	} {
@@ -106,8 +107,8 @@ func TestBindingTypeOf(t *testing.T) {
 		{&bindingsv1.Binding{}, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 		{nil, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 	} {
-		if got := BindingTypeOf(tc.binding); got != tc.want {
-			t.Errorf("BindingTypeOf(a binding whose properties are %T) = %v, want %v", tc.binding.GetProperties(), got, tc.want)
+		if got := TypeOf(tc.binding); got != tc.want {
+			t.Errorf("TypeOf(a binding whose properties are %T) = %v, want %v", tc.binding.GetProperties(), got, tc.want)
 		}
 	}
 }
@@ -116,23 +117,23 @@ func TestBindingProperties(t *testing.T) {
 	binding := &bindingsv1.Binding{Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 		Host: "h", Port: 5433, TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
 	}}}
-	if got := BindingPropertyNames(binding); !slices.Equal(got, []string{"database", "host", "password", "port", "tlsCa", "tlsMode", "tlsServerName", "url", "username"}) {
-		t.Errorf("BindingPropertyNames = %v", got)
+	if got := PropertyNames(binding); !slices.Equal(got, []string{"database", "host", "password", "port", "tlsCa", "tlsMode", "tlsServerName", "url", "username"}) {
+		t.Errorf("PropertyNames = %v", got)
 	}
-	if got, ok := BindingProperty(binding, "port"); !ok || got != float64(5433) {
-		t.Errorf("BindingProperty(port) = %v, %v", got, ok)
+	if got, ok := Property(binding, "port"); !ok || got != float64(5433) {
+		t.Errorf("Property(port) = %v, %v", got, ok)
 	}
-	if got, ok := BindingProperty(binding, "tlsMode"); !ok || got != "POSTGRES_TLS_MODE_VERIFY_FULL" {
-		t.Errorf("BindingProperty(tlsMode) = %v, %v, want the name the record's json uses", got, ok)
+	if got, ok := Property(binding, "tlsMode"); !ok || got != "POSTGRES_TLS_MODE_VERIFY_FULL" {
+		t.Errorf("Property(tlsMode) = %v, %v, want the name the record's json uses", got, ok)
 	}
-	if got, ok := BindingProperty(binding, "host"); !ok || got != "h" {
-		t.Errorf("BindingProperty(host) = %v, %v", got, ok)
+	if got, ok := Property(binding, "host"); !ok || got != "h" {
+		t.Errorf("Property(host) = %v, %v", got, ok)
 	}
-	if _, ok := BindingProperty(binding, "bucket"); ok {
-		t.Error("BindingProperty(bucket) found on a postgres binding")
+	if _, ok := Property(binding, "bucket"); ok {
+		t.Error("Property(bucket) found on a postgres binding")
 	}
-	if got := BindingPropertyNames(&bindingsv1.Binding{}); got != nil {
-		t.Errorf("BindingPropertyNames(typeless) = %v, want nil", got)
+	if got := PropertyNames(&bindingsv1.Binding{}); got != nil {
+		t.Errorf("PropertyNames(typeless) = %v, want nil", got)
 	}
 }
 
@@ -148,40 +149,40 @@ func TestCustomBindingProperties(t *testing.T) {
 	}
 	binding := &bindingsv1.Binding{Properties: &bindingsv1.Binding_Custom{Custom: custom}}
 
-	if got := BindingPropertyNames(binding); !slices.Equal(got, []string{"attached", "maxConns", "subnetIds", "vpcId"}) {
-		t.Errorf("BindingPropertyNames = %v", got)
+	if got := PropertyNames(binding); !slices.Equal(got, []string{"attached", "maxConns", "subnetIds", "vpcId"}) {
+		t.Errorf("PropertyNames = %v", got)
 	}
-	if got, ok := BindingProperty(binding, "subnetIds"); !ok || !reflect.DeepEqual(got, []any{"subnet-a", "subnet-b"}) {
-		t.Errorf("BindingProperty(subnetIds) = %v, %v", got, ok)
+	if got, ok := Property(binding, "subnetIds"); !ok || !reflect.DeepEqual(got, []any{"subnet-a", "subnet-b"}) {
+		t.Errorf("Property(subnetIds) = %v, %v", got, ok)
 	}
 	for name, want := range map[string]any{"vpcId": "vpc-1", "attached": true, "maxConns": float64(20)} {
-		if got, ok := BindingProperty(binding, name); !ok || got != want {
-			t.Errorf("BindingProperty(%s) = %v, %v, want %v", name, got, ok, want)
+		if got, ok := Property(binding, name); !ok || got != want {
+			t.Errorf("Property(%s) = %v, %v, want %v", name, got, ok, want)
 		}
 	}
-	if _, ok := BindingProperty(binding, "host"); ok {
-		t.Error("BindingProperty(host) found on a record that has no such key")
+	if _, ok := Property(binding, "host"); ok {
+		t.Error("Property(host) found on a record that has no such key")
 	}
 }
 
 func TestATaskSharesItsNamespaceWithTopics(t *testing.T) {
 	topic, _ := KindOf(bindingsv1.BindingType_BINDING_TYPE_TOPIC)
 	task, _ := KindOf(bindingsv1.BindingType_BINDING_TYPE_TASK)
-	if topic != KindTopic || task != KindTopic {
-		t.Errorf("KindOf(topic) = %q, KindOf(task) = %q, want both %q: a task is a topic with one consumer, and the two names share one namespace", topic, task, KindTopic)
+	if topic != naming.KindTopic || task != naming.KindTopic {
+		t.Errorf("KindOf(topic) = %q, KindOf(task) = %q, want both %q: a task is a topic with one consumer, and the two names share one namespace", topic, task, naming.KindTopic)
 	}
 }
 
 func TestAKVStoreIsAComponentOfItsOwn(t *testing.T) {
 	kind, bound := KindOf(bindingsv1.BindingType_BINDING_TYPE_KV)
-	if !bound || kind != KindKV || !kind.Valid() || kind.Component() != "kv" {
-		t.Errorf("KindOf(kv) = %q (bound %v), component %q, want %q with component \"kv\"", kind, bound, kind.Component(), KindKV)
+	if !bound || kind != naming.KindKV || !kind.Valid() || kind.Component() != "kv" {
+		t.Errorf("KindOf(kv) = %q (bound %v), component %q, want %q with component \"kv\"", kind, bound, kind.Component(), naming.KindKV)
 	}
 }
 
 func TestARealtimeResourceIsAComponentOfItsOwn(t *testing.T) {
 	kind, bound := KindOf(bindingsv1.BindingType_BINDING_TYPE_REALTIME)
-	if !bound || kind != KindRealtime || !kind.Valid() || kind.Component() != "realtime" {
-		t.Errorf("KindOf(realtime) = %q (bound %v), component %q, want %q with component \"realtime\"", kind, bound, kind.Component(), KindRealtime)
+	if !bound || kind != naming.KindRealtime || !kind.Valid() || kind.Component() != "realtime" {
+		t.Errorf("KindOf(realtime) = %q (bound %v), component %q, want %q with component \"realtime\"", kind, bound, kind.Component(), naming.KindRealtime)
 	}
 }

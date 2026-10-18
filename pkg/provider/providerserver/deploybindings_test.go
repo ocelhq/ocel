@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -37,8 +37,8 @@ func externalBindingRequest(name, external string, kind bindingsv1.BindingType) 
 }
 
 func declaredAs(kind bindingsv1.BindingType) resourcesv1.ResourceType {
-	for _, declared := range naming.BindableResourceTypes() {
-		if bound, _ := naming.BindableAs(declared); bound == kind {
+	for _, declared := range bindings.BindableResourceTypes() {
+		if bound, _ := bindings.BindableAs(declared); bound == kind {
 			return declared
 		}
 	}
@@ -339,7 +339,7 @@ func TestADryRunAdmitsTheRecordAnInlineBindingWritesOnlyAtDeploy(t *testing.T) {
 	})
 
 	t.Run("a deploy still refuses it missing", func(t *testing.T) {
-		req := externalBindingRequest("orders", naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+		req := externalBindingRequest("orders", bindings.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
 		message := refusedDeploy(t, req, nil)
 		if !strings.Contains(message, "ocel:postgres.orders") {
 			t.Errorf("refusal = %q, want the record named", message)

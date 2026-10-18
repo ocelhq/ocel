@@ -10,11 +10,11 @@ import (
 	sqladmin "google.golang.org/api/sqladmin/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -256,7 +256,7 @@ func TestADatabaseAlreadyInPlaceIsBoundWithTheSamePasswordAndNothingWritten(t *t
 func TestADatabaseWhosePasswordWasLostIsGivenANewOne(t *testing.T) {
 	h := servingPostgres(t)
 	first := h.provision(t, "17")
-	if err := keyvalue.Forget(context.Background(), h.records, h.instances.passwordKey("orders")); err != nil {
+	if err := records.Forget(context.Background(), h.records, h.instances.passwordKey("orders")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -273,7 +273,7 @@ func TestADatabaseWhosePasswordWasLostIsGivenANewOne(t *testing.T) {
 func TestAPasswordCloudSQLRefusedToSetIsSetByTheNextDeploy(t *testing.T) {
 	h := servingPostgres(t)
 	h.provision(t, "17")
-	if err := keyvalue.Forget(context.Background(), h.records, h.instances.passwordKey("orders")); err != nil {
+	if err := records.Forget(context.Background(), h.records, h.instances.passwordKey("orders")); err != nil {
 		t.Fatal(err)
 	}
 	h.server.refusedSet = 1
@@ -336,7 +336,7 @@ func TestRemovingADatabaseDeletesItsInstanceAndForgetsItsPassword(t *testing.T) 
 	if !slices.Equal(h.server.deleted, []string{instance}) {
 		t.Errorf("Cloud SQL deleted %v, want %s", h.server.deleted, instance)
 	}
-	if _, err := h.records.Read(context.Background(), h.instances.passwordKey("orders")); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := h.records.Read(context.Background(), h.instances.passwordKey("orders")); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("the recorded password reads %v after removal, want it gone with the database", err)
 	}
 	if err := h.instances.remove(context.Background(), provider.Binding{Type: provider.BindingPostgres, Name: "orders"}, nil); err != nil {
@@ -425,7 +425,7 @@ func TestADatabaseMadeSmallerThanItsTierPlansAnUpdateNamingWhatResizes(t *testin
 func TestADatabaseWhosePasswordWasLostPlansAnUpdate(t *testing.T) {
 	h := servingPostgres(t)
 	h.provision(t, "17")
-	if err := keyvalue.Forget(context.Background(), h.records, h.instances.passwordKey("orders")); err != nil {
+	if err := records.Forget(context.Background(), h.records, h.instances.passwordKey("orders")); err != nil {
 		t.Fatal(err)
 	}
 

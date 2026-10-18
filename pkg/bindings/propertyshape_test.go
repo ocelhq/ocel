@@ -1,4 +1,4 @@
-package naming
+package bindings
 
 import (
 	"reflect"
@@ -26,8 +26,8 @@ func TestBindingPropertyShapes(t *testing.T) {
 			Name:       "orders",
 			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{}},
 		}
-		if got := BindingPropertyShapes(empty); !reflect.DeepEqual(got, want) {
-			t.Errorf("BindingPropertyShapes(empty postgres) = %v, want %v", got, want)
+		if got := PropertyShapes(empty); !reflect.DeepEqual(got, want) {
+			t.Errorf("PropertyShapes(empty postgres) = %v, want %v", got, want)
 		}
 
 		filled := &bindingsv1.Binding{
@@ -36,8 +36,8 @@ func TestBindingPropertyShapes(t *testing.T) {
 				Host: "db.internal", Port: 5432, Database: "app", Username: "app", Password: "pw",
 			}},
 		}
-		if got := BindingPropertyShapes(filled); !reflect.DeepEqual(got, want) {
-			t.Errorf("BindingPropertyShapes(filled postgres) = %v, want %v", got, want)
+		if got := PropertyShapes(filled); !reflect.DeepEqual(got, want) {
+			t.Errorf("PropertyShapes(filled postgres) = %v, want %v", got, want)
 		}
 	})
 
@@ -67,14 +67,14 @@ func TestBindingPropertyShapes(t *testing.T) {
 			{Name: "subnetIds", JSONType: JSONTypeString, List: true},
 			{Name: "tags", JSONType: JSONTypeObject},
 		}
-		if got := BindingPropertyShapes(binding); !reflect.DeepEqual(got, want) {
-			t.Errorf("BindingPropertyShapes(custom) = %v, want %v", got, want)
+		if got := PropertyShapes(binding); !reflect.DeepEqual(got, want) {
+			t.Errorf("PropertyShapes(custom) = %v, want %v", got, want)
 		}
 	})
 
 	t.Run("a record with no properties describes nothing", func(t *testing.T) {
-		if got := BindingPropertyShapes(&bindingsv1.Binding{Name: "orders"}); got != nil {
-			t.Errorf("BindingPropertyShapes(bare) = %v, want nil", got)
+		if got := PropertyShapes(&bindingsv1.Binding{Name: "orders"}); got != nil {
+			t.Errorf("PropertyShapes(bare) = %v, want nil", got)
 		}
 	})
 }

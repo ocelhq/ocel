@@ -7,11 +7,12 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type distributionRecords struct {
-	keyValues keyvalue.Store
+	keyValues records.Store
 	tier      environment.Tier
 }
 
@@ -20,12 +21,12 @@ type recordedFront struct {
 	DomainName string `json:"domainName"`
 }
 
-func (r distributionRecords) key(name string) keyvalue.Key {
-	return keyvalue.Partition{Tier: r.tier, Root: keyvalue.RootRouters, Path: []string{string(Kind)}}.Key("distribution", name)
+func (r distributionRecords) key(name string) records.Key {
+	return records.Partition{Tier: r.tier, Root: stackrecords.RootRouters, Path: []string{string(Kind)}}.Key("distribution", name)
 }
 
 func (r distributionRecords) find(ctx context.Context, name string) (front, bool, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, r.keyValues, r.key(name))
+	entry, err := records.ReadOrEmpty(ctx, r.keyValues, r.key(name))
 	if err != nil {
 		return front{}, false, fmt.Errorf("read the distribution recorded for %s: %w", name, err)
 	}
@@ -45,7 +46,7 @@ func (r distributionRecords) record(ctx context.Context, name string, served fro
 		return err
 	}
 	for range invalidationAttempts {
-		entry, err := keyvalue.ReadOrEmpty(ctx, r.keyValues, r.key(name))
+		entry, err := records.ReadOrEmpty(ctx, r.keyValues, r.key(name))
 		if err != nil {
 			return fmt.Errorf("record distribution %s for %s: %w", served.id, name, err)
 		}
@@ -54,7 +55,7 @@ func (r distributionRecords) record(ctx context.Context, name string, served fro
 		}
 		entry.Value = encoded
 		if _, err := r.keyValues.Write(ctx, entry); err != nil {
-			if errors.Is(err, keyvalue.ErrStale) {
+			if errors.Is(err, records.ErrStale) {
 				continue
 			}
 			return fmt.Errorf("record distribution %s for %s: %w", served.id, name, err)
@@ -65,7 +66,7 @@ func (r distributionRecords) record(ctx context.Context, name string, served fro
 }
 
 func (r distributionRecords) forget(ctx context.Context, name string) error {
-	if err := keyvalue.Forget(ctx, r.keyValues, r.key(name)); err != nil {
+	if err := records.Forget(ctx, r.keyValues, r.key(name)); err != nil {
 		return fmt.Errorf("forget the distribution recorded for %s: %w", name, err)
 	}
 	return nil

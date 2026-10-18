@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
+
+const RootSharedPhysicals records.Root = "sharedphysicals"
 
 const (
 	sharedPhysicalAttempts = 8
@@ -99,8 +101,8 @@ func containerCompute(hooks *ContainerHooks) compute[provider.AppContainer] {
 	}
 }
 
-func sharedPhysicalPartition(tier environment.Tier, slug string) keyvalue.Partition {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootSharedPhysicals, Path: []string{slug}}
+func sharedPhysicalPartition(tier environment.Tier, slug string) records.Partition {
+	return records.Partition{Tier: tier, Root: RootSharedPhysicals, Path: []string{slug}}
 }
 
 func provisionCompute[T any](
@@ -342,7 +344,7 @@ func (f *hookStacks) settleKept(ctx context.Context, ref provider.StackRef, phys
 func (f *hookStacks) changeShared(ctx context.Context, ref provider.StackRef, physical string, apply func(*sharedPhysical, time.Time) bool) (sharedPhysical, error) {
 	key := sharedPhysicalPartition(ref.Tier, ref.Project).Key(physical)
 	for attempt := 0; attempt < sharedPhysicalAttempts; {
-		stored, err := keyvalue.ReadOrEmpty(ctx, f.keyValues, key)
+		stored, err := records.ReadOrEmpty(ctx, f.keyValues, key)
 		if err != nil {
 			return sharedPhysical{}, fmt.Errorf("read the releases holding %s: %w", physical, err)
 		}
@@ -364,7 +366,7 @@ func (f *hookStacks) changeShared(ctx context.Context, ref provider.StackRef, ph
 			continue
 		}
 		err = f.writeShared(ctx, stored, entry)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			attempt++
 			continue
 		}
@@ -376,7 +378,7 @@ func (f *hookStacks) changeShared(ctx context.Context, ref provider.StackRef, ph
 	return sharedPhysical{}, fmt.Errorf("record the releases holding %s: it moved under %d attempts", physical, sharedPhysicalAttempts)
 }
 
-func (f *hookStacks) writeShared(ctx context.Context, stored keyvalue.Entry, entry sharedPhysical) error {
+func (f *hookStacks) writeShared(ctx context.Context, stored records.Entry, entry sharedPhysical) error {
 	if len(entry.Holders) > 0 || entry.Removing != nil {
 		var err error
 		if stored.Value, err = json.Marshal(entry); err != nil {
@@ -389,8 +391,8 @@ func (f *hookStacks) writeShared(ctx context.Context, stored keyvalue.Entry, ent
 		return nil
 	}
 	err := f.keyValues.Remove(ctx, stored.Key, stored.Revision)
-	if errors.Is(err, keyvalue.ErrNotFound) {
-		return keyvalue.ErrStale
+	if errors.Is(err, records.ErrNotFound) {
+		return records.ErrStale
 	}
 	return err
 }
@@ -406,7 +408,7 @@ func (s sharedPhysical) holdersAndRemoving() map[string]string {
 	return holders
 }
 
-func HasHolder(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, within func(naming.StackName) bool) (bool, error) {
+func HasHolder(ctx context.Context, store records.Store, tier environment.Tier, slug string, within func(naming.StackName) bool) (bool, error) {
 	entries, err := store.List(ctx, sharedPhysicalPartition(tier, slug))
 	if err != nil {
 		return false, fmt.Errorf("read the physical resources %s's releases share: %w", slug, err)
@@ -425,7 +427,7 @@ func HasHolder(ctx context.Context, store keyvalue.Store, tier environment.Tier,
 	return false, nil
 }
 
-func RecordUnrecordedHolders(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, within func(naming.StackName) bool) ([]naming.StackName, error) {
+func RecordUnrecordedHolders(ctx context.Context, store records.Store, tier environment.Tier, slug string, within func(naming.StackName) bool) ([]naming.StackName, error) {
 	entries, err := store.List(ctx, sharedPhysicalPartition(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read the physical resources %s's releases share: %w", slug, err)

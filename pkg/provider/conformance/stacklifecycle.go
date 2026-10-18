@@ -7,21 +7,23 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const updatedOrigin = "https://conformance.example.com"
 
 type stackLifecycle struct {
-	stacks provider.Stacks
-	store  keyvalue.Store
-	ref    provider.StackRef
+	stacks      provider.Stacks
+	store       records.Store
+	vendorRoots []records.Root
+	ref         provider.StackRef
 }
 
-func runStackLifecycle(t *testing.T, facts provider.Facts, stacks provider.Stacks, store keyvalue.Store) {
+func runStackLifecycle(t *testing.T, facts provider.Facts, stacks provider.Stacks, store records.Store, vendorRoots []records.Root) {
 	t.Helper()
 
 	resources := declared(facts.Bindings)
@@ -29,7 +31,7 @@ func runStackLifecycle(t *testing.T, facts provider.Facts, stacks provider.Stack
 		t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 	}
 	ctx := context.Background()
-	life := stackLifecycle{stacks: stacks, store: store, ref: provider.StackRef{
+	life := stackLifecycle{stacks: stacks, store: store, vendorRoots: vendorRoots, ref: provider.StackRef{
 		Project: "conformance",
 		Tier:    environment.TierPreview,
 		Name:    naming.InfraStack("lifecycle"),
@@ -162,16 +164,16 @@ func (l stackLifecycle) snapshot(t *testing.T, ctx context.Context) map[string]s
 		return nil
 	}
 	tier, project := l.ref.Tier, l.ref.Project
-	partitions := []keyvalue.Partition{
+	partitions := []records.Partition{
 		stackrecords.ProjectsPartition(tier),
 		stackrecords.StacksPartition(tier, project),
 		stackrecords.EnvironmentsPartition(tier, project),
 		stackrecords.EdgeStacksPartition(tier),
-		{Tier: tier, Root: keyvalue.RootBootstrap},
-		{Tier: tier, Root: keyvalue.RootSharedPhysicals, Path: []string{project}},
-		{Tier: tier, Root: keyvalue.RootQueues},
-		{Tier: tier, Root: keyvalue.RootRealtime},
-		{Tier: tier, Root: keyvalue.RootPostgres},
+		{Tier: tier, Root: stackrecords.RootBootstrap},
+		{Tier: tier, Root: resources.RootSharedPhysicals, Path: []string{project}},
+	}
+	for _, root := range l.vendorRoots {
+		partitions = append(partitions, records.Partition{Tier: tier, Root: root})
 	}
 	recorded := map[string]string{}
 	for _, partition := range partitions {

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -54,12 +54,12 @@ func (c *leaseClock) watchingTerms() stackrecords.LeaseTerms {
 	return terms
 }
 
-func takeLease(store keyvalue.Store, token string, terms stackrecords.LeaseTerms) error {
+func takeLease(store records.Store, token string, terms stackrecords.LeaseTerms) error {
 	_, err := stackrecords.TakeEnvironmentLease(context.Background(), store, environment.TierProduction, "shop", "production", token, stackrecords.LeaseDeploy, terms)
 	return err
 }
 
-func renewLease(store keyvalue.Store, token string, terms stackrecords.LeaseTerms) error {
+func renewLease(store records.Store, token string, terms stackrecords.LeaseTerms) error {
 	return stackrecords.RenewEnvironmentLease(context.Background(), store, environment.TierProduction, "shop", "production", token, stackrecords.LeaseDeploy, terms)
 }
 
@@ -277,7 +277,7 @@ func TestTakeEnvironmentLeaseRefusalNamesWhatHoldsTheEnvironmentAndWhatToRunAgai
 	}
 }
 
-func takeProjectLease(store keyvalue.Store, token string, terms stackrecords.LeaseTerms) error {
+func takeProjectLease(store records.Store, token string, terms stackrecords.LeaseTerms) error {
 	_, err := stackrecords.TakeProjectLease(context.Background(), store, environment.TierProduction, "shop", token, stackrecords.LeaseRemoval, terms)
 	return err
 }
@@ -294,7 +294,7 @@ func TestAnEnvironmentLeaseIsRefusedWhileARemovalHoldsItsProject(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "a removal of shop in production is running: deploy again once it ends") {
 		t.Fatalf("TakeEnvironmentLease() = %v, want it refused while a removal holds shop", err)
 	}
-	if _, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", "production")); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", "production")); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading the refused deploy's lease = %v, want nothing left behind", err)
 	}
 }
@@ -325,7 +325,7 @@ func TestAnEnvironmentLeaseIsTakenOnceTheRemovalHoldingItsProjectWentUnrenewedFo
 	if clock.waited < leaseTTL {
 		t.Errorf("the deploy watched the removal's lease for %s, want a full TTL of %s on its own clock before it trusts the removal stopped", clock.waited, leaseTTL)
 	}
-	if _, err := store.Read(context.Background(), stackrecords.ProjectLeaseKey(environment.TierProduction, "shop")); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := store.Read(context.Background(), stackrecords.ProjectLeaseKey(environment.TierProduction, "shop")); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading the stopped removal's lease = %v, want it forgotten", err)
 	}
 }
@@ -348,25 +348,25 @@ func TestADeployWhoseClockRunsAheadIsRefusedWhileTheRemovalHoldingItsProjectStil
 	if err == nil || !strings.Contains(err.Error(), "a removal of shop in production is running") {
 		t.Fatalf("TakeEnvironmentLease() on a clock ahead of the removal's = %v, want it refused because the removal still renews its lease", err)
 	}
-	if _, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", "production")); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", "production")); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading the refused deploy's lease = %v, want nothing left behind", err)
 	}
 }
 
 type cancellingKeyValues struct {
 	*fake.KeyValues
-	cancelAfterWriting keyvalue.Key
+	cancelAfterWriting records.Key
 	cancel             context.CancelFunc
 }
 
-func (s *cancellingKeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s *cancellingKeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if err := ctx.Err(); err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	return s.KeyValues.Read(ctx, key)
 }
 
-func (s *cancellingKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s *cancellingKeyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	revision, err := s.KeyValues.Write(ctx, entry)
 	if entry.Key.String() == s.cancelAfterWriting.String() {
 		s.cancel()
@@ -374,7 +374,7 @@ func (s *cancellingKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (
 	return revision, err
 }
 
-func (s *cancellingKeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (s *cancellingKeyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -392,7 +392,7 @@ func TestAnEnvironmentLeaseWhoseRequestEndsBeforeItsProjectCheckLeavesNoLeaseBeh
 	if err == nil {
 		t.Fatal("TakeEnvironmentLease() succeeded though its request ended before it checked the project, want it to stop")
 	}
-	if _, err := store.KeyValues.Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := store.KeyValues.Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading the lease after the request ended = %v, want the lease it wrote forgotten rather than left to run out", err)
 	}
 }

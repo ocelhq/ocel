@@ -15,8 +15,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -163,19 +163,19 @@ func (s Store) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord
 			return err
 		}
 		if !found {
-			return keyvalue.ErrStale
+			return records.ErrStale
 		}
 		var current recordDocument
 		if err := snapshot.DataTo(&current); err != nil {
 			return err
 		}
 		if current.Value != string(held) {
-			return keyvalue.ErrStale
+			return records.ErrStale
 		}
 		return tx.Set(doc, recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt})
 	})
-	if errors.Is(err, keyvalue.ErrStale) {
-		return fmt.Errorf("the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, keyvalue.ErrStale)
+	if errors.Is(err, records.ErrStale) {
+		return fmt.Errorf("the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, records.ErrStale)
 	}
 	if err != nil {
 		return fmt.Errorf("replace the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
@@ -225,18 +225,18 @@ func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*
 
 func isNotFound(err error) bool { return status.Code(err) == codes.NotFound }
 
-func (s Store) CreateRun(ctx context.Context, run runs.Run) (keyvalue.Revision, error) {
+func (s Store) CreateRun(ctx context.Context, run runs.Run) (records.Revision, error) {
 	doc, err := s.runDocument(run.Execution)
 	if err != nil {
 		return "", err
 	}
-	revision, err := keyvalue.NewRevision()
+	revision, err := records.NewRevision()
 	if err != nil {
 		return "", err
 	}
 	_, err = doc.Create(ctx, documentOf(run, revision))
 	if status.Code(err) == codes.AlreadyExists {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	if err != nil {
 		return "", fmt.Errorf("record run %s: %w", run.Execution, err)
@@ -251,7 +251,7 @@ func (s Store) ReadRun(ctx context.Context, topic, execution string) (runs.Run, 
 	}
 	snapshot, err := doc.Get(ctx)
 	if isNotFound(err) {
-		return runs.Run{}, keyvalue.ErrNotFound
+		return runs.Run{}, records.ErrNotFound
 	}
 	if err != nil {
 		return runs.Run{}, fmt.Errorf("read run %s: %w", execution, err)
@@ -261,24 +261,24 @@ func (s Store) ReadRun(ctx context.Context, topic, execution string) (runs.Run, 
 		return runs.Run{}, err
 	}
 	if run.Topic != topic {
-		return runs.Run{}, keyvalue.ErrNotFound
+		return runs.Run{}, records.ErrNotFound
 	}
 	return run, nil
 }
 
-func (s Store) WriteRun(ctx context.Context, run runs.Run) (keyvalue.Revision, error) {
+func (s Store) WriteRun(ctx context.Context, run runs.Run) (records.Revision, error) {
 	if run.Revision == "" {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
-	next, err := keyvalue.NewRevision()
+	next, err := records.NewRevision()
 	if err != nil {
 		return "", err
 	}
 	err = s.atRevision(ctx, run, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
 		return tx.Set(doc, documentOf(run, next))
 	})
-	if errors.Is(err, keyvalue.ErrStale) {
-		return "", keyvalue.ErrStale
+	if errors.Is(err, records.ErrStale) {
+		return "", records.ErrStale
 	}
 	if err != nil {
 		return "", fmt.Errorf("write run %s: %w", run.Execution, err)
@@ -288,13 +288,13 @@ func (s Store) WriteRun(ctx context.Context, run runs.Run) (keyvalue.Revision, e
 
 func (s Store) DeleteRun(ctx context.Context, run runs.Run) error {
 	if run.Revision == "" {
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	err := s.atRevision(ctx, run, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
 		return tx.Delete(doc)
 	})
-	if errors.Is(err, keyvalue.ErrStale) {
-		return keyvalue.ErrStale
+	if errors.Is(err, records.ErrStale) {
+		return records.ErrStale
 	}
 	if err != nil {
 		return fmt.Errorf("delete run %s: %w", run.Execution, err)
@@ -317,14 +317,14 @@ func (s Store) atRevision(ctx context.Context, run runs.Run, change func(*firest
 			return err
 		}
 		if !found {
-			return keyvalue.ErrStale
+			return records.ErrStale
 		}
 		current, err := runOf(snapshot)
 		if err != nil {
 			return err
 		}
 		if current.Topic != run.Topic || current.Revision != run.Revision {
-			return keyvalue.ErrStale
+			return records.ErrStale
 		}
 		return change(tx, doc)
 	})
@@ -359,11 +359,11 @@ func runOf(snapshot *firestore.DocumentSnapshot) (runs.Run, error) {
 		StartedAt:   timeOf(doc.StartedAt),
 		FinishedAt:  timeOf(doc.FinishedAt),
 		ExpiresAt:   timeOf(doc.ExpiresAt),
-		Revision:    keyvalue.Revision(doc.Revision),
+		Revision:    records.Revision(doc.Revision),
 	}, nil
 }
 
-func documentOf(run runs.Run, revision keyvalue.Revision) runDocument {
+func documentOf(run runs.Run, revision records.Revision) runDocument {
 	doc := runDocument{
 		Topic:       run.Topic,
 		Consumer:    run.Consumer,

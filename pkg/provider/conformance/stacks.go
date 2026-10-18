@@ -13,12 +13,12 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/realtime"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/topiclimits"
@@ -107,7 +107,7 @@ func (c *countedImages) Pushed() int {
 	return c.pushed
 }
 
-func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artifacts provider.ArtifactStore, store keyvalue.Store) {
+func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artifacts provider.ArtifactStore, store records.Store, vendorRoots ...records.Root) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -118,7 +118,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 	}
 
 	t.Run("a stack's plans and provisions agree from its creation to its teardown", func(t *testing.T) {
-		runStackLifecycle(t, facts, stacks, store)
+		runStackLifecycle(t, facts, stacks, store, vendorRoots)
 	})
 
 	t.Run("a second Provision of a stack another Provision is inside is refused as busy", func(t *testing.T) {
@@ -232,7 +232,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 					t.Errorf("forgetting the stack the teardown took = %v", err)
 				}
 			}()
-			raw, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.StackKey(ref.Tier, ref.Project, ref.Name))
+			raw, err := records.ReadOrEmpty(ctx, store, stackrecords.StackKey(ref.Tier, ref.Project, ref.Name))
 			if err != nil {
 				t.Fatalf("reading the stack record back = %v", err)
 			}

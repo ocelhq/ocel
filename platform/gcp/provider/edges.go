@@ -5,8 +5,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -21,7 +21,7 @@ import (
 
 type edges struct {
 	namespace provider.Namespace
-	keyValues keyvalue.Store
+	keyValues records.Store
 	pins      pin.Pins
 	gates     cloudrun.Gates
 	stacks    alb.Stacks

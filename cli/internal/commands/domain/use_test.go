@@ -12,12 +12,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -54,7 +54,7 @@ func servedOnWildcard(t *testing.T, project clitest.FakeProject, slug string, pr
 	ctx := context.Background()
 	store := project.Provider.KeyValues()
 	name := stackrecords.EdgeStackKey(environment.TierPreview, slug)
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	recorded, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func servedOnWildcard(t *testing.T, project clitest.FakeProject, slug string, pr
 	}
 	for _, preview := range previews {
 		stack := stackrecords.StackKey(environment.TierPreview, slug, naming.AppStack(preview, "web", naming.NewReleaseToken("b1", "")))
-		entry, err := keyvalue.ReadOrEmpty(ctx, store, stack)
+		entry, err := records.ReadOrEmpty(ctx, store, stack)
 		if err != nil {
 			t.Fatal(err)
 		}

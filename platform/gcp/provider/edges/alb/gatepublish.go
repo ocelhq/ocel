@@ -12,8 +12,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
 )
@@ -49,7 +49,7 @@ type gateProof struct {
 }
 
 type writtenPublication struct {
-	entry       keyvalue.Entry
+	entry       records.Entry
 	publication gatePublication
 }
 
@@ -144,18 +144,18 @@ func (e *Edge) raiseGate(ctx context.Context, tier environment.Tier, image strin
 	return e.confirmGatePublication(ctx, tier, written)
 }
 
-func (e *Edge) recordGatePublication(ctx context.Context, tier environment.Tier, image string, write bool) (gatePublication, keyvalue.Entry, error) {
+func (e *Edge) recordGatePublication(ctx context.Context, tier environment.Tier, image string, write bool) (gatePublication, records.Entry, error) {
 	for range maxGateRecordReads {
 		config, err := e.encodeGateConfig(ctx, tier)
 		if err != nil {
-			return gatePublication{}, keyvalue.Entry{}, err
+			return gatePublication{}, records.Entry{}, err
 		}
 		if err := e.refuseOversizedConfig(tier, config); err != nil {
-			return gatePublication{}, keyvalue.Entry{}, err
+			return gatePublication{}, records.Entry{}, err
 		}
 		entry, recorded, found, err := e.readGatePublicationEntry(ctx, tier)
 		if err != nil {
-			return gatePublication{}, keyvalue.Entry{}, err
+			return gatePublication{}, records.Entry{}, err
 		}
 		publication := gatePublication{Main: newGateVersion(image, config)}
 		if found {
@@ -165,11 +165,11 @@ func (e *Edge) recordGatePublication(ctx context.Context, tier environment.Tier,
 			return publication, entry, nil
 		}
 		entry, err = e.writeGatePublication(ctx, tier, entry, publication)
-		if !errors.Is(err, keyvalue.ErrStale) {
+		if !errors.Is(err, records.ErrStale) {
 			return publication, entry, err
 		}
 	}
-	return gatePublication{}, keyvalue.Entry{}, refusal.Refuse(refusal.CodeBusy,
+	return gatePublication{}, records.Entry{}, refusal.Refuse(refusal.CodeBusy,
 		"what the gate plugin of the %s edge's %s load balancer runs was rewritten between every read of it and the write that followed: run this again once other deploys have finished", Kind, tier)
 }
 
@@ -196,7 +196,7 @@ func (e *Edge) confirmGatePublication(ctx context.Context, tier environment.Tier
 	}
 	written.publication.Confirmed = true
 	_, err := e.writeGatePublication(ctx, tier, written.entry, written.publication)
-	if errors.Is(err, keyvalue.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return nil
 	}
 	return err

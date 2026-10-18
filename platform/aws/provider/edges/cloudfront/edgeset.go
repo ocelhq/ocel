@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
@@ -32,7 +32,7 @@ func edgeSetFrom(set cloudfrontpart.Set) edgeSet {
 	}
 }
 
-func partRecords(c Clients, deployed bootstrap.Deployed) keyvalue.Store {
+func partRecords(c Clients, deployed bootstrap.Deployed) records.Store {
 	return awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(deployed.StateTable)}
 }
 

@@ -9,19 +9,19 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func recordingTopics(t *testing.T, tier environment.Tier, bindings ...provider.Binding) keyvalue.Store {
+func recordingTopics(t *testing.T, tier environment.Tier, bindings ...provider.Binding) records.Store {
 	t.Helper()
 	ctx := context.Background()
 	store := fake.NewKeyValues()
-	if _, err := store.Write(ctx, keyvalue.Entry{Key: stackrecords.ProjectKey(tier, "shop"), Value: []byte(`{}`)}); err != nil {
+	if _, err := store.Write(ctx, records.Entry{Key: stackrecords.ProjectKey(tier, "shop"), Value: []byte(`{}`)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := stackrecords.Write(ctx, store, tier, "shop", naming.InfraStack("prod"), stackrecords.Stack{Kind: provider.StackInfra, Bindings: bindings}); err != nil {

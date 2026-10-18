@@ -9,10 +9,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/valkey"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -39,7 +39,7 @@ var ownEnv = map[string][]string{
 }
 
 var appendedArgs = map[string]func(args []string) error{
-	transformTypeKV: kvstore.RefuseOwnedArgs,
+	transformTypeKV: valkey.RefuseOwnedArgs,
 }
 
 var storeOwnEnv = []string{

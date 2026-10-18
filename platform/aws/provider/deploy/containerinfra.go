@@ -19,10 +19,10 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
@@ -73,8 +73,8 @@ var containerShare = sharedStack{
 	refuseInUse: RefuseContainerInfrastructureInUse,
 }
 
-func forgetContainerFront(ctx context.Context, store keyvalue.Store, tier environment.Tier) error {
-	return keyvalue.Forget(ctx, store, awsports.ContainerFrontKey(tier))
+func forgetContainerFront(ctx context.Context, store records.Store, tier environment.Tier) error {
+	return records.Forget(ctx, store, awsports.ContainerFrontKey(tier))
 }
 
 type containerInfra struct {
@@ -224,7 +224,7 @@ func (r *Stacks) recordContainerInfraConsumer(ctx context.Context, ref provider.
 	return r.claimShared(ctx, containerShare, ref)
 }
 
-func (r *Stacks) releaseContainerInfra(ctx context.Context, store keyvalue.Store, ref provider.StackRef, progress progress.Log) error {
+func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store, ref provider.StackRef, progress progress.Log) error {
 	return r.releaseShared(ctx, containerShare, store, ref, progress)
 }
 
@@ -239,7 +239,7 @@ func RefuseContainerInfrastructureInUse(tier environment.Tier, users []string) e
 		strings.Join(users, ", "), tier)
 }
 
-func ReadContainerInfrastructurePart(ctx context.Context, store keyvalue.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+func ReadContainerInfrastructurePart(ctx context.Context, store records.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
 	_, present, err := stackrecords.Read(ctx, store, tier, ContainersSlug, containerInfraRef(tier).Name)
 	if err != nil || !present {
 		return provider.BootstrapPart{}, false, err

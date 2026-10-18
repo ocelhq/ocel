@@ -8,6 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -320,12 +321,12 @@ func (r *release) bytecodeCache(spec provider.StackSpec) *bytecodeConfig {
 }
 
 func (r *release) sealApp(project, app string, values provider.AppValues) (appBundle, error) {
-	bindings := make([]live.Binding, 0, len(values.Bindings))
+	declared := make([]live.Binding, 0, len(values.Bindings))
 	for _, binding := range values.Bindings {
 		kind := provider.ProtoBindingType(binding.Type)
-		bindings = append(bindings, live.Binding{
+		declared = append(declared, live.Binding{
 			Name:    binding.Name,
-			Key:     naming.ResourceEnvName(kind, bindingResource(binding)),
+			Key:     bindings.ResourceEnvName(kind, bindingResource(binding)),
 			Type:    kind,
 			Granted: binding.Version,
 		})
@@ -334,7 +335,7 @@ func (r *release) sealApp(project, app string, values provider.AppValues) (appBu
 	for _, secret := range values.Secrets {
 		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
 	}
-	return sealAppBundle(r.cfg, project, app, values.Sensitive, keys, bindings)
+	return sealAppBundle(r.cfg, project, app, values.Sensitive, keys, declared)
 }
 
 func bindingResource(binding provider.Binding) string {

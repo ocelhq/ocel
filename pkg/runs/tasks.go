@@ -11,10 +11,10 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 var _ taskv1connect.TaskServiceHandler = Tasks{}
@@ -159,7 +159,7 @@ func (e *Engine) cancel(ctx context.Context, run Run, reason string) (Run, error
 		canceled := run
 		canceled.cancel(reason, time.Now())
 		written, err := e.write(ctx, canceled)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			if run, err = e.reread(ctx, run); err != nil {
 				return Run{}, refuseGone(execution, err)
 			}

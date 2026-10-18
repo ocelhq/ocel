@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -180,7 +181,7 @@ func TestLiveTheMachineAnswersEveryPortTheConformanceSuiteAsks(t *testing.T) {
 		}()
 	}
 
-	conformance.RunPorts(t, p)
+	conformance.RunPorts(t, p, live.RootQueues, live.RootRealtime)
 	t.Run("Hooks", func(t *testing.T) { conformance.RunHooks(t, p) })
 }
 

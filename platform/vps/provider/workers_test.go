@@ -10,10 +10,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -27,7 +27,7 @@ func aWorkerApp() provider.AppSpec {
 	return app
 }
 
-func recordedWorker(t *testing.T, store keyvalue.Store, name string) (live.QueueWorker, bool) {
+func recordedWorker(t *testing.T, store records.Store, name string) (live.QueueWorker, bool) {
 	t.Helper()
 	entry, err := store.Read(context.Background(), live.QueueWorkerKey(environment.TierProduction, "shop", "prod", name))
 	if err != nil {

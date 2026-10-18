@@ -16,13 +16,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -356,7 +356,7 @@ func TestAPrebuiltDeploySendsNoLeaseTokenForTheProviderToMint(t *testing.T) {
 func environmentLeaseHeld(t *testing.T, fixture clitest.FakeProject) bool {
 	t.Helper()
 	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, clitest.FixtureSlug, stackrecords.ProductionEnv))
-	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+	if err != nil && !errors.Is(err, records.ErrNotFound) {
 		t.Fatalf("reading the deploy lease = %v", err)
 	}
 	return err == nil

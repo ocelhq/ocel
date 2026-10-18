@@ -10,14 +10,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func recordGates(t *testing.T, store keyvalue.Store, cipher *fake.Cipher, records map[string]stackrecords.GateRecord) {
+func recordGates(t *testing.T, store records.Store, cipher *fake.Cipher, gates map[string]stackrecords.GateRecord) {
 	t.Helper()
-	plaintext, err := json.Marshal(records)
+	plaintext, err := json.Marshal(gates)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func recordGates(t *testing.T, store keyvalue.Store, cipher *fake.Cipher, record
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Write(context.Background(), keyvalue.Entry{Key: stackrecords.NewGatesRecordKey(environment.TierPreview), Value: value}); err != nil {
+	if _, err := store.Write(context.Background(), records.Entry{Key: stackrecords.NewGatesRecordKey(environment.TierPreview), Value: value}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -68,7 +68,7 @@ func TestReadGatesRefusesARecordSealedUnderAnotherTierOrContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	value, _ := json.Marshal(sealed)
-	if _, err := store.Write(context.Background(), keyvalue.Entry{Key: stackrecords.NewGatesRecordKey(environment.TierPreview), Value: value}); err != nil {
+	if _, err := store.Write(context.Background(), records.Entry{Key: stackrecords.NewGatesRecordKey(environment.TierPreview), Value: value}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,7 +105,7 @@ func TestChangeGatesThatRefusesLeavesTheRecordUnwritten(t *testing.T) {
 		return errors.New("refused")
 	})
 
-	recorded, readErr := keyvalue.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
+	recorded, readErr := records.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
 	if err == nil || readErr != nil || len(recorded.Value) != 0 {
 		t.Errorf("ChangeGates() = %v and the record holds %q, want the refusal and no record", err, recorded.Value)
 	}
@@ -115,14 +115,14 @@ func TestChangeGatesThatChangesNothingWritesNothing(t *testing.T) {
 	t.Parallel()
 	store, cipher := fake.NewKeyValues(), fake.NewCipher()
 	recordGates(t, store, cipher, map[string]stackrecords.GateRecord{"shop": {Gate: gate.Gate{Key: "k", BypassSecrets: []string{}, AllowOptions: []string{}}, Password: "pw"}})
-	before, err := keyvalue.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
+	before, err := records.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	err = stackrecords.ChangeGates(context.Background(), store, cipher, environment.TierPreview, func(map[string]stackrecords.GateRecord) error { return nil })
 
-	after, readErr := keyvalue.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
+	after, readErr := records.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
 	if err != nil || readErr != nil || after.Revision != before.Revision {
 		t.Errorf("ChangeGates() = %v moved the record from revision %v to %v, want it left alone: a deploy that changes nothing must not contend for a record every project shares", err, before.Revision, after.Revision)
 	}
@@ -134,7 +134,7 @@ func TestChangeGatesWithNoRecordThatChangesNothingWritesNothing(t *testing.T) {
 
 	err := stackrecords.ChangeGates(context.Background(), store, cipher, environment.TierPreview, func(map[string]stackrecords.GateRecord) error { return nil })
 
-	recorded, readErr := keyvalue.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
+	recorded, readErr := records.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
 	if err != nil || readErr != nil || len(recorded.Value) != 0 {
 		t.Errorf("ChangeGates() = %v and the record holds %q, want no record written: a sync of a project with no gate changes nothing", err, recorded.Value)
 	}
@@ -169,7 +169,7 @@ func TestTheRecordSealsThePasswordAndKeyAndNeverStoresThemInThePlain(t *testing.
 		return nil
 	})
 
-	recorded, readErr := keyvalue.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
+	recorded, readErr := records.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierPreview))
 	if err != nil || readErr != nil {
 		t.Fatalf("ChangeGates() = %v, %v", err, readErr)
 	}
@@ -221,11 +221,11 @@ func TestAProductionGateRecordCannotBeOpenedAsAPreviewOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := keyvalue.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierProduction))
+	sealed, err := records.ReadOrEmpty(context.Background(), store, stackrecords.NewGatesRecordKey(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Write(context.Background(), keyvalue.Entry{Key: stackrecords.NewGatesRecordKey(environment.TierPreview), Value: sealed.Value}); err != nil {
+	if _, err := store.Write(context.Background(), records.Entry{Key: stackrecords.NewGatesRecordKey(environment.TierPreview), Value: sealed.Value}); err != nil {
 		t.Fatal(err)
 	}
 

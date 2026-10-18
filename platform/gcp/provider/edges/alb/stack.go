@@ -11,10 +11,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
@@ -253,7 +253,7 @@ func (s *stack) serving(ctx context.Context, app string) (Host, error) {
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	name := s.e.claim(s.state.Tier, hostname)
-	entry, err := keyvalue.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
+	entry, err := records.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
 	if err != nil {
 		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
@@ -274,7 +274,7 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	}
 	entry.Value = encoded
 	_, err = s.e.deps.KeyValues.Write(ctx, entry)
-	if errors.Is(err, keyvalue.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return false, s.claimedMeanwhile(ctx, hostname, name)
 	}
 	if err != nil {
@@ -283,8 +283,8 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	return true, nil
 }
 
-func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name keyvalue.Key) error {
-	entry, err := keyvalue.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
+func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name records.Key) error {
+	entry, err := records.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
 	if err != nil || len(entry.Value) == 0 {
 		return refusal.Refuse(refusal.CodeBusy,
 			"%s was claimed on the %s edge while this bind was claiming it: bind it again once the other run has finished", hostname, Kind)
@@ -303,7 +303,7 @@ func claimedBy(hostname, owner string) error {
 }
 
 func (s *stack) disown(ctx context.Context, hostname string) error {
-	if err := keyvalue.Forget(ctx, s.e.deps.KeyValues, s.e.claim(s.state.Tier, hostname)); err != nil {
+	if err := records.Forget(ctx, s.e.deps.KeyValues, s.e.claim(s.state.Tier, hostname)); err != nil {
 		return fmt.Errorf("release what served %s on the %s edge: %w", hostname, Kind, err)
 	}
 	return nil

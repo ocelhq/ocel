@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -26,13 +25,13 @@ func (r *deployRun) newSpans() deploySpans {
 	verbs := r.mode.verbs()
 	routes, infra, app, onto := verbs.routes, verbs.infra, verbs.app, verbs.onto
 	s := deploySpans{
-		Environment: RootSpan(naming.SpanEnvironment, env,
+		Environment: RootSpan(SpanEnvironment, env,
 			progress.Checking.Title("the bootstrap, domains and bindings for "+r.spec.Slug), progressv1.Phase_PHASE_PROVISION),
 		Infra: RootSpan(r.spec.Infra.String(), env, infra.Title(r.describeInfra()), progressv1.Phase_PHASE_PROVISION),
-		Edge:  RootSpan(naming.SpanEdge, kind, routes.Title(fmt.Sprintf("the routes for %s in %s", r.spec.Slug, where)), progressv1.Phase_PHASE_PROVISION),
-		Hostnames: RootSpan(naming.SpanHostnames, kind,
+		Edge:  RootSpan(SpanEdge, kind, routes.Title(fmt.Sprintf("the routes for %s in %s", r.spec.Slug, where)), progressv1.Phase_PHASE_PROVISION),
+		Hostnames: RootSpan(SpanHostnames, kind,
 			progress.Attaching.Title(namedList("production hostname", "production hostnames", r.hostnames())), progressv1.Phase_PHASE_PROVISION),
-		Promotion: RootSpan(naming.SpanPromotion, env,
+		Promotion: RootSpan(SpanPromotion, env,
 			progress.Switching.Title("traffic to promotion "+r.spec.PromotionID), progressv1.Phase_PHASE_PROMOTE),
 		Apps: make(map[string]Span, len(r.spec.Apps)),
 	}

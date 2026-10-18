@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type Store interface {
-	CreateRun(ctx context.Context, run Run) (keyvalue.Revision, error)
+	CreateRun(ctx context.Context, run Run) (records.Revision, error)
 	ReadRun(ctx context.Context, topic, execution string) (Run, error)
-	WriteRun(ctx context.Context, run Run) (keyvalue.Revision, error)
+	WriteRun(ctx context.Context, run Run) (records.Revision, error)
 	DeleteRun(ctx context.Context, run Run) error
 	ListRuns(ctx context.Context, filter RunFilter) (RunPage, error)
 	CountRuns(ctx context.Context, filter RunFilter) (int64, error)

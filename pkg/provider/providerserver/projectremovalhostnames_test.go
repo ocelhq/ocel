@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -25,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -363,7 +363,7 @@ func TestRemoveProjectRemovesAServiceWhoseHolderLostItsStackRecord(t *testing.T)
 	if !slices.Equal(removed, []string{"shop-web-server"}) {
 		t.Errorf("the removal took down %v, want the service a release still held though its stack record was gone", removed)
 	}
-	shared := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootSharedPhysicals, Path: []string{"shop"}}
+	shared := records.Partition{Tier: environment.TierProduction, Root: resources.RootSharedPhysicals, Path: []string{"shop"}}
 	if left, err := vendor.KeyValues().List(ctx, shared); err != nil || len(left) != 0 {
 		t.Errorf("the removal left %v, %v behind, want nothing: a removed project leaves no bytes", left, err)
 	}
@@ -405,7 +405,7 @@ func TestRemovingEveryPreviewSaysUntilWhenItWaitsOutTheLeasesInterruptedRunsLeft
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := vendor.KeyValues().Write(context.Background(), keyvalue.Entry{Key: stackrecords.EnvironmentLeaseKey(environment.TierPreview, "shop", env), Value: value}); err != nil {
+		if _, err := vendor.KeyValues().Write(context.Background(), records.Entry{Key: stackrecords.EnvironmentLeaseKey(environment.TierPreview, "shop", env), Value: value}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -461,7 +461,7 @@ func TestRemovingEveryPreviewRefusesAFirstDeployToANewPreviewUntilItEnds(t *test
 	if isLeaseHeld(t, vendor.KeyValues(), environment.TierPreview, "pr-9") {
 		t.Error("the refused deploy left a lease on pr-9")
 	}
-	if _, err := vendor.KeyValues().Read(context.Background(), stackrecords.ProjectLeaseKey(environment.TierPreview, "shop")); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := vendor.KeyValues().Read(context.Background(), stackrecords.ProjectLeaseKey(environment.TierPreview, "shop")); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading the removal's lease on shop after it ended = %v, want it freed", err)
 	}
 }

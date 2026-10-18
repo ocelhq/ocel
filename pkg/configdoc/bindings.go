@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -138,9 +138,9 @@ var unboundInConfig = map[resourcesv1.ResourceType]bool{
 
 func BindableTypes() []string {
 	out := make([]string, 0, 4)
-	for _, typ := range naming.BindableResourceTypes() {
+	for _, typ := range bindings.BindableResourceTypes() {
 		if !unboundInConfig[typ] {
-			out = append(out, naming.ResourceTypeName(typ))
+			out = append(out, bindings.ResourceTypeName(typ))
 		}
 	}
 	slices.Sort(out)

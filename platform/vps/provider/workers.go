@@ -9,10 +9,10 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -36,7 +36,7 @@ func newWorkerEnv(app *provider.AppSpec, worker, deliverySecret string) map[stri
 }
 
 func (p *Provider) openDeliverySecret(ctx context.Context, ref provider.StackRef) (string, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
+	recorded, err := records.ReadOrEmpty(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
 	if err != nil {
 		return "", err
 	}
@@ -103,7 +103,7 @@ func (p *Provider) recordWorker(ctx context.Context, ref provider.StackRef, name
 		return "", err
 	}
 	replaced := ""
-	err = keyvalue.Change(ctx, p.keyValues, live.QueueWorkerKey(ref.Tier, ref.Project, ref.Name.Env, name), func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	err = records.Change(ctx, p.keyValues, live.QueueWorkerKey(ref.Tier, ref.Project, ref.Name.Env, name), func(recorded records.Entry) ([]byte, bool, error) {
 		replaced = ""
 		if len(recorded.Value) > 0 {
 			var previous live.QueueWorker
@@ -131,7 +131,7 @@ func (p *Provider) retireWorkers(ctx context.Context, ref provider.StackRef, ret
 		if err := p.host.TakeDown(ctx, ref.Tier, worker.Container); err != nil {
 			return err
 		}
-		if err := keyvalue.ForgetMatching(ctx, p.keyValues, entry.Key, func(recorded keyvalue.Entry) (bool, error) {
+		if err := records.ForgetMatching(ctx, p.keyValues, entry.Key, func(recorded records.Entry) (bool, error) {
 			return string(recorded.Value) == string(entry.Value), nil
 		}); err != nil {
 			return err

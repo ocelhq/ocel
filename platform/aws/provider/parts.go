@@ -13,10 +13,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
@@ -227,7 +227,7 @@ func (p *Provider) describeAddedParts(ctx context.Context, tier environment.Tier
 	return parts, nil
 }
 
-func addedPartUsers(ctx context.Context, store keyvalue.Store, tier environment.Tier) (map[string][]string, error) {
+func addedPartUsers(ctx context.Context, store records.Store, tier environment.Tier) (map[string][]string, error) {
 	users, err := stackrecords.ListPartUsers(ctx, store, tier)
 	if err != nil || tier != environment.TierPreview {
 		return users, err

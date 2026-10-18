@@ -20,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/localrpc"
-	"github.com/ocelhq/ocel/pkg/naming"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -219,7 +218,9 @@ func (s *fakeProviderServer) Configure(_ context.Context, req *contractv1.Config
 	return &contractv1.ConfigureResponse{}, nil
 }
 
-var fakeStageID = naming.SpanID(naming.SpanEnvironment)
+var fakeStageRoot = providerserver.RootSpanID(providerserver.SpanEnvironment)
+
+var fakeStageID = fakeStageRoot[:]
 
 const fakeOversizedEventBytes = 1 << 16
 

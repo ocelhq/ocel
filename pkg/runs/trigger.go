@@ -10,9 +10,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type runRequest struct {
@@ -117,7 +117,7 @@ func (e *Engine) triggerDebounced(ctx context.Context, deployed deployedConsumer
 	}
 	if idempotency.Key != "" {
 		pointed := NewRecordNamingRun(idempotency.Purpose, idempotency.Topic, idempotency.Key, pending, idempotency.ExpiresAt)
-		if err := e.cfg.Store.ReplaceRecord(ctx, pointed, idempotency.Value); err != nil && !errors.Is(err, keyvalue.ErrStale) {
+		if err := e.cfg.Store.ReplaceRecord(ctx, pointed, idempotency.Value); err != nil && !errors.Is(err, records.ErrStale) {
 			return "", err
 		}
 	}
@@ -205,12 +205,12 @@ func (e *Engine) debounce(ctx context.Context, deployed deployedConsumer, key, e
 		switch code := connect.CodeOf(err); {
 		case err == nil:
 			refreshed := NewRecordNamingRun(record.Purpose, record.Topic, record.Key, pending, due)
-			if err := e.cfg.Store.ReplaceRecord(ctx, refreshed, held.Value); err != nil && !errors.Is(err, keyvalue.ErrStale) {
+			if err := e.cfg.Store.ReplaceRecord(ctx, refreshed, held.Value); err != nil && !errors.Is(err, records.ErrStale) {
 				return "", err
 			}
 			return pending, nil
 		case code == connect.CodeFailedPrecondition || code == connect.CodeNotFound:
-			if err := e.cfg.Store.ReplaceRecord(ctx, record, held.Value); !errors.Is(err, keyvalue.ErrStale) {
+			if err := e.cfg.Store.ReplaceRecord(ctx, record, held.Value); !errors.Is(err, records.ErrStale) {
 				return "", err
 			}
 		default:
@@ -237,7 +237,7 @@ func (e *Engine) readTaskRun(ctx context.Context, id string) (Run, error) {
 		return Run{}, refuseMissingRun(id)
 	}
 	run, err := e.cfg.Store.ReadRun(ctx, task, id)
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return Run{}, refuseMissingRun(id)
 	}
 	return run, err
@@ -245,7 +245,7 @@ func (e *Engine) readTaskRun(ctx context.Context, id string) (Run, error) {
 
 func (e *Engine) reschedule(ctx context.Context, deployed deployedConsumer, execution string, due time.Time, shiftExpiry bool) (Run, error) {
 	run, err := e.cfg.Store.ReadRun(ctx, deployed.topicName, execution)
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return Run{}, refuseMissingRun(execution)
 	}
 	if err != nil {
@@ -265,7 +265,7 @@ func (e *Engine) reschedule(ctx context.Context, deployed deployedConsumer, exec
 			moved.ExpiresAt = run.ExpiresAt.Add(due.Sub(run.DueAt))
 		}
 		written, err := e.write(ctx, moved)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			if run, err = e.reread(ctx, run); err != nil {
 				return Run{}, refuseGone(execution, err)
 			}

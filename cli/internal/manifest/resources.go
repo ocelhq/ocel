@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -61,7 +62,7 @@ func (d declaredResource) label() string {
 	if d.Type == resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER {
 		return fmt.Sprintf("consumer %q of topic %q", d.Name, d.Consumer.GetTopic())
 	}
-	return fmt.Sprintf("%s %q", naming.ResourceTypeName(d.Type), d.Name)
+	return fmt.Sprintf("%s %q", bindings.ResourceTypeName(d.Type), d.Name)
 }
 
 func (d declaredResource) namespaced(kind declarationKind) namespacedName {
@@ -250,11 +251,11 @@ func sourceOrUnknown(source string) string {
 }
 
 func typeKind(t resourcesv1.ResourceType) (naming.Kind, error) {
-	bound, bindable := naming.BindableAs(t)
+	bound, bindable := bindings.BindableAs(t)
 	if !bindable {
 		return "", fmt.Errorf("unsupported resource type %s", t)
 	}
-	kind, ok := naming.KindOf(bound)
+	kind, ok := bindings.KindOf(bound)
 	if !ok {
 		return "", fmt.Errorf("unsupported resource type %s", t)
 	}

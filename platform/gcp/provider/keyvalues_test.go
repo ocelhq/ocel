@@ -13,7 +13,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -46,7 +47,7 @@ func firestoreAnswering(t *testing.T, queries error) string {
 }
 
 func TestReadingWhereTheDatabaseIsAbsentSaysWhatToRunRatherThanThatTheEntryIsMissing(t *testing.T) {
-	name := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootConformance}.Key("absent")
+	name := records.Partition{Tier: environment.TierProduction, Root: conformance.Root}.Key("absent")
 
 	t.Run("a database that is not there", func(t *testing.T) {
 		t.Setenv("OCEL_FLOCI_GCP_ENDPOINT",
@@ -65,7 +66,7 @@ func TestReadingWhereTheDatabaseIsAbsentSaysWhatToRunRatherThanThatTheEntryIsMis
 	t.Run("a database that is there and has no such document", func(t *testing.T) {
 		t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", firestoreAnswering(t, nil))
 
-		if _, err := testProvider(t).KeyValues().Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
+		if _, err := testProvider(t).KeyValues().Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 			t.Fatalf("Read() of a name nothing was written at = %v, want ErrNotFound", err)
 		}
 	})

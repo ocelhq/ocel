@@ -8,16 +8,17 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func buildInvalidationTargetsKey(tier environment.Tier, kind edge.Kind, slug string) keyvalue.Key {
-	partition := keyvalue.Partition{Tier: tier, Root: keyvalue.RootRouters, Path: []string{string(kind), naming.Sanitize(slug)}}
+func buildInvalidationTargetsKey(tier environment.Tier, kind edge.Kind, slug string) records.Key {
+	partition := records.Partition{Tier: tier, Root: stackrecords.RootRouters, Path: []string{string(kind), naming.Sanitize(slug)}}
 	return partition.Key("invalidation")
 }
 
-func decodeInvalidationTargets(entry keyvalue.Entry) ([]string, error) {
+func decodeInvalidationTargets(entry records.Entry) ([]string, error) {
 	if len(entry.Value) == 0 {
 		return nil, nil
 	}
@@ -32,11 +33,11 @@ func removeInvalidationTarget(targets []string, url string) []string {
 	return slices.DeleteFunc(slices.Clone(targets), func(target string) bool { return target == url })
 }
 
-func recordInvalidationTarget(ctx context.Context, store keyvalue.Store, tier environment.Tier, kind edge.Kind, slug, previous, current string) error {
+func recordInvalidationTarget(ctx context.Context, store records.Store, tier environment.Tier, kind edge.Kind, slug, previous, current string) error {
 	if current == "" {
 		return forgetInvalidationTarget(ctx, store, tier, kind, slug, previous)
 	}
-	return keyvalue.Change(ctx, store, buildInvalidationTargetsKey(tier, kind, slug), func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	return records.Change(ctx, store, buildInvalidationTargetsKey(tier, kind, slug), func(recorded records.Entry) ([]byte, bool, error) {
 		targets, err := decodeInvalidationTargets(recorded)
 		if err != nil {
 			return nil, false, err
@@ -54,12 +55,12 @@ func recordInvalidationTarget(ctx context.Context, store keyvalue.Store, tier en
 	})
 }
 
-func forgetInvalidationTarget(ctx context.Context, store keyvalue.Store, tier environment.Tier, kind edge.Kind, slug, url string) error {
+func forgetInvalidationTarget(ctx context.Context, store records.Store, tier environment.Tier, kind edge.Kind, slug, url string) error {
 	if url == "" {
 		return nil
 	}
 	key := buildInvalidationTargetsKey(tier, kind, slug)
-	err := keyvalue.Change(ctx, store, key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	err := records.Change(ctx, store, key, func(recorded records.Entry) ([]byte, bool, error) {
 		targets, err := decodeInvalidationTargets(recorded)
 		if err != nil {
 			return nil, false, err
@@ -74,7 +75,7 @@ func forgetInvalidationTarget(ctx context.Context, store keyvalue.Store, tier en
 	if err != nil {
 		return err
 	}
-	return keyvalue.ForgetMatching(ctx, store, key, func(recorded keyvalue.Entry) (bool, error) {
+	return records.ForgetMatching(ctx, store, key, func(recorded records.Entry) (bool, error) {
 		targets, err := decodeInvalidationTargets(recorded)
 		return len(removeInvalidationTarget(targets, url)) == 0, err
 	})

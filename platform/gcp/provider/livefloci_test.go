@@ -81,7 +81,7 @@ func TestLiveStacks(t *testing.T) {
 		bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart, gcp.NetworkPart)
 	}
 
-	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues())
+	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues(), gcp.RootRealtime, gcp.RootPostgres)
 }
 
 func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {

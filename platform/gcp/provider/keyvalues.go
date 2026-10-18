@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -18,15 +18,15 @@ func (s keyValues) open(ctx context.Context) (*clients, ports.KeyValues, error) 
 	return resolved, ports.KeyValues{Clients: resolved.Workload()}, nil
 }
 
-func (s keyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s keyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	_, store, err := s.open(ctx)
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	return store.Read(ctx, key)
 }
 
-func (s keyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s keyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	c, store, err := s.open(ctx)
 	if err != nil {
 		return "", err
@@ -41,7 +41,7 @@ func (s keyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 	return store.Write(ctx, entry)
 }
 
-func (s keyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
+func (s keyValues) WritePair(ctx context.Context, first, second records.Entry) error {
 	c, store, err := s.open(ctx)
 	if err != nil {
 		return err
@@ -56,12 +56,12 @@ func (s keyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 	return store.WritePair(ctx, first, second)
 }
 
-func ensureProjectDatabaseOf(ctx context.Context, c *clients, in keyvalue.Partition) error {
+func ensureProjectDatabaseOf(ctx context.Context, c *clients, in records.Partition) error {
 	project, _ := ports.ProjectOfRecords(in)
 	return c.ensureProjectDatabase(ctx, in.Tier, project)
 }
 
-func (s keyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (s keyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
 	_, store, err := s.open(ctx)
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func (s keyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyval
 	return store.Remove(ctx, key, expected)
 }
 
-func (s keyValues) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s keyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	_, store, err := s.open(ctx)
 	if err != nil {
 		return nil, err

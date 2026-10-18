@@ -12,11 +12,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -107,20 +107,20 @@ func digestKeyAfter(t *testing.T, req provider.BootstrapRequest, keys ...string)
 		Apply(ctx, req, nil); err != nil {
 		t.Fatal(err)
 	}
-	_, err := store.KeyValues.Read(ctx, keyvalue.Partition{Tier: req.Tier, Root: keyvalue.RootEnvSourceDigestKey}.Key("digestkey"))
+	_, err := store.KeyValues.Read(ctx, records.Partition{Tier: req.Tier, Root: envsource.RootDigestKey}.Key("digestkey"))
 	return err
 }
 
 func TestAnApplyThatTakesTheVariablesKeyAwayForgetsTheDigestKeySealedUnderIt(t *testing.T) {
 	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{provider.VariablesKeyPart}}
-	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", ""); !errors.Is(err, keyvalue.ErrNotFound) {
+	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", ""); !errors.Is(err, records.ErrNotFound) {
 		t.Fatalf("the digest key after the variables key was removed reads %v, want it forgotten: nothing opens it once its key is gone, and a sync never replaces a key it cannot open", err)
 	}
 }
 
 func TestAnApplyThatBringsAnotherVariablesKeyForgetsTheDigestKeySealedUnderTheOldOne(t *testing.T) {
 	req := provider.BootstrapRequest{Tier: environment.TierPreview}
-	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/two"); !errors.Is(err, keyvalue.ErrNotFound) {
+	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/two"); !errors.Is(err, records.ErrNotFound) {
 		t.Fatalf("the digest key after the variables key changed reads %v, want it forgotten", err)
 	}
 }

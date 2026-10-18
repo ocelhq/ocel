@@ -6,7 +6,12 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
+)
+
+const (
+	RootValues    records.Root = "values"
+	RootValueRefs records.Root = "valuerefs"
 )
 
 const (
@@ -77,68 +82,68 @@ func plainFolder(folder string) string {
 	return folder
 }
 
-func ValuesPartition(scope Scope) keyvalue.Partition {
-	return keyvalue.Partition{Tier: scope.Tier, Root: keyvalue.RootValues, Path: []string{scope.Project}}
+func ValuesPartition(scope Scope) records.Partition {
+	return records.Partition{Tier: scope.Tier, Root: RootValues, Path: []string{scope.Project}}
 }
 
-func cellsPrefix(scope Scope) keyvalue.Key { return ValuesPartition(scope).Key("cells") }
+func cellsPrefix(scope Scope) records.Key { return ValuesPartition(scope).Key("cells") }
 
-func CellKey(scope Scope, at Coordinate) keyvalue.Key {
+func CellKey(scope Scope, at Coordinate) records.Key {
 	at = at.canonical()
 	return ValuesPartition(scope).Key("cells", at.Folder, at.Key, at.Environment)
 }
 
-func historyPrefix(scope Scope, at Coordinate) keyvalue.Key {
+func historyPrefix(scope Scope, at Coordinate) records.Key {
 	at = at.canonical()
 	return ValuesPartition(scope).Key("history", at.Folder, at.Key, at.Environment)
 }
 
-func versionKey(scope Scope, at Coordinate, version int64) keyvalue.Key {
+func versionKey(scope Scope, at Coordinate, version int64) records.Key {
 	history := historyPrefix(scope, at)
 	return history.Partition.Key(append(history.Path, fmt.Sprintf("%0*d", versionDigits, version))...)
 }
 
-func bindingsPrefix(scope Scope) keyvalue.Key { return ValuesPartition(scope).Key("bindings") }
+func bindingsPrefix(scope Scope) records.Key { return ValuesPartition(scope).Key("bindings") }
 
-func bindingPrefix(scope Scope, binding string) keyvalue.Key {
+func bindingPrefix(scope Scope, binding string) records.Key {
 	return ValuesPartition(scope).Key("bindings", binding)
 }
 
-func bindingRecordAt(scope Scope, binding, environment string) keyvalue.Key {
+func bindingRecordAt(scope Scope, binding, environment string) records.Key {
 	return ValuesPartition(scope).Key("bindings", binding, "records", canonicalEnvironment(environment))
 }
 
-func bindingValueAt(scope Scope, binding, environment string) keyvalue.Key {
+func bindingValueAt(scope Scope, binding, environment string) records.Key {
 	return ValuesPartition(scope).Key("bindings", binding, "values", canonicalEnvironment(environment))
 }
 
-func bindingOwnersPrefix(scope Scope) keyvalue.Key {
+func bindingOwnersPrefix(scope Scope) records.Key {
 	return ValuesPartition(scope).Key("bindingowners")
 }
 
-func bindingOwnerKey(scope Scope, owner, environment string) keyvalue.Key {
+func bindingOwnerKey(scope Scope, owner, environment string) records.Key {
 	return ValuesPartition(scope).Key("bindingowners", owner, canonicalEnvironment(environment))
 }
 
-func ReferencesPartition(scope Scope) keyvalue.Partition {
-	return keyvalue.Partition{Tier: scope.Tier, Root: keyvalue.RootValueRefs, Path: []string{scope.Project}}
+func ReferencesPartition(scope Scope) records.Partition {
+	return records.Partition{Tier: scope.Tier, Root: RootValueRefs, Path: []string{scope.Project}}
 }
 
-func refsPrefix(target Scope, at Coordinate) keyvalue.Key {
+func refsPrefix(target Scope, at Coordinate) records.Key {
 	at = at.canonical()
 	return ReferencesPartition(target).Key(at.Folder, at.Key)
 }
 
-func refKey(target Scope, at Coordinate, from Scope, sourceAt Coordinate) keyvalue.Key {
+func refKey(target Scope, at Coordinate, from Scope, sourceAt Coordinate) records.Key {
 	at, sourceAt = at.canonical(), sourceAt.canonical()
 	return ReferencesPartition(target).Key(at.Folder, at.Key, from.Project, sourceAt.Folder, sourceAt.Key, sourceAt.Environment)
 }
 
-func (s Store) listUnder(ctx context.Context, prefix keyvalue.Key) ([]keyvalue.Entry, error) {
+func (s Store) listUnder(ctx context.Context, prefix records.Key) ([]records.Entry, error) {
 	return s.KeyValues.List(ctx, prefix.Partition, prefix.Path...)
 }
 
-func cellOf(key keyvalue.Key) (Coordinate, bool) {
+func cellOf(key records.Key) (Coordinate, bool) {
 	if len(key.Path) < 3 {
 		return Coordinate{}, false
 	}

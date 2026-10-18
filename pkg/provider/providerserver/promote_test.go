@@ -10,10 +10,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -282,16 +282,16 @@ func TestTwoPromotesRacingOnOnePointerLeaveTheLedgerAndEveryRouterOnTheSameRelea
 	}
 }
 
-type honouring struct{ keyvalue.Store }
+type honouring struct{ records.Store }
 
-func (h honouring) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (h honouring) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if err := ctx.Err(); err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	return h.Store.Read(ctx, key)
 }
 
-func (h honouring) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (h honouring) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -329,12 +329,12 @@ func TestAPromoteInterruptedWhileItMovesStillTakesItsPromotionBack(t *testing.T)
 }
 
 type overtaking struct {
-	keyvalue.Store
+	records.Store
 	mu     sync.Mutex
 	before func()
 }
 
-func (o *overtaking) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (o *overtaking) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	o.mu.Lock()
 	before := o.before
 	if slices.Equal(entry.Key.Path, []string{"pointers", router.DefaultPointer}) {
@@ -404,7 +404,7 @@ func TestAPromoteWhoseRecordAReclaimRemovedAsItLandedIsTakenBackAndMovesNothing(
 	record := ledger.Partition(environment.TierProduction, promotedSlug).Key("records", "web", "web-p2")
 	store.mu.Lock()
 	store.before = func() {
-		if err := keyvalue.Forget(context.Background(), vendor.KeyValues(), record); err != nil {
+		if err := records.Forget(context.Background(), vendor.KeyValues(), record); err != nil {
 			t.Errorf("forget web-p2 = %v", err)
 		}
 	}

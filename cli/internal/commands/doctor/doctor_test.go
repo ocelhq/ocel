@@ -23,7 +23,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -31,6 +30,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -199,13 +199,13 @@ export default {
 	return project
 }
 
-func record(t *testing.T, p *fake.Provider, key keyvalue.Key, value any) {
+func record(t *testing.T, p *fake.Provider, key records.Key, value any) {
 	t.Helper()
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.KeyValues().Write(context.Background(), keyvalue.Entry{Key: key, Value: encoded}); err != nil {
+	if _, err := p.KeyValues().Write(context.Background(), records.Entry{Key: key, Value: encoded}); err != nil {
 		t.Fatalf("record %s: %v", key, err)
 	}
 }

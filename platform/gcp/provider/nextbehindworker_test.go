@@ -7,9 +7,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -144,7 +144,7 @@ func TestPrerenderSeedsBehindTheWorkerAllGoToCloudStorage(t *testing.T) {
 func TestANextServiceBehindTheWorkerOnATierWithNoOriginWildcardSeedsNoPrerenders(t *testing.T) {
 	w := behindTheWorkerWithItsSeed(t)
 	root := plantPrerenders(t, map[string]string{"cache/blog/post.cache.json": "{}"})
-	if err := keyvalue.Forget(context.Background(), w.p.records, originWildcardKey(environment.TierProduction)); err != nil {
+	if err := records.Forget(context.Background(), w.p.records, originWildcardKey(environment.TierProduction)); err != nil {
 		t.Fatal(err)
 	}
 

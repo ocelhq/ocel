@@ -14,7 +14,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -23,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -154,7 +154,7 @@ func TestARollbackHoldsProductionWhileItMovesThePointerAndFreesItAfter(t *testin
 	if during == nil || !strings.Contains(during.Error(), "a rollback of prod is running") {
 		t.Errorf("a deploy taking production while the rollback moved the pointer = %v, want it refused because the rollback holds production", during)
 	}
-	if _, err := provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv)); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv)); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading production's lease after the rollback = %v, want it freed", err)
 	}
 }

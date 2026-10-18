@@ -14,12 +14,12 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
@@ -62,7 +62,7 @@ func workersStack(env, app string) naming.StackName {
 	return naming.StackName{Env: env, App: app}
 }
 
-func workersAt(ref provider.StackRef) keyvalue.Key {
+func workersAt(ref provider.StackRef) records.Key {
 	path := []string{workersKey, ref.Name.Env, ref.Name.App}
 	if ref.Name.HoldsContainerWorkers() {
 		path = append(path, containerWorkersKey)
@@ -160,7 +160,7 @@ func (r *release) recordWorkers(ctx context.Context, ref provider.StackRef) erro
 	if r.cfg.KeyValues == nil {
 		return nil
 	}
-	entry, err := keyvalue.ReadOrEmpty(ctx, r.cfg.KeyValues, workersAt(ref))
+	entry, err := records.ReadOrEmpty(ctx, r.cfg.KeyValues, workersAt(ref))
 	if err != nil || len(entry.Value) > 0 {
 		return err
 	}
@@ -174,7 +174,7 @@ func (r *release) hasRecordedWorkers(ctx context.Context, ref provider.StackRef)
 		return false, nil
 	}
 	_, err := r.cfg.KeyValues.Read(ctx, workersAt(ref))
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return false, nil
 	}
 	return err == nil, err
@@ -189,7 +189,7 @@ func (r *release) destroyWorkersStack(ctx context.Context, ref provider.StackRef
 			return err
 		}
 	}
-	if err := keyvalue.Forget(ctx, r.cfg.KeyValues, workersAt(ref)); err != nil {
+	if err := records.Forget(ctx, r.cfg.KeyValues, workersAt(ref)); err != nil {
 		return err
 	}
 	return r.releaseFunctionNetwork(ctx, r.cfg.KeyValues, ref, progress)
@@ -349,7 +349,7 @@ func (r *Stacks) listRetiredWorkers(ctx context.Context, live provider.LiveApps)
 	return opened, retired, nil
 }
 
-func recordedWorkersStack(key keyvalue.Key, env string) (naming.StackName, bool) {
+func recordedWorkersStack(key records.Key, env string) (naming.StackName, bool) {
 	rest, found := key.Under(workersKey, env)
 	switch {
 	case found && len(rest) == 1:

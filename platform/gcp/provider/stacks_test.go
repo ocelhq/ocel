@@ -11,11 +11,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -167,7 +167,7 @@ func functionRelease(buildID, image string) provider.StackSpec {
 
 type releasedStacks struct {
 	stacks provider.Stacks
-	store  keyvalue.Store
+	store  records.Store
 }
 
 func newReleasedStacks(p *Provider) releasedStacks {

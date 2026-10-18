@@ -23,7 +23,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -33,6 +32,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
@@ -356,7 +356,7 @@ func useGlobalPreviewDomain(t *testing.T, fixture clitest.FakeProject, base stri
 		t.Fatal(err)
 	}
 	name := stackrecords.WildcardKey(environment.TierPreview)
-	entry, err := keyvalue.ReadOrEmpty(context.Background(), fixture.Provider.KeyValues(), name)
+	entry, err := records.ReadOrEmpty(context.Background(), fixture.Provider.KeyValues(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1097,7 +1097,7 @@ func TestAFirstPreviewUpThatBuildsNothingToDeployLeavesNoPreviewBehind(t *testin
 	}
 
 	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, clitest.FixtureSlug, "staging"))
-	if !errors.Is(err, keyvalue.ErrNotFound) {
+	if !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading staging's record after its first preview up had nothing to deploy = %v, want nothing recorded: `ocel preview ls` would list a preview that was never deployed", err)
 	}
 }
@@ -1121,7 +1121,7 @@ func TestAPersistentPreviewUpWhoseBuildFailsAfterItsInfraFreesThePreviewItHeld(t
 		t.Fatal("the build failed before ProvisionInfra ran, so this test holds no lease to free")
 	}
 	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierPreview, clitest.FixtureSlug, "staging"))
-	if !errors.Is(err, keyvalue.ErrNotFound) {
+	if !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading the lease of preview staging = %v, want none: a preview up whose build failed abandons the lease its infra took", err)
 	}
 }

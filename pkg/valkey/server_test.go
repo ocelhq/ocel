@@ -1,4 +1,4 @@
-package kvstore
+package valkey
 
 import (
 	"slices"
@@ -23,7 +23,7 @@ func directive(args []string, name string) []string {
 func TestAValkeyRunsWithTheDefaultUserOffAndOneUserKnownOnlyByItsPasswordsHash(t *testing.T) {
 	t.Parallel()
 
-	args := Valkey{Password: "hunter2", MemoryBytes: 256 << 20}.Args()
+	args := Server{Password: "hunter2", MemoryBytes: 256 << 20}.Args()
 	if args[0] != "valkey-server" {
 		t.Fatalf("Args() = %v, want the server as the command", args)
 	}
@@ -33,7 +33,7 @@ func TestAValkeyRunsWithTheDefaultUserOffAndOneUserKnownOnlyByItsPasswordsHash(t
 			users = append(users, directive(args[at:], "user"))
 		}
 	}
-	want := [][]string{{"default", "off"}, {ValkeyUsername, "on", "#" + hunter2SHA256, "~*", "&*", "+@all"}}
+	want := [][]string{{"default", "off"}, {Username, "on", "#" + hunter2SHA256, "~*", "&*", "+@all"}}
 	if len(users) != 2 || !slices.Equal(users[0], want[0]) || !slices.Equal(users[1], want[1]) {
 		t.Errorf("users = %v, want %v", users, want)
 	}
@@ -45,7 +45,7 @@ func TestAValkeyRunsWithTheDefaultUserOffAndOneUserKnownOnlyByItsPasswordsHash(t
 func TestAValkeyHoldsItsMemoryAndPersistsEverySecondPlusSnapshots(t *testing.T) {
 	t.Parallel()
 
-	args := Valkey{Password: "p", MemoryBytes: 256 << 20, Eviction: "allkeys-lru"}.Args()
+	args := Server{Password: "p", MemoryBytes: 256 << 20, Eviction: "allkeys-lru"}.Args()
 	for name, want := range map[string][]string{
 		"maxmemory":        {"268435456"},
 		"maxmemory-policy": {"allkeys-lru"},
@@ -62,7 +62,7 @@ func TestAValkeyHoldsItsMemoryAndPersistsEverySecondPlusSnapshots(t *testing.T) 
 func TestAValkeyNamingNoEvictionLeavesTheEnginesOwnDefault(t *testing.T) {
 	t.Parallel()
 
-	if args := (Valkey{Password: "p", MemoryBytes: 32 << 20}).Args(); slices.Contains(args, "--maxmemory-policy") {
+	if args := (Server{Password: "p", MemoryBytes: 32 << 20}).Args(); slices.Contains(args, "--maxmemory-policy") {
 		t.Errorf("Args() = %v, want no eviction policy when the store names none", args)
 	}
 }
@@ -70,11 +70,11 @@ func TestAValkeyNamingNoEvictionLeavesTheEnginesOwnDefault(t *testing.T) {
 func TestTheReadyProbeAuthenticatesWithAPasswordReadFromStdin(t *testing.T) {
 	t.Parallel()
 
-	probe := ValkeyReadyProbe()
+	probe := ReadyProbe()
 	joined := strings.Join(probe, " ")
-	for _, want := range []string{"valkey-cli", "-e", "--user " + ValkeyUsername, "--askpass", "ping"} {
+	for _, want := range []string{"valkey-cli", "-e", "--user " + Username, "--askpass", "ping"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("ValkeyReadyProbe() = %v, want it to include %q", probe, want)
+			t.Errorf("ReadyProbe() = %v, want it to include %q", probe, want)
 		}
 	}
 }

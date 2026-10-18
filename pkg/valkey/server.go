@@ -1,4 +1,4 @@
-package kvstore
+package valkey
 
 import (
 	"crypto/sha256"
@@ -10,25 +10,25 @@ import (
 )
 
 const (
-	ValkeyPort     = 6379
-	ValkeyUsername = "ocel"
-	ValkeyData     = "/data"
-	ValkeyRunsAs   = "valkey:valkey"
+	Port     = 6379
+	Username = "ocel"
+	DataDir  = "/data"
+	RunsAs   = "valkey:valkey"
 
-	valkeySnapshots = "3600 1 300 100 60 10000"
+	snapshots = "3600 1 300 100 60 10000"
 )
 
-type Valkey struct {
+type Server struct {
 	Password    string
 	MemoryBytes int64
 	Eviction    string
 }
 
-func (v Valkey) Args() []string {
+func (v Server) Args() []string {
 	hash := sha256.Sum256([]byte(v.Password))
 	args := []string{"valkey-server",
 		"--user", "default", "off",
-		"--user", ValkeyUsername, "on", "#" + hex.EncodeToString(hash[:]), "~*", "&*", "+@all",
+		"--user", Username, "on", "#" + hex.EncodeToString(hash[:]), "~*", "&*", "+@all",
 		"--maxmemory", strconv.FormatInt(v.MemoryBytes, 10),
 	}
 	if v.Eviction != "" {
@@ -37,12 +37,12 @@ func (v Valkey) Args() []string {
 	return append(args,
 		"--appendonly", "yes",
 		"--appendfsync", "everysec",
-		"--save", valkeySnapshots,
+		"--save", snapshots,
 	)
 }
 
-func ValkeyReadyProbe() []string {
-	return []string{"valkey-cli", "-e", "--no-auth-warning", "--user", ValkeyUsername, "--askpass", "ping"}
+func ReadyProbe() []string {
+	return []string{"valkey-cli", "-e", "--no-auth-warning", "--user", Username, "--askpass", "ping"}
 }
 
 var ownedDirectives = []string{

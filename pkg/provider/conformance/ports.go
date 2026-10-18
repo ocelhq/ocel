@@ -5,11 +5,13 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
-func RunPorts(t *testing.T, p provider.Provider) {
+const Root records.Root = "conformance"
+
+func RunPorts(t *testing.T, p provider.Provider, vendorRoots ...records.Root) {
 	t.Helper()
 
 	t.Run("Store", func(t *testing.T) { RunStore(t, p.KeyValues()) })
@@ -17,7 +19,7 @@ func RunPorts(t *testing.T, p provider.Provider) {
 	facts := p.Facts()
 	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, facts, p.Artifacts()) })
 	t.Run("Stacks", func(t *testing.T) {
-		RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues())
+		RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues(), vendorRoots...)
 	})
 	t.Run("Bootstrap", func(t *testing.T) {
 		RunBootstrap(t, bootstrapOf(t, p), facts.DefaultEdge)
@@ -42,11 +44,11 @@ func bootstrapOf(t *testing.T, p provider.Provider) provider.Bootstrap {
 	return bootstrap
 }
 
-func conformanceIn(tier environment.Tier, t *testing.T) keyvalue.Partition {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootConformance, Path: []string{t.Name()}}
+func conformanceIn(tier environment.Tier, t *testing.T) records.Partition {
+	return records.Partition{Tier: tier, Root: Root, Path: []string{t.Name()}}
 }
 
-func under(t *testing.T, path ...string) keyvalue.Key {
+func under(t *testing.T, path ...string) records.Key {
 	return conformanceIn(environment.TierProduction, t).Key(path...)
 }
 

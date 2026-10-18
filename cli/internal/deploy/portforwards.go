@@ -11,8 +11,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/portforward"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -102,7 +102,7 @@ func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []decl
 		}
 	}
 	for _, usage := range usages {
-		_, bindable := naming.BindableAs(usage.Type)
+		_, bindable := bindings.BindableAs(usage.Type)
 		if !built[usage.App] || !bindable {
 			continue
 		}
