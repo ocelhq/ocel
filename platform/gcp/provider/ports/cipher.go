@@ -18,15 +18,18 @@ type Cipher struct {
 	Clients *Clients
 }
 
-func (s Cipher) resolveKeyPath(tier environment.Tier) (string, error) {
+func (s Cipher) resolveKeyPath(tier environment.Tier, bound seal.AssociatedData) (string, error) {
 	if tier == "" {
 		return "", Tierless("a value")
+	}
+	if project, owned := ProjectSealedFor(bound); owned {
+		return s.Clients.ProjectKeyPath(tier, project), nil
 	}
 	return s.Clients.KeyPath(string(tier)), nil
 }
 
 func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	key, err := s.resolveKeyPath(tier)
+	key, err := s.resolveKeyPath(tier, bound)
 	if err != nil {
 		return nil, err
 	}
@@ -40,13 +43,13 @@ func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 		AdditionalAuthenticatedData: bound.Bytes(),
 	})
 	if err != nil {
-		return nil, s.keyless(tier, "encrypt value", err)
+		return nil, s.keyless(tier, bound, "encrypt value", err)
 	}
 	return sealed.GetCiphertext(), nil
 }
 
 func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	key, err := s.resolveKeyPath(tier)
+	key, err := s.resolveKeyPath(tier, bound)
 	if err != nil {
 		return nil, err
 	}
@@ -60,12 +63,15 @@ func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.Asso
 		AdditionalAuthenticatedData: bound.Bytes(),
 	})
 	if err != nil {
-		return nil, s.keyless(tier, "decrypt value", err)
+		return nil, s.keyless(tier, bound, "decrypt value", err)
 	}
 	return opened.GetPlaintext(), nil
 }
 
-func (s Cipher) keyless(tier environment.Tier, doing string, err error) error {
+func (s Cipher) keyless(tier environment.Tier, bound seal.AssociatedData, doing string, err error) error {
+	if project, owned := ProjectSealedFor(bound); owned && status.Code(err) == codes.NotFound {
+		return refuseNoProjectKey(tier, project)
+	}
 	if status.Code(err) == codes.NotFound {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this project has no %s key on the %s ring to seal a %s value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",

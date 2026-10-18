@@ -31,15 +31,22 @@ type KeyValues struct {
 	Clients *Clients
 }
 
-func (s KeyValues) collection(in keyvalue.Partition) (*firestore.CollectionRef, error) {
+func (s KeyValues) open(in keyvalue.Partition) (*firestore.Client, *firestore.CollectionRef, error) {
 	if err := keyvalue.RefuseMalformedPartition(in); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	client, err := s.Clients.Firestore()
+	client, err := s.client(in)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return OpenTierCollection(client, in.Tier), nil
+	return client, OpenTierCollection(client, in.Tier), nil
+}
+
+func (s KeyValues) client(in keyvalue.Partition) (*firestore.Client, error) {
+	if project, owned := ProjectOfRecords(in); owned {
+		return s.Clients.ProjectFirestore(in.Tier, project)
+	}
+	return s.Clients.Firestore()
 }
 
 func OpenTierCollection(client *firestore.Client, tier environment.Tier) *firestore.CollectionRef {
@@ -59,11 +66,14 @@ func (s KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, 
 	if err := keyvalue.RefuseMalformedKey(key); err != nil {
 		return keyvalue.Entry{}, err
 	}
-	collection, err := s.collection(key.Partition)
+	_, collection, err := s.open(key.Partition)
 	if err != nil {
 		return keyvalue.Entry{}, err
 	}
 	snapshot, err := collection.Doc(documentID(key)).Get(ctx)
+	if _, owned := ProjectOfRecords(key.Partition); owned && status.Code(err) == codes.NotFound {
+		return keyvalue.Entry{}, keyvalue.ErrNotFound
+	}
 	if status.Code(err) == codes.NotFound {
 		return keyvalue.Entry{}, s.refuseAbsentDocument(ctx, collection, key.Partition.Tier)
 	}
@@ -77,15 +87,11 @@ func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 	if err := keyvalue.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
-	collection, err := s.collection(entry.Key.Partition)
+	client, collection, err := s.open(entry.Key.Partition)
 	if err != nil {
 		return "", err
 	}
 	next, err := keyvalue.NewRevision()
-	if err != nil {
-		return "", err
-	}
-	client, err := s.Clients.Firestore()
 	if err != nil {
 		return "", err
 	}
@@ -104,11 +110,11 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 			return err
 		}
 	}
-	collection, err := s.collection(first.Key.Partition)
+	client, collection, err := s.open(first.Key.Partition)
 	if err != nil {
 		return err
 	}
-	beside, err := s.collection(second.Key.Partition)
+	_, beside, err := s.open(second.Key.Partition)
 	if err != nil {
 		return err
 	}
@@ -121,10 +127,6 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 		if revisions[slot], err = keyvalue.NewRevision(); err != nil {
 			return err
 		}
-	}
-	client, err := s.Clients.Firestore()
-	if err != nil {
-		return err
 	}
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		pair := []keyvalue.Entry{first, second}
@@ -150,11 +152,7 @@ func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyval
 	if err := keyvalue.RefuseMalformedKey(key); err != nil {
 		return err
 	}
-	collection, err := s.collection(key.Partition)
-	if err != nil {
-		return err
-	}
-	client, err := s.Clients.Firestore()
+	client, collection, err := s.open(key.Partition)
 	if err != nil {
 		return err
 	}
@@ -173,13 +171,16 @@ func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyval
 		return tx.Delete(reference)
 	})
 	if err != nil {
+		if _, owned := ProjectOfRecords(key.Partition); owned && status.Code(err) == codes.NotFound {
+			return keyvalue.ErrNotFound
+		}
 		return s.refuseFailedWrite(key, err)
 	}
 	return nil
 }
 
 func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
-	collection, err := s.collection(in)
+	_, collection, err := s.open(in)
 	if err != nil {
 		return nil, err
 	}
@@ -204,6 +205,9 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 			return found, nil
 		}
 		if err != nil {
+			if _, owned := ProjectOfRecords(in); owned && status.Code(err) == codes.NotFound {
+				return nil, nil
+			}
 			if status.Code(err) == codes.NotFound {
 				return nil, s.refuseUnbootstrapped(in.Tier)
 			}
@@ -277,6 +281,9 @@ func currentRevision(tx *firestore.Transaction, reference *firestore.DocumentRef
 func (s KeyValues) refuseFailedWrite(key keyvalue.Key, err error) error {
 	if errors.Is(err, keyvalue.ErrStale) || errors.Is(err, keyvalue.ErrNotFound) {
 		return err
+	}
+	if project, owned := ProjectOfRecords(key.Partition); owned && status.Code(err) == codes.NotFound {
+		return refuseNoProjectRecords(key.Partition.Tier, project)
 	}
 	if status.Code(err) == codes.NotFound {
 		return s.refuseUnbootstrapped(key.Partition.Tier)

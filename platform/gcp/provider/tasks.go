@@ -8,8 +8,6 @@ import (
 	"strings"
 
 	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
-	"cloud.google.com/go/iam/apiv1/iampb"
-	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -50,8 +49,8 @@ var queueRoles = []string{queueEnqueuerRole}
 
 var retiredTierQueueRoles = []string{queueEnqueuerRole, queueDeleterRole}
 
-func taskDatabaseCondition(c *clients, tier environment.Tier) *cloudresourcemanager.Expr {
-	return &cloudresourcemanager.Expr{
+func taskDatabaseCondition(c *clients, tier environment.Tier) *iampolicy.Condition {
+	return &iampolicy.Condition{
 		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " task database",
 		Expression: fmt.Sprintf("resource.name == %q", databasePath(c, c.TaskDatabase(tier))),
 	}
@@ -227,38 +226,12 @@ func (b bootstrap) ensureDelayQueue(ctx context.Context, tier environment.Tier) 
 }
 
 func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, member string, roles, wanted []string) error {
-	client, err := c.Workload().CloudTasks()
-	if err != nil {
-		return err
+	changes := make([]iampolicy.Change, 0, len(roles))
+	for _, role := range roles {
+		changes = append(changes, grantedOrRevoked(role, member, nil, slices.Contains(wanted, role)))
 	}
-	path := c.DelayQueuePath(c.region, tier)
-	var refused error
-	for attempt := range bindAttempts {
-		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
-			return ctx.Err()
-		}
-		policy, err := googleretry.Called(ctx, func() (*iampb.Policy, error) {
-			return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: path})
-		})
-		if err != nil {
-			return fmt.Errorf("read who may delay messages on %s: %w", c.DelayQueue(tier), err)
-		}
-		bindings, changed := boundKeyRoles(policy.GetBindings(), member, roles, wanted)
-		if !changed {
-			return nil
-		}
-		policy.Bindings = bindings
-		_, refused = googleretry.Called(ctx, func() (*iampb.Policy, error) {
-			return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: path, Policy: policy})
-		})
-		if refused == nil {
-			return nil
-		}
-		if !stale(refused) {
-			break
-		}
-	}
-	return fmt.Errorf("let %s delay messages on %s: %w", member, c.DelayQueue(tier), refused)
+	_, err := iampolicy.Edit(ctx, c.queuePolicy(c.DelayQueuePath(c.region, tier), "the "+c.DelayQueue(tier)+" delay queue"), iampolicy.Each(changes...))
+	return err
 }
 
 func (b bootstrap) purgeDelayQueue(ctx context.Context, tier environment.Tier) error {

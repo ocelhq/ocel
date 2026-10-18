@@ -54,7 +54,7 @@ func TestEachTierSyncsAsAnAccountOfItsOwnThatEveryReadNamesTheSame(t *testing.T)
 		t.Errorf("the production sync account is %s once and %s again, and a survey could not find the account an apply made", production, again)
 	}
 	for _, tier := range bothTiers {
-		if names.EnvSourceSyncAccount(tier) == names.AppAccount(tier, "shop", "api") {
+		if names.EnvSourceSyncAccount(tier) == names.AppAccount(tier, "shop", "production", "api") {
 			t.Errorf("the %s sync runs as an app's account, and an app would then write every value", tier)
 		}
 	}

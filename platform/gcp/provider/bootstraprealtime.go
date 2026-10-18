@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"google.golang.org/api/cloudresourcemanager/v1"
-
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 )
 
 const (
@@ -29,12 +28,12 @@ func realtimeMember(c *clients, tier environment.Tier) string {
 	return "serviceAccount:" + c.RealtimeAccountEmail(tier)
 }
 
-func (b bootstrap) realtimeKeysCondition(ctx context.Context, tier environment.Tier) (*cloudresourcemanager.Expr, error) {
+func (b bootstrap) realtimeKeysCondition(ctx context.Context, tier environment.Tier) (*iampolicy.Condition, error) {
 	number, err := b.clients.ReadProjectNumber(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &cloudresourcemanager.Expr{
+	return &iampolicy.Condition{
 		Title: "ocel " + string(b.clients.Namespace()) + " " + string(tier) + " realtime keys",
 		Expression: fmt.Sprintf("resource.type == %q && resource.name.startsWith(%q)",
 			secretVersionType, fmt.Sprintf("projects/%d/secrets/%s", number, b.clients.RealtimeKeysSecretPrefix(tier))),

@@ -51,7 +51,7 @@ func newStaticKeys(assetPrefix string) (staticKeys, error) {
 }
 
 func servesStaticFiles(spec provider.StackSpec) bool {
-	return spec.App != nil && servesNext(spec.App) && spec.App.Routing != nil
+	return spec.App != nil && servesNext(spec.App) && spec.App.Compute != provider.ComputeContainer && spec.App.Routing != nil
 }
 
 func (p *Provider) uploadStaticFiles(ctx context.Context, spec provider.StackSpec, runProgress progress.Log) error {

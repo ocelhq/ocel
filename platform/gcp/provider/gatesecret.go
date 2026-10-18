@@ -7,15 +7,12 @@ import (
 	"maps"
 	"slices"
 
-	"google.golang.org/api/secretmanager/v1"
-
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -83,46 +80,19 @@ func (c *clients) deleteGate(ctx context.Context, tier environment.Tier, slug st
 	return c.deleteSecret(ctx, service, c.GateSecret(tier, slug))
 }
 
-func (c *clients) bindGateReader(ctx context.Context, tier environment.Tier, slug, member string, granting bool) (bool, error) {
-	service, err := c.Secrets()
-	if err != nil {
-		return false, err
+func (c *clients) gateGrants(spec provider.StackSpec, member string) []appGrant {
+	if !mountsGateOnAnyService(spec) {
+		return nil
 	}
-	path := secretPath(c.project, c.GateSecret(tier, slug))
-	var refused error
-	for attempt := range bindAttempts {
-		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
-			return false, ctx.Err()
-		}
-		policy, err := googleretry.Attempted(ctx, service.Projects.Secrets.GetIamPolicy(path).Context(ctx).Do)
-		if absent(err) && !granting {
-			return false, nil
-		}
-		if err != nil {
-			return false, fmt.Errorf("read who may read the %s gate of %s: %w", tier, slug, err)
-		}
-		bindings, changed := boundSecretMember(policy.Bindings, gateReaderRole, member, granting)
-		if !changed {
-			return false, nil
-		}
-		policy.Bindings = bindings
-		_, refused = googleretry.Attempted(ctx, service.Projects.Secrets.SetIamPolicy(path,
-			&secretmanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
-		if refused == nil {
-			return true, nil
-		}
-		if !stale(refused) {
-			break
-		}
-	}
-	return false, fmt.Errorf("update who may read the %s gate of %s: %w", tier, slug, refused)
+	return []appGrant{on(targetSecret, c.GateSecret(spec.Ref.Tier, spec.Ref.Project), gateReaderRole, member)}
 }
 
-func (c *clients) grantGateRead(ctx context.Context, account string, tier environment.Tier, slug string) error {
-	return untilVisible(ctx, func() error {
-		_, err := c.bindGateReader(ctx, tier, slug, "serviceAccount:"+account, true)
-		return err
-	})
+func mountsGateOnAnyService(spec provider.StackSpec) bool {
+	if !mountsGate(spec) {
+		return false
+	}
+	return spec.App.Compute == provider.ComputeContainer || len(spec.App.Functions) == 0 ||
+		slices.ContainsFunc(spec.App.Functions, func(fn provider.FunctionSpec) bool { return !ignoresGate(spec, fn) })
 }
 
 var gateFrameworks = []string{buildoutput.FrameworkNode, buildoutput.FrameworkNext, buildoutput.FrameworkSvelteKit}
@@ -134,7 +104,7 @@ type gatedServing struct {
 
 func (g gatedServing) hasGate() bool { return len(g.env) > 0 }
 
-func (p *Provider) provisionGate(ctx context.Context, c *clients, spec provider.StackSpec, account string) (gatedServing, error) {
+func (p *Provider) provisionGate(ctx context.Context, c *clients, spec provider.StackSpec) (gatedServing, error) {
 	if !mountsGate(spec) {
 		return gatedServing{}, nil
 	}
@@ -147,9 +117,6 @@ func (p *Provider) provisionGate(ctx context.Context, c *clients, spec provider.
 		return gatedServing{}, fmt.Errorf("the secret the %s services of %s mount does not exist, so a service mounting it would answer every request with 503: deploy again, which writes the secret before any service mounts it", tier, slug)
 	case held == nil && isGated(spec):
 		return gatedServing{}, fmt.Errorf("the secret the %s services of %s mount holds no gate, so they would serve this protected deploy to anyone: deploy again", tier, slug)
-	}
-	if err := c.grantGateRead(ctx, account, tier, slug); err != nil {
-		return gatedServing{}, fmt.Errorf("let %s read the %s gate of %s: %w", account, tier, slug, err)
 	}
 	if p.gateInEnv {
 		// HACK: floci-gcp runs no secret volume, so an emulated service takes its gate, or the withdrawn marker, from its environment and a change of gate rolls a revision; drop gateInEnv once floci-gcp mounts secret volumes (#1605).

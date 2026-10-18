@@ -8,9 +8,16 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const cacheGrantPrefix = "prod/shop/web/r1a2b3c4d/isr"
+
+func cachedAt(prefix string) provider.StackSpec {
+	spec := nextSpec()
+	spec.App.ISR = &provider.ISRSpec{Prefix: prefix}
+	return spec
+}
 
 func cacheBindingsOf(server *iamServer) []string {
 	var bound []string
@@ -26,10 +33,10 @@ func TestAnAppsAccountMayUseObjectsUnderItsOwnCachePrefixAndNoOther(t *testing.T
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.open(t)
-	member := "serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", "web")
+	member := "serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 
-	if err := c.ensureCacheGrant(context.Background(), environment.TierProduction, member, cacheGrantPrefix); err != nil {
-		t.Fatalf("ensureCacheGrant() = %v", err)
+	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
+		t.Fatalf("applyAppGrants() = %v", err)
 	}
 
 	want := appObjectsRole + " " + member + ` resource.name.startsWith("projects/_/buckets/ocel-acme-prod-production/objects/cache/shop/web/")`
@@ -75,14 +82,13 @@ func TestARedeployOfAnAppWritesNoPolicy(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.open(t)
-	member := "serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", "web")
-	if err := c.ensureCacheGrant(context.Background(), environment.TierProduction, member, cacheGrantPrefix); err != nil {
+	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
 		t.Fatal(err)
 	}
 	before := server.projectWrites
 
-	if err := c.ensureCacheGrant(context.Background(), environment.TierProduction, member, cacheGrantPrefix); err != nil {
-		t.Fatalf("second ensureCacheGrant() = %v", err)
+	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
+		t.Fatalf("second applyAppGrants() = %v", err)
 	}
 	if got := server.projectWrites - before; got != 0 {
 		t.Errorf("a redeploy wrote the project policy %d times, want 0", got)
@@ -94,8 +100,8 @@ func TestACachePolicyChangedUnderTheGrantIsReadAgainAndWritten(t *testing.T) {
 	server := &policyServer{refusals: 1}
 	c := server.open(t)
 
-	if err := c.ensureCacheGrant(context.Background(), environment.TierProduction, "serviceAccount:web@acme-prod.iam.gserviceaccount.com", cacheGrantPrefix); err != nil {
-		t.Fatalf("ensureCacheGrant() against a policy that changed once under it = %v", err)
+	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
+		t.Fatalf("applyAppGrants() against a policy that changed once under it = %v", err)
 	}
 	if reads, writes := server.reads.Load(), server.writes.Load(); reads != 2 || writes != 2 {
 		t.Errorf("the grant read %d and wrote %d times, want 2 and 2", reads, writes)
@@ -129,10 +135,10 @@ func TestANextAppsAccountMayUseItsTiersTagRecordsAndNoOtherDatabase(t *testing.T
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.open(t)
-	account := c.AppAccountEmail(environment.TierProduction, "shop", "web")
+	account := c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 
-	if err := grantCache(context.Background(), c, routedNextSpec(), account); err != nil {
-		t.Fatalf("grantCache() = %v", err)
+	if err := applyAppGrants(t, c, routedNextSpec()); err != nil {
+		t.Fatalf("applyAppGrants() = %v", err)
 	}
 
 	want := tagRecordsRole + " serviceAccount:" + account + ` resource.name == "projects/acme-prod/databases/ocel-production-tags"`
@@ -152,8 +158,8 @@ func TestAnAppWithoutAnIncrementalCacheIsGrantedNoTagRecords(t *testing.T) {
 	server := appAccountsOnly()
 	c := server.open(t)
 
-	if err := grantCache(context.Background(), c, nextSpec(), c.AppAccountEmail(environment.TierProduction, "shop", "web")); err != nil {
-		t.Fatalf("grantCache() = %v", err)
+	if err := applyAppGrants(t, c, nextSpec()); err != nil {
+		t.Fatalf("applyAppGrants() = %v", err)
 	}
 	if got := tagRecordBindingsOf(server); len(got) != 0 {
 		t.Errorf("an app without ISR holds the tag record bindings %q, want none", got)
@@ -164,14 +170,13 @@ func TestARedeployOfANextAppWritesNoTagRecordsPolicy(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.open(t)
-	account := c.AppAccountEmail(environment.TierProduction, "shop", "web")
-	if err := grantCache(context.Background(), c, routedNextSpec(), account); err != nil {
+	if err := applyAppGrants(t, c, routedNextSpec()); err != nil {
 		t.Fatal(err)
 	}
 	before := server.projectWrites
 
-	if err := grantCache(context.Background(), c, routedNextSpec(), account); err != nil {
-		t.Fatalf("second grantCache() = %v", err)
+	if err := applyAppGrants(t, c, routedNextSpec()); err != nil {
+		t.Fatalf("second applyAppGrants() = %v", err)
 	}
 	if got := server.projectWrites - before; got != 0 {
 		t.Errorf("a redeploy wrote the project policy %d times, want 0", got)

@@ -15,6 +15,7 @@ import (
 
 	sqladmin "google.golang.org/api/sqladmin/v1"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -28,8 +29,8 @@ import (
 
 const (
 	cloudSQLEdition        = "ENTERPRISE"
-	cloudSQLTier           = "db-f1-micro"
 	cloudSQLZonal          = "ZONAL"
+	cloudSQLRegional       = "REGIONAL"
 	cloudSQLDiskType       = "PD_SSD"
 	cloudSQLDiskGB         = 10
 	cloudSQLEncryptedOnly  = "ENCRYPTED_ONLY"
@@ -49,6 +50,54 @@ var cloudSQLVersions = map[string]string{
 	"15": "POSTGRES_15",
 	"16": "POSTGRES_16",
 	"17": "POSTGRES_17",
+}
+
+type cloudSQLSize struct {
+	machineType         string
+	availability        string
+	pointInTimeRecovery bool
+	deletionProtection  bool
+	maxConnections      int
+}
+
+var (
+	productionCloudSQL = cloudSQLSize{
+		machineType:         "db-custom-1-3840",
+		availability:        cloudSQLRegional,
+		pointInTimeRecovery: true,
+		deletionProtection:  true,
+		maxConnections:      100,
+	}
+	previewCloudSQL = cloudSQLSize{
+		machineType:    "db-f1-micro",
+		availability:   cloudSQLZonal,
+		maxConnections: 25,
+	}
+)
+
+func (s cloudSQLSize) backups() *sqladmin.BackupConfiguration {
+	return &sqladmin.BackupConfiguration{
+		Enabled:                    true,
+		PointInTimeRecoveryEnabled: s.pointInTimeRecovery,
+		ForceSendFields:            []string{"PointInTimeRecoveryEnabled"},
+	}
+}
+
+func (s cloudSQLSize) isSize(instance *sqladmin.DatabaseInstance) bool {
+	settings := instance.Settings
+	if settings == nil || settings.BackupConfiguration == nil {
+		return false
+	}
+	return settings.Tier == s.machineType && settings.AvailabilityType == s.availability &&
+		settings.DeletionProtectionEnabled == s.deletionProtection &&
+		settings.BackupConfiguration.Enabled && settings.BackupConfiguration.PointInTimeRecoveryEnabled == s.pointInTimeRecovery
+}
+
+func cloudSQLSizeOf(tier environment.Tier) cloudSQLSize {
+	if tier == environment.TierProduction {
+		return productionCloudSQL
+	}
+	return previewCloudSQL
 }
 
 var settlingStates = []string{"PENDING_CREATE", "MAINTENANCE"}
@@ -73,14 +122,15 @@ func readPostgres(resource provider.Resource) (postgresSpec, error) {
 	return postgresSpec{version: version}, nil
 }
 
-func (s postgresSpec) shapeProperties(region string) map[string]any {
+func (s postgresSpec) shapeProperties(region string, tier environment.Tier) map[string]any {
+	size := cloudSQLSizeOf(tier)
 	return map[string]any{
 		"region":           region,
 		"database_version": s.version,
 		"settings": map[string]any{
-			"tier":              cloudSQLTier,
+			"tier":              size.machineType,
 			"edition":           cloudSQLEdition,
-			"availability_type": cloudSQLZonal,
+			"availability_type": size.availability,
 			"disk_type":         cloudSQLDiskType,
 			"disk_size":         cloudSQLDiskGB,
 		},
@@ -180,6 +230,9 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 				"Declare %s again, or upgrade it with `gcloud sql instances patch %s --database-version=%s` and deploy again",
 			resource.Name, spec.version, current.Name, current.DatabaseVersion, current.DatabaseVersion, current.Name, spec.version)
 	}
+	if current, err = i.resize(ctx, resource.Name, current, progress); err != nil {
+		return provider.Binding{}, err
+	}
 	if current, err = i.awaitAddress(ctx, resource.Name, current); err != nil {
 		return provider.Binding{}, err
 	}
@@ -214,7 +267,7 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 }
 
 func (i postgresInstances) desiredInstance(name string, spec postgresSpec, database string) *sqladmin.DatabaseInstance {
-	project, grows := i.clients.project, true
+	project, grows, size := i.clients.project, true, cloudSQLSizeOf(i.ref.Tier)
 	return &sqladmin.DatabaseInstance{
 		Name:            name,
 		Region:          i.clients.region,
@@ -222,13 +275,13 @@ func (i postgresInstances) desiredInstance(name string, spec postgresSpec, datab
 		InstanceType:    cloudSQLInstanceType,
 		Settings: &sqladmin.Settings{
 			Edition:             cloudSQLEdition,
-			Tier:                cloudSQLTier,
-			AvailabilityType:    cloudSQLZonal,
+			Tier:                size.machineType,
+			AvailabilityType:    size.availability,
 			DataDiskType:        cloudSQLDiskType,
 			DataDiskSizeGb:      cloudSQLDiskGB,
 			StorageAutoResize:   &grows,
 			UserLabels:          i.labels(database),
-			BackupConfiguration: &sqladmin.BackupConfiguration{Enabled: true},
+			BackupConfiguration: size.backups(),
 			IpConfiguration: &sqladmin.IpConfiguration{
 				Ipv4Enabled: false,
 				SslMode:     cloudSQLEncryptedOnly,
@@ -241,7 +294,7 @@ func (i postgresInstances) desiredInstance(name string, spec postgresSpec, datab
 				},
 				ForceSendFields: []string{"Ipv4Enabled"},
 			},
-			DeletionProtectionEnabled: false,
+			DeletionProtectionEnabled: size.deletionProtection,
 			ForceSendFields:           []string{"DeletionProtectionEnabled"},
 		},
 	}
@@ -263,6 +316,31 @@ func (i postgresInstances) create(ctx context.Context, database string, spec pos
 		return nil, err
 	}
 	return i.readInstance(ctx, database, name)
+}
+
+func (i postgresInstances) resize(ctx context.Context, database string, current *sqladmin.DatabaseInstance, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
+	size := cloudSQLSizeOf(i.ref.Tier)
+	if size.isSize(current) {
+		return current, nil
+	}
+	ensureProgress(progress).Say("Resizing postgres " + database + "'s Cloud SQL instance " + current.Name + " to " + size.machineType + ", " +
+		strings.ToLower(size.availability) + ", as the " + string(i.ref.Tier) + " tier runs it: Cloud SQL restarts an instance whose machine type or availability changes")
+	started, err := googleretry.Attempted(ctx, i.sql.Instances.Patch(i.clients.project, current.Name, &sqladmin.DatabaseInstance{
+		Settings: &sqladmin.Settings{
+			Tier:                      size.machineType,
+			AvailabilityType:          size.availability,
+			BackupConfiguration:       size.backups(),
+			DeletionProtectionEnabled: size.deletionProtection,
+			ForceSendFields:           []string{"DeletionProtectionEnabled"},
+		},
+	}).Context(ctx).Do)
+	if err != nil {
+		return nil, fmt.Errorf("resize the Cloud SQL instance postgres %s runs on: %w", database, err)
+	}
+	if err := i.awaited(ctx, "resizing postgres "+database, started); err != nil {
+		return nil, err
+	}
+	return i.readInstance(ctx, database, current.Name)
 }
 
 func (i postgresInstances) readInstance(ctx context.Context, database, name string) (*sqladmin.DatabaseInstance, error) {
@@ -461,6 +539,9 @@ func (i postgresInstances) remove(ctx context.Context, binding provider.Binding,
 		return err
 	}
 	if current != nil {
+		if err := i.unprotect(ctx, binding.Name, current); err != nil {
+			return err
+		}
 		ensureProgress(progress).Say("Removing postgres " + binding.Name + ", its Cloud SQL instance " + current.Name + " and its data")
 		started, err := googleretry.Attempted(ctx, i.sql.Instances.Delete(i.clients.project, current.Name).Context(ctx).Do)
 		switch {
@@ -474,4 +555,17 @@ func (i postgresInstances) remove(ctx context.Context, binding provider.Binding,
 		}
 	}
 	return keyvalue.Forget(ctx, i.records, i.passwordKey(binding.Name))
+}
+
+func (i postgresInstances) unprotect(ctx context.Context, database string, current *sqladmin.DatabaseInstance) error {
+	if current.Settings == nil || !current.Settings.DeletionProtectionEnabled {
+		return nil
+	}
+	started, err := googleretry.Attempted(ctx, i.sql.Instances.Patch(i.clients.project, current.Name, &sqladmin.DatabaseInstance{
+		Settings: &sqladmin.Settings{DeletionProtectionEnabled: false, ForceSendFields: []string{"DeletionProtectionEnabled"}},
+	}).Context(ctx).Do)
+	if err != nil {
+		return fmt.Errorf("turn off deletion protection on the Cloud SQL instance postgres %s runs on: %w", database, err)
+	}
+	return i.awaited(ctx, "turning off deletion protection on postgres "+database, started)
 }

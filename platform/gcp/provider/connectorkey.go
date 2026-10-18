@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 )
 
 const (
@@ -128,44 +129,15 @@ func (p *Provider) bindConnectorKeySecret(ctx context.Context, granting bool) er
 	if err != nil {
 		return err
 	}
-	service, err := clients.Secrets()
-	if err != nil {
-		return err
-	}
-	path := secretPath(clients.project, clients.ConnectorKeySecret())
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
-	policy, err := googleretry.Attempted(ctx, service.Projects.Secrets.GetIamPolicy(path).Context(ctx).Do)
-	if absent(err) && !granting {
+	_, err = iampolicy.Edit(ctx, clients.secretPolicy(clients.ConnectorKeySecret()), grantedOrRevoked(connectorKeyRole, member, nil, granting))
+	if iampolicy.IsAbsent(err) && !granting {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("read who may read the connector's key: %w", err)
-	}
-	bindings, changed := boundSecretMember(policy.Bindings, connectorKeyRole, member, granting)
-	if !changed {
-		return nil
-	}
-	policy.Bindings = bindings
-	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.SetIamPolicy(path,
-		&secretmanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do); err != nil {
 		return fmt.Errorf("let %s read the connector's key: %w", member, err)
 	}
 	return nil
-}
-
-func boundSecretMember(bindings []*secretmanager.Binding, role, member string, granting bool) ([]*secretmanager.Binding, bool) {
-	for _, binding := range bindings {
-		if binding.Role != role {
-			continue
-		}
-		members, changed := boundMembers(binding.Members, member, granting)
-		binding.Members = members
-		return bindings, changed
-	}
-	if !granting {
-		return bindings, false
-	}
-	return append(bindings, &secretmanager.Binding{Role: role, Members: []string{member}}), true
 }
 
 func (p *Provider) takeConnectorKey(ctx context.Context, progress progress.Log) error {

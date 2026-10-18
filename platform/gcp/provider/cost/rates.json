@@ -931,6 +931,58 @@
       "verified": "2026-10-05"
     },
     {
+      "id": "gcp/sql/vcpu",
+      "region": "us-central1",
+      "unit": "vCPU-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0413"
+        }
+      ],
+      "source": "https://cloud.google.com/sql/pricing",
+      "verified": "2026-10-18"
+    },
+    {
+      "id": "gcp/sql/vcpu-ha",
+      "region": "us-central1",
+      "unit": "vCPU-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0826"
+        }
+      ],
+      "source": "https://cloud.google.com/sql/pricing",
+      "verified": "2026-10-18"
+    },
+    {
+      "id": "gcp/sql/memory",
+      "region": "us-central1",
+      "unit": "GiB-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.007"
+        }
+      ],
+      "source": "https://cloud.google.com/sql/pricing",
+      "verified": "2026-10-18"
+    },
+    {
+      "id": "gcp/sql/memory-ha",
+      "region": "us-central1",
+      "unit": "GiB-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.014"
+        }
+      ],
+      "source": "https://cloud.google.com/sql/pricing",
+      "verified": "2026-10-18"
+    },
+    {
       "id": "gcp/sql/ssd",
       "region": "us-central1",
       "unit": "GiB-month",
@@ -942,6 +994,19 @@
       ],
       "source": "https://cloud.google.com/sql/pricing",
       "verified": "2026-10-05"
+    },
+    {
+      "id": "gcp/sql/ssd-ha",
+      "region": "us-central1",
+      "unit": "GiB-month",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.34"
+        }
+      ],
+      "source": "https://cloud.google.com/sql/pricing",
+      "verified": "2026-10-18"
     },
     {
       "id": "gcp/sql/backup",

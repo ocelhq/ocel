@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 func appAccountsOnly() *iamServer {
@@ -86,7 +87,7 @@ func TestTwoAppsInOneProjectRunAsDifferentAccounts(t *testing.T) {
 		t.Fatalf("ensureAppAccount(api) = %v", err)
 	}
 
-	if web == api || web != c.AppAccountEmail(environment.TierProduction, "shop", "web") || api != c.AppAccountEmail(environment.TierProduction, "shop", "api") {
+	if web == api || web != c.AppAccountEmail(environment.TierProduction, "shop", "production", "web") || api != c.AppAccountEmail(environment.TierProduction, "shop", "production", "api") {
 		t.Errorf("web runs as %q and api as %q, want an account each named for its own app", web, api)
 	}
 	if len(server.created) != 2 {
@@ -114,7 +115,7 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = p.provisionWorkers(context.Background(), p.resolved, worker, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, nil, nil)
+			_, err = p.provisionWorkers(context.Background(), p.resolved, worker, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, nil, provider.Instances{}, nil)
 			return err
 		},
 	} {
@@ -126,7 +127,7 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 			if err := deploy(p, function); err != nil {
 				t.Fatalf("deploying %s = %v", name, err)
 			}
-			want := p.resolved.AppAccountEmail(environment.TierProduction, "shop", "api")
+			want := p.resolved.AppAccountEmail(environment.TierProduction, "shop", "production", "api")
 			if len(server.created) == 0 {
 				t.Fatalf("%s created no service", name)
 			}
@@ -158,7 +159,7 @@ func TestAnAppsAccountIsCreatedOnceAndReusedByTheNextDeploy(t *testing.T) {
 	}
 }
 
-func TestANewAccountMayReadItsRecordsAndOpenUnderItsTiersKeyAndNothingMore(t *testing.T) {
+func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderItsProjectsKeyAndNothingMore(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
@@ -169,8 +170,8 @@ func TestANewAccountMayReadItsRecordsAndOpenUnderItsTiersKeyAndNothingMore(t *te
 
 	member := "serviceAccount:" + email
 	want := []string{
-		"roles/cloudkms.cryptoKeyDecrypter " + member + ` resource.name == "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"`,
-		"roles/datastore.viewer " + member + ` resource.name == "projects/acme-prod/databases/ocel"`,
+		"roles/cloudkms.cryptoKeyDecrypter " + member + ` resource.name == "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/` + ports.ProjectKey(environment.TierProduction, "shop") + `"`,
+		"roles/datastore.viewer " + member + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectDatabase("ocel", environment.TierProduction, "shop") + `"`,
 	}
 	if got := projectBindingsOf(server); !slices.Equal(got, want) {
 		t.Errorf("the project binds %q, want exactly %q", got, want)
@@ -179,9 +180,9 @@ func TestANewAccountMayReadItsRecordsAndOpenUnderItsTiersKeyAndNothingMore(t *te
 		t.Errorf("the key policy, queue and topics were written (%d, %d, %d), and an app that reaches no topics needs none of them", len(server.keyPolicy), server.queueWrites, server.topicWrites)
 	}
 	if got := server.created[0]; got.AccountId != strings.TrimSuffix(email, "@acme-prod.iam.gserviceaccount.com") ||
-		got.ServiceAccount.DisplayName != "ocel shop/api (production)" ||
-		got.ServiceAccount.Description != "the identity app api of project shop runs as in the production tier" {
-		t.Errorf("the account was created as %+v, want one named for its app, project and tier", got)
+		got.ServiceAccount.DisplayName != "ocel shop/api@production (production)" ||
+		got.ServiceAccount.Description != "the identity app api of project shop runs as in environment production of the production tier" {
+		t.Errorf("the account was created as %+v, want one named for its app, project, environment and tier", got.ServiceAccount)
 	}
 }
 
@@ -195,8 +196,8 @@ func TestAGrantRefusedBecauseTheNewAccountIsNotYetVisibleIsRetried(t *testing.T)
 		t.Fatalf("ensureAppAccount() = %v, want the grant retried until the account is visible", err)
 	}
 
-	if server.projectAttempts != 4 || server.projectWrites != 2 {
-		t.Errorf("the project policy was written %d times and %d took, want 2 refused then 2 granted", server.projectAttempts, server.projectWrites)
+	if server.projectAttempts != 3 || server.projectWrites != 1 {
+		t.Errorf("the project policy was written %d times and %d took, want 2 refused then 1 that grants both roles", server.projectAttempts, server.projectWrites)
 	}
 }
 
@@ -348,7 +349,7 @@ func TestADeployCredentialWithoutTheAppAccountsRoleIsToldWhichRoleItLacks(t *tes
 				t.Errorf("unexpected %s %s", r.Method, r.URL)
 			})
 
-			err := c.createAppAccount(context.Background(), environment.TierProduction, "shop", "api")
+			err := c.createAppAccount(context.Background(), provider.StackRef{Tier: environment.TierProduction, Project: "shop", Name: stackOf("production", "api", "r1")}, "api")
 
 			if err == nil || !strings.Contains(err.Error(), "projects/acme-prod/roles/ocel_app_accounts") {
 				t.Errorf("createAppAccount() = %v, want an error naming projects/acme-prod/roles/ocel_app_accounts", err)

@@ -22,9 +22,8 @@ func TestEveryPubSubNameIsOnePubSubTakesAndNamesOneDeclarationOnly(t *testing.T)
 		{"resize-image", "resize-image"},
 	} {
 		for kind, name := range map[string]string{
-			"topic":             names.Topic(declared.topic),
-			"subscription":      names.Subscription(declared.topic, declared.consumer),
-			"dead-letter topic": names.DeadLetterTopic(declared.topic, declared.consumer),
+			"topic":        names.Topic(declared.topic),
+			"subscription": names.Subscription(declared.topic, declared.consumer),
 		} {
 			if !pubsubName.MatchString(name) || strings.HasPrefix(name, "goog") {
 				t.Errorf("the %s of %s/%s is %q, which Pub/Sub refuses", kind, declared.topic, declared.consumer, name)

@@ -119,3 +119,11 @@ func WaitedFor(ctx context.Context, attempt int, limit time.Duration) bool {
 		return true
 	}
 }
+
+func IsStale(err error) bool {
+	switch AnsweredCode(err) {
+	case http.StatusConflict, http.StatusPreconditionFailed:
+		return true
+	}
+	return status.Code(err) == codes.Aborted || status.Code(err) == codes.FailedPrecondition
+}

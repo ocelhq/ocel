@@ -16,6 +16,7 @@ import (
 	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
@@ -75,6 +76,11 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap item %s has no shape", item.ID())
 		}
 		tree.Add(shared, string(Vendor), typ, item.Name, region, itemProperties(item, region))
+	}
+	projectKey := item{Kind: KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)}
+	projectDatabase := item{Kind: KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)}
+	for _, owned := range []item{projectKey, projectDatabase} {
+		tree.Add(shared, string(Vendor), itemTypes[owned.Kind], owned.Name, region, itemProperties(owned, region))
 	}
 	tree.AddShaped(shared, string(Vendor), region, syncShape(names.EnvSourceSync(req.Deploy.Tier), region))
 	if slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {
@@ -173,7 +179,7 @@ func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 				return err
 			}
 			instance := names.PostgresInstance(req.Deploy.Slug, req.Deploy.Env, resource.Name)
-			tree.Add(environment, string(Vendor), tfSQLInstance, instance, region, spec.shapeProperties(region))
+			tree.Add(environment, string(Vendor), tfSQLInstance, instance, region, spec.shapeProperties(region, req.Deploy.Tier))
 		default:
 			continue
 		}
@@ -199,7 +205,6 @@ func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 		for _, consumer := range topic.spec.Consumers {
 			tree.Add(environment, string(Vendor), tfPubSubSubscription, scope.Subscription(topic.declared, consumer.Name), region,
 				map[string]any{"ack_deadline_seconds": int(pushCeiling.Seconds()), "enable_message_ordering": topic.spec.Ordered})
-			tree.Add(environment, string(Vendor), tfPubSubTopic, scope.DeadLetterTopic(topic.declared, consumer.Name), region, map[string]any{"dead_letter": true})
 		}
 		if topic.spec.Cron != "" {
 			tree.Add(environment, string(Vendor), tfSchedulerJob, scope.ScheduleJob(topic.declared), region, map[string]any{"region": region, "schedule": topic.spec.Cron})

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -19,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -50,8 +50,8 @@ func unindexedTagFields() []string {
 	return []string{tagWrittenAtField, tagField, tagStaleField, tagExpiredField}
 }
 
-func tagDatabaseCondition(c *clients, tier environment.Tier) *cloudresourcemanager.Expr {
-	return &cloudresourcemanager.Expr{
+func tagDatabaseCondition(c *clients, tier environment.Tier) *iampolicy.Condition {
+	return &iampolicy.Condition{
 		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " tag records",
 		Expression: fmt.Sprintf("resource.name == %q", databasePath(c, c.TagDatabase(tier))),
 	}

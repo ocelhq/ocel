@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -307,10 +308,18 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 		return err
 	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
-	if err := clients.bindProjectRole(ctx, member, connectorRecordsRole, databaseCondition(clients.project, clients.Namespace()), granting); err != nil {
-		return fmt.Errorf("let %s read and write the %s database's records: %w", member, ports.Database(clients.Namespace()), err)
+	if err := clients.bindProjectRole(ctx, member, connectorRecordsRole, connectorRecordsCondition(clients), granting); err != nil {
+		return fmt.Errorf("let %s read and write the %s database's records and every project's: %w", member, ports.Database(clients.Namespace()), err)
 	}
 	return nil
+}
+
+func connectorRecordsCondition(c *clients) *iampolicy.Condition {
+	clauses := []string{fmt.Sprintf("resource.name == %q", databasePath(c, c.Database()))}
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		clauses = append(clauses, fmt.Sprintf("resource.name.startsWith(%q)", databasePath(c, c.ProjectDatabasePrefix(tier))))
+	}
+	return &iampolicy.Condition{Title: "ocel " + string(c.Namespace()) + " records", Expression: strings.Join(clauses, " || ")}
 }
 
 func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progress progress.Log) error {
@@ -325,6 +334,12 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progr
 		if err != nil && len(wanted) > 0 {
 			return err
 		}
+		projectChanged, projectErr := clients.bindProjectKeyRoles(ctx, tier, member, connectorKeyRoles, wanted)
+		if projectErr != nil && len(wanted) > 0 {
+			return projectErr
+		}
+		changed = changed || projectChanged
+		err = errors.Join(err, projectErr)
 		if changed && len(wanted) > 0 {
 			ensureProgress(progress).Say("Granted the connector " + strings.Join(wanted, " and ") + " on the " + string(tier) + " KMS key")
 		}
@@ -334,20 +349,6 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progr
 }
 
 var connectorKeyRoles = []string{connectorSealingRole, connectorOpeningRole}
-
-func boundMembers(members []string, member string, granting bool) ([]string, bool) {
-	at := slices.Index(members, member)
-	switch {
-	case granting && at >= 0:
-		return members, false
-	case granting:
-		return append(slices.Clone(members), member), true
-	case at < 0:
-		return members, false
-	default:
-		return slices.Delete(slices.Clone(members), at, at+1), true
-	}
-}
 
 func (p *Provider) takeConnectorAccount(ctx context.Context, progress progress.Log) error {
 	clients, err := p.openClients(ctx)

@@ -429,8 +429,9 @@ or database is still on it, naming them. The bootstrap credential needs
 
 ## Topics, tasks and workers
 
-Each topic and task is a Pub/Sub topic, and each of its consumers gets a push subscription and
-a dead-letter topic of its own. A task with a `cron` is a Cloud Scheduler job publishing to its
+Each topic and task is a Pub/Sub topic, and each of its consumers gets a push subscription of
+its own. Pub/Sub redelivers a message until its run settles, and a run that spends its attempts
+settles failed, a dead letter to list or redrive. A task with a `cron` is a Cloud Scheduler job publishing to its
 topic. Runs are kept in a Firestore database of the tier's own, and a delayed send or trigger
 waits in the tier's Cloud Tasks queue until it is due.
 

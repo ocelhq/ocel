@@ -68,13 +68,14 @@ type Clients struct {
 	Endpoint    string
 	TagEndpoint string
 
-	firestore  memo[*firestore.Client]
-	taskStores sync.Map
-	tagStores  sync.Map
-	kms        memo[*kms.KeyManagementClient]
-	pubsub     memo[*pubsub.Service]
-	tasks      memo[*cloudtasks.Client]
-	scheduler  memo[*cloudscheduler.Service]
+	firestore     memo[*firestore.Client]
+	taskStores    sync.Map
+	projectStores sync.Map
+	tagStores     sync.Map
+	kms           memo[*kms.KeyManagementClient]
+	pubsub        memo[*pubsub.Service]
+	tasks         memo[*cloudtasks.Client]
+	scheduler     memo[*cloudscheduler.Service]
 }
 
 func (c *Clients) Emulated() bool { return c.Endpoint != "" }

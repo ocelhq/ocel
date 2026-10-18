@@ -14,18 +14,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
-	pushAckDeadline         = 600 * time.Second
-	maxBackoff              = 600 * time.Second
-	deadLetterDeliveryLimit = 100
-	mutableSubscription     = "pushConfig,retryPolicy,deadLetterPolicy,ackDeadlineSeconds"
+	pushAckDeadline     = 600 * time.Second
+	maxBackoff          = 600 * time.Second
+	mutableSubscription = "pushConfig,retryPolicy,ackDeadlineSeconds"
 
-	publisherRole  = "roles/pubsub.publisher"
-	subscriberRole = "roles/pubsub.subscriber"
-	grantAttempts  = 4
+	PublisherRole = "roles/pubsub.publisher"
 )
 
 type Push struct {
@@ -34,17 +32,14 @@ type Push struct {
 }
 
 type Topology struct {
-	Names     Names
-	Topics    map[string]*provider.TopicSpec
-	Publisher string
-	Agent     string
+	Names  Names
+	Topics map[string]*provider.TopicSpec
 }
 
 type Subscriptions struct {
 	Names  Names
 	Topics map[string]*provider.TopicSpec
 	Pushes map[string]Push
-	Agent  string
 }
 
 func PushPath(topic, consumer string) string {
@@ -68,18 +63,6 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 		if err := ensureTopic(ctx, service, path); err != nil {
 			return err
 		}
-		if err := grantOnTopic(ctx, service, path, publisherRole, t.Publisher); err != nil {
-			return err
-		}
-		for _, consumer := range topic.Consumers {
-			deadLetters := TopicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.Name))
-			if err := ensureTopic(ctx, service, deadLetters); err != nil {
-				return err
-			}
-			if err := grantOnTopic(ctx, service, deadLetters, publisherRole, t.Agent); err != nil {
-				return err
-			}
-		}
 		if topic.Cron != "" && runs.IsTask(topic) {
 			if err := t.ensureSchedule(ctx, clients, name, topic.Cron); err != nil {
 				return err
@@ -87,50 +70,6 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 		}
 	}
 	return nil
-}
-
-func (t Topology) GrantPublisher(ctx context.Context, clients *ports.Clients) error {
-	service, err := clients.PubSub()
-	if err != nil {
-		return err
-	}
-	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
-		if err := grantOnTopic(ctx, service, TopicPath(clients.Project, t.Names.Topic(name)), publisherRole, t.Publisher); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (t Topology) RevokePublisher(ctx context.Context, clients *ports.Clients) (Topology, error) {
-	taken := Topology{Names: t.Names, Publisher: t.Publisher, Agent: t.Agent}
-	if t.Publisher == "" {
-		return taken, nil
-	}
-	service, err := clients.PubSub()
-	if err != nil {
-		return taken, err
-	}
-	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
-		path := TopicPath(clients.Project, t.Names.Topic(name))
-		removed, err := revokePubSubRole(ctx, path, publisherRole, t.Publisher, iamPolicyCalls{
-			read: func() (*pubsub.Policy, error) { return service.Projects.Topics.GetIamPolicy(path).Context(ctx).Do() },
-			write: func(policy *pubsub.Policy) error {
-				_, err := service.Projects.Topics.SetIamPolicy(path, &pubsub.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do()
-				return err
-			},
-		})
-		if err != nil {
-			return taken, err
-		}
-		if removed {
-			if taken.Topics == nil {
-				taken.Topics = map[string]*provider.TopicSpec{}
-			}
-			taken.Topics[name] = t.Topics[name]
-		}
-	}
-	return taken, nil
 }
 
 func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error {
@@ -145,12 +84,8 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 			if !hosted {
 				continue
 			}
-			deadLetters := TopicPath(clients.Project, s.Names.DeadLetterTopic(name, consumer.Name))
 			path := subscriptionPath(clients.Project, s.Names.Subscription(name, consumer.Name))
-			if err := ensureSubscription(ctx, service, path, s.subscription(clients.Project, name, topic, consumer, push, deadLetters)); err != nil {
-				return err
-			}
-			if err := grantOnSubscription(ctx, service, path, subscriberRole, s.Agent); err != nil {
+			if err := ensureSubscription(ctx, service, path, s.subscription(clients.Project, name, topic, consumer, push)); err != nil {
 				return err
 			}
 		}
@@ -158,7 +93,7 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 	return nil
 }
 
-func (s Subscriptions) subscription(project, name string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, push Push, deadLetters string) *pubsub.Subscription {
+func (s Subscriptions) subscription(project, name string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, push Push) *pubsub.Subscription {
 	return &pubsub.Subscription{
 		Topic:                 TopicPath(project, s.Names.Topic(name)),
 		AckDeadlineSeconds:    int64(pushAckDeadline / time.Second),
@@ -172,7 +107,6 @@ func (s Subscriptions) subscription(project, name string, topic *provider.TopicS
 			MinimumBackoff: durationText(min(consumer.Retry.MinDelay, maxBackoff)),
 			MaximumBackoff: durationText(min(consumer.Retry.MaxDelay, maxBackoff)),
 		},
-		DeadLetterPolicy: &pubsub.DeadLetterPolicy{DeadLetterTopic: deadLetters, MaxDeliveryAttempts: deadLetterDeliveryLimit},
 		ExpirationPolicy: &pubsub.ExpirationPolicy{},
 	}
 }
@@ -225,138 +159,49 @@ func ensureSubscription(ctx context.Context, service *pubsub.Service, path strin
 	return nil
 }
 
-type iamPolicyCalls struct {
-	read  func() (*pubsub.Policy, error)
-	write func(*pubsub.Policy) error
-}
-
-func grantOnTopic(ctx context.Context, service *pubsub.Service, path, role, member string) error {
-	return grantPubSubRole(ctx, path, role, member, iamPolicyCalls{
-		read: func() (*pubsub.Policy, error) { return service.Projects.Topics.GetIamPolicy(path).Context(ctx).Do() },
-		write: func(policy *pubsub.Policy) error {
-			_, err := service.Projects.Topics.SetIamPolicy(path, &pubsub.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do()
+func TopicPolicy(service *pubsub.Service, path string) iampolicy.Resource {
+	return iampolicy.Resource{Name: "the Pub/Sub topic " + path, Read: func(ctx context.Context) ([]iampolicy.Binding, iampolicy.Write, error) {
+		policy, err := googleretry.Attempted(ctx, service.Projects.Topics.GetIamPolicy(path).Context(ctx).Do)
+		if isAnswered(err, http.StatusNotFound) {
+			return nil, nil, iampolicy.Absent(err)
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		write := func(ctx context.Context, bindings []iampolicy.Binding) error {
+			policy.Bindings = make([]*pubsub.Binding, 0, len(bindings))
+			for _, binding := range bindings {
+				policy.Bindings = append(policy.Bindings, &pubsub.Binding{Role: binding.Role, Members: binding.Members, Condition: topicExpr(binding.Condition)})
+			}
+			if iampolicy.IsConditioned(bindings) {
+				policy.Version = iampolicy.ConditionalVersion
+			}
+			_, err := googleretry.Attempted(ctx, service.Projects.Topics.SetIamPolicy(path, &pubsub.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
+			if isAnswered(err, http.StatusNotFound) {
+				return iampolicy.Absent(err)
+			}
 			return err
-		},
-	})
+		}
+		bindings := make([]iampolicy.Binding, 0, len(policy.Bindings))
+		for _, binding := range policy.Bindings {
+			bindings = append(bindings, iampolicy.Binding{Role: binding.Role, Members: binding.Members, Condition: topicCondition(binding.Condition)})
+		}
+		return bindings, write, nil
+	}}
 }
 
-func grantOnSubscription(ctx context.Context, service *pubsub.Service, path, role, member string) error {
-	return grantPubSubRole(ctx, path, role, member, iamPolicyCalls{
-		read: func() (*pubsub.Policy, error) {
-			return service.Projects.Subscriptions.GetIamPolicy(path).Context(ctx).Do()
-		},
-		write: func(policy *pubsub.Policy) error {
-			_, err := service.Projects.Subscriptions.SetIamPolicy(path, &pubsub.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do()
-			return err
-		},
-	})
-}
-
-func grantPubSubRole(ctx context.Context, path, role, member string, calls iamPolicyCalls) error {
-	if member == "" {
+func topicCondition(condition *pubsub.Expr) *iampolicy.Condition {
+	if condition == nil {
 		return nil
 	}
-	var refused error
-	for attempt := range grantAttempts {
-		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
-			return ctx.Err()
-		}
-		policy, err := readPolicy(ctx, calls)
-		if err != nil {
-			return fmt.Errorf("read who may reach %s: %w", path, err)
-		}
-		if holdsRole(policy, role, member) {
-			return nil
-		}
-		policy.Bindings = withMember(policy.Bindings, role, member)
-		refused = googleretry.Done(ctx, func() error { return calls.write(policy) })
-		if refused == nil || !stale(refused) {
-			break
-		}
-	}
-	if refused != nil {
-		return fmt.Errorf("grant %s %s on %s: %w", member, role, path, refused)
-	}
-	return nil
+	return &iampolicy.Condition{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
 }
 
-func revokePubSubRole(ctx context.Context, path, role, member string, calls iamPolicyCalls) (bool, error) {
-	var refused error
-	for attempt := range grantAttempts {
-		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
-			return false, ctx.Err()
-		}
-		policy, err := readPolicy(ctx, calls)
-		if err != nil {
-			if isAnswered(err, http.StatusNotFound) {
-				return false, nil
-			}
-			return false, fmt.Errorf("read who may reach %s: %w", path, err)
-		}
-		bindings, removed := withoutMember(policy.Bindings, role, member)
-		if !removed {
-			return false, nil
-		}
-		policy.Bindings = bindings
-		refused = googleretry.Done(ctx, func() error { return calls.write(policy) })
-		if refused == nil {
-			return true, nil
-		}
-		if isAnswered(refused, http.StatusNotFound) {
-			return false, nil
-		}
-		if !stale(refused) {
-			break
-		}
+func topicExpr(condition *iampolicy.Condition) *pubsub.Expr {
+	if condition == nil {
+		return nil
 	}
-	return false, fmt.Errorf("revoke %s %s on %s: %w", member, role, path, refused)
-}
-
-func readPolicy(ctx context.Context, calls iamPolicyCalls) (*pubsub.Policy, error) {
-	var policy *pubsub.Policy
-	err := googleretry.Done(ctx, func() error {
-		var readErr error
-		policy, readErr = calls.read()
-		return readErr
-	})
-	return policy, err
-}
-
-func holdsRole(policy *pubsub.Policy, role, member string) bool {
-	return slices.ContainsFunc(policy.Bindings, func(binding *pubsub.Binding) bool {
-		return binding.Role == role && binding.Condition == nil && slices.Contains(binding.Members, member)
-	})
-}
-
-func withMember(bindings []*pubsub.Binding, role, member string) []*pubsub.Binding {
-	for i, binding := range bindings {
-		if binding.Role == role && binding.Condition == nil {
-			bound := slices.Clone(bindings)
-			widened := *binding
-			widened.Members = append(slices.Clone(binding.Members), member)
-			bound[i] = &widened
-			return bound
-		}
-	}
-	return append(bindings, &pubsub.Binding{Role: role, Members: []string{member}})
-}
-
-func withoutMember(bindings []*pubsub.Binding, role, member string) ([]*pubsub.Binding, bool) {
-	for i, binding := range bindings {
-		if binding.Role != role || binding.Condition != nil || !slices.Contains(binding.Members, member) {
-			continue
-		}
-		kept := slices.Clone(bindings)
-		members := slices.DeleteFunc(slices.Clone(binding.Members), func(held string) bool { return held == member })
-		if len(members) == 0 {
-			return slices.Delete(kept, i, i+1), true
-		}
-		narrowed := *binding
-		narrowed.Members = members
-		kept[i] = &narrowed
-		return kept, true
-	}
-	return bindings, false
+	return &pubsub.Expr{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
 }
 
 func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, topic string, consumers []string) error {
@@ -368,13 +213,6 @@ func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, t
 		subscription := subscriptionPath(clients.Project, t.Names.Subscription(topic, consumer))
 		if err := deleteIgnoringMissing(ctx, "subscription "+subscription, func() error {
 			_, err := service.Projects.Subscriptions.Delete(subscription).Context(ctx).Do()
-			return err
-		}); err != nil {
-			return err
-		}
-		deadLetters := TopicPath(clients.Project, t.Names.DeadLetterTopic(topic, consumer))
-		if err := deleteIgnoringMissing(ctx, "topic "+deadLetters, func() error {
-			_, err := service.Projects.Topics.Delete(deadLetters).Context(ctx).Do()
 			return err
 		}); err != nil {
 			return err
@@ -441,10 +279,6 @@ func deleteIgnoringMissing(ctx context.Context, what string, call func() error) 
 		return fmt.Errorf("delete Pub/Sub %s: %w", what, err)
 	}
 	return nil
-}
-
-func stale(err error) bool {
-	return isAnswered(err, http.StatusConflict) || isAnswered(err, http.StatusPreconditionFailed)
 }
 
 func isAnswered(err error, code int) bool { return googleretry.AnsweredCode(err) == code }

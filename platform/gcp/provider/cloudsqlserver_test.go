@@ -25,6 +25,7 @@ type cloudSQLServer struct {
 	created    []*sqladmin.DatabaseInstance
 	sent       []map[string]any
 	deleted    []string
+	patched    []map[string]any
 	operations int
 	listed     []string
 	writes     []string
@@ -127,12 +128,47 @@ func (s *cloudSQLServer) instance(w http.ResponseWriter, r *http.Request, name s
 	switch r.Method {
 	case http.MethodGet:
 		writeBody(w, instance)
+	case http.MethodPatch:
+		s.patch(w, r, instance)
 	case http.MethodDelete:
+		if instance.Settings != nil && instance.Settings.DeletionProtectionEnabled {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":{"code":400,"message":"The instance is protected from deletion."}}`))
+			return
+		}
 		delete(s.instances, name)
 		s.deleted = append(s.deleted, name)
 		s.writes = append(s.writes, "delete instance "+name)
 		s.operation(w)
 	}
+}
+
+func (s *cloudSQLServer) patch(w http.ResponseWriter, r *http.Request, instance *sqladmin.DatabaseInstance) {
+	body, err := io.ReadAll(r.Body)
+	asked, sent := &sqladmin.DatabaseInstance{}, map[string]any{}
+	if err != nil || json.Unmarshal(body, asked) != nil || json.Unmarshal(body, &sent) != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	s.patched = append(s.patched, sent)
+	s.writes = append(s.writes, "patch instance "+instance.Name)
+	settings, _ := sent["settings"].(map[string]any)
+	if instance.Settings == nil {
+		instance.Settings = &sqladmin.Settings{}
+	}
+	if _, named := settings["tier"]; named {
+		instance.Settings.Tier = asked.Settings.Tier
+	}
+	if _, named := settings["availabilityType"]; named {
+		instance.Settings.AvailabilityType = asked.Settings.AvailabilityType
+	}
+	if _, named := settings["backupConfiguration"]; named {
+		instance.Settings.BackupConfiguration = asked.Settings.BackupConfiguration
+	}
+	if _, named := settings["deletionProtectionEnabled"]; named {
+		instance.Settings.DeletionProtectionEnabled = asked.Settings.DeletionProtectionEnabled
+	}
+	s.operation(w)
 }
 
 func (s *cloudSQLServer) database(w http.ResponseWriter, r *http.Request, parts []string) {
