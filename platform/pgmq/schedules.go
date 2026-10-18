@@ -20,28 +20,26 @@ type scheduledPayload struct {
 	Timestamp string `json:"timestamp"`
 }
 
-func (e *Engine) applySchedules(ctx context.Context, deployment Deployment) error {
+func applySchedules(ctx context.Context, tx pgx.Tx, deployment Deployment) error {
 	now := time.Now()
 	scheduled := []string{}
-	return e.inTx(ctx, func(tx pgx.Tx) error {
-		for name, topic := range deployment.Topics {
-			if topic.GetCron() == "" || !isTask(topic) {
-				continue
-			}
-			schedule, err := cron.Parse(topic.GetCron())
-			if err != nil {
-				return fmt.Errorf("task %s: %w", name, err)
-			}
-			if _, err := tx.Exec(ctx, `INSERT INTO ocel.schedules (topic, cron, next_at) VALUES ($1, $2, $3)
+	for name, topic := range deployment.Topics {
+		if topic.GetCron() == "" || !isTask(topic) {
+			continue
+		}
+		schedule, err := cron.Parse(topic.GetCron())
+		if err != nil {
+			return fmt.Errorf("task %s: %w", name, err)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO ocel.schedules (topic, cron, next_at) VALUES ($1, $2, $3)
 				ON CONFLICT (topic) DO UPDATE SET cron = EXCLUDED.cron, next_at = EXCLUDED.next_at
 				WHERE ocel.schedules.cron <> EXCLUDED.cron`, name, topic.GetCron(), schedule.Next(now)); err != nil {
-				return fmt.Errorf("schedule task %s: %w", name, err)
-			}
-			scheduled = append(scheduled, name)
+			return fmt.Errorf("schedule task %s: %w", name, err)
 		}
-		_, err := tx.Exec(ctx, "DELETE FROM ocel.schedules WHERE topic <> ALL($1)", scheduled)
-		return err
-	})
+		scheduled = append(scheduled, name)
+	}
+	_, err := tx.Exec(ctx, "DELETE FROM ocel.schedules WHERE topic <> ALL($1)", scheduled)
+	return err
 }
 
 func (e *Engine) fireSchedules(ctx context.Context) {

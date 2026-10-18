@@ -19,7 +19,8 @@ import (
 const (
 	Database = "ocel"
 
-	defaultLease = 60 * time.Second
+	defaultLease         = 60 * time.Second
+	defaultShutdownGrace = 10 * time.Second
 
 	minimumPgmq = "1.11.1"
 	openLock    = "ocel.pgmq.open"
@@ -29,12 +30,14 @@ type Config struct {
 	ServerURL     string
 	Database      string
 	Lease         time.Duration
+	ShutdownGrace time.Duration
 	ReportAttempt func(Attempt)
 }
 
 type Engine struct {
 	pool          *pgxpool.Pool
 	lease         time.Duration
+	shutdownGrace time.Duration
 	reportAttempt func(Attempt)
 
 	mu          sync.Mutex
@@ -51,6 +54,9 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 	}
 	if cfg.Lease <= 0 {
 		cfg.Lease = defaultLease
+	}
+	if cfg.ShutdownGrace <= 0 {
+		cfg.ShutdownGrace = defaultShutdownGrace
 	}
 	if cfg.ReportAttempt == nil {
 		cfg.ReportAttempt = func(Attempt) {}
@@ -74,6 +80,7 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 	return &Engine{
 		pool:          pool,
 		lease:         cfg.Lease,
+		shutdownGrace: cfg.ShutdownGrace,
 		reportAttempt: cfg.ReportAttempt,
 		workerSlots:   map[string]*slots{},
 		applied:       make(chan struct{}, 1),

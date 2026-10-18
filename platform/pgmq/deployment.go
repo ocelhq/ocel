@@ -9,10 +9,17 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
-const maxQueueNameLength = 47
+const (
+	maxQueueNameLength = 47
+	applyLock          = "ocel.pgmq.apply"
+)
 
 type Deployment struct {
 	Slug    string
@@ -70,22 +77,29 @@ func queueName(topic, consumer string) string {
 }
 
 func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
-	if err := e.claimDatabase(ctx, deployment.Slug); err != nil {
+	var canceled []string
+	err := e.inTx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", applyLock); err != nil {
+			return fmt.Errorf("wait for other engines applying a deployment: %w", err)
+		}
+		if err := claimDatabase(ctx, tx, deployment.Slug); err != nil {
+			return err
+		}
+		deployed := deployment.consumers()
+		var err error
+		if canceled, err = dropUndeployedQueues(ctx, tx, deployed); err != nil {
+			return err
+		}
+		if err := createQueues(ctx, tx, deployed); err != nil {
+			return err
+		}
+		return applySchedules(ctx, tx, deployment)
+	})
+	if err != nil {
 		return err
 	}
-	for queue, deployed := range deployment.consumers() {
-		if _, err := e.pool.Exec(ctx, "SELECT pgmq.create($1)", queue); err != nil {
-			return fmt.Errorf("create queue %s: %w", queue, err)
-		}
-		if !deployed.topic.GetOrdered() {
-			continue
-		}
-		if _, err := e.pool.Exec(ctx, "SELECT pgmq.create_fifo_index($1)", queue); err != nil {
-			return fmt.Errorf("index queue %s by key: %w", queue, err)
-		}
-	}
-	if err := e.applySchedules(ctx, deployment); err != nil {
-		return err
+	for _, execution := range canceled {
+		e.stopInFlight(execution)
 	}
 	e.mu.Lock()
 	e.deployment = deployment
@@ -101,6 +115,74 @@ func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
 	return nil
 }
 
+func dropUndeployedQueues(ctx context.Context, tx pgx.Tx, deployed map[string]deployedConsumer) ([]string, error) {
+	rows, err := tx.Query(ctx, "SELECT queue_name FROM pgmq.list_queues()")
+	if err != nil {
+		return nil, fmt.Errorf("list the engine's queues: %w", err)
+	}
+	queues, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("list the engine's queues: %w", err)
+	}
+	var canceled []string
+	for _, queue := range queues {
+		if _, still := deployed[queue]; still {
+			continue
+		}
+		executions, err := moveRuns(ctx, tx, runMove{
+			from:  unfinishedStatuses,
+			to:    provider.RunCanceled,
+			where: "queue = @queue",
+			set:   "error = @reason, finished_at = clock_timestamp()",
+			args:  pgx.NamedArgs{"queue": queue, "reason": "its consumer is no longer deployed"},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("cancel the runs of queue %s: %w", queue, err)
+		}
+		canceled = append(canceled, executions...)
+		if _, err := tx.Exec(ctx, "SELECT pgmq.drop_queue($1)", queue); err != nil {
+			return nil, fmt.Errorf("drop queue %s: %w", queue, err)
+		}
+	}
+	return canceled, nil
+}
+
+func createQueues(ctx context.Context, tx pgx.Tx, deployed map[string]deployedConsumer) error {
+	for queue, consumer := range deployed {
+		if _, err := tx.Exec(ctx, "SELECT pgmq.create($1)", queue); err != nil {
+			return fmt.Errorf("create queue %s: %w", queue, err)
+		}
+		if !consumer.topic.GetOrdered() {
+			if err := indexLanes(ctx, tx, queue); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := tx.Exec(ctx, "SELECT pgmq.create_fifo_index($1)", queue); err != nil {
+			return fmt.Errorf("index queue %s by key: %w", queue, err)
+		}
+	}
+	return nil
+}
+
+func indexLanes(ctx context.Context, tx pgx.Tx, queue string) error {
+	for _, lane := range allLanes {
+		condition, err := laneCondition(lane)
+		if err != nil {
+			return err
+		}
+		var statement string
+		if err := tx.QueryRow(ctx, `SELECT format('CREATE INDEX IF NOT EXISTS %I ON pgmq.%I (msg_id) WHERE (message @> %L::jsonb)::integer = 1', q || '_' || $2 || '_idx', q, $3::text)
+			FROM pgmq.format_table_name($1, 'q') AS q`, queue, string(runs.LaneOf(lane)), condition).Scan(&statement); err != nil {
+			return fmt.Errorf("name the %s lane index of queue %s: %w", runs.LaneOf(lane), queue, err)
+		}
+		if _, err := tx.Exec(ctx, statement); err != nil {
+			return fmt.Errorf("index queue %s by its %s lane: %w", queue, runs.LaneOf(lane), err)
+		}
+	}
+	return nil
+}
+
 func (e *Engine) current() Deployment {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -113,12 +195,12 @@ func (e *Engine) workerSlotsOf(worker string) *slots {
 	return e.workerSlots[worker]
 }
 
-func (e *Engine) claimDatabase(ctx context.Context, slug string) error {
+func claimDatabase(ctx context.Context, tx pgx.Tx, slug string) error {
 	if slug == "" {
 		return errors.New("the deployment names no app slug, and the engine's database serves one app")
 	}
 	var owner string
-	err := e.pool.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		WITH claimed AS (
 			INSERT INTO ocel.deployment (slug) VALUES ($1) ON CONFLICT DO NOTHING RETURNING slug
 		)

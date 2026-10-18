@@ -238,10 +238,8 @@ func TestAWorkersHeaderRidesOnEveryDeliveryToIt(t *testing.T) {
 	}
 }
 
-func dispatchingWithLease(t *testing.T, lease time.Duration, topics map[string]*contractv1.ManifestTopic, workers map[string]Worker) *Engine {
+func appliedWith(t *testing.T, cfg Config, topics map[string]*contractv1.ManifestTopic, workers map[string]Worker) *Engine {
 	t.Helper()
-	cfg := aDatabase(t)
-	cfg.Lease = lease
 	engine, err := Open(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -250,6 +248,14 @@ func dispatchingWithLease(t *testing.T, lease time.Duration, topics map[string]*
 	if err := engine.Apply(context.Background(), Deployment{Slug: "app", Topics: topics, Workers: workers}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
+	return engine
+}
+
+func dispatchingWithLease(t *testing.T, lease time.Duration, topics map[string]*contractv1.ManifestTopic, workers map[string]Worker) *Engine {
+	t.Helper()
+	cfg := aDatabase(t)
+	cfg.Lease = lease
+	engine := appliedWith(t, cfg, topics, workers)
 	startDispatch(t, engine)
 	return engine
 }
@@ -332,5 +338,85 @@ func TestATriggerOnAQueueIdleLongEnoughToPollRarelyIsDeliveredAtOnce(t *testing.
 	trigger(t, engine, "resize", `{}`, nil)
 	if got := awaitDelivered(t, worker, 1); got[0].at.Sub(triggered) > time.Second {
 		t.Errorf("the run reached the worker %v after its trigger, want the wake to cut the idle wait short", got[0].at.Sub(triggered))
+	}
+}
+
+func stoppableDispatch(t *testing.T, engine *Engine) (stop func() time.Duration) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- engine.Dispatch(ctx) }()
+	var stopped bool
+	stop = func() time.Duration {
+		if stopped {
+			return 0
+		}
+		stopped = true
+		began := time.Now()
+		cancel()
+		if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+			t.Errorf("Dispatch: %v", err)
+		}
+		return time.Since(began)
+	}
+	t.Cleanup(func() { stop() })
+	return stop
+}
+
+func TestAnAttemptInFlightWhenTheEngineStopsIsLetFinishAndItsOutcomeRecorded(t *testing.T) {
+	worker := newWorker(t, func(*topicv1.Envelope) reply {
+		return reply{status: http.StatusOK, body: `"resized"`, hold: time.Second}
+	})
+	engine := applied(t, map[string]*contractv1.ManifestTopic{"resize": aTask()}, map[string]Worker{"worker": {URL: worker.server.URL}})
+	stop := stoppableDispatch(t, engine)
+	id := trigger(t, engine, "resize", `{}`, nil)
+	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_EXECUTING)
+
+	stop()
+
+	if run := retrieve(t, engine, id); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_COMPLETED {
+		t.Errorf("run = %v after the engine stopped, want the attempt in flight let finish and completed", run.GetStatus())
+	}
+}
+
+func TestStoppingTheEngineCutsAnAttemptStillRunningWhenTheShutdownGraceEnds(t *testing.T) {
+	worker := newWorker(t, func(*topicv1.Envelope) reply { return reply{status: http.StatusOK, hold: 10 * time.Second} })
+	cfg := aDatabase(t)
+	cfg.ShutdownGrace = 300 * time.Millisecond
+	engine := appliedWith(t, cfg, map[string]*contractv1.ManifestTopic{"resize": aTask(named("resize"))}, map[string]Worker{"worker": {URL: worker.server.URL}})
+	stop := stoppableDispatch(t, engine)
+	id := trigger(t, engine, "resize", `{}`, nil)
+	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_EXECUTING)
+
+	if took := stop(); took < 300*time.Millisecond || took > 3*time.Second {
+		t.Errorf("the engine stopped %v after it was asked to, want it to wait out its 300ms grace and no longer", took)
+	}
+	deadline := time.Now().Add(time.Second)
+	for worker.inFlightNow() > 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if worker.inFlightNow() > 0 {
+		t.Error("the worker still holds an attempt of an engine that stopped")
+	}
+}
+
+func TestARunPastItsAttemptCapIsSettledFailedRatherThanRunAgain(t *testing.T) {
+	worker := newWorker(t, func(*topicv1.Envelope) reply { return reply{status: http.StatusOK, hold: 5 * time.Second} })
+	cfg := aDatabase(t)
+	cfg.Lease, cfg.ShutdownGrace = time.Second, 100*time.Millisecond
+	engine := appliedWith(t, cfg, map[string]*contractv1.ManifestTopic{"charge": aTask(named("charge"), retrying(1, time.Millisecond, time.Millisecond))}, map[string]Worker{"worker": {URL: worker.server.URL}})
+	stop := stoppableDispatch(t, engine)
+	id := trigger(t, engine, "charge", `{}`, nil)
+	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_EXECUTING)
+	stop()
+
+	stoppableDispatch(t, engine)
+	run := awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_FAILED)
+
+	if got := len(worker.received()); got != 1 || run.GetAttempts() != 1 {
+		t.Errorf("the worker received %d attempts and the run counts %d, want the one attempt its cap of 1 allows", got, run.GetAttempts())
+	}
+	if run.GetError() == "" || run.GetFinishedAt() == nil {
+		t.Errorf("run = %v, want it finished with why it failed", run)
 	}
 }

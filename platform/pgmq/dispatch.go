@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 const (
@@ -101,13 +99,18 @@ func (e *Engine) Dispatch(ctx context.Context) error {
 
 func (e *Engine) serveQueue(ctx context.Context, queue string) {
 	loop := &queueLoop{name: queue, consumers: newSlots(maxInFlight), held: map[int64]bool{}}
-	var running sync.WaitGroup
+	attempts, stopAttempts := e.withShutdownGrace(ctx)
+	defer stopAttempts()
+	leases, stopLeases := context.WithCancel(attempts)
+	var renewing, running sync.WaitGroup
+	renewing.Go(func() { e.renewLeases(leases, loop) })
+	defer renewing.Wait()
+	defer stopLeases()
 	defer running.Wait()
-	running.Go(func() { e.renewLeases(ctx, loop) })
 	wake := e.ensureWakeChannel(queue)
 	idle := pollInterval
-	waitIdle := func(consumerChanged, workerChanged <-chan struct{}) {
-		if wait(ctx, idle, wake, consumerChanged, workerChanged) {
+	waitIdle := func(changed [2]<-chan struct{}) {
+		if wait(ctx, idle, wake, changed[0], changed[1]) {
 			idle = pollInterval
 		} else {
 			idle = lengthenPollInterval(idle)
@@ -122,7 +125,7 @@ func (e *Engine) serveQueue(ctx context.Context, queue string) {
 		worker, served := deployment.Workers[deployed.consumer.GetWorker()]
 		workerSlots := e.workerSlotsOf(deployed.consumer.GetWorker())
 		if !served || workerSlots == nil {
-			waitIdle(nil, nil)
+			waitIdle([2]<-chan struct{}{})
 			continue
 		}
 		loop.consumers.setLimit(concurrencyOf(deployed))
@@ -130,19 +133,18 @@ func (e *Engine) serveQueue(ctx context.Context, queue string) {
 		if deployed.consumer.GetBatch().GetSize() > 0 {
 			want = 1
 		}
-		n, changed := reserveBoth(loop.consumers, workerSlots, want)
-		if n == 0 {
-			waitIdle(changed[0], changed[1])
+		held := reserveSlots(want, loop.consumers, workerSlots)
+		if held.n == 0 {
+			waitIdle(held.changed)
 			continue
 		}
-		messages, err := e.read(ctx, loop, deployed, n)
+		messages, err := e.read(ctx, loop, deployed, held.n)
 		if err != nil && ctx.Err() == nil {
 			slog.Warn("read a queue", "queue", queue, "error", err)
 		}
 		if len(messages) == 0 {
-			loop.consumers.unreserve(n)
-			workerSlots.unreserve(n)
-			waitIdle(nil, nil)
+			held.keep(0)
+			waitIdle([2]<-chan struct{}{})
 			continue
 		}
 		idle = pollInterval
@@ -154,31 +156,31 @@ func (e *Engine) serveQueue(ctx context.Context, queue string) {
 				deliveries = append(deliveries, []message{msg})
 			}
 		}
-		if unused := n - len(deliveries); unused > 0 {
-			loop.consumers.unreserve(unused)
-			workerSlots.unreserve(unused)
-		}
+		held.keep(len(deliveries))
 		for _, delivery := range deliveries {
 			running.Go(func() {
-				defer loop.consumers.release(1)
-				defer workerSlots.release(1)
-				e.deliver(ctx, loop, deployed, worker, delivery)
+				defer held.releaseOne()
+				e.deliver(attempts, loop, deployed, worker, delivery)
 			})
 		}
 	}
 }
 
-func reserveBoth(consumer, worker *slots, want int) (int, [2]<-chan struct{}) {
-	consumerChanged, workerChanged := consumer.changes(), worker.changes()
-	granted := consumer.reserve(want)
-	if granted == 0 {
-		return 0, [2]<-chan struct{}{consumerChanged, workerChanged}
+func (e *Engine) withShutdownGrace(ctx context.Context) (context.Context, context.CancelFunc) {
+	attempts, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	stopWaiting := context.AfterFunc(ctx, func() {
+		grace := time.NewTimer(e.shutdownGrace)
+		defer grace.Stop()
+		select {
+		case <-grace.C:
+			cancel()
+		case <-attempts.Done():
+		}
+	})
+	return attempts, func() {
+		stopWaiting()
+		cancel()
 	}
-	both := worker.reserve(granted)
-	if both < granted {
-		consumer.unreserve(granted - both)
-	}
-	return both, [2]<-chan struct{}{consumerChanged, workerChanged}
 }
 
 func concurrencyOf(deployed deployedConsumer) int {
@@ -278,11 +280,11 @@ func (e *Engine) readLanes(ctx context.Context, loop *queueLoop, deployed deploy
 	leaseSeconds := e.leaseSeconds()
 	var read []message
 	for lane, share := range loop.lanes.share(lanesOf(deployed.consumer), n) {
-		condition, err := json.Marshal(map[string]provider.Lane{"lane": runs.LaneOf(lane)})
+		condition, err := laneCondition(lane)
 		if err != nil {
 			return nil, err
 		}
-		got, err := e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read($1, $2, $3, $4::jsonb)", loop.name, leaseSeconds, share, string(condition))
+		got, err := e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read($1, $2, $3, $4::jsonb)", loop.name, leaseSeconds, share, condition)
 		if err != nil {
 			return read, err
 		}

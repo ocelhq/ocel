@@ -74,27 +74,16 @@ func lockRun(ctx context.Context, tx pgx.Tx, id string) (queuedRun, error) {
 }
 
 func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*taskv1.CancelRunResponse, error) {
-	var stop bool
-	err := t.engine.inTx(ctx, func(tx pgx.Tx) error {
-		run, err := lockRun(ctx, tx, req.GetId())
-		if err != nil || !runs.IsUnfinished(run.status) {
-			return err
-		}
-		stop = run.status == provider.RunExecuting
-		if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'canceled', finished_at = clock_timestamp(), revision = `+newRevisionSQL+`
-			WHERE execution = $1`, req.GetId()); err != nil {
-			return err
-		}
-		if run.message == nil {
-			return nil
-		}
-		_, err = tx.Exec(ctx, "SELECT pgmq.delete($1, $2::bigint)", run.queue, *run.message)
-		return err
+	canceled, err := moveRun(ctx, t.engine.pool, req.GetId(), runMove{
+		from:    unfinishedStatuses,
+		to:      provider.RunCanceled,
+		set:     "finished_at = clock_timestamp()",
+		message: deleteMessage,
 	})
 	if err != nil {
 		return nil, err
 	}
-	if stop {
+	if canceled {
 		t.engine.stopInFlight(req.GetId())
 	}
 	resp, err := t.RetrieveRun(ctx, &taskv1.RetrieveRunRequest{Id: req.GetId()})
@@ -122,12 +111,14 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 		if due.After(time.Now()) {
 			status = provider.RunDelayed
 		}
-		if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = $2, due_at = $3, revision = `+newRevisionSQL+` WHERE execution = $1`,
-			req.GetId(), string(status), due); err != nil {
-			return err
-		}
 		queue = run.queue
-		_, err = tx.Exec(ctx, "SELECT pgmq.set_vt($1, $2::bigint, $3::timestamptz)", run.queue, *run.message, due)
+		_, err = moveRun(ctx, tx, req.GetId(), runMove{
+			from:    []provider.RunStatus{provider.RunDelayed},
+			to:      status,
+			set:     "due_at = @visible_at::timestamptz",
+			args:    pgx.NamedArgs{"visible_at": due},
+			message: delayMessage,
+		})
 		return err
 	})
 	if err != nil {
