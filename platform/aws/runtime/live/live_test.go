@@ -105,17 +105,7 @@ func TestResolveLiveValues(t *testing.T) {
 			},
 		}
 
-		names := bindingNames(manifest.Bindings)
-		if len(names) != 2 {
-			t.Fatalf("names = %v, want one per binding", names)
-		}
-		for i, want := range manifest.Bindings {
-			if names[i] != want.Name {
-				t.Errorf("name %q, want the binding %q the record is published under", names[i], want.Name)
-			}
-		}
-
-		resolved := live.MergeBindings(nil, manifest.Bindings, []variablestore.StoredBinding{
+		resolved := deliveredValues(t, manifest.Bindings, []variablestore.StoredBinding{
 			publishedRecord(t, &bindingsv1.Binding{Name: "db--main", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}}}, 1),
 			publishedRecord(t, &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-uploads"}}}, 1),
 		})

@@ -119,10 +119,6 @@ func (c Coordinate) PhysicalPrefix(max int) string {
 	) + WordSeparator
 }
 
-func (c Coordinate) SliceName() string {
-	return Underscore(Join(WordSeparator, c.Project, c.Env, c.App, c.Name, c.Release.String()))
-}
-
 func ResourceID(kind Kind, name string, parts ...string) string {
 	return Join(WordSeparator, append([]string{string(kind), name}, parts...)...)
 }

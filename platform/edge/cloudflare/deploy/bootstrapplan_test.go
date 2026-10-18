@@ -207,10 +207,8 @@ func TestBootstrapConverges(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
-		for _, offer := range first.Offers {
-			if credOf(t, offer) == "" {
-				t.Errorf("first Bootstrap offered %q with no bootstrap credential", offer.Kind)
-			}
+		if releasesStoreOf(t, first).BootstrapCredential == "" {
+			t.Error("first Bootstrap offered the releases store with no bootstrap credential")
 		}
 		puts, subdomains := len(m.putScripts), len(m.subdomainCalls)
 
@@ -224,13 +222,11 @@ func TestBootstrapConverges(t *testing.T) {
 		if len(m.subdomainCalls) != subdomains {
 			t.Errorf("re-run set %v subdomains, want none", m.subdomainCalls[subdomains:])
 		}
-		for _, offer := range second.Offers {
-			if cred := credOf(t, offer); cred != "" {
-				t.Errorf("re-run offered %q a fresh credential %q, want the stored one left alone", offer.Kind, cred)
-			}
+		if cred := releasesStoreOf(t, second).BootstrapCredential; cred != "" {
+			t.Errorf("re-run offered the releases store a fresh credential %q, want the stored one left alone", cred)
 		}
-		if !reflect.DeepEqual(endpoints(first), endpoints(second)) {
-			t.Errorf("endpoints = %v, want %v", endpoints(second), endpoints(first))
+		if got, want := releasesStoreOf(t, second).Endpoint, releasesStoreOf(t, first).Endpoint; got != want {
+			t.Errorf("endpoint = %q, want %q", got, want)
 		}
 	})
 
@@ -262,10 +258,8 @@ func TestBootstrapConverges(t *testing.T) {
 		if !slices.Contains(m.scriptSecrets[sharedStoreScriptName], bootstrapSecretBinding) {
 			t.Errorf("secrets after re-upload = %v, want %s kept", m.scriptSecrets[sharedStoreScriptName], bootstrapSecretBinding)
 		}
-		for _, offer := range out.Offers {
-			if offer.Kind == edge.OfferReleasesStore && credOf(t, offer) != "" {
-				t.Error("a drift re-upload minted a fresh credential, orphaning the stored one")
-			}
+		if releasesStoreOf(t, out).BootstrapCredential != "" {
+			t.Error("a drift re-upload minted a fresh credential, orphaning the stored one")
 		}
 	})
 }
@@ -309,13 +303,8 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 		if len(m.putSecrets) != 1 || m.putSecrets[0].script != sharedStoreScriptName || m.putSecrets[0].name != bootstrapSecretBinding {
 			t.Errorf("secrets set = %+v, want %s alone on %s", m.putSecrets, bootstrapSecretBinding, sharedStoreScriptName)
 		}
-		for _, offer := range out.Offers {
-			if offer.Kind != edge.OfferReleasesStore {
-				continue
-			}
-			if cred := credOf(t, offer); cred != m.putSecrets[0].text {
-				t.Errorf("offered credential = %q, want the %q that was set on the worker", cred, m.putSecrets[0].text)
-			}
+		if cred := releasesStoreOf(t, out).BootstrapCredential; cred != m.putSecrets[0].text {
+			t.Errorf("offered credential = %q, want the %q that was set on the worker", cred, m.putSecrets[0].text)
 		}
 
 		replanned, err := p.planBootstrap(t.Context(), environment.TierProduction)
@@ -328,25 +317,12 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 	})
 }
 
-func credOf(t *testing.T, offer edge.Offer) string {
+func releasesStoreOf(t *testing.T, out edge.BootstrapOutput) edge.ReleasesStore {
 	t.Helper()
-	switch offer.Kind {
-	case edge.OfferReleasesStore:
-		return offer.Values[edge.OfferKeyStoreBootstrapCredential]
-	default:
-		t.Fatalf("offer %q includes no bootstrap credential", offer.Kind)
-		return ""
+	if out.ReleasesStore == nil {
+		t.Fatal("Bootstrap offered no releases store")
 	}
-}
-
-func endpoints(out edge.BootstrapOutput) map[edge.OfferKind]string {
-	found := map[edge.OfferKind]string{}
-	for _, offer := range out.Offers {
-		if offer.Kind == edge.OfferReleasesStore {
-			found[offer.Kind] = offer.Values[edge.OfferKeyStoreEndpoint]
-		}
-	}
-	return found
+	return *out.ReleasesStore
 }
 
 func TestDeployedScriptWithoutTheModuleItExpected(t *testing.T) {

@@ -1,7 +1,6 @@
 package naming
 
 import (
-	"slices"
 	"strings"
 )
 
@@ -50,27 +49,4 @@ func path(parts ...string) string {
 		}
 	}
 	return strings.Join(kept, PathSeparator)
-}
-
-const isrSegment = "isr"
-
-func ISRPrefixUnder(prefix string) (string, bool) {
-	trimmed, closed := strings.CutSuffix(prefix, PathSeparator)
-	if !closed {
-		return "", false
-	}
-	segments := strings.Split(trimmed, PathSeparator)
-	switch {
-	case len(segments) == 5 && segments[4] == isrSegment:
-		segments = segments[:4]
-	case len(segments) != 4:
-		return "", false
-	}
-	if slices.Contains(segments, "") {
-		return "", false
-	}
-	if _, err := ParseReleaseToken(segments[3]); err != nil {
-		return "", false
-	}
-	return strings.Join(append(segments, isrSegment), PathSeparator), true
 }

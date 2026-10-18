@@ -20,23 +20,8 @@ type storeSource struct {
 }
 
 func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
-	resolved, err := f.reader.Values(ctx, f.cells)
-	if err != nil {
-		return nil, err
-	}
-	stored, err := f.reader.Bindings(ctx, bindingNames(f.bindings))
-	if err != nil {
-		return nil, err
-	}
-	return live.MergeBindings(resolved, f.bindings, stored), nil
-}
-
-func bindingNames(bindings []live.Binding) []string {
-	names := make([]string, 0, len(bindings))
-	for _, l := range bindings {
-		names = append(names, l.Name)
-	}
-	return names
+	values, _, err := live.Fetch(ctx, f.reader, f.cells, f.bindings)
+	return values, err
 }
 
 func FromManifest(raw []byte) (*live.Values, error) {

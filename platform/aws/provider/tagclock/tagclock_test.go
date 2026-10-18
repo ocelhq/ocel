@@ -117,7 +117,7 @@ func valueOf(entry map[string]ddbtypes.AttributeValue, name string) string {
 }
 
 func tagRow(project string, stack naming.StackName, tag string) map[string]ddbtypes.AttributeValue {
-	entry := item(naming.ISRTagKey(project, stack, tag), tagSortKey)
+	entry := item(naming.ISRTagPrefix(project, stack)+tag, tagSortKey)
 	entry[tagNamespaceAttribute] = &ddbtypes.AttributeValueMemberS{Value: naming.ISRTagPrefix(project, stack)}
 	entry["gsi1sk"] = &ddbtypes.AttributeValueMemberS{Value: "000001700000000"}
 	entry["tag"] = &ddbtypes.AttributeValueMemberS{Value: tag}
@@ -154,8 +154,8 @@ func TestSweepTakesEveryTagRowTheStackWrote(t *testing.T) {
 	}
 
 	want := []string{
-		naming.ISRTagKey("shop", stack, "products") + " " + tagSortKey,
-		naming.ISRTagKey("shop", stack, "carts") + " " + tagSortKey,
+		naming.ISRTagPrefix("shop", stack) + "products" + " " + tagSortKey,
+		naming.ISRTagPrefix("shop", stack) + "carts" + " " + tagSortKey,
 	}
 	if got := deletedKeys(ddb.deleted); !reflect.DeepEqual(got, want) {
 		t.Fatalf("deleted %v, want %v — a dropped stack leaves no tag rows behind, and none of a surviving stack's", got, want)

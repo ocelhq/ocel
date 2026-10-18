@@ -394,9 +394,7 @@ func TestARenewedWorkerClientCertificateIsTrustedByTheRecordedOriginWildcard(t *
 		t.Fatal(err)
 	}
 	renewed := "-----BEGIN CERTIFICATE-----\nBBBB\n-----END CERTIFICATE-----\n"
-	offer := edge.Offer{Kind: edge.OfferWorkerClientCertificate, Values: map[string]string{
-		edge.OfferKeyClientCertificateAuthorities: renewed + workerAuthority,
-	}}
+	offer := edge.ClientCertificate{ID: "m2", Authorities: renewed + workerAuthority}
 
 	if err := h.wildcards.TrustWorkerClientCertificate(context.Background(), environment.TierProduction, offer); err != nil {
 		t.Fatalf("trustWorkerClientCertificate = %v", err)
@@ -413,7 +411,7 @@ func TestARenewedWorkerClientCertificateOnATierWithNoOriginWildcardTrustsNothing
 	t.Parallel()
 	h := newWildcardHarness()
 
-	if err := h.wildcards.TrustWorkerClientCertificate(context.Background(), environment.TierProduction, edge.Offer{}); err != nil {
+	if err := h.wildcards.TrustWorkerClientCertificate(context.Background(), environment.TierProduction, edge.ClientCertificate{}); err != nil {
 		t.Fatalf("trustWorkerClientCertificate = %v", err)
 	}
 	if len(h.balancer.reconciled) != 0 {

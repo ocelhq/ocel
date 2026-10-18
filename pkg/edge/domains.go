@@ -4,10 +4,6 @@ import (
 	"slices"
 )
 
-func (s StackState) BoundTo(hostname string) bool {
-	return slices.Contains(s.Bound, hostname)
-}
-
 func (s *StackState) Bind(hostname string) {
 	if hostname == "" || slices.Contains(s.Bound, hostname) {
 		return

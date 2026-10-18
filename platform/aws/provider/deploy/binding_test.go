@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"context"
 	"slices"
 	"testing"
 
@@ -66,5 +67,16 @@ func publishedRecords(t *testing.T, bindings []live.Binding) (map[string]string,
 		}
 		records = append(records, variablestore.StoredBinding{Name: l.Name, Value: pair.Value})
 	}
-	return live.MergeBindings(nil, bindings, records), nil
+	values, _, err := live.Fetch(t.Context(), storedRecords(records), nil, bindings)
+	return values, err
+}
+
+type storedRecords []variablestore.StoredBinding
+
+func (r storedRecords) Values(context.Context, []variablestore.Cell) (map[string]string, error) {
+	return nil, nil
+}
+
+func (r storedRecords) Bindings(context.Context, []string) ([]variablestore.StoredBinding, error) {
+	return r, nil
 }

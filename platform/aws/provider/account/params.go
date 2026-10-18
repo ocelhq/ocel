@@ -155,7 +155,7 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tie
 }
 
 func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, adoption edge.Adoption) ([]provider.Change, error) {
-	if len(adoption.Offers) == 0 {
+	if !adoption.ReleasesStore {
 		return nil, nil
 	}
 	names, err := edgeNamesFor(ns, tier, kind)
@@ -164,23 +164,12 @@ func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier e
 	}
 
 	var changes []provider.Change
-
-	for _, adopted := range []struct {
-		offer  edge.OfferKind
-		params []string
-	}{
-		{edge.OfferReleasesStore, []string{names.releasesStoreParam, names.purgeSeedParam}},
-	} {
-		if !slices.Contains(adoption.Offers, adopted.offer) {
-			continue
+	for _, name := range []string{names.releasesStoreParam, names.purgeSeedParam} {
+		change, err := paramPresence(ctx, ssmClient, name)
+		if err != nil {
+			return nil, err
 		}
-		for _, name := range adopted.params {
-			change, err := paramPresence(ctx, ssmClient, name)
-			if err != nil {
-				return nil, err
-			}
-			changes = append(changes, change)
-		}
+		changes = append(changes, change)
 	}
 	return changes, nil
 }

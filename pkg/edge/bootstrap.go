@@ -3,12 +3,19 @@ package edge
 import "strings"
 
 type BootstrapOutput struct {
-	Trust  TrustBoundary
-	Offers []Offer
+	Trust             TrustBoundary
+	ReleasesStore     *ReleasesStore
+	ClientCertificate *ClientCertificate
+}
+
+type ClientCertificate struct {
+	ID          string
+	Authorities string
 }
 
 type Adoption struct {
-	Offers []OfferKind
+	ReleasesStore     bool
+	ClientCertificate bool
 }
 
 type BootstrapPart struct {
@@ -76,26 +83,4 @@ type TrustBoundary string
 const (
 	TrustExternal TrustBoundary = "external"
 	TrustInternal TrustBoundary = "internal"
-)
-
-type Offer struct {
-	Kind   OfferKind
-	Values map[string]string
-}
-
-type OfferKind string
-
-const OfferReleasesStore OfferKind = "releases-store"
-
-const OfferWorkerClientCertificate OfferKind = "worker-client-certificate"
-
-const (
-	OfferKeyClientCertificateID          = "certificateId"
-	OfferKeyClientCertificateAuthorities = "certificateAuthorities"
-)
-
-const (
-	OfferKeyStoreEndpoint            = "endpoint"
-	OfferKeyStoreScriptName          = "scriptName"
-	OfferKeyStoreBootstrapCredential = "bootstrapCred"
 )

@@ -87,7 +87,7 @@ func TestProgrammingAnEntryWorkerBeforeBootstrapIsNotReady(t *testing.T) {
 func TestProgrammingAnEntryWorkerWithoutAnAdoptedClientCertificateIsNotReady(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt([]edge.Offer{storeOffer("c1")}); err != nil {
+	if err := h.adopt(edge.BootstrapOutput{ReleasesStore: storeOffer("c1")}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))

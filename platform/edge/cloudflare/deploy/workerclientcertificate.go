@@ -139,7 +139,7 @@ func namesWorkerClientCertificate(name, base string) bool {
 	return err == nil
 }
 
-func (c workerClientCertificates) ensure(ctx context.Context, accountID string, state workerClientCertificateState) (edge.Offer, error) {
+func (c workerClientCertificates) ensure(ctx context.Context, accountID string, state workerClientCertificateState) (edge.ClientCertificate, error) {
 	for _, expired := range state.expired() {
 		_ = c.delete(ctx, accountID, expired.id)
 	}
@@ -148,7 +148,7 @@ func (c workerClientCertificates) ensure(ctx context.Context, accountID string, 
 	for _, held := range live {
 		authority, ok := readEmbeddedCA(held.certificates)
 		if !ok {
-			return edge.Offer{}, refusal.Refuse(refusal.CodeInvalid,
+			return edge.ClientCertificate{}, refusal.Refuse(refusal.CodeInvalid,
 				"the mTLS certificate %s (%s) is held by the account, and ocel cannot read the CA it chains to, so no origin can be told to trust it: delete it with `wrangler mtls-certificate delete --id %s` and run `ocel bootstrap` again",
 				held.id, held.name, held.id)
 		}
@@ -161,19 +161,13 @@ func (c workerClientCertificates) ensure(ctx context.Context, accountID string, 
 	} else {
 		uploaded, authority, err := c.upload(ctx, accountID, state)
 		if err != nil {
-			return edge.Offer{}, err
+			return edge.ClientCertificate{}, err
 		}
 		currentID = uploaded
 		authorities = slices.Insert(authorities, 0, authority)
 	}
 
-	return edge.Offer{
-		Kind: edge.OfferWorkerClientCertificate,
-		Values: map[string]string{
-			edge.OfferKeyClientCertificateID:          currentID,
-			edge.OfferKeyClientCertificateAuthorities: strings.Join(slices.Compact(authorities), ""),
-		},
-	}, nil
+	return edge.ClientCertificate{ID: currentID, Authorities: strings.Join(slices.Compact(authorities), "")}, nil
 }
 
 func (c workerClientCertificates) upload(ctx context.Context, accountID string, state workerClientCertificateState) (id, authority string, err error) {

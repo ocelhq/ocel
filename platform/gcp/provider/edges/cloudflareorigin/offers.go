@@ -82,7 +82,7 @@ func AdoptOffers(
 	out edge.BootstrapOutput,
 	runProgress progress.Log,
 ) error {
-	if len(out.Offers) == 0 {
+	if out.ReleasesStore == nil && out.ClientCertificate == nil {
 		return nil
 	}
 	say := gcloud.EnsureProgress(runProgress)
@@ -91,37 +91,25 @@ func AdoptOffers(
 		return err
 	}
 	adopted, credentials := stored, storedCredentials
-	sawReleasesStore := false
-	for _, offer := range out.Offers {
-		switch offer.Kind {
-		case edge.OfferReleasesStore:
-			say.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (Secret Manager)", kind))
-			sawReleasesStore = true
-			adopted.ReleasesStore = AdoptedWorker{
-				Endpoint:   offer.Values[edge.OfferKeyStoreEndpoint],
-				ScriptName: offer.Values[edge.OfferKeyStoreScriptName],
-			}
-			if offered := offer.Values[edge.OfferKeyStoreBootstrapCredential]; offered != "" {
-				credentials.ReleasesStore = offered
-			}
-			if credentials.ReleasesStore == "" {
-				return edgeCredentialUnrecorded(c, tier, kind, "releases store", adopted.ReleasesStore.ScriptName)
-			}
-		case edge.OfferWorkerClientCertificate:
-			adopted.ClientCertificate = AdoptedClientCertificate{
-				ID:          offer.Values[edge.OfferKeyClientCertificateID],
-				Authorities: offer.Values[edge.OfferKeyClientCertificateAuthorities],
-			}
-		default:
-			say.Warn(fmt.Sprintf("Ignoring the %s edge's %q offer: nothing in this bootstrap adopts it", kind, offer.Kind))
+	if offered := out.ReleasesStore; offered != nil {
+		say.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (Secret Manager)", kind))
+		adopted.ReleasesStore = AdoptedWorker{Endpoint: offered.Endpoint, ScriptName: offered.Name}
+		if offered.BootstrapCredential != "" {
+			credentials.ReleasesStore = offered.BootstrapCredential
 		}
+		if credentials.ReleasesStore == "" {
+			return edgeCredentialUnrecorded(c, tier, kind, "releases store", adopted.ReleasesStore.ScriptName)
+		}
+	}
+	if offered := out.ClientCertificate; offered != nil {
+		adopted.ClientCertificate = AdoptedClientCertificate{ID: offered.ID, Authorities: offered.Authorities}
 	}
 	if credentials != storedCredentials {
 		if err := WriteEdgeCredentials(ctx, c, tier, kind, credentials); err != nil {
 			return err
 		}
 	}
-	if sawReleasesStore {
+	if out.ReleasesStore != nil {
 		if err := ensurePurgeSeed(ctx, c, tier, kind); err != nil {
 			return err
 		}

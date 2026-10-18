@@ -20,6 +20,25 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 )
 
+type storedRecords []variablestore.StoredBinding
+
+func (r storedRecords) Values(context.Context, []variablestore.Cell) (map[string]string, error) {
+	return nil, nil
+}
+
+func (r storedRecords) Bindings(context.Context, []string) ([]variablestore.StoredBinding, error) {
+	return r, nil
+}
+
+func deliveredValues(t *testing.T, bindings []live.Binding, records []variablestore.StoredBinding) map[string]string {
+	t.Helper()
+	values, _, err := live.Fetch(t.Context(), storedRecords(records), nil, bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return values
+}
+
 type rotatingSecret struct {
 	password string
 	err      error
@@ -60,7 +79,7 @@ func fixtureSecretARN(t *testing.T) string {
 func deployedPostgres(t *testing.T, value []byte) ([]variablestore.StoredBinding, map[string]string) {
 	t.Helper()
 	records := []variablestore.StoredBinding{{Name: postgresBinding().Name, Value: value, Version: 1}}
-	return records, live.MergeBindings(nil, []live.Binding{postgresBinding()}, records)
+	return records, deliveredValues(t, []live.Binding{postgresBinding()}, records)
 }
 
 func withoutGrants(t *testing.T) []byte {
@@ -164,7 +183,7 @@ func TestCurrentPasswords(t *testing.T) {
 		secret := &rotatingSecret{password: "unused"}
 		bucket := live.Binding{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}
 		records := []variablestore.StoredBinding{{Name: bucket.Name, Value: publishedPostgresFixture(t), Version: 1}}
-		values := live.MergeBindings(nil, []live.Binding{bucket}, records)
+		values := deliveredValues(t, []live.Binding{bucket}, records)
 		if _, err := currentPasswords(context.Background(), signin.Sources{Secrets: secret}, []live.Binding{bucket}, records, values); err != nil {
 			t.Fatalf("currentPasswords: %v", err)
 		}

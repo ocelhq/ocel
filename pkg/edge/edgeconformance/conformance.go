@@ -562,13 +562,8 @@ func reconciledOn(t *testing.T, suite Suite) (edge.Edge, edge.EdgeStack) {
 	return e, stack
 }
 
-func offerKinds(offers []edge.Offer) []edge.OfferKind {
-	kinds := make([]edge.OfferKind, 0, len(offers))
-	for _, offer := range offers {
-		kinds = append(kinds, offer.Kind)
-	}
-	slices.Sort(kinds)
-	return kinds
+func offered(out edge.BootstrapOutput) edge.Adoption {
+	return edge.Adoption{ReleasesStore: out.ReleasesStore != nil, ClientCertificate: out.ClientCertificate != nil}
 }
 
 func checkOffers(t *testing.T, what string, out edge.BootstrapOutput) {
@@ -577,16 +572,11 @@ func checkOffers(t *testing.T, what string, out edge.BootstrapOutput) {
 	if out.Trust != edge.TrustExternal && out.Trust != edge.TrustInternal {
 		t.Errorf("%s: Trust = %q, want external or internal", what, out.Trust)
 	}
-	for i, offer := range out.Offers {
-		if offer.Kind == "" {
-			t.Errorf("%s: offer %d names no kind", what, i)
-		}
-		if len(offer.Values) == 0 {
-			t.Errorf("%s: offer %q has no values; the origin has nothing to adopt", what, offer.Kind)
-		}
-		if slices.ContainsFunc(out.Offers[:i], func(prior edge.Offer) bool { return prior.Kind == offer.Kind }) {
-			t.Errorf("%s: offer %q is made twice", what, offer.Kind)
-		}
+	if store := out.ReleasesStore; store != nil && (store.Name == "" || store.Endpoint == "") {
+		t.Errorf("%s: releases store %+v names no worker or endpoint; the origin has nothing to adopt", what, *store)
+	}
+	if cert := out.ClientCertificate; cert != nil && (cert.ID == "" || cert.Authorities == "") {
+		t.Errorf("%s: client certificate %+v carries no ID or authorities; the origin has nothing to adopt", what, *cert)
 	}
 }
 
@@ -609,8 +599,8 @@ func runBootstrap(t *testing.T, suite Suite) {
 			t.Fatalf("Bootstrap again: %v", err)
 		}
 		checkOffers(t, "second Bootstrap", second)
-		if !slices.Equal(offerKinds(second.Offers), offerKinds(first.Offers)) {
-			t.Errorf("second Bootstrap offered %v, want the %v the first did: a re-run converges on what is already installed", offerKinds(second.Offers), offerKinds(first.Offers))
+		if offered(second) != offered(first) {
+			t.Errorf("second Bootstrap offered %+v, want the %+v the first did: a re-run converges on what is already installed", offered(second), offered(first))
 		}
 
 		if adopt := e.Hooks().PlanAdoption; adopt != nil {
@@ -618,10 +608,8 @@ func runBootstrap(t *testing.T, suite Suite) {
 			if err != nil {
 				t.Fatalf("PlanAdoption: %v", err)
 			}
-			offered := slices.Clone(adoption.Offers)
-			slices.Sort(offered)
-			if !slices.Equal(offered, offerKinds(first.Offers)) {
-				t.Errorf("Adoption offers %v, want the %v Bootstrap made", offered, offerKinds(first.Offers))
+			if adoption != offered(first) {
+				t.Errorf("Adoption = %+v, want the %+v Bootstrap offered", adoption, offered(first))
 			}
 		}
 
@@ -637,8 +625,8 @@ func runBootstrap(t *testing.T, suite Suite) {
 			t.Fatalf("Bootstrap after Teardown: %v", err)
 		}
 		checkOffers(t, "Bootstrap after Teardown", again)
-		if !slices.Equal(offerKinds(again.Offers), offerKinds(first.Offers)) {
-			t.Errorf("Bootstrap after Teardown offered %v, want the %v a fresh account gets", offerKinds(again.Offers), offerKinds(first.Offers))
+		if offered(again) != offered(first) {
+			t.Errorf("Bootstrap after Teardown offered %+v, want the %+v a fresh account gets", offered(again), offered(first))
 		}
 	})
 }

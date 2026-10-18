@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func TestKindOf(t *testing.T) {
+func TestABindingTypeOcelProvisionsNamesTheResourceKindItProvisions(t *testing.T) {
 	for _, tc := range []struct {
 		typ  bindingsv1.BindingType
 		want naming.Kind
@@ -28,7 +28,7 @@ func TestKindOf(t *testing.T) {
 	}
 }
 
-func TestProxied(t *testing.T) {
+func TestAPostgresBindingIsNotReachedThroughTheRuntimeProxyWhileABucketIs(t *testing.T) {
 	for _, tc := range []struct {
 		typ  bindingsv1.BindingType
 		want bool
@@ -45,7 +45,7 @@ func TestProxied(t *testing.T) {
 	}
 }
 
-func TestEnvFragment(t *testing.T) {
+func TestABindingTypesEnvFragmentIsItsUpperCaseName(t *testing.T) {
 	for _, tc := range []struct {
 		typ  bindingsv1.BindingType
 		want string
@@ -59,7 +59,7 @@ func TestEnvFragment(t *testing.T) {
 	}
 }
 
-func TestResourceEnvName(t *testing.T) {
+func TestABindingsResourceEnvNameIsOcelResourceThenItsTypeThenItsName(t *testing.T) {
 	for _, tc := range []struct {
 		typ  bindingsv1.BindingType
 		want string
@@ -92,7 +92,7 @@ func TestEveryBindingTypeOcelProvisionsHasAKind(t *testing.T) {
 	}
 }
 
-func TestBindingTypeOf(t *testing.T) {
+func TestABindingsTypeIsTheKindOfItsProperties(t *testing.T) {
 	for _, tc := range []struct {
 		binding *bindingsv1.Binding
 		want    bindingsv1.BindingType
@@ -113,7 +113,7 @@ func TestBindingTypeOf(t *testing.T) {
 	}
 }
 
-func TestBindingProperties(t *testing.T) {
+func TestABindingsPropertiesAreReadByTheirJSONNames(t *testing.T) {
 	binding := &bindingsv1.Binding{Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 		Host: "h", Port: 5433, TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
 	}}}
@@ -137,7 +137,7 @@ func TestBindingProperties(t *testing.T) {
 	}
 }
 
-func TestCustomBindingProperties(t *testing.T) {
+func TestACustomBindingsPropertiesAreTheKeysOfItsPublishedStruct(t *testing.T) {
 	custom, err := structpb.NewStruct(map[string]any{
 		"subnetIds": []any{"subnet-a", "subnet-b"},
 		"vpcId":     "vpc-1",

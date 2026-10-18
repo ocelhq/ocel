@@ -154,14 +154,14 @@ func (w Wildcards) Ensure(ctx context.Context, tier environment.Tier, base strin
 	return err
 }
 
-func (w Wildcards) TrustWorkerClientCertificate(ctx context.Context, tier environment.Tier, offer edge.Offer) error {
+func (w Wildcards) TrustWorkerClientCertificate(ctx context.Context, tier environment.Tier, certificate edge.ClientCertificate) error {
 	_, recorded, err := w.Read(ctx, tier)
 	if err != nil || recorded.BaseDomain == "" || !recorded.Certified {
 		return err
 	}
 	_, err = w.Balancer.ReconcileOriginWildcard(ctx, alb.OriginWildcardSpec{
 		Tier: tier, BaseDomain: recorded.BaseDomain, Certificate: recorded.Certificate.ID,
-		ClientCAs: splitAuthorities(offer.Values[edge.OfferKeyClientCertificateAuthorities]),
+		ClientCAs: splitAuthorities(certificate.Authorities),
 	})
 	return err
 }

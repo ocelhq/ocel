@@ -51,7 +51,7 @@ func (o *orderLog) add(step string) {
 
 func adoptTheWorker(t *testing.T, h *offersHarness) {
 	t.Helper()
-	if err := h.adopt([]edge.Offer{storeOffer("c1"), certificateOffer()}); err != nil {
+	if err := h.adopt(fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
 }

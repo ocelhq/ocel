@@ -412,8 +412,8 @@ func TestBootstrapWritesNothing(t *testing.T) {
 	if out.Trust != edge.TrustInternal {
 		t.Errorf("Trust = %q, want internal; this edge runs inside the account it serves", out.Trust)
 	}
-	if len(out.Offers) != 0 {
-		t.Errorf("Offers = %v, want none; the api-gateway edge hosts no store the bootstrap adopts", out.Offers)
+	if out.ReleasesStore != nil || out.ClientCertificate != nil {
+		t.Errorf("Bootstrap offered %+v, want nothing; the api-gateway edge hosts no store the bootstrap adopts", out)
 	}
 	if got := w.gateway.mutations(); len(got) != 0 {
 		t.Errorf("bootstrap called %v, want nothing; everything it once created is in the core stack, where the change plan can show it", got)

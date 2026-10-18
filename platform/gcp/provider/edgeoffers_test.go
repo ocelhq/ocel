@@ -49,13 +49,12 @@ func newOffersHarness(t *testing.T) *offersHarness {
 	return h
 }
 
-func (h *offersHarness) adopt(offers []edge.Offer) error {
-	return h.adoptIn(environment.TierProduction, offers)
+func (h *offersHarness) adopt(out edge.BootstrapOutput) error {
+	return h.adoptIn(environment.TierProduction, out)
 }
 
-func (h *offersHarness) adoptIn(tier environment.Tier, offers []edge.Offer) error {
-	return cloudflareorigin.AdoptOffers(context.Background(), h.clients, h.records, tier, cloudflareKind,
-		edge.BootstrapOutput{Offers: offers}, h.log)
+func (h *offersHarness) adoptIn(tier environment.Tier, out edge.BootstrapOutput) error {
+	return cloudflareorigin.AdoptOffers(context.Background(), h.clients, h.records, tier, cloudflareKind, out, h.log)
 }
 
 func (h *offersHarness) record(t *testing.T) (cloudflareorigin.AdoptedEdge, bool) {
@@ -80,36 +79,16 @@ func (h *offersHarness) credentials(t *testing.T) string {
 	return got
 }
 
-func (h *offersHarness) count(prefix string) int {
-	n := 0
-	for _, line := range h.log.Lines() {
-		if strings.HasPrefix(line, prefix) {
-			n++
-		}
-	}
-	return n
+func storeOffer(credential string) *edge.ReleasesStore {
+	return &edge.ReleasesStore{Name: "ocel-releases-store", Endpoint: "https://s.example.workers.dev", BootstrapCredential: credential}
 }
 
-func storeOffer(credential string) edge.Offer {
-	values := map[string]string{
-		edge.OfferKeyStoreEndpoint:   "https://s.example.workers.dev",
-		edge.OfferKeyStoreScriptName: "ocel-releases-store",
-	}
-	if credential != "" {
-		values[edge.OfferKeyStoreBootstrapCredential] = credential
-	}
-	return edge.Offer{Kind: edge.OfferReleasesStore, Values: values}
+func certificateOffer() *edge.ClientCertificate {
+	return &edge.ClientCertificate{ID: "m1", Authorities: offeredCAs}
 }
 
-func certificateOffer() edge.Offer {
-	return edge.Offer{Kind: edge.OfferWorkerClientCertificate, Values: map[string]string{
-		edge.OfferKeyClientCertificateID:          "m1",
-		edge.OfferKeyClientCertificateAuthorities: offeredCAs,
-	}}
-}
-
-func fullOffers(storeCredential string) []edge.Offer {
-	return []edge.Offer{storeOffer(storeCredential), certificateOffer()}
+func fullOffers(storeCredential string) edge.BootstrapOutput {
+	return edge.BootstrapOutput{ReleasesStore: storeOffer(storeCredential), ClientCertificate: certificateOffer()}
 }
 
 func TestABootstrapAdoptsTheCloudflareEdgesWorkerAndCertificateAndKeepsItsCredentialInSecretManager(t *testing.T) {
@@ -208,24 +187,11 @@ func TestABootstrapRefusesAWorkerReofferedWithoutACredentialItNeverStored(t *tes
 	}
 }
 
-func TestABootstrapWarnsOfAnOfferNothingAdopts(t *testing.T) {
-	t.Parallel()
-	h := newOffersHarness(t)
-
-	offers := append(fullOffers("c1"), edge.Offer{Kind: "mystery"})
-	if err := h.adopt(offers); err != nil {
-		t.Fatal(err)
-	}
-	if n := h.count("WARN Ignoring the cloudflare edge's \"mystery\" offer"); n != 1 {
-		t.Errorf("%d warnings for the unknown offer, want 1: %v", n, h.log.Lines())
-	}
-}
-
 func TestAFrontThatOffersNothingLeavesNoRecord(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 
-	if err := h.adopt(nil); err != nil {
+	if err := h.adopt(edge.BootstrapOutput{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, found := h.record(t); found {

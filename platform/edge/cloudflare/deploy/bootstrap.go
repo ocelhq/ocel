@@ -20,20 +20,20 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 	}
 	out := edge.BootstrapOutput{Trust: edge.TrustExternal}
 	for _, worker := range state.workers {
-		offer, err := p.ensureWorker(ctx, accountID, worker)
+		store, err := p.ensureWorker(ctx, accountID, worker)
 		if err != nil {
 			return out, fmt.Errorf("bootstrap %s: %w", worker.what, err)
 		}
-		out.Offers = append(out.Offers, offer)
+		out.ReleasesStore = &store
 	}
 	if p.workerClientCertificate {
-		offer, err := p.workerClientCertificates().ensure(ctx, accountID, state.certificates)
+		certificate, err := p.workerClientCertificates().ensure(ctx, accountID, state.certificates)
 		if err != nil {
 			return out, fmt.Errorf("bootstrap the worker client certificate: %w", err)
 		}
-		out.Offers = append(out.Offers, offer)
+		out.ClientCertificate = &certificate
 		if p.trustClientCertificate != nil {
-			if err := p.trustClientCertificate(ctx, tier, offer); err != nil {
+			if err := p.trustClientCertificate(ctx, tier, certificate); err != nil {
 				return out, fmt.Errorf("make the origin trust the worker client certificate's CA before the entry worker presents it: %w", err)
 			}
 		}
@@ -67,14 +67,6 @@ type bootstrapWorker struct {
 	worker     workerScript
 	do         durableObjectWorker
 	what       string
-	offer      edge.OfferKind
-	keys       offerKeys
-}
-
-type offerKeys struct {
-	endpoint   string
-	scriptName string
-	cred       string
 }
 
 func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorker, error) {
@@ -90,24 +82,18 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 			worker:     storeWorker,
 			do:         releasesStoreWorker,
 			what:       "releases-store worker",
-			offer:      edge.OfferReleasesStore,
-			keys: offerKeys{
-				endpoint:   edge.OfferKeyStoreEndpoint,
-				scriptName: edge.OfferKeyStoreScriptName,
-				cred:       edge.OfferKeyStoreBootstrapCredential,
-			},
 		},
 	}, nil
 }
 
-func (p *cloudflare) ensureWorker(ctx context.Context, accountID string, state workerState) (edge.Offer, error) {
+func (p *cloudflare) ensureWorker(ctx context.Context, accountID string, state workerState) (edge.ReleasesStore, error) {
 	b := state.bootstrapWorker
 	up := upload{accountID: accountID, scriptName: b.scriptName, worker: b.worker}
 	var cred string
 	if !state.secretPresent {
 		minted, err := mintSecret()
 		if err != nil {
-			return edge.Offer{}, fmt.Errorf("mint bootstrap credential: %w", err)
+			return edge.ReleasesStore{}, fmt.Errorf("mint bootstrap credential: %w", err)
 		}
 		cred = minted
 	}
@@ -121,27 +107,20 @@ func (p *cloudflare) ensureWorker(ctx context.Context, accountID string, state w
 			up.worker = withSecret(b.worker, bootstrapSecretBinding, cred)
 		}
 		if err := p.putDurableObjectScript(ctx, up, b.do, state.classes, inherited); err != nil {
-			return edge.Offer{}, fmt.Errorf("put %s: %w", b.what, err)
+			return edge.ReleasesStore{}, fmt.Errorf("put %s: %w", b.what, err)
 		}
 	case cred != "":
 		if err := p.putBootstrapSecret(ctx, accountID, b.scriptName, cred); err != nil {
-			return edge.Offer{}, fmt.Errorf("set the bootstrap credential of %s: %w", b.what, err)
+			return edge.ReleasesStore{}, fmt.Errorf("set the bootstrap credential of %s: %w", b.what, err)
 		}
 	}
 
 	endpoint, err := p.ensureSubdomain(ctx, up, state.subdomainOn, b.what)
 	if err != nil {
-		return edge.Offer{}, err
+		return edge.ReleasesStore{}, err
 	}
 
-	values := map[string]string{
-		b.keys.endpoint:   endpoint,
-		b.keys.scriptName: b.scriptName,
-	}
-	if cred != "" {
-		values[b.keys.cred] = cred
-	}
-	return edge.Offer{Kind: b.offer, Values: values}, nil
+	return edge.ReleasesStore{Name: b.scriptName, Endpoint: endpoint, BootstrapCredential: cred}, nil
 }
 
 func (p *cloudflare) ensureSubdomain(ctx context.Context, up upload, on bool, what string) (string, error) {
