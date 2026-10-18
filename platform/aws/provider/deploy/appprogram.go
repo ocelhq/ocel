@@ -22,6 +22,8 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
 type appWork struct {
@@ -31,11 +33,11 @@ type appWork struct {
 	roleCoord   naming.Coordinate
 	logical     []string
 	bundle      variables.Bundle
-	cache       *isrConfig
-	sets        []assetSet
-	delivery    edgeDelivery
+	cache       *site.ISR
+	sets        []site.AssetSet
+	delivery    site.EdgeDelivery
 	stack       string
-	network     *functionNetwork
+	network     *functionnetwork.Network
 	uploads     []functioncode.Upload
 
 	networkPending  bool
@@ -43,7 +45,7 @@ type appWork struct {
 }
 
 func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error {
-	pushed, err := declareAssetSets(pctx, w.stack, w.sets)
+	pushed, err := site.DeclareAssetSets(pctx, w.stack, w.sets)
 	if err != nil {
 		return err
 	}
@@ -59,7 +61,7 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	return stack.register(pctx)
 }
 
-func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches, network *functionNetwork, bundle variables.Bundle, uploads []functioncode.Upload) (*appWork, error) {
+func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches, network *functionnetwork.Network, bundle variables.Bundle, uploads []functioncode.Upload) (*appWork, error) {
 	app := spec.App
 	project, stack := naming.Sanitize(spec.Ref.Project), spec.Ref.Name
 	sessions := bucket.NewSessions(project, stack.Env, r.cfg.StateTableARN)
@@ -82,7 +84,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	if err := variables.CheckRuntimeOwnedNames(app.App, app.Values); err != nil {
 		return nil, err
 	}
-	if err := checkAppEdgeVariables(r.cfg, app.App, app.Values, bundle); err != nil {
+	if err := site.CheckEdgeVariables(r.cfg.ArtifactRoot, app.App, app.Values, bundle); err != nil {
 		return nil, err
 	}
 
@@ -156,7 +158,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 
 	r.served.plan(r, app.App, logical, bytecode)
 
-	sets, delivery, err := r.assetSets(spec, app.App, bundle, cache)
+	sets, delivery, err := site.ReadAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, appCoordinate(spec), app, bundle, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +205,7 @@ func reachesTasks(app *provider.AppSpec) bool {
 }
 
 func (r *release) artifactAt(ref provider.ArtifactRef) (artifactRef, error) {
-	bucket, err := r.store(ref.Bucket)
+	bucket, err := r.cfg.buckets().Find(ref.Bucket)
 	if err != nil {
 		return artifactRef{}, err
 	}
@@ -211,16 +213,6 @@ func (r *release) artifactAt(ref provider.ArtifactRef) (artifactRef, error) {
 		return artifactRef{}, fmt.Errorf("no code was uploaded for it")
 	}
 	return artifactRef{Bucket: bucket, Key: ref.Key}, nil
-}
-
-func (r *release) store(name string) (string, error) {
-	switch name {
-	case provider.StoreFunctions:
-		return r.cfg.ArtifactBucket, nil
-	case provider.StoreAssets:
-		return r.cfg.AssetBucket, nil
-	}
-	return "", fmt.Errorf("this provider keeps no %q store", name)
 }
 
 func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string, error) {
@@ -285,12 +277,12 @@ func (r *release) originGuard(spec provider.StackSpec) (*originGuard, error) {
 	return &originGuard{RootFunction: guard.RootFunction, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
 }
 
-func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
+func (r *release) isrCache(spec provider.StackSpec) *site.ISR {
 	isr := spec.App.ISR
 	if isr == nil {
 		return nil
 	}
-	cache := &isrConfig{
+	cache := &site.ISR{
 		Coord:     appCoordinate(spec),
 		Namespace: isr.TagNamespace,
 		Bucket:    r.cfg.AssetBucket,
@@ -298,7 +290,7 @@ func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
 		Table:     r.cfg.StateTable,
 		TableARN:  r.cfg.StateTableARN,
 	}
-	if edgeReadsAssetBucket(r.cfg) {
+	if r.cfg.buckets().CanEdgeRead() {
 		cache.EdgeReadable = true
 		if r.cfg.PurgeSeed != "" {
 			cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, isr.Prefix)

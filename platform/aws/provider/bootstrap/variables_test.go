@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"slices"
 	"strings"
@@ -10,71 +11,69 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-
-	"gopkg.in/yaml.v3"
 )
 
 type variablesTemplate struct {
 	Resources map[string]struct {
-		Type           string `yaml:"Type"`
-		DeletionPolicy string `yaml:"DeletionPolicy"`
+		Type           string `json:"Type"`
+		DeletionPolicy string `json:"DeletionPolicy"`
 		Metadata       struct {
-			Description string `yaml:"Description"`
-		} `yaml:"Metadata"`
+			Description string `json:"Description"`
+		} `json:"Metadata"`
 		Properties struct {
-			Description          string `yaml:"Description"`
-			Path                 string `yaml:"Path"`
-			RoleName             string `yaml:"RoleName"`
-			BillingMode          string `yaml:"BillingMode"`
+			Description          string `json:"Description"`
+			Path                 string `json:"Path"`
+			RoleName             string `json:"RoleName"`
+			BillingMode          string `json:"BillingMode"`
 			AttributeDefinitions []struct {
-				AttributeName string `yaml:"AttributeName"`
-				AttributeType string `yaml:"AttributeType"`
-			} `yaml:"AttributeDefinitions"`
+				AttributeName string `json:"AttributeName"`
+				AttributeType string `json:"AttributeType"`
+			} `json:"AttributeDefinitions"`
 			KeySchema []struct {
-				AttributeName string `yaml:"AttributeName"`
-				KeyType       string `yaml:"KeyType"`
-			} `yaml:"KeySchema"`
+				AttributeName string `json:"AttributeName"`
+				KeyType       string `json:"KeyType"`
+			} `json:"KeySchema"`
 			GlobalSecondaryIndexes []struct {
-				IndexName string `yaml:"IndexName"`
+				IndexName string `json:"IndexName"`
 				KeySchema []struct {
-					AttributeName string `yaml:"AttributeName"`
-					KeyType       string `yaml:"KeyType"`
-				} `yaml:"KeySchema"`
+					AttributeName string `json:"AttributeName"`
+					KeyType       string `json:"KeyType"`
+				} `json:"KeySchema"`
 				Projection struct {
-					ProjectionType string `yaml:"ProjectionType"`
-				} `yaml:"Projection"`
-			} `yaml:"GlobalSecondaryIndexes"`
+					ProjectionType string `json:"ProjectionType"`
+				} `json:"Projection"`
+			} `json:"GlobalSecondaryIndexes"`
 
-			EnableKeyRotation bool   `yaml:"EnableKeyRotation"`
-			AliasName         string `yaml:"AliasName"`
-			TargetKeyId       string `yaml:"TargetKeyId"`
+			EnableKeyRotation bool         `json:"EnableKeyRotation"`
+			AliasName         string       `json:"AliasName"`
+			TargetKeyId       templateText `json:"TargetKeyId"`
 			Tags              []struct {
-				Key   string `yaml:"Key"`
-				Value string `yaml:"Value"`
-			} `yaml:"Tags"`
+				Key   string `json:"Key"`
+				Value string `json:"Value"`
+			} `json:"Tags"`
 			KeyPolicy struct {
 				Statement []struct {
-					Effect    string `yaml:"Effect"`
+					Effect    string `json:"Effect"`
 					Principal struct {
-						AWS string `yaml:"AWS"`
-					} `yaml:"Principal"`
-					Action   any    `yaml:"Action"`
-					Resource string `yaml:"Resource"`
-				} `yaml:"Statement"`
-			} `yaml:"KeyPolicy"`
-		} `yaml:"Properties"`
-	} `yaml:"Resources"`
+						AWS templateText `json:"AWS"`
+					} `json:"Principal"`
+					Action   any          `json:"Action"`
+					Resource templateText `json:"Resource"`
+				} `json:"Statement"`
+			} `json:"KeyPolicy"`
+		} `json:"Properties"`
+	} `json:"Resources"`
 	Outputs map[string]struct {
-		Description string `yaml:"Description"`
-		Value       string `yaml:"Value"`
-	} `yaml:"Outputs"`
+		Description string       `json:"Description"`
+		Value       templateText `json:"Value"`
+	} `json:"Outputs"`
 }
 
 func parseVariablesTemplate(t *testing.T, template string) variablesTemplate {
 	t.Helper()
 	var tmpl variablesTemplate
-	if err := yaml.Unmarshal([]byte(template), &tmpl); err != nil {
-		t.Fatalf("template is not valid YAML: %v", err)
+	if err := json.Unmarshal([]byte(template), &tmpl); err != nil {
+		t.Fatalf("template is not valid JSON: %v", err)
 	}
 	return tmpl
 }
@@ -89,8 +88,8 @@ func variablesBootstraps() []struct {
 		tier     environment.Tier
 		template string
 	}{
-		{"production", environment.TierProduction, coreStackTemplate(defaultNamespace, environment.TierProduction, "")},
-		{"preview", environment.TierPreview, coreStackTemplate(defaultNamespace, environment.TierPreview, "")},
+		{"production", environment.TierProduction, coreBody(defaultNamespace, environment.TierProduction, "")},
+		{"preview", environment.TierPreview, coreBody(defaultNamespace, environment.TierPreview, "")},
 	}
 }
 

@@ -27,6 +27,7 @@ import (
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
 func TestOnlyAWorkerOnContainerComputeNamesTheServiceASenderWakes(t *testing.T) {
@@ -564,28 +565,28 @@ func TestTheContainersPartIsKeptWhileAContainerWorkersStackRunsInItsCluster(t *t
 	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	if err := stacks.releaseContainerInfra(ctx, store, spec.Ref, progress.Discard()); err != nil {
+	if err := stacks.containers.Release(ctx, store, spec.Ref, progress.Discard()); err != nil {
 		t.Fatalf("let go of the app's own hold: %v", err)
 	}
 
-	part, present, err := ReadContainerInfrastructurePart(ctx, store, "us-east-1", environment.TierProduction)
+	part, present, err := containers.ReadPart(ctx, store, "us-east-1", environment.TierProduction)
 	if err != nil || !present {
-		t.Fatalf("ReadContainerInfrastructurePart() = %v, %v, want the containers part while the workers' services run in its cluster", present, err)
+		t.Fatalf("containers.ReadPart() = %v, %v, want the containers part while the workers' services run in its cluster", present, err)
 	}
 	if !slices.Equal(part.UsedBy, []string{spec.Ref.Project}) {
 		t.Errorf("containers used by %v, want %s, whose workers run there", part.UsedBy, spec.Ref.Project)
 	}
-	if err := stacks.RemoveContainerInfrastructure(ctx, environment.TierProduction, progress.Discard()); err == nil {
-		t.Error("RemoveContainerInfrastructure() = nil, want it refused while workers services run in the cluster")
+	if err := stacks.containers.Remove(ctx, environment.TierProduction, progress.Discard()); err == nil {
+		t.Error("containers.Remove() = nil, want it refused while workers services run in the cluster")
 	}
-	if infra := containerInfraRef(environment.TierProduction).Name.String(); slices.Contains(engine.torn(), infra) {
+	if infra := containers.StackRef(environment.TierProduction).Name.String(); slices.Contains(engine.torn(), infra) {
 		t.Fatalf("took down %v, want the shared infrastructure kept", engine.torn())
 	}
 
 	if err := stacks.RetireWorkers(ctx, provider.LiveApps{Slug: spec.Ref.Project, Tier: environment.TierProduction, Env: "prod"}, progress.Discard()); err != nil {
 		t.Fatalf("RetireWorkers() = %v", err)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, ContainersPart); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, containers.Part); err != nil || present {
 		t.Errorf("containers record present %v (%v) after the last workers stack went, want it forgotten with the infrastructure", present, err)
 	}
 }
@@ -718,7 +719,7 @@ func TestProvisioningAContainerAppThatOnlyHostsItsWorkerReturnsTheWorkerAloneAnd
 	if len(result.Containers) != 1 || result.Containers[0].Name != resources.WorkerName("web") || result.Containers[0].URL != "" {
 		t.Errorf("Containers = %+v, want the worker alone, with no URL", result.Containers)
 	}
-	part, present, err := ReadContainerInfrastructurePart(context.Background(), store, "us-east-1", environment.TierProduction)
+	part, present, err := containers.ReadPart(context.Background(), store, "us-east-1", environment.TierProduction)
 	if err != nil || !present || !slices.Equal(part.UsedBy, []string{spec.Ref.Project}) {
 		t.Errorf("containers part = %+v, %v, %v, want it added and used by %s: its worker's service runs in the cluster", part, present, err, spec.Ref.Project)
 	}

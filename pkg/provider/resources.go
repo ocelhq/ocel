@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 
 	"google.golang.org/protobuf/types/known/structpb"
@@ -70,7 +71,10 @@ const (
 	PropertyVerifyKey     = "verifyKey"
 )
 
-const GrantPasswordSecret = "password secret"
+const (
+	GrantPasswordSecret    = "password secret"
+	GrantIAMAuthentication = "iam authentication"
+)
 
 func (b Binding) Endpointed() bool {
 	return b.Type == BindingBucket && b.Properties[PropertyEndpoint] != ""
@@ -85,6 +89,10 @@ func (b Binding) PasswordSecret() string {
 		return ""
 	}
 	return labelled[0].Resources[0]
+}
+
+func (b Binding) HasIAMAuthentication() bool {
+	return b.Type == BindingPostgres && slices.ContainsFunc(b.Grants, func(grant Grant) bool { return grant.Label == GrantIAMAuthentication })
 }
 
 func passwordSecretGrants(grants []Grant) []Grant {
@@ -149,10 +157,10 @@ func verifyPostgresPassword(binding Binding) error {
 			"binding %s came back naming its password secret by %d %q grants over %v: a password is read from exactly one secret, named by one grant",
 			binding.Name, len(labelled), GrantPasswordSecret, listGrantResources(labelled))
 	}
-	if binding.Properties[PropertyPassword] == "" && len(labelled) == 0 {
+	if binding.Properties[PropertyPassword] == "" && len(labelled) == 0 && !binding.HasIAMAuthentication() {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"binding %s came back with neither a %q nor a %q grant: every postgres binding includes its password or names the one secret it is read from",
-			binding.Name, PropertyPassword, GrantPasswordSecret)
+			"binding %s came back with neither a %q nor a %q or %q grant: every postgres binding includes its password, names the one secret it is read from, or is granted IAM authentication",
+			binding.Name, PropertyPassword, GrantPasswordSecret, GrantIAMAuthentication)
 	}
 	return nil
 }

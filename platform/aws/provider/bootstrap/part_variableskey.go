@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 var variablesKeyPart = part{
@@ -26,39 +27,40 @@ var variablesKeyPart = part{
 }
 
 func variablesKeyTemplate(in partInputs) (partStack, error) {
+	described := "Ocel bootstrap part (" + provider.VariablesKeyPart + ", " + string(in.tier) + ") - "
 	if in.variablesKey != "" {
-		return partStack{body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap part (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this tier is sealed under. Ocel owns no key here and puts nothing on it."
-Resources:
-  VariablesKeyRecord:
-    Type: AWS::CloudFormation::WaitConditionHandle
-    Metadata:
-      Description: "Placeholder for the %s tier's brought variable key: the stack records the key ARN as an output and creates nothing. The app boundary admits the key by that ARN."
-Outputs:
-%s`,
-			provider.VariablesKeyPart, in.tier, in.tier,
-			broughtVariablesKeyOutput(in.variablesKey))}, nil
+		return newPartStack(cfn.Template{
+			Description: described + "the record of the KMS key this account brought, which every encrypted variable of this tier is sealed under. Ocel owns no key here and puts nothing on it.",
+			Resources: []cfn.Resource{{
+				ID:   "VariablesKeyRecord",
+				Type: "AWS::CloudFormation::WaitConditionHandle",
+				Metadata: cfn.Metadata{
+					Description: "Placeholder for the " + string(in.tier) + " tier's brought variable key: the stack records the key ARN as an output and creates nothing. The app boundary admits the key by that ARN.",
+				},
+			}},
+			Outputs: broughtVariablesKeyOutputs(in.variablesKey),
+		}, nil)
 	}
-	return partStack{
-		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap part (%s, %s) - the KMS key every encrypted variable of this tier is sealed under, and the alias naming it."
-Resources:
-%sOutputs:
-%s`,
-			provider.VariablesKeyPart, in.tier,
-			variablesKeyResources(in.ns, in.tier),
-			variablesKeyOutputs()),
-	}, nil
+	return newPartStack(cfn.Template{
+		Description: described + "the KMS key every encrypted variable of this tier is sealed under, and the alias naming it.",
+		Resources:   variablesKeyResources(in.ns, in.tier),
+		Outputs:     variablesKeyOutputs(),
+	}, nil)
 }
 
-func broughtVariablesKeyOutput(named string) string {
-	return fmt.Sprintf(`  %s:
-    Description: "KMS key every encrypted value of this tier is encrypted under. This account brought it, so ocel records it and neither made nor manages it."
-    Value: %q
-  %s:
-    Description: "Marks the key above as one this account brought, so a later run knows ocel made no key here."
-    Value: "true"
-`, outputVariablesKeyARN, named, outputVariablesKeyBrought)
+func broughtVariablesKeyOutputs(named string) []cfn.Output {
+	return []cfn.Output{
+		{
+			Name:        outputVariablesKeyARN,
+			Description: "KMS key every encrypted value of this tier is encrypted under. This account brought it, so ocel records it and neither made nor manages it.",
+			Value:       named,
+		},
+		{
+			Name:        outputVariablesKeyBrought,
+			Description: "Marks the key above as one this account brought, so a later run knows ocel made no key here.",
+			Value:       "true",
+		},
+	}
 }
 
 type KeyAPI interface {

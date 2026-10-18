@@ -75,8 +75,8 @@ func TestPriceOfAProductionDeployBehindCloudFront(t *testing.T) {
 		t.Errorf("lambda duration = %s, want 4.61 (1M requests of 200 ms at 1769 MB, 345,507.8 GB-s at 0.0000133334)", got)
 	}
 	instance := "project:shop/environment:prod/aws_rds_cluster_instance:main"
-	if got := componentNamed(t, est, instance, "Aurora Serverless v2 capacity"); got.GetMonthlyCost() != "87.60" || got.GetAssumption() != "moderate profile: 730 ACU-hours" {
-		t.Errorf("aurora capacity = %v, want 87.60 at the midpoint of 0 and 2 ACU", got)
+	if got := componentNamed(t, est, instance, "Aurora Serverless v2 capacity"); got.GetMonthlyCost() != "372.30" || got.GetAssumption() != "moderate profile: 3102.5 ACU-hours" {
+		t.Errorf("aurora capacity = %v, want 372.30 at the midpoint of a production database's 0.5 and 8 ACU", got)
 	}
 	if got := componentNamed(t, est, "project:shop/shared:production/aws_dynamodb_table:VariablesTable", "Storage"); got.GetMonthlyCost() != "0.00" {
 		t.Errorf("variables table storage = %v, want the account's 25 GB allowance to cover 1 GB", got)

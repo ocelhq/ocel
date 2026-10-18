@@ -269,6 +269,26 @@ func TestAPostgresBindingWithNeitherAPasswordNorAPasswordSecretIsRefusedNamingBo
 	}
 }
 
+func TestAPostgresBindingAuthenticatedByIAMNeedsNeitherAPasswordNorAPasswordSecret(t *testing.T) {
+	t.Parallel()
+
+	binding := postgresWithoutPassword(provider.Grant{
+		Label:     provider.GrantIAMAuthentication,
+		Actions:   []string{"rds-db:connect"},
+		Resources: []string{"arn:aws:rds-db:us-east-1:111122223333:dbuser:cluster-ABCDEFGHIJKL/ocel_app"},
+	})
+
+	if err := provider.VerifyProperties(binding); err != nil {
+		t.Errorf("VerifyProperties() = %v, want a binding whose app connects with a token its own identity mints accepted", err)
+	}
+	if !binding.HasIAMAuthentication() {
+		t.Error("HasIAMAuthentication() = false, want true for a binding granted IAM authentication")
+	}
+	if postgresWithoutPassword(passwordSecretGrant(testPasswordSecret)).HasIAMAuthentication() {
+		t.Error("HasIAMAuthentication() = true for a binding that names a password secret, want false")
+	}
+}
+
 func TestAPostgresBindingNamingMoreThanOnePasswordSecretIsRefused(t *testing.T) {
 	t.Parallel()
 

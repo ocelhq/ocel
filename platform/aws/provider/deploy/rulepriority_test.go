@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
 const containerPhysical = "shop-prod-web-container-r3f8a1c90"
@@ -80,7 +81,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	if torn := engine.torn(); len(torn) != 0 {
 		t.Errorf("a claimed priority tore down %v, want nothing: the deploy recovers rather than abandons", torn)
 	}
-	if _, present, err := stackrecords.Read(context.Background(), cfg.KeyValues, environment.TierProduction, ContainersSlug, containerInfraRef(environment.TierProduction).Name); err != nil || !present {
+	if _, present, err := stackrecords.Read(context.Background(), cfg.KeyValues, environment.TierProduction, containers.Slug, containers.StackRef(environment.TierProduction).Name); err != nil || !present {
 		t.Errorf("the shared container infrastructure is not recorded (present %v, err %v) after the deploy that recovered", present, err)
 	}
 }

@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.31
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.30
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.51
+	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.30
 	github.com/aws/aws-sdk-go-v2/service/acm v1.42.1
 	github.com/aws/aws-sdk-go-v2/service/apigateway v1.41.0
 	github.com/aws/aws-sdk-go-v2/service/apigatewayv2 v1.37.6
@@ -24,6 +25,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/kms v1.55.0
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.99.0
 	github.com/aws/aws-sdk-go-v2/service/rds v1.130.1
+	github.com/aws/aws-sdk-go-v2/service/rdsdata v1.40.2
 	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.41.2
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.42.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.0
@@ -45,7 +47,6 @@ require (
 	github.com/shopspring/decimal v1.4.0
 	golang.org/x/sync v0.22.0
 	google.golang.org/protobuf v1.36.12
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -211,6 +212,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/grpc v1.83.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/frand v1.5.1 // indirect
 )
 

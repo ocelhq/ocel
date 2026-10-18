@@ -71,9 +71,17 @@ func collectBinding(region, name string, fields map[string]any) (*variablestorev
 	if err != nil {
 		return nil, err
 	}
-	secretARN, err := component.RequireStringField(fields, name, OutputKeySecretARN)
+	clusterARN, err := component.RequireStringField(fields, name, OutputKeyClusterARN)
 	if err != nil {
 		return nil, err
+	}
+	resourceID, err := component.RequireStringField(fields, name, OutputKeyResourceID)
+	if err != nil {
+		return nil, err
+	}
+	account := component.AccountOfARN(clusterARN)
+	if account == "" {
+		return nil, fmt.Errorf("postgres %s: the cluster ARN %q names no account, so no app could be granted its database user", name, clusterARN)
 	}
 
 	port := Port
@@ -98,6 +106,6 @@ func collectBinding(region, name string, fields map[string]any) (*variablestorev
 				TlsCa:    roots,
 			}},
 		},
-		Grants: grants(secretARN),
+		Grants: grants(dbUserARN(region, account, resourceID, username)),
 	}, nil
 }

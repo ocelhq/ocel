@@ -11,8 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
-	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
 type partsRemoved struct{ names []string }
@@ -108,7 +109,7 @@ func TestTheContainerInfrastructureTheFunctionNetworkAndTheBastionAreOfferedForR
 	t.Parallel()
 
 	removable := (&Provider{}).removableParts()
-	for _, name := range []string{deploy.ContainersPart, deploy.FunctionNetworkPart, bastion.Part} {
+	for _, name := range []string{containers.Part, functionnetwork.Part, bastion.Part} {
 		at := slices.IndexFunc(removable, func(each removablePart) bool { return each.Name == name })
 		if at < 0 {
 			t.Errorf("removableParts() offers no %s, want `ocel bootstrap <tier> --remove %s` to take it down", name, name)

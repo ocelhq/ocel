@@ -9,6 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 )
 
@@ -34,56 +36,50 @@ func cloudflareEdgeTemplate(in partInputs) (partStack, error) {
 	if err != nil {
 		return partStack{}, err
 	}
-	return partStack{
-		params: values,
-		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap part (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to this bootstrap alone."
-%sResources:
-%s`,
-			CloudflareEdgePart, in.tier, params,
-			edgeUserResource(in.ns, userName, in.tier)),
-	}, nil
+	return newPartStack(cfn.Template{
+		Description: "Ocel bootstrap part (" + CloudflareEdgePart + ", " + string(in.tier) + ") - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to this bootstrap alone.",
+		Parameters:  params,
+		Resources:   []cfn.Resource{edgeUserResource(in.ns, userName, in.tier)},
+	}, values)
 }
 
-func edgeUserResource(ns Namespace, userName string, tier environment.Tier) string {
-	return fmt.Sprintf(`  EdgeUser:
-    Type: AWS::IAM::User
-    Metadata:
-      Description: "The identity the %s edge signs its calls into this account with: it invokes app functions and the image optimizer, lists the asset bucket and reads the objects in it the deploy tagged edge-readable."
-    Properties:
-      UserName: %s
-      Policies:
-        - PolicyName: %s
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - lambda:InvokeFunctionUrl
-                  - lambda:InvokeFunction
-                Resource: !Sub 'arn:aws:lambda:*:${AWS::AccountId}:function:*'
-                Condition:
-                  StringEquals:
-                    'aws:ResourceTag/ocel:component': 'function'
-                    'aws:ResourceTag/%s': '%s'
-              - Effect: Allow
-                Action: s3:GetObject
-                Resource: !Sub '${%s}/*'
-                Condition:
-                  StringEquals:
-                    's3:ExistingObjectTag/%s': '%s'
-              - Effect: Allow
-                Action: s3:ListBucket
-                Resource: !Ref %s
-              - Effect: Allow
-                Action:
-                  - lambda:InvokeFunctionUrl
-                  - lambda:InvokeFunction
-                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:%s'
-`, tier, userName, ns.PolicyName("edge-cache"),
-		naming.EnvTierTagKey, tier,
-		paramAssetBucketARN, naming.EdgeReadableTagKey, naming.EdgeReadableTagValue, paramAssetBucketARN,
-		imageoptimizer.NamesFor(string(ns), tier).Function)
+func edgeUserResource(ns Namespace, userName string, tier environment.Tier) cfn.Resource {
+	invoke := []string{"lambda:InvokeFunctionUrl", "lambda:InvokeFunction"}
+	return cfn.Resource{
+		ID:   "EdgeUser",
+		Type: "AWS::IAM::User",
+		Metadata: cfn.Metadata{
+			Description: "The identity the " + string(tier) + " edge signs its calls into this account with: it invokes app functions and the image optimizer, lists the asset bucket and reads the objects in it the deploy tagged edge-readable.",
+		},
+		Properties: map[string]any{
+			"UserName": userName,
+			"Policies": []any{map[string]any{
+				"PolicyName": ns.PolicyName("edge-cache"),
+				"PolicyDocument": iam.Document([]iam.Statement{
+					{
+						Actions:        invoke,
+						ResourceValues: []any{cfn.Sub("arn:aws:lambda:*:${AWS::AccountId}:function:*")},
+						Condition: map[string]any{"StringEquals": map[string]any{
+							"aws:ResourceTag/ocel:component":          "function",
+							"aws:ResourceTag/" + naming.EnvTierTagKey: string(tier),
+						}},
+					},
+					{
+						Actions:        []string{"s3:GetObject"},
+						ResourceValues: []any{cfn.Sub("${" + paramAssetBucketARN + "}/*")},
+						Condition: map[string]any{"StringEquals": map[string]any{
+							"s3:ExistingObjectTag/" + naming.EdgeReadableTagKey: naming.EdgeReadableTagValue,
+						}},
+					},
+					{Actions: []string{"s3:ListBucket"}, ResourceValues: []any{cfn.Ref(paramAssetBucketARN)}},
+					{
+						Actions:        invoke,
+						ResourceValues: []any{cfn.Sub("arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:" + imageoptimizer.NamesFor(string(ns), tier).Function)},
+					},
+				}),
+			}},
+		},
+	}
 }
 
 func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, _ Request) ([]provider.Change, error) {

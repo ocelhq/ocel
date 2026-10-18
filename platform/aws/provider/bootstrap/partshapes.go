@@ -15,8 +15,12 @@ func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...
 	for _, name := range parts {
 		in.alongside[name] = true
 	}
+	core, err := shapeTemplate(coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey)))
+	if err != nil {
+		return nil, err
+	}
 	shapes := map[string][]pricing.Shaped{
-		provider.BasePart: shapeTemplate(coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey))),
+		provider.BasePart: core,
 		RuntimeLayersPart: shapedRuntimeLayers(),
 	}
 	for _, name := range parts {
@@ -28,7 +32,9 @@ func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...
 		if err != nil {
 			return nil, err
 		}
-		shapes[name] = shapeTemplate(stack.body)
+		if shapes[name], err = shapeTemplate(stack.template); err != nil {
+			return nil, err
+		}
 	}
 	return shapes, nil
 }

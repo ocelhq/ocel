@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
 func TestAServerlessAppUsingProvisionedPostgresIsBilledForTheTiersNATGateway(t *testing.T) {
@@ -16,7 +17,7 @@ func TestAServerlessAppUsingProvisionedPostgresIsBilledForTheTiersNATGateway(t *
 	for _, r := range set.GetResources() {
 		scopes[r.GetType()+":"+r.GetName()] = r.GetScope()
 	}
-	for _, key := range []string{"aws_nat_gateway:" + FunctionNetworkSlug + "-1", "aws_eip:" + FunctionNetworkSlug + "-2"} {
+	for _, key := range []string{"aws_nat_gateway:" + functionnetwork.Slug + "-1", "aws_eip:" + functionnetwork.Slug + "-2"} {
 		if scopes[key] != "project:shop/shared:production" {
 			t.Errorf("%s is in scope %q, want the tier's shared scope: one gateway serves every app in it", key, scopes[key])
 		}

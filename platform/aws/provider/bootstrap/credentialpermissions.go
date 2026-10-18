@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -950,6 +952,14 @@ func appProvisioning(r ScopedARNs) []iam.Statement {
 		{
 			Actions:   []string{"rds:DeleteDBCluster"},
 			Resources: []string{appClusterSnapshotARN},
+		},
+		{
+			Actions:   []string{"rds-data:ExecuteStatement"},
+			Resources: []string{appClusterARN},
+		},
+		{
+			Actions:   []string{"rds-db:connect"},
+			Resources: []string{"arn:aws:rds-db:*:*:dbuser:*/" + postgres.AppRole},
 		},
 		{
 			Actions: []string{

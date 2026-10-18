@@ -11,6 +11,7 @@ const (
 	LambdaLogGroupPrefix   = "/aws/lambda/"
 	LambdaLogFormat        = "Text"
 	LambdaLogRetentionDays = 14
+	LambdaNodeRuntime      = "nodejs24.x"
 )
 
 func LambdaLogGroupPrefixFor(base string) string {

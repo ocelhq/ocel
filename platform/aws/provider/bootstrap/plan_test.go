@@ -298,7 +298,7 @@ func TestPlanListsWhatADroppedPartTakesWithIt(t *testing.T) {
 	}
 }
 
-const leftoverTemplate = "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  LeftoverQueue:\n    Type: AWS::SQS::Queue\n"
+const leftoverTemplate = `{"AWSTemplateFormatVersion": "2010-09-09", "Resources": {"LeftoverQueue": {"Type": "AWS::SQS::Queue"}}}`
 
 func (f *fakeCFN) setTemplate(stackName, body string) {
 	f.mu.Lock()

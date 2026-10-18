@@ -35,6 +35,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
 const (
@@ -45,8 +46,8 @@ const (
 	fixtureListener = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/ocel-containers-production/abc/def"
 )
 
-func fixtureContainerInfra() containerInfra {
-	return containerInfra{
+func fixtureContainerInfra() containers.Infrastructure {
+	return containers.Infrastructure{
 		VPC:           "vpc-123",
 		Subnets:       []string{"subnet-a", "subnet-b"},
 		Listener:      fixtureListener,
@@ -269,8 +270,8 @@ func TestAContainerStackProvisionsAFargateServiceBehindTheSharedFront(t *testing
 		t.Fatalf("containerDefinitions = %v, want one container: %v", task["containerDefinitions"], err)
 	}
 	definition := definitions[0]
-	if definition.Image != containerImage || definition.Name != containerName || definition.PortMappings[0].ContainerPort != containerPortNumber {
-		t.Errorf("container = %+v, want the pushed image listening on %d", definition, containerPortNumber)
+	if definition.Image != containerImage || definition.Name != containerName || definition.PortMappings[0].ContainerPort != containers.TaskPort {
+		t.Errorf("container = %+v, want the pushed image listening on %d", definition, containers.TaskPort)
 	}
 	env := definitionEnvOf(t, rec)
 	if env["GREETING"] != "hello" || env[containerPortEnv] != containerPort {

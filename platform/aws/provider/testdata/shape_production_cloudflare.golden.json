@@ -227,8 +227,8 @@
         "engine_version": "16.4",
         "manage_master_user_password": true,
         "serverlessv2_scaling_configuration": {
-          "max_capacity": 2,
-          "min_capacity": 0
+          "max_capacity": 8,
+          "min_capacity": 0.5
         }
       }
     },
@@ -243,8 +243,8 @@
         "engine": "aurora-postgresql",
         "instance_class": "db.serverless",
         "serverlessv2_scaling_configuration": {
-          "max_capacity": 2,
-          "min_capacity": 0
+          "max_capacity": 8,
+          "min_capacity": 0.5
         }
       }
     },

@@ -28,7 +28,7 @@ func New(clusters ClustersAPI) component.Component {
 			return collectBinding(at.Region, declared.Name, fields)
 		},
 		WidestGrants: func(component.Stack, provider.Resource) []*variablestorev1.Grant {
-			return grants(widestMasterSecretARN)
+			return grants(widestDBUserARN)
 		},
 		Teardown: &component.Teardown{
 			Plan: markProtectedClusters,
@@ -45,7 +45,7 @@ func New(clusters ClustersAPI) component.Component {
 
 func declare(ctx *pulumi.Context, at component.Stack, declared []provider.Resource) error {
 	for _, resource := range declared {
-		args := translate(resource.Postgres)
+		args := translate(resource.Postgres, at.Tier())
 		args.Tags = at.Transforms.TagsFor(transformKind, resource.Name)
 		args.Protected = at.Tier() == environment.TierProduction
 		if err := register(ctx, at.Project, at.Env, resource.Name, args, at.Network); err != nil {

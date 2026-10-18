@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
 )
 
 func TestTranslateFunctionSpec(t *testing.T) {
@@ -534,10 +535,10 @@ func TestTheBytecodeCacheFollowsTheSpecWhateverTheOperatorsShell(t *testing.T) {
 	}
 }
 
-func isrCacheFor(t *testing.T, env, project, app, buildID string) isrConfig {
+func isrCacheFor(t *testing.T, env, project, app, buildID string) site.ISR {
 	t.Helper()
 	coord := storageCoordinate(env, project, app, deployedAs(buildID).Token())
-	return isrConfig{
+	return site.ISR{
 		Coord:    coord,
 		Bucket:   "assets-xyz",
 		Prefix:   isrPrefixOf(coord),
@@ -549,7 +550,7 @@ func isrCacheFor(t *testing.T, env, project, app, buildID string) isrConfig {
 func TestISREnv(t *testing.T) {
 	t.Run("says nothing about the bytecode cache", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
-		env := cfg.env()
+		env := cfg.Env()
 		for _, key := range []string{"OCEL_BYTECODE_PREFIX", "OCEL_BYTECODE_BUCKET"} {
 			if _, ok := env[key]; ok {
 				t.Errorf("%s = %q, want the bytecode cache passed on its own config", key, env[key])
@@ -560,7 +561,7 @@ func TestISREnv(t *testing.T) {
 	t.Run("agrees with the policy scope", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
-		env := cfg.env()
+		env := cfg.Env()
 
 		if env["OCEL_ISR_BUCKET"] != "assets-xyz" {
 			t.Errorf("OCEL_ISR_BUCKET = %q", env["OCEL_ISR_BUCKET"])
@@ -659,7 +660,7 @@ func TestISREdgeReadable(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 		cfg.EdgeReadable = true
 
-		if got := cfg.env()["OCEL_ISR_EDGE_READABLE"]; got != "1" {
+		if got := cfg.Env()["OCEL_ISR_EDGE_READABLE"]; got != "1" {
 			t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want 1", got)
 		}
 	})
@@ -667,21 +668,21 @@ func TestISREdgeReadable(t *testing.T) {
 	t.Run("says nothing about it otherwise", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
-		if got, ok := cfg.env()["OCEL_ISR_EDGE_READABLE"]; ok {
+		if got, ok := cfg.Env()["OCEL_ISR_EDGE_READABLE"]; ok {
 			t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want it unset", got)
 		}
 	})
 
 	t.Run("lets the function tag only its page entries, and only when the edge reads", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
-		without, err := isrPolicy(cfg)
+		without, err := cfg.Policy()
 		if err != nil {
-			t.Fatalf("isrPolicy: %v", err)
+			t.Fatalf("ISR.Policy: %v", err)
 		}
 		cfg.EdgeReadable = true
-		with, err := isrPolicy(cfg)
+		with, err := cfg.Policy()
 		if err != nil {
-			t.Fatalf("isrPolicy: %v", err)
+			t.Fatalf("ISR.Policy: %v", err)
 		}
 
 		if strings.Contains(without, "s3:PutObjectTagging") {
@@ -709,28 +710,13 @@ func TestISREdgeReadable(t *testing.T) {
 	})
 }
 
-func TestEdgeReadableTagging(t *testing.T) {
-	t.Run("matches the tagging the cache handler writes page entries with", func(t *testing.T) {
-		var contract struct {
-			EdgeReadableTagging string `json:"edgeReadableTagging"`
-		}
-		if err := json.Unmarshal(nextCacheFixture(t, "edge-contract.json"), &contract); err != nil {
-			t.Fatalf("parse fixture: %v", err)
-		}
-
-		if edgeReadableTagging != contract.EdgeReadableTagging {
-			t.Errorf("edgeReadableTagging = %q, want the contract's %q", edgeReadableTagging, contract.EdgeReadableTagging)
-		}
-	})
-}
-
 func TestISRPolicy(t *testing.T) {
 	t.Run("scopes to the app's own namespace", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
-		raw, err := isrPolicy(cfg)
+		raw, err := cfg.Policy()
 		if err != nil {
-			t.Fatalf("isrPolicy: %v", err)
+			t.Fatalf("ISR.Policy: %v", err)
 		}
 
 		var doc struct {
@@ -798,7 +784,7 @@ func TestISRPolicy(t *testing.T) {
 
 		for _, stmt := range webDoc.Statement[1:] {
 			keys := stmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
-			if want := web.tagNamespace() + "*"; len(keys) != 1 || keys[0] != want {
+			if want := web.TagNamespace() + "*"; len(keys) != 1 || keys[0] != want {
 				t.Fatalf("web LeadingKeys = %v, want only %q", keys, want)
 			}
 			for _, tag := range []string{"products", "a#b", ""} {
@@ -806,7 +792,7 @@ func TestISRPolicy(t *testing.T) {
 					t.Errorf("web's LeadingKeys %q denies its own tag key %q", keys[0], key)
 				}
 			}
-			for _, other := range []isrConfig{admin, preview, redeployed} {
+			for _, other := range []site.ISR{admin, preview, redeployed} {
 				for _, tag := range []string{"products", ""} {
 					if key := isrTagKey(other, tag); admits(t, keys[0], key) {
 						t.Errorf("web's LeadingKeys %q admits %q, which web must not write", keys[0], key)
@@ -826,8 +812,8 @@ func TestISRPolicy(t *testing.T) {
 	})
 }
 
-func isrTagKey(c isrConfig, tag string) string {
-	return c.tagNamespace() + tag
+func isrTagKey(c site.ISR, tag string) string {
+	return c.TagNamespace() + tag
 }
 
 func admits(t *testing.T, pattern, key string) bool {
@@ -881,11 +867,11 @@ type policyDoc struct {
 	}
 }
 
-func parsePolicy(t *testing.T, cfg isrConfig) policyDoc {
+func parsePolicy(t *testing.T, cfg site.ISR) policyDoc {
 	t.Helper()
-	raw, err := isrPolicy(cfg)
+	raw, err := cfg.Policy()
 	if err != nil {
-		t.Fatalf("isrPolicy: %v", err)
+		t.Fatalf("ISR.Policy: %v", err)
 	}
 	var doc policyDoc
 	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
@@ -926,18 +912,18 @@ func TestTagNamespace(t *testing.T) {
 		if got := isrPrefixOf(coord); got != contract.TagNamespace.ISRPrefix {
 			t.Errorf("isrPrefixOf() = %q, want the contract's isrPrefix %q", got, contract.TagNamespace.ISRPrefix)
 		}
-		cfg := isrConfig{Coord: coord}
-		if got := cfg.tagNamespace(); got != contract.TagNamespace.PartitionKeyPrefix {
-			t.Errorf("tagNamespace() = %q, want %q", got, contract.TagNamespace.PartitionKeyPrefix)
+		cfg := site.ISR{Coord: coord}
+		if got := cfg.TagNamespace(); got != contract.TagNamespace.PartitionKeyPrefix {
+			t.Errorf("TagNamespace() = %q, want %q", got, contract.TagNamespace.PartitionKeyPrefix)
 		}
 	})
 
 	t.Run("refuses a cache with no coordinate", func(t *testing.T) {
-		if got := (isrConfig{Prefix: "prod/proj/web/r3f8a1c9d/isr"}).tagNamespace(); got != "" {
-			t.Errorf("tagNamespace() = %q, want %q — a rendered path is not a coordinate", got, "")
+		if got := (site.ISR{Prefix: "prod/proj/web/r3f8a1c9d/isr"}).TagNamespace(); got != "" {
+			t.Errorf("TagNamespace() = %q, want %q — a rendered path is not a coordinate", got, "")
 		}
-		if _, err := isrPolicy(isrConfig{Prefix: "prod/proj/web/r3f8a1c9d/isr"}); err == nil {
-			t.Error("isrPolicy accepted a cache with no coordinate; an unscoped tag grant must never render")
+		if _, err := (site.ISR{Prefix: "prod/proj/web/r3f8a1c9d/isr"}).Policy(); err == nil {
+			t.Error("ISR.Policy accepted a cache with no coordinate; an unscoped tag grant must never render")
 		}
 	})
 }
@@ -953,9 +939,9 @@ func TestISRCacheStore(t *testing.T) {
 			}
 		}
 
-		raw, err := isrPolicy(cfg)
+		raw, err := cfg.Policy()
 		if err != nil {
-			t.Fatalf("isrPolicy: %v", err)
+			t.Fatalf("ISR.Policy: %v", err)
 		}
 		for _, action := range []string{"ssm:GetParameter", "kms:Decrypt"} {
 			if strings.Contains(raw, action) {

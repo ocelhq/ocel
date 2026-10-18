@@ -27,6 +27,8 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
 var pulumiTokens = map[string]string{
@@ -162,8 +164,8 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 		t.Fatal(err)
 	}
 	run("container", containerWork.run)
-	run("function-network", (&functionNetworkWork{tier: environment.TierProduction, region: "us-east-1", tags: functionNetworkTags(environment.TierProduction), subnets: &functionNetworkCloud{subnets: defaultVPCSubnets()}}).run)
-	run("container-infra", (&containerInfraWork{tier: environment.TierProduction, boundary: containerCfg.AppBoundaryARN, rolePath: containerCfg.AppRolePath}).run)
+	run("function-network", functionnetwork.NewProgram(environment.TierProduction, "us-east-1", &functionNetworkCloud{subnets: defaultVPCSubnets()}).Run)
+	run("container-infra", containers.NewProgram(environment.TierProduction, containerCfg.AppBoundaryARN, containerCfg.AppRolePath, nil).Run)
 	topicsRelease := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
 	req := shapeRequest(t)
 	run("topics", func(pctx *pulumi.Context) error {
@@ -198,6 +200,7 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 			SigningKeys: realtime.Keys{SigningKeys: newFakeSigningKeys(), Root: "/ocel/realtime"},
 		})
 		at := component.Stack{
+			Ref:     provider.StackRef{Tier: environment.TierProduction, Project: "shop"},
 			Project: "shop", Env: "prod", StateTable: "ocel-state", StateTableARN: testStateTableARN,
 			AppBoundaryARN: containerCfg.AppBoundaryARN, AppRolePath: containerCfg.AppRolePath,
 			Network:    component.Network{VPCID: "vpc-1", VPCCIDR: "10.0.0.0/16", SubnetIDs: []string{"subnet-a"}},

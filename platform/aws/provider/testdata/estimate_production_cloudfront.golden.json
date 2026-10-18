@@ -496,16 +496,16 @@
         {
           "name": "Aurora Serverless v2 capacity",
           "unit": "ACU-hours",
-          "monthlyQuantity": "730",
+          "monthlyQuantity": "3102.5",
           "unitPrice": "0.12",
-          "monthlyCost": "87.60",
+          "monthlyCost": "372.30",
           "usageBased": true,
-          "assumption": "moderate profile: 730 ACU-hours",
+          "assumption": "moderate profile: 3102.5 ACU-hours",
           "rateRef": "aws/rds/aurora-serverless-v2"
         }
       ],
       "monthlyFixed": "0.00",
-      "monthlyUsage": "87.60"
+      "monthlyUsage": "372.30"
     },
     {
       "resource": "project:shop/environment:prod/aws_secretsmanager_secret:main",
@@ -824,7 +824,7 @@
     {
       "scope": "project:shop",
       "monthlyFixed": "35.85",
-      "monthlyUsage": "112.31"
+      "monthlyUsage": "397.01"
     },
     {
       "scope": "project:shop/shared:production",
@@ -834,7 +834,7 @@
     {
       "scope": "project:shop/environment:prod",
       "monthlyFixed": "18.42",
-      "monthlyUsage": "99.89"
+      "monthlyUsage": "384.59"
     },
     {
       "scope": "project:shop/environment:prod/app:web",
@@ -880,5 +880,5 @@
     "CloudFront is priced at its United States rates whichever price class the distribution uses"
   ],
   "monthlyFixed": "35.85",
-  "monthlyUsage": "112.31"
+  "monthlyUsage": "397.01"
 }

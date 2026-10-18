@@ -30,7 +30,7 @@ func checkEdgeReaderBootstrapped(cfg Config, front edge.Kind) error {
 	switch {
 	case cfg.EdgeCredentialsErr != nil:
 		return fmt.Errorf("read the credential the %s edge reads the asset bucket with: %w", front, cfg.EdgeCredentialsErr)
-	case !edgeReadsAssetBucket(cfg):
+	case !cfg.buckets().CanEdgeRead():
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this bootstrap holds no credential for the %s edge to read the asset bucket with, so nothing this build caches could be served from it; re-run `%s`",
 			front, provider.BootstrapCommand(cfg.Tier))

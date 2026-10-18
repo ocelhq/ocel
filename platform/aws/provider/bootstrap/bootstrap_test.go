@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"path"
 	"reflect"
@@ -13,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
-	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -23,84 +23,84 @@ import (
 
 type parsedTemplate struct {
 	Resources map[string]struct {
-		Type       string `yaml:"Type"`
+		Type       string `json:"Type"`
 		Properties struct {
-			BillingMode          string `yaml:"BillingMode"`
+			BillingMode          string `json:"BillingMode"`
 			AttributeDefinitions []struct {
-				AttributeName string `yaml:"AttributeName"`
-				AttributeType string `yaml:"AttributeType"`
-			} `yaml:"AttributeDefinitions"`
+				AttributeName string `json:"AttributeName"`
+				AttributeType string `json:"AttributeType"`
+			} `json:"AttributeDefinitions"`
 			KeySchema []struct {
-				AttributeName string `yaml:"AttributeName"`
-				KeyType       string `yaml:"KeyType"`
-			} `yaml:"KeySchema"`
+				AttributeName string `json:"AttributeName"`
+				KeyType       string `json:"KeyType"`
+			} `json:"KeySchema"`
 			GlobalSecondaryIndexes []struct {
-				IndexName string `yaml:"IndexName"`
+				IndexName string `json:"IndexName"`
 				KeySchema []struct {
-					AttributeName string `yaml:"AttributeName"`
-					KeyType       string `yaml:"KeyType"`
-				} `yaml:"KeySchema"`
+					AttributeName string `json:"AttributeName"`
+					KeyType       string `json:"KeyType"`
+				} `json:"KeySchema"`
 				Projection struct {
-					ProjectionType   string   `yaml:"ProjectionType"`
-					NonKeyAttributes []string `yaml:"NonKeyAttributes"`
-				} `yaml:"Projection"`
-			} `yaml:"GlobalSecondaryIndexes"`
+					ProjectionType   string   `json:"ProjectionType"`
+					NonKeyAttributes []string `json:"NonKeyAttributes"`
+				} `json:"Projection"`
+			} `json:"GlobalSecondaryIndexes"`
 			TimeToLiveSpecification struct {
-				AttributeName string `yaml:"AttributeName"`
-				Enabled       bool   `yaml:"Enabled"`
-			} `yaml:"TimeToLiveSpecification"`
+				AttributeName string `json:"AttributeName"`
+				Enabled       bool   `json:"Enabled"`
+			} `json:"TimeToLiveSpecification"`
 			StreamSpecification struct {
-				StreamViewType string `yaml:"StreamViewType"`
-			} `yaml:"StreamSpecification"`
-			Bucket         string `yaml:"Bucket"`
+				StreamViewType string `json:"StreamViewType"`
+			} `json:"StreamSpecification"`
+			Bucket         templateText `json:"Bucket"`
 			PolicyDocument struct {
-				Version   string `yaml:"Version"`
+				Version   string `json:"Version"`
 				Statement []struct {
-					Sid       string `yaml:"Sid"`
-					Effect    string `yaml:"Effect"`
+					Sid       string `json:"Sid"`
+					Effect    string `json:"Effect"`
 					Principal struct {
-						Service string `yaml:"Service"`
-					} `yaml:"Principal"`
-					Action    any    `yaml:"Action"`
-					Resource  string `yaml:"Resource"`
+						Service string `json:"Service"`
+					} `json:"Principal"`
+					Action    any          `json:"Action"`
+					Resource  templateText `json:"Resource"`
 					Condition struct {
-						StringEquals map[string]string `yaml:"StringEquals"`
-					} `yaml:"Condition"`
-				} `yaml:"Statement"`
-			} `yaml:"PolicyDocument"`
+						StringEquals map[string]templateText `json:"StringEquals"`
+					} `json:"Condition"`
+				} `json:"Statement"`
+			} `json:"PolicyDocument"`
 			PublicAccessBlockConfiguration struct {
-				BlockPublicAcls       bool `yaml:"BlockPublicAcls"`
-				BlockPublicPolicy     bool `yaml:"BlockPublicPolicy"`
-				IgnorePublicAcls      bool `yaml:"IgnorePublicAcls"`
-				RestrictPublicBuckets bool `yaml:"RestrictPublicBuckets"`
-			} `yaml:"PublicAccessBlockConfiguration"`
+				BlockPublicAcls       bool `json:"BlockPublicAcls"`
+				BlockPublicPolicy     bool `json:"BlockPublicPolicy"`
+				IgnorePublicAcls      bool `json:"IgnorePublicAcls"`
+				RestrictPublicBuckets bool `json:"RestrictPublicBuckets"`
+			} `json:"PublicAccessBlockConfiguration"`
 			LifecycleConfiguration struct {
 				Rules []struct {
-					Id                          string `yaml:"Id"`
-					Status                      string `yaml:"Status"`
-					ExpirationInDays            int    `yaml:"ExpirationInDays"`
-					ExpiredObjectDeleteMarker   bool   `yaml:"ExpiredObjectDeleteMarker"`
+					Id                          string `json:"Id"`
+					Status                      string `json:"Status"`
+					ExpirationInDays            int    `json:"ExpirationInDays"`
+					ExpiredObjectDeleteMarker   bool   `json:"ExpiredObjectDeleteMarker"`
 					NoncurrentVersionExpiration struct {
-						NoncurrentDays          int `yaml:"NoncurrentDays"`
-						NewerNoncurrentVersions int `yaml:"NewerNoncurrentVersions"`
-					} `yaml:"NoncurrentVersionExpiration"`
+						NoncurrentDays          int `json:"NoncurrentDays"`
+						NewerNoncurrentVersions int `json:"NewerNoncurrentVersions"`
+					} `json:"NoncurrentVersionExpiration"`
 					AbortIncompleteMultipartUpload struct {
-						DaysAfterInitiation int `yaml:"DaysAfterInitiation"`
-					} `yaml:"AbortIncompleteMultipartUpload"`
-				} `yaml:"Rules"`
-			} `yaml:"LifecycleConfiguration"`
-		} `yaml:"Properties"`
-	} `yaml:"Resources"`
+						DaysAfterInitiation int `json:"DaysAfterInitiation"`
+					} `json:"AbortIncompleteMultipartUpload"`
+				} `json:"Rules"`
+			} `json:"LifecycleConfiguration"`
+		} `json:"Properties"`
+	} `json:"Resources"`
 	Outputs map[string]struct {
-		Value string `yaml:"Value"`
-	} `yaml:"Outputs"`
+		Value templateText `json:"Value"`
+	} `json:"Outputs"`
 }
 
 func parseTemplateStr(t *testing.T, template string) parsedTemplate {
 	t.Helper()
 	var tmpl parsedTemplate
-	if err := yaml.Unmarshal([]byte(template), &tmpl); err != nil {
-		t.Fatalf("template is not valid YAML: %v", err)
+	if err := json.Unmarshal([]byte(template), &tmpl); err != nil {
+		t.Fatalf("template is not valid JSON: %v", err)
 	}
 	return tmpl
 }
@@ -111,8 +111,8 @@ func TestStackTemplate(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", coreStackTemplate(defaultNamespace, environment.TierProduction, "")},
-			{"preview", coreStackTemplate(defaultNamespace, environment.TierPreview, "")},
+			{"production", coreBody(defaultNamespace, environment.TierProduction, "")},
+			{"preview", coreBody(defaultNamespace, environment.TierPreview, "")},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parseTemplateStr(t, tc.template)
@@ -188,8 +188,8 @@ func TestStateBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", coreStackTemplate(defaultNamespace, environment.TierProduction, "")},
-		{"preview", coreStackTemplate(defaultNamespace, environment.TierPreview, "")},
+		{"production", coreBody(defaultNamespace, environment.TierProduction, "")},
+		{"preview", coreBody(defaultNamespace, environment.TierPreview, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -245,8 +245,8 @@ func TestArtifactBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", coreStackTemplate(defaultNamespace, environment.TierProduction, "")},
-		{"preview", coreStackTemplate(defaultNamespace, environment.TierPreview, "")},
+		{"production", coreBody(defaultNamespace, environment.TierProduction, "")},
+		{"preview", coreBody(defaultNamespace, environment.TierPreview, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -291,8 +291,8 @@ func TestAssetBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", coreStackTemplate(defaultNamespace, environment.TierProduction, "")},
-		{"preview", coreStackTemplate(defaultNamespace, environment.TierPreview, "")},
+		{"production", coreBody(defaultNamespace, environment.TierProduction, "")},
+		{"preview", coreBody(defaultNamespace, environment.TierPreview, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -389,7 +389,7 @@ func TestCheckDeployed(t *testing.T) {
 					Name:      coreStackName,
 					Present:   true,
 					Digest:    "written-digest",
-					Intended:  cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierProduction, "")),
+					Intended:  cfn.TemplateDigest(coreBody(defaultNamespace, environment.TierProduction, "")),
 					WrittenBy: "1.4.0",
 				},
 				{Name: coreStackName + "-" + CloudflareEdgePart, Part: CloudflareEdgePart},
@@ -460,7 +460,7 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("a stack written from this build reads as current", func(t *testing.T) {
 		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).
-			stamped(Stamp{Digest: cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierProduction, ""))})}
+			stamped(Stamp{Digest: cfn.TemplateDigest(coreBody(defaultNamespace, environment.TierProduction, ""))})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -475,10 +475,10 @@ func TestCheckDeployed(t *testing.T) {
 func TestPreviewStackTemplate(t *testing.T) {
 	t.Run("stamps preview tier", func(t *testing.T) {
 		var tmpl parsedTemplate
-		if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, environment.TierPreview, "")), &tmpl); err != nil {
-			t.Fatalf("preview template is not valid YAML: %v", err)
+		if err := json.Unmarshal([]byte(coreBody(defaultNamespace, environment.TierPreview, "")), &tmpl); err != nil {
+			t.Fatalf("preview template is not valid JSON: %v", err)
 		}
-		if got := tmpl.Outputs[outputInfraTier].Value; got != string(environment.TierPreview) {
+		if got := tmpl.Outputs[outputInfraTier].Value; got != templateText(environment.TierPreview) {
 			t.Errorf("%s output = %q, want %q", outputInfraTier, got, environment.TierPreview)
 		}
 	})
@@ -566,8 +566,8 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", coreStackTemplate(defaultNamespace, environment.TierProduction, "")},
-		{"preview", coreStackTemplate(defaultNamespace, environment.TierPreview, "")},
+		{"production", coreBody(defaultNamespace, environment.TierProduction, "")},
+		{"preview", coreBody(defaultNamespace, environment.TierPreview, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -587,7 +587,7 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 				t.Fatalf("the policy has %d statements, want exactly one: it is written once by the bootstrap and never rewritten per deploy", len(statements))
 			}
 			grant := statements[0]
-			if grant.Effect != "Allow" || !slices.Equal(yamlStrings(grant.Action), []string{"s3:GetObject"}) {
+			if grant.Effect != "Allow" || !slices.Equal(templateStrings(grant.Action), []string{"s3:GetObject"}) {
 				t.Errorf("the grant is %s %v, want Allow s3:GetObject", grant.Effect, grant.Action)
 			}
 			if grant.Principal.Service != "cloudfront.amazonaws.com" {

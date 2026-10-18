@@ -19,10 +19,12 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
 const (
-	defaultFunctionRuntime = "nodejs24.x"
+	defaultFunctionRuntime = component.LambdaNodeRuntime
 
 	pythonFunctionRuntime = "python" + arch.PythonVersion
 
@@ -60,44 +62,7 @@ type functionArgs struct {
 	TimeoutSeconds int
 	InvokeMode     string
 	Tags           map[string]string
-	Network        *functionNetwork
-}
-
-type isrConfig struct {
-	Coord     naming.Coordinate
-	Namespace string
-
-	Bucket   string
-	Prefix   string
-	Table    string
-	TableARN string
-
-	PurgeSecret string
-
-	EdgeReadable bool
-}
-
-func (c isrConfig) tagNamespace() string {
-	if c.Namespace != "" {
-		return c.Namespace
-	}
-	if c.Coord.Project == "" || c.Coord.Env == "" || c.Coord.App == "" || c.Coord.Release.IsZero() {
-		return ""
-	}
-	return naming.ISRTagPrefix(c.Coord.Project, c.Coord.Stack())
-}
-
-func (c isrConfig) env() map[string]string {
-	env := map[string]string{
-		"OCEL_ISR_BUCKET":        c.Bucket,
-		"OCEL_ISR_PREFIX":        c.Prefix,
-		"OCEL_STATE_TABLE":       c.Table,
-		"OCEL_ISR_TAG_NAMESPACE": c.tagNamespace(),
-	}
-	if c.EdgeReadable {
-		env["OCEL_ISR_EDGE_READABLE"] = "1"
-	}
-	return env
+	Network        *functionnetwork.Network
 }
 
 type bytecodeConfig struct {
@@ -179,45 +144,6 @@ func renderDispatchInvokePolicy(siblings []string, account string, optimizer boo
 	return string(out), nil
 }
 
-func isrPolicy(c isrConfig) (string, error) {
-	namespace := c.tagNamespace()
-	if namespace == "" {
-		return "", fmt.Errorf("isr cache under %q has no coordinate, so its tag items cannot be scoped to this app", c.Prefix)
-	}
-	statements := []any{
-		map[string]any{
-			"Effect":   "Allow",
-			"Action":   []string{"s3:GetObject", "s3:PutObject"},
-			"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
-		},
-		map[string]any{
-			"Effect":   "Allow",
-			"Action":   []string{"dynamodb:UpdateItem"},
-			"Resource": c.TableARN,
-			"Condition": map[string]any{
-				"ForAllValues:StringLike": map[string]any{
-					"dynamodb:LeadingKeys": []string{namespace + "*"},
-				},
-			},
-		},
-	}
-
-	if c.EdgeReadable {
-		statements = append(statements, map[string]any{
-			"Effect":   "Allow",
-			"Action":   []string{"s3:PutObjectTagging"},
-			"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/cache/*", c.Bucket, c.Prefix),
-		})
-	}
-
-	doc := map[string]any{"Version": "2012-10-17", "Statement": statements}
-	out, err := json.Marshal(doc)
-	if err != nil {
-		return "", fmt.Errorf("render isr policy: %w", err)
-	}
-	return string(out), nil
-}
-
 func functionCoordinate(project string, stack naming.StackName, logicalName string) naming.Coordinate {
 	return naming.Coordinate{
 		Project: project,
@@ -249,10 +175,15 @@ func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)
 }
 
+type artifactRef struct {
+	Bucket string
+	Key    string
+}
+
 type executionRole struct {
 	App       string
 	Tags      map[string]string
-	Cache     *isrConfig
+	Cache     *site.ISR
 	Bytecode  *bytecodeConfig
 	Variables variables.Reader
 	Boundary  string
@@ -265,7 +196,7 @@ type executionRole struct {
 	TasksPolicy string
 }
 
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle variables.Bundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, dispatch *dispatchHost) executionRole {
+func appExecutionRole(cfg Config, app string, caches map[string]*site.ISR, bytecode map[string]*bytecodeConfig, bundle variables.Bundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, dispatch *dispatchHost) executionRole {
 	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], Variables: variables.Reader{KeyARN: cfg.VariablesKeyARN}, Boundary: cfg.AppBoundaryARN, Path: cfg.AppRolePath, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
 	if bundle.HasLive() {
 		role.Variables.TableARN = cfg.VariablesTableARN
@@ -307,7 +238,7 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		}
 	}
 	if r.Cache != nil {
-		policy, err := isrPolicy(*r.Cache)
+		policy, err := r.Cache.Policy()
 		if err != nil {
 			return nil, err
 		}
@@ -378,7 +309,7 @@ func lambdaHandler(args functionArgs) string {
 	return args.Handler
 }
 
-func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, bytecode *bytecodeConfig) map[string]string {
+func functionEnv(base map[string]string, args functionArgs, isr *site.ISR, bytecode *bytecodeConfig) map[string]string {
 	env := make(map[string]string, len(base))
 	maps.Copy(env, base)
 	if args.Runtime != providedFunctionRuntime {
@@ -386,7 +317,7 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, byte
 	}
 	env["OCEL_HANDLER"] = "/var/task/" + args.Handler
 	if isr != nil {
-		maps.Copy(env, isr.env())
+		maps.Copy(env, isr.Env())
 	}
 	if bytecode != nil {
 		maps.Copy(env, bytecode.env())
@@ -401,7 +332,7 @@ func runtimeLayerInput(arn string) pulumi.StringArrayInput {
 	return pulumi.StringArray{pulumi.String(arn)}
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, bundle string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth, kmsKeyARN string, opts ...pulumi.ResourceOption) (functionRef, error) {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, bundle string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *site.ISR, bytecode *bytecodeConfig, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth, kmsKeyARN string, opts ...pulumi.ResourceOption) (functionRef, error) {
 	var none functionRef
 
 	env := pulumi.StringMap{}
@@ -443,7 +374,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 
 		Layers: layers,
 
-		VpcConfig: args.Network.vpcConfig(),
+		VpcConfig: args.Network.VPCConfig(),
 	}, opts...)
 	if err != nil {
 		return none, err

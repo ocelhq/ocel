@@ -1,0 +1,119 @@
+package site
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"net/url"
+	"path/filepath"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+)
+
+const (
+	uploadConcurrency = 64
+	appsDirName       = "apps"
+)
+
+var uploadSlots = make(chan struct{}, uploadConcurrency)
+
+func takeUploadSlot() func() {
+	uploadSlots <- struct{}{}
+	return func() { <-uploadSlots }
+}
+
+type objectHeaders struct {
+	contentType  string
+	cacheControl string
+	tagging      string
+}
+
+var edgeReadableTagging = url.Values{naming.EdgeReadableTagKey: {naming.EdgeReadableTagValue}}.Encode()
+
+func (h objectHeaders) taggedFor(to uploadTarget) objectHeaders {
+	if to.edgeReadable {
+		h.tagging = edgeReadableTagging
+	}
+	return h
+}
+
+func uploadArtifact(ctx context.Context, up payloads.ObjectStore, bucket, key string, headers objectHeaders, body func() ([]byte, error)) (transferred bool, err error) {
+	_, err = up.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err == nil {
+		return false, nil
+	}
+	if !isNotFound(err) {
+		return false, fmt.Errorf("head artifact %s/%s: %w", bucket, key, err)
+	}
+	data, err := body()
+	if err != nil {
+		return false, err
+	}
+	return true, putArtifact(ctx, up, bucket, key, headers, data)
+}
+
+func putArtifact(ctx context.Context, up payloads.ObjectStore, bucket, key string, headers objectHeaders, data []byte) error {
+	in := &s3.PutObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   bytes.NewReader(data),
+	}
+	if headers.contentType != "" {
+		in.ContentType = aws.String(headers.contentType)
+	}
+	if headers.cacheControl != "" {
+		in.CacheControl = aws.String(headers.cacheControl)
+	}
+	if headers.tagging != "" {
+		in.Tagging = aws.String(headers.tagging)
+	}
+	if _, err := up.PutObject(ctx, in); err != nil {
+		return fmt.Errorf("upload artifact %s/%s: %w", bucket, key, err)
+	}
+	return nil
+}
+
+func tracedUpload(ctx context.Context, up payloads.ObjectStore, bucket, key string, headers objectHeaders, body func() ([]byte, error), stats *uploadBatchStats) error {
+	start := time.Now()
+	var size int64
+	transferred, err := uploadArtifact(ctx, up, bucket, key, headers, func() ([]byte, error) {
+		data, err := body()
+		if err == nil {
+			size = int64(len(data))
+		}
+		return data, err
+	})
+	if stats != nil {
+		stats.record(uploadOutcome{Bytes: size, Start: start, End: time.Now(), Failed: err != nil, Err: err, Transferred: transferred})
+	}
+	return err
+}
+
+func tracedPut(ctx context.Context, up payloads.ObjectStore, bucket, key string, headers objectHeaders, data []byte, stats *uploadBatchStats) error {
+	start := time.Now()
+	err := putArtifact(ctx, up, bucket, key, headers, data)
+	if stats != nil {
+		stats.record(uploadOutcome{Bytes: int64(len(data)), Start: start, End: time.Now(), Failed: err != nil, Err: err, Transferred: true})
+	}
+	return err
+}
+
+func isNotFound(err error) bool {
+	var nf *s3types.NotFound
+	var nsk *s3types.NoSuchKey
+	return errors.As(err, &nf) || errors.As(err, &nsk)
+}
+
+func appArtifactRoot(artifactRoot, app string) string {
+	return filepath.Join(artifactRoot, appsDirName, app)
+}

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
 )
 
 type Config struct {
@@ -104,6 +105,16 @@ type Config struct {
 
 func (c Config) variableStore() variables.Store {
 	return variables.Store{Table: c.VariablesTable, KeyARN: c.VariablesKeyARN, Tier: c.Tier, Env: c.Env, Referenced: c.VariablesReferenced}
+}
+
+func (c Config) buckets() site.Buckets {
+	return site.Buckets{
+		Objects:      c.Objects,
+		Assets:       c.AssetBucket,
+		Artifacts:    c.ArtifactBucket,
+		Tier:         c.Tier,
+		EdgeHoldsKey: c.EdgeAccessKeyID != "" && c.EdgeSecretKey != "",
+	}
 }
 
 func (c Config) stateTable() topic.StateTable {

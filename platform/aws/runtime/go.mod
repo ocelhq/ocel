@@ -7,6 +7,7 @@ require (
 	github.com/aws/aws-lambda-go v1.54.0
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.30
+	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.30
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.51
 	github.com/aws/aws-sdk-go-v2/service/appsync v1.60.0
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0

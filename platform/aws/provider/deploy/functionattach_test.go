@@ -9,38 +9,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
-func TestOnlyProvisionedPostgresAndKVNeedTheFunctionNetwork(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name   string
-		grants []provider.Binding
-		want   bool
-	}{
-		{"no grant", nil, false},
-		{"a bucket", []provider.Binding{{Type: provider.BindingBucket, Name: "bucket--uploads"}}, false},
-		{"a topic and a task", []provider.Binding{{Type: provider.BindingTopic, Name: "topic--a"}, {Type: provider.BindingTask, Name: "task--b"}}, false},
-		{"provisioned postgres", []provider.Binding{{Type: provider.BindingPostgres, Name: "db--main"}}, true},
-		{"provisioned kv", []provider.Binding{{Type: provider.BindingKV, Name: "kv--cache"}}, true},
-		{"postgres the user's own IaC provisions", []provider.Binding{{Type: provider.BindingPostgres, Name: "db--main", Source: "terraform"}}, false},
-		{"kv another project published", []provider.Binding{{Type: provider.BindingKV, Name: "kv--cache", Source: "ocel"}}, false},
-		{"a bucket beside provisioned postgres", []provider.Binding{{Type: provider.BindingBucket, Name: "bucket--uploads"}, {Type: provider.BindingPostgres, Name: "db--main"}}, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := needsFunctionNetwork(tc.grants); got != tc.want {
-				t.Errorf("needsFunctionNetwork() = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
-func attachedNetwork() *functionNetwork {
-	return &functionNetwork{Subnets: []string{"subnet-private-a", "subnet-private-b"}, SecurityGroup: "sg-functions"}
+func attachedNetwork() *functionnetwork.Network {
+	return &functionnetwork.Network{Subnets: []string{"subnet-private-a", "subnet-private-b"}, SecurityGroup: "sg-functions"}
 }
 
 func runAppProgram(t *testing.T, work *appWork) *inputRecorder {

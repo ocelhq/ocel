@@ -86,7 +86,7 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret := &rotatingSecret{password: "rotated-once"}
 		records, values := deployedPostgres(t, publishedPostgresFixture(t))
-		if err := currentPasswords(context.Background(), secret, bindings, records, values); err != nil {
+		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err != nil {
 			t.Fatalf("currentPasswords: %v", err)
 		}
 		if got := decodeBinding(t, values[postgresBinding().Key]).GetPostgres().GetPassword(); got != "rotated-once" {
@@ -95,7 +95,7 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret.password = "rotated-twice"
 		records, values = deployedPostgres(t, publishedPostgresFixture(t))
-		if err := currentPasswords(context.Background(), secret, bindings, records, values); err != nil {
+		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err != nil {
 			t.Fatalf("currentPasswords: %v", err)
 		}
 		if got := decodeBinding(t, values[postgresBinding().Key]).GetPostgres().GetPassword(); got != "rotated-twice" {
@@ -111,7 +111,7 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret := &rotatingSecret{password: "rotated-once"}
 		records, values := deployedPostgres(t, publishedPostgresFixture(t))
-		if err := currentPasswords(context.Background(), secret, bindings, records, values); err != nil {
+		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err != nil {
 			t.Fatalf("currentPasswords: %v", err)
 		}
 		handed := values[postgresBinding().Key]
@@ -128,7 +128,7 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret := &rotatingSecret{password: "unused"}
 		records, values := deployedPostgres(t, withoutGrants(t))
-		if err := currentPasswords(context.Background(), secret, bindings, records, values); err != nil {
+		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err != nil {
 			t.Fatalf("currentPasswords: %v", err)
 		}
 		if got := decodeBinding(t, values[postgresBinding().Key]).GetPostgres().GetPassword(); got != "fixture-password-not-a-secret" {
@@ -144,7 +144,7 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret := &rotatingSecret{err: errors.New("AccessDeniedException")}
 		records, values := deployedPostgres(t, publishedPostgresFixture(t))
-		if err := currentPasswords(context.Background(), secret, bindings, records, values); err == nil {
+		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err == nil {
 			t.Error("currentPasswords = nil, want the failure surfaced rather than a password the cluster may have rotated away")
 		}
 	})
@@ -156,11 +156,56 @@ func TestCurrentPasswords(t *testing.T) {
 		bucket := live.Binding{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}
 		records := []variablestore.StoredBinding{{Name: bucket.Name, Value: publishedPostgresFixture(t), Version: 1}}
 		values := live.MergeBindings(nil, []live.Binding{bucket}, records)
-		if err := currentPasswords(context.Background(), secret, []live.Binding{bucket}, records, values); err != nil {
+		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, []live.Binding{bucket}, records, values); err != nil {
 			t.Fatalf("currentPasswords: %v", err)
 		}
 		if len(secret.reads) != 0 {
 			t.Errorf("read %v, want no secret read for a binding this deployment reads as a bucket", secret.reads)
 		}
 	})
+}
+
+func withIAMAuthentication(t *testing.T) []byte {
+	t.Helper()
+	published := &variablestorev1.PublishedBinding{}
+	if err := protojson.Unmarshal(publishedPostgresFixture(t), published); err != nil {
+		t.Fatal(err)
+	}
+	published.GetBinding().GetPostgres().Password = ""
+	published.Grants = []*variablestorev1.Grant{{
+		Label:     provider.GrantIAMAuthentication,
+		Actions:   []string{"rds-db:connect"},
+		Resources: []string{"arn:aws:rds-db:us-east-1:111122223333:dbuser:cluster-ABCDEFGHIJKL/fixture_operator"},
+	}}
+	encoded, err := protojson.Marshal(published)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
+}
+
+func TestAnIAMAuthenticatedDatabaseIsHandedATokenMintedAtEachReadAndNoSecretIsRead(t *testing.T) {
+	t.Parallel()
+
+	secret := &rotatingSecret{password: "master-password"}
+	var minted []string
+	mint := func(_ context.Context, endpoint, username string) (string, error) {
+		minted = append(minted, endpoint+" as "+username)
+		return fmt.Sprintf("token-%d", len(minted)), nil
+	}
+	for want := range []string{"token-1", "token-2"} {
+		records, values := deployedPostgres(t, withIAMAuthentication(t))
+		if err := currentPasswords(context.Background(), passwordSources{secrets: secret, mintToken: mint}, []live.Binding{postgresBinding()}, records, values); err != nil {
+			t.Fatalf("currentPasswords: %v", err)
+		}
+		if got := decodeBinding(t, values[postgresBinding().Key]).GetPostgres().GetPassword(); got != fmt.Sprintf("token-%d", want+1) {
+			t.Errorf("password = %q, want the token minted at this read: a token lives 15 minutes, so each read mints its own", got)
+		}
+	}
+	if want := "shop-prod-main-r1a2b3c4.cluster-cxyz.us-east-1.rds.amazonaws.com:5433 as fixture_operator"; len(minted) != 2 || minted[0] != want {
+		t.Errorf("minted %v, want a token for %s at each read", minted, want)
+	}
+	if len(secret.reads) != 0 {
+		t.Errorf("read secrets %v, want none: an app authenticated by IAM never reads the master password", secret.reads)
+	}
 }

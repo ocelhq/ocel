@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 )
 
@@ -165,11 +166,15 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
+	intendedCore, err := target.core(broughtVariablesKey(d.Outputs))
+	if err != nil {
+		return Deployed{}, stackRefs{}, err
+	}
 	d.Stacks = append(d.Stacks, StackStamp{
 		Name:      target.stackName,
 		Present:   true,
 		Digest:    coreStamp.Digest,
-		Intended:  cfn.TemplateDigest(target.core(broughtVariablesKey(d.Outputs))),
+		Intended:  cfn.TemplateDigest(intendedCore.body),
 		WrittenBy: coreStamp.WrittenBy,
 	})
 	for _, f := range partRegistry {
@@ -264,7 +269,9 @@ type spec struct {
 	stackStep string
 }
 
-func (s spec) core(broughtKey string) string { return coreStackTemplate(s.ns, s.tier, broughtKey) }
+func (s spec) core(broughtKey string) (partStack, error) {
+	return newPartStack(coreStackTemplate(s.ns, s.tier, broughtKey), nil)
+}
 
 func productionBootstrap(ns Namespace) spec {
 	return spec{
@@ -350,9 +357,12 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	progress.Say(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := AdmitReplacements(target.ns, req.AcceptReplacements, progress)
-	coreBody := target.core(coreVariablesKey(alongside, req.VariablesKey))
-	coreTags := stampTags(target.ns, target.tier, Stamp{Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
-	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
+	core, err := target.core(coreVariablesKey(alongside, req.VariablesKey))
+	if err != nil {
+		return err
+	}
+	coreTags := stampTags(target.ns, target.tier, Stamp{Digest: cfn.TemplateDigest(core.body), WrittenBy: req.Writer.String()})
+	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, core.body, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
 	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.tier)
@@ -593,22 +603,39 @@ func coreVariablesKey(alongside PartSet, brought string) string {
 	return ""
 }
 
-func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey string) string {
-	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: %q
-Resources:
-%s%s%s%s%s%s%s%s%sOutputs:
-  %s:
-    Description: "S3 bucket storing the Pulumi state Ocel plans every %s deploy and teardown from. One versioned object per %s stack."
-    Value: !Ref StateBucket
-%s%s%s%s%s%s  %s:
-    Description: "The tier this bootstrap was installed for: production or preview."
-    Value: '%s'
-`, coreStackDescription(tier),
-		stateBucketResource(tier), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), variablesResources(tier), appBoundaryResource(ns, tier, broughtKey),
-		tagInvalidatorRoleResource(ns, tier), edgeInvokeRoleResource(ns, tier),
-		outputStateBucket, tier, scopeOf(tier),
-		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), variablesOutputs(), appBoundaryOutput(), baseRoleOutputs(), outputInfraTier, tier)
+func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey string) cfn.Template {
+	return cfn.Template{
+		Description: coreStackDescription(tier),
+		Resources: []cfn.Resource{
+			stateBucketResource(tier),
+			stateTableResource(),
+			artifactBucketResource(),
+			assetBucketResource(),
+			assetBucketPolicyResource(),
+			variablesTableResource(tier),
+			appBoundaryResource(ns, tier, broughtKey),
+			tagInvalidatorRoleResource(ns, tier),
+			edgeInvokeRoleResource(ns, tier),
+		},
+		Outputs: slices.Concat(
+			[]cfn.Output{{
+				Name:        outputStateBucket,
+				Description: "S3 bucket storing the Pulumi state Ocel plans every " + string(tier) + " deploy and teardown from. One versioned object per " + scopeOf(tier) + " stack.",
+				Value:       cfn.Ref("StateBucket"),
+			}},
+			stateTableOutputs(),
+			[]cfn.Output{artifactBucketOutput()},
+			assetBucketOutputs(),
+			variablesOutputs(),
+			[]cfn.Output{appBoundaryOutput()},
+			baseRoleOutputs(),
+			[]cfn.Output{{
+				Name:        outputInfraTier,
+				Description: "The tier this bootstrap was installed for: production or preview.",
+				Value:       string(tier),
+			}},
+		),
+	}
 }
 
 func coreStackDescription(tier environment.Tier) string {
@@ -616,7 +643,7 @@ func coreStackDescription(tier environment.Tier) string {
 	if tier == environment.TierPreview {
 		apart = " It is kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
 	}
-	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store and the roles the tag invalidator and API Gateway run as. Each other piece a deploy needs is added beside it on first use.%s", tier, scopeOf(tier), apart)
+	return "Ocel bootstrap (" + string(tier) + ") - the account-global core every " + scopeOf(tier) + " Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store and the roles the tag invalidator and API Gateway run as. Each other piece a deploy needs is added beside it on first use." + apart
 }
 
 func scopeOf(tier environment.Tier) string {
@@ -626,176 +653,203 @@ func scopeOf(tier environment.Tier) string {
 	return "production app"
 }
 
-func stateBucketResource(tier environment.Tier) string {
-	return fmt.Sprintf(`  StateBucket:
-    Type: AWS::S3::Bucket
-    Metadata:
-      Description: "Pulumi state for every %s Ocel has deployed here, one versioned object per stack, read to plan a deploy and to tear one down. Emptying it strands what is already deployed."
-    Properties:
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      VersioningConfiguration:
-        Status: Enabled
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      LifecycleConfiguration:
-        Rules:
-          - Id: expire-noncurrent-state
-            Status: Enabled
-            NoncurrentVersionExpiration:
-              NoncurrentDays: %d
-            AbortIncompleteMultipartUpload:
-              DaysAfterInitiation: %d
-          - Id: expire-state-delete-markers
-            Status: Enabled
-            ExpiredObjectDeleteMarker: true
-`, scopeOf(tier), stateNoncurrentDays, stateAbortMultipartDays)
+func bucketEncryption() map[string]any {
+	return map[string]any{
+		"ServerSideEncryptionConfiguration": []any{
+			map[string]any{"ServerSideEncryptionByDefault": map[string]any{"SSEAlgorithm": "AES256"}},
+		},
+	}
 }
 
-func stateTableResource() string {
-	return fmt.Sprintf(`  StateTable:
-    Type: AWS::DynamoDB::Table
-    Metadata:
-      Description: "Account-global Ocel state, keyed by pk/sk: the index of every stack this bootstrap has deployed, which prune and teardown walk, and the tag clock the edge reads and updates."
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: pk
-          AttributeType: S
-        - AttributeName: sk
-          AttributeType: S
-        - AttributeName: gsi1pk
-          AttributeType: S
-        - AttributeName: gsi1sk
-          AttributeType: S
-      KeySchema:
-        - AttributeName: pk
-          KeyType: HASH
-        - AttributeName: sk
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: %s
-          KeySchema:
-            - AttributeName: gsi1pk
-              KeyType: HASH
-            - AttributeName: gsi1sk
-              KeyType: RANGE
-          Projection:
-            ProjectionType: INCLUDE
-            NonKeyAttributes:
-              - expired
-              - stale
-              - tag
-      TimeToLiveSpecification:
-        AttributeName: expires_at
-        Enabled: true
-      StreamSpecification:
-        StreamViewType: NEW_IMAGE
-`, StateTableIndexName)
+func blockedPublicAccess() map[string]any {
+	return map[string]any{
+		"BlockPublicAcls":       true,
+		"BlockPublicPolicy":     true,
+		"IgnorePublicAcls":      true,
+		"RestrictPublicBuckets": true,
+	}
 }
 
-func stateTableOutputs() string {
-	return fmt.Sprintf(`  %s:
-    Description: "DynamoDB table storing account-global Ocel state: the stack index prune and teardown walk, and the ISR tag clock the edge shares."
-    Value: !Ref StateTable
-  %s:
-    Description: "ARN of that table, handed to every part stack that grants an item read or write on it."
-    Value: !GetAtt StateTable.Arn
-  %s:
-    Description: "ARN of that table's stream, handed to every part stack that reads tag writes off it."
-    Value: !GetAtt StateTable.StreamArn
-`, outputStateTable, outputStateTableARN, outputStateTableStreamARN)
+func stateBucketResource(tier environment.Tier) cfn.Resource {
+	return cfn.Resource{
+		ID:   "StateBucket",
+		Type: "AWS::S3::Bucket",
+		Metadata: cfn.Metadata{
+			Description: "Pulumi state for every " + scopeOf(tier) + " Ocel has deployed here, one versioned object per stack, read to plan a deploy and to tear one down. Emptying it strands what is already deployed.",
+		},
+		Properties: map[string]any{
+			"BucketEncryption":               bucketEncryption(),
+			"VersioningConfiguration":        map[string]any{"Status": "Enabled"},
+			"PublicAccessBlockConfiguration": blockedPublicAccess(),
+			"LifecycleConfiguration": map[string]any{
+				"Rules": []any{
+					map[string]any{
+						"Id":                             "expire-noncurrent-state",
+						"Status":                         "Enabled",
+						"NoncurrentVersionExpiration":    map[string]any{"NoncurrentDays": stateNoncurrentDays},
+						"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": stateAbortMultipartDays},
+					},
+					map[string]any{
+						"Id":                        "expire-state-delete-markers",
+						"Status":                    "Enabled",
+						"ExpiredObjectDeleteMarker": true,
+					},
+				},
+			},
+		},
+	}
 }
 
-func artifactBucketResource() string {
-	return fmt.Sprintf(`  ArtifactBucket:
-    Type: AWS::S3::Bucket
-    Metadata:
-      Description: "Staging area for the Lambda code Ocel uploads before a stack references it. A deployed function keeps its own copy, and these objects age out on a lifecycle rule."
-    Properties:
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      LifecycleConfiguration:
-        Rules:
-          - Id: expire-artifacts
-            Status: Enabled
-            ExpirationInDays: %d
-            AbortIncompleteMultipartUpload:
-              DaysAfterInitiation: %d
-`, artifactExpirationDays, artifactAbortMultipartDays)
+func keyedTableAttributes() []any {
+	attributes := make([]any, 0, 4)
+	for _, name := range []string{"pk", "sk", "gsi1pk", "gsi1sk"} {
+		attributes = append(attributes, map[string]any{"AttributeName": name, "AttributeType": "S"})
+	}
+	return attributes
 }
 
-func artifactBucketOutput() string {
-	return fmt.Sprintf(`  %s:
-    Description: "S3 bucket Ocel stages function code in before a stack references it. Objects age out on a lifecycle rule."
-    Value: !Ref ArtifactBucket
-`, outputArtifactBucket)
+func keySchema(hash, rangeKey string) []any {
+	return []any{
+		map[string]any{"AttributeName": hash, "KeyType": "HASH"},
+		map[string]any{"AttributeName": rangeKey, "KeyType": "RANGE"},
+	}
 }
 
-func assetBucketResource() string {
-	return fmt.Sprintf(`  AssetBucket:
-    Type: AWS::S3::Bucket
-    Metadata:
-      Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. Read directly by the edge, the optimizer and the publisher."
-    Properties:
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      LifecycleConfiguration:
-        Rules:
-          - Id: abort-incomplete-uploads
-            Status: Enabled
-            AbortIncompleteMultipartUpload:
-              DaysAfterInitiation: %d
-`, artifactAbortMultipartDays)
+func stateTableResource() cfn.Resource {
+	return cfn.Resource{
+		ID:   "StateTable",
+		Type: "AWS::DynamoDB::Table",
+		Metadata: cfn.Metadata{
+			Description: "Account-global Ocel state, keyed by pk/sk: the index of every stack this bootstrap has deployed, which prune and teardown walk, and the tag clock the edge reads and updates.",
+		},
+		Properties: map[string]any{
+			"BillingMode":          "PAY_PER_REQUEST",
+			"AttributeDefinitions": keyedTableAttributes(),
+			"KeySchema":            keySchema("pk", "sk"),
+			"GlobalSecondaryIndexes": []any{
+				map[string]any{
+					"IndexName": StateTableIndexName,
+					"KeySchema": keySchema("gsi1pk", "gsi1sk"),
+					"Projection": map[string]any{
+						"ProjectionType":   "INCLUDE",
+						"NonKeyAttributes": []string{"expired", "stale", "tag"},
+					},
+				},
+			},
+			"TimeToLiveSpecification": map[string]any{"AttributeName": "expires_at", "Enabled": true},
+			"StreamSpecification":     map[string]any{"StreamViewType": "NEW_IMAGE"},
+		},
+	}
 }
 
-func assetBucketPolicyResource() string {
-	return `  AssetBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Metadata:
-      Description: "The only grant on the asset bucket: CloudFront distributions in this account, and no one else, read objects out of it over an origin access control. One statement for the whole account, so no deploy rewrites it."
-    Properties:
-      Bucket: !Ref AssetBucket
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: AllowCloudFrontOriginAccessControlRead
-            Effect: Allow
-            Principal:
-              Service: cloudfront.amazonaws.com
-            Action: s3:GetObject
-            Resource: !Sub '${AssetBucket.Arn}/*'
-            Condition:
-              StringEquals:
-                AWS:SourceAccount: !Ref AWS::AccountId
-`
+func stateTableOutputs() []cfn.Output {
+	return []cfn.Output{
+		{
+			Name:        outputStateTable,
+			Description: "DynamoDB table storing account-global Ocel state: the stack index prune and teardown walk, and the ISR tag clock the edge shares.",
+			Value:       cfn.Ref("StateTable"),
+		},
+		{
+			Name:        outputStateTableARN,
+			Description: "ARN of that table, handed to every part stack that grants an item read or write on it.",
+			Value:       cfn.GetAtt("StateTable", "Arn"),
+		},
+		{
+			Name:        outputStateTableStreamARN,
+			Description: "ARN of that table's stream, handed to every part stack that reads tag writes off it.",
+			Value:       cfn.GetAtt("StateTable", "StreamArn"),
+		},
+	}
 }
 
-func assetBucketOutputs() string {
-	return fmt.Sprintf(`  %s:
-    Description: "S3 bucket storing per-build static assets, prerender fallbacks, image-optimizer config and the edge fetch cache. Read directly by the edge."
-    Value: !Ref AssetBucket
-  %s:
-    Description: "ARN of that bucket, handed to every part stack that grants a read or a write inside it."
-    Value: !GetAtt AssetBucket.Arn
-`, outputAssetBucket, outputAssetBucketARN)
+func artifactBucketResource() cfn.Resource {
+	return cfn.Resource{
+		ID:   "ArtifactBucket",
+		Type: "AWS::S3::Bucket",
+		Metadata: cfn.Metadata{
+			Description: "Staging area for the Lambda code Ocel uploads before a stack references it. A deployed function keeps its own copy, and these objects age out on a lifecycle rule.",
+		},
+		Properties: map[string]any{
+			"BucketEncryption":               bucketEncryption(),
+			"PublicAccessBlockConfiguration": blockedPublicAccess(),
+			"LifecycleConfiguration": map[string]any{
+				"Rules": []any{
+					map[string]any{
+						"Id":                             "expire-artifacts",
+						"Status":                         "Enabled",
+						"ExpirationInDays":               artifactExpirationDays,
+						"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": artifactAbortMultipartDays},
+					},
+				},
+			},
+		},
+	}
+}
+
+func artifactBucketOutput() cfn.Output {
+	return cfn.Output{
+		Name:        outputArtifactBucket,
+		Description: "S3 bucket Ocel stages function code in before a stack references it. Objects age out on a lifecycle rule.",
+		Value:       cfn.Ref("ArtifactBucket"),
+	}
+}
+
+func assetBucketResource() cfn.Resource {
+	return cfn.Resource{
+		ID:   "AssetBucket",
+		Type: "AWS::S3::Bucket",
+		Metadata: cfn.Metadata{
+			Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. Read directly by the edge, the optimizer and the publisher.",
+		},
+		Properties: map[string]any{
+			"BucketEncryption":               bucketEncryption(),
+			"PublicAccessBlockConfiguration": blockedPublicAccess(),
+			"LifecycleConfiguration": map[string]any{
+				"Rules": []any{
+					map[string]any{
+						"Id":                             "abort-incomplete-uploads",
+						"Status":                         "Enabled",
+						"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": artifactAbortMultipartDays},
+					},
+				},
+			},
+		},
+	}
+}
+
+func assetBucketPolicyResource() cfn.Resource {
+	return cfn.Resource{
+		ID:   "AssetBucketPolicy",
+		Type: "AWS::S3::BucketPolicy",
+		Metadata: cfn.Metadata{
+			Description: "The only grant on the asset bucket: CloudFront distributions in this account, and no one else, read objects out of it over an origin access control. One statement for the whole account, so no deploy rewrites it.",
+		},
+		Properties: map[string]any{
+			"Bucket": cfn.Ref("AssetBucket"),
+			"PolicyDocument": iam.Document([]iam.Statement{{
+				Sid:            "AllowCloudFrontOriginAccessControlRead",
+				Principal:      iam.Principal{Service: iam.CloudFrontPrincipal},
+				Actions:        []string{"s3:GetObject"},
+				ResourceValues: []any{cfn.Sub("${AssetBucket.Arn}/*")},
+				Condition: map[string]any{
+					"StringEquals": map[string]any{"AWS:SourceAccount": cfn.Ref("AWS::AccountId")},
+				},
+			}}),
+		},
+	}
+}
+
+func assetBucketOutputs() []cfn.Output {
+	return []cfn.Output{
+		{
+			Name:        outputAssetBucket,
+			Description: "S3 bucket storing per-build static assets, prerender fallbacks, image-optimizer config and the edge fetch cache. Read directly by the edge.",
+			Value:       cfn.Ref("AssetBucket"),
+		},
+		{
+			Name:        outputAssetBucketARN,
+			Description: "ARN of that bucket, handed to every part stack that grants a read or a write inside it.",
+			Value:       cfn.GetAtt("AssetBucket", "Arn"),
+		},
+	}
 }

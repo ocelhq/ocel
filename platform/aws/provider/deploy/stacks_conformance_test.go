@@ -26,12 +26,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
 )
 
 type mockedEngine struct {
 	outputs   auto.OutputMap
 	mocks     sdk.MockResourceMonitor
-	pending   *pendingSets
+	pending   *site.PendingSets
 	mu        sync.Mutex
 	ran       []string
 	torndown  []string
@@ -44,17 +45,12 @@ type mockedEngine struct {
 
 type pushingAssetSets struct {
 	inner   sdk.MockResourceMonitor
-	pending *pendingSets
+	pending *site.PendingSets
 }
 
 func (p pushingAssetSets) NewResource(args sdk.MockResourceArgs) (string, resource.PropertyMap, error) {
-	if args.TypeToken == assetSetToken && p.pending != nil {
-		id := pendingKey(args.Inputs["stack"].StringValue(), args.Inputs["set"].StringValue())
-		queued, waiting := p.pending.take(id)
-		if !waiting {
-			return "", nil, fmt.Errorf("the program declared %s but the run queued nothing to push for it", id)
-		}
-		if err := queued.set.push(context.Background(), queued.progress); err != nil {
+	if args.TypeToken == site.AssetSetToken && p.pending != nil {
+		if _, err := p.pending.Push(context.Background(), args.Inputs["stack"].StringValue(), args.Inputs["set"].StringValue()); err != nil {
 			return "", nil, err
 		}
 	}
@@ -223,11 +219,12 @@ func (standInCloud) Call(sdk.MockCallArgs) (resource.PropertyMap, error) {
 func provisionedOutputs() auto.OutputMap {
 	return auto.OutputMap{
 		"c-postgres": auto.OutputValue{Value: map[string]any{
-			component.OutputKeyHost:     "shop-prod.cluster.eu-west-1.rds.amazonaws.com",
-			component.OutputKeyPort:     float64(5432),
-			postgres.OutputKeyDatabase:  "shop",
-			postgres.OutputKeyUsername:  "ocel",
-			postgres.OutputKeySecretARN: "arn:aws:secretsmanager:eu-west-1:111122223333:secret:shop",
+			component.OutputKeyHost:      "shop-prod.cluster.eu-west-1.rds.amazonaws.com",
+			component.OutputKeyPort:      float64(5432),
+			postgres.OutputKeyDatabase:   "shop",
+			postgres.OutputKeyUsername:   "ocel",
+			postgres.OutputKeyClusterARN: "arn:aws:rds:eu-west-1:111122223333:cluster:shop",
+			postgres.OutputKeyResourceID: "cluster-SHOP",
 		}},
 		"c-bucket":   auto.OutputValue{Value: map[string]any{bucket.OutputKeyBucket: "shop-prod-uploads"}},
 		"c-kv":       kvOutput("c-kv"),
@@ -384,9 +381,9 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 			t.Errorf("Provision() returned a binding providerserver refuses to record: %v", err)
 		}
 	}
-	if got := result.Bindings[0]; got.Properties[provider.PropertyPassword] != "" || got.PasswordSecret() != "arn:aws:secretsmanager:eu-west-1:111122223333:secret:shop" {
-		t.Errorf("the postgres binding carries a password of %d bytes and names %q as its secret, want no password and the managed secret named",
-			len(got.Properties[provider.PropertyPassword]), got.PasswordSecret())
+	if got := result.Bindings[0]; got.Properties[provider.PropertyPassword] != "" || got.PasswordSecret() != "" || !got.HasIAMAuthentication() {
+		t.Errorf("the postgres binding carries a password of %d bytes, names %q as its secret and authenticates by IAM: %v, want no password, no secret and IAM authentication",
+			len(got.Properties[provider.PropertyPassword]), got.PasswordSecret(), got.HasIAMAuthentication())
 	}
 }
 

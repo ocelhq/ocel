@@ -3,6 +3,8 @@ package aws
 import (
 	"context"
 
+	"github.com/aws/aws-sdk-go-v2/service/rdsdata"
+
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 
@@ -80,6 +82,7 @@ func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootst
 	p.ProbeAddress = emulatedProbeAddress(cfg)
 	p.stacks = deploy.NewStacks(p.release, &deploy.Realized{})
 	p.stacks.PlanParts = p.planDeployParts
+	p.stacks.Statements = rdsdata.NewFromConfig(cfg)
 	return p
 }
 

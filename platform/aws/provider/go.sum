@@ -38,6 +38,8 @@ github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.51 h1:pVJCWZV
 github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.51/go.mod h1:OiabLK2FGV8RWdXw7eZzfyHkAsI9KaFSYg5OwyDQju8=
 github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.31 h1:kfVL5wAunCJycL6MOQ6aNh6PlAYEymflcjuKmrWUA0o=
 github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.31/go.mod h1:nWfRNDAppujCQgOUd43lKT4yeLv9z3nJ3bw1G3BgQKo=
+github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.30 h1:XCjbI9mFEjY5LFflsSl9QW+sfBqF0EXFSlnlbE5BFak=
+github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.30/go.mod h1:x5Eik0+ZlpVrOCta7yTgK0JAXBXo3iS6WhBdYfVU0L0=
 github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4 h1:CLq4+8UHCI+ZZYl/EuJxXovaIVN2xeeT8JV+dsApQ5E=
 github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4/go.mod h1:Wv4q5sAM04xAMkoOedxLx2inVf6K5FdxYp+A61L+q/0=
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4 h1:dD4MR81I7YkpEBRk6UP9rocC2QnT3qVuXwzlYTtfGEs=
@@ -88,6 +90,8 @@ github.com/aws/aws-sdk-go-v2/service/lambda v1.99.0 h1:F5jW/w63W6/2/rwqhc1QzqiRY
 github.com/aws/aws-sdk-go-v2/service/lambda v1.99.0/go.mod h1:gKWVtxlMTgoLU9m6FDw7z6FAEFh8u8CoaPJx0zWk5J8=
 github.com/aws/aws-sdk-go-v2/service/rds v1.130.1 h1:H17oFwC/icF6BB/UeG1EskOdI/n7ugkVKMs8aAFi4Yo=
 github.com/aws/aws-sdk-go-v2/service/rds v1.130.1/go.mod h1:ISB8224E71TShRfUITcXvgbjlq0MVx/KWpvF0jbiFmg=
+github.com/aws/aws-sdk-go-v2/service/rdsdata v1.40.2 h1:va4jYyzg6cTWo0oqvnMv8QEiHyxDvJAoGPciO8R9Mik=
+github.com/aws/aws-sdk-go-v2/service/rdsdata v1.40.2/go.mod h1:7/+FiHeFdqEzblJCLzVt1KCnykWPCR9X219I49MkBAw=
 github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.41.2 h1:32rwvTSa3LpwgndcsWcPPa4BGqMX/eXx0OmmWrvzce4=
 github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.41.2/go.mod h1:kL7NhBEQruQcuAi+m7oCc2LcYxVpBH74HfjOKhMd7+w=
 github.com/aws/aws-sdk-go-v2/service/route53 v1.42.3 h1:MmLCRqP4U4Cw9gJ4bNrCG0mWqEtBlmAVleyelcHARMU=

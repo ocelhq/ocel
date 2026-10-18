@@ -2,11 +2,10 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -15,17 +14,17 @@ import (
 
 type edgeUserTemplate struct {
 	Resources map[string]struct {
-		Type       string `yaml:"Type"`
+		Type       string `json:"Type"`
 		Properties struct {
-			UserName string `yaml:"UserName"`
+			UserName string `json:"UserName"`
 			Policies []struct {
-				PolicyName     string `yaml:"PolicyName"`
+				PolicyName     string `json:"PolicyName"`
 				PolicyDocument struct {
-					Statement []policyStatement `yaml:"Statement"`
-				} `yaml:"PolicyDocument"`
-			} `yaml:"Policies"`
-		} `yaml:"Properties"`
-	} `yaml:"Resources"`
+					Statement []policyStatement `json:"Statement"`
+				} `json:"PolicyDocument"`
+			} `json:"Policies"`
+		} `json:"Properties"`
+	} `json:"Resources"`
 }
 
 func TestEdgeUser(t *testing.T) {
@@ -39,8 +38,8 @@ func TestEdgeUser(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var tmpl edgeUserTemplate
-			if err := yaml.Unmarshal([]byte(tc.template), &tmpl); err != nil {
-				t.Fatalf("template is not valid YAML: %v", err)
+			if err := json.Unmarshal([]byte(tc.template), &tmpl); err != nil {
+				t.Fatalf("template is not valid JSON: %v", err)
 			}
 			user, ok := tmpl.Resources["EdgeUser"]
 			if !ok {
@@ -72,7 +71,7 @@ func TestEdgeUser(t *testing.T) {
 					}
 				}
 				if hasAction(st.Action, "s3:ListBucket") {
-					listBucket = len(listPolicyActions(st.Action)) == 1 && slices.Equal(yamlStrings(st.Resource), []string{paramAssetBucketARN})
+					listBucket = len(listPolicyActions(st.Action)) == 1 && slices.Equal(templateStrings(st.Resource), []string{paramAssetBucketARN})
 				}
 				if hasAction(st.Action, "lambda:InvokeFunctionUrl") {
 					invoke = true
@@ -153,8 +152,8 @@ func existingTagsSatisfy(condition map[string]any, tags map[string]string) bool 
 
 func TestTheEdgeUserCannotReadAnUntaggedObjectOfAProjectNamedEdgeOrAnAppNamedAssets(t *testing.T) {
 	var tmpl edgeUserTemplate
-	if err := yaml.Unmarshal([]byte(partTemplate(CloudflareEdgePart, environment.TierProduction)), &tmpl); err != nil {
-		t.Fatalf("template is not valid YAML: %v", err)
+	if err := json.Unmarshal([]byte(partTemplate(CloudflareEdgePart, environment.TierProduction)), &tmpl); err != nil {
+		t.Fatalf("template is not valid JSON: %v", err)
 	}
 	stmts := tmpl.Resources["EdgeUser"].Properties.Policies[0].PolicyDocument.Statement
 	for _, object := range []string{
@@ -238,8 +237,8 @@ func TestTheEdgeUserInvokesTheImageOptimizerOfItsOwnTierByNameAndNoOtherFunction
 	} {
 		t.Run(string(tc.tier), func(t *testing.T) {
 			var tmpl edgeUserTemplate
-			if err := yaml.Unmarshal([]byte(partTemplate(CloudflareEdgePart, tc.tier)), &tmpl); err != nil {
-				t.Fatalf("template is not valid YAML: %v", err)
+			if err := json.Unmarshal([]byte(partTemplate(CloudflareEdgePart, tc.tier)), &tmpl); err != nil {
+				t.Fatalf("template is not valid JSON: %v", err)
 			}
 			want := "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:" + tc.optimizer
 			var named []string
@@ -247,7 +246,7 @@ func TestTheEdgeUserInvokesTheImageOptimizerOfItsOwnTierByNameAndNoOtherFunction
 				if !hasAction(st.Action, "lambda:InvokeFunction") {
 					continue
 				}
-				for _, resource := range yamlStrings(st.Resource) {
+				for _, resource := range templateStrings(st.Resource) {
 					if strings.HasSuffix(resource, ":function:*") {
 						continue
 					}

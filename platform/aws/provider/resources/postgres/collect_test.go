@@ -14,15 +14,19 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 )
 
-const testSecretARN = "arn:aws:secretsmanager:us-east-1:111122223333:secret:rds!cluster-0a1b2c3d-AbCdEf"
+const (
+	testClusterARN = "arn:aws:rds:us-east-1:111122223333:cluster:ocel-shop-prod-main"
+	testResourceID = "cluster-ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
 
 func postgresOutputs() map[string]any {
 	return map[string]any{
 		component.OutputKeyHost: "shop-prod-main.cluster-cxyz.us-east-1.rds.amazonaws.com",
 		component.OutputKeyPort: float64(Port),
 		OutputKeyDatabase:       postgresDatabaseName,
-		OutputKeyUsername:       postgresMasterUsername,
-		OutputKeySecretARN:      testSecretARN,
+		OutputKeyUsername:       AppRole,
+		OutputKeyClusterARN:     testClusterARN,
+		OutputKeyResourceID:     testResourceID,
 	}
 }
 
@@ -50,35 +54,33 @@ func certificateNames(t *testing.T, bundle string) []string {
 	return names
 }
 
-func TestThePostgresBindingNamesTheSecretItsPasswordRotatesIn(t *testing.T) {
+func TestThePostgresBindingConnectsAsTheAppRoleByIAMAndMayReachNoSecret(t *testing.T) {
 	t.Parallel()
 
 	binding, err := collectTestPostgres(t, "us-east-1")
 	if err != nil {
 		t.Fatalf("collectBinding: %v", err)
 	}
-	if got := provider.PublishedBindingOf(binding).PasswordSecret(); got != testSecretARN {
-		t.Errorf("the binding names %q as its password's secret, want %s: RDS rotates the password there every 7 days, and the runtime reads it from there", got, testSecretARN)
-	}
-	at := slices.IndexFunc(binding.GetGrants(), func(g *variablestorev1.Grant) bool { return g.GetLabel() == provider.GrantPasswordSecret })
-	if at < 0 {
-		t.Fatalf("grants = %v, want one that lets the app read the master secret", binding.GetGrants())
-	}
-	grant := binding.GetGrants()[at]
-	if !slices.Equal(grant.GetActions(), []string{"secretsmanager:GetSecretValue"}) || !slices.Equal(grant.GetResources(), []string{testSecretARN}) {
-		t.Errorf("grant = %v, want GetSecretValue on the cluster's secret alone", grant)
-	}
-}
-
-func TestThePostgresBindingCarriesNoPasswordARotationCouldLeaveStale(t *testing.T) {
-	t.Parallel()
-
-	binding, err := collectTestPostgres(t, "us-east-1")
-	if err != nil {
-		t.Fatalf("collectBinding: %v", err)
+	if got := binding.GetBinding().GetPostgres().GetUsername(); got != AppRole {
+		t.Errorf("username = %q, want the app role %s: an app never connects as the master user", got, AppRole)
 	}
 	if got := binding.GetBinding().GetPostgres().GetPassword(); got != "" {
-		t.Errorf("the binding carries a password of %d bytes, want none: RDS rotates it every 7 days, and every reader resolves it from the secret the binding names", len(got))
+		t.Errorf("the binding carries a password of %d bytes, want none: the app's role mints a 15-minute token instead", len(got))
+	}
+	want := "arn:aws:rds-db:us-east-1:111122223333:dbuser:" + testResourceID + "/" + AppRole
+	if len(binding.GetGrants()) != 1 {
+		t.Fatalf("grants = %v, want exactly the IAM authentication grant", binding.GetGrants())
+	}
+	grant := binding.GetGrants()[0]
+	if grant.GetLabel() != provider.GrantIAMAuthentication || !slices.Equal(grant.GetActions(), []string{"rds-db:connect"}) || !slices.Equal(grant.GetResources(), []string{want}) {
+		t.Errorf("grant = %v, want rds-db:connect on %s alone", grant, want)
+	}
+	for _, grant := range binding.GetGrants() {
+		for _, action := range grant.GetActions() {
+			if strings.HasPrefix(action, "secretsmanager:") {
+				t.Errorf("grant %v reaches Secrets Manager, want an app kept from the master secret", grant)
+			}
+		}
 	}
 	if err := provider.VerifyProperties(provider.PublishedBindingOf(binding)); err != nil {
 		t.Errorf("VerifyProperties() = %v, want the binding providerserver records", err)
@@ -119,29 +121,23 @@ func TestPostgresProducerEmitsTheFixture(t *testing.T) {
 	t.Parallel()
 
 	want := componenttest.BindingFixture(t, bindingsv1.BindingType_BINDING_TYPE_POSTGRES).GetPostgres()
-	secretARN := provider.PublishedBindingOf(componenttest.PublishedFixture(t, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)).PasswordSecret()
-	if secretARN == "" {
-		t.Fatalf("fixture %s names no %q grant, and the AWS record names its password by one", componenttest.FixtureFile(bindingsv1.BindingType_BINDING_TYPE_POSTGRES), provider.GrantPasswordSecret)
-	}
-
 	fields := map[string]any{
 		component.OutputKeyHost: want.GetHost(),
 		component.OutputKeyPort: float64(want.GetPort()),
 		OutputKeyDatabase:       want.GetDatabase(),
 		OutputKeyUsername:       want.GetUsername(),
-		OutputKeySecretARN:      secretARN,
+		OutputKeyClusterARN:     testClusterARN,
+		OutputKeyResourceID:     testResourceID,
 	}
 
 	got, err := collectBinding("us-east-1", "db--main", fields)
 	if err != nil {
-		t.Fatalf("collectPostgresBinding: %v", err)
+		t.Fatalf("collectBinding: %v", err)
 	}
-	if password := got.GetBinding().GetPostgres().GetPassword(); password != "" {
-		t.Errorf("AWS emitted a password of %d bytes, want none: the runtime reads it from the secret the record names", len(password))
-	}
-	if named := provider.PublishedBindingOf(got).PasswordSecret(); named != secretARN {
-		t.Errorf("AWS named %q as the password secret, want %s", named, secretARN)
+	if !provider.PublishedBindingOf(got).HasIAMAuthentication() {
+		t.Fatalf("grants = %v, want the record to say its app authenticates by IAM", got.GetGrants())
 	}
 	got.GetBinding().GetPostgres().Password = want.GetPassword()
+	got.Grants = componenttest.PublishedFixture(t, bindingsv1.BindingType_BINDING_TYPE_POSTGRES).GetGrants()
 	componenttest.AssertMatchesFixture(t, got, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
 }

@@ -3,11 +3,9 @@ package deploy
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -15,119 +13,23 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
 func containerInfraOutputs() auto.OutputMap {
 	infra := fixtureContainerInfra()
 	subnets, _ := json.Marshal(infra.Subnets)
 	return auto.OutputMap{
-		outputKeyVPC:           auto.OutputValue{Value: infra.VPC},
-		outputKeySubnets:       auto.OutputValue{Value: string(subnets)},
-		outputKeyListener:      auto.OutputValue{Value: infra.Listener},
-		outputKeyOriginHost:    auto.OutputValue{Value: infra.OriginHost},
-		outputKeyVPCOrigin:     auto.OutputValue{Value: infra.VPCOrigin},
-		outputKeyTaskSecurity:  auto.OutputValue{Value: infra.TaskSecurity},
-		outputKeyCluster:       auto.OutputValue{Value: infra.Cluster},
-		outputKeyExecutionRole: auto.OutputValue{Value: infra.ExecutionRole},
-		outputKeyLogGroup:      auto.OutputValue{Value: infra.LogGroup},
-	}
-}
-
-func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole(t *testing.T) {
-	t.Parallel()
-
-	work := &containerInfraWork{tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: containerInfraTags(environment.TierProduction)}
-	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
-		t.Fatalf("run the container infrastructure program: %v", err)
-	}
-
-	listener := recordedOf(t, rec, "aws:lb/listener:Listener")
-	action := listener["defaultActions"].ArrayValue()[0].ObjectValue()
-	if action["type"].StringValue() != "fixed-response" || action["fixedResponse"].ObjectValue()["statusCode"].StringValue() != listenerDeniedStatus {
-		t.Errorf("default action = %v, want a fixed %s: a request that names no release reaches nothing", action, listenerDeniedStatus)
-	}
-	balancer := recordedOf(t, rec, "aws:lb/loadBalancer:LoadBalancer")
-	if balancer["name"].StringValue() != "ocel-containers-production" || !balancer["internal"].BoolValue() {
-		t.Errorf("load balancer = %v, want an internal front named for the tier: nothing on the internet has a route to it", balancer)
-	}
-	vpcOrigin := recordedOf(t, rec, "aws:cloudfront/vpcOrigin:VpcOrigin")
-	endpoint := vpcOrigin["vpcOriginEndpointConfig"].ObjectValue()
-	if endpoint["arn"].StringValue() == "" || endpoint["name"].StringValue() != "ocel-containers-production" {
-		t.Errorf("vpc origin = %v, want it to name the tier front by its ARN: the edge reaches the front through it and nothing else", endpoint)
-	}
-	if endpoint["originProtocolPolicy"].StringValue() != vpcOriginProtocolPolicy || endpoint["httpPort"].NumberValue() != originListenerPort {
-		t.Errorf("vpc origin = %v, want CloudFront to reach the listener on %d over its private path", endpoint, originListenerPort)
-	}
-	role := recordedOf(t, rec, "aws:iam/role:Role")
-	if !strings.Contains(role["assumeRolePolicy"].StringValue(), iam.ECSTasksPrincipal) {
-		t.Errorf("the execution role trusts %q, want %s", role["assumeRolePolicy"].StringValue(), iam.ECSTasksPrincipal)
-	}
-	if len(rec.attached) != 1 || rec.attached[0] != ecsTaskExecutionPolicyARN {
-		t.Errorf("attached %v, want only the ECS task execution policy", rec.attached)
-	}
-	groups := 0
-	for key, inputs := range rec.recorded {
-		if !strings.HasPrefix(key, "aws:ec2/securityGroup:SecurityGroup::") {
-			continue
-		}
-		groups++
-		ingress := inputs["ingress"].ArrayValue()[0].ObjectValue()
-		if strings.HasSuffix(key, "tasks-security-group") && ingress["fromPort"].NumberValue() != containerPortNumber {
-			t.Errorf("the task security group admits port %v, want %d and only from the front", ingress["fromPort"], containerPortNumber)
-		}
-		if strings.HasSuffix(key, "front-security-group") {
-			if _, open := ingress["cidrBlocks"]; open || len(ingress["prefixListIds"].ArrayValue()) != 1 {
-				t.Errorf("the front admits %v, want only CloudFront's origin-facing prefix list: the secret must never cross the open internet", ingress)
-			}
-		}
-	}
-	if groups != 2 {
-		t.Errorf("declared %d security groups, want one for the front and one for the tasks", groups)
-	}
-}
-
-func TestTheContainerSecurityGroupsKeepTheDescriptionsTheyWereCreatedWith(t *testing.T) {
-	t.Parallel()
-
-	work := &containerInfraWork{tier: environment.TierPreview, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: containerInfraTags(environment.TierPreview)}
-	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("ocel-containers", "preview--infra", rec)); err != nil {
-		t.Fatalf("run the container infrastructure program: %v", err)
-	}
-
-	want := map[string]string{
-		"front-security-group": "Ocel: the load balancer every container app in the preview class answers behind",
-		"tasks-security-group": "Ocel: the tasks every container app in the preview class runs as",
-	}
-	for key, inputs := range rec.recorded {
-		if !strings.HasPrefix(key, "aws:ec2/securityGroup:SecurityGroup::") {
-			continue
-		}
-		for suffix, description := range want {
-			if strings.HasSuffix(key, suffix) && inputs["description"].StringValue() != description {
-				t.Errorf("%s is described %q, want %q: a new description replaces the group, and the replacement cannot take the name the group already holds", suffix, inputs["description"].StringValue(), description)
-			}
-		}
-	}
-}
-
-func TestDecodeContainerInfraReadsEveryOutputAndRefusesAnEmptyOne(t *testing.T) {
-	t.Parallel()
-
-	decoded, err := decodeContainerInfra(containerInfraOutputs())
-	if err != nil {
-		t.Fatalf("decodeContainerInfra() = %v", err)
-	}
-	if decoded.OriginHost != fixtureOrigin || decoded.VPCOrigin != fixtureFront || len(decoded.Subnets) != 2 || decoded.Listener != fixtureListener {
-		t.Errorf("decoded = %+v, want every output the program exported", decoded)
-	}
-	partial := containerInfraOutputs()
-	delete(partial, outputKeyListener)
-	if _, err := decodeContainerInfra(partial); err == nil {
-		t.Error("decodeContainerInfra accepted outputs with no listener, so a container would have no rule to hang off")
+		"vpcId":             auto.OutputValue{Value: infra.VPC},
+		"subnets":           auto.OutputValue{Value: string(subnets)},
+		"listenerArn":       auto.OutputValue{Value: infra.Listener},
+		"originHost":        auto.OutputValue{Value: infra.OriginHost},
+		"vpcOrigin":         auto.OutputValue{Value: infra.VPCOrigin},
+		"taskSecurityGroup": auto.OutputValue{Value: infra.TaskSecurity},
+		"cluster":           auto.OutputValue{Value: infra.Cluster},
+		"executionRoleArn":  auto.OutputValue{Value: infra.ExecutionRole},
+		"logGroup":          auto.OutputValue{Value: infra.LogGroup},
 	}
 }
 
@@ -153,7 +55,7 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 	ran := engine.stacks()
-	if len(ran) != 2 || ran[0] != containerInfraRef(environment.TierProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
+	if len(ran) != 2 || ran[0] != containers.StackRef(environment.TierProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
 		t.Fatalf("the first container deploy ran %v, want the container infrastructure stack before the app stack", ran)
 	}
 	front, recorded, err := awsports.ReadContainerFront(ctx, cfg.KeyValues, environment.TierProduction)
@@ -183,10 +85,10 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 		t.Fatalf("Destroy(blog) = %v", err)
 	}
 	destroyed := engine.torn()
-	if len(destroyed) != 3 || destroyed[2] != containerInfraRef(environment.TierProduction).Name.String() {
+	if len(destroyed) != 3 || destroyed[2] != containers.StackRef(environment.TierProduction).Name.String() {
 		t.Fatalf("destroying the last container stack tore down %v, want the shared container infrastructure to go with it: nothing idle-billing survives the last container", destroyed)
 	}
-	if _, present, err := stackrecords.Read(ctx, cfg.KeyValues, environment.TierProduction, ContainersSlug, containerInfraRef(environment.TierProduction).Name); err != nil || present {
+	if _, present, err := stackrecords.Read(ctx, cfg.KeyValues, environment.TierProduction, containers.Slug, containers.StackRef(environment.TierProduction).Name); err != nil || present {
 		t.Errorf("the shared container infrastructure is still recorded (present %v, err %v) after its last consumer left", present, err)
 	}
 	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.KeyValues, environment.TierProduction); err != nil || recorded {
@@ -216,7 +118,7 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	if len(remaining) != 0 {
 		t.Errorf("a failed deploy left %d consumer records, so the shared container infrastructure could never be taken down", len(remaining))
 	}
-	if torn := engine.torn(); len(torn) != 2 || torn[0] != spec.Ref.Name.String() || torn[1] != containerInfraRef(environment.TierProduction).Name.String() {
+	if torn := engine.torn(); len(torn) != 2 || torn[0] != spec.Ref.Name.String() || torn[1] != containers.StackRef(environment.TierProduction).Name.String() {
 		t.Errorf("after the only consumer failed the engine tore down %v, want the half-built app stack first and then the container infrastructure stack it had just provisioned: a cluster with a service inside refuses to go, and nothing idle-billing outlives a failed first deploy", torn)
 	}
 

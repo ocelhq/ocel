@@ -2,9 +2,7 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -13,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 const CloudflareEdgePart = "cloudflare-edge"
@@ -34,8 +33,17 @@ type partInputs struct {
 }
 
 type partStack struct {
-	body   string
-	params []cfntypes.Parameter
+	template cfn.Template
+	body     string
+	params   []cfntypes.Parameter
+}
+
+func newPartStack(template cfn.Template, params []cfntypes.Parameter) (partStack, error) {
+	body, err := template.Body()
+	if err != nil {
+		return partStack{}, err
+	}
+	return partStack{template: template, body: body, params: params}, nil
 }
 
 type stepDeps struct {
@@ -158,16 +166,15 @@ type crossStackParam struct {
 	value       string
 }
 
-func crossStack(specs []crossStackParam) (string, []cfntypes.Parameter) {
-	var b strings.Builder
-	b.WriteString("Parameters:\n")
+func crossStack(specs []crossStackParam) ([]cfn.Parameter, []cfntypes.Parameter) {
+	declared := make([]cfn.Parameter, 0, len(specs))
 	values := make([]cfntypes.Parameter, 0, len(specs))
 	for _, spec := range specs {
-		fmt.Fprintf(&b, "  %s:\n    Type: String\n    Description: %q\n", spec.name, spec.description)
+		declared = append(declared, cfn.Parameter{Name: spec.name, Type: "String", Description: spec.description})
 		values = append(values, cfntypes.Parameter{
 			ParameterKey:   aws.String(spec.name),
 			ParameterValue: aws.String(spec.value),
 		})
 	}
-	return b.String(), values
+	return declared, values
 }

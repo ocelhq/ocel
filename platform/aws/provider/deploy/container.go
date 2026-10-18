@@ -39,21 +39,20 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
 const rootHealthPath = "/"
 
 const (
-	containerPort       = "8080"
-	containerPortNumber = 8080
-	containerCPU        = "512"
-	containerMemory     = "1024"
-	containerName       = "app"
-	containerPortEnv    = "PORT"
+	containerPort    = "8080"
+	containerCPU     = "512"
+	containerMemory  = "1024"
+	containerName    = "app"
+	containerPortEnv = "PORT"
 
 	containerLocalName = "container"
 
-	targetGroupNamePrefix = "ocel-"
 	deregistrationSeconds = 10
 	healthGraceSeconds    = 60
 
@@ -99,7 +98,7 @@ type containerWork struct {
 	transformed *transformPatches
 	service     naming.Coordinate
 	role        naming.Coordinate
-	infra       containerInfra
+	infra       containers.Infrastructure
 	public      bool
 	workerApp   bool
 }
@@ -257,7 +256,7 @@ func liveOnly(values provider.AppValues) provider.AppValues {
 	return values
 }
 
-func (r *release) containerWork(spec provider.StackSpec, infra containerInfra) (*containerWork, error) {
+func (r *release) containerWork(spec provider.StackSpec, infra containers.Infrastructure) (*containerWork, error) {
 	work, err := r.checkContainer(spec)
 	if err != nil {
 		return nil, err
@@ -401,7 +400,7 @@ func (w *containerWork) definition() (string, error) {
 		Name:         containerName,
 		Image:        w.image,
 		Essential:    true,
-		PortMappings: []portMapping{{ContainerPort: containerPortNumber, Protocol: "tcp"}},
+		PortMappings: []portMapping{{ContainerPort: containers.TaskPort, Protocol: "tcp"}},
 		Environment:  pairs,
 		LogConfig: logConfiguration{
 			Driver: "awslogs",
@@ -464,8 +463,8 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 	}
 
 	group, err := lb.NewTargetGroup(ctx, naming.ResourceID(naming.KindService, containerLocalName, "targets"), &lb.TargetGroupArgs{
-		NamePrefix:          pulumi.String(targetGroupNamePrefix),
-		Port:                pulumi.Int(containerPortNumber),
+		NamePrefix:          pulumi.String(containers.TargetGroupNamePrefix),
+		Port:                pulumi.Int(containers.TaskPort),
 		Protocol:            pulumi.String("HTTP"),
 		TargetType:          pulumi.String("ip"),
 		VpcId:               pulumi.String(w.infra.VPC),
@@ -528,7 +527,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		LoadBalancers: ecs.ServiceLoadBalancerArray{&ecs.ServiceLoadBalancerArgs{
 			TargetGroupArn: group.Arn,
 			ContainerName:  pulumi.String(containerName),
-			ContainerPort:  pulumi.Int(containerPortNumber),
+			ContainerPort:  pulumi.Int(containers.TaskPort),
 		}},
 		Tags: tags,
 	}, serviceOptions...)
@@ -677,7 +676,7 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	infra, err := r.ensureContainerInfra(ctx, spec.Ref, public, progress)
+	infra, err := r.containers.Ensure(ctx, spec.Ref, public, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -739,18 +738,18 @@ func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, l
 	if err := r.automation.Destroy(ctx, ref, lease, progress); err != nil {
 		return err
 	}
-	return r.releaseContainerInfra(ctx, r.cfg.KeyValues, ref, progress)
+	return r.containers.Release(ctx, r.cfg.KeyValues, ref, progress)
 }
 
 func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {
-	infra, present, err := r.readContainerInfra(ctx, spec.Ref.Tier)
+	infra, present, err := r.containers.Read(ctx, spec.Ref.Tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	if !present || (isRoutedPublicly(spec) && infra.PublicListener == "") {
 		shared := provider.ChangeGroup{
 			Kind:   provider.StackGroupKind,
-			Name:   containerInfraRef(spec.Ref.Tier).Name.String(),
+			Name:   containers.StackRef(spec.Ref.Tier).Name.String(),
 			Action: provider.ActionCreate,
 			Reason: "the first container deploy in the " + string(spec.Ref.Tier) + " tier provisions the load balancer and cluster every container app in it shares",
 			Slow:   true,

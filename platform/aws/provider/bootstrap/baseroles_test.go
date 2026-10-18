@@ -1,40 +1,38 @@
 package bootstrap
 
 import (
-	"fmt"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type baseRoleTemplate struct {
 	Resources map[string]struct {
-		Type       string `yaml:"Type"`
+		Type       string `json:"Type"`
 		Properties struct {
-			RoleName          string   `yaml:"RoleName"`
-			Path              string   `yaml:"Path"`
-			ManagedPolicyArns []string `yaml:"ManagedPolicyArns"`
+			RoleName          string   `json:"RoleName"`
+			Path              string   `json:"Path"`
+			ManagedPolicyArns []string `json:"ManagedPolicyArns"`
 			Policies          []struct {
 				PolicyDocument struct {
-					Statement []policyStatement `yaml:"Statement"`
-				} `yaml:"PolicyDocument"`
-			} `yaml:"Policies"`
-		} `yaml:"Properties"`
-	} `yaml:"Resources"`
+					Statement []policyStatement `json:"Statement"`
+				} `json:"PolicyDocument"`
+			} `json:"Policies"`
+		} `json:"Properties"`
+	} `json:"Resources"`
 	Outputs map[string]struct {
-		Value string `yaml:"Value"`
-	} `yaml:"Outputs"`
+		Value templateText `json:"Value"`
+	} `json:"Outputs"`
 }
 
 func coreRoles(t *testing.T, tier environment.Tier) baseRoleTemplate {
 	t.Helper()
 	var tmpl baseRoleTemplate
-	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, tier, "")), &tmpl); err != nil {
-		t.Fatalf("the core template is not valid YAML: %v", err)
+	if err := json.Unmarshal([]byte(coreBody(defaultNamespace, tier, "")), &tmpl); err != nil {
+		t.Fatalf("the core template is not valid JSON: %v", err)
 	}
 	return tmpl
 }
@@ -197,8 +195,9 @@ func TestPassingTheTagInvalidatorRoleReachesNothingTheDeployCredentialCannotAlre
 							continue
 						}
 						equals, _ := st.Condition["StringEquals"].(map[string]any)
-						via, _ := equals["kms:ViaService"].(string)
-						if resolve.Replace(via) != "ssm."+region+".amazonaws.com" || resolve.Replace(fmt.Sprint(equals["kms:EncryptionContext:PARAMETER_ARN"])) != seed {
+						via, _ := templateString(equals["kms:ViaService"])
+						parameter, _ := templateString(equals["kms:EncryptionContext:PARAMETER_ARN"])
+						if resolve.Replace(via) != "ssm."+region+".amazonaws.com" || resolve.Replace(parameter) != seed {
 							t.Errorf("kms:Decrypt condition = %v, want it gated on Parameter Store decrypting %s alone, which the deploy credential reads too", st.Condition, seed)
 						}
 					}
@@ -240,8 +239,8 @@ func TestTheTagInvalidatorRoleReadsOnlyItsOwnTiersPurgeSeed(t *testing.T) {
 			if got := resourcesGranted(statements, "ssm:GetParameter"); !slices.Equal(got, want) {
 				t.Errorf("ssm:GetParameter is granted on %v, want %v", got, want)
 			}
-			body := coreStackTemplate(defaultNamespace, tier, "")
-			if strings.Contains(body, "parameter"+other+"'") {
+			body := coreBody(defaultNamespace, tier, "")
+			if strings.Contains(body, "parameter"+other+`"`) {
 				t.Errorf("the %s core reaches %s, the other tier's purge seed", tier, other)
 			}
 			if len(resourcesGranted(statements, "kms:Decrypt")) == 0 {

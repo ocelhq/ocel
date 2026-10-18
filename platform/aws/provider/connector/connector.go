@@ -262,7 +262,10 @@ func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
 		return bucket, nil
 	}
 
-	template := codeTemplate()
+	template, err := codeTemplate()
+	if err != nil {
+		return "", err
+	}
 	progress.Say(fmt.Sprintf("Creating stack %s to stage the connector's code in", StackName(ns)))
 	if err := cfn.Create(ctx, apis.CFN, StackName(ns), template, nil, nil,
 		tagsFor(ns, template, writer)); err != nil {
@@ -307,22 +310,20 @@ func zipped(binary []byte) (payloads.Payload, error) {
 	return payloads.Of(body.Bytes()), nil
 }
 
-func codeTemplate() string {
-	rendered, err := json.MarshalIndent(map[string]any{
-		"AWSTemplateFormatVersion": "2010-09-09",
-		"Description":              "Ocel connector - the bucket the connector's own code is staged in. The function that reads it lands in this same stack once the code is there.",
-		"Resources":                map[string]any{"CodeBucket": codeBucketResource()},
-		"Outputs": map[string]any{
-			outputBucket: map[string]any{
-				"Description": "S3 bucket this stack stages the connector's code in. Nothing else writes to it.",
-				"Value":       map[string]any{"Ref": "CodeBucket"},
-			},
-		},
-	}, "", "  ")
-	if err != nil {
-		panic("connector: render the connector code template: " + err.Error())
+func codeBucketOutput() cfn.Output {
+	return cfn.Output{
+		Name:        outputBucket,
+		Description: "S3 bucket this stack stages the connector's code in. Nothing else writes to it.",
+		Value:       cfn.Ref("CodeBucket"),
 	}
-	return string(rendered)
+}
+
+func codeTemplate() (string, error) {
+	return cfn.Template{
+		Description: "Ocel connector - the bucket the connector's own code is staged in. The function that reads it lands in this same stack once the code is there.",
+		Resources:   []cfn.Resource{codeBucketResource()},
+		Outputs:     []cfn.Output{codeBucketOutput()},
+	}.Body()
 }
 
 func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, keys []string) (string, error) {
@@ -342,123 +343,119 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, k
 	if err != nil {
 		return "", err
 	}
-	rendered, err := json.MarshalIndent(map[string]any{
-		"AWSTemplateFormatVersion": "2010-09-09",
-		"Description":              "Ocel connector - the function the console reads this account's variables through, the role it runs under and the url it answers on. It is separate from every bootstrap stack and has no deploy rights.",
-		"Resources": withURLPermissions(map[string]any{
-			"CodeBucket": codeBucketResource(),
-			"ConnectorRole": map[string]any{
-				"Type": "AWS::IAM::Role",
-				"Metadata": map[string]any{
-					"Description": "What the connector may reach: the variable records and the key they are sealed under, and nothing a deploy would need.",
-				},
-				"Properties": map[string]any{
-					"AssumeRolePolicyDocument": map[string]any{
-						"Version": "2012-10-17",
-						"Statement": []map[string]any{{
-							"Effect":    "Allow",
-							"Principal": map[string]any{"Service": iam.LambdaPrincipal},
-							"Action":    "sts:AssumeRole",
-						}},
-					},
-					"ManagedPolicyArns": []string{iam.LambdaBasicExecutionPolicyARN},
-					"Policies": []map[string]any{{
-						"PolicyName":     ns.PolicyName("connector"),
-						"PolicyDocument": map[string]any{"Version": "2012-10-17", "Statement": statements(ns, keys)},
-					}},
-				},
+	functionARN := cfn.GetAtt("ConnectorFunction", "Arn")
+	resources := []cfn.Resource{
+		codeBucketResource(),
+		{
+			ID:   "ConnectorRole",
+			Type: "AWS::IAM::Role",
+			Metadata: cfn.Metadata{
+				Description: "What the connector may reach: the variable records and the key they are sealed under, and nothing a deploy would need.",
 			},
-			"ConnectorFunction": map[string]any{
-				"Type": "AWS::Lambda::Function",
-				"Metadata": map[string]any{
-					"Description": "The connector itself. The console dials it over its function url and authenticates with a short-lived token the connector verifies before any call runs.",
-				},
-				"Properties": map[string]any{
-					"Architectures": []string{Arch},
-					"Code":          map[string]any{"S3Bucket": map[string]any{"Ref": "CodeBucket"}, "S3Key": at.Key},
-					"Environment": map[string]any{"Variables": map[string]any{
-						provider.NamespaceEnvVar:       string(ns),
-						RegionEnvVar:                   map[string]any{"Ref": "AWS::Region"},
-						provider.ConnectorConfigEnvVar: string(bundle.Config),
-						KeyParameterEnvVar:             KeyParameter(ns),
-					}},
-					"Handler":                      handler,
-					"MemorySize":                   memory,
-					"ReservedConcurrentExecutions": reservedConcurrency,
-					"Role":                         map[string]any{"Fn::GetAtt": []string{"ConnectorRole", "Arn"}},
-					"Runtime":                      runtime,
-					"Timeout":                      timeout,
-				},
-			},
-			"ConnectorUrl": map[string]any{
-				"Type": "AWS::Lambda::Url",
-				"Metadata": map[string]any{
-					"Description": "The address the console dials. Its auth is the token the connector checks itself, so a caller with no token reaches a refusal rather than a signed request it could never make.",
-				},
-				"Properties": map[string]any{
-					"AuthType":          functionurl.AuthNone,
-					"TargetFunctionArn": map[string]any{"Fn::GetAtt": []string{"ConnectorFunction", "Arn"}},
-				},
-			},
-			"ConnectorHeartbeat": map[string]any{
-				"Type": "AWS::Events::Rule",
-				"Metadata": map[string]any{
-					"Description": "Wakes the connector once a minute to send the console a signed heartbeat: a function runs nothing between invocations, so the beat has to be one.",
-				},
-				"Properties": map[string]any{
-					"ScheduleExpression": heartbeatEvery,
-					"State":              "ENABLED",
-					"Targets": []map[string]any{{
-						"Id":    "connector",
-						"Arn":   map[string]any{"Fn::GetAtt": []string{"ConnectorFunction", "Arn"}},
-						"Input": string(wake),
-					}},
-				},
-			},
-			"ConnectorHeartbeatInvokes": map[string]any{
-				"Type": "AWS::Lambda::Permission",
-				"Properties": map[string]any{
-					"Action":       "lambda:InvokeFunction",
-					"FunctionName": map[string]any{"Fn::GetAtt": []string{"ConnectorFunction", "Arn"}},
-					"Principal":    "events.amazonaws.com",
-					"SourceArn":    map[string]any{"Fn::GetAtt": []string{"ConnectorHeartbeat", "Arn"}},
-				},
-			},
-		}),
-		"Outputs": map[string]any{
-			outputBucket: map[string]any{
-				"Description": "S3 bucket this stack stages the connector's code in. Nothing else writes to it.",
-				"Value":       map[string]any{"Ref": "CodeBucket"},
-			},
-			outputURL: map[string]any{
-				"Description": "The url the console dials this connector at.",
-				"Value":       map[string]any{"Fn::GetAtt": []string{"ConnectorUrl", "FunctionUrl"}},
-			},
-			outputVersion: map[string]any{
-				"Description": "The connector bundle this stack deploys.",
-				"Value":       bundle.Version,
-			},
-			outputPublicKey: map[string]any{
-				"Description": "The public half of the key the connector signs its heartbeats with. The private half is the SecureString parameter the function reads.",
-				"Value":       bundle.PublicKey,
+			Properties: map[string]any{
+				"AssumeRolePolicyDocument": iam.AssumeRoleDocument(iam.LambdaPrincipal),
+				"ManagedPolicyArns":        []string{iam.LambdaBasicExecutionPolicyARN},
+				"Policies": []any{map[string]any{
+					"PolicyName":     ns.PolicyName("connector"),
+					"PolicyDocument": iam.Document(grants(ns, keys)),
+				}},
 			},
 		},
-	}, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("render the connector template: %w", err)
+		{
+			ID:   "ConnectorFunction",
+			Type: "AWS::Lambda::Function",
+			Metadata: cfn.Metadata{
+				Description: "The connector itself. The console dials it over its function url and authenticates with a short-lived token the connector verifies before any call runs.",
+			},
+			Properties: map[string]any{
+				"Architectures": []string{Arch},
+				"Code":          map[string]any{"S3Bucket": cfn.Ref("CodeBucket"), "S3Key": at.Key},
+				"Environment": map[string]any{"Variables": map[string]any{
+					provider.NamespaceEnvVar:       string(ns),
+					RegionEnvVar:                   cfn.Ref("AWS::Region"),
+					provider.ConnectorConfigEnvVar: string(bundle.Config),
+					KeyParameterEnvVar:             KeyParameter(ns),
+				}},
+				"Handler":                      handler,
+				"MemorySize":                   memory,
+				"ReservedConcurrentExecutions": reservedConcurrency,
+				"Role":                         cfn.GetAtt("ConnectorRole", "Arn"),
+				"Runtime":                      runtime,
+				"Timeout":                      timeout,
+			},
+		},
+		{
+			ID:   "ConnectorUrl",
+			Type: "AWS::Lambda::Url",
+			Metadata: cfn.Metadata{
+				Description: "The address the console dials. Its auth is the token the connector checks itself, so a caller with no token reaches a refusal rather than a signed request it could never make.",
+			},
+			Properties: map[string]any{
+				"AuthType":          functionurl.AuthNone,
+				"TargetFunctionArn": functionARN,
+			},
+		},
+		{
+			ID:   "ConnectorHeartbeat",
+			Type: "AWS::Events::Rule",
+			Metadata: cfn.Metadata{
+				Description: "Wakes the connector once a minute to send the console a signed heartbeat: a function runs nothing between invocations, so the beat has to be one.",
+			},
+			Properties: map[string]any{
+				"ScheduleExpression": heartbeatEvery,
+				"State":              "ENABLED",
+				"Targets": []any{map[string]any{
+					"Id":    "connector",
+					"Arn":   functionARN,
+					"Input": string(wake),
+				}},
+			},
+		},
+		{
+			ID:   "ConnectorHeartbeatInvokes",
+			Type: "AWS::Lambda::Permission",
+			Properties: map[string]any{
+				"Action":       "lambda:InvokeFunction",
+				"FunctionName": functionARN,
+				"Principal":    "events.amazonaws.com",
+				"SourceArn":    cfn.GetAtt("ConnectorHeartbeat", "Arn"),
+			},
+		},
 	}
-	return string(rendered), nil
+	return cfn.Template{
+		Description: "Ocel connector - the function the console reads this account's variables through, the role it runs under and the url it answers on. It is separate from every bootstrap stack and has no deploy rights.",
+		Resources:   append(resources, urlPermissions(functionARN)...),
+		Outputs: []cfn.Output{
+			codeBucketOutput(),
+			{
+				Name:        outputURL,
+				Description: "The url the console dials this connector at.",
+				Value:       cfn.GetAtt("ConnectorUrl", "FunctionUrl"),
+			},
+			{
+				Name:        outputVersion,
+				Description: "The connector bundle this stack deploys.",
+				Value:       bundle.Version,
+			},
+			{
+				Name:        outputPublicKey,
+				Description: "The public half of the key the connector signs its heartbeats with. The private half is the SecureString parameter the function reads.",
+				Value:       bundle.PublicKey,
+			},
+		},
+	}.Body()
 }
 
 func urlPermissionID(permission functionurl.Permission) string {
 	return "ConnectorUrl" + permission.Verb()
 }
 
-func withURLPermissions(resources map[string]any) map[string]any {
+func urlPermissions(functionARN cfn.Intrinsic) []cfn.Resource {
+	var resources []cfn.Resource
 	for _, permission := range functionurl.Public() {
 		properties := map[string]any{
 			"Action":       permission.Action,
-			"FunctionName": map[string]any{"Fn::GetAtt": []string{"ConnectorFunction", "Arn"}},
+			"FunctionName": functionARN,
 			"Principal":    "*",
 		}
 		if permission.URLAuthType != "" {
@@ -467,20 +464,21 @@ func withURLPermissions(resources map[string]any) map[string]any {
 		if permission.ViaURL {
 			properties["InvokedViaFunctionUrl"] = true
 		}
-		resources[urlPermissionID(permission)] = map[string]any{"Type": "AWS::Lambda::Permission", "Properties": properties}
+		resources = append(resources, cfn.Resource{ID: urlPermissionID(permission), Type: "AWS::Lambda::Permission", Properties: properties})
 	}
 	return resources
 }
 
-func codeBucketResource() map[string]any {
-	return map[string]any{
-		"Type": "AWS::S3::Bucket",
-		"Metadata": map[string]any{
-			"Description": "Stores the connector's own code archive, keyed by its digest. Emptying it leaves the deployed function running and the next install re-uploads.",
+func codeBucketResource() cfn.Resource {
+	return cfn.Resource{
+		ID:   "CodeBucket",
+		Type: "AWS::S3::Bucket",
+		Metadata: cfn.Metadata{
+			Description: "Stores the connector's own code archive, keyed by its digest. Emptying it leaves the deployed function running and the next install re-uploads.",
 		},
-		"Properties": map[string]any{
+		Properties: map[string]any{
 			"BucketEncryption": map[string]any{
-				"ServerSideEncryptionConfiguration": []map[string]any{{
+				"ServerSideEncryptionConfiguration": []any{map[string]any{
 					"ServerSideEncryptionByDefault": map[string]any{"SSEAlgorithm": "AES256"},
 				}},
 			},
@@ -491,7 +489,7 @@ func codeBucketResource() map[string]any {
 				"RestrictPublicBuckets": true,
 			},
 			"LifecycleConfiguration": map[string]any{
-				"Rules": []map[string]any{{
+				"Rules": []any{map[string]any{
 					"Id":                             "abort-incomplete-connector-uploads",
 					"Status":                         "Enabled",
 					"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": codeAbort},
@@ -534,8 +532,4 @@ func grants(ns bootstrap.Namespace, keys []string) []iam.Statement {
 			Resources: []string{iam.AnyResource},
 		},
 	}
-}
-
-func statements(ns bootstrap.Namespace, keys []string) []map[string]any {
-	return iam.Statements(grants(ns, keys))
 }

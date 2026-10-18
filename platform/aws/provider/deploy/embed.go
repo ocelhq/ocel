@@ -367,3 +367,13 @@ func (p embedPass) updateCode(ctx context.Context, target embedTarget, key strin
 		}
 	}
 }
+
+func copyFileInto(w io.Writer, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, f)
+	f.Close()
+	return err
+}

@@ -7,9 +7,11 @@ const (
 
 	AnyResource = "*"
 
-	LambdaPrincipal    = "lambda.amazonaws.com"
-	SchedulerPrincipal = "scheduler.amazonaws.com"
-	ECSTasksPrincipal  = "ecs-tasks.amazonaws.com"
+	LambdaPrincipal     = "lambda.amazonaws.com"
+	SchedulerPrincipal  = "scheduler.amazonaws.com"
+	ECSTasksPrincipal   = "ecs-tasks.amazonaws.com"
+	APIGatewayPrincipal = "apigateway.amazonaws.com"
+	CloudFrontPrincipal = "cloudfront.amazonaws.com"
 
 	LambdaBasicExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 	LambdaVPCAccessPolicyARN      = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -17,18 +19,45 @@ const (
 )
 
 type Statement struct {
-	Actions   []string
-	Resources []string
-	Condition map[string]any
+	Sid            string
+	Principal      Principal
+	Actions        []string
+	Resources      []string
+	ResourceValues []any
+	Condition      map[string]any
+}
+
+type Principal struct {
+	Service string
+	AWS     any
+}
+
+func (p Principal) rendered() map[string]any {
+	out := map[string]any{}
+	if p.Service != "" {
+		out["Service"] = p.Service
+	}
+	if p.AWS != nil {
+		out["AWS"] = p.AWS
+	}
+	return out
 }
 
 func Statements(statements []Statement) []map[string]any {
 	out := make([]map[string]any, 0, len(statements))
 	for _, statement := range statements {
 		rendered := map[string]any{
-			"Effect":   "Allow",
-			"Action":   oneOrMany(statement.Actions),
-			"Resource": oneOrMany(statement.Resources),
+			"Effect": "Allow",
+			"Action": oneOrMany(statement.Actions),
+		}
+		if resources := resourcesOf(statement); len(resources) > 0 {
+			rendered["Resource"] = oneOrMany(resources)
+		}
+		if statement.Sid != "" {
+			rendered["Sid"] = statement.Sid
+		}
+		if principal := statement.Principal.rendered(); len(principal) > 0 {
+			rendered["Principal"] = principal
 		}
 		if len(statement.Condition) > 0 {
 			rendered["Condition"] = statement.Condition
@@ -38,11 +67,19 @@ func Statements(statements []Statement) []map[string]any {
 	return out
 }
 
+func resourcesOf(statement Statement) []any {
+	out := make([]any, 0, len(statement.Resources)+len(statement.ResourceValues))
+	for _, resource := range statement.Resources {
+		out = append(out, resource)
+	}
+	return append(out, statement.ResourceValues...)
+}
+
 func Document(statements []Statement) map[string]any {
 	return map[string]any{"Version": PolicyVersion, "Statement": Statements(statements)}
 }
 
-func oneOrMany(values []string) any {
+func oneOrMany[T any](values []T) any {
 	if len(values) == 1 {
 		return values[0]
 	}
@@ -66,16 +103,12 @@ func MergeConditions(conditions ...map[string]any) map[string]any {
 	return merged
 }
 
+func AssumeRoleDocument(servicePrincipal string) map[string]any {
+	return Document([]Statement{{Principal: Principal{Service: servicePrincipal}, Actions: []string{"sts:AssumeRole"}}})
+}
+
 func AssumeRolePolicy(servicePrincipal string) string {
-	doc := map[string]any{
-		"Version": PolicyVersion,
-		"Statement": []map[string]any{{
-			"Effect":    "Allow",
-			"Action":    "sts:AssumeRole",
-			"Principal": map[string]any{"Service": servicePrincipal},
-		}},
-	}
-	b, _ := json.Marshal(doc)
+	b, _ := json.Marshal(AssumeRoleDocument(servicePrincipal))
 	return string(b)
 }
 

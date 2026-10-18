@@ -27,7 +27,7 @@ func TestAnAppBehindAnEdgeHoldingAKeyToTheAssetBucketTagsItsPagesEdgeReadableAnd
 	if want := edge.DerivePurgeSecret("a-seed", spec.App.ISR.Prefix); cache.PurgeSecret != want {
 		t.Errorf("PurgeSecret = %q, want %q", cache.PurgeSecret, want)
 	}
-	env := cache.env()
+	env := cache.Env()
 	if env["OCEL_ISR_EDGE_READABLE"] != "1" {
 		t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want 1", env["OCEL_ISR_EDGE_READABLE"])
 	}
@@ -49,7 +49,7 @@ func TestAnAppBehindAnEdgeHoldingNoKeyToTheAssetBucketTagsNothing(t *testing.T) 
 	if cache.EdgeReadable || cache.PurgeSecret != "" {
 		t.Errorf("cache = %+v, want no tagging and no purge secret where no edge reads the bucket", cache)
 	}
-	if _, told := cache.env()["OCEL_ISR_EDGE_READABLE"]; told {
+	if _, told := cache.Env()["OCEL_ISR_EDGE_READABLE"]; told {
 		t.Error("OCEL_ISR_EDGE_READABLE is set, want it absent")
 	}
 }

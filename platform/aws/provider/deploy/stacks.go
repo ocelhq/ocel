@@ -8,6 +8,8 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
@@ -30,6 +32,10 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
 type Scope struct {
@@ -61,7 +67,7 @@ type Stacks struct {
 
 	served *servedApps
 
-	pending    *pendingSets
+	pending    *site.PendingSets
 	pluginOnce sync.Once
 	plugin     pulumi.Plugin
 	pluginErr  error
@@ -69,10 +75,12 @@ type Stacks struct {
 	mu     sync.Mutex
 	opened map[Scope]*release
 
-	containerInfraLock  sync.Mutex
-	functionNetworkLock sync.Mutex
+	containers      *containers.Stacks
+	functionNetwork *functionnetwork.Stacks
 
 	PlanParts func(ctx context.Context, spec provider.StackSpec) ([]provider.ChangeGroup, error)
+
+	Statements postgres.StatementsAPI
 }
 
 type release struct {
@@ -87,19 +95,46 @@ func NewStacks(resolve ReleaseConfig, realized *Realized) *Stacks {
 }
 
 func newStacks(resolve ReleaseConfig, realized *Realized, engine pulumi.Engine) *Stacks {
-	return &Stacks{
+	r := &Stacks{
 		resolve:    resolve,
 		realized:   realized,
 		engine:     engine,
 		skipChecks: processenv.SkipChecks(),
 		served:     newServedApps(),
-		pending:    newPendingSets(),
+		pending:    site.NewPendingSets(),
 		opened:     map[Scope]*release{},
 	}
+	r.containers = &containers.Stacks{Open: r.openShared}
+	r.functionNetwork = &functionnetwork.Stacks{Open: r.openShared}
+	return r
 }
 
-func (r *Stacks) assetSetPlugin() (pulumi.Plugin, error) {
-	r.pluginOnce.Do(func() { r.plugin, r.pluginErr = assetSetPlugin(r.pending) })
+func (r *Stacks) Containers() *containers.Stacks {
+	return r.containers
+}
+
+func (r *Stacks) FunctionNetwork() *functionnetwork.Stacks {
+	return r.functionNetwork
+}
+
+func (r *Stacks) openShared(ctx context.Context, ref provider.StackRef) (sharedstack.Owner, error) {
+	owner, err := r.at(ctx, ref, "")
+	if err != nil {
+		return sharedstack.Owner{}, err
+	}
+	return sharedstack.Owner{
+		Automation:     owner.automation,
+		KeyValues:      owner.cfg.KeyValues,
+		WrittenBy:      owner.cfg.WrittenBy,
+		Region:         owner.cfg.Region,
+		Subnets:        owner.cfg.Subnets,
+		AppBoundaryARN: owner.cfg.AppBoundaryARN,
+		AppRolePath:    owner.cfg.AppRolePath,
+	}, nil
+}
+
+func (r *Stacks) ocelPlugin() (pulumi.Plugin, error) {
+	r.pluginOnce.Do(func() { r.plugin, r.pluginErr = newOcelPlugin(r.pending, r.Statements) })
 	return r.plugin, r.pluginErr
 }
 
@@ -125,7 +160,7 @@ func (r *Stacks) open(ctx context.Context, scope Scope) (*release, error) {
 	if err != nil {
 		return nil, err
 	}
-	plugin, err := r.assetSetPlugin()
+	plugin, err := r.ocelPlugin()
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +221,7 @@ func (r *release) infraProgram(spec provider.StackSpec, work *infraWork) compone
 func (r *release) appProgram(spec provider.StackSpec, work *appWork) component.Program {
 	return component.Program{
 		Run: func(pctx *sdk.Context) error {
-			shipped, err := r.shipArtifacts(pctx, work.uploads)
+			shipped, err := site.ShipArtifacts(pctx, r.cfg.buckets(), work.uploads)
 			if err != nil {
 				return err
 			}
@@ -418,8 +453,8 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	defer prepared.discard()
 	work := prepared.app
 	if work != nil && len(work.sets) > 0 {
-		r.pending.add(work.stack, work.sets, progress)
-		defer r.pending.drop(work.stack, work.sets)
+		r.pending.Add(work.stack, work.sets, progress)
+		defer r.pending.Drop(work.stack, work.sets)
 	}
 	outputs, err := r.automation.Run(ctx, spec.Ref, prepared.program, spec.Lease, progress)
 	if err != nil {
@@ -438,7 +473,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	}
 	result.Functions = append(result.Functions, workers...)
 	if work != nil && !work.functionsAttach {
-		if err := r.releaseFunctionNetwork(ctx, r.cfg.KeyValues, spec.Ref, progress); err != nil {
+		if err := r.functionNetwork.Release(ctx, r.cfg.KeyValues, spec.Ref, progress); err != nil {
 			return provider.StackResult{}, err
 		}
 	}
@@ -487,7 +522,7 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 		return provider.Plan{}, err
 	}
 	if work != nil && work.networkPending {
-		previewed.Groups = append([]provider.ChangeGroup{functionNetworkGroup(spec.Ref.Tier)}, previewed.Groups...)
+		previewed.Groups = append([]provider.ChangeGroup{functionnetwork.NewChangeGroup(spec.Ref.Tier)}, previewed.Groups...)
 	}
 	workerGroups, err := r.previewWorkers(ctx, spec, work, progress)
 	if err != nil {
@@ -546,7 +581,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 		work := &infraWork{transformed: transformed, previewing: kind == runPreview}
 		return preparedStack{program: r.infraProgram(spec, work), transformed: transformed}, nil
 	}
-	var network *functionNetwork
+	var network *functionnetwork.Network
 	var pending, functionsAttach bool
 	if kind == runPreview {
 		network, pending, err = r.readFunctionNetworkFor(ctx, spec, transformed)
@@ -599,10 +634,10 @@ func (r *Stacks) Destroy(ctx context.Context, req provider.StackDestroy, progres
 			return err
 		}
 	}
-	if err := r.releaseContainerInfra(ctx, opened.cfg.KeyValues, ref, progress); err != nil {
+	if err := r.containers.Release(ctx, opened.cfg.KeyValues, ref, progress); err != nil {
 		return err
 	}
-	if err := r.releaseFunctionNetwork(ctx, opened.cfg.KeyValues, ref, progress); err != nil {
+	if err := r.functionNetwork.Release(ctx, opened.cfg.KeyValues, ref, progress); err != nil {
 		return err
 	}
 	if ref.Name.IsInfra() {

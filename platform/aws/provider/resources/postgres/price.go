@@ -7,7 +7,7 @@ import (
 
 func shape(cost component.CostTree, scope string, at component.Stack, declared []provider.Resource) error {
 	for _, resource := range declared {
-		args := translate(resource.Postgres)
+		args := translate(resource.Postgres, at.Tier())
 		names := resourceNames(at.Project, at.Env, resource.Name)
 		cost.Add(scope, component.TerraformRDSCluster, resource.Name, map[string]any{
 			"engine":         args.Engine,
