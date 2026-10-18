@@ -1,6 +1,7 @@
 import type http from "node:http";
 import type { LauncherConfig, RevalidateWindow } from "@framework/next-protocol/launcher";
 import { invalidatesByCacheTag } from "@framework/node-runtime/host";
+import { beforeWriteHead } from "@framework/node-runtime/write-head";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import {
   cachesOnlyMarked,
@@ -72,11 +73,7 @@ export function shapeOriginCache(
   shaping: OriginShaping,
 ): void {
   collectTags(req.headers as RequestHeaders);
-  const writeHead = res.writeHead;
-  res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
-    if (!this.headersSent) shape(req, this, shaping);
-    return (writeHead as any).apply(this, args);
-  } as typeof res.writeHead;
+  beforeWriteHead(res, (res) => shape(req, res, shaping));
 }
 
 function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: OriginShaping): void {

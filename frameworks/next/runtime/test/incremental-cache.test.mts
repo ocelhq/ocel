@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -20,6 +19,7 @@ async function makeFixture(name: string) {
   const projectDir = join(dir, name);
   const { nextConfig } = await writeNextProjectFixture(projectDir);
   const requireFromApp = createRequire(join(projectDir, "package.json"));
+  requireFromApp("next/dist/server/node-environment-baseline.js");
   const StubCacheHandler = requireFromApp(join(projectDir, "stub-cache-handler.cjs")).default;
   const make = newIncrementalCacheFactory(nextConfig, projectDir, StubCacheHandler);
   return { projectDir, make, StubCacheHandler };
@@ -29,14 +29,28 @@ function fakeReq(headers: Record<string, string> = {}): any {
   return { headers };
 }
 
-test("generates fetch-cache keys in Next's format so both runtimes share a keyspace", async () => {
-  const { make } = await makeFixture("keys");
-  const cache: any = make(fakeReq());
+test("next's own unstable_cache runs against the request's incremental cache", async () => {
+  const { projectDir, make } = await makeFixture("unstable-cache");
+  const requireFromApp = createRequire(join(projectDir, "package.json"));
+  const { unstable_cache } = requireFromApp(
+    "next/dist/server/web/spec-extension/unstable-cache.js",
+  );
+  let calls = 0;
+  const cached = unstable_cache(
+    async (n: number) => {
+      calls++;
+      return { n, calls };
+    },
+    ["probe"],
+  );
 
-  const expected = createHash("sha256")
-    .update(JSON.stringify(["v4", "prefix", "my-invocation"]))
-    .digest("hex");
-  expect(await cache.generateSimpleCacheKey("my-invocation")).toBe(expected);
+  (globalThis as any).__incrementalCache = make(fakeReq());
+  try {
+    expect(await cached(7)).toEqual({ n: 7, calls: 1 });
+    expect(await cached(7)).toEqual({ n: 7, calls: 1 });
+  } finally {
+    delete (globalThis as any).__incrementalCache;
+  }
 });
 
 test("a set entry is served back fresh until its revalidate window passes", async () => {
@@ -65,21 +79,6 @@ test("an entry older than its revalidate window comes back stale", async () => {
   expect(entry.isStale).toBe(true);
 });
 
-test("only FETCH traffic passes through; other kinds read null and write nothing", async () => {
-  const { make, StubCacheHandler } = await makeFixture("fetch-only");
-  const cache: any = make(fakeReq());
-
-  await cache.set("page-key", { kind: "PAGES", html: "<html/>" }, {});
-  expect(StubCacheHandler.store.has("page-key")).toBe(false);
-  expect(await cache.get("anything", { kind: "PAGES" })).toBeNull();
-
-  StubCacheHandler.store.set("wrong-kind", {
-    lastModified: Date.now(),
-    value: { kind: "PAGES", html: "<html/>" },
-  });
-  expect(await cache.get("wrong-kind", { kind: "FETCH" })).toBeNull();
-});
-
 test("revalidateTag reaches the installed handler", async () => {
   const { make, StubCacheHandler } = await makeFixture("revalidate-tag");
   const cache: any = make(fakeReq());
@@ -92,10 +91,10 @@ test("the on-demand revalidate header is honored only with the build's preview i
   const { make } = await makeFixture("on-demand");
 
   const plain: any = make(fakeReq());
-  expect(plain.isOnDemandRevalidate).toBe(false);
+  expect(plain.isOnDemandRevalidate).not.toBe(true);
 
   const wrongId: any = make(fakeReq({ "x-prerender-revalidate": "not-it" }));
-  expect(wrongId.isOnDemandRevalidate).toBe(false);
+  expect(wrongId.isOnDemandRevalidate).not.toBe(true);
 
   const onDemand: any = make(fakeReq({ "x-prerender-revalidate": previewModeId }));
   expect(onDemand.isOnDemandRevalidate).toBe(true);

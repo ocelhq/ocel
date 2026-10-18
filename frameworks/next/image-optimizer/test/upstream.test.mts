@@ -380,14 +380,17 @@ describe("redirects", () => {
     expect(calls).toBe(2);
   });
 
-  test("stop at the three hops the default config allows", async () => {
+  test("stop at the three hops the default config allows, as a 508", async () => {
     const { port, requests } = await serve((_req, res) => {
       res.writeHead(302, { location: "/again" });
       res.end();
     });
     await expect(
       fetchUpstream(`http://cdn.test:${port}/start`, config(), loopback),
-    ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+    ).rejects.toMatchObject({
+      status: 508,
+      message: '"url" parameter is valid but upstream response is invalid',
+    });
     expect(requests.length).toBe(4);
   });
 
@@ -422,20 +425,23 @@ describe("redirects", () => {
     expect(requests.length).toBe(6);
   });
 
-  test("a maximumRedirects of zero follows no redirect", async () => {
+  test("a maximumRedirects of zero follows no redirect, as a 508", async () => {
     const { port, requests } = await serve((_req, res) => {
       res.writeHead(302, { location: "/again" });
       res.end();
     });
     await expect(
       fetchUpstream(`http://cdn.test:${port}/start`, config({ maximumRedirects: 0 }), loopback),
-    ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+    ).rejects.toMatchObject({
+      status: 508,
+      message: '"url" parameter is valid but upstream response is invalid',
+    });
     expect(requests.length).toBe(1);
   });
 });
 
 describe("the byte ceiling", () => {
-  test("aborts a body that grows past it, with no Content-Length to warn us", async () => {
+  test("aborts a body that grows past it, with no Content-Length to warn us, as a 413", async () => {
     const { port } = await serve((_req, res) => {
       res.writeHead(200, { "content-type": "image/jpeg" });
       for (let i = 0; i < 64; i++) res.write(Buffer.alloc(64 * 1024));
@@ -447,10 +453,13 @@ describe("the byte ceiling", () => {
         config({ maximumResponseBody: 128 * 1024 }),
         loopback,
       ),
-    ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+    ).rejects.toMatchObject({
+      status: 413,
+      message: '"url" parameter is valid but upstream response is invalid',
+    });
   });
 
-  test("refuses a declared length over it before reading a byte of body", async () => {
+  test("refuses a declared length over it before reading a byte of body, as a 413", async () => {
     let bodyWritten = false;
     const { port } = await serve((_req, res) => {
       res.writeHead(200, {
@@ -468,7 +477,10 @@ describe("the byte ceiling", () => {
         config({ maximumResponseBody: 1024 }),
         loopback,
       ),
-    ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+    ).rejects.toMatchObject({
+      status: 413,
+      message: '"url" parameter is valid but upstream response is invalid',
+    });
     expect(bodyWritten).toBe(true);
   });
 
@@ -488,17 +500,49 @@ describe("the byte ceiling", () => {
 });
 
 describe("upstream failures", () => {
-  for (const status of [301, 404, 403, 500, 503]) {
-    test(`a ${status} with no usable Location is one generic answer`, async () => {
+  for (const [status, answered] of [
+    [404, 404],
+    [403, 403],
+    [500, 500],
+    [503, 503],
+    [301, 500],
+    [304, 500],
+  ] as const) {
+    test(`a ${status} with no usable Location is answered as a ${answered} that hides its body`, async () => {
       const { port } = await serve((_req, res) => {
         res.writeHead(status);
         res.end("detail the caller must not learn");
       });
       await expect(
         fetchUpstream(`http://cdn.test:${port}/x.jpg`, config(), loopback),
-      ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+      ).rejects.toMatchObject({
+        status: answered,
+        message: '"url" parameter is valid but upstream response is invalid',
+      });
     });
   }
+
+  for (const status of [201, 203, 206]) {
+    test(`a ${status} carrying an image is served like a 200`, async () => {
+      const image = await solid("jpeg");
+      const { port } = await serve((_req, res) => {
+        res.writeHead(status, { "content-type": "image/jpeg" });
+        res.end(Buffer.from(image));
+      });
+      const result = await fetchUpstream(`http://cdn.test:${port}/x.jpg`, config(), loopback);
+      expect(Buffer.from(result.bytes).equals(Buffer.from(image))).toBe(true);
+    });
+  }
+
+  test("an origin that never answers is a 504", async () => {
+    const { port } = await serve(() => {});
+    await expect(
+      fetchUpstream(`http://cdn.test:${port}/x.jpg`, config(), loopback),
+    ).rejects.toMatchObject({
+      status: 504,
+      message: '"url" parameter is valid but upstream response timed out',
+    });
+  }, 20_000);
 
   test("a connection refused is the same answer as everything else", async () => {
     const { port } = await serve((_req, res) => res.end());
@@ -510,7 +554,7 @@ describe("upstream failures", () => {
   });
 });
 
-test("a slowloris origin is ended by the wall-clock deadline", async () => {
+test("a slowloris origin is ended by the wall-clock deadline, as a 504", async () => {
   const timers: NodeJS.Timeout[] = [];
   const { port } = await serve((_req, res) => {
     res.writeHead(200, { "content-type": "image/jpeg" });
@@ -525,7 +569,10 @@ test("a slowloris origin is ended by the wall-clock deadline", async () => {
   try {
     await expect(
       fetchUpstream(`http://cdn.test:${port}/x.jpg`, config(), loopback),
-    ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+    ).rejects.toMatchObject({
+      status: 504,
+      message: '"url" parameter is valid but upstream response timed out',
+    });
   } finally {
     for (const timer of timers) clearInterval(timer);
   }

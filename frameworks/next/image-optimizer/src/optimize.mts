@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   type CompiledImageConfig,
+  IMAGE_ERROR,
   IMAGE_PASSTHROUGH,
   type ImageOriginRequest,
   type RouteImage,
@@ -36,10 +37,10 @@ export async function optimize(
       if (error.detail !== undefined) {
         console.error(`ocel image optimizer: ${error.message}`, error.detail);
       }
-      return { status: error.status, headers: {}, body: encode(error.message) };
+      return { status: error.status, headers: { [IMAGE_ERROR]: "1" }, body: encode(error.message) };
     }
     console.error("ocel image optimizer: bootstrap failure", error);
-    return { status: 502, headers: {}, body: encode(BOOTSTRAP_MESSAGE) };
+    return { status: 502, headers: { [IMAGE_ERROR]: "1" }, body: encode(BOOTSTRAP_MESSAGE) };
   }
 }
 

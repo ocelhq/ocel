@@ -7,10 +7,16 @@ import {
 } from "@framework/next-protocol/image";
 import { Agent, request } from "undici";
 import { isReachableAddress } from "./addresses.mjs";
-import { upstreamFailure } from "./errors.mjs";
-import { readCapped } from "./stream.mjs";
+import { type ImageError, upstreamFailure, upstreamTimeout } from "./errors.mjs";
+import { readCapped, TooLargeError } from "./stream.mjs";
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+const TIMEOUT_CODES = new Set([
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+]);
 
 export interface UpstreamImage {
   bytes: Uint8Array;
@@ -135,26 +141,31 @@ async function follow(
         },
       });
     } catch (error) {
-      throw upstreamFailure(error);
+      throw failedRead(error);
     }
 
     const location = header(response.headers.location);
     if (REDIRECT_STATUSES.has(response.statusCode) && location) {
       await response.body.dump().catch(() => {});
-      if (hop >= config.maximumRedirects) throw upstreamFailure(`too many redirects for ${href}`);
+      if (hop >= config.maximumRedirects) {
+        throw upstreamFailure(`too many redirects for ${href}`, 508);
+      }
       current = resolveHop(location, current, config);
       continue;
     }
 
-    if (response.statusCode !== 200) {
+    if (response.statusCode < 200 || response.statusCode > 299) {
       await response.body.dump().catch(() => {});
-      throw upstreamFailure(`upstream status ${response.statusCode} for ${current}`);
+      throw upstreamFailure(
+        `upstream status ${response.statusCode} for ${current}`,
+        answeredStatus(response.statusCode),
+      );
     }
 
     const declared = Number(header(response.headers["content-length"]));
     if (Number.isFinite(declared) && declared > limit) {
       await response.body.dump().catch(() => {});
-      throw upstreamFailure(`declared length ${declared} over ${limit}`);
+      throw upstreamFailure(`declared length ${declared} over ${limit}`, 413);
     }
 
     try {
@@ -166,9 +177,25 @@ async function follow(
       };
     } catch (error) {
       response.body.destroy();
-      throw upstreamFailure(error);
+      throw failedRead(error);
     }
   }
+}
+
+function failedRead(error: unknown): ImageError {
+  if (error instanceof TooLargeError) return upstreamFailure(error, 413);
+  if (isTimeout(error)) return upstreamTimeout(error);
+  return upstreamFailure(error);
+}
+
+function isTimeout(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as NodeJS.ErrnoException).code;
+  return error.name === "TimeoutError" || (code !== undefined && TIMEOUT_CODES.has(code));
+}
+
+function answeredStatus(upstream: number): number {
+  return upstream >= 400 && upstream <= 599 ? upstream : 500;
 }
 
 function resolveHop(location: string, from: URL, config: CompiledImageConfig): URL {

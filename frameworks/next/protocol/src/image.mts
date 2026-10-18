@@ -52,6 +52,8 @@ export interface RouteImage {
 
 export const IMAGE_PASSTHROUGH = "x-ocel-image-passthrough";
 
+export const IMAGE_ERROR = "x-ocel-image-error";
+
 export const UPSTREAM_TIMEOUT_MS = 7_000;
 
 export const UPSTREAM_INVALID_MESSAGE = '"url" parameter is valid but upstream response is invalid';

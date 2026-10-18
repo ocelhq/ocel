@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
-import { CONTROL_HEADERS, type RouteDeps, serve } from "@framework/next-router";
+import { type RouteDeps, serve } from "@framework/next-router";
 import type { AssetBucket, AssetStoreDeps } from "@framework/next-router/assets";
 import { functionUrlImageOrigin, type ImageOrigin } from "@framework/next-router/image";
 import type { OriginThrottle } from "@framework/next-router/retry";
@@ -8,19 +8,6 @@ import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import { type Invoke, invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { withRouterHeader } from "@framework/node-runtime/router-header";
 import { uncachedResponses } from "./uncached-responses.mjs";
-
-const NEXT_INTERNAL_PREFIX = "x-middleware-";
-
-export function withoutClientControl(headers: Headers): Headers {
-  const kept = new Headers(headers);
-  for (const name of [...headers.keys()]) {
-    const lower = name.toLowerCase();
-    if (lower.startsWith(NEXT_INTERNAL_PREFIX) || CONTROL_HEADERS.includes(lower)) {
-      kept.delete(name);
-    }
-  }
-  return kept;
-}
 
 export interface DispatchHost {
   manifest: NextRouteTable;
@@ -76,10 +63,7 @@ export async function dispatchRequest(
   host: DispatchHost,
   waitUntil: (promise: Promise<unknown>) => void,
 ): Promise<Response> {
-  const stripped = new Request(request, {
-    headers: withoutClientControl(request.headers),
-  });
-  return withRouterHeader(await serve(stripped, newRouteDeps(host, waitUntil)), host.routerKind);
+  return withRouterHeader(await serve(request, newRouteDeps(host, waitUntil)), host.routerKind);
 }
 
 export function newDispatchInvoke(host: DispatchHost): Invoke {

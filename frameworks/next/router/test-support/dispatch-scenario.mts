@@ -1,8 +1,20 @@
-import type { NextRouteTable } from "@framework/next-protocol/route-table";
+import type { NextRouteTable, RoutingTable } from "@framework/next-protocol/route-table";
 import type { AssetBucket } from "../src/assets.mjs";
 import type { RouteDeps } from "../src/index.mjs";
 
-export type TestManifest = Omit<NextRouteTable, "rootFunction"> & { rootFunction?: string };
+export type TestManifest = Omit<NextRouteTable, "rootFunction" | "routes"> & {
+  rootFunction?: string;
+  routes?: Partial<RoutingTable>;
+};
+
+const noRoutes: RoutingTable = {
+  beforeMiddleware: [],
+  beforeFiles: [],
+  afterFiles: [],
+  dynamicRoutes: [],
+  onMatch: [],
+  fallback: [],
+};
 
 export type TestRouteDeps = Omit<Partial<RouteDeps>, "manifest"> & {
   manifest?: TestManifest;
@@ -58,9 +70,9 @@ export function baseDeps(overrides: TestRouteDeps = {}): RouteDeps {
       buildId: "test",
       basePath: "",
       pathnames: [],
-      routes: {},
       dispatch: {},
       ...manifest,
+      routes: { ...noRoutes, ...manifest?.routes },
     },
   };
 }

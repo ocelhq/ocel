@@ -1,83 +1,54 @@
-import { createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type http from "node:http";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import type { LauncherConfig } from "@framework/next-protocol/launcher";
 
-const MAIN_KEY_PREFIX = "v4";
-const PRERENDER_REVALIDATE_HEADER = "x-prerender-revalidate";
+const incrementalCacheModule = "next/dist/server/lib/incremental-cache/index.js";
 
-class PagesRuntimeIncrementalCache {
-  readonly isOnDemandRevalidate: boolean;
-  private readonly handler: any;
-  private readonly fetchCacheKeyPrefix: string;
-
-  constructor(opts: {
-    handler: any;
-    fetchCacheKeyPrefix: string;
-    previewModeId: string | undefined;
-    requestHeaders: http.IncomingHttpHeaders;
-  }) {
-    this.handler = opts.handler;
-    this.fetchCacheKeyPrefix = opts.fetchCacheKeyPrefix;
-    this.isOnDemandRevalidate =
-      opts.previewModeId !== undefined &&
-      opts.requestHeaders[PRERENDER_REVALIDATE_HEADER] === opts.previewModeId;
-  }
-
-  async generateSimpleCacheKey(input: string): Promise<string> {
-    const cacheString = JSON.stringify([MAIN_KEY_PREFIX, this.fetchCacheKeyPrefix, input]);
-    return createHash("sha256").update(cacheString).digest("hex");
-  }
-
-  async get(cacheKey: string, ctx: any): Promise<any> {
-    if (ctx?.kind !== "FETCH") return null;
-    const entry = await this.handler.get(cacheKey, ctx);
-    if (entry?.value?.kind !== "FETCH") return null;
-
-    const revalidate = ctx.revalidate || entry.value.revalidate;
-    const age = (Date.now() - (entry.lastModified || 0)) / 1000;
-    return {
-      isStale: age > revalidate,
-      value: { kind: "FETCH", data: entry.value.data, revalidate },
-    };
-  }
-
-  async set(cacheKey: string, data: any, ctx: any): Promise<void> {
-    if (data?.kind !== "FETCH") return;
-    await this.handler.set(cacheKey, data, ctx);
-  }
-
-  async revalidateTag(tags: string | string[], durations?: { expire?: number }): Promise<void> {
-    await this.handler.revalidateTag(tags, durations);
-  }
-
-  resetRequestCache(): void {
-    this.handler.resetRequestCache?.();
-  }
+interface IncrementalCacheOptions {
+  dev: boolean;
+  minimalMode: boolean;
+  flushToDisk: boolean | undefined;
+  serverDistDir: string;
+  requestHeaders: http.IncomingHttpHeaders;
+  maxMemoryCacheSize: number | undefined;
+  fetchCacheKeyPrefix: string;
+  getPrerenderManifest: () => unknown;
+  CurCacheHandler: new (opts: never) => unknown;
 }
+
+type IncrementalCache = new (opts: IncrementalCacheOptions) => unknown;
 
 export type IncrementalCacheFactory = (req: http.IncomingMessage) => unknown;
 
 export function newIncrementalCacheFactory(
   config: LauncherConfig,
   projectDir: string,
-  CacheHandler: new (opts: any) => any,
+  CacheHandler: new (opts: never) => unknown,
 ): IncrementalCacheFactory {
   const { fetchCacheKeyPrefix, isrFlushToDisk, cacheMaxMemorySize, previewModeId } = config.cache;
+  const { IncrementalCache } = createRequire(join(projectDir, "package.json"))(
+    incrementalCacheModule,
+  ) as { IncrementalCache: IncrementalCache };
+  const prerenderManifest = {
+    version: 4,
+    routes: {},
+    dynamicRoutes: {},
+    notFoundRoutes: [],
+    preview: { previewModeId: previewModeId ?? randomBytes(32).toString("hex") },
+  };
 
   return (req) =>
-    new PagesRuntimeIncrementalCache({
-      handler: new CacheHandler({
-        dev: false,
-        flushToDisk: isrFlushToDisk,
-        serverDistDir: join(projectDir, config.distDir, "server"),
-        revalidatedTags: [],
-        maxMemoryCacheSize: cacheMaxMemorySize,
-        _requestHeaders: req.headers,
-        fetchCacheKeyPrefix,
-      }),
-      fetchCacheKeyPrefix,
-      previewModeId,
+    new IncrementalCache({
+      dev: false,
+      minimalMode: false,
+      flushToDisk: isrFlushToDisk,
+      serverDistDir: join(projectDir, config.distDir, "server"),
       requestHeaders: req.headers,
+      maxMemoryCacheSize: cacheMaxMemorySize,
+      fetchCacheKeyPrefix,
+      getPrerenderManifest: () => prerenderManifest,
+      CurCacheHandler: CacheHandler,
     });
 }

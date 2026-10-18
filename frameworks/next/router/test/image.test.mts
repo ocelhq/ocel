@@ -1,10 +1,15 @@
-import type { ImageConfig, ImageOriginRequest } from "@framework/next-protocol/image";
+import {
+  IMAGE_ERROR,
+  type ImageConfig,
+  type ImageOriginRequest,
+} from "@framework/next-protocol/image";
 import { describe, expect, it, vi } from "vitest";
 import fixtures from "../fixtures/image-conformance.json" with { type: "json" };
 import {
   deploymentImageOrigin,
   getSupportedMimeType,
   isImageRequest,
+  servedImage,
   serveImage,
   validateImageRequest,
 } from "../src/image.mjs";
@@ -414,10 +419,49 @@ describe("deploymentImageOrigin", () => {
     );
   });
 
+  it("relays every status the optimizer marks as its own", async () => {
+    for (const status of [413, 504, 508, 404]) {
+      const send = vi.fn(
+        async () =>
+          new Response(`optimizer ${status}`, { status, headers: { [IMAGE_ERROR]: "1" } }),
+      );
+      const response = await deploymentImageOrigin(
+        "https://r1-x.o.example.com",
+        send as unknown as typeof fetch,
+      )!(payload);
+      expect(response.status).toBe(status);
+      expect(await response.text()).toBe(`optimizer ${status}`);
+    }
+  });
+
+  it("discards a status the optimizer did not mark as its own", async () => {
+    for (const status of [413, 504]) {
+      const send = vi.fn(async () => new Response(`gateway ${status}`, { status }));
+      const response = await deploymentImageOrigin(
+        "https://r1-x.o.example.com",
+        send as unknown as typeof fetch,
+      )!(payload);
+      expect(response.status).toBe(502);
+      expect(await response.text()).not.toContain("gateway");
+    }
+  });
+
   it("has no deployment image origin for a record without an entry url", () => {
     expect(deploymentImageOrigin(undefined, fetch)).toBeUndefined();
     expect(deploymentImageOrigin("", fetch)).toBeUndefined();
     expect(deploymentImageOrigin("not a url", fetch)).toBeUndefined();
+  });
+});
+
+describe("servedImage", () => {
+  it("keeps the optimizer's error marker from the client", async () => {
+    const response = servedImage(
+      new Response("timed out", { status: 504, headers: { [IMAGE_ERROR]: "1" } }),
+      60,
+    );
+    expect(response.status).toBe(504);
+    expect(response.headers.has(IMAGE_ERROR)).toBe(false);
+    expect(await response.text()).toBe("timed out");
   });
 });
 

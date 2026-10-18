@@ -65,7 +65,7 @@ const launcherModule = `module.exports = {
       res.end(JSON.stringify({ error: "incrementalCache missing" }));
       return;
     }
-    const key = await cache.generateSimpleCacheKey("launcher-invocation");
+    const key = await cache.generateCacheKey("launcher-invocation");
     const hit = await cache.get(key, { kind: "FETCH", revalidate: 60 });
     if (hit && hit.value && !hit.isStale) {
       res.end(JSON.stringify({ from: "cache", random: JSON.parse(hit.value.data.body) }));

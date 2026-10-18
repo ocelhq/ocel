@@ -8,7 +8,6 @@ import {
   parseStaticRules,
   readDispatchHost,
   siblingFunctionUrls,
-  withoutClientControl,
 } from "../src/dispatch-host.mjs";
 
 const LOCAL_BUNDLE = "local-bundle";
@@ -208,18 +207,6 @@ test("a route that names no entry leaves the client unable to name one", async (
   await serving("/keyless", forged);
 
   expect(seen[0]!["x-ocel-entry"]).toBeUndefined();
-});
-
-test("withoutClientControl keeps everything the app is allowed to see", () => {
-  const kept = withoutClientControl(
-    new Headers({ ...forged, cookie: "sid=1", "x-middleware-skip": "1" }),
-  );
-
-  expect([...kept.keys()].sort()).toEqual(["cookie", "x-keep", "x-ocel-probe"]);
-  expect(kept.get("x-ocel-entry")).toBeNull();
-  expect(kept.get("next-resume")).toBeNull();
-  expect(kept.get("x-middleware-skip")).toBeNull();
-  expect(kept.get("x-ocel-probe")).toBe("probe-value");
 });
 
 test("only a deploy that declared origin dispatch hosts it", () => {

@@ -1,4 +1,5 @@
 import {
+  IMAGE_ERROR,
   IMAGE_PASSTHROUGH,
   type ImageConfig,
   type ImageOriginRequest,
@@ -322,7 +323,7 @@ export function withServedCacheControl(response: Response, context: ImageCacheCo
 const IMMUTABLE = "public, max-age=315360000, immutable";
 
 export function servedImage(response: Response, minimumCacheTTL: number): Response {
-  if (response.status !== 200) return response;
+  if (response.status !== 200) return withoutErrorMarker(response);
 
   const passthrough = response.headers.has(IMAGE_PASSTHROUGH);
   const upstream = passthrough
@@ -336,6 +337,17 @@ export function servedImage(response: Response, minimumCacheTTL: number): Respon
   headers.set("cache-control", `public, max-age=${ttl}, must-revalidate`);
   headers.set(NEXT_CACHE_STATUS, "MISS");
 
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function withoutErrorMarker(response: Response): Response {
+  if (!response.headers.has(IMAGE_ERROR)) return response;
+  const headers = new Headers(response.headers);
+  headers.delete(IMAGE_ERROR);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -428,9 +440,10 @@ const OPTIMIZER_STATUSES = new Set([400, 500, 502]);
 
 function relayed(response: Response): Response {
   const own =
-    response.status === 200
+    response.headers.has(IMAGE_ERROR) ||
+    (response.status === 200
       ? isImage(response.headers.get("content-type"))
-      : OPTIMIZER_STATUSES.has(response.status);
+      : OPTIMIZER_STATUSES.has(response.status));
   if (own) return response;
   response.body?.cancel().catch(() => {});
   return new Response("The image optimizer could not be reached.", {

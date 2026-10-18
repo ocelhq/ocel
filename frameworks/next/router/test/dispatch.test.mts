@@ -7,7 +7,8 @@ import type { Route } from "@next/routing";
 import { EMPTY_BODY_HEADER } from "@platform/edge-contract/empty-body";
 import { describe, expect, it } from "vitest";
 
-import { dispatchResult, type RouteDeps, ruleDestinationPathname, serve } from "../src/index.mjs";
+import { dispatchResult, type RouteDeps, serve } from "../src/index.mjs";
+import { ruleDestinationPathname } from "../src/route-result.mjs";
 import { assetStoreServing, baseDeps } from "../test-support/dispatch-scenario.mjs";
 
 v8.setFlagsFromString("--expose-gc");
@@ -642,6 +643,55 @@ describe("dispatchResult", () => {
 
     expect(captured?.headers.get("x-forwarded-host")).toBe("cachelab.ocel.dev");
     expect(captured?.headers.get("x-forwarded-proto")).toBe("https");
+  });
+
+  it("serve drops every x-middleware-* header a client sends before it routes", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/api/documents"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: {
+          "/api/documents": {
+            kind: "function",
+            id: "/api/documents",
+            entryKey: "/api/documents",
+          },
+        },
+      },
+      functionUrls: { "/api/documents": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await serve(
+      new Request("https://cachelab.ocel.dev/api/documents", {
+        headers: {
+          "x-middleware-subrequest": "middleware:middleware:middleware",
+          "x-middleware-prefetch": "1",
+          "x-ocel-entry": "/admin",
+          "x-ocel-probe": "probe-value",
+        },
+      }),
+      deps,
+    );
+
+    expect(captured).toBeDefined();
+    expect(captured?.headers.get("x-middleware-subrequest")).toBeNull();
+    expect(captured?.headers.get("x-middleware-prefetch")).toBeNull();
+    expect(captured?.headers.get("x-ocel-entry")).toBe("/api/documents");
+    expect(captured?.headers.get("x-ocel-probe")).toBe("probe-value");
   });
 
   it("drops the control headers a client sends and forwards every other x-ocel-* header", async () => {
@@ -1471,7 +1521,6 @@ describe("the service-worker chunk", () => {
         routes: {
           beforeMiddleware: [
             {
-              source: `${basePath}/_next/static/service-worker/:path*`,
               sourceRegex: `^${basePath}/_next/static/service-worker(?:/(.*))?(?:/)?$`,
               headers: { "Service-Worker-Allowed": basePath || "/" },
               priority: true,

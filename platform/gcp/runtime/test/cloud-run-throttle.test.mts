@@ -10,7 +10,14 @@ const manifest: NextRouteTable = {
   buildId: "b1",
   basePath: "",
   pathnames: [],
-  routes: {},
+  routes: {
+    beforeMiddleware: [],
+    beforeFiles: [],
+    afterFiles: [],
+    dynamicRoutes: [],
+    onMatch: [],
+    fallback: [],
+  },
   dispatch: {},
 };
 
