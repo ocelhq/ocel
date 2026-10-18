@@ -1,6 +1,6 @@
 use crate::attribute::Entry;
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 
 pub(crate) fn parse_duration(entry: &Entry) -> syn::Result<TokenStream> {
     let (seconds, nanos) = read_duration(entry)?;
@@ -88,11 +88,17 @@ pub(crate) fn parse_retry(entry: &Entry, krate: &syn::Path) -> syn::Result<Token
             }
         }
     }
+    let v1 = quote_resources(krate);
+    let (min_delay, max_delay) = (
+        quote_proto_duration(min_delay, krate),
+        quote_proto_duration(max_delay, krate),
+    );
     Ok(quote! {
-        ::core::option::Option::Some(#krate::Retry {
+        ::core::convert::From::from(#v1::RetryPolicy {
             max_attempts: #max_attempts,
             min_delay: #min_delay,
             max_delay: #max_delay,
+            ..::core::default::Default::default()
         })
     })
 }
@@ -124,18 +130,24 @@ pub(crate) fn parse_batch(entry: &Entry, krate: &syn::Path) -> syn::Result<Token
 }
 
 pub(crate) fn quote_batch(size: i32, timeout: TokenStream, krate: &syn::Path) -> TokenStream {
+    let v1 = quote_resources(krate);
+    let timeout = quote_proto_duration(timeout, krate);
     quote! {
-        ::core::option::Option::Some(#krate::Batch { size: #size, timeout: #timeout })
+        ::core::convert::From::from(#v1::BatchPolicy {
+            size: #size,
+            timeout: #timeout,
+            ..::core::default::Default::default()
+        })
     }
 }
 
 pub(crate) fn parse_lanes(entry: &Entry, krate: &syn::Path) -> syn::Result<TokenStream> {
     let mut lanes = Vec::new();
     for lane in entry.read_list()? {
-        lanes.push(match lane.as_str() {
-            "high" => quote!(#krate::Lane::High),
-            "default" => quote!(#krate::Lane::Default),
-            "low" => quote!(#krate::Lane::Low),
+        let wire = match lane.as_str() {
+            "high" => format_ident!("LANE_HIGH"),
+            "default" => format_ident!("LANE_DEFAULT"),
+            "low" => format_ident!("LANE_LOW"),
             other => {
                 return Err(syn::Error::new(
                     entry.span(),
@@ -144,13 +156,54 @@ pub(crate) fn parse_lanes(entry: &Entry, krate: &syn::Path) -> syn::Result<Token
                 ),
                 ))
             }
+        };
+        lanes.push(quote! {
+            ::core::convert::From::from(#krate::proto::app::topic::v1::Lane::#wire)
         });
     }
-    Ok(quote!(&[#(#lanes),*]))
+    Ok(quote!(::std::vec![#(#lanes),*]))
 }
 
 pub(crate) fn quote_none() -> TokenStream {
     quote!(::core::option::Option::None)
+}
+
+pub(crate) fn quote_unset() -> TokenStream {
+    quote!(::core::default::Default::default())
+}
+
+pub(crate) fn quote_resources(krate: &syn::Path) -> TokenStream {
+    quote!(#krate::proto::app::resources::v1)
+}
+
+pub(crate) fn quote_proto_duration(duration: TokenStream, krate: &syn::Path) -> TokenStream {
+    quote!(::core::convert::From::from(#krate::proto_duration(#duration)))
+}
+
+pub(crate) fn quote_declared(
+    krate: &syn::Path,
+    resource_type: &str,
+    name: &str,
+    config: TokenStream,
+    (file, line): (&str, u32),
+) -> TokenStream {
+    let v1 = quote_resources(krate);
+    let resource_type = format_ident!("RESOURCE_TYPE_{}", resource_type);
+    quote! {
+        #krate::DeclaredResource {
+            request: #v1::DeclareRequest {
+                resource: ::core::convert::From::from(#v1::ResourceIdentifier {
+                    r#type: ::core::convert::From::from(#v1::ResourceType::#resource_type),
+                    name: ::std::string::String::from(#name),
+                    ..::core::default::Default::default()
+                }),
+                config: ::core::option::Option::Some(::core::convert::From::from(#config)),
+                ..::core::default::Default::default()
+            },
+            file: #file,
+            line: #line,
+        }
+    }
 }
 
 pub(crate) fn refuse_unknown_attribute(

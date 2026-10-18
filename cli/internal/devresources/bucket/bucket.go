@@ -319,11 +319,6 @@ func (c *Backend) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipa
 	return service.AbortMultipart(ctx, req)
 }
 
-func (c *Backend) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
-	path, handler := bucketv1connect.NewBucketServiceHandler(c, options...)
-	mux.Handle(path, guard(handler))
-}
-
 func (c *Backend) Close(ctx context.Context, stopContainers bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

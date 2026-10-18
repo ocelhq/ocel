@@ -160,6 +160,52 @@ afterEach(async () => {
   await gateway.close();
 });
 
+describe("a realtime client on the gateway's connection limits", () => {
+  it("reconnects with a fresh connect token when the gateway closes its socket at the token's expiry, and keeps its subscription", async () => {
+    await replaceGateway({ connectTokenLifetimeMs: 150 });
+    const live = createRealtimeClient<typeof rt>({ url: app.url });
+    const received: unknown[] = [];
+    live.subscribe("status", {}, (event) => received.push(event));
+    await waitFor(() => gateway.closedForPolicy.length === 1, "the expiry close");
+    await waitFor(() => gateway.subscribes.length === 2, "the subscribe on the next socket");
+    await waitFor(() => live.state === "connected", "the reconnect");
+
+    await rt.publish("status", { body: { status: "after" } });
+
+    await waitFor(() => received.length === 1, "the event on the new socket");
+    expect(new Set(gateway.connectTokens).size).toBe(gateway.connectTokens.length);
+    live.close();
+  });
+
+  it("never opens a second socket on a connect token the first still holds", async () => {
+    const live = createRealtimeClient<typeof rt>({ url: app.url });
+    live.subscribe("status", {}, () => {});
+    await waitFor(() => gateway.subscribes.length === 1, "the subscribe");
+
+    gateway.dropSockets();
+    await waitFor(() => gateway.subscribes.length === 2, "the subscribe on the next socket");
+
+    expect(gateway.connectTokens).toHaveLength(2);
+    expect(gateway.connectTokens[0]).not.toBe(gateway.connectTokens[1]);
+    live.close();
+  });
+
+  it("keeps its socket through the gateway's pings", async () => {
+    await replaceGateway({ pingIntervalMs: 20, pongTimeoutMs: 60 });
+    const live = createRealtimeClient<typeof rt>({ url: app.url });
+    const received: unknown[] = [];
+    live.subscribe("status", {}, (event) => received.push(event));
+    await waitFor(() => gateway.subscribes.length === 1, "the subscribe");
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await rt.publish("status", { body: { status: "still here" } });
+
+    await waitFor(() => received.length === 1, "the event");
+    expect(gateway.sockets).toHaveLength(1);
+    live.close();
+  });
+});
+
 describe("a realtime client subscribing", () => {
   it("receives each event the server publishes on a public channel, with its envelope's meta", async () => {
     const live = createRealtimeClient<typeof rt>({ url: app.url });

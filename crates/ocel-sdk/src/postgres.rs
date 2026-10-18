@@ -3,8 +3,6 @@ use crate::declare::is_discovering;
 use crate::proto::common::bindings::v1::{PostgresProperties, PostgresTlsMode};
 use crate::Error;
 
-pub(crate) const KIND: &str = "postgres";
-
 /// A postgres database an app declares and reads its binding from. A field of this type in a
 /// struct deriving [`Resources`](macro@crate::Resources) is the declaration.
 #[derive(Clone)]

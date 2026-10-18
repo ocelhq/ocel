@@ -61,6 +61,8 @@ export interface FakeGateway {
   url: string;
   published: PublishedEvent[];
   sockets: WebSocket[];
+  connectTokens: string[];
+  closedForPolicy: string[];
   subscribes: { id: string; channel: string }[];
   dropSockets(): void;
   close(): Promise<void>;
@@ -104,6 +106,14 @@ export interface FakeGatewayOptions {
   status?: number;
   acknowledgingConnections?: boolean;
   answeringSubscribes?: boolean;
+  /**
+   * Closes each socket for policy this long after it opened, as the gateway does when the
+   * connect token expires, without waiting out a real token lifetime.
+   */
+  connectTokenLifetimeMs?: number;
+  /** Pings each socket this often, and drops one whose pong is late by `pongTimeoutMs`. */
+  pingIntervalMs?: number;
+  pongTimeoutMs?: number;
 }
 
 /**
@@ -152,9 +162,15 @@ export async function serveFakeGateway({
   status = 202,
   acknowledgingConnections = true,
   answeringSubscribes = true,
+  connectTokenLifetimeMs,
+  pingIntervalMs,
+  pongTimeoutMs = 1_000,
 }: FakeGatewayOptions = {}): Promise<FakeGateway> {
   const published: PublishedEvent[] = [];
   const sockets: WebSocket[] = [];
+  const connectTokens: string[] = [];
+  const closedForPolicy: string[] = [];
+  const heldTokens = new Set<string>();
   const subscribes: { id: string; channel: string }[] = [];
   const live = new Map<WebSocket, Map<string, string>>();
   const relay = (channel: string, envelope: string) => {
@@ -188,7 +204,11 @@ export async function serveFakeGateway({
     const offered = new Set(
       (req.headers["sec-websocket-protocol"] ?? "").split(",").map((protocol) => protocol.trim()),
     );
-    const refusal = findRefusal(readConnectToken(offered), host, "connect", "/app");
+    const connectToken = readConnectToken(offered) ?? "";
+    connectTokens.push(connectToken);
+    const refusal = heldTokens.has(connectToken)
+      ? "the connect token already holds its limit of 1 socket; ask the app's realtime handler for another"
+      : findRefusal(connectToken, host, "connect", "/app");
     if (refusal) {
       socket.send(
         JSON.stringify({
@@ -199,9 +219,38 @@ export async function serveFakeGateway({
       socket.close(1008, "unauthorized");
       return;
     }
+    heldTokens.add(connectToken);
+    const closeForPolicy = (reason: string) => {
+      closedForPolicy.push(reason);
+      socket.close(1008, reason);
+    };
+    const expiresInMs =
+      connectTokenLifetimeMs ?? Number(readClaims(connectToken).exp) * 1_000 - Date.now();
+    const expiry = setTimeout(
+      () => closeForPolicy("the connection's token has expired"),
+      expiresInMs,
+    );
+    let pongDeadline: ReturnType<typeof setTimeout> | undefined;
+    const pinging =
+      pingIntervalMs === undefined
+        ? undefined
+        : setInterval(() => {
+            socket.ping();
+            pongDeadline ??= setTimeout(() => socket.terminate(), pongTimeoutMs);
+          }, pingIntervalMs);
+    socket.on("pong", () => {
+      clearTimeout(pongDeadline);
+      pongDeadline = undefined;
+    });
     const subscriptions = new Map<string, string>();
     live.set(socket, subscriptions);
-    socket.on("close", () => live.delete(socket));
+    socket.on("close", () => {
+      live.delete(socket);
+      heldTokens.delete(connectToken);
+      clearTimeout(expiry);
+      clearTimeout(pongDeadline);
+      clearInterval(pinging);
+    });
     socket.on("message", (raw) => {
       const frame = JSON.parse(raw.toString());
       const reply = (answer: unknown) => socket.send(JSON.stringify(answer));
@@ -238,6 +287,8 @@ export async function serveFakeGateway({
     url,
     published,
     sockets,
+    connectTokens,
+    closedForPolicy,
     subscribes,
     dropSockets() {
       for (const socket of live.keys()) socket.terminate();

@@ -4,13 +4,7 @@ import {
   VariableClass as WireClass,
 } from "../gen/proto/app/resources/v1/variables_pb.js";
 import { rpc } from "../runtime/rpc.js";
-import {
-  complaint,
-  type FlatDefinitions,
-  isRequired,
-  type VariableClass,
-  type VariableDefinition,
-} from "./definition.js";
+import { complaint, type FlatDefinitions, isRequired, type VariableClass } from "./definition.js";
 import { parse } from "./standard.js";
 
 const WIRE_CLASS: Record<VariableClass, WireClass> = {
@@ -47,7 +41,7 @@ export async function declareEnv(definitions: FlatDefinitions, source: string): 
     groups,
   });
 
-  const problems = validate(definitions, cells);
+  const problems = findInvalidValues(definitions, cells);
   if (problems.length > 0) {
     await rpc.resource.reportEnvProblems({ problems });
   }
@@ -60,29 +54,17 @@ interface ReportedProblem {
   detail: string;
 }
 
-function validate(definitions: FlatDefinitions, cells: readonly VariableCell[]): ReportedProblem[] {
+function findInvalidValues(
+  definitions: FlatDefinitions,
+  cells: readonly VariableCell[],
+): ReportedProblem[] {
   const problems: ReportedProblem[] = [];
 
   for (const [key, definition] of Object.entries(definitions)) {
-    const stored = cells.filter((c) => c.key === key);
-
-    if (isRequired(definition)) {
-      for (const folder of requiredFolders(definition)) {
-        if (
-          definition.groupOptional &&
-          definition.group &&
-          !switchedOn(definitions, cells, definition.group, folder)
-        )
-          continue;
-        if (!stored.some((c) => c.folder === folder)) {
-          problems.push(problem(key, folder, VariableProblem_Kind.MISSING, ""));
-        }
-      }
-    }
-
     if (definition.class === "secret" || !definition.schema) continue;
 
-    for (const cell of stored) {
+    for (const cell of cells) {
+      if (cell.key !== key) continue;
       const result = parse(definition.schema, cell.value);
       if (!result.ok) {
         problems.push(
@@ -98,35 +80,6 @@ function validate(definitions: FlatDefinitions, cells: readonly VariableCell[]):
   }
 
   return problems;
-}
-
-function switchedOn(
-  definitions: FlatDefinitions,
-  cells: readonly VariableCell[],
-  group: string,
-  folder: string,
-): boolean {
-  return Object.entries(definitions).some(
-    ([key, definition]) => definition.group === group && hasCell(cells, key, definition, folder),
-  );
-}
-
-function hasCell(
-  cells: readonly VariableCell[],
-  key: string,
-  definition: VariableDefinition,
-  folder: string,
-): boolean {
-  const at = (where: string) => cells.some((cell) => cell.key === key && cell.folder === where);
-  const scope = definition.folders ?? [];
-  if (scope.length > 0) {
-    return folder !== "" && scope.includes(folder) && at(folder);
-  }
-  return (folder !== "" && at(folder)) || at("");
-}
-
-function requiredFolders(definition: VariableDefinition): readonly string[] {
-  return definition.folders?.length ? definition.folders : [""];
 }
 
 function problem(

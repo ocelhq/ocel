@@ -82,18 +82,20 @@ def test_a_store_leaves_version_eviction_and_memory_to_the_provider(collector):
     )
 
 
-def test_two_overlapping_entries_are_refused_naming_both_lines(collector):
+def test_entries_the_cli_refuses_reach_the_dev_server_as_declared(collector):
     cache = kv("overlap")
-    line = sys._getframe().f_lineno
     cache.text("session", "session/:id")
-    with pytest.raises(ValueError) as raised:
-        cache.text("current", "session/current")
+    cache.text("current", "session/current")
+    cache.text("current", "current")
+    cache.text("client", "clients/:id")
 
-    message = str(raised.value)
-    for said in ['"current"', '"session/current"', "overlaps", '"session/:id"', '"session"']:
-        assert said in message
-    assert f"test_kv.py:{line + 1}" in message
-    assert f"test_kv.py:{line + 3}" in message
+    entries = collector.declares[-1][2].config.value.entries
+    assert [(e.name, e.pattern) for e in entries] == [
+        ("session", "session/:id"),
+        ("current", "session/current"),
+        ("current", "current"),
+        ("client", "clients/:id"),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -102,7 +104,6 @@ def test_two_overlapping_entries_are_refused_naming_both_lines(collector):
         ("session", "session/{id}", "hash tag"),
         ("pair", "a/:id/:id", "twice"),
         ("trailing", "a/", "empty segment"),
-        ("client", "clients/:id", "reserved"),
         ("expiring", "expiring/:ttl", "ttl"),
         ("newline", "session\n", "no literal"),
         ("newline", "session/:id\n", "no parameter"),
@@ -111,26 +112,6 @@ def test_two_overlapping_entries_are_refused_naming_both_lines(collector):
 def test_a_malformed_entry_is_refused_saying_what_is_wrong(name, pattern, says):
     with pytest.raises(ValueError, match=says):
         kv("malformed").text(name, pattern)
-
-
-@pytest.mark.parametrize(
-    "name", ["", "_session", "1session", "user-sessions", "sessión", "session\n", "a" * 64]
-)
-def test_an_entry_name_no_sdk_can_hold_is_refused(name):
-    with pytest.raises(ValueError, match="is no name every SDK can hold"):
-        kv("names").text(name, "session")
-
-
-def test_an_entry_name_of_63_letters_digits_and_underscores_is_held():
-    kv("long").text("S" + "a_9" * 20 + "zz", "session")
-
-
-def test_an_entry_name_declared_twice_is_refused():
-    cache = kv("twice")
-    cache.text("session", "session/:id")
-
-    with pytest.raises(ValueError, match='"session" is declared already'):
-        cache.text("session", "sessions/:id")
 
 
 @pytest.mark.parametrize("ttl", [10, "10", "10s\n", "١٠s"])

@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -28,9 +27,6 @@ const (
 
 var (
 	keyPattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
-
-	ownerMu sync.Mutex
-	owner   = map[string]string{}
 )
 
 // A DefinitionError is what [Define] panics with when a struct declares a
@@ -234,7 +230,7 @@ func define[T any]() (T, error) {
 	var out T
 	_, file, line, _ := runtime.Caller(2)
 
-	decl, err := definitions(reflect.TypeFor[T](), file)
+	decl, err := definitions(reflect.TypeFor[T]())
 	if err != nil {
 		return out, err
 	}
@@ -252,13 +248,10 @@ func define[T any]() (T, error) {
 	return out, nil
 }
 
-func definitions(t reflect.Type, source string) (declaration, error) {
+func definitions(t reflect.Type) (declaration, error) {
 	if t.Kind() != reflect.Struct {
 		return declaration{}, &DefinitionError{Detail: fmt.Sprintf("env.Define wants a struct type, and %s is a %s.", t, t.Kind())}
 	}
-
-	ownerMu.Lock()
-	defer ownerMu.Unlock()
 
 	var decl declaration
 	for i := range t.NumField() {
@@ -295,12 +288,6 @@ func definitions(t reflect.Type, source string) (declaration, error) {
 		if slices.ContainsFunc(decl.variables, func(seen variable) bool { return seen.key == v.key && !slices.Equal(seen.index, v.index) }) {
 			return declaration{}, &DefinitionError{Key: v.key, Detail: "is declared by two fields of the same struct. A key is declared by exactly one field."}
 		}
-		if claimed, ok := owner[v.key]; ok && claimed != source {
-			return declaration{}, &DefinitionError{Key: v.key, Detail: fmt.Sprintf("is already declared in %s. A key may be defined by exactly one file.", claimed)}
-		}
-	}
-	for _, v := range decl.variables {
-		owner[v.key] = source
 	}
 	return decl, nil
 }
@@ -523,71 +510,29 @@ func declareEnv(decl declaration, source string) error {
 	if err != nil {
 		return err
 	}
-	problems := validate(decl, res.GetCells())
+	problems := findInvalidValues(decl, res.GetCells())
 	if len(problems) == 0 {
 		return nil
 	}
 	return binding.ReportEnvProblems(&resourcesv1.ReportEnvProblemsRequest{Problems: problems})
 }
 
-func validate(decl declaration, cells []*resourcesv1.VariableCell) []*resourcesv1.VariableProblem {
+func findInvalidValues(decl declaration, cells []*resourcesv1.VariableCell) []*resourcesv1.VariableProblem {
 	var problems []*resourcesv1.VariableProblem
 	for _, v := range decl.variables {
-		stored := slices.DeleteFunc(slices.Clone(cells), func(c *resourcesv1.VariableCell) bool { return c.GetKey() != v.key })
-
-		if v.required() {
-			for _, folder := range requiredFolders(v) {
-				if g := decl.group(v.group); g != nil && !g.required && !switchedOn(decl, *g, cells, folder) {
-					continue
-				}
-				if !slices.ContainsFunc(stored, func(c *resourcesv1.VariableCell) bool { return c.GetFolder() == folder }) {
-					problems = append(problems, problem(v.key, folder, resourcesv1.VariableProblem_KIND_MISSING, ""))
-				}
-			}
-		}
-
 		if v.live() || !v.parsed() {
 			continue
 		}
-		for _, cell := range stored {
+		for _, cell := range cells {
+			if cell.GetKey() != v.key {
+				continue
+			}
 			if _, err := parse(v.field.Type, cell.GetValue()); err != nil {
-				problems = append(problems, problem(v.key, cell.GetFolder(), resourcesv1.VariableProblem_KIND_INVALID, v.complaint(err.Error())))
+				problems = append(problems, &resourcesv1.VariableProblem{Key: v.key, Folder: cell.GetFolder(), Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: v.complaint(err.Error())})
 			}
 		}
 	}
 	return problems
-}
-
-func switchedOn(decl declaration, g group, cells []*resourcesv1.VariableCell, folder string) bool {
-	for _, member := range g.members {
-		if hasCell(decl.variables[member], cells, folder) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasCell(v variable, cells []*resourcesv1.VariableCell, folder string) bool {
-	at := func(where string) bool {
-		return slices.ContainsFunc(cells, func(c *resourcesv1.VariableCell) bool {
-			return c.GetKey() == v.key && c.GetFolder() == where
-		})
-	}
-	if len(v.folders) > 0 {
-		return folder != "" && slices.Contains(v.folders, folder) && at(folder)
-	}
-	return (folder != "" && at(folder)) || at("")
-}
-
-func requiredFolders(v variable) []string {
-	if len(v.folders) > 0 {
-		return v.folders
-	}
-	return []string{""}
-}
-
-func problem(key, folder string, kind resourcesv1.VariableProblem_Kind, detail string) *resourcesv1.VariableProblem {
-	return &resourcesv1.VariableProblem{Key: key, Folder: folder, Kind: kind, Detail: detail}
 }
 
 func resolve(target reflect.Value, decl declaration) error {

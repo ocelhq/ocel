@@ -22,7 +22,7 @@ struct Shared {
 
 #[test]
 fn a_group_its_members_share_a_folder_declares_every_member() {
-    let (url, requests) = collector_with_cells(2, vec![cell("SHARED_BOTH", "/api", "b")]);
+    let (url, requests) = collector_with_cells(1, vec![cell("SHARED_BOTH", "/api", "b")]);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);
     std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);
@@ -32,14 +32,9 @@ fn a_group_its_members_share_a_folder_declares_every_member() {
         "discover ran the app on"
     );
 
-    let received: Vec<Received> = (0..2)
-        .map(|_| requests.recv().expect("a request"))
-        .collect();
-    let declared = received
-        .iter()
-        .find(|one| one.path == DECLARE_ENV)
-        .expect("one DeclareEnv request")
-        .declare_env();
+    let received: Received = requests.recv().expect("a request");
+    assert_eq!(received.path, DECLARE_ENV);
+    let declared = received.declare_env();
     let members: Vec<(String, String)> = declared
         .definitions
         .iter()

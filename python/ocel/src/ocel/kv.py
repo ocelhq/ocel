@@ -37,9 +37,7 @@ KeyPart = str | int
 #: A write's ``ttl`` that keeps the key's current TTL.
 KEEP = "keep"
 
-_RESERVED_ENTRY_NAMES = {"client", "connectionString", "connection_string", "then", "constructor"}
 _RESERVED_PARAMETERS = {"ttl"}
-_ENTRY_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,62}")
 _LITERAL = re.compile(r"[A-Za-z0-9._-]+")
 _PARAMETER = re.compile(r":[A-Za-z_][A-Za-z0-9_]*")
 _DURATION = re.compile(r"([0-9]+(?:\.[0-9]+)?)(ms|s|m|h|d)")
@@ -121,14 +119,6 @@ class _Pattern:
     def parameters(self) -> list[str]:
         return [value for kind, value in self.segments if kind == "parameter"]
 
-    def overlaps(self, other: _Pattern) -> bool:
-        if len(self.segments) != len(other.segments):
-            return False
-        return all(
-            mine[0] == "parameter" or theirs[0] == "parameter" or mine[1] == theirs[1]
-            for mine, theirs in zip(self.segments, other.segments, strict=True)
-        )
-
     def build(self, key: Mapping[str, object]) -> str:
         expected = set(self.parameters)
         unknown = set(key) - expected
@@ -203,7 +193,6 @@ class KV:
         self.name = name
         self._config = config
         self._source = source
-        self._entries: list[tuple[str, _Pattern, str]] = []
         self._clients: LoopLocal[Any] = LoopLocal(_close_client)
         self._sync_client = None
 
@@ -219,34 +208,12 @@ class KV:
         )
 
     def _add_entry(self, name: str, pattern: str, shape: KvShape, source: str) -> _Pattern:
-        def refuse(reason: str) -> ValueError:
-            return ValueError(f'kv "{self.name}": entry "{name}" {reason}')
-
-        if not _ENTRY_NAME.fullmatch(name):
-            raise refuse(
-                f"declared at {source} is no name every SDK can hold: it starts with a letter "
-                "and goes on in letters, digits and _, at most 63 characters"
-            )
         try:
             parsed = _Pattern(pattern)
         except ValueError as error:
-            raise refuse(f"declared at {source}: {error}") from None
-        if name in _RESERVED_ENTRY_NAMES:
-            raise refuse("is reserved, since a store already has a member of that name in some SDK")
-        for prior, prior_pattern, prior_source in self._entries:
-            if prior == name:
-                raise ValueError(
-                    f'kv "{self.name}": entry "{name}" is declared already at {prior_source}, '
-                    "and a store names each entry once"
-                )
-            if prior_pattern.overlaps(parsed):
-                raise refuse(
-                    f'declared at {source} has pattern "{pattern}", which overlaps pattern '
-                    f'"{prior_pattern.written}" of entry "{prior}" declared at {prior_source}: '
-                    "some key would match both, so neither entry could tell its keys from the "
-                    "other's"
-                )
-        self._entries.append((name, parsed, source))
+            raise ValueError(
+                f'kv "{self.name}": entry "{name}" declared at {source}: {error}'
+            ) from None
         self._config.entries.append(KvEntry(name=name, pattern=pattern, shape=shape, source=source))
         self._declare()
         return parsed
@@ -840,8 +807,9 @@ def kv(
     version and a size when they are unset.
 
     Declare its entries with :meth:`KV.text`, :meth:`KV.counter`, :meth:`KV.json`,
-    :meth:`KV.list` and :meth:`KV.set`. Two entries whose patterns could name the same key
-    are refused where the second is declared. During discovery every operation, client and
+    :meth:`KV.list` and :meth:`KV.set`. ``ocel deploy`` and ``ocel dev`` refuse an entry
+    name no SDK can hold, a name declared twice, and two entries whose patterns could name
+    the same key, naming the line of each. During discovery every operation, client and
     connection string raises :class:`UnprovisionedResourceError`."""
     caller = inspect.stack(0)[1]
     store = KV(

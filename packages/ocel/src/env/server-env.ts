@@ -23,7 +23,7 @@ export function defineServerEnv<const TDefinitions extends EnvDefinitions>(
   access: Access,
 ): Env<TDefinitions> {
   const source = callSiteFile();
-  const flat = validateDefinitions(definitions, source);
+  const flat = validateDefinitions(definitions);
 
   if (isDiscovering()) {
     holdRegistration(declareEnv(flat, source));

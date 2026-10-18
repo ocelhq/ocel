@@ -360,31 +360,22 @@ def test_every_variable_reaches_the_dev_server_with_its_class_and_what_it_needs(
         assert definition.source == f"{__file__}:{line}"
 
 
-def test_a_required_key_the_store_has_no_cell_for_is_reported(collector):
-    collector.cells = [VariableCell(key="PRESENT", value="v")]
+def test_a_required_key_the_store_has_no_cell_for_is_left_to_the_cli_to_report(collector):
+    collector.cells = [VariableCell(key="PORT", value="eighty")]
+
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
 
     class Env(ocel.Env):
-        present: str
+        port: int
         missing: str
+        scoped: str = ocel.var(folders=["/apps/web"])
+        github: GitHub
 
     _ = Env
-    problems = collector.reported()
-    assert len(problems) == 1
-    assert problems[0].key == "MISSING"
-    assert problems[0].kind is VariableProblem.Kind.MISSING
-    assert problems[0].folder == ""
-
-
-def test_a_scoped_key_is_reported_for_every_folder_the_store_has_no_cell_in(collector):
-    collector.cells = [VariableCell(key="FLAG", folder="/apps/web", value="true")]
-
-    class Env(ocel.Env):
-        flag: bool = ocel.var(folders=["/apps/web", "/apps/api"])
-
-    _ = Env
-    problems = collector.reported()
-    assert len(problems) == 1
-    assert (problems[0].key, problems[0].folder) == ("FLAG", "/apps/api")
+    assert [(p.key, p.kind) for p in collector.reported()] == [
+        ("PORT", VariableProblem.Kind.INVALID)
+    ]
 
 
 def test_a_stored_value_the_annotation_rejects_is_reported(collector):
@@ -863,53 +854,7 @@ def test_a_secret_in_a_group_resolves_on_every_read(monkeypatch):
     assert secret.value == "rotated"
 
 
-def test_an_optional_group_one_member_is_delivered_for_reports_the_rest_missing(collector):
-    collector.cells = [VariableCell(key="GITHUB_CLIENT_ID", value="id")]
-
-    class GitHub(ocel.Group):
-        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
-        client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
-
-    class Env(ocel.Env):
-        github: GitHub | None = None
-
-    _ = Env
-    problems = collector.reported()
-    assert [(p.key, p.kind) for p in problems] == [
-        ("GITHUB_CLIENT_SECRET", VariableProblem.Kind.MISSING)
-    ]
-
-
-def test_an_optional_group_nothing_is_delivered_for_reports_nothing_missing(collector):
-    class GitHub(ocel.Group):
-        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
-        client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
-
-    class Env(ocel.Env):
-        github: GitHub | None = None
-
-    _ = Env
-    assert collector.reported() == []
-
-
-def test_a_required_group_nothing_is_delivered_for_reports_every_member_missing(collector):
-    class GitHub(ocel.Group):
-        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
-        client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
-
-    class Env(ocel.Env):
-        github: GitHub
-
-    _ = Env
-    assert [p.key for p in collector.reported()] == [
-        "GITHUB_CLIENT_ID",
-        "GITHUB_CLIENT_SECRET",
-    ]
-
-
-def test_a_member_spelled_optional_is_not_required_when_the_group_is_on(collector):
-    collector.cells = [VariableCell(key="SMTP_HOST", value="mail.example")]
-
+def test_a_member_spelled_optional_reaches_the_dev_server_as_not_required(collector):
     class Smtp(ocel.Group):
         host: str = ocel.var(key="SMTP_HOST")
         port: int = ocel.var(key="SMTP_PORT", default=587)
@@ -919,7 +864,6 @@ def test_a_member_spelled_optional_is_not_required_when_the_group_is_on(collecto
         smtp: Smtp
 
     _ = Env
-    assert collector.reported() == []
     assert [d.required for d in collector.declared_env().definitions] == [True, False, False]
 
 
@@ -935,7 +879,6 @@ def test_an_optional_group_of_members_all_spelled_optional_is_off_until_one_is_d
 
     monkeypatch.delenv("SMTP_HOST", raising=False)
     monkeypatch.delenv("SMTP_PORT", raising=False)
-    assert collector.reported() == []
     assert Env().smtp is None
     monkeypatch.setenv("SMTP_PORT", "25")
     assert Env().smtp.port == 25
@@ -1064,20 +1007,6 @@ def test_two_attributes_naming_one_group_are_refused():
     )
 
 
-def test_an_optional_group_with_only_a_live_member_is_on(collector):
-    collector.cells = [VariableCell(key="GITHUB_CLIENT_SECRET")]
-
-    class GitHub(ocel.Group):
-        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
-        client_secret: ocel.Secret = ocel.var(key="GITHUB_CLIENT_SECRET")
-
-    class Env(ocel.Env):
-        github: GitHub | None = None
-
-    _ = Env
-    assert [p.key for p in collector.reported()] == ["GITHUB_CLIENT_ID"]
-
-
 def test_a_class_of_env_annotated_as_a_group_is_refused():
     class Other(ocel.Env):
         token: str = ocel.var(key="TOKEN")
@@ -1094,20 +1023,6 @@ def test_a_class_of_env_annotated_as_a_group_is_refused():
         "app takes together are a class of ocel.Group, and the attribute annotated with it "
         "is the group."
     )
-
-
-def test_a_scoped_member_of_a_group_a_root_value_turned_on_is_reported_missing(collector):
-    collector.cells = [VariableCell(key="INHERITED_TOKEN", value="t")]
-
-    class Inherited(ocel.Group):
-        token: str = ocel.var(key="INHERITED_TOKEN")
-        web: str = ocel.var(key="INHERITED_WEB", folders=["/web"])
-
-    class Env(ocel.Env):
-        inherited: Inherited | None = None
-
-    _ = Env
-    assert [(p.key, p.folder) for p in collector.reported()] == [("INHERITED_WEB", "/web")]
 
 
 def test_a_group_no_folder_satisfies_is_refused():

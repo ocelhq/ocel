@@ -1,4 +1,3 @@
-import { callSiteFile } from "../declaration/callsite.js";
 import { type Access, type Env, envAccessor, FIXED } from "./access.js";
 import {
   type EnvDefinitions,
@@ -18,7 +17,7 @@ export function defineEdgeEnv<const TDefinitions extends EnvDefinitions>(
   definitions: TDefinitions,
   access: Access,
 ): Env<TDefinitions> {
-  validateDefinitions(definitions, callSiteFile());
+  validateDefinitions(definitions);
 
   return envAccessor(definitions, access);
 }

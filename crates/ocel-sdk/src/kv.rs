@@ -5,8 +5,8 @@
 mod entry;
 
 use crate::binding::{kv_binding_key, percent_encode, read_kv};
-use crate::declare::is_discovering;
-use crate::proto::app::resources::v1::KvShape;
+use crate::declare::{format_source, is_discovering};
+use crate::proto::app::resources::v1::{KvEntry, KvShape};
 use crate::proto::common::bindings::v1::KvProperties;
 use crate::Error;
 use std::marker::PhantomData;
@@ -149,6 +149,19 @@ pub struct KvEntryDeclaration {
     pub line: u32,
 }
 
+impl KvEntryDeclaration {
+    #[doc(hidden)]
+    pub fn to_proto(&self) -> KvEntry {
+        KvEntry {
+            name: self.name.to_string(),
+            pattern: self.pattern.to_string(),
+            shape: self.shape.to_wire().into(),
+            source: format_source(self.file, self.line),
+            ..Default::default()
+        }
+    }
+}
+
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShapeKind {
@@ -245,31 +258,4 @@ integer_parameters!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usi
 #[doc(hidden)]
 pub fn write_parameter<T: KvParameter + ?Sized>(key: &mut String, value: &T) {
     value.write_parameter(key);
-}
-
-pub(crate) struct ParsedPattern<'a> {
-    pub(crate) segments: Vec<Option<&'a str>>,
-}
-
-impl<'a> ParsedPattern<'a> {
-    pub(crate) fn parse(pattern: &'a str) -> Self {
-        Self {
-            segments: pattern
-                .split('/')
-                .map(|segment| (!segment.starts_with(':')).then_some(segment))
-                .collect(),
-        }
-    }
-
-    pub(crate) fn overlaps(&self, other: &ParsedPattern) -> bool {
-        self.segments.len() == other.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(&other.segments)
-                .all(|(mine, theirs)| match (mine, theirs) {
-                    (Some(mine), Some(theirs)) => mine == theirs,
-                    _ => true,
-                })
-    }
 }

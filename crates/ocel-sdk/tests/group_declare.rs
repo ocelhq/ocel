@@ -1,6 +1,6 @@
 mod collector;
 
-use collector::{cell, collector_with_cells, Received, DECLARE_ENV, REPORT_ENV_PROBLEMS};
+use collector::{cell, collector_with_cells, Received, DECLARE_ENV};
 
 #[allow(dead_code)]
 #[derive(ocel::Env)]
@@ -48,9 +48,9 @@ struct Stripe {
 }
 
 #[test]
-fn a_group_reaches_the_dev_server_once_and_requires_only_what_it_is_switched_on_for() {
+fn a_group_reaches_the_dev_server_once_with_its_members_and_whether_it_is_required() {
     let (url, requests) = collector_with_cells(
-        2,
+        1,
         vec![
             cell("DATABASE_URL", "", "postgres://shop"),
             cell("STRIPE_WEBHOOK_SECRET", "", "whsec_live"),
@@ -65,14 +65,9 @@ fn a_group_reaches_the_dev_server_once_and_requires_only_what_it_is_switched_on_
         "discover ran the app on"
     );
 
-    let received: Vec<Received> = (0..2)
-        .map(|_| requests.recv().expect("a request"))
-        .collect();
-    let declared = received
-        .iter()
-        .find(|one| one.path == DECLARE_ENV)
-        .expect("one DeclareEnv request")
-        .declare_env();
+    let received: Received = requests.recv().expect("a request");
+    assert_eq!(received.path, DECLARE_ENV);
+    let declared = received.declare_env();
 
     let members: Vec<String> = declared
         .definitions
@@ -116,19 +111,5 @@ fn a_group_reaches_the_dev_server_once_and_requires_only_what_it_is_switched_on_
             "smtp required=true ''",
             "stripe required=false ''",
         ]
-    );
-
-    let problems: Vec<String> = received
-        .iter()
-        .find(|one| one.path == REPORT_ENV_PROBLEMS)
-        .expect("one ReportEnvProblems request")
-        .problems()
-        .problems
-        .iter()
-        .map(|problem| format!("{} '{}' {:?}", problem.key, problem.folder, problem.kind))
-        .collect();
-    assert_eq!(
-        problems,
-        ["SMTP_HOST '' KIND_MISSING", "STRIPE_KEY '' KIND_MISSING",]
     );
 }

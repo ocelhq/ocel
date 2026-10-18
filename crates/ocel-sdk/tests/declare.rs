@@ -31,7 +31,7 @@ struct Env {
 const DB_LINE: &str = "10";
 
 #[test]
-fn discovery_posts_every_declaration_and_reports_the_problems_it_finds() {
+fn discovery_posts_every_declaration_and_reports_each_value_its_type_cannot_parse() {
     let (url, requests) = collector_with_cells(
         4,
         vec![
@@ -161,9 +161,7 @@ fn discovery_posts_every_declaration_and_reports_the_problems_it_finds() {
         problems,
         [
             "PORT '' KIND_INVALID invalid digit found in string",
-            "MISSING_ONE '' KIND_MISSING ",
             "API_PORT '' KIND_INVALID withheld, because a 'sensitive' value's parse message can quote the value itself",
-            "SCOPED '/apps/api' KIND_MISSING ",
             "READY '' KIND_INVALID want one of 1 t T TRUE true True 0 f F FALSE false False",
         ]
     );

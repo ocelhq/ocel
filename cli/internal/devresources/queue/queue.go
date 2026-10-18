@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"path/filepath"
 	"slices"
@@ -225,12 +224,9 @@ func (b *Backend) current() (*pgmq.Engine, error) {
 	return b.engine, nil
 }
 
-func (b *Backend) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
-	taskPath, taskHandler := taskv1connect.NewTaskServiceHandler(tasks{b}, options...)
-	mux.Handle(taskPath, guard(taskHandler))
-	topicPath, topicHandler := topicv1connect.NewTopicServiceHandler(topics{b}, options...)
-	mux.Handle(topicPath, guard(topicHandler))
-}
+func (b *Backend) Tasks() taskv1connect.TaskServiceHandler { return tasks{b} }
+
+func (b *Backend) Topics() topicv1connect.TopicServiceHandler { return topics{b} }
 
 func (b *Backend) Close(ctx context.Context, stopContainers bool) error {
 	b.mu.Lock()

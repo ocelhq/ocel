@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	realtimev1 "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1"
-	"github.com/ocelhq/ocel/pkg/proto/app/realtime/v1/realtimev1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
@@ -126,11 +125,6 @@ func (b *Backend) Publish(ctx context.Context, req *realtimev1.PublishRequest) (
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this app declares no realtime, so there is nothing to publish on"))
 	}
 	return publisher.Publish(ctx, req)
-}
-
-func (b *Backend) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
-	path, handler := realtimev1connect.NewRealtimeServiceHandler(b, options...)
-	mux.Handle(path, guard(handler))
 }
 
 func (b *Backend) Close(ctx context.Context, _ bool) error {
