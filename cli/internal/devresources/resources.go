@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	connect "connectrpc.com/connect"
 	"github.com/gofrs/flock"
 
 	"github.com/ocelhq/ocel/cli/internal/declaration"
@@ -29,12 +27,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
 
 type Backend struct {
 	Kinds   []resourcesv1.ResourceType
 	Resolve func(ctx context.Context, project string, resources []declaration.Resource) ([]binding.Resolved, error)
-	Routes  func(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
 	Close   func(ctx context.Context, stopContainers bool) error
 
 	declaredLastPass bool
@@ -67,7 +65,9 @@ type Resources struct {
 	announce func(line string)
 
 	backends []*Backend
+	buckets  *bucket.Backend
 	queue    *queue.Backend
+	realtime *realtime.Backend
 
 	mu        sync.Mutex
 	engine    docker.Engine
@@ -113,15 +113,15 @@ func New(projectName string, opts Options) *Resources {
 	secrets := filepath.Join(opts.StateDir, secretsDir)
 	servers := postgres.New(opts.Open, secrets)
 	stores := kv.New(opts.Open, secrets)
-	buckets := bucket.New(opts.Open, secrets, opts.AppOrigins)
+	r.buckets = bucket.New(opts.Open, secrets, opts.AppOrigins)
 	r.queue = queue.New(opts.Open, secrets, opts.Project, opts.Announce)
-	realtimeBackend := realtime.New(opts.AppOrigins)
+	r.realtime = realtime.New(opts.AppOrigins)
 	r.backends = []*Backend{
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}, Resolve: servers.Resolve, Close: servers.Close},
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_KV}, Resolve: stores.Resolve, Close: stores.Close},
-		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET}, Resolve: buckets.Resolve, Routes: buckets.Routes, Close: buckets.Close},
-		{Kinds: queue.Kinds, Resolve: r.queue.Resolve, Routes: r.queue.Routes, Close: r.queue.Close},
-		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}, Resolve: realtimeBackend.Resolve, Routes: realtimeBackend.Routes, Close: realtimeBackend.Close},
+		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET}, Resolve: r.buckets.Resolve, Close: r.buckets.Close},
+		{Kinds: queue.Kinds, Resolve: r.queue.Resolve, Close: r.queue.Close},
+		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}, Resolve: r.realtime.Resolve, Close: r.realtime.Close},
 	}
 	return r
 }
@@ -131,11 +131,12 @@ func ProjectName(dir string) string {
 	return strings.Trim(project.DeriveSlug(filepath.Base(dir)), "-") + "-" + hex.EncodeToString(sum[:4])
 }
 
-func (r *Resources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
-	for _, backend := range r.backends {
-		if backend.Routes != nil {
-			backend.Routes(mux, guard, options...)
-		}
+func (r *Resources) Services() bindingproxy.Services {
+	return bindingproxy.Services{
+		Buckets:  r.buckets,
+		Tasks:    r.queue.Tasks(),
+		Topics:   r.queue.Topics(),
+		Realtime: r.realtime,
 	}
 }
 

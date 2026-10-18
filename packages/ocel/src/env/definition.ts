@@ -129,16 +129,13 @@ export function isUsableKey(key: string): boolean {
   return KEY_PATTERN.test(key);
 }
 
-const owner = new Map<string, string>();
-
-export function validateDefinitions(definitions: EnvDefinitions, source: string): FlatDefinitions {
+export function validateDefinitions(definitions: EnvDefinitions): FlatDefinitions {
   for (const [key, definition] of Object.entries(definitions)) {
     if ("definitions" in definition) validateGroup(key, definition);
   }
   const flat = flattenDefinitions(definitions);
   for (const [key, definition] of Object.entries(flat)) {
-    validateDefinition(key, definition, source);
-    owner.set(key, source);
+    validateDefinition(key, definition);
   }
   return flat;
 }
@@ -190,7 +187,7 @@ function descriptionProblem(description: string | undefined): string {
   return "";
 }
 
-function validateDefinition(key: string, definition: VariableDefinition, source: string): void {
+function validateDefinition(key: string, definition: VariableDefinition): void {
   if (!KEY_PATTERN.test(key)) {
     throw new EnvDefinitionError(
       `'${key}' is not a usable variable name: use upper-case letters, digits and underscores, starting with a letter or underscore.`,
@@ -200,12 +197,6 @@ function validateDefinition(key: string, definition: VariableDefinition, source:
   if (writtenFor !== undefined) {
     throw new EnvDefinitionError(
       `'${key}' is written by Ocel for ${writtenFor}, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it as \`deployment.url\` from 'ocel/env'.`,
-    );
-  }
-  const claimed = owner.get(key);
-  if (claimed !== undefined && claimed !== source) {
-    throw new EnvDefinitionError(
-      `'${key}' is already declared in ${claimed}. A key may be defined by exactly one definitions file.`,
     );
   }
   if (RESERVED_PREFIXES.some((prefix) => key.startsWith(prefix))) {

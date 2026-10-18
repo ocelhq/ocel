@@ -1,6 +1,9 @@
-use crate::attribute::{parse_entries, read_container_crate_path, respan, Entry};
-use crate::options::{parse_count, parse_retry, quote_none};
+use crate::attribute::{parse_entries, read_container_crate_path, Entry};
+use crate::options::{
+    parse_count, parse_retry, quote_declared, quote_none, quote_resources, quote_unset,
+};
 use crate::source::source;
+use crate::task::{quote_no_schema, quote_schema};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
@@ -49,95 +52,107 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     let resources = read_resources(input, krate)?;
     let ident = &input.ident;
 
-    let mut hooks = Vec::new();
+    let v1 = quote_resources(krate);
+    let mut handlers = Vec::new();
     let declared: Vec<TokenStream> = resources
         .iter()
         .map(|resource| {
             let name = &resource.name;
-            let (file, line) = (&resource.file, resource.line);
-            let config = match &resource.config {
-                Config::Postgres { version } => {
-                    quote!(#krate::DeclaredConfig::Postgres { version: #version })
-                }
+            let site = (resource.file.as_str(), resource.line);
+            match &resource.config {
+                Config::Postgres { version } => quote_declared(
+                    krate,
+                    "POSTGRES",
+                    name,
+                    quote! {
+                        #v1::PostgresConfig {
+                            version: ::std::string::String::from(#version),
+                            ..::core::default::Default::default()
+                        }
+                    },
+                    site,
+                ),
                 Config::Bucket {
                     public,
                     allowed_origins,
-                } => quote! {
-                    #krate::DeclaredConfig::Bucket {
-                        public: #public,
-                        allowed_origins: &[#(#allowed_origins),*],
-                    }
-                },
+                } => quote_declared(
+                    krate,
+                    "BUCKET",
+                    name,
+                    quote! {
+                        #v1::BucketConfig {
+                            public: #public,
+                            allowed_origins: ::std::vec![#(::std::string::String::from(#allowed_origins)),*],
+                            ..::core::default::Default::default()
+                        }
+                    },
+                    site,
+                ),
                 Config::Topic {
                     schema,
                     ordered,
                     retry,
                     ..
-                } => quote! {
-                    #krate::DeclaredConfig::Topic {
-                        schema: #schema,
-                        ordered: #ordered,
-                        retry: #retry,
-                    }
-                },
+                } => quote_declared(
+                    krate,
+                    "TOPIC",
+                    name,
+                    quote! {
+                        #v1::TopicConfig {
+                            schema: #schema,
+                            ordered: #ordered,
+                            retry: #retry,
+                            ..::core::default::Default::default()
+                        }
+                    },
+                    site,
+                ),
                 Config::Kv {
                     version,
                     eviction,
                     memory,
                     entries,
-                } => quote! {
-                    #krate::DeclaredConfig::Kv {
-                        version: #version,
-                        eviction: #eviction,
-                        memory: #memory,
-                        entries: ::std::vec![#(<#entries as #krate::KvKey>::ENTRY),*],
-                    }
-                },
+                } => quote_declared(
+                    krate,
+                    "KV",
+                    name,
+                    quote! {
+                        #v1::KvConfig {
+                            version: ::std::string::String::from(#version),
+                            eviction: ::std::string::String::from(#eviction),
+                            memory: ::std::string::String::from(#memory),
+                            entries: ::std::vec![#(<#entries as #krate::KvKey>::ENTRY.to_proto()),*],
+                            ..::core::default::Default::default()
+                        }
+                    },
+                    site,
+                ),
                 Config::Worker {
                     concurrency,
                     on_start,
                     middleware,
                 } => {
-                    let on_start = match on_start {
-                        Some(path) => {
-                            let wrapper = format_ident!("__ocel_{}_on_start", resource.ident);
-                            let call = quote_spanned!(path.span()=> ::std::boxed::Box::pin(#path()));
-                            hooks.push(quote! {
-                                fn #wrapper() -> #krate::BoxFuture<'static, ::core::result::Result<(), #krate::RunError>> {
-                                    #call
-                                }
-                            });
-                            quote!(::core::option::Option::Some(#wrapper))
-                        }
-                        None => quote_none(),
-                    };
-                    let middleware = match middleware {
-                        Some(path) => {
-                            let wrapper = format_ident!("__ocel_{}_middleware", resource.ident);
-                            let call = quote_spanned!(path.span()=> ::std::boxed::Box::pin(#path(run, next)));
-                            hooks.push(quote! {
-                                fn #wrapper<'a>(
-                                    run: &'a #krate::Run,
-                                    next: #krate::Next<'a>,
-                                ) -> #krate::BoxFuture<'a, ::core::result::Result<(), #krate::RunError>> {
-                                    #call
-                                }
-                            });
-                            quote!(::core::option::Option::Some(#wrapper))
-                        }
-                        None => quote_none(),
-                    };
-                    quote! {
-                        #krate::DeclaredConfig::Worker {
-                            concurrency: #concurrency,
-                            on_start: #on_start,
-                            middleware: #middleware,
-                        }
-                    }
+                    handlers.push(quote_worker_handler(
+                        krate,
+                        &resource.ident,
+                        name,
+                        *concurrency,
+                        on_start.as_ref(),
+                        middleware.as_ref(),
+                    ));
+                    quote_declared(
+                        krate,
+                        "WORKER",
+                        name,
+                        quote! {
+                            #v1::WorkerConfig {
+                                concurrency: #concurrency,
+                                ..::core::default::Default::default()
+                            }
+                        },
+                        site,
+                    )
                 }
-            };
-            quote! {
-                #krate::DeclaredResource { name: #name, config: #config, file: #file, line: #line }
             }
         })
         .collect();
@@ -182,8 +197,6 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     Ok(quote! {
         impl #krate::Declare for #ident {
             fn declared() -> #krate::Declared {
-                #(#hooks)*
-
                 #krate::Declared {
                     resources: ::std::vec![#(#declared),*],
                     variables: ::std::vec::Vec::new(),
@@ -208,7 +221,63 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
         #krate::inventory::submit! {
             #krate::Registered(<#ident as #krate::Declare>::declared)
         }
+
+        #(#handlers)*
     })
+}
+
+fn quote_worker_handler(
+    krate: &syn::Path,
+    ident: &syn::Ident,
+    name: &str,
+    concurrency: i32,
+    on_start: Option<&syn::Path>,
+    middleware: Option<&syn::Path>,
+) -> TokenStream {
+    let mut hooks = Vec::new();
+    let on_start = match on_start {
+        Some(path) => {
+            let wrapper = format_ident!("__ocel_{}_on_start", ident);
+            let call = quote_spanned!(path.span()=> ::std::boxed::Box::pin(#path()));
+            hooks.push(quote! {
+                fn #wrapper() -> #krate::BoxFuture<'static, ::core::result::Result<(), #krate::RunError>> {
+                    #call
+                }
+            });
+            quote!(::core::option::Option::Some(#wrapper))
+        }
+        None => quote_none(),
+    };
+    let middleware = match middleware {
+        Some(path) => {
+            let wrapper = format_ident!("__ocel_{}_middleware", ident);
+            let call = quote_spanned!(path.span()=> ::std::boxed::Box::pin(#path(run, next)));
+            hooks.push(quote! {
+                fn #wrapper<'a>(
+                    run: &'a #krate::Run,
+                    next: #krate::Next<'a>,
+                ) -> #krate::BoxFuture<'a, ::core::result::Result<(), #krate::RunError>> {
+                    #call
+                }
+            });
+            quote!(::core::option::Option::Some(#wrapper))
+        }
+        None => quote_none(),
+    };
+    quote! {
+        const _: () = {
+            #(#hooks)*
+
+            #krate::inventory::submit! {
+                #krate::Handler::Worker {
+                    name: #name,
+                    concurrency: #concurrency,
+                    on_start: #on_start,
+                    middleware: #middleware,
+                }
+            }
+        };
+    }
 }
 
 fn read_resources(input: &DeriveInput, krate: &syn::Path) -> syn::Result<Vec<Resource>> {
@@ -248,9 +317,9 @@ fn read_resources(input: &DeriveInput, krate: &syn::Path) -> syn::Result<Vec<Res
             },
             Kind::Topic(payload) => Config::Topic {
                 payload: (**payload).clone(),
-                schema: quote_none(),
+                schema: quote_no_schema(),
                 ordered: false,
-                retry: quote_none(),
+                retry: quote_unset(),
             },
             Kind::Worker => Config::Worker {
                 concurrency: 0,
@@ -324,7 +393,7 @@ fn read_entry(
                 schema, payload, ..
             },
             "schema",
-        ) => *schema = quote_topic_schema(entry, payload, krate)?,
+        ) => *schema = quote_schema(entry, payload, krate)?,
         (Config::Worker { concurrency, .. }, "concurrency") => *concurrency = parse_count(entry)?,
         (Config::Worker { on_start, .. }, "on_start") => {
             *on_start = Some(entry.read_path()?.clone())
@@ -348,16 +417,6 @@ fn read_entry(
         }
     }
     Ok(())
-}
-
-fn quote_topic_schema(
-    entry: &Entry,
-    payload: &Type,
-    krate: &syn::Path,
-) -> syn::Result<TokenStream> {
-    entry.expect_flag()?;
-    let krate = respan(krate, entry.span());
-    Ok(quote_spanned!(entry.span()=> #krate::__json_schema!(#payload)))
 }
 
 fn read_namespace(config: &Config) -> &'static str {

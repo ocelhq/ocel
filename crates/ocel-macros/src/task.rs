@@ -1,7 +1,8 @@
 use crate::attribute::{parse_arguments, respan, take_crate_path, Entry, Value};
 use crate::options::{
     parse_batch, parse_batch_size, parse_count, parse_duration, parse_lanes, parse_retry,
-    parse_string, quote_batch, quote_none, refuse_unknown_attribute,
+    parse_string, quote_batch, quote_declared, quote_none, quote_proto_duration, quote_resources,
+    quote_unset, refuse_unknown_attribute,
 };
 use crate::source::source;
 use proc_macro2::{Span, TokenStream};
@@ -101,10 +102,22 @@ fn derive_default_name(function: &ItemFn) -> String {
         .replace('_', "-")
 }
 
-fn quote_schema(entry: &Entry, payload: &Type, krate: &syn::Path) -> syn::Result<TokenStream> {
+pub(crate) fn quote_schema(
+    entry: &Entry,
+    payload: &Type,
+    krate: &syn::Path,
+) -> syn::Result<TokenStream> {
     entry.expect_flag()?;
     let krate = respan(krate, entry.span());
-    Ok(quote_spanned!(entry.span()=> #krate::__json_schema!(#payload)))
+    Ok(quote_spanned! {entry.span()=>
+        #krate::__json_schema!(#payload)
+            .map(|schema| schema())
+            .unwrap_or_default()
+    })
+}
+
+pub(crate) fn quote_no_schema() -> TokenStream {
+    quote!(::std::string::String::new())
 }
 
 struct Hook {
@@ -179,13 +192,13 @@ pub(crate) fn expand_task(attribute: TokenStream, function: ItemFn) -> syn::Resu
     };
 
     let mut name = derive_default_name(&function);
-    let mut schema = quote_none();
+    let mut schema = quote_no_schema();
     let mut ordered = false;
-    let mut retry = quote_none();
+    let mut retry = quote_unset();
     let mut concurrency = 0;
     let mut max_duration = quote_none();
     let mut ttl = quote_none();
-    let mut batch = quote_none();
+    let mut batch = quote_unset();
     let mut worker = String::new();
     let mut cron = String::new();
     let mut hooks: Vec<Hook> = Vec::new();
@@ -231,6 +244,31 @@ pub(crate) fn expand_task(attribute: TokenStream, function: ItemFn) -> syn::Resu
     inner.vis = syn::Visibility::Inherited;
     inner.sig.ident = format_ident!("__ocel_run");
     let (file, line) = source(ident.span());
+    let v1 = quote_resources(&krate);
+    let (max_duration, ttl) = (
+        quote_proto_duration(max_duration, &krate),
+        quote_proto_duration(ttl, &krate),
+    );
+    let declared = quote_declared(
+        &krate,
+        "TASK",
+        &name,
+        quote! {
+            #v1::TaskConfig {
+                schema: #schema,
+                ordered: #ordered,
+                retry: #retry,
+                concurrency: #concurrency,
+                max_duration: #max_duration,
+                ttl: #ttl,
+                batch: #batch,
+                worker: ::std::string::String::from(#worker),
+                cron: ::std::string::String::from(#cron),
+                ..::core::default::Default::default()
+            }
+        },
+        (file.as_str(), line),
+    );
 
     let wrappers = hooks.iter().map(|hook| &hook.wrapper);
     let fields = PAYLOAD_HOOKS.map(|field| {
@@ -281,23 +319,7 @@ pub(crate) fn expand_task(attribute: TokenStream, function: ItemFn) -> syn::Resu
 
             fn __ocel_declared() -> #krate::Declared {
                 #krate::Declared {
-                    resources: ::std::vec![#krate::DeclaredResource {
-                        name: #name,
-                        config: #krate::DeclaredConfig::Task {
-                            schema: #schema,
-                            ordered: #ordered,
-                            retry: #retry,
-                            concurrency: #concurrency,
-                            max_duration: #max_duration,
-                            ttl: #ttl,
-                            batch: #batch,
-                            worker: #worker,
-                            cron: #cron,
-                            deliver: __ocel_deliver,
-                        },
-                        file: #file,
-                        line: #line,
-                    }],
+                    resources: ::std::vec![#declared],
                     variables: ::std::vec::Vec::new(),
                     groups: ::std::vec::Vec::new(),
                 }
@@ -305,6 +327,17 @@ pub(crate) fn expand_task(attribute: TokenStream, function: ItemFn) -> syn::Resu
 
             #krate::inventory::submit! {
                 #krate::Registered(__ocel_declared)
+            }
+
+            #krate::inventory::submit! {
+                #krate::Handler::Run {
+                    kind: #krate::RunKind::Task,
+                    topic: #name,
+                    name: #name,
+                    worker: #worker,
+                    batch: #batched,
+                    deliver: __ocel_deliver,
+                }
             }
         };
     })
@@ -344,9 +377,9 @@ fn expand_topic_consumer(
 
     let mut topic: Option<syn::Path> = None;
     let mut name = derive_default_name(&function);
-    let mut retry = quote_none();
+    let mut retry = quote_unset();
     let mut concurrency = 0;
-    let mut lanes = quote!(&[]);
+    let mut lanes = quote!(::std::vec::Vec::new());
     let mut max_duration = quote_none();
     let mut worker = String::new();
     let mut batch_size: Option<i32> = None;
@@ -372,7 +405,7 @@ fn expand_topic_consumer(
         ));
     };
     let batch = match (batched, batch_size) {
-        (false, _) => quote_none(),
+        (false, _) => quote_unset(),
         (true, Some(size)) => quote_batch(size, batch_timeout, &krate),
         (true, None) => {
             return Err(syn::Error::new(
@@ -388,6 +421,26 @@ fn expand_topic_consumer(
     let topic_name = quote_spanned! {topic.span()=>
         const __OCEL_TOPIC: #topic_krate::TopicName<#message> = #topic;
     };
+    let v1 = quote_resources(&krate);
+    let max_duration = quote_proto_duration(max_duration, &krate);
+    let declared = quote_declared(
+        &krate,
+        "CONSUMER",
+        &name,
+        quote! {
+            #v1::ConsumerConfig {
+                topic: ::std::string::String::from(__OCEL_TOPIC.name()),
+                worker: ::std::string::String::from(#worker),
+                retry: #retry,
+                concurrency: #concurrency,
+                max_duration: #max_duration,
+                lanes: #lanes,
+                batch: #batch,
+                ..::core::default::Default::default()
+            }
+        },
+        (file.as_str(), line),
+    );
     Ok(quote! {
         #function
 
@@ -411,21 +464,7 @@ fn expand_topic_consumer(
 
             fn __ocel_declared() -> #krate::Declared {
                 #krate::Declared {
-                    resources: ::std::vec![#krate::DeclaredResource {
-                        name: #name,
-                        config: #krate::DeclaredConfig::Consumer {
-                            topic: __OCEL_TOPIC.name(),
-                            worker: #worker,
-                            retry: #retry,
-                            concurrency: #concurrency,
-                            max_duration: #max_duration,
-                            lanes: #lanes,
-                            batch: #batch,
-                            deliver: __ocel_deliver,
-                        },
-                        file: #file,
-                        line: #line,
-                    }],
+                    resources: ::std::vec![#declared],
                     variables: ::std::vec::Vec::new(),
                     groups: ::std::vec::Vec::new(),
                 }
@@ -433,6 +472,17 @@ fn expand_topic_consumer(
 
             #krate::inventory::submit! {
                 #krate::Registered(__ocel_declared)
+            }
+
+            #krate::inventory::submit! {
+                #krate::Handler::Run {
+                    kind: #krate::RunKind::Consumer,
+                    topic: __OCEL_TOPIC.name(),
+                    name: #name,
+                    worker: #worker,
+                    batch: #batched,
+                    deliver: __ocel_deliver,
+                }
             }
         };
     })

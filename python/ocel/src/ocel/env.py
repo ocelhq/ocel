@@ -803,64 +803,32 @@ def _declare_entries(entries: Sequence[_Variable | _Group], site: _Site) -> None
                 )
             )
     response = declare_env(DeclareEnvRequest(definitions=definitions, groups=groups))
-    problems = _find_problems(entries, response.cells)
+    problems = _find_invalid_values(entries, response.cells)
     if problems:
         report_env_problems(ReportEnvProblemsRequest(problems=problems))
 
 
-def _find_problems(
+def _find_invalid_values(
     entries: Sequence[_Variable | _Group], cells: Sequence[VariableCell]
 ) -> list[VariableProblem]:
     problems: list[VariableProblem] = []
-    for entry in entries:
-        gate = entry if isinstance(entry, _Group) and entry.optional else None
-        for variable in _list_variables(entry):
-            problems.extend(_find_variable_problems(variable, cells, gate))
-    return problems
-
-
-def _has_cell(variable: _Variable, cells: Sequence[VariableCell], folder: str) -> bool:
-    def has_cell_at(where: str) -> bool:
-        return any(cell.key == variable.key and cell.folder == where for cell in cells)
-
-    if variable.folders:
-        return folder != "" and folder in variable.folders and has_cell_at(folder)
-    return (folder != "" and has_cell_at(folder)) or has_cell_at("")
-
-
-def _is_group_on(group: _Group, cells: Sequence[VariableCell], folder: str) -> bool:
-    return any(_has_cell(member, cells, folder) for member in group.members)
-
-
-def _find_variable_problems(
-    variable: _Variable, cells: Sequence[VariableCell], gate: "_Group | None"
-) -> list[VariableProblem]:
-    problems: list[VariableProblem] = []
-    stored = [cell for cell in cells if cell.key == variable.key]
-    if variable.required:
-        for folder in variable.folders or ("",):
-            if gate is not None and not _is_group_on(gate, cells, folder):
+    for variable in _list_all_variables(entries):
+        if not variable.has_schema:
+            continue
+        for cell in cells:
+            if cell.key != variable.key:
                 continue
-            if not any(cell.folder == folder for cell in stored):
+            try:
+                _parse_value(variable.target, cell.value)
+            except Exception as error:
                 problems.append(
                     VariableProblem(
-                        key=variable.key, folder=folder, kind=VariableProblem.Kind.MISSING
+                        key=variable.key,
+                        folder=cell.folder,
+                        kind=VariableProblem.Kind.INVALID,
+                        detail=variable.redact_message(format_error(error)),
                     )
                 )
-    if not variable.has_schema:
-        return problems
-    for cell in stored:
-        try:
-            _parse_value(variable.target, cell.value)
-        except Exception as error:
-            problems.append(
-                VariableProblem(
-                    key=variable.key,
-                    folder=cell.folder,
-                    kind=VariableProblem.Kind.INVALID,
-                    detail=variable.redact_message(format_error(error)),
-                )
-            )
     return problems
 
 

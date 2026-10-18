@@ -8,15 +8,13 @@ import (
 	"slices"
 	"strings"
 
-	connect "connectrpc.com/connect"
-	"connectrpc.com/validate"
-
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
 
 type SyncResult struct {
@@ -30,7 +28,7 @@ type SyncResult struct {
 
 type Resources interface {
 	Resolve(ctx context.Context, resources []declaration.Resource) ([]binding.Resolved, error)
-	Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
+	Services() bindingproxy.Services
 }
 
 type Server struct {
@@ -138,10 +136,9 @@ func (s *Server) guard(token string, next http.Handler) http.Handler {
 
 func (s *Server) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
-	interceptors := connect.WithInterceptors(validate.NewInterceptor())
 	resourcePath, resourceHandler := s.declarations.Handler()
 	mux.Handle(resourcePath, s.guard(s.discoveryToken, resourceHandler))
-	s.resources.Routes(mux, func(next http.Handler) http.Handler { return s.guard(s.appToken, next) }, interceptors)
+	mux.Handle("/", s.guard(s.appToken, bindingproxy.NewMux(s.resources.Services())))
 	mux.Handle("/sync", s.guard(s.discoveryToken, http.HandlerFunc(s.handleSync)))
 	mux.Handle("/env", s.guard(s.appToken, http.HandlerFunc(s.handleEnv)))
 	return mux

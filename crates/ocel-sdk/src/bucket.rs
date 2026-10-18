@@ -26,8 +26,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub use writer::Writer;
 
-pub(crate) const KIND: &str = "bucket";
-
 const SINGLE_REQUEST_CEILING: usize = 16 << 20;
 const PART_SIZE: usize = 8 << 20;
 const PARTS_IN_FLIGHT: usize = 4;

@@ -20,21 +20,22 @@ def _import_as(name, path):
     return module
 
 
-def test_a_module_imported_under_two_names_declares_each_resource_once(collector, tmp_path):
+def test_a_module_imported_under_two_names_sends_the_same_declarations_each_time(
+    collector, tmp_path
+):
     infra = tmp_path / "infra.py"
     infra.write_text(_INFRA)
 
     _import_as("infra", infra)
+    first = [body for _, _, body in collector.declares]
     _import_as("app.infra", infra)
+    second = [body for _, _, body in collector.declares][len(first) :]
 
-    declared = [body for _, _, body in collector.declares]
-    assert [d.resource.type for d in declared if d.resource.type != ResourceType.KV] == [
+    assert [d.resource.type for d in first] == [
         ResourceType.BUCKET,
         ResourceType.POSTGRES,
+        ResourceType.KV,
+        ResourceType.KV,
+        ResourceType.KV,
     ]
-    stores = [d for d in declared if d.resource.type == ResourceType.KV]
-    assert [[entry.name for entry in d.config.value.entries] for d in stores] == [
-        [],
-        ["visits"],
-        ["visits", "names"],
-    ]
+    assert [d.to_binary() for d in second] == [d.to_binary() for d in first]

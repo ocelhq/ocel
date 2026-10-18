@@ -179,12 +179,14 @@ For a Go, Python or Rust backend, run [`ocel generate`](/docs/cli/generate) and 
 
 | Target | Transport | A revoked caller keeps an open subscription for at most |
 | --- | --- | --- |
-| `ocel dev` | Ocel gateway inside `ocel dev` | the dev server's lifetime |
+| `ocel dev` | Ocel gateway inside `ocel dev` | one connect token's lifetime |
 | AWS | AppSync Events | 24 hours |
-| Google Cloud | Ocel gateway on Cloud Run | 60 minutes |
-| VPS | Ocel gateway in a container on the box | the next deploy |
+| Google Cloud | Ocel gateway on Cloud Run | one connect token's lifetime |
+| VPS | Ocel gateway in a container on the box | one connect token's lifetime |
 
 Rules run on subscribe and on every reconnect, not on events to an open subscription. The browser client reconnects on its own and re-authorizes every live subscription in one request.
+
+A socket is opened with a connect token the handler mints, valid for the resource's `tokenTtl` (60 seconds unless set, between 10 and 300). The Ocel gateway holds one socket per connect token, closes a socket when its connect token expires, and the client then reconnects with a fresh one, so a socket cycles once per token lifetime and an event published during the reconnect can be missed. The gateway also pings every socket every 30 seconds and drops one that has not answered 10 seconds later, and, unless given another cap, holds at most 1000 sockets. AppSync checks the connect token only when the socket opens and closes a socket after 24 hours.
 
 ## On AWS
 

@@ -157,11 +157,11 @@ pub use ocel_macros::batch_consumer;
 
 #[doc(hidden)]
 pub use declare::{
-    Batch, Check, Declare, Declared, DeclaredConfig, DeclaredGroup, DeclaredResource,
-    DeclaredVariable, Group, Registered, Retry,
+    proto_duration, Check, Declare, Declared, DeclaredGroup, DeclaredResource, DeclaredVariable,
+    Group, Registered,
 };
 #[doc(hidden)]
-pub use deliver::{deliver, run_attempt, Delivery, Outcome, Steps};
+pub use deliver::{deliver, run_attempt, Delivery, Handler, Outcome, Steps};
 #[doc(hidden)]
 pub use env::{check, group_present, optional, secret, value, Boolean, Class};
 #[doc(hidden)]

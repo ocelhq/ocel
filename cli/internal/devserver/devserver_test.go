@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
+	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
 
 type fakeResources struct {
@@ -52,10 +53,9 @@ func (f *fakeResources) Resolve(_ context.Context, resources []declaration.Resou
 	return out, nil
 }
 
-func (f *fakeResources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
+func (f *fakeResources) Services() bindingproxy.Services {
 	f.mounted = true
-	path, handler := bucketv1connect.NewBucketServiceHandler(bucketv1connect.UnimplementedBucketServiceHandler{}, options...)
-	mux.Handle(path, guard(handler))
+	return bindingproxy.Services{Buckets: bucketv1connect.UnimplementedBucketServiceHandler{}}
 }
 
 func newDevServer(resources *fakeResources) *Server {
@@ -218,6 +218,22 @@ func TestAnAppRouteAnswersOnlyTheAppTokenTheChildWasHanded(t *testing.T) {
 			t.Fatalf("env SECRET = %q, want %q", got, "hunter2")
 		}
 	})
+}
+
+func TestAnAppCallTheBindingProxysSchemaForbidsIsRefusedBeforeItReachesADevResource(t *testing.T) {
+	t.Parallel()
+
+	resources := &fakeResources{}
+	url := serve(t, newDevServer(resources))
+
+	_, err := bucketv1connect.NewBucketServiceClient(appClient, url).Sign(context.Background(), &bucketv1.SignRequest{Key: "a.png"})
+
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("Sign with no bucket error = %v, want invalid argument: dev serves the proxy a deploy serves", err)
+	}
+	if !resources.mounted {
+		t.Error("the dev server mounted no service the dev resources serve")
+	}
 }
 
 func TestTheTaskAndTopicServicesOfTheDevResourcesAnswerOnlyTheAppToken(t *testing.T) {

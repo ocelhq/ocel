@@ -1,23 +1,18 @@
 use crate::env::{complaint, Class};
-use crate::kv::{KvEntryDeclaration, ParsedPattern};
-use crate::proto::app::resources::v1::declare_request::Config;
 use crate::proto::app::resources::v1::variable_problem::Kind;
-use crate::proto::app::resources::v1::ResourceType;
 use crate::proto::app::resources::v1::{
-    BatchPolicy, BucketConfig, ConsumerConfig, DeclareEnvRequest, DeclareRequest, GroupDefinition,
-    KvConfig, KvEntry, PostgresConfig, ReportEnvProblemsRequest, ResourceIdentifier,
-    ResourceServiceClient, RetryPolicy, TaskConfig, TopicConfig, VariableCell, VariableClass,
-    VariableDefinition, VariableProblem, WorkerConfig,
+    DeclareEnvRequest, DeclareRequest, GroupDefinition, ReportEnvProblemsRequest,
+    ResourceServiceClient, VariableCell, VariableClass, VariableDefinition, VariableProblem,
 };
 #[cfg(feature = "realtime")]
 use crate::proto::app::resources::v1::{
-    RealtimeChannel, RealtimeConfig, RealtimePublish, RealtimeSubscribe,
+    RealtimeChannel, RealtimeConfig, RealtimePublish, RealtimeSubscribe, ResourceIdentifier,
+    ResourceType,
 };
 #[cfg(feature = "realtime")]
 use crate::realtime::{list_declared_channels, resolve_token_ttl, DeclaredChannel};
-use crate::run::BoxFuture;
-use crate::worker::{OnStart, WorkerMiddleware};
-use crate::{Error, Lane};
+use crate::Error;
+use buffa::Enumeration;
 use std::time::Duration;
 
 const PHASE_ENV: &str = "OCEL_PHASE";
@@ -29,273 +24,15 @@ const SDK_VERSION_HEADER: &str = "ocel-sdk-version";
 const SDK_VERSION: &str = concat!("rust/", env!("CARGO_PKG_VERSION"));
 
 #[doc(hidden)]
-#[derive(Clone, Copy)]
-pub struct Retry {
-    pub max_attempts: i32,
-    pub min_delay: Option<Duration>,
-    pub max_delay: Option<Duration>,
-}
-
-#[doc(hidden)]
-#[derive(Clone, Copy)]
-pub struct Batch {
-    pub size: i32,
-    pub timeout: Option<Duration>,
-}
-
-#[doc(hidden)]
-pub type Schema = fn() -> String;
-
-#[doc(hidden)]
-pub type DeliveryFn = fn(crate::deliver::Delivery) -> BoxFuture<'static, crate::deliver::Outcome>;
-
-#[doc(hidden)]
-pub enum DeclaredConfig {
-    Postgres {
-        version: &'static str,
-    },
-    Bucket {
-        public: bool,
-        allowed_origins: &'static [&'static str],
-    },
-    Topic {
-        schema: Option<Schema>,
-        ordered: bool,
-        retry: Option<Retry>,
-    },
-    Task {
-        schema: Option<Schema>,
-        ordered: bool,
-        retry: Option<Retry>,
-        concurrency: i32,
-        max_duration: Option<Duration>,
-        ttl: Option<Duration>,
-        batch: Option<Batch>,
-        worker: &'static str,
-        cron: &'static str,
-        deliver: DeliveryFn,
-    },
-    Consumer {
-        topic: &'static str,
-        worker: &'static str,
-        retry: Option<Retry>,
-        concurrency: i32,
-        max_duration: Option<Duration>,
-        lanes: &'static [Lane],
-        batch: Option<Batch>,
-        deliver: DeliveryFn,
-    },
-    Worker {
-        concurrency: i32,
-        on_start: Option<OnStart>,
-        middleware: Option<WorkerMiddleware>,
-    },
-    Kv {
-        version: &'static str,
-        eviction: &'static str,
-        memory: &'static str,
-        entries: Vec<KvEntryDeclaration>,
-    },
-    #[cfg(feature = "realtime")]
-    Realtime {
-        channels: Vec<DeclaredChannel>,
-        token_ttl: Duration,
-    },
-}
-
-impl DeclaredConfig {
-    fn kind(&self) -> &'static str {
-        match self {
-            Self::Postgres { .. } => crate::postgres::KIND,
-            Self::Bucket { .. } => crate::bucket::KIND,
-            Self::Topic { .. } => "topic",
-            Self::Task { .. } => "task",
-            Self::Consumer { .. } => "consumer",
-            Self::Worker { .. } => "worker",
-            Self::Kv { .. } => "kv",
-            #[cfg(feature = "realtime")]
-            Self::Realtime { .. } => "realtime",
-        }
-    }
-
-    fn namespace(&self) -> &'static str {
-        match self {
-            Self::Postgres { .. } | Self::Bucket { .. } | Self::Kv { .. } => "resource",
-            #[cfg(feature = "realtime")]
-            Self::Realtime { .. } => "resource",
-            Self::Topic { .. } | Self::Task { .. } => "topic",
-            Self::Consumer { .. } => "consumer",
-            Self::Worker { .. } => "worker",
-        }
-    }
-
-    fn claimed_name(&self, name: &str) -> String {
-        match self {
-            Self::Consumer { topic, .. } => format!("{topic}/{name}"),
-            _ => name.to_string(),
-        }
-    }
-
-    fn resource_type(&self) -> ResourceType {
-        match self {
-            Self::Postgres { .. } => ResourceType::RESOURCE_TYPE_POSTGRES,
-            Self::Bucket { .. } => ResourceType::RESOURCE_TYPE_BUCKET,
-            Self::Topic { .. } => ResourceType::RESOURCE_TYPE_TOPIC,
-            Self::Task { .. } => ResourceType::RESOURCE_TYPE_TASK,
-            Self::Consumer { .. } => ResourceType::RESOURCE_TYPE_CONSUMER,
-            Self::Worker { .. } => ResourceType::RESOURCE_TYPE_WORKER,
-            Self::Kv { .. } => ResourceType::RESOURCE_TYPE_KV,
-            #[cfg(feature = "realtime")]
-            Self::Realtime { .. } => ResourceType::RESOURCE_TYPE_REALTIME,
-        }
-    }
-
-    fn config(&self) -> Config {
-        match self {
-            Self::Postgres { version } => Config::from(PostgresConfig {
-                version: version.to_string(),
-                ..Default::default()
-            }),
-            Self::Bucket {
-                public,
-                allowed_origins,
-            } => Config::from(BucketConfig {
-                public: *public,
-                allowed_origins: allowed_origins.iter().map(|one| one.to_string()).collect(),
-                ..Default::default()
-            }),
-            Self::Topic {
-                schema,
-                ordered,
-                retry,
-            } => Config::from(TopicConfig {
-                schema: schema.map(|schema| schema()).unwrap_or_default(),
-                ordered: *ordered,
-                retry: retry.map(build_retry_policy).into(),
-                ..Default::default()
-            }),
-            Self::Task {
-                schema,
-                ordered,
-                retry,
-                concurrency,
-                max_duration,
-                ttl,
-                batch,
-                worker,
-                cron,
-                deliver: _,
-            } => Config::from(TaskConfig {
-                schema: schema.map(|schema| schema()).unwrap_or_default(),
-                ordered: *ordered,
-                retry: retry.map(build_retry_policy).into(),
-                concurrency: *concurrency,
-                max_duration: max_duration.map(Into::into).into(),
-                ttl: ttl.map(Into::into).into(),
-                batch: batch.map(build_batch_policy).into(),
-                worker: worker.to_string(),
-                cron: cron.to_string(),
-                ..Default::default()
-            }),
-            Self::Consumer {
-                topic,
-                worker,
-                retry,
-                concurrency,
-                max_duration,
-                lanes,
-                batch,
-                deliver: _,
-            } => Config::from(ConsumerConfig {
-                topic: topic.to_string(),
-                worker: worker.to_string(),
-                retry: retry.map(build_retry_policy).into(),
-                concurrency: *concurrency,
-                max_duration: max_duration.map(Into::into).into(),
-                lanes: lanes.iter().map(|lane| lane.to_wire().into()).collect(),
-                batch: batch.map(build_batch_policy).into(),
-                ..Default::default()
-            }),
-            Self::Worker { concurrency, .. } => Config::from(WorkerConfig {
-                concurrency: *concurrency,
-                ..Default::default()
-            }),
-            Self::Kv {
-                version,
-                eviction,
-                memory,
-                entries,
-            } => Config::from(KvConfig {
-                version: version.to_string(),
-                eviction: eviction.to_string(),
-                memory: memory.to_string(),
-                entries: entries
-                    .iter()
-                    .map(|entry| KvEntry {
-                        name: entry.name.to_string(),
-                        pattern: entry.pattern.to_string(),
-                        shape: entry.shape.to_wire().into(),
-                        source: format_source(entry.file, entry.line),
-                        ..Default::default()
-                    })
-                    .collect(),
-                ..Default::default()
-            }),
-            #[cfg(feature = "realtime")]
-            Self::Realtime {
-                channels,
-                token_ttl,
-            } => Config::from(RealtimeConfig {
-                channels: channels
-                    .iter()
-                    .map(|channel| RealtimeChannel {
-                        pattern: channel.pattern.to_string(),
-                        wildcard: channel.wildcard,
-                        schema: channel.schema.map(|schema| schema()).unwrap_or_default(),
-                        subscribe: if channel.public {
-                            RealtimeSubscribe::REALTIME_SUBSCRIBE_PUBLIC
-                        } else {
-                            RealtimeSubscribe::REALTIME_SUBSCRIBE_RULE
-                        }
-                        .into(),
-                        publish: if channel.publish {
-                            RealtimePublish::REALTIME_PUBLISH_RULE
-                        } else {
-                            RealtimePublish::REALTIME_PUBLISH_SERVER
-                        }
-                        .into(),
-                        source: format_source(channel.file, channel.line),
-                        ..Default::default()
-                    })
-                    .collect(),
-                token_ttl: buffa::MessageField::some((*token_ttl).into()),
-                ..Default::default()
-            }),
-        }
-    }
-}
-
-fn build_retry_policy(retry: Retry) -> RetryPolicy {
-    RetryPolicy {
-        max_attempts: retry.max_attempts,
-        min_delay: retry.min_delay.map(Into::into).into(),
-        max_delay: retry.max_delay.map(Into::into).into(),
-        ..Default::default()
-    }
-}
-
-fn build_batch_policy(batch: Batch) -> BatchPolicy {
-    BatchPolicy {
-        size: batch.size,
-        timeout: batch.timeout.map(Into::into).into(),
-        ..Default::default()
-    }
+pub fn proto_duration(
+    duration: Option<Duration>,
+) -> Option<buffa_types::google::protobuf::Duration> {
+    duration.map(Into::into)
 }
 
 #[doc(hidden)]
 pub struct DeclaredResource {
-    pub name: &'static str,
-    pub config: DeclaredConfig,
+    pub request: DeclareRequest,
     pub file: &'static str,
     pub line: u32,
 }
@@ -383,7 +120,7 @@ pub(crate) fn is_discovering() -> bool {
     std::env::var(PHASE_ENV).as_deref() == Ok(DISCOVERY_PHASE)
 }
 
-pub(crate) fn collect_declarations() -> Result<Declared, Error> {
+fn collect_declarations() -> Result<Declared, Error> {
     let mut structs: Vec<Declared> = inventory::iter::<Registered>
         .into_iter()
         .map(|registered| (registered.0)())
@@ -395,16 +132,11 @@ pub(crate) fn collect_declarations() -> Result<Declared, Error> {
         variables: Vec::new(),
         groups: Vec::new(),
     };
-    let mut resource_owners: Vec<(String, String)> = Vec::new();
     let mut variable_owners: Vec<(&str, String)> = Vec::new();
     let mut group_owners: Vec<(&str, String)> = Vec::new();
 
     for one in structs {
-        for resource in one.resources {
-            claim_resource(&mut resource_owners, &resource)?;
-            refuse_overlapping_entries(&resource)?;
-            all.resources.push(resource);
-        }
+        all.resources.extend(one.resources);
         for variable in one.variables {
             claim(
                 &mut variable_owners,
@@ -425,69 +157,77 @@ pub(crate) fn collect_declarations() -> Result<Declared, Error> {
         }
     }
     #[cfg(feature = "realtime")]
-    for resource in collect_realtime_resources()? {
-        claim_resource(&mut resource_owners, &resource)?;
-        all.resources.push(resource);
-    }
+    all.resources.extend(collect_realtime_resources()?);
     join_group_members(&mut all)?;
     Ok(all)
 }
 
 #[cfg(feature = "realtime")]
 fn collect_realtime_resources() -> Result<Vec<DeclaredResource>, Error> {
-    let mut resources: Vec<DeclaredResource> = Vec::new();
+    let mut resources: Vec<Vec<DeclaredChannel>> = Vec::new();
     for channel in list_declared_channels() {
-        let resource = match resources
+        match resources
             .iter_mut()
-            .find(|resource| resource.name == channel.realtime)
+            .find(|channels| channels[0].realtime == channel.realtime)
         {
-            Some(resource) => resource,
-            None => {
-                resources.push(DeclaredResource {
-                    name: channel.realtime,
-                    config: DeclaredConfig::Realtime {
-                        channels: Vec::new(),
-                        token_ttl: Duration::ZERO,
-                    },
-                    file: channel.file,
-                    line: channel.line,
-                });
-                resources.last_mut().expect("the resource just pushed")
-            }
-        };
-        let DeclaredConfig::Realtime { channels, .. } = &mut resource.config else {
-            unreachable!("a realtime resource holds realtime channels");
-        };
-        if let Some(prior) = channels
-            .iter()
-            .find(|prior| prior.pattern == channel.pattern)
-        {
-            return Err(Error::Definition {
-                key: channel.realtime.to_string(),
-                detail: format!(
-                    "declares channel \"{}\" at {} and at {}, and a realtime resource declares each pattern once",
-                    channel.pattern,
-                    format_site(prior.file, prior.line),
-                    format_site(channel.file, channel.line)
-                ),
-            });
+            Some(channels) => channels.push(channel),
+            None => resources.push(vec![channel]),
         }
-        channels.push(channel);
     }
-    for resource in &mut resources {
-        let DeclaredConfig::Realtime {
-            channels,
-            token_ttl,
-        } = &mut resource.config
-        else {
-            unreachable!("a realtime resource holds realtime channels");
-        };
-        *token_ttl = resolve_token_ttl(channels).map_err(|detail| Error::Definition {
-            key: resource.name.to_string(),
-            detail,
-        })?;
+    resources
+        .iter()
+        .map(|channels| {
+            let first = &channels[0];
+            let token_ttl = resolve_token_ttl(channels).map_err(|detail| Error::Definition {
+                key: first.realtime.to_string(),
+                detail,
+            })?;
+            Ok(DeclaredResource {
+                request: DeclareRequest {
+                    resource: ResourceIdentifier {
+                        r#type: ResourceType::RESOURCE_TYPE_REALTIME.into(),
+                        name: first.realtime.to_string(),
+                        ..Default::default()
+                    }
+                    .into(),
+                    config: Some(
+                        RealtimeConfig {
+                            channels: channels.iter().map(build_channel).collect(),
+                            token_ttl: buffa::MessageField::some(token_ttl.into()),
+                            ..Default::default()
+                        }
+                        .into(),
+                    ),
+                    ..Default::default()
+                },
+                file: first.file,
+                line: first.line,
+            })
+        })
+        .collect()
+}
+
+#[cfg(feature = "realtime")]
+fn build_channel(channel: &DeclaredChannel) -> RealtimeChannel {
+    RealtimeChannel {
+        pattern: channel.pattern.to_string(),
+        wildcard: channel.wildcard,
+        schema: channel.schema.map(|schema| schema()).unwrap_or_default(),
+        subscribe: if channel.public {
+            RealtimeSubscribe::REALTIME_SUBSCRIBE_PUBLIC
+        } else {
+            RealtimeSubscribe::REALTIME_SUBSCRIBE_RULE
+        }
+        .into(),
+        publish: if channel.publish {
+            RealtimePublish::REALTIME_PUBLISH_RULE
+        } else {
+            RealtimePublish::REALTIME_PUBLISH_SERVER
+        }
+        .into(),
+        source: format_source(channel.file, channel.line),
+        ..Default::default()
     }
-    Ok(resources)
 }
 
 fn join_group_members(all: &mut Declared) -> Result<(), Error> {
@@ -544,63 +284,6 @@ fn find_first_site(one: &Declared) -> (&'static str, u32) {
 
 fn format_site(file: &str, line: u32) -> String {
     format!("{file}:{line}")
-}
-
-fn claim_resource(
-    owners: &mut Vec<(String, String)>,
-    resource: &DeclaredResource,
-) -> Result<(), Error> {
-    let name = resource.config.claimed_name(resource.name);
-    let key = format!("{}:{name}", resource.config.namespace());
-    let site = format_site(resource.file, resource.line);
-    if let Some((_, claimed)) = owners.iter().find(|(seen, _)| *seen == key) {
-        let rule = match resource.config.namespace() {
-            "topic" => "Topics and tasks share one namespace, and a name in it is declared exactly once, in exactly one file.",
-            "consumer" => "A topic's consumer is declared exactly once, in exactly one file.",
-            "worker" => "A worker is declared exactly once, in exactly one file.",
-            _ => "A resource name is declared exactly once, in exactly one file.",
-        };
-        return Err(Error::Definition {
-            key: name,
-            detail: format!("is declared in {claimed} and {site}. {rule}"),
-        });
-    }
-    owners.push((key, site));
-    Ok(())
-}
-
-fn refuse_overlapping_entries(resource: &DeclaredResource) -> Result<(), Error> {
-    let DeclaredConfig::Kv { entries, .. } = &resource.config else {
-        return Ok(());
-    };
-    for (index, entry) in entries.iter().enumerate() {
-        for prior in &entries[..index] {
-            let (site, prior_site) = (
-                format_site(entry.file, entry.line),
-                format_site(prior.file, prior.line),
-            );
-            let detail = if prior.name == entry.name {
-                format!(
-                    "has entry '{}' declared at {prior_site} and at {site}, and a store names each entry once",
-                    entry.name
-                )
-            } else if ParsedPattern::parse(prior.pattern)
-                .overlaps(&ParsedPattern::parse(entry.pattern))
-            {
-                format!(
-                    "has entry '{}' declared at {site} with pattern \"{}\", which overlaps pattern \"{}\" of entry '{}' declared at {prior_site}: some key would match both, so neither entry could tell its keys from the other's",
-                    entry.name, entry.pattern, prior.pattern, prior.name
-                )
-            } else {
-                continue;
-            };
-            return Err(Error::Definition {
-                key: resource.name.to_string(),
-                detail,
-            });
-        }
-    }
-    Ok(())
 }
 
 fn claim<'a>(
@@ -704,32 +387,10 @@ fn convert_class(class: Class) -> VariableClass {
 fn find_problems(declared: &Declared, cells: &[VariableCell]) -> Vec<VariableProblem> {
     let mut problems = Vec::new();
     for variable in &declared.variables {
-        let stored: Vec<&VariableCell> = cells
-            .iter()
-            .filter(|cell| cell.key == variable.key)
-            .collect();
-
-        if variable.required {
-            for folder in list_required_folders(variable) {
-                if stored.iter().any(|cell| cell.folder == folder) {
-                    continue;
-                }
-                if !is_required_at(declared, variable, cells, folder) {
-                    continue;
-                }
-                problems.push(new_problem(
-                    variable.key,
-                    folder,
-                    Kind::KIND_MISSING,
-                    String::new(),
-                ));
-            }
-        }
-
         let Some(check) = variable.check else {
             continue;
         };
-        for cell in stored {
+        for cell in cells.iter().filter(|cell| cell.key == variable.key) {
             if let Err(said) = check(&cell.value) {
                 problems.push(new_problem(
                     variable.key,
@@ -741,54 +402,6 @@ fn find_problems(declared: &Declared, cells: &[VariableCell]) -> Vec<VariablePro
         }
     }
     problems
-}
-
-fn is_required_at(
-    declared: &Declared,
-    variable: &DeclaredVariable,
-    cells: &[VariableCell],
-    folder: &str,
-) -> bool {
-    let Some(key) = variable.group else {
-        return true;
-    };
-    let required = declared
-        .groups
-        .iter()
-        .any(|group| group.key == key && group.required);
-    required || is_group_switched_on(declared, key, cells, folder)
-}
-
-fn is_group_switched_on(
-    declared: &Declared,
-    key: &str,
-    cells: &[VariableCell],
-    folder: &str,
-) -> bool {
-    declared
-        .variables
-        .iter()
-        .filter(|member| member.group == Some(key))
-        .any(|member| has_cell(member, cells, folder))
-}
-
-fn has_cell(variable: &DeclaredVariable, cells: &[VariableCell], folder: &str) -> bool {
-    let at = |where_: &str| {
-        cells
-            .iter()
-            .any(|cell| cell.key == variable.key && cell.folder == where_)
-    };
-    if !variable.folders.is_empty() {
-        return !folder.is_empty() && variable.folders.contains(&folder) && at(folder);
-    }
-    (!folder.is_empty() && at(folder)) || at("")
-}
-
-fn list_required_folders(variable: &DeclaredVariable) -> Vec<&str> {
-    if variable.folders.is_empty() {
-        return vec![""];
-    }
-    variable.folders.to_vec()
 }
 
 fn new_problem(key: &str, folder: &str, kind: Kind, detail: String) -> VariableProblem {
@@ -803,19 +416,12 @@ fn new_problem(key: &str, folder: &str, kind: Kind, detail: String) -> VariableP
 
 fn build_declare_request(resource: &DeclaredResource) -> DeclareRequest {
     DeclareRequest {
-        resource: ResourceIdentifier {
-            r#type: resource.config.resource_type().into(),
-            name: resource.name.to_string(),
-            ..Default::default()
-        }
-        .into(),
-        config: Some(resource.config.config()),
         source: format_source(resource.file, resource.line),
-        ..Default::default()
+        ..resource.request.clone()
     }
 }
 
-fn format_source(file: &str, line: u32) -> String {
+pub(crate) fn format_source(file: &str, line: u32) -> String {
     let path = std::path::Path::new(file);
     let absolute = if path.is_absolute() {
         path.to_path_buf()
@@ -833,9 +439,17 @@ fn read_source_root() -> std::path::PathBuf {
 }
 
 fn refuse_declaration(resource: &DeclaredResource, said: String) -> Error {
+    let identifier = &resource.request.resource;
+    let kind = identifier
+        .r#type
+        .as_known()
+        .map(|known| known.proto_name())
+        .unwrap_or_default();
     Error::Declare {
-        kind: resource.config.kind().to_string(),
-        name: resource.name.to_string(),
+        kind: kind
+            .trim_start_matches("RESOURCE_TYPE_")
+            .to_ascii_lowercase(),
+        name: identifier.name.clone(),
         said,
     }
 }

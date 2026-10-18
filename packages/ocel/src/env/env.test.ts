@@ -73,16 +73,6 @@ beforeEach(() => {
 });
 
 describe("definition errors", () => {
-  it("rejects a key another definitions file already declared", () => {
-    source.override = "/project/env.first.ts";
-    defineEnv({ DUPE_KEY: { class: "plain" } });
-
-    source.override = "/project/env.second.ts";
-    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(EnvDefinitionError);
-    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(/DUPE_KEY/);
-    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(/env\.first\.ts/);
-  });
-
   it("lets the file that declared a key declare it again", () => {
     source.override = "/project/env.reloaded.ts";
     defineEnv({ RELOADED_KEY: { class: "plain" } });
@@ -223,13 +213,11 @@ describe("the declaration payload", () => {
 });
 
 describe("validation against the stored cells", () => {
-  it("reports a required key the store has no cell for", async () => {
+  it("leaves a required key the store has no cell for to the CLI", async () => {
     defineEnv({ VALIDATE_MISSING: { class: "plain" } });
     await flushDeclarations();
 
-    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
-      problems: [{ key: "VALIDATE_MISSING", folder: "", kind: 1, detail: "" }],
-    });
+    expect(reportEnvProblemsMock).not.toHaveBeenCalled();
   });
 
   it("reports a present value its schema rejects, naming what failed", async () => {
@@ -292,9 +280,7 @@ describe("validation against the stored cells", () => {
     });
     await flushDeclarations();
 
-    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
-      problems: [{ key: "LIVE_ABSENT", folder: "", kind: 1, detail: "" }],
-    });
+    expect(reportEnvProblemsMock).not.toHaveBeenCalled();
   });
 });
 
@@ -758,40 +744,6 @@ describe("folder scoping", () => {
       [{ definitions: { key: string; folders: string[] }[] }],
     ];
     expect(call![0].definitions[0]!.folders).toEqual(["/web", "/admin"]);
-  });
-
-  it("requires a scoped key in every folder it names, and never at root", async () => {
-    declareEnvMock.mockResolvedValue({
-      cells: [cell("SCOPE_PARTIAL", "ph_web", "/web")],
-    });
-    defineEnv({ SCOPE_PARTIAL: { class: "plain", folders: ["/web", "/admin"] } });
-    await flushDeclarations();
-
-    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
-      problems: [{ key: "SCOPE_PARTIAL", folder: "/admin", kind: 1, detail: "" }],
-    });
-  });
-
-  it("does not accept a root value as covering a scoped key", async () => {
-    declareEnvMock.mockResolvedValue({ cells: [cell("SCOPE_ROOTED", "one")] });
-    defineEnv({ SCOPE_ROOTED: { class: "plain", folders: ["/web"] } });
-    await flushDeclarations();
-
-    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
-      problems: [{ key: "SCOPE_ROOTED", folder: "/web", kind: 1, detail: "" }],
-    });
-  });
-
-  it("requires an unscoped key at root even when a folder overrides it", async () => {
-    declareEnvMock.mockResolvedValue({
-      cells: [cell("SCOPE_UNSCOPED", "override", "/web")],
-    });
-    defineEnv({ SCOPE_UNSCOPED: { class: "plain" } });
-    await flushDeclarations();
-
-    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
-      problems: [{ key: "SCOPE_UNSCOPED", folder: "", kind: 1, detail: "" }],
-    });
   });
 
   it("says nothing when every folder a scope names is set", async () => {
@@ -1347,53 +1299,6 @@ describe("validating a group against the stored cells", () => {
     await flushDeclarations();
 
     expect(reportEnvProblemsMock).not.toHaveBeenCalled();
-  });
-
-  it("reports the rest of an optional group missing once one member has a cell", async () => {
-    declareEnvMock.mockResolvedValue({ cells: [cell("CELLS_PARTIAL_ID", "an-id")] });
-    defineEnv({
-      github6: group(
-        { CELLS_PARTIAL_ID: { class: "plain" }, CELLS_PARTIAL_SECRET: { class: "plain" } },
-        { optional: true },
-      ),
-    });
-    await flushDeclarations();
-
-    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
-      problems: [{ key: "CELLS_PARTIAL_SECRET", folder: "", kind: 1, detail: "" }],
-    });
-  });
-
-  it("reports every member of a required group missing with nothing stored", async () => {
-    defineEnv({
-      smtp2: group({ CELLS_SMTP_HOST: { class: "plain" }, CELLS_SMTP_PORT: { class: "plain" } }),
-    });
-    await flushDeclarations();
-
-    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
-      problems: [
-        { key: "CELLS_SMTP_HOST", folder: "", kind: 1, detail: "" },
-        { key: "CELLS_SMTP_PORT", folder: "", kind: 1, detail: "" },
-      ],
-    });
-  });
-
-  it("counts a member inherited from the root as turning the group on for a subfolder", async () => {
-    declareEnvMock.mockResolvedValue({ cells: [cell("CELLS_INHERITED_ID", "an-id")] });
-    defineEnv({
-      github8: group(
-        {
-          CELLS_INHERITED_ID: { class: "plain" },
-          CELLS_INHERITED_SECRET: { class: "plain", folders: ["/web"] },
-        },
-        { optional: true },
-      ),
-    });
-    await flushDeclarations();
-
-    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
-      problems: [{ key: "CELLS_INHERITED_SECRET", folder: "/web", kind: 1, detail: "" }],
-    });
   });
 
   it("does not report a member missing that its own spelling makes optional when the group is on", async () => {

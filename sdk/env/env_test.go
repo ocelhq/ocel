@@ -390,8 +390,8 @@ func TestDefineDeclaresEveryVariableWithItsClassAndWhetherItIsRequired(t *testin
 			t.Errorf("definitions[%d].source = %q, want the call site", i, source)
 		}
 	}
-	if byPath(*seen, "/ReportEnvProblems") == nil {
-		t.Error("no ReportEnvProblems call, want one for the missing required cells")
+	if byPath(*seen, "/ReportEnvProblems") != nil {
+		t.Error("a ReportEnvProblems call, want none: the CLI works out which required cells are missing")
 	}
 }
 
@@ -401,7 +401,7 @@ func equal(got, want any) bool {
 	return string(g) == string(w)
 }
 
-func TestDefineReportsARequiredKeyTheStoreHasNoCellFor(t *testing.T) {
+func TestDefineLeavesARequiredKeyTheStoreHasNoCellForToTheCLI(t *testing.T) {
 	seen := discover(t, []cell{{Key: "PRESENT", Value: "v"}})
 
 	env.MustDefine[struct {
@@ -409,12 +409,8 @@ func TestDefineReportsARequiredKeyTheStoreHasNoCellFor(t *testing.T) {
 		Missing string `ocel:"MISSING"`
 	}]()
 
-	problems := reported(t, *seen)
-	if len(problems) != 1 {
-		t.Fatalf("problems = %v, want one", problems)
-	}
-	if p := problems[0]; p["key"] != "MISSING" || p["kind"] != "KIND_MISSING" {
-		t.Errorf("problem = %v", p)
+	if problems := reported(t, *seen); len(problems) != 0 {
+		t.Fatalf("problems = %v, want none: the CLI works out which required cells are missing", problems)
 	}
 }
 
@@ -808,22 +804,6 @@ func TestDefineLeavesAnOptionalGroupAbsentWhenNoMemberIsDelivered(t *testing.T) 
 	}
 }
 
-func TestDefineReportsTheMissingMemberOfAHalfDeliveredOptionalGroup(t *testing.T) {
-	seen := discover(t, []cell{{Key: "GITHUB_ID", Value: "id"}})
-
-	env.MustDefine[struct {
-		GitHub *githubGroup `ocel:"github"`
-	}]()
-
-	problems := reported(t, *seen)
-	if len(problems) != 1 {
-		t.Fatalf("problems = %v, want one", problems)
-	}
-	if p := problems[0]; p["key"] != "GITHUB_SECRET" || p["kind"] != "KIND_MISSING" {
-		t.Errorf("problem = %v", p)
-	}
-}
-
 func TestDefineResolvesAFullyDeliveredOptionalGroup(t *testing.T) {
 	t.Setenv("GITHUB_ID", "id")
 	t.Setenv("GITHUB_SECRET", "s3cret")
@@ -837,30 +817,6 @@ func TestDefineResolvesAFullyDeliveredOptionalGroup(t *testing.T) {
 	}
 	if got.GitHub.ID != "id" || got.GitHub.Secret != "s3cret" {
 		t.Errorf("GitHub = %+v", *got.GitHub)
-	}
-}
-
-func TestDefineReportsEveryMemberOfARequiredGroupTheStoreHasNoCellForAsMissing(t *testing.T) {
-	type smtp struct {
-		Host string `ocel:"SMTP_HOST"`
-		Port int    `ocel:"SMTP_PORT"`
-	}
-	seen := discover(t, nil)
-
-	env.MustDefine[struct {
-		SMTP smtp `ocel:"smtp"`
-	}]()
-
-	problems := reported(t, *seen)
-	var keys []string
-	for _, p := range problems {
-		if p["kind"] != "KIND_MISSING" {
-			t.Errorf("problem = %v", p)
-		}
-		keys = append(keys, p["key"].(string))
-	}
-	if !equal(keys, []string{"SMTP_HOST", "SMTP_PORT"}) {
-		t.Errorf("missing keys = %v, want both members", keys)
 	}
 }
 
@@ -1022,27 +978,6 @@ func TestDefineRefusesAnUnexportedGroup(t *testing.T) {
 	})
 	if !strings.Contains(err.Error(), "unexported") {
 		t.Errorf("error = %q", err)
-	}
-}
-
-type inheritedGroup struct {
-	Token string `ocel:"INHERITED_TOKEN"`
-	Web   string `ocel:"INHERITED_WEB,folders=/web"`
-}
-
-func TestDefineReportsAScopedMemberOfAGroupARootValueTurnedOnAsMissing(t *testing.T) {
-	seen := discover(t, []cell{{Key: "INHERITED_TOKEN", Value: "t"}})
-
-	env.MustDefine[struct {
-		Inherited *inheritedGroup `ocel:"inherited"`
-	}]()
-
-	problems := reported(t, *seen)
-	if len(problems) != 1 {
-		t.Fatalf("problems = %v, want one", problems)
-	}
-	if p := problems[0]; p["key"] != "INHERITED_WEB" || p["folder"] != "/web" || p["kind"] != "KIND_MISSING" {
-		t.Errorf("problem = %v", p)
 	}
 }
 

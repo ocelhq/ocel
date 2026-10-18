@@ -31,7 +31,7 @@ mod wire;
 pub use denial::DenialCode;
 
 use crate::binding::read_realtime;
-use crate::declare::{is_discovering, Schema};
+use crate::declare::is_discovering;
 use crate::proto::app::realtime::v1::{PublishRequest, RealtimeServiceClient};
 use crate::proto::common::bindings::v1::RealtimeProperties;
 use crate::run::BoxFuture;
@@ -71,6 +71,9 @@ pub trait Channel: Sized + Send + Sync + 'static {
     #[doc(hidden)]
     fn from_params(params: &BTreeMap<String, String>) -> Self;
 }
+
+#[doc(hidden)]
+pub type Schema = fn() -> String;
 
 #[doc(hidden)]
 pub struct DeclaredChannel {

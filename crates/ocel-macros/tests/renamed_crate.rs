@@ -84,10 +84,10 @@ fn start() {}
 
 #[test]
 fn every_macro_reaches_the_sdk_through_the_path_its_crate_attribute_names() {
-    let resources: Vec<&str> = <Infra as sdk::Declare>::declared()
+    let resources: Vec<String> = <Infra as sdk::Declare>::declared()
         .resources
-        .iter()
-        .map(|resource| resource.name)
+        .into_iter()
+        .map(|resource| resource.request.resource.name.clone())
         .collect();
     assert_eq!(resources, ["orders", "db", "files", "media", "cache"]);
 

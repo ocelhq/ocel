@@ -22,6 +22,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
+	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
 
 const liveEnv = "OCEL_LIVE_DOCKER"
@@ -86,9 +87,7 @@ func (p liveProject) backend(t *testing.T, report func(string)) *queue.Backend {
 
 func tasksOf(t *testing.T, backend *queue.Backend) taskv1connect.TaskServiceClient {
 	t.Helper()
-	mux := http.NewServeMux()
-	backend.Routes(mux, func(next http.Handler) http.Handler { return next })
-	server := httptest.NewServer(mux)
+	server := httptest.NewServer(bindingproxy.NewMux(bindingproxy.Services{Tasks: backend.Tasks(), Topics: backend.Topics()}))
 	t.Cleanup(server.Close)
 	return taskv1connect.NewTaskServiceClient(server.Client(), server.URL)
 }

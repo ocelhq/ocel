@@ -1,4 +1,3 @@
-use crate::declare::{collect_declarations, DeclaredConfig, DeliveryFn};
 use crate::json::convert_timestamp;
 use crate::proto::app::topic::v1::Envelope;
 use crate::run::{Attempt, BoxFuture, Message, Next, Run, RunError, RunKind};
@@ -28,6 +27,29 @@ pub enum Outcome {
     Abort(String),
     Retry(String),
 }
+
+#[doc(hidden)]
+pub type DeliveryFn = fn(Delivery) -> BoxFuture<'static, Outcome>;
+
+#[doc(hidden)]
+pub enum Handler {
+    Run {
+        kind: RunKind,
+        topic: &'static str,
+        name: &'static str,
+        worker: &'static str,
+        batch: bool,
+        deliver: DeliveryFn,
+    },
+    Worker {
+        name: &'static str,
+        concurrency: i32,
+        on_start: Option<OnStart>,
+        middleware: Option<WorkerMiddleware>,
+    },
+}
+
+inventory::collect!(Handler);
 
 type StepFuture<'a, T> = BoxFuture<'a, Result<T, RunError>>;
 type RunStep<P, R> = for<'a> fn(P, &'a Run) -> StepFuture<'a, R>;
@@ -252,53 +274,37 @@ struct Registry {
 }
 
 impl Registry {
-    fn new() -> Result<Self, String> {
-        let declared = collect_declarations().map_err(|err| err.to_string())?;
+    fn new() -> Self {
         let mut registry = Self::default();
-        for resource in declared.resources {
-            match resource.config {
-                DeclaredConfig::Task {
-                    worker,
-                    batch,
-                    deliver,
-                    ..
-                } => {
-                    registry.registrations.insert(
-                        (resource.name.to_string(), resource.name.to_string()),
-                        Registration {
-                            kind: RunKind::Task,
-                            name: resource.name,
-                            worker: resolve_worker_name(worker),
-                            batch: batch.is_some(),
-                            deliver,
-                        },
-                    );
-                }
-                DeclaredConfig::Consumer {
+        for handler in inventory::iter::<Handler> {
+            match *handler {
+                Handler::Run {
+                    kind,
                     topic,
+                    name,
                     worker,
                     batch,
                     deliver,
-                    ..
                 } => {
                     registry.registrations.insert(
-                        (topic.to_string(), resource.name.to_string()),
+                        (topic.to_string(), name.to_string()),
                         Registration {
-                            kind: RunKind::Consumer,
-                            name: resource.name,
+                            kind,
+                            name,
                             worker: resolve_worker_name(worker),
-                            batch: batch.is_some(),
+                            batch,
                             deliver,
                         },
                     );
                 }
-                DeclaredConfig::Worker {
+                Handler::Worker {
+                    name,
                     concurrency,
                     on_start,
                     middleware,
                 } => {
                     registry.workers.insert(
-                        resource.name.to_string(),
+                        name.to_string(),
                         WorkerSetup {
                             slots: (concurrency > 0)
                                 .then(|| Arc::new(Semaphore::new(concurrency as usize))),
@@ -308,10 +314,9 @@ impl Registry {
                         },
                     );
                 }
-                _ => {}
             }
         }
-        Ok(registry)
+        registry
     }
 
     fn find_worker(&self, name: &str) -> &WorkerSetup {
@@ -326,8 +331,8 @@ fn resolve_worker_name(worker: &'static str) -> &'static str {
     }
 }
 
-fn ensure_registry() -> &'static Result<Registry, String> {
-    static REGISTRY: OnceLock<Result<Registry, String>> = OnceLock::new();
+fn ensure_registry() -> &'static Registry {
+    static REGISTRY: OnceLock<Registry> = OnceLock::new();
     REGISTRY.get_or_init(Registry::new)
 }
 
@@ -343,10 +348,7 @@ pub async fn deliver(worker: &str, body: &[u8]) -> (u16, Vec<u8>) {
         Err(err) => return answer_text(400, format!("the body is not a delivery envelope: {err}")),
     };
     let envelope = &received.envelope;
-    let registry = match ensure_registry() {
-        Ok(registry) => registry,
-        Err(err) => return answer_text(500, err.clone()),
-    };
+    let registry = ensure_registry();
     let key = (envelope.topic.clone(), envelope.consumer.clone());
     let Some(registration) = registry.registrations.get(&key) else {
         return answer_text(

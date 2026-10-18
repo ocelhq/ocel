@@ -1,6 +1,5 @@
 import inspect
 import os
-import threading
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _installed
 
@@ -18,9 +17,6 @@ _PHASE_ENV = "OCEL_PHASE"
 _DEV_SERVER_ENV = "OCEL_DEV_SERVER"
 _DEV_SERVER_TOKEN_ENV = "OCEL_DEV_SERVER_TOKEN"
 _SDK_VERSION_HEADER = "Ocel-Sdk-Version"
-
-_declared_lock = threading.Lock()
-declared: set[bytes] = set()
 
 
 def read_sdk_version() -> str:
@@ -52,17 +48,10 @@ def find_caller_source() -> str:
 
 
 def declare(request: DeclareRequest) -> None:
-    sent = request.to_binary()
-    with _declared_lock:
-        if sent in declared:
-            return
-        declared.add(sent)
     try:
         with _new_client() as client:
             client.declare(request, headers=_build_headers())
     except Exception as error:
-        with _declared_lock:
-            declared.discard(sent)
         raise _build_declare_error(request, error) from None
 
 
