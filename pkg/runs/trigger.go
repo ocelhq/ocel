@@ -202,10 +202,10 @@ func (e *Engine) debounce(ctx context.Context, deployed deployedConsumer, key, e
 		if pending, err = ReadRecordedRun(held); err != nil {
 			return false, err
 		}
-		_, err = e.reschedule(ctx, deployed, pending, due, true)
+		moved, err := e.reschedule(ctx, deployed, pending, due, true)
 		switch code := connect.CodeOf(err); {
 		case err == nil:
-			refreshed := NewRecordNamingRun(record.Purpose, record.Topic, record.Key, pending, due)
+			refreshed := NewRecordNamingRun(record.Purpose, record.Topic, record.Key, pending, moved.DueAt)
 			if err := e.cfg.Store.ReplaceRecord(ctx, refreshed, held.Value); err != nil && !errors.Is(err, records.ErrStale) {
 				return false, err
 			}
@@ -250,7 +250,7 @@ func (e *Engine) readTaskRun(ctx context.Context, id string) (Run, error) {
 	return run, err
 }
 
-func (e *Engine) reschedule(ctx context.Context, deployed deployedConsumer, execution string, due time.Time, shiftExpiry bool) (Run, error) {
+func (e *Engine) reschedule(ctx context.Context, deployed deployedConsumer, execution string, due time.Time, debounced bool) (Run, error) {
 	run, err := e.cfg.Store.ReadRun(ctx, deployed.topicName, execution)
 	if errors.Is(err, records.ErrNotFound) {
 		return Run{}, refuseMissingRun(execution)
@@ -260,6 +260,10 @@ func (e *Engine) reschedule(ctx context.Context, deployed deployedConsumer, exec
 	}
 	var written Run
 	err = records.RetryWhileStale(ctx, func() (bool, error) {
+		if debounced && IsUnfinished(run.Status) && !due.After(run.DueAt) {
+			written = run
+			return false, nil
+		}
 		now := time.Now()
 		if status := statusAt(run, now, true); status != provider.RunDelayed {
 			return false, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is %s, and only a delayed run can be rescheduled", execution, status))
@@ -269,7 +273,7 @@ func (e *Engine) reschedule(ctx context.Context, deployed deployedConsumer, exec
 		if !due.After(now) {
 			moved.Status = provider.RunQueued
 		}
-		if shiftExpiry && !run.ExpiresAt.IsZero() {
+		if debounced && !run.ExpiresAt.IsZero() {
 			moved.ExpiresAt = run.ExpiresAt.Add(due.Sub(run.DueAt))
 		}
 		var err error
