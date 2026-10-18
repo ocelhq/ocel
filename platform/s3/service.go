@@ -3,10 +3,12 @@ package s3
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +29,7 @@ const (
 	sessionTTL    = 2 * time.Hour
 
 	sessionRecordLifetime = 2 * sessionTTL
+	openedAtWidth         = 12
 
 	ReservedKeyPrefix = buildoutput.StateDir + "/"
 
@@ -98,7 +101,7 @@ type Service struct {
 	granted  map[string]scope
 
 	now       func() time.Time
-	newID     func() string
+	newID     func(bucket string, at time.Time) string
 	newSecret func() string
 	sweeping  func(run func())
 
@@ -118,7 +121,7 @@ func New(cfg Config) *Service {
 		sessions:  scopeOf(cfg.Sessions),
 		granted:   granted,
 		now:       time.Now,
-		newID:     func() string { return sessionIDPrefix(cfg.Tag) + randomHex(16) },
+		newID:     func(bucket string, at time.Time) string { return sessionID(cfg.Tag, bucket, at, randomHex(16)) },
 		newSecret: func() string { return randomHex(32) },
 		sweeping:  func(run func()) { go run() },
 	}
@@ -129,6 +132,27 @@ func sessionIDPrefix(tag string) string {
 		return "sess_"
 	}
 	return "sess_" + tag + "_"
+}
+
+func ownedSessionPrefix(tag, bucket string) string {
+	sum := sha256.Sum256([]byte(bucket))
+	return sessionIDPrefix(tag) + hex.EncodeToString(sum[:8]) + "_"
+}
+
+func sessionID(tag, bucket string, at time.Time, random string) string {
+	return ownedSessionPrefix(tag, bucket) + fmt.Sprintf("%0*x", openedAtWidth, at.UnixMilli()) + "_" + random
+}
+
+func sessionOpenedAt(owned, id string) (time.Time, bool) {
+	stamp, found := strings.CutPrefix(id, owned)
+	if !found || len(stamp) < openedAtWidth {
+		return time.Time{}, false
+	}
+	millis, err := strconv.ParseInt(stamp[:openedAtWidth], 16, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.UnixMilli(millis), true
 }
 
 func (s *Service) hasBucket(name string) bool {
@@ -230,8 +254,8 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUpload
 	if err != nil {
 		return nil, err
 	}
-	sessionID := s.newID()
 	now := s.now()
+	sessionID := s.newID(req.GetBucket(), now)
 
 	files := make([]sessionFile, len(req.GetFiles()))
 	targets := make([]*bucketv1.PresignedTarget, len(req.GetFiles()))

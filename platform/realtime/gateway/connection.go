@@ -174,8 +174,18 @@ func (c *connection) wait(ctx context.Context, d time.Duration) bool {
 }
 
 func (c *connection) write(ctx context.Context, expired <-chan struct{}) {
-	keepAlive := time.NewTicker(c.g.cfg.KeepAlive)
-	defer keepAlive.Stop()
+	keepAlive := make(chan struct{}, 1)
+	var stopKeepAlive func() bool
+	armKeepAlive := func() {
+		stopKeepAlive = c.g.cfg.Clock.AfterFunc(c.g.cfg.KeepAlive, func() {
+			select {
+			case keepAlive <- struct{}{}:
+			default:
+			}
+		})
+	}
+	armKeepAlive()
+	defer func() { stopKeepAlive() }()
 	for {
 		select {
 		case <-ctx.Done():
@@ -186,10 +196,11 @@ func (c *connection) write(ctx context.Context, expired <-chan struct{}) {
 		case <-c.queue.Overflowed():
 			_ = c.conn.Close(websocket.StatusTryAgainLater, "the connection fell behind its events")
 			return
-		case <-keepAlive.C:
+		case <-keepAlive:
 			if c.send(ctx, mustEncode(idFrame{Type: frameKeepAlive})) != nil {
 				return
 			}
+			armKeepAlive()
 		case <-c.queue.Ready():
 			for _, frame := range c.queue.Take() {
 				if c.send(ctx, frame) != nil {

@@ -42,6 +42,7 @@ type fakeStore struct {
 	objects map[string]map[string]stored
 	next    int
 	clock   func() time.Time
+	uploads map[string][]s3types.MultipartUpload
 
 	overwrittenAfterWrite bool
 }
@@ -179,11 +180,30 @@ func (f *fakeStore) CopyObject(_ context.Context, in *s3.CopyObjectInput, _ ...f
 }
 
 func (f *fakeStore) CreateMultipartUpload(_ context.Context, in *s3.CreateMultipartUploadInput, _ ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	now := time.Now()
+	if f.clock != nil {
+		now = f.clock()
+	}
+	if f.uploads == nil {
+		f.uploads = map[string][]s3types.MultipartUpload{}
+	}
+	bucket := aws.ToString(in.Bucket)
+	f.uploads[bucket] = append(f.uploads[bucket], s3types.MultipartUpload{Key: in.Key, UploadId: aws.String("upload-1"), Initiated: aws.Time(now)})
 	return &s3.CreateMultipartUploadOutput{UploadId: aws.String("upload-1")}, nil
 }
 
-func (f *fakeStore) ListMultipartUploads(_ context.Context, _ *s3.ListMultipartUploadsInput, _ ...func(*s3.Options)) (*s3.ListMultipartUploadsOutput, error) {
-	return &s3.ListMultipartUploadsOutput{}, nil
+func (f *fakeStore) ListMultipartUploads(_ context.Context, in *s3.ListMultipartUploadsInput, _ ...func(*s3.Options)) (*s3.ListMultipartUploadsOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := &s3.ListMultipartUploadsOutput{}
+	for _, upload := range f.uploads[aws.ToString(in.Bucket)] {
+		if strings.HasPrefix(aws.ToString(upload.Key), aws.ToString(in.Prefix)) {
+			out.Uploads = append(out.Uploads, upload)
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeStore) CompleteMultipartUpload(_ context.Context, in *s3.CompleteMultipartUploadInput, _ ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error) {
@@ -237,6 +257,7 @@ type harness struct {
 	store  *fakeStore
 	poster *recordingPoster
 	now    time.Time
+	opened []string
 }
 
 func newHarness(t *testing.T, tweak func(*Config)) *harness {
@@ -262,7 +283,7 @@ func newHarness(t *testing.T, tweak func(*Config)) *harness {
 	h.svc = New(cfg)
 	h.svc.sweeping = func(run func()) { run() }
 	h.svc.now = func() time.Time { return h.now }
-	h.svc.newID = func() string { return "sess_fixed" }
+	h.svc.newID = func(string, time.Time) string { return "sess_fixed" }
 	h.svc.newSecret = func() string { return "test-secret" }
 	return h
 }

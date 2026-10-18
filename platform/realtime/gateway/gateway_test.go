@@ -470,7 +470,7 @@ func TestAnExpiredSubscribeTokenIsRefused(t *testing.T) {
 func TestAConnectionIsClosedForPolicyWhenItsConnectTokenExpires(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t)
+	h := newHarness(t, func(cfg *gateway.Config) { cfg.KeepAlive = 2 * time.Minute })
 	c := h.connect()
 	channel := "/app/orders/o-1"
 
@@ -688,7 +688,7 @@ func TestTheTwoHundredAndFirstSubscriptionOnAConnectionIsRefused(t *testing.T) {
 func TestAConnectionIsAcknowledgedWithItsTimeoutAndKeptAlive(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, func(cfg *gateway.Config) { cfg.KeepAlive = 50 * time.Millisecond })
+	h := newHarness(t, func(cfg *gateway.Config) { cfg.KeepAlive = 10 * time.Second })
 	c, _, err := h.dial(h.mint(token.Connect, "/"+namespace))
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -696,11 +696,13 @@ func TestAConnectionIsAcknowledgedWithItsTimeoutAndKeptAlive(t *testing.T) {
 	c.send(map[string]any{"type": "connection_init"})
 
 	ack := c.read()
-	if ack["type"] != "connection_ack" || ack["connectionTimeoutMs"] != float64(250) {
+	if ack["type"] != "connection_ack" || ack["connectionTimeoutMs"] != float64(50_000) {
 		t.Fatalf("got %v, want connection_ack with a timeout of five keep-alives", ack)
 	}
+	h.clock.awaitTimers(t, 3)
+	h.advance(10 * time.Second)
 	if ka := c.read(); ka["type"] != "ka" {
-		t.Fatalf("got %v, want a keep-alive", ka)
+		t.Fatalf("got %v, want a keep-alive once the gateway's clock reached one", ka)
 	}
 }
 

@@ -111,11 +111,8 @@ func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
 	e.deployment = deployment
 	e.mu.Unlock()
 	e.runs.Deploy(runsDeployment(deployment))
-	if err := e.cancelUndeployedRuns(ctx, deployment); err != nil {
-		return err
-	}
 	e.signalApplied()
-	return nil
+	return e.cancelUndeployedRuns(ctx, deployment)
 }
 
 func (e *Engine) cancelUndeployedRuns(ctx context.Context, deployment Deployment) error {

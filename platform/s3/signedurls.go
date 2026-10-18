@@ -209,6 +209,17 @@ func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest)
 	if req.GetExpiresIn() != nil {
 		ttl = ttlOf(req.GetExpiresIn())
 	}
+	if s.cfg.SweepUploads {
+		initiated, err := s.initiated(ctx, granted.bucket, key, req.GetUploadId())
+		if err != nil {
+			return nil, err
+		}
+		left := initiated.Add(orphanAge).Sub(s.now())
+		if left < time.Second {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("upload %q of %q was opened more than %s ago and is swept as abandoned; open a new one", req.GetUploadId(), req.GetKey(), orphanAge))
+		}
+		ttl = min(ttl, left.Truncate(time.Second))
+	}
 
 	resp := &bucketv1.SignPartsResponse{Parts: make([]*bucketv1.SignedPart, 0, len(req.GetPartNumbers()))}
 	for _, number := range req.GetPartNumbers() {
@@ -275,4 +286,24 @@ func (s *Service) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipa
 		return nil, storeError("abandon the multipart upload of "+req.GetKey(), err)
 	}
 	return &bucketv1.AbortMultipartResponse{}, nil
+}
+
+func (s *Service) initiated(ctx context.Context, bucket, key, uploadID string) (time.Time, error) {
+	in := &s3.ListMultipartUploadsInput{Bucket: aws.String(bucket), Prefix: aws.String(key), MaxUploads: aws.Int32(sweptPerSweep)}
+	for page := 0; page < sweepPageLimit; page++ {
+		out, err := s.cfg.Objects.ListMultipartUploads(ctx, in)
+		if err != nil {
+			return time.Time{}, storeError("read the multipart uploads open on "+key, err)
+		}
+		for _, upload := range out.Uploads {
+			if aws.ToString(upload.Key) == key && aws.ToString(upload.UploadId) == uploadID && upload.Initiated != nil {
+				return *upload.Initiated, nil
+			}
+		}
+		if !aws.ToBool(out.IsTruncated) {
+			break
+		}
+		in.KeyMarker, in.UploadIdMarker = out.NextKeyMarker, out.NextUploadIdMarker
+	}
+	return time.Time{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("no multipart upload %q of %q is open", uploadID, key))
 }

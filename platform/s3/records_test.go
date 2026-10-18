@@ -70,7 +70,7 @@ func TestAnUploadSessionStaysWithItsBindingWhenAnotherBindingsRecordChanges(t *t
 	var session string
 	for _, backend := range before {
 		if backend.hasBucket("OCEL_RESOURCE_BUCKET_avatars") {
-			session = backend.newID()
+			session = backend.newID("OCEL_RESOURCE_BUCKET_avatars", time.Now())
 		}
 	}
 
@@ -201,7 +201,7 @@ func (l *listeningStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	l.mu.Lock()
-	if strings.HasSuffix(r.URL.Query().Get("prefix"), SessionKeyPrefix) {
+	if strings.Contains(r.URL.Query().Get("prefix"), SessionKeyPrefix) {
 		l.swept = append(l.swept, heard)
 	} else {
 		l.heard = append(l.heard, heard)

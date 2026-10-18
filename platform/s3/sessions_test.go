@@ -75,10 +75,10 @@ func TestAnUploadSessionAnswersOnlyACallerGrantedItsBucket(t *testing.T) {
 }
 
 func sessionsInSequence(h *harness) {
-	opened := 0
-	h.svc.newID = func() string {
-		opened++
-		return fmt.Sprintf("sess_%d", opened)
+	h.svc.newID = func(bucket string, at time.Time) string {
+		id := sessionID(h.svc.cfg.Tag, bucket, at, fmt.Sprint(len(h.opened)+1))
+		h.opened = append(h.opened, id)
+		return id
 	}
 	h.svc.sweeping = func(run func()) { run() }
 }
@@ -91,16 +91,16 @@ func TestASessionLongPastItsExpiryIsDeletedWhenTheNextUploadOpens(t *testing.T) 
 
 	h.presign(t, "a.png", 3, "image/png")
 	h.store.put("store", "a.png", []byte("abc"), "image/png")
-	if _, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: "sess_1"}); err != nil {
+	if _, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: h.opened[0]}); err != nil {
 		t.Fatalf("CompleteUpload: %v", err)
 	}
 	h.now = h.now.Add(5 * time.Hour)
 	h.presign(t, "b.png", 3, "image/png")
 
-	if _, kept := h.store.objects["store"][SessionKeyPrefix+"sess_1"]; kept {
+	if _, kept := h.store.objects["store"][SessionKeyPrefix+h.opened[0]]; kept {
 		t.Error("a session settled five hours ago is still in the store, so every upload ever made leaves a record behind")
 	}
-	if _, opened := h.store.objects["store"][SessionKeyPrefix+"sess_2"]; !opened {
+	if _, opened := h.store.objects["store"][SessionKeyPrefix+h.opened[1]]; !opened {
 		t.Error("the session just opened was deleted with the old one")
 	}
 	if _, present := h.store.objects["store"]["a.png"]; !present {
@@ -116,13 +116,13 @@ func TestASessionStillWithinReachOfItsClientIsKept(t *testing.T) {
 
 	h.presign(t, "a.png", 3, "image/png")
 	h.store.put("store", "a.png", []byte("abc"), "image/png")
-	if _, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: "sess_1"}); err != nil {
+	if _, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: h.opened[0]}); err != nil {
 		t.Fatalf("CompleteUpload: %v", err)
 	}
 	h.now = h.now.Add(time.Hour)
 	h.presign(t, "b.png", 3, "image/png")
 
-	resp, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: "sess_1"})
+	resp, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: h.opened[0]})
 	if err != nil {
 		t.Fatalf("a client polling the session it finished an hour ago was answered %v", err)
 	}
@@ -141,7 +141,7 @@ func TestAnAbandonedSessionIsExpiredBeforeItsRecordIsDeleted(t *testing.T) {
 	h.now = h.now.Add(5 * time.Hour)
 	h.presign(t, "b.png", 3, "image/png")
 
-	if _, kept := h.store.objects["store"][SessionKeyPrefix+"sess_1"]; kept {
+	if _, kept := h.store.objects["store"][SessionKeyPrefix+h.opened[0]]; kept {
 		t.Error("a session nobody came back to is still in the store")
 	}
 	if _, present := h.store.objects["store"]["a.png"]; present {
@@ -175,7 +175,7 @@ func TestASessionOfABucketThisAppWasNotGrantedIsLeftForItsOwner(t *testing.T) {
 		Granted:  []string{"theirs"},
 	})
 	other.now = func() time.Time { return owner.now.Add(5 * time.Hour) }
-	other.newID = func() string { return "sess_theirs" }
+	other.newID = func(string, time.Time) string { return "sess_theirs" }
 	other.sweeping = func(run func()) { run() }
 	if _, err := other.PresignUpload(ctx, &bucketv1.PresignUploadRequest{
 		Bucket: "theirs",
@@ -184,7 +184,7 @@ func TestASessionOfABucketThisAppWasNotGrantedIsLeftForItsOwner(t *testing.T) {
 		t.Fatalf("PresignUpload: %v", err)
 	}
 
-	if _, kept := owner.store.objects["shared"]["build/"+SessionKeyPrefix+"sess_1"]; !kept {
+	if _, kept := owner.store.objects["shared"]["build/"+SessionKeyPrefix+owner.opened[0]]; !kept {
 		t.Error("another grant's sweep deleted a session it could not read")
 	}
 }
