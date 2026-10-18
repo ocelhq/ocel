@@ -31,7 +31,7 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 	}
 	address := listener.Addr().String()
 
-	resources := devresources.New(devresources.ProjectName(cfg.Dir), devresources.Options{
+	resources := devresources.New(resourcesName(cfg), devresources.Options{
 		Open:       opts.OpenDocker,
 		StateDir:   stateDir(cfg),
 		Project:    cfg,
@@ -53,8 +53,12 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 	}}, nil
 }
 
+func resourcesName(cfg *project.Project) string {
+	return devresources.ProjectName(cfg.Path)
+}
+
 func stateDir(cfg *project.Project) string {
-	return filepath.Join(cfg.Dir, buildoutput.StateDir, "devresources")
+	return filepath.Join(cfg.Dir, buildoutput.StateDir, "devresources", filepath.Base(cfg.Path))
 }
 
 func appOrigins(dir string, source valueSource) func() []string {

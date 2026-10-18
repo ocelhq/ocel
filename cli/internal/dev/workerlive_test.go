@@ -89,7 +89,7 @@ func liveProject(t *testing.T, declarations string) string {
 		if err != nil {
 			return
 		}
-		_ = engine.Wipe(ctx, docker.ProjectLabels(devresources.ProjectName(root)))
+		_ = engine.Wipe(ctx, docker.ProjectLabels(devresources.ProjectName(filepath.Join(root, "ocel.json"))))
 		_ = engine.Close()
 	})
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "worker-dev", "provider": "aws", "apps": [{"name": "web", "path": "."}]}`)
@@ -199,7 +199,7 @@ func TestDockerAWorkerStoppedForTheNextPassNeverReportsThatItExited(t *testing.T
 	ctx := context.Background()
 	dir := t.TempDir()
 	cfg := &project.Project{Dir: dir, Slug: "worker-stop", Apps: []project.App{{Name: "web", Path: "."}}}
-	name := devresources.ProjectName(dir)
+	name := devresources.ProjectName(filepath.Join(dir, "ocel.json"))
 	resources := devresources.New(name, devresources.Options{Open: docker.Open, StateDir: t.TempDir(), Project: cfg})
 	t.Cleanup(func() {
 		_ = resources.Close(ctx)

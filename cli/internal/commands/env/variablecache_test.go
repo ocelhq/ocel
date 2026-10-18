@@ -77,3 +77,17 @@ func TestTheVariableCacheMissesAnEntryWrittenBeforeGroups(t *testing.T) {
 		t.Error("LoadContaining ok = true, want a miss for an entry written before groups")
 	}
 }
+
+func TestTheVariableCacheKeepsNothingForProgramsWithoutAFingerprint(t *testing.T) {
+	cache, err := openVariableCacheAt(t.TempDir())
+	if err != nil {
+		t.Fatalf("openVariableCacheAt err = %v", err)
+	}
+	if err := cache.Save("/project", "", []*resourcesv1.VariableDefinition{{Key: "LOG_LEVEL"}}, nil); err != nil {
+		t.Fatalf("Save err = %v", err)
+	}
+
+	if _, _, ok := cache.LoadContaining("/project", "", "LOG_LEVEL"); ok {
+		t.Error("LoadContaining ok = true, want a miss: no fingerprint means nothing proves the declarations unchanged")
+	}
+}

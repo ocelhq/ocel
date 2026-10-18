@@ -145,14 +145,18 @@ export function startedResources(said: string): boolean {
   return /^INFO\s+\S+ "[^"]+" → /m.test(said);
 }
 
-export function devProject(dir: string): string {
+export function devProject(configPath: string): string {
   const readable = path
-    .basename(dir)
+    .basename(path.dirname(configPath))
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  const digest = createHash("sha256").update(path.normalize(dir)).digest("hex").slice(0, 8);
+  const digest = createHash("sha256").update(path.normalize(configPath)).digest("hex").slice(0, 8);
   return `${readable}-${digest}`;
+}
+
+function devProjectIn(dir: string): string {
+  return devProject(path.join(dir, journeyConfigIn(dir)));
 }
 
 async function labelled(kind: "container" | "volume", project: string): Promise<string[]> {
@@ -300,7 +304,7 @@ export class DevTarget implements Target, Restart, Exposure {
   }
 
   async restart(cell: CellUnderTest): Promise<Deployment> {
-    const project = devProject(this.servedFor(cell).dir);
+    const project = devProjectIn(this.servedFor(cell).dir);
     const before = await readStartTimes(project);
     const deployed = await this.serveApps(cell, await this.stopApps(cell), "restart");
     const kept = findKeptRunning(before, await readStartTimes(project));
@@ -314,7 +318,7 @@ export class DevTarget implements Target, Restart, Exposure {
 
   async readExposed(cell: CellUnderTest): Promise<string> {
     const served = this.servedFor(cell);
-    const containers = await labelled("container", devProject(served.dir));
+    const containers = await labelled("container", devProjectIn(served.dir));
     const inspected =
       containers.length === 0 ? "" : (await run("docker", ["inspect", ...containers])).stdout;
     const processes = (await run("ps", ["-eo", "args"])).stdout;
@@ -384,7 +388,7 @@ export class DevTarget implements Target, Restart, Exposure {
       await cell.evidence.write("destroy", `dev-${one.app}.log`, one.output());
     }
     this.served.delete(cell.slug);
-    const project = devProject(configTree(cell, this.name));
+    const project = devProjectIn(configTree(cell, this.name));
     const unlabelled = await removeStack(project);
     await rm(treeRoot(cell, this.name), { recursive: true, force: true });
     if (unlabelled.length > 0) {
@@ -453,7 +457,7 @@ export class DevTarget implements Target, Restart, Exposure {
   }
 
   private async stackIsTraceable(dir: string): Promise<void> {
-    const project = devProject(dir);
+    const project = devProjectIn(dir);
     if ((await labelled("container", project)).length === 0) {
       throw new Error(
         `no container is labelled ${PROJECT_LABEL}=${project}, so the resources ocel dev started for ${dir} cannot be traced back to it, and nothing here can remove them.`,

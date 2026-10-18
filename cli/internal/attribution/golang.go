@@ -57,9 +57,9 @@ func readGoImports(ctx context.Context, root string, app App) (map[string]Reacha
 }
 
 func goList(ctx context.Context, app, dir string) ([]goPackage, error) {
-	cmd := exec.CommandContext(ctx, "go", "list", "-json", "-deps", "./...")
+	cmd := exec.Command("go", "list", "-json", "-deps", "./...")
 	cmd.Dir = dir
-	decoder, said, err := runJSON(cmd)
+	decoder, said, err := runJSON(ctx, cmd)
 	if err != nil {
 		return nil, fmt.Errorf("attribution: app %q: go list: %s", app, said)
 	}

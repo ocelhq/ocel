@@ -62,6 +62,11 @@ func (p Programs) Fingerprint() string {
 	if p.bundle == nil {
 		return ""
 	}
+	for _, root := range p.Roots {
+		if root.Language != language.JS {
+			return ""
+		}
+	}
 	sum := sha256.Sum256(p.bundle)
 	return hex.EncodeToString(sum[:])
 }

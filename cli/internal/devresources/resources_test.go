@@ -278,10 +278,10 @@ func TestReset(t *testing.T) {
 func TestProjectNamesAreReadableAndDistinctPerDirectory(t *testing.T) {
 	t.Parallel()
 
-	if got := devresources.ProjectName("/work/trees/sdk-node/My Shop"); got != "my-shop-2d2cdb07" {
-		t.Fatalf("ProjectName = %q, want my-shop-2d2cdb07, the name the e2e harness looks containers up by", got)
+	if got := devresources.ProjectName("/work/trees/sdk-node/My Shop/ocel.json"); got != "my-shop-fabbdfce" {
+		t.Fatalf("ProjectName = %q, want my-shop-fabbdfce, the name the e2e harness looks containers up by", got)
 	}
-	a, b := devresources.ProjectName("/home/ada/work/My Shop"), devresources.ProjectName("/home/ada/play/My Shop")
+	a, b := devresources.ProjectName("/home/ada/work/My Shop/ocel.json"), devresources.ProjectName("/home/ada/play/My Shop/ocel.json")
 	if !strings.HasPrefix(a, "my-shop-") || a == b {
 		t.Fatalf("ProjectName = %q and %q, want a readable name that differs between two directories called the same", a, b)
 	}

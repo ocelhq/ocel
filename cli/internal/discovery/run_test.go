@@ -269,3 +269,20 @@ func TestTwoRunsInOneProjectEachRunTheirOwnEntryAndLeaveNothingBehind(t *testing
 		t.Errorf("%s/tmp holds %d entries after both runs, want each run to remove its own", buildoutput.StateDir, len(entries))
 	}
 }
+
+func TestProgramsWithARootOtherThanJSHaveNoFingerprint(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "web", "main.ts"), "export {};\n")
+	write(t, filepath.Join(root, "api", "main.go"), "package api\n")
+	prepared, err := Prepare(root, []Root{
+		{Dir: filepath.Join(root, "web"), Language: language.JS},
+		{Dir: filepath.Join(root, "api"), Language: language.Go},
+	})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	if fingerprint := prepared.Fingerprint(); fingerprint != "" {
+		t.Errorf("Fingerprint() = %q, want none: the bundle it hashes leaves out the Go root's edits", fingerprint)
+	}
+}

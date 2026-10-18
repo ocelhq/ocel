@@ -40,6 +40,9 @@ func openVariableCacheAt(dir string) (*variableCache, error) {
 }
 
 func (c *variableCache) LoadContaining(projectDir, fingerprint, key string) (definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, ok bool) {
+	if fingerprint == "" {
+		return nil, nil, false
+	}
 	data, err := os.ReadFile(c.path(projectDir))
 	if err != nil {
 		return nil, nil, false
@@ -74,6 +77,9 @@ func (c *variableCache) LoadContaining(projectDir, fingerprint, key string) (def
 }
 
 func (c *variableCache) Save(projectDir, fingerprint string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) error {
+	if fingerprint == "" {
+		return nil
+	}
 	var e variableCacheEntry
 	for _, definition := range definitions {
 		raw, err := protojson.Marshal(definition)

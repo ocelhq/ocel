@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
@@ -206,10 +207,10 @@ func isVendored(rel string) bool {
 	return slices.Contains(strings.Split(rel, "/"), "node_modules")
 }
 
-func runJSON(cmd *exec.Cmd) (*json.Decoder, string, error) {
+func runJSON(ctx context.Context, cmd *exec.Cmd) (*json.Decoder, string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err := childprocess.Run(ctx, cmd)
 	return json.NewDecoder(&stdout), strings.TrimSpace(stderr.String()), err
 }
