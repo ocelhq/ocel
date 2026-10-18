@@ -52,7 +52,7 @@ func pythonCommands(ctx context.Context, configDir string, roots []Root, server 
 			return nil, err
 		}
 
-		cmd := exec.CommandContext(ctx, PythonInterpreter(runRoot), entry)
+		cmd := exec.Command(PythonInterpreter(runRoot), entry)
 		cmd.Dir = runRoot
 		cmd.Env = append(append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1"), server.Env()...)
 		commands = append(commands, cmd)

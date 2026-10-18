@@ -180,7 +180,7 @@ func installVariants(ctx context.Context, app, staging string, parent manifest, 
 			return stagedVariants{}, err
 		}
 	}
-	cmd := exec.CommandContext(ctx, npmCommand, npmInstallArgs(cpu)...)
+	cmd := exec.Command(npmCommand, npmInstallArgs(cpu)...)
 	cmd.Dir = staging
 	var npmOutput bytes.Buffer
 	cmd.Stdout = &npmOutput

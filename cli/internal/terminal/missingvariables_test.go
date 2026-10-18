@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
@@ -96,7 +97,7 @@ func TestColourTouchesOnlyTheMarkAndTheFolderOfAMissingVariable(t *testing.T) {
 		{Key: "PORT", Folder: "/web", Reason: "set, but not a number"},
 	}}
 	tagged := strings.NewReplacer("\x1b[31m", "<red>", "\x1b[90m", "<dim>", "\x1b[0m", "</>")
-	got := tagged.Replace(strings.Join(MissingVariablesLines(missing, Presentation{Color: true}), "\n"))
+	got := tagged.Replace(strings.Join(wording.Lines(missing, Presentation{Color: true}.Palette()), "\n"))
 	want := strings.Join([]string{
 		"<red>✗</> 2 variables are not ready — nothing has been built.",
 		"",
@@ -107,7 +108,7 @@ func TestColourTouchesOnlyTheMarkAndTheFolderOfAMissingVariable(t *testing.T) {
 		t.Errorf("MissingVariablesLines() =\n%s\nwant\n%s", got, want)
 	}
 	stripped := strings.NewReplacer("<red>", "", "<dim>", "", "</>", "").Replace(got)
-	if plain := strings.Join(MissingVariablesLines(missing, Presentation{}), "\n"); stripped != plain {
+	if plain := strings.Join(wording.Lines(missing, Presentation{}.Palette()), "\n"); stripped != plain {
 		t.Errorf("coloured minus codes =\n%s\nwant the plain form\n%s", stripped, plain)
 	}
 }

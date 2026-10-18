@@ -25,24 +25,14 @@ const (
 	UseInfrastructure
 	UseVariablesKey
 	UseParts
-	DeployProduction
-	DeployPreview
+	Deploy
 )
 
 type OpenOptions struct {
 	Intent Intent
 	Tier   environmentv1.Tier
 	Policy consent.Policy
-}
-
-func (o OpenOptions) tier() environmentv1.Tier {
-	switch o.Intent {
-	case DeployProduction:
-		return environmentv1.Tier_TIER_PRODUCTION
-	case DeployPreview:
-		return environmentv1.Tier_TIER_PREVIEW
-	}
-	return o.Tier
+	DryRun bool
 }
 
 func (i Intent) requirement() readiness.Requirement {
@@ -51,27 +41,27 @@ func (i Intent) requirement() readiness.Requirement {
 		return readiness.Credentials
 	case UseInfrastructure, UseVariablesKey:
 		return readiness.Infrastructure
-	case UseParts, DeployProduction, DeployPreview:
+	case UseParts, Deploy:
 		return readiness.Parts
 	}
 	return readiness.None
 }
 
 func (i Intent) deploys() bool {
-	return i == DeployProduction || i == DeployPreview
+	return i == Deploy
 }
 
 func (o OpenOptions) request(cfg *project.Project) readiness.Request {
-	req := readiness.Request{Tier: o.tier(), Require: o.Intent.requirement(), DryRun: o.Policy.DryRun}
+	req := readiness.Request{Tier: o.Tier, Require: o.Intent.requirement(), DryRun: o.DryRun}
 	switch o.Intent {
 	case ManageBootstrap:
 		req.Slug = cfg.Slug
 	case UseVariablesKey:
 		req.Slug, req.Part, req.RecordWants = cfg.Slug, providercontract.VariablesKeyPart, true
-	case DeployProduction, DeployPreview:
+	case Deploy:
 		req.Slug, req.RecordWants, req.Domains = cfg.Slug, true, cfg.HostnameNames(req.Tier)
-		req.RequireHostname = o.Intent == DeployProduction
-		req.CheckPreviewRoute = o.Intent == DeployPreview
+		req.RequireHostname = req.Tier == environmentv1.Tier_TIER_PRODUCTION
+		req.CheckPreviewRoute = req.Tier == environmentv1.Tier_TIER_PREVIEW
 	}
 	return req
 }
@@ -94,7 +84,7 @@ func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *proje
 		}
 	}
 	loading := check.Child(providerID(cfg), progress.Loading.Title("the provider"))
-	provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, executables.ChoosePinning(opts.Policy.DryRun))
+	provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, executables.ChoosePinning(opts.DryRun))
 	loading.End(err)
 	if err != nil {
 		return nil, readiness.Preflight{}, err

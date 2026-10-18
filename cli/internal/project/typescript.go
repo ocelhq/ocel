@@ -74,7 +74,7 @@ try {
 		return nil, fmt.Errorf("%s is a TypeScript config, and node is not on PATH: %w — write %s instead, which needs no node", configPath, err, DefaultFileName)
 	}
 
-	cmd := exec.CommandContext(ctx, "node", outfile)
+	cmd := exec.Command("node", outfile)
 	cmd.Env = env.environ()
 	var stdout bytes.Buffer
 	var stderr strings.Builder

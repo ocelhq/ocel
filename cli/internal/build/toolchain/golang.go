@@ -60,7 +60,7 @@ func CompileGo(ctx context.Context, app, dir, pkg, out, goarch string) error {
 }
 
 func compileGo(ctx context.Context, app, dir, pkg, out, goarch string) (string, error) {
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", out, pkg)
+	cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", out, pkg)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+goarch)
 	var said bytes.Buffer

@@ -77,7 +77,7 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 
 	captured := &childprocess.Tail{Limit: capturedOutputBytes}
 
-	cmd := exec.CommandContext(ctx, "node", scriptPath)
+	cmd := exec.Command("node", scriptPath)
 	cmd.Stdin = bytes.NewReader(request)
 
 	reader, writer, err := os.Pipe()

@@ -21,27 +21,30 @@ func TestSignallingAGroupThatIsAlreadyGone(t *testing.T) {
 
 	for _, tc := range []struct {
 		name   string
-		signal func(*exec.Cmd) error
+		signal func(*processGroup, *exec.Cmd) error
 	}{
-		{name: "killing a group that is already gone reports the process done", signal: KillGroup},
-		{name: "terminating a group that is already gone reports the process done", signal: TerminateGroup},
+		{name: "killing a group that is already gone reports the process done", signal: (*processGroup).kill},
+		{name: "terminating a group that is already gone reports the process done", signal: (*processGroup).terminate},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			cmd := exec.Command("sleep", "5")
-			SetOwnGroup(cmd)
+			group, err := newProcessGroup(cmd, true)
+			if err != nil {
+				t.Fatalf("newProcessGroup: %v", err)
+			}
 			if err := cmd.Start(); err != nil {
 				t.Fatalf("start: %v", err)
 			}
-			if err := KillGroup(cmd); err != nil {
+			if err := group.kill(cmd); err != nil {
 				t.Fatalf("first KillGroup: %v", err)
 			}
 			_ = cmd.Wait()
 
 			deadline := time.Now().Add(2 * time.Second)
 			for {
-				err := tc.signal(cmd)
+				err := tc.signal(group, cmd)
 				if errors.Is(err, os.ErrProcessDone) {
 					return
 				}

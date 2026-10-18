@@ -3,6 +3,7 @@ package childprocess
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"io"
 	"os/exec"
 	"time"
@@ -21,6 +22,7 @@ type Options struct {
 
 type Child struct {
 	cmd        *exec.Cmd
+	group      *processGroup
 	done       chan struct{}
 	exited     chan error
 	isTerminal bool
@@ -38,25 +40,41 @@ func Start(ctx context.Context, cmd *exec.Cmd, opts Options) (*Child, error) {
 		grace:      cmp.Or(opts.Grace, GracePeriod),
 		reap:       cmp.Or(opts.Reap, opts.Grace, GracePeriod),
 	}
+	if cmd.Cancel != nil {
+		return nil, fmt.Errorf("start %s: it was made with exec.CommandContext, and only Start may stop it when its context ends", cmd.Path)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	group, err := newProcessGroup(cmd, !opts.Terminal)
+	if err != nil {
+		return nil, fmt.Errorf("start %s: %w", cmd.Path, err)
+	}
+	child.group = group
 	if opts.Terminal {
 		child.terminal = saveTerminal(opts.Stdin)
-	} else {
-		SetOwnGroup(cmd)
-	}
-	if cmd.Cancel != nil {
-		cmd.Cancel = child.terminate
 	}
 	cmd.WaitDelay = WaitDelay
 
 	if err := cmd.Start(); err != nil {
+		group.release()
+		child.terminal.restore()
 		return nil, err
+	}
+	if err := group.attach(cmd); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		group.release()
+		child.terminal.restore()
+		return nil, fmt.Errorf("start %s: %w", cmd.Path, err)
 	}
 	running.add(child)
 	go func() {
 		err := cmd.Wait()
 		if !child.isTerminal {
-			_ = KillGroup(cmd)
+			_ = group.kill(cmd)
 		}
+		group.release()
 		child.terminal.restore()
 		child.exited <- err
 		close(child.done)
@@ -109,17 +127,11 @@ func (c *Child) Stop() {
 }
 
 func (c *Child) terminate() error {
-	if c.isTerminal {
-		return terminateTree(c.cmd)
-	}
-	return TerminateGroup(c.cmd)
+	return c.group.terminate(c.cmd)
 }
 
 func (c *Child) kill() error {
-	if c.isTerminal {
-		return killTree(c.cmd)
-	}
-	return KillGroup(c.cmd)
+	return c.group.kill(c.cmd)
 }
 
 func (c *Child) hasExited() bool {

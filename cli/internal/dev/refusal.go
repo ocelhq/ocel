@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -30,7 +31,7 @@ func describeRefusal(err error, dotfileKeys map[string]struct{}, run localComman
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s not ready — the app has not been started.\n", variablesAre(len(refusal.Problems)))
+	fmt.Fprintf(&b, "%s not ready — the app has not been started.\n", wording.VariablesAre(len(refusal.Problems)))
 	for _, problem := range refusal.Problems {
 		cell := variables.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}
 		fmt.Fprintf(&b, "\n  %s%s\n    %s\n    fix: %s\n",
@@ -69,13 +70,6 @@ func shellHint(key string, dotfileKeys map[string]struct{}, run localCommand) st
 		return ""
 	}
 	return fmt.Sprintf("%s is set in this shell, but `%s` resolves values from %s so every developer's run is the same.", key, run.line(), run.source.where())
-}
-
-func variablesAre(n int) string {
-	if n == 1 {
-		return "1 variable is"
-	}
-	return fmt.Sprintf("%d variables are", n)
 }
 
 func whyUnready(problem *resourcesv1.VariableProblem) string {

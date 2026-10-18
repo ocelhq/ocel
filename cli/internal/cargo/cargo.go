@@ -100,7 +100,7 @@ func (w Workspace) Members() []Package {
 
 func Metadata(ctx context.Context, dir string, opts ...string) (Workspace, error) {
 	args := append([]string{"metadata", "--format-version", "1"}, opts...)
-	cmd := exec.CommandContext(ctx, "cargo", args...)
+	cmd := exec.Command("cargo", args...)
 	cmd.Dir = dir
 
 	var stdout, stderr bytes.Buffer

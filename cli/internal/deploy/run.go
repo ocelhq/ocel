@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -27,6 +28,9 @@ type deployRun struct {
 	cfg          *project.Project
 	provider     *providerprocess.Provider
 	scope        variables.Scope
+	env          *environmentv1.Environment
+	tag          string
+	registry     *contractv1.ImageRegistry
 	command      string
 
 	containerArchs map[string]string
@@ -46,14 +50,17 @@ type deployRun struct {
 	span         *run.Span
 }
 
-func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project, process *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, infra *infraProvisioning, opts Options, browser bool) deployRun {
+func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project, process *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, infra *infraProvisioning, opts Options, browser bool) *deployRun {
 	scope := variables.ScopeOf(cfg, env.GetTier(), env.GetIdentity())
 	scope.Browser = browser
-	return deployRun{
+	return &deployRun{
 		dependencies:   dependencies,
 		cfg:            cfg,
 		provider:       process,
 		scope:          scope,
+		env:            env,
+		tag:            target.tag,
+		registry:       facts.registry,
 		command:        target.command(),
 		containerArchs: facts.containerArchs,
 		workerCeilings: facts.workerCeilings,
@@ -68,11 +75,33 @@ func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project
 	}
 }
 
-func (d deployRun) tier() environmentv1.Tier {
+func (d *deployRun) request(manifest *contractv1.Manifest, inline []*bindingsv1.Binding) (*contractv1.DeployRequest, error) {
+	outputRoot, err := buildoutput.Root(d.cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	return &contractv1.DeployRequest{
+		Manifest:    manifest,
+		OutputRoot:  outputRoot,
+		Environment: d.env,
+		Tag:         d.tag,
+		Edge:        d.cfg.EdgeSelection(),
+		Dry:         d.dry,
+
+		ProjectRegistry:  d.registry,
+		InlineBindings:   inline,
+		Protect:          d.cfg.Protection.Protects(d.env.GetTier()),
+		AliasToken:       d.infra.aliasToken,
+		InfraProvisioned: d.infra.isProvisioned(),
+		LeaseToken:       d.infra.readLeaseToken(),
+	}, nil
+}
+
+func (d *deployRun) tier() environmentv1.Tier {
 	return d.scope.Tier
 }
 
-func (d deployRun) buildManifest(ctx context.Context, phase *run.Span) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
+func (d *deployRun) buildManifest(ctx context.Context, phase *run.Span) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	d.phase = phase
 	d.span = phase.Child(d.cfg.Slug, buildTitle(d.cfg, d.prebuilt))
 	switch {
@@ -120,7 +149,7 @@ func appList(cfg *project.Project) string {
 	}
 }
 
-func (d deployRun) buildWithVariables(ctx context.Context) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
+func (d *deployRun) buildWithVariables(ctx context.Context) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	declarations, err := d.readDeclarations(ctx)
 	var refusal *variables.MissingError
 	if errors.As(err, &refusal) && d.canFill {
@@ -146,17 +175,17 @@ func (d deployRun) buildWithVariables(ctx context.Context) (*contractv1.Manifest
 	return d.attempt(ctx, declarations, 1)
 }
 
-func (d deployRun) newDeclarations(synced variables.EnvSource) *variables.Declarations {
+func (d *deployRun) newDeclarations(synced variables.EnvSource) *variables.Declarations {
 	scope := d.scope
 	scope.EnvSource = synced
 	return variables.NewDeclarations(d.valueStore(), scope)
 }
 
-func (d deployRun) valueStore() variables.Store {
+func (d *deployRun) valueStore() variables.Store {
 	return variables.Store{Provider: d.provider, Project: d.cfg, Tier: d.tier()}
 }
 
-func (d deployRun) readDeclarations(ctx context.Context) (*variables.Declarations, error) {
+func (d *deployRun) readDeclarations(ctx context.Context) (*variables.Declarations, error) {
 	synced, err := d.valueStore().SyncEnvSource(ctx)
 	if problems := variables.CredentialProblems(err); len(problems) > 0 {
 		declarations := d.newDeclarations(variables.ConfiguredEnvSource(d.cfg, d.tier()))
@@ -168,7 +197,7 @@ func (d deployRun) readDeclarations(ctx context.Context) (*variables.Declaration
 	return d.newDeclarations(synced), nil
 }
 
-func (d deployRun) attempt(ctx context.Context, declarations *variables.Declarations, retry int) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
+func (d *deployRun) attempt(ctx context.Context, declarations *variables.Declarations, retry int) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	attempt := d.span.Trace(d.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
 	d.declarations = declarations
 	manifest, inline, err := d.collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt))
@@ -176,7 +205,7 @@ func (d deployRun) attempt(ctx context.Context, declarations *variables.Declarat
 	return manifest, inline, err
 }
 
-func (d deployRun) fill(ctx context.Context, declarations *variables.Declarations, refusal *variables.MissingError) error {
+func (d *deployRun) fill(ctx context.Context, declarations *variables.Declarations, refusal *variables.MissingError) error {
 	editor, err := d.dependencies.ServeVariableEditor(ctx, d.cfg, d.provider, d.tier(), declarations, d.recovery(refusal))
 	if err != nil {
 		return err
@@ -203,7 +232,7 @@ func (d deployRun) fill(ctx context.Context, declarations *variables.Declaration
 	}
 }
 
-func (d deployRun) recovery(refusal *variables.MissingError) *variableeditor.Recovery {
+func (d *deployRun) recovery(refusal *variables.MissingError) *variableeditor.Recovery {
 	missing := make([]variables.Cell, 0, len(refusal.Problems))
 	for _, problem := range refusal.Problems {
 		missing = append(missing, variables.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})

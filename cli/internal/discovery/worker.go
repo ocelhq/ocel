@@ -127,7 +127,7 @@ func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Ro
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
+	cmd := exec.Command("node", "--enable-source-maps", entry)
 	cmd.Env = os.Environ()
 	return cmd, nil
 }
@@ -209,7 +209,7 @@ func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, "go", "run", pkg)
+	cmd := exec.Command("go", "run", pkg)
 	cmd.Dir = moduleRoot
 	cmd.Env = os.Environ()
 	return cmd, nil
@@ -278,7 +278,7 @@ func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, se
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, PythonInterpreter(runRoot), entry)
+	cmd := exec.Command(PythonInterpreter(runRoot), entry)
 	cmd.Dir = runRoot
 	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 	if importDirs := listImportDirsOutside(runRoot, packages); len(importDirs) > 0 {

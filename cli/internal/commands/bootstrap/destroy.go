@@ -62,7 +62,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	if notice != "" {
 		check.Warn(notice)
 	}
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Intent: commands.ManageBootstrap, Tier: tier, Policy: policy})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Intent: commands.ManageBootstrap, Tier: tier, Policy: policy, DryRun: policy.DryRun})
 	check.End(err)
 	if err != nil {
 		return err

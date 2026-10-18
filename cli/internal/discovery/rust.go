@@ -52,7 +52,7 @@ func cargoRunCommand(ctx context.Context, root Root) (*exec.Cmd, string, error) 
 		return nil, "", fmt.Errorf("discovery: %s builds %d binaries, and ocel runs one binary per crate: keep one bin target in the crate at %s", crate.Name, len(bins), root.Dir)
 	}
 
-	cmd := exec.CommandContext(ctx, "cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bins[0].Name)
+	cmd := exec.Command("cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bins[0].Name)
 	cmd.Dir = workspace.Root
 	return cmd, workspace.Root, nil
 }

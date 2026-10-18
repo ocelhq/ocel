@@ -160,7 +160,7 @@ func bundleRoots(configDir string, roots []Root, outfile string) ([]byte, error)
 }
 
 func nodeCommand(ctx context.Context, entry string, server Server) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
+	cmd := exec.Command("node", "--enable-source-maps", entry)
 	cmd.Env = append(os.Environ(), server.Env()...)
 	return cmd
 }

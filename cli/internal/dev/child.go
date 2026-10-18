@@ -12,7 +12,7 @@ import (
 )
 
 func startChild(ctx context.Context, opts Options, env map[string]string) (*childprocess.Child, error) {
-	cmd := exec.CommandContext(ctx, opts.Command[0], opts.Command[1:]...)
+	cmd := exec.Command(opts.Command[0], opts.Command[1:]...)
 	cmd.Env = applyEnv(os.Environ(), env)
 	cmd.Stdin = opts.Stdin
 	cmd.Stdout = opts.Stdout

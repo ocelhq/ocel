@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package childprocess
 
@@ -8,13 +8,21 @@ import (
 	"os/exec"
 )
 
-func setOwnGroup(cmd *exec.Cmd) {}
+type processGroup struct{}
 
-func terminateGroup(cmd *exec.Cmd) error {
-	return killGroup(cmd)
+func newProcessGroup(*exec.Cmd, bool) (*processGroup, error) {
+	return &processGroup{}, nil
 }
 
-func killGroup(cmd *exec.Cmd) error {
+func (*processGroup) attach(*exec.Cmd) error { return nil }
+
+func (*processGroup) release() {}
+
+func (g *processGroup) terminate(cmd *exec.Cmd) error {
+	return g.kill(cmd)
+}
+
+func (*processGroup) kill(cmd *exec.Cmd) error {
 	if cmd.Process == nil {
 		return os.ErrProcessDone
 	}

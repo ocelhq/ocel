@@ -43,7 +43,7 @@ type collected struct {
 	usages    []attribution.Usage
 }
 
-func (d deployRun) collectBuildAndAssemble(ctx context.Context) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
+func (d *deployRun) collectBuildAndAssemble(ctx context.Context) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	c, err := d.collect(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -68,7 +68,7 @@ func (d deployRun) collectBuildAndAssemble(ctx context.Context) (*contractv1.Man
 	return assembled, c.inline, nil
 }
 
-func (d deployRun) collect(ctx context.Context) (collected, error) {
+func (d *deployRun) collect(ctx context.Context) (collected, error) {
 	cfg, declarations, span := d.cfg, d.declarations, d.span
 	captured := &boundedCapture{}
 	tee := io.MultiWriter(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), captured)
@@ -121,7 +121,7 @@ func (d deployRun) collect(ctx context.Context) (collected, error) {
 	}, nil
 }
 
-func (d deployRun) readPrebuilt(ctx context.Context, c collected) (build.Output, error) {
+func (d *deployRun) readPrebuilt(ctx context.Context, c collected) (build.Output, error) {
 	if err := variables.CheckClientValuesFresh(d.cfg.Dir, c.clients); err != nil {
 		return build.Output{}, err
 	}
@@ -134,7 +134,7 @@ func (d deployRun) readPrebuilt(ctx context.Context, c collected) (build.Output,
 	return built, nil
 }
 
-func (d deployRun) provisionAndBuild(ctx context.Context, steps *buildSteps, c collected) (build.Output, error) {
+func (d *deployRun) provisionAndBuild(ctx context.Context, steps *buildSteps, c collected) (build.Output, error) {
 	for _, warning := range findImageAppsBuiltWithoutValues(d.cfg, c.clients) {
 		d.span.Warn(warning)
 	}
@@ -149,14 +149,14 @@ func (d deployRun) provisionAndBuild(ctx context.Context, steps *buildSteps, c c
 	return d.build(ctx, steps, c, secrets)
 }
 
-func (d deployRun) provision(ctx context.Context, c collected) error {
+func (d *deployRun) provision(ctx context.Context, c collected) error {
 	if d.dry {
 		return nil
 	}
 	return d.infra.provision(ctx, c.resources, c.inline)
 }
 
-func (d deployRun) build(ctx context.Context, steps *buildSteps, c collected, secrets map[string]map[string]string) (build.Output, error) {
+func (d *deployRun) build(ctx context.Context, steps *buildSteps, c collected, secrets map[string]map[string]string) (build.Output, error) {
 	cfg := d.cfg
 	runsPreBuild := d.preBuild != nil && !d.dry
 	forwards, err := d.forwardPorts(ctx, steps, c, runsPreBuild)
@@ -181,7 +181,7 @@ func (d deployRun) build(ctx context.Context, steps *buildSteps, c collected, se
 	return built, errors.Join(err, forwards.Close())
 }
 
-func (d deployRun) assemble(c collected, built build.Output) (*contractv1.Manifest, error) {
+func (d *deployRun) assemble(c collected, built build.Output) (*contractv1.Manifest, error) {
 	cfg := d.cfg
 	onEdge, err := build.EdgeApps(cfg.Dir)
 	if err != nil {

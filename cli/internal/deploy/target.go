@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -32,13 +31,6 @@ func (t Target) command() string {
 		return "ocel preview up"
 	}
 	return "ocel deploy"
-}
-
-func (t Target) intent() commands.Intent {
-	if t.isPreview() {
-		return commands.DeployPreview
-	}
-	return commands.DeployProduction
 }
 
 func (t Target) kind() consolev1.DeploymentKind {

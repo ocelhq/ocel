@@ -9,18 +9,35 @@ import (
 	"syscall"
 )
 
-func setOwnGroup(cmd *exec.Cmd) {
-	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	cmd.SysProcAttr.Setpgid = true
+type processGroup struct {
+	own bool
 }
 
-func terminateGroup(cmd *exec.Cmd) error {
+func newProcessGroup(cmd *exec.Cmd, own bool) (*processGroup, error) {
+	if own {
+		if cmd.SysProcAttr == nil {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		cmd.SysProcAttr.Setpgid = true
+	}
+	return &processGroup{own: own}, nil
+}
+
+func (*processGroup) attach(*exec.Cmd) error { return nil }
+
+func (*processGroup) release() {}
+
+func (g *processGroup) terminate(cmd *exec.Cmd) error {
+	if !g.own {
+		return terminateTree(cmd)
+	}
 	return signalGroup(cmd, syscall.SIGTERM)
 }
 
-func killGroup(cmd *exec.Cmd) error {
+func (g *processGroup) kill(cmd *exec.Cmd) error {
+	if !g.own {
+		return killTree(cmd)
+	}
 	return signalGroup(cmd, syscall.SIGKILL)
 }
 

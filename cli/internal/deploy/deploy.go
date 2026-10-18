@@ -12,15 +12,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
-	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type Dependencies struct {
@@ -62,7 +59,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 	var attempt *deployreport.Attempt
 	var apps []*consolev1.App
 	var succeeded *consolev1.Deployment
-	err = dependencies.WithProvider(ctx, cfg, target.command(), commands.OpenOptions{Intent: target.intent(), Policy: policy}, func(ctx context.Context, p commands.ProviderRun) (err error) {
+	err = dependencies.WithProvider(ctx, cfg, target.command(), commands.OpenOptions{Intent: commands.Deploy, Tier: target.tier, Policy: policy, DryRun: policy.DryRun}, func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider := p.Run, p.Check, p.Provider
 		facts, err := runPreflight(ctx, dependencies, policy, check, provider, p.Project, p.Preflight, opts.Prebuilt, env)
 		check.End(err)
@@ -74,17 +71,8 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 			return nil
 		}
 		cfg := facts.project
-		deployed := false
-		defer func() {
-			if deployed {
-				return
-			}
-			if forgetErr := forgetUnclaimedPreviewAlias(ctx, provider, cfg.Slug, env, facts.mintedAlias); forgetErr != nil {
-				err = errors.Join(err, forgetErr)
-			}
-		}()
 		infra := newInfraProvisioning(provider, env, facts)
-		defer infra.abandon(ctx, cfg.Slug)
+		defer func() { err = errors.Join(err, infra.release(ctx, cfg.Slug)) }()
 		if !opts.Dry {
 			attempt = p.NewAttempt(ctx, target.kind(), cfg, env, dependencies.DiscoverPRNumber())
 		}
@@ -109,29 +97,9 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		}
 		apps, _ = appsDeployed(cfg, manifest, nil, env)
 
-		registry, err := readiness.ProjectRegistry(cfg)
+		req, err := d.request(manifest, inline)
 		if err != nil {
 			return err
-		}
-		outputRoot, err := buildoutput.Root(cfg.Dir)
-		if err != nil {
-			return err
-		}
-
-		req := &contractv1.DeployRequest{
-			Manifest:    manifest,
-			OutputRoot:  outputRoot,
-			Environment: env,
-			Tag:         target.tag,
-			Edge:        cfg.EdgeSelection(),
-			Dry:         opts.Dry,
-
-			ProjectRegistry:  registry,
-			InlineBindings:   inline,
-			Protect:          cfg.Protection.Protects(env.GetTier()),
-			AliasToken:       facts.builtAlias,
-			InfraProvisioned: infra.isProvisioned(),
-			LeaseToken:       infra.readLeaseToken(),
 		}
 
 		if opts.Dry {
@@ -146,7 +114,6 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 			return err
 		}
 		infra.markShipped()
-		deployed = true
 		deployTelemetry.noteDeployed()
 
 		if succeeded, err = deployreport.WriteSucceeded(attempt, apps, out.promotion(target.tag), unread); err != nil {
