@@ -10,14 +10,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-const (
-	unpromoteWindow = 60 * time.Second
-	restoreAttempts = 8
-)
+const unpromoteWindow = 60 * time.Second
 
 type appRouter struct {
 	stack      router.Stack
@@ -111,47 +109,45 @@ func unpromote(ctx context.Context, l projectLedger, pointer, promotionID string
 }
 
 func restore(ctx context.Context, l projectLedger, pointer string, routed appRouter) error {
-	for retry := range restoreAttempts {
-		if err := l.WaitToRetry(ctx, retry); err != nil {
-			return err
-		}
+	err := records.RetryWhileStale(ctx, func() (bool, error) {
 		active, found, err := l.ReadActive(ctx, pointer)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if !found {
 			if err := routed.stack.RemovePointer(ctx, router.PointerRemoval{Pointer: pointer, Hosts: routed.hosts}, progress.Discard()); err != nil {
-				return err
+				return false, err
 			}
 			named, err := l.ActivePromotionID(ctx, pointer)
-			if err != nil || named == "" {
-				return err
-			}
-			continue
+			return err == nil && named != "", err
 		}
-		records, err := l.readRecords(ctx, active, routed.apps)
+		released, err := l.readRecords(ctx, active, routed.apps)
 		if err != nil {
-			return err
+			return false, err
 		}
 		kept, err := readKeptPromotions(ctx, l, pointer)
 		if err != nil {
-			return err
+			return false, err
 		}
 		err = routed.stack.MovePointer(ctx, router.PointerMove{
 			Pointer:     pointer,
 			Promotion:   active,
-			Records:     records,
+			Records:     released,
 			Hosts:       routed.previous,
 			Superseded:  routed.hosts,
 			Kept:        kept,
 			StillActive: newStillActive(l, pointer, active.PromotionID),
 		}, progress.Discard())
 		var inactive inactivePromotion
-		if !errors.As(err, &inactive) {
-			return err
+		if errors.As(err, &inactive) {
+			return true, nil
 		}
+		return false, err
+	})
+	if errors.Is(err, records.ErrContended) {
+		return fmt.Errorf("another deploy moved %s on every attempt to serve what the ledger names there: %w", router.ResolvePointer(pointer), err)
 	}
-	return fmt.Errorf("another deploy moved %s on each of %d attempts to serve what the ledger names there", router.ResolvePointer(pointer), restoreAttempts)
+	return err
 }
 
 func newStillActive(l projectLedger, pointer, promotionID string) router.StillActive {

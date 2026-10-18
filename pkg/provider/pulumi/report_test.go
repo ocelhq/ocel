@@ -183,7 +183,7 @@ func TestTheEngineLogIsForwardedToDebugALineAtATime(t *testing.T) {
 	t.Parallel()
 
 	recorded := &fakeProgress{}
-	lines := engineLines(recorded)
+	lines := engineLines(recorded, nil)
 	if _, err := lines.Write([]byte("creating bucket\r\nupdating role\npart")); err != nil {
 		t.Fatal(err)
 	}
@@ -196,6 +196,29 @@ func TestTheEngineLogIsForwardedToDebugALineAtATime(t *testing.T) {
 	}
 	if len(recorded.details) != 0 {
 		t.Errorf("the engine's own output reached Detail: %q", recorded.details)
+	}
+}
+
+func TestASecretTheEnginePrintsReachesDebugMasked(t *testing.T) {
+	t.Parallel()
+
+	recorded := &fakeProgress{}
+	setup := WorkspaceSpec{Secrets: []string{"origin-secret-value"}}
+	err := runReportingResourceOperations(setup, recorded, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
+		close(engineEvents)
+		_, err := lines.Write([]byte("~ header: origin-secret-value\nunmasked tail origin-secret-value"))
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded.debugs) != 2 {
+		t.Fatalf("forwarded %q to debug, want both lines", recorded.debugs)
+	}
+	for _, line := range recorded.debugs {
+		if strings.Contains(line, "origin-secret-value") {
+			t.Errorf("forwarded %q to debug, want the secret masked", line)
+		}
 	}
 }
 

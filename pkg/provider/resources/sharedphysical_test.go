@@ -609,3 +609,23 @@ func TestDestroyOfAStackOfSeveralFunctionsTakesThemDownInOneRemoveCall(t *testin
 		t.Errorf("Destroy() called the remove hook with %v, want one call naming every function the stack recorded: %v", calls, want)
 	}
 }
+
+type sharedPhysicalsMoving struct{ records.Store }
+
+func (s sharedPhysicalsMoving) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
+	if entry.Key.Partition.Root == resources.RootSharedPhysicals {
+		return "", records.ErrStale
+	}
+	return s.Store.Write(ctx, entry)
+}
+
+func TestAProvisionWhoseSharedPhysicalMovesUnderEveryWriteIsGivenUpOnAsContended(t *testing.T) {
+	t.Parallel()
+
+	service := &serviceEveryReleaseRevises{revision: "shop-prod-web-api-00001"}
+	stacks := resources.NewHookStacks(sharedPhysicalsMoving{fake.NewKeyValues()}, fake.NewArtifacts(), service.hooks())
+	_, err := stacks.Provision(context.Background(), provider.StackSpec{Ref: releaseRef("d1"), Kind: provider.StackApp, App: functionApp()}, nil)
+	if !errors.Is(err, records.ErrContended) {
+		t.Errorf("Provision() = %v, want it given up on as contended", err)
+	}
+}

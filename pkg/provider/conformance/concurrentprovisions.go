@@ -104,10 +104,8 @@ func runConcurrentProvisions(t *testing.T, facts provider.Facts, stacks provider
 		if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 			t.Errorf("Destroy() of the raced stack = %v", err)
 		}
-		if store != nil {
-			if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {
-				t.Errorf("forgetting the raced stack = %v", err)
-			}
+		if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {
+			t.Errorf("forgetting the raced stack = %v", err)
 		}
 	}()
 
@@ -147,10 +145,8 @@ func runConcurrentProvisions(t *testing.T, facts provider.Facts, stacks provider
 		t.Errorf("a second Provision() of %s while another was inside it = %v, want a %s refusal the CLI renders as a run already working on it", ref.Name, raced.err, refusal.CodeBusy)
 	}
 
-	if store != nil {
-		if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{Kind: provider.StackInfra, Bindings: held.result.Bindings}); err != nil {
-			t.Fatalf("recording what the first Provision() returned = %v", err)
-		}
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{Kind: provider.StackInfra, Bindings: held.result.Bindings}); err != nil {
+		t.Fatalf("recording what the first Provision() returned = %v", err)
 	}
 	settled := spec
 	settled.Images = provider.ImagePushes{}

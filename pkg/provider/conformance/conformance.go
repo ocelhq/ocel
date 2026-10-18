@@ -19,8 +19,6 @@ type Suite struct {
 
 	Binary string
 
-	Vendor func(t *testing.T, p provider.Provider)
-
 	Certificates *CertificateChecks
 
 	Logs *LogChecks
@@ -46,14 +44,13 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("ports", func(t *testing.T) { RunPorts(t, construct(t, suite, suite.New)) })
 	t.Run("hooks", func(t *testing.T) { RunHooks(t, construct(t, suite, suite.New)) })
 	t.Run("logs", func(t *testing.T) { runLogs(t, suite) })
-	t.Run("vendor", func(t *testing.T) { runVendor(t, suite) })
 }
 
 func RunWithoutAccount(t *testing.T, suite Suite) {
 	t.Helper()
 
-	if suite.New != nil || suite.Vendor != nil || suite.Logs != nil {
-		t.Fatal("the suite names a constructor, vendor checks or log checks, and only Run runs them: " +
+	if suite.New != nil || suite.Logs != nil {
+		t.Fatal("the suite names a constructor or log checks, and only Run runs them: " +
 			"a suite run without an account would report a pass having left them unexercised")
 	}
 	refuseIncompleteServer(t, suite)
@@ -120,13 +117,4 @@ func RunHooks(t *testing.T, p provider.Provider) {
 			t.Errorf("Runtime().NextServer() has no %s, which a Next container runs in front of next start", containerimage.NextServerPreloadFile)
 		}
 	})
-}
-
-func runVendor(t *testing.T, suite Suite) {
-	t.Helper()
-
-	if suite.Vendor == nil {
-		t.Skip("this provider hangs no checks of its own here; its live tests are its own to run")
-	}
-	suite.Vendor(t, construct(t, suite, suite.New))
 }

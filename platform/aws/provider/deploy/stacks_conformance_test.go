@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -357,9 +358,11 @@ func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ environment.Tier, p
 }
 
 func TestStacksRunTheConformancePortTier(t *testing.T) {
-	store := newShippedArtifacts()
-	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store, state: newEngineState()}
-	conformance.RunStacks(t, provider.Facts{Bindings: awsresources.Types(), StoresArtifacts: true}, conformingStacks(engine), store, nil)
+	shipped := newShippedArtifacts()
+	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: shipped, state: newEngineState()}
+	cfg := conformingConfig(&fakeArtifactStore{})
+	cfg.KeyValues = fake.NewKeyValues()
+	conformance.RunStacks(t, provider.Facts{Bindings: awsresources.Types(), StoresArtifacts: true}, stacksWith(cfg, engine), shipped, cfg.KeyValues)
 }
 
 func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *testing.T) {

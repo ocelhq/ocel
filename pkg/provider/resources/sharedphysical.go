@@ -21,9 +21,8 @@ import (
 const RootSharedPhysicals records.Root = "sharedphysicals"
 
 const (
-	sharedPhysicalAttempts = 8
-	sharedRemovalWindow    = 10 * time.Minute
-	sharedRemovalPoll      = 250 * time.Millisecond
+	sharedRemovalWindow = 10 * time.Minute
+	sharedRemovalPoll   = 250 * time.Millisecond
 
 	kindFunction  = "function"
 	kindContainer = "container"
@@ -343,39 +342,50 @@ func (f *hookStacks) settleKept(ctx context.Context, ref provider.StackRef, phys
 
 func (f *hookStacks) changeShared(ctx context.Context, ref provider.StackRef, physical string, apply func(*sharedPhysical, time.Time) bool) (sharedPhysical, error) {
 	key := sharedPhysicalPartition(ref.Tier, ref.Project).Key(physical)
-	for attempt := 0; attempt < sharedPhysicalAttempts; {
-		stored, err := records.ReadOrEmpty(ctx, f.keyValues, key)
-		if err != nil {
-			return sharedPhysical{}, fmt.Errorf("read the releases holding %s: %w", physical, err)
-		}
+	for {
 		var entry sharedPhysical
-		if len(stored.Value) > 0 {
-			if err := json.Unmarshal(stored.Value, &entry); err != nil {
-				return sharedPhysical{}, fmt.Errorf("decode the releases holding %s: %w", physical, err)
+		waiting := false
+		err := records.RetryWhileStale(ctx, func() (bool, error) {
+			stored, err := records.ReadOrEmpty(ctx, f.keyValues, key)
+			if err != nil {
+				return false, fmt.Errorf("read the releases holding %s: %w", physical, err)
 			}
-		}
-		if entry.Holders == nil {
-			entry.Holders = map[string]string{}
-		}
-		if apply(&entry, time.Now()) {
-			select {
-			case <-ctx.Done():
-				return sharedPhysical{}, fmt.Errorf("wait for another destroy to finish removing %s: %w", physical, ctx.Err())
-			case <-time.After(sharedRemovalPoll):
+			entry = sharedPhysical{}
+			if len(stored.Value) > 0 {
+				if err := json.Unmarshal(stored.Value, &entry); err != nil {
+					return false, fmt.Errorf("decode the releases holding %s: %w", physical, err)
+				}
 			}
-			continue
-		}
-		err = f.writeShared(ctx, stored, entry)
-		if errors.Is(err, records.ErrStale) {
-			attempt++
-			continue
-		}
-		if err != nil {
+			if entry.Holders == nil {
+				entry.Holders = map[string]string{}
+			}
+			if waiting = apply(&entry, time.Now()); waiting {
+				return false, nil
+			}
+			err = f.writeShared(ctx, stored, entry)
+			if errors.Is(err, records.ErrStale) {
+				return true, nil
+			}
+			if err != nil {
+				return false, fmt.Errorf("record the releases holding %s: %w", physical, err)
+			}
+			return false, nil
+		})
+		if errors.Is(err, records.ErrContended) {
 			return sharedPhysical{}, fmt.Errorf("record the releases holding %s: %w", physical, err)
 		}
-		return entry, nil
+		if err != nil {
+			return sharedPhysical{}, err
+		}
+		if !waiting {
+			return entry, nil
+		}
+		select {
+		case <-ctx.Done():
+			return sharedPhysical{}, fmt.Errorf("wait for another destroy to finish removing %s: %w", physical, ctx.Err())
+		case <-time.After(sharedRemovalPoll):
+		}
 	}
-	return sharedPhysical{}, fmt.Errorf("record the releases holding %s: it moved under %d attempts", physical, sharedPhysicalAttempts)
 }
 
 func (f *hookStacks) writeShared(ctx context.Context, stored records.Entry, entry sharedPhysical) error {
