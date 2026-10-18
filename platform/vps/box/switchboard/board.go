@@ -164,7 +164,7 @@ func (b *Board) Close() error {
 	return err
 }
 
-func (b *Board) Grace() time.Duration { return b.table.Load().Grace }
+func (b *Board) Grace() time.Duration { return b.table.Load().Grace() }
 
 func (b *Board) Load(path string) error {
 	b.loading.Lock()
@@ -195,7 +195,7 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMisdirectedRequest)
 		return
 	}
-	if throughTunnel && table.Visitor.IsOverHTTP(r) {
+	if throughTunnel && table.IsOverHTTP(r) {
 		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusPermanentRedirect)
 		return
 	}
@@ -263,7 +263,7 @@ func (b *Board) forwarding(r *http.Request) (boxapi.Forward, context.Context, fu
 func (b *Board) cutUnrouted(address string) {
 	b.loading.Lock()
 	defer b.loading.Unlock()
-	if !b.table.Load().Routed[address] {
+	if !b.table.Load().IsRouted(address) {
 		b.ledger.cut(address)
 	}
 }
@@ -323,7 +323,7 @@ func (b *Board) forwarded(out *httputil.ProxyRequest) {
 	case hearsEdge:
 		out.Out.Header.Set("X-Forwarded-Host", out.In.Host)
 		out.Out.Header.Set("X-Forwarded-Proto", "https")
-		if header := b.table.Load().Visitor.Address; header != "" {
+		if header := b.table.Load().VisitorAddressHeader(); header != "" {
 			if visitor := out.In.Header.Get(header); visitor != "" {
 				out.Out.Header.Set("X-Forwarded-For", visitor)
 			}

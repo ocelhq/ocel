@@ -16,8 +16,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/box/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const (

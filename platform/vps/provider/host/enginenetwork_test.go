@@ -59,7 +59,7 @@ func onYourNetwork(t *testing.T) yourNetwork {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(routing, filepath.Base(boxapi.RoutingTable)), routingTable(nil).Content, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(routing, filepath.Base(boxapi.RoutingTablePath)), routingTable(nil).Content, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	binary := switchboardBinary(arch)

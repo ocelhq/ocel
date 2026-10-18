@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -16,15 +16,15 @@ import (
 func TestAPinnedPairWhoseKeyIsNotTheCertificatesIsRefusedBeforeTheProxyLoadsIt(t *testing.T) {
 	t.Parallel()
 
-	pin := Pin{Hostname: "shop.example.com", Path: caddy.PinsDir + "/shop"}
+	pin := Pin{Hostname: "shop.example.com", Path: boxapi.PinsDir + "/shop"}
 	for verdict, refuses := range map[string]bool{pairMatched: false, pairMismatched: true, pairUnchecked: false, "": false} {
 		leaf, _ := pinnedBlocks(t, []string{pin.Hostname}, 90*24*time.Hour)
 		box := machine(nil)
 		box.answer = func(command string) (ssh.Result, bool) {
 			switch {
-			case strings.Contains(command, "cat "+shell.Quote(caddy.PinCertificate(pin.Path))):
+			case strings.Contains(command, "cat "+shell.Quote(boxapi.PinCertificate(pin.Path))):
 				return ssh.Result{Stdout: string(leaf)}, true
-			case strings.Contains(command, "openssl pkey -in "+shell.Quote(caddy.PinKey(pin.Path))):
+			case strings.Contains(command, "openssl pkey -in "+shell.Quote(boxapi.PinKey(pin.Path))):
 				return ssh.Result{Stdout: verdict + "\n"}, true
 			}
 			return ssh.Result{}, false
@@ -34,11 +34,11 @@ func TestAPinnedPairWhoseKeyIsNotTheCertificatesIsRefusedBeforeTheProxyLoadsIt(t
 		if refused := errors.As(err, &refused); refused != refuses {
 			t.Errorf("a pair the box reports %q vouches as %v, want refused=%v: a mismatched pair is one the proxy refuses at the cutover, taking every hostname pinned to it off the air", verdict, err, refuses)
 		}
-		if refuses && (!strings.Contains(err.Error(), caddy.PinKey(pin.Path)) || !strings.Contains(err.Error(), caddy.PinCertificate(pin.Path))) {
+		if refuses && (!strings.Contains(err.Error(), boxapi.PinKey(pin.Path)) || !strings.Contains(err.Error(), boxapi.PinCertificate(pin.Path))) {
 			t.Errorf("the refusal reads %q and names neither the key nor the certificate", err)
 		}
 		for _, command := range box.commands() {
-			if strings.Contains(command, "cat "+shell.Quote(caddy.PinKey(pin.Path))) || (strings.Contains(command, caddy.PinKey(pin.Path)) && !strings.Contains(command, "-pubout")) {
+			if strings.Contains(command, "cat "+shell.Quote(boxapi.PinKey(pin.Path))) || (strings.Contains(command, boxapi.PinKey(pin.Path)) && !strings.Contains(command, "-pubout")) {
 				t.Errorf("checking the pair ran %q, which brings the private key across the session rather than a digest of its public half", command)
 			}
 		}
@@ -48,10 +48,10 @@ func TestAPinnedPairWhoseKeyIsNotTheCertificatesIsRefusedBeforeTheProxyLoadsIt(t
 func TestThePairCheckReadsOnlyPublicHalvesAndSaysWhenItCouldNotRun(t *testing.T) {
 	t.Parallel()
 
-	command := pairCommand(caddy.PinsDir + "/shop")
+	command := pairCommand(boxapi.PinsDir + "/shop")
 	for what, wanted := range map[string]string{
-		"the certificate's public key":          "openssl x509 -in " + shell.Quote(caddy.PinsDir+"/shop.crt") + " -noout -pubkey",
-		"the key's public half":                 "openssl pkey -in " + shell.Quote(caddy.PinsDir+"/shop.key") + " -pubout",
+		"the certificate's public key":          "openssl x509 -in " + shell.Quote(boxapi.PinsDir+"/shop.crt") + " -noout -pubkey",
+		"the key's public half":                 "openssl pkey -in " + shell.Quote(boxapi.PinsDir+"/shop.key") + " -pubout",
 		"a verdict when openssl is absent":      "echo " + pairUnchecked,
 		"a digest rather than the bytes":        "sha256sum",
 		"one word for a pair that does not fit": "echo " + pairMismatched,

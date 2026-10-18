@@ -29,27 +29,7 @@ const (
 
 var ErrTunnelReleased = errors.New("the tunnel was released")
 
-type Tunnel struct {
-	Edge                 edge.Kind `json:"edge"`
-	Name                 string    `json:"name"`
-	ID                   string    `json:"id,omitempty"`
-	Address              string    `json:"address,omitempty"`
-	VisitorAddressHeader string    `json:"visitorAddressHeader,omitempty"`
-	VisitorSchemeHeader  string    `json:"visitorSchemeHeader,omitempty"`
-}
-
-type TunneledHost struct {
-	Hostname string `json:"hostname"`
-	Owner    string `json:"owner"`
-}
-
-func tunneledHostnames(tunneled []TunneledHost) boxapi.TunneledHostnames {
-	hostnames := make([]string, 0, len(tunneled))
-	for _, held := range tunneled {
-		hostnames = append(hostnames, held.Hostname)
-	}
-	return boxapi.NewTunneledHostnames(hostnames)
-}
+type Tunnel = boxapi.Tunnel
 
 func tunnelBox(tunnel Tunnel, connector edge.TunnelConnector) boxContainer {
 	return boxContainer{
@@ -214,31 +194,37 @@ func renderTunnelRemoval(retired Tunnel) string {
 		shell.Words(renderTunnelTokenArgv("unplace", retired.Name))
 }
 
-func (h *Host) TunnelHost(ctx context.Context, tunneled TunneledHost, tunnelName string) error {
+func (h *Host) ClaimThrough(ctx context.Context, tunnelName string, claims []HostClaim) error {
+	if len(claims) == 0 {
+		return nil
+	}
+	through := make([]HostClaim, 0, len(claims))
+	for _, claim := range claims {
+		claim.Tunneled = true
+		through = append(through, claim)
+	}
+	if err := validTable(RoutingTable{Claims: through}); err != nil {
+		return err
+	}
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		if err := refuseUnreserved(state, tunnelName, h.Named()); err != nil {
 			return RoutingTable{}, err
 		}
-		for _, held := range state.Tunneled {
-			if held.Hostname == tunneled.Hostname && held.Owner != tunneled.Owner {
-				return RoutingTable{}, refusal.Refuse(refusal.CodeBusy,
-					"%s is tunneled on this box for %s\nUnbind it there before %s binds it", tunneled.Hostname, held.Owner, tunneled.Owner)
+		for _, claim := range through {
+			taken, err := Claiming(state.Claims, claim)
+			if err != nil {
+				return RoutingTable{}, err
 			}
+			state.Claims = taken
 		}
-		state.Tunneled = append(dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool { return held.Hostname == tunneled.Hostname }), tunneled)
 		return state, nil
 	})
 }
 
-func (h *Host) RemoveTunneledHost(ctx context.Context, tunneled TunneledHost) error {
-	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
-		state.Tunneled = dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool { return held == tunneled })
-		return state, nil
+func (h *Host) InstallPreviewEntryThrough(ctx context.Context, base, tunnelName string) error {
+	return h.installPreviewEntry(ctx, base, func(state RoutingTable) error {
+		return refuseUnreserved(state, tunnelName, h.Named())
 	})
-}
-
-func dropTunneledHosts(tunneled []TunneledHost, dropped func(TunneledHost) bool) []TunneledHost {
-	return slices.DeleteFunc(slices.Clone(tunneled), dropped)
 }
 
 func (h *Host) IsTunneled(ctx context.Context, hostname string) (bool, error) {
@@ -246,7 +232,7 @@ func (h *Host) IsTunneled(ctx context.Context, hostname string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return tunneledHostnames(state.Tunneled).Has(hostname), nil
+	return state.IsTunneled(hostname), nil
 }
 
 func (h *Host) ReleaseTunnel(ctx context.Context) ([]Tunnel, error) {
@@ -254,7 +240,7 @@ func (h *Host) ReleaseTunnel(ctx context.Context) ([]Tunnel, error) {
 	var stopped Tunnel
 	stopping := false
 	if err := h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
-		stopping = state.Tunnel != nil && len(state.Tunneled) == 0
+		stopping = state.Tunnel != nil && !state.HasTunneled()
 		if stopping {
 			stopped = *state.Tunnel
 			state.Retired = append(state.Retired, stopped)

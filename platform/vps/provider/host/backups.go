@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -18,7 +18,7 @@ const StoreCopierImage = "rclone/rclone:1.74.4@sha256:c61954aaa32328a5486715dd06
 var backupsScript = bytes.ReplaceAll(backupsTemplate, []byte("@STORE_COPIER@"), []byte(StoreCopierImage))
 
 const (
-	BackupsHelper = boxstore.Dir + "/backups"
+	BackupsHelper = boxapi.LibDir + "/backups"
 
 	backupsServiceFile = "/etc/systemd/system/ocel-backups.service"
 	backupsTimerFile   = "/etc/systemd/system/ocel-backups.timer"
@@ -78,9 +78,9 @@ func BackupItems() []Item {
 			Note: "dump and restore"},
 		{Kind: KindFile, Name: backupsServiceFile, Mode: 0o644, Owner: rootOwner, Content: service},
 		{Kind: KindFile, Name: backupsTimerFile, Mode: 0o644, Owner: rootOwner, Content: timer},
-		{Kind: KindUnit, Name: BackupsTimer, Owner: rootOwner, Content: unitWatchFacts(timer, service, backupsScript),
+		systemdUnit(Item{Name: BackupsTimer, Owner: rootOwner, Content: unitWatchFacts(timer, service, backupsScript),
 			Watch: []string{backupsTimerFile, backupsServiceFile, BackupsHelper},
-			Slow:  true, Note: "daily backups"},
+			Slow:  true, Note: "daily backups"}),
 	}
 }
 

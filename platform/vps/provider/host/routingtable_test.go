@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func everything() RoutingTable {
@@ -21,7 +20,7 @@ func everything() RoutingTable {
 		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + containerimage.PortText},
 	}
 	table.Grace = 12 * time.Second
-	table.Pins = []Pin{{Hostname: "shop.example.com", Path: caddy.PinsDir + "/shop"}}
+	table.Pins = []Pin{{Hostname: "shop.example.com", Path: boxapi.PinsDir + "/shop"}}
 	table.PreviewBase = previewBase
 	table.Connector = "box.example.com"
 	return table
@@ -74,7 +73,7 @@ func TestATableWrittenFromRowsInAnyOrderIsTheSameBytes(t *testing.T) {
 	t.Parallel()
 
 	table := everything()
-	table.Pins = append(table.Pins, Pin{Hostname: "blog.example.com", Path: caddy.PinsDir + "/blog"})
+	table.Pins = append(table.Pins, Pin{Hostname: "blog.example.com", Path: boxapi.PinsDir + "/blog"})
 	scrambled := table
 	scrambled.Claims = []HostClaim{table.Claims[1], table.Claims[0]}
 	scrambled.Routes = []AppRoute{table.Routes[1], table.Routes[0]}
@@ -97,9 +96,9 @@ func TestATableOcelCouldNotRenderIsRefusedWhenItIsRead(t *testing.T) {
 		"a preview base of one dns label": `{"grace":"30s","preview":"internal"}`,
 	} {
 		var refused refusal.Refusal
-		if _, err := ReadRoutingTable([]byte(written)); !errors.As(err, &refused) || !strings.Contains(err.Error(), boxapi.RoutingTable) {
+		if _, err := ReadRoutingTable([]byte(written)); !errors.As(err, &refused) || !strings.Contains(err.Error(), boxapi.RoutingTablePath) {
 			t.Errorf("ReadRoutingTable() over %s = %v, want a refusal naming %s: a row ocel cannot render takes every later reshape on this box with it",
-				what, err, boxapi.RoutingTable)
+				what, err, boxapi.RoutingTablePath)
 		}
 	}
 }
@@ -107,10 +106,11 @@ func TestATableOcelCouldNotRenderIsRefusedWhenItIsRead(t *testing.T) {
 func TestWhatTheBoxsAgentReadsItsStoreBaseFromIsTheTableADeployWrote(t *testing.T) {
 	t.Parallel()
 
-	claims, err := boxapi.ClaimedIn(mustWrite(t, storing()))
+	read, err := boxapi.ReadRoutingTable(mustWrite(t, storing()))
 	if err != nil {
-		t.Fatalf("ClaimedIn() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
+	claims := read.Claims
 	if base := boxapi.StoreBase(claims, surface, pointed); base != "https://storage.shop.example.com" {
 		t.Errorf("the agent reads a store base of %q off the table a deploy wrote, want https://storage.shop.example.com", base)
 	}

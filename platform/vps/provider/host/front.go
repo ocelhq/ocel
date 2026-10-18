@@ -5,10 +5,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strconv"
-
-	"github.com/ocelhq/ocel/pkg/edge"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -73,22 +70,6 @@ func destination(front proxy.Proxy) string {
 		return file
 	}
 	return ""
-}
-
-func (state RoutingTable) hostnames() []string {
-	named := make([]string, 0, len(state.Claims)+2)
-	for _, claim := range state.Claims {
-		named = append(named, claim.Hostname)
-	}
-	if state.Connector != "" {
-		named = append(named, state.Connector)
-	}
-	if state.PreviewBase != "" {
-		named = append(named, edge.ProbeHostname(edge.PreviewWildcard(state.PreviewBase)))
-	}
-	named = slices.DeleteFunc(named, tunneledHostnames(state.Tunneled).Has)
-	slices.Sort(named)
-	return slices.Compact(named)
 }
 
 func (f Front) adopted() bool { return f != Front{} }

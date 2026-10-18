@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -65,7 +64,7 @@ func TestATraefikPreviewIsRefusedNamingThePreviewResolverThatWouldShareOneCertif
 func TestAPreviewServedUnderOneWildcardCertificateIsNotRefused(t *testing.T) {
 	t.Parallel()
 
-	origin := proxy.CertificatePair{Certificate: "ORIGIN", Key: "KEY"}
+	origin := boxapi.CertificatePair{Certificate: "ORIGIN", Key: "KEY"}
 	for name, bench := range map[string]struct {
 		state RoutingTable
 		front Front
@@ -73,7 +72,7 @@ func TestAPreviewServedUnderOneWildcardCertificateIsNotRefused(t *testing.T) {
 	}{
 		"a Traefik with a preview resolver": {state: RoutingTable{PreviewBase: publicPreviewBase}, front: newTraefikFront("dns")},
 		"a proxy you route yourself":        {state: RoutingTable{PreviewBase: publicPreviewBase}, front: Front{Manual: &ManualFront{Port: 8480}}},
-		"a pinned wildcard":                 {state: RoutingTable{PreviewBase: publicPreviewBase}, pins: []Pin{{Hostname: "*." + publicPreviewBase, Path: caddy.PinsDir + "/preview"}}},
+		"a pinned wildcard":                 {state: RoutingTable{PreviewBase: publicPreviewBase}, pins: []Pin{{Hostname: "*." + publicPreviewBase, Path: boxapi.PinsDir + "/preview"}}},
 		"an edge's origin certificate": {state: RoutingTable{PreviewBase: publicPreviewBase, Shields: []Shield{{
 			Hostname: "*." + publicPreviewBase, Owner: "ocel-preview-entry", ClientCAs: []string{"zone"}, OriginCertificate: origin,
 		}}}},

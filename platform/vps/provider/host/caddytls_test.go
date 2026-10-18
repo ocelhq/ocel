@@ -53,10 +53,10 @@ func pinnedPair(t *testing.T, dir, name string, names []string) string {
 
 	cert, key := pinnedBlocks(t, names, 90*24*time.Hour)
 	at := filepath.Join(dir, name)
-	if err := os.WriteFile(caddy.PinCertificate(at), cert, 0o644); err != nil {
+	if err := os.WriteFile(boxapi.PinCertificate(at), cert, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(caddy.PinKey(at), key, 0o600); err != nil {
+	if err := os.WriteFile(boxapi.PinKey(at), key, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return at
@@ -65,7 +65,7 @@ func pinnedPair(t *testing.T, dir, name string, names []string) string {
 func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testing.T) {
 	proxyBox := aLiveProxy(t)
 
-	at := caddy.PinsDir + "/wildcard"
+	at := boxapi.PinsDir + "/wildcard"
 	pinnedPair(t, proxyBox.pins, "wildcard", []string{"*.preview.example.com"})
 
 	state := routed()
@@ -76,7 +76,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v", err)
 	}
 
-	if !strings.Contains(string(rendered), caddy.PinCertificate(caddy.PinsMount+"/wildcard")) {
+	if !strings.Contains(string(rendered), boxapi.PinCertificate(caddy.PinsMount+"/wildcard")) {
 		t.Fatalf("the config names a pinned pair by a path other than the one the proxy is handed it at:\n%s", rendered)
 	}
 	proxyBox.stages(t, routingTableItem().Content, state, issuedByNobody(t, rendered))
@@ -252,7 +252,7 @@ func TestARealProxyServesAPinAddedOverAHostnameItAlreadyOrderedFor(t *testing.T)
 
 	written := mustWrite(t, state)
 	pinnedPair(t, proxyBox.pins, "wildcard", []string{wildcard})
-	state.Pins = []Pin{{Hostname: wildcard, Path: caddy.PinsDir + "/wildcard"}}
+	state.Pins = []Pin{{Hostname: wildcard, Path: boxapi.PinsDir + "/wildcard"}}
 	proxyBox.stages(t, written, state, issuedByNobody(t, mustRender(t, state)))
 	proxyBox.drives(t, "load", proxyBox.table)
 	proxyBox.reloads(t)

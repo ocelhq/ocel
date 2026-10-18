@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -37,12 +38,12 @@ func pinnedBox(t *testing.T, pins []Pin, files map[string][]byte) *Host {
 func pinning(t *testing.T) (*claimBench, *Host) {
 	t.Helper()
 
-	at := caddy.PinsDir + "/wildcard"
+	at := boxapi.PinsDir + "/wildcard"
 	covering, _ := pinnedBlocks(t, []string{wildcard}, 90*24*time.Hour)
 	rig := claimingBox(t, routed())
 	serves := rig.answer
 	rig.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, shell.Quote(caddy.PinCertificate(at))) {
+		if strings.Contains(command, shell.Quote(boxapi.PinCertificate(at))) {
 			return ssh.Result{Stdout: string(covering)}, true
 		}
 		return serves(command)
@@ -59,7 +60,7 @@ func claiming(t *testing.T, pins []Pin, files map[string][]byte) error {
 func TestAPinIsWrittenAtThePathTheProxyOpensAndReadBackAtThePathThisHostSpells(t *testing.T) {
 	t.Parallel()
 
-	at := caddy.PinsDir + "/wildcard"
+	at := boxapi.PinsDir + "/wildcard"
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: "shop.preview.example.com", Owner: surface, Pointer: pointed}}
 	state.Pins = []Pin{{Hostname: wildcard, Path: at}}
@@ -67,11 +68,11 @@ func TestAPinIsWrittenAtThePathTheProxyOpensAndReadBackAtThePathThisHostSpells(t
 	if err != nil {
 		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v", err)
 	}
-	if !strings.Contains(string(rendered), caddy.PinCertificate(caddy.PinsMount+"/wildcard")) {
+	if !strings.Contains(string(rendered), boxapi.PinCertificate(caddy.PinsMount+"/wildcard")) {
 		t.Errorf("the config hands the proxy %q, and the proxy opens a pair at %s: a path this host spells is a path the container has no such file at, and the whole config is refused with it:\n%s",
 			at, caddy.PinsMount, rendered)
 	}
-	if strings.Contains(string(rendered), caddy.PinsDir+"/wildcard") {
+	if strings.Contains(string(rendered), boxapi.PinsDir+"/wildcard") {
 		t.Errorf("the config names a path off this host's own filesystem:\n%s", rendered)
 	}
 
@@ -90,16 +91,16 @@ func TestAPinTheProxyCouldNotOpenIsRefusedRatherThanRendered(t *testing.T) {
 	for what, pin := range map[string]Pin{
 		"a pair beside ocel's own state": {Hostname: wildcard, Path: "/etc/ocel/wildcard"},
 		"a pair the operator kept":       {Hostname: wildcard, Path: "/srv/certs/wildcard"},
-		"a pair nested under the root":   {Hostname: wildcard, Path: caddy.PinsDir + "/preview/wildcard"},
-		"a pair reached by climbing out": {Hostname: wildcard, Path: caddy.PinsDir + "/.."},
-		"a pair naming no host":          {Hostname: "", Path: caddy.PinsDir + "/wildcard"},
+		"a pair nested under the root":   {Hostname: wildcard, Path: boxapi.PinsDir + "/preview/wildcard"},
+		"a pair reached by climbing out": {Hostname: wildcard, Path: boxapi.PinsDir + "/.."},
+		"a pair naming no host":          {Hostname: "", Path: boxapi.PinsDir + "/wildcard"},
 	} {
 		state := routed()
 		state.Pins = []Pin{pin}
 		var refused refusal.Refusal
 		if _, err := RenderProxyConfig(caddy.Builtin{}, state); !errors.As(err, &refused) {
 			t.Errorf("RenderProxyConfig(caddy.Builtin{}, ) over %s at %q = %v, want a refusal naming %s: anything the proxy cannot open takes every reshape on this box with it",
-				what, pin.Path, err, caddy.PinsDir)
+				what, pin.Path, err, boxapi.PinsDir)
 		}
 	}
 }
@@ -107,7 +108,7 @@ func TestAPinTheProxyCouldNotOpenIsRefusedRatherThanRendered(t *testing.T) {
 func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 	t.Parallel()
 
-	at := caddy.PinsDir + "/wildcard"
+	at := boxapi.PinsDir + "/wildcard"
 	covering, _ := pinnedBlocks(t, []string{wildcard}, 90*24*time.Hour)
 	elsewhere, _ := pinnedBlocks(t, []string{"*.other.example.com"}, 90*24*time.Hour)
 	expired, _ := pinnedBlocks(t, []string{wildcard}, -time.Hour)
@@ -117,7 +118,7 @@ func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 		"a pair nothing on this box renews and nobody replaced": expired,
 		"a file that is no certificate at all":                  []byte("-----BEGIN EC PRIVATE KEY-----\nMHcCAQE=\n-----END EC PRIVATE KEY-----\n"),
 	} {
-		err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{caddy.PinCertificate(at): stored})
+		err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{boxapi.PinCertificate(at): stored})
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) {
 			t.Errorf("a claim on a box storing %s = %v, want ocel's own refusal naming %s: the pin reaches the proxy on every reshape, so an unverified one turns a typo into a caddy error on somebody else's deploy",
@@ -125,7 +126,7 @@ func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 		}
 	}
 
-	if err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{caddy.PinCertificate(at): covering}); err != nil {
+	if err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{boxapi.PinCertificate(at): covering}); err != nil {
 		t.Errorf("a claim on a box storing a pinned pair that covers what it is pinned for = %v, want the claim taken", err)
 	}
 }
@@ -133,13 +134,13 @@ func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 	t.Parallel()
 
-	at := caddy.PinsDir + "/wildcard"
+	at := boxapi.PinsDir + "/wildcard"
 	covering, _ := pinnedBlocks(t, []string{wildcard}, 90*24*time.Hour)
 	rig := claimingBox(t, routed())
 	serves := rig.answer
 	reads := 0
 	rig.answer = func(command string) (ssh.Result, bool) {
-		if strings.HasPrefix(command, "cat "+shell.Quote(caddy.PinCertificate(at))) {
+		if strings.HasPrefix(command, "cat "+shell.Quote(boxapi.PinCertificate(at))) {
 			reads++
 			return ssh.Result{Stdout: string(covering)}, true
 		}
@@ -163,15 +164,15 @@ func TestAPinTheProxyCouldNotOpenCoversNothingRatherThanNamingAHandle(t *testing
 
 	for what, pin := range map[string]Pin{
 		"a pair the operator kept elsewhere": {Hostname: wildcard, Path: "/srv/certs/wildcard"},
-		"a pair nested under the root":       {Hostname: wildcard, Path: caddy.PinsDir + "/preview/wildcard"},
-		"a pair reached by climbing out":     {Hostname: wildcard, Path: caddy.PinsDir + "/.."},
+		"a pair nested under the root":       {Hostname: wildcard, Path: boxapi.PinsDir + "/preview/wildcard"},
+		"a pair reached by climbing out":     {Hostname: wildcard, Path: boxapi.PinsDir + "/.."},
 	} {
 		if at := Covering([]Pin{pin}, "shop.preview.example.com"); at != "" {
 			t.Errorf("%s at %q covers the hostname as %q, and a status naming a handle no reshape will ever bind sends an operator looking for a pin that cannot exist",
 				what, pin.Path, at)
 		}
 	}
-	loaded := Pin{Hostname: wildcard, Path: caddy.PinsDir + "/wildcard"}
+	loaded := Pin{Hostname: wildcard, Path: boxapi.PinsDir + "/wildcard"}
 	if at := Covering([]Pin{loaded}, "shop.preview.example.com"); at != loaded.Path {
 		t.Errorf("Covering() over a pair the proxy loads = %q, want %q", at, loaded.Path)
 	}
@@ -180,7 +181,7 @@ func TestAPinTheProxyCouldNotOpenCoversNothingRatherThanNamingAHandle(t *testing
 func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) {
 	t.Parallel()
 
-	at := caddy.PinsDir + "/pair"
+	at := boxapi.PinsDir + "/pair"
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: "shop.example.com", Owner: surface, Pointer: pointed}, {Hostname: "blog.example.com", Owner: surface, Pointer: pointed}}
 	state.Pins = []Pin{{Hostname: "shop.example.com", Path: at}, {Hostname: "blog.example.com", Path: at}}
@@ -233,7 +234,7 @@ func TestAPinnedPreviewWildcardServesTheProbeBeforeAnyPreviewIsClaimed(t *testin
 	t.Parallel()
 
 	state := previewing()
-	state.Pins = []Pin{{Hostname: wildcard, Path: caddy.PinsDir + "/wildcard"}}
+	state.Pins = []Pin{{Hostname: wildcard, Path: boxapi.PinsDir + "/wildcard"}}
 	var read struct {
 		Apps struct {
 			TLS *struct {
@@ -251,7 +252,7 @@ func TestAPinnedPreviewWildcardServesTheProbeBeforeAnyPreviewIsClaimed(t *testin
 		loaded = read.Apps.TLS.Certificates.LoadFiles
 	}
 	if !slices.ContainsFunc(loaded, func(pair loadedPair) bool {
-		return pair.Certificate == caddy.PinCertificate(caddy.PinsMount+"/wildcard")
+		return pair.Certificate == boxapi.PinCertificate(caddy.PinsMount+"/wildcard")
 	}) {
 		t.Errorf("a box answering previews under a pinned %s hands the proxy %+v, want that pair loaded: the probe %s is answered whether or not a preview is claimed, and with no pair loaded for it the proxy orders one from acme, which a dns-01-only setup never gets", wildcard, loaded, edge.ProbeHostname(wildcard))
 	}

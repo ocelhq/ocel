@@ -223,7 +223,7 @@ func (vm machine) teardownImages(t *testing.T) string {
 func (vm machine) routedHosts(t *testing.T) []string {
 	t.Helper()
 
-	table, err := host.ReadRoutingTable([]byte(vm.ssh(t, "sudo cat "+quote(boxapi.RoutingTable))))
+	table, err := host.ReadRoutingTable([]byte(vm.ssh(t, "sudo cat "+quote(boxapi.RoutingTablePath))))
 	if err != nil {
 		t.Fatalf("read the routing table the switchboard serves: %v", err)
 	}

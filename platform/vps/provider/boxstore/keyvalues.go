@@ -13,36 +13,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-const (
-	Dir             = "/usr/local/lib/ocel"
-	KeyValuesHelper = Dir + "/keyvalues"
-	SealHelper      = Dir + "/seal"
-)
+const agentMissing = 127
 
-const (
-	ExitNotFound = 3
-	ExitStale    = 4
-)
+type KeyValues struct{ box *ssh.Box }
 
-const (
-	revisionWidth = 32
-	revisionHex   = "0123456789abcdef"
-	acknowledged  = "removed"
-)
-
-type KeyValueTransport interface {
-	HasStore(ctx context.Context, tier environment.Tier) (bool, error)
-
-	Run(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error)
-}
-
-type KeyValues struct{ over KeyValueTransport }
-
-func NewKeyValues(over KeyValueTransport) *KeyValues { return &KeyValues{over: over} }
-
-var errUnprovisioned = errors.New("this host keeps no store for the tier")
+func NewKeyValues(box *ssh.Box) *KeyValues { return &KeyValues{box: box} }
 
 func refuseUnbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
@@ -50,15 +29,24 @@ func refuseUnbootstrapped(tier environment.Tier) error {
 		provider.BootstrapCommand(tier))
 }
 
-func (s *KeyValues) run(ctx context.Context, tier environment.Tier, unprovisioned error, stdin io.Reader, argv ...string) (string, error) {
-	provisioned, err := s.over.HasStore(ctx, tier)
+func (s *KeyValues) run(ctx context.Context, tier environment.Tier, unbootstrapped error, stdin io.Reader, argv ...string) (string, error) {
+	command := shell.Words(append([]string{boxapi.LiveBinary, boxapi.RecordsCommand, string(tier)}, argv...))
+	result, err := s.box.Stream(ctx, ssh.RootWhenAble, command, stdin)
 	if err != nil {
 		return "", err
 	}
-	if !provisioned {
-		return "", unprovisioned
+	switch result.Code {
+	case 0:
+		return result.Stdout, nil
+	case boxapi.ExitNotFound:
+		return "", records.ErrNotFound
+	case boxapi.ExitStale:
+		return "", records.ErrStale
+	case agentMissing:
+		return "", unbootstrapped
+	default:
+		return "", s.box.Refuse("records "+argv[0], result)
 	}
-	return s.over.Run(ctx, tier, stdin, argv...)
 }
 
 func (s *KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
@@ -66,61 +54,76 @@ func (s *KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, e
 	if err != nil {
 		return records.Entry{}, err
 	}
-	rendered, err := s.run(ctx, key.Partition.Tier, records.ErrNotFound, nil, "read", path)
+	rendered, err := s.run(ctx, key.Partition.Tier, records.ErrNotFound, nil, boxapi.RecordsVerbGet, path)
 	if err != nil {
 		return records.Entry{}, err
 	}
-	revision, value, split := strings.Cut(strings.TrimRight(rendered, "\n"), "\t")
-	if !split {
-		return records.Entry{}, refusal.Refuse(refusal.CodeDenied,
-			"the key-value helper answered a read with %q", rendered)
+	var file boxapi.EntryFile
+	if err := json.Unmarshal([]byte(rendered), &file); err != nil {
+		return records.Entry{}, unreadable(boxapi.RecordsVerbGet, rendered)
 	}
-	return entryOf(key, revision, value)
+	return entryOf(key, file.Revision, file.Value)
 }
 
 func (s *KeyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
-	path, line, err := encodeEntry(entry)
+	revisions, err := s.compareAndSet(ctx, entry.Key.Partition.Tier, entry)
 	if err != nil {
 		return "", err
 	}
-	tier := entry.Key.Partition.Tier
-	rendered, err := s.run(ctx, tier, refuseUnbootstrapped(tier), bytes.NewReader(line), "write", path, string(entry.Revision))
-	if err != nil {
-		return "", err
-	}
-	return parseRevision(rendered)
+	return revisions[0], nil
 }
 
 func (s *KeyValues) WritePair(ctx context.Context, first, second records.Entry) error {
-	one, firstLine, err := encodeEntry(first)
-	if err != nil {
-		return err
-	}
-	two, secondLine, err := encodeEntry(second)
-	if err != nil {
-		return err
-	}
-	tier := first.Key.Partition.Tier
-	if second.Key.Partition.Tier != tier {
+	if second.Key.Partition.Tier != first.Key.Partition.Tier {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s and %s belong to different tiers",
 			first.Key, second.Key)
 	}
-	fed := io.MultiReader(bytes.NewReader(firstLine), bytes.NewReader(secondLine))
-	rendered, err := s.run(ctx, tier, refuseUnbootstrapped(tier), fed, "pair", one, string(first.Revision), two, string(second.Revision))
-	if err != nil {
-		return err
-	}
-	left, right, split := strings.Cut(strings.TrimSpace(rendered), "\t")
-	if !split {
-		return refusal.Refuse(refusal.CodeDenied,
-			"the key-value helper answered a pair with %q", rendered)
-	}
-	if _, err := parseRevision(left); err != nil {
-		return err
-	}
-	_, err = parseRevision(right)
+	_, err := s.compareAndSet(ctx, first.Key.Partition.Tier, first, second)
 	return err
+}
+
+func (s *KeyValues) compareAndSet(ctx context.Context, tier environment.Tier, entries ...records.Entry) ([]records.Revision, error) {
+	changes := make([]boxapi.Change, 0, len(entries))
+	for _, entry := range entries {
+		if err := records.RefuseUnwritable(entry); err != nil {
+			return nil, err
+		}
+		path, err := boxapi.PathOf(entry.Key)
+		if err != nil {
+			return nil, err
+		}
+		var value bytes.Buffer
+		if err := json.Compact(&value, entry.Value); err != nil {
+			return nil, err
+		}
+		changes = append(changes, boxapi.Change{Path: path, Revision: entry.Revision, Value: value.Bytes()})
+	}
+	return s.send(ctx, tier, refuseUnbootstrapped(tier), changes)
+}
+
+func (s *KeyValues) send(ctx context.Context, tier environment.Tier, unbootstrapped error, changes []boxapi.Change) ([]records.Revision, error) {
+	fed, err := json.Marshal(changes)
+	if err != nil {
+		return nil, err
+	}
+	rendered, err := s.run(ctx, tier, unbootstrapped, bytes.NewReader(fed), boxapi.RecordsVerbCompareAndSet)
+	if err != nil {
+		return nil, err
+	}
+	var revisions []records.Revision
+	if err := json.Unmarshal([]byte(rendered), &revisions); err != nil || len(revisions) != len(changes) {
+		return nil, unreadable(boxapi.RecordsVerbCompareAndSet, rendered)
+	}
+	for at, change := range changes {
+		if change.Remove {
+			continue
+		}
+		if _, err := parseRevision(string(revisions[at])); err != nil {
+			return nil, err
+		}
+	}
+	return revisions, nil
 }
 
 func (s *KeyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
@@ -128,15 +131,8 @@ func (s *KeyValues) Remove(ctx context.Context, key records.Key, expected record
 	if err != nil {
 		return err
 	}
-	rendered, err := s.run(ctx, key.Partition.Tier, records.ErrNotFound, nil, "remove", path, string(expected))
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(rendered) != acknowledged {
-		return refusal.Refuse(refusal.CodeDenied,
-			"the key-value helper did not confirm removing %s", key)
-	}
-	return nil
+	_, err = s.send(ctx, key.Partition.Tier, records.ErrNotFound, []boxapi.Change{{Path: path, Revision: expected, Remove: true}})
+	return err
 }
 
 func (s *KeyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
@@ -144,7 +140,7 @@ func (s *KeyValues) List(ctx context.Context, in records.Partition, under ...str
 	if err != nil {
 		return nil, err
 	}
-	argv := []string{"list", dir}
+	argv := []string{boxapi.RecordsVerbList, dir}
 	if len(under) > 0 {
 		prefix, err := boxapi.PathOf(in.Key(under...))
 		if err != nil {
@@ -152,28 +148,27 @@ func (s *KeyValues) List(ctx context.Context, in records.Partition, under ...str
 		}
 		argv = append(argv, strings.TrimPrefix(prefix, dir+"/"))
 	}
-	rendered, err := s.run(ctx, in.Tier, errUnprovisioned, nil, argv...)
-	if errors.Is(err, errUnprovisioned) {
+	rendered, err := s.run(ctx, in.Tier, errUnbootstrappedList, nil, argv...)
+	if errors.Is(err, errUnbootstrappedList) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 	var found []records.Entry
-	for _, line := range strings.Split(strings.TrimSpace(rendered), "\n") {
+	for line := range strings.Lines(rendered) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		columns := strings.SplitN(line, "\t", 3)
-		if len(columns) != 3 {
-			return nil, refusal.Refuse(refusal.CodeDenied,
-				"the key-value helper listed a row ocel cannot read: %q", line)
+		var listed boxapi.ListedEntry
+		if err := json.Unmarshal([]byte(line), &listed); err != nil {
+			return nil, unreadable(boxapi.RecordsVerbList, line)
 		}
-		key, err := boxapi.KeyOf(in, columns[0])
+		key, err := boxapi.KeyOf(in, listed.Path)
 		if err != nil {
 			return nil, err
 		}
-		entry, err := entryOf(key, columns[1], columns[2])
+		entry, err := entryOf(key, listed.Revision, listed.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -182,37 +177,34 @@ func (s *KeyValues) List(ctx context.Context, in records.Partition, under ...str
 	return found, nil
 }
 
-func encodeEntry(entry records.Entry) (string, []byte, error) {
-	if err := records.RefuseUnwritable(entry); err != nil {
-		return "", nil, err
-	}
-	path, err := boxapi.PathOf(entry.Key)
-	if err != nil {
-		return "", nil, err
-	}
-	var line bytes.Buffer
-	if err := json.Compact(&line, entry.Value); err != nil {
-		return "", nil, err
-	}
-	return path, append(line.Bytes(), '\n'), nil
+var errUnbootstrappedList = refusal.Refuse(refusal.CodeNotReady, "this host keeps no records")
+
+func unreadable(verb, said string) error {
+	return refusal.Refuse(refusal.CodeDenied,
+		"the box answered a records %s with %q", verb, strings.TrimSpace(said))
 }
 
-func entryOf(key records.Key, revision, value string) (records.Entry, error) {
-	if !json.Valid([]byte(value)) {
+const (
+	revisionWidth = 32
+	revisionHex   = "0123456789abcdef"
+)
+
+func entryOf(key records.Key, revision records.Revision, value json.RawMessage) (records.Entry, error) {
+	if !json.Valid(value) {
 		return records.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s is not an entry ocel wrote", key)
 	}
-	parsed, err := parseRevision(revision)
+	parsed, err := parseRevision(string(revision))
 	if err != nil {
 		return records.Entry{}, err
 	}
-	return records.Entry{Key: key, Value: []byte(value), Revision: parsed}, nil
+	return records.Entry{Key: key, Value: value, Revision: parsed}, nil
 }
 
 func parseRevision(rendered string) (records.Revision, error) {
 	revision := strings.TrimSpace(rendered)
 	if len(revision) != revisionWidth || strings.Trim(revision, revisionHex) != "" {
 		return "", refusal.Refuse(refusal.CodeDenied,
-			"the key-value helper answered %q, not a revision", rendered)
+			"the box answered %q, not a revision", rendered)
 	}
 	return records.Revision(revision), nil
 }

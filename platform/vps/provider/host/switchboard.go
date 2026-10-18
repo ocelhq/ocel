@@ -9,7 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -17,7 +16,7 @@ import (
 
 const (
 	SwitchboardContainer = boxapi.Switchboard
-	SwitchboardDir       = boxstore.Dir + "/switchboard"
+	SwitchboardDir       = boxapi.LibDir + "/switchboard"
 	SwitchboardBinary    = SwitchboardDir + "/" + boxapi.Switchboard
 	switchboardMount     = "/ocel/switchboard"
 	SwitchboardMounted   = switchboardMount + "/" + boxapi.Switchboard
@@ -39,7 +38,7 @@ func switchboardBox(binary []byte, front Front) boxContainer {
 			"--listen", ":" + switchboardPort,
 			"--front", boxapi.FrontSocket,
 			"--admit", boxapi.AdmitSocket,
-			"--table", boxapi.RoutingTable,
+			"--table", boxapi.RoutingTablePath,
 			"--tunnel-listen", TunnelNetwork + ":" + boxapi.TunnelListenPort,
 		}, front.listening()...),
 		ports:    front.published(),
@@ -53,7 +52,7 @@ func switchboardBox(binary []byte, front Front) boxContainer {
 			boxapi.FrontDir + ":" + boxapi.FrontDir,
 		},
 		caps:    switchboardCapabilities,
-		files:   []string{boxapi.RoutingTable, SwitchboardBinary},
+		files:   []string{boxapi.RoutingTablePath, SwitchboardBinary},
 		ready:   []string{SwitchboardMounted, "upstreams"},
 		unready: "answered nothing over its control socket in " + boxapi.SwitchboardControlDir,
 		inodes:  []string{SwitchboardMounted, "inodes"},

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
@@ -12,17 +13,23 @@ import (
 
 func tunneledRouting(t *testing.T, upstreams map[string]string, tunneled ...string) []byte {
 	t.Helper()
-	var table map[string]any
-	if err := json.Unmarshal(routing(t, upstreams), &table); err != nil {
+	table, err := boxapi.ReadRoutingTable(routing(t, upstreams))
+	if err != nil {
 		t.Fatal(err)
 	}
-	held := make([]map[string]string, 0, len(tunneled))
 	for _, hostname := range tunneled {
-		held = append(held, map[string]string{"hostname": hostname, "owner": "ocel--site-0--production"})
+		if base, wild := strings.CutPrefix(hostname, "*."); wild {
+			table.PreviewBase, table.PreviewTunneled = base, true
+			continue
+		}
+		for at := range table.Claims {
+			if table.Claims[at].Hostname == hostname {
+				table.Claims[at].Tunneled = true
+			}
+		}
 	}
-	table["tunneled"] = held
-	table["tunnel"] = map[string]string{"edge": "cloudflare", "name": "ocel-box", "id": "5a6b7c8d-1", "visitorAddressHeader": "Cf-Connecting-Ip", "visitorSchemeHeader": "Cf-Visitor"}
-	written, err := json.Marshal(table)
+	table.Tunnel = &boxapi.Tunnel{Edge: "cloudflare", Name: "ocel-box", ID: "5a6b7c8d-1", VisitorAddressHeader: "Cf-Connecting-Ip", VisitorSchemeHeader: "Cf-Visitor"}
+	written, err := boxapi.WriteRoutingTable(table)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,13 +6,13 @@ import (
 	"encoding/hex"
 	"sync"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
 	realtimeBinaryName = "ocel-realtime"
-	RealtimeDir        = boxstore.Dir + "/realtime"
+	RealtimeDir        = boxapi.LibDir + "/realtime"
 	RealtimeBinary     = RealtimeDir + "/" + realtimeBinaryName
 	RealtimeMount      = "/ocel/realtime"
 	RealtimeMounted    = RealtimeMount + "/" + realtimeBinaryName

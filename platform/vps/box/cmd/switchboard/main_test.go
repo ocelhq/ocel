@@ -21,8 +21,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/box/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 func ran(t *testing.T, argv ...string) (int, string, string) {
@@ -478,9 +478,8 @@ func TestARelayedNetworkTheSwitchboardHasNoAddressOnIsRefused(t *testing.T) {
 func TestServeAnswersATunneledHostnameOnItsTunnelListenerAndNowhereElse(t *testing.T) {
 	web := backend(t, "web")
 	table := documentAt(t, []byte(`{"grace":"30s",`+
-		`"claims":[{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production"}],`+
-		`"routes":[{"owner":"ocel--shop--production","pointer":"@production","app":"web","upstream":"`+web+`"}],`+
-		`"tunneled":[{"hostname":"shop.example.com","owner":"ocel--shop--production"}]}`))
+		`"claims":[{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production","tunneled":true}],`+
+		`"routes":[{"owner":"ocel--shop--production","pointer":"@production","app":"web","upstream":"`+web+`"}]}`))
 	tunnel := freeAddress(t)
 	running := served(t, table, "--tunnel-listen", tunnel)
 

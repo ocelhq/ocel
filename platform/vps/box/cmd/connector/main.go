@@ -8,7 +8,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
 var version = "dev"
@@ -55,8 +54,8 @@ func run(listen, config string, printing, reporting bool) error {
 		Addr:       listen,
 		ConfigPath: config,
 		VariableStore: variablestoreserver.Backend{
-			KeyValues: boxstore.NewKeyValues(boxstore.LocalTransport{}),
-			Cipher:    boxstore.NewCipher(boxstore.LocalTransport{Elevation: []string{"sudo", "-n"}}),
+			KeyValues: boxapi.KeyValues{Root: boxapi.StateRoot},
+			Cipher:    newAgentCipher(),
 		},
 	})
 }

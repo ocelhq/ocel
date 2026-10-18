@@ -76,7 +76,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 	}
 	proxy := liveProxy{name: name, board: board, network: network, dir: dir}
 	proxied, routing, switching := filepath.Join(dir, "proxy"), filepath.Join(dir, "routing"), filepath.Join(dir, "switchboard")
-	proxy.pins, proxy.table = filepath.Join(dir, "pins"), filepath.Join(routing, filepath.Base(boxapi.RoutingTable))
+	proxy.pins, proxy.table = filepath.Join(dir, "pins"), filepath.Join(routing, filepath.Base(boxapi.RoutingTablePath))
 	proxy.binary = filepath.Join(switching, boxapi.Switchboard)
 	for _, made := range []string{proxied, filepath.Join(proxied, "data"), routing, switching, proxy.pins, filepath.Join(dir, "control"), filepath.Join(dir, "front"), filepath.Join(dir, "connector")} {
 		if err := os.MkdirAll(made, 0o755); err != nil {
@@ -94,7 +94,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 		boxapi.SwitchboardControlDir, filepath.Join(dir, "control"),
 		SwitchboardDir, switching,
 		ConnectorRun, filepath.Join(dir, "connector"),
-		caddy.PinsDir, proxy.pins,
+		boxapi.PinsDir, proxy.pins,
 		proxyRoot, proxied,
 		boxapi.RoutingDir, routing,
 		routingLock, dir,

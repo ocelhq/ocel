@@ -1,24 +1,15 @@
 package host
 
 import (
-	"context"
 	_ "embed"
-	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
-	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
-
-//go:embed seal.py
-var sealScript []byte
 
 const SealAlgorithm = "aes-256-gcm"
 
@@ -34,13 +25,14 @@ type Seal struct {
 }
 
 func sealKey(tier environment.Tier) Item {
-	return Item{Kind: KindSealKey, Name: SealKeyPath(tier), Mode: sealKeyMode, Owner: rootOwner, Tier: tier, Note: "seals secret values"}
+	return Item{Kind: KindSealKey, Name: SealKeyPath(tier), Mode: sealKeyMode, Owner: rootOwner, Tier: tier, Note: "seals secret values",
+		script: Item.mint, survey: sealSurvey}
 }
 
 func sealSudoers(tier environment.Tier) []byte {
 	allowed := make([]string, 0, 2)
-	for _, verb := range []string{"seal", "open"} {
-		allowed = append(allowed, boxstore.SealHelper+" "+string(tier)+" "+verb+" *")
+	for _, verb := range []string{boxapi.SealVerbSeal, boxapi.SealVerbOpen} {
+		allowed = append(allowed, LiveBinary+" "+boxapi.SealCommand+" "+string(tier)+" "+verb+" *")
 	}
 	return []byte(deployUser + " ALL=(root) NOPASSWD: " + strings.Join(allowed, ", ") + "\n")
 }
@@ -49,27 +41,7 @@ func (i Item) mint() string {
 	name := shell.Quote(i.Name)
 	return "if [ -e " + name + " ]; then chown " + rootOwner + ":" + rootOwner + " " + name +
 		fmt.Sprintf(" && chmod %04o ", i.Mode) + name + "; else " +
-		`command -v python3 >/dev/null 2>&1 || { echo 'the seal helper needs python3' >&2; exit 1; }
-` + shell.Quote(boxstore.SealHelper) + " " + shell.Quote(string(i.Tier)) + " init; fi"
-}
-
-func NewCipher(h *Host) *boxstore.Cipher { return boxstore.NewCipher(sshSeal{host: h}) }
-
-type sshSeal struct{ host *Host }
-
-func (s sshSeal) Seal(ctx context.Context, what string, tier environment.Tier, argv []string, stdin io.Reader) (string, error) {
-	rendered, err := s.host.RunArgv(ctx, ssh.Granted, what, argv, stdin)
-	var refused refusal.Refusal
-	if err == nil || !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		return rendered, err
-	}
-	installed, readErr := s.host.Run(ctx, ssh.RootWhenAble, "read the seal helper", "cat "+shell.Quote(boxstore.SealHelper), nil)
-	if readErr != nil || installed == string(sealScript) {
-		return "", err
-	}
-	return "", refusal.Refuse(refusal.CodeNotReady,
-		"%s\nThe seal helper on this box is not the one this ocel installs.\nRun `%s` to update it, then try again",
-		err, provider.BootstrapCommand(tier))
+		shell.Words([]string{LiveBinary, boxapi.SealCommand, string(i.Tier), boxapi.SealVerbInit}) + "; fi"
 }
 
 func sealSurvey(item Item) string {

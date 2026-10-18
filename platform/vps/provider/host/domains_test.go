@@ -397,12 +397,12 @@ func TestTwoProjectsRunningTheSameAppNameOnOneBoxKeepTheirOwnRoutes(t *testing.T
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
-	if want := slices.SortedFunc(slices.Values(twoProjects().Routes), byKey); !slices.Equal(read.Routes, want) {
+	if want := slices.SortedFunc(slices.Values(twoProjects().Routes), func(a, b AppRoute) int { return strings.Compare(a.Identity(), b.Identity()) }); !slices.Equal(read.Routes, want) {
 		t.Fatalf("the routes read back as %v, want %v: two projects on one box name their apps whatever they like, and a route keyed on the app name alone is one project's route answering for both", read.Routes, want)
 	}
 	var identities []string
 	for _, route := range read.Routes {
-		identities = append(identities, route.identity())
+		identities = append(identities, route.Identity())
 	}
 	if identities[0] == identities[1] {
 		t.Errorf("both projects' routes are written as %q, so one deploy rewrites the other's upstream", identities[0])

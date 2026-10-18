@@ -47,9 +47,9 @@ func EnvSourceSyncItems(tier environment.Tier, architecture string) []Item {
 	template := envSourceSyncUnit()
 	return []Item{
 		{Kind: KindFile, Name: envSourceSyncTemplateFile, Mode: 0o644, Owner: rootOwner, Content: template},
-		{Kind: KindUnit, Name: EnvSourceSyncService(tier), Owner: rootOwner, Content: unitWatchFacts(template, liveAgent(architecture)),
+		systemdUnit(Item{Name: EnvSourceSyncService(tier), Owner: rootOwner, Content: unitWatchFacts(template, liveAgent(architecture)),
 			Watch: []string{envSourceSyncTemplateFile, LiveBinary},
-			Slow:  true, Note: "keeps values in step with env sources"},
+			Slow:  true, Note: "keeps values in step with env sources"}),
 	}
 }
 

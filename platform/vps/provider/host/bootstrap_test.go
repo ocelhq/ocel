@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -68,7 +68,7 @@ func TestAReplacementRefusingApplyWillNotWriteOverWhatAlreadyExists(t *testing.T
 	t.Parallel()
 
 	tier := environment.TierProduction
-	for _, name := range []string{boxstore.KeyValuesHelper, SealKeyPath(tier), deployUser, dockerEngine} {
+	for _, name := range []string{LiveBinary, SealKeyPath(tier), deployUser, dockerEngine} {
 		read := drifted(t, currentHost(), name)
 		refused := refusalOf(t, refuseReplacements(read, Items(read.Tier, read.Keys, ssh.AMD64, Front{})), refusal.CodeNotReady)
 		if !strings.Contains(refused.Message, name) {
@@ -84,7 +84,7 @@ func TestAReplacementRefusingApplyConvergesAHostRatherThanRefusingEveryChange(t 
 	t.Parallel()
 
 	tier := environment.TierProduction
-	for _, name := range []string{dockerUnit, KeyValuesDir(tier), stateRoot, boxstore.Dir} {
+	for _, name := range []string{dockerUnit, KeyValuesDir(tier), stateRoot, boxapi.LibDir} {
 		read := drifted(t, currentHost(), name)
 		if err := refuseReplacements(read, Items(read.Tier, read.Keys, ssh.AMD64, Front{})); err != nil {
 			t.Errorf("a replacement-refusing apply over a host whose %s has moved = %v, want a converge that destroys nothing to proceed", name, err)

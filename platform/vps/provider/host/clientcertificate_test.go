@@ -18,7 +18,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -135,7 +134,7 @@ func TestMergingAShieldFromOneZoneKeepsEveryCertificateAnotherZoneStillPresents(
 func TestMergingAShieldAgainKeepsTheOriginCertificateItAlreadyHolds(t *testing.T) {
 	t.Parallel()
 
-	held := []Shield{{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"zone"}, OriginCertificate: proxy.CertificatePair{Certificate: "ORIGIN", Key: "KEY"}}}
+	held := []Shield{{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"zone"}, OriginCertificate: boxapi.CertificatePair{Certificate: "ORIGIN", Key: "KEY"}}}
 	again := MergeShield(held, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"zone", "successor"}})
 	if len(again) != 1 || again[0].OriginCertificate.Certificate != "ORIGIN" || again[0].OriginCertificate.Key != "KEY" {
 		t.Errorf("shielding shop.example.com again leaves %+v, want the origin certificate it holds kept: a claim carries one only when the origin needs a new one", again)

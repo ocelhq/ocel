@@ -3,6 +3,7 @@ package dotted
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	. "github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 

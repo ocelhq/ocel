@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -50,7 +49,7 @@ func (h *Host) vouch(ctx context.Context, pin Pin) error {
 	if err != nil {
 		return err
 	}
-	leaf, err := certs.Parse(caddy.PinCertificate(pin.Path), block)
+	leaf, err := certs.Parse(boxapi.PinCertificate(pin.Path), block)
 	if err != nil {
 		return refused(err)
 	}
@@ -70,7 +69,7 @@ const (
 )
 
 func pairCommand(path string) string {
-	certificate, key := shell.Quote(caddy.PinCertificate(path)), shell.Quote(caddy.PinKey(path))
+	certificate, key := shell.Quote(boxapi.PinCertificate(path)), shell.Quote(boxapi.PinKey(path))
 	return "if ! command -v openssl >/dev/null 2>&1; then echo " + pairUnchecked + "; exit 0; fi\n" +
 		"certified=$(openssl x509 -in " + certificate + " -noout -pubkey 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum)\n" +
 		"keyed=$(openssl pkey -in " + key + " -pubout -outform DER 2>/dev/null | sha256sum)\n" +
@@ -78,25 +77,25 @@ func pairCommand(path string) string {
 }
 
 func (h *Host) paired(ctx context.Context, pin Pin) error {
-	said, err := h.Run(ctx, ssh.Root, "check the key pinned beside "+caddy.PinCertificate(pin.Path), pairCommand(pin.Path), nil)
+	said, err := h.Run(ctx, ssh.Root, "check the key pinned beside "+boxapi.PinCertificate(pin.Path), pairCommand(pin.Path), nil)
 	if err != nil {
 		return err
 	}
 	if strings.TrimSpace(said) == pairMismatched {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the key at %s does not match the certificate at %s",
-			caddy.PinKey(pin.Path), caddy.PinCertificate(pin.Path))
+			boxapi.PinKey(pin.Path), boxapi.PinCertificate(pin.Path))
 	}
 	return nil
 }
 
 func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, error) {
-	if _, pinned := caddy.Pinned(path); !pinned {
+	if _, pinned := boxapi.Pinned(path); !pinned {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"pinned certificate %q is outside %s",
-			path, caddy.PinsDir)
+			path, boxapi.PinsDir)
 	}
-	read, err := h.Run(ctx, ssh.Root, "read the certificate pinned at "+caddy.PinCertificate(path), "cat "+shell.Quote(caddy.PinCertificate(path)), nil)
+	read, err := h.Run(ctx, ssh.Root, "read the certificate pinned at "+boxapi.PinCertificate(path), "cat "+shell.Quote(boxapi.PinCertificate(path)), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +189,7 @@ func (b frontBox) Claimed(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return state.hostnames(), nil
+	return state.Hostnames(), nil
 }
 
 func (b frontBox) Shielded(ctx context.Context) ([]string, error) {

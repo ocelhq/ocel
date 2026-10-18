@@ -8,13 +8,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
-	ConnectorBinary   = boxstore.Dir + "/connector"
+	ConnectorBinary   = boxapi.LibDir + "/connector"
 	connectorRoot     = tierRoot + "/connector"
 	ConnectorConfig   = connectorRoot + "/config.json"
 	ConnectorKey      = connectorRoot + "/key"
@@ -60,9 +59,9 @@ func ConnectorItems(binary, config []byte) []Item {
 		{Kind: KindFile, Name: connectorTmpfiles, Mode: 0o644, Owner: rootOwner, Content: connectorRuntimeConf()},
 		dir(ConnectorRun, 0o755, stateOwner, ""),
 		{Kind: KindFile, Name: connectorUnitFile, Mode: 0o644, Owner: rootOwner, Content: unit},
-		{Kind: KindUnit, Name: ConnectorUnit, Owner: rootOwner, Content: unitWatchFacts(unit, binary, config),
+		systemdUnit(Item{Name: ConnectorUnit, Owner: rootOwner, Content: unitWatchFacts(unit, binary, config),
 			Watch: []string{connectorUnitFile, ConnectorBinary, ConnectorConfig},
-			Slow:  true},
+			Slow:  true}),
 	}
 }
 

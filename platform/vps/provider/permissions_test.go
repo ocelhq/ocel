@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -156,7 +156,7 @@ func TestTheDeployDocumentIncludesEverySudoersLineBootstrapWrites(t *testing.T) 
 		if !strings.Contains(document, strings.TrimSpace(string(item.Content))) {
 			t.Errorf("a bootstrap writes %s and the document never prints the line it contains:\n%s", item.Name, document)
 		}
-		sealing = sealing || strings.Contains(string(item.Content), boxstore.SealHelper)
+		sealing = sealing || strings.Contains(string(item.Content), boxapi.LiveBinary+" "+boxapi.SealCommand)
 	}
 	if !sealing {
 		t.Fatal("nothing in the item set whitelists the seal helper, so the deploy login seals nothing")

@@ -23,11 +23,9 @@ func (r Router) claimPreviewEntry(ctx context.Context, claim router.Claim) (edge
 		return edge.Origin{}, err
 	}
 	if claim.Tunnel != edge.None {
-		origin, err := r.e.tunnelHost(ctx, claim.Hostname, nil, claim.Tunnel, edge.PreviewEntryOwner)
-		if err != nil {
-			return edge.Origin{}, err
-		}
-		return origin, r.e.machine.InstallPreviewEntry(ctx, base)
+		return r.e.claimThrough(ctx, claim.Tunnel, edge.PreviewEntryOwner, claim.Hostname, func(tunnel host.Tunnel) error {
+			return r.e.machine.InstallPreviewEntryThrough(ctx, base, tunnel.Name)
+		})
 	}
 	address, err := r.e.machine.Address(ctx)
 	if err != nil {
@@ -43,7 +41,7 @@ func (r Router) claimPreviewEntry(ctx context.Context, claim router.Claim) (edge
 	if err := r.e.machine.InstallPreviewEntry(ctx, base); err != nil {
 		return edge.Origin{}, err
 	}
-	if err := r.e.removeTunneledHosts(ctx, edge.PreviewEntryOwner, claim.Hostname); err != nil {
+	if err := r.e.releaseTunnel(ctx); err != nil {
 		return edge.Origin{}, err
 	}
 	if shielded {
@@ -61,7 +59,7 @@ func (r Router) disclaimPreviewEntry(ctx context.Context, baseDomain string) err
 	if err := r.e.machine.RemoveShield(ctx, edge.PreviewWildcard(baseDomain), edge.PreviewEntryOwner); err != nil {
 		return err
 	}
-	return r.e.removeTunneledHosts(ctx, edge.PreviewEntryOwner, edge.PreviewWildcard(baseDomain))
+	return r.e.releaseTunnel(ctx)
 }
 
 func (r Router) planPreviewEntryRemoval(wildcard string) []edge.PlanGroup {

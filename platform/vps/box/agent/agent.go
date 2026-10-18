@@ -501,17 +501,17 @@ func (s Store) storeBase(manifest boxapi.Manifest) string {
 	}
 	at := s.RoutingTable
 	if at == "" {
-		at = boxapi.RoutingTable
+		at = boxapi.RoutingTablePath
 	}
 	table, err := os.ReadFile(at)
 	if err != nil {
 		return ""
 	}
-	claims, err := boxapi.ClaimedIn(table)
+	read, err := boxapi.ReadRoutingTable(table)
 	if err != nil {
 		return ""
 	}
-	return boxapi.StoreBase(claims, boxapi.Surface(manifest.Slug, manifest.Tier), manifest.Store.Pointer)
+	return boxapi.StoreBase(read.Claims, boxapi.Surface(manifest.Slug, manifest.Tier), manifest.Store.Pointer)
 }
 
 func (s Store) storeSecret(ctx context.Context, manifest boxapi.Manifest) (string, error) {

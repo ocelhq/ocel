@@ -1,8 +1,9 @@
 package switchboard
 
 import (
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"net/http"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 func (b *Board) admit() http.Handler {

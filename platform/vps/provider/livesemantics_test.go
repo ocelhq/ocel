@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -125,7 +125,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	dying, kill := context.WithCancel(ctx)
 	defer kill()
 	err = bootstrap.Apply(dying, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"},
-		&killer{at: "Installed file " + boxstore.SealHelper, kill: kill})
+		&killer{at: "Installed file " + boxapi.LiveBinary, kill: kill})
 	if err == nil {
 		t.Fatal("the apply ran to completion, and a half-applied host is what this proves recovery from")
 	}
@@ -155,7 +155,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	if group.Action != provider.ActionUpdate {
 		t.Errorf("Plan() over a half-applied host plans %q, want %q", group.Action, provider.ActionUpdate)
 	}
-	for _, name := range []string{helperDir, boxstore.SealHelper} {
+	for _, name := range []string{helperDir, boxapi.LiveBinary} {
 		if planned := planFor(group, name); planned.Action != provider.ActionKeep {
 			t.Errorf("Plan() shows %s as %q, want the work the dead apply already did left alone", name, planned.Action)
 		}
@@ -170,7 +170,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, &said); err != nil {
 		t.Fatalf("the same command over a half-applied host = %v, want recovery to be the first run's command", err)
 	}
-	unchanged := "File " + boxstore.SealHelper + " is already current"
+	unchanged := "File " + boxapi.LiveBinary + " is already current"
 	if !slices.Contains(said, unchanged) {
 		t.Errorf("the apply said %q, want %q: what the plan showed as a no-op is declared rather than passed over", said, unchanged)
 	}

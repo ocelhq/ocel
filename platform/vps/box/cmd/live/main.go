@@ -13,9 +13,9 @@ import (
 	"syscall"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/box/agent"
 	"github.com/ocelhq/ocel/platform/vps/box/queues"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const (
@@ -37,13 +37,19 @@ func run(argv []string, errs *os.File) int {
 	if len(argv) > 0 && argv[0] == boxapi.DockerCommand {
 		return dockerCommand(argv[1:], errs)
 	}
+	if len(argv) > 0 && argv[0] == boxapi.SealCommand {
+		return sealCommand(argv[1:], os.Stdin, os.Stdout, errs)
+	}
+	if len(argv) > 0 && argv[0] == boxapi.RecordsCommand {
+		return recordsCommand(argv[1:], os.Stdin, os.Stdout, errs)
+	}
 	flags := flag.NewFlagSet("ocel-live", flag.ContinueOnError)
 	flags.SetOutput(errs)
 	listen := flags.String("listen", boxapi.SocketPath, "the unix socket to answer on when systemd hands over none")
 	tierRoot := flags.String("tier-root", boxapi.TierRoot, "where each tier keeps its seal key")
 	stateRoot := flags.String("state-root", boxapi.StateRoot, "where each tier keeps its records")
 	proc := flags.String("proc", agent.ProcRoot, "the procfs a caller's cgroup is read from")
-	routingTable := flags.String("routing-table", boxapi.RoutingTable, "routing table to read this box's hostnames from")
+	routingTable := flags.String("routing-table", boxapi.RoutingTablePath, "routing table to read this box's hostnames from")
 	if err := flags.Parse(argv); err != nil {
 		return 2
 	}
@@ -81,6 +87,18 @@ func run(argv []string, errs *os.File) int {
 		return 1
 	}
 	return 0
+}
+
+func isTier(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, c := range name {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func listener(path string) (net.Listener, error) {

@@ -4,45 +4,47 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"io"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-type SealTransport interface {
-	Seal(ctx context.Context, what string, tier environment.Tier, argv []string, stdin io.Reader) (string, error)
-}
+type Cipher struct{ box *ssh.Box }
 
-type Cipher struct{ over SealTransport }
-
-func NewCipher(over SealTransport) *Cipher { return &Cipher{over: over} }
+func NewCipher(box *ssh.Box) *Cipher { return &Cipher{box: box} }
 
 func (s *Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	return s.runSealHelper(ctx, "seal", tier, bound, plaintext)
+	return s.run(ctx, boxapi.SealVerbSeal, tier, bound, plaintext)
 }
 
 func (s *Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	return s.runSealHelper(ctx, "open", tier, bound, sealed)
+	return s.run(ctx, boxapi.SealVerbOpen, tier, bound, sealed)
 }
 
-func (s *Cipher) runSealHelper(ctx context.Context, verb string, tier environment.Tier, bound seal.AssociatedData, body []byte) ([]byte, error) {
+func SealArgv(tier environment.Tier, verb string, bound seal.AssociatedData) []string {
+	return []string{boxapi.LiveBinary, boxapi.SealCommand, string(tier), verb, string(bound.Bytes())}
+}
+
+func (s *Cipher) run(ctx context.Context, verb string, tier environment.Tier, bound seal.AssociatedData, body []byte) ([]byte, error) {
 	if tier == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"a value bound to %s names no tier", bound.Bytes())
 	}
-	argv := []string{SealHelper, string(tier), verb, string(bound.Bytes())}
 	fed := append([]byte(base64.StdEncoding.EncodeToString(body)), '\n')
-	rendered, err := s.over.Seal(ctx, verb+" a value bound to "+string(bound.Bytes()), tier, argv, bytes.NewReader(fed))
+	rendered, err := s.box.RunArgv(ctx, ssh.Granted, verb+" a value bound to "+string(bound.Bytes()), SealArgv(tier, verb, bound), bytes.NewReader(fed))
 	if err != nil {
 		return nil, err
 	}
 	written, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rendered))
 	if err != nil {
 		return nil, refusal.Refuse(refusal.CodeDenied,
-			"the seal helper answered a %s with %d unreadable bytes", verb, len(rendered))
+			"the box answered a %s with %d unreadable bytes", verb, len(rendered))
 	}
 	return written, nil
 }
+
+var _ seal.Cipher = (*Cipher)(nil)

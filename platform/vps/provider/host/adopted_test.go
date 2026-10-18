@@ -405,7 +405,7 @@ func TestAReloadYourProxyRefusesPutsThePreviousFileBackAndSaysWhatYourProxySaid(
 		t.Errorf("the placed file reads %q after a reload your proxy refused, want the previous file put back, %q", adopted.placed, placedBefore)
 	}
 	if adopted.recorded != prior {
-		t.Errorf("%s reads\n%s\nafter a reload your proxy refused, want the table before the claim\n%s", boxapi.RoutingTable, adopted.recorded, prior)
+		t.Errorf("%s reads\n%s\nafter a reload your proxy refused, want the table before the claim\n%s", boxapi.RoutingTablePath, adopted.recorded, prior)
 	}
 }
 
@@ -462,7 +462,7 @@ func TestAPlacementTheSwitchboardRefusesPutsTheTableAndThePlacedFileBackAndSaysW
 		t.Errorf("the claim refused with %q, want the table and the file restored", err)
 	}
 	if adopted.recorded != prior {
-		t.Errorf("%s contains\n%s\nafter a placement that failed, want the table before the claim\n%s\nthe switchboard would route a hostname the proxy in front of it was never told of", boxapi.RoutingTable, adopted.recorded, prior)
+		t.Errorf("%s contains\n%s\nafter a placement that failed, want the table before the claim\n%s\nthe switchboard would route a hostname the proxy in front of it was never told of", boxapi.RoutingTablePath, adopted.recorded, prior)
 	}
 	if adopted.placed != placedBefore {
 		t.Errorf("the placed file reads %q, want the rendering of the table put back, %q", adopted.placed, placedBefore)
@@ -620,7 +620,7 @@ func (b *placingShell) run(t *testing.T, script, stdin string) (int, string, str
 			t.Fatal(err)
 		}
 	}
-	command := exec.Command("/bin/sh", "-c", strings.NewReplacer(boxapi.RoutingTable, b.table, routingLock, b.dir).Replace(script))
+	command := exec.Command("/bin/sh", "-c", strings.NewReplacer(boxapi.RoutingTablePath, b.table, routingLock, b.dir).Replace(script))
 	command.Env = append(os.Environ(), "PATH="+b.bin+":"+os.Getenv("PATH"))
 	command.Stdin = strings.NewReader(stdin)
 	var out, errs strings.Builder
@@ -745,27 +745,27 @@ func TestEveryRoutingFailureNamesTheFilesTheProxyActuallyKeeps(t *testing.T) {
 		"a write that fails beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, routed())
 			failing(adopted, ssh.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{boxapi.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
+			return []string{boxapi.RoutingTablePath}, []string{ProxyConfig}, adopted.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
 		},
 		"a write onto an unseeded box beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, routed())
 			failing(adopted, ssh.Result{Code: routingUnseeded})
-			return []string{boxapi.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
+			return []string{boxapi.RoutingTablePath}, []string{ProxyConfig}, adopted.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
 		},
 		"a release whose write fails beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
 			failing(adopted, ssh.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{boxapi.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).RollOut(context.Background(), aRollout(), progress.Discard())
+			return []string{boxapi.RoutingTablePath}, []string{ProxyConfig}, adopted.fronted(routedByHand()).RollOut(context.Background(), aRollout(), progress.Discard())
 		},
 		"a release whose write fails beside a proxy that keeps its file elsewhere": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
 			failing(adopted, ssh.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{boxapi.RoutingTable, coolifyFile}, []string{ProxyConfig}, adopted.host().RollOut(context.Background(), aRollout(), progress.Discard())
+			return []string{boxapi.RoutingTablePath, coolifyFile}, []string{ProxyConfig}, adopted.host().RollOut(context.Background(), aRollout(), progress.Discard())
 		},
 		"a placement whose revert fails too": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, routed())
 			adopted.refused = []string{"no space left on device", "no space left on device"}
-			return []string{boxapi.RoutingTable, coolifyFile}, []string{ProxyConfig}, adopted.host().ClaimHosts(context.Background(), claim)
+			return []string{boxapi.RoutingTablePath, coolifyFile}, []string{ProxyConfig}, adopted.host().ClaimHosts(context.Background(), claim)
 		},
 	} {
 		t.Run(what, func(t *testing.T) {

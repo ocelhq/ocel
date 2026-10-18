@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/box/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const upgradeProtocol = "echo"

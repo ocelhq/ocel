@@ -6,7 +6,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -39,10 +38,10 @@ func grants(tier environment.Tier, arch string, front Front) []Grant {
 				"Bootstrap uses a docker " + engineFloor + " or later it finds, or installs the daemon from " + dockerSource + "; destroy removes the login and leaves the engine and its containers",
 		})
 	}
-	if helper := written(items, KindFile, boxstore.KeyValuesHelper); helper.Name != "" {
+	if agent := written(items, KindFile, LiveBinary); agent.Name != "" {
 		grants = append(grants, Grant{
-			Name:   "runs " + helper.Name,
-			Detail: fmt.Sprintf("root-owned at %04o; %s runs it to compare-and-set its entries and cannot write it", helper.Mode, deployer.name),
+			Name:   "runs " + agent.Name + " " + boxapi.RecordsCommand,
+			Detail: fmt.Sprintf("root-owned at %04o, run without sudo; %s runs it to read and compare-and-set each tier's entries under %s, which it owns, and cannot write the binary", agent.Mode, deployer.name, stateRoot),
 		})
 	}
 	if helper := written(items, KindFile, releasesHelper); helper.Name != "" {
@@ -81,7 +80,7 @@ func grants(tier environment.Tier, arch string, front Front) []Grant {
 			Name: "no hand in " + unit.Name,
 			Detail: "root's env source sync, " + LiveBinary + " " + boxapi.EnvSourceSyncCommand + ", run by systemd, not by " + deployer.name +
 				". Bounded to CAP_CHOWN and CAP_DAC_OVERRIDE on a read-only system, it writes " + KeyValuesDir(tier) +
-				" and nothing beside, seals through " + boxstore.SealHelper + " without sudo, and logs in to each env source with the credential " +
+				" and nothing beside, seals in process under the tier key, and logs in to each env source with the credential " +
 				string(tier) + " stores in ocel's own values",
 		})
 	}
@@ -104,13 +103,13 @@ func sealing(items []Item, tier environment.Tier, deployer login) []Grant {
 		return nil
 	}
 	return []Grant{{
-		Name: "runs " + boxstore.SealHelper + " as root, through one line in " + fragment.Name,
+		Name: "runs " + LiveBinary + " " + boxapi.SealCommand + " as root, through one line in " + fragment.Name,
 		Detail: "the line is\n\n      " + strings.TrimSpace(string(fragment.Content)) +
-			"\n\n    one of the two lines of sudo " + deployer.name + " has. The helper seals and opens values under the " + string(tier) +
-			" key only; it mints no key, reaches no other tier, and never prints the key",
+			"\n\n    one of the two lines of sudo " + deployer.name + " has. It seals and opens values under the " + string(tier) +
+			" key only; it creates no key, reaches no other tier, and never prints the key",
 	}, {
 		Name: "no read of " + key.Name,
-		Detail: fmt.Sprintf("root-owned at %04o, minted on this machine and never leaves it; %s uses it through the helper and cannot read the %s key. It is never rotated; `ocel destroy` removes it with the tier",
+		Detail: fmt.Sprintf("root-owned at %04o, created on this machine and never leaves it; %s uses it through ocel-live seal and cannot read the %s key. It is never rotated; `ocel destroy` removes it with the tier",
 			key.Mode, deployer.name, SealAlgorithm),
 	}}
 }

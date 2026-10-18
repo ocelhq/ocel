@@ -13,9 +13,9 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/ocelhq/ocel/platform/vps/box/agent"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/dockerpolicy"
-	"github.com/ocelhq/ocel/platform/vps/box/agent"
 )
 
 const (

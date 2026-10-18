@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -26,7 +27,7 @@ const (
 var permission = proxy.Permission{Dial: "unix//run/ocel-front/admit.sock", Path: "/admit"}
 
 func pinned(hostname, leaf string) proxy.Pin {
-	return proxy.Pin{Hostname: hostname, Path: caddy.PinsDir + "/" + leaf}
+	return proxy.Pin{Hostname: hostname, Path: boxapi.PinsDir + "/" + leaf}
 }
 
 func specified(pins ...proxy.Pin) proxy.Spec {
@@ -268,7 +269,7 @@ func TestEveryPinnedPairIsLoadedOnceOffTheDirectoryTheProxyMounts(t *testing.T) 
 	for at, leaf := range []string{"shop", "wild"} {
 		loaded := read.Apps.TLS.Certificates.LoadFiles[at]
 		mounted := caddy.PinsMount + "/" + leaf
-		if loaded.Certificate != caddy.PinCertificate(mounted) || loaded.Key != caddy.PinKey(mounted) {
+		if loaded.Certificate != boxapi.PinCertificate(mounted) || loaded.Key != boxapi.PinKey(mounted) {
 			t.Errorf("the pair pinned at %s is loaded from %s and %s, want the path it sits at inside the proxy", leaf, loaded.Certificate, loaded.Key)
 		}
 		if !slices.Equal(loaded.Tags, []string{mounted}) {
@@ -345,7 +346,7 @@ func TestWhatTheProxyCouldNotServeIsRefusedRatherThanRendered(t *testing.T) {
 		"no path to ask the admission at": {Upstream: switchboard, Router: routerName, Permission: proxy.Permission{Dial: permission.Dial}},
 		"a pin outside the pin root":      specified(proxy.Pin{Hostname: "shop.example.com", Path: "/etc/shadow"}),
 		"a pin beneath the pin root":      specified(pinned("shop.example.com", "nested/shop")),
-		"the pin root itself":             specified(proxy.Pin{Hostname: "shop.example.com", Path: caddy.PinsDir}),
+		"the pin root itself":             specified(proxy.Pin{Hostname: "shop.example.com", Path: boxapi.PinsDir}),
 		"a pin climbing out of its root":  specified(pinned("shop.example.com", "..")),
 		"a pin naming no hostname":        specified(pinned("", "shop")),
 	} {

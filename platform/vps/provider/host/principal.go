@@ -47,7 +47,8 @@ func (l login) described() []byte {
 
 func principal() Item {
 	deploy := deployLogin()
-	return Item{Kind: KindUser, Name: deploy.name, Owner: deploy.name, Content: deploy.described(), Note: "deploy login"}
+	return Item{Kind: KindUser, Name: deploy.name, Owner: deploy.name, Content: deploy.described(), Note: "deploy login",
+		script: func(Item) string { return deploy.command() }, survey: func(Item) string { return deploy.survey() }}
 }
 
 func (l login) command() string {

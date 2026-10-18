@@ -324,8 +324,8 @@ func TestLiveTheProxysConfigIsStatedAndItsLogContainsNoQueryString(t *testing.T)
 	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+host.ProxyConfig)); owner != deployLogin+":640" {
 		t.Errorf("%s is owned by %q, want the deploy principal's own file: the config is what a deploy renders", host.ProxyConfig, owner)
 	}
-	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+boxapi.RoutingTable)); owner != deployLogin+":640" {
-		t.Errorf("%s is owned by %q, want the deploy principal's own file: the table is what a deploy writes", boxapi.RoutingTable, owner)
+	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+boxapi.RoutingTablePath)); owner != deployLogin+":640" {
+		t.Errorf("%s is owned by %q, want the deploy principal's own file: the table is what a deploy writes", boxapi.RoutingTablePath, owner)
 	}
 	grace := vm.frontGrace(t)
 	if grace == "" || grace == "null" {
@@ -390,7 +390,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	if network := vm.inspects(t, "network", host.ProxyNetwork, "{{.Name}}"); network != "" {
 		t.Errorf("the network %s still exists after a destroy", host.ProxyNetwork)
 	}
-	for _, gone := range []string{host.SwitchboardBinary, host.ProxyConfig, host.ProxyData, boxapi.RoutingTable} {
+	for _, gone := range []string{host.SwitchboardBinary, host.ProxyConfig, host.ProxyData, boxapi.RoutingTablePath} {
 		if vm.exists(t, gone) {
 			t.Errorf("%s still exists after a destroy took the last tier on this host", gone)
 		}

@@ -2,10 +2,8 @@ package caddy
 
 import (
 	"context"
-	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/officialimages"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
@@ -23,26 +21,11 @@ const (
 	ConfigMount = ConfigDir + "/" + ConfigName
 	DataMount   = "/data"
 	PinsMount   = "/etc/caddy/pins"
-	PinsDir     = boxapi.TierRoot + "/certs"
 	HTTPPort    = proxy.HTTPPort
 	HTTPSPort   = proxy.HTTPSPort
 )
 
 const Grace = 30 * time.Second
-
-const (
-	pinCertificate = ".crt"
-	pinKey         = ".key"
-)
-
-func PinCertificate(path string) string { return path + pinCertificate }
-
-func PinKey(path string) string { return path + pinKey }
-
-func Pinned(path string) (string, bool) {
-	leaf, beneath := strings.CutPrefix(path, PinsDir+"/")
-	return leaf, beneath && leaf != "" && !strings.Contains(leaf, "/") && leaf != "." && leaf != ".."
-}
 
 func Command() []string { return []string{"caddy", "run", "--config", ConfigMount} }
 

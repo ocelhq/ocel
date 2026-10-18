@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/box/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const controlEnv = "OCEL_SWITCHBOARD_CONTROL"

@@ -18,8 +18,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/box/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 func routing(t *testing.T, upstreams map[string]string) []byte {

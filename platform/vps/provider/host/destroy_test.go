@@ -11,11 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/conformance"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -81,7 +78,7 @@ func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 	if stamp < 0 {
 		t.Fatalf("Remove() never took %s:\n%s", TierDir(tier), strings.Join(box.taking(), "\n"))
 	}
-	for _, beneath := range []string{StateDir(tier), SealKeyPath(tier), boxstore.SealHelper, deployUser} {
+	for _, beneath := range []string{StateDir(tier), SealKeyPath(tier), LiveBinary, deployUser} {
 		if at := box.took(shell.Quote(beneath)); at < 0 || at > stamp {
 			t.Errorf("Remove() took %s at command %d and the tier directory at %d, and the stamp is what an interrupted destroy leaves behind",
 				beneath, at, stamp)
@@ -187,7 +184,7 @@ func TestARootOtherTiersShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T) 
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := box.taking()
-	for _, shared := range []string{stateRoot, boxstore.Dir, tierRoot} {
+	for _, shared := range []string{stateRoot, boxapi.LibDir, tierRoot} {
 		at := slices.IndexFunc(taken, func(command string) bool {
 			return strings.Contains(command, shell.Quote(shared)) && !strings.HasPrefix(command, routingLocked("-x"))
 		})
@@ -260,21 +257,6 @@ func gone(taken []string, name string) bool {
 	return false
 }
 
-func TestForgettingARecordOnAHostThatHasNoStoreIsAlreadyForgotten(t *testing.T) {
-	t.Parallel()
-
-	box := machine(nil)
-	name := records.Partition{Tier: environment.TierProduction, Root: conformance.Root}.Key(t.Name())
-	if err := records.Forget(context.Background(), NewKeyValues(box.host()), name); err != nil {
-		t.Fatalf("Forget() over a host a destroy has cleared = %v, want cleanup that does not need the store back", err)
-	}
-	for _, command := range box.commands() {
-		if strings.HasPrefix(command, shell.Quote(boxstore.KeyValuesHelper)+" ") {
-			t.Errorf("Forget() ran %q against a host that has no helper at all", command)
-		}
-	}
-}
-
 func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	t.Parallel()
 
@@ -315,7 +297,7 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastTierAndByNoOther(t *testi
 	current := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
 	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))}
 	singletons := []string{
-		stateRoot, boxstore.Dir, boxstore.KeyValuesHelper, boxstore.SealHelper, SwitchboardBinary, ProxyConfig, boxapi.RoutingTable, sshDir, tierRoot, deployUser,
+		stateRoot, boxapi.LibDir, LiveBinary, SwitchboardBinary, ProxyConfig, boxapi.RoutingTablePath, sshDir, tierRoot, deployUser,
 	}
 
 	for _, singleton := range singletons {

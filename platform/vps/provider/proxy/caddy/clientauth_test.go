@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -148,7 +149,7 @@ func TestAShieldedHostnameIsAnsweredWithTheOriginCertificateTheEdgeIssuedForIt(t
 	spec := specified(pinned("shop.example.com", "shop"))
 	spec.Shields = []proxy.Shield{{
 		Hostname: "shop.example.com", ClientCAs: []string{client},
-		OriginCertificate: proxy.CertificatePair{Certificate: "ORIGIN CERTIFICATE", Key: "ORIGIN KEY"},
+		OriginCertificate: boxapi.CertificatePair{Certificate: "ORIGIN CERTIFICATE", Key: "ORIGIN KEY"},
 	}}
 	written, _ := render(t, spec)
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -41,7 +42,7 @@ func TestTheFrontProxysConfigChangesWithItsPinsAndWithNothingABindOrAPreviewDoes
 		t.Error("binding a hostname, raising a preview or installing the connector renders the front proxy's config anew, and every reload drops requests on every hostname the box serves (#1280)")
 	}
 	pinned := bound
-	pinned.Pins = []Pin{{Hostname: claimed, Path: caddy.PinsDir + "/shop"}}
+	pinned.Pins = []Pin{{Hostname: claimed, Path: boxapi.PinsDir + "/shop"}}
 	if bytes.Equal(seeded, mustRender(t, pinned)) {
 		t.Error("pinning a pair renders the same config, so the running proxy never loads the certificate the operator pinned")
 	}

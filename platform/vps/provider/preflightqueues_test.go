@@ -23,12 +23,12 @@ func agentSurveyed(t *testing.T, content []byte) answer {
 
 func currentAgent(t *testing.T) []byte {
 	t.Helper()
-	for _, item := range host.LiveItems(ssh.AMD64) {
+	for _, item := range host.StorageItems(environment.TierProduction, nil, ssh.AMD64) {
 		if item.Name == host.LiveBinary {
 			return item.Content
 		}
 	}
-	t.Fatal("no live item installs the agent")
+	t.Fatal("no storage item installs the agent")
 	return nil
 }
 

@@ -1,19 +1,14 @@
 package host
 
 import (
-	"cmp"
-	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
@@ -21,29 +16,13 @@ const (
 	DrainWindow  = 30 * time.Second
 )
 
-type RouteKey struct {
-	Owner   string `json:"owner"`
-	Pointer string `json:"pointer"`
-	App     string `json:"app"`
-}
+type RouteKey = boxapi.RouteKey
 
-func (k RouteKey) identity() string {
-	return boxapi.RouteIdentity + strings.Join([]string{k.Owner, k.Pointer, k.App}, boxapi.ClaimSeparator)
-}
+type AppRoute = boxapi.Route
 
-type AppRoute struct {
-	RouteKey
-	Upstream string `json:"upstream"`
-}
+type HostClaim = boxapi.Claim
 
-type HostClaim boxapi.Claimed
-
-type Shield struct {
-	Hostname          string                `json:"hostname"`
-	Owner             string                `json:"owner"`
-	ClientCAs         []string              `json:"clientCAs,omitempty"`
-	OriginCertificate proxy.CertificatePair `json:"originCertificate,omitzero"`
-}
+type Shield = boxapi.Shield
 
 func MergeShield(shields []Shield, merged Shield) []Shield {
 	merged.ClientCAs = slices.Compact(slices.Sorted(slices.Values(merged.ClientCAs)))
@@ -67,26 +46,18 @@ func DropShields(shields []Shield, dropped func(Shield) bool) []Shield {
 	return slices.DeleteFunc(slices.Clone(shields), dropped)
 }
 
-type OwnedGate struct {
-	Owner string    `json:"owner"`
-	Gate  gate.Gate `json:"gate"`
-}
+type OwnedGate = boxapi.OwnedGate
 
-func byGateOwner(a, b OwnedGate) int { return strings.Compare(a.Owner, b.Owner) }
+type Pin = boxapi.Pin
 
-type Pin struct {
-	Hostname string `json:"hostname"`
-	Path     string `json:"path"`
-}
-
-func (p Pin) Covers(hostname string) bool {
-	return (certs.Leaf{Domains: []string{p.Hostname}}).Covers(hostname)
+func pinCovers(pin Pin, hostname string) bool {
+	return (certs.Leaf{Domains: []string{pin.Hostname}}).Covers(hostname)
 }
 
 func Covering(pins []Pin, hostname string) string {
 	for _, exact := range []bool{true, false} {
 		at := slices.IndexFunc(pins, func(pin Pin) bool {
-			return exact == (pin.Hostname == hostname) && pin.Covers(hostname) && validPin(pin) == nil
+			return exact == (pin.Hostname == hostname) && pinCovers(pin, hostname) && validPin(pin) == nil
 		})
 		if at >= 0 {
 			return pins[at].Path
@@ -161,7 +132,7 @@ func proxySpec(state RoutingTable) proxy.Spec {
 	return proxy.Spec{
 		Pins:        pins,
 		Shields:     shields,
-		Hostnames:   state.hostnames(),
+		Hostnames:   state.Hostnames(),
 		PreviewBase: state.PreviewBase,
 		Upstream:    SwitchboardUpstream,
 		Router:      boxapi.SwitchboardRouter,
@@ -170,54 +141,17 @@ func proxySpec(state RoutingTable) proxy.Spec {
 }
 
 func validTable(state RoutingTable) error {
-	written, err := WriteRoutingTable(state)
-	if err != nil {
-		return err
-	}
-	if _, err := boxapi.ReadTable(written); err != nil {
+	if err := state.Validate(); err != nil {
 		return refusal.Refuse(refusal.CodeInvalid, "%v", err)
-	}
-	for _, pin := range state.Pins {
-		if err := validPin(pin); err != nil {
-			return err
-		}
 	}
 	return nil
 }
 
 func validPin(pin Pin) error {
-	if _, pinned := caddy.Pinned(pin.Path); pin.Hostname == "" || !pinned {
+	if _, pinned := boxapi.Pinned(pin.Path); pin.Hostname == "" || !pinned {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"pinned certificate for %q is at %q, not under %s/",
-			pin.Hostname, pin.Path, caddy.PinsDir)
+			pin.Hostname, pin.Path, boxapi.PinsDir)
 	}
 	return nil
-}
-
-func byClaimed(a, b HostClaim) int {
-	return strings.Compare(a.Hostname, b.Hostname)
-}
-
-func byPinned(a, b Pin) int {
-	return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Path, b.Path))
-}
-
-type ownedHostname interface{ hostnameAndOwner() (string, string) }
-
-func (s Shield) hostnameAndOwner() (string, string) { return s.Hostname, s.Owner }
-
-func (t TunneledHost) hostnameAndOwner() (string, string) { return t.Hostname, t.Owner }
-
-func byHostnameThenOwner[T ownedHostname](a, b T) int {
-	aHostname, aOwner := a.hostnameAndOwner()
-	bHostname, bOwner := b.hostnameAndOwner()
-	return cmp.Or(strings.Compare(aHostname, bHostname), strings.Compare(aOwner, bOwner))
-}
-
-func byKey(a, b AppRoute) int {
-	return strings.Compare(a.identity(), b.identity())
-}
-
-func spelled(window time.Duration) string {
-	return fmt.Sprintf("%ds", int(window.Round(time.Second).Seconds()))
 }

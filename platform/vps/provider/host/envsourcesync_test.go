@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -171,7 +170,7 @@ func TestTheDeployLoginIsToldTheEnvSourceSyncIsRootsAndWhatItMayWrite(t *testing
 			continue
 		}
 		named = true
-		for _, want := range []string{LiveBinary, deployUser, KeyValuesDir(tier), "CAP_CHOWN", "CAP_DAC_OVERRIDE", boxstore.SealHelper} {
+		for _, want := range []string{LiveBinary, deployUser, KeyValuesDir(tier), "CAP_CHOWN", "CAP_DAC_OVERRIDE"} {
 			if !strings.Contains(grant.Detail, want) {
 				t.Errorf("the grant reads %q and never says %q", grant.Detail, want)
 			}

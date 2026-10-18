@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -29,8 +28,8 @@ func TestWhatATierKeepsIsRootsAndItsStateIsTheDeployPrincipalsAlone(t *testing.T
 	for name, want := range map[string]string{
 		tierRoot:                                 rootOwner,
 		TierDir(environment.TierProduction):      rootOwner,
-		boxstore.Dir:                             rootOwner,
-		boxstore.KeyValuesHelper:                 rootOwner,
+		boxapi.LibDir:                            rootOwner,
+		LiveBinary:                               rootOwner,
 		releasesHelper:                           rootOwner,
 		stateRoot:                                rootOwner,
 		releasesRoot:                             deployUser,
@@ -48,18 +47,18 @@ func TestWhatATierKeepsIsRootsAndItsStateIsTheDeployPrincipalsAlone(t *testing.T
 func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *testing.T) {
 	t.Parallel()
 
-	tableDir := filepath.Dir(boxapi.RoutingTable)
+	tableDir := filepath.Dir(boxapi.RoutingTablePath)
 	if tableDir == stateRoot || tableDir == proxyRoot {
 		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", tableDir)
 	}
 	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, Front{})
 	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == tableDir })
-	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), boxapi.RoutingTable) })
+	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), boxapi.RoutingTablePath) })
 	if made < 0 || table < 0 || made > table {
 		t.Fatalf("%s is made at %d and the table in it first written at %d by %s: the table is written by renaming a file staged beside it, so its directory must exist first", tableDir, made, table, items[max(table, 0)].ID())
 	}
 	for _, item := range items {
-		if item.Name != tableDir && item.Name != boxapi.RoutingTable && beneath(tableDir, item.Name) {
+		if item.Name != tableDir && item.Name != boxapi.RoutingTablePath && beneath(tableDir, item.Name) {
 			t.Errorf("%s is written beside the routing table, and whatever reads the table's directory reads it too", item.ID())
 		}
 	}

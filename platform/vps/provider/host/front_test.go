@@ -34,11 +34,11 @@ func TestABoxFrontedByHandInstallsNothingOfOcelsOwnProxy(t *testing.T) {
 		switch {
 		case item.Kind == KindContainer && item.Name == caddy.Container,
 			item.Kind == KindProxyConfig,
-			item.Name == ProxyData, item.Name == caddy.PinsDir, item.Name == proxyRoot:
+			item.Name == ProxyData, item.Name == boxapi.PinsDir, item.Name == proxyRoot:
 			t.Errorf("a box fronted by your own proxy installs %s, which only ocel's own proxy reads", item.ID())
 		}
 	}
-	for _, wanted := range []string{SwitchboardBinary, boxapi.RoutingTable, ProxyNetwork, SwitchboardContainer} {
+	for _, wanted := range []string{SwitchboardBinary, boxapi.RoutingTablePath, ProxyNetwork, SwitchboardContainer} {
 		if !slices.ContainsFunc(items, func(item Item) bool { return item.Name == wanted }) {
 			t.Errorf("a box fronted by your own proxy installs no %s; the switchboard still routes it", wanted)
 		}
@@ -47,8 +47,8 @@ func TestABoxFrontedByHandInstallsNothingOfOcelsOwnProxy(t *testing.T) {
 
 func switchboardOf(t *testing.T, front Front) boxContainer {
 	t.Helper()
-	board := itemAt(t, ProxyItems(ssh.AMD64, front), KindContainer, SwitchboardContainer)
-	return *board.box
+	itemAt(t, ProxyItems(ssh.AMD64, front), KindContainer, SwitchboardContainer)
+	return switchboardBox(switchboardBinary(ssh.AMD64), front)
 }
 
 func TestTheSwitchboardPublishesOnLoopbackOnlyForAProxyRoutedByHand(t *testing.T) {
@@ -145,7 +145,7 @@ func TestAClaimOnABoxFrontedByHandWritesTheTableAloneAndReloadsNothing(t *testin
 		t.Fatal(err)
 	}
 	if len(table.Claims) != 1 || table.Claims[0].Hostname != claimed {
-		t.Errorf("%s records claims %v, want %s claimed", boxapi.RoutingTable, table.Claims, claimed)
+		t.Errorf("%s records claims %v, want %s claimed", boxapi.RoutingTablePath, table.Claims, claimed)
 	}
 	if absent != "" {
 		t.Errorf("the claim wrote %s as %q, want nothing written for a proxy ocel never writes to", ProxyConfig, absent)

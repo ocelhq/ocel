@@ -20,12 +20,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-var wildcardPin = caddy.PinsDir + "/wildcard"
+var wildcardPin = boxapi.PinsDir + "/wildcard"
 
 func selfSigned(t *testing.T, names []string, until time.Duration) []byte {
 	t.Helper()
@@ -52,8 +53,8 @@ func pinning(t *testing.T, machine *box, block []byte, at string) *vps.Provider 
 	if machine.reads == nil {
 		machine.reads = map[string]string{}
 	}
-	machine.reads[caddy.PinCertificate(at)] = string(block)
-	machine.reads[caddy.PinKey(at)] = "-----BEGIN EC PRIVATE KEY-----\nnothing here may ever reach the cli process\n-----END EC PRIVATE KEY-----\n"
+	machine.reads[boxapi.PinCertificate(at)] = string(block)
+	machine.reads[boxapi.PinKey(at)] = "-----BEGIN EC PRIVATE KEY-----\nnothing here may ever reach the cli process\n-----END EC PRIVATE KEY-----\n"
 	p := vps.ProviderOver(
 		vps.Options{
 			SSH:          vps.Target{Host: "box.invalid", User: "ada"},
@@ -95,15 +96,15 @@ func TestInspectingAPinnedCertificateNeverOpensTheKeyBesideIt(t *testing.T) {
 		t.Fatalf("Inspect() = %v", err)
 	}
 
-	key := caddy.PinKey(wildcardPin)
+	key := boxapi.PinKey(wildcardPin)
 	for _, command := range machine.commands() {
 		if strings.Contains(command, key) {
 			t.Errorf("the box ran %q, which names %s: ocel reads the certificate to report on it and never the key, and a wildcard private key must not enter the CLI process or the ssh session",
 				command, key)
 		}
 	}
-	if machine.at(caddy.PinCertificate(wildcardPin)) < 0 {
-		t.Errorf("nothing read %s, so the expiry reported for a pinned certificate came from somewhere other than the certificate", caddy.PinCertificate(wildcardPin))
+	if machine.at(boxapi.PinCertificate(wildcardPin)) < 0 {
+		t.Errorf("nothing read %s, so the expiry reported for a pinned certificate came from somewhere other than the certificate", boxapi.PinCertificate(wildcardPin))
 	}
 }
 
@@ -134,7 +135,7 @@ func TestAPinThatDoesNotCoverTheHostnameIsRefusedAtBindWithAReasonThatNamesBoth(
 	t.Parallel()
 
 	machine := &box{reads: map[string]string{
-		caddy.PinCertificate(wildcardPin): string(selfSigned(t, []string{"*.staging.example.com"}, 90*24*time.Hour)),
+		boxapi.PinCertificate(wildcardPin): string(selfSigned(t, []string{"*.staging.example.com"}, 90*24*time.Hour)),
 	}}
 	p := vps.ProviderOver(
 		vps.Options{
@@ -160,7 +161,7 @@ func TestAnExpiredPinIsRefusedRatherThanServedUnderAHandleThatReadsHealthy(t *te
 	t.Parallel()
 
 	machine := &box{reads: map[string]string{
-		caddy.PinCertificate(wildcardPin): string(selfSigned(t, []string{"*.preview.example.com"}, -time.Hour)),
+		boxapi.PinCertificate(wildcardPin): string(selfSigned(t, []string{"*.preview.example.com"}, -time.Hour)),
 	}}
 	p := vps.ProviderOver(
 		vps.Options{
@@ -317,7 +318,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 
 	const elsewhere = "/etc/ocel/preview/certs/wildcard"
 	machine := &box{reads: map[string]string{
-		caddy.PinCertificate(elsewhere): string(selfSigned(t, []string{"*.preview.example.com"}, 90*24*time.Hour)),
+		boxapi.PinCertificate(elsewhere): string(selfSigned(t, []string{"*.preview.example.com"}, 90*24*time.Hour)),
 	}}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
@@ -327,8 +328,8 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 	_, err := p.Certificates().Inspect(context.Background(), edge.None, "", "pr-7.preview.example.com",
 		provider.Certificate{ID: certs.PinHandle(elsewhere)})
 	var refused refusal.Refusal
-	if !asRefusal(err, &refused) || !strings.Contains(refused.Message, caddy.PinsDir) {
-		t.Fatalf("Inspect() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", caddy.PinsDir, err)
+	if !asRefusal(err, &refused) || !strings.Contains(refused.Message, boxapi.PinsDir) {
+		t.Fatalf("Inspect() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", boxapi.PinsDir, err)
 	}
 	for _, command := range machine.commands() {
 		if strings.Contains(command, elsewhere) {
