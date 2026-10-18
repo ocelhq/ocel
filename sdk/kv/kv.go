@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"regexp"
 	"strconv"
 	"sync"
 
@@ -20,6 +19,7 @@ import (
 
 	"ocel.dev"
 	"ocel.dev/internal/binding"
+	"ocel.dev/internal/declaration"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
@@ -71,25 +71,14 @@ func Memory(size string) Option {
 	return option(func(c *resourcesv1.KvConfig) { c.Memory = size })
 }
 
-var entryNameGrammar = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,62}$`)
-
-var reservedEntryNames = map[string]bool{"client": true, "connectionString": true, "connection_string": true, "then": true, "constructor": true}
-
-type declaredEntry struct {
-	name    string
-	pattern keyPattern
-	source  string
-}
-
 // A Store is a key-value store an app declares, one Valkey instance of its own, and
 // reaches through its typed entries or its [Store.Client].
 type Store struct {
 	name   string
 	source string
 
-	mu       sync.Mutex
-	config   *resourcesv1.KvConfig
-	declared []declaredEntry
+	mu     sync.Mutex
+	config *resourcesv1.KvConfig
 
 	connection binding.Connection[*redis.Client]
 }
@@ -104,7 +93,7 @@ func New(name string, opts ...Option) *Store {
 	for _, opt := range opts {
 		opt.applyStore(config)
 	}
-	store := &Store{name: name, source: binding.CallSite(0), config: config}
+	store := &Store{name: name, source: declaration.CallSite(0), config: config}
 	store.declare()
 	return store
 }
@@ -113,42 +102,19 @@ func New(name string, opts ...Option) *Store {
 func (s *Store) Name() string { return s.name }
 
 func (s *Store) declare() {
-	if !binding.Discovering() {
+	if !declaration.Discovering() {
 		return
 	}
-	binding.Declare(s.source, &resourcesv1.DeclareRequest{
+	declaration.Declare(s.source, &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV, Name: s.name},
 		Config:   &resourcesv1.DeclareRequest_Kv{Kv: proto.CloneOf(s.config)},
 	})
 }
 
-func (s *Store) addEntry(declared declaredEntry, shape resourcesv1.KvShape) {
+func (s *Store) addEntry(declared *resourcesv1.KvEntry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !entryNameGrammar.MatchString(declared.name) {
-		panic(fmt.Sprintf("ocel: kv %q: entry name %q is no name every SDK can hold: it starts with a letter and goes on in letters, digits and _, at most 63 characters", s.name, declared.name))
-	}
-	if reservedEntryNames[declared.name] {
-		panic(fmt.Sprintf("ocel: kv %q: entry name %q is reserved, since a store already has a member of that name in some SDK: name the entry otherwise", s.name, declared.name))
-	}
-	for _, prior := range s.declared {
-		if prior.name == declared.name {
-			panic(fmt.Sprintf("ocel: kv %q: entry %q is declared already at %s, and a store names each entry once", s.name, declared.name, prior.source))
-		}
-		if prior.pattern.overlaps(declared.pattern) {
-			panic(fmt.Sprintf(
-				"ocel: kv %q: entry %q declared at %s has pattern %q, which overlaps pattern %q of entry %q declared at %s: some key would match both, so neither entry could tell its keys from the other's",
-				s.name, declared.name, declared.source, declared.pattern.written, prior.pattern.written, prior.name, prior.source,
-			))
-		}
-	}
-	s.declared = append(s.declared, declared)
-	s.config.Entries = append(s.config.Entries, &resourcesv1.KvEntry{
-		Name:    declared.name,
-		Pattern: declared.pattern.written,
-		Shape:   shape,
-		Source:  declared.source,
-	})
+	s.config.Entries = append(s.config.Entries, declared)
 	s.declare()
 }
 
@@ -224,7 +190,7 @@ func (s *Store) properties(access string) (*bindingsv1.KvProperties, error) {
 }
 
 func (s *Store) refuseDuringDiscovery(access string) error {
-	if binding.Discovering() {
+	if declaration.Discovering() {
 		return &ocel.UnprovisionedError{Resource: s.resource(), Access: access}
 	}
 	return nil

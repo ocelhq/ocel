@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/declaration"
 	topicv1 "ocel.dev/internal/proto/app/topic/v1"
 	"ocel.dev/runs"
 )
@@ -40,7 +40,7 @@ func RegisterRoute(topic, consumer string, r *Route) {
 	registryMutex.Lock()
 	defer registryMutex.Unlock()
 	key := routeKey{topic: topic, consumer: consumer}
-	if _, taken := routes[key]; taken && !binding.Discovering() {
+	if _, taken := routes[key]; taken && !declaration.Discovering() {
 		panic(fmt.Sprintf("ocel: consumer %q of topic %q is declared twice, and a consumer is declared once", consumer, topic))
 	}
 	routes[key] = r
@@ -49,7 +49,7 @@ func RegisterRoute(topic, consumer string, r *Route) {
 func RegisterWorker(name string, settings WorkerSettings) {
 	registryMutex.Lock()
 	defer registryMutex.Unlock()
-	if _, taken := workers[name]; taken && !binding.Discovering() {
+	if _, taken := workers[name]; taken && !declaration.Discovering() {
 		panic(fmt.Sprintf("ocel: worker %q is declared twice, and a worker is declared once", name))
 	}
 	workers[name] = newWorker(name, settings)

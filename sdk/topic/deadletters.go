@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
 	topicv1 "ocel.dev/internal/proto/app/topic/v1"
 	"ocel.dev/internal/proto/app/topic/v1/topicv1connect"
 	"ocel.dev/runs"
@@ -159,10 +159,10 @@ func (d *DeadLetters) formatAccess(op string) string {
 func decodeDeadLetter(wire *topicv1.DeadLetter) (*DeadLetter, error) {
 	return &DeadLetter{
 		Execution: wire.GetExecution(),
-		Message:   runs.Message{ID: wire.GetMessage().GetId(), PublishedAt: binding.DecodeTimestamp(wire.GetMessage().GetPublishedAt())},
-		Payload:   binding.ReadJSON(wire.GetPayload()),
+		Message:   runs.Message{ID: wire.GetMessage().GetId(), PublishedAt: codec.DecodeTimestamp(wire.GetMessage().GetPublishedAt())},
+		Payload:   codec.ReadJSON(wire.GetPayload()),
 		Attempts:  int(wire.GetAttempts()),
 		Error:     wire.GetError(),
-		FailedAt:  binding.DecodeTimestamp(wire.GetFailedAt()),
+		FailedAt:  codec.DecodeTimestamp(wire.GetFailedAt()),
 	}, nil
 }

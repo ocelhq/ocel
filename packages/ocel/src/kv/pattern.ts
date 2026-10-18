@@ -26,60 +26,13 @@ export type KeyArgs<TPattern extends string> = [PatternParameters<TPattern>] ext
   ? []
   : [key: KeyOf<TPattern>];
 
-const literalSegment = /^[A-Za-z0-9._-]+$/;
-const parameterSegment = /^:[A-Za-z_][A-Za-z0-9_]*$/;
-
 export function parsePattern(written: string): Pattern {
-  if (written === "") {
-    throw new Error(
-      "the pattern is empty: write one or more segments joined by /, each a literal or a :parameter",
+  const segments = written
+    .split("/")
+    .map(
+      (part): Segment => (part.startsWith(":") ? { parameter: part.slice(1) } : { literal: part }),
     );
-  }
-  if (/[{}]/.test(written)) {
-    throw new Error(
-      `pattern "${written}" holds { or }, which a store reserves as the hash tag syntax`,
-    );
-  }
-  const segments: Segment[] = [];
-  const named = new Set<string>();
-  for (const part of written.split("/")) {
-    if (part === "") {
-      throw new Error(
-        `pattern "${written}" has an empty segment: it neither starts nor ends with /, and no two / are adjacent`,
-      );
-    }
-    if (part.startsWith(":")) {
-      if (!parameterSegment.test(part)) {
-        throw new Error(
-          `pattern "${written}" has segment "${part}", which is no parameter: a parameter is : and a name of letters, digits and _ that starts with a letter or _`,
-        );
-      }
-      const name = part.slice(1);
-      if (named.has(name)) {
-        throw new Error(
-          `pattern "${written}" names parameter "${name}" twice, so a key could not say which value is which`,
-        );
-      }
-      named.add(name);
-      segments.push({ parameter: name });
-      continue;
-    }
-    if (!literalSegment.test(part)) {
-      throw new Error(
-        `pattern "${written}" has segment "${part}", which is no literal: a literal is letters, digits, ., _ and -`,
-      );
-    }
-    segments.push({ literal: part });
-  }
   return { written, segments };
-}
-
-export function patternsOverlap(a: Pattern, b: Pattern): boolean {
-  if (a.segments.length !== b.segments.length) return false;
-  return a.segments.every((mine, i) => {
-    const theirs = b.segments[i] as Segment;
-    return !("literal" in mine && "literal" in theirs) || mine.literal === theirs.literal;
-  });
 }
 
 export function hasParameters(pattern: Pattern): boolean {

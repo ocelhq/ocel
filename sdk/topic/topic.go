@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
+	"ocel.dev/internal/declaration"
 	"ocel.dev/internal/delivery"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 	topicv1 "ocel.dev/internal/proto/app/topic/v1"
@@ -31,7 +33,7 @@ func New[P any](name string, opts ...Option) *Topic[P] {
 	for _, opt := range opts {
 		opt.applyTopic(&s)
 	}
-	binding.Declare(binding.CallSite(0), &resourcesv1.DeclareRequest{
+	declaration.Declare(declaration.CallSite(0), &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC, Name: name},
 		Config:   &resourcesv1.DeclareRequest_Topic{Topic: s.config},
 	})
@@ -62,7 +64,7 @@ func (t *Topic[P]) Consumer(name string, handle func(ctx context.Context, payloa
 	if settings.config.Batch != nil {
 		panic(fmt.Sprintf("ocel: consumer %q of topic %q takes one message at a time, so it batches nothing: declare it with BatchConsumer", name, t.name))
 	}
-	t.declareConsumer(binding.CallSite(0), name, settings)
+	t.declareConsumer(declaration.CallSite(0), name, settings)
 	delivery.RegisterRoute(t.name, name, &delivery.Route{
 		Kind:   runs.KindConsumer,
 		Name:   name,
@@ -81,7 +83,7 @@ func (t *Topic[P]) Consumer(name string, handle func(ctx context.Context, payloa
 func (t *Topic[P]) BatchConsumer(name string, size int, handle func(ctx context.Context, payloads []P) error, opts ...ConsumerOption) *Consumer {
 	settings := t.newConsumerSettings(opts)
 	delivery.EnsureBatchPolicy(&settings.config.Batch).Size = int32(size)
-	t.declareConsumer(binding.CallSite(0), name, settings)
+	t.declareConsumer(declaration.CallSite(0), name, settings)
 	delivery.RegisterRoute(t.name, name, &delivery.Route{
 		Kind:    runs.KindConsumer,
 		Name:    name,
@@ -103,7 +105,7 @@ func (t *Topic[P]) newConsumerSettings(opts []ConsumerOption) consumerSettings {
 }
 
 func (t *Topic[P]) declareConsumer(source, name string, settings consumerSettings) {
-	binding.Declare(source, &resourcesv1.DeclareRequest{
+	declaration.Declare(source, &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER, Name: name},
 		Config:   &resourcesv1.DeclareRequest_Consumer{Consumer: settings.config},
 	})
@@ -115,7 +117,7 @@ func (t *Topic[P]) Send(ctx context.Context, payload P, opts ...SendOption) (str
 	if err != nil {
 		return "", err
 	}
-	body, err := binding.EncodePayload(payload)
+	body, err := codec.EncodePayload(payload)
 	if err != nil {
 		return "", err
 	}

@@ -5,7 +5,7 @@ package worker
 import (
 	"context"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/declaration"
 	"ocel.dev/internal/delivery"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 )
@@ -54,7 +54,7 @@ func New(name string, opts ...Option) *Worker {
 	for _, opt := range opts {
 		opt.applyWorker(&settings)
 	}
-	binding.Declare(binding.CallSite(0), &resourcesv1.DeclareRequest{
+	declaration.Declare(declaration.CallSite(0), &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_WORKER, Name: name},
 		Config: &resourcesv1.DeclareRequest_Worker{Worker: &resourcesv1.WorkerConfig{
 			Concurrency: int32(settings.Concurrency),

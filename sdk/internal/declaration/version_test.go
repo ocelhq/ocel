@@ -1,10 +1,10 @@
-package binding_test
+package declaration_test
 
 import (
 	"runtime/debug"
 	"testing"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/declaration"
 )
 
 func TestTheSDKReadsItsVersionFromTheBuild(t *testing.T) {
@@ -31,7 +31,7 @@ func TestTheSDKReadsItsVersionFromTheBuild(t *testing.T) {
 		{"an app that does not require the sdk", &debug.BuildInfo{Main: debug.Module{Path: "example.com/app"}}, true, ""},
 	}
 	for _, c := range cases {
-		if got := binding.VersionIn(c.info, c.ok); got != c.want {
+		if got := declaration.VersionIn(c.info, c.ok); got != c.want {
 			t.Errorf("%s: versionIn() = %q, want %q", c.name, got, c.want)
 		}
 	}

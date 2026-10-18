@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"ocel.dev"
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/declaration"
 	"ocel.dev/internal/sdktest"
 	"ocel.dev/postgres"
 )
@@ -30,7 +30,7 @@ func TestADeclarationSendsTheDevServerToken(t *testing.T) {
 	if got := seen[0]["__authorization"]; got != "Bearer "+sdktest.DevServerToken {
 		t.Errorf("Authorization = %v, want the dev server token", got)
 	}
-	if got, want := seen[0]["__sdk"], "go/"+binding.Version; got != want {
+	if got, want := seen[0]["__sdk"], "go/"+declaration.Version; got != want {
 		t.Errorf("Ocel-Sdk-Version = %v, want %q", got, want)
 	}
 }

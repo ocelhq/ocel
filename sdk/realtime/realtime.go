@@ -14,17 +14,14 @@ import (
 
 	"ocel.dev"
 	"ocel.dev/internal/binding"
+	"ocel.dev/internal/declaration"
 	realtimev1 "ocel.dev/internal/proto/app/realtime/v1"
 	"ocel.dev/internal/proto/app/realtime/v1/realtimev1connect"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
-const (
-	minTokenTTL     = 10 * time.Second
-	maxTokenTTL     = 5 * time.Minute
-	defaultTokenTTL = 60 * time.Second
-)
+const defaultTokenTTL = 60 * time.Second
 
 // An Option tunes the realtime resource [New] declares.
 type Option interface {
@@ -86,17 +83,11 @@ type Realtime struct {
 func New(name string, opts ...Option) *Realtime {
 	d := &Realtime{
 		name:     name,
-		source:   binding.CallSite(0),
+		source:   declaration.CallSite(0),
 		settings: settings{ttl: defaultTokenTTL},
 	}
 	for _, opt := range opts {
 		opt.applyRealtime(&d.settings)
-	}
-	if !channelSegment.MatchString(name) {
-		d.refuse("the name begins every channel, so it is a channel namespace: %s", channelSegmentRule)
-	}
-	if ttl := d.settings.ttl; ttl < minTokenTTL || ttl > maxTokenTTL || ttl%time.Second != 0 {
-		d.refuse("token ttl %s is outside %s to %s in whole seconds: a token lives long enough to open a socket and no longer", ttl, minTokenTTL, maxTokenTTL)
 	}
 	d.declare()
 	return d
@@ -105,16 +96,12 @@ func New(name string, opts ...Option) *Realtime {
 // Name is the name the resource was declared under.
 func (d *Realtime) Name() string { return d.name }
 
-func (d *Realtime) refuse(format string, args ...any) {
-	panic(fmt.Sprintf("ocel: realtime %q: ", d.name) + fmt.Sprintf(format, args...))
-}
-
 func (d *Realtime) declare() {
 	channels := make([]*resourcesv1.RealtimeChannel, 0, len(d.channels))
 	for _, channel := range d.channels {
 		channels = append(channels, channel.buildManifest())
 	}
-	binding.Declare(d.source, &resourcesv1.DeclareRequest{
+	declaration.Declare(d.source, &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME, Name: d.name},
 		Config: &resourcesv1.DeclareRequest_Realtime{Realtime: &resourcesv1.RealtimeConfig{
 			Channels: channels,
@@ -126,11 +113,6 @@ func (d *Realtime) declare() {
 func (d *Realtime) addChannel(channel *declaredChannel) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
-	for _, prior := range d.channels {
-		if prior.pattern.written == channel.pattern.written {
-			d.refuse("channel %q is declared already at %s, and a resource declares each pattern once", channel.pattern.written, prior.source)
-		}
-	}
 	d.channels = append(d.channels, channel)
 	d.declare()
 }
@@ -147,7 +129,7 @@ func (d *Realtime) findChannel(pattern string) *declaredChannel {
 }
 
 func (d *Realtime) readBinding(access string) (*bindingsv1.RealtimeProperties, error) {
-	if binding.Discovering() {
+	if declaration.Discovering() {
 		return nil, &ocel.UnprovisionedError{Resource: fmt.Sprintf("realtime(%q)", d.name), Access: access}
 	}
 	delivered, err := binding.Read(d.name, bindingsv1.BindingType_BINDING_TYPE_REALTIME)

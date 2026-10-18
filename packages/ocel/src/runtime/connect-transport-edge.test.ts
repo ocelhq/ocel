@@ -1,5 +1,5 @@
+import { createClient } from "@connectrpc/connect";
 import { afterEach, expect, it } from "vitest";
-import { createBucketClient } from "../bucket/bucket-client.js";
 import { BucketService, UploadState } from "../gen/proto/app/bucket/v1/bucket_pb.js";
 import { type RuntimeProxy, serveRuntimeProxy } from "../testing/runtime-proxy.js";
 import { createConnectTransport } from "./connect-transport-edge.js";
@@ -21,7 +21,8 @@ it("calls the ocel runtime over fetch, presenting what its interceptors set", as
       },
     }),
   );
-  const client = createBucketClient(
+  const client = createClient(
+    BucketService,
     createConnectTransport({
       baseUrl: process.env.OCEL_RUNTIME_ADDRESS!,
       interceptors: [
@@ -47,7 +48,8 @@ it("reads a response the ocel runtime gzipped, which fetch has already decompres
       getUploadStatus: () => ({ state: UploadState.EXPIRED, error }),
     }),
   );
-  const client = createBucketClient(
+  const client = createClient(
+    BucketService,
     createConnectTransport({ baseUrl: process.env.OCEL_RUNTIME_ADDRESS!, interceptors: [] }),
   );
 

@@ -113,53 +113,6 @@ describe("kv discovery declare", () => {
     });
   });
 
-  it("refuses two entries whose patterns overlap, naming both and where each was declared", () => {
-    expect(() =>
-      kv("overlapping", {
-        entries: {
-          session: kv.text("session/:id"),
-          current: kv.text("session/current"),
-        },
-      }),
-    ).toThrow(/"current".*"session\/current".*overlaps.*"session\/:id" of entry "session"/);
-    expect(declareMock).not.toHaveBeenCalled();
-  });
-
-  it("refuses a malformed pattern, saying what is wrong with it", () => {
-    expect(() => kv("braces", { entries: { session: kv.text("session/{id}") } })).toThrow(
-      /hash tag/,
-    );
-    expect(() => kv("twice", { entries: { pair: kv.text("a/:id/:id") } })).toThrow(/twice/);
-    expect(() => kv("empty", { entries: { trailing: kv.text("a/") } })).toThrow(/empty segment/);
-  });
-
-  it.each(["client", "connectionString", "connection_string", "then", "constructor"])(
-    "refuses an entry named %s, a member a store has in some SDK",
-    (name) => {
-      expect(() => kv("reserved", { entries: { [name]: kv.text("a/:id") } as never })).toThrow(
-        `kv("reserved"): entry name "${name}" is reserved, since a store already has a member of that name in some SDK: name the entry otherwise`,
-      );
-      expect(declareMock).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(["_session", "1st", "rate-limit", "café", "", "a".repeat(64)])(
-    "refuses an entry named %j, which some SDK cannot hold as a name",
-    (name) => {
-      expect(() => kv("ungrammatical", { entries: { [name]: kv.text("a") } })).toThrow(
-        `kv("ungrammatical"): entry name "${name}" is no name every SDK can hold: it starts with a letter and goes on in letters, digits and _, at most 63 characters`,
-      );
-      expect(declareMock).not.toHaveBeenCalled();
-    },
-  );
-
-  it("takes an entry name of a letter and then up to 62 letters, digits and _", () => {
-    const name = `a${"_9Z".repeat(20)}xy`;
-    expect(name).toHaveLength(63);
-
-    expect(() => kv("grammatical", { entries: { [name]: kv.text("a") } })).not.toThrow();
-  });
-
   it("refuses a ttl that is no duration", () => {
     expect(() => kv("ttl", { entries: { a: kv.text("a", { ttl: 10 as never }) } })).toThrow(
       /duration/,

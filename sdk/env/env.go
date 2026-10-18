@@ -16,7 +16,9 @@ import (
 	"unicode"
 
 	"ocel.dev/internal/binding"
+	"ocel.dev/internal/declaration"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
+	"ocel.dev/internal/wire"
 )
 
 const (
@@ -137,12 +139,12 @@ type group struct {
 	members     []int
 }
 
-type declaration struct {
+type declared struct {
 	variables []variable
 	groups    []group
 }
 
-func (d declaration) group(key string) *group {
+func (d declared) group(key string) *group {
 	for i := range d.groups {
 		if d.groups[i].key == key {
 			return &d.groups[i]
@@ -235,7 +237,7 @@ func define[T any]() (T, error) {
 		return out, err
 	}
 
-	if binding.Discovering() {
+	if declaration.Discovering() {
 		if err := declareEnv(decl, fmt.Sprintf("%s:%d", file, line)); err != nil {
 			return out, fmt.Errorf("ocel: declare env: %w", err)
 		}
@@ -248,35 +250,35 @@ func define[T any]() (T, error) {
 	return out, nil
 }
 
-func definitions(t reflect.Type) (declaration, error) {
+func definitions(t reflect.Type) (declared, error) {
 	if t.Kind() != reflect.Struct {
-		return declaration{}, &DefinitionError{Detail: fmt.Sprintf("env.Define wants a struct type, and %s is a %s.", t, t.Kind())}
+		return declared{}, &DefinitionError{Detail: fmt.Sprintf("env.Define wants a struct type, and %s is a %s.", t, t.Kind())}
 	}
 
-	var decl declaration
+	var decl declared
 	for i := range t.NumField() {
 		field := t.Field(i)
 		if groupType(field.Type) == nil {
 			v, err := definition(field, field.Index)
 			if err != nil {
-				return declaration{}, err
+				return declared{}, err
 			}
 			decl.variables = append(decl.variables, v)
 			continue
 		}
 		g, err := groupDefinition(field)
 		if err != nil {
-			return declaration{}, err
+			return declared{}, err
 		}
 		if decl.group(g.key) != nil {
-			return declaration{}, &DefinitionError{Detail: fmt.Sprintf("group %s is declared by two fields of the same struct. A group is declared by exactly one field.", g.key)}
+			return declared{}, &DefinitionError{Detail: fmt.Sprintf("group %s is declared by two fields of the same struct. A group is declared by exactly one field.", g.key)}
 		}
 		members, err := groupVariables(groupType(field.Type), field.Index, g.key)
 		if err != nil {
-			return declaration{}, err
+			return declared{}, err
 		}
 		if err := satisfiable(g.key, members); err != nil {
-			return declaration{}, err
+			return declared{}, err
 		}
 		for _, member := range members {
 			g.members = append(g.members, len(decl.variables))
@@ -286,7 +288,7 @@ func definitions(t reflect.Type) (declaration, error) {
 	}
 	for _, v := range decl.variables {
 		if slices.ContainsFunc(decl.variables, func(seen variable) bool { return seen.key == v.key && !slices.Equal(seen.index, v.index) }) {
-			return declaration{}, &DefinitionError{Key: v.key, Detail: "is declared by two fields of the same struct. A key is declared by exactly one field."}
+			return declared{}, &DefinitionError{Key: v.key, Detail: "is declared by two fields of the same struct. A key is declared by exactly one field."}
 		}
 	}
 	return decl, nil
@@ -419,7 +421,7 @@ func definition(field reflect.StructField, index []int) (variable, error) {
 		return variable{}, &DefinitionError{Key: v.key, Detail: "has an unusable description: " + problem}
 	}
 
-	if v.key == binding.AppURLEnv {
+	if v.key == wire.AppURLEnv {
 		return variable{}, &DefinitionError{Key: v.key, Detail: "is written by Ocel for every app, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it with DeploymentURL."}
 	}
 	if strings.HasPrefix(v.key, reservedPrefix) {
@@ -490,7 +492,7 @@ func folderProblem(folder string) string {
 	return ""
 }
 
-func declareEnv(decl declaration, source string) error {
+func declareEnv(decl declared, source string) error {
 	req := &resourcesv1.DeclareEnvRequest{}
 	for _, g := range decl.groups {
 		req.Groups = append(req.Groups, &resourcesv1.GroupDefinition{Key: g.key, Required: g.required, Description: g.description})
@@ -506,7 +508,7 @@ func declareEnv(decl declaration, source string) error {
 			Group:       v.group,
 		})
 	}
-	res, err := binding.DeclareVariables(req)
+	res, err := declaration.DeclareVariables(req)
 	if err != nil {
 		return err
 	}
@@ -514,10 +516,10 @@ func declareEnv(decl declaration, source string) error {
 	if len(problems) == 0 {
 		return nil
 	}
-	return binding.ReportEnvProblems(&resourcesv1.ReportEnvProblemsRequest{Problems: problems})
+	return declaration.ReportEnvProblems(&resourcesv1.ReportEnvProblemsRequest{Problems: problems})
 }
 
-func findInvalidValues(decl declaration, cells []*resourcesv1.VariableCell) []*resourcesv1.VariableProblem {
+func findInvalidValues(decl declared, cells []*resourcesv1.VariableCell) []*resourcesv1.VariableProblem {
 	var problems []*resourcesv1.VariableProblem
 	for _, v := range decl.variables {
 		if v.live() || !v.parsed() {
@@ -535,7 +537,7 @@ func findInvalidValues(decl declaration, cells []*resourcesv1.VariableCell) []*r
 	return problems
 }
 
-func resolve(target reflect.Value, decl declaration) error {
+func resolve(target reflect.Value, decl declared) error {
 	for i, v := range decl.variables {
 		g := decl.group(v.group)
 		if g == nil {
@@ -563,7 +565,7 @@ func resolve(target reflect.Value, decl declaration) error {
 	return nil
 }
 
-func groupDelivered(decl declaration, g group) bool {
+func groupDelivered(decl declared, g group) bool {
 	for _, member := range g.members {
 		if _, ok := binding.ReadDelivered(decl.variables[member].key); ok {
 			return true
@@ -574,7 +576,7 @@ func groupDelivered(decl declaration, g group) bool {
 
 func resolveVariable(target reflect.Value, v variable) error {
 	if !inScope(v.folders) {
-		return &ScopeError{Key: v.key, Folders: v.folders, Binding: os.Getenv(binding.AppFolderEnv)}
+		return &ScopeError{Key: v.key, Folders: v.folders, Binding: os.Getenv(wire.AppFolderEnv)}
 	}
 	field := target.FieldByIndex(v.index)
 	raw, ok := binding.ReadDelivered(v.key)
@@ -604,7 +606,7 @@ func unset(key string) *ValueError {
 }
 
 func inScope(folders []string) bool {
-	return len(folders) == 0 || slices.Contains(folders, os.Getenv(binding.AppFolderEnv))
+	return len(folders) == 0 || slices.Contains(folders, os.Getenv(wire.AppFolderEnv))
 }
 
 var (
@@ -696,10 +698,10 @@ func parse(t reflect.Type, raw string) (reflect.Value, error) {
 // nothing declares it. It fails with a [*ValueError] when the deploy gave
 // this app no hostname.
 func DeploymentURL() (string, error) {
-	url, ok := binding.ReadDelivered(binding.AppURLEnv)
+	url, ok := binding.ReadDelivered(wire.AppURLEnv)
 	if !ok {
 		return "", &ValueError{
-			Key:    binding.AppURLEnv,
+			Key:    wire.AppURLEnv,
 			Detail: "was not delivered to this app. Ocel writes it from the hostname the deploy serves the app on, and this app is served on none: add one under `domains.production` on the app, or on the project if this is the first app it names, and deploy again.",
 		}
 	}

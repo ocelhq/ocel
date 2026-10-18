@@ -16,6 +16,7 @@ import (
 
 	"ocel.dev"
 	"ocel.dev/internal/binding"
+	"ocel.dev/internal/declaration"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
@@ -52,7 +53,7 @@ func New(name string, opts ...Option) *DB {
 	for _, opt := range opts {
 		opt.applyPostgres(config)
 	}
-	binding.Declare(binding.CallSite(0), &resourcesv1.DeclareRequest{
+	declaration.Declare(declaration.CallSite(0), &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: name},
 		Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: config},
 	})
@@ -169,7 +170,7 @@ func setTLSServerName(config *pgxpool.Config, name string) {
 }
 
 func (p *DB) properties(access string) (*bindingsv1.PostgresProperties, error) {
-	if binding.Discovering() {
+	if declaration.Discovering() {
 		return nil, &ocel.UnprovisionedError{Resource: p.resource(), Access: access}
 	}
 	delivered, err := binding.Read(p.name, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)

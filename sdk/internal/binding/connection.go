@@ -9,7 +9,9 @@ import (
 
 	"connectrpc.com/connect"
 	"ocel.dev"
+	"ocel.dev/internal/declaration"
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
+	"ocel.dev/internal/wire"
 )
 
 type Connection[C any] struct {
@@ -22,7 +24,7 @@ type serviceClientConstructor[C any] func(httpClient connect.HTTPClient, baseURL
 
 func (c *Connection[C]) Connect(resource, access string, open func() (C, error)) (C, error) {
 	var none C
-	if Discovering() {
+	if declaration.Discovering() {
 		return none, &ocel.UnprovisionedError{Resource: resource, Access: access}
 	}
 	c.mu.Lock()
@@ -51,11 +53,11 @@ func Dial[C any](name string, bindingType bindingsv1.BindingType, newClient serv
 }
 
 func ReadRuntimeConnection() (string, connect.ClientOption, error) {
-	address := os.Getenv(RuntimeAddressEnv)
+	address := os.Getenv(wire.RuntimeAddressEnv)
 	if address == "" {
 		return "", nil, &missingRuntimeAddressError{}
 	}
-	token := os.Getenv(SessionTokenEnv)
+	token := os.Getenv(wire.SessionTokenEnv)
 	if token == "" {
 		return "", nil, &missingSessionTokenError{}
 	}
@@ -68,7 +70,7 @@ func (*missingRuntimeAddressError) Error() string {
 	return fmt.Sprintf(
 		"%s is not defined, so no resource the ocel runtime serves can be reached. "+
 			"Run `ocel dev` to serve it locally, or `ocel deploy` to have the deployed runtime's address delivered.",
-		RuntimeAddressEnv,
+		wire.RuntimeAddressEnv,
 	)
 }
 
@@ -78,7 +80,7 @@ func (*missingSessionTokenError) Error() string {
 	return fmt.Sprintf(
 		"%s is not defined, so the ocel runtime at %s would refuse every call. "+
 			"It is delivered beside %s by `ocel dev` and by the deployed runtime, never set by hand.",
-		SessionTokenEnv, RuntimeAddressEnv, RuntimeAddressEnv,
+		wire.SessionTokenEnv, wire.RuntimeAddressEnv, wire.RuntimeAddressEnv,
 	)
 }
 
@@ -95,7 +97,7 @@ var refusing = connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect
 func newBearerInterceptor(token string) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", Bearer(token))
+			req.Header().Set("Authorization", "Bearer "+token)
 			return next(ctx, req)
 		}
 	})

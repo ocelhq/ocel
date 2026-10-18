@@ -13,7 +13,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
+	"ocel.dev/internal/declaration"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 )
 
@@ -25,15 +26,11 @@ type entry[K comparable] struct {
 }
 
 func declareEntry[K comparable](store *Store, name, pattern string, shape resourcesv1.KvShape, opts []EntryOption) entry[K] {
-	source := binding.CallSite(1)
+	source := declaration.CallSite(1)
 	refuse := func(err error) {
 		panic(fmt.Sprintf("ocel: kv %q: entry %q: %v", store.name, name, err))
 	}
-	parsed, err := parseKeyPattern(pattern)
-	if err != nil {
-		refuse(err)
-	}
-	builder, err := newKeyBuilder(parsed, reflect.TypeFor[K]())
+	builder, err := newKeyBuilder(parseKeyPattern(pattern), reflect.TypeFor[K]())
 	if err != nil {
 		refuse(err)
 	}
@@ -49,7 +46,7 @@ func declareEntry[K comparable](store *Store, name, pattern string, shape resour
 	if settings.missOnInvalid && shape != resourcesv1.KvShape_KV_SHAPE_JSON {
 		refuse(errors.New("MissOnInvalid applies to a json entry alone, whose stored value can fail to decode"))
 	}
-	store.addEntry(declaredEntry{name: name, pattern: parsed, source: source}, shape)
+	store.addEntry(&resourcesv1.KvEntry{Name: name, Pattern: pattern, Shape: shape, Source: source})
 	return entry[K]{store: store, name: name, key: builder, settings: settings}
 }
 
@@ -168,8 +165,9 @@ type Text[K comparable] struct{ entry[K] }
 // struct whose fields are the parameters, matched by name regardless of case or by a
 // `kv:"name"` tag. name starts with an ASCII letter and goes on in ASCII letters, digits
 // and _, at most 63 of them, and is none of client, connectionString,
-// connection_string, then and constructor. A name otherwise, a K that does not match
-// the pattern, and a pattern that overlaps another entry's, panic here.
+// connection_string, then and constructor: the deploy refuses a name otherwise, a
+// malformed pattern and a pattern that overlaps another entry's. A K that does not
+// match the pattern panics here.
 func NewText[K comparable](store *Store, name, pattern string, opts ...EntryOption) *Text[K] {
 	return &Text[K]{declareEntry[K](store, name, pattern, resourcesv1.KvShape_KV_SHAPE_TEXT, opts)}
 }
@@ -325,7 +323,7 @@ func (e *JSON[K, V]) GetMany(ctx context.Context, keys ...K) (map[K]V, error) {
 // Set writes value under the key as JSON, with the entry's TTL unless an option says
 // otherwise.
 func (e *JSON[K, V]) Set(ctx context.Context, key K, value V, opts ...WriteOption) error {
-	encoded, err := binding.EncodeJSON(value)
+	encoded, err := codec.EncodeJSON(value)
 	if err != nil {
 		return fmt.Errorf("ocel: kv entry %q: the value does not encode as JSON: %w", e.name, err)
 	}

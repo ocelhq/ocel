@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
 	"ocel.dev/runs"
 )
 
@@ -32,7 +32,7 @@ func (w Work[In, R]) serve(ctx context.Context, payload In, wrap Middleware) ans
 
 	var body []byte
 	if err == nil {
-		body, err = binding.EncodeJSON(output)
+		body, err = codec.EncodeJSON(output)
 		if err != nil {
 			err = fmt.Errorf("the output does not encode as JSON: %w: %w", err, runs.ErrAbort)
 		}

@@ -15,7 +15,6 @@ import type { TokenIssuer } from "./token.js";
 import {
   type ChannelPattern,
   encodeWireChannel,
-  isChannelNamespace,
   parseChannelPattern,
   type WireRefusal,
 } from "./wire.js";
@@ -169,8 +168,6 @@ export function readRuntime(rt: Realtime): RealtimeRuntime {
   return runtime;
 }
 
-const minTtlSeconds = 10;
-const maxTtlSeconds = 300;
 const defaultTtl: Duration = "60s";
 
 /** A declared realtime resource, and the handle its channels are published through. */
@@ -186,18 +183,8 @@ export class Realtime<
   constructor(name: string, options: RealtimeOptions<TAuth, TChannels>) {
     this.name = name;
     const what = `realtime("${name}")`;
-    if (!isChannelNamespace(name)) {
-      throw new Error(
-        `${what}: the name begins every channel, so it is letters, digits and -, at most 50 characters, starting and ending with a letter or digit`,
-      );
-    }
     const ttl = options.tokenTtl ?? defaultTtl;
     const ttlSeconds = parseDurationMilliseconds(ttl) / 1_000;
-    if (!Number.isInteger(ttlSeconds) || ttlSeconds < minTtlSeconds || ttlSeconds > maxTtlSeconds) {
-      throw new Error(
-        `${what}: token ttl ${ttlSeconds}s is outside ${minTtlSeconds}s to ${maxTtlSeconds}s in whole seconds: a token lives long enough to open a socket and no longer`,
-      );
-    }
     const channels = new Map<string, DeclaredChannel>();
     for (const [written, declared] of Object.entries(
       options.channels as Record<string, ChannelShape>,

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
@@ -135,7 +135,7 @@ func writeResponse(w http.ResponseWriter, status int, body any) {
 		w.WriteHeader(status)
 		return
 	}
-	encoded, err := binding.EncodeJSON(body)
+	encoded, err := codec.EncodeJSON(body)
 	if err != nil {
 		status, encoded = http.StatusInternalServerError, []byte(`{"error":"the answer does not encode as JSON"}`)
 	}

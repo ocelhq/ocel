@@ -8,6 +8,8 @@ import (
 	"fmt"
 
 	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
+	"ocel.dev/internal/declaration"
 	"ocel.dev/internal/delivery"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 	taskv1 "ocel.dev/internal/proto/app/task/v1"
@@ -38,7 +40,7 @@ func New[P, R any](name string, run func(ctx context.Context, payload P) (R, err
 		panic(fmt.Sprintf("ocel: task %q runs one payload at a time, so it batches nothing: declare it with NewBatch", name))
 	}
 	hooks := mustAssertHookTypes[P, R](name, settings.hooks)
-	declare(binding.CallSite(0), name, settings)
+	declare(declaration.CallSite(0), name, settings)
 	delivery.RegisterRoute(name, name, &delivery.Route{
 		Kind:   runs.KindTask,
 		Name:   name,
@@ -59,7 +61,7 @@ func NewBatch[P, R any](name string, size int, run func(ctx context.Context, pay
 	settings := newSettings(opts)
 	delivery.EnsureBatchPolicy(&settings.config.Batch).Size = int32(size)
 	hooks := mustAssertHookTypes[[]P, R](name, settings.hooks)
-	declare(binding.CallSite(0), name, settings)
+	declare(declaration.CallSite(0), name, settings)
 	delivery.RegisterRoute(name, name, &delivery.Route{
 		Kind:    runs.KindTask,
 		Name:    name,
@@ -79,7 +81,7 @@ func newSettings(opts []Option) settings {
 }
 
 func declare(source, name string, s settings) {
-	binding.Declare(source, &resourcesv1.DeclareRequest{
+	declaration.Declare(source, &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: name},
 		Config:   &resourcesv1.DeclareRequest_Task{Task: s.config},
 	})
@@ -103,7 +105,7 @@ func (t *Task[P, R]) Trigger(ctx context.Context, payload P, opts ...TriggerOpti
 	if err != nil {
 		return runs.Handle{}, err
 	}
-	body, err := binding.EncodePayload(payload)
+	body, err := codec.EncodePayload(payload)
 	if err != nil {
 		return runs.Handle{}, err
 	}
@@ -127,7 +129,7 @@ func (t *Task[P, R]) BatchTrigger(ctx context.Context, triggers ...Trigger[P]) (
 	}
 	req := &taskv1.BatchTriggerRequest{Task: t.name}
 	for i, trigger := range triggers {
-		body, err := binding.EncodePayload(trigger.Payload)
+		body, err := codec.EncodePayload(trigger.Payload)
 		if err != nil {
 			return nil, fmt.Errorf("trigger %d: %w", i, err)
 		}
@@ -171,7 +173,7 @@ func encodeTriggerOptions(opts []TriggerOption) (*taskv1.TriggerOptions, error) 
 		Tags:              settings.tags,
 	}
 	if settings.metadata != nil {
-		raw, err := binding.EncodeJSON(settings.metadata)
+		raw, err := codec.EncodeJSON(settings.metadata)
 		if err != nil {
 			return nil, fmt.Errorf("the run's metadata does not encode as JSON: %w", err)
 		}

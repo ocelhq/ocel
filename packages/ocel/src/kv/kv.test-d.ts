@@ -79,8 +79,8 @@ describe("a kv store's entries typed from their declarations", () => {
   it("refuses an entry named after a member the store already has", () => {
     // @ts-expect-error client is the store's own client
     kv("reserved", { entries: { client: kv.text("clients/:id") } });
-    // @ts-expect-error connection_string is the Python store's connection string
-    kv("reserved", { entries: { connection_string: kv.text("urls/:id") } });
+    // @ts-expect-error connectionString is the store's own connection string
+    kv("reserved", { entries: { connectionString: kv.text("urls/:id") } });
   });
 
   it("requires a schema for a json entry", () => {

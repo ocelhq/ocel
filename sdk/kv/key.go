@@ -3,7 +3,6 @@ package kv
 import (
 	"fmt"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -18,41 +17,16 @@ type keyPattern struct {
 	segments []keySegment
 }
 
-var (
-	literalSegment   = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	parameterSegment = regexp.MustCompile(`^:[A-Za-z_][A-Za-z0-9_]*$`)
-)
-
-func parseKeyPattern(written string) (keyPattern, error) {
-	if written == "" {
-		return keyPattern{}, fmt.Errorf("the pattern is empty: write one or more segments joined by /, each a literal or a :parameter")
-	}
-	if strings.ContainsAny(written, "{}") {
-		return keyPattern{}, fmt.Errorf("pattern %q holds { or }, which a store reserves as the hash tag syntax", written)
-	}
+func parseKeyPattern(written string) keyPattern {
 	pattern := keyPattern{written: written}
-	named := map[string]bool{}
 	for _, part := range strings.Split(written, "/") {
-		switch {
-		case part == "":
-			return keyPattern{}, fmt.Errorf("pattern %q has an empty segment: it neither starts nor ends with /, and no two / are adjacent", written)
-		case strings.HasPrefix(part, ":"):
-			if !parameterSegment.MatchString(part) {
-				return keyPattern{}, fmt.Errorf("pattern %q has segment %q, which is no parameter: a parameter is : and a name of letters, digits and _ that starts with a letter or _", written, part)
-			}
-			name := part[1:]
-			if named[name] {
-				return keyPattern{}, fmt.Errorf("pattern %q names parameter %q twice, so a key could not say which value is which", written, name)
-			}
-			named[name] = true
-			pattern.segments = append(pattern.segments, keySegment{parameter: name})
-		case !literalSegment.MatchString(part):
-			return keyPattern{}, fmt.Errorf("pattern %q has segment %q, which is no literal: a literal is letters, digits, ., _ and -", written, part)
-		default:
-			pattern.segments = append(pattern.segments, keySegment{literal: part})
+		if parameter, ok := strings.CutPrefix(part, ":"); ok {
+			pattern.segments = append(pattern.segments, keySegment{parameter: parameter})
+			continue
 		}
+		pattern.segments = append(pattern.segments, keySegment{literal: part})
 	}
-	return pattern, nil
+	return pattern
 }
 
 func (p keyPattern) parameters() []string {
@@ -63,19 +37,6 @@ func (p keyPattern) parameters() []string {
 		}
 	}
 	return names
-}
-
-func (p keyPattern) overlaps(other keyPattern) bool {
-	if len(p.segments) != len(other.segments) {
-		return false
-	}
-	for i, mine := range p.segments {
-		theirs := other.segments[i]
-		if mine.parameter == "" && theirs.parameter == "" && mine.literal != theirs.literal {
-			return false
-		}
-	}
-	return true
 }
 
 type keyBuilder struct {

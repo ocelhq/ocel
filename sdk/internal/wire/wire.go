@@ -1,4 +1,4 @@
-package binding
+package wire
 
 const (
 	PhaseEnv          = "OCEL_PHASE"
@@ -9,9 +9,5 @@ const (
 	RuntimeAddressEnv = "OCEL_RUNTIME_ADDRESS"
 	LiveDirEnv        = "OCEL_LIVE_DIR"
 	SessionTokenEnv   = "OCEL_SESSION_TOKEN"
-	sdkVersionHeader  = "Ocel-Sdk-Version"
+	SDKVersionHeader  = "Ocel-Sdk-Version"
 )
-
-func Bearer(token string) string {
-	return "Bearer " + token
-}

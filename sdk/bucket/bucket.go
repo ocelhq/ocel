@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"ocel.dev/internal/binding"
+	"ocel.dev/internal/declaration"
 	bucketv1 "ocel.dev/internal/proto/app/bucket/v1"
 	"ocel.dev/internal/proto/app/bucket/v1/bucketv1connect"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
@@ -121,7 +122,7 @@ func New(name string, opts ...Option) *Bucket {
 	for _, opt := range opts {
 		opt.applyBucket(config)
 	}
-	binding.Declare(binding.CallSite(0), &resourcesv1.DeclareRequest{
+	declaration.Declare(declaration.CallSite(0), &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: name},
 		Config:   &resourcesv1.DeclareRequest_Bucket{Bucket: config},
 	})

@@ -14,7 +14,8 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
+	"ocel.dev/internal/declaration"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 )
 
@@ -163,7 +164,7 @@ type Channel[E, P any] struct {
 // [ChannelPublish], [ChannelWildcard] and [Schema] are optional. A declaration outside
 // these rules panics.
 func NewChannel[E, P any](realtime *Realtime, pattern string, opts ...ChannelOption) *Channel[E, P] {
-	source := binding.CallSite(0)
+	source := declaration.CallSite(0)
 	fail := func(format string, args ...any) {
 		panic(fmt.Sprintf("ocel: realtime %q: channel %q declared at %s ", realtime.name, pattern, source) + fmt.Sprintf(format, args...))
 	}
@@ -273,13 +274,13 @@ type realtimeEnvelope struct {
 }
 
 func (c *declaredChannel) encodeEnvelope(wire string, body any) ([]byte, denialCode) {
-	data, err := binding.EncodeJSON(body)
+	data, err := codec.EncodeJSON(body)
 	if err != nil || !c.isValidEvent(data) {
 		return nil, denialInvalidBody
 	}
 	id := make([]byte, 16)
 	_, _ = rand.Read(id)
-	envelope, err := binding.EncodeJSON(realtimeEnvelope{
+	envelope, err := codec.EncodeJSON(realtimeEnvelope{
 		Version:   1,
 		ID:        hex.EncodeToString(id),
 		Channel:   wire,
