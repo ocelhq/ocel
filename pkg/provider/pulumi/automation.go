@@ -498,7 +498,7 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress
 }
 
 func runReportingResourceOperations(setup WorkspaceSpec, progress progress.Log, run func(engineEvents chan<- events.EngineEvent, lines *lineLog) error) error {
-	lines := engineLines(progress)
+	lines := engineLines(progress, setup.Secrets)
 	engineEvents := make(chan events.EngineEvent, 256)
 	traced := drainTrace(engineEvents, resourceLatencyOutlierThreshold, setup.Secrets)
 

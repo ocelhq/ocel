@@ -60,44 +60,28 @@ func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
 }
 
 func (w *wildcards) save(ctx context.Context) error {
-	name := stackrecords.WildcardKey(environment.TierPreview)
-	for range reservationAttempts {
-		entry, stored, err := w.readStored(ctx)
+	return records.Change(ctx, w.keyValues, stackrecords.WildcardKey(environment.TierPreview), func(entry records.Entry) ([]byte, bool, error) {
+		stored, err := decodeWildcard(entry)
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		if !w.recorded.Host.Tunneled {
 			w.recorded.Host.OriginCertificateID = stored.Host.OriginCertificateID
 			w.recorded.Host.OriginCertificateExpiresAt = stored.Host.OriginCertificateExpiresAt
 		}
-		if entry.Value, err = json.Marshal(w.recorded); err != nil {
-			return fmt.Errorf("record %s: %w", name, err)
-		}
-		_, err = w.keyValues.Write(ctx, entry)
-		if errors.Is(err, records.ErrStale) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("record %s: %w", name, err)
-		}
-		return nil
-	}
-	return fmt.Errorf("record %s: it changed under every one of %d attempts", name, reservationAttempts)
+		value, err := json.Marshal(w.recorded)
+		return value, true, err
+	})
 }
 
-func (w *wildcards) readStored(ctx context.Context) (records.Entry, stackrecords.Wildcard, error) {
-	name := stackrecords.WildcardKey(environment.TierPreview)
-	entry, err := records.ReadOrEmpty(ctx, w.keyValues, name)
-	if err != nil {
-		return records.Entry{}, stackrecords.Wildcard{}, fmt.Errorf("read %s: %w", name, err)
-	}
+func decodeWildcard(entry records.Entry) (stackrecords.Wildcard, error) {
 	var stored stackrecords.Wildcard
 	if len(entry.Value) > 0 {
 		if err := json.Unmarshal(entry.Value, &stored); err != nil {
-			return records.Entry{}, stackrecords.Wildcard{}, fmt.Errorf("read %s: %w", name, err)
+			return stackrecords.Wildcard{}, fmt.Errorf("read %s: %w", entry.Key, err)
 		}
 	}
-	return entry, stored, nil
+	return stored, nil
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
@@ -246,8 +230,6 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 
 var errPreviewEntryRenewing = errors.New("another run is renewing the certificate the shared preview entry is answered with")
 
-const reservationAttempts = 8
-
 func (w *wildcards) reserveOriginCertificate(ctx context.Context, issued edge.OriginCertificate) (func(context.Context) error, error) {
 	prior := w.recorded.Host
 	if err := w.swapOriginCertificate(ctx, prior.OriginCertificateID, issued.ID, issued.ExpiresAt); err != nil {
@@ -259,29 +241,22 @@ func (w *wildcards) reserveOriginCertificate(ctx context.Context, issued edge.Or
 }
 
 func (w *wildcards) swapOriginCertificate(ctx context.Context, from, to string, expiresAt time.Time) error {
-	name := stackrecords.WildcardKey(environment.TierPreview)
-	for range reservationAttempts {
-		entry, recorded, err := w.readStored(ctx)
+	err := records.Change(ctx, w.keyValues, stackrecords.WildcardKey(environment.TierPreview), func(entry records.Entry) ([]byte, bool, error) {
+		recorded, err := decodeWildcard(entry)
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		if recorded.Host.OriginCertificateID != from {
-			return fmt.Errorf("%w on %s: deploy again once it finishes", errPreviewEntryRenewing, w.recorded.Hostname())
+			return nil, false, fmt.Errorf("%w on %s: deploy again once it finishes", errPreviewEntryRenewing, w.recorded.Hostname())
 		}
 		recorded.Host.OriginCertificateID, recorded.Host.OriginCertificateExpiresAt = to, expiresAt
-		if entry.Value, err = json.Marshal(recorded); err != nil {
-			return fmt.Errorf("record %s: %w", name, err)
-		}
-		_, err = w.keyValues.Write(ctx, entry)
-		if errors.Is(err, records.ErrStale) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("record %s: %w", name, err)
-		}
-		return nil
+		value, err := json.Marshal(recorded)
+		return value, true, err
+	})
+	if errors.Is(err, records.ErrContended) {
+		return fmt.Errorf("%w on %s: %w", errPreviewEntryRenewing, w.recorded.Hostname(), err)
 	}
-	return fmt.Errorf("%w on %s: its record changed under every one of %d attempts", errPreviewEntryRenewing, w.recorded.Hostname(), reservationAttempts)
+	return err
 }
 
 func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runProgress progress.Log) error {

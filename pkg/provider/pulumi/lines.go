@@ -7,16 +7,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
-func engineLines(progress progress.Log) *lineLog {
+func engineLines(progress progress.Log, secrets []string) *lineLog {
 	if progress == nil {
 		return nil
 	}
-	return &lineLog{log: progress.Debug}
+	return &lineLog{log: progress.Debug, secrets: secrets}
 }
 
 type lineLog struct {
-	log func(string)
-	buf []byte
+	log     func(string)
+	secrets []string
+	buf     []byte
 }
 
 func (w *lineLog) Write(p []byte) (int, error) {
@@ -27,7 +28,7 @@ func (w *lineLog) Write(p []byte) (int, error) {
 			break
 		}
 		if line := strings.TrimRight(string(w.buf[:i]), "\r"); line != "" {
-			w.log(line)
+			w.log(maskSecrets(line, w.secrets))
 		}
 		w.buf = w.buf[i+1:]
 	}
@@ -39,7 +40,7 @@ func (w *lineLog) Flush() {
 		return
 	}
 	if line := strings.TrimRight(string(w.buf), "\r"); line != "" {
-		w.log(line)
+		w.log(maskSecrets(line, w.secrets))
 	}
 	w.buf = nil
 }

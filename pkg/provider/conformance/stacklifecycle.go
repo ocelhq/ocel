@@ -136,10 +136,8 @@ func (l stackLifecycle) provision(t *testing.T, ctx context.Context, spec provid
 	if err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	if l.store != nil {
-		if err := stackrecords.Write(ctx, l.store, l.ref.Tier, l.ref.Project, l.ref.Name, stackrecords.Stack{Kind: provider.StackInfra, Bindings: result.Bindings}); err != nil {
-			t.Fatalf("recording what the release returned, as providerserver does after every Provision() = %v", err)
-		}
+	if err := stackrecords.Write(ctx, l.store, l.ref.Tier, l.ref.Project, l.ref.Name, stackrecords.Stack{Kind: provider.StackInfra, Bindings: result.Bindings}); err != nil {
+		t.Fatalf("recording what the release returned, as providerserver does after every Provision() = %v", err)
 	}
 	return reported.listWrites()
 }
@@ -150,19 +148,14 @@ func (l stackLifecycle) destroy(t *testing.T, ctx context.Context) {
 	if err := l.stacks.Destroy(ctx, provider.StackDestroy{Ref: l.ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
-	if l.store != nil {
-		if err := stackrecords.Forget(ctx, l.store, l.ref.Tier, l.ref.Project, l.ref.Name); err != nil {
-			t.Fatalf("forgetting the stack the teardown took, as providerserver does after every Destroy() = %v", err)
-		}
+	if err := stackrecords.Forget(ctx, l.store, l.ref.Tier, l.ref.Project, l.ref.Name); err != nil {
+		t.Fatalf("forgetting the stack the teardown took, as providerserver does after every Destroy() = %v", err)
 	}
 }
 
 func (l stackLifecycle) snapshot(t *testing.T, ctx context.Context) map[string]string {
 	t.Helper()
 
-	if l.store == nil {
-		return nil
-	}
 	tier, project := l.ref.Tier, l.ref.Project
 	partitions := []records.Partition{
 		stackrecords.ProjectsPartition(tier),

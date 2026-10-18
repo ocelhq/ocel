@@ -109,6 +109,9 @@ func (c *countedImages) Pushed() int {
 
 func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artifacts provider.ArtifactStore, store records.Store, vendorRoots ...records.Root) {
 	t.Helper()
+	if store == nil {
+		t.Fatal("RunStacks needs the records store the stacks write to, or no step that writes records is checked")
+	}
 
 	ctx := context.Background()
 	ref := provider.StackRef{
@@ -222,23 +225,21 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			}
 		}
 
-		if store != nil {
-			recorded := stackrecords.Stack{Kind: provider.StackInfra, Bindings: result.Bindings}
-			if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, recorded); err != nil {
-				t.Fatalf("recording what the release returned, as providerserver does after every Provision() = %v", err)
+		recorded := stackrecords.Stack{Kind: provider.StackInfra, Bindings: result.Bindings}
+		if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, recorded); err != nil {
+			t.Fatalf("recording what the release returned, as providerserver does after every Provision() = %v", err)
+		}
+		defer func() {
+			if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {
+				t.Errorf("forgetting the stack the teardown took = %v", err)
 			}
-			defer func() {
-				if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {
-					t.Errorf("forgetting the stack the teardown took = %v", err)
-				}
-			}()
-			raw, err := records.ReadOrEmpty(ctx, store, stackrecords.StackKey(ref.Tier, ref.Project, ref.Name))
-			if err != nil {
-				t.Fatalf("reading the stack record back = %v", err)
-			}
-			for _, fault := range findRecordedSecrets(raw.Value) {
-				t.Error(fault)
-			}
+		}()
+		raw, err := records.ReadOrEmpty(ctx, store, stackrecords.StackKey(ref.Tier, ref.Project, ref.Name))
+		if err != nil {
+			t.Fatalf("reading the stack record back = %v", err)
+		}
+		for _, fault := range findRecordedSecrets(raw.Value) {
+			t.Error(fault)
 		}
 
 		removal, err := stacks.PlanDestroy(ctx, ref, nil)

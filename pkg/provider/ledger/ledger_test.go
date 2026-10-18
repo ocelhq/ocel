@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -779,15 +778,10 @@ func TestStagedRecordsRoundTrip(t *testing.T) {
 	}
 }
 
-func TestAPointerThatKeepsMovingIsRetriedAfterAJitteredDelayThatGrowsToItsCeiling(t *testing.T) {
+func TestAPointerThatKeepsMovingIsGivenUpOnAsContendedAfterTheSharedRetries(t *testing.T) {
 	l, store := fixture()
 	promoting(t, l, "", "p1")
 	next := staged(t, l, "p2")
-	var waits []time.Duration
-	l.wait = func(_ context.Context, d time.Duration) error {
-		waits = append(waits, d)
-		return nil
-	}
 	var moving func(string)
 	moving = func(key string) {
 		if row, ok := store.rows[key]; ok {
@@ -799,17 +793,7 @@ func TestAPointerThatKeepsMovingIsRetriedAfterAJitteredDelayThatGrowsToItsCeilin
 	}
 	store.beforeWrite = moving
 
-	if _, err := l.Promote(context.Background(), next, "", "p1"); err == nil {
-		t.Fatal("Promote() over a pointer that moved on every attempt = nil, want it to give up")
-	}
-
-	if len(waits) != casAttempts-1 {
-		t.Fatalf("the ledger waited %d times, want once before each of its %d retries", len(waits), casAttempts-1)
-	}
-	for i, waited := range waits {
-		ceiling := min(casMinDelay<<i, casMaxDelay)
-		if waited < ceiling/2 || waited >= ceiling {
-			t.Errorf("retry %d waited %s, want a jittered delay in [%s, %s)", i+1, waited, ceiling/2, ceiling)
-		}
+	if _, err := l.Promote(context.Background(), next, "", "p1"); !errors.Is(err, records.ErrContended) {
+		t.Fatalf("Promote() over a pointer that moved on every attempt = %v, want it given up on as contended", err)
 	}
 }
