@@ -78,8 +78,8 @@ func TestAGatedFrontAnswersEveryConformanceVector(t *testing.T) {
 
 func TestAGatedFrontReadsARotatedGateWithoutARestart(t *testing.T) {
 	up := serveUpstream(t)
-	first := gate.Gate{Key: "first", PasswordMAC: gate.HashPassword("first", "pw")}
-	rotated := gate.Gate{Key: "rotated", PasswordMAC: gate.HashPassword("rotated", "pw")}
+	first := gate.Gate{Key: "first", PasswordHash: gate.HashPassword("pw")}
+	rotated := gate.Gate{Key: "rotated", PasswordHash: gate.HashPassword("pw")}
 	current := &first
 	clock := time.Unix(1700000000, 0)
 	front := gatedFront(t, up, func() ([]byte, error) { return gate.EncodeMounted(current) }, func() time.Time { return clock })
@@ -131,7 +131,7 @@ func TestAGatedFrontWhoseGateWasWithdrawnServesEveryone(t *testing.T) {
 
 func TestAGatedFrontTakesThePasswordOffWhatItAdmits(t *testing.T) {
 	up := serveUpstream(t)
-	held := gate.Gate{Key: "k", PasswordMAC: gate.HashPassword("k", "pw")}
+	held := gate.Gate{Key: "k", PasswordHash: gate.HashPassword("pw")}
 	front := gatedFront(t, up, mountedGate(&held), time.Now)
 	req, _ := http.NewRequest(http.MethodGet, front.URL+"/page", nil)
 	req.SetBasicAuth("anyone", "pw")
@@ -158,7 +158,7 @@ func TestAGatedFrontTakesThePasswordOffWhatItAdmits(t *testing.T) {
 
 func TestAGatedFrontRefusesAWebsocketUpgradeWithNoCredentials(t *testing.T) {
 	up := serveUpstream(t)
-	held := gate.Gate{Key: "k", PasswordMAC: gate.HashPassword("k", "pw")}
+	held := gate.Gate{Key: "k", PasswordHash: gate.HashPassword("pw")}
 	front := gatedFront(t, up, mountedGate(&held), time.Now)
 	req, _ := http.NewRequest(http.MethodGet, front.URL+"/socket", nil)
 	req.Header.Set("Connection", "Upgrade")
@@ -205,7 +205,7 @@ func askAsProbe(t *testing.T, front *httptest.Server, path, token string) *http.
 
 func TestAGatedFrontAnswersAProbeCarryingItsTokenWithTheAppsStatusAlone(t *testing.T) {
 	up := serveUpstream(t)
-	held := gate.Gate{Key: "k", PasswordMAC: gate.HashPassword("k", "pw")}
+	held := gate.Gate{Key: "k", PasswordHash: gate.HashPassword("pw")}
 	front := probedFront(t, up, healthPath, mountedGate(&held))
 
 	resp := askAsProbe(t, front, healthPath, probeToken)
@@ -226,7 +226,7 @@ func TestAGatedFrontRefusesAnUnauthenticatedRequestForTheHealthPath(t *testing.T
 	for name, token := range map[string]string{"no token": "", "a wrong token": "guessed"} {
 		t.Run(name, func(t *testing.T) {
 			up := serveUpstream(t)
-			held := gate.Gate{Key: "k", PasswordMAC: gate.HashPassword("k", "pw")}
+			held := gate.Gate{Key: "k", PasswordHash: gate.HashPassword("pw")}
 			front := probedFront(t, up, "/", mountedGate(&held))
 
 			resp := askAsProbe(t, front, "/", token)
@@ -240,7 +240,7 @@ func TestAGatedFrontRefusesAnUnauthenticatedRequestForTheHealthPath(t *testing.T
 
 func TestAGatedFrontWithNoProbeTokenExemptsNoPath(t *testing.T) {
 	up := serveUpstream(t)
-	held := gate.Gate{Key: "k", PasswordMAC: gate.HashPassword("k", "pw")}
+	held := gate.Gate{Key: "k", PasswordHash: gate.HashPassword("pw")}
 	front := httptest.NewServer(Handler(Options{
 		Upstream:   mustParse(t, up.server.URL),
 		HealthPath: "/",

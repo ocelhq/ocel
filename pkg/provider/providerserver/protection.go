@@ -213,7 +213,7 @@ func withPassword(record stackrecords.GateRecord, password string) (stackrecords
 	}
 	record.Password = password
 	record.Gate.Key = key
-	record.Gate.PasswordMAC = gate.HashPassword(key, password)
+	record.Gate.PasswordHash = gate.HashPassword(password)
 	return record, nil
 }
 
@@ -302,7 +302,7 @@ func (h *handlers) publishProtection(ctx context.Context, p provider.Provider, t
 		published.Error = describeFront(front.Kind()) + " runs no gate, so it answers " + describeProtected(tier, slug) + " to anyone: serve them through an edge that gates"
 		return errGateUnpublished
 	}
-	if err := publish(recordedGate); err != nil {
+	if err := publish(recordedGate, record.Password); err != nil {
 		published.Error = err.Error()
 		return errors.Join(errGateUnpublished, markGatePending(ctx, p, tier, slug))
 	}
@@ -321,24 +321,27 @@ func (h *handlers) publishProtection(ctx context.Context, p provider.Provider, t
 	return nil
 }
 
-func gatePublisher(ctx context.Context, front edge.Edge, state edge.StackState, log progress.Log) func(*gate.Gate) error {
+func gatePublisher(ctx context.Context, front edge.Edge, state edge.StackState, log progress.Log) func(held *gate.Gate, password string) error {
 	hook := front.Hooks().PublishGate
 	if hook == nil || !front.Facts().Gates {
 		return nil
 	}
-	return func(published *gate.Gate) error {
+	return func(held *gate.Gate, password string) error {
 		log.Say("Publishing the " + string(state.Tier) + " gate of " + state.Slug + " to " + describeFront(front.Kind()))
-		return hook(ctx, edge.GatePublication{State: state, Gate: published, Say: log.Say})
+		return hook(ctx, edge.GatePublication{State: state, Gate: gateForEdge(front, held, password), Say: log.Say})
 	}
 }
 
-func settleGate(ctx context.Context, p provider.Provider, tier environment.Tier, slug string, written *gate.Gate, publish func(*gate.Gate) error) error {
+func settleGate(ctx context.Context, p provider.Provider, tier environment.Tier, slug string, written *gate.Gate, publish func(held *gate.Gate, password string) error) error {
 	for range maxGateWrites {
-		var current *gate.Gate
+		var (
+			current  *gate.Gate
+			password string
+		)
 		settled := false
 		err := stackrecords.ChangeGates(ctx, p.KeyValues(), p.Cipher(), tier, func(records map[string]stackrecords.GateRecord) error {
 			record, recorded := records[slug]
-			current = record.GateInForce()
+			current, password = record.GateInForce(), record.Password
 			settled = sameGate(current, written)
 			if recorded {
 				record.Pending = !settled
@@ -352,7 +355,7 @@ func settleGate(ctx context.Context, p provider.Provider, tier environment.Tier,
 		if publish == nil {
 			return errGateUnpublished
 		}
-		if err := publish(current); err != nil {
+		if err := publish(current, password); err != nil {
 			return err
 		}
 		written = current

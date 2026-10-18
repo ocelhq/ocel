@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	recordedGate   = gate.Gate{Key: "k", PasswordMAC: "mac", BypassSecrets: []string{"s"}}
-	productionGate = gate.Gate{Key: "p", PasswordMAC: "production-mac", BypassSecrets: []string{"t"}}
+	recordedGate   = gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string{"s"}}
+	productionGate = gate.Gate{Key: "p", PasswordHash: "production-hash", BypassSecrets: []string{"t"}}
 )
 
 const productionHost = "shop.example.com"

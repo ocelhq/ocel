@@ -48,7 +48,7 @@ const (
 
 type Gate struct {
 	Key           string   `json:"key"`
-	PasswordMAC   string   `json:"passwordMac"`
+	PasswordHash  string   `json:"passwordHash"`
 	BypassSecrets []string `json:"bypassSecrets"`
 	AllowOptions  []string `json:"allowOptions"`
 }
@@ -84,10 +84,6 @@ type Verdict struct {
 	ResponseHeader Header
 }
 
-func HashPassword(key, password string) string {
-	return sign(key, passwordPurpose, password)
-}
-
 func isLogin(method, target string) bool {
 	path, _, _ := strings.Cut(target, "?")
 	return path == LoginPath && (method == methodPost || method == methodGet || method == methodHead)
@@ -99,7 +95,7 @@ func (g Gate) Check(req Request, now time.Time) Verdict {
 	}
 	path, _, _ := strings.Cut(req.Target, "?")
 
-	hasBasic := g.hasPassword(joinHeaderValues(req.Header, "Authorization"))
+	hasBasic := g.hasBasicPassword(joinHeaderValues(req.Header, "Authorization"))
 	hasBypass := g.hasBypassSecret(joinHeaderValues(req.Header, HeaderBypass))
 	hasCookie := g.hasSession(req, now)
 
@@ -122,7 +118,7 @@ func (g Gate) Check(req Request, now time.Time) Verdict {
 }
 
 func (g Gate) checkLogin(req Request, now time.Time) Verdict {
-	if g.hasPassword(joinHeaderValues(req.Header, "Authorization")) {
+	if g.hasBasicPassword(joinHeaderValues(req.Header, "Authorization")) {
 		if req.Method == methodPost {
 			return g.sessionStarted(req.Host, now)
 		}
@@ -134,12 +130,7 @@ func (g Gate) checkLogin(req Request, now time.Time) Verdict {
 	return answerLoginPage("/", true)
 }
 
-func (g Gate) isPassword(password string) bool {
-	return g.PasswordMAC != "" && utf8.ValidString(password) &&
-		hmac.Equal([]byte(HashPassword(g.Key, password)), []byte(g.PasswordMAC))
-}
-
-func (g Gate) hasPassword(authorization string) bool {
+func (g Gate) hasBasicPassword(authorization string) bool {
 	scheme, credentials, found := strings.Cut(authorization, " ")
 	if !found || toLowerASCII(scheme) != "basic" {
 		return false
@@ -149,7 +140,7 @@ func (g Gate) hasPassword(authorization string) bool {
 		return false
 	}
 	_, password, found := strings.Cut(string(decoded), ":")
-	return found && g.isPassword(password)
+	return found && g.HasPassword(password)
 }
 
 func (g Gate) hasBypassSecret(value string) bool {

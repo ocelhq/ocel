@@ -153,7 +153,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 			return stamp
 		}
 
-		if ungated, gated := stampOf(nil), stampOf(&gate.Gate{Key: "k1", PasswordMAC: "m1"}); ungated != gated {
+		if ungated, gated := stampOf(nil), stampOf(&gate.Gate{Key: "k1", PasswordHash: "m1"}); ungated != gated {
 			t.Errorf("stamps = %q, %q, want one: a rotated gate must not redeploy the worker, and one that never reaches the script cannot leave it stale", ungated, gated)
 		}
 	})

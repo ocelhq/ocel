@@ -9,7 +9,7 @@ import {
 } from "@platform/edge-contract/purge";
 import { readCapped } from "./capped-body";
 import type { Env } from "./env";
-import { type EntryExports, openPurgeQueue } from "./exports";
+import { type EntryExports, newPurgeQueuePort } from "./exports";
 import type { RaisedTag } from "./purge-backlog";
 import type { ReleaseScope, TagTimes } from "./purge-times";
 import type { ServedRecord } from "./served-record";
@@ -20,7 +20,8 @@ export const maxPurgeBodyBytes = 512 * 1024;
 
 export type ServedLookup =
   | { kind: "record"; record: Pick<ServedRecord, "edge"> }
-  | { kind: "not-served" };
+  | { kind: "not-served" }
+  | { kind: "forgotten" };
 
 export interface PurgeGatewayPorts {
   slug: string;
@@ -100,7 +101,7 @@ export function answerPurgeOnWorker(
   return answerPurge(request, {
     slug,
     readServed: (isrPrefix) => env.RELEASES.readServedRecord({ slug, isrPrefix }),
-    queue: openPurgeQueue(ctx.exports),
+    queue: newPurgeQueuePort(ctx.exports),
   });
 }
 
@@ -119,7 +120,7 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
     console.error(`ocel: cannot tell whether the release at ${body.isrPrefix} is served`, error);
     return reply(503, "unavailable");
   }
-  if (served.kind === "not-served") return reply(204);
+  if (served.kind !== "record") return reply(204);
 
   const { purgeSecret } = served.record.edge;
   const signature = request.headers.get(purgeSignatureHeader);

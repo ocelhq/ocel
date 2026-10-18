@@ -13,7 +13,7 @@ func TestAConfigRoundTripsEveryGateItHolds(t *testing.T) {
 	t.Parallel()
 
 	gates := map[string]gate.Gate{
-		"shop": {Key: "k 1,2=%", PasswordMAC: "abc", BypassSecrets: []string{"a b", "-", "c,d"}, AllowOptions: []string{"/api", "/é"}},
+		"shop": {Key: "k 1,2=%", PasswordHash: gate.SignPassword("k 1,2=%", "pw"), BypassSecrets: []string{"a b", "-", "c,d"}, AllowOptions: []string{"/api", "/é"}},
 		"blog": {Key: "plain"},
 	}
 	hosts := map[string]string{"pr-1-shop.example.dev": "shop", "pr-2-shop.example.dev": "shop", "main-blog.example.dev": "blog"}
@@ -180,5 +180,17 @@ func TestAConfigErrorNamesTheLineAndFieldButNeverWhatTheyHold(t *testing.T) {
 				t.Errorf("ParseConfig error %q does not name the line it refused", err)
 			}
 		})
+	}
+}
+
+func TestAConfigWhoseGateHoldsAPasswordHashThePluginCannotAffordIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for _, hash := range []string{gate.HashPassword("pw"), "m"} {
+		text := gateplugin.EncodeConfig(map[string]string{"shop.example.dev": "shop"}, map[string]gate.Gate{"shop": {Key: "k", PasswordHash: hash}})
+
+		if _, err := gateplugin.ParseConfig(text); err == nil || !strings.Contains(err.Error(), "password hash") {
+			t.Errorf("ParseConfig of a gate holding %q = %v, want it refused for its password hash", hash, err)
+		}
 	}
 }

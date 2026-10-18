@@ -242,15 +242,16 @@ describe("the PurgeQueue's tag times", () => {
 });
 
 describe("the PurgeQueue retiring a release", () => {
-  const released = (answer: () => Promise<"record" | "not-served">) => ({
+  type Served = "record" | "not-served" | "forgotten";
+  const released = (answer: () => Promise<Served>) => ({
     readServedRecord: async () => {
       const kind = await answer();
-      return kind === "record" ? { kind, record: {} as never } : ({ kind: "not-served" } as const);
+      return kind === "record" ? { kind, record: {} as never } : { kind };
     },
   });
 
   async function raiseThenCheckAnHourOn(
-    answer: () => Promise<"record" | "not-served">,
+    answer: () => Promise<Served>,
   ): Promise<DurableObjectStub<PurgeQueue>> {
     const queue = freshQueue();
     await runInDurableObject(queue, async (instance) => {
@@ -277,6 +278,46 @@ describe("the PurgeQueue retiring a release", () => {
         r1: { purgedAt: 1_800_000_000_500 },
         "r2|a": { purgedAt: 1_800_000_000_000 + RETIREMENT_CHECK_EVERY_MS + 1 },
       });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("forgets every tag time of a release no pointer serves or keeps, leaving no row for it", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(1_800_000_000_000);
+      const queue = await raiseThenCheckAnHourOn(async () => "forgotten");
+
+      expect(await queue.readTimes(["r1", "r1|a", "r1|b"])).toEqual({});
+      await runInDurableObject(queue, async (_instance, state) => {
+        const releases = state.storage.sql
+          .exec<{ release: string }>(`SELECT release FROM recorded_releases ORDER BY release`)
+          .toArray()
+          .map((row) => row.release);
+        expect(releases).toEqual(["r2"]);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("forgets the purge time of a retired release once no pointer keeps it either", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(1_800_000_000_000);
+      let served: Served = "not-served";
+      const queue = await raiseThenCheckAnHourOn(async () => served);
+      expect(Object.keys(await queue.readTimes(["r1"]))).toEqual(["r1"]);
+
+      served = "forgotten";
+      vi.setSystemTime(Date.now() + RETIREMENT_CHECK_EVERY_MS + 1);
+      await queue.raise({ slug: "p1", isrPrefix: "production/p1/web/r2/isr" }, "purge", [
+        { tag: "r2|b", raisedAt: Date.now() },
+      ]);
+      await runDurableObjectAlarm(queue);
+
+      expect(await queue.readTimes(["r1", "r1|a", "r1|b"])).toEqual({});
     } finally {
       vi.useRealTimers();
     }

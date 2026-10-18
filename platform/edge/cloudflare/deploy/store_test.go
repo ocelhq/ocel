@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -291,6 +292,53 @@ func pointerMoveOf(promotionID, pointer string, records ...router.ReleaseRecord)
 		move.Records[record.App] = record
 	}
 	return move
+}
+
+func TestAPointerMoveTellsTheStoreTheReleaseTokenOfEveryReleaseTheLedgerStillKeepsOnThatPointer(t *testing.T) {
+	t.Parallel()
+
+	srv, store := fakeStoreFor(t, "s3cr3t")
+	web1, web2, api1 := keptReleaseOf(t, "a"), keptReleaseOf(t, "b"), keptReleaseOf(t, "c")
+	move := pointerMoveOf("promo-2", "", router.ReleaseRecord{App: "web", Release: web2.String()})
+	move.Kept = []router.Promotion{
+		{PromotionID: "promo-2", Releases: map[string]string{"web": web2.String(), "api": api1.String()}},
+		{PromotionID: "promo-1", Releases: map[string]string{"web": web1.String(), "api": api1.String()}},
+	}
+
+	movePointer(t, &cloudflare{}, testState(srv.URL, "s3cr3t"), move)
+
+	want := []keptRelease{
+		{App: "api", ReleaseToken: api1.Token().String()},
+		{App: "web", ReleaseToken: web2.Token().String()},
+		{App: "web", ReleaseToken: web1.Token().String()},
+	}
+	if got := store.moved()[0].Kept; !slices.Equal(got, want) {
+		t.Errorf("the move kept %v, want %v: the edge knows a release by the token its ISR prefix names, and forgets what it holds for a release no rollback can reach", got, want)
+	}
+}
+
+func TestAPointerMoveWhoseLedgerKeepsAReleaseWithNoTokenServesNothing(t *testing.T) {
+	t.Parallel()
+
+	srv, store := fakeStoreFor(t, "s3cr3t")
+	move := pointerMoveOf("promo-1", "", router.ReleaseRecord{App: "web", Release: keptReleaseOf(t, "a").String()})
+	move.Kept = []router.Promotion{{PromotionID: "promo-1", Releases: map[string]string{"web": "not-a-release"}}}
+
+	err := (routerStack{s: stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t"))}).MovePointer(t.Context(), move, progress.Discard())
+
+	if !errors.As(err, new(router.Unserved)) || len(store.moved()) != 0 {
+		t.Errorf("MovePointer = %v after %d store move(s), want an unserved error and no move: a kept release the store cannot know by its token would be forgotten while a rollback can still serve it", err, len(store.moved()))
+	}
+}
+
+func keptReleaseOf(t *testing.T, hexDigit string) provider.Release {
+	t.Helper()
+	buildID := strings.Repeat(hexDigit, 32)
+	release, err := provider.NewRelease(buildID, "promo-"+hexDigit, "production", "")
+	if err != nil {
+		t.Fatalf("NewRelease(%q) = %v", buildID, err)
+	}
+	return release
 }
 
 func TestAPointerMoveServesItsRecordsOnItsPointerInTheStore(t *testing.T) {

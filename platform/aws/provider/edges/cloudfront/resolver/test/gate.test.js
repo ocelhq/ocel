@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -174,6 +175,16 @@ function distribution(program, cf) {
   };
 }
 
+function signedGate(example) {
+  const gate = { ...vectors.gate, ...example.gate };
+  const password =
+    example.password ??
+    (example.gate && "passwordHash" in example.gate ? undefined : vectors.password);
+  if (password === undefined) return { ...gate, passwordHash: "" };
+  const signature = createHmac("sha256", gate.key).update(`password\n${password}`).digest("hex");
+  return { ...gate, passwordHash: `hmac-sha256$${signature}` };
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(vectors.nowSeconds * 1000);
@@ -189,7 +200,7 @@ describe.each(RESOLVERS)("the %s resolver", (_name, program) => {
       const tier = { host: example.request.host, route: routeOf("production") };
 
       it(example.name, async () => {
-        const gate = { ...vectors.gate, ...example.gate };
+        const gate = signedGate(example);
         const event = eventFor(example.request);
         const { answered } = await admit(program, tier, event, gate, {
           entries: { [example.request.host.toLowerCase()]: tier.route },
@@ -254,13 +265,23 @@ describe.each(RESOLVERS)("the %s resolver", (_name, program) => {
         { key: "" },
         "gate",
         [],
-        { key: "k", passwordMac: "m", bypassSecrets: 1, allowOptions: [] },
+        { key: "k", passwordHash: "m", bypassSecrets: 1, allowOptions: [] },
       ]) {
         const { answered, cf } = await admit(program, tier, eventFor(refused), record);
 
         expect(answered.statusCode).toBe(503);
         expect(cf.origins).toHaveLength(0);
       }
+    });
+
+    it("refuses the right password against an scrypt hash, which it has no CPU to derive", async () => {
+      const basic = `Basic ${btoa(`u:${vectors.password}`)}`;
+      const event = eventFor({ ...refused, headers: { authorization: basic } });
+
+      const { answered, cf } = await admit(program, tier, event, vectors.gate);
+
+      expect(answered.statusCode).toBe(401);
+      expect(cf.origins).toHaveLength(0);
     });
 
     it("refuses a request with no credentials before it reaches any origin", async () => {

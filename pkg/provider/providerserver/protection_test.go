@@ -3,6 +3,7 @@ package providerserver_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -184,8 +185,8 @@ func TestRotatingThePasswordRecordsAndPublishesAGateTheOldPasswordAndSessionsFai
 	if generated == "" || generated == before.Password || after.Password != generated {
 		t.Errorf("the change answered password %q, the record %q, was %q, want a new one in both", generated, after.Password, before.Password)
 	}
-	if after.Gate.Key == before.Gate.Key || after.Gate.PasswordMAC != gate.HashPassword(after.Gate.Key, generated) {
-		t.Errorf("the gate is %+v after the rotation, want a new key and the new password's MAC under it, so every session ends", after.Gate)
+	if after.Gate.Key == before.Gate.Key || !after.Gate.HasPassword(generated) {
+		t.Errorf("the gate is %+v after the rotation, want a new key beside the new password's hash, so every session ends", after.Gate)
 	}
 	if published := lastPublication(t, vendor); published.Gate == nil || published.Gate.Key != after.Gate.Key {
 		t.Errorf("the edge was published %+v, want the rotated gate", published.Gate)
@@ -308,7 +309,7 @@ func TestRevokingABypassSecretRemovesItAndRotatesTheKeyKeepingThePasswordWorking
 	if len(after.Gate.BypassSecrets) != 0 || after.Gate.Key == before.Gate.Key {
 		t.Errorf("the gate is %+v, want the secret gone and a new key so the sessions it opened end", after.Gate)
 	}
-	if after.Gate.PasswordMAC != gate.HashPassword(after.Gate.Key, after.Password) {
+	if !after.Gate.HasPassword(after.Password) {
 		t.Error("the password no longer matches the gate after the key rotated")
 	}
 }
@@ -342,6 +343,25 @@ func TestSyncingPublishesTheRecordedGateAndClearsWhatWasPending(t *testing.T) {
 	}
 	if published := lastPublication(t, vendor); published.Gate == nil || len(published.Gate.BypassSecrets) != 1 {
 		t.Errorf("the sync published %+v, want the recorded gate with the secret created while the edge was down", published.Gate)
+	}
+}
+
+func TestSyncingToAnEdgeThatChecksSignedPasswordsPublishesTheRecordedGateWithItsPasswordSigned(t *testing.T) {
+	client, vendor := protectedPreview(t)
+	relayEdge(vendor).ChecksSignedPasswords(true)
+
+	if result, _, err := publishProtection(t, client); err != nil || !result.GetSuccess() {
+		t.Fatalf("sync = %v, %v, want it to succeed", result, err)
+	}
+
+	record, _ := recordedGateOf(t, vendor, "shop")
+	want := record.Gate
+	want.PasswordHash = gate.SignPassword(record.Gate.Key, record.Password)
+	if published := lastPublication(t, vendor); published.Gate == nil || !reflect.DeepEqual(*published.Gate, want) {
+		t.Fatalf("the sync published %+v, want the recorded gate with its password signed, %+v", published.Gate, want)
+	}
+	if signed := lastPublication(t, vendor).Gate; !signed.HasPassword(record.Password) {
+		t.Error("the published gate refuses the recorded password")
 	}
 }
 
@@ -541,7 +561,7 @@ func TestPublishingWhileAPreviewFunctionIgnoresTheGateWritesTheGateAndFailsNamin
 	if len(published) == 0 {
 		t.Fatal("the edge was published nothing")
 	}
-	if published := published[len(published)-1]; published.Gate == nil || published.Gate.PasswordMAC != gate.HashPassword(published.Gate.Key, changed.GetPassword()) {
+	if published := published[len(published)-1]; published.Gate == nil || !published.Gate.HasPassword(changed.GetPassword()) {
 		t.Errorf("the edge holds %+v, want the rotated gate: every preview that checks it is protected by it", published.Gate)
 	}
 	if result.GetSuccess() || !strings.Contains(result.GetError(), "answer anyone") {

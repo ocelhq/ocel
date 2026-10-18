@@ -310,6 +310,7 @@ func (s *sharedStack) serveDeploymentOn(ctx context.Context, kind router.Kind, d
 		Promotion:   promotion,
 		Records:     records,
 		Hosts:       hosts,
+		Kept:        []router.Promotion{promotion},
 		StillActive: stillKept,
 	}, progress)
 	if moved == nil {

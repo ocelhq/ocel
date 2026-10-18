@@ -52,7 +52,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
 }
 
 function pointerMoveBody(over: Record<string, unknown> = {}) {
-  return JSON.stringify({ promotionId: "promo-1", records: [makeRecord()], ...over });
+  return JSON.stringify({ promotionId: "promo-1", records: [makeRecord()], kept: [], ...over });
 }
 
 async function movePointer(over: Record<string, unknown> = {}) {
@@ -213,7 +213,7 @@ describe("authenticated endpoints", () => {
 
   it("keeps the project's gate for the entry worker to read, and removes it on request", async () => {
     await initialize();
-    const gate = { key: "k", passwordMac: "m", bypassSecrets: [], allowOptions: [] };
+    const gate = { key: "k", passwordHash: "m", bypassSecrets: [], allowOptions: [] };
 
     const before = await SELF.fetch(authedReq("/gate"));
     expect(await before.json()).toEqual({ gate: null });
@@ -270,6 +270,22 @@ describe("authenticated endpoints", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 400 on a pointer move that names no releases it keeps", async () => {
+    await initialize();
+    const res = await SELF.fetch(
+      authedReq("/move-pointer", {
+        method: "POST",
+        body: JSON.stringify({ promotionId: "promo-1", records: [makeRecord()] }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 on a pointer move that keeps a release with no release token", async () => {
+    await initialize();
+    expect((await movePointer({ kept: [{ app: "web" }] })).status).toBe(400);
+  });
+
   it("returns 404 for an unknown route", async () => {
     await initialize();
     const res = await SELF.fetch(authedReq("/nope"));
@@ -285,7 +301,7 @@ describe("authenticated endpoints", () => {
 describe("service-binding read path", () => {
   it("needs no secret to resolve the served record", async () => {
     const store = env.RELEASES_DO.get(env.RELEASES_DO.idFromName(SLUG));
-    await store.movePointer({ promotionId: "promo-1", records: [makeRecord()] });
+    await store.movePointer({ promotionId: "promo-1", records: [makeRecord()], kept: [] });
 
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.readPointerRecord({ slug: SLUG, app: "web" })).toEqual({
@@ -324,7 +340,7 @@ describe("service-binding read path", () => {
 
   it("resolves the app the pointer serves when the caller omits it", async () => {
     const store = env.RELEASES_DO.get(env.RELEASES_DO.idFromName(SLUG));
-    await store.movePointer({ promotionId: "promo-1", records: [makeRecord()] });
+    await store.movePointer({ promotionId: "promo-1", records: [makeRecord()], kept: [] });
 
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.readPointerRecord({ slug: SLUG })).toEqual({
@@ -339,6 +355,7 @@ describe("service-binding read path", () => {
     await store.movePointer({
       promotionId: "promo-1",
       records: [makeRecord(), makeRecord({ app: "admin", release: "deploy-9" })],
+      kept: [],
     });
 
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);

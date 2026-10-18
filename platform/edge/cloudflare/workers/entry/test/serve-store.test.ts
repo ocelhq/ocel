@@ -79,6 +79,7 @@ interface Harness {
   settled: () => Promise<void>;
   originCalls: Request[];
   timeReads: string[][];
+  queueNames: string[];
   fetchOrigin: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
@@ -96,6 +97,7 @@ function harness(
 ): Harness {
   const pending: Promise<unknown>[] = [];
   const timeReads: string[][] = [];
+  const queueNames: string[] = [];
   const originCalls: Request[] = [];
   const { times = {}, originStatus = 200 } = options;
   const ctx = Object.assign(createExecutionContext(), {
@@ -103,10 +105,11 @@ function harness(
     waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
     exports: {
       PurgeQueue: options.queues ?? {
-        getByName: () => ({
+        getByName: (name: string) => ({
           raise: async () => {},
           record: async () => {},
           readTimes: async (tags: string[]) => {
+            queueNames.push(name);
             timeReads.push(tags);
             if (times instanceof Error) throw times;
             return times;
@@ -143,6 +146,7 @@ function harness(
     serve,
     originCalls,
     timeReads,
+    queueNames,
     settled: async () => void (await Promise.all(pending)),
     request,
     fetchOrigin: async <T>(run: () => Promise<T>) =>
@@ -183,6 +187,19 @@ afterEach(() => {
 });
 
 describe("Serve answering a miss from the durable store", () => {
+  it("reads the tag times from the purge queue of the project its render names", async () => {
+    await seed(storedEntry());
+    const h = harness({ release: { slug: "p7" } }) as Used;
+
+    await h.fetchOrigin(async () => {
+      await h.serve.fetch(h.request());
+      await h.settled();
+    });
+
+    expect(h.queueNames.length).toBeGreaterThan(0);
+    expect(new Set(h.queueNames)).toEqual(new Set(["p7"]));
+  });
+
   it("answers the stored page without calling the origin, for Workers Cache to revalidate on the next read", async () => {
     await seed(storedEntry());
     const h = harness() as Used;

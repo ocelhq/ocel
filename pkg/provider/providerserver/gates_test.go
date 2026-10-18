@@ -24,14 +24,14 @@ import (
 
 var shopGate = gate.Gate{
 	Key:           "shop-gate-key",
-	PasswordMAC:   gate.HashPassword("shop-gate-key", shopPassword),
+	PasswordHash:  gate.HashPassword(shopPassword),
 	BypassSecrets: []string{"shop-bypass"},
 	AllowOptions:  []string{"/api/"},
 }
 
 const shopPassword = "correct horse battery"
 
-var otherGate = gate.Gate{Key: "other-gate-key", PasswordMAC: "other-password-mac", BypassSecrets: []string{}, AllowOptions: []string{}}
+var otherGate = gate.Gate{Key: "other-gate-key", PasswordHash: "other-password-hash", BypassSecrets: []string{}, AllowOptions: []string{}}
 
 var recordedGates = map[string]stackrecords.GateRecord{
 	"shop":  {Gate: shopGate, Password: shopPassword, Enabled: true},
@@ -109,6 +109,27 @@ func TestAProtectedPreviewDeployHandsItsStackTheGateRecordedForItsProject(t *tes
 	}
 }
 
+func TestAProtectedPreviewDeployHandsAnEdgeThatChecksSignedPasswordsTheGateWithItsPasswordSigned(t *testing.T) {
+	builtProject(t)
+	client, vendor := contractServed(t, "1.0.0")
+	previewBootstrapped(t, client)
+	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
+	seedGates(t, vendor, recordedGates)
+	relayEdge(vendor).ChecksSignedPasswords(true)
+	if result, _ := deploy(t, client, protecting(previewDeployRequest())); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	want := shopGate
+	want.PasswordHash = gate.SignPassword(shopGate.Key, shopPassword)
+	if got := onlyStack(t, vendor).Gate; got == nil || !reflect.DeepEqual(*got, want) {
+		t.Errorf("Gate = %+v, want the recorded gate with its password signed, %+v: the edge cannot afford to derive scrypt", got, want)
+	}
+	if record, _ := recordedGateOf(t, vendor, "shop"); record.Gate.PasswordHash != shopGate.PasswordHash {
+		t.Errorf("the recorded gate holds %q, want the scrypt hash it held, %q", record.Gate.PasswordHash, shopGate.PasswordHash)
+	}
+}
+
 func TestAProtectedPreviewDeployOnTheSharedWildcardHandsItsStackTheGateToo(t *testing.T) {
 	vendor := gatedPreviewDeployed(t, previewDeployRequest())
 
@@ -160,8 +181,8 @@ func TestTheFirstProtectedPreviewDeployCreatesTheGateAndShowsNoPassword(t *testi
 	if !held {
 		t.Fatal("no gate is recorded for shop after a protected preview deploy")
 	}
-	if len(record.Password) < 12 || record.Gate.Key == "" || record.Gate.PasswordMAC != gate.HashPassword(record.Gate.Key, record.Password) {
-		t.Errorf("the recorded gate is %+v, want a generated password of 12 or more characters and its MAC under a random key", record)
+	if len(record.Password) < 12 || record.Gate.Key == "" || !record.Gate.HasPassword(record.Password) {
+		t.Errorf("the recorded gate is %+v, want a generated password of 12 or more characters, its hash and a random key", record)
 	}
 	if got := onlyStack(t, vendor).Gate; got == nil || got.Key != record.Gate.Key {
 		t.Errorf("the stack received %+v, want the gate just created", got)

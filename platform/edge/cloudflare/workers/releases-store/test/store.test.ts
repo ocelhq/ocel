@@ -33,6 +33,7 @@ function makePointerMove(over: Partial<PointerMove> = {}): PointerMove {
   return {
     promotionId: "promo-1",
     records: [makeRecord()],
+    kept: [],
     ...over,
   };
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func (r *Stacks) Preflight(ctx context.Context, pre provider.DeployPreflight) error {
@@ -24,7 +23,7 @@ func (r *Stacks) Preflight(ctx context.Context, pre provider.DeployPreflight) er
 }
 
 func checkEdgeReaderBootstrapped(cfg Config, front edge.Kind) error {
-	if front != cloudflare.Kind {
+	if cfg.Edge == nil || !cfg.Edge.Facts().RunsCode {
 		return nil
 	}
 	switch {

@@ -9,6 +9,11 @@ declare module "cloudflare:test" {
 
 const WEB_PREFIX = "production/p1/web/r0a1b2c3d/isr";
 const PREVIEW_PREFIX = "pr-42/p1/web/r0000000a/isr";
+const OLDER_PREFIX = "production/p1/web/r00000001/isr";
+const NEWER_PREFIX = "production/p1/web/r00000002/isr";
+const WEB_KEPT = { app: "web", releaseToken: "r0a1b2c3d" };
+const OLDER_KEPT = { app: "web", releaseToken: "r00000001" };
+const NEWER_KEPT = { app: "web", releaseToken: "r00000002" };
 
 let stores = 0;
 
@@ -34,7 +39,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
 }
 
 function makePointerMove(over: Partial<PointerMove> = {}): PointerMove {
-  return { promotionId: "promo-1", records: [makeRecord()], ...over };
+  return { promotionId: "promo-1", records: [makeRecord()], kept: [], ...over };
 }
 
 describe("readServedRecord", () => {
@@ -82,8 +87,94 @@ describe("readServedRecord", () => {
     expect(await store.readServedRecord("build-1~fp1")).toEqual({ kind: "not-served" });
   });
 
-  it("returns not-served for a release no pointer serves", async () => {
-    expect(await storeStub().readServedRecord(WEB_PREFIX)).toEqual({ kind: "not-served" });
+  it("answers forgotten for a release no pointer serves or keeps", async () => {
+    expect(await storeStub().readServedRecord(WEB_PREFIX)).toEqual({ kind: "forgotten" });
+  });
+
+  it("answers not-served for a release no pointer serves but one still keeps", async () => {
+    const store = storeStub();
+    await store.movePointer(
+      makePointerMove({
+        records: [makeRecord({ release: "build-2~fp2", isrPrefix: OLDER_PREFIX })],
+        kept: [WEB_KEPT, OLDER_KEPT],
+      }),
+    );
+
+    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "not-served" });
+  });
+
+  it("knows a kept release by its app as well as its release token", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove({ kept: [WEB_KEPT] }));
+
+    expect(await store.readServedRecord("production/p1/api/r0a1b2c3d/isr")).toEqual({
+      kind: "forgotten",
+    });
+  });
+
+  it("forgets a release the next move on its pointer no longer keeps", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove({ kept: [WEB_KEPT, OLDER_KEPT] }));
+    await store.movePointer(
+      makePointerMove({
+        promotionId: "promo-2",
+        replaces: "promo-1",
+        records: [makeRecord({ release: "build-2~fp2", isrPrefix: NEWER_PREFIX })],
+        kept: [NEWER_KEPT, WEB_KEPT],
+      }),
+    );
+
+    expect(await store.readServedRecord(OLDER_PREFIX)).toEqual({ kind: "forgotten" });
+    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "not-served" });
+  });
+
+  it("keeps a release while another pointer still keeps it", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove({ kept: [WEB_KEPT] }));
+    await store.movePointer(
+      makePointerMove({ promotionId: "promo-preview", pointer: "pr-42", kept: [WEB_KEPT] }),
+    );
+    await store.movePointer(
+      makePointerMove({
+        promotionId: "promo-2",
+        replaces: "promo-1",
+        records: [makeRecord({ release: "build-2~fp2", isrPrefix: NEWER_PREFIX })],
+        kept: [NEWER_KEPT],
+      }),
+    );
+    await store.removePointer("pr-42");
+
+    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "forgotten" });
+  });
+
+  it("forgets every release a removed pointer kept", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove({ pointer: "pr-42", kept: [WEB_KEPT, OLDER_KEPT] }));
+
+    await store.removePointer("pr-42");
+
+    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "forgotten" });
+    expect(await store.readServedRecord(OLDER_PREFIX)).toEqual({ kind: "forgotten" });
+  });
+
+  it("forgets every release once the store is destroyed", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove({ kept: [WEB_KEPT, OLDER_KEPT] }));
+
+    await store.destroy();
+
+    expect(await store.readServedRecord(OLDER_PREFIX)).toEqual({ kind: "forgotten" });
+  });
+
+  it("keeps the releases a move kept when the move is stale", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove({ kept: [WEB_KEPT, OLDER_KEPT] }));
+
+    await store.movePointer(
+      makePointerMove({ promotionId: "promo-3", replaces: "promo-2", kept: [NEWER_KEPT] }),
+    );
+
+    expect(await store.readServedRecord(OLDER_PREFIX)).toEqual({ kind: "not-served" });
   });
 
   it("stops returning a release once its pointer moves on", async () => {
@@ -94,20 +185,12 @@ describe("readServedRecord", () => {
         promotionId: "promo-2",
         replaces: "promo-1",
         records: [makeRecord({ release: "build-2~fp2", isrPrefix: PREVIEW_PREFIX })],
+        kept: [WEB_KEPT],
       }),
     );
 
     expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "not-served" });
     expect(await store.readServedRecord(PREVIEW_PREFIX)).toMatchObject({ kind: "record" });
-  });
-
-  it("stops returning a release once its pointer is removed", async () => {
-    const store = storeStub();
-    await store.movePointer(makePointerMove({ pointer: "pr-42" }));
-
-    await store.removePointer("pr-42");
-
-    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "not-served" });
   });
 
   it("is reachable through the entrypoint the entry worker binds, by project and ISR prefix", async () => {
@@ -120,7 +203,7 @@ describe("readServedRecord", () => {
       record: makeRecord(),
     });
     expect(await entry.readServedRecord({ slug, isrPrefix: PREVIEW_PREFIX })).toEqual({
-      kind: "not-served",
+      kind: "forgotten",
     });
   });
 });

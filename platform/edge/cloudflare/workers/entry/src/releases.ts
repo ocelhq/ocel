@@ -12,7 +12,10 @@ export type PointerRecordResult =
   | { kind: "record"; release: string; record: StoredRecord }
   | { kind: "dangling"; release: string };
 
-export type ServedRecordResult = { kind: "record"; record: StoredRecord } | { kind: "not-served" };
+export type ServedRecordResult =
+  | { kind: "record"; record: StoredRecord }
+  | { kind: "not-served" }
+  | { kind: "forgotten" };
 
 export interface ReleasesBinding {
   readServedRecord(args: { slug: string; isrPrefix: string }): Promise<ServedRecordResult>;

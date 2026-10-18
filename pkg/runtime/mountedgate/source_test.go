@@ -22,7 +22,7 @@ func TestAGateIsReadFromTheMountedFileAgainOnceTheCacheLapses(t *testing.T) {
 	t.Parallel()
 
 	reads := 0
-	contents := `{"key":"first","passwordMac":"m"}`
+	contents := `{"key":"first","passwordHash":"m"}`
 	clk := &clock{at: time.Unix(1700000000, 0)}
 	source := mountedgate.New(func() ([]byte, error) { reads++; return []byte(contents), nil }, clk.now)
 
@@ -35,7 +35,7 @@ func TestAGateIsReadFromTheMountedFileAgainOnceTheCacheLapses(t *testing.T) {
 		t.Errorf("read the mount %d times inside the cache window, want 1", reads)
 	}
 
-	contents = `{"key":"rotated","passwordMac":"m"}`
+	contents = `{"key":"rotated","passwordHash":"m"}`
 	clk.at = clk.at.Add(mountedgate.CacheFor)
 	if held, err := source.Current(); err != nil || held == nil || held.Key != "rotated" {
 		t.Errorf("Current after the cache lapsed = %+v, %v, want the rotated gate", held, err)
@@ -51,7 +51,7 @@ func TestAMountThatCannotBeReadIsAnErrorAndRecoversWhenItCan(t *testing.T) {
 		if failure != nil {
 			return nil, failure
 		}
-		return []byte(`{"key":"k","passwordMac":"m"}`), nil
+		return []byte(`{"key":"k","passwordHash":"m"}`), nil
 	}, clk.now)
 
 	if held, err := source.Current(); err == nil || held != nil {
@@ -88,7 +88,7 @@ func TestTheEnvironmentNamesTheMountedFileAndTheServiceIsGatedFromIt(t *testing.
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "gate")
-	if err := os.WriteFile(path, []byte(`{"key":"k","passwordMac":"m"}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"key":"k","passwordHash":"m"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -108,7 +108,7 @@ func TestTheEnvironmentNamesTheMountedFileAndTheServiceIsGatedFromIt(t *testing.
 func TestAnInlineGateIsTheGateWhenNoFileIsNamed(t *testing.T) {
 	t.Parallel()
 
-	source, kept := mountedgate.FromEnv([]string{gate.MountedInlineVar + `={"key":"inline","passwordMac":"m"}`})
+	source, kept := mountedgate.FromEnv([]string{gate.MountedInlineVar + `={"key":"inline","passwordHash":"m"}`})
 
 	if len(kept) != 0 {
 		t.Errorf("kept = %v, want the gate withheld from the app", kept)
@@ -123,7 +123,7 @@ func TestAReadThatHangsFailsClosedOnceItsTimeoutPasses(t *testing.T) {
 
 	unblock := make(chan struct{})
 	t.Cleanup(func() { close(unblock) })
-	source := mountedgate.New(func() ([]byte, error) { <-unblock; return []byte(`{"key":"k","passwordMac":"m"}`), nil }, time.Now)
+	source := mountedgate.New(func() ([]byte, error) { <-unblock; return []byte(`{"key":"k","passwordHash":"m"}`), nil }, time.Now)
 	source.SetReadTimeout(20 * time.Millisecond)
 
 	answered := make(chan error, 1)
@@ -153,7 +153,7 @@ func TestRequestsThatArriveDuringARefreshShareOneRead(t *testing.T) {
 	source := mountedgate.New(func() ([]byte, error) {
 		reads.Add(1)
 		<-unblock
-		return []byte(`{"key":"k","passwordMac":"m"}`), nil
+		return []byte(`{"key":"k","passwordHash":"m"}`), nil
 	}, time.Now)
 	source.SetReadTimeout(5 * time.Second)
 
@@ -191,7 +191,7 @@ func TestAReadThatTimedOutServesItsGateOnceItFinishes(t *testing.T) {
 	t.Parallel()
 
 	unblock := make(chan struct{})
-	source := mountedgate.New(func() ([]byte, error) { <-unblock; return []byte(`{"key":"k","passwordMac":"m"}`), nil }, time.Now)
+	source := mountedgate.New(func() ([]byte, error) { <-unblock; return []byte(`{"key":"k","passwordHash":"m"}`), nil }, time.Now)
 	source.SetReadTimeout(20 * time.Millisecond)
 
 	if _, err := source.Current(); !errors.Is(err, mountedgate.ErrReadTimedOut) {

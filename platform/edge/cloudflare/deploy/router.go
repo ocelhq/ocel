@@ -64,6 +64,10 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
+	kept, err := listKeptReleases(move.Kept)
+	if err != nil {
+		return router.Unserved{Err: err}
+	}
 	for attempt := range moveAttempts {
 		if attempt > 0 {
 			if err := waitBeforeRetry(ctx, storeRetryDelay(nil, attempt-1, retryJitter())); err != nil {
@@ -83,6 +87,7 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 			PromotionID: move.Promotion.PromotionID,
 			Records:     records,
 			Labels:      listPointerLabels(move.Hosts),
+			Kept:        kept,
 		})
 		if err != nil || !stale {
 			return err

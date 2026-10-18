@@ -66,12 +66,39 @@ describe("the times the PurgeQueue keeps for the tags raised", () => {
       times.record(r1, "invalidate", [{ tag: "r1|b", raisedAt: 8 }]);
       times.record(r10, "purge", [{ tag: "r10|a", raisedAt: 3 }]);
 
-      times.retire("r1");
+      times.retire("r1", Date.now() + 10);
 
       expect(times.read(["r1", "r1|a", "r1|b", "r10|a"])).toEqual({
         r1: { purgedAt: 8 },
         "r10|a": { purgedAt: 3 },
       });
+      expect(times.readReleasesCheckedBefore(Date.now() + 1, 10)).toEqual([r10]);
+    });
+  });
+
+  it("checks a retired release again once its next check is due", async () => {
+    await runInDurableObject(freshQueue(), async (_instance, state) => {
+      const times = newSqliteTagTimes(state.storage);
+      times.record(r1, "purge", [{ tag: "r1|a", raisedAt: 5 }]);
+      const checkedAt = Date.now() + 10;
+
+      times.retire("r1", checkedAt);
+
+      expect(times.readReleasesCheckedBefore(checkedAt + 1, 10)).toEqual([r1]);
+    });
+  });
+
+  it("forgets every time of a release, its tags' and its own, and leaves other releases alone", async () => {
+    await runInDurableObject(freshQueue(), async (_instance, state) => {
+      const times = newSqliteTagTimes(state.storage);
+      times.record(r1, "purge", [{ tag: "r1|a", raisedAt: 5 }]);
+      times.retire("r1", Date.now());
+      times.record(r1, "invalidate", [{ tag: "r1|b", raisedAt: 8 }]);
+      times.record(r10, "purge", [{ tag: "r10|a", raisedAt: 3 }]);
+
+      times.forget("r1");
+
+      expect(times.read(["r1", "r1|a", "r1|b", "r10|a"])).toEqual({ "r10|a": { purgedAt: 3 } });
       expect(times.readReleasesCheckedBefore(Date.now() + 1, 10)).toEqual([r10]);
     });
   });

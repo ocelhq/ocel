@@ -39,10 +39,13 @@ function bindingHolding(gates: Record<string, string | Error>): ReleasesBinding 
   };
 }
 
+let passwordHashed: Promise<string> | undefined;
+
 async function gateRecord(over: Record<string, unknown> = {}) {
+  passwordHashed ??= hashPassword(PASSWORD);
   return {
     key: GATE_KEY,
-    passwordMac: await hashPassword(GATE_KEY, PASSWORD),
+    passwordHash: await passwordHashed,
     bypassSecrets: [BYPASS, "bypass-secret-two"],
     allowOptions: ["/api/"],
     ...over,
@@ -441,7 +444,7 @@ describe("the gate on a project's production worker", () => {
   it("does not admit the preview password", async () => {
     const productionGate = await gateRecord({
       key: "production-key",
-      passwordMac: await hashPassword("production-key", "production password"),
+      passwordHash: await hashPassword("production password"),
       bypassSecrets: [],
     });
     const env = await productionEnv({
@@ -506,7 +509,7 @@ describe("the gate on the shared preview entry", () => {
   it("does not admit another key's password to a project's preview", async () => {
     const other = await gateRecord({
       key: "other-key",
-      passwordMac: await hashPassword("other-key", "x"),
+      passwordHash: await hashPassword("x"),
     });
     const env = await globalEnv({ RELEASES: bindingHolding({ shop: JSON.stringify(other) }) });
 
@@ -571,7 +574,7 @@ describe("a gate published to the releases store takes effect while the worker r
     held = JSON.stringify(
       await gateRecord({
         key: "rotated",
-        passwordMac: await hashPassword("rotated", PASSWORD),
+        passwordHash: await hashPassword(PASSWORD),
       }),
     );
 

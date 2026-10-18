@@ -626,7 +626,7 @@ describe("Serve fetching from the origin", () => {
   });
 
   describe("an origin response announcing a purge", () => {
-    function serveRaising(raised: { mode: string; tags: { tag: string }[] }[]): {
+    function serveRaising(raised: { queue: string; mode: string; tags: { tag: string }[] }[]): {
       serve: Serve;
       settled: () => Promise<void>;
     } {
@@ -636,9 +636,9 @@ describe("Serve fetching from the origin", () => {
         waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
         exports: {
           PurgeQueue: {
-            getByName: () => ({
+            getByName: (queue: string) => ({
               raise: async (_scope: unknown, mode: string, tags: { tag: string }[]) => {
-                raised.push({ mode, tags });
+                raised.push({ queue, mode, tags });
               },
             }),
           },
@@ -662,7 +662,7 @@ describe("Serve fetching from the origin", () => {
       );
 
     it("never stores the announcement with the page", async () => {
-      const raised: { mode: string; tags: { tag: string }[] }[] = [];
+      const raised: { queue: string; mode: string; tags: { tag: string }[] }[] = [];
       const { serve, settled } = serveRaising(raised);
 
       const response = await withGlobalFetch(announcing().fetch, () =>
@@ -674,16 +674,18 @@ describe("Serve fetching from the origin", () => {
       expect(response.headers.get("cloudflare-cdn-cache-control")).toContain("max-age=15");
     });
 
-    it("raises the announced tags on the purge queue behind the response", async () => {
-      const raised: { mode: string; tags: { tag: string }[] }[] = [];
+    it("raises the announced tags on the purge queue of the render's project behind the response", async () => {
+      const raised: { queue: string; mode: string; tags: { tag: string }[] }[] = [];
       const { serve, settled } = serveRaising(raised);
 
       await withGlobalFetch(announcing().fetch, () => serve.fetch(originRequest("blog/a")));
       await settled();
 
-      expect(raised.map(({ mode, tags }) => [mode, tags.map(({ tag }) => tag)])).toEqual([
-        ["purge", ["r1a2b3c4d|a"]],
-        ["invalidate", ["r1a2b3c4d|b"]],
+      expect(
+        raised.map(({ queue, mode, tags }) => [queue, mode, tags.map(({ tag }) => tag)]),
+      ).toEqual([
+        ["p1", "purge", ["r1a2b3c4d|a"]],
+        ["p1", "invalidate", ["r1a2b3c4d|b"]],
       ]);
     });
   });

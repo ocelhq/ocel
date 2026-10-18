@@ -36,7 +36,7 @@ func TestBypassSecretsAreCreatedListedByIDAndRevoked(t *testing.T) {
 	if _, stderr, err := executePreview(t, project, "", "bypass", "revoke", id); err != nil {
 		t.Fatalf("revoke: %v; stderr=%s", err, stderr)
 	}
-	if gate := recorded(t, project).Gate; len(gate.BypassSecrets) != 0 || gate.PasswordMAC == "" {
+	if gate := recorded(t, project).Gate; len(gate.BypassSecrets) != 0 || gate.PasswordHash == "" {
 		t.Errorf("the recorded gate = %+v, want the password kept and no bypass secret", gate)
 	}
 }

@@ -3,12 +3,25 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { authorized, bearer } from "./auth";
 import type { Env } from "./env";
 import { ReleasesStore } from "./releases-do";
-import type { PointerMove, PointerRecordResult, ServedRecordResult } from "./store";
+import type { KeptRelease, PointerMove, PointerRecordResult, ServedRecordResult } from "./store";
 
 export { ReleasesStore };
 
 function stub(env: Env, slug: string) {
   return env.RELEASES_DO.get(env.RELEASES_DO.idFromName(slug));
+}
+
+function isKeptReleases(kept: unknown): kept is KeptRelease[] {
+  return (
+    Array.isArray(kept) &&
+    kept.every(
+      (release: Partial<KeptRelease> | null) =>
+        typeof release?.app === "string" &&
+        release.app !== "" &&
+        typeof release.releaseToken === "string" &&
+        release.releaseToken !== "",
+    )
+  );
 }
 
 async function readJson<T>(request: Request): Promise<T | undefined> {
@@ -52,7 +65,7 @@ export default class extends WorkerEntrypoint<Env> {
 
     if (request.method === "POST" && sub === "/move-pointer") {
       const body = await readJson<PointerMove>(request);
-      if (!body?.promotionId || !Array.isArray(body.records)) {
+      if (!body?.promotionId || !Array.isArray(body.records) || !isKeptReleases(body.kept)) {
         return new Response("Bad Request", { status: 400 });
       }
       const outcome = await store.movePointer(body);

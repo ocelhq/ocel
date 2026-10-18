@@ -16,14 +16,16 @@ var gateVectors []byte
 
 type gateVector struct {
 	NowSeconds int64      `json:"nowSeconds"`
+	Password   string     `json:"password"`
 	Gate       gate.Gate  `json:"gate"`
 	Cases      []gateCase `json:"cases"`
 }
 
 type gateCase struct {
-	Name    string          `json:"name"`
-	Gate    json.RawMessage `json:"gate"`
-	Request struct {
+	Name     string          `json:"name"`
+	Password string          `json:"password"`
+	Gate     json.RawMessage `json:"gate"`
+	Request  struct {
 		Method  string                  `json:"method"`
 		Host    string                  `json:"host"`
 		Target  string                  `json:"target"`
@@ -66,6 +68,18 @@ func RunGate(t *testing.T) {
 func RunGateWith(t *testing.T, check GateCheck) {
 	t.Helper()
 
+	runGateVectors(t, false, check)
+}
+
+func RunSignedGateWith(t *testing.T, check GateCheck) {
+	t.Helper()
+
+	runGateVectors(t, true, check)
+}
+
+func runGateVectors(t *testing.T, signed bool, check GateCheck) {
+	t.Helper()
+
 	var vectors gateVector
 	if err := json.Unmarshal(gateVectors, &vectors); err != nil {
 		t.Fatalf("the gate vectors do not parse: %v", err)
@@ -81,6 +95,9 @@ func RunGateWith(t *testing.T, check GateCheck) {
 				if err := json.Unmarshal(example.Gate, &held); err != nil {
 					t.Fatalf("the case's gate does not parse: %v", err)
 				}
+			}
+			if signed {
+				held.PasswordHash = signedHash(t, vectors.Password, example, held)
 			}
 			header := gate.Header{}
 			for name, values := range example.Request.Headers {
@@ -145,4 +162,23 @@ func RunGateWith(t *testing.T, check GateCheck) {
 			}
 		})
 	}
+}
+
+func signedHash(t *testing.T, password string, example gateCase, held gate.Gate) string {
+	t.Helper()
+	var named struct {
+		PasswordHash *string `json:"passwordHash"`
+	}
+	if len(example.Gate) > 0 {
+		if err := json.Unmarshal(example.Gate, &named); err != nil {
+			t.Fatalf("the case's gate does not parse: %v", err)
+		}
+	}
+	switch {
+	case example.Password != "":
+		return gate.SignPassword(held.Key, example.Password)
+	case named.PasswordHash != nil:
+		return ""
+	}
+	return gate.SignPassword(held.Key, password)
 }

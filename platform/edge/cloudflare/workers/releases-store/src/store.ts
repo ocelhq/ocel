@@ -1,3 +1,4 @@
+import { readReleaseToken } from "@platform/edge-contract/purge";
 import type { ReleaseRecord } from "@platform/edge-contract/release-record";
 
 export interface SqlStore {
@@ -16,6 +17,12 @@ export interface PointerMove {
   promotionId: string;
   records: StoredRecord[];
   labels?: ServedLabel[];
+  kept: KeptRelease[];
+}
+
+export interface KeptRelease {
+  app: string;
+  releaseToken: string;
 }
 
 export interface ServedLabel {
@@ -70,7 +77,14 @@ export function ensureSchema(store: SqlStore): void {
        asset_prefix TEXT NOT NULL,
        seq INTEGER NOT NULL,
        PRIMARY KEY (pointer, app, build_id)
-     );`,
+     );
+     CREATE TABLE IF NOT EXISTS kept (
+       pointer TEXT NOT NULL,
+       app TEXT NOT NULL,
+       release_token TEXT NOT NULL,
+       PRIMARY KEY (pointer, app, release_token)
+     );
+     CREATE INDEX IF NOT EXISTS kept_release ON kept (app, release_token);`,
   );
 }
 
@@ -127,6 +141,15 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
         served.label,
         pointer,
         served.app,
+      );
+    }
+    store.sql.exec(`DELETE FROM kept WHERE pointer = ?`, pointer);
+    for (const kept of move.kept) {
+      store.sql.exec(
+        `INSERT OR IGNORE INTO kept (pointer, app, release_token) VALUES (?, ?, ?)`,
+        pointer,
+        kept.app,
+        kept.releaseToken,
       );
     }
     store.sql.exec(
@@ -207,6 +230,7 @@ export function removePointer(store: SqlStore, pointer: string): void {
     store.sql.exec(`DELETE FROM served WHERE pointer = ?`, pointer);
     store.sql.exec(`DELETE FROM pointers WHERE name = ?`, pointer);
     store.sql.exec(`DELETE FROM labels WHERE pointer = ?`, pointer);
+    store.sql.exec(`DELETE FROM kept WHERE pointer = ?`, pointer);
   });
 }
 
@@ -273,7 +297,10 @@ export function readPointerRecord(
   return selectServedResult(rows, app, knownRelease);
 }
 
-export type ServedRecordResult = { kind: "record"; record: StoredRecord } | { kind: "not-served" };
+export type ServedRecordResult =
+  | { kind: "record"; record: StoredRecord }
+  | { kind: "not-served" }
+  | { kind: "forgotten" };
 
 export function readServedRecord(store: SqlStore, isrPrefix: string): ServedRecordResult {
   const row = store.sql
@@ -282,8 +309,14 @@ export function readServedRecord(store: SqlStore, isrPrefix: string): ServedReco
       isrPrefix,
     )
     .toArray()[0];
-  if (!row) return { kind: "not-served" };
-  return { kind: "record", record: JSON.parse(row.data) as StoredRecord };
+  if (row) return { kind: "record", record: JSON.parse(row.data) as StoredRecord };
+  const releaseToken = readReleaseToken(isrPrefix);
+  if (releaseToken === undefined) return { kind: "not-served" };
+  const app = isrPrefix.split("/")[2];
+  const kept = store.sql
+    .exec(`SELECT 1 FROM kept WHERE app = ? AND release_token = ? LIMIT 1`, app, releaseToken)
+    .toArray();
+  return kept.length > 0 ? { kind: "not-served" } : { kind: "forgotten" };
 }
 
 export type Initialization = "adopted" | "refused";

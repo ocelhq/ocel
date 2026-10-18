@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-var shopGate = gate.Gate{Key: "k", PasswordMAC: "mac", BypassSecrets: []string{"b"}, AllowOptions: []string{"/api"}}
+var shopGate = gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string{"b"}, AllowOptions: []string{"/api"}}
 
 func TestTheRoutingTableReadsBackTheGatesItHolds(t *testing.T) {
 	t.Parallel()
@@ -24,7 +24,7 @@ func TestTheRoutingTableReadsBackTheGatesItHolds(t *testing.T) {
 	if len(read.Gates) != 2 || read.Gates[0].Owner != otherSurface || read.Gates[1].Owner != surface {
 		t.Fatalf("the table reads back gates %+v, want both, sorted by owner so the same gates are the same bytes", read.Gates)
 	}
-	if !reflect.DeepEqual(read.Gates[0].Gate.BypassSecrets, shopGate.BypassSecrets) || read.Gates[0].Gate.PasswordMAC != "mac" {
+	if !reflect.DeepEqual(read.Gates[0].Gate.BypassSecrets, shopGate.BypassSecrets) || read.Gates[0].Gate.PasswordHash != "hash" {
 		t.Errorf("the gate reads back as %+v, want %+v", read.Gates[0].Gate, shopGate)
 	}
 }

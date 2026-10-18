@@ -113,7 +113,8 @@ export class PurgeQueue extends DurableObject<Env> {
     for (const { release, slug, isrPrefix } of this.readDueChecks(RELEASES_CHECKED_PER_ALARM)) {
       try {
         const served = await this.releases.readServedRecord({ slug, isrPrefix });
-        if (served.kind === "not-served") this.times.retire(release);
+        if (served.kind === "forgotten") this.times.forget(release);
+        else if (served.kind === "not-served") this.times.retire(release, Date.now());
         else this.times.markChecked(release, Date.now());
       } catch (error) {
         console.error(`ocel: cannot tell whether release ${release} is still served`, error);

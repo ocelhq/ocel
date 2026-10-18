@@ -22,9 +22,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-var shopGate = gate.Gate{Key: "shop-key", PasswordMAC: "shop-mac", BypassSecrets: []string{"shop-bypass"}}
+var shopGate = gate.Gate{Key: "shop-key", PasswordHash: gate.SignPassword("shop-key", "shop password"), BypassSecrets: []string{"shop-bypass"}}
 
-var blogGate = gate.Gate{Key: "blog-key", PasswordMAC: "blog-mac"}
+var blogGate = gate.Gate{Key: "blog-key", PasswordHash: gate.SignPassword("blog-key", "blog password")}
 
 var tiers = []environment.Tier{environment.TierPreview, environment.TierProduction}
 
@@ -176,6 +176,15 @@ func TestTheALBEdgeGates(t *testing.T) {
 	balancer, _ := balancing(t)
 	if !balancer.Facts().Gates {
 		t.Error("Facts().Gates = false, and a gated preview is refused on an edge that does not run the gate")
+	}
+}
+
+func TestTheALBEdgeChecksSignedPasswordsSinceItsPluginCannotDeriveScrypt(t *testing.T) {
+	t.Parallel()
+
+	balancer, _ := balancing(t)
+	if !balancer.Facts().ChecksSignedPasswords {
+		t.Error("Facts().ChecksSignedPasswords = false, but a Service Extensions plugin has 1 ms of CPU a request, too little to derive an scrypt hash")
 	}
 }
 
@@ -820,6 +829,7 @@ func TestThePublishedGateAnswersTheConformanceSuite(t *testing.T) {
 			}
 			return &recorded.Gate, nil
 		},
+		Signed: true,
 	})
 }
 
@@ -847,7 +857,7 @@ func TestDestroyingAGatedProjectAgainAfterAFailedWithdrawalRollsTheGateOutOfTheP
 	}
 }
 
-var productionGate = gate.Gate{Key: "shop-production-key", PasswordMAC: "shop-production-mac"}
+var productionGate = gate.Gate{Key: "shop-production-key", PasswordHash: gate.SignPassword("shop-production-key", "shop production password")}
 
 func TestAProtectedProductionHostIsInTheProductionPluginAndProvenGatedBeforeItIsRouted(t *testing.T) {
 	t.Parallel()

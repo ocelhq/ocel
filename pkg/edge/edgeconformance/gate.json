@@ -1,8 +1,9 @@
 {
   "nowSeconds": 1700000000,
+  "password": "JBSWY3DPEHPK3PXP2345",
   "gate": {
     "key": "test-preview-key",
-    "passwordMac": "f18e0cd484c475051052b9fed4f125e1db487c694fc74b1128b40bb4af41e5a3",
+    "passwordHash": "scrypt$14$8$5$dNOneJGum/tp6Q5MFLqwUQ$0IHdqIdmVXt/5qGkjAtNym9YU3Sd1+Z6WbsToHU0uaM",
     "bypassSecrets": ["bypass-secret-one", "bypass-secret-two"],
     "allowOptions": ["/api", "/trpc/"]
   },
@@ -896,7 +897,7 @@
     {
       "name": "Basic credentials are refused when the gate has no password",
       "gate": {
-        "passwordMac": ""
+        "passwordHash": ""
       },
       "request": {
         "method": "GET",
@@ -923,9 +924,68 @@
       }
     },
     {
-      "name": "a Basic password hashed under another key is refused",
+      "name": "a matching Basic password is refused when the gate's hash costs more than a gate derives",
       "gate": {
-        "passwordMac": "e38c437c6a135111c4406a03eba0ebcad355cf54d527260ba58c3f4c58c5a404"
+        "passwordHash": "scrypt$15$8$1$c2l4dGVlbiBieXRlIHNsdA$8k73rFKSfw4DbHVIxSZk0DhLg0PQ9XuZNueZIDracs4"
+      },
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "authorization": "Basic dTpKQlNXWTNEUEVIUEszUFhQMjM0NQ=="
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/login\">"
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
+      }
+    },
+    {
+      "name": "a Basic password is refused when the gate's hash names no algorithm a gate knows",
+      "gate": {
+        "passwordHash": "bcrypt$12$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "request": {
+        "method": "GET",
+        "host": "app-abc.preview.example.com",
+        "target": "/",
+        "headers": {
+          "authorization": "Basic dTpKQlNXWTNEUEVIUEszUFhQMjM0NQ=="
+        }
+      },
+      "expect": {
+        "status": 401,
+        "headers": {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "bodyContains": [
+          "<main data-next=",
+          "id=\"password\"",
+          "<noscript><p><a href=\"/.ocel/login\">"
+        ],
+        "bodyExcludes": [],
+        "headersAbsent": ["set-cookie", "location", "www-authenticate"]
+      }
+    },
+    {
+      "name": "a Basic password the gate's hash was not made from is refused",
+      "password": "another password",
+      "gate": {
+        "passwordHash": "scrypt$14$8$5$9drG82d4sC1k+BovvrpluA$r8HYFyHhh2iOX1PtlXLvMRgdlpAnyqQg3Mh4AlM8wcg"
       },
       "request": {
         "method": "GET",
@@ -1031,8 +1091,9 @@
     },
     {
       "name": "Basic credentials that are not UTF-8 are refused",
+      "password": "\ufffd",
       "gate": {
-        "passwordMac": "dbbae4bcefad761d675ec64f809837e275774bc8d1606be0a9bd8dfb89d8b701"
+        "passwordHash": "scrypt$14$8$5$plqkJDPx8Afl5p+iXir1Mg$xKLTMqvQti+MiLhy2G5UJzPZJQs/wkSWnK1KYdo5Q2g"
       },
       "request": {
         "method": "GET",
@@ -1863,7 +1924,7 @@
     {
       "name": "a login is refused when the gate has no password",
       "gate": {
-        "passwordMac": ""
+        "passwordHash": ""
       },
       "request": {
         "method": "POST",
@@ -1886,8 +1947,9 @@
     },
     {
       "name": "a login whose Basic credentials are not UTF-8 is refused",
+      "password": "\ufffd",
       "gate": {
-        "passwordMac": "dbbae4bcefad761d675ec64f809837e275774bc8d1606be0a9bd8dfb89d8b701"
+        "passwordHash": "scrypt$14$8$5$plqkJDPx8Afl5p+iXir1Mg$xKLTMqvQti+MiLhy2G5UJzPZJQs/wkSWnK1KYdo5Q2g"
       },
       "request": {
         "method": "POST",
@@ -1909,9 +1971,10 @@
       }
     },
     {
-      "name": "a login with Basic credentials hashed under another key is refused",
+      "name": "a login with a Basic password the gate's hash was not made from is refused",
+      "password": "another password",
       "gate": {
-        "key": "another-preview-key"
+        "passwordHash": "scrypt$14$8$5$9drG82d4sC1k+BovvrpluA$r8HYFyHhh2iOX1PtlXLvMRgdlpAnyqQg3Mh4AlM8wcg"
       },
       "request": {
         "method": "POST",

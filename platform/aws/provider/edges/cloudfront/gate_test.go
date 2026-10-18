@@ -24,7 +24,7 @@ import (
 
 var shopGate = gate.Gate{
 	Key:           "gate-key",
-	PasswordMAC:   "password-mac",
+	PasswordHash:  "password-hash",
 	BypassSecrets: []string{"bypass-one"},
 	AllowOptions:  []string{"/api/"},
 }
@@ -103,7 +103,7 @@ func TestAProjectsProductionAndPreviewGatesLiveInSeparateStores(t *testing.T) {
 	w := newWorld()
 	production := bootstrapped(t, w)
 	preview := previewBootstrapped(t, w)
-	previewGate := gate.Gate{Key: "preview-key", PasswordMAC: "preview-mac", BypassSecrets: []string{}, AllowOptions: []string{}}
+	previewGate := gate.Gate{Key: "preview-key", PasswordHash: "preview-hash", BypassSecrets: []string{}, AllowOptions: []string{}}
 
 	reconcileGated(t, production, environment.TierProduction, &shopGate)
 	reconcileGated(t, preview, environment.TierPreview, &previewGate)
@@ -180,7 +180,7 @@ func TestAGateIsKeyedByTheProjectSlugUnderAPrefixNoHostnameCanHave(t *testing.T)
 func TestAGateWithNoListsIsRecordedWithEmptyListsTheResolverCanIterate(t *testing.T) {
 	eachTier(t, func(t *testing.T, tier environment.Tier) {
 		w := newWorld()
-		reconcileGated(t, bootstrappedFor(t, w, tier), tier, &gate.Gate{Key: "k", PasswordMAC: "m"})
+		reconcileGated(t, bootstrappedFor(t, w, tier), tier, &gate.Gate{Key: "k", PasswordHash: "m"})
 
 		value := w.store.itemsOf(fakeRoutesARN(tier))["gate/"+conformanceSlug]
 		if !strings.Contains(value, `"bypassSecrets":[]`) || !strings.Contains(value, `"allowOptions":[]`) {
@@ -210,12 +210,12 @@ func TestAReconcileReplacesAGateWhoseKeysChanged(t *testing.T) {
 		e := bootstrappedFor(t, w, tier)
 		reconcileGated(t, e, tier, &shopGate)
 		rotated := shopGate
-		rotated.PasswordMAC = "rotated-mac"
+		rotated.PasswordHash = "rotated-hash"
 
 		reconcileGated(t, e, tier, &rotated)
 
-		if got, _ := recordedGate(t, w, tier); got.PasswordMAC != "rotated-mac" {
-			t.Errorf("recorded password MAC = %q, want the rotated one", got.PasswordMAC)
+		if got, _ := recordedGate(t, w, tier); got.PasswordHash != "rotated-hash" {
+			t.Errorf("recorded password hash = %q, want the rotated one", got.PasswordHash)
 		}
 	})
 }
@@ -336,7 +336,7 @@ func TestAPromotedProductionRouteNamesTheSlugTheResolverReadsItsGateUnder(t *tes
 }
 
 func TestAGateWithEightGeneratedBypassSecretsFitsAKeyValueStoreValue(t *testing.T) {
-	full := gate.Gate{Key: strings.Repeat("k", 64), PasswordMAC: strings.Repeat("m", 64)}
+	full := gate.Gate{Key: strings.Repeat("k", 64), PasswordHash: gate.SignPassword(strings.Repeat("k", 64), "pw")}
 	for range 8 {
 		full.BypassSecrets = append(full.BypassSecrets, strings.Repeat("s", 64))
 	}
@@ -391,6 +391,7 @@ func TestThePublishedGateAnswersTheConformanceSuite(t *testing.T) {
 				}
 				return nil, nil
 			},
+			Signed: true,
 		})
 	})
 }

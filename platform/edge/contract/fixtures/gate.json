@@ -4,25 +4,25 @@
       "name": "a gate with only a password",
       "gate": {
         "key": "gate-key",
-        "passwordMac": "password-mac",
+        "passwordHash": "password-hash",
         "bypassSecrets": [],
         "allowOptions": []
       },
-      "encoded": "{\"key\":\"gate-key\",\"passwordMac\":\"password-mac\",\"bypassSecrets\":[],\"allowOptions\":[]}"
+      "encoded": "{\"key\":\"gate-key\",\"passwordHash\":\"password-hash\",\"bypassSecrets\":[],\"allowOptions\":[]}"
     },
     {
       "name": "a gate with bypass secrets and allowed OPTIONS prefixes",
       "gate": {
         "key": "gate-key",
-        "passwordMac": "password-mac",
+        "passwordHash": "password-hash",
         "bypassSecrets": ["bypass-one", "bypass-two"],
         "allowOptions": ["/api/"]
       },
-      "encoded": "{\"key\":\"gate-key\",\"passwordMac\":\"password-mac\",\"bypassSecrets\":[\"bypass-one\",\"bypass-two\"],\"allowOptions\":[\"/api/\"]}"
+      "encoded": "{\"key\":\"gate-key\",\"passwordHash\":\"password-hash\",\"bypassSecrets\":[\"bypass-one\",\"bypass-two\"],\"allowOptions\":[\"/api/\"]}"
     }
   ],
   "sharedEntry": {
     "slug": "shop",
-    "encoded": "{\"shop\":{\"key\":\"gate-key\",\"passwordMac\":\"password-mac\",\"bypassSecrets\":[],\"allowOptions\":[]}}"
+    "encoded": "{\"shop\":{\"key\":\"gate-key\",\"passwordHash\":\"password-hash\",\"bypassSecrets\":[],\"allowOptions\":[]}}"
   }
 }

@@ -28,7 +28,7 @@ type Routers struct {
 func newRouters(edges *Edges) *Routers {
 	routers := &Routers{edges: edges, planes: map[router.Kind]*DataPlane{}}
 	for _, kind := range edges.kinds() {
-		routers.planes[edges.Edge(kind).routedBy] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
+		routers.planes[edges.Edge(kind).routedBy] = &DataPlane{served: map[projectPointer]map[string]string{}, kept: map[projectPointer][]router.Promotion{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
 	}
 	return routers
 }
@@ -63,7 +63,7 @@ func (r *Routers) DataPlane(kind router.Kind) *DataPlane {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.planes[kind] == nil {
-		r.planes[kind] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
+		r.planes[kind] = &DataPlane{served: map[projectPointer]map[string]string{}, kept: map[projectPointer][]router.Promotion{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
 	}
 	return r.planes[kind]
 }
@@ -79,6 +79,7 @@ type DataPlane struct {
 	progress   progress.Log
 	propagates *router.Propagation
 	served     map[projectPointer]map[string]string
+	kept       map[projectPointer][]router.Promotion
 	writes     map[projectPointer]int
 	hosts      map[string]projectPointer
 }
@@ -97,6 +98,12 @@ func (d *DataPlane) Releases(slug string, tier environment.Tier, pointer string)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return maps.Clone(d.served[pointerOf(edge.StackState{Slug: slug, Tier: tier}, pointer)])
+}
+
+func (d *DataPlane) Kept(slug string, tier environment.Tier, pointer string) []router.Promotion {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return slices.Clone(d.kept[pointerOf(edge.StackState{Slug: slug, Tier: tier}, pointer)])
 }
 
 func (d *DataPlane) FindServingPointer(hostname string) (pointer string, releases map[string]string) {
@@ -202,6 +209,7 @@ func (d *DataPlane) serveOver(at projectPointer, releases map[string]string, mov
 		return false
 	}
 	d.served[at] = maps.Clone(releases)
+	d.kept[at] = slices.Clone(move.Kept)
 	d.writes[at]++
 	d.unrouteHosts(at, move.ListHostsToWithdraw())
 	for _, host := range move.Hosts {

@@ -19,7 +19,7 @@ import {
 } from "@platform/edge-contract/purge";
 import { createReleaseEdgeInvoker, ownBundleKey } from "./edge";
 import type { Env } from "./env";
-import { openPurgeQueue } from "./exports";
+import { newPurgeQueuePort, openPurgeQueue } from "./exports";
 import { openOrigin } from "./origin/reach";
 import type { OriginObjects } from "./origin/store";
 import { PPR_SHELL_VARIANT } from "./ppr";
@@ -456,7 +456,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       },
       {
         source,
-        readTimes: (tags) => openPurgeQueue(this.ctx.exports).readTimes(tags),
+        readTimes: (tags) => openPurgeQueue(this.ctx.exports, render.slug).readTimes(tags),
         now: Date.now,
       },
     );
@@ -494,7 +494,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (announced !== null) {
       this.ctx.waitUntil(
         purgeInBand(readPurge(announced), {
-          queue: openPurgeQueue(this.ctx.exports),
+          queue: newPurgeQueuePort(this.ctx.exports),
           scope: call.scope,
           now: Date.now,
         }),

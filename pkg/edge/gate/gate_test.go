@@ -17,15 +17,6 @@ func TestTheGateAnswersEveryConformanceVector(t *testing.T) {
 	edgeconformance.RunGate(t)
 }
 
-func TestAPasswordHashesToTheValueTheVectorsStore(t *testing.T) {
-	t.Parallel()
-
-	const want = "f18e0cd484c475051052b9fed4f125e1db487c694fc74b1128b40bb4af41e5a3"
-	if got := gate.HashPassword("test-preview-key", "JBSWY3DPEHPK3PXP2345"); got != want {
-		t.Errorf("HashPassword = %q, want %q", got, want)
-	}
-}
-
 func TestAGateEncodesAsTheJSONTheEdgeContractFixtureRecords(t *testing.T) {
 	t.Parallel()
 
@@ -79,7 +70,7 @@ func TestAGateEncodesAsTheJSONTheEdgeContractFixtureRecords(t *testing.T) {
 func TestASignedSessionIsAdmittedOnTheHostItWasSignedForAndNoOther(t *testing.T) {
 	t.Parallel()
 
-	held := gate.Gate{Key: "k", PasswordMAC: gate.HashPassword("k", "pw")}
+	held := gate.Gate{Key: "k", PasswordHash: gate.SignPassword("k", "pw")}
 	now := time.Unix(1_800_000_000, 0)
 	cookie := gate.CookieName + "=" + held.SignSession("App.example.com", now)
 	ask := func(host string) gate.Verdict {
