@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
@@ -164,10 +165,10 @@ func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
 		t.Errorf("%s is %s on a box your Traefik fronts, want it never started", caddy.Container, state)
 	}
 	if tf.network != "" {
-		if networks := frontNetworks(t, vm, host.SwitchboardContainer); !slices.Contains(networks, tf.network) {
-			t.Errorf("%s sits on %q, want it on %s, where your Traefik reaches it", host.SwitchboardContainer, networks, tf.network)
+		if networks := frontNetworks(t, vm, boxapi.Switchboard); !slices.Contains(networks, tf.network) {
+			t.Errorf("%s sits on %q, want it on %s, where your Traefik reaches it", boxapi.Switchboard, networks, tf.network)
 		}
-	} else if published := vm.inspects(t, "container", host.SwitchboardContainer, "{{json .HostConfig.PortBindings}}"); !strings.Contains(published, `"HostIp":"127.0.0.1","HostPort":"8480"`) {
+	} else if published := vm.inspects(t, "container", boxapi.Switchboard, "{{json .HostConfig.PortBindings}}"); !strings.Contains(published, `"HostIp":"127.0.0.1","HostPort":"8480"`) {
 		t.Errorf("the switchboard publishes %s, want 127.0.0.1:8480 for a Traefik on the host network to reach", published)
 	}
 
@@ -232,7 +233,7 @@ func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
 	servesAPreviewBehindTraefik(t, vm, d, opened, tf)
 
 	if tf.cleanup {
-		vm.ssh(t, "sudo docker stop "+host.SwitchboardContainer+" >/dev/null")
+		vm.ssh(t, "sudo docker stop "+boxapi.Switchboard+" >/dev/null")
 		vm.feeds(t, "sudo sh -s", frontScript(t, tf.front, "cleanup.sh"))
 		if left := vm.ssh(t, "sudo docker network inspect "+host.ProxyNetwork+" >/dev/null 2>&1 && echo present || echo gone"); strings.TrimSpace(left) != "gone" {
 			t.Fatalf("%s's cleanup left the %s network behind a stopped switchboard, so it proves nothing about recreating them", tf.front, host.ProxyNetwork)
@@ -266,14 +267,14 @@ func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
 	if err := stack.Destroy(ctx); err != nil {
 		t.Errorf("Destroy() = %v", err)
 	}
-	vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
+	vm.ssh(t, "sudo docker ps -aq --filter label="+docker.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
 		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Fatalf("Remove(%s) behind %s = %v", tier, tf.front, err)
 		}
 	}
-	if state := vm.state(t, host.SwitchboardContainer); state != "gone" {
-		t.Errorf("%s is %s after the box was destroyed", host.SwitchboardContainer, state)
+	if state := vm.state(t, boxapi.Switchboard); state != "gone" {
+		t.Errorf("%s is %s after the box was destroyed", boxapi.Switchboard, state)
 	}
 	if left := vm.ssh(t, "sudo test -e "+quote(placed)+" && echo present || echo gone"); strings.TrimSpace(left) != "gone" {
 		t.Errorf("%s outlived the destroy", placed)

@@ -6,26 +6,28 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 func inspecting() map[string]string {
 	return map[string]string{
-		"what a release reads to see if the app is already serving":              servingCommand(physical),
-		"what a release that fell over captures as evidence":                     stateCommand(physical),
+		"what a release reads to see if the app is already serving":              docker.ServingCommand(physical),
+		"what a release that fell over captures as evidence":                     docker.StateCommand(physical),
 		"what a release that fell over captures as logs":                         logCommand(physical),
 		"what a container that failed to start gives as its last run's logs":     renderLastRunLogs(physical),
 		"what a probe watches its container with while it waits":                 renderStartWatch([]string{physical}, []string{"true"}),
-		"what a proxy that did not come up reports":                              frontProxy().rising(3),
-		"what a switchboard that did not come up reports":                        switchboardBox(nil, Front{}).rising(3),
-		"what a bootstrap probes the proxy with":                                 frontProxy().probe(),
-		"what a preflight reads the proxy's state with":                          stateCommand(caddy.Container),
+		"what a proxy that did not come up reports":                              frontProxy().Rising(3),
+		"what a switchboard that did not come up reports":                        switchboardBox(nil, Front{}).Rising(3),
+		"what a bootstrap probes the proxy with":                                 containerProbe(frontProxy()),
+		"what a preflight reads the proxy's state with":                          docker.StateCommand(caddy.Container),
 		"what doctor reads a switchboard a deploy started again with":            restoredCommand(),
 		"what a release reads to tell a stopped retiree from one still draining": runningCommand([]string{retiring}),
 		"what a destroy asks before it reloads your Caddy's container":           coolifysCaddy().caddyReloadCommand(),
-		"what a claim through a tunnel reads to tell whether the tunnel runs":    renderTunnelInspect(),
-		"what a release reads to tell whether the tunnel it retires still runs":  renderTunnelRemoval(Tunnel{Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}),
+		"what a claim through a tunnel reads to tell whether the tunnel runs":    tunnel.Inspecting(),
+		"what a release reads to tell whether the tunnel it retires still runs":  tunnel.Removing(boxapi.Tunnel{Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}),
 		"what a port forward reads its container's address with":                 containerAddressCommand(physical),
 		"what a release reads to archive the image of the container it retires":  releaseCommand(physical),
 	}
@@ -59,7 +61,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 	t.Parallel()
 
 	commands := inspecting()
-	commands["the fact template a bootstrap compares the proxy against"] = ContainerFactTemplate
+	commands["the fact template a bootstrap compares the proxy against"] = docker.ContainerFactTemplate
 	commands["what a preflight reads the disk headroom with"] = headroomCommand([]string{"ocel-shop-web"})
 	for what, command := range commands {
 		for _, leak := range []string{".Config.Env", ".Env}}", "{{json .}}", "--format '{{.}}'"} {
@@ -82,9 +84,9 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"caddyReloadCommand", "containerAddressCommand", "probe", "renderTunnelInspect", "renderTunnelRemoval", "releaseCommand", "restoredCommand", "restoring", "rising", "renderLastRunLogs", "runningCommand", "servingCommand", "stateCommand", "renderStartWatch"},
-		"docker network inspect": {"command", "joinNetworkScript", "networkCreating", "networkEnsured", "networkForgetting", "networkProbe", "networksPresent"},
-		"docker image inspect":   {"imagePulled"},
+		"docker inspect":         {"caddyReloadCommand", "containerAddressCommand", "containerProbe", "Inspecting", "Removing", "releaseCommand", "restoredCommand", "Restoring", "Rising", "renderLastRunLogs", "runningCommand", "ServingCommand", "StateCommand", "renderStartWatch"},
+		"docker network inspect": {"command", "JoiningNetwork", "CreatingNetwork", "EnsuringNetwork", "ForgettingNetwork", "networkProbe", "NetworksPresent"},
+		"docker image inspect":   {"Pulled"},
 	}
 }
 
@@ -125,11 +127,11 @@ func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 		"what a bootstrap creates the proxy network with":     {networkCommand(), ProxyNetwork},
 		"what a bootstrap probes the proxy network with":      {networkProbe(), ProxyNetwork},
 		"what a destroy removes the proxy network with":       {removal{kind: KindNetwork, path: ProxyNetwork}.command(), ProxyNetwork},
-		"what a deploy puts a project's network up with":      {joinNetworkScript(valued().Tier, valued().Project), project},
-		"what a resource puts a project's network up with":    {networkCreating(valued().Tier, valued().Project), project},
-		"what a teardown takes a project's network down with": {networkForgetting(valued().Tier, valued().Project), project},
+		"what a deploy puts a project's network up with":      {docker.JoiningNetwork(valued().Tier, valued().Project), project},
+		"what a resource puts a project's network up with":    {docker.CreatingNetwork(valued().Tier, valued().Project), project},
+		"what a teardown takes a project's network down with": {docker.ForgettingNetwork(valued().Tier, valued().Project), project},
 		"what a switchboard write finds your proxy's network with": {
-			boxContainer{networks: Front{Manual: &ManualFront{Port: 8480, Network: "coolify"}}.joined()}.networksPresent(), "coolify",
+			docker.Service{Networks: Front{Manual: &ManualFront{Port: 8480, Network: "coolify"}}.joined()}.NetworksPresent(), "coolify",
 		},
 	}
 	if len(networking) != len(inspectRosters()["docker network inspect"]) {
@@ -145,11 +147,11 @@ func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 				if !strings.Contains(ask, shell.Quote(site.network)) {
 					t.Errorf("%s runs %q, which inspects something other than %s by name", what, strings.TrimSpace(line), site.network)
 				}
-				if strings.Contains(ask, "--type container") || strings.Contains(ask, caddy.Container) || strings.Contains(ask, SwitchboardContainer) {
+				if strings.Contains(ask, "--type container") || strings.Contains(ask, caddy.Container) || strings.Contains(ask, boxapi.Switchboard) {
 					t.Errorf("%s runs %q and inspects a container: a network inspect is exempt from naming its fields because a network has no value a container was handed, and one that reaches a container is not",
 						what, strings.TrimSpace(line))
 				}
-				if format, formatted := strings.CutPrefix(ask, "--format "); formatted && !strings.HasPrefix(format, shell.Quote(membersFormat)) {
+				if format, formatted := strings.CutPrefix(ask, "--format "); formatted && !strings.HasPrefix(format, shell.Quote(docker.MembersFormat)) {
 					t.Errorf("%s runs %q with a format other than the container names on the network, and a network inspect that prints more prints what those containers were handed",
 						what, strings.TrimSpace(line))
 				}
@@ -172,7 +174,7 @@ func TestTheLogsARefusalQuotesAreBounded(t *testing.T) {
 
 func expiring() map[string]string {
 	return map[string]string{
-		"what doctor reads a served leaf with": shell.Words([]string{SwitchboardBinary, "leaf", "shop.example.com"}),
+		"what doctor reads a served leaf with": shell.Words([]string{boxapi.SwitchboardBinary, "leaf", "shop.example.com"}),
 		"what a pinned pair is read off":       "cat " + shell.Quote(boxapi.PinCertificate(boxapi.PinsDir+"/wildcard")),
 	}
 }

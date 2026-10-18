@@ -1,4 +1,4 @@
-package host
+package docker
 
 import (
 	"context"
@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	sizeFields  = "{{.MemTotal}} {{.NCPU}}"
-	sizeCommand = "docker info --format '" + sizeFields + "'"
+	SizeFields  = "{{.MemTotal}} {{.NCPU}}"
+	sizeCommand = "docker info --format '" + SizeFields + "'"
 )
 
-const minimumMemoryBytes = 256 << 20
+const MinimumMemoryBytes = 256 << 20
 
 type boxSize struct {
 	MemoryBytes int64
@@ -81,10 +81,10 @@ func limitsFor(tier environment.Tier, size boxSize) Limits {
 }
 
 func share(size boxSize, parts int64) int64 {
-	return min(size.MemoryBytes, max(minimumMemoryBytes, size.MemoryBytes/parts))
+	return min(size.MemoryBytes, max(MinimumMemoryBytes, size.MemoryBytes/parts))
 }
 
-func (l Limits) argv() []string {
+func (l Limits) Argv() []string {
 	if l.MemoryBytes == 0 {
 		return nil
 	}

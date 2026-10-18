@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -83,7 +84,7 @@ func denyingDocker(rig *bench, served string) {
 		if strings.Contains(command, ssh.DockerReach) {
 			return ssh.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
 		}
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(servingSelectors())) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return ssh.Result{Stdout: served + "\n"}, true
 		}
 		return ssh.Result{}, false
@@ -161,7 +162,7 @@ func TestTheEnvFileIsTakenBackWhenTheContainerCannotBeStarted(t *testing.T) {
 	path := EnvFile(spec.Tier, spec.Name)
 	rig := machine(nil)
 	rig.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(servingSelectors())) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return ssh.Result{Stdout: "false \n"}, true
 		}
 		if strings.Contains(command, shell.Quote("--detach")) {
@@ -190,7 +191,7 @@ func TestTheEnvFileIsTakenBackWhenTheWriteItselfFallsOver(t *testing.T) {
 	path := EnvFile(spec.Tier, spec.Name)
 	rig := machine(nil)
 	rig.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(servingSelectors())) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return ssh.Result{Stdout: "false \n"}, true
 		}
 		if strings.Contains(command, "install -m 0600") {

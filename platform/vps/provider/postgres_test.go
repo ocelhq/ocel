@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/officialimages"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
@@ -271,7 +272,7 @@ func volumeOfAnotherMajor(machine *box, state string) {
 	withRecordedPostgres(machine)
 	machine.refuses = func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, "docker volume ls") && strings.Contains(command, host.LabelGeneration):
+		case strings.Contains(command, "docker volume ls") && strings.Contains(command, docker.LabelGeneration):
 			return ssh.Result{Stdout: "16\n"}, true
 		case strings.Contains(command, ".State.Status"):
 			return ssh.Result{Stdout: state + " postgres:16 0123456789ab\n"}, true
@@ -351,7 +352,7 @@ func TestAVolumeIsLabelledWithTheMajorThatInitialisedIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	kept := machine.commands()[machine.at("'docker' 'volume' 'create'")]
-	if !strings.Contains(kept, "'"+host.LabelGeneration+"=17'") {
+	if !strings.Contains(kept, "'"+docker.LabelGeneration+"=17'") {
 		t.Errorf("the volume was created as %q, and the next deploy cannot tell which major wrote what is on it", kept)
 	}
 }

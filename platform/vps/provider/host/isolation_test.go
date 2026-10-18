@@ -7,7 +7,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 func handedTo(spec Container) handoff {
@@ -40,11 +42,11 @@ func resourced() ResourceContainer {
 func running() map[string]string {
 	return map[string]string{
 		appContainer:      shell.Words(containerRun(valued(), handedTo(valued()))),
-		proxyContainer:    shell.Words(frontProxy().run()),
-		boardContainer:    shell.Words(switchboardBox(nil, Front{}).run()),
+		proxyContainer:    shell.Words(frontProxy().Run()),
+		boardContainer:    shell.Words(switchboardBox(nil, Front{}).Run()),
 		resourceContainer: shell.Words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name))),
-		tunnelContainer:   shell.Words(tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector()).run()),
-		tokenPlacer:       shell.Words(renderTunnelTokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d")),
+		tunnelContainer:   shell.Words(tunnel.Service(boxapi.Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector()).Run()),
+		tokenPlacer:       shell.Words(tunnel.TokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d")),
 	}
 }
 
@@ -54,8 +56,8 @@ func entitledPaths() map[string][]string {
 		proxyContainer:    {proxyRoot, boxapi.PinsDir, ProxyData},
 		boardContainer:    {boxapi.RoutingDir, boxapi.RoutingTablePath},
 		resourceContainer: {EnvFile(resourced().Tier, resourced().Name)},
-		tunnelContainer:   {TunnelDir},
-		tokenPlacer:       {TunnelDir},
+		tunnelContainer:   {tunnel.Dir},
+		tokenPlacer:       {tunnel.Dir},
 	}
 }
 
@@ -167,14 +169,14 @@ func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheTierStateItself(t *
 func TestEveryContainerThisPackageRunsIsBoundByTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "volumeCopy", "placementRun", "renderTunnelTokenArgv", "resourceRun", "run"},
+	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "volumeCopy", "placementRun", "TokenArgv", "resourceRun", "Run"},
 		"a container run built somewhere this bench does not read is bound by none of the rules in this file")
 }
 
 func TestAPlacementContainerIsBoundByTheIsolationRulesAndMountsNothingButItsDirectoryAndTheSwitchboardBinary(t *testing.T) {
 	t.Parallel()
 
-	command := shell.Words(placementFed("/etc/traefik/dynamic", "place", "/etc/traefik/dynamic/ocel.yml"))
+	command := shell.Words(routing.PlacementFed("/etc/traefik/dynamic", "place", "/etc/traefik/dynamic/ocel.yml"))
 	for _, refused := range []string{"docker.sock", shell.Quote("--pid"), "--pid=", "--privileged", "--volume"} {
 		if strings.Contains(command, refused) {
 			t.Errorf("a placement runs %q, and names %s", command, refused)
@@ -188,7 +190,7 @@ func TestAPlacementContainerIsBoundByTheIsolationRulesAndMountsNothingButItsDire
 			}
 		}
 	}
-	if want := []string{SwitchboardDir, "/etc/traefik/dynamic"}; !slices.Equal(mounted, want) {
+	if want := []string{boxapi.SwitchboardDir, "/etc/traefik/dynamic"}; !slices.Equal(mounted, want) {
 		t.Errorf("a placement runs %q and mounts %q, want %q alone: nothing under %s or %s is its business", command, mounted, want, tierRoot, stateRoot)
 	}
 }

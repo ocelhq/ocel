@@ -10,102 +10,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const proxyNotServingYet = 3
 
-func (h *Host) VerifiedPins(ctx context.Context) ([]Pin, error) {
-	h.pinning.Lock()
-	defer h.pinning.Unlock()
-	if h.vouched {
-		return slices.Clone(h.pins), h.unusable
-	}
-	for _, pin := range h.pins {
-		if err := h.vouch(ctx, pin); err != nil {
-			return nil, err
-		}
-	}
-	h.vouched = true
-	return slices.Clone(h.pins), nil
-}
-
-func (h *Host) vouch(ctx context.Context, pin Pin) error {
-	refused := func(err error) error {
-		h.vouched, h.unusable = true, err
-		return err
-	}
-	if err := validPin(pin); err != nil {
-		return refused(err)
-	}
-	block, err := h.PinnedCertificate(ctx, pin.Path)
-	if err != nil {
-		return err
-	}
-	leaf, err := certs.Parse(boxapi.PinCertificate(pin.Path), block)
-	if err != nil {
-		return refused(err)
-	}
-	if err := certs.Verify(pin.Path, pin.Hostname, leaf, time.Now()); err != nil {
-		return refused(err)
-	}
-	if err := h.paired(ctx, pin); err != nil {
-		return refused(err)
-	}
-	return nil
-}
-
-const (
-	pairMatched    = "matched"
-	pairMismatched = "mismatched"
-	pairUnchecked  = "unchecked"
-)
-
-func pairCommand(path string) string {
-	certificate, key := shell.Quote(boxapi.PinCertificate(path)), shell.Quote(boxapi.PinKey(path))
-	return "if ! command -v openssl >/dev/null 2>&1; then echo " + pairUnchecked + "; exit 0; fi\n" +
-		"certified=$(openssl x509 -in " + certificate + " -noout -pubkey 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum)\n" +
-		"keyed=$(openssl pkey -in " + key + " -pubout -outform DER 2>/dev/null | sha256sum)\n" +
-		"if [ -n \"$certified\" ] && [ \"$certified\" = \"$keyed\" ]; then echo " + pairMatched + "; else echo " + pairMismatched + "; fi"
-}
-
-func (h *Host) paired(ctx context.Context, pin Pin) error {
-	said, err := h.Run(ctx, ssh.Root, "check the key pinned beside "+boxapi.PinCertificate(pin.Path), pairCommand(pin.Path), nil)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(said) == pairMismatched {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"the key at %s does not match the certificate at %s",
-			boxapi.PinKey(pin.Path), boxapi.PinCertificate(pin.Path))
-	}
-	return nil
-}
-
-func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, error) {
-	if _, pinned := boxapi.Pinned(path); !pinned {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"pinned certificate %q is outside %s",
-			path, boxapi.PinsDir)
-	}
-	read, err := h.Run(ctx, ssh.Root, "read the certificate pinned at "+boxapi.PinCertificate(path), "cat "+shell.Quote(boxapi.PinCertificate(path)), nil)
-	if err != nil {
-		return nil, err
-	}
-	return []byte(read), nil
-}
-
 func (h *Host) FrontProxy() proxy.Proxy { return h.front }
 
 func (h *Host) ReadServedCertificate(ctx context.Context, hostname string) ([]byte, error) {
-	result, err := h.Stream(ctx, ssh.Login, shell.Words([]string{SwitchboardBinary, "leaf", hostname}), nil)
+	result, err := h.Stream(ctx, ssh.Login, shell.Words([]string{boxapi.SwitchboardBinary, "leaf", hostname}), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +52,7 @@ func (h *Host) ProbeRouterOverPlainHTTP(ctx context.Context, hostname string) (A
 }
 
 func (h *Host) probe(ctx context.Context, what, hostname string, flags ...string) (Answer, error) {
-	result, err := h.Stream(ctx, ssh.Login, shell.Words(slices.Concat([]string{SwitchboardBinary, "probe"}, flags, []string{hostname})), nil)
+	result, err := h.Stream(ctx, ssh.Login, shell.Words(slices.Concat([]string{boxapi.SwitchboardBinary, "probe"}, flags, []string{hostname})), nil)
 	if err != nil {
 		return Answer{}, err
 	}
@@ -173,7 +92,7 @@ func (b frontBox) elevation(ctx context.Context, argv []string) (ssh.Acting, err
 }
 
 func (b frontBox) PlacedSum(ctx context.Context, path string) (string, error) {
-	return b.h.destinationSum(ctx, path)
+	return b.h.routing.DestinationSum(ctx, path)
 }
 
 func (b frontBox) Listening(ctx context.Context) ([]listeners.Listener, error) {
@@ -185,7 +104,7 @@ func (b frontBox) Publishing(ctx context.Context, port string) ([]string, error)
 }
 
 func (b frontBox) Claimed(ctx context.Context) ([]string, error) {
-	state, err := b.h.routingTable(ctx)
+	state, err := b.h.routing.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +112,7 @@ func (b frontBox) Claimed(ctx context.Context) ([]string, error) {
 }
 
 func (b frontBox) Shielded(ctx context.Context) ([]string, error) {
-	state, err := b.h.routingTable(ctx)
+	state, err := b.h.routing.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -214,11 +133,11 @@ func (b frontBox) Probe(ctx context.Context, hostname string) (router.Kind, stri
 }
 
 func (b frontBox) ReadSpec(ctx context.Context) (proxy.Spec, error) {
-	state, err := b.h.routingTable(ctx)
+	state, err := b.h.routing.Read(ctx)
 	if err != nil {
 		return proxy.Spec{}, err
 	}
-	return proxySpec(state), nil
+	return routing.Spec(state), nil
 }
 
 func (b frontBox) ProbeAnyCertificate(ctx context.Context, hostname string) (string, string, error) {
@@ -237,7 +156,7 @@ func (b frontBox) ReadBeside(ctx context.Context, path string) ([]boxapi.Sibling
 	if err != nil {
 		return nil, err
 	}
-	said, err := b.h.Run(ctx, elevation, "read what your proxy reads beside "+path, shell.Words(placementCommand(filepath.Dir(path), "beside", path)), nil)
+	said, err := b.h.Run(ctx, elevation, "read what your proxy reads beside "+path, shell.Words(routing.Placement(filepath.Dir(path), "beside", path)), nil)
 	if err != nil {
 		return nil, err
 	}

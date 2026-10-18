@@ -10,13 +10,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func loadsSwitchboard(command string) bool {
-	return strings.Contains(command, shell.Words(switchboardCommand("load", boxapi.RoutingTablePath)))
+	return strings.Contains(command, shell.Words(routing.SwitchboardCommand("load", boxapi.RoutingTablePath)))
 }
 
 func reloadsFront(command string) bool {
@@ -37,8 +39,8 @@ func TestARouteChangeLoadsTheSwitchboardAndLeavesTheFrontProxyRunningAsItWas(t *
 	t.Parallel()
 
 	box := claimingBox(t, routed())
-	store := AppRoute{RouteKey: RouteKey{Owner: surface, Pointer: pointed, App: boxapi.StoreLabel}, Upstream: "shop-storage:9000"}
-	if err := box.host().RouteResource(context.Background(), store); err != nil {
+	store := boxapi.Route{RouteKey: boxapi.RouteKey{Owner: surface, Pointer: pointed, App: boxapi.StoreLabel}, Upstream: "shop-storage:9000"}
+	if err := box.host().routing.RouteResource(context.Background(), store); err != nil {
 		t.Fatalf("RouteResource() = %v", err)
 	}
 	if loads := box.count(loadsSwitchboard); loads != 1 {
@@ -53,7 +55,7 @@ func TestAClaimLoadsTheSwitchboardAndLeavesTheFrontProxyRunningAsItWas(t *testin
 	t.Parallel()
 
 	box := claimingBox(t, routed())
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
 	if loads := box.count(loadsSwitchboard); loads != 1 {
@@ -68,10 +70,10 @@ func TestAPinnedPairLoadsTheSwitchboardBeforeTheFrontProxyReloadsOntoIt(t *testi
 	t.Parallel()
 
 	box, h := pinning(t)
-	if err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := h.routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
-	loaded, reloaded := box.at(shell.Words(switchboardCommand("load", boxapi.RoutingTablePath))), -1
+	loaded, reloaded := box.at(shell.Words(routing.SwitchboardCommand("load", boxapi.RoutingTablePath))), -1
 	for at, command := range box.commands() {
 		if reloadsFront(command) {
 			reloaded = at
@@ -89,9 +91,9 @@ func TestClaimingAHostnameTheBoxAlreadyServesReloadsNothing(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
 	if loads, reloads := box.count(loadsSwitchboard), box.count(reloadsFront); loads != 0 || reloads != 0 {
@@ -111,7 +113,7 @@ func TestAFrontProxyThatRefusesANewPinPutsTheTableAndTheSwitchboardBack(t *testi
 		}
 		return proxied(command)
 	}
-	err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	err := h.routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("ClaimHosts() under a front proxy that refused the reload = %v, want its refusal", err)
 	}
@@ -136,7 +138,7 @@ func TestASwitchboardTheEngineCannotStartIsRefusedWithTheEnginesReason(t *testin
 			}
 			return proxied(command)
 		}
-		err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+		err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 		if err == nil || !strings.Contains(err.Error(), unstarted) {
 			t.Errorf("ClaimHosts() where docker exits %d unable to start the switchboard = %v, want docker's own reason: docker prints it on stdout, and a refusal that says no reason was given leaves the operator nothing to act on", code, err)
 		}
@@ -155,7 +157,7 @@ func TestAProgramThatRanAndFailedNeverHasItsOutputReadAsTheReason(t *testing.T) 
 		}
 		return proxied(command)
 	}
-	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil || strings.Contains(err.Error(), printed) {
 		t.Errorf("ClaimHosts() where the switchboard ran and failed = %v, want a refusal that includes none of its stdout: what a program prints is its answer, and a refusal is shown and logged where that answer never is", err)
 	}
@@ -168,7 +170,7 @@ func TestAReleaseGatesCutsOverAndDrainsInsideTheSwitchboardAndNeverReloadsTheFro
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
-	inside := shell.Words([]string{"docker", "exec", SwitchboardContainer, SwitchboardMounted})
+	inside := shell.Words([]string{"docker", "exec", boxapi.Switchboard, boxapi.SwitchboardMounted})
 	for _, verb := range []string{"gate", "cutover", "idle"} {
 		at := slices.IndexFunc(box.commands(), func(command string) bool {
 			asked := inside + " " + shell.Quote(verb)
@@ -176,7 +178,7 @@ func TestAReleaseGatesCutsOverAndDrainsInsideTheSwitchboardAndNeverReloadsTheFro
 			return strings.Contains(command, asked) || strings.Contains(command, watched[1:len(watched)-1])
 		})
 		if at < 0 {
-			t.Errorf("the release never ran %s inside %s: %q", verb, SwitchboardContainer, box.commands())
+			t.Errorf("the release never ran %s inside %s: %q", verb, boxapi.Switchboard, box.commands())
 		}
 	}
 	if reloads := box.count(reloadsFront); reloads != 0 {
@@ -244,18 +246,18 @@ func TestAReleaseWhoseFrontProxyRefusesTheReloadPutsBothFilesBackAndNeverCutsOve
 func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing(t *testing.T) {
 	t.Parallel()
 
-	argv := switchboardBox(nil, Front{}).run()
+	argv := switchboardBox(nil, Front{}).Run()
 	joined := strings.Join(argv, " ")
 	for what, wanted := range map[string]string{
-		"its name":                         "--name " + SwitchboardContainer,
+		"its name":                         "--name " + boxapi.Switchboard,
 		"the box's network":                "--network " + ProxyNetwork,
 		"a restart unless stopped":         "--restart unless-stopped",
-		"its binary's directory read-only": "--volume " + SwitchboardDir + ":" + switchboardMount + ":ro",
+		"its binary's directory read-only": "--volume " + boxapi.SwitchboardDir + ":" + boxapi.SwitchboardMount + ":ro",
 		"the routing table's directory":    "--volume " + boxapi.RoutingDir + ":" + boxapi.RoutingDir + ":ro",
 		"the connector's socket directory": "--volume " + ConnectorRun + ":" + ConnectorRun + ":ro",
 		"its control socket's directory":   "--volume " + boxapi.SwitchboardControlDir + ":" + boxapi.SwitchboardControlDir,
 		"no capability it was not handed":  "--cap-drop ALL",
-		"no new privileges":                "--security-opt " + noNewPrivileges,
+		"no new privileges":                "--security-opt " + docker.NoNewPrivileges,
 		"the front proxy's socket":         "--front " + boxapi.FrontSocket,
 		"the front socket's directory":     "--volume " + boxapi.FrontDir + ":" + boxapi.FrontDir,
 		"the table it serves":              "--table " + boxapi.RoutingTablePath,
@@ -270,8 +272,8 @@ func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing
 	if strings.Contains(joined, "--publish") {
 		t.Errorf("the switchboard publishes a port: %q; only the front proxy is reached from outside the box", joined)
 	}
-	if at := slices.Index(argv, StaticImage); at < 0 || !strings.Contains(StaticImage, "@sha256:") {
-		t.Errorf("the switchboard runs %q, want an image pinned by digest", StaticImage)
+	if at := slices.Index(argv, docker.StaticImage); at < 0 || !strings.Contains(docker.StaticImage, "@sha256:") {
+		t.Errorf("the switchboard runs %q, want an image pinned by digest", docker.StaticImage)
 	}
 	for _, capability := range []string{"NET_BIND_SERVICE", "NET_ADMIN", "SYS_ADMIN"} {
 		if slices.Contains(argv, capability) {
@@ -283,17 +285,17 @@ func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing
 func TestTheFrontProxyMountsNoRoutingStateTheSwitchboardNowOwns(t *testing.T) {
 	t.Parallel()
 
-	joined := strings.Join(frontProxy().run(), " ")
+	joined := strings.Join(frontProxy().Run(), " ")
 	for _, owned := range []string{ConnectorRun, boxapi.RoutingDir, boxapi.SwitchboardControlDir} {
 		if strings.Contains(joined, "--volume "+owned+":") {
 			t.Errorf("the front proxy runs as %q, which still reaches %s", joined, owned)
 		}
 	}
-	if reader := "--volume " + SwitchboardDir + ":" + switchboardMount + ":ro"; !strings.Contains(joined, reader) {
+	if reader := "--volume " + boxapi.SwitchboardDir + ":" + boxapi.SwitchboardMount + ":ro"; !strings.Contains(joined, reader) {
 		t.Errorf("the front proxy runs as %q, which contains no %s: its image has nothing that reads its admin socket, so nothing proves the socket answers", joined, reader)
 	}
-	if !slices.Equal(frontProxy().run()[len(frontProxy().run())-len(caddy.Command()):], caddy.Command()) {
-		t.Errorf("the front proxy runs %q, want caddy started straight off its config", frontProxy().run())
+	if !slices.Equal(frontProxy().Run()[len(frontProxy().Run())-len(caddy.Command()):], caddy.Command()) {
+		t.Errorf("the front proxy runs %q, want caddy started straight off its config", frontProxy().Run())
 	}
 }
 
@@ -301,12 +303,12 @@ func TestEveryProjectNetworkJoinsTheSwitchboardAndNeverTheFrontProxy(t *testing.
 	t.Parallel()
 
 	for what, script := range map[string]string{
-		"joining a network":    joinNetworkScript(environment.TierProduction, "shop"),
-		"forgetting a network": networkForgetting(environment.TierProduction, "shop"),
-		"recreating the board": switchboardBox(nil, Front{}).writing(1),
+		"joining a network":    docker.JoiningNetwork(environment.TierProduction, "shop"),
+		"forgetting a network": docker.ForgettingNetwork(environment.TierProduction, "shop"),
+		"recreating the board": switchboardBox(nil, Front{}).Writing(1),
 	} {
-		if !strings.Contains(script, shell.Quote(SwitchboardContainer)) {
-			t.Errorf("%s runs\n%s\nwhich never names %s: it reaches every upstream", what, script, SwitchboardContainer)
+		if !strings.Contains(script, shell.Quote(boxapi.Switchboard)) {
+			t.Errorf("%s runs\n%s\nwhich never names %s: it reaches every upstream", what, script, boxapi.Switchboard)
 		}
 		for line := range strings.Lines(script) {
 			if strings.Contains(line, "docker network") && strings.Contains(line, shell.Quote(caddy.Container)) {
@@ -330,7 +332,7 @@ func TestTheBoxProbesWhatItServesOnItsOwnHttpsPortWithoutDocker(t *testing.T) {
 		if err := probe(box.host()); err != nil {
 			t.Fatalf("%s = %v", verb, err)
 		}
-		want := shell.Words([]string{SwitchboardBinary, verb, "web.localhost"})
+		want := shell.Words([]string{boxapi.SwitchboardBinary, verb, "web.localhost"})
 		if at := box.at(want); at < 0 {
 			t.Errorf("%s ran %q, want %s run on the box itself", verb, box.commands(), want)
 		}
@@ -346,10 +348,10 @@ func TestTheDeployLoginIsToldItRunsTheSwitchboardAndCannotWriteIt(t *testing.T) 
 	t.Parallel()
 
 	at := slices.IndexFunc(grants(environment.TierProduction, ssh.AMD64, Front{}), func(grant Grant) bool {
-		return grant.Name == "runs "+SwitchboardBinary
+		return grant.Name == "runs "+boxapi.SwitchboardBinary
 	})
 	if at < 0 {
-		t.Fatalf("the deploy grants never name %s, and the deploy login runs it on the box for every loopback probe", SwitchboardBinary)
+		t.Fatalf("the deploy grants never name %s, and the deploy login runs it on the box for every loopback probe", boxapi.SwitchboardBinary)
 	}
 	if detail := grants(environment.TierProduction, ssh.AMD64, Front{})[at].Detail; !strings.Contains(detail, "0755") || !strings.Contains(detail, "cannot write it") {
 		t.Errorf("the grant reads %q, want the mode it is written at and that the login cannot write it", detail)
@@ -379,10 +381,10 @@ func TestAProbeTheBoxCannotAnswerYetFailsWithAOneLineReason(t *testing.T) {
 func pruneAnswers(sum string) func(command string) (ssh.Result, bool) {
 	return func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, shell.Words(switchboardBox(nil, Front{}).readiness())) && !strings.Contains(command, "while :"):
-			return ssh.Result{Code: 1, Stderr: "Error: No such container: " + SwitchboardContainer}, true
-		case command == stateCommand(SwitchboardContainer):
-			return ssh.Result{Stdout: "Error: No such object: " + SwitchboardContainer}, true
+		case strings.Contains(command, shell.Words(switchboardBox(nil, Front{}).Readiness())) && !strings.Contains(command, "while :"):
+			return ssh.Result{Code: 1, Stderr: "Error: No such container: " + boxapi.Switchboard}, true
+		case command == docker.StateCommand(boxapi.Switchboard):
+			return ssh.Result{Stdout: "Error: No such object: " + boxapi.Switchboard}, true
 		case strings.Contains(command, "missing="):
 			return ssh.Result{Stdout: "sum=" + sum + "\n"}, true
 		}
@@ -406,10 +408,10 @@ func TestASwitchboardRestoredIsTheOneBootstrapRunsWithTheBinaryTheBoxHas(t *test
 			t.Fatalf("%s: CheckProxy() = %v, want the switchboard restored", what, err)
 		}
 		bootstrapped := switchboardBox(switchboardBinary(ssh.AMD64), front)
-		want := slices.Clone(bootstrapped.create())
-		labelled := slices.Index(want, configLabel+"="+bootstrapped.config)
-		want[labelled] = configLabel + "=" + sum
-		want = slices.Insert(want, labelled+1, "--label", restoredLabel+"="+restoredBy)
+		want := slices.Clone(bootstrapped.Create())
+		labelled := slices.Index(want, docker.ConfigLabel+"="+bootstrapped.Config)
+		want[labelled] = docker.ConfigLabel + "=" + sum
+		want = slices.Insert(want, labelled+1, "--label", docker.RestoredLabel+"="+docker.RestoredBy)
 		if b.at(shell.Words(want)) < 0 {
 			t.Errorf("%s: no command started the switchboard bootstrap runs, labelled with the binary the box has and as restored:\n%s\nran:\n%s",
 				what, shell.Words(want), strings.Join(b.commands(), "\n---\n"))
@@ -423,7 +425,7 @@ func TestASwitchboardAPruneLeftStoppedWithItsNetworkGoneIsRecreatedInPlaceOfTheS
 	b := machine(nil)
 	pruned := pruneAnswers("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0")
 	b.answer = func(command string) (ssh.Result, bool) {
-		if command == stateCommand(SwitchboardContainer) {
+		if command == docker.StateCommand(boxapi.Switchboard) {
 			return ssh.Result{Stdout: "Status=exited ExitCode=0 OOMKilled=false Error= RestartCount=0\n"}, true
 		}
 		return pruned(command)
@@ -436,7 +438,7 @@ func TestASwitchboardAPruneLeftStoppedWithItsNetworkGoneIsRecreatedInPlaceOfTheS
 		t.Fatalf("no command started the switchboard again:\n%s", strings.Join(b.commands(), "\n---\n"))
 	}
 	command := b.commands()[at]
-	removed := strings.Index(command, "docker rm --force "+shell.Quote(SwitchboardContainer))
+	removed := strings.Index(command, "docker rm --force "+shell.Quote(boxapi.Switchboard))
 	if removed < 0 || removed > strings.Index(command, shell.Quote("docker")+" "+shell.Quote("create")) {
 		t.Errorf("the switchboard was recreated as\n%s\nwant the stopped one removed first, and only while it is not running", command)
 	}

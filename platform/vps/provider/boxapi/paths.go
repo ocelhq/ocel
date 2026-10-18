@@ -1,6 +1,10 @@
 package boxapi
 
-import "strings"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+)
 
 const (
 	ProxyDir         = StateRoot + "/proxy"
@@ -16,6 +20,11 @@ const (
 )
 
 const LiveBinary = LibDir + "/live"
+
+func Sum(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
+}
 
 const (
 	PinsDir        = TierRoot + "/certs"

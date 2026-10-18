@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -58,35 +59,35 @@ func publishers(said string) []string { return strings.Fields(said) }
 
 func (h *Host) CheckSwitchboard(ctx context.Context, tier environment.Tier) provider.HostCheck {
 	board := switchboardBox(nil, h.proxyOption)
-	check := provider.HostCheck{Subject: board.name, Verdict: provider.HostFail,
+	check := provider.HostCheck{Subject: board.Name, Verdict: provider.HostFail,
 		Fix: "run `" + provider.BootstrapCommand(tier) + "` to start it again"}
 	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
-		check.Finding = fmt.Sprintf("ask the engine about %s: %v", board.name, err)
+		check.Finding = fmt.Sprintf("ask the engine about %s: %v", board.Name, err)
 		return check
 	}
-	result, err := h.Stream(ctx, elevation, shell.Words(board.readiness()), nil)
+	result, err := h.Stream(ctx, elevation, shell.Words(board.Readiness()), nil)
 	switch {
 	case err != nil:
-		check.Finding = fmt.Sprintf("ask %s whether it answers: %v", board.name, err)
+		check.Finding = fmt.Sprintf("ask %s whether it answers: %v", board.Name, err)
 		return check
 	case result.Code == 0:
 		check.Verdict, check.Fix = provider.HostPass, ""
-		check.Finding = fmt.Sprintf("%s is running and answers over its control socket in %s", board.name, boxapi.SwitchboardControlDir)
+		check.Finding = fmt.Sprintf("%s is running and answers over its control socket in %s", board.Name, boxapi.SwitchboardControlDir)
 		if at, restored := h.restoredAt(ctx, elevation); restored {
 			check.Finding += fmt.Sprintf("; a deploy started it again at %s after it was removed, as a prune removes it whenever it is stopped", at)
 		}
 		return check
 	}
-	state := strings.TrimSpace(h.Evidence(ctx, elevation, stateCommand(board.name)))
-	switch status := stateField(state, "Status"); status {
+	state := strings.TrimSpace(h.Evidence(ctx, elevation, docker.StateCommand(board.Name)))
+	switch status := docker.StateField(state, "Status"); status {
 	case "":
-		check.Finding = fmt.Sprintf("no %s container on this box, so nothing routes what the front proxy forwards: %s", board.name, state)
+		check.Finding = fmt.Sprintf("no %s container on this box, so nothing routes what the front proxy forwards: %s", board.Name, state)
 	case "running":
-		check.Finding = fmt.Sprintf("%s %s: %s", board.name, board.unready, ssh.Spoken(result))
+		check.Finding = fmt.Sprintf("%s %s: %s", board.Name, board.Unready, ssh.Spoken(result))
 	default:
-		check.Finding = fmt.Sprintf("%s is %s, so nothing routes what the front proxy forwards: %s", board.name, status, state)
-		check.Fix = "check `docker logs " + board.name + "`, then " + check.Fix
+		check.Finding = fmt.Sprintf("%s is %s, so nothing routes what the front proxy forwards: %s", board.Name, status, state)
+		check.Fix = "check `docker logs " + board.Name + "`, then " + check.Fix
 	}
 	return check
 }

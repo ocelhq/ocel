@@ -17,7 +17,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 
@@ -53,7 +55,7 @@ func bothApps() Rollout {
 	return rollout
 }
 
-func documentOf(t *testing.T, state RoutingTable) string {
+func documentOf(t *testing.T, state boxapi.RoutingTable) string {
 	t.Helper()
 	mustRender(t, state)
 	return string(mustWrite(t, state))
@@ -61,17 +63,17 @@ func documentOf(t *testing.T, state RoutingTable) string {
 
 func configFor(t *testing.T, upstream string) string {
 	t.Helper()
-	return documentOf(t, RoutingTable{
+	return documentOf(t, boxapi.RoutingTable{
 		Grace:  30 * time.Second,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
+		Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: upstream}},
 	})
 }
 
 func twoAppsServing(t *testing.T) string {
 	t.Helper()
-	return documentOf(t, RoutingTable{
+	return documentOf(t, boxapi.RoutingTable{
 		Grace: 30 * time.Second,
-		Routes: []AppRoute{
+		Routes: []boxapi.Route{
 			{RouteKey: keyed("web"), Upstream: retired},
 			{RouteKey: keyed("api"), Upstream: apiRetired},
 		},
@@ -121,19 +123,19 @@ func (f *rolloutBench) count(match func(string) bool) int {
 
 func (f *rolloutBench) cutover() int { return f.after(-1, cutsOver) }
 
-func (f *rolloutBench) state(t *testing.T) RoutingTable {
+func (f *rolloutBench) state(t *testing.T) boxapi.RoutingTable {
 	t.Helper()
 	f.mu.Lock()
 	recorded := f.recorded
 	f.mu.Unlock()
-	state, err := ReadRoutingTable([]byte(recorded))
+	state, err := routing.ReadRoutingTable([]byte(recorded))
 	if err != nil {
 		t.Fatalf("%s was left as %q, which the next deploy cannot read: %v", boxapi.RoutingTablePath, recorded, err)
 	}
 	return state
 }
 
-func upstreamsOf(state RoutingTable) map[string]string {
+func upstreamsOf(state boxapi.RoutingTable) map[string]string {
 	upstreams := map[string]string{}
 	for _, route := range state.Routes {
 		upstreams[route.App] = route.Upstream
@@ -220,7 +222,7 @@ func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneCutover(t *testing.T) {
 	if written != 1 {
 		t.Errorf("the promotion wrote %s %d times before its cutover, want once: %v", ProxyConfig, written, box.commands())
 	}
-	cutoverTable, err := ReadRoutingTable([]byte(posted))
+	cutoverTable, err := routing.ReadRoutingTable([]byte(posted))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,12 +317,12 @@ func TestACutoverThatFailsPutsEveryAppBackOntoItsPreviousUpstreamAndPostsIt(t *t
 func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t *testing.T) {
 	t.Parallel()
 
-	neighbour := documentOf(t, RoutingTable{
+	neighbour := documentOf(t, boxapi.RoutingTable{
 		Grace: 30 * time.Second,
-		Routes: []AppRoute{
+		Routes: []boxapi.Route{
 			{RouteKey: keyed("web"), Upstream: retired},
 			{RouteKey: keyed("api"), Upstream: apiRetired},
-			{RouteKey: RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-1:8080"},
+			{RouteKey: boxapi.RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-1:8080"},
 		},
 	})
 	box := benchedOn(t, twoAppsServing(t), ssh.Result{}, ssh.Result{})
@@ -336,7 +338,7 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 			}
 			box.mu.Unlock()
 			if collided {
-				return ssh.Result{Code: routingMoved, Stderr: digested(neighbour)}, true
+				return ssh.Result{Code: routing.ExitMoved, Stderr: digested(neighbour)}, true
 			}
 		}
 		return proxied(command)
@@ -352,7 +354,7 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 	if got := upstreamsOf(state); got["web"] != nextTarget || got["api"] != apiNextTarget {
 		t.Errorf("the box serves %v, want both apps on their new targets", got)
 	}
-	if !slices.ContainsFunc(state.Routes, func(route AppRoute) bool { return route.Owner == otherSurface }) {
+	if !slices.ContainsFunc(state.Routes, func(route boxapi.Route) bool { return route.Owner == otherSurface }) {
 		t.Errorf("the recomposed write dropped the neighbour's route: %v", state.Routes)
 	}
 }
@@ -364,7 +366,7 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndCutsOverNothing(t *testing.T) {
 	proxied := box.answer
 	box.answer = func(command string) (ssh.Result, bool) {
 		if writesProxy(command) {
-			return ssh.Result{Code: routingMoved, Stderr: "a digest another writer left"}, true
+			return ssh.Result{Code: routing.ExitMoved, Stderr: "a digest another writer left"}, true
 		}
 		return proxied(command)
 	}
@@ -376,8 +378,8 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndCutsOverNothing(t *testing.T) {
 	if !unserved(err) {
 		t.Errorf("a write that never landed refused with %v, which does not say the previous release still serves", err)
 	}
-	if written := box.count(writesProxy); written != routingRewrites {
-		t.Errorf("the release wrote %d times, want %d: the retry is bounded", written, routingRewrites)
+	if written := box.count(writesProxy); written != routing.Rewrites {
+		t.Errorf("the release wrote %d times, want %d: the retry is bounded", written, routing.Rewrites)
 	}
 	if box.cutover() >= 0 {
 		t.Errorf("a release that never wrote its configuration still cut over: %v", box.commands())
@@ -542,7 +544,7 @@ func TestACutoverThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.
 func TestAFirstDeployThatFailsLeavesNothingServingAndIsNotAPathOfItsOwn(t *testing.T) {
 	t.Parallel()
 
-	box := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}),
+	box := benchedOn(t, documentOf(t, boxapi.RoutingTable{Grace: 30 * time.Second}),
 		ssh.Result{Code: 3, Stderr: "answered /healthz with status 500"}, ssh.Result{})
 	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
 		t.Fatal("a first deploy whose app never came up released successfully")
@@ -612,7 +614,7 @@ func TestAReleaseWithNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing.T) 
 func TestAReleaseWithNothingToRetireNeverAsksForADrain(t *testing.T) {
 	t.Parallel()
 
-	box := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), ssh.Result{}, ssh.Result{})
+	box := benchedOn(t, documentOf(t, boxapi.RoutingTable{Grace: 30 * time.Second}), ssh.Result{}, ssh.Result{})
 	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
@@ -641,9 +643,9 @@ func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUps
 	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
-	want, err := RenderProxyConfig(caddy.Builtin{}, RoutingTable{
+	want, err := routing.RenderProxyConfig(caddy.Builtin{}, boxapi.RoutingTable{
 		Grace:  30 * time.Second,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: nextTarget}},
+		Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: nextTarget}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -655,8 +657,8 @@ func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUps
 	for _, wanted := range []string{
 		shell.Quote(nextTarget + "/healthz"),
 		shell.Quote("--deploy-timeout") + " " + shell.Quote("30"),
-		shell.Quote(SwitchboardMounted),
-		shell.Quote(SwitchboardContainer),
+		shell.Quote(boxapi.SwitchboardMounted),
+		shell.Quote(boxapi.Switchboard),
 	} {
 		if !strings.Contains(gated, insideWatch(wanted)) {
 			t.Errorf("the gate is made as %q, which includes no %s", gated, wanted)
@@ -728,7 +730,7 @@ func TestARetiringReleaseSaysWhatItWaitsForAndHowLongTheRetireeDrains(t *testing
 func TestTheCompareAndSetOverTheProxyConfigIsOneCriticalSection(t *testing.T) {
 	t.Parallel()
 
-	written := stagedWrite("a-digest-this-deploy-read", ProxyConfig, nil)
+	written := routing.StagedWrite("a-digest-this-deploy-read", ProxyConfig, nil)
 	locked := strings.Index(written, "flock -x")
 	compared := strings.Index(written, `if [ "$current" != `)
 	moved := strings.Index(written, `mv "$staged" `)
@@ -741,8 +743,8 @@ func TestTheCompareAndSetOverTheProxyConfigIsOneCriticalSection(t *testing.T) {
 	if rendered := strings.Index(written, `mv "$rendered" `); rendered < locked {
 		t.Errorf("the staged write is\n%s\nand moves %s into place outside the lock, so two writers can leave one's table beside the other's rendering", written, ProxyConfig)
 	}
-	if !strings.Contains(written[:locked], "exec 9<"+shell.Quote(routingLock)) {
-		t.Errorf("the staged write is\n%s\nand locks something other than %s: a lock on a file the write moves over is a lock on an inode the next writer never opens", written, routingLock)
+	if !strings.Contains(written[:locked], "exec 9<"+shell.Quote(routing.Lock)) {
+		t.Errorf("the staged write is\n%s\nand locks something other than %s: a lock on a file the write moves over is a lock on an inode the next writer never opens", written, routing.Lock)
 	}
 	if strings.Index(written, `cat > "$rendered"`) > locked {
 		t.Errorf("the staged write is\n%s\nand reads the whole document off the wire with the lock held, which stalls every other writer on this box for the length of an ssh transfer", written)
@@ -769,10 +771,10 @@ func TestAWriteThatDiesBetweenItsMovesLeavesTheTableItWroteRatherThanTheConfig(t
 	executable(t, filepath.Join(bin, "mv"), "#!/bin/sh\nif [ \"$2\" = "+shell.Quote(config)+" ]; then exit 1; fi\nexec "+shell.Quote(moving)+" \"$@\"\n")
 
 	after := string(mustWrite(t, routed()))
-	here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routingLock, dir).Replace
-	write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum([]byte(before))), ProxyConfig, nil)))
+	here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routing.Lock, dir).Replace
+	write := exec.Command("/bin/sh", "-c", here(routing.StagedWrite(routing.Digest(contentSum([]byte(before))), ProxyConfig, nil)))
 	write.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
-	write.Stdin = strings.NewReader(pairFed(routingPair{table: []byte(after), config: mustRender(t, routed())}))
+	write.Stdin = strings.NewReader(routing.PairFed(routing.Pair{Table: []byte(after), Config: mustRender(t, routed())}))
 	if err := write.Run(); err == nil {
 		t.Fatal("a write whose second move failed reported success, so nothing below is about a write that died between its moves")
 	}
@@ -853,13 +855,13 @@ func TestAWriteOntoABoxMissingEitherFileSaysToBootstrapIt(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routingLock, dir).Replace
-		write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum(written)), ProxyConfig, nil)))
-		write.Stdin = strings.NewReader(pairFed(routingPair{table: mustWrite(t, routed()), config: mustRender(t, routed())}))
+		here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routing.Lock, dir).Replace
+		write := exec.Command("/bin/sh", "-c", here(routing.StagedWrite(routing.Digest(contentSum(written)), ProxyConfig, nil)))
+		write.Stdin = strings.NewReader(routing.PairFed(routing.Pair{Table: mustWrite(t, routed()), Config: mustRender(t, routed())}))
 		err := write.Run()
 		var exited *exec.ExitError
-		if !errors.As(err, &exited) || exited.ExitCode() != routingUnseeded {
-			t.Errorf("a write onto a box missing %s = %v, want exit %d so the deploy can say the box needs its bootstrap", missing, err, routingUnseeded)
+		if !errors.As(err, &exited) || exited.ExitCode() != routing.ExitUnseeded {
+			t.Errorf("a write onto a box missing %s = %v, want exit %d so the deploy can say the box needs its bootstrap", missing, err, routing.ExitUnseeded)
 		}
 	}
 
@@ -867,11 +869,11 @@ func TestAWriteOntoABoxMissingEitherFileSaysToBootstrapIt(t *testing.T) {
 	proxied := box.answer
 	box.answer = func(command string) (ssh.Result, bool) {
 		if writesProxy(command) {
-			return ssh.Result{Code: routingUnseeded}, true
+			return ssh.Result{Code: routing.ExitUnseeded}, true
 		}
 		return proxied(command)
 	}
-	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
 		t.Errorf("a write onto a box missing its table or its config = %v, want it to say to run `ocel bootstrap`", err)
 	}
@@ -892,9 +894,9 @@ func TestTheTableAndItsConfigAreReadTogetherUnderTheLockAWriterHoldsAcrossBothMo
 			t.Fatal(err)
 		}
 	}
-	here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routingLock, dir).Replace
-	if !strings.Contains(stagedWrite("a-digest", ProxyConfig, nil), strings.TrimSuffix(routingLocked("-x"), "\n")) {
-		t.Fatalf("the staged write is\n%s\nand does not hold %s exclusively, so a read under it serializes against nothing", stagedWrite("a-digest", ProxyConfig, nil), routingLock)
+	here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routing.Lock, dir).Replace
+	if !strings.Contains(routing.StagedWrite("a-digest", ProxyConfig, nil), strings.TrimSuffix(routing.Locked("-x"), "\n")) {
+		t.Fatalf("the staged write is\n%s\nand does not hold %s exclusively, so a read under it serializes against nothing", routing.StagedWrite("a-digest", ProxyConfig, nil), routing.Lock)
 	}
 
 	acquired := filepath.Join(t.TempDir(), "acquired")
@@ -911,7 +913,7 @@ func TestTheTableAndItsConfigAreReadTogetherUnderTheLockAWriterHoldsAcrossBothMo
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	said, err := exec.Command("/bin/sh", "-c", here(pairReading())).Output()
+	said, err := exec.Command("/bin/sh", "-c", here(routing.PairReading())).Output()
 	if err != nil {
 		t.Fatalf("the read of the pair = %v", err)
 	}
@@ -935,13 +937,13 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 			t.Fatal(err)
 		}
 	}
-	read := tableDigest(contentSum([]byte("the table both writers read")))
+	read := routing.Digest(contentSum([]byte("the table both writers read")))
 
 	racing := make(chan error, 2)
 	for _, writer := range []string{"one", "the other"} {
 		go func() {
-			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routingLock, dir).Replace(stagedWrite(read, ProxyConfig, nil)))
-			run.Stdin = strings.NewReader(pairFed(routingPair{table: []byte("table by " + writer), config: []byte("config by " + writer)}))
+			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routing.Lock, dir).Replace(routing.StagedWrite(read, ProxyConfig, nil)))
+			run.Stdin = strings.NewReader(routing.PairFed(routing.Pair{Table: []byte("table by " + writer), Config: []byte("config by " + writer)}))
 			racing <- run.Run()
 		}()
 	}
@@ -965,9 +967,9 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 	t.Parallel()
 
 	neighbours := map[int]string{
-		1: documentOf(t, RoutingTable{
+		1: documentOf(t, boxapi.RoutingTable{
 			Grace:  30 * time.Second,
-			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
+			Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
 		}),
 	}
 	box := benched(t, ssh.Result{}, ssh.Result{})
@@ -983,7 +985,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 			}
 			box.mu.Unlock()
 			if collided {
-				return ssh.Result{Code: routingMoved, Stderr: digested(neighbour)}, true
+				return ssh.Result{Code: routing.ExitMoved, Stderr: digested(neighbour)}, true
 			}
 		}
 		return proxied(command)
@@ -1058,7 +1060,7 @@ func diagnosed(t *testing.T, gate ssh.Result, state, logs string) string {
 		t.Fatal("a release the gate refused returned no error at all")
 	}
 	read, removed := box.at("docker logs"), box.at("docker rm --force "+shell.Quote(physical))
-	if read < 0 || box.at("docker inspect --type container --format "+shell.Quote(strings.Join(stateSelectors(), " "))) < 0 {
+	if read < 0 || box.at("docker inspect --type container --format "+shell.Quote(strings.Join(docker.StateSelectors(), " "))) < 0 {
 		t.Fatalf("a refused release captured no evidence at all: %v", box.commands())
 	}
 	if removed < read {
@@ -1287,7 +1289,7 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 	}
 
 	quiet := &fake.Log{}
-	first := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), ssh.Result{}, ssh.Result{})
+	first := benchedOn(t, documentOf(t, boxapi.RoutingTable{Grace: 30 * time.Second}), ssh.Result{}, ssh.Result{})
 	if err := first.host().RollOut(context.Background(), aRollout(), quiet); err != nil {
 		t.Fatal(err)
 	}
@@ -1379,9 +1381,9 @@ func TestWhatFollowsTheCutoverLeavesARouteAnotherReleaseCutOverSinceOnItsUpstrea
 		if cutsOver(command) {
 			once.Do(func() {
 				box.mu.Lock()
-				box.recorded = documentOf(t, RoutingTable{
+				box.recorded = documentOf(t, boxapi.RoutingTable{
 					Grace:  30 * time.Second,
-					Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: overtaking}},
+					Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: overtaking}},
 				})
 				box.mu.Unlock()
 			})
@@ -1779,10 +1781,10 @@ func TestARoutingTableThatReadsBackTornIsRefusedWithoutQuotingIt(t *testing.T) {
 func TestAPreviewMovingOnLeavesTheContainerADeploymentPointerStillRoutesToRunning(t *testing.T) {
 	t.Parallel()
 
-	deployment := RouteKey{Owner: surface, Pointer: router.FormatDeploymentPointer(pointed, "0123456789abcdef0123456789abcdef"), App: "web"}
-	box := benchedOn(t, documentOf(t, RoutingTable{
+	deployment := boxapi.RouteKey{Owner: surface, Pointer: router.FormatDeploymentPointer(pointed, "0123456789abcdef0123456789abcdef"), App: "web"}
+	box := benchedOn(t, documentOf(t, boxapi.RoutingTable{
 		Grace: 30 * time.Second,
-		Routes: []AppRoute{
+		Routes: []boxapi.Route{
 			{RouteKey: keyed("web"), Upstream: retired},
 			{RouteKey: deployment, Upstream: retired},
 		},
@@ -1795,7 +1797,7 @@ func TestAPreviewMovingOnLeavesTheContainerADeploymentPointerStillRoutesToRunnin
 		t.Errorf("the release stopped %s, which %s still routes to: a deployment's own hostname answers 502 the moment its preview moves on", retiring, deployment.Pointer)
 	}
 	state := box.state(t)
-	if at := slices.IndexFunc(state.Routes, func(route AppRoute) bool { return route.RouteKey == deployment }); at < 0 || state.Routes[at].Upstream != retired {
+	if at := slices.IndexFunc(state.Routes, func(route boxapi.Route) bool { return route.RouteKey == deployment }); at < 0 || state.Routes[at].Upstream != retired {
 		t.Errorf("the release left routes %v, want %s still on %s", state.Routes, deployment.Pointer, retired)
 	}
 }

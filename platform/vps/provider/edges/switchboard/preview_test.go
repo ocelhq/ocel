@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 const previewBase = "preview.example.com"
@@ -163,7 +162,7 @@ func movePointerOnto(t *testing.T, stack boxStack, pointer, promotionID string, 
 	}
 }
 
-func claimedOn(t *testing.T, m *machine) []host.HostClaim {
+func claimedOn(t *testing.T, m *machine) []boxapi.Claim {
 	t.Helper()
 
 	claims, err := m.Claims(context.Background())
@@ -181,13 +180,13 @@ func TestAPreviewOfAMultiAppProjectClaimsEachHostnameTheMoveNamesForItsApp(t *te
 
 	surface := switchboard.Surface(slug, environment.TierPreview)
 	hosts := listPreviewHosts("pr-7", "api", "web")
-	want := []host.HostClaim{
+	want := []boxapi.Claim{
 		{Hostname: hosts[0].Hostname, Owner: surface, Pointer: "pr-7", App: "api"},
 		{Hostname: hosts[1].Hostname, Owner: surface, Pointer: "pr-7", App: "web"},
 	}
-	slices.SortFunc(want, func(a, b host.HostClaim) int { return strings.Compare(a.Hostname, b.Hostname) })
+	slices.SortFunc(want, func(a, b boxapi.Claim) int { return strings.Compare(a.Hostname, b.Hostname) })
 	claimed := claimedOn(t, m)
-	slices.SortFunc(claimed, func(a, b host.HostClaim) int { return strings.Compare(a.Hostname, b.Hostname) })
+	slices.SortFunc(claimed, func(a, b boxapi.Claim) int { return strings.Compare(a.Hostname, b.Hostname) })
 	if !slices.Equal(claimed, want) {
 		t.Fatalf("the box records %v, want %v: a preview is served on the hostnames its move names, each routed to the app it names", claimed, want)
 	}
@@ -199,7 +198,7 @@ func TestAPreviewOfASingleAppProjectClaimsTheOneHostnameTheMoveNames(t *testing.
 	m := aMachine()
 	previewed(t, previewStack(t, m), "pr-7", "web")
 
-	want := []host.HostClaim{{
+	want := []boxapi.Claim{{
 		Hostname: listPreviewHosts("pr-7", "web")[0].Hostname,
 		Owner:    switchboard.Surface(slug, environment.TierPreview),
 		Pointer:  "pr-7",
@@ -293,11 +292,11 @@ func TestAPreviewDeploymentKeepsItsHostnameAfterThePreviewMovesOnUntilItIsRemove
 	movePointerOnto(t, stack, "pr-7", "p-2", map[string]string{"web": "b-2"}, listPreviewHosts("pr-7", "web"))
 
 	surface := switchboard.Surface(slug, environment.TierPreview)
-	if served := m.upstream[host.RouteKey{Owner: surface, Pointer: deployment, App: "web"}]; !strings.HasPrefix(served, slug+"-web-pr-7:") {
+	if served := m.upstream[boxapi.RouteKey{Owner: surface, Pointer: deployment, App: "web"}]; !strings.HasPrefix(served, slug+"-web-pr-7:") {
 		t.Errorf("%s forwards to %q after the preview moved on, want the container it was deployed with", deployment, served)
 	}
 	own := listPreviewHosts(deployment, "web")[0].Hostname
-	if !slices.ContainsFunc(claimedOn(t, m), func(claim host.HostClaim) bool { return claim.Hostname == own && claim.Pointer == deployment }) {
+	if !slices.ContainsFunc(claimedOn(t, m), func(claim boxapi.Claim) bool { return claim.Hostname == own && claim.Pointer == deployment }) {
 		t.Errorf("the box records %v, want %s still claimed for %s", claimedOn(t, m), own, deployment)
 	}
 
@@ -309,7 +308,7 @@ func TestAPreviewDeploymentKeepsItsHostnameAfterThePreviewMovesOnUntilItIsRemove
 			t.Errorf("%s is still claimed for %s after it was removed", claim.Hostname, claim.Pointer)
 		}
 	}
-	if _, routed := m.upstream[host.RouteKey{Owner: surface, Pointer: deployment, App: "web"}]; routed {
+	if _, routed := m.upstream[boxapi.RouteKey{Owner: surface, Pointer: deployment, App: "web"}]; routed {
 		t.Errorf("%s is still routed after it was removed", deployment)
 	}
 }
@@ -320,7 +319,7 @@ func TestAPreviewWithAStoreServesItOnOneLabelUnderTheSameWildcard(t *testing.T) 
 	m := aMachine()
 	stack := previewStack(t, m)
 	surface := switchboard.Surface(slug, environment.TierPreview)
-	m.upstream[host.RouteKey{Owner: surface, Pointer: "pr-7", App: boxapi.StoreLabel}] = "shop-pr-7-store-s3:9000"
+	m.upstream[boxapi.RouteKey{Owner: surface, Pointer: "pr-7", App: boxapi.StoreLabel}] = "shop-pr-7-store-s3:9000"
 	previewed(t, stack, "pr-7", "api", "web")
 
 	claimed := claimedHosts(m, boxapi.StoreLabel)
@@ -344,7 +343,7 @@ func TestAPreviewWithAStoreServesItOnOneLabelUnderTheSameWildcard(t *testing.T) 
 	}
 
 	other := aMachine()
-	other.upstream[host.RouteKey{Owner: surface, Pointer: "pr-9", App: boxapi.StoreLabel}] = "shop-pr-9-store-s3:9000"
+	other.upstream[boxapi.RouteKey{Owner: surface, Pointer: "pr-9", App: boxapi.StoreLabel}] = "shop-pr-9-store-s3:9000"
 	previewed(t, previewStack(t, other), "pr-9", "api", "web")
 	if elsewhere := claimedHosts(other, boxapi.StoreLabel); slices.Equal(elsewhere, claimed) {
 		t.Errorf("two previews both serve their store on %v", claimed)
@@ -367,7 +366,7 @@ func TestAPreviewStoreHostnameIsNoAppHostnameEvenForAProjectNamedStorage(t *test
 		t.Fatalf("Reconcile: %v", err)
 	}
 	stack := stackOn(front, stackEdge)
-	m.upstream[host.RouteKey{Owner: switchboard.Surface(named, environment.TierPreview), Pointer: "pr-7", App: boxapi.StoreLabel}] = "storage-pr-7-store-s3:9000"
+	m.upstream[boxapi.RouteKey{Owner: switchboard.Surface(named, environment.TierPreview), Pointer: "pr-7", App: boxapi.StoreLabel}] = "storage-pr-7-store-s3:9000"
 	staged(t, stack, "web", "b1", named+"-web-1")
 	hosts := edge.NewSharedPreviewSite(named, previewBase, previewKey).ListHosts("pr-7", "abcdefghijklmnop", []string{"web"})
 	movePointerOnto(t, stack, "pr-7", "p1", map[string]string{"web": "b1"}, hosts)
@@ -382,7 +381,7 @@ func TestAPreviewDeploymentClaimsNoStoreOfItsOwn(t *testing.T) {
 
 	m := aMachine()
 	stack := previewStack(t, m)
-	m.upstream[host.RouteKey{Owner: switchboard.Surface(slug, environment.TierPreview), Pointer: "pr-7", App: boxapi.StoreLabel}] = "shop-pr-7-store-s3:9000"
+	m.upstream[boxapi.RouteKey{Owner: switchboard.Surface(slug, environment.TierPreview), Pointer: "pr-7", App: boxapi.StoreLabel}] = "shop-pr-7-store-s3:9000"
 	previewed(t, stack, "pr-7", "web")
 	deployment := router.FormatDeploymentPointer("pr-7", "0123456789abcdef0123456789abcdef")
 	movePointerOnto(t, stack, deployment, "p-pr-7", map[string]string{"web": "b-pr-7"}, listPreviewHosts(deployment, "web"))

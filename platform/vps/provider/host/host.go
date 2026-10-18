@@ -9,40 +9,43 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 type Host struct {
 	*ssh.Box
 	deploy      Keys
-	pins        []Pin
+	pins        *certs.Pins
 	proxyOption Front
 	front       proxy.Proxy
 
 	keying sync.Mutex
 	keyed  []byte
 
-	pinning  sync.Mutex
-	vouched  bool
-	unusable error
-
 	described sync.Mutex
 	readings  map[environment.Tier]Reading
 
-	engine *Engine
+	engine  *docker.Engine
+	routing *routing.Table
+	tunnel  *tunnel.Container
 }
 
-func New(box *ssh.Box, deploy Keys, pins []Pin, front Front) *Host {
-	h := &Host{Box: box, engine: NewEngine(box), deploy: deploy, pins: pins, proxyOption: front}
+func New(box *ssh.Box, deploy Keys, pins []boxapi.Pin, front Front) *Host {
+	h := &Host{Box: box, engine: docker.NewEngine(box), deploy: deploy, pins: certs.NewPins(box, pins), proxyOption: front}
 	h.front = openFront(front, frontBox{h})
+	h.routing = routing.NewTable(box, h.front, h.pins.Verified)
+	h.tunnel = tunnel.New(box, h.routing)
 	return h
 }
 
-func (h *Host) Pins() []Pin { return slices.Clone(h.pins) }
-
-func (h *Host) PinFor(hostname string) string { return Covering(h.pins, hostname) }
+func (h *Host) Pins() *certs.Pins { return h.pins }
 
 func (h *Host) Install(ctx context.Context, item Item) error {
 	_, err := h.Run(ctx, ssh.Root, "write "+item.ID(), item.command(), item.stdin())
@@ -56,7 +59,7 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 		return err == nil, err
 	case KindNetwork:
 		rendered, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
-		return strings.TrimSpace(rendered) != networkInUse, err
+		return strings.TrimSpace(rendered) != docker.NetworkInUse, err
 	case KindContainer, KindApps, KindResourceVolumes, KindAppNetworks:
 		_, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
@@ -198,7 +201,7 @@ func (h *Host) observe(ctx context.Context, tier environment.Tier, keys []byte, 
 func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte, arch string, as ssh.Acting) (Reading, error) {
 	surveying := Items(tier, keys, arch, h.proxyOption)
 	if h.proxyOption.adopted() {
-		surveying = append(surveying, frontProxy().item(""))
+		surveying = append(surveying, containerItem(frontProxy(), ""))
 	}
 	rendered, err := h.Run(ctx, as, "survey what "+string(tier)+" has installed", survey(surveying, StampPath(tier), FrontRecordPath, imagesLock), nil)
 	if err != nil {
@@ -356,3 +359,7 @@ func readSurvey(rendered string) (map[string]string, Seal, error) {
 	}
 	return observed, seal, nil
 }
+
+func (h *Host) Routing() *routing.Table { return h.routing }
+
+func (h *Host) Tunnel() *tunnel.Container { return h.tunnel }

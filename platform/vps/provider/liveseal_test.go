@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -81,7 +82,7 @@ func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
 	if rendered, err := vm.attempt(deployLogin, "sudo -n cat "+key); err == nil {
 		t.Errorf("%s read %s through sudo and got %q, so the sudoers line grants more than the helper", deployLogin, key, rendered)
 	}
-	if rendered, err := vm.attempt(deployLogin, "docker run --rm --network none --volume "+host.TierDir(tier)+":/k:ro "+host.StaticImage+" /k/seal.key"); err == nil {
+	if rendered, err := vm.attempt(deployLogin, "docker run --rm --network none --volume "+host.TierDir(tier)+":/k:ro "+docker.StaticImage+" /k/seal.key"); err == nil {
 		t.Errorf("%s mounted %s into a container and got %q, so the docker it drives reaches every file root owns", deployLogin, host.TierDir(tier), rendered)
 	}
 }

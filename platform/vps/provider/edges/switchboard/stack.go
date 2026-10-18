@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 type stack struct {
@@ -30,12 +31,12 @@ func (s *stack) State() edge.StackState { return s.state }
 
 func (s *stack) surface() string { return Surface(s.state.Slug, s.state.Tier) }
 
-func (s *stack) routeKey(pointer, app string) host.RouteKey {
-	return host.RouteKey{Owner: s.surface(), Pointer: router.ResolvePointer(pointer), App: app}
+func (s *stack) routeKey(pointer, app string) boxapi.RouteKey {
+	return boxapi.RouteKey{Owner: s.surface(), Pointer: router.ResolvePointer(pointer), App: app}
 }
 
 type promotable struct {
-	key    host.RouteKey
+	key    boxapi.RouteKey
 	app    string
 	record router.ReleaseRecord
 }
@@ -76,8 +77,8 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	}
 	err = s.e.machine.RollOut(ctx, host.Rollout{
 		Apps:          apps,
-		DeployTimeout: host.DeployWindow,
-		DrainTimeout:  host.DrainWindow,
+		DeployTimeout: routing.DeployWindow,
+		DrainTimeout:  routing.DrainWindow,
 		StillActive:   move.RefuseInactive,
 	}, progress)
 	if unserved := (router.Unserved{}); errors.As(err, &unserved) {
@@ -86,7 +87,7 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	return errors.Join(err, s.recordServed(ctx, move, claims, ready))
 }
 
-func (s *stack) refuse(ctx context.Context, move router.PointerMove, touched []host.AppRollout, added []host.HostClaim, why error) error {
+func (s *stack) refuse(ctx context.Context, move router.PointerMove, touched []host.AppRollout, added []boxapi.Claim, why error) error {
 	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), host.UnwindWindow)
 	defer stop()
 	if len(touched) > 0 {
@@ -95,7 +96,7 @@ func (s *stack) refuse(ctx context.Context, move router.PointerMove, touched []h
 	return router.Unserved{Err: errors.Join(why, s.disclaimAdded(ctx, move, added))}
 }
 
-func (s *stack) recordServed(ctx context.Context, move router.PointerMove, claims []host.HostClaim, ready []promotable) error {
+func (s *stack) recordServed(ctx context.Context, move router.PointerMove, claims []boxapi.Claim, ready []promotable) error {
 	var errs []error
 	if len(claims) > 0 {
 		errs = append(errs, s.disclaimUnnamed(ctx, move.Pointer, claims))
@@ -149,13 +150,13 @@ func (s *stack) rerun(ctx context.Context, release promotable, progress progress
 	})
 }
 
-func (s *stack) listPreviewClaims(ctx context.Context, pointer string, hosts []edge.PreviewHost) ([]host.HostClaim, error) {
+func (s *stack) listPreviewClaims(ctx context.Context, pointer string, hosts []edge.PreviewHost) ([]boxapi.Claim, error) {
 	if len(hosts) == 0 || router.IsDefaultPointer(pointer) {
 		return nil, nil
 	}
-	claims := make([]host.HostClaim, 0, len(hosts)+1)
+	claims := make([]boxapi.Claim, 0, len(hosts)+1)
 	for _, served := range hosts {
-		claims = append(claims, host.HostClaim{
+		claims = append(claims, boxapi.Claim{
 			Hostname: served.Hostname, Owner: s.surface(), Pointer: pointer, App: served.App,
 		})
 	}
@@ -167,7 +168,7 @@ func (s *stack) listPreviewClaims(ctx context.Context, pointer string, hosts []e
 	if err != nil {
 		return nil, err
 	}
-	return append(claims, host.HostClaim{
+	return append(claims, boxapi.Claim{
 		Hostname: hostname, Owner: s.surface(), Pointer: pointer, App: boxapi.StoreLabel,
 	}), nil
 }
@@ -183,19 +184,19 @@ func formatPreviewStoreHostname(hosts []edge.PreviewHost) (string, error) {
 	return tail + "-" + boxapi.StoreLabel + "." + base, nil
 }
 
-func (s *stack) claimPreview(ctx context.Context, claims []host.HostClaim) ([]host.HostClaim, error) {
+func (s *stack) claimPreview(ctx context.Context, claims []boxapi.Claim) ([]boxapi.Claim, error) {
 	if len(claims) == 0 {
 		return nil, nil
 	}
-	current, err := s.e.machine.Claims(ctx)
+	current, err := s.e.routes.Claims(ctx)
 	if err != nil {
 		return nil, err
 	}
-	added := slices.DeleteFunc(slices.Clone(claims), func(claim host.HostClaim) bool { return slices.Contains(current, claim) })
+	added := slices.DeleteFunc(slices.Clone(claims), func(claim boxapi.Claim) bool { return slices.Contains(current, claim) })
 	return added, s.claim(ctx, claims)
 }
 
-func (s *stack) disclaimAdded(ctx context.Context, move router.PointerMove, added []host.HostClaim) error {
+func (s *stack) disclaimAdded(ctx context.Context, move router.PointerMove, added []boxapi.Claim) error {
 	if len(added) == 0 {
 		return nil
 	}
@@ -208,7 +209,7 @@ func (s *stack) disclaimAdded(ctx context.Context, move router.PointerMove, adde
 	}
 	var errs []error
 	for _, claim := range added {
-		if err := s.e.machine.DisclaimHost(ctx, claim.Hostname, s.surface()); err != nil {
+		if err := s.e.routes.DisclaimHost(ctx, claim.Hostname, s.surface()); err != nil {
 			errs = append(errs, fmt.Errorf("%s left claimed: %w", claim.Hostname, err))
 		}
 	}
@@ -218,17 +219,17 @@ func (s *stack) disclaimAdded(ctx context.Context, move router.PointerMove, adde
 	return errors.Join(errs...)
 }
 
-func (s *stack) disclaimUnnamed(ctx context.Context, pointer string, claims []host.HostClaim) error {
-	current, err := s.e.machine.Claims(ctx)
+func (s *stack) disclaimUnnamed(ctx context.Context, pointer string, claims []boxapi.Claim) error {
+	current, err := s.e.routes.Claims(ctx)
 	if err != nil {
 		return err
 	}
 	for _, claim := range current {
 		if claim.Owner != s.surface() || claim.Pointer != pointer ||
-			slices.ContainsFunc(claims, func(named host.HostClaim) bool { return named.Hostname == claim.Hostname }) {
+			slices.ContainsFunc(claims, func(named boxapi.Claim) bool { return named.Hostname == claim.Hostname }) {
 			continue
 		}
-		if err := s.e.machine.DisclaimHost(ctx, claim.Hostname, s.surface()); err != nil {
+		if err := s.e.routes.DisclaimHost(ctx, claim.Hostname, s.surface()); err != nil {
 			return err
 		}
 	}
@@ -292,8 +293,8 @@ func (s *stack) claimTunneled(ctx context.Context, claim router.Claim) (edge.Ori
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	origin, err := s.e.claimThrough(ctx, claim.Tunnel, s.surface(), claim.Hostname, func(tunnel host.Tunnel) error {
-		return s.e.machine.ClaimThrough(ctx, tunnel.Name, served)
+	origin, err := s.e.claimThrough(ctx, claim.Tunnel, s.surface(), claim.Hostname, func(tunnel boxapi.Tunnel) error {
+		return s.e.routes.ClaimThrough(ctx, tunnel.Name, served)
 	})
 	if err != nil {
 		return edge.Origin{}, err
@@ -301,25 +302,25 @@ func (s *stack) claimTunneled(ctx context.Context, claim router.Claim) (edge.Ori
 	return origin, s.applyOrigins(ctx)
 }
 
-func (s *stack) listServed(ctx context.Context, claim router.Claim) ([]host.HostClaim, error) {
+func (s *stack) listServed(ctx context.Context, claim router.Claim) ([]boxapi.Claim, error) {
 	if strings.HasPrefix(claim.Hostname, "*.") {
 		return nil, nil
 	}
-	served := []host.HostClaim{{
+	served := []boxapi.Claim{{
 		Hostname: claim.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: claim.App,
 	}}
 	stores, err := s.stores(ctx, router.DefaultPointer)
 	if err != nil || !stores {
 		return served, err
 	}
-	return append(served, host.HostClaim{
+	return append(served, boxapi.Claim{
 		Hostname: boxapi.StoreHostname(claim.Hostname), Owner: s.surface(),
 		Pointer: router.DefaultPointer, App: boxapi.StoreLabel,
 	}), nil
 }
 
 func (e *Edge) putShield(ctx context.Context, claim router.Claim, owner string) (certified bool, err error) {
-	held, err := e.machine.PutShield(ctx, host.Shield{
+	held, err := e.routes.PutShield(ctx, boxapi.Shield{
 		Hostname: claim.Hostname, Owner: owner, ClientCAs: claim.ClientCAs,
 		OriginCertificate: boxapi.CertificatePair{Certificate: claim.OriginCertificate.Certificate, Key: claim.OriginCertificate.Key},
 	})
@@ -329,7 +330,7 @@ func (e *Edge) putShield(ctx context.Context, claim router.Claim, owner string) 
 	return isOriginCertificateCurrent(held, time.Now()), nil
 }
 
-func isOriginCertificateCurrent(shield host.Shield, now time.Time) bool {
+func isOriginCertificateCurrent(shield boxapi.Shield, now time.Time) bool {
 	block, _ := pem.Decode([]byte(shield.OriginCertificate.Certificate))
 	if block == nil {
 		return false
@@ -341,11 +342,11 @@ func isOriginCertificateCurrent(shield host.Shield, now time.Time) bool {
 	return !edge.OriginCertificate{ExpiresAt: leaf.NotAfter}.IsDue(now)
 }
 
-func (s *stack) claim(ctx context.Context, claims []host.HostClaim) error {
+func (s *stack) claim(ctx context.Context, claims []boxapi.Claim) error {
 	if len(claims) == 0 {
 		return nil
 	}
-	if err := s.e.machine.ClaimHosts(ctx, claims); err != nil {
+	if err := s.e.routes.ClaimHosts(ctx, claims); err != nil {
 		return err
 	}
 	return s.applyOrigins(ctx)
@@ -356,7 +357,7 @@ func (s *stack) applyOrigins(ctx context.Context) error {
 }
 
 func (s *stack) stores(ctx context.Context, pointer string) (bool, error) {
-	upstream, err := s.e.machine.Serving(ctx, s.routeKey(pointer, boxapi.StoreLabel))
+	upstream, err := s.e.routes.Serving(ctx, s.routeKey(pointer, boxapi.StoreLabel))
 	return upstream != "", err
 }
 
@@ -376,13 +377,13 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 }
 
 func (s *stack) disclaimHostname(ctx context.Context, hostname string) error {
-	if err := s.e.machine.DisclaimHost(ctx, hostname, s.surface()); err != nil {
+	if err := s.e.routes.DisclaimHost(ctx, hostname, s.surface()); err != nil {
 		return err
 	}
-	if err := s.e.machine.DisclaimHost(ctx, boxapi.StoreHostname(hostname), s.surface()); err != nil {
+	if err := s.e.routes.DisclaimHost(ctx, boxapi.StoreHostname(hostname), s.surface()); err != nil {
 		return err
 	}
-	return s.e.machine.RemoveShield(ctx, hostname, s.surface())
+	return s.e.routes.RemoveShield(ctx, hostname, s.surface())
 }
 
 func (s *stack) released(what string, err error) error {
@@ -391,7 +392,7 @@ func (s *stack) released(what string, err error) error {
 
 func (s *stack) Destroy(ctx context.Context) error {
 	var errs []error
-	if err := s.e.machine.DisclaimSurface(ctx, s.surface()); err != nil {
+	if err := s.e.routes.DisclaimSurface(ctx, s.surface()); err != nil {
 		errs = append(errs, err)
 	} else {
 		for _, hostname := range slices.Clone(s.state.Bound) {
@@ -399,7 +400,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 			s.state.PublishAddress(hostname, "")
 		}
 	}
-	if err := s.e.machine.UnrouteSurface(ctx, s.surface()); err != nil {
+	if err := s.e.routes.UnrouteSurface(ctx, s.surface()); err != nil {
 		errs = append(errs, err)
 	}
 	if err := s.e.machine.ForgetNetwork(ctx, s.state.Tier, s.state.Slug); err != nil {

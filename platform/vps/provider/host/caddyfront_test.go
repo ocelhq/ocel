@@ -11,7 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -38,7 +40,7 @@ func TestACaddyOptionOpensTheCaddyfileProxyOverTheDirectoryItImports(t *testing.
 	if opened != want {
 		t.Errorf("openFront() = %+v, want %+v", opened, want)
 	}
-	if at := destination(opened); at != "/data/coolify/proxy/caddy/dynamic/"+caddyfile.FileName {
+	if at := routing.Destination(opened); at != "/data/coolify/proxy/caddy/dynamic/"+caddyfile.FileName {
 		t.Errorf("the rendering goes to %q, want Coolify's dynamic directory", at)
 	}
 }
@@ -47,17 +49,17 @@ func TestTheSwitchboardHearsYourCaddyOnItsNetworkOnTheHTTPSListenerAlone(t *test
 	t.Parallel()
 
 	board := switchboardOf(t, coolifysCaddy())
-	if at := slices.Index(board.command, "--https-listen"); at < 0 || board.command[at+1] != "coolify:"+boxapi.HTTPSListenPort {
-		t.Errorf("the switchboard serves as %q, want --https-listen coolify:%s: your Caddy reaches it by name there", board.command, boxapi.HTTPSListenPort)
+	if at := slices.Index(board.Command, "--https-listen"); at < 0 || board.Command[at+1] != "coolify:"+boxapi.HTTPSListenPort {
+		t.Errorf("the switchboard serves as %q, want --https-listen coolify:%s: your Caddy reaches it by name there", board.Command, boxapi.HTTPSListenPort)
 	}
-	if slices.Contains(board.command, "--relay-network") {
-		t.Errorf("the switchboard serves as %q, want nothing relayed: every tenant on coolify would choose its X-Forwarded-Host", board.command)
+	if slices.Contains(board.Command, "--relay-network") {
+		t.Errorf("the switchboard serves as %q, want nothing relayed: every tenant on coolify would choose its X-Forwarded-Host", board.Command)
 	}
-	if len(board.ports) != 0 {
-		t.Errorf("the switchboard publishes %v, want nothing published beside a network", board.ports)
+	if len(board.Ports) != 0 {
+		t.Errorf("the switchboard publishes %v, want nothing published beside a network", board.Ports)
 	}
-	if !slices.ContainsFunc(board.networks, func(joined userNetwork) bool { return joined.name == "coolify" }) {
-		t.Errorf("the switchboard joins %v at docker run, want coolify: the listener resolves its address as serve starts", board.networks)
+	if !slices.ContainsFunc(board.Networks, func(joined docker.Network) bool { return joined.Name == "coolify" }) {
+		t.Errorf("the switchboard joins %v at docker run, want coolify: the listener resolves its address as serve starts", board.Networks)
 	}
 }
 
@@ -65,12 +67,12 @@ func TestTheSwitchboardIsPublishedOnLoopbackForACaddyOnTheHost(t *testing.T) {
 	t.Parallel()
 
 	board := switchboardOf(t, caddyService())
-	running := strings.Join(board.run(), " ")
+	running := strings.Join(board.Run(), " ")
 	if !strings.Contains(running, "--publish 127.0.0.1:8480:"+boxapi.HTTPSListenPort) {
 		t.Errorf("the switchboard runs as %q, want 127.0.0.1:8480 published onto its https listener", running)
 	}
-	if at := slices.Index(board.command, "--https-listen"); at < 0 || board.command[at+1] != ProxyNetwork+":"+boxapi.HTTPSListenPort {
-		t.Errorf("the switchboard serves as %q, want its https listener on its %s address, which the publish forwards to", board.command, ProxyNetwork)
+	if at := slices.Index(board.Command, "--https-listen"); at < 0 || board.Command[at+1] != ProxyNetwork+":"+boxapi.HTTPSListenPort {
+		t.Errorf("the switchboard serves as %q, want its https listener on its %s address, which the publish forwards to", board.Command, ProxyNetwork)
 	}
 }
 
@@ -118,8 +120,8 @@ func TestDestroyUnplacesOcelCaddyReloadsYourCaddyAndTakesTheSudoersLine(t *testi
 	t.Parallel()
 
 	read := Reading{Tier: environment.TierProduction, Front: caddyService(), Observed: map[string]string{
-		KindFile + " " + sudoersCaddyReload:        "",
-		KindContainer + " " + SwitchboardContainer: "",
+		KindFile + " " + sudoersCaddyReload:      "",
+		KindContainer + " " + boxapi.Switchboard: "",
 	}}
 	taken := removing(read, Reading{Tier: environment.TierPreview}, appsPresent{})
 	at := slices.IndexFunc(taken, func(r removal) bool { return r.kind == KindPlaced })
@@ -132,7 +134,7 @@ func TestDestroyUnplacesOcelCaddyReloadsYourCaddyAndTakesTheSudoersLine(t *testi
 			t.Errorf("the destroy runs\n%s\nwant %s in it: your Caddy otherwise keeps routing ocel's hostnames to a switchboard that is gone", command, want)
 		}
 	}
-	board := slices.IndexFunc(taken, func(r removal) bool { return r.kind == KindContainer && r.path == SwitchboardContainer })
+	board := slices.IndexFunc(taken, func(r removal) bool { return r.kind == KindContainer && r.path == boxapi.Switchboard })
 	if board < at {
 		t.Errorf("the destroy removes the switchboard before it unplaces %s, want it unplaced through the switchboard first", caddyfile.FileName)
 	}

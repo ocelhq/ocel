@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -141,7 +142,7 @@ func TestTheGatewayRunsAsOneConfinedContainerOnlyItsProjectReaches(t *testing.T)
 		"'--user' '65532:65532'",
 		"source=" + host.RealtimeDir,
 		"readonly",
-		host.StaticImage,
+		docker.StaticImage,
 	} {
 		if !strings.Contains(runCommand, want) {
 			t.Errorf("the gateway was started without %q:\n%s", want, runCommand)

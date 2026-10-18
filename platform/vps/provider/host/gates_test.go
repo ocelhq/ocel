@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 var shopGate = gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string{"b"}, AllowOptions: []string{"/api"}}
@@ -15,9 +16,9 @@ var shopGate = gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string
 func TestTheRoutingTableReadsBackTheGatesItHolds(t *testing.T) {
 	t.Parallel()
 
-	table := RoutingTable{Grace: DrainWindow, Gates: []OwnedGate{{Owner: surface, Gate: gate.Gate{Key: "j"}}, {Owner: otherSurface, Gate: shopGate}}}
+	table := boxapi.RoutingTable{Grace: routing.DrainWindow, Gates: []boxapi.OwnedGate{{Owner: surface, Gate: gate.Gate{Key: "j"}}, {Owner: otherSurface, Gate: shopGate}}}
 
-	read, err := ReadRoutingTable(mustWrite(t, table))
+	read, err := routing.ReadRoutingTable(mustWrite(t, table))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
@@ -35,12 +36,12 @@ func TestPuttingAGateRecordsItForItsOwnerAndReplacesTheOneItHeld(t *testing.T) {
 	box := claimingBox(t, routed())
 	h := box.host()
 	for _, gate := range []gate.Gate{{Key: "old"}, shopGate} {
-		if err := h.PutGate(context.Background(), surface, &gate); err != nil {
+		if err := h.routing.PutGate(context.Background(), surface, &gate); err != nil {
 			t.Fatalf("PutGate() = %v", err)
 		}
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,13 +54,13 @@ func TestPuttingNoGateTakesTheOneTheOwnerHeldAndNoOnesElse(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Gates = []OwnedGate{{Owner: surface, Gate: shopGate}, {Owner: otherSurface, Gate: shopGate}}
+	state.Gates = []boxapi.OwnedGate{{Owner: surface, Gate: shopGate}, {Owner: otherSurface, Gate: shopGate}}
 	box := claimingBox(t, state)
-	if err := box.host().PutGate(context.Background(), surface, nil); err != nil {
+	if err := box.host().routing.PutGate(context.Background(), surface, nil); err != nil {
 		t.Fatalf("PutGate() = %v", err)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,15 +77,15 @@ func TestEachTierOfAProjectHoldsItsOwnGateAndTakingOneLeavesTheOther(t *testing.
 	h := box.host()
 	previewGate := gate.Gate{Key: "preview"}
 	for owner, held := range map[string]*gate.Gate{surface: &shopGate, preview: &previewGate} {
-		if err := h.PutGate(context.Background(), owner, held); err != nil {
+		if err := h.routing.PutGate(context.Background(), owner, held); err != nil {
 			t.Fatalf("PutGate(%s) = %v", owner, err)
 		}
 	}
-	if err := h.PutGate(context.Background(), preview, nil); err != nil {
+	if err := h.routing.PutGate(context.Background(), preview, nil); err != nil {
 		t.Fatalf("PutGate(%s, nil) = %v", preview, err)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,13 +98,13 @@ func TestDisclaimingASurfaceTakesItsGateWithIt(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Gates = []OwnedGate{{Owner: surface, Gate: shopGate}, {Owner: otherSurface, Gate: shopGate}}
+	state.Gates = []boxapi.OwnedGate{{Owner: surface, Gate: shopGate}, {Owner: otherSurface, Gate: shopGate}}
 	box := claimingBox(t, state)
-	if err := box.host().DisclaimSurface(context.Background(), surface); err != nil {
+	if err := box.host().routing.DisclaimSurface(context.Background(), surface); err != nil {
 		t.Fatalf("DisclaimSurface() = %v", err)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +119,7 @@ func TestAGateWithNoKeyIsRefusedBeforeTheBoxIsTouched(t *testing.T) {
 	box := claimingBox(t, routed())
 	before := box.recorded
 
-	if err := box.host().PutGate(context.Background(), surface, &gate.Gate{}); err == nil {
+	if err := box.host().routing.PutGate(context.Background(), surface, &gate.Gate{}); err == nil {
 		t.Fatal("PutGate() accepted a gate with no key")
 	}
 	if box.recorded != before {

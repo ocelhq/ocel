@@ -20,6 +20,7 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 func pinnedBlocks(t *testing.T, names []string, until time.Duration) (cert, key []byte) {
@@ -69,9 +70,9 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 	pinnedPair(t, proxyBox.pins, "wildcard", []string{"*.preview.example.com"})
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: "pr-7.preview.example.com", Owner: surface, Pointer: pointed}}
-	state.Pins = []Pin{{Hostname: "*.preview.example.com", Path: at}}
-	rendered, err := RenderProxyConfig(caddy.Builtin{}, state)
+	state.Claims = []boxapi.Claim{{Hostname: "pr-7.preview.example.com", Owner: surface, Pointer: pointed}}
+	state.Pins = []boxapi.Pin{{Hostname: "*.preview.example.com", Path: at}}
+	rendered, err := routing.RenderProxyConfig(caddy.Builtin{}, state)
 	if err != nil {
 		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v", err)
 	}
@@ -121,7 +122,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 
 func TestARealProxyOrdersOnTheFirstHandshakeForAClaimedHostnameAndNeverForAnUnclaimedOne(t *testing.T) {
 	state := twoProjects()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	proxyBox, ask := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
 
 	if said := ask(claimed); said.status/100 == 3 {
@@ -186,7 +187,7 @@ func managed(logs, managing, hostname string) bool {
 }
 
 func TestAHostnameClaimedBeforeAnythingServesItIsOrderedForAllTheSame(t *testing.T) {
-	state := RoutingTable{Grace: DrainWindow, Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}}
+	state := boxapi.RoutingTable{Grace: routing.DrainWindow, Claims: []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}}
 	proxyBox, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
 
 	proxyBox.handshake(claimed)
@@ -243,7 +244,7 @@ func TestARealProxyServesAPinAddedOverAHostnameItAlreadyOrderedFor(t *testing.T)
 		wildcard = "*.ocel.home.arpa"
 	)
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: hostname, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: hostname, Owner: surface, Pointer: pointed}}
 	proxyBox, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
 	if ordered := proxyBox.servedLeaf(t, hostname); ordered.Subject.CommonName == wildcard || !slices.Contains(ordered.DNSNames, hostname) {
 		t.Fatalf("the proxy served %q %v for %s before any pin, want the one it ordered for that name: nothing below is a pin taking over from it",
@@ -252,7 +253,7 @@ func TestARealProxyServesAPinAddedOverAHostnameItAlreadyOrderedFor(t *testing.T)
 
 	written := mustWrite(t, state)
 	pinnedPair(t, proxyBox.pins, "wildcard", []string{wildcard})
-	state.Pins = []Pin{{Hostname: wildcard, Path: boxapi.PinsDir + "/wildcard"}}
+	state.Pins = []boxapi.Pin{{Hostname: wildcard, Path: boxapi.PinsDir + "/wildcard"}}
 	proxyBox.stages(t, written, state, issuedByNobody(t, mustRender(t, state)))
 	proxyBox.drives(t, "load", proxyBox.table)
 	proxyBox.reloads(t)

@@ -12,8 +12,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 const tunnelEdge edge.Kind = "cloudflare"
@@ -92,7 +94,7 @@ func TestATunnelAClaimStartedAfterAnotherRunReleasedItIsStoppedAgain(t *testing.
 
 	_, err := routed.Claim(context.Background(), tunneledClaim("shop.example.com"))
 
-	if !errors.Is(err, host.ErrTunnelReleased) {
+	if !errors.Is(err, routing.ErrTunnelReleased) {
 		t.Fatalf("Claim through a tunnel released while it started = %v, want it refused as released", err)
 	}
 	if m.tunnelRunning != "" || !slices.Contains(m.calls, "stop tunnel uuid-1") {
@@ -177,26 +179,26 @@ func (m *machine) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	}, nil
 }
 
-func (m *machine) ReserveTunnel(_ context.Context, front edge.Kind, connector edge.TunnelConnector) (host.Tunnel, error) {
+func (m *machine) Reserve(_ context.Context, front edge.Kind, connector edge.TunnelConnector) (boxapi.Tunnel, error) {
 	if err := m.refuse("ReserveTunnel"); err != nil {
-		return host.Tunnel{}, err
+		return boxapi.Tunnel{}, err
 	}
 	if m.tunnel == nil {
-		m.tunnel = &host.Tunnel{Edge: front, Name: fmt.Sprintf("ocel-box-%d", m.tunnelsReserved), VisitorAddressHeader: connector.VisitorAddressHeader, VisitorSchemeHeader: connector.VisitorSchemeHeader}
+		m.tunnel = &boxapi.Tunnel{Edge: front, Name: fmt.Sprintf("ocel-box-%d", m.tunnelsReserved), VisitorAddressHeader: connector.VisitorAddressHeader, VisitorSchemeHeader: connector.VisitorSchemeHeader}
 		m.tunnelsReserved++
 	}
 	if m.tunnel.Edge != front {
-		return host.Tunnel{}, refusal.Refuse(refusal.CodeBusy, "the box is reached through the %s edge's tunnel", m.tunnel.Edge)
+		return boxapi.Tunnel{}, refusal.Refuse(refusal.CodeBusy, "the box is reached through the %s edge's tunnel", m.tunnel.Edge)
 	}
 	return *m.tunnel, nil
 }
 
-func (m *machine) RunTunnel(ctx context.Context, tunnel host.Tunnel, connector edge.TunnelConnector, token func(context.Context) (string, error)) error {
+func (m *machine) Run(ctx context.Context, tunnel boxapi.Tunnel, connector edge.TunnelConnector, token func(context.Context) (string, error)) error {
 	if err := m.refuse("RunTunnel"); err != nil {
 		return err
 	}
 	if m.tunnel == nil || m.tunnel.Name != tunnel.Name {
-		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnel.Name), host.ErrTunnelReleased)
+		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnel.Name), routing.ErrTunnelReleased)
 	}
 	m.tunnel = &tunnel
 	if m.tunnelRunning == tunnel.ID {
@@ -214,7 +216,7 @@ func (m *machine) RunTunnel(ctx context.Context, tunnel host.Tunnel, connector e
 	return nil
 }
 
-func (m *machine) StopTunnel(_ context.Context, tunnel host.Tunnel) error {
+func (m *machine) Stop(_ context.Context, tunnel boxapi.Tunnel) error {
 	if m.tunnelRunning == tunnel.ID {
 		m.calls = append(m.calls, "stop tunnel "+tunnel.ID)
 		m.tunnelRunning = ""
@@ -222,14 +224,14 @@ func (m *machine) StopTunnel(_ context.Context, tunnel host.Tunnel) error {
 	return nil
 }
 
-func (m *machine) ClaimThrough(_ context.Context, tunnelName string, claims []host.HostClaim) error {
+func (m *machine) ClaimThrough(_ context.Context, tunnelName string, claims []boxapi.Claim) error {
 	if m.tunnel == nil || m.tunnel.Name != tunnelName {
-		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName), host.ErrTunnelReleased)
+		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName), routing.ErrTunnelReleased)
 	}
 	for _, claim := range claims {
 		claim.Tunneled = true
 		m.calls = append(m.calls, "claim through "+claim.Hostname)
-		taken, err := host.Claiming(m.claims, claim)
+		taken, err := routing.Claim(m.claims, claim)
 		if err != nil {
 			return err
 		}
@@ -240,7 +242,7 @@ func (m *machine) ClaimThrough(_ context.Context, tunnelName string, claims []ho
 
 func (m *machine) InstallPreviewEntryThrough(ctx context.Context, base, tunnelName string) error {
 	if m.tunnel == nil || m.tunnel.Name != tunnelName {
-		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName), host.ErrTunnelReleased)
+		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName), routing.ErrTunnelReleased)
 	}
 	if err := m.InstallPreviewEntry(ctx, base); err != nil {
 		return err
@@ -262,7 +264,7 @@ func (m *machine) tunneledNames() []string {
 	return named
 }
 
-func (m *machine) ReleaseTunnel(context.Context) ([]host.Tunnel, error) {
+func (m *machine) Release(context.Context) ([]boxapi.Tunnel, error) {
 	if m.tunnel != nil && len(m.tunneledNames()) == 0 {
 		m.retired = append(m.retired, *m.tunnel)
 		m.calls = append(m.calls, "stop tunnel "+m.tunnel.ID)
@@ -271,8 +273,8 @@ func (m *machine) ReleaseTunnel(context.Context) ([]host.Tunnel, error) {
 	return slices.Clone(m.retired), nil
 }
 
-func (m *machine) ForgetTunnel(_ context.Context, name string) error {
-	m.retired = slices.DeleteFunc(m.retired, func(held host.Tunnel) bool { return held.Name == name })
+func (m *machine) Forget(_ context.Context, name string) error {
+	m.retired = slices.DeleteFunc(m.retired, func(held boxapi.Tunnel) bool { return held.Name == name })
 	return nil
 }
 
@@ -292,7 +294,7 @@ func TestAClaimThroughATunnelOpensTheBoxsTunnelAndNamesItAsTheOrigin(t *testing.
 	if origin != want {
 		t.Errorf("Claim named origin %+v, want %+v: Cloudflare forwards the hostname to the tunnel, and the tunnel only reaches the box", origin, want)
 	}
-	if !slices.Equal(m.tunnelEvents.opened, []string{"ensure ocel-box-0", "configure uuid-1 " + host.TunnelService, "token uuid-1"}) {
+	if !slices.Equal(m.tunnelEvents.opened, []string{"ensure ocel-box-0", "configure uuid-1 " + tunnel.Upstream, "token uuid-1"}) {
 		t.Errorf("the edge saw %v, want the tunnel opened under the name the box reserved, every hostname sent to the switchboard's tunnel listener, and its token read to run it", m.tunnelEvents.opened)
 	}
 	surface := switchboard.Surface(slug, environment.TierProduction)

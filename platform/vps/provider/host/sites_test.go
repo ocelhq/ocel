@@ -10,15 +10,20 @@ import (
 
 func sites(t *testing.T, marker string) []string {
 	t.Helper()
-	entries, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatal(err)
+	var entries []string
+	for _, dir := range []string{".", "../docker", "../routing", "../tunnel"} {
+		matched, err := filepath.Glob(filepath.Join(dir, "*.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range matched {
+			if !strings.HasSuffix(entry, "_test.go") {
+				entries = append(entries, entry)
+			}
+		}
 	}
 	var found []string
 	for _, entry := range entries {
-		if strings.HasSuffix(entry, "_test.go") {
-			continue
-		}
 		read, err := os.ReadFile(entry)
 		if err != nil {
 			t.Fatal(err)
@@ -53,7 +58,7 @@ func rendered(t *testing.T, marker string, roster []string, why string) {
 	t.Helper()
 	found := sites(t, marker)
 	if len(found) == 0 {
-		t.Fatalf("no source in this package renders %s, so the roster this bench checks against it proves nothing", marker)
+		t.Fatalf("no source this bench reads renders %s, so the roster this bench checks against it proves nothing", marker)
 	}
 	slices.Sort(roster)
 	if !slices.Equal(found, roster) {

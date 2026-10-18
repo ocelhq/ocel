@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -47,22 +48,22 @@ func TestAShieldedHostnameIsAnsweredOnlyToAClientPresentingACertificateItTrusts(
 
 	certificate, trusted := pulledCertificate(t)
 	table := releasing()
-	table.Claims = []HostClaim{
+	table.Claims = []boxapi.Claim{
 		{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web"},
 		{Hostname: "storage." + claimed, Owner: surface, Pointer: pointed, App: "storage"},
 	}
-	table.Shields = []Shield{{Hostname: claimed, Owner: surface, ClientCAs: []string{certificate}}}
+	table.Shields = []boxapi.Shield{{Hostname: claimed, Owner: surface, ClientCAs: []string{certificate}}}
 
 	rendered := string(mustRender(t, table))
 	if strings.Count(rendered, trusted) != 1 {
 		t.Errorf("the proxy config trusts the client certificate %d times, want only for %s: its store hostname is reached without the edge in front", strings.Count(rendered, trusted), claimed)
 	}
 
-	written, err := WriteRoutingTable(table)
+	written, err := routing.WriteRoutingTable(table)
 	if err != nil {
 		t.Fatalf("WriteRoutingTable: %v", err)
 	}
-	read, err := ReadRoutingTable(written)
+	read, err := routing.ReadRoutingTable(written)
 	if err != nil {
 		t.Fatalf("ReadRoutingTable: %v", err)
 	}
@@ -74,11 +75,11 @@ func TestAShieldedHostnameIsAnsweredOnlyToAClientPresentingACertificateItTrusts(
 func TestARealProxyRedirectsAShieldedHostnameOverPlainHTTPToHTTPSAndStillServesTheRest(t *testing.T) {
 	certificate, _ := pulledCertificate(t)
 	state := twoProjects()
-	state.Claims = []HostClaim{
+	state.Claims = []boxapi.Claim{
 		{Hostname: claimed, Owner: surface, Pointer: pointed},
 		{Hostname: "blog.example.com", Owner: otherSurface, Pointer: pointed},
 	}
-	state.Shields = []Shield{{Hostname: claimed, Owner: surface, ClientCAs: []string{certificate}}}
+	state.Shields = []boxapi.Shield{{Hostname: claimed, Owner: surface, ClientCAs: []string{certificate}}}
 	ask := probing(t, state)
 
 	if said := ask(claimed); said.status != http.StatusPermanentRedirect || said.location != "https://"+claimed+"/" || said.router == boxapi.SwitchboardRouter {
@@ -92,13 +93,13 @@ func TestARealProxyRedirectsAShieldedHostnameOverPlainHTTPToHTTPSAndStillServesT
 func TestMergingAShieldCarriesItsCertificatesToEveryHostnameThatTrustedOneOfThem(t *testing.T) {
 	t.Parallel()
 
-	shields := []Shield{
+	shields := []boxapi.Shield{
 		{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"old"}},
 		{Hostname: "blog.example.com", Owner: "ocel-blog-production", ClientCAs: []string{"old"}},
 		{Hostname: "other.example.org", Owner: "ocel-other-production", ClientCAs: []string{"another zone"}},
 	}
 
-	rotated := MergeShield(shields, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"new", "old"}})
+	rotated := routing.MergeShield(shields, boxapi.Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"new", "old"}})
 	trusts := map[string][]string{}
 	for _, shield := range rotated {
 		trusts[shield.Hostname] = shield.ClientCAs
@@ -110,8 +111,8 @@ func TestMergingAShieldCarriesItsCertificatesToEveryHostnameThatTrustedOneOfThem
 		t.Errorf("other.example.org trusts %v, want its own zone's certificate left alone", trusts["other.example.org"])
 	}
 
-	retired := MergeShield(rotated, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"new"}})
-	retired = MergeShield(retired, Shield{Hostname: "blog.example.com", Owner: "ocel-blog-production", ClientCAs: []string{"new"}})
+	retired := routing.MergeShield(rotated, boxapi.Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"new"}})
+	retired = routing.MergeShield(retired, boxapi.Shield{Hostname: "blog.example.com", Owner: "ocel-blog-production", ClientCAs: []string{"new"}})
 	for _, shield := range retired {
 		if shield.Hostname == "blog.example.com" && !slices.Equal(shield.ClientCAs, []string{"new"}) {
 			t.Errorf("blog.example.com trusts %v once its own claim retired the old certificate, want the successor alone", shield.ClientCAs)
@@ -122,8 +123,8 @@ func TestMergingAShieldCarriesItsCertificatesToEveryHostnameThatTrustedOneOfThem
 func TestMergingAShieldFromOneZoneKeepsEveryCertificateAnotherZoneStillPresents(t *testing.T) {
 	t.Parallel()
 
-	shields := []Shield{{Hostname: "shop.example.org", Owner: "ocel-org-production", ClientCAs: []string{"uploaded to both", "org's own"}}}
-	merged := MergeShield(shields, Shield{Hostname: "shop.example.com", Owner: "ocel-com-production", ClientCAs: []string{"uploaded to both"}})
+	shields := []boxapi.Shield{{Hostname: "shop.example.org", Owner: "ocel-org-production", ClientCAs: []string{"uploaded to both", "org's own"}}}
+	merged := routing.MergeShield(shields, boxapi.Shield{Hostname: "shop.example.com", Owner: "ocel-com-production", ClientCAs: []string{"uploaded to both"}})
 	for _, shield := range merged {
 		if shield.Hostname == "shop.example.org" && !slices.Contains(shield.ClientCAs, "org's own") {
 			t.Errorf("shop.example.org trusts %v once example.com was shielded, want its own zone's certificate still: example.org presents it, and dropping it refuses every request forwarded there", shield.ClientCAs)
@@ -134,8 +135,8 @@ func TestMergingAShieldFromOneZoneKeepsEveryCertificateAnotherZoneStillPresents(
 func TestMergingAShieldAgainKeepsTheOriginCertificateItAlreadyHolds(t *testing.T) {
 	t.Parallel()
 
-	held := []Shield{{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"zone"}, OriginCertificate: boxapi.CertificatePair{Certificate: "ORIGIN", Key: "KEY"}}}
-	again := MergeShield(held, Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"zone", "successor"}})
+	held := []boxapi.Shield{{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"zone"}, OriginCertificate: boxapi.CertificatePair{Certificate: "ORIGIN", Key: "KEY"}}}
+	again := routing.MergeShield(held, boxapi.Shield{Hostname: "shop.example.com", Owner: "ocel-shop-production", ClientCAs: []string{"zone", "successor"}})
 	if len(again) != 1 || again[0].OriginCertificate.Certificate != "ORIGIN" || again[0].OriginCertificate.Key != "KEY" {
 		t.Errorf("shielding shop.example.com again leaves %+v, want the origin certificate it holds kept: a claim carries one only when the origin needs a new one", again)
 	}

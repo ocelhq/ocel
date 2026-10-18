@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -44,7 +45,7 @@ func newQueueContainer(ref provider.StackRef) host.ResourceContainer {
 	spec.Args = []string{"postgres", "-c", "listen_addresses="}
 	spec.Sockets = boxapi.QueueSocketsPath
 	spec.Ready = []string{"pg_isready", "-U", postgresSuperuser}
-	spec.Labels = map[string]string{host.LabelOwner: boxapi.QueueRole}
+	spec.Labels = map[string]string{docker.LabelOwner: boxapi.QueueRole}
 	superuser := spec.Credential.Reassert
 	spec.Credential.Reassert = func(secret string) ([]string, string) {
 		argv, stdin := superuser(secret)

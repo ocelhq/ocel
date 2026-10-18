@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -22,7 +23,7 @@ type engineReport struct {
 	started int
 }
 
-func probedAs(t *testing.T, k kernel, container boxContainer, engine engineReport) string {
+func probedAs(t *testing.T, k kernel, container docker.Service, engine engineReport) string {
 	t.Helper()
 	dir := t.TempDir()
 	said := filepath.Join(dir, "facts")
@@ -60,35 +61,35 @@ func probedAs(t *testing.T, k kernel, container boxContainer, engine engineRepor
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("/bin/sh", "-c", k.script(container.probe()))
+	cmd := exec.Command("/bin/sh", "-c", k.script(containerProbe(container)))
 	cmd.Env = []string{"PATH=" + dir}
 	rendered, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("probe %s: %v", container.name, err)
+		t.Fatalf("probe %s: %v", container.Name, err)
 	}
 	observed, _, err := readSurvey(string(rendered))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return observed[container.item("").ID()]
+	return observed[containerItem(container, "").ID()]
 }
 
-func engineSays(container boxContainer, migrate string) string {
+func engineSays(container docker.Service, migrate string) string {
 	var said []string
-	for line := range strings.Lines(string(container.facts())) {
-		if !strings.HasPrefix(line, migrateFact) && !strings.HasPrefix(line, mountsFact) {
+	for line := range strings.Lines(string(container.Facts())) {
+		if !strings.HasPrefix(line, docker.MigrateFact) && !strings.HasPrefix(line, docker.MountsFact) {
 			said = append(said, strings.TrimSuffix(line, "\n"))
 		}
 	}
-	if container.migrates {
-		said = append(said, migrateFact+migrate)
+	if container.Migrates {
+		said = append(said, docker.MigrateFact+migrate)
 	}
 	return strings.Join(said, "\n")
 }
 
-func mountedAs(container boxContainer, moved int) (inside, stats map[string]string) {
+func mountedAs(container docker.Service, moved int) (inside, stats map[string]string) {
 	inside, stats = map[string]string{}, map[string]string{}
-	for at, bind := range container.binds {
+	for at, bind := range container.Binds {
 		source, dest, _ := strings.Cut(bind, ":")
 		dest, _, _ = strings.Cut(dest, ":")
 		device := fmt.Sprintf("2049:%d", 100+at)
@@ -104,11 +105,11 @@ func mountedAs(container boxContainer, moved int) (inside, stats map[string]stri
 func TestAContainerWithAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 	t.Parallel()
 
-	for _, container := range []boxContainer{frontProxy(), switchboardBox(nil, Front{})} {
-		stated := container.item("").Digest()
-		facts := engineSays(container, migrateSet)
+	for _, container := range []docker.Service{frontProxy(), switchboardBox(nil, Front{})} {
+		stated := containerItem(container, "").Digest()
+		facts := engineSays(container, docker.MigrateSet)
 		current, _ := mountedAs(container, -1)
-		inside, moved := mountedAs(container, len(container.binds)-1)
+		inside, moved := mountedAs(container, len(container.Binds)-1)
 		_, unmoved := mountedAs(container, -1)
 		for what, probed := range map[string]struct {
 			engine  engineReport
@@ -124,7 +125,7 @@ func TestAContainerWithAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 			observed := probedAs(t, kernelMigrating(t, true), container, probed.engine)
 			if (observed == stated) != probed.current {
 				t.Errorf("%s with %s reads as current=%v, want %v: a container reading a mount the host replaced serves what is no longer there, and only a new container picks the new one up",
-					container.name, what, observed == stated, probed.current)
+					container.Name, what, observed == stated, probed.current)
 			}
 		}
 	}
@@ -138,7 +139,7 @@ func TestAContainerWithAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 	items := Items(tier, keys, ssh.AMD64, Front{})
 	minted := []byte("the key this box minted for itself")
 	for _, item := range []Item{frontItem(), boardItem()} {
-		moved := bytes.Replace(item.Content, []byte(mountsFact+mountsIntact), []byte(mountsFact+mountsMoved), 1)
+		moved := bytes.Replace(item.Content, []byte(docker.MountsFact+docker.MountsIntact), []byte(docker.MountsFact+docker.MountsMoved), 1)
 		if bytes.Equal(moved, item.Content) {
 			t.Fatalf("%s is surveyed without its mounts, so what a moved one proves here is nothing", item.Name)
 		}

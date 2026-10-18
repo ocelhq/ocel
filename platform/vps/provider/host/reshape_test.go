@@ -5,6 +5,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -27,22 +29,22 @@ func TestAClaimComposedOntoAFileOneDeployMovedOnceIsRetriedOntoWhatThatDeployLef
 		}
 		box.mu.Unlock()
 		if first {
-			return ssh.Result{Code: routingMoved, Stderr: digested(string(moved))}, true
+			return ssh.Result{Code: routing.ExitMoved, Stderr: digested(string(moved))}, true
 		}
 		return proxied(command)
 	}
 
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() beside one deploy that rewrote %s = %v: the compare-and-set exists to refuse a lost update, and a release retries it rather than handing the collision to the user, so a domain bind does the same", ProxyConfig, err)
 	}
 	if written := writes; written != 2 {
 		t.Errorf("the claim wrote %s %d times, want twice: once onto the digest the other deploy moved, and once onto what it left", ProxyConfig, written)
 	}
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(table.Claims, []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}) {
+	if !slices.Equal(table.Claims, []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}) {
 		t.Errorf("%s contains claims %v after the retried claim, want %q claimed by %q", ProxyConfig, table.Claims, claimed, surface)
 	}
 	if len(table.Routes) != 2 {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -19,7 +20,7 @@ func searchedOnCrashing(found ssh.Result, state string) *bench {
 	searched := box.answer
 	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
-		case command == stateCommand(physical):
+		case command == docker.StateCommand(physical):
 			return ssh.Result{Stdout: state}, true
 		case command == renderLastRunLogs(physical):
 			return ssh.Result{Stdout: "Error: Cannot find module '/app/index.js'\nocel: the app exited: exit status 1\n"}, true

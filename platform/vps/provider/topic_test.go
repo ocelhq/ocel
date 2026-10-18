@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -103,7 +104,7 @@ func TestADeclaredTaskRunsTheEnvironmentsQueueDatabaseAsAConfinedContainerOnlyIt
 		images.QueueDatabase(),
 		"'listen_addresses='",
 		"dst=" + boxapi.QueueSocketsPath,
-		"'" + host.LabelOwner + "=" + boxapi.QueueRole + "'",
+		"'" + docker.LabelOwner + "=" + boxapi.QueueRole + "'",
 	} {
 		if !strings.Contains(runCommand, want) {
 			t.Errorf("the queue database was started without %q:\n%s", want, runCommand)

@@ -48,8 +48,8 @@ func (vm machine) inside(t *testing.T, command string) string {
 
 func (vm machine) drives(t *testing.T, argv string) string {
 	t.Helper()
-	return strings.TrimSpace(vm.ran(t, host.SwitchboardMounted+" in "+host.SwitchboardContainer,
-		"sudo sh -c "+containerScript("docker exec "+host.SwitchboardContainer+" "+host.SwitchboardMounted+" "+argv)))
+	return strings.TrimSpace(vm.ran(t, boxapi.SwitchboardMounted+" in "+boxapi.Switchboard,
+		"sudo sh -c "+containerScript("docker exec "+boxapi.Switchboard+" "+boxapi.SwitchboardMounted+" "+argv)))
 }
 
 func (vm machine) frontGrace(t *testing.T) string {
@@ -116,9 +116,9 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 	if networks := vm.inspects(t, "container", caddy.Container, "{{range $n, $v := .NetworkSettings.Networks}}{{$n}} {{end}}"); !slices.Equal(strings.Fields(networks), []string{host.ProxyNetwork}) {
 		t.Errorf("the proxy sits on %q, want %q alone: it forwards to the switchboard and reaches no app", networks, host.ProxyNetwork)
 	}
-	if !vm.running(t, host.SwitchboardContainer) {
+	if !vm.running(t, boxapi.Switchboard) {
 		t.Fatalf("%s is not running after a bootstrap that installs it:\n%s",
-			host.SwitchboardContainer, vm.ssh(t, "sudo docker logs --tail 40 "+host.SwitchboardContainer+" 2>&1 || true"))
+			boxapi.Switchboard, vm.ssh(t, "sudo docker logs --tail 40 "+boxapi.Switchboard+" 2>&1 || true"))
 	}
 	if mode := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%a %U' "+quote(host.ProxyData))); mode != "700 root" {
 		t.Errorf("%s is %q, want 700 root: it stores every private key on this box and the acme account key that issues for all of them", host.ProxyData, mode)
@@ -177,19 +177,19 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 	if flight := vm.drives(t, "upstreams"); flight != "[]" {
 		t.Errorf("the switchboard read its upstreams as %q, want an empty set over its control socket: the binary bootstrap mounts is what the release loop drives", flight)
 	}
-	if kind := strings.TrimSpace(vm.ssh(t, "sudo head -c 4 "+host.SwitchboardBinary+" | od -An -c | tr -d ' '")); !strings.Contains(kind, "ELF") {
-		t.Errorf("%s is %q, want an elf executable: the image it runs in lends it no interpreter", host.SwitchboardBinary, kind)
+	if kind := strings.TrimSpace(vm.ssh(t, "sudo head -c 4 "+boxapi.SwitchboardBinary+" | od -An -c | tr -d ' '")); !strings.Contains(kind, "ELF") {
+		t.Errorf("%s is %q, want an elf executable: the image it runs in lends it no interpreter", boxapi.SwitchboardBinary, kind)
 	}
-	if mode := strings.TrimSpace(vm.ssh(t, "stat -c %a:%U:%G "+host.SwitchboardBinary)); mode != "755:root:root" {
-		t.Errorf("%s is %q, want 755:root:root: root alone writes what routes every hostname, and the deploy login runs it to read what the box serves", host.SwitchboardBinary, mode)
+	if mode := strings.TrimSpace(vm.ssh(t, "stat -c %a:%U:%G "+boxapi.SwitchboardBinary)); mode != "755:root:root" {
+		t.Errorf("%s is %q, want 755:root:root: root alone writes what routes every hostname, and the deploy login runs it to read what the box serves", boxapi.SwitchboardBinary, mode)
 	}
-	board := vm.inspects(t, "container", host.SwitchboardContainer, "{{range .Mounts}}{{.Type}}:{{.Destination}}:{{.RW}} {{end}}")
+	board := vm.inspects(t, "container", boxapi.Switchboard, "{{range .Mounts}}{{.Type}}:{{.Destination}}:{{.RW}} {{end}}")
 	for _, mount := range []string{"bind:/ocel/switchboard:false", "bind:" + boxapi.RoutingDir + ":false"} {
 		if !strings.Contains(board, mount) {
 			t.Errorf("the switchboard mounts %q, want %s among them: a directory it reads and cannot write", board, mount)
 		}
 	}
-	if published := vm.inspects(t, "container", host.SwitchboardContainer, "{{json .HostConfig.PortBindings}}"); published != "{}" && published != "null" {
+	if published := vm.inspects(t, "container", boxapi.Switchboard, "{{json .HostConfig.PortBindings}}"); published != "{}" && published != "null" {
 		t.Errorf("the switchboard publishes %s, and nothing but the front proxy is reached from off the box", published)
 	}
 
@@ -369,7 +369,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 		t.Fatalf("PlanRemove() = %v", err)
 	}
 	leaving := onlyGroup(t, removal)
-	for _, taken := range []string{caddy.Container, host.SwitchboardContainer, host.ProxyData, host.ProxyNetwork} {
+	for _, taken := range []string{caddy.Container, boxapi.Switchboard, host.ProxyData, host.ProxyNetwork} {
 		planned := planFor(leaving, taken)
 		if planned.Action != provider.ActionDelete {
 			t.Errorf("PlanRemove() plans %s as %q, want it taken: what ocel wrote is what ocel takes back", taken, planned.Action)
@@ -382,7 +382,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	for _, named := range []string{caddy.Container, host.SwitchboardContainer} {
+	for _, named := range []string{caddy.Container, boxapi.Switchboard} {
 		if vm.running(t, named) {
 			t.Errorf("%s still runs after a destroy, and a container nobody wrote back is one nobody takes down", named)
 		}
@@ -390,7 +390,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	if network := vm.inspects(t, "network", host.ProxyNetwork, "{{.Name}}"); network != "" {
 		t.Errorf("the network %s still exists after a destroy", host.ProxyNetwork)
 	}
-	for _, gone := range []string{host.SwitchboardBinary, host.ProxyConfig, host.ProxyData, boxapi.RoutingTablePath} {
+	for _, gone := range []string{boxapi.SwitchboardBinary, host.ProxyConfig, host.ProxyData, boxapi.RoutingTablePath} {
 		if vm.exists(t, gone) {
 			t.Errorf("%s still exists after a destroy took the last tier on this host", gone)
 		}

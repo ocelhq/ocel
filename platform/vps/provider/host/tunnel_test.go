@@ -13,8 +13,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 const tunnelEdge edge.Kind = "cloudflare"
@@ -24,20 +27,20 @@ func isBusy(err error) bool {
 	return errors.As(err, &refused) && refused.Code == refusal.CodeBusy
 }
 
-func readBack(t *testing.T, box *claimBench) RoutingTable {
+func readBack(t *testing.T, box *claimBench) boxapi.RoutingTable {
 	t.Helper()
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return table
 }
 
-func tunneledBox(t *testing.T) (*claimBench, Tunnel) {
+func tunneledBox(t *testing.T) (*claimBench, boxapi.Tunnel) {
 	t.Helper()
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, Tunneled: true}}
-	state.Tunnel = &Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1", Address: "5a6b7c8d-1.cfargotunnel.com"}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed, Tunneled: true}}
+	state.Tunnel = &boxapi.Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1", Address: "5a6b7c8d-1.cfargotunnel.com"}
 	return claimingBox(t, state), *state.Tunnel
 }
 
@@ -55,10 +58,10 @@ func newConnector() edge.TunnelConnector {
 func TestATunnelIsReadyOnlyOnceTheCommandItsEdgesConnectorNamesAnswersInIt(t *testing.T) {
 	t.Parallel()
 
-	box := tunnelBox(Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}, newConnector())
+	box := tunnel.Service(boxapi.Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}, newConnector())
 
-	if want := []string{"docker", "exec", TunnelContainer, "connector", "ready"}; !slices.Equal(box.readiness(), want) {
-		t.Errorf("the tunnel's readiness is `%s`, want `%s`: only the edge knows how its connector reports a connection", strings.Join(box.readiness(), " "), strings.Join(want, " "))
+	if want := []string{"docker", "exec", tunnel.ContainerName, "connector", "ready"}; !slices.Equal(box.Readiness(), want) {
+		t.Errorf("the tunnel's readiness is `%s`, want `%s`: only the edge knows how its connector reports a connection", strings.Join(box.Readiness(), " "), strings.Join(want, " "))
 	}
 }
 
@@ -66,11 +69,11 @@ func TestABoxReservesOneTunnelNameForItsEdgeAndHandsTheSameOneBack(t *testing.T)
 	t.Parallel()
 	box := claimingBox(t, routed())
 
-	first, err := box.host().ReserveTunnel(context.Background(), tunnelEdge, newConnector())
+	first, err := box.host().tunnel.Reserve(context.Background(), tunnelEdge, newConnector())
 	if err != nil {
 		t.Fatalf("ReserveTunnel() = %v", err)
 	}
-	again, err := box.host().ReserveTunnel(context.Background(), tunnelEdge, newConnector())
+	again, err := box.host().tunnel.Reserve(context.Background(), tunnelEdge, newConnector())
 	if err != nil {
 		t.Fatalf("ReserveTunnel() again = %v", err)
 	}
@@ -87,7 +90,7 @@ func TestABoxReachedThroughOneEdgesTunnelRefusesAnothers(t *testing.T) {
 	t.Parallel()
 	box, _ := tunneledBox(t)
 
-	_, err := box.host().ReserveTunnel(context.Background(), "another-edge", newConnector())
+	_, err := box.host().tunnel.Reserve(context.Background(), "another-edge", newConnector())
 
 	if !isBusy(err) {
 		t.Errorf("ReserveTunnel(another-edge) = %v, want it refused busy: one tunnel reaches one box", err)
@@ -98,7 +101,7 @@ func TestATunnelIsReservedWithTheVisitorHeadersItsEdgeSends(t *testing.T) {
 	t.Parallel()
 	box := claimingBox(t, routed())
 
-	reserved, err := box.host().ReserveTunnel(context.Background(), tunnelEdge, newConnector())
+	reserved, err := box.host().tunnel.Reserve(context.Background(), tunnelEdge, newConnector())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,26 +114,26 @@ func TestATunnelIsReservedWithTheVisitorHeadersItsEdgeSends(t *testing.T) {
 func TestATunnelRunsAsOcelTunnelTheImageAndCommandItsEdgesConnectorNamesReadingARootOnlyTokenFile(t *testing.T) {
 	t.Parallel()
 	box := claimingBox(t, routed())
-	reserved, err := box.host().ReserveTunnel(context.Background(), tunnelEdge, newConnector())
+	reserved, err := box.host().tunnel.Reserve(context.Background(), tunnelEdge, newConnector())
 	if err != nil {
 		t.Fatal(err)
 	}
 	opened := reserved
 	opened.ID, opened.Address = "5a6b7c8d-1", "5a6b7c8d-1.cfargotunnel.com"
 
-	if err := box.host().RunTunnel(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
+	if err := box.host().tunnel.Run(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
 		t.Fatalf("RunTunnel() = %v", err)
 	}
 
 	if recorded := readBack(t, box).Tunnel; recorded == nil || *recorded != opened {
 		t.Errorf("the routing table records tunnel %+v, want %+v: its last leaver deletes it by that id", recorded, opened)
 	}
-	at := box.at(shell.Quote("--name") + " " + shell.Quote(TunnelContainer))
+	at := box.at(shell.Quote("--name") + " " + shell.Quote(tunnel.ContainerName))
 	if at < 0 {
 		t.Fatalf("no container was run: %v", box.commands())
 	}
 	run := box.commands()[at]
-	for _, want := range []string{shell.Quote(TunnelContainer), shell.Quote(newConnector().Image) + " " + shell.Words(newConnector().Command), shell.Quote("CONNECTOR_TOKEN_FILE=" + tunnelTokenMounted(opened.Name)), shell.Quote("--network") + " " + shell.Quote(TunnelNetwork)} {
+	for _, want := range []string{shell.Quote(tunnel.ContainerName), shell.Quote(newConnector().Image) + " " + shell.Words(newConnector().Command), shell.Quote("CONNECTOR_TOKEN_FILE=" + tunnel.TokenMounted(opened.Name)), shell.Quote("--network") + " " + shell.Quote(tunnel.Network)} {
 		if !strings.Contains(run, want) {
 			t.Errorf("the tunnel was run as %q, want %s in it: the box runs the connector its edge names", run, want)
 		}
@@ -144,8 +147,8 @@ func TestATunnelRunsAsOcelTunnelTheImageAndCommandItsEdgesConnectorNamesReadingA
 		}
 	}
 	written := slices.IndexFunc(box.fed, func(fed string) bool { return fed == "the-tunnel-token" })
-	if written < 0 || !strings.Contains(box.commands()[written], shell.Words(renderTunnelTokenArgv("place-secret", opened.Name))) {
-		t.Errorf("the token was not placed root-only in %s from stdin: %v", TunnelDir, box.commands())
+	if written < 0 || !strings.Contains(box.commands()[written], shell.Words(tunnel.TokenArgv("place-secret", opened.Name))) {
+		t.Errorf("the token was not placed root-only in %s from stdin: %v", tunnel.Dir, box.commands())
 	}
 	if written > at {
 		t.Errorf("the tunnel was run before its token was written: %v", box.commands())
@@ -161,14 +164,14 @@ func TestATunnelAlreadyRunningIsLeftRunningAndItsTokenNeverRead(t *testing.T) {
 	box, reserved := tunneledBox(t)
 	serves := box.answer
 	box.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(TunnelContainer)) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(tunnel.ContainerName)) {
 			return ssh.Result{Stdout: "true " + reserved.ID + "\n"}, true
 		}
 		return serves(command)
 	}
 
 	read := false
-	err := box.host().RunTunnel(context.Background(), reserved, newConnector(), func(context.Context) (string, error) {
+	err := box.host().tunnel.Run(context.Background(), reserved, newConnector(), func(context.Context) (string, error) {
 		read = true
 		return "the-tunnel-token", nil
 	})
@@ -187,28 +190,28 @@ func TestATunnelIsRunOnlyUnderTheNameTheBoxReserved(t *testing.T) {
 	stale := reserved
 	stale.Name = "ocel-203-0-113-10-ffffffff"
 
-	err := box.host().RunTunnel(context.Background(), stale, newConnector(), tokenOf("the-tunnel-token"))
+	err := box.host().tunnel.Run(context.Background(), stale, newConnector(), tokenOf("the-tunnel-token"))
 
-	if !isBusy(err) || !errors.Is(err, ErrTunnelReleased) || box.at(shell.Quote("docker")+" "+shell.Quote("run")) >= 0 {
+	if !isBusy(err) || !errors.Is(err, routing.ErrTunnelReleased) || box.at(shell.Quote("docker")+" "+shell.Quote("run")) >= 0 {
 		t.Errorf("RunTunnel() under a name the box no longer reserves = %v, running %v, want it refused busy as a released tunnel with nothing run: that tunnel is being deleted", err, box.commands())
 	}
 }
 
 func TestATunneledHostnameIsLeftOutOfTheProxyAndRefusedByTheSwitchboardAroundTheTunnel(t *testing.T) {
 	t.Parallel()
-	box := claimingBox(t, func() RoutingTable {
+	box := claimingBox(t, func() boxapi.RoutingTable {
 		state := routed()
-		state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-		state.Tunnel = &Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1", Address: "5a6b7c8d-1.cfargotunnel.com"}
+		state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+		state.Tunnel = &boxapi.Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1", Address: "5a6b7c8d-1.cfargotunnel.com"}
 		return state
 	}())
 
-	if err := box.host().ClaimThrough(context.Background(), "ocel-203-0-113-10-0a1b2c3d", []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimThrough(context.Background(), "ocel-203-0-113-10-0a1b2c3d", []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimThrough() = %v", err)
 	}
 
 	table := readBack(t, box)
-	if !slices.Equal(table.Claims, []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, Tunneled: true}}) {
+	if !slices.Equal(table.Claims, []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed, Tunneled: true}}) {
 		t.Errorf("the routing table claims %v, want %s claimed through the tunnel for %s", table.Claims, claimed, surface)
 	}
 	if rendered := string(mustRender(t, table)); strings.Contains(rendered, claimed) {
@@ -230,7 +233,7 @@ func TestAHostnameIsTunneledOnlyThroughTheTunnelTheBoxReserves(t *testing.T) {
 	t.Parallel()
 	box, _ := tunneledBox(t)
 
-	err := box.host().ClaimThrough(context.Background(), "ocel-203-0-113-10-ffffffff", []HostClaim{{Hostname: "blog.example.com", Owner: surface, Pointer: pointed}})
+	err := box.host().routing.ClaimThrough(context.Background(), "ocel-203-0-113-10-ffffffff", []boxapi.Claim{{Hostname: "blog.example.com", Owner: surface, Pointer: pointed}})
 
 	if !isBusy(err) {
 		t.Errorf("ClaimThrough() a tunnel the box no longer reserves = %v, want it refused busy", err)
@@ -241,31 +244,31 @@ func TestTheTunnelIsReleasedOnlyOnceNoHostnameIsTunneled(t *testing.T) {
 	t.Parallel()
 	box, reserved := tunneledBox(t)
 
-	if retired, err := box.host().ReleaseTunnel(context.Background()); err != nil || len(retired) != 0 {
+	if retired, err := box.host().tunnel.Release(context.Background()); err != nil || len(retired) != 0 {
 		t.Fatalf("ReleaseTunnel() with %s tunneled = %v, %v; want nothing released", claimed, retired, err)
 	}
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
-	retired, err := box.host().ReleaseTunnel(context.Background())
-	if err != nil || !slices.Equal(retired, []Tunnel{reserved}) {
+	retired, err := box.host().tunnel.Release(context.Background())
+	if err != nil || !slices.Equal(retired, []boxapi.Tunnel{reserved}) {
 		t.Fatalf("ReleaseTunnel() = %+v, %v; want %+v released", retired, err, reserved)
 	}
 
 	table := readBack(t, box)
-	if table.Tunnel != nil || !slices.Equal(table.Retired, []Tunnel{reserved}) {
+	if table.Tunnel != nil || !slices.Equal(table.Retired, []boxapi.Tunnel{reserved}) {
 		t.Errorf("the routing table records tunnel %+v and retired %+v, want none current and %+v retired until the edge deletes it", table.Tunnel, table.Retired, reserved)
 	}
-	if again, err := box.host().ReleaseTunnel(context.Background()); err != nil || !slices.Equal(again, []Tunnel{reserved}) {
+	if again, err := box.host().tunnel.Release(context.Background()); err != nil || !slices.Equal(again, []boxapi.Tunnel{reserved}) {
 		t.Errorf("ReleaseTunnel() again = %+v, %v; want the retired tunnel handed back until it is forgotten", again, err)
 	}
-	if err := box.host().ForgetTunnel(context.Background(), reserved.Name); err != nil {
+	if err := box.host().tunnel.Forget(context.Background(), reserved.Name); err != nil {
 		t.Fatalf("ForgetTunnel() = %v", err)
 	}
 	if table := readBack(t, box); len(table.Retired) != 0 {
 		t.Errorf("the routing table still retires %+v once the edge deleted it", table.Retired)
 	}
-	if box.at("docker rm --force "+shell.Quote(TunnelContainer)) < 0 || box.at(shell.Words(renderTunnelTokenArgv("unplace", reserved.Name))) < 0 {
+	if box.at("docker rm --force "+shell.Quote(tunnel.ContainerName)) < 0 || box.at(shell.Words(tunnel.TokenArgv("unplace", reserved.Name))) < 0 {
 		t.Errorf("the tunnel's container and token were not removed: %v", box.taking())
 	}
 }
@@ -273,7 +276,7 @@ func TestTheTunnelIsReleasedOnlyOnceNoHostnameIsTunneled(t *testing.T) {
 func TestDisclaimingAHostnameOrASurfaceStopsTunnelingIt(t *testing.T) {
 	t.Parallel()
 	box, _ := tunneledBox(t)
-	if err := box.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
+	if err := box.host().routing.DisclaimHost(context.Background(), claimed, surface); err != nil {
 		t.Fatal(err)
 	}
 	if table := readBack(t, box); table.HasTunneled() {
@@ -281,7 +284,7 @@ func TestDisclaimingAHostnameOrASurfaceStopsTunnelingIt(t *testing.T) {
 	}
 
 	box, _ = tunneledBox(t)
-	if err := box.host().DisclaimSurface(context.Background(), surface); err != nil {
+	if err := box.host().routing.DisclaimSurface(context.Background(), surface); err != nil {
 		t.Fatal(err)
 	}
 	if table := readBack(t, box); table.HasTunneled() {
@@ -293,35 +296,35 @@ func TestADroppedStoreStopsTunnelingItsHostnameSoAnotherSurfaceCanClaimIt(t *tes
 	t.Parallel()
 	storeHostname := boxapi.StoreHostname(claimed)
 	state := routed()
-	state.Routes = append(state.Routes, AppRoute{RouteKey: keyed(boxapi.StoreLabel), Upstream: "shop-store:9000"})
-	state.Claims = []HostClaim{
+	state.Routes = append(state.Routes, boxapi.Route{RouteKey: keyed(boxapi.StoreLabel), Upstream: "shop-store:9000"})
+	state.Claims = []boxapi.Claim{
 		{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web", Tunneled: true},
 		{Hostname: storeHostname, Owner: surface, Pointer: pointed, App: boxapi.StoreLabel, Tunneled: true},
 	}
-	state.Tunnel = &Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1", Address: "5a6b7c8d-1.cfargotunnel.com"}
+	state.Tunnel = &boxapi.Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1", Address: "5a6b7c8d-1.cfargotunnel.com"}
 	box := claimingBox(t, state)
 
-	if err := box.host().UnrouteApp(context.Background(), keyed(boxapi.StoreLabel)); err != nil {
+	if err := box.host().routing.UnrouteApp(context.Background(), keyed(boxapi.StoreLabel)); err != nil {
 		t.Fatalf("UnrouteApp() = %v", err)
 	}
 	if table := readBack(t, box); table.IsTunneled(storeHostname) || !table.IsTunneled(claimed) {
 		t.Errorf("dropping the store left %v, want only %s tunneled: nothing of %s answers %s any more", table.Claims, claimed, surface, storeHostname)
 	}
 
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: storeHostname, Owner: otherSurface, Pointer: pointed, App: boxapi.StoreLabel}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: storeHostname, Owner: otherSurface, Pointer: pointed, App: boxapi.StoreLabel}}); err != nil {
 		t.Fatalf("ClaimHosts() by %s = %v", otherSurface, err)
 	}
-	if tunneled, err := box.host().IsTunneled(context.Background(), storeHostname); err != nil || tunneled {
+	if tunneled, err := box.host().routing.IsTunneled(context.Background(), storeHostname); err != nil || tunneled {
 		t.Errorf("IsTunneled(%s) once %s claims it directly = %v, %v; want false: the switchboard refuses a tunneled hostname at the box", storeHostname, otherSurface, tunneled, err)
 	}
 }
 
 func TestTheTunnelListenerIsBoundOnANetworkOnlyTheSwitchboardAndTheTunnelJoin(t *testing.T) {
 	t.Parallel()
-	joined := shell.Quote("--network") + " " + shell.Quote(TunnelNetwork)
+	joined := shell.Quote("--network") + " " + shell.Quote(tunnel.Network)
 	for what, command := range running() {
 		if strings.Contains(command, joined) != (what == boardContainer || what == tunnelContainer) {
-			t.Errorf("%s runs %q, want only the switchboard and the tunnel on %s: the tunnel listener trusts what the edge says about the visitor", what, command, TunnelNetwork)
+			t.Errorf("%s runs %q, want only the switchboard and the tunnel on %s: the tunnel listener trusts what the edge says about the visitor", what, command, tunnel.Network)
 		}
 	}
 	if tunnel := running()[tunnelContainer]; strings.Contains(tunnel, shell.Quote("--network")+" "+shell.Quote(ProxyNetwork)) {
@@ -335,26 +338,26 @@ func TestTheTunnelListenerIsBoundOnANetworkOnlyTheSwitchboardAndTheTunnelJoin(t 
 		"your traefik":            {Traefik: &TraefikFront{Directory: "/etc/traefik", Network: "coolify"}},
 	} {
 		board := switchboardBox(nil, front)
-		command := shell.Words(board.command)
-		if !strings.Contains(command, shell.Quote("--tunnel-listen")+" "+shell.Quote(TunnelNetwork+":"+boxapi.TunnelListenPort)) {
-			t.Errorf("behind %s the switchboard runs %q, want its tunnel listener bound on the %s network only", name, command, TunnelNetwork)
+		command := shell.Words(board.Command)
+		if !strings.Contains(command, shell.Quote("--tunnel-listen")+" "+shell.Quote(tunnel.Network+":"+boxapi.TunnelListenPort)) {
+			t.Errorf("behind %s the switchboard runs %q, want its tunnel listener bound on the %s network only", name, command, tunnel.Network)
 		}
-		for _, port := range board.ports {
-			if port.target == boxapi.TunnelListenPort {
+		for _, port := range board.Ports {
+			if port.Target == boxapi.TunnelListenPort {
 				t.Errorf("behind %s the switchboard publishes its tunnel listener as %v", name, port)
 			}
 		}
-		if slices.ContainsFunc(front.joined(), func(joined userNetwork) bool { return joined.name == TunnelNetwork }) {
-			t.Errorf("behind %s your proxy's network is %s", name, TunnelNetwork)
+		if slices.ContainsFunc(front.joined(), func(joined docker.Network) bool { return joined.Name == tunnel.Network }) {
+			t.Errorf("behind %s your proxy's network is %s", name, tunnel.Network)
 		}
-		for what, script := range map[string]string{"started": board.writing(containerRising), "started again": board.restoring(containerRising, routingLocked("-x"))} {
-			if !strings.Contains(script, "docker network create "+shell.Quote(TunnelNetwork)) {
-				t.Errorf("behind %s the switchboard is %s without %s created first:\n%s", name, what, TunnelNetwork, script)
+		for what, script := range map[string]string{"started": board.Writing(docker.ContainerRising), "started again": board.Restoring(docker.ContainerRising, routing.Locked("-x"))} {
+			if !strings.Contains(script, "docker network create "+shell.Quote(tunnel.Network)) {
+				t.Errorf("behind %s the switchboard is %s without %s created first:\n%s", name, what, tunnel.Network, script)
 			}
 		}
 	}
-	if !slices.ContainsFunc(proxyRemovals(), func(taken removal) bool { return taken.kind == KindNetwork && taken.path == TunnelNetwork }) {
-		t.Errorf("a teardown leaves the %s network behind", TunnelNetwork)
+	if !slices.ContainsFunc(proxyRemovals(), func(taken removal) bool { return taken.kind == KindNetwork && taken.path == tunnel.Network }) {
+		t.Errorf("a teardown leaves the %s network behind", tunnel.Network)
 	}
 }
 
@@ -390,7 +393,7 @@ func aTunnelShell(t *testing.T, runningID string) *tunnelShell {
 
 func (s *tunnelShell) run(t *testing.T, script string) {
 	t.Helper()
-	command := exec.Command("/bin/sh", "-c", strings.NewReplacer(routingLock, s.dir).Replace(script))
+	command := exec.Command("/bin/sh", "-c", strings.NewReplacer(routing.Lock, s.dir).Replace(script))
 	command.Env = append(os.Environ(), "PATH="+s.bin+":"+os.Getenv("PATH"))
 	if out, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("the script = %v\n%s\n%s", err, out, script)
@@ -402,32 +405,32 @@ func (s *tunnelShell) read(path string) string {
 	return strings.TrimSpace(string(read))
 }
 
-func tokenPathOf(t *testing.T, tunnel Tunnel) string {
+func tokenPathOf(t *testing.T, reserved boxapi.Tunnel) string {
 	t.Helper()
 	connector := newConnector()
-	for _, set := range tunnelBox(tunnel, connector).env {
+	for _, set := range tunnel.Service(reserved, connector).Env {
 		if path, found := strings.CutPrefix(set, connector.TokenFileEnv+"="); found {
 			return path
 		}
 	}
-	t.Fatalf("the tunnel %s runs reading no token file", tunnel.Name)
+	t.Fatalf("the tunnel %s runs reading no token file", reserved.Name)
 	return ""
 }
 
 func TestReleasingATunnelLeavesTheReplacementAnotherClaimStartedAfterIt(t *testing.T) {
 	t.Parallel()
 	box, retired := tunneledBox(t)
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := box.host().ReleaseTunnel(context.Background()); err != nil {
+	if _, err := box.host().tunnel.Release(context.Background()); err != nil {
 		t.Fatalf("ReleaseTunnel() = %v", err)
 	}
 	removal := box.at("unplace")
 	if removal < 0 {
 		t.Fatalf("the released tunnel's token was never removed: %v", box.commands())
 	}
-	replacement := Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-ffffffff", ID: "9e8d7c6b-2", Address: "9e8d7c6b-2.cfargotunnel.com"}
+	replacement := boxapi.Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-ffffffff", ID: "9e8d7c6b-2", Address: "9e8d7c6b-2.cfargotunnel.com"}
 	stand := aTunnelShell(t, replacement.ID)
 
 	stand.run(t, box.commands()[removal])
@@ -441,8 +444,8 @@ func TestReleasingATunnelLeavesTheReplacementAnotherClaimStartedAfterIt(t *testi
 
 	stand = aTunnelShell(t, retired.ID)
 	stand.run(t, box.commands()[removal])
-	if removed := stand.read(stand.removed); removed != TunnelContainer {
-		t.Errorf("releasing %s while its own container still ran removed %q, want %s", retired.ID, removed, TunnelContainer)
+	if removed := stand.read(stand.removed); removed != tunnel.ContainerName {
+		t.Errorf("releasing %s while its own container still ran removed %q, want %s", retired.ID, removed, tunnel.ContainerName)
 	}
 }
 
@@ -450,10 +453,10 @@ func TestATunnelReleasedAndReplacedWhileItsRunPausedNeverReplacesTheNewConnector
 	t.Parallel()
 	box, paused := tunneledBox(t)
 	paused.ID, paused.Address = "5a6b7c8d-2", "5a6b7c8d-2.cfargotunnel.com"
-	replacement := Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-ffffffff", ID: "9e8d7c6b-2", Address: "9e8d7c6b-2.cfargotunnel.com"}
+	replacement := boxapi.Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-ffffffff", ID: "9e8d7c6b-2", Address: "9e8d7c6b-2.cfargotunnel.com"}
 	serves := box.answer
 	box.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, shell.Words(renderTunnelTokenArgv("place-secret", paused.Name))) {
+		if strings.Contains(command, shell.Words(tunnel.TokenArgv("place-secret", paused.Name))) {
 			state := readBack(t, box)
 			state.Retired, state.Tunnel = append(state.Retired, *state.Tunnel), &replacement
 			box.recorded = string(mustWrite(t, state))
@@ -461,15 +464,15 @@ func TestATunnelReleasedAndReplacedWhileItsRunPausedNeverReplacesTheNewConnector
 		return serves(command)
 	}
 
-	err := box.host().RunTunnel(context.Background(), paused, newConnector(), tokenOf("the-paused-token"))
+	err := box.host().tunnel.Run(context.Background(), paused, newConnector(), tokenOf("the-paused-token"))
 
-	if !isBusy(err) || !errors.Is(err, ErrTunnelReleased) {
+	if !isBusy(err) || !errors.Is(err, routing.ErrTunnelReleased) {
 		t.Errorf("RunTunnel() once another run released and replaced its tunnel = %v, want it refused busy as released", err)
 	}
-	if started := box.at(shell.Quote("--name") + " " + shell.Quote(TunnelContainer)); started >= 0 {
+	if started := box.at(shell.Quote("--name") + " " + shell.Quote(tunnel.ContainerName)); started >= 0 {
 		t.Errorf("the paused run started its connector with\n%s\nover the replacement %s the box now reserves", box.commands()[started], replacement.Name)
 	}
-	if box.at(shell.Words(renderTunnelTokenArgv("unplace", replacement.Name))) >= 0 || box.at(shell.Words(renderTunnelTokenArgv("unplace", paused.Name))) < 0 {
+	if box.at(shell.Words(tunnel.TokenArgv("unplace", replacement.Name))) >= 0 || box.at(shell.Words(tunnel.TokenArgv("unplace", paused.Name))) < 0 {
 		t.Errorf("the paused run left its own token or removed the replacement's: %v", box.commands())
 	}
 }
@@ -479,10 +482,10 @@ func TestATunnelStartsOnlyWhileTheTableItCheckedIsTheOneOnTheBox(t *testing.T) {
 	box, reserved := tunneledBox(t)
 	opened := reserved
 	opened.ID = "9e8d7c6b-2"
-	if err := box.host().RunTunnel(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
+	if err := box.host().tunnel.Run(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
 		t.Fatalf("RunTunnel() = %v", err)
 	}
-	start := box.at(shell.Quote("--name") + " " + shell.Quote(TunnelContainer))
+	start := box.at(shell.Quote("--name") + " " + shell.Quote(tunnel.ContainerName))
 	if start < 0 {
 		t.Fatalf("the tunnel was never started: %v", box.commands())
 	}
@@ -491,12 +494,12 @@ func TestATunnelStartsOnlyWhileTheTableItCheckedIsTheOneOnTheBox(t *testing.T) {
 	if err := os.WriteFile(moved, []byte("a table another run wrote since\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command("/bin/sh", "-c", strings.NewReplacer(routingLock, stand.dir, boxapi.RoutingTablePath, moved).Replace(box.commands()[start]))
+	command := exec.Command("/bin/sh", "-c", strings.NewReplacer(routing.Lock, stand.dir, boxapi.RoutingTablePath, moved).Replace(box.commands()[start]))
 	command.Env = append(os.Environ(), "PATH="+stand.bin+":"+os.Getenv("PATH"))
 	out, _ := command.CombinedOutput()
 
-	if code := command.ProcessState.ExitCode(); code != routingMoved {
-		t.Errorf("the start under a table that moved exited %d, want %d so the run checks the reservation again:\n%s", code, routingMoved, out)
+	if code := command.ProcessState.ExitCode(); code != routing.ExitMoved {
+		t.Errorf("the start under a table that moved exited %d, want %d so the run checks the reservation again:\n%s", code, routing.ExitMoved, out)
 	}
 	if removed := stand.read(stand.removed); removed != "" {
 		t.Errorf("the start under a table that moved removed %s before it knew the box still reserved %s", removed, opened.Name)
@@ -508,24 +511,24 @@ func TestATunnelIsStartedAndRemovedOnlyUnderTheLockEveryRoutingWriterTakes(t *te
 	box, reserved := tunneledBox(t)
 	opened := reserved
 	opened.ID = "9e8d7c6b-2"
-	if err := box.host().RunTunnel(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
+	if err := box.host().tunnel.Run(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
 		t.Fatalf("RunTunnel() = %v", err)
 	}
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := box.host().ReleaseTunnel(context.Background()); err != nil {
+	if _, err := box.host().tunnel.Release(context.Background()); err != nil {
 		t.Fatalf("ReleaseTunnel() = %v", err)
 	}
 
-	for what, at := range map[string]int{"started": box.at(shell.Quote("--name") + " " + shell.Quote(TunnelContainer)), "removed": box.at("unplace")} {
+	for what, at := range map[string]int{"started": box.at(shell.Quote("--name") + " " + shell.Quote(tunnel.ContainerName)), "removed": box.at("unplace")} {
 		if at < 0 {
 			t.Fatalf("the tunnel was never %s: %v", what, box.commands())
 		}
 		command := box.commands()[at]
-		locked := strings.Index(command, strings.TrimSuffix(routingLocked("-x"), "\n"))
+		locked := strings.Index(command, strings.TrimSuffix(routing.Locked("-x"), "\n"))
 		if locked < 0 || strings.Index(command, "docker rm") < locked {
-			t.Errorf("the tunnel is %s by\n%s\nwhich does not hold %s first, so a release and a claim's start interleave and one removes the other's container", what, command, routingLock)
+			t.Errorf("the tunnel is %s by\n%s\nwhich does not hold %s first, so a release and a claim's start interleave and one removes the other's container", what, command, routing.Lock)
 		}
 	}
 }

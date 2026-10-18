@@ -8,6 +8,8 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 const (
@@ -34,23 +36,23 @@ func dockerSudoers() []byte {
 func dockerGrants(front Front) boxapi.DockerGrants {
 	grants := boxapi.DockerGrants{
 		Binds: []boxapi.DockerBind{
-			{Path: SwitchboardDir},
+			{Path: boxapi.SwitchboardDir},
 			{Path: RealtimeDir},
 			{Path: LiveSocketDir},
 			{Path: boxapi.RoutingDir},
 			{Path: ConnectorRun},
 			{Path: boxapi.SwitchboardControlDir, Writable: true},
 			{Path: boxapi.FrontDir, Writable: true},
-			{Path: TunnelDir, Writable: true},
+			{Path: tunnel.Dir, Writable: true},
 		},
-		Containers: []string{SwitchboardContainer, caddy.Container, TunnelContainer},
+		Containers: []string{boxapi.Switchboard, caddy.Container, tunnel.ContainerName},
 		Networks:   []string{},
 	}
-	if placed := destination(openFront(front, frontBox{})); placed != "" {
+	if placed := routing.Destination(openFront(front, frontBox{})); placed != "" {
 		grants.Binds = append(grants.Binds, boxapi.DockerBind{Path: filepath.Dir(placed), Writable: true})
 	}
 	for _, joined := range front.joined() {
-		grants.Networks = append(grants.Networks, joined.name)
+		grants.Networks = append(grants.Networks, joined.Name)
 	}
 	if front.Caddy != nil && front.Caddy.Container != "" {
 		grants.Containers = append(grants.Containers, front.Caddy.Container)

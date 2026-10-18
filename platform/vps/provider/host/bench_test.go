@@ -18,9 +18,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 type bench struct {
@@ -58,6 +62,12 @@ func (b *bench) host() *Host { return b.fronted(Front{}) }
 
 func (b *bench) fronted(front Front) *Host {
 	return New(ssh.NewBox(b.dial, b.pause), Keys{}, nil, front)
+}
+
+func (h *Host) useFront(front proxy.Proxy) {
+	h.front = front
+	h.routing = routing.NewTable(h.Box, front, h.pins.Verified)
+	h.tunnel = tunnel.New(h.Box, h.routing)
 }
 
 func (b *bench) pause(ctx context.Context, wait time.Duration) error {
@@ -122,7 +132,7 @@ func (b *bench) taking() []string {
 		if strings.HasPrefix(command, "rm ") || strings.HasPrefix(command, "rm -rf ") ||
 			strings.HasPrefix(command, "rmdir ") || strings.HasPrefix(command, "userdel ") ||
 			strings.HasPrefix(command, "docker ") || strings.HasPrefix(command, "if ! docker ") ||
-			strings.HasPrefix(command, routingLocked("-x")+"rm ") {
+			strings.HasPrefix(command, routing.Locked("-x")+"rm ") {
 			taken = append(taken, command)
 		}
 	}
@@ -216,7 +226,7 @@ func (b *bench) rendered(command string) ssh.Result {
 		return ssh.Result{Stdout: "0\n"}
 	case command == "uname -m":
 		return ssh.Result{Stdout: b.facts.Arch + "\n"}
-	case strings.Contains(command, sizeFields):
+	case strings.Contains(command, docker.SizeFields):
 		return ssh.Result{Stdout: strconv.Itoa(benchMemoryBytes) + " " + strconv.Itoa(benchCPUs) + "\n"}
 	case readsProxy(command):
 		return ssh.Result{Stdout: pairSaid(string(routingTableItem().Content), string(proxyConfigItem().Content))}
@@ -399,7 +409,7 @@ func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	box := bootstrappedOn(t, tier)
 	installed := box.installed[tier]
 	for at, item := range installed {
-		if item.Name == SwitchboardBinary {
+		if item.Name == boxapi.SwitchboardBinary {
 			installed[at].Content = nil
 		}
 	}
@@ -411,12 +421,12 @@ func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	if read.current(proxyItem(KindFile)) {
 		t.Fatal("the reading calls a helper it read no bytes of current, so this test proves nothing about what drift is")
 	}
-	if !read.observed(KindFile, SwitchboardBinary) {
+	if !read.observed(KindFile, boxapi.SwitchboardBinary) {
 		t.Errorf("%s is absent from a reading every write is planned against, and absence is a lie there: a file this reading could not hash is drift it must name",
-			SwitchboardBinary)
+			boxapi.SwitchboardBinary)
 	}
 	if read.upToDate() {
-		t.Errorf("a box whose %s does not hash as ocel writes it reports itself up to date", SwitchboardBinary)
+		t.Errorf("a box whose %s does not hash as ocel writes it reports itself up to date", boxapi.SwitchboardBinary)
 	}
 }
 
@@ -456,11 +466,11 @@ func tableOf(fed string) string { return fedLine(fed, 0) }
 func configOf(fed string) string { return fedLine(fed, 1) }
 
 func renderedFrom(document string) string {
-	table, err := ReadRoutingTable([]byte(document))
+	table, err := routing.ReadRoutingTable([]byte(document))
 	if err != nil {
 		return err.Error()
 	}
-	rendered, err := RenderProxyConfig(caddy.Builtin{}, table)
+	rendered, err := routing.RenderProxyConfig(caddy.Builtin{}, table)
 	if err != nil {
 		return err.Error()
 	}
@@ -488,7 +498,7 @@ func servesPair(b *bench, table, config *string) func(string) (ssh.Result, bool)
 		switch {
 		case writesProxy(command):
 			if expected := expectedDigest(command); expected != digested(*table) {
-				return ssh.Result{Code: routingMoved, Stderr: digested(*table)}, true
+				return ssh.Result{Code: routing.ExitMoved, Stderr: digested(*table)}, true
 			}
 			*table = tableOf(b.fed[len(b.fed)-1])
 			if config != nil {
@@ -506,7 +516,7 @@ func servesPair(b *bench, table, config *string) func(string) (ssh.Result, bool)
 	}
 }
 
-func admittedBy(t *testing.T, state RoutingTable) func(hostname string) bool {
+func admittedBy(t *testing.T, state boxapi.RoutingTable) func(hostname string) bool {
 	t.Helper()
 	table, err := boxapi.ReadTable(mustWrite(t, state))
 	if err != nil {
@@ -515,7 +525,7 @@ func admittedBy(t *testing.T, state RoutingTable) func(hostname string) bool {
 	return table.Admits
 }
 
-func routedBy(t *testing.T, state RoutingTable) func(hostname, path string) (string, bool) {
+func routedBy(t *testing.T, state boxapi.RoutingTable) func(hostname, path string) (string, bool) {
 	t.Helper()
 	table, err := boxapi.ReadTable(mustWrite(t, state))
 	if err != nil {

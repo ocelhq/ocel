@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
@@ -203,8 +204,8 @@ func TestLiveOcelServesBehindAProxyOnItsOwnNetworkAcrossTheProxysRecreation(t *t
 		if networks := frontNetworks(t, vm, container); !slices.Equal(networks, []string{network}) {
 			t.Fatalf("the front container sits on %q, want %s alone: this front proves ocel reaches a proxy on the proxy's own network", networks, network)
 		}
-		if networks := frontNetworks(t, vm, host.SwitchboardContainer); !slices.Contains(networks, network) {
-			t.Fatalf("%s sits on %q, want it on %s, the network option proxy.manual.network names", host.SwitchboardContainer, networks, network)
+		if networks := frontNetworks(t, vm, boxapi.Switchboard); !slices.Contains(networks, network) {
+			t.Fatalf("%s sits on %q, want it on %s, the network option proxy.manual.network names", boxapi.Switchboard, networks, network)
 		}
 		before := vm.inspects(t, "container", container, "{{.Id}}")
 		vm.feeds(t, "sudo sh -s -- "+quote("*.localhost")+" "+quote("*."+frontedPreview), frontScript(t, "nginx-network", "up.sh"))
@@ -247,7 +248,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if state := vm.state(t, caddy.Container); state != "gone" {
 		t.Errorf("%s is %s on a box %s fronts, want it never started", caddy.Container, state, front)
 	}
-	if published := vm.inspects(t, "container", host.SwitchboardContainer, "{{json .HostConfig.PortBindings}}"); !strings.Contains(published, `"HostIp":"127.0.0.1","HostPort":"8480"`) {
+	if published := vm.inspects(t, "container", boxapi.Switchboard, "{{json .HostConfig.PortBindings}}"); !strings.Contains(published, `"HostIp":"127.0.0.1","HostPort":"8480"`) {
 		t.Errorf("the switchboard publishes %s, want 127.0.0.1:8480 for a proxy on the box to reach", published)
 	}
 	if record := vm.ssh(t, "sudo cat "+quote(host.FrontRecordPath)); !strings.Contains(record, `"manual":{"port":8480`) {
@@ -323,14 +324,14 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if err := stack.Destroy(ctx); err != nil {
 		t.Errorf("Destroy() = %v", err)
 	}
-	vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
+	vm.ssh(t, "sudo docker ps -aq --filter label="+docker.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
 		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Fatalf("Remove(%s) behind %s = %v", tier, front, err)
 		}
 	}
-	if state := vm.state(t, host.SwitchboardContainer); state != "gone" {
-		t.Errorf("%s is %s after the box was destroyed", host.SwitchboardContainer, state)
+	if state := vm.state(t, boxapi.Switchboard); state != "gone" {
+		t.Errorf("%s is %s after the box was destroyed", boxapi.Switchboard, state)
 	}
 	if left := vm.ssh(t, "sudo test -e "+quote(host.FrontRecordPath)+" && echo present || echo gone"); strings.TrimSpace(left) != "gone" {
 		t.Errorf("%s outlived the destroy", host.FrontRecordPath)

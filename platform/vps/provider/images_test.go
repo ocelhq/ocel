@@ -32,6 +32,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -171,7 +172,7 @@ func (b *box) proxying(command, input string) (ssh.Result, bool) {
 		return ssh.Result{}, false
 	}
 	if b.routingDoc == "" {
-		written, err := host.WriteRoutingTable(host.RoutingTable{Grace: host.DrainWindow})
+		written, err := routing.WriteRoutingTable(boxapi.RoutingTable{Grace: routing.DrainWindow})
 		if err != nil {
 			return ssh.Result{Code: 1, Stderr: err.Error()}, true
 		}
@@ -179,11 +180,11 @@ func (b *box) proxying(command, input string) (ssh.Result, bool) {
 	}
 	switch {
 	case strings.Contains(command, "flock -s 9"):
-		table, err := host.ReadRoutingTable([]byte(b.routingDoc))
+		table, err := routing.ReadRoutingTable([]byte(b.routingDoc))
 		if err != nil {
 			return ssh.Result{Code: 1, Stderr: err.Error()}, true
 		}
-		rendered, err := host.RenderProxyConfig(caddy.Builtin{}, table)
+		rendered, err := routing.RenderProxyConfig(caddy.Builtin{}, table)
 		if err != nil {
 			return ssh.Result{Code: 1, Stderr: err.Error()}, true
 		}

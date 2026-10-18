@@ -10,11 +10,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 func storeRouted(m *machine, slug string) {
-	m.upstream[host.RouteKey{
+	m.upstream[boxapi.RouteKey{
 		Owner:   switchboard.Surface(slug, environment.TierProduction),
 		Pointer: router.DefaultPointer,
 		App:     boxapi.StoreLabel,

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -28,7 +29,7 @@ type claimBench struct {
 	recorded string
 }
 
-func claimingBox(t *testing.T, state RoutingTable) *claimBench {
+func claimingBox(t *testing.T, state boxapi.RoutingTable) *claimBench {
 	t.Helper()
 
 	mustRender(t, state)
@@ -37,10 +38,10 @@ func claimingBox(t *testing.T, state RoutingTable) *claimBench {
 	return box
 }
 
-func routed() RoutingTable {
-	return RoutingTable{
-		Grace:  DrainWindow,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + containerimage.PortText}},
+func routed() boxapi.RoutingTable {
+	return boxapi.RoutingTable{
+		Grace:  routing.DrainWindow,
+		Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + containerimage.PortText}},
 	}
 }
 
@@ -48,8 +49,8 @@ func TestAClaimedHostnameReadsBackAsTheSurfaceThatClaimedIt(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	read, err := ReadRoutingTable(mustWrite(t, state))
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	read, err := routing.ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
@@ -65,7 +66,7 @@ func TestAClaimedHostnameIsAdmittedForACertificateAndAnsweredByTheAppItsSurfaceR
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	if upstream, ok := routedBy(t, state)(claimed, "/"); !ok || upstream != state.Routes[0].Upstream {
 		t.Errorf("the switchboard answers %s from %q (%v), want the app its surface runs on %s", claimed, upstream, ok, state.Routes[0].Upstream)
 	}
@@ -83,8 +84,8 @@ func TestASurfaceNamedWithTheSeparatorIsRefusedRatherThanRenderedAmbiguously(t *
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: "ocel" + boxapi.ClaimSeparator + "shop", Pointer: pointed}}
-	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: "ocel" + boxapi.ClaimSeparator + "shop", Pointer: pointed}}
+	if _, err := routing.RenderProxyConfig(caddy.Builtin{}, state); err == nil {
 		t.Errorf("a surface named with %q renders a claim that reads back naming a different surface", boxapi.ClaimSeparator)
 	}
 }
@@ -93,8 +94,8 @@ func TestAHostnameNamedWithTheSeparatorIsRefusedTheWayASurfaceIs(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: "shop.example.com" + boxapi.ClaimSeparator + surface, Owner: surface, Pointer: pointed}}
-	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
+	state.Claims = []boxapi.Claim{{Hostname: "shop.example.com" + boxapi.ClaimSeparator + surface, Owner: surface, Pointer: pointed}}
+	if _, err := routing.RenderProxyConfig(caddy.Builtin{}, state); err == nil {
 		t.Errorf("a hostname containing %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", boxapi.ClaimSeparator)
 	}
 }
@@ -103,15 +104,15 @@ func TestClaimingAHostnameLoadsItOntoTheRunningProxy(t *testing.T) {
 	t.Parallel()
 
 	box := claimingBox(t, routed())
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(table.Claims, []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}) {
+	if !slices.Equal(table.Claims, []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}) {
 		t.Errorf("%s contains claims %v after the claim, want %q claimed by %q", ProxyConfig, table.Claims, claimed, surface)
 	}
 	if !slices.ContainsFunc(box.commands(), loadsSwitchboard) {
@@ -126,9 +127,9 @@ func TestClaimingAHostnameTwiceWritesTheProxyOnce(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
 	for _, command := range box.commands() {
@@ -150,7 +151,7 @@ func TestAPinTheProxyRefusesLeavesTheFileTheProxyWouldRestartOnto(t *testing.T) 
 		return nil
 	}
 
-	if err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err == nil {
+	if err := h.routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err == nil {
 		t.Fatal("ClaimHosts() succeeded against a proxy that refused the pin it sent")
 	}
 	if box.recorded != previous {
@@ -162,17 +163,17 @@ func TestDisclaimingAHostnameTakesTheClaimAndLeavesTheRest(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: "other.example.com", Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: "other.example.com", Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
-	if err := box.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
+	if err := box.host().routing.DisclaimHost(context.Background(), claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(table.Claims, []HostClaim{{Hostname: "other.example.com", Owner: surface, Pointer: pointed}}) {
+	if !slices.Equal(table.Claims, []boxapi.Claim{{Hostname: "other.example.com", Owner: surface, Pointer: pointed}}) {
 		t.Errorf("the claims left are %v, want the one the disclaim never named", table.Claims)
 	}
 }
@@ -181,18 +182,18 @@ func TestDisclaimingASurfaceTakesEveryHostnameItOwnsAndNoOneElses(t *testing.T) 
 	t.Parallel()
 
 	state := routed()
-	kept := HostClaim{Hostname: "kept.example.com", Owner: otherSurface, Pointer: pointed}
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, kept, {Hostname: "other.example.com", Owner: surface, Pointer: pointed}}
+	kept := boxapi.Claim{Hostname: "kept.example.com", Owner: otherSurface, Pointer: pointed}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}, kept, {Hostname: "other.example.com", Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
-	if err := box.host().DisclaimSurface(context.Background(), surface); err != nil {
+	if err := box.host().routing.DisclaimSurface(context.Background(), surface); err != nil {
 		t.Fatalf("DisclaimSurface() = %v", err)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(table.Claims, []HostClaim{kept}) {
+	if !slices.Equal(table.Claims, []boxapi.Claim{kept}) {
 		t.Errorf("the claims left are %v, want only %v: a torn-down surface answers for nothing, and every hostname it owned has to come back into circulation without a shell on this box", table.Claims, kept)
 	}
 }
@@ -201,11 +202,11 @@ func TestAHostnameAnotherSurfaceOwnsIsRefusedRatherThanTakenOffIt(t *testing.T) 
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
 	before := box.recorded
 
-	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}})
+	err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}})
 	if err == nil {
 		t.Fatal("a second project bound a hostname the first one already owns, and the first project's site then answers nothing with no deploy of its own having failed")
 	}
@@ -225,13 +226,13 @@ func TestUnbindingAHostnameAnotherSurfaceNowOwnsLeavesItWhereItIs(t *testing.T) 
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}
 	box := claimingBox(t, state)
 
-	if err := box.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
+	if err := box.host().routing.DisclaimHost(context.Background(), claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,22 +245,22 @@ func TestAHostnameItsOwnerReleasesIsFreeForTheNextSurfaceToTake(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
 	ctx := context.Background()
 
-	if err := box.host().DisclaimHost(ctx, claimed, surface); err != nil {
+	if err := box.host().routing.DisclaimHost(ctx, claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
-	if err := box.host().ClaimHosts(ctx, []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(ctx, []boxapi.Claim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() by the surface it was released for = %v: a hostname one project unbinds is a hostname another can bind, and a box that keeps refusing it has taken the name out of circulation for good", err)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(table.Claims, []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}) {
+	if !slices.Equal(table.Claims, []boxapi.Claim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}) {
 		t.Errorf("the claims left are %v, want %s owned by %s alone", table.Claims, claimed, otherSurface)
 	}
 }
@@ -277,15 +278,15 @@ func TestALoginThatCannotElevateStillWritesAProxyConfigItOwns(t *testing.T) {
 	t.Parallel()
 
 	box := refusingSudo(t)
-	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	if err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts = %v; a deploy login that owns %s writes it without sudo, and that is how a box provisioned for a non-root login works rather than a state to refuse", err, ProxyConfig)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(table.Claims, HostClaim{Hostname: claimed, Owner: surface, Pointer: pointed}) {
+	if !slices.Contains(table.Claims, boxapi.Claim{Hostname: claimed, Owner: surface, Pointer: pointed}) {
 		t.Errorf("the claims on the box are %v, want %s among them", table.Claims, claimed)
 	}
 	if at := box.at(`IFS= read -r written`); at < 0 || strings.HasPrefix(box.commands()[at], "sudo") {
@@ -305,7 +306,7 @@ func TestAWriteThisLoginCannotMakeNamesTheElevationItWasRefused(t *testing.T) {
 		return answering(command)
 	}
 
-	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil {
 		t.Fatal("a claim this login could neither write nor elevate to write reported success")
 	}
@@ -321,10 +322,10 @@ func TestTheClaimsOnThisBoxAreReadFromWhatTheProxyWasGiven(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
 
-	read, err := box.host().Claims(context.Background())
+	read, err := box.host().routing.Claims(context.Background())
 	if err != nil {
 		t.Fatalf("Claims() = %v", err)
 	}
@@ -337,14 +338,14 @@ func TestWhatServesAnAppIsTheUpstreamItsRouteNames(t *testing.T) {
 	t.Parallel()
 
 	box := claimingBox(t, routed())
-	upstream, err := box.host().Serving(context.Background(), keyed("web"))
+	upstream, err := box.host().routing.Serving(context.Background(), keyed("web"))
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
 	if upstream != "shop-web-2222:"+containerimage.PortText {
 		t.Errorf("Serving(web) = %q, want the upstream its route names: a release retires what is serving, and retiring the wrong name drains nothing and stops something live", upstream)
 	}
-	absent, err := box.host().Serving(context.Background(), keyed("api"))
+	absent, err := box.host().routing.Serving(context.Background(), keyed("api"))
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
@@ -357,19 +358,19 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
 
 	rollout := Rollout{
 		Apps:          []AppRollout{{RouteKey: keyed("web"), Target: "shop-web-3333:" + containerimage.PortText, HealthPath: "/healthz"}},
-		DeployTimeout: DeployWindow,
-		DrainTimeout:  DrainWindow,
+		DeployTimeout: routing.DeployWindow,
+		DrainTimeout:  routing.DrainWindow,
 	}
 	if err := box.host().RollOut(context.Background(), rollout, progress.Discard()); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,12 +381,12 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 
 const otherSurface = "ocel--blog--production"
 
-func twoProjects() RoutingTable {
-	return RoutingTable{
-		Grace: DrainWindow,
-		Routes: []AppRoute{
+func twoProjects() boxapi.RoutingTable {
+	return boxapi.RoutingTable{
+		Grace: routing.DrainWindow,
+		Routes: []boxapi.Route{
 			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + containerimage.PortText},
-			{RouteKey: RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-3333:" + containerimage.PortText},
+			{RouteKey: boxapi.RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-3333:" + containerimage.PortText},
 		},
 	}
 }
@@ -393,11 +394,11 @@ func twoProjects() RoutingTable {
 func TestTwoProjectsRunningTheSameAppNameOnOneBoxKeepTheirOwnRoutes(t *testing.T) {
 	t.Parallel()
 
-	read, err := ReadRoutingTable(mustWrite(t, twoProjects()))
+	read, err := routing.ReadRoutingTable(mustWrite(t, twoProjects()))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
-	if want := slices.SortedFunc(slices.Values(twoProjects().Routes), func(a, b AppRoute) int { return strings.Compare(a.Identity(), b.Identity()) }); !slices.Equal(read.Routes, want) {
+	if want := slices.SortedFunc(slices.Values(twoProjects().Routes), func(a, b boxapi.Route) int { return strings.Compare(a.Identity(), b.Identity()) }); !slices.Equal(read.Routes, want) {
 		t.Fatalf("the routes read back as %v, want %v: two projects on one box name their apps whatever they like, and a route keyed on the app name alone is one project's route answering for both", read.Routes, want)
 	}
 	var identities []string
@@ -413,20 +414,20 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 	t.Parallel()
 
 	box := claimingBox(t, twoProjects())
-	blog := RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}
+	blog := boxapi.RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}
 	if err := box.host().RollOut(context.Background(), Rollout{
 		Apps:          []AppRollout{{RouteKey: blog, Target: "blog-web-4444:" + containerimage.PortText, HealthPath: "/healthz"}},
-		DeployTimeout: DeployWindow,
-		DrainTimeout:  DrainWindow,
+		DeployTimeout: routing.DeployWindow,
+		DrainTimeout:  routing.DrainWindow,
 	}, progress.Discard()); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := slices.IndexFunc(table.Routes, func(route AppRoute) bool { return route.RouteKey == keyed("web") })
+	at := slices.IndexFunc(table.Routes, func(route boxapi.Route) bool { return route.RouteKey == keyed("web") })
 	if at < 0 || table.Routes[at].Upstream != "shop-web-2222:"+containerimage.PortText {
 		t.Errorf("after a deploy of %s the routes read %v; the other project's app is named web too, and its live container is what a deploy that took its route would then stop", otherSurface, table.Routes)
 	}
@@ -439,10 +440,10 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 	t.Parallel()
 
 	state := twoProjects()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: "blog.example.com", Owner: otherSurface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: "blog.example.com", Owner: otherSurface, Pointer: pointed}}
 	answer := routedBy(t, state)
 	for hostname, owner := range map[string]string{claimed: surface, "blog.example.com": otherSurface} {
-		at := slices.IndexFunc(state.Routes, func(route AppRoute) bool { return route.Owner == owner })
+		at := slices.IndexFunc(state.Routes, func(route boxapi.Route) bool { return route.Owner == owner })
 		if upstream, ok := answer(hostname, "/"); !ok || upstream != state.Routes[at].Upstream {
 			t.Errorf("%s is answered from %q (%v), want %s's own app on %s: with two projects on this box, a route answering a hostname its surface never claimed answers for both of them",
 				hostname, upstream, ok, owner, state.Routes[at].Upstream)
@@ -450,10 +451,10 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 	}
 }
 
-func twoApps() RoutingTable {
-	return RoutingTable{
-		Grace: DrainWindow,
-		Routes: []AppRoute{
+func twoApps() boxapi.RoutingTable {
+	return boxapi.RoutingTable{
+		Grace: routing.DrainWindow,
+		Routes: []boxapi.Route{
 			{RouteKey: keyed("api"), Upstream: "shop-api-1111:" + containerimage.PortText},
 			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + containerimage.PortText},
 		},
@@ -464,9 +465,9 @@ func TestOneSurfacesHostnameIsNotHandedToEveryAppThatSurfaceRuns(t *testing.T) {
 	t.Parallel()
 
 	state := twoApps()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 
-	_, err := RenderProxyConfig(caddy.Builtin{}, state)
+	_, err := routing.RenderProxyConfig(caddy.Builtin{}, state)
 	if err == nil {
 		t.Fatal("a project running two apps rendered both of them matching every hostname it claims; reverse_proxy is terminal and the routes are written in name order, so api answers shop.example.com and web is configuration nothing on this box ever reaches")
 	}
@@ -485,7 +486,7 @@ func TestAHostnameDeclaredUnderOneAppOfAMultiAppSurfaceReachesThatAppAlone(t *te
 	t.Parallel()
 
 	state := twoApps()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "api"}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "api"}}
 
 	if upstream, ok := routedBy(t, state)(claimed, "/"); !ok || upstream != state.Routes[0].Upstream {
 		t.Errorf("%s is answered from %q (%v), want api on %s alone: the project declared the hostname under api, and a box that cannot honour the declaration refuses every multi-app project a domain at all", claimed, upstream, ok, state.Routes[0].Upstream)
@@ -496,16 +497,16 @@ func TestAClaimNamingTheAppItWasDeclaredUnderReadsBackWithThatApp(t *testing.T) 
 	t.Parallel()
 
 	state := twoApps()
-	state.Claims = []HostClaim{
+	state.Claims = []boxapi.Claim{
 		{Hostname: claimed, Owner: surface, Pointer: pointed, App: "api"},
 		{Hostname: "www.example.com", Owner: surface, Pointer: pointed, App: "web"},
 	}
 
-	read, err := ReadRoutingTable(mustWrite(t, state))
+	read, err := routing.ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
-	want := slices.SortedFunc(slices.Values(state.Claims), func(a, b HostClaim) int {
+	want := slices.SortedFunc(slices.Values(state.Claims), func(a, b boxapi.Claim) int {
 		return strings.Compare(a.Hostname, b.Hostname)
 	})
 	if !slices.Equal(read.Claims, want) {
@@ -517,12 +518,12 @@ func TestAProjectWideClaimStillNamesNoAppOnTheWireItIsWrittenTo(t *testing.T) {
 	t.Parallel()
 
 	wide := routed()
-	wide.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	wide.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	if written := string(mustWrite(t, wide)); strings.Contains(written, `"app":""`) || strings.Count(written, `"app"`) != len(wide.Routes) {
 		t.Errorf("a project-wide claim is written as\n%s\nwant it naming no app at all", written)
 	}
 	attributed := routed()
-	attributed.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web"}}
+	attributed.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web"}}
 	if written := string(mustWrite(t, attributed)); strings.Count(written, `"app":"web"`) != 2 {
 		t.Errorf("a claim declared under an app is written as\n%s\nwithout the app, so nothing distinguishes it from the project-wide claim it is not", written)
 	}
@@ -532,9 +533,9 @@ func TestAnUnattributedHostnameOnAMultiAppSurfaceIsRefusedAndNamesTheFormThatFix
 	t.Parallel()
 
 	state := twoApps()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 
-	_, err := RenderProxyConfig(caddy.Builtin{}, state)
+	_, err := routing.RenderProxyConfig(caddy.Builtin{}, state)
 	if err == nil {
 		t.Fatal("a project running two apps and claiming a hostname project-wide rendered both routes matching it")
 	}
@@ -550,7 +551,7 @@ func TestAnUnattributedHostnameOnAMultiAppSurfaceIsRefusedAndNamesTheFormThatFix
 func TestTwoAppsOnASurfaceThatClaimsNothingAreBothStillWritten(t *testing.T) {
 	t.Parallel()
 
-	read, err := ReadRoutingTable(mustWrite(t, twoApps()))
+	read, err := routing.ReadRoutingTable(mustWrite(t, twoApps()))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
@@ -564,9 +565,9 @@ func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndForwardsThemToTheSwitchb
 
 	for _, box := range []struct {
 		what  string
-		state RoutingTable
+		state boxapi.RoutingTable
 	}{
-		{"a box serving nothing", RoutingTable{Grace: DrainWindow}},
+		{"a box serving nothing", boxapi.RoutingTable{Grace: routing.DrainWindow}},
 		{"a box serving one project", routed()},
 		{"a box serving two projects", twoProjects()},
 	} {
@@ -600,8 +601,8 @@ func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndForwardsThemToTheSwitchb
 				t.Fatalf("%s renders no front server with routes", box.what)
 			}
 			last := server.Routes[len(server.Routes)-1]
-			if len(last.Match) != 0 || len(last.Handle) != 1 || len(last.Handle[0].Upstreams) != 1 || last.Handle[0].Upstreams[0].Dial != SwitchboardUpstream {
-				t.Errorf("%s ends its front routes with %+v, want an unmatched forward to %s: the switchboard answers what nothing claims with the box's own 404, and caddy's own answer is an empty 200", box.what, last, SwitchboardUpstream)
+			if len(last.Match) != 0 || len(last.Handle) != 1 || len(last.Handle[0].Upstreams) != 1 || last.Handle[0].Upstreams[0].Dial != routing.SwitchboardUpstream {
+				t.Errorf("%s ends its front routes with %+v, want an unmatched forward to %s: the switchboard answers what nothing claims with the box's own 404, and caddy's own answer is an empty 200", box.what, last, routing.SwitchboardUpstream)
 			}
 		})
 	}
@@ -611,10 +612,10 @@ func TestARouteOnlyOneSurfaceOwnsIsTakenByThatSurfaceAlone(t *testing.T) {
 	t.Parallel()
 
 	box := claimingBox(t, twoProjects())
-	if err := box.host().UnroutePointer(context.Background(), surface, pointed); err != nil {
+	if err := box.host().routing.UnroutePointer(context.Background(), surface, pointed); err != nil {
 		t.Fatalf("UnroutePointer() = %v", err)
 	}
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -627,15 +628,15 @@ func TestATornDownSurfaceLeavesNoRouteForwardingToARemovedContainer(t *testing.T
 	t.Parallel()
 
 	state := twoProjects()
-	state.Routes = append(state.Routes, AppRoute{
-		RouteKey: RouteKey{Owner: surface, Pointer: pointed, App: "worker"},
+	state.Routes = append(state.Routes, boxapi.Route{
+		RouteKey: boxapi.RouteKey{Owner: surface, Pointer: pointed, App: "worker"},
 		Upstream: "shop-worker-5555:" + containerimage.PortText,
 	})
 	box := claimingBox(t, state)
-	if err := box.host().UnrouteSurface(context.Background(), surface); err != nil {
+	if err := box.host().routing.UnrouteSurface(context.Background(), surface); err != nil {
 		t.Fatalf("UnrouteSurface() = %v", err)
 	}
-	table, err := ReadRoutingTable([]byte(box.recorded))
+	table, err := routing.ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -657,10 +658,10 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 		box.mu.Lock()
 		box.recorded = string(moved)
 		box.mu.Unlock()
-		return ssh.Result{Code: routingMoved, Stderr: digested(string(moved))}, true
+		return ssh.Result{Code: routing.ExitMoved, Stderr: digested(string(moved))}, true
 	}
 
-	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil {
 		t.Fatal("a claim composed onto a configuration another deploy kept replacing was written anyway")
 	}
@@ -680,7 +681,7 @@ func TestAWildcardIsRefusedAsAnOrdinaryClaim(t *testing.T) {
 	t.Parallel()
 
 	box := claimingBox(t, routed())
-	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: "*.preview.acme.com", Owner: surface, Pointer: pointed}})
+	err := box.host().routing.ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: "*.preview.acme.com", Owner: surface, Pointer: pointed}})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("ClaimHosts() of a wildcard = %v, want a refusal: a claim is a hostname the proxy orders one certificate for over http-01, and a wildcard is a match every hostname pointed at this box falls under", err)
@@ -719,7 +720,7 @@ func TestAReloadThatFailsPutsBackTheExactBytesOfBothFilesAndReloadsThem(t *testi
 	})
 	table := box.recorded
 
-	if err := box.host().rerender(context.Background()); err == nil {
+	if err := box.host().routing.Rerender(context.Background()); err == nil {
 		t.Fatal("rerender() over a reload that failed = nil, want the failure")
 	}
 	if box.recorded != table || config != older {
@@ -745,7 +746,7 @@ func TestAReloadThatFailsTwiceSaysTheProxyMayServeWhatTheFilesNoLongerRecord(t *
 	box := cuttingOverBox(t, &config, func(int) ssh.Result {
 		return ssh.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
 	})
-	err := box.host().rerender(context.Background())
+	err := box.host().routing.Rerender(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "may still serve") {
 		t.Errorf("rerender() over a reload that failed and a reload back that failed too = %v, want it to say the proxy may still serve what the restored files no longer record", err)
 	}

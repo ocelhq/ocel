@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -576,8 +577,8 @@ func fakeDocker(t *testing.T, running, images []string) dockerStub {
 		"printf '%s\\n' \"$*\" >>" + filepath.Join(dir, "log") + "\n" +
 		"app=; project=; reference=\n" +
 		"for arg in \"$@\"; do case $arg in\n" +
-		"label=" + LabelApp + "=*) app=${arg#label=" + LabelApp + "=} ;;\n" +
-		"label=" + LabelProject + "=*) project=${arg#label=" + LabelProject + "=} ;;\n" +
+		"label=" + docker.LabelApp + "=*) app=${arg#label=" + docker.LabelApp + "=} ;;\n" +
+		"label=" + docker.LabelProject + "=*) project=${arg#label=" + docker.LabelProject + "=} ;;\n" +
 		"reference=*) reference=${arg#reference=} ;;\n" +
 		"esac; done\n" +
 		"case \"$1\" in\n" +

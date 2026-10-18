@@ -17,126 +17,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
-
-const (
-	LabelApp     = "ocel.app"
-	LabelProject = "ocel.project"
-	LabelRef     = "ocel.ref"
-	LabelEnv     = "ocel.env"
-	LabelTier    = boxapi.TierLabel
-
-	LabelResource   = "ocel.resource"
-	LabelGeneration = "ocel.generation"
-	LabelOwner      = "ocel.database-owner"
-)
-
-const (
-	poolExhausted = "address pool"
-	membersFormat = `{{range .Containers}}{{.Name}}{{"\n"}}{{end}}`
-)
-
-func networkLabels(tier environment.Tier, project string) []string {
-	return []string{
-		"--label", LabelTier + "=" + string(tier),
-		"--label", LabelProject + "=" + naming.Sanitize(project),
-	}
-}
-
-func networkCreating(tier environment.Tier, project string) string {
-	network := shell.Quote(boxapi.AppNetwork(tier, project))
-	create := "docker network create " + shell.Words(networkLabels(tier, project)) + " " + network
-	return "set -e\n" +
-		"if ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
-		"if ! said=$(" + create + " 2>&1 >/dev/null) && ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
-		"printf '%s\\n' \"$said\" >&2\n" +
-		"exit 1\n" +
-		"fi\n" +
-		"fi"
-}
-
-func joinNetworkScript(tier environment.Tier, project string) string {
-	network := shell.Quote(boxapi.AppNetwork(tier, project))
-	return networkCreating(tier, project) + "\n" +
-		"if ! docker network connect " + network + " " + shell.Quote(SwitchboardContainer) + " >/dev/null 2>&1 && " +
-		"! docker network inspect --format " + shell.Quote(membersFormat) + " " + network + " | grep -qx " + shell.Quote(SwitchboardContainer) + "; then\n" +
-		"printf '%s\\n' " + shell.Quote(SwitchboardContainer+" could not join "+boxapi.AppNetwork(tier, project)) + " >&2\n" +
-		"exit 1\n" +
-		"fi"
-}
-
-func networkForgetting(tier environment.Tier, project string) string {
-	network := shell.Quote(boxapi.AppNetwork(tier, project))
-	return "if docker network inspect " + network + " >/dev/null 2>&1; then\n" +
-		"if docker network inspect --format " + shell.Quote(membersFormat) + " " + network +
-		" | grep -qvx " + shell.Quote(SwitchboardContainer) + "; then printf '%s\\n' " + shell.Quote(networkInUse) + "; exit 0; fi\n" +
-		"docker network disconnect --force " + network + " " + shell.Quote(SwitchboardContainer) + " >/dev/null 2>&1 || true\n" +
-		"docker network rm " + network + " >/dev/null\n" +
-		"fi"
-}
-
-func (e *Engine) Join(ctx context.Context, who string, tier environment.Tier, project string) error {
-	_, said, err := e.box.Attempt(ctx, ssh.Docker, "put "+who+" on "+boxapi.AppNetwork(tier, project), joinNetworkScript(tier, project), nil)
-	if err != nil && strings.Contains(said, poolExhausted) {
-		return refusal.Refuse(refusal.CodeNotReady,
-			"%s has no subnet left for %s: %s\n"+
-				"Add `\"default-address-pools\": [{\"base\": \"10.200.0.0/16\", \"size\": 24}]` to /etc/docker/daemon.json and restart docker",
-			e.box.Named(), boxapi.AppNetwork(tier, project), said)
-	}
-	return err
-}
-
-func (e *Engine) ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error {
-	_, err := e.box.Run(ctx, ssh.Docker, "take "+boxapi.AppNetwork(tier, project)+" down", networkForgetting(tier, project), nil)
-	return err
-}
 
 const (
 	appRestart = "unless-stopped"
 	nameShort  = 12
 )
 
-const (
-	logDriver   = "local"
-	logMaxSize  = "20m"
-	logMaxFiles = "5"
-	LogCeiling  = 20 * 5 << 20
-)
-
-const (
-	pidsLimit       = "4096"
-	noNewPrivileges = "no-new-privileges"
-)
-
 var appCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "NET_BIND_SERVICE", "SETGID", "SETUID", "SETPCAP"}
-
-func logging() []string {
-	return []string{"--log-driver", logDriver, "--log-opt", "max-size=" + logMaxSize, "--log-opt", "max-file=" + logMaxFiles}
-}
-
-func confined(capabilities []string, fileCapabilities bool) []string {
-	argv := []string{"--pids-limit", pidsLimit}
-	if !fileCapabilities {
-		argv = append(argv, "--security-opt", noNewPrivileges)
-	}
-	argv = append(argv, "--cap-drop", "ALL")
-	for _, capability := range capabilities {
-		argv = append(argv, "--cap-add", capability)
-	}
-	return argv
-}
-
-var stateFields = []struct{ label, selector string }{
-	{"Status", ".State.Status"},
-	{"ExitCode", ".State.ExitCode"},
-	{"OOMKilled", ".State.OOMKilled"},
-	{"Error", ".State.Error"},
-	{"StartedAt", ".State.StartedAt"},
-	{"FinishedAt", ".State.FinishedAt"},
-	{"RestartCount", ".RestartCount"},
-}
 
 type Container struct {
 	Name    string
@@ -151,7 +42,7 @@ type Container struct {
 	Resolved   bool
 	Declared   []string
 
-	Limits Limits
+	Limits docker.Limits
 }
 
 func (c Container) delivered() map[string]string {
@@ -178,7 +69,7 @@ func ContainerName(stack, app, deployment, image string) string {
 const appPulls = 5
 
 func runContainerScript(spec Container, env handoff) string {
-	return imagePulled(spec.Image, appPulls, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
+	return docker.Pulled(spec.Image, appPulls, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
 		shell.Bounded(shell.DockerStepSeconds, "docker run of "+spec.Name, shell.Words(containerRun(spec, env))+" >/dev/null")
 }
 
@@ -188,15 +79,15 @@ func containerRun(spec Container, env handoff) []string {
 		"--restart", appRestart,
 		"--init=false",
 		"--network", boxapi.AppNetwork(spec.Tier, spec.Project),
-		"--label", LabelTier + "=" + string(spec.Tier),
-		"--label", LabelProject + "=" + naming.Sanitize(spec.Project),
-		"--label", LabelApp + "=" + spec.App,
-		"--label", LabelRef + "=" + spec.Image,
-		"--label", LabelEnv + "=" + env.digest,
+		"--label", docker.LabelTier + "=" + string(spec.Tier),
+		"--label", docker.LabelProject + "=" + naming.Sanitize(spec.Project),
+		"--label", docker.LabelApp + "=" + spec.App,
+		"--label", docker.LabelRef + "=" + spec.Image,
+		"--label", docker.LabelEnv + "=" + env.digest,
 	}
-	argv = append(argv, logging()...)
-	argv = append(argv, confined(appCapabilities, false)...)
-	argv = append(argv, spec.Limits.argv()...)
+	argv = append(argv, docker.Logging()...)
+	argv = append(argv, docker.Confined(appCapabilities, false)...)
+	argv = append(argv, spec.Limits.Argv()...)
 	if env.path != "" {
 		argv = append(argv, "--env-file", env.path)
 	}
@@ -205,47 +96,6 @@ func containerRun(spec Container, env handoff) []string {
 			"--tmpfs", containerimage.LivePath+":"+liveDirTmpfs)
 	}
 	return append(argv, "--env", containerimage.PortEnvVar+"="+containerimage.PortText, spec.Image)
-}
-
-func LabelSelector(label string) string {
-	return "{{index .Config.Labels " + strconv.Quote(label) + "}}"
-}
-
-func servingSelectors() string {
-	return "{{.State.Status}} " + LabelSelector(LabelRef) + " " + LabelSelector(LabelEnv)
-}
-
-func runningImage(said, image string) bool {
-	fields := strings.Fields(said)
-	return len(fields) >= 2 && fields[0] == "running" && fields[1] == image
-}
-
-func stillServing(said, image, digest string) bool {
-	if !runningImage(said, image) {
-		return false
-	}
-	fields := strings.Fields(said)
-	return len(fields) > 2 && fields[2] == digest
-}
-
-func startableImage(said, image string) bool {
-	fields := strings.Fields(said)
-	return len(fields) >= 2 && fields[1] == image &&
-		(fields[0] == "exited" || fields[0] == "created" || fields[0] == "paused")
-}
-
-func restartCommand(said, name string) string {
-	if strings.HasPrefix(strings.TrimSpace(said), "paused") {
-		return "docker unpause " + shell.Quote(name) + " >/dev/null"
-	}
-	return "docker start " + shell.Quote(name) + " >/dev/null"
-}
-
-func servingCommand(name string) string {
-	return "if said=$(docker inspect --type container --format " + shell.Quote(servingSelectors()) + " " + shell.Quote(name) + " 2>&1); then printf '%s\\n' \"$said\"\n" +
-		"elif printf '%s' \"$said\" | grep -qi 'no such'; then :\n" +
-		"else printf '%s\\n' \"$said\" >&2; exit 1\n" +
-		"fi"
 }
 
 type Run uint8
@@ -276,15 +126,15 @@ func (h *Host) RunContainer(ctx context.Context, spec Container) (ran Run, err e
 		if err != nil {
 			return RunKept, err
 		}
-		if stillServing(said, spec.Image, env.digest) {
+		if docker.IsServing(said, spec.Image, env.digest) {
 			return RunKept, nil
 		}
 	} else {
-		if runningImage(said, spec.Image) {
+		if docker.IsRunningImage(said, spec.Image) {
 			return RunKept, nil
 		}
-		if startableImage(said, spec.Image) {
-			_, err := h.Run(ctx, elevation, "start "+spec.App+" back up as "+spec.Name, restartCommand(said, spec.Name), nil)
+		if docker.IsStartableImage(said, spec.Image) {
+			_, err := h.Run(ctx, elevation, "start "+spec.App+" back up as "+spec.Name, docker.RestartCommand(said, spec.Name), nil)
 			return RunRestarted, err
 		}
 		note, known, err := h.handed(ctx, spec)
@@ -350,7 +200,7 @@ func (h *Host) TakeDown(ctx context.Context, tier environment.Tier, name string)
 }
 
 func releaseSelectors() string {
-	return LabelSelector(LabelProject) + " " + LabelSelector(LabelApp) + " " + LabelSelector(LabelRef)
+	return docker.LabelSelector(docker.LabelProject) + " " + docker.LabelSelector(docker.LabelApp) + " " + docker.LabelSelector(docker.LabelRef)
 }
 
 func releaseCommand(name string) string {
@@ -370,7 +220,7 @@ func (h *Host) RetireContainer(ctx context.Context, name string) error {
 	if len(release) != 3 {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s lacks the %s, %s or %s label every app container carries, so its image cannot be archived for a rollback: %q",
-			name, LabelProject, LabelApp, LabelRef, strings.TrimSpace(said))
+			name, docker.LabelProject, docker.LabelApp, docker.LabelRef, strings.TrimSpace(said))
 	}
 	if err := h.archive(ctx, release[0], release[1], release[2]); err != nil {
 		return err
@@ -386,18 +236,6 @@ func (h *Host) RemoveContainer(ctx context.Context, name string) error {
 	}
 	_, err = h.Run(ctx, elevation, "remove "+name, shell.Bounded(shell.DockerStepSeconds, "docker rm of "+name, "docker rm --force "+shell.Quote(name)+" >/dev/null"), nil)
 	return err
-}
-
-func stateSelectors() []string {
-	selectors := make([]string, 0, len(stateFields))
-	for _, field := range stateFields {
-		selectors = append(selectors, field.label+"={{"+field.selector+"}}")
-	}
-	return selectors
-}
-
-func stateCommand(name string) string {
-	return "docker inspect --type container --format " + shell.Quote(strings.Join(stateSelectors(), " ")) + " " + shell.Quote(name) + " 2>&1 || true"
 }
 
 func logCommand(name string) string {
@@ -462,11 +300,6 @@ func parseLogLine(raw string, stderr bool) (Line, bool) {
 		return Line{}, false
 	}
 	return Line{Time: at.UTC(), Stderr: stderr, Text: text}, true
-}
-
-func (e *Engine) ReadServing(ctx context.Context, name string) (string, error) {
-	said, err := e.box.Run(ctx, ssh.Docker, "read whether "+name+" is serving", servingCommand(name), nil)
-	return strings.TrimSpace(said), err
 }
 
 func (h *Host) ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error {

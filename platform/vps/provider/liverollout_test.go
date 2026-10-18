@@ -21,6 +21,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -43,12 +45,12 @@ func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 	fixtures(t, vm)
 	p := vm.deploying(t)
 	t.Cleanup(func() {
-		if err := p.Host().UnrouteSurface(context.Background(), liveOwner); err != nil {
+		if err := p.Host().Routing().UnrouteSurface(context.Background(), liveOwner); err != nil {
 			t.Errorf("UnrouteSurface(%s) before removing the containers its routes dial = %v", liveOwner, err)
 		}
-		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
+		vm.ssh(t, "sudo docker ps -aq --filter label="+docker.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	})
-	if err := p.Host().ClaimHosts(context.Background(), []host.HostClaim{{Hostname: caddy.Container, Owner: liveOwner, Pointer: router.DefaultPointer}}); err != nil {
+	if err := p.Host().Routing().ClaimHosts(context.Background(), []boxapi.Claim{{Hostname: caddy.Container, Owner: liveOwner, Pointer: router.DefaultPointer}}); err != nil {
 		t.Fatalf("ClaimHosts(%s) = %v", caddy.Container, err)
 	}
 	return vm, p
@@ -89,7 +91,7 @@ func provisioned(t *testing.T, p *vps.Provider, tag string) release {
 func rollingOut(p *vps.Provider, next release, drain time.Duration, progress progress.Log) error {
 	return p.Host().RollOut(context.Background(), host.Rollout{
 		Apps: []host.AppRollout{{
-			RouteKey:   host.RouteKey{Owner: liveOwner, Pointer: livePointer, App: liveApp},
+			RouteKey:   boxapi.RouteKey{Owner: liveOwner, Pointer: livePointer, App: liveApp},
 			Target:     next.address,
 			HealthPath: healthPath,
 		}},
@@ -138,11 +140,11 @@ func TestLiveAReleaseServesThroughTheProxyAndNothingElseOnTheBoxCanReachIt(t *te
 	if served := servedBy(t, vm, "/"); served != "one" {
 		t.Fatalf("the proxy served %q, want the release that was just cut over to", served)
 	}
-	if app := vm.inspects(t, "container", one.physical, host.LabelSelector(host.LabelApp)); app != liveApp {
-		t.Errorf("the container has %q under %s, and retention is a set difference over that label", app, host.LabelApp)
+	if app := vm.inspects(t, "container", one.physical, docker.LabelSelector(docker.LabelApp)); app != liveApp {
+		t.Errorf("the container has %q under %s, and retention is a set difference over that label", app, docker.LabelApp)
 	}
-	if ref := vm.inspects(t, "container", one.physical, host.LabelSelector(host.LabelRef)); ref != fixtureAt("one") {
-		t.Errorf("the container has %q under %s, want the image ref it runs", ref, host.LabelRef)
+	if ref := vm.inspects(t, "container", one.physical, docker.LabelSelector(docker.LabelRef)); ref != fixtureAt("one") {
+		t.Errorf("the container has %q under %s, want the image ref it runs", ref, docker.LabelRef)
 	}
 	if published := vm.inspects(t, "container", one.physical, "{{json .HostConfig.PortBindings}}"); published != "{}" && published != "null" {
 		t.Errorf("the app publishes %s, and the proxy is meant to be the only path to it", published)

@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -31,7 +32,7 @@ func aContainer() Container {
 
 func imaging(b *bench, served string) {
 	b.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(servingSelectors())) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return ssh.Result{Stdout: served + "\n"}, true
 		}
 		return ssh.Result{}, false
@@ -67,9 +68,9 @@ func TestAReleaseRunsOneLabelledContainerOnTheOneNetworkTargetsResolveAcross(t *
 		"the name the drain attributes its in-flight count to": shell.Quote("--name") + " " + shell.Quote(physical),
 		"a reboot that does not take the app down":             shell.Quote("--restart") + " " + shell.Quote(appRestart),
 		"the network the proxy reaches it over":                shell.Quote("--network") + " " + shell.Quote(boxapi.AppNetwork(aContainer().Tier, "shop")),
-		"the app label retention reads":                        shell.Quote("--label") + " " + shell.Quote(LabelApp+"=web"),
-		"the project label retention reads":                    shell.Quote("--label") + " " + shell.Quote(LabelProject+"=shop"),
-		"the ref label retention reads":                        shell.Quote("--label") + " " + shell.Quote(LabelRef+"="+appImage),
+		"the app label retention reads":                        shell.Quote("--label") + " " + shell.Quote(docker.LabelApp+"=web"),
+		"the project label retention reads":                    shell.Quote("--label") + " " + shell.Quote(docker.LabelProject+"=shop"),
+		"the ref label retention reads":                        shell.Quote("--label") + " " + shell.Quote(docker.LabelRef+"="+appImage),
 		"the port the app is told to bind":                     shell.Quote("--env") + " " + shell.Quote("PORT="+containerimage.PortText),
 		"the image the release names":                          shell.Quote(appImage),
 	} {
@@ -200,13 +201,13 @@ func rendering(t *testing.T, format string) string {
 func TestTheInspectedStateNamesTheSevenFieldsItNeedsAndNothingTheContainerWasGiven(t *testing.T) {
 	t.Parallel()
 
-	said := rendering(t, strings.Join(stateSelectors(), " "))
-	for _, field := range stateFields {
-		if !strings.Contains(said, field.label+"=") {
-			t.Errorf("the inspected state of a real container reads %q and never %s: exited, running-with-no-answer and restarting are told apart by these and nothing else", said, field.label)
+	said := rendering(t, strings.Join(docker.StateSelectors(), " "))
+	for _, field := range docker.StateFields {
+		if !strings.Contains(said, field.Label+"=") {
+			t.Errorf("the inspected state of a real container reads %q and never %s: exited, running-with-no-answer and restarting are told apart by these and nothing else", said, field.Label)
 		}
 	}
-	command := stateCommand(physical)
+	command := docker.StateCommand(physical)
 	for _, leak := range []string{".Config", ".Env", "{{json .}}", "{{.}}"} {
 		if strings.Contains(command, leak) {
 			t.Errorf("the inspected state reads %q, and %s prints the container's whole environment into a deploy's failure output", command, leak)
@@ -217,7 +218,7 @@ func TestTheInspectedStateNamesTheSevenFieldsItNeedsAndNothingTheContainerWasGiv
 func TestTheStateLineOfACrashLoopingContainerCountsItsRestarts(t *testing.T) {
 	t.Parallel()
 
-	said := rendering(t, strings.Join(stateSelectors(), " "))
+	said := rendering(t, strings.Join(docker.StateSelectors(), " "))
 	for _, wanted := range []string{"Status=restarting", "ExitCode=3", "OOMKilled=false", "RestartCount=6"} {
 		if !strings.Contains(said, wanted) {
 			t.Errorf("a daemon's crash-looping container renders as %q, which never says %s: a restart policy makes the loop invisible without it", said, wanted)
@@ -231,10 +232,10 @@ func TestTheStateLineOfACrashLoopingContainerCountsItsRestarts(t *testing.T) {
 func TestWhatIsAlreadyServingIsReadFromWhereADaemonKeepsIt(t *testing.T) {
 	t.Parallel()
 
-	if !strings.Contains(servingCommand(physical), shell.Quote(servingSelectors())) {
-		t.Fatalf("the serving check reads %q and no longer asks the daemon for the format it reads", servingCommand(physical))
+	if !strings.Contains(docker.ServingCommand(physical), shell.Quote(docker.ServingSelectors())) {
+		t.Fatalf("the serving check reads %q and no longer asks the daemon for the format it reads", docker.ServingCommand(physical))
 	}
-	said := rendering(t, servingSelectors())
+	said := rendering(t, docker.ServingSelectors())
 	fields := strings.Fields(said)
 	if len(fields) != 3 || fields[1] != fixtureRef {
 		t.Errorf("a container labelled %s reads as %q, and a redeploy of the image already up would tear it down for the same one", fixtureRef, said)
@@ -245,10 +246,10 @@ func TestWhatIsAlreadyServingIsReadFromWhereADaemonKeepsIt(t *testing.T) {
 	if fields[0] == "running" {
 		t.Errorf("a crash-looping container reads as %q, and a redeploy is kept off a container that serves nothing", said)
 	}
-	if !stillServing("running "+fixtureRef+" "+fields[2], fixtureRef, fields[2]) {
+	if !docker.IsServing("running "+fixtureRef+" "+fields[2], fixtureRef, fields[2]) {
 		t.Errorf("a container running under %q and the values it was handed reads as replaceable", said)
 	}
-	if stillServing("running "+fixtureRef+" "+fields[2], fixtureRef, "0000000000") {
+	if docker.IsServing("running "+fixtureRef+" "+fields[2], fixtureRef, "0000000000") {
 		t.Error("a container running under values a deploy has since changed reads as still serving, and it would keep the old ones for the life of the release")
 	}
 }
@@ -256,8 +257,8 @@ func TestWhatIsAlreadyServingIsReadFromWhereADaemonKeepsIt(t *testing.T) {
 func TestTheLabelsRetentionReadsRenderAgainstWhatADaemonAnswersRatherThanFailingIntoEmpty(t *testing.T) {
 	t.Parallel()
 
-	for label, wanted := range map[string]string{LabelApp: "web", LabelRef: fixtureRef} {
-		if said := rendering(t, LabelSelector(label)); said != wanted {
+	for label, wanted := range map[string]string{docker.LabelApp: "web", docker.LabelRef: fixtureRef} {
+		if said := rendering(t, docker.LabelSelector(label)); said != wanted {
 			t.Errorf("a real container's %s reads as %q, want %q: a selector that will not parse is answered as the empty string, and retention would then take the image out from under a container still serving it",
 				label, said, wanted)
 		}

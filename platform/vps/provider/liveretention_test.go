@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -118,9 +119,9 @@ func TestLiveAReconcileNeverTakesTheImageUnderARunningContainer(t *testing.T) {
 
 	sweepsUp(t, p, "r1")
 	vm.ssh(t, "sudo docker run -d --name live-retention-served"+
-		" --label "+host.LabelApp+"="+sweepApp+
-		" --label "+host.LabelProject+"="+sweepProject+
-		" --label "+host.LabelRef+"="+sweepAt("served")+
+		" --label "+docker.LabelApp+"="+sweepApp+
+		" --label "+docker.LabelProject+"="+sweepProject+
+		" --label "+docker.LabelRef+"="+sweepAt("served")+
 		" "+sweepAt("served"))
 	t.Cleanup(func() { vm.ssh(t, "sudo docker rm -f live-retention-served >/dev/null 2>&1 || true") })
 

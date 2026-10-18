@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 const PerHostnamePreviewCertificatesOption = "perHostnamePreviewCertificates"
@@ -14,7 +15,7 @@ func (h *Host) RefusePerHostnamePreviewCertificates(ctx context.Context, destina
 	if !h.front.Guarantees().OrdersEachPreviewHostnameItsOwnCertificate {
 		return nil
 	}
-	state, err := h.routingTable(ctx)
+	state, err := h.routing.Read(ctx)
 	if err != nil {
 		return err
 	}
@@ -26,10 +27,10 @@ func (h *Host) RefusePerHostnamePreviewCertificates(ctx context.Context, destina
 		return nil
 	}
 	previewed := edge.ProbeHostname(edge.PreviewWildcard(base))
-	if Covering(h.pins, previewed) != "" {
+	if h.pins.Covering(previewed) != "" {
 		return nil
 	}
-	if shield, shielded := proxySpec(state).ShieldOf(previewed); shielded && shield.OriginCertificate.Certificate != "" {
+	if shield, shielded := routing.Spec(state).ShieldOf(previewed); shielded && shield.OriginCertificate.Certificate != "" {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,

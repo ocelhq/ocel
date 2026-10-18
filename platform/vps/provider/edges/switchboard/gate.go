@@ -17,7 +17,7 @@ func (e *Edge) publishGate(ctx context.Context, publication edge.GatePublication
 }
 
 func (e *Edge) putGate(ctx context.Context, slug string, tier environment.Tier, held *gate.Gate) error {
-	if err := e.machine.PutGate(ctx, Surface(slug, tier), held); err != nil {
+	if err := e.routes.PutGate(ctx, Surface(slug, tier), held); err != nil {
 		return fmt.Errorf("hand the switchboard the %s gate of %s: %w", tier, slug, err)
 	}
 	return nil

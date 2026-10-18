@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -186,7 +187,7 @@ func TestARootOtherTiersShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T) 
 	taken := box.taking()
 	for _, shared := range []string{stateRoot, boxapi.LibDir, tierRoot} {
 		at := slices.IndexFunc(taken, func(command string) bool {
-			return strings.Contains(command, shell.Quote(shared)) && !strings.HasPrefix(command, routingLocked("-x"))
+			return strings.Contains(command, shell.Quote(shared)) && !strings.HasPrefix(command, routing.Locked("-x"))
 		})
 		if at < 0 {
 			t.Fatalf("Remove() left %s in place on a host that has nothing else:\n%s", shared, strings.Join(taken, "\n"))
@@ -297,7 +298,7 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastTierAndByNoOther(t *testi
 	current := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
 	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))}
 	singletons := []string{
-		stateRoot, boxapi.LibDir, LiveBinary, SwitchboardBinary, ProxyConfig, boxapi.RoutingTablePath, sshDir, tierRoot, deployUser,
+		stateRoot, boxapi.LibDir, LiveBinary, boxapi.SwitchboardBinary, ProxyConfig, boxapi.RoutingTablePath, sshDir, tierRoot, deployUser,
 	}
 
 	for _, singleton := range singletons {

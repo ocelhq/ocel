@@ -11,7 +11,9 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/dockerpolicy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 type everyContainerOcels struct{}
@@ -21,7 +23,7 @@ func (everyContainerOcels) IsOcels(context.Context, string) (bool, error) { retu
 func (everyContainerOcels) IsHostBound(context.Context, string) (bool, error) { return false, nil }
 
 func composedArgvs(front Front) map[string][]string {
-	tunnel := tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector())
+	tunneled := tunnel.Service(boxapi.Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector())
 	board := switchboardBox(nil, front)
 	gateway := resourced()
 	gateway.Mounts = []Mount{{Source: RealtimeDir, Target: RealtimeMount}}
@@ -29,20 +31,20 @@ func composedArgvs(front Front) map[string][]string {
 		"an app":                       containerRun(valued(), handedTo(valued())),
 		"a resource":                   resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name)),
 		"the realtime gateway":         resourceRun(gateway, "0123456789ab", EnvFile(gateway.Tier, gateway.Name)),
-		"the switchboard, recreated":   board.create(),
-		"the switchboard, run":         board.run(),
-		"the tunnel":                   tunnel.run(),
-		"the tunnel's token":           renderTunnelTokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d"),
-		"the tunnel's readiness":       tunnel.readiness(),
-		"the switchboard's readiness":  board.readiness(),
+		"the switchboard, recreated":   board.Create(),
+		"the switchboard, run":         board.Run(),
+		"the tunnel":                   tunneled.Run(),
+		"the tunnel's token":           tunnel.TokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d"),
+		"the tunnel's readiness":       tunneled.Readiness(),
+		"the switchboard's readiness":  board.Readiness(),
 		"a resource's readiness":       append([]string{"docker", "exec", resourced().Name}, "pg_isready"),
 		"a credential reasserted":      append([]string{"docker", "exec", "--interactive", resourced().Name}, "psql"),
-		"the proxy's readiness":        frontProxy().readiness(),
-		"the proxy's mounts, compared": append([]string{"docker", "exec", caddy.Container}, frontProxy().inodes...),
+		"the proxy's readiness":        frontProxy().Readiness(),
+		"the proxy's mounts, compared": append([]string{"docker", "exec", caddy.Container}, frontProxy().Inodes...),
 	}
-	if placed := destination(openFront(front, frontBox{})); placed != "" {
-		argvs["a placement"] = placementCommand(filepath.Dir(placed), "origin-group")
-		argvs["a fed placement"] = placementFed(filepath.Dir(placed), "place-origin", placed)
+	if placed := routing.Destination(openFront(front, frontBox{})); placed != "" {
+		argvs["a placement"] = routing.Placement(filepath.Dir(placed), "origin-group")
+		argvs["a fed placement"] = routing.PlacementFed(filepath.Dir(placed), "place-origin", placed)
 	}
 	if front.Caddy != nil && front.Caddy.Container != "" {
 		argvs["the adopted proxy's reload"] = []string{"docker", "exec", front.Caddy.Container, "caddy", "reload"}

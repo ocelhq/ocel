@@ -22,7 +22,7 @@ import (
 func claimedThrice(t *testing.T) string {
 	t.Helper()
 	state := routed()
-	state.Claims = []HostClaim{
+	state.Claims = []boxapi.Claim{
 		{Hostname: claimed, Owner: surface, Pointer: pointed},
 		{Hostname: "www." + claimed, Owner: surface, Pointer: pointed},
 	}
@@ -134,7 +134,7 @@ func TestMovingABoxWithinYourOwnProxyPlansTheNewFileBeforeTheOldAndNoOutage(t *t
 	wantChange(t, move, "/etc/traefik/dynamic/ocel/ocel.yml", provider.ActionCreate)
 	wantChange(t, move, "/etc/traefik/dynamic/ocel.yml", provider.ActionDelete)
 	for _, change := range move.Changes {
-		if change.Name == SwitchboardContainer && change.Action.Writes() {
+		if change.Name == boxapi.Switchboard && change.Action.Writes() {
 			t.Errorf("the move would %s %s, want it left running: a switchboard started again drops the requests it was serving", change.Action, change.Name)
 		}
 		if change.Kind == KindCertificates {
@@ -214,7 +214,7 @@ func TestMovingABoxOntoOneHostnameCountsItAsOneCertificate(t *testing.T) {
 
 	tier := environment.TierProduction
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	table := string(mustWrite(t, state))
 	box := bootstrappedBehind(t, tier, Front{}, &table, nil)
 	recordOn(t, box, tier, Front{}, "blog")
@@ -225,7 +225,7 @@ func boxRecordedWithCertificatesFor(t *testing.T, tier environment.Tier, recorde
 	t.Helper()
 	certificate, _ := pulledCertificate(t)
 	state := routed()
-	state.Claims = []HostClaim{
+	state.Claims = []boxapi.Claim{
 		{Hostname: claimed, Owner: surface, Pointer: pointed},
 		{Hostname: "pinned.example.com", Owner: surface, Pointer: pointed},
 		{Hostname: "origin.example.com", Owner: surface, Pointer: pointed},
@@ -234,8 +234,8 @@ func boxRecordedWithCertificatesFor(t *testing.T, tier environment.Tier, recorde
 	}
 	state.Connector = "box.example.com"
 	state.PreviewBase = "preview.example.com"
-	state.Pins = []Pin{{Hostname: "pinned.example.com", Path: boxapi.PinsDir + "/pinned"}}
-	state.Shields = []Shield{{
+	state.Pins = []boxapi.Pin{{Hostname: "pinned.example.com", Path: boxapi.PinsDir + "/pinned"}}
+	state.Shields = []boxapi.Shield{{
 		Hostname: "origin.example.com", Owner: surface, ClientCAs: []string{certificate},
 		OriginCertificate: boxapi.CertificatePair{Certificate: certificate, Key: "KEY"},
 	}}

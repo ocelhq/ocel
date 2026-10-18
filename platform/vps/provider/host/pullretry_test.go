@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -32,7 +33,7 @@ func TestEveryContainerThisHostStartsPullsItsImageAheadOfRunningIt(t *testing.T)
 				t.Errorf("%s contains no %q, so its pull is either unbounded or repeated on a box that already has the image:\n%s", what, want, container.command)
 			}
 		}
-		if !strings.Contains(container.command, scriptPullBackoff.Start()) || !strings.Contains(container.command, scriptPullBackoff.Again()) {
+		if !strings.Contains(container.command, docker.ScriptPullBackoff.Start()) || !strings.Contains(container.command, docker.ScriptPullBackoff.Again()) {
 			t.Errorf("%s backs off between pulls in a spelling of its own rather than scriptPullBackoff, so a fleet retrying at once is neither spread out nor capped:\n%s", what, container.command)
 		}
 	}
@@ -41,7 +42,7 @@ func TestEveryContainerThisHostStartsPullsItsImageAheadOfRunningIt(t *testing.T)
 func TestTheWaitBetweenTriesBacksOffToACeilingAndIsSpreadOut(t *testing.T) {
 	t.Parallel()
 
-	for what, backoff := range map[string]shell.Backoff{"a pull": scriptPullBackoff} {
+	for what, backoff := range map[string]shell.Backoff{"a pull": docker.ScriptPullBackoff} {
 		again := backoff.Again()
 		for _, want := range []string{"backoff=$((backoff * 2))", "sleep $((backoff + jitter))", fmt.Sprintf("backoff=%d; fi", backoff.Ceiling)} {
 			if !strings.Contains(again, want) {

@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -37,8 +38,8 @@ func TestLiveADeclaredKVStoreAnswersOnlyItsUserOnItsProjectAndLeavesNothingBehin
 	ctx := context.Background()
 	in := aKVStore(t, "8")
 	t.Cleanup(func() {
-		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelResource+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
-		vm.ssh(t, "sudo docker volume ls -q --filter label="+host.LabelResource+" | xargs -r sudo docker volume rm >/dev/null 2>&1 || true")
+		vm.ssh(t, "sudo docker ps -aq --filter label="+docker.LabelResource+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
+		vm.ssh(t, "sudo docker volume ls -q --filter label="+docker.LabelResource+" | xargs -r sudo docker volume rm >/dev/null 2>&1 || true")
 	})
 
 	binding, err := p.ProvisionKV(ctx, in, progress.Discard())

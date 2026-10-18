@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -282,11 +283,11 @@ func TestAProxyThatCouldNotBeReadIsNotReadAsACleanNamespace(t *testing.T) {
 func boardCheck(t *testing.T, checks []provider.HostCheck) provider.HostCheck {
 	t.Helper()
 	for _, check := range checks {
-		if check.Subject == host.SwitchboardContainer {
+		if check.Subject == boxapi.Switchboard {
 			return check
 		}
 	}
-	t.Fatalf("CheckHost() answered %+v and none of it is about %s, which routes every request the box serves", checks, host.SwitchboardContainer)
+	t.Fatalf("CheckHost() answered %+v and none of it is about %s, which routes every request the box serves", checks, boxapi.Switchboard)
 	return provider.HostCheck{}
 }
 
@@ -333,9 +334,9 @@ func TestASwitchboardThatIsGoneStoppedOrSilentFailsByWhatIsWrongWithIt(t *testin
 		wanted string
 	}{
 		"not there at all": {map[string]answer{
-			"'upstreams'":    {code: 1, stderr: "Error: No such container: " + host.SwitchboardContainer},
-			"docker inspect": {code: 1, stdout: "Error: No such object: " + host.SwitchboardContainer},
-		}, "no " + host.SwitchboardContainer},
+			"'upstreams'":    {code: 1, stderr: "Error: No such container: " + boxapi.Switchboard},
+			"docker inspect": {code: 1, stdout: "Error: No such object: " + boxapi.Switchboard},
+		}, "no " + boxapi.Switchboard},
 		"exited": {map[string]answer{
 			"'upstreams'":    {code: 1, stderr: "Error response from daemon: container is not running"},
 			"docker inspect": {stdout: exitedState},

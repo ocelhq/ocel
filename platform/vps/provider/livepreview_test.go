@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 const livePreviewBase = "preview.ocel.home.arpa"
@@ -95,13 +96,13 @@ func TestLiveTheLoadedConfigurationOrdersOnDemandOnlyWhatTheSwitchboardAdmits(t 
 	loaded := vm.loadedProxyConfig(t)
 	onDemand, _ := nestedIn(t, loaded, "apps", "tls", "automation", "on_demand").(map[string]any)
 	permission, _ := onDemand["permission"].(map[string]any)
-	endpoint := caddy.PermissionEndpoint(host.SwitchboardPermission.Path)
+	endpoint := caddy.PermissionEndpoint(routing.SwitchboardPermission.Path)
 	if len(onDemand) != 1 || permission["module"] != "http" || permission["endpoint"] != endpoint {
 		t.Fatalf("the loaded configuration orders on demand through %v, want the switchboard's %s alone: an on-demand policy nobody guards is an acme trigger a stranger drives with a junk subdomain until this box is locked out of its own tls", onDemand, endpoint)
 	}
 	relayed, _ := json.Marshal(nestedIn(t, loaded, "apps", "http", "servers", "admit", "routes"))
-	if !strings.Contains(string(relayed), `"dial":"`+host.SwitchboardPermission.Dial+`"`) {
-		t.Fatalf("the loaded configuration relays %s to %s, want the switchboard's admission at %s", endpoint, relayed, host.SwitchboardPermission.Dial)
+	if !strings.Contains(string(relayed), `"dial":"`+routing.SwitchboardPermission.Dial+`"`) {
+		t.Fatalf("the loaded configuration relays %s to %s, want the switchboard's admission at %s", endpoint, relayed, routing.SwitchboardPermission.Dial)
 	}
 	if status := vm.asksFor(t, "pr-7."+livePreviewBase); status != http.StatusNotFound {
 		t.Errorf("an unclaimed preview hostname was answered %d, want the switchboard's 404", status)
