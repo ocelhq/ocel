@@ -32,6 +32,6 @@ func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 		Computes:         provider.ComputeNames(facts.Computes),
 		WorkerCeilings:   provider.WorkerCeilingMessages(facts.WorkerCeilings),
 		MaxFunctionBytes: facts.MaxFunctionBytes,
-		ForwardsPorts:    p.Hooks().ForwardPorts != nil,
+		ForwardsPorts:    p.Hooks().BindingAccess != nil,
 	}
 }

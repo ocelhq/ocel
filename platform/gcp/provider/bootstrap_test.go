@@ -292,7 +292,9 @@ func replacingTheTierKey(t *testing.T) (bootstrap, survey, *int) {
 func TestABootstrapRefusingReplacementsRefusesBeforeWritingAnythingWhenItWouldReplaceTheTierKey(t *testing.T) {
 	b, read, asked := replacingTheTierKey(t)
 
-	err := b.Apply(t.Context(), provider.BootstrapRequest{Tier: environment.TierProduction, RefuseReplacements: true, VendorState: read}, nil)
+	b.surveyed = &surveys{}
+	b.surveyed.remember(read)
+	err := b.Apply(t.Context(), provider.BootstrapRequest{Tier: environment.TierProduction, RefuseReplacements: true}, nil)
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "KMS key production") || !strings.Contains(err.Error(), "--yes") {

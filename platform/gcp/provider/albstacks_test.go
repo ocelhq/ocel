@@ -25,7 +25,7 @@ func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
 		{Tier: tier, Slug: "shop"},
 		{Tier: tier, Slug: "blog"},
 	} {
-		config, _ := stacks.config(stacks.p.resolved, target, "secret", nil)
+		config, _ := stacks.config(stacks.p.resolved, target, "secret")
 		prefixes[target.Slug] = config.Backend.URL
 	}
 
@@ -45,9 +45,19 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 	t.Parallel()
 
 	stacks := stacking(t)
-	front, spec := stacks.config(stacks.p.resolved, alb.Target{Tier: environment.TierProduction}, "secret", nil)
-	if front.Refresh == nil || !front.Refresh(spec.Ref, pulumi.OperationProvision) {
+	front, ref := stacks.config(stacks.p.resolved, alb.Target{Tier: environment.TierProduction}, "secret")
+	if front.Refresh == nil || !front.Refresh(ref, pulumi.OperationProvision) {
 		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by keeping " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the tier back to unrouted")
+	}
+}
+
+func TestAnALBStackIsTornDownWithoutBeingHandedTheProgramThatRaisedIt(t *testing.T) {
+	t.Parallel()
+
+	stacks := stacking(t)
+	config, ref := stacks.config(stacks.p.resolved, alb.Target{Tier: environment.TierProduction, Slug: "shop"}, "secret")
+	if _, err := pulumi.New(config).Workspace(ref, nil); err != nil {
+		t.Errorf("Workspace() for a teardown = %v, want the stack ready to destroy: a teardown has no program to hand it", err)
 	}
 }

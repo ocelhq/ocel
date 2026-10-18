@@ -431,11 +431,7 @@ func grantMessages(grants []provider.Grant) []*bindingsv1.Grant {
 	return out
 }
 
-func (r *release) decodeApp(spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
-	work, planned := spec.VendorState.(*appWork)
-	if !planned {
-		return provider.StackResult{}, fmt.Errorf("this stack was not planned as an app stack")
-	}
+func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.StackResult, error) {
 	result := provider.StackResult{
 		EdgeBundleKey: work.delivery.BundleKey,
 		RouteTableKey: work.delivery.RouteTableKey,

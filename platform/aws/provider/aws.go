@@ -104,10 +104,8 @@ func (p *Provider) Hooks() provider.Hooks {
 		ProgramEdge:         p.ProgramEdge,
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenRegistryImages:  p.OpenRegistryImages,
-		ProveIdentity:       p.ProveIdentity,
-		EnsureEnvSourceSync: p.EnsureEnvSourceSync,
-		ForwardPorts:        p.ForwardPorts,
-		ServeBindingProxy:   p.ServeBindingProxy,
+		EnvSource:           &provider.EnvSourceHooks{ProveIdentity: p.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
+		BindingAccess:       &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		Retirement:          &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
 	}

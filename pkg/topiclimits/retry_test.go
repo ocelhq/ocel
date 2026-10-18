@@ -1,4 +1,4 @@
-package provider
+package topiclimits
 
 import (
 	"strings"
@@ -8,12 +8,13 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func TestAConsumerDeclaringNoRetryRunsTheDefaults(t *testing.T) {
 	t.Parallel()
 
-	want := RetryPolicy{MaxAttempts: 3, MinDelay: time.Second, MaxDelay: time.Minute}
+	want := provider.RetryPolicy{MaxAttempts: 3, MinDelay: time.Second, MaxDelay: time.Minute}
 	if got := ResolveRetryPolicy(nil, nil); got != want {
 		t.Errorf("ResolveRetryPolicy(nil, nil) = %+v, want %+v", got, want)
 	}
@@ -24,7 +25,7 @@ func TestAConsumersRetryOverridesItsTopicsFieldByField(t *testing.T) {
 
 	topic := &resourcesv1.RetryPolicy{MaxAttempts: 7, MinDelay: durationpb.New(2 * time.Second), MaxDelay: durationpb.New(5 * time.Minute)}
 	consumer := &resourcesv1.RetryPolicy{MaxAttempts: 4, MaxDelay: durationpb.New(30 * time.Second)}
-	want := RetryPolicy{MaxAttempts: 4, MinDelay: 2 * time.Second, MaxDelay: 30 * time.Second}
+	want := provider.RetryPolicy{MaxAttempts: 4, MinDelay: 2 * time.Second, MaxDelay: 30 * time.Second}
 	if got := ResolveRetryPolicy(topic, consumer); got != want {
 		t.Errorf("ResolveRetryPolicy(topic, consumer) = %+v, want %+v", got, want)
 	}
@@ -33,7 +34,7 @@ func TestAConsumersRetryOverridesItsTopicsFieldByField(t *testing.T) {
 func TestAMinDelayAboveTheMaxDelayRaisesTheMaxDelayToIt(t *testing.T) {
 	t.Parallel()
 
-	want := RetryPolicy{MaxAttempts: 3, MinDelay: 5 * time.Minute, MaxDelay: 5 * time.Minute}
+	want := provider.RetryPolicy{MaxAttempts: 3, MinDelay: 5 * time.Minute, MaxDelay: 5 * time.Minute}
 	if got := ResolveRetryPolicy(&resourcesv1.RetryPolicy{MinDelay: durationpb.New(5 * time.Minute)}); got != want {
 		t.Errorf("ResolveRetryPolicy(minDelay 5m) = %+v, want %+v", got, want)
 	}

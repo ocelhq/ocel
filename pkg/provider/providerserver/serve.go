@@ -157,14 +157,15 @@ func (s sessionBackend) Read() (variablestoreserver.Backend, error) {
 		return variablestoreserver.Backend{}, err
 	}
 	hooks := vendor.Hooks()
-	return variablestoreserver.Backend{
-		KeyValues:     vendor.KeyValues(),
-		Cipher:        vendor.Cipher(),
-		VerifyGrants:  hooks.VerifyGrants,
-		ProveIdentity: hooks.ProveIdentity,
-
-		EnsureEnvSourceSync: hooks.EnsureEnvSourceSync,
-	}, nil
+	backend := variablestoreserver.Backend{
+		KeyValues:    vendor.KeyValues(),
+		Cipher:       vendor.Cipher(),
+		VerifyGrants: hooks.VerifyGrants,
+	}
+	if hooks.EnvSource != nil {
+		backend.ProveIdentity, backend.EnsureEnvSourceSync = hooks.EnvSource.ProveIdentity, hooks.EnvSource.EnsureSync
+	}
+	return backend, nil
 }
 
 type session struct {

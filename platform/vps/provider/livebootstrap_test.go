@@ -86,7 +86,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Fatal("Describe() claims a bootstrap on a machine nothing has written to")
 	}
 
-	req := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: fresh.VendorState}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}
 	plan, err := bootstrap.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
@@ -142,9 +142,9 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	}
 	if !described.Present || !described.Stacks[0].DigestCurrent {
 		t.Fatalf("Describe() after Apply() = %+v, want a present bootstrap current at the digest applied, %s\n%s",
-			described.Stacks, stillMoving(t, bootstrap, tier, described.VendorState), vm.proxySaid(t))
+			described.Stacks, stillMoving(t, bootstrap, tier), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
@@ -225,7 +225,7 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	if described.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls an unfinished apply current, so a partially applied host reads as a healthy one")
 	}
-	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"})
 	if err != nil {
 		t.Fatalf("Plan() over an unfinished apply = %v", err)
 	}
@@ -254,13 +254,12 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverIncluded(t *testing.T) {
 		}
 	}()
 
-	shown, err := bootstrap.Describe(ctx, tier)
-	if err != nil {
+	if _, err := bootstrap.Describe(ctx, tier); err != nil {
 		t.Fatal(err)
 	}
 	vm.ssh(t, "sudo rm -rf /usr/local/lib/ocel")
 
-	err = bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shown.VendorState}, progress.Discard())
+	err = bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard())
 	if err == nil {
 		t.Fatal("Apply() did work the plan the user consented to never included")
 	}

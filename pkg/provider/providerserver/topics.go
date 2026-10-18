@@ -8,6 +8,7 @@ import (
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/topiclimits"
 )
 
 var lanes = map[topicv1.Lane]provider.Lane{
@@ -56,20 +57,20 @@ func readTopicSpec(kind provider.BindingType, topic *contractv1.ManifestTopic) (
 }
 
 func refuseTopicLimits(kind provider.BindingType, topic *contractv1.ManifestTopic) error {
-	if err := provider.RefuseRetry(topic.GetRetry()); err != nil {
+	if err := topiclimits.RefuseRetry(topic.GetRetry()); err != nil {
 		return err
 	}
-	if err := provider.RefuseTTL(topic.GetTtl()); err != nil {
+	if err := topiclimits.RefuseTTL(topic.GetTtl()); err != nil {
 		return err
 	}
 	if kind == provider.BindingTask {
 		for _, consumer := range topic.GetConsumers() {
-			if err := provider.RefuseOrderedTask(topic.GetOrdered(), consumer.GetBatch()); err != nil {
+			if err := topiclimits.RefuseOrderedTask(topic.GetOrdered(), consumer.GetBatch()); err != nil {
 				return err
 			}
 		}
 	}
-	return provider.RefuseConsumerCount(len(topic.GetConsumers()), topic.GetOrdered())
+	return topiclimits.RefuseConsumerCount(len(topic.GetConsumers()), topic.GetOrdered())
 }
 
 func readConsumerSpec(topic *contractv1.ManifestTopic, message *contractv1.ManifestConsumer) (provider.ConsumerSpec, error) {
@@ -86,7 +87,7 @@ func readConsumerSpec(topic *contractv1.ManifestTopic, message *contractv1.Manif
 		Name:        message.GetName(),
 		Worker:      message.GetWorker(),
 		Exclusive:   message.GetExclusive(),
-		Retry:       provider.ResolveRetryPolicy(topic.GetRetry(), message.GetRetry()),
+		Retry:       topiclimits.ResolveRetryPolicy(topic.GetRetry(), message.GetRetry()),
 		Concurrency: int(message.GetConcurrency()),
 		MaxDuration: message.GetMaxDuration().AsDuration(),
 	}
@@ -105,13 +106,13 @@ func readConsumerSpec(topic *contractv1.ManifestTopic, message *contractv1.Manif
 
 func refuseConsumerLimits(ordered bool, message *contractv1.ManifestConsumer) error {
 	refusals := []error{
-		provider.RefuseRetry(message.GetRetry()),
+		topiclimits.RefuseRetry(message.GetRetry()),
 		provider.RefuseConcurrency(message.GetConcurrency()),
-		provider.RefuseMaxDuration(message.GetMaxDuration()),
-		provider.RefuseBatch(message.GetBatch()),
+		topiclimits.RefuseMaxDuration(message.GetMaxDuration()),
+		topiclimits.RefuseBatch(message.GetBatch()),
 	}
 	if ordered {
-		refusals = append(refusals, provider.RefuseOrderedConsumer(message.GetLanes(), message.GetBatch()))
+		refusals = append(refusals, topiclimits.RefuseOrderedConsumer(message.GetLanes(), message.GetBatch()))
 	}
 	for _, err := range refusals {
 		if err != nil {

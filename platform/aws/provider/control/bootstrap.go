@@ -116,7 +116,6 @@ func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provide
 		return provider.BootstrapDescription{}, err
 	}
 	description.Stacks = append(description.Stacks, edgeStacks...)
-	description.VendorState = read
 	return description, nil
 }
 
@@ -135,7 +134,7 @@ func described(tier environment.Tier, deployed bootstrap.Deployed) provider.Boot
 }
 
 func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
-	read, err := b.reading(ctx, req)
+	read, err := b.read(ctx, req.Tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -166,13 +165,6 @@ func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (bootstrap.R
 		return bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
 	}
 	return b.Read(ctx, tier)
-}
-
-func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (bootstrap.Reading, error) {
-	if prior, passed := req.VendorState.(bootstrap.Reading); passed && prior.Tier() == req.Tier {
-		return prior, nil
-	}
-	return bootstrap.Read(ctx, b.CFN, b.Namespace, req.Tier)
 }
 
 func (b Bootstrap) open(kind edge.Kind) (edge.Edge, error) {

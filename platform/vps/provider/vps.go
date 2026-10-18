@@ -102,8 +102,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		OpenDirectImages:   p.OpenDirectImages,
 		CheckHost:          p.CheckHost,
 		CheckBucket:        s3store.Check,
-		ForwardPorts:       p.ForwardPorts,
-		ServeBindingProxy:  p.ServeBindingProxy,
+		BindingAccess:      &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Retirement:         &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
 	}
 }

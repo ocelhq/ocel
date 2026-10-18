@@ -150,13 +150,12 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	if err != nil {
 		return provider.RefusalError(err)
 	}
-	forward := p.Hooks().ForwardPorts
+	access := p.Hooks().BindingAccess
 	reachable := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
-		return forward == nil || !isReachableByPort(binding)
+		return access == nil || !isReachableByPort(binding)
 	})
-	serve := p.Hooks().ServeBindingProxy
 	proxied := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
-		return serve == nil || !isReachableByProxy(binding)
+		return access == nil || !isReachableByProxy(binding)
 	})
 	said := &streamLog{stream: stream}
 	defer said.close()
@@ -168,13 +167,13 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 		}
 	}
 	if len(reachable) > 0 {
-		forwards, err = forward(ctx, provider.PortForwardRequest{Tier: tier, Bindings: reachable, ReportFailure: reportFailure}, said)
+		forwards, err = access.ForwardPorts(ctx, provider.PortForwardRequest{Tier: tier, Bindings: reachable, ReportFailure: reportFailure}, said)
 		if err != nil {
 			return provider.RefusalError(err)
 		}
 	}
 	if len(proxied) > 0 {
-		served, err := serve(ctx, provider.BindingProxyRequest{Slug: spec.Slug, Tier: tier, Env: env, Grants: listProxiedGrants(req.GetGrants(), proxied), ReportFailure: reportFailure}, said)
+		served, err := access.ServeProxy(ctx, provider.BindingProxyRequest{Slug: spec.Slug, Tier: tier, Env: env, Grants: listProxiedGrants(req.GetGrants(), proxied), ReportFailure: reportFailure}, said)
 		if err != nil {
 			return provider.RefusalError(err)
 		}

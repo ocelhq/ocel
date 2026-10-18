@@ -29,8 +29,8 @@ func answersTheFunctionBuildFacts(t *testing.T, suite Suite, configured *contrac
 
 	p := readDeclaredProvider(t, suite)
 	declared := p.Facts()
-	if got, want := configured.GetForwardsPorts(), p.Hooks().ForwardPorts != nil; got != want {
-		t.Errorf("ConfigureResponse.facts.forwards_ports = %v, want %v — the RPC answers whether Hooks().ForwardPorts is set", got, want)
+	if got, want := configured.GetForwardsPorts(), p.Hooks().BindingAccess != nil; got != want {
+		t.Errorf("ConfigureResponse.facts.forwards_ports = %v, want %v — the RPC answers whether Hooks().BindingAccess is set", got, want)
 	}
 	if got, want := configured.GetMaxFunctionBytes(), declared.MaxFunctionBytes; got != want {
 		t.Errorf("ConfigureResponse.facts.max_function_bytes = %d, want %d — the RPC answers what Facts().MaxFunctionBytes declares", got, want)

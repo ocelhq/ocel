@@ -49,7 +49,7 @@ func TestForwardPortsHandsBackThePublishedBindingPointedAtItsForwardAndHoldsItUn
 	held := make(chan context.Context, 1)
 	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			asked = req
 			held <- ctx
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { close(closed) }}}, nil
@@ -110,7 +110,7 @@ func TestForwardPortsEndsTheStreamWithTheFailureTheProviderReportsAndClosesTheFo
 	fail := make(chan func(error), 1)
 	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			fail <- req.ReportFailure
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { close(closed) }}}, nil
 		}
@@ -147,7 +147,7 @@ func TestForwardPortsEndsTheStreamWithAFailureBeforeItsForwardsFinishClosingAndH
 	releaseForwards := func() { released.Do(func() { close(release) }) }
 	defer releaseForwards()
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			req.ReportFailure(errors.New("the bastion task stopped: Task stopped by user"))
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { <-release }}}, nil
 		}
@@ -242,7 +242,7 @@ func TestForwardPortsLeavesAPostgresBindingAddressedByAURLUnforwarded(t *testing
 	}
 	var asked []provider.Binding
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			asked = req.Bindings
 			forwards := make([]provider.PortForward, 0, len(req.Bindings))
 			for _, binding := range req.Bindings {
@@ -280,7 +280,7 @@ func TestADeployAfterForwardsBeginsOnlyOnceTheProviderHasClosedThem(t *testing.T
 	releaseForwards := func() { released.Do(func() { close(release) }) }
 	defer releaseForwards()
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { <-release }}}, nil
 		}
 	})
@@ -326,7 +326,7 @@ func TestWhatTheProviderSaysWhileOpeningForwardsAndWhileTheyAreHeldReachesTheCal
 	provisionedInfra(t, client, infraRequest(deployRequest()))
 	opened := make(chan progress.Log, 1)
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, _ provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, _ provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
 			progress.Say("Creating the bastion")
 			opened <- progress
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234"}}, nil
@@ -379,7 +379,7 @@ func TestWhatTheProviderSaysOnceItsForwardsAreClosedGoesNowhere(t *testing.T) {
 	opened := make(chan progress.Log, 1)
 	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, _ provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, _ provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
 			opened <- progress
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { close(closed) }}}, nil
 		}
@@ -422,7 +422,7 @@ func TestWhatTheProviderSaysWhileClosingForwardsThatFailedGoesNowhere(t *testing
 	provisionedInfra(t, client, infraRequest(deployRequest()))
 	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
 			req.ReportFailure(errors.New("the bastion task stopped: Task stopped by user"))
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() {
 				defer close(closed)
@@ -514,7 +514,7 @@ func TestForwardPortsServesTheBindingProxyForBindingsNoPortReachesAndHoldsItUnti
 	var asked provider.BindingProxyRequest
 	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+		fake.EnsureBindingAccess(h).ServeProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
 			asked = req
 			return provider.BindingProxy{Address: "http://127.0.0.1:41999", Sessions: []provider.BindingSession{{Grantee: "web", SessionToken: "token-1"}}, Close: func() { close(closed) }}, nil
 		}
@@ -594,7 +594,7 @@ func TestForwardPortsLeavesABucketAddressedByAnEndpointUnforwardedSinceNoVendorP
 	}
 	var asked []provider.BindingGrant
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+		fake.EnsureBindingAccess(h).ServeProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
 			asked = req.Grants
 			return provider.BindingProxy{Address: "http://127.0.0.1:41999", Sessions: []provider.BindingSession{{Grantee: "web", SessionToken: "token-1"}}}, nil
 		}
@@ -625,7 +625,7 @@ func TestForwardPortsClosesWhatAVendorOpenedForAProxyWithNoAddress(t *testing.T)
 	provisionedInfra(t, client, infraRequest(twoAppRequest()))
 	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ServeBindingProxy = func(context.Context, provider.BindingProxyRequest, progress.Log) (provider.BindingProxy, error) {
+		fake.EnsureBindingAccess(h).ServeProxy = func(context.Context, provider.BindingProxyRequest, progress.Log) (provider.BindingProxy, error) {
 			return provider.BindingProxy{Close: func() { close(closed) }}, nil
 		}
 	})
@@ -653,7 +653,7 @@ func TestForwardPortsHoldsNoBindingProxyWhenTheVendorServesNoneOfTheBindings(t *
 	client, vendor := deployServed(t)
 	provisionedInfra(t, client, infraRequest(twoAppRequest()))
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+		fake.EnsureBindingAccess(h).ServeProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
 			return provider.BindingProxy{Unserved: []string{req.Grants[0].Bindings[0].Name}}, nil
 		}
 	})
@@ -682,7 +682,7 @@ func TestForwardPortsLeavesUnforwardedTheProxiedBindingsTheProxyReportsItDoesNot
 	provisionedInfra(t, client, infraRequest(twoAppRequest()))
 	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ServeBindingProxy = func(context.Context, provider.BindingProxyRequest, progress.Log) (provider.BindingProxy, error) {
+		fake.EnsureBindingAccess(h).ServeProxy = func(context.Context, provider.BindingProxyRequest, progress.Log) (provider.BindingProxy, error) {
 			return provider.BindingProxy{Address: "http://127.0.0.1:41999", Sessions: []provider.BindingSession{{Grantee: "web", SessionToken: "token-1"}}, Unserved: []string{"uploads"}, Close: func() { close(closed) }}, nil
 		}
 	})
@@ -708,7 +708,7 @@ func TestForwardPortsAsksTheBindingProxyForEachGranteeItsOwnProxiedBindingsAndAn
 	provisionedInfra(t, client, infraRequest(twoAppRequest()))
 	var asked []provider.BindingGrant
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+		fake.EnsureBindingAccess(h).ServeProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
 			asked = req.Grants
 			return provider.BindingProxy{Address: "http://127.0.0.1:41999", Sessions: []provider.BindingSession{
 				{Grantee: "web", SessionToken: "token-web"},

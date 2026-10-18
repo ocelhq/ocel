@@ -29,6 +29,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -242,7 +243,7 @@ func TestAPreBuildWithoutAnAppRunsFromTheProjectDirectory(t *testing.T) {
 func TestAPreBuildOfAProviderThatForwardsNoPortRunsWithoutBindingsAndSaysSo(t *testing.T) {
 	p := setUpPreBuildProject(t, `"true"`)
 	writeConfigWithLifecycle(t, p.fixture.Root, fmt.Sprintf(`"echo ran > %s; test -z \"$OCEL_LIVE_DIR\""`, p.marker))
-	p.fixture.Provider.WithHooks(func(h *provider.Hooks) { h.ForwardPorts = nil })
+	p.fixture.Provider.WithHooks(func(h *provider.Hooks) { h.BindingAccess = nil })
 
 	out, err := p.deploy(t, deployOptions{yes: true})
 
@@ -261,7 +262,7 @@ func TestAPreBuildWhoseForwardIsRefusedStopsTheDeployBeforeItRunsAndNamesTheReso
 	p := setUpPreBuildProject(t, `"true"`)
 	writeConfigWithLifecycle(t, p.fixture.Root, fmt.Sprintf(`"touch %s"`, p.marker))
 	p.fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
 			return nil, refusal.Refuse(refusal.CodeNotReady, "container db holds no address on any network, so it is not running")
 		}
 	})
@@ -300,8 +301,8 @@ func TestAPreBuildAsksForTheForwardsOfTheDeploysTierAndAWayToReportOneThatFails(
 func TestAPreBuildWhoseForwardFailsWhileItRunsStopsTheDeployBeforeAnythingIsPromotedAndSaysWhy(t *testing.T) {
 	p := setUpPreBuildProject(t, `"sleep 1"`)
 	p.fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		forward := h.ForwardPorts
-		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, said progress.Log) ([]provider.PortForward, error) {
+		forward := fake.EnsureBindingAccess(h).ForwardPorts
+		fake.EnsureBindingAccess(h).ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, said progress.Log) ([]provider.PortForward, error) {
 			forwards, err := forward(ctx, req, said)
 			req.ReportFailure(errors.New("the bastion task stopped: Essential container in task exited"))
 			return forwards, err

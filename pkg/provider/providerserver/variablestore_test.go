@@ -10,6 +10,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -177,7 +178,9 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 
 func TestAnEnvSourceLogsInWithTheCloudIdentityTheProviderProves(t *testing.T) {
 	p := fake.NewProvider(fake.Options{})
-	p.WithHooks(func(hooks *provider.Hooks) { hooks.ProveIdentity = p.ProveIdentity })
+	p.WithHooks(func(hooks *provider.Hooks) {
+		hooks.EnvSource = &provider.EnvSourceHooks{ProveIdentity: p.ProveIdentity, EnsureSync: func(context.Context, environment.Tier, string) error { return nil }}
+	})
 	variables := variablesServedBy(t, p)
 	infisical := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string

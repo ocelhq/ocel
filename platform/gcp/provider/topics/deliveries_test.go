@@ -12,11 +12,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/topiclimits"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
 func deployedTopics() map[string]*provider.TopicSpec {
-	twice := provider.RetryPolicy{MaxAttempts: 2, MinDelay: provider.DefaultRetryMinDelay, MaxDelay: provider.DefaultRetryMaxDelay}
+	twice := provider.RetryPolicy{MaxAttempts: 2, MinDelay: topiclimits.DefaultRetryMinDelay, MaxDelay: topiclimits.DefaultRetryMaxDelay}
 	return map[string]*provider.TopicSpec{
 		"resize": {
 			Schema:    "{}",
@@ -90,4 +91,4 @@ func TestAPushThatIsNotAPubSubMessageIsRefused(t *testing.T) {
 	}
 }
 
-var defaultRetry = provider.RetryPolicy{MaxAttempts: provider.DefaultRetryMaxAttempts, MinDelay: provider.DefaultRetryMinDelay, MaxDelay: provider.DefaultRetryMaxDelay}
+var defaultRetry = provider.RetryPolicy{MaxAttempts: topiclimits.DefaultRetryMaxAttempts, MinDelay: topiclimits.DefaultRetryMinDelay, MaxDelay: topiclimits.DefaultRetryMaxDelay}

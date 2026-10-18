@@ -141,7 +141,7 @@ func TestConfigureSaysTheProviderForwardsPortsWhenItsHookIsSet(t *testing.T) {
 		want bool
 	}{
 		{"hook set", func(hooks *provider.Hooks) {
-			hooks.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
+			fake.EnsureBindingAccess(hooks).ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
 				return nil, nil
 			}
 		}, true},

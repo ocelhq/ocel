@@ -11,7 +11,6 @@ import (
 	connect "connectrpc.com/connect"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
-
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -20,6 +19,20 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
+
+func TestAnAWSTargetForwardsPortsAndForwardsNothingWhenNoBindingAsksWithoutReachingAWS(t *testing.T) {
+	cfg := aws.Config{Region: "eu-west-2", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", ""), BaseEndpoint: aws.String("http://127.0.0.1:1")}
+	forward := NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace).Hooks().BindingAccess
+	if forward == nil {
+		t.Fatal("the aws provider sets no ForwardPorts hook, so a build never gets the bindings of a private Aurora or Valkey")
+	}
+
+	forwards, err := forward.ForwardPorts(context.Background(), provider.PortForwardRequest{Tier: environment.TierProduction}, progress.Discard())
+
+	if err != nil || len(forwards) != 0 {
+		t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and no call to AWS", forwards, err)
+	}
+}
 
 type storeSeen struct {
 	mutex sync.Mutex
@@ -71,11 +84,11 @@ func servedGrants(t *testing.T, grants ...provider.BindingGrant) (provider.Bindi
 	}); err != nil {
 		t.Fatal(err)
 	}
-	serve := p.Hooks().ServeBindingProxy
+	serve := p.Hooks().BindingAccess
 	if serve == nil {
 		t.Fatal("the aws provider sets no ServeBindingProxy hook, so a build never reaches a bucket")
 	}
-	proxy, err := serve(context.Background(), provider.BindingProxyRequest{Slug: "shop", Tier: environment.TierProduction, Env: "production", Grants: grants}, progress.Discard())
+	proxy, err := serve.ServeProxy(context.Background(), provider.BindingProxyRequest{Slug: "shop", Tier: environment.TierProduction, Env: "production", Grants: grants}, progress.Discard())
 	if err != nil {
 		t.Fatalf("ServeBindingProxy() error = %v", err)
 	}

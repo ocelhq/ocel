@@ -12,6 +12,10 @@ import (
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
+func (p *Provider) ProveIdentity(ctx context.Context, audience string) (envsource.IdentityProof, error) {
+	return awsports.CallerIdentity{Config: p.aws}.Prove(ctx, audience)
+}
+
 func (p *Provider) envSourceSyncSpec(ctx context.Context, tier environment.Tier) (envsourcesync.Spec, error) {
 	deployed, err := p.bootstrapped(ctx, tier)
 	if err != nil {

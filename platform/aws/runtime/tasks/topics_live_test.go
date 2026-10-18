@@ -16,12 +16,13 @@ import (
 
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	"github.com/ocelhq/ocel/pkg/topiclimits"
 )
 
 func aTopic(consumers ...provider.ConsumerSpec) *provider.TopicSpec {
 	for i := range consumers {
 		if consumers[i].Retry.MaxAttempts == 0 {
-			consumers[i].Retry = provider.ResolveRetryPolicy()
+			consumers[i].Retry = topiclimits.ResolveRetryPolicy()
 		}
 	}
 	return &provider.TopicSpec{Consumers: consumers}

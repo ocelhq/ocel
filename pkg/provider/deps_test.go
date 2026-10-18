@@ -37,3 +37,17 @@ func TestTheContractNamesAnImageWithoutLinkingWhatBuildsOrPushesIt(t *testing.T)
 		}
 	}
 }
+
+func TestTheContractReadsNoAppDeclarationItself(t *testing.T) {
+	t.Parallel()
+
+	out, err := exec.Command("go", "list", "-f", `{{join .Imports "\n"}}`, ".").CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list -f imports: %v\n%s", err, out)
+	}
+	for _, pkg := range strings.Fields(string(out)) {
+		if strings.HasPrefix(pkg, "github.com/ocelhq/ocel/pkg/proto/app/") {
+			t.Errorf("the contract imports %s: an app's declarations are decoded before a vendor is handed a spec, never by the contract", pkg)
+		}
+	}
+}

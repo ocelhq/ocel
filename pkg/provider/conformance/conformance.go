@@ -56,10 +56,10 @@ func runHooks(t *testing.T, suite Suite) {
 		runCost(t, suite)
 	})
 	t.Run("ForwardPorts", func(t *testing.T) {
-		if hooks.ForwardPorts == nil {
+		if hooks.BindingAccess == nil {
 			t.Skip("this provider forwards no ports, so a build gets no bindings to its private resources")
 		}
-		forwards, err := hooks.ForwardPorts(context.Background(), provider.PortForwardRequest{}, progress.Discard())
+		forwards, err := hooks.BindingAccess.ForwardPorts(context.Background(), provider.PortForwardRequest{}, progress.Discard())
 		if err != nil || len(forwards) != 0 {
 			t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and nothing reached", forwards, err)
 		}

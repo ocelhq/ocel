@@ -56,8 +56,6 @@ type StackSpec struct {
 	Bindings Bindings
 
 	App *AppSpec
-
-	VendorState any
 }
 
 type Bindings interface {

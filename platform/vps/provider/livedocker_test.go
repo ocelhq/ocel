@@ -90,11 +90,10 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Fatal(err)
 	}
 
-	absent, err := bootstrap.Describe(ctx, tier)
-	if err != nil {
+	if _, err := bootstrap.Describe(ctx, tier); err != nil {
 		t.Fatal(err)
 	}
-	req := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: absent.VendorState}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}
 	plan, err := bootstrap.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() over a machine with no engine = %v", err)
@@ -154,9 +153,9 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	}
 	if !described.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() calls a machine that has just been bootstrapped, engine and all, drifted, %s\n%s",
-			stillMoving(t, bootstrap, tier, described.VendorState), vm.proxySaid(t))
+			stillMoving(t, bootstrap, tier), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,11 +176,10 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	}
 	vm.ssh(t, "sudo systemctl disable --now "+socketName+" "+unitName)
 
-	idle, err := bootstrap.Describe(ctx, tier)
-	if err != nil {
+	if _, err := bootstrap.Describe(ctx, tier); err != nil {
 		t.Fatal(err)
 	}
-	stopped := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: idle.VendorState}
+	stopped := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}
 	restarting, err := bootstrap.Plan(ctx, stopped)
 	if err != nil {
 		t.Fatalf("Plan() over an installed engine whose daemon is idle = %v", err)
@@ -229,11 +227,10 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 			unitName, strings.Join(moved, ", "), surviving)
 	}
 
-	shimmed, err := bootstrap.Describe(ctx, tier)
-	if err != nil {
+	if _, err := bootstrap.Describe(ctx, tier); err != nil {
 		t.Fatal(err)
 	}
-	reinstalling, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shimmed.VendorState})
+	reinstalling, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"})
 	if err != nil {
 		t.Fatalf("Plan() over a docker binary with no unit behind it = %v", err)
 	}
@@ -245,7 +242,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
 	}
 	got := refused(t, bootstrap.Apply(ctx,
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shimmed.VendorState, RefuseReplacements: true}, progress.Discard()),
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", RefuseReplacements: true}, progress.Discard()),
 		refusal.CodeNotReady)
 	if !strings.Contains(got.Message, engineName) {
 		t.Errorf("an apply that refuses replacements over a docker binary with no unit says %q, want it refused by name: running %s as root over an install that already exists replaces it, and this apply refuses replacements",

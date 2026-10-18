@@ -124,7 +124,11 @@ func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec,
 	if err := r.recordWorkers(ctx, ref); err != nil {
 		return nil, fmt.Errorf("record the workers of %s: %w", spec.App.App, err)
 	}
-	result, err := r.automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: workers}, progress)
+	outputs, err := r.automation.Run(ctx, ref, stackProgram{run: workers.run, tags: spec.Tags}, progress)
+	if err != nil {
+		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
+	}
+	result, err := workers.decode(outputs)
 	if err != nil {
 		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
 	}
@@ -200,7 +204,7 @@ func (r *release) previewWorkers(ctx context.Context, spec provider.StackSpec, w
 		return nil, err
 	}
 	ref := workersRef(spec.Ref)
-	planned, err := r.automation.Preview(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: workers}, progress)
+	planned, err := r.automation.Preview(ctx, ref, stackProgram{run: workers.run, tags: spec.Tags}, progress)
 	return planned.Groups, err
 }
 

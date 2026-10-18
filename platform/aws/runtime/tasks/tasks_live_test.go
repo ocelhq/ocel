@@ -20,6 +20,7 @@ import (
 
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	"github.com/ocelhq/ocel/pkg/topiclimits"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
@@ -28,7 +29,7 @@ const exactJSON = `{"ratio":2.0,"id":9007199254740993}`
 type taskOption func(*provider.TopicSpec)
 
 func aTask(name string, options ...taskOption) *provider.TopicSpec {
-	topic := &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: name, Worker: "worker", Exclusive: true, Retry: provider.ResolveRetryPolicy()}}}
+	topic := &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: name, Worker: "worker", Exclusive: true, Retry: topiclimits.ResolveRetryPolicy()}}}
 	for _, option := range options {
 		option(topic)
 	}

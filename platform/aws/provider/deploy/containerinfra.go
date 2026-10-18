@@ -99,7 +99,6 @@ type containerInfraWork struct {
 	rolePath string
 	tags     map[string]string
 	public   []string
-	outputs  auto.OutputMap
 }
 
 const cloudFrontOriginFacingPrefixList = "com.amazonaws.global.cloudfront.origin-facing"
@@ -179,16 +178,10 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 		tags:     containerInfraTags(tier),
 		public:   public,
 	}
-	spec := provider.StackSpec{
-		Ref:         containerInfraRef(tier),
-		Kind:        provider.StackInfra,
-		Tags:        containerInfraTags(tier),
-		VendorState: work,
-	}
 	var decoded containerInfra
 	err = raiseShared(ctx, containerShare, owner, tier, ref.Project, func() ([]provider.PartResource, error) {
 		var err error
-		if decoded, err = provisionContainerInfra(ctx, owner, spec, work, progress); err != nil {
+		if decoded, err = provisionContainerInfra(ctx, owner, containerInfraRef(tier), work, progress); err != nil {
 			return nil, err
 		}
 		return listContainerInfrastructureResources(tier, decoded.front()), nil
@@ -199,18 +192,19 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 	return decoded, r.claimShared(ctx, containerShare, ref)
 }
 
-func provisionContainerInfra(ctx context.Context, owner *release, spec provider.StackSpec, work *containerInfraWork, progress progress.Log) (containerInfra, error) {
-	tier := spec.Ref.Tier
-	if err := stackrecords.Write(ctx, owner.cfg.KeyValues, tier, ContainersSlug, spec.Ref.Name, stackrecords.Stack{
+func provisionContainerInfra(ctx context.Context, owner *release, ref provider.StackRef, work *containerInfraWork, progress progress.Log) (containerInfra, error) {
+	tier := ref.Tier
+	if err := stackrecords.Write(ctx, owner.cfg.KeyValues, tier, ContainersSlug, ref.Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
 		WrittenBy: owner.cfg.WrittenBy,
 	}); err != nil {
 		return containerInfra{}, err
 	}
-	if _, err := owner.automation.Run(ctx, spec, progress); err != nil {
+	outputs, err := owner.automation.Run(ctx, ref, stackProgram{run: work.run, tags: work.tags}, progress)
+	if err != nil {
 		return containerInfra{}, fmt.Errorf("provision the shared container infrastructure for the %s tier: %w", tier, err)
 	}
-	decoded, err := decodeContainerInfra(work.outputs)
+	decoded, err := decodeContainerInfra(outputs)
 	if err != nil {
 		return containerInfra{}, err
 	}

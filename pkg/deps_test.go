@@ -38,6 +38,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/router",
 	"github.com/ocelhq/ocel/pkg/seal",
 	"github.com/ocelhq/ocel/pkg/stackrecords",
+	"github.com/ocelhq/ocel/pkg/topiclimits",
 }
 
 func buildsOnProvider(pkg string) []string {
@@ -81,6 +82,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		{name: "runs", pattern: "./runs/...", open: buildsOnProvider("runs")},
 		{name: "seal", pattern: "./seal/...", open: []string{"github.com/ocelhq/ocel/pkg/environment", "github.com/ocelhq/ocel/pkg/seal"}},
 		{name: "stackrecords", pattern: "./stackrecords/...", open: providerBuildsOn},
+		{name: "topiclimits", pattern: "./topiclimits/...", open: providerBuildsOn},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
