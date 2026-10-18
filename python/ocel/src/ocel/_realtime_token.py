@@ -2,9 +2,14 @@ import base64
 import json
 import secrets
 import time
-from typing import Any, Literal
+from typing import Literal, TypedDict
 
 TokenOperation = Literal["connect", "subscribe", "publish"]
+
+
+class MintedToken(TypedDict):
+    token: str
+    expiresAt: int
 
 
 def _import_ed25519():
@@ -22,11 +27,11 @@ def _encode_base64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode().rstrip("=")
 
 
-def _encode_canonical_json(value: Any) -> bytes:
+def _encode_canonical_json(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
-def sign_token(signing_key: bytes, header: dict[str, Any], claims: dict[str, Any]) -> str:
+def sign_token(signing_key: bytes, header: dict[str, object], claims: dict[str, object]) -> str:
     key = _import_ed25519().Ed25519PrivateKey.from_private_bytes(signing_key)
     encoded_header = _encode_base64url(_encode_canonical_json(header))
     encoded_claims = _encode_base64url(_encode_canonical_json(claims))
@@ -43,7 +48,7 @@ def mint_token(
     operation: TokenOperation,
     channel: str,
     ttl_seconds: int,
-) -> dict[str, Any]:
+) -> MintedToken:
     issued_at = int(time.time())
     expires_at = issued_at + ttl_seconds
     token = sign_token(

@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from typing import Any, overload
 
 from ocel._declare import declare_env, is_discovering, report_env_problems
-from ocel._error import format_error
+from ocel._error import OcelError, format_error
 from ocel._live import live_value
 from ocel.gen.app.resources.v1.variables_pb import (
     DeclareEnvRequest,
@@ -57,7 +57,7 @@ _DECLARED_TWICE = (
 )
 
 
-class EnvDefinitionError(Exception):
+class EnvDefinitionError(OcelError):
     """Raised at class creation when a class of :class:`Env` declares a variable Ocel
     cannot accept: an unusable key, a class that contradicts its default, an annotation
     nothing can parse a value into."""
@@ -71,7 +71,7 @@ class EnvDefinitionError(Exception):
         self.detail = detail
 
 
-class EnvValueError(Exception):
+class EnvValueError(OcelError):
     """Raised when a declared variable has no value, or one its annotation rejects, and
     when no deployment url was delivered."""
 
@@ -84,7 +84,7 @@ class EnvValueError(Exception):
         self.detail = detail
 
 
-class EnvScopeError(Exception):
+class EnvScopeError(OcelError):
     """Raised when a variable is scoped to folders this app is not bound to."""
 
     key: str
@@ -339,7 +339,7 @@ class Group:
     one is refused where it is written. The class itself declares nothing; the class of
     :class:`Env` that names it declares its members."""
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         _refuse_restatement(cls, Group)
         members = _build_group_members(cls)
@@ -373,7 +373,7 @@ class Env:
     A class other than plain keeps the value out of every error, since a parser's message
     can quote it."""
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         _refuse_restatement(cls, Env)
         site = _find_declaring_site(cls)
@@ -424,7 +424,7 @@ def _find_caller_frame() -> inspect.FrameInfo:
     for frame in inspect.stack(0):
         if frame.filename != __file__:
             return frame
-    raise RuntimeError("ocel: no frame outside the env module declared the class")
+    raise OcelError("ocel: no frame outside the env module declared the class")
 
 
 def _refuse_restatement(cls: type, base: type) -> None:

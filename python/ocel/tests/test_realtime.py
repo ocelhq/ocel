@@ -8,7 +8,13 @@ import pytest
 from fakerealtime import FIXTURE, FakeRealtimeRuntime, read_claims
 from pydantic import BaseModel
 
-from ocel import RealtimePublishError, UnprovisionedResourceError, realtime
+from ocel import (
+    OcelError,
+    RealtimePublishError,
+    RuntimeRefusedError,
+    UnprovisionedResourceError,
+    realtime,
+)
 from ocel.gen.app.resources.v1.resources_pb import (
     RealtimePublish,
     RealtimeSubscribe,
@@ -533,8 +539,9 @@ def test_publish_fails_when_the_runtime_refuses_it(runtime):
     runtime.refusal = "the gateway refused it with status 401"
     orders = realtime("app").channel("orders/:order_id", schema=OrderEvent, subscribe="public")
 
-    with pytest.raises(RuntimeError, match="status 401"):
+    with pytest.raises(RuntimeRefusedError, match="status 401") as refused:
         orders.publish({"status": "paid"}, order_id="o1")
+    assert refused.value.code == "unavailable"
 
 
 def test_publish_outside_a_provisioned_run_says_why(collector, monkeypatch):
@@ -543,7 +550,7 @@ def test_publish_outside_a_provisioned_run_says_why(collector, monkeypatch):
         status.publish({"status": "up"})
 
     monkeypatch.setenv("OCEL_PHASE", "")
-    with pytest.raises(RuntimeError, match="OCEL_RESOURCE_REALTIME_app"):
+    with pytest.raises(OcelError, match="OCEL_RESOURCE_REALTIME_app"):
         status.publish({"status": "up"})
 
 

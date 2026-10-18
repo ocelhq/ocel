@@ -3,8 +3,10 @@ from datetime import datetime, timedelta, timezone
 
 import fakeruntime
 import pytest
+from connectrpc.code import Code
+from connectrpc.errors import ConnectError
 
-from ocel import Run, RunStatus, UnprovisionedResourceError, runs, task
+from ocel import Run, RunStatus, RuntimeRefusedError, UnprovisionedResourceError, runs, task
 from ocel.gen.app.task.v1.task_pb import RunStatus as WireRunStatus
 
 _AT = datetime(2023, 11, 14, 22, 13, 20, tzinfo=timezone.utc)
@@ -152,3 +154,13 @@ def test_runs_reached_during_discovery_say_they_are_not_provisioned_yet(collecto
         "'runs' cannot be used during discovery: "
         "tried to access 'retrieve' before the resource was provisioned"
     )
+
+
+def test_a_read_the_runtime_refuses_raises_an_ocel_error_that_keeps_its_code(runtime):
+    runtime.refusal = ConnectError(Code.NOT_FOUND, "no run run_404")
+
+    with pytest.raises(RuntimeRefusedError) as raised:
+        runs.retrieve("run_404")
+
+    assert raised.value.code == "not_found"
+    assert not isinstance(raised.value, ConnectError)

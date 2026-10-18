@@ -6,17 +6,18 @@ import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Literal, get_args, overload
+from typing import BinaryIO, Literal, cast, get_args, overload
 from urllib.parse import urlsplit, urlunsplit
+from wsgiref.types import StartResponse
 
-from connectrpc.errors import ConnectError
 from protobuf import Oneof
 from protobuf.wkt import Duration
 
-from ocel._binding import read_realtime_binding, read_runtime, refuse_unprovisioned
+from ocel._binding import read_realtime_binding, refuse_unprovisioned
 from ocel._declare import declare, find_caller_source, is_discovering
+from ocel._error import OcelError
 from ocel._payload import Codec
-from ocel._realtime_token import TokenOperation, mint_token
+from ocel._realtime_token import MintedToken, TokenOperation, mint_token
 from ocel._realtime_wire import (
     CHANNEL_SEGMENT,
     SEGMENT_RULE,
@@ -24,6 +25,7 @@ from ocel._realtime_wire import (
     WireRefusal,
     encode_wire_channel,
 )
+from ocel._runtime import RuntimeConnection
 from ocel.gen.app.realtime.v1.realtime_connect import (
     RealtimeServiceClient,
     RealtimeServiceClientSync,
@@ -83,21 +85,21 @@ class RealtimeRequest:
 
 
 @dataclass(frozen=True)
-class RuleContext:
+class RuleContext[A]:
     """What a rule decides from."""
 
     #: What ``authorize`` returned for the request; never ``None`` in a rule.
-    auth: Any
+    auth: A
     #: The params the caller asked for. On a ``wildcard`` channel, trailing params a
     #: subscriber left off are missing.
     params: dict[str, str]
     #: The request the realtime handler received.
     request: RealtimeRequest
     #: In a publish rule, the event, validated against the channel's schema.
-    body: Any = None
+    body: object = None
 
 
-class RealtimePublishError(ValueError):
+class RealtimePublishError(OcelError, ValueError):
     """Raised by ``publish`` when the params or the event cannot be published."""
 
     #: The reason, one of the codes the realtime handler denies an op with:
@@ -110,7 +112,21 @@ class RealtimePublishError(ValueError):
         self.code = code
 
 
-Rule = Callable[[RuleContext], bool | Awaitable[bool]]
+type Rule[A] = Callable[[RuleContext[A]], bool | Awaitable[bool]]
+"""A rule deciding whether a caller may subscribe to or publish on a channel, sync or async."""
+
+type ASGIApplication = Callable[
+    [
+        Mapping[str, object],
+        Callable[[], Awaitable[Mapping[str, object]]],
+        Callable[[dict[str, object]], Awaitable[None]],
+    ],
+    Awaitable[None],
+]
+"""An ASGI application, as :meth:`Realtime.asgi` returns it."""
+
+type WSGIApplication = Callable[[dict[str, object], StartResponse], Iterable[bytes]]
+"""A WSGI application, as :meth:`Realtime.wsgi` returns it."""
 
 
 @dataclass(frozen=True)
@@ -119,24 +135,29 @@ class _Transport:
     answered_host: str | None = None
 
 
-async def _await_if_awaitable(value: Any) -> Any:
-    return await value if inspect.isawaitable(value) else value
+async def _await_if_awaitable[T](value: T | Awaitable[T]) -> T:
+    if inspect.isawaitable(value):
+        return cast(T, await value)
+    return cast(T, value)
 
 
-def _read_subject(auth: Any) -> str:
+def _read_subject(auth: object) -> str:
     if auth is None:
         return "anonymous"
-    identity = auth.get("id") if isinstance(auth, Mapping) else getattr(auth, "id", None)
+    if isinstance(auth, Mapping):
+        identity = cast(Mapping[str, object], auth).get("id")
+    else:
+        identity = cast(object, getattr(auth, "id", None))
     if isinstance(identity, str) or (isinstance(identity, int) and not isinstance(identity, bool)):
         return str(identity)
     return "anonymous"
 
 
-def _deny(code: _DenialCode) -> dict[str, Any]:
+def _deny(code: _DenialCode) -> dict[str, object]:
     return {"code": code}
 
 
-class Channel:
+class Channel[A]:
     """One channel pattern of a realtime resource, and the handle its events are published
     through."""
 
@@ -145,12 +166,12 @@ class Channel:
 
     def __init__(
         self,
-        resource: "Realtime",
+        resource: "Realtime[A]",
         pattern: ChannelPattern,
         codec: Codec,
         wildcard: bool,
-        subscribe: Rule | None,
-        publish: Rule | None,
+        subscribe: Rule[A] | None,
+        publish: Rule[A] | None,
         source: str,
     ):
         self.pattern = pattern.written
@@ -174,12 +195,16 @@ class Channel:
             source=self._source,
         )
 
-    def _encode_event(self, params: Mapping[str, Any], body: Any) -> tuple[str, Any, bytes]:
+    def _encode_event(
+        self, params: Mapping[str, object], body: object
+    ) -> tuple[str, object, bytes]:
         if not all(isinstance(value, str) for value in params.values()):
             raise RealtimePublishError(self.pattern, "invalid-params")
-        channel, refused = encode_wire_channel(self._resource.name, self._parsed, params, False)
-        if refused is not None:
-            raise RealtimePublishError(self.pattern, refused)
+        named = cast(Mapping[str, str], params)
+        encoded = encode_wire_channel(self._resource.name, self._parsed, named, False)
+        if encoded[1] is not None:
+            raise RealtimePublishError(self.pattern, encoded[1])
+        channel = encoded[0]
         if body is _MISSING_BODY:
             raise RealtimePublishError(self.pattern, "invalid-body")
         try:
@@ -203,16 +228,16 @@ class Channel:
             raise RealtimePublishError(self.pattern, "body-too-large")
         return channel, validated, envelope
 
-    def publish(self, body: Any, /, **params: str) -> None:
+    def publish(self, body: object, /, **params: str) -> None:
         """Publish ``body`` to every subscriber of the channel ``params`` fill in the
         pattern, after validating it against the channel's schema. Every param is required.
         Raises :class:`RealtimePublishError` for params or a body that cannot be published,
-        and ``RuntimeError`` when the ocel runtime does not publish the event."""
-        self._resource._ensure_connection("publish")
+        and :class:`ocel.RuntimeRefusedError` when the ocel runtime does not publish the event."""
+        self._resource._runtime.open("publish", True)
         channel, _, envelope = self._encode_event(params, body)
         self._resource._publish("publish", channel, envelope)
 
-    async def publish_async(self, body: Any, /, **params: str) -> None:
+    async def publish_async(self, body: object, /, **params: str) -> None:
         """Publish ``body`` as :meth:`publish` does, without blocking the event loop."""
         channel, _, envelope = self._encode_event(params, body)
         await self._resource._publish_async("publish_async", channel, envelope)
@@ -221,11 +246,11 @@ class Channel:
 @dataclass
 class _Response:
     status: int
-    body: Any = None
-    headers: dict[str, str] = field(default_factory=dict)
+    body: object = None
+    headers: dict[str, str] = field(default_factory=dict[str, str])
 
     def encode(self) -> tuple[int, list[tuple[str, str]], bytes]:
-        headers = {"Cache-Control": "no-store", **self.headers}
+        headers: dict[str, str] = {"Cache-Control": "no-store", **self.headers}
         content = b""
         if self.body is not None:
             content = json.dumps(self.body, separators=(",", ":")).encode()
@@ -240,18 +265,23 @@ def _build_error_response(
     return _Response(status, {"error": message}, headers or {})
 
 
-def _parse_batch(body: bytes) -> tuple[bool, list[Any]] | None:
+def _parse_batch(body: bytes) -> tuple[bool, list[object]] | None:
     try:
-        batch = json.loads(body)
+        batch: object = json.loads(body)
     except (ValueError, RecursionError):
         return None
-    if not isinstance(batch, dict) or not batch.keys() <= _BATCH_KEYS:
+    fields = _read_object(batch)
+    if fields is None or not fields.keys() <= _BATCH_KEYS:
         return None
-    ops = batch.get("ops")
-    connect = batch.get("connect", False)
+    ops = fields.get("ops")
+    connect = fields.get("connect", False)
     if not isinstance(ops, list) or not isinstance(connect, bool):
         return None
-    return connect, ops
+    return connect, cast(list[object], ops)
+
+
+def _read_object(value: object) -> dict[str, object] | None:
+    return cast(dict[str, object], value) if isinstance(value, dict) else None
 
 
 def _read_first_header_value(request: RealtimeRequest, name: str) -> str:
@@ -286,7 +316,7 @@ def _resolve_socket_url(url: str, request: RealtimeRequest) -> str:
     return f"{'wss' if scheme == 'https' else 'ws'}://{host}{url}"
 
 
-class Realtime:
+class Realtime[A]:
     """A realtime resource an app declares: typed channels that browsers subscribe to
     through its :meth:`asgi` or :meth:`wsgi` handler, and the server publishes on."""
 
@@ -296,7 +326,7 @@ class Realtime:
     def __init__(
         self,
         name: str,
-        authorize: Callable[[RealtimeRequest], Any] | None,
+        authorize: Callable[[RealtimeRequest], A | None | Awaitable[A | None]] | None,
         ttl_seconds: int,
         source: str,
     ):
@@ -306,9 +336,13 @@ class Realtime:
         self._authorize = authorize
         self._ttl_seconds = ttl_seconds
         self._source = source
-        self._channels: dict[str, Channel] = {}
-        self._connection: tuple[Any, dict[str, str]] | None = None
-        self._async_connection: tuple[Any, dict[str, str]] | None = None
+        self._channels: dict[str, Channel[A]] = {}
+        self._runtime = RuntimeConnection(
+            f'realtime("{name}")',
+            lambda address: RealtimeServiceClientSync(address, send_compression=None),
+            lambda address: RealtimeServiceClient(address, send_compression=None),
+            lambda: read_realtime_binding(name),
+        )
 
     def _declare(self) -> None:
         if not is_discovering():
@@ -332,30 +366,30 @@ class Realtime:
         self,
         pattern: str,
         *,
-        schema: Any = None,
+        schema: object = None,
         wildcard: bool = False,
         subscribe: Literal["public"],
-        publish: Rule | None = None,
-    ) -> Channel: ...
+        publish: Rule[A] | None = None,
+    ) -> Channel[A]: ...
     @overload
     def channel(
         self,
         pattern: str,
         *,
-        schema: Any = None,
+        schema: object = None,
         wildcard: bool = False,
         subscribe: None = None,
-        publish: Rule | None = None,
-    ) -> Callable[[Rule], Channel]: ...
+        publish: Rule[A] | None = None,
+    ) -> Callable[[Rule[A]], Channel[A]]: ...
     def channel(
         self,
         pattern: str,
         *,
-        schema: Any = None,
+        schema: object = None,
         wildcard: bool = False,
         subscribe: Literal["public"] | None = None,
-        publish: Rule | None = None,
-    ) -> Channel | Callable[[Rule], Channel]:
+        publish: Rule[A] | None = None,
+    ) -> Channel[A] | Callable[[Rule[A]], Channel[A]]:
         """Declare the channel ``pattern``: at most 4 segments joined by /, each a literal or
         a ``:param``. Decorate the rule deciding whether a caller may subscribe, a function
         of a :class:`RuleContext` answering a bool, sync or async; or pass
@@ -387,7 +421,7 @@ class Realtime:
             )
         codec = Codec(schema)
 
-        def attach(rule: Rule | None) -> Channel:
+        def attach(rule: Rule[A] | None) -> Channel[A]:
             channel = Channel(self, parsed, codec, wildcard, rule, publish, source)
             self._channels[pattern] = channel
             self._declare()
@@ -408,7 +442,7 @@ class Realtime:
         subject: str,
         operation: TokenOperation,
         channel: str,
-    ) -> dict[str, Any]:
+    ) -> MintedToken:
         return mint_token(
             properties.signing_key,
             namespace=self.name,
@@ -424,96 +458,68 @@ class Realtime:
             return _Transport("appsync-events", properties.host)
         if properties.transport == RealtimeTransport.OCEL_GATEWAY:
             return _Transport("ocel-gateway")
-        raise RuntimeError(
+        raise OcelError(
             f'realtime "{self.name}": the binding names transport {properties.transport}, '
             "which this SDK does not speak"
         )
 
-    def _ensure_connection(self, access: str) -> tuple[Any, dict[str, str]]:
-        if is_discovering():
-            raise refuse_unprovisioned(f'realtime("{self.name}")', access)
-        if self._connection is None:
-            self._connection = self._new_connection(RealtimeServiceClientSync)
-        return self._connection
-
-    def _ensure_async_connection(self, access: str) -> tuple[Any, dict[str, str]]:
-        if is_discovering():
-            raise refuse_unprovisioned(f'realtime("{self.name}")', access)
-        if self._async_connection is None:
-            self._async_connection = self._new_connection(RealtimeServiceClient)
-        return self._async_connection
-
-    def _new_connection(self, client_type: Any) -> tuple[Any, dict[str, str]]:
-        read_realtime_binding(self.name)
-        address, headers = read_runtime()
-        return client_type(address, send_compression=None), headers
-
     def _build_request(self, channel: str, envelope: bytes) -> PublishRequest:
         return PublishRequest(realtime=self.name, channel=channel, event=envelope.decode())
 
-    def _refused_publish(self, channel: str, refused: ConnectError) -> RuntimeError:
-        return RuntimeError(f'realtime "{self.name}": publish on {channel}: {refused.message}')
-
     def _publish(self, access: str, channel: str, envelope: bytes) -> None:
-        client, headers = self._ensure_connection(access)
-        try:
-            client.publish(self._build_request(channel, envelope), headers=headers)
-        except ConnectError as refused:
-            raise self._refused_publish(channel, refused) from refused
+        request = self._build_request(channel, envelope)
+        self._runtime.call(access, lambda client: client.publish(request))
 
     async def _publish_async(self, access: str, channel: str, envelope: bytes) -> None:
-        client, headers = self._ensure_async_connection(access)
-        try:
-            await client.publish(self._build_request(channel, envelope), headers=headers)
-        except ConnectError as refused:
-            raise self._refused_publish(channel, refused) from refused
+        request = self._build_request(channel, envelope)
+        await self._runtime.call_async(access, lambda client: client.publish(request))
 
     async def _serve_op(
         self,
         properties: RealtimeProperties,
         request: RealtimeRequest,
-        auth: Any,
-        op: Any,
-    ) -> dict[str, Any]:
+        auth: A | None,
+        op: object,
+    ) -> dict[str, object]:
+        fields = _read_object(op)
         if (
-            not isinstance(op, dict)
-            or not op.keys() <= _OP_KEYS
-            or (op.get("op") == "subscribe" and "body" in op)
+            fields is None
+            or not fields.keys() <= _OP_KEYS
+            or (fields.get("op") == "subscribe" and "body" in fields)
         ):
             return _deny("invalid-op")
-        operation = op.get("op")
+        operation = fields.get("op")
         if not isinstance(operation, str) or operation not in _OPERATIONS:
             return _deny("unknown-op")
-        pattern = op.get("pattern")
+        pattern = fields.get("pattern")
         channel = self._channels.get(pattern) if isinstance(pattern, str) else None
         if channel is None:
             return _deny("unknown-pattern")
-        if operation == "publish" and channel._publish is None:
+        rule = channel._publish
+        if operation == "publish" and rule is None:
             return _deny("no-publish-rule")
-        params = op.get("params")
-        if params is None:
-            params = {}
-        elif not isinstance(params, dict) or not all(
-            isinstance(value, str) for value in params.values()
-        ):
+        given = fields.get("params")
+        asked = {} if given is None else _read_object(given)
+        if asked is None or not all(isinstance(value, str) for value in asked.values()):
             return _deny("invalid-params")
-        if operation == "subscribe":
+        params = cast(dict[str, str], asked)
+        if operation == "subscribe" or rule is None:
             return await self._serve_subscribe(properties, request, auth, channel, params)
-        return await self._serve_publish(
-            request, auth, channel, params, op.get("body", _MISSING_BODY)
-        )
+        body = fields.get("body", _MISSING_BODY)
+        return await self._serve_publish(request, auth, channel, rule, params, body)
 
     async def _serve_subscribe(
         self,
         properties: RealtimeProperties,
         request: RealtimeRequest,
-        auth: Any,
-        channel: Channel,
+        auth: A | None,
+        channel: Channel[A],
         params: dict[str, str],
-    ) -> dict[str, Any]:
-        wire, refused = encode_wire_channel(self.name, channel._parsed, params, channel._wildcard)
-        if refused is not None:
-            return _deny(refused)
+    ) -> dict[str, object]:
+        encoded = encode_wire_channel(self.name, channel._parsed, params, channel._wildcard)
+        if encoded[1] is not None:
+            return _deny(encoded[1])
+        wire = encoded[0]
         if channel._subscribe is not None:
             if auth is None:
                 return _deny("unauthenticated")
@@ -526,11 +532,12 @@ class Realtime:
     async def _serve_publish(
         self,
         request: RealtimeRequest,
-        auth: Any,
-        channel: Channel,
+        auth: A | None,
+        channel: Channel[A],
+        rule: Rule[A],
         params: dict[str, str],
-        body: Any,
-    ) -> dict[str, Any]:
+        body: object,
+    ) -> dict[str, object]:
         try:
             wire, validated, envelope = channel._encode_event(params, body)
         except RealtimePublishError as refused:
@@ -538,7 +545,7 @@ class Realtime:
         if auth is None:
             return _deny("unauthenticated")
         context = RuleContext(auth, dict(params), request, validated)
-        denied = await _run_rule(channel._publish, context)
+        denied = await _run_rule(rule, context)
         if denied is not None:
             return _deny(denied)
         try:
@@ -548,25 +555,21 @@ class Realtime:
         return {"wire": wire}
 
     async def _answer_batch(
-        self, request: RealtimeRequest, connect: bool, ops: list[Any]
-    ) -> dict[str, Any]:
+        self, request: RealtimeRequest, connect: bool, ops: list[object]
+    ) -> dict[str, object]:
         properties = self._read_properties("handler")
         transport = self._resolve_transport(properties)
-        auth = None
+        auth: A | None = None
         if self._authorize is not None:
             auth = await _await_if_awaitable(self._authorize(request))
 
-        async def serve(i: int, op: Any) -> tuple[int, dict[str, Any]]:
+        async def serve(i: int, op: object) -> tuple[int, dict[str, object]]:
             return i, await self._serve_op(properties, request, auth, op)
 
-        publishes = [
-            (i, op)
-            for i, op in enumerate(ops)
-            if isinstance(op, dict) and op.get("op") == "publish"
-        ]
+        publishes = [(i, op) for i, op in enumerate(ops) if _is_publish(op)]
         published = {i for i, _ in publishes}
 
-        async def serve_publishes_in_order() -> list[tuple[int, dict[str, Any]]]:
+        async def serve_publishes_in_order() -> list[tuple[int, dict[str, object]]]:
             return [await serve(i, op) for i, op in publishes]
 
         async with asyncio.TaskGroup() as group:
@@ -578,7 +581,7 @@ class Realtime:
             [*(task.result() for task in others), *chain.result()], key=lambda pair: pair[0]
         )
 
-        answer: dict[str, Any] = {
+        answer: dict[str, object] = {
             "transport": transport.name,
             "url": _resolve_socket_url(properties.url, request),
         }
@@ -636,7 +639,7 @@ class Realtime:
         except Exception:
             return _build_error_response(500, "the realtime handler failed", cors)
 
-    def asgi(self, *, allowed_origins: Iterable[str] = ()) -> Callable[..., Awaitable[None]]:
+    def asgi(self, *, allowed_origins: Iterable[str] = ()) -> ASGIApplication:
         """An ASGI application serving the resource to browsers, mounted at any path: one
         batched POST of ``{ connect?, ops: [{ op, pattern, params?, body? }] }``, at most 50
         ops, answered with the transport, its url, a connect token when asked, a grant with a
@@ -646,7 +649,11 @@ class Realtime:
         ``Cache-Control: no-store``, and never sets a cookie."""
         origins = tuple(allowed_origins)
 
-        async def app(scope, receive, send):
+        async def app(
+            scope: Mapping[str, object],
+            receive: Callable[[], Awaitable[Mapping[str, object]]],
+            send: Callable[[dict[str, object]], Awaitable[None]],
+        ) -> None:
             if scope["type"] == "lifespan":
                 while True:
                     message = await receive()
@@ -661,18 +668,19 @@ class Realtime:
                 message = await receive()
                 if message["type"] == "http.disconnect":
                     return
-                body += message.get("body", b"")
-                more = message.get("more_body", False)
+                chunk = message.get("body", b"")
+                body += chunk if isinstance(chunk, bytes) else b""
+                more = message.get("more_body", False) is True
                 if len(body) > _MAX_REQUEST_BYTES:
                     break
             headers: dict[str, str] = {}
-            for name, value in scope["headers"]:
+            for name, value in cast(Iterable[tuple[bytes, bytes]], scope["headers"]):
                 headers.setdefault(name.decode("latin-1").lower(), value.decode("latin-1"))
             host = headers.get("host", "")
-            path = scope.get("root_path", "") + scope["path"]
-            query = scope.get("query_string", b"").decode("latin-1")
-            url = urlunsplit((scope.get("scheme", "http"), host, path, query, ""))
-            request = RealtimeRequest(scope["method"], url, headers, body)
+            path = str(scope.get("root_path", "")) + str(scope["path"])
+            query = cast(bytes, scope.get("query_string", b"")).decode("latin-1")
+            url = urlunsplit((str(scope.get("scheme", "http")), host, path, query, ""))
+            request = RealtimeRequest(str(scope["method"]), url, headers, body)
             status, response_headers, content = (await self._serve(request, origins)).encode()
             await send(
                 {
@@ -687,37 +695,32 @@ class Realtime:
 
         return app
 
-    def wsgi(self, *, allowed_origins: Iterable[str] = ()) -> Callable[..., Iterable[bytes]]:
+    def wsgi(self, *, allowed_origins: Iterable[str] = ()) -> WSGIApplication:
         """A WSGI application serving the resource as :meth:`asgi` does."""
         origins = tuple(allowed_origins)
 
-        def app(environ, start_response):
+        def app(environ: dict[str, object], start_response: StartResponse) -> list[bytes]:
+            def read(key: str) -> str:
+                return str(environ.get(key) or "")
+
             headers = {
-                key[5:].replace("_", "-").lower(): value
+                key[5:].replace("_", "-").lower(): str(value)
                 for key, value in environ.items()
                 if key.startswith("HTTP_")
             }
-            if environ.get("CONTENT_TYPE"):
-                headers["content-type"] = environ["CONTENT_TYPE"]
+            if read("CONTENT_TYPE"):
+                headers["content-type"] = read("CONTENT_TYPE")
             try:
-                length = int(environ.get("CONTENT_LENGTH") or 0)
+                length = int(read("CONTENT_LENGTH") or 0)
             except ValueError:
                 length = 0
-            body = (
-                environ["wsgi.input"].read(min(length, _MAX_REQUEST_BYTES + 1)) if length else b""
-            )
-            host = headers.get("host") or environ.get("SERVER_NAME", "")
-            path = environ.get("SCRIPT_NAME", "") + environ.get("PATH_INFO", "")
-            url = urlunsplit(
-                (
-                    environ.get("wsgi.url_scheme", "http"),
-                    host,
-                    path,
-                    environ.get("QUERY_STRING", ""),
-                    "",
-                )
-            )
-            request = RealtimeRequest(environ["REQUEST_METHOD"], url, headers, body)
+            source = cast(BinaryIO, environ["wsgi.input"])
+            body = source.read(min(length, _MAX_REQUEST_BYTES + 1)) if length else b""
+            host = headers.get("host") or read("SERVER_NAME")
+            path = read("SCRIPT_NAME") + read("PATH_INFO")
+            scheme = read("wsgi.url_scheme") or "http"
+            url = urlunsplit((scheme, host, path, read("QUERY_STRING"), ""))
+            request = RealtimeRequest(read("REQUEST_METHOD"), url, headers, body)
             status, response_headers, content = asyncio.run(self._serve(request, origins)).encode()
             start_response(f"{status} {_STATUS_PHRASES.get(status, '')}".strip(), response_headers)
             return [content]
@@ -737,7 +740,14 @@ _STATUS_PHRASES = {
 }
 
 
-async def _run_rule(rule: Rule, context: RuleContext) -> Literal["forbidden", "rule-error"] | None:
+def _is_publish(op: object) -> bool:
+    fields = _read_object(op)
+    return fields is not None and fields.get("op") == "publish"
+
+
+async def _run_rule[A](
+    rule: Rule[A], context: RuleContext[A]
+) -> Literal["forbidden", "rule-error"] | None:
     try:
         allowed = await _await_if_awaitable(rule(context))
     except Exception:
@@ -745,12 +755,23 @@ async def _run_rule(rule: Rule, context: RuleContext) -> Literal["forbidden", "r
     return None if allowed else "forbidden"
 
 
+@overload
 def realtime(
+    name: str, *, authorize: None = None, token_ttl: int | timedelta = 60
+) -> Realtime[None]: ...
+@overload
+def realtime[A](
     name: str,
     *,
-    authorize: Callable[[RealtimeRequest], Any] | None = None,
+    authorize: Callable[[RealtimeRequest], A | None | Awaitable[A | None]],
     token_ttl: int | timedelta = 60,
-) -> Realtime:
+) -> Realtime[A]: ...
+def realtime[A](
+    name: str,
+    *,
+    authorize: Callable[[RealtimeRequest], A | None | Awaitable[A | None]] | None = None,
+    token_ttl: int | timedelta = 60,
+) -> Realtime[A] | Realtime[None]:
     """Declare a realtime resource named ``name`` and return the handle its channels are
     declared, served and published through. ``authorize`` identifies the caller of the
     handler from its :class:`RealtimeRequest`, with whatever auth the app already uses, sync

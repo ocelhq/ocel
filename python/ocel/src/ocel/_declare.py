@@ -1,9 +1,10 @@
 import inspect
 import os
+import threading
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _installed
 
-from ocel._error import format_error
+from ocel._error import OcelError, format_error
 from ocel.gen.app.resources.v1.resources_connect import ResourceServiceClientSync
 from ocel.gen.app.resources.v1.resources_pb import DeclareRequest
 from ocel.gen.app.resources.v1.variables_pb import (
@@ -17,6 +18,9 @@ _PHASE_ENV = "OCEL_PHASE"
 _DEV_SERVER_ENV = "OCEL_DEV_SERVER"
 _DEV_SERVER_TOKEN_ENV = "OCEL_DEV_SERVER_TOKEN"
 _SDK_VERSION_HEADER = "Ocel-Sdk-Version"
+
+_declared_lock = threading.Lock()
+declared: set[bytes] = set()
 
 
 def read_sdk_version() -> str:
@@ -48,10 +52,17 @@ def find_caller_source() -> str:
 
 
 def declare(request: DeclareRequest) -> None:
+    sent = request.to_binary()
+    with _declared_lock:
+        if sent in declared:
+            return
+        declared.add(sent)
     try:
         with _new_client() as client:
             client.declare(request, headers=_build_headers())
     except Exception as error:
+        with _declared_lock:
+            declared.discard(sent)
         raise _build_declare_error(request, error) from None
 
 
@@ -71,10 +82,11 @@ def report_env_problems(request: ReportEnvProblemsRequest) -> None:
         raise _build_env_error(error) from None
 
 
-def _build_declare_error(request: DeclareRequest, error: Exception) -> RuntimeError:
+def _build_declare_error(request: DeclareRequest, error: Exception) -> OcelError:
     kind = request.config.field if request.config else "resource"
-    return RuntimeError(f"ocel: declare {kind} '{request.resource.name}': {format_error(error)}")
+    name = request.resource.name if request.resource else ""
+    return OcelError(f"ocel: declare {kind} '{name}': {format_error(error)}")
 
 
-def _build_env_error(error: Exception) -> RuntimeError:
-    return RuntimeError(f"ocel: declare env: {format_error(error)}")
+def _build_env_error(error: Exception) -> OcelError:
+    return OcelError(f"ocel: declare env: {format_error(error)}")

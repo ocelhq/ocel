@@ -3,14 +3,15 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Generic, Literal, TypeVar, overload
+from typing import Generic, Literal, TypeVar, overload
 
 from protobuf import Oneof
 
 from ocel import _registry
-from ocel._binding import read_runtime, refuse_unbound, refuse_unprovisioned
+from ocel._binding import require_binding
 from ocel._declare import declare, find_caller_source, is_discovering
-from ocel._payload import Codec, decode_json, find_payload_type
+from ocel._payload import Codec, JsonValue, decode_json, find_payload_type
+from ocel._runtime import RuntimeConnection
 from ocel._wire import (
     Seconds,
     decode_timestamp,
@@ -77,7 +78,7 @@ class DeadLetter:
     #: When the message was sent.
     published_at: datetime | None
     #: The message's payload, decoded from JSON.
-    payload: Any
+    payload: JsonValue
     #: How many attempts the consumer made.
     attempts: int
     #: The last attempt's error.
@@ -105,7 +106,7 @@ class Consumer(Generic[P]):
     #: The topic it reads.
     topic: "Topic[P]"
 
-    def __init__(self, name: str, topic: "Topic[P]", run: Callable[..., Any]):
+    def __init__(self, name: str, topic: "Topic[P]", run: Callable[..., object]):
         """Wrap ``run`` as the consumer named ``name``. Prefer :meth:`Topic.consumer`, which
         declares the consumer and registers it with its worker as well."""
         self.name = name
@@ -113,7 +114,7 @@ class Consumer(Generic[P]):
         self._run = run
         functools.update_wrapper(self, run)
 
-    def __call__(self, *arguments: Any, **keyword_arguments: Any) -> Any:
+    def __call__(self, *arguments: object, **keyword_arguments: object) -> object:
         """Call the decorated function directly, as if it were not a consumer."""
         return self._run(*arguments, **keyword_arguments)
 
@@ -121,11 +122,11 @@ class Consumer(Generic[P]):
         return f"Consumer({self.topic.name!r}, {self.name!r})"
 
 
-class DeadLetters:
+class DeadLetters(Generic[P]):
     """The messages one consumer of a topic exhausted its attempts on. Each operation has a
     blocking form and an awaited ``_async`` form."""
 
-    def __init__(self, topic: "Topic[Any]", consumer: str):
+    def __init__(self, topic: "Topic[P]", consumer: str):
         """Take the dead letters of ``consumer`` on ``topic``. Prefer
         :meth:`Topic.dead_letter`."""
         self._topic = topic
@@ -134,67 +135,83 @@ class DeadLetters:
     def list(self, *, cursor: str | None = None, limit: int | None = None) -> DeadLetterPage:
         """Read one page of dead letters, from ``cursor`` when given, of at most ``limit``
         entries."""
-        client, headers = self._topic._ensure_connection("dead_letter.list")
         request = ListDeadLettersRequest(
             topic=self._topic.name, consumer=self._consumer, cursor=cursor or "", limit=limit or 0
         )
-        return _build_dead_letter_page(client.list_dead_letters(request, headers=headers))
+        response = self._topic._runtime.call(
+            "dead_letter.list", lambda client: client.list_dead_letters(request)
+        )
+        return _build_dead_letter_page(response)
 
     async def list_async(
         self, *, cursor: str | None = None, limit: int | None = None
     ) -> DeadLetterPage:
         """Read one page of dead letters, as :meth:`list` does."""
-        client, headers = self._topic._ensure_async_connection("dead_letter.list_async")
         request = ListDeadLettersRequest(
             topic=self._topic.name, consumer=self._consumer, cursor=cursor or "", limit=limit or 0
         )
-        return _build_dead_letter_page(await client.list_dead_letters(request, headers=headers))
+        response = await self._topic._runtime.call_async(
+            "dead_letter.list_async", lambda client: client.list_dead_letters(request)
+        )
+        return _build_dead_letter_page(response)
 
     def redrive(self, executions: Iterable[str] | None = None) -> int:
         """Send the dead letters named by ``executions``, or all of them, back to the
         consumer, and return how many were sent."""
-        client, headers = self._topic._ensure_connection("dead_letter.redrive")
         request = RedriveDeadLettersRequest(
             topic=self._topic.name, consumer=self._consumer, executions=list(executions or ())
         )
-        return client.redrive_dead_letters(request, headers=headers).redriven
+        response = self._topic._runtime.call(
+            "dead_letter.redrive", lambda client: client.redrive_dead_letters(request)
+        )
+        return response.redriven
 
     async def redrive_async(self, executions: Iterable[str] | None = None) -> int:
         """Send dead letters back to the consumer, as :meth:`redrive` does."""
-        client, headers = self._topic._ensure_async_connection("dead_letter.redrive_async")
         request = RedriveDeadLettersRequest(
             topic=self._topic.name, consumer=self._consumer, executions=list(executions or ())
         )
-        return (await client.redrive_dead_letters(request, headers=headers)).redriven
+        response = await self._topic._runtime.call_async(
+            "dead_letter.redrive_async", lambda client: client.redrive_dead_letters(request)
+        )
+        return response.redriven
 
     def purge(self, executions: Iterable[str] | None = None) -> int:
         """Delete the dead letters named by ``executions``, or all of them, and return how
         many were deleted."""
-        client, headers = self._topic._ensure_connection("dead_letter.purge")
         request = PurgeDeadLettersRequest(
             topic=self._topic.name, consumer=self._consumer, executions=list(executions or ())
         )
-        return client.purge_dead_letters(request, headers=headers).purged
+        response = self._topic._runtime.call(
+            "dead_letter.purge", lambda client: client.purge_dead_letters(request)
+        )
+        return response.purged
 
     async def purge_async(self, executions: Iterable[str] | None = None) -> int:
         """Delete dead letters, as :meth:`purge` does."""
-        client, headers = self._topic._ensure_async_connection("dead_letter.purge_async")
         request = PurgeDeadLettersRequest(
             topic=self._topic.name, consumer=self._consumer, executions=list(executions or ())
         )
-        return (await client.purge_dead_letters(request, headers=headers)).purged
+        response = await self._topic._runtime.call_async(
+            "dead_letter.purge_async", lambda client: client.purge_dead_letters(request)
+        )
+        return response.purged
 
     def count(self) -> int:
         """How many dead letters the consumer has."""
-        client, headers = self._topic._ensure_connection("dead_letter.count")
         request = CountDeadLettersRequest(topic=self._topic.name, consumer=self._consumer)
-        return client.count_dead_letters(request, headers=headers).count
+        response = self._topic._runtime.call(
+            "dead_letter.count", lambda client: client.count_dead_letters(request)
+        )
+        return response.count
 
     async def count_async(self) -> int:
         """How many dead letters the consumer has, as :meth:`count` answers."""
-        client, headers = self._topic._ensure_async_connection("dead_letter.count_async")
         request = CountDeadLettersRequest(topic=self._topic.name, consumer=self._consumer)
-        return (await client.count_dead_letters(request, headers=headers)).count
+        response = await self._topic._runtime.call_async(
+            "dead_letter.count_async", lambda client: client.count_dead_letters(request)
+        )
+        return response.count
 
 
 class Topic(Generic[P]):
@@ -210,8 +227,12 @@ class Topic(Generic[P]):
         declares the topic as well as handing back its handle."""
         self.name = name
         self._codec = codec
-        self._connection: tuple[Any, dict[str, str]] | None = None
-        self._async_connection: tuple[Any, dict[str, str]] | None = None
+        self._runtime = RuntimeConnection(
+            f'topic("{name}")',
+            lambda address: TopicServiceClientSync(address, send_compression=None),
+            lambda address: TopicServiceClient(address, send_compression=None),
+            lambda: require_binding(name, "topic"),
+        )
 
     def __repr__(self) -> str:
         return f"Topic({self.name!r})"
@@ -225,7 +246,7 @@ class Topic(Generic[P]):
         lanes: Sequence[Lane | Literal["high", "default", "low"]] = (),
         max_duration: Seconds | None = None,
         worker: Worker | None = None,
-    ) -> Callable[[Callable[..., Any]], Consumer[P]]:
+    ) -> Callable[[Callable[..., object]], Consumer[P]]:
         """Declare the decorated function as the consumer named ``name``, which receives
         every message sent to the topic as ``(payload, ctx)``. It may be sync, when it runs
         in a thread, or async. Raising fails the attempt, which is retried by ``retry``;
@@ -249,7 +270,7 @@ class Topic(Generic[P]):
         lanes: Sequence[Lane | Literal["high", "default", "low"]] = (),
         max_duration: Seconds | None = None,
         worker: Worker | None = None,
-    ) -> Callable[[Callable[..., Any]], Consumer[P]]:
+    ) -> Callable[[Callable[..., object]], Consumer[P]]:
         """Declare the decorated function as the consumer named ``name``, which receives the
         topic's messages as a list of up to ``batch_size`` payloads, waiting at most
         ``batch_timeout`` for a partial batch. The other options are :meth:`consumer`'s."""
@@ -273,9 +294,8 @@ class Topic(Generic[P]):
         ``idempotency_key`` publishes nothing new; ``key`` orders the messages of an ordered
         topic; ``lane`` is the lane it is read from. A payload whose JSON exceeds 256 KiB
         is refused before anything is sent."""
-        client, headers = self._ensure_connection("send")
         request = self._build_send_request(payload, delay, idempotency_key, key, lane)
-        return client.send(request, headers=headers).message_id
+        return self._runtime.call("send", lambda client: client.send(request)).message_id
 
     async def send_async(
         self,
@@ -287,11 +307,11 @@ class Topic(Generic[P]):
         lane: Lane | Literal["high", "default", "low"] | None = None,
     ) -> str:
         """Publish ``payload`` to every consumer, as :meth:`send` does."""
-        client, headers = self._ensure_async_connection("send_async")
         request = self._build_send_request(payload, delay, idempotency_key, key, lane)
-        return (await client.send(request, headers=headers)).message_id
+        response = await self._runtime.call_async("send_async", lambda client: client.send(request))
+        return response.message_id
 
-    def dead_letter(self, consumer: "Consumer[P] | str") -> DeadLetters:
+    def dead_letter(self, consumer: "Consumer[P] | str") -> DeadLetters[P]:
         """The dead letters of ``consumer``, given by handle or by name."""
         return DeadLetters(self, consumer if isinstance(consumer, str) else consumer.name)
 
@@ -305,12 +325,12 @@ class Topic(Generic[P]):
         max_duration: Seconds | None,
         worker: Worker | None,
         batch: BatchPolicy | None,
-    ) -> Callable[[Callable[..., Any]], Consumer[P]]:
-        def decorate(run: Callable[..., Any]) -> Consumer[P]:
+    ) -> Callable[[Callable[..., object]], Consumer[P]]:
+        def decorate(run: Callable[..., object]) -> Consumer[P]:
             worker_name = get_worker_name(worker)
             codec = self._codec
             if not codec.schema:
-                codec = Codec(find_payload_type(run, batch is not None))
+                codec = Codec(find_payload_type(f'consumer "{name}"', run, batch is not None))
             _registry.register(
                 _registry.Registration(
                     kind="consumer",
@@ -360,28 +380,6 @@ class Topic(Generic[P]):
             lane=encode_lane(lane),
         )
 
-    def _ensure_connection(self, access: str) -> tuple[Any, dict[str, str]]:
-        if is_discovering():
-            raise refuse_unprovisioned(f'topic("{self.name}")', access)
-        if self._connection is None:
-            address, headers = read_runtime()
-            client = TopicServiceClientSync(address, send_compression=None)
-            if refusal := refuse_unbound(self.name, "topic"):
-                raise refusal
-            self._connection = (client, headers)
-        return self._connection
-
-    def _ensure_async_connection(self, access: str) -> tuple[Any, dict[str, str]]:
-        if is_discovering():
-            raise refuse_unprovisioned(f'topic("{self.name}")', access)
-        if self._async_connection is None:
-            address, headers = read_runtime()
-            client = TopicServiceClient(address, send_compression=None)
-            if refusal := refuse_unbound(self.name, "topic"):
-                raise refusal
-            self._async_connection = (client, headers)
-        return self._async_connection
-
 
 @overload
 def topic(
@@ -390,14 +388,14 @@ def topic(
 @overload
 def topic(
     name: str, *, schema: None = None, ordered: bool = False, retry: Retry | None = None
-) -> Topic[Any]: ...
+) -> Topic[object]: ...
 def topic(
     name: str,
     *,
-    schema: Any = None,
+    schema: type[P] | None = None,
     ordered: bool = False,
     retry: Retry | None = None,
-) -> Topic[Any]:
+) -> Topic[P] | Topic[object]:
     """Declare a topic named ``name`` and return the handle an app sends to it and declares
     its consumers through. ``schema`` is the payload's type: a type beyond plain JSON (a
     pydantic model, a dataclass) is validated with pydantic, which the ``ocel[pydantic]``
@@ -417,7 +415,7 @@ def topic(
                 source=find_caller_source(),
             )
         )
-    return Topic(name, codec)
+    return Topic[object](name, codec)
 
 
 def _build_dead_letter_page(response: ListDeadLettersResponse) -> DeadLetterPage:

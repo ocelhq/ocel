@@ -4,11 +4,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal, Protocol
+from typing import Literal, Protocol
 
-from ocel._binding import read_runtime, refuse_unprovisioned
-from ocel._declare import is_discovering
-from ocel._payload import decode_json
+from ocel._error import OcelError
+from ocel._payload import JsonValue, decode_json
+from ocel._runtime import RuntimeConnection
 from ocel._wire import Seconds, decode_timestamp, encode_due_at
 from ocel.gen.app.task.v1.task_connect import TaskServiceClient, TaskServiceClientSync
 from ocel.gen.app.task.v1.task_pb import (
@@ -55,9 +55,9 @@ class Run:
     #: Where the run stands.
     status: RunStatus
     #: The payload it was triggered with, decoded from JSON.
-    payload: Any
+    payload: JsonValue
     #: What the task returned, decoded from JSON, once it completed.
-    output: Any
+    output: JsonValue
     #: The last attempt's error, when one failed.
     error: str
     #: How many attempts were made.
@@ -65,7 +65,7 @@ class Run:
     #: The tags it was triggered with.
     tags: builtins.list[str]
     #: The metadata it was triggered with.
-    metadata: dict[str, Any]
+    metadata: dict[str, JsonValue]
     #: When it was triggered.
     created_at: datetime | None
     #: When it was or is due to start.
@@ -104,7 +104,7 @@ class RunResult:
     #: Whether the run succeeded.
     ok: bool
     #: What the task returned, when it succeeded.
-    output: Any = None
+    output: object = None
     #: What failed the run, when it did not.
     error: BaseException | None = None
 
@@ -179,17 +179,23 @@ class Runs:
     instance; each operation has a blocking form and an awaited ``_async`` form."""
 
     def __init__(self) -> None:
-        self._clients: dict[tuple[str, bool], Any] = {}
+        self._runtime = RuntimeConnection(
+            "runs",
+            lambda address: TaskServiceClientSync(address, send_compression=None),
+            lambda address: TaskServiceClient(address, send_compression=None),
+        )
 
     def retrieve(self, id: str) -> Run:
         """The record of the run ``id``."""
-        client, headers = self._ensure_client("retrieve", False)
-        return _build_run(client.retrieve_run(RetrieveRunRequest(id=id), headers=headers).run)
+        request = RetrieveRunRequest(id=id)
+        return _build_run(self._runtime.call("retrieve", lambda c: c.retrieve_run(request)).run)
 
     async def retrieve_async(self, id: str) -> Run:
         """The record of the run ``id``, as :meth:`retrieve` answers."""
-        client, headers = self._ensure_client("retrieve_async", True)
-        response = await client.retrieve_run(RetrieveRunRequest(id=id), headers=headers)
+        request = RetrieveRunRequest(id=id)
+        response = await self._runtime.call_async(
+            "retrieve_async", lambda c: c.retrieve_run(request)
+        )
         return _build_run(response.run)
 
     def list(
@@ -204,9 +210,8 @@ class Runs:
         """Read one page of runs, newest first: of ``task`` (a task handle or its declared
         name) when given, in any of the statuses ``status`` names, carrying every tag in
         ``tags``, from ``cursor``, at most ``limit`` of them."""
-        client, headers = self._ensure_client("list", False)
         request = _build_list_request(task, status, tags, cursor, limit)
-        return _build_run_page(client.list_runs(request, headers=headers))
+        return _build_run_page(self._runtime.call("list", lambda c: c.list_runs(request)))
 
     async def list_async(
         self,
@@ -218,55 +223,46 @@ class Runs:
         limit: int | None = None,
     ) -> RunPage:
         """Read one page of runs, as :meth:`list` does."""
-        client, headers = self._ensure_client("list_async", True)
         request = _build_list_request(task, status, tags, cursor, limit)
-        return _build_run_page(await client.list_runs(request, headers=headers))
+        response = await self._runtime.call_async("list_async", lambda c: c.list_runs(request))
+        return _build_run_page(response)
 
     def cancel(self, id: str) -> Run:
         """Cancel the run ``id`` and return its record. No further attempt starts; a running
         one is cancelled as far as its worker can."""
-        client, headers = self._ensure_client("cancel", False)
-        return _build_run(client.cancel_run(CancelRunRequest(id=id), headers=headers).run)
+        request = CancelRunRequest(id=id)
+        return _build_run(self._runtime.call("cancel", lambda c: c.cancel_run(request)).run)
 
     async def cancel_async(self, id: str) -> Run:
         """Cancel the run ``id``, as :meth:`cancel` does."""
-        client, headers = self._ensure_client("cancel_async", True)
-        return _build_run((await client.cancel_run(CancelRunRequest(id=id), headers=headers)).run)
+        request = CancelRunRequest(id=id)
+        response = await self._runtime.call_async("cancel_async", lambda c: c.cancel_run(request))
+        return _build_run(response.run)
 
     def replay(self, id: str) -> RunHandle:
         """Start a new run with the payload and options of the run ``id``, and return it."""
-        client, headers = self._ensure_client("replay", False)
-        return RunHandle(client.replay_run(ReplayRunRequest(id=id), headers=headers).id)
+        request = ReplayRunRequest(id=id)
+        return RunHandle(self._runtime.call("replay", lambda c: c.replay_run(request)).id)
 
     async def replay_async(self, id: str) -> RunHandle:
         """Start a new run from the run ``id``, as :meth:`replay` does."""
-        client, headers = self._ensure_client("replay_async", True)
-        response = await client.replay_run(ReplayRunRequest(id=id), headers=headers)
+        request = ReplayRunRequest(id=id)
+        response = await self._runtime.call_async("replay_async", lambda c: c.replay_run(request))
         return RunHandle(response.id)
 
     def reschedule(self, id: str, *, delay: Seconds | datetime) -> Run:
         """Move the delayed run ``id`` to start after ``delay``, or at that moment, up to
         30 days ahead, and return its record."""
-        client, headers = self._ensure_client("reschedule", False)
         request = RescheduleRunRequest(id=id, due_at=encode_due_at(delay))
-        return _build_run(client.reschedule_run(request, headers=headers).run)
+        return _build_run(self._runtime.call("reschedule", lambda c: c.reschedule_run(request)).run)
 
     async def reschedule_async(self, id: str, *, delay: Seconds | datetime) -> Run:
         """Move the delayed run ``id``, as :meth:`reschedule` does."""
-        client, headers = self._ensure_client("reschedule_async", True)
         request = RescheduleRunRequest(id=id, due_at=encode_due_at(delay))
-        return _build_run((await client.reschedule_run(request, headers=headers)).run)
-
-    def _ensure_client(self, access: str, awaited: bool) -> tuple[Any, dict[str, str]]:
-        if is_discovering():
-            raise refuse_unprovisioned("runs", access)
-        address, headers = read_runtime()
-        client = self._clients.get((address, awaited))
-        if client is None:
-            kind = TaskServiceClient if awaited else TaskServiceClientSync
-            client = kind(address, send_compression=None)
-            self._clients[(address, awaited)] = client
-        return client, headers
+        response = await self._runtime.call_async(
+            "reschedule_async", lambda c: c.reschedule_run(request)
+        )
+        return _build_run(response.run)
 
 
 #: The runs of every task the app declares.
@@ -302,9 +298,14 @@ def _build_run_page(response: ListRunsResponse) -> RunPage:
     )
 
 
+def _decode_metadata(encoded: bytes) -> dict[str, JsonValue]:
+    decoded = decode_json(encoded)
+    return decoded if isinstance(decoded, dict) else {}
+
+
 def _build_run(wire: WireRun | None) -> Run:
     if wire is None:
-        raise RuntimeError("the runtime answered no run record")
+        raise OcelError("the ocel runtime answered no run record")
     return Run(
         id=wire.id,
         task=wire.task,
@@ -314,7 +315,7 @@ def _build_run(wire: WireRun | None) -> Run:
         error=wire.error,
         attempts=wire.attempts,
         tags=builtins.list(wire.tags),
-        metadata=decode_json(wire.metadata) if wire.metadata else {},
+        metadata=_decode_metadata(wire.metadata),
         created_at=decode_timestamp(wire.created_at),
         due_at=decode_timestamp(wire.due_at),
         started_at=decode_timestamp(wire.started_at),

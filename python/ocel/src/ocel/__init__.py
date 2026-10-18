@@ -1,6 +1,7 @@
 from ocel._binding import UnprovisionedResourceError
+from ocel._error import OcelError, RuntimeRefusedError
+from ocel._payload import JsonValue
 from ocel.bucket import (
-    AsyncBucket,
     AsyncObjectBody,
     Bucket,
     ObjectBody,
@@ -8,7 +9,6 @@ from ocel.bucket import (
     ObjectNotFound,
     PreconditionFailed,
     SignedUpload,
-    SyncBucket,
     bucket,
 )
 from ocel.env import (
@@ -52,7 +52,6 @@ from ocel.worker import Worker, worker
 
 __all__ = [
     "AbortTaskRunError",
-    "AsyncBucket",
     "AsyncObjectBody",
     "Batch",
     "Bucket",
@@ -69,11 +68,13 @@ __all__ = [
     "EnvValueError",
     "Group",
     "InvalidKVValueError",
+    "JsonValue",
     "KV",
     "Lane",
     "ObjectBody",
     "ObjectInfo",
     "ObjectNotFound",
+    "OcelError",
     "Postgres",
     "PreconditionFailed",
     "Realtime",
@@ -90,9 +91,9 @@ __all__ = [
     "RuleContext",
     "RunStatus",
     "Runs",
+    "RuntimeRefusedError",
     "Secret",
     "SignedUpload",
-    "SyncBucket",
     "Task",
     "Topic",
     "Trigger",

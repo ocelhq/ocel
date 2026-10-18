@@ -4,9 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 import fakeruntime
 import pytest
+from connectrpc.code import Code
+from connectrpc.errors import ConnectError
 from pydantic import BaseModel
 
-from ocel import Lane, Retry, UnprovisionedResourceError, topic, worker
+from ocel import Lane, Retry, RuntimeRefusedError, UnprovisionedResourceError, topic, worker
 from ocel.gen.app.resources.v1.resources_pb import ResourceType
 from ocel.gen.app.topic.v1.topic_pb import Lane as WireLane
 
@@ -235,3 +237,13 @@ def test_a_topic_used_during_discovery_says_it_is_not_provisioned_yet(collector)
     )
     with pytest.raises(UnprovisionedResourceError):
         orders.dead_letter("ship").count()
+
+
+def test_a_send_the_runtime_refuses_raises_an_ocel_error_that_keeps_its_code(runtime):
+    runtime.refusal = ConnectError(Code.UNAVAILABLE, "the queue is unreachable")
+
+    with pytest.raises(RuntimeRefusedError) as raised:
+        topic("orders", schema=Order).send(Order(id=7))
+
+    assert raised.value.code == "unavailable"
+    assert not isinstance(raised.value, ConnectError)

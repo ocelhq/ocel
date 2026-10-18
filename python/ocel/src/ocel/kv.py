@@ -6,13 +6,15 @@ import ssl
 from collections.abc import Callable, Iterable, Mapping
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 from urllib.parse import quote
 
 from protobuf import Oneof
 
 from ocel._binding import read_kv_binding, refuse_unprovisioned
 from ocel._declare import declare, is_discovering
+from ocel._error import OcelError
+from ocel._loop import LoopLocal
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     KvConfig,
@@ -23,7 +25,14 @@ from ocel.gen.app.resources.v1.resources_pb import (
 )
 from ocel.gen.common.bindings.v1.bindings_pb import KvProperties
 
+if TYPE_CHECKING:
+    import redis
+    import redis.asyncio
+
 M = TypeVar("M")
+
+KeyPart = str | int
+"""The value of one ``:parameter`` of a key: a ``str`` or an ``int``."""
 
 #: A write's ``ttl`` that keeps the key's current TTL.
 KEEP = "keep"
@@ -38,7 +47,7 @@ _UNIT_MILLISECONDS = {"ms": 1, "s": 1_000, "m": 60_000, "h": 3_600_000, "d": 86_
 _UNRESERVED = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 
 
-class InvalidKVValueError(ValueError):
+class InvalidKVValueError(OcelError, ValueError):
     """Raised when a value written to an entry, or read from one, is not a value of the
     entry's shape: a ``json`` value its model refuses, or a ``counter`` that holds no
     integer."""
@@ -120,7 +129,7 @@ class _Pattern:
             for mine, theirs in zip(self.segments, other.segments, strict=True)
         )
 
-    def build(self, key: Mapping[str, Any]) -> str:
+    def build(self, key: Mapping[str, object]) -> str:
         expected = set(self.parameters)
         unknown = set(key) - expected
         if unknown:
@@ -128,7 +137,7 @@ class _Pattern:
                 f'pattern "{self.written}" has no parameter {", ".join(sorted(unknown))}: its '
                 f"parameters are {', '.join(self.parameters) or 'none'}"
             )
-        built = []
+        built: list[str] = []
         for kind, value in self.segments:
             if kind == "literal":
                 built.append(value)
@@ -195,7 +204,7 @@ class KV:
         self._config = config
         self._source = source
         self._entries: list[tuple[str, _Pattern, str]] = []
-        self._client = None
+        self._clients: LoopLocal[Any] = LoopLocal(_close_client)
         self._sync_client = None
 
     def _declare(self) -> None:
@@ -274,30 +283,18 @@ class KV:
             options["ssl_server_name"] = properties.tls_server_name
         return options
 
-    def client(self):
+    def client(self) -> redis.asyncio.Redis:
         """The ``redis.asyncio.Redis`` client connected to the store, opened on the first
-        call and returned unchanged on every one after. Over TLS it trusts only the store's
-        own certificate authority when the provider names one, verifies the binding's TLS
-        server name when it names one, as a binding pointing at a port forward does, and
-        raises ``ValueError`` when the delivered authority holds no PEM certificate. redis-py
-        is imported here, from the ``ocel[kv]`` extra."""
-        if self._client is None:
-            options = self._client_options("client")
-            _import_redis()
-            import redis.asyncio
+        call in each event loop and returned unchanged on every one after in that loop, so
+        an app that runs each request under its own ``asyncio.run`` gets a client per run,
+        closed when the run ends. Over TLS it trusts only the store's own certificate
+        authority when the provider names one, verifies the binding's TLS server name when it
+        names one, as a binding pointing at a port forward does, and raises ``ValueError``
+        when the delivered authority holds no PEM certificate. redis-py is imported here,
+        from the ``ocel[kv]`` extra."""
+        return self._clients.get(lambda: _open_async_client(self._client_options("client")))
 
-            if "ssl_authority" in options:
-                from ocel._kv_authority import AsyncAuthorityConnection
-
-                pool = redis.asyncio.ConnectionPool(
-                    connection_class=AsyncAuthorityConnection, **options
-                )
-                self._client = redis.asyncio.Redis.from_pool(pool)
-            else:
-                self._client = redis.asyncio.Redis(**options)
-        return self._client
-
-    def sync_client(self):
+    def sync_client(self) -> redis.Redis:
         """The ``redis.Redis`` client connected to the store, opened on the first call and
         returned unchanged on every one after. It raises as :meth:`client` does."""
         if self._sync_client is None:
@@ -346,6 +343,22 @@ class KV:
         return Set(self, name, pattern, KvShape.SET, ttl, _caller())
 
 
+def _open_async_client(options: dict[str, Any]) -> Any:
+    _import_redis()
+    import redis.asyncio
+
+    if "ssl_authority" not in options:
+        return redis.asyncio.Redis(**options)
+    from ocel._kv_authority import AsyncAuthorityConnection
+
+    pool = redis.asyncio.ConnectionPool(connection_class=AsyncAuthorityConnection, **options)
+    return redis.asyncio.Redis.from_pool(pool)
+
+
+async def _close_client(client: Any) -> None:
+    await client.aclose()
+
+
 def _caller() -> str:
     caller = inspect.stack(0)[2]
     return f"{caller.filename}:{caller.lineno}"
@@ -380,17 +393,17 @@ class _Entry:
     def __repr__(self) -> str:
         return f'<kv "{self._store.name}" entry "{self._name}" {self._pattern.written}>'
 
-    def _sync(self, operation: str):
+    def _sync(self, operation: str) -> Any:
         if is_discovering():
             raise refuse_unprovisioned(f'kv("{self._store.name}")', f"{self._name}.{operation}")
         return self._store.sync_client()
 
-    def _async(self, operation: str):
+    def _async(self, operation: str) -> Any:
         if is_discovering():
             raise refuse_unprovisioned(f'kv("{self._store.name}")', f"{self._name}.{operation}")
         return self._store.client()
 
-    def _key(self, key: Mapping[str, Any]) -> str:
+    def _key(self, key: Mapping[str, KeyPart]) -> str:
         return self._pattern.build(key)
 
     def _resolve_ttl(self, written: _WriteTtl) -> tuple[str, int]:
@@ -410,7 +423,9 @@ class _Entry:
             return {"keepttl": True}
         return {}
 
-    def _queue(self, pipeline, key: str, written: _WriteTtl, command: Callable[[Any], Any]) -> None:
+    def _queue(
+        self, pipeline: Any, key: str, written: _WriteTtl, command: Callable[[Any], object]
+    ) -> None:
         command(pipeline)
         mode, milliseconds = self._resolve_ttl(written)
         if mode == "expire":
@@ -418,37 +433,39 @@ class _Entry:
         elif mode == "clear":
             pipeline.persist(key)
 
-    def _write(self, operation: str, key: str, written: _WriteTtl, command: Callable[[Any], Any]):
+    def _write(
+        self, operation: str, key: str, written: _WriteTtl, command: Callable[[Any], object]
+    ) -> Any:
         with self._sync(operation).pipeline(transaction=True) as pipeline:
             self._queue(pipeline, key, written, command)
             return pipeline.execute()[0]
 
     async def _write_async(
-        self, operation: str, key: str, written: _WriteTtl, command: Callable[[Any], Any]
-    ):
+        self, operation: str, key: str, written: _WriteTtl, command: Callable[[Any], object]
+    ) -> Any:
         async with self._async(operation).pipeline(transaction=True) as pipeline:
             self._queue(pipeline, key, written, command)
             return (await pipeline.execute())[0]
 
-    def _get_many(self, keys: Iterable[Mapping[str, Any]]) -> list[Any]:
+    def _get_many(self, keys: Iterable[Mapping[str, KeyPart]]) -> list[tuple[str, Any]]:
         built = [self._key(key) for key in keys]
         with self._sync("get_many").pipeline(transaction=False) as pipeline:
             for key in built:
                 pipeline.get(key)
             return list(zip(built, pipeline.execute(), strict=True))
 
-    async def _get_many_async(self, keys: Iterable[Mapping[str, Any]]) -> list[Any]:
+    async def _get_many_async(self, keys: Iterable[Mapping[str, KeyPart]]) -> list[tuple[str, Any]]:
         built = [self._key(key) for key in keys]
         async with self._async("get_many").pipeline(transaction=False) as pipeline:
             for key in built:
                 pipeline.get(key)
             return list(zip(built, await pipeline.execute(), strict=True))
 
-    def delete(self, **key: Any) -> bool:
+    def delete(self, **key: KeyPart) -> bool:
         """Delete the key, answering whether it held a value."""
         return self._sync("delete").delete(self._key(key)) > 0
 
-    async def delete_async(self, **key: Any) -> bool:
+    async def delete_async(self, **key: KeyPart) -> bool:
         """Delete the key, answering whether it held a value."""
         return await self._async("delete").delete(self._key(key)) > 0
 
@@ -457,37 +474,37 @@ class Text(_Entry):
     """A ``text`` entry: a string under each key. Every operation takes the key's
     parameters as keyword arguments, and has an ``_async`` twin."""
 
-    def get(self, **key: Any) -> str | None:
+    def get(self, **key: KeyPart) -> str | None:
         """The string under the key, or ``None`` when there is none."""
         return _decode(self._sync("get").get(self._key(key)))
 
-    async def get_async(self, **key: Any) -> str | None:
+    async def get_async(self, **key: KeyPart) -> str | None:
         """The string under the key, or ``None`` when there is none."""
         return _decode(await self._async("get").get(self._key(key)))
 
-    def get_many(self, keys: Iterable[Mapping[str, Any]]) -> list[str | None]:
+    def get_many(self, keys: Iterable[Mapping[str, KeyPart]]) -> list[str | None]:
         """The string under each key, in order, read in one round trip."""
         return [_decode(value) for _, value in self._get_many(keys)]
 
-    async def get_many_async(self, keys: Iterable[Mapping[str, Any]]) -> list[str | None]:
+    async def get_many_async(self, keys: Iterable[Mapping[str, KeyPart]]) -> list[str | None]:
         """The string under each key, in order, read in one round trip."""
         return [_decode(value) for _, value in await self._get_many_async(keys)]
 
     def set(
-        self, value: str, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, value: str, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> None:
         """Write ``value`` under the key. ``ttl`` replaces the entry's own, ``"keep"`` keeps
         the key's current one, and ``None`` clears it."""
         self._sync("set").set(self._key(key), _text(value), **self._set_options(ttl))
 
     async def set_async(
-        self, value: str, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, value: str, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> None:
         """Write ``value`` under the key, as :meth:`set` does."""
         await self._async("set").set(self._key(key), _text(value), **self._set_options(ttl))
 
 
-def _text(value: Any) -> str:
+def _text(value: object) -> str:
     if not isinstance(value, str):
         raise TypeError(f"a text entry holds a str, not {type(value).__name__}")
     return value
@@ -498,7 +515,7 @@ class Counter(_Entry):
     takes the key's parameters as keyword arguments, and has an ``_async`` twin."""
 
     @staticmethod
-    def _count(key: str, value: Any) -> int | None:
+    def _count(key: str, value: object) -> int | None:
         if value is None:
             return None
         text = _decode(value)
@@ -507,38 +524,38 @@ class Counter(_Entry):
         except ValueError:
             raise InvalidKVValueError(key, f'holds "{text}", which is no integer') from None
 
-    def get(self, **key: Any) -> int | None:
+    def get(self, **key: KeyPart) -> int | None:
         """The integer under the key, or ``None`` when there is none."""
         built = self._key(key)
         return self._count(built, self._sync("get").get(built))
 
-    async def get_async(self, **key: Any) -> int | None:
+    async def get_async(self, **key: KeyPart) -> int | None:
         """The integer under the key, or ``None`` when there is none."""
         built = self._key(key)
         return self._count(built, await self._async("get").get(built))
 
-    def get_many(self, keys: Iterable[Mapping[str, Any]]) -> list[int | None]:
+    def get_many(self, keys: Iterable[Mapping[str, KeyPart]]) -> list[int | None]:
         """The integer under each key, in order, read in one round trip."""
         return [self._count(key, value) for key, value in self._get_many(keys)]
 
-    async def get_many_async(self, keys: Iterable[Mapping[str, Any]]) -> list[int | None]:
+    async def get_many_async(self, keys: Iterable[Mapping[str, KeyPart]]) -> list[int | None]:
         """The integer under each key, in order, read in one round trip."""
         return [self._count(key, value) for key, value in await self._get_many_async(keys)]
 
     def set(
-        self, value: int, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, value: int, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> None:
         """Write ``value`` under the key, treating ``ttl`` as :meth:`Text.set` does."""
         self._sync("set").set(self._key(key), str(_integer(value)), **self._set_options(ttl))
 
     async def set_async(
-        self, value: int, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, value: int, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> None:
         """Write ``value`` under the key, as :meth:`set` does."""
         await self._async("set").set(self._key(key), str(_integer(value)), **self._set_options(ttl))
 
     def increment(
-        self, by: int = 1, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, by: int = 1, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Add ``by`` to the integer under the key, from 0 when there is none, and answer the
         sum. The ttl is applied in the same transaction."""
@@ -547,7 +564,7 @@ class Counter(_Entry):
         return self._write("increment", built, ttl, lambda p: p.incrby(built, step))
 
     async def increment_async(
-        self, by: int = 1, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, by: int = 1, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Add ``by`` to the integer under the key, as :meth:`increment` does."""
         built = self._key(key)
@@ -555,7 +572,7 @@ class Counter(_Entry):
         return await self._write_async("increment", built, ttl, lambda p: p.incrby(built, step))
 
     def decrement(
-        self, by: int = 1, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, by: int = 1, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Subtract ``by`` from the integer under the key, as :meth:`increment` adds."""
         built = self._key(key)
@@ -563,7 +580,7 @@ class Counter(_Entry):
         return self._write("decrement", built, ttl, lambda p: p.decrby(built, step))
 
     async def decrement_async(
-        self, by: int = 1, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, by: int = 1, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Subtract ``by`` from the integer under the key, as :meth:`increment` adds."""
         built = self._key(key)
@@ -571,7 +588,7 @@ class Counter(_Entry):
         return await self._write_async("decrement", built, ttl, lambda p: p.decrby(built, step))
 
 
-def _integer(value: Any) -> int:
+def _integer(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"a counter holds an int, not {type(value).__name__}")
     return value
@@ -581,7 +598,17 @@ class Json(_Entry, Generic[M]):
     """A ``json`` entry: a value of its model under each key. Every operation takes the
     key's parameters as keyword arguments, and has an ``_async`` twin."""
 
-    def __init__(self, store, name, pattern, shape, ttl, source, model, on_invalid):
+    def __init__(
+        self,
+        store: KV,
+        name: str,
+        pattern: str,
+        shape: KvShape,
+        ttl: str | timedelta | None,
+        source: str,
+        model: type[M],
+        on_invalid: Literal["raise", "miss"],
+    ):
         if on_invalid not in ("raise", "miss"):
             raise ValueError(f'on_invalid is "raise" or "miss", not {on_invalid!r}')
         try:
@@ -592,11 +619,11 @@ class Json(_Entry, Generic[M]):
                 f"installed. Install it with the extra: pip install 'ocel[pydantic]'"
             ) from None
         super().__init__(store, name, pattern, shape, ttl, source)
-        self._adapter = TypeAdapter(model)
+        self._adapter: TypeAdapter[M] = TypeAdapter(model)
         self._invalid = ValidationError
         self._miss_on_invalid = on_invalid == "miss"
 
-    def _read(self, key: str, raw: Any) -> M | None:
+    def _read(self, key: str, raw: str | bytes | None) -> M | None:
         if raw is None:
             return None
         try:
@@ -606,7 +633,7 @@ class Json(_Entry, Generic[M]):
                 return None
             raise InvalidKVValueError(key, f"holds a value its model refuses: {error}") from None
 
-    def _encode(self, key: str, value: Any) -> str:
+    def _encode(self, key: str, value: M) -> str:
         try:
             validated = self._adapter.validate_python(value)
         except self._invalid as error:
@@ -615,26 +642,26 @@ class Json(_Entry, Generic[M]):
             ) from None
         return self._adapter.dump_json(validated).decode("utf-8")
 
-    def get(self, **key: Any) -> M | None:
+    def get(self, **key: KeyPart) -> M | None:
         """The value under the key, or ``None`` when there is none."""
         built = self._key(key)
         return self._read(built, self._sync("get").get(built))
 
-    async def get_async(self, **key: Any) -> M | None:
+    async def get_async(self, **key: KeyPart) -> M | None:
         """The value under the key, or ``None`` when there is none."""
         built = self._key(key)
         return self._read(built, await self._async("get").get(built))
 
-    def get_many(self, keys: Iterable[Mapping[str, Any]]) -> list[M | None]:
+    def get_many(self, keys: Iterable[Mapping[str, KeyPart]]) -> list[M | None]:
         """The value under each key, in order, read in one round trip."""
         return [self._read(key, value) for key, value in self._get_many(keys)]
 
-    async def get_many_async(self, keys: Iterable[Mapping[str, Any]]) -> list[M | None]:
+    async def get_many_async(self, keys: Iterable[Mapping[str, KeyPart]]) -> list[M | None]:
         """The value under each key, in order, read in one round trip."""
         return [self._read(key, value) for key, value in await self._get_many_async(keys)]
 
     def set(
-        self, value: M, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, value: M, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> None:
         """Validate ``value`` against the model and write it under the key as JSON, treating
         ``ttl`` as :meth:`Text.set` does."""
@@ -643,7 +670,7 @@ class Json(_Entry, Generic[M]):
         self._sync("set").set(built, encoded, **self._set_options(ttl))
 
     async def set_async(
-        self, value: M, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, value: M, /, *, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> None:
         """Validate ``value`` and write it under the key, as :meth:`set` does."""
         built = self._key(key)
@@ -651,10 +678,10 @@ class Json(_Entry, Generic[M]):
         await self._async("set").set(built, encoded, **self._set_options(ttl))
 
 
-def _strings(values: tuple[Any, ...]) -> list[str]:
+def _strings(values: tuple[object, ...]) -> list[str]:
     if not values or any(not isinstance(value, str) for value in values):
         raise TypeError("a list or set entry takes one or more str values")
-    return list(values)
+    return [str(value) for value in values]
 
 
 def _slice_stop(stop: int | None) -> int:
@@ -666,7 +693,7 @@ class List(_Entry):
     parameters as keyword arguments, and has an ``_async`` twin."""
 
     def append(
-        self, *values: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, *values: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Append ``values`` to the end of the list and answer its new length, applying the
         ttl in the same transaction."""
@@ -674,14 +701,14 @@ class List(_Entry):
         return self._write("append", built, ttl, lambda p: p.rpush(built, *items))
 
     async def append_async(
-        self, *values: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, *values: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Append ``values`` to the end of the list, as :meth:`append` does."""
         built, items = self._key(key), _strings(values)
         return await self._write_async("append", built, ttl, lambda p: p.rpush(built, *items))
 
     def appendleft(
-        self, *values: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, *values: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Prepend ``values``, in the order given, to the start of the list and answer its
         new length, as :meth:`append` does."""
@@ -689,38 +716,38 @@ class List(_Entry):
         return self._write("appendleft", built, ttl, lambda p: p.lpush(built, *items))
 
     async def appendleft_async(
-        self, *values: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, *values: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Prepend ``values`` to the start of the list, as :meth:`appendleft` does."""
         built, items = self._key(key), _strings(values)[::-1]
         return await self._write_async("appendleft", built, ttl, lambda p: p.lpush(built, *items))
 
-    def pop(self, **key: Any) -> str | None:
+    def pop(self, **key: KeyPart) -> str | None:
         """Remove and answer the last value, or ``None`` when the list is empty."""
         return _decode(self._sync("pop").rpop(self._key(key)))
 
-    async def pop_async(self, **key: Any) -> str | None:
+    async def pop_async(self, **key: KeyPart) -> str | None:
         """Remove and answer the last value, or ``None`` when the list is empty."""
         return _decode(await self._async("pop").rpop(self._key(key)))
 
-    def popleft(self, **key: Any) -> str | None:
+    def popleft(self, **key: KeyPart) -> str | None:
         """Remove and answer the first value, or ``None`` when the list is empty."""
         return _decode(self._sync("popleft").lpop(self._key(key)))
 
-    async def popleft_async(self, **key: Any) -> str | None:
+    async def popleft_async(self, **key: KeyPart) -> str | None:
         """Remove and answer the first value, or ``None`` when the list is empty."""
         return _decode(await self._async("popleft").lpop(self._key(key)))
 
-    def get(self, index: int, /, **key: Any) -> str | None:
+    def get(self, index: int, /, **key: KeyPart) -> str | None:
         """The value at ``index``, counting back from the end when negative, or ``None`` past
         either end."""
         return _decode(self._sync("get").lindex(self._key(key), index))
 
-    async def get_async(self, index: int, /, **key: Any) -> str | None:
+    async def get_async(self, index: int, /, **key: KeyPart) -> str | None:
         """The value at ``index``, as :meth:`get` reads it."""
         return _decode(await self._async("get").lindex(self._key(key), index))
 
-    def slice(self, start: int = 0, stop: int | None = None, /, **key: Any) -> list[str]:
+    def slice(self, start: int = 0, stop: int | None = None, /, **key: KeyPart) -> list[str]:
         """The values from ``start`` up to but not including ``stop``, as a Python slice
         reads them."""
         if stop == 0:
@@ -729,7 +756,7 @@ class List(_Entry):
         return [_decode(value) for value in values]
 
     async def slice_async(
-        self, start: int = 0, stop: int | None = None, /, **key: Any
+        self, start: int = 0, stop: int | None = None, /, **key: KeyPart
     ) -> list[str]:
         """The values from ``start`` up to but not including ``stop``, as :meth:`slice`."""
         if stop == 0:
@@ -737,11 +764,11 @@ class List(_Entry):
         values = await self._async("slice").lrange(self._key(key), start, _slice_stop(stop))
         return [_decode(value) for value in values]
 
-    def length(self, **key: Any) -> int:
+    def length(self, **key: KeyPart) -> int:
         """How many values the list holds."""
         return self._sync("length").llen(self._key(key))
 
-    async def length_async(self, **key: Any) -> int:
+    async def length_async(self, **key: KeyPart) -> int:
         """How many values the list holds."""
         return await self._async("length").llen(self._key(key))
 
@@ -751,7 +778,7 @@ class Set(_Entry):
     parameters as keyword arguments, and has an ``_async`` twin."""
 
     def add(
-        self, *members: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, *members: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Add ``members`` and answer how many were not in the set already, applying the ttl
         in the same transaction."""
@@ -759,41 +786,41 @@ class Set(_Entry):
         return self._write("add", built, ttl, lambda p: p.sadd(built, *items))
 
     async def add_async(
-        self, *members: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: Any
+        self, *members: str, ttl: str | timedelta | None | _Unset = _DECLARED, **key: KeyPart
     ) -> int:
         """Add ``members``, as :meth:`add` does."""
         built, items = self._key(key), _strings(members)
         return await self._write_async("add", built, ttl, lambda p: p.sadd(built, *items))
 
-    def discard(self, *members: str, **key: Any) -> int:
+    def discard(self, *members: str, **key: KeyPart) -> int:
         """Remove ``members`` and answer how many were in the set."""
         return self._sync("discard").srem(self._key(key), *_strings(members))
 
-    async def discard_async(self, *members: str, **key: Any) -> int:
+    async def discard_async(self, *members: str, **key: KeyPart) -> int:
         """Remove ``members`` and answer how many were in the set."""
         return await self._async("discard").srem(self._key(key), *_strings(members))
 
-    def contains(self, member: str, /, **key: Any) -> bool:
+    def contains(self, member: str, /, **key: KeyPart) -> bool:
         """Whether ``member`` is in the set."""
         return bool(self._sync("contains").sismember(self._key(key), member))
 
-    async def contains_async(self, member: str, /, **key: Any) -> bool:
+    async def contains_async(self, member: str, /, **key: KeyPart) -> bool:
         """Whether ``member`` is in the set."""
         return bool(await self._async("contains").sismember(self._key(key), member))
 
-    def size(self, **key: Any) -> int:
+    def size(self, **key: KeyPart) -> int:
         """How many members the set holds."""
         return self._sync("size").scard(self._key(key))
 
-    async def size_async(self, **key: Any) -> int:
+    async def size_async(self, **key: KeyPart) -> int:
         """How many members the set holds."""
         return await self._async("size").scard(self._key(key))
 
-    def members(self, **key: Any) -> set[str]:
+    def members(self, **key: KeyPart) -> set[str]:
         """Every member of the set."""
         return {_decode(member) for member in self._sync("members").smembers(self._key(key))}
 
-    async def members_async(self, **key: Any) -> set[str]:
+    async def members_async(self, **key: KeyPart) -> set[str]:
         """Every member of the set."""
         members = await self._async("members").smembers(self._key(key))
         return {_decode(member) for member in members}

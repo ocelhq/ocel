@@ -1,16 +1,20 @@
+import asyncio
+import io
 import json
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 
 import fakebucket
 import pytest
+from connectrpc.code import Code
+from connectrpc.errors import ConnectError
 
 from ocel import (
-    AsyncBucket,
-    ObjectInfo,
     ObjectNotFound,
+    OcelError,
     PreconditionFailed,
-    SyncBucket,
+    RuntimeRefusedError,
     UnprovisionedResourceError,
     bucket,
 )
@@ -59,7 +63,7 @@ def test_a_declaration_the_server_refuses_says_what_it_said(monkeypatch):
     monkeypatch.setenv("OCEL_PHASE", "discovery")
     monkeypatch.setenv("OCEL_DEV_SERVER", "http://127.0.0.1:1")
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(OcelError) as raised:
         bucket("uploads")
     assert str(raised.value).startswith("ocel: declare bucket 'uploads': ")
 
@@ -241,6 +245,35 @@ def test_an_object_is_read_a_chunk_at_a_time(uploads):
     assert read.info.size == 11
 
 
+def test_a_body_read_whole_twice_answers_the_same_bytes_both_times(uploads):
+    bucket("uploads").put("a.txt", b"hello world")
+
+    read = bucket("uploads").get("a.txt")
+
+    assert read.bytes() == b"hello world"
+    assert read.bytes() == b"hello world"
+    assert read.text() == "hello world"
+
+
+def test_a_body_already_walked_chunk_by_chunk_refuses_a_second_walk(uploads):
+    bucket("uploads").put("a.txt", b"hello world")
+    read = bucket("uploads").get("a.txt")
+    b"".join(read)
+
+    with pytest.raises(OcelError, match='the body of "a.txt" was read already'):
+        read.bytes()
+
+
+@pytest.mark.asyncio
+async def test_an_async_body_read_whole_twice_answers_the_same_bytes_both_times(uploads):
+    await bucket("uploads").put_async("a.txt", b"hello world")
+
+    read = await bucket("uploads").get_async("a.txt")
+
+    assert await read.bytes() == b"hello world"
+    assert await read.bytes() == b"hello world"
+
+
 def test_an_object_opened_for_reading_behaves_like_a_file(uploads):
     bucket("uploads").put("a.txt", b"hello world")
 
@@ -309,7 +342,7 @@ def test_a_part_the_store_refuses_abandons_the_whole_write(uploads):
     store._single_request_limit_bytes = 8
     store._part_size_bytes = 4
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(OcelError) as raised:
         store.put("a.txt", b"0123456789abcde")
     assert 'part 2 of "a.txt" was refused' in str(raised.value)
     assert uploads.store.aborted == ["upload-1"]
@@ -371,41 +404,12 @@ def test_a_bucket_with_no_public_address_says_what_would_give_it_one(uploads, mo
         json.dumps({"name": "uploads", "bucket": {"bucket": "shop-prod-uploads"}}),
     )
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(OcelError) as raised:
         bucket("uploads").public_url("a.txt")
     assert str(raised.value) == (
         'this bucket has no public address, so "a.txt" has no public url: declare the '
         "bucket with public=True and give the project a domain to serve it from"
     )
-
-
-def test_the_handle_answers_to_the_protocols_a_fake_is_written_against(uploads):
-    store = bucket("uploads")
-
-    assert isinstance(store, SyncBucket)
-    assert isinstance(store, AsyncBucket)
-
-
-def test_a_fake_that_answers_like_a_bucket_satisfies_the_sync_protocol():
-    class FakeBucket:
-        name = "uploads"
-
-        def put(self, key, data, **options):
-            return ObjectInfo(key=key, size=0, etag="", content_type="")
-
-        def get(self, key, **options): ...
-        def open(self, key, mode="rb", **options): ...
-        def head(self, key): ...
-        def exists(self, key): ...
-        def delete(self, *keys): ...
-        def copy(self, src, dst): ...
-        def list(self, **options): ...
-        def signed_url(self, key, **options): ...
-        def signed_upload(self, key, **options): ...
-        def public_url(self, key): ...
-
-    assert isinstance(FakeBucket(), SyncBucket)
-    assert not isinstance(FakeBucket(), AsyncBucket)
 
 
 @pytest.mark.asyncio
@@ -461,7 +465,7 @@ async def test_an_async_part_the_store_refuses_abandons_the_whole_write(uploads)
     store._single_request_limit_bytes = 8
     store._part_size_bytes = 4
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(OcelError):
         await store.put_async("a.txt", b"0123456789abcde")
     assert uploads.store.aborted == ["upload-1"]
     assert "a.txt" not in uploads.store.objects
@@ -498,3 +502,47 @@ async def test_an_async_signed_upload_includes_the_form_the_uploader_must_send(u
     assert signed.method == "POST"
     assert signed.fields == {"key": "a.txt"}
     assert (await bucket("uploads").signed_url_async("a.txt")).startswith(uploads.url)
+
+
+class _ThreadRecordingFile(io.BytesIO):
+    def __init__(self, data: bytes):
+        super().__init__(data)
+        self.read_on: set[int] = set()
+
+    def read(self, size=-1):
+        self.read_on.add(threading.get_ident())
+        return super().read(size)
+
+
+@pytest.mark.asyncio
+async def test_an_async_put_reads_a_file_body_off_the_event_loop(uploads):
+    source = _ThreadRecordingFile(b"0123456789abcde")
+    store = bucket("uploads")
+    store._part_size_bytes = 4
+
+    await store.put_async("a.txt", source)
+
+    assert uploads.store.objects["a.txt"].data == b"0123456789abcde"
+    assert source.read_on
+    assert threading.get_ident() not in source.read_on
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        lambda store: store.head("a.txt"),
+        lambda store: store.delete("a.txt"),
+        lambda store: list(store.list(prefix="kept/")),
+        lambda store: asyncio.run(store.head_async("a.txt")),
+    ],
+)
+def test_a_call_the_runtime_refuses_raises_an_ocel_error_that_keeps_its_code(uploads, operation):
+    uploads.store.refusal = ConnectError(Code.UNAVAILABLE, "the runtime is restarting")
+
+    with pytest.raises(RuntimeRefusedError) as raised:
+        operation(bucket("uploads"))
+
+    assert raised.value.code == "unavailable"
+    assert "the runtime is restarting" in str(raised.value)
+    assert isinstance(raised.value, OcelError)
+    assert not isinstance(raised.value, ConnectError)

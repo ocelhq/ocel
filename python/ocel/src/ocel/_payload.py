@@ -2,9 +2,14 @@ import inspect
 import json
 import types
 from collections.abc import Callable
-from typing import Any, Union, get_args, get_origin
+from typing import Any, Union, cast, get_args, get_origin
+
+from ocel._error import OcelError
 
 PAYLOAD_LIMIT = 262144
+
+type JsonValue = dict[str, JsonValue] | list[JsonValue] | str | int | float | bool | None
+"""A value decoded from JSON: an object, an array, a string, a number, a bool or null."""
 
 _PLAIN = (dict, list, str, int, float, bool, type(None), object)
 
@@ -59,16 +64,22 @@ def encode_json(value: Any) -> str:
         return json.dumps(to_jsonable_python(value), separators=(",", ":"))
 
 
-def decode_json(text: bytes) -> Any:
-    return json.loads(text) if text else None
+def decode_json(text: bytes) -> JsonValue:
+    return cast(JsonValue, json.loads(text)) if text else None
 
 
-def find_payload_type(handler: Callable[..., Any] | None, batch: bool) -> Any:
+def find_payload_type(owner: str, handler: Callable[..., Any] | None, batch: bool) -> Any:
     if handler is None:
         return None
     try:
         parameters = list(inspect.signature(handler, eval_str=True).parameters.values())
-    except (NameError, TypeError, ValueError):
+    except NameError as error:
+        raise OcelError(
+            f"{owner}: the payload annotation of {handler.__name__} names {error.name}, "
+            "which is not defined when the module runs: import it outside "
+            "`if TYPE_CHECKING:`, or pass schema="
+        ) from None
+    except (TypeError, ValueError):
         return None
     if not parameters:
         return None

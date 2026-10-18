@@ -5,6 +5,7 @@ description = "Declare the infrastructure a Python app needs from the app itself
 requires-python = ">=3.12"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
+classifiers = ["Typing :: Typed"]
 dependencies = ["connectrpc>=0.12.1,<0.13", "protobuf-py>=0.4,<0.5", "pyqwest>=0.10,<0.11"]
 
 [project.optional-dependencies]
