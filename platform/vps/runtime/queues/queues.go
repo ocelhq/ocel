@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
@@ -263,7 +264,7 @@ func (e *Engines) readDeployment(ctx context.Context, queue live.Queue) (pgmq.De
 		return pgmq.Deployment{}, err
 	}
 	signed := http.Header{}
-	signed.Set(originguard.OriginSecretHeader, secret)
+	signed.Set(edge.OriginSecretHeader, secret)
 	for _, name := range slices.Sorted(maps.Keys(queue.Workers)) {
 		worker := queue.Workers[name]
 		address, err := e.Addresses.Address(ctx, live.AppNetwork(queue.Tier, queue.Project), worker.Container)

@@ -12,12 +12,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func readRecordFile(t *testing.T, root string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, statedir.Name, "output", "client-digests.json"))
+	data, err := os.ReadFile(filepath.Join(root, buildoutput.StateDir, "output", "client-digests.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

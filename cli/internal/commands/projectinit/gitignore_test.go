@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 func gitRepository(t *testing.T, dir string) {
@@ -58,7 +58,7 @@ func TestInitIgnoresTheStateDirectory(t *testing.T) {
 		{
 			name:       "a git repository with no .gitignore gets one that ignores .ocel/",
 			repository: true,
-			want:       statedir.Name + "/\n",
+			want:       buildoutput.StateDir + "/\n",
 			wantExists: true,
 		},
 		{
@@ -66,7 +66,7 @@ func TestInitIgnoresTheStateDirectory(t *testing.T) {
 			repository: true,
 			existing:   "node_modules\n# build\ndist",
 			exists:     true,
-			want:       "node_modules\n# build\ndist\n" + statedir.Name + "/\n",
+			want:       "node_modules\n# build\ndist\n" + buildoutput.StateDir + "/\n",
 			wantExists: true,
 		},
 		{
@@ -74,44 +74,44 @@ func TestInitIgnoresTheStateDirectory(t *testing.T) {
 			repository: true,
 			existing:   "node_modules\n",
 			exists:     true,
-			want:       "node_modules\n" + statedir.Name + "/\n",
+			want:       "node_modules\n" + buildoutput.StateDir + "/\n",
 			wantExists: true,
 		},
 		{
 			name:       "a .gitignore that already ignores .ocel is left alone",
 			repository: true,
-			existing:   "node_modules\n" + statedir.Name + "\n",
+			existing:   "node_modules\n" + buildoutput.StateDir + "\n",
 			exists:     true,
-			want:       "node_modules\n" + statedir.Name + "\n",
+			want:       "node_modules\n" + buildoutput.StateDir + "\n",
 			wantExists: true,
 		},
 		{
 			name:       "a .gitignore outside a git repository still gains .ocel/",
 			existing:   "node_modules\n",
 			exists:     true,
-			want:       "node_modules\n" + statedir.Name + "/\n",
+			want:       "node_modules\n" + buildoutput.StateDir + "/\n",
 			wantExists: true,
 		},
 		{
 			name:       "a .gitignore outside a git repository that already lists it anchored at its root is left alone",
-			existing:   "/" + statedir.Name + "/\n",
+			existing:   "/" + buildoutput.StateDir + "/\n",
 			exists:     true,
-			want:       "/" + statedir.Name + "/\n",
+			want:       "/" + buildoutput.StateDir + "/\n",
 			wantExists: true,
 		},
 		{
 			name:       "a .gitignore that lists the state directory indented ignores nothing, so it gains a line of its own",
 			repository: true,
-			existing:   "  " + statedir.Name + "/\n",
+			existing:   "  " + buildoutput.StateDir + "/\n",
 			exists:     true,
-			want:       "  " + statedir.Name + "/\n" + statedir.Name + "/\n",
+			want:       "  " + buildoutput.StateDir + "/\n" + buildoutput.StateDir + "/\n",
 			wantExists: true,
 		},
 		{
 			name:       "a .gitignore outside a git repository that lists it with trailing spaces is left alone",
-			existing:   "/" + statedir.Name + "/  \r\n",
+			existing:   "/" + buildoutput.StateDir + "/  \r\n",
 			exists:     true,
-			want:       "/" + statedir.Name + "/  \r\n",
+			want:       "/" + buildoutput.StateDir + "/  \r\n",
 			wantExists: true,
 		},
 		{
@@ -147,7 +147,7 @@ func TestInitIgnoresTheStateDirectory(t *testing.T) {
 func TestInitLeavesTheGitignoreAloneWhenTheRepositoryAlreadyIgnoresTheStateDirectory(t *testing.T) {
 	t.Parallel()
 
-	for _, pattern := range []string{statedir.Name, statedir.Name + "/", "/apps/web/" + statedir.Name + "/"} {
+	for _, pattern := range []string{buildoutput.StateDir, buildoutput.StateDir + "/", "/apps/web/" + buildoutput.StateDir + "/"} {
 		t.Run(pattern, func(t *testing.T) {
 			t.Parallel()
 

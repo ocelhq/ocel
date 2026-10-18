@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestFrameworkBuildID(t *testing.T) {
@@ -125,7 +124,7 @@ func TestEdgeApps(t *testing.T) {
 
 func writeAppFile(t *testing.T, root, rel string, contents []byte) {
 	t.Helper()
-	dest := filepath.Join(root, statedir.Name, "output", "apps", filepath.FromSlash(rel))
+	dest := filepath.Join(root, buildoutput.StateDir, "output", "apps", filepath.FromSlash(rel))
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +143,7 @@ func TestReadFunctions(t *testing.T) {
 		if err == nil {
 			t.Fatal("CollectFunctions succeeded with no build output, want error")
 		}
-		if !strings.Contains(err.Error(), filepath.Join(statedir.Name, "output")) {
+		if !strings.Contains(err.Error(), filepath.Join(buildoutput.StateDir, "output")) {
 			t.Errorf("error = %q, want it to name the missing output directory", err)
 		}
 		if !strings.Contains(err.Error(), "ocel build") {
@@ -156,7 +155,7 @@ func TestReadFunctions(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, statedir.Name, "output"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, buildoutput.StateDir, "output"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 
@@ -173,7 +172,7 @@ func TestReadFunctions(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		outDir := filepath.Join(root, statedir.Name, "output")
+		outDir := filepath.Join(root, buildoutput.StateDir, "output")
 		writeFuncConfig(t, outDir, "web", "index.func",
 			buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),

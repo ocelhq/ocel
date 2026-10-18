@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func spanOf(r *Trace, id byte, name string, status progressv1.SpanStatus) {
@@ -32,7 +32,7 @@ func TestOpenNamesArtifactsByTraceID(t *testing.T) {
 		t.Fatalf("Close() = %v", err)
 	}
 
-	runsDir := filepath.Join(dir, statedir.Name, "runs")
+	runsDir := filepath.Join(dir, buildoutput.StateDir, "runs")
 	id := r.traceID.String()
 	for _, want := range []string{filepath.Join(runsDir, id+".ndjson"), filepath.Join(runsDir, id+".otlp.json")} {
 		if _, err := os.Stat(want); err != nil {

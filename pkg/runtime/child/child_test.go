@@ -205,6 +205,41 @@ func TestExited(t *testing.T) {
 	})
 }
 
+func TestEveryReaderOfAnExitHearsIt(t *testing.T) {
+	proc := start(t, "exit:3")
+
+	first, second := waitExit(t, proc), waitExit(t, proc)
+	if first.Code != 3 || second.Code != 3 {
+		t.Errorf("two readers heard %+v and %+v, want the app's code 3 for each: the front's loop and a deferred stop both wait on it", first, second)
+	}
+	stopped := make(chan Exit, 1)
+	go func() { stopped <- proc.Stop(time.Second) }()
+	select {
+	case exit := <-stopped:
+		if exit.Code != 3 {
+			t.Errorf("Stop() after the exit was read = %+v, want the code the app exited with", exit)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Stop() of an app whose exit was already read never returned")
+	}
+}
+
+func TestAnInitReapingOrphansHandsEachChildItsOwnExit(t *testing.T) {
+	reapsOrphans = true
+	t.Cleanup(func() { reapsOrphans = os.Getpid() == 1 })
+
+	codes := []int{3, 5, 7}
+	procs := make([]*Process, len(codes))
+	for i, code := range codes {
+		procs[i] = start(t, "exit:"+strconv.Itoa(code))
+	}
+	for i, proc := range procs {
+		if exit := waitExit(t, proc); exit.Code != codes[i] {
+			t.Errorf("child %d heard %+v, want its own code %d: as PID 1 the runtime reaps every child, and one's exit must not reach another", i, exit, codes[i])
+		}
+	}
+}
+
 func TestStop(t *testing.T) {
 	t.Run("asks the app to finish and lets it exit on its own terms", func(t *testing.T) {
 		proc := start(t, "obeys")

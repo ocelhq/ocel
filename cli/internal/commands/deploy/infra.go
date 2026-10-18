@@ -10,12 +10,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/pkg/lease"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type infraProvisioning struct {
@@ -70,7 +70,7 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 		return err
 	}
 	if i.leaseToken == "" {
-		if i.leaseToken, err = stackrecords.NewEnvironmentLeaseToken(); err != nil {
+		if i.leaseToken, err = lease.NewToken(); err != nil {
 			return err
 		}
 	}

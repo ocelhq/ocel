@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func goFixture(t *testing.T, module string) string {
@@ -36,7 +36,7 @@ func TestGoDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	if cmd.Dir != moduleRoot {
 		t.Errorf("Dir = %q, want %q", cmd.Dir, moduleRoot)
 	}
-	if want := []string{"go", "run", "-trimpath=false", "./" + statedir.Name + "/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
+	if want := []string{"go", "run", "-trimpath=false", "./" + buildoutput.StateDir + "/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
 		t.Errorf("Args = %q, want %q", cmd.Args, want)
 	}
 	for _, want := range []string{processenv.PhaseEnvVar + "=discovery", processenv.DevServerEnvVar + "=http://127.0.0.1:1234", processenv.DevServerTokenEnvVar + "=opensesame"} {
@@ -45,7 +45,7 @@ func TestGoDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 		}
 	}
 
-	generated, err := os.ReadFile(filepath.Join(moduleRoot, statedir.Name, "discovery", "main.go"))
+	generated, err := os.ReadFile(filepath.Join(moduleRoot, buildoutput.StateDir, "discovery", "main.go"))
 	if err != nil {
 		t.Fatalf("read the generated main: %v", err)
 	}

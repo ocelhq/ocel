@@ -13,7 +13,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
-	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 var reportedErrorKinds = []string{"BuildEnvError", "EnvDefinitionError"}
@@ -28,9 +28,9 @@ func recognizedErrorKinds() string {
 
 func evaluateTypeScript(ctx context.Context, configPath string, env environment) ([]byte, error) {
 	dir := filepath.Dir(configPath)
-	outDir := filepath.Join(dir, statedir.Name)
+	outDir := filepath.Join(dir, buildoutput.StateDir)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create %s: %w", statedir.Name, err)
+		return nil, fmt.Errorf("create %s: %w", buildoutput.StateDir, err)
 	}
 	outfile := filepath.Join(outDir, bundleName(configPath))
 

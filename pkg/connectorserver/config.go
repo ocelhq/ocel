@@ -49,6 +49,9 @@ func (c Config) check() error {
 	if c.Console == "" {
 		return fmt.Errorf("console is required")
 	}
+	if _, err := originOf(c.Console); err != nil {
+		return err
+	}
 	if c.ConnectorID == "" {
 		return fmt.Errorf("connectorId is required")
 	}

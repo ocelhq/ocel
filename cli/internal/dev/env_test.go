@@ -26,7 +26,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/statedir"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 )
@@ -542,7 +541,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: ".", compute: { s
 		if got, want := env[processenv.PublicKeysEnvVar], processenv.NextPublicURLEnvVar+",NEXT_PUBLIC_SITE_URL"; got != want {
 			t.Errorf("%s = %q, want the declared public keys %q: STRIPE_API_KEY is not public", processenv.PublicKeysEnvVar, got, want)
 		}
-		if _, statErr := os.Stat(filepath.Join(root, statedir.Name, "env-client.ts")); statErr == nil {
+		if _, statErr := os.Stat(filepath.Join(root, buildoutput.StateDir, "env-client.ts")); statErr == nil {
 			t.Error("dev generated a client accessor, which ocel no longer does")
 		}
 		if got := readTestFile(t, filepath.Join(root, "tsconfig.json")); got != tsconfig {

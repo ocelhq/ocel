@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func readCodeAndHint(err error) (code, hint string) {
@@ -123,7 +123,7 @@ func TestAConfigThatFailsForAReasonOutsideItReportsInternal(t *testing.T) {
 	t.Run("a state directory that cannot be created", func(t *testing.T) {
 		dir := t.TempDir()
 		writeConfig(t, dir, `export default { slug: "acme" };`)
-		write(t, filepath.Join(dir, statedir.Name), "")
+		write(t, filepath.Join(dir, buildoutput.StateDir), "")
 
 		_, err := Load(context.Background(), dir, "")
 

@@ -15,10 +15,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func gitIgnoredDirs(t *testing.T, repo string) map[string]bool {
@@ -54,8 +54,8 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"cli/internal/discovery/roots.go": {
 			DefaultRootDirName: true,
 		},
-		"pkg/statedir/statedir.go": {
-			statedir.Name: true,
+		"pkg/buildoutput/buildoutput.go": {
+			buildoutput.StateDir: true,
 		},
 		"pkg/processenv/processenv.go": {
 			processenv.PhaseEnvVar:          true,
@@ -83,7 +83,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 			DefaultRootDirName: true,
 		},
 		"pkg/provider/pulumi/runtime.go": {
-			statedir.Name: true,
+			buildoutput.StateDir: true,
 		},
 		"pkg/edge/gate/gate.go": {
 			gate.LoginPath: true,
@@ -103,7 +103,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 	}
 	segments := []*regexp.Regexp{
 		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(DefaultRootDirName) + `(?:$|[/\\"'])`),
-		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(statedir.Name) + `(?:$|[/\\"'])`),
+		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(buildoutput.StateDir) + `(?:$|[/\\"'])`),
 		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + processenv.PhaseEnvVar + `(?:$|[^A-Z0-9_])`),
 		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + processenv.DevServerEnvVar + `(?:$|[^A-Z0-9_])`),
 		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + processenv.DevServerTokenEnvVar + `(?:$|[^A-Z0-9_])`),
@@ -122,7 +122,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", ".next", ".venv", ".claude", statedir.Name, "node_modules", "dist", "target":
+			case ".git", ".next", ".venv", ".claude", buildoutput.StateDir, "node_modules", "dist", "target":
 				return filepath.SkipDir
 			}
 			if rel == "pkg/proto" || rel == "sdk" || ignored[rel] {
@@ -212,7 +212,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", ".next", ".venv", ".claude", statedir.Name, "node_modules", "dist", "target":
+			case ".git", ".next", ".venv", ".claude", buildoutput.StateDir, "node_modules", "dist", "target":
 				return filepath.SkipDir
 			}
 			rel, err := filepath.Rel(repo, path)

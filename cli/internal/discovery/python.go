@@ -11,11 +11,11 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const (
-	pythonEntryFile = statedir.Name + "/discovery.py"
+	pythonEntryFile = buildoutput.StateDir + "/discovery.py"
 	pythonOnPath    = "python3"
 )
 

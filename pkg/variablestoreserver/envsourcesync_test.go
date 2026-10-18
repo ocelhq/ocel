@@ -42,7 +42,7 @@ func servedAddingSync(t *testing.T, syncs *addedSyncs) variablestorev1connect.Va
 
 func servedAddingSyncTo(t *testing.T, provider *fake.Provider, syncs *addedSyncs) variablestorev1connect.VariableStoreServiceClient {
 	t.Helper()
-	return serve(t, &variablestoreserver.Service{CallerNamesEnvSource: true, Source: variablestoreserver.FixedBackend{
+	return serve(t, &variablestoreserver.Service{Source: variablestoreserver.FixedBackend{
 		KeyValues:           provider.KeyValues(),
 		Cipher:              provider.Cipher(),
 		EnsureEnvSourceSync: syncs.ensure,

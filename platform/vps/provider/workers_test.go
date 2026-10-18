@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -21,7 +22,7 @@ func aWorkerApp() provider.AppSpec {
 	app := anApp()
 	app.Workers = []provider.WorkerSpec{{Name: "worker"}, {Name: "ledger", Concurrency: 2}}
 	app.Values.Bindings = []provider.Binding{{Type: provider.BindingTask, Name: "task--receipt", Resource: "receipt"}}
-	app.Values.ContainerEnv = map[string]string{"GREETING": "hello", originguard.OriginSecretVar: "edge-only"}
+	app.Values.ContainerEnv = map[string]string{"GREETING": "hello", edge.OriginSecretVar: "edge-only"}
 	return app
 }
 
@@ -246,7 +247,7 @@ func TestAWorkerAdmitsOnlyDeliveriesSignedWithItsEnvironmentsDeliverySecret(t *t
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
 	handed := machine.fedTo("install -m 0600 /dev/stdin '" + host.EnvFile(environment.TierProduction, ledger.Container) + "'")
-	if !strings.Contains(handed, originguard.OriginSecretVar+"="+string(secret)) {
-		t.Errorf("ledger is handed %q, want %s set to the queue's delivery secret, so its front refuses a POST the engine did not send", handed, originguard.OriginSecretVar)
+	if !strings.Contains(handed, edge.OriginSecretVar+"="+string(secret)) {
+		t.Errorf("ledger is handed %q, want %s set to the queue's delivery secret, so its front refuses a POST the engine did not send", handed, edge.OriginSecretVar)
 	}
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 type host struct {
@@ -54,7 +54,7 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 }
 
 func stateDir(cfg *project.Project) string {
-	return filepath.Join(cfg.Dir, statedir.Name, "devresources")
+	return filepath.Join(cfg.Dir, buildoutput.StateDir, "devresources")
 }
 
 func appOrigins(dir string, source valueSource) func() []string {

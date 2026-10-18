@@ -14,6 +14,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
@@ -125,7 +126,10 @@ func TestAWorkerContainersFrontRefusesADeliveryTheEngineDidNotSign(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	read, env := readFront([]string{processenv.WorkerEnvVar + "=ledger", originguard.OriginSecretVar + "=delivery-secret", "GREETING=hello"})
+	read, env, err := readFront([]string{processenv.WorkerEnvVar + "=ledger", edge.OriginSecretVar + "=delivery-secret", "GREETING=hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if slices.ContainsFunc(env, func(entry string) bool { return strings.Contains(entry, "delivery-secret") }) {
 		t.Errorf("the worker process is handed %q, want the delivery secret kept by its front", env)
 	}
@@ -144,7 +148,7 @@ func TestAWorkerContainersFrontRefusesADeliveryTheEngineDidNotSign(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set(originguard.OriginSecretHeader, "delivery-secret")
+	req.Header.Set(edge.OriginSecretHeader, "delivery-secret")
 	signed, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -152,5 +156,11 @@ func TestAWorkerContainersFrontRefusesADeliveryTheEngineDidNotSign(t *testing.T)
 	signed.Body.Close()
 	if signed.StatusCode != http.StatusOK {
 		t.Errorf("the engine's delivery is answered %d, want it through to the worker", signed.StatusCode)
+	}
+}
+
+func TestAWorkerContainerHandedNoDeliverySecretRefusesToStart(t *testing.T) {
+	if _, _, err := readFront([]string{processenv.WorkerEnvVar + "=ledger", "GREETING=hello"}); err == nil {
+		t.Error("a worker container with no delivery secret started a front that admits any container on the project network")
 	}
 }

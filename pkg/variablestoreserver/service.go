@@ -34,8 +34,7 @@ type BackendSource interface {
 }
 
 type Service struct {
-	Source               BackendSource
-	CallerNamesEnvSource bool
+	Source BackendSource
 }
 
 type FixedBackend Backend

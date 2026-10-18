@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -248,7 +248,7 @@ emit({type:"span_end",id:"1",ok:true});
 		var ended error
 		building.End(&ended)
 
-		traces, err := filepath.Glob(filepath.Join(dir, statedir.Name, "runs", "*.otlp.json"))
+		traces, err := filepath.Glob(filepath.Join(dir, buildoutput.StateDir, "runs", "*.otlp.json"))
 		if err != nil || len(traces) != 1 {
 			t.Fatalf("traces = %v, %v, want the run's one trace", traces, err)
 		}

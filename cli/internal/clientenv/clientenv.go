@@ -18,10 +18,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-var recordPath = filepath.Join(statedir.Name, "output", "client-digests.json")
+var recordPath = filepath.Join(buildoutput.StateDir, "output", "client-digests.json")
 
 type App struct {
 	variables.App
@@ -137,12 +136,12 @@ func CheckFresh(projectDir string, apps []App) error {
 	var causes []string
 	if len(missing) > 0 {
 		causes = append(causes, fmt.Sprintf(
-			"%s %s never inlined — either unset or not a variable the app inlines when "+statedir.Name+"/output was built, or built by `ocel build`, which resolves no values",
+			"%s %s never inlined — either unset or not a variable the app inlines when "+buildoutput.StateDir+"/output was built, or built by `ocel build`, which resolves no values",
 			strings.Join(missing, ", "), were(missing),
 		))
 	}
 	if len(changed) > 0 {
-		causes = append(causes, fmt.Sprintf("the build-time value of %s changed since "+statedir.Name+"/output was built", strings.Join(changed, ", ")))
+		causes = append(causes, fmt.Sprintf("the build-time value of %s changed since "+buildoutput.StateDir+"/output was built", strings.Join(changed, ", ")))
 	}
 	return fmt.Errorf(
 		"--prebuilt cannot deploy this build: %s. "+

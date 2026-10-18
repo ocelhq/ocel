@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
-	FilePath = statedir.Name + "/queues.json"
+	FilePath = buildoutput.StateDir + "/queues.json"
 
 	EnvVar = "OCEL_QUEUES"
 

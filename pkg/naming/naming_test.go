@@ -93,6 +93,9 @@ func TestStackNamesRoundTrip(t *testing.T) {
 		InfraStack("pr-7"),
 		AppStack("prod", "web", release),
 		AppStack("pr-7", "web", release),
+		ContainerWorkersStack("prod", "web"),
+		ContainerWorkersStack("pr-7", "web"),
+		{Env: "prod", App: "web"},
 	} {
 		got, err := ParseStackName(want.String())
 		if err != nil {
@@ -108,7 +111,7 @@ func TestStackNamesHaveFixedArity(t *testing.T) {
 	if got := AppStack("prod", "web", NewReleaseToken("b", "")).String(); strings.Count(got, FieldSeparator) != 2 {
 		t.Errorf("app stack %q must always include env, app and release", got)
 	}
-	for _, bad := range []string{"prod", "prod--web", "prod--web--nothex", "prod--infra--r00000000", "prod--web--r1--extra"} {
+	for _, bad := range []string{"prod", "prod--web--nothex", "prod--infra--r00000000", "prod--infra--containers", "prod--web--r1--extra"} {
 		if _, err := ParseStackName(bad); err == nil {
 			t.Errorf("ParseStackName(%q) = nil error, want a rejection", bad)
 		}

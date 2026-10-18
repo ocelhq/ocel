@@ -10,14 +10,14 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const fileName = "deploy-report.json"
 
 func Path(projectDir string) string {
-	return filepath.Join(projectDir, statedir.Name, fileName)
+	return filepath.Join(projectDir, buildoutput.StateDir, fileName)
 }
 
 func Write(projectDir string, deployment *consolev1.Deployment) error {

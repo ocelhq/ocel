@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -41,6 +42,19 @@ type Process struct {
 	exited  chan Exit
 }
 
+type waited struct {
+	status syscall.WaitStatus
+	err    error
+}
+
+var reapsOrphans = os.Getpid() == 1
+
+var orphanReaper = struct {
+	sync.Mutex
+	waiting map[int]chan waited
+	running bool
+}{waiting: map[int]chan waited{}}
+
 func Start(opts Options) (*Process, error) {
 	if len(opts.Command) == 0 {
 		return nil, errors.New("no command to run")
@@ -50,11 +64,27 @@ func Start(opts Options) (*Process, error) {
 	cmd.Env = opts.Env
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stderr
+	if !reapsOrphans {
+		if err := cmd.Start(); err != nil {
+			return nil, fmt.Errorf("start %s: %w", opts.Command[0], err)
+		}
+		p := &Process{pid: cmd.Process.Pid, program: opts.Command[0], exited: make(chan Exit)}
+		go func() { p.answer(waitFor(p.pid)) }()
+		return p, nil
+	}
+	orphanReaper.Lock()
+	defer orphanReaper.Unlock()
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start %s: %w", opts.Command[0], err)
 	}
-	p := &Process{pid: cmd.Process.Pid, program: opts.Command[0], exited: make(chan Exit, 1)}
-	go p.reap()
+	p := &Process{pid: cmd.Process.Pid, program: opts.Command[0], exited: make(chan Exit)}
+	reaped := make(chan waited, 1)
+	orphanReaper.waiting[p.pid] = reaped
+	if !orphanReaper.running {
+		orphanReaper.running = true
+		go reapEveryChild()
+	}
+	go func() { p.answer(<-reaped) }()
 	return p, nil
 }
 
@@ -85,26 +115,49 @@ func (p *Process) Stop(grace time.Duration) Exit {
 	}
 }
 
-func (p *Process) reap() {
-	waited := p.pid
-	if os.Getpid() == 1 {
-		waited = -1
-	}
+func waitFor(pid int) waited {
 	for {
 		var status syscall.WaitStatus
-		pid, err := syscall.Wait4(waited, &status, 0, nil)
+		_, err := syscall.Wait4(pid, &status, 0, nil)
+		if !errors.Is(err, syscall.EINTR) {
+			return waited{status: status, err: err}
+		}
+	}
+}
+
+func reapEveryChild() {
+	for {
+		var status syscall.WaitStatus
+		pid, err := syscall.Wait4(-1, &status, 0, nil)
 		if errors.Is(err, syscall.EINTR) {
 			continue
 		}
+		orphanReaper.Lock()
 		if err != nil {
-			p.exited <- Exit{Code: 1, Err: fmt.Errorf("wait for %s: %w", p.program, err)}
+			for waiting, reaped := range orphanReaper.waiting {
+				reaped <- waited{err: err}
+				delete(orphanReaper.waiting, waiting)
+			}
+		} else if reaped, ours := orphanReaper.waiting[pid]; ours {
+			reaped <- waited{status: status}
+			delete(orphanReaper.waiting, pid)
+		}
+		if len(orphanReaper.waiting) == 0 {
+			orphanReaper.running = false
+			orphanReaper.Unlock()
 			return
 		}
-		if pid != p.pid {
-			continue
-		}
-		p.exited <- exitOf(status)
-		return
+		orphanReaper.Unlock()
+	}
+}
+
+func (p *Process) answer(reaped waited) {
+	exit := exitOf(reaped.status)
+	if reaped.err != nil {
+		exit = Exit{Code: 1, Err: fmt.Errorf("wait for %s: %w", p.program, reaped.err)}
+	}
+	for {
+		p.exited <- exit
 	}
 }
 

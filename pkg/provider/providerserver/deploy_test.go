@@ -37,7 +37,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/pkg/statedir"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -68,7 +67,7 @@ func builtApps(t *testing.T, apps ...string) {
 func builtAppsUnder(t *testing.T, root string, apps ...string) {
 	t.Helper()
 	for _, app := range apps {
-		built := filepath.Join(root, statedir.Name, "output", filepath.FromSlash(appArtifactPath(app)))
+		built := filepath.Join(root, buildoutput.StateDir, "output", filepath.FromSlash(appArtifactPath(app)))
 		if err := os.MkdirAll(built, 0o755); err != nil {
 			t.Fatal(err)
 		}

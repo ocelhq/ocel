@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const (
-	FilePath = statedir.Name + "/variables.enc"
+	FilePath = buildoutput.StateDir + "/variables.enc"
 
 	EnvelopeVar = "OCEL_VARIABLES_ENVELOPE"
 

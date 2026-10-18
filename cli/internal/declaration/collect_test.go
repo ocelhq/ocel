@@ -16,9 +16,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestCollectReturnsEveryResourceTheProgramDeclares(t *testing.T) {
@@ -197,7 +197,7 @@ func TestCollectPreparedRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 		t.Fatal("Entry() is empty, want the bundle Prepare built")
 	}
 
-	writeFile(t, filepath.Join(root, statedir.Name, "entry.mjs"), `
+	writeFile(t, filepath.Join(root, buildoutput.StateDir, "entry.mjs"), `
 await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+processenv.DevServerEnvVar+`), {
   method: "POST",
   headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },

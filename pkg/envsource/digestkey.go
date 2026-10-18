@@ -23,7 +23,6 @@ const (
 	digestKeyBytes    = 32
 	digestBytes       = 16
 	digestKeyAttempts = 3
-	everyProject      = "*"
 	digestKeyFolder   = "/"
 	digestKeyBinding  = "envsource"
 	digestKeyName     = "digestkey"
@@ -43,7 +42,7 @@ func digestKeyAt(tier environment.Tier) keyvalue.Key {
 
 func newDigestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
 	return seal.AssociatedData{
-		{Name: "project", Value: everyProject},
+		{Name: "project", Value: variablestore.EveryProject},
 		{Name: "class", Value: string(tier)},
 		{Name: "environment", Value: variablestore.TierWideEnvironment},
 		{Name: "folder", Value: digestKeyFolder},

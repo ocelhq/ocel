@@ -133,7 +133,7 @@ func UnescapeSegment(segment string) (string, error) {
 			return "", refuseUnescaped(segment)
 		}
 		value, err := strconv.ParseUint(segment[i+1:i+3], 16, 8)
-		if err != nil {
+		if err != nil || strings.ToUpper(segment[i+1:i+3]) != segment[i+1:i+3] {
 			return "", refuseUnescaped(segment)
 		}
 		unescaped.WriteByte(byte(value))
@@ -143,7 +143,7 @@ func UnescapeSegment(segment string) (string, error) {
 }
 
 func refuseUnescaped(segment string) error {
-	return refusal.Refuse(refusal.CodeDenied, "%q holds a %% that escapes no byte, so ocel did not write it", segment)
+	return refusal.Refuse(refusal.CodeDenied, "%q holds a %% that escapes no byte in upper-case hex, so ocel did not write it", segment)
 }
 
 const revisionBytes = 16
@@ -224,60 +224,65 @@ func Forget(ctx context.Context, store Store, key Key) error {
 }
 
 func ForgetMatching(ctx context.Context, store Store, key Key, match func(recorded Entry) (bool, error)) error {
-	for range forgetAttempts {
-		recorded, err := store.Read(ctx, key)
-		if errors.Is(err, ErrNotFound) {
-			return nil
-		}
-		if err != nil {
-			return err
+	return untilCurrent(ctx, store, key, "removal", func(recorded Entry, found bool) (bool, error) {
+		if !found {
+			return false, nil
 		}
 		if matched, err := match(recorded); err != nil || !matched {
-			return err
+			return false, err
 		}
-		err = store.Remove(ctx, key, recorded.Revision)
-		if err == nil || errors.Is(err, ErrNotFound) {
-			return nil
+		err := store.Remove(ctx, key, recorded.Revision)
+		if errors.Is(err, ErrStale) {
+			return true, nil
 		}
-		if !errors.Is(err, ErrStale) {
-			return err
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return false, err
 		}
-	}
-	return fmt.Errorf(
-		"%s was rewritten between every read of it and the removal that followed, %d times over. "+
-			"Something is still writing that entry; removing it now would drop a write nobody has seen",
-		key, forgetAttempts)
+		return false, nil
+	})
 }
 
-const forgetAttempts = 5
-
 func Change(ctx context.Context, store Store, key Key, change func(recorded Entry) (value []byte, changed bool, err error)) error {
-	for attempt := range changeAttempts {
-		if err := waitForRacingWriter(ctx, attempt); err != nil {
-			return err
-		}
-		recorded, err := ReadOrEmpty(ctx, store, key)
-		if err != nil {
-			return fmt.Errorf("read %s: %w", key, err)
-		}
+	return untilCurrent(ctx, store, key, "write", func(recorded Entry, _ bool) (bool, error) {
 		value, changed, err := change(recorded)
 		if err != nil || !changed {
-			return err
+			return false, err
 		}
 		recorded.Value = value
 		_, err = store.Write(ctx, recorded)
-		if err == nil {
-			return nil
+		if errors.Is(err, ErrStale) {
+			return true, nil
 		}
-		if !errors.Is(err, ErrStale) {
-			return fmt.Errorf("record %s: %w", key, err)
+		if err != nil {
+			return false, fmt.Errorf("record %s: %w", key, err)
 		}
-	}
-	return fmt.Errorf("record %s: it was rewritten between every read of it and the write that followed, %d times over",
-		key, changeAttempts)
+		return false, nil
+	})
 }
 
-const changeAttempts = 10
+func untilCurrent(ctx context.Context, store Store, key Key, act string, apply func(recorded Entry, found bool) (stale bool, err error)) error {
+	for attempt := range currentAttempts {
+		if err := waitForRacingWriter(ctx, attempt); err != nil {
+			return err
+		}
+		recorded, err := store.Read(ctx, key)
+		found := err == nil
+		if errors.Is(err, ErrNotFound) {
+			recorded, err = Entry{}, nil
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", key, err)
+		}
+		recorded.Key = key
+		if stale, err := apply(recorded, found); !stale {
+			return err
+		}
+	}
+	return fmt.Errorf("%s was rewritten between every read of it and the %s that followed, %d times over. "+
+		"Something is still writing that entry", key, act, currentAttempts)
+}
+
+const currentAttempts = 10
 
 const racingWriterWait = 10 * time.Millisecond
 

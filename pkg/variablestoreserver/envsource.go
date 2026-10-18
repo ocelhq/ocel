@@ -44,10 +44,6 @@ func (h *Service) ensureSync(ctx context.Context, scope variablestore.Scope, des
 }
 
 func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEnvSourceRequest) (*variablestorev1.SyncEnvSourceResponse, error) {
-	if req.GetRegistered() == nil && !h.CallerNamesEnvSource {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New(
-			"this caller syncs only the env source a deploy registered, never one it names: sync the registered one, or change the tier's envSource and deploy"))
-	}
 	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err

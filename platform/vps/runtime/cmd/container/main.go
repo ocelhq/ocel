@@ -55,7 +55,10 @@ func run(ctx context.Context, command []string, environ []string) int {
 		return fatal(err.Error())
 	}
 	command = chooseCommand(environ, command, isFile)
-	read, env := readFront(environ)
+	read, env, err := readFront(environ)
+	if err != nil {
+		return fatal(err.Error())
+	}
 	exposed, manifest, healthPath, guard := read.exposed, read.manifest, read.healthPath, read.guard
 
 	values, err := resolve(ctx, manifest, boxlive.SocketPath, containerimage.LivePath)
@@ -154,7 +157,7 @@ type front struct {
 	guard      *originguard.Guard
 }
 
-func readFront(environ []string) (front, []string) {
+func readFront(environ []string) (front, []string, error) {
 	read := front{exposed: containerimage.PortText}
 	env := make([]string, 0, len(environ))
 	for _, entry := range environ {
@@ -171,15 +174,20 @@ func readFront(environ []string) (front, []string) {
 		}
 		env = append(env, entry)
 	}
-	read.guard, env = originguard.GuardFromEnv(env)
-	return read, env
+	guard, env, err := originguard.GuardFromEnv(env, slices.ContainsFunc(environ, isWorkerEntry))
+	read.guard = guard
+	return read, env, err
 }
 
 func chooseCommand(environ, command []string, present func(path string) bool) []string {
-	if !slices.ContainsFunc(environ, func(entry string) bool { return strings.HasPrefix(entry, processenv.WorkerEnvVar+"=") }) {
+	if !slices.ContainsFunc(environ, isWorkerEntry) {
 		return command
 	}
 	return containerimage.WorkerCommand(present, command)
+}
+
+func isWorkerEntry(entry string) bool {
+	return strings.HasPrefix(entry, processenv.WorkerEnvVar+"=")
 }
 
 func isFile(path string) bool {

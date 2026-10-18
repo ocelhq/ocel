@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func pythonFixture(t *testing.T) string {
@@ -34,7 +34,7 @@ func TestPythonDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	if cmd.Dir != configDir {
 		t.Errorf("Dir = %q, want %q", cmd.Dir, configDir)
 	}
-	if want := "./" + statedir.Name + "/discovery.py"; !slices.Contains(cmd.Args, want) {
+	if want := "./" + buildoutput.StateDir + "/discovery.py"; !slices.Contains(cmd.Args, want) {
 		t.Errorf("Args = %q, want them to run %q", cmd.Args, want)
 	}
 	for _, want := range []string{processenv.PhaseEnvVar + "=discovery", processenv.DevServerEnvVar + "=http://127.0.0.1:1234", processenv.DevServerTokenEnvVar + "=opensesame", "PYTHONDONTWRITEBYTECODE=1"} {
@@ -43,7 +43,7 @@ func TestPythonDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 		}
 	}
 
-	generated, err := os.ReadFile(filepath.Join(configDir, statedir.Name, "discovery.py"))
+	generated, err := os.ReadFile(filepath.Join(configDir, buildoutput.StateDir, "discovery.py"))
 	if err != nil {
 		t.Fatalf("read the generated script: %v", err)
 	}

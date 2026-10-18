@@ -55,6 +55,13 @@ func TestForgetRefusesToReportAnEntryGoneThatKeepsMoving(t *testing.T) {
 	}
 }
 
+func TestForgetOutlastsSevenWritersRacingItToTheEntry(t *testing.T) {
+	moved := &movingStore{recorded: keyvalue.Entry{Key: values.Key("cells"), Revision: "one"}, moves: 7}
+	if err := keyvalue.Forget(context.Background(), moved, moved.recorded.Key); err != nil || !moved.removed {
+		t.Errorf("Forget() of an entry rewritten seven times = %v, removed = %v, want it removed: Forget and Change race the same writers", err, moved.removed)
+	}
+}
+
 type rewritingStore struct {
 	movingStore
 	rewrite json.RawMessage
@@ -221,6 +228,17 @@ func TestASegmentHoldingAPercentThatEscapesNoByteIsRefused(t *testing.T) {
 		var refused refusal.Refusal
 		if split, err := keyvalue.SplitSegments(joined, "#"); !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
 			t.Errorf("SplitSegments(%q) = %q, %v, want a %s refusal: JoinSegments escapes every %%, so ocel never wrote it", joined, split, err, refusal.CodeDenied)
+		}
+	}
+}
+
+func TestASegmentEscapedInLowerCaseHexIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for _, joined := range []string{"a%2fb", "50%2a", "ghcr.io%2Facme%2fweb"} {
+		var refused refusal.Refusal
+		if split, err := keyvalue.SplitSegments(joined, "#"); !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+			t.Errorf("SplitSegments(%q) = %q, %v, want a %s refusal: JoinSegments escapes in upper-case hex, so one segment has one stored key", joined, split, err, refusal.CodeDenied)
 		}
 	}
 }

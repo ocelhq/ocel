@@ -37,7 +37,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/statedir"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -839,7 +838,7 @@ func parseNano(t *testing.T, s string) int64 {
 
 func readTraceSpans(t *testing.T, root string) []traceSpan {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(root, statedir.Name, "runs", "*.otlp.json"))
+	matches, err := filepath.Glob(filepath.Join(root, buildoutput.StateDir, "runs", "*.otlp.json"))
 	if err != nil {
 		t.Fatalf("glob trace files: %v", err)
 	}

@@ -30,9 +30,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
@@ -1078,7 +1078,7 @@ func TestDevReportsThroughItsRun(t *testing.T) {
 			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
 		}
 
-		logs, err := filepath.Glob(filepath.Join(root, statedir.Name, "runs", "*.ndjson"))
+		logs, err := filepath.Glob(filepath.Join(root, buildoutput.StateDir, "runs", "*.ndjson"))
 		if err != nil || len(logs) != 1 {
 			t.Fatalf("run logs = %v (%v), want one", logs, err)
 		}

@@ -7,9 +7,9 @@ import (
 	"sync"
 
 	"connectrpc.com/connect"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const ConnectorPublicKey = "ZmFrZS1jb25uZWN0b3Ita2V5"
@@ -97,7 +97,7 @@ func (c *Connector) Install(_ context.Context, install provider.ConnectorInstall
 		progress.Say("wrote the connector")
 	}
 	return provider.ConnectorAddress{
-		URL:       "https://" + target.Hostname + "/" + statedir.Name + "/connector",
+		URL:       "https://" + target.Hostname + "/" + buildoutput.StateDir + "/connector",
 		PublicKey: ConnectorPublicKey,
 		Compute:   compute,
 	}, nil

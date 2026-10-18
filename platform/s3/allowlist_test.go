@@ -6,8 +6,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func neighbours(t *testing.T) *harness {
@@ -96,7 +96,7 @@ func TestOnlyTheBucketsThisAppWasGrantedAnswerIt(t *testing.T) {
 				"customer",
 				"customer/shop/production/uploads/deeper",
 				SessionsBucket(),
-				SessionsBucket() + "/" + statedir.Name,
+				SessionsBucket() + "/" + buildoutput.StateDir,
 				"customer/shop/production/web",
 			} {
 				denied(t, name+" of "+bucket, reach(neighbours(t), bucket))

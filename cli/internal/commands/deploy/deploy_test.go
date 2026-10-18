@@ -27,7 +27,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestDeployRefusesBeforeStartingAProviderWhenTheConfigCannotNameOne(t *testing.T) {
@@ -246,7 +245,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 
 func writeHosting(t *testing.T, root, app, buildID string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, buildoutput.HostingFile),
+	clitest.WriteFile(t, filepath.Join(root, buildoutput.StateDir, "output", "apps", app, buildoutput.HostingFile),
 		`{"version":1,"framework":"node","frameworkBuildId":"`+buildID+`"}`)
 }
 

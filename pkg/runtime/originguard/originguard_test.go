@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const healthPath = "/_ocel/health"
@@ -33,7 +35,7 @@ func serveUpstream(t *testing.T) *upstream {
 		up.host = r.Host
 		up.query = r.URL.RawQuery
 		up.heard = r.Header.Clone()
-		up.secret = r.Header.Get(OriginSecretHeader)
+		up.secret = r.Header.Get(edge.OriginSecretHeader)
 		io.WriteString(w, "served by the app")
 	}))
 	t.Cleanup(up.server.Close)
@@ -63,7 +65,7 @@ func ask(t *testing.T, front *httptest.Server, method, path, secret string) *htt
 		t.Fatal(err)
 	}
 	if secret != "" {
-		req.Header.Set(OriginSecretHeader, secret)
+		req.Header.Set(edge.OriginSecretHeader, secret)
 	}
 	resp, err := front.Client().Do(req)
 	if err != nil {
@@ -166,15 +168,54 @@ func TestHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("the health path is answered without the secret the rest of the app needs", func(t *testing.T) {
+	t.Run("a probe of the health path without the secret is answered with the app's status alone", func(t *testing.T) {
 		up := serveUpstream(t)
 		front := serveFront(t, up, NewGuard("s3cr3t"), nil)
 
-		if resp := ask(t, front, http.MethodGet, healthPath, ""); resp.StatusCode != http.StatusOK {
-			t.Errorf("status = %d, want %d: the probe sends no secret and its failure takes the deployment down", resp.StatusCode, http.StatusOK)
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			resp := ask(t, front, method, healthPath, "")
+			body, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("%s status = %d, want %d: the probe sends no secret and its failure takes the deployment down", method, resp.StatusCode, http.StatusOK)
+			}
+			if len(body) != 0 {
+				t.Errorf("%s read %q without the secret; the health path may be any page of the app", method, body)
+			}
 		}
-		if resp := ask(t, front, http.MethodHead, healthPath, ""); resp.StatusCode != http.StatusOK {
-			t.Errorf("HEAD status = %d, want %d", resp.StatusCode, http.StatusOK)
+	})
+
+	t.Run("a probe of a root health path without the secret reads none of the root page", func(t *testing.T) {
+		up := serveUpstream(t)
+		target, err := url.Parse(up.server.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		front := httptest.NewServer(Handler(Options{Upstream: target, Guard: NewGuard("s3cr3t"), HealthPath: "/"}))
+		t.Cleanup(front.Close)
+
+		resp := ask(t, front, http.MethodGet, "/", "")
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK || len(body) != 0 {
+			t.Errorf("answer = %d %q, want the app's status and none of its root page", resp.StatusCode, body)
+		}
+		if resp := ask(t, front, http.MethodGet, "/", "s3cr3t"); resp.StatusCode != http.StatusOK {
+			t.Errorf("status with the secret = %d, want %d", resp.StatusCode, http.StatusOK)
+		} else if body, _ := io.ReadAll(resp.Body); string(body) != "served by the app" {
+			t.Errorf("the edge read %q, want the root page", body)
+		}
+	})
+
+	t.Run("a probe of an app that does not answer is marked as the runtime's answer", func(t *testing.T) {
+		up := serveUpstream(t)
+		up.server.Close()
+		front := serveFront(t, up, NewGuard("s3cr3t"), nil)
+
+		resp := ask(t, front, http.MethodGet, healthPath, "")
+		if resp.StatusCode != http.StatusBadGateway {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadGateway)
+		}
+		if resp.Header.Get(AppUnansweredHeader) == "" {
+			t.Errorf("the probe's 502 carries no %s, so the probe would take the runtime's answer for the app's", AppUnansweredHeader)
 		}
 	})
 
@@ -216,7 +257,7 @@ func TestHandler(t *testing.T) {
 		ask(t, front, http.MethodGet, "/", "s3cr3t")
 
 		if up.secret != "" {
-			t.Errorf("the app was handed %s=%q; the secret is the front's business and nothing the app logs should contain it", OriginSecretHeader, up.secret)
+			t.Errorf("the app was handed %s=%q; the secret is the front's business and nothing the app logs should contain it", edge.OriginSecretHeader, up.secret)
 		}
 		if want := strings.TrimPrefix(front.URL, "http://"); up.host != want {
 			t.Errorf("host = %q, want %q: the app builds absolute URLs from what the caller asked for", up.host, want)
@@ -418,13 +459,13 @@ func TestAWebsocketUpgradeStillReachesTheApp(t *testing.T) {
 
 func TestGuardFromEnv(t *testing.T) {
 	t.Run("takes the secret out of the environment the app is handed", func(t *testing.T) {
-		guard, kept := GuardFromEnv([]string{
+		guard, kept, _ := GuardFromEnv([]string{
 			"PORT=8080",
-			OriginSecretVar + "=s3cr3t",
+			edge.OriginSecretVar + "=s3cr3t",
 			"NODE_ENV=production",
-		})
+		}, false)
 
-		if slices.ContainsFunc(kept, func(e string) bool { return strings.HasPrefix(e, OriginSecretVar+"=") }) {
+		if slices.ContainsFunc(kept, func(e string) bool { return strings.HasPrefix(e, edge.OriginSecretVar+"=") }) {
 			t.Errorf("the app's environment = %q, which still contains the origin secret", kept)
 		}
 		if !slices.Equal(kept, []string{"PORT=8080", "NODE_ENV=production"}) {
@@ -435,7 +476,7 @@ func TestGuardFromEnv(t *testing.T) {
 		}
 
 		admitted := httptest.NewRequest(http.MethodGet, "/", nil)
-		admitted.Header.Set(OriginSecretHeader, "s3cr3t")
+		admitted.Header.Set(edge.OriginSecretHeader, "s3cr3t")
 		if !guard.Admits(admitted) {
 			t.Error("the guard turns away the secret it was built from")
 		}
@@ -445,37 +486,51 @@ func TestGuardFromEnv(t *testing.T) {
 	})
 
 	t.Run("takes the predecessor out of the environment too and admits it", func(t *testing.T) {
-		guard, kept := GuardFromEnv([]string{
-			OriginSecretPreviousVar + "=0ld",
-			OriginSecretVar + "=s3cr3t",
+		guard, kept, _ := GuardFromEnv([]string{
+			edge.OriginSecretPreviousVar + "=0ld",
+			edge.OriginSecretVar + "=s3cr3t",
 			"PORT=8080",
-		})
+		}, false)
 
 		if !slices.Equal(kept, []string{"PORT=8080"}) {
 			t.Errorf("the app's environment = %q, want both secrets taken out of it", kept)
 		}
 		for _, presented := range []string{"s3cr3t", "0ld"} {
 			admitted := httptest.NewRequest(http.MethodGet, "/", nil)
-			admitted.Header.Set(OriginSecretHeader, presented)
+			admitted.Header.Set(edge.OriginSecretHeader, presented)
 			if !guard.Admits(admitted) {
 				t.Errorf("the guard turns away %q, one of the two secrets the rotation hands it", presented)
 			}
 		}
 	})
 
-	t.Run("a predecessor with no current secret guards nothing and reaches no app", func(t *testing.T) {
-		guard, kept := GuardFromEnv([]string{OriginSecretPreviousVar + "=0ld", "PORT=8080"})
+	t.Run("a predecessor with no current secret still guards and reaches no app", func(t *testing.T) {
+		guard, kept, err := GuardFromEnv([]string{edge.OriginSecretPreviousVar + "=0ld", "PORT=8080"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-		if guard != nil {
-			t.Error("a predecessor alone built a guard; only the current secret says a deployment is fronted")
+		if guard.Admits(httptest.NewRequest(http.MethodGet, "/", nil)) {
+			t.Error("a predecessor alone left the app open to a request with no secret")
+		}
+		admitted := httptest.NewRequest(http.MethodGet, "/", nil)
+		admitted.Header.Set(edge.OriginSecretHeader, "0ld")
+		if !guard.Admits(admitted) {
+			t.Error("the guard turns away the predecessor it was handed")
 		}
 		if !slices.Equal(kept, []string{"PORT=8080"}) {
-			t.Errorf("the app's environment = %q, want the stray predecessor dropped from it", kept)
+			t.Errorf("the app's environment = %q, want the predecessor taken out of it", kept)
+		}
+	})
+
+	t.Run("a deployment that must be fronted and was given no secret is refused", func(t *testing.T) {
+		if _, _, err := GuardFromEnv([]string{"PORT=8080"}, true); err == nil {
+			t.Error("GuardFromEnv built no guard and no error for a deployment that must be fronted")
 		}
 	})
 
 	t.Run("builds no guard for a deployment nothing fronts", func(t *testing.T) {
-		guard, kept := GuardFromEnv([]string{"PORT=8080"})
+		guard, kept, _ := GuardFromEnv([]string{"PORT=8080"}, false)
 
 		if guard != nil {
 			t.Error("GuardFromEnv built a guard for a deployment that was given no secret")
@@ -489,7 +544,7 @@ func TestGuardFromEnv(t *testing.T) {
 	})
 
 	t.Run("an origin secret set to nothing fails closed", func(t *testing.T) {
-		guard, _ := GuardFromEnv([]string{OriginSecretVar + "="})
+		guard, _, _ := GuardFromEnv([]string{edge.OriginSecretVar + "="}, false)
 
 		if guard == nil {
 			t.Fatal("an origin secret that was set to nothing left the app open to anyone who finds it")

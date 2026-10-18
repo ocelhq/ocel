@@ -16,9 +16,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func jsFixture(t *testing.T, source string) (string, Programs) {
@@ -142,7 +142,7 @@ export {};
 
 func readTraceFile(t *testing.T, projectDir string) string {
 	t.Helper()
-	traces, err := filepath.Glob(filepath.Join(projectDir, statedir.Name, "runs", "*.otlp.json"))
+	traces, err := filepath.Glob(filepath.Join(projectDir, buildoutput.StateDir, "runs", "*.otlp.json"))
 	if err != nil || len(traces) != 1 {
 		t.Fatalf("traces = %v, %v, want the run's one trace", traces, err)
 	}
@@ -218,7 +218,7 @@ func TestRunBuildsNoBundleAndRunsNoNodeWithoutAJSRoot(t *testing.T) {
 	if err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(root, statedir.Name, "entry.mjs")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "entry.mjs")); !os.IsNotExist(err) {
 		t.Errorf("stat entry.mjs = %v, want a project with no js root to bundle nothing and run no node", err)
 	}
 }
@@ -240,7 +240,7 @@ func TestRunBundlesNothingForARootItCannotDiscover(t *testing.T) {
 	if err := Run(context.Background(), root, prepared, okServer(t), &stdout, &stderr); err == nil {
 		t.Fatal("Run succeeded on a root of a language ocel does not discover, want an error")
 	}
-	if _, err := os.Stat(filepath.Join(root, statedir.Name, "entry.mjs")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "entry.mjs")); !os.IsNotExist(err) {
 		t.Errorf("stat entry.mjs = %v, want a project with no js root to bundle nothing", err)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const protocolBanner = `
@@ -58,9 +58,9 @@ func Bundle(configDir string, files []string) (string, error) {
 }
 
 func bundleEntry(configDir, resolveDir, name, sourcefile, source string) (string, error) {
-	outDir := filepath.Join(configDir, statedir.Name)
+	outDir := filepath.Join(configDir, buildoutput.StateDir)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return "", fmt.Errorf("create %s: %w", statedir.Name, err)
+		return "", fmt.Errorf("create %s: %w", buildoutput.StateDir, err)
 	}
 	outfile := filepath.Join(outDir, name)
 	return outfile, bundleTo(resolveDir, outfile, sourcefile, source)

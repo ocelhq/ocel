@@ -66,7 +66,10 @@ func run(ctx context.Context, command []string, environ []string) int {
 		}
 		env = append(env, entry)
 	}
-	guard, env := originguard.GuardFromEnv(env)
+	guard, env, err := originguard.GuardFromEnv(env, false)
+	if err != nil {
+		return fatal(err.Error())
+	}
 
 	values, err := resolve(ctx, manifest)
 	if err != nil {

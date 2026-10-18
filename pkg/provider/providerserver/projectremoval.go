@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/lease"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -268,7 +269,7 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		if err != nil {
 			return err
 		}
-		token, err := stackrecords.NewEnvironmentLeaseToken()
+		token, err := lease.NewToken()
 		if err != nil {
 			return err
 		}

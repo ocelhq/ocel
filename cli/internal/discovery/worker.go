@@ -11,14 +11,14 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
 	nodeWorkerEntryFile   = "worker.mjs"
-	pythonWorkerEntryFile = statedir.Name + "/worker.py"
-	goWorkerEntryDir      = statedir.Name + "/worker"
+	pythonWorkerEntryFile = buildoutput.StateDir + "/worker.py"
+	goWorkerEntryDir      = buildoutput.StateDir + "/worker"
 )
 
 const goWorkerMain = `package main
@@ -126,9 +126,9 @@ func WorkerCommand(ctx context.Context, configDir string, roots []Root, served R
 }
 
 func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Root) (*exec.Cmd, error) {
-	entry := filepath.Join(configDir, statedir.Name, nodeWorkerEntryFile)
+	entry := filepath.Join(configDir, buildoutput.StateDir, nodeWorkerEntryFile)
 	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
-		return nil, fmt.Errorf("create %s: %w", statedir.Name, err)
+		return nil, fmt.Errorf("create %s: %w", buildoutput.StateDir, err)
 	}
 	if err := BundleNodeWorker(configDir, roots, entry); err != nil {
 		return nil, err

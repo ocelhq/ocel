@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -74,7 +74,7 @@ func (c *clock) advance(d time.Duration) {
 
 func runFile(t *testing.T, projectDir, extension string) string {
 	t.Helper()
-	found, err := filepath.Glob(filepath.Join(projectDir, statedir.Name, "runs", "*"+extension))
+	found, err := filepath.Glob(filepath.Join(projectDir, buildoutput.StateDir, "runs", "*"+extension))
 	if err != nil || len(found) != 1 {
 		t.Fatalf("run files = %v, %v, want the run's one %s file", found, err, extension)
 	}

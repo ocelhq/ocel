@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -36,7 +37,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
@@ -151,7 +151,7 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	if len(srv.addressed) != 1 {
 		t.Fatalf("addresses = %v, want one", srv.addressed)
 	}
-	if srv.addressed[0].GetUrl() != "https://"+hostname+"/"+statedir.Name+"/connector" {
+	if srv.addressed[0].GetUrl() != "https://"+hostname+"/"+buildoutput.StateDir+"/connector" {
 		t.Errorf("addressed url = %v, want the box's own connector path", srv.addressed[0].GetUrl())
 	}
 	if srv.addressed[0].GetPublicKey() == "" {
@@ -442,7 +442,7 @@ func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
 	srv := newConsoleServer(t, &consolev1.Connector{
 		Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
 		Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
-		Url:   proto.String("https://" + hostname + "/" + statedir.Name + "/connector"), Capabilities: []string{"variables.read", "variables.write"},
+		Url:   proto.String("https://" + hostname + "/" + buildoutput.StateDir + "/connector"), Capabilities: []string{"variables.read", "variables.write"},
 		ConnectedAt: timestamppb.New(seen), LastSeenAt: timestamppb.New(seen), Online: true,
 	})
 	linked(t, root, srv.URL)
@@ -492,7 +492,7 @@ func TestStatusAsJSONPrintsEveryRegisteredConnectorAsOneEnvelope(t *testing.T) {
 		&consolev1.Connector{
 			Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
 			Reach:        consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
-			Url:          proto.String("https://" + hostname + "/" + statedir.Name + "/connector"),
+			Url:          proto.String("https://" + hostname + "/" + buildoutput.StateDir + "/connector"),
 			Capabilities: []string{"variables.write", "variables.read"},
 			ConnectedAt:  timestamppb.New(seen), LastSeenAt: timestamppb.New(seen), Online: true,
 			LastDenied: &consolev1.ConnectorDenial{

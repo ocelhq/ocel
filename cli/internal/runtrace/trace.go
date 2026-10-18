@@ -10,8 +10,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 type Trace struct {
@@ -35,7 +35,7 @@ type Trace struct {
 func Open(projectDir, command string) (*Trace, error) {
 	start := time.Now()
 	id := newTraceID()
-	dir := filepath.Join(projectDir, statedir.Name, "runs")
+	dir := filepath.Join(projectDir, buildoutput.StateDir, "runs")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}

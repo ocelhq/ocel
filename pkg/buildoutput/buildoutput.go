@@ -3,12 +3,12 @@ package buildoutput
 import (
 	"fmt"
 	"path/filepath"
-
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
+const StateDir = ".ocel"
+
 const (
-	Dir = statedir.Name + "/output"
+	Dir = StateDir + "/output"
 
 	appsDir = "apps"
 
