@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"slices"
 	"strconv"
 	"unicode"
 	"unicode/utf8"
@@ -98,7 +97,7 @@ func StorageItems(tier environment.Tier, keys []byte, arch string) []Item {
 }
 
 func Items(tier environment.Tier, keys []byte, arch string, front Front) []Item {
-	return slices.Concat(TierItems(tier), StorageItems(tier, keys, arch), EngineItems(), LiveItems(arch), DockerAccessItems(front), EnvSourceSyncItems(tier, arch), ProxyItems(arch, front), RealtimeItems(arch), BackupItems())
+	return Reading{Tier: tier, Keys: keys, Arch: arch, Front: front}.Items()
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {

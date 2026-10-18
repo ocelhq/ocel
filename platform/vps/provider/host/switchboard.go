@@ -32,8 +32,9 @@ func switchboardBinary(arch string) []byte { return embedded(boxapi.Switchboard,
 
 func switchboardBox(binary []byte, front Front) boxContainer {
 	return boxContainer{
-		name:  SwitchboardContainer,
-		image: StaticImage,
+		memory: switchboardMemoryBytes,
+		name:   SwitchboardContainer,
+		image:  StaticImage,
 		command: append([]string{SwitchboardMounted, "serve",
 			"--listen", ":" + switchboardPort,
 			"--front", boxapi.FrontSocket,
