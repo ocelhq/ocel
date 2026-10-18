@@ -80,16 +80,21 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 			}
 			return forwards, nil
 		}
-		preflight := h.PreflightDeploy
-		h.PreflightDeploy = func(ctx context.Context, pre provider.DeployPreflight) error {
+		preflight := provider.PreflightHooks{Plan: func(context.Context, provider.DeployPreflight) (provider.Plan, error) { return provider.Plan{}, nil }}
+		if h.Preflight != nil {
+			preflight = *h.Preflight
+		}
+		apply := preflight.Apply
+		preflight.Apply = func(ctx context.Context, pre provider.DeployPreflight) error {
 			seen.mutex.Lock()
 			seen.openAtDeploy = append(seen.openAtDeploy, seen.open)
 			seen.mutex.Unlock()
-			if preflight == nil {
+			if apply == nil {
 				return nil
 			}
-			return preflight(ctx, pre)
+			return apply(ctx, pre)
 		}
+		h.Preflight = &preflight
 	})
 	return seen
 }

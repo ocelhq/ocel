@@ -165,20 +165,24 @@ func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 
 type addingParts struct {
 	*fake.Provider
-	seen []provider.DeployPreflight
+	seen    []provider.DeployPreflight
+	applied int
 }
 
 func (p *addingParts) Hooks() provider.Hooks {
 	hooks := p.Provider.Hooks()
-	hooks.PreflightDeploy = p.PreflightDeploy
+	hooks.Preflight = &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight}
 	return hooks
 }
 
-func (p *addingParts) PreflightDeploy(_ context.Context, pre provider.DeployPreflight) error {
+func (p *addingParts) PlanPreflight(_ context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
 	p.seen = append(p.seen, pre)
-	if pre.Dry {
-		pre.AddToPlan(provider.ChangeGroup{Kind: provider.StackGroupKind, Name: "fake/tasks", Part: "tasks", Action: provider.ActionCreate})
-	}
+	return provider.Plan{Groups: []provider.ChangeGroup{{Kind: provider.StackGroupKind, Name: "fake/tasks", Part: "tasks", Action: provider.ActionCreate}}}, nil
+}
+
+func (p *addingParts) ApplyPreflight(_ context.Context, pre provider.DeployPreflight) error {
+	p.seen = append(p.seen, pre)
+	p.applied++
 	return nil
 }
 

@@ -135,13 +135,11 @@ func TestABootstrapChecksFirestoreIndexPermissionsByTheirCurrentNames(t *testing
 
 func plannedBy(t *testing.T, p *Provider, pre provider.DeployPreflight) []provider.ChangeGroup {
 	t.Helper()
-	var planned []provider.ChangeGroup
-	pre.Dry = true
-	pre.AddToPlan = func(groups ...provider.ChangeGroup) { planned = append(planned, groups...) }
-	if err := p.PreflightDeploy(context.Background(), pre); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+	plan, err := p.PlanPreflight(context.Background(), pre)
+	if err != nil {
+		t.Fatalf("PlanPreflight() = %v", err)
 	}
-	return planned
+	return plan.Groups
 }
 
 func plansWritableDatabase(planned []provider.ChangeGroup, database string) bool {
@@ -165,8 +163,8 @@ func TestADryDeployDeclaringATaskPlansItsProjectsWritableDatabaseAndMakesNothing
 func TestTheFirstDeployDeclaringATaskMakesItsProjectsWritableDatabaseAndAnotherProjectsIsStillPlanned(t *testing.T) {
 	p, _ := deployingNetworks(t)
 
-	if err := p.PreflightDeploy(context.Background(), declaringATaskOf("shop")); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+	if err := p.ApplyPreflight(context.Background(), declaringATaskOf("shop")); err != nil {
+		t.Fatalf("ApplyPreflight() = %v", err)
 	}
 	if planned := plannedBy(t, p, declaringATaskOf("shop")); len(planned) != 0 {
 		t.Errorf("a dry deploy of shop after its first planned %+v, want nothing", planned)

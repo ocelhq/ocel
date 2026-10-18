@@ -57,6 +57,22 @@ func ProjectWritableDatabaseCondition(c *gcloud.Clients, tier environment.Tier, 
 	}
 }
 
+func PlanProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, pre provider.DeployPreflight) (*provider.ChangeGroup, error) {
+	tier, project := pre.Deploy.Tier, pre.Deploy.Slug
+	recorded, err := records.ReadOrEmpty(ctx, b.Records, writableDatabaseKey(tier, project))
+	if err != nil || len(recorded.Value) > 0 {
+		return nil, err
+	}
+	database := b.Clients.ProjectWritableDatabase(tier, project)
+	return &provider.ChangeGroup{
+		Kind:    provider.StackGroupKind,
+		Name:    string(gcloud.Vendor) + "/" + b.Clients.Project() + "/" + string(tier) + "/" + database,
+		Action:  provider.ActionCreate,
+		Reason:  fmt.Sprintf(reasonWritableFirstUse, project),
+		Changes: []provider.Change{{Kind: string(bootstrap.KindDatabase), Name: database, Action: provider.ActionCreate}},
+	}, nil
+}
+
 func EnsureProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, pre provider.DeployPreflight, layouts ...Layout) error {
 	tier, project := pre.Deploy.Tier, pre.Deploy.Slug
 	recorded, err := records.ReadOrEmpty(ctx, b.Records, writableDatabaseKey(tier, project))
@@ -64,18 +80,6 @@ func EnsureProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, pre 
 		return err
 	}
 	database := b.Clients.ProjectWritableDatabase(tier, project)
-	if pre.Dry {
-		if pre.AddToPlan != nil {
-			pre.AddToPlan(provider.ChangeGroup{
-				Kind:    provider.StackGroupKind,
-				Name:    string(gcloud.Vendor) + "/" + b.Clients.Project() + "/" + string(tier) + "/" + database,
-				Action:  provider.ActionCreate,
-				Reason:  fmt.Sprintf(reasonWritableFirstUse, project),
-				Changes: []provider.Change{{Kind: string(bootstrap.KindDatabase), Name: database, Action: provider.ActionCreate}},
-			})
-		}
-		return nil
-	}
 	if !b.Clients.Emulated() {
 		if err := makeWritableDatabase(ctx, b, database); err != nil {
 			return err
@@ -152,10 +156,6 @@ func makeLayout(ctx context.Context, b bootstrap.Engine, database string, layout
 
 func fieldPath(database string, field LayoutField) string {
 	return database + "/collectionGroups/" + field.Group + "/fields/" + field.Path
-}
-
-func TakeProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, log progress.Log) error {
-	return takeWritableDatabase(ctx, b, storesOf(b), tier, project, log)
 }
 
 func takeWritableDatabase(ctx context.Context, b bootstrap.Engine, stores projectStores, tier environment.Tier, project string, log progress.Log) error {

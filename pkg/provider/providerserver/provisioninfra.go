@@ -48,13 +48,19 @@ func (h *handlers) ProvisionInfra(ctx context.Context, req *contractv1.Provision
 }
 
 func (h *handlers) executeInfraRun(ctx context.Context, req *contractv1.ProvisionInfraRequest, spec provider.DeploySpec, sender *eventStream) (*progressv1.OperationEvent, error) {
-	run, err := h.openDeploy(ctx, &contractv1.DeployRequest{
+	deploy := &contractv1.DeployRequest{
 		Manifest:       req.GetManifest(),
 		Environment:    req.GetEnvironment(),
 		Edge:           req.GetEdge(),
 		InlineBindings: req.GetInlineBindings(),
 		AliasToken:     req.GetAliasToken(),
-	}, spec, applied{}, sender)
+		Consented:      req.GetConsented(),
+	}
+	mode, err := deployModeOf(deploy, 0)
+	if err != nil {
+		return nil, err
+	}
+	run, err := h.openDeploy(ctx, deploy, spec, mode, sender)
 	if err != nil {
 		return nil, err
 	}
@@ -92,13 +98,6 @@ func refuseInfraProvisionedDeploy(req *contractv1.DeployRequest) error {
 }
 
 func (r *deployRun) executeInfra(ctx context.Context) (*progressv1.OperationEvent, error) {
-	if err := r.spanEvents.run(r.spans.Environment, func(env *spanRun) error {
-		return env.phase(func(progress progress.Log) error {
-			return r.prepareInfra(ctx, progress)
-		})
-	}); err != nil {
-		return nil, err
-	}
 	recorded, _, err := stackrecords.Read(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra)
 	if err != nil {
 		return nil, err
@@ -107,20 +106,27 @@ func (r *deployRun) executeInfra(ctx context.Context) (*progressv1.OperationEven
 	if err != nil {
 		return nil, err
 	}
+	if err := r.spanEvents.run(r.spans.Environment, func(env *spanRun) error {
+		return env.phase(func(progress progress.Log) error {
+			return r.prepareInfra(ctx, progress, undeclared)
+		})
+	}); err != nil {
+		return nil, err
+	}
 	if err := r.provisionInfra(ctx, undeclared); err != nil {
 		return nil, err
 	}
 	return okResult(), nil
 }
 
-func (r *deployRun) prepareInfra(ctx context.Context, progress progress.Log) error {
+func (r *deployRun) prepareInfra(ctx context.Context, progress progress.Log, undeclared []*contractv1.ManifestResource) error {
 	if err := r.refuseOtherLifecycle(ctx); err != nil {
 		return err
 	}
 	if err := r.checkInlineBindings(ctx, progress); err != nil {
 		return err
 	}
-	if err := r.ensureBootstrap(ctx, progress); err != nil {
+	if err := r.refuseUnreadyBootstrap(ctx, progress); err != nil {
 		return err
 	}
 	if err := r.resolveServingDomains(ctx); err != nil {
@@ -133,6 +139,9 @@ func (r *deployRun) prepareInfra(ctx context.Context, progress progress.Log) err
 		return err
 	}
 	if err := r.refuseUnsupportedDeclarations(ctx); err != nil {
+		return err
+	}
+	if err := r.refuseUnconsentedInfra(ctx, undeclared); err != nil {
 		return err
 	}
 	if err := r.ensureProject(ctx); err != nil {

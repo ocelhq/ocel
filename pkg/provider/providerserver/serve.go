@@ -117,7 +117,7 @@ func newMux(config Config) *http.ServeMux {
 	)
 
 	s := &session{config: config, writer: provider.WrittenByVersion(config.Version)}
-	services := &handlers{session: s, questions: asked, leases: newEnvironmentLeases(), skipChecks: processenv.SkipChecks(), Service: &variablestoreserver.Service{Source: sessionBackend{session: s}}}
+	services := &handlers{session: s, questions: asked, leases: newSubjectLeases(), skipChecks: processenv.SkipChecks(), Service: &variablestoreserver.Service{Source: sessionBackend{session: s}}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
@@ -137,7 +137,7 @@ type handlers struct {
 	session   *session
 	questions *questions
 	forwards  openForwards
-	leases    *environmentLeases
+	leases    *subjectLeases
 
 	skipChecks bool
 }

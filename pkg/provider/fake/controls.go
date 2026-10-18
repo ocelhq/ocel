@@ -45,7 +45,7 @@ func EnsureBindingAccess(hooks *provider.Hooks) *provider.BindingAccessHooks {
 }
 
 func (p *Provider) everyHook(hooks *provider.Hooks) {
-	hooks.PreflightDeploy = p.PreflightDeploy
+	hooks.Preflight = &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight}
 	hooks.EnsureImageRegistry = p.EnsureImageRegistry
 	hooks.EnvSource = &provider.EnvSourceHooks{ProveIdentity: p.ProveIdentity, EnsureSync: func(context.Context, environment.Tier, string) error { return nil }}
 }
@@ -74,7 +74,7 @@ func (p *Provider) FakeBootstrap() *Bootstrap { return p.bootstrap }
 func (p *Provider) Journal() []string { return p.journal.Entries() }
 
 func (p *Provider) ResourceStacks(hooks resources.Hooks) *Provider {
-	p.resourceStacks = resources.NewHookStacks(p.keyValues, p.artifacts, hooks)
+	p.resourceStacks = resources.NewHookStacks(p.keyValues, hooks)
 	return p
 }
 

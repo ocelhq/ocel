@@ -77,10 +77,10 @@ func prunedAndRestarted(t *testing.T, front string) {
 		t.Fatalf("the %s network is %s after the prune, want it gone with the switchboard as a host tool's nightly cleanup leaves it", host.ProxyNetwork, network)
 	}
 
-	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
+	if err := d.ApplyPreflight(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 		Slug: frontedSlug, Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
-		t.Fatalf("PreflightDeploy() after the prune = %v, want the switchboard and its network started again from what bootstrap left", err)
+		t.Fatalf("ApplyPreflight() after the prune = %v, want the switchboard and its network started again from what bootstrap left", err)
 	}
 	deadline := time.Now().Add(loadWait)
 	for served := vm.throughTheFront(t, frontedHostname, "/"); served != "one"; served = vm.throughTheFront(t, frontedHostname, "/") {

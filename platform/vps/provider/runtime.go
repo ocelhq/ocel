@@ -19,5 +19,3 @@ func (p containerRuntime) Arch(ctx context.Context, app, declared string) (strin
 func (p containerRuntime) Binary(_ context.Context, arch string) ([]byte, error) {
 	return host.ContainerRuntime(arch)
 }
-
-func (containerRuntime) NextServer(context.Context) (map[string][]byte, error) { return nil, nil }

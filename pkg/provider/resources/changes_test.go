@@ -64,7 +64,7 @@ func TestProvisionReportsEveryResourceItCreatedAndNoneItAlreadyHeld(t *testing.T
 	recordBuckets(t, store, ref, "uploads")
 
 	reported := newChangeLog()
-	if _, err := resources.NewHookStacks(store, fake.NewArtifacts(), (&buckets{}).hooks()).
+	if _, err := resources.NewHookStacks(store, (&buckets{}).hooks()).
 		Provision(context.Background(), bucketSpec(ref, "uploads", "logs"), reported); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
@@ -98,7 +98,7 @@ func TestProvisionReportsTheResourceWhoseProvisioningFailed(t *testing.T) {
 
 		reported := newChangeLog()
 		hooks := resources.Hooks{Bucket: provisioning(failingBuckets{failing: "logs"}.ProvisionBucket)}
-		if _, err := resources.NewHookStacks(store, fake.NewArtifacts(), hooks).
+		if _, err := resources.NewHookStacks(store, hooks).
 			Provision(context.Background(), bucketSpec(ref, "uploads", "logs"), reported); err == nil {
 			t.Fatalf("%s: Provision() = nil, want the hook's failure", name)
 		}
@@ -115,7 +115,7 @@ func TestProvisionAndDestroyReportEveryResourceTheyTookDown(t *testing.T) {
 	ref := infraRef()
 	store := fake.NewKeyValues()
 	recordBuckets(t, store, ref, "uploads", "exports")
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), (&buckets{}).hooks())
+	stacks := resources.NewHookStacks(store, (&buckets{}).hooks())
 
 	provisioned := newChangeLog()
 	if _, err := stacks.Provision(ctx, bucketSpec(ref, "uploads"), provisioned); err != nil {
@@ -141,7 +141,7 @@ func TestProvisionAndDestroyReportEveryAppContainerTheyCreatedAndTookDown(t *tes
 	store := fake.NewKeyValues()
 	ref := appRef()
 	recordContainers(t, store, ref, "legacy")
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks())
+	stacks := resources.NewHookStacks(store, (&withContainers{buckets: &buckets{}}).hooks())
 
 	provisioned := newChangeLog()
 	if _, err := stacks.Provision(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: containerApp("web")}, provisioned); err != nil {
@@ -169,7 +169,7 @@ func TestProvisionReportsEveryFunctionItCreatedAndTookDown(t *testing.T) {
 
 	reported := newChangeLog()
 	app := &provider.AppSpec{App: "web", Compute: provider.ComputeServerless, Functions: []provider.FunctionSpec{{Name: "api"}, {Name: "images"}}}
-	if _, err := resources.NewHookStacks(store, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks()).
+	if _, err := resources.NewHookStacks(store, (&withFunctions{buckets: &buckets{}}).hooks()).
 		Provision(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: app}, reported); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
@@ -204,7 +204,7 @@ func TestProvisionReportsAnUpdateForAHeldFunctionItServesFromANewRevisionAndNoth
 		}
 		reported := newChangeLog()
 		app := &provider.AppSpec{App: "web", Compute: provider.ComputeServerless, Functions: []provider.FunctionSpec{{Name: "api"}}}
-		if _, err := resources.NewHookStacks(store, fake.NewArtifacts(), hooks).
+		if _, err := resources.NewHookStacks(store, hooks).
 			Provision(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: app}, reported); err != nil {
 			t.Fatalf("%s: Provision() = %v", name, err)
 		}
@@ -235,7 +235,7 @@ func TestProvisionReportsAnUpdateForAHeldAppContainerItStartedFromAnotherBuildAn
 		}
 
 		reported := newChangeLog()
-		if _, err := resources.NewHookStacks(store, fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks()).
+		if _, err := resources.NewHookStacks(store, (&withContainers{buckets: &buckets{}}).hooks()).
 			Provision(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: containerApp("web")}, reported); err != nil {
 			t.Fatalf("%s: Provision() = %v", name, err)
 		}
@@ -254,7 +254,7 @@ func TestAnExistingResourceTheVendorPlansAsAnUpdateIsShownAndReportedAsTheUpdate
 	opening := func(context.Context, resources.ProvisionRequest, *provider.Binding) (provider.ChangeAction, string, error) {
 		return provider.ActionUpdate, "it becomes readable by anyone", nil
 	}
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), resources.Hooks{
+	stacks := resources.NewHookStacks(store, resources.Hooks{
 		Bucket: &resources.ResourceHooks{Plan: opening, Provision: (&buckets{}).ProvisionBucket, Remove: (&buckets{}).RemoveResource},
 	})
 

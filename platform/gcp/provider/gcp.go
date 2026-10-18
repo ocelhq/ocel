@@ -126,15 +126,17 @@ func (p *Provider) Facts() provider.Facts {
 
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
-		PreflightDeploy:     p.PreflightDeploy,
+		Preflight:           &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight},
 		ProgramEdge:         p.ProgramEdge,
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenDirectImages:    p.OpenDirectImages,
 		CheckBucket:         s3store.Check,
+		NextServerRuntime:   nextServerRuntime,
 		EnvSource:           &provider.EnvSourceHooks{ProveIdentity: ports.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
 		BindingAccess:       &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		Retirement:          &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
+		ProjectRemoval:      &provider.ProjectRemovalHooks{Plan: p.PlanProjectRemoval, Remove: p.RemoveProject},
 	}
 }
 
@@ -146,7 +148,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 }
 
 func (p *Provider) Stacks() provider.Stacks {
-	return stacks{Stacks: resources.NewHookStacks(p.KeyValues(), p.Artifacts(), p.resourceHooks()), p: p}
+	return stacks{Stacks: resources.NewHookStacks(p.KeyValues(), p.resourceHooks()), p: p}
 }
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return p.objects() }

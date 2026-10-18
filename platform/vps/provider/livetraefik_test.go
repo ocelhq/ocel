@@ -174,10 +174,10 @@ func servesBehindTraefik(t *testing.T, vm liveBox, tf traefikFront) {
 
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
-	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
+	if err := d.ApplyPreflight(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 		Slug: frontedSlug, Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
-		t.Fatalf("PreflightDeploy() behind %s = %v", tf.front, err)
+		t.Fatalf("ApplyPreflight() behind %s = %v", tf.front, err)
 	}
 	opened, err := d.Edges().Open(edge.None, nil)
 	if err != nil {
@@ -238,10 +238,10 @@ func servesBehindTraefik(t *testing.T, vm liveBox, tf traefikFront) {
 		if left := vm.ssh(t, "sudo docker network inspect "+host.ProxyNetwork+" >/dev/null 2>&1 && echo present || echo gone"); strings.TrimSpace(left) != "gone" {
 			t.Fatalf("%s's cleanup left the %s network behind a stopped switchboard, so it proves nothing about recreating them", tf.front, host.ProxyNetwork)
 		}
-		if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
+		if err := d.ApplyPreflight(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 			Slug: frontedSlug, Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("two")}},
 		}}); err != nil {
-			t.Fatalf("PreflightDeploy() after %s's cleanup took the stopped switchboard = %v", tf.front, err)
+			t.Fatalf("ApplyPreflight() after %s's cleanup took the stopped switchboard = %v", tf.front, err)
 		}
 		vm.routesThrough(t, tf.bound, "two")
 	}

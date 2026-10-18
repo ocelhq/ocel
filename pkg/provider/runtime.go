@@ -9,7 +9,6 @@ import (
 type Runtime interface {
 	Arch(ctx context.Context, app, declared string) (string, error)
 	Binary(ctx context.Context, arch string) ([]byte, error)
-	NextServer(ctx context.Context) (map[string][]byte, error)
 }
 
 type Wrapped func(ctx context.Context) (v1.Image, func(), error)

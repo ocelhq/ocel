@@ -97,7 +97,7 @@ type deployRun struct {
 	infraProvisioned     bool
 	infraHoldsUndeclared bool
 
-	hold *environmentHold
+	hold *leaseHold
 
 	mode          deployMode
 	allowDegraded []string

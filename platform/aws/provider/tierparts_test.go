@@ -6,8 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -20,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -35,50 +32,14 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
 
-func writeBuild(t *testing.T, root, app, hosting string, imageConfig bool) {
-	t.Helper()
-	dir := buildoutput.AppRoot(root, app)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if hosting != "" {
-		if err := os.WriteFile(filepath.Join(dir, buildoutput.HostingFile), []byte(hosting), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if imageConfig {
-		if err := os.WriteFile(filepath.Join(dir, naming.ImageConfigFile), []byte(`{}`), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 func partsOver(store records.Store) tier.Parts {
 	p := NewProvider(Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
 	return p.tierParts(tier.Records{KeyValues: store, WrittenBy: "1.0.0", Region: "us-east-1", Reads: &tier.Reads{}})
 }
 
-func partsAddedForBuilds(root string, appsAndFrameworks ...string) ([]string, error) {
-	var uses []buildoutput.Uses
-	for i := 0; i+1 < len(appsAndFrameworks); i += 2 {
-		used, err := usesOf(root, appsAndFrameworks[i], appsAndFrameworks[i+1])
-		if err != nil {
-			return nil, err
-		}
-		uses = append(uses, used)
-	}
-	return partsOver(fake.NewKeyValues()).AddedFor(uses, edge.None).Names(), nil
-}
-
 func TestADeployNeedsThePartsItsBuildsUse(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	writeBuild(t, root, "web", `{"version":1,"framework":"next","needs":{"revalidation":{}}}`, true)
-	writeBuild(t, root, "docs", `{"version":1,"framework":"next"}`, false)
-	needed, err := partsAddedForBuilds(root, "web", "next", "docs", "next")
-	if err != nil {
-		t.Fatalf("AddedFor() = %v", err)
-	}
+	needed := partsOver(fake.NewKeyValues()).AddedFor([]buildoutput.Uses{{Revalidation: true, ImageOptimization: true}, {}}, edge.None).Names()
 
 	want := []string{imageoptimizer.Part, taginvalidator.Part}
 	if !slices.Equal(needed, want) {
@@ -88,25 +49,14 @@ func TestADeployNeedsThePartsItsBuildsUse(t *testing.T) {
 
 func TestADeployWhoseBuildsUseNeitherNeedsNoPart(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	writeBuild(t, root, "api", `{"version":1,"framework":"go"}`, false)
-
-	needed, err := partsAddedForBuilds(root, "api", "go")
-	if err != nil {
-		t.Fatalf("AddedFor() = %v", err)
-	}
-	if len(needed) != 0 {
+	if needed := partsOver(fake.NewKeyValues()).AddedFor([]buildoutput.Uses{{}}, edge.None).Names(); len(needed) != 0 {
 		t.Errorf("AddedFor() = %v, want none", needed)
 	}
 }
 
 func TestAnAppWithNoBuildToReadIsPresumedToUseWhatItsFrameworkCan(t *testing.T) {
 	t.Parallel()
-
-	needed, err := partsAddedForBuilds(t.TempDir(), "web", "next")
-	if err != nil {
-		t.Fatalf("AddedFor() = %v", err)
-	}
+	needed := partsOver(fake.NewKeyValues()).AddedFor([]buildoutput.Uses{buildoutput.PresumeUses("next")}, edge.None).Names()
 	if want := []string{imageoptimizer.Part, taginvalidator.Part}; !slices.Equal(needed, want) {
 		t.Errorf("AddedFor() = %v, want %v, as the app's serving presumes for a next app it cannot read the hosting of", needed, want)
 	}

@@ -42,13 +42,13 @@ func TestAPublicBucketIsRefusedBeforeAnythingIsReadAndAPrivateOneNeedsNoPart(t *
 		}
 	}
 
-	err := p.PreflightDeploy(context.Background(), declaring(provider.BucketSpec{Public: true}))
+	err := p.ApplyPreflight(context.Background(), declaring(provider.BucketSpec{Public: true}))
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || !strings.Contains(err.Error(), "avatars") {
-		t.Errorf("PreflightDeploy() of a public bucket = %v, want an %s refusal naming it", err, refusal.CodeInvalid)
+		t.Errorf("ApplyPreflight() of a public bucket = %v, want an %s refusal naming it", err, refusal.CodeInvalid)
 	}
-	if err := p.PreflightDeploy(context.Background(), declaring(provider.BucketSpec{AllowedOrigins: []string{"https://shop.example"}})); err != nil {
-		t.Errorf("PreflightDeploy() of a private bucket = %v, want it admitted", err)
+	if err := p.ApplyPreflight(context.Background(), declaring(provider.BucketSpec{AllowedOrigins: []string{"https://shop.example"}})); err != nil {
+		t.Errorf("ApplyPreflight() of a private bucket = %v, want it admitted", err)
 	}
 }
 
@@ -65,10 +65,10 @@ func TestADeployDeclaringADatabaseOnAVersionCloudSQLDoesNotRunIsRefusedBeforeAny
 	}))
 	t.Cleanup(served.Close)
 
-	err := pushing(t, served.URL).PreflightDeploy(context.Background(), declaringADatabase("12"))
+	err := pushing(t, served.URL).ApplyPreflight(context.Background(), declaringADatabase("12"))
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Errorf("PreflightDeploy() = %v, want an %s refusal", err, refusal.CodeInvalid)
+		t.Errorf("ApplyPreflight() = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
 }
 
@@ -78,9 +78,9 @@ func TestADeployDeclaringAStoreAbove32GBIsRefusedBeforeAnythingIsRead(t *testing
 	}))
 	t.Cleanup(served.Close)
 
-	err := pushing(t, served.URL).PreflightDeploy(context.Background(), declaringAStore(64<<30))
+	err := pushing(t, served.URL).ApplyPreflight(context.Background(), declaringAStore(64<<30))
 	if err == nil || !strings.Contains(err.Error(), "32gb") {
-		t.Errorf("PreflightDeploy() = %v, want the store refused naming the 32gb limit", err)
+		t.Errorf("ApplyPreflight() = %v, want the store refused naming the 32gb limit", err)
 	}
 }
 
@@ -90,8 +90,8 @@ func TestADeployDeclaringNoStoreReadsNothing(t *testing.T) {
 	}))
 	t.Cleanup(served.Close)
 
-	if err := pushing(t, served.URL).PreflightDeploy(context.Background(), provider.DeployPreflight{}); err != nil {
-		t.Errorf("PreflightDeploy() = %v", err)
+	if err := pushing(t, served.URL).ApplyPreflight(context.Background(), provider.DeployPreflight{}); err != nil {
+		t.Errorf("ApplyPreflight() = %v", err)
 	}
 }
 
@@ -141,8 +141,8 @@ func TestANextAppIsAdmittedWithoutReadingWhatTheTierHasInstalled(t *testing.T) {
 		for _, front := range []edge.Kind{edge.None, cloudflare.Kind} {
 			pre := shippingNext(container)
 			pre.Edge = front
-			if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {
-				t.Errorf("PreflightDeploy() of a Next app (container %v) behind %q = %v, want it admitted without reading the stamp: the edge refreshes a stale page", container, front, err)
+			if err := failingOnAnyCall(t).ApplyPreflight(context.Background(), pre); err != nil {
+				t.Errorf("ApplyPreflight() of a Next app (container %v) behind %q = %v, want it admitted without reading the stamp: the edge refreshes a stale page", container, front, err)
 			}
 		}
 	}
@@ -152,8 +152,8 @@ func TestADeployWithoutANextAppIsNotRefusedForAnEdgeThatCannotBeOpened(t *testin
 	pre := shippingNext(false)
 	pre.Deploy.Apps[0].Manifest.Framework = nil
 	pre.Edge = edge.Kind("unregistered")
-	if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {
-		t.Errorf("PreflightDeploy() = %v, want an app that is not Next admitted whatever edge fronts it", err)
+	if err := failingOnAnyCall(t).ApplyPreflight(context.Background(), pre); err != nil {
+		t.Errorf("ApplyPreflight() = %v, want an app that is not Next admitted whatever edge fronts it", err)
 	}
 }
 
@@ -163,8 +163,8 @@ func TestTheFirstDeployDeclaringADatabaseAddsThePrivateNetworkAsAPartItRecords(t
 	pre := declaringADatabase("17")
 	pre.Deploy.Slug = "shop"
 
-	if err := p.PreflightDeploy(ctx, pre); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+	if err := p.ApplyPreflight(ctx, pre); err != nil {
+		t.Fatalf("ApplyPreflight() = %v", err)
 	}
 
 	want := []string{"create network ocel-production", "create subnetwork ocel-production", "create policy ocel-production-memorystore", "create policy ocel-production-cloudsql"}
@@ -176,8 +176,8 @@ func TestTheFirstDeployDeclaringADatabaseAddsThePrivateNetworkAsAPartItRecords(t
 		t.Errorf("the part record = %+v, %t, %v, want it ready, added by shop, holding the network, subnetwork and both policies", recorded, present, err)
 	}
 
-	if err := p.PreflightDeploy(ctx, declaringAStore(1<<30)); err != nil {
-		t.Fatalf("PreflightDeploy() of a store = %v", err)
+	if err := p.ApplyPreflight(ctx, declaringAStore(1<<30)); err != nil {
+		t.Fatalf("ApplyPreflight() of a store = %v", err)
 	}
 	if got := server.wrote(); len(got) != len(want) {
 		t.Errorf("a later deploy declaring a store wrote %v, want only its read of the part record", got[len(want):])
@@ -186,14 +186,11 @@ func TestTheFirstDeployDeclaringADatabaseAddsThePrivateNetworkAsAPartItRecords(t
 
 func TestADryDeployDeclaringADatabasePlansThePrivateNetworkAndMakesNothing(t *testing.T) {
 	p, server := deployingNetworks(t)
-	var planned []provider.ChangeGroup
-	pre := declaringADatabase("17")
-	pre.Dry = true
-	pre.AddToPlan = func(groups ...provider.ChangeGroup) { planned = append(planned, groups...) }
-
-	if err := p.PreflightDeploy(context.Background(), pre); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+	plan, err := p.PlanPreflight(context.Background(), declaringADatabase("17"))
+	if err != nil {
+		t.Fatalf("PlanPreflight() = %v", err)
 	}
+	planned := plan.Groups
 
 	if len(server.wrote()) != 0 {
 		t.Errorf("a dry deploy wrote %v, want nothing", server.wrote())

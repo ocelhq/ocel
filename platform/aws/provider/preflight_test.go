@@ -77,7 +77,6 @@ func TestAServerlessAppUsingAKVStoreIsNotRefusedByPreflight(t *testing.T) {
 	}
 	cache := provider.Resource{Name: "kv--cache", Type: provider.BindingKV}
 	pre := provider.DeployPreflight{
-		Dry: true,
 		Deploy: provider.DeploySpec{Tier: environment.TierProduction, Apps: []provider.AppEntry{
 			{App: "web", Manifest: &contractv1.ManifestApp{}},
 		}},
@@ -86,7 +85,7 @@ func TestAServerlessAppUsingAKVStoreIsNotRefusedByPreflight(t *testing.T) {
 	}
 
 	var refused refusal.Refusal
-	err := p.PreflightDeploy(context.Background(), pre)
+	_, err := p.PlanPreflight(context.Background(), pre)
 	if errors.As(err, &refused) && refused.Code == refusal.CodeUnsupported {
 		t.Fatalf("preflight of a serverless app using a kv store = %v, want it let through: the app joins the VPC the store answers in", err)
 	}
@@ -104,7 +103,6 @@ func TestAContainerAppSendingToATaskOrTopicPassesPreflight(t *testing.T) {
 	container := &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}
 	resize := provider.Resource{Name: "topic--resize", Declared: "resize", Type: provider.BindingTask}
 	pre := provider.DeployPreflight{
-		Dry: true,
 		Deploy: provider.DeploySpec{Tier: environment.TierProduction, Infra: naming.InfraStack("production"), Apps: []provider.AppEntry{
 			{App: "api", Manifest: container, Instances: provider.Instances{Min: 1, Max: 2}},
 		}},
@@ -117,7 +115,7 @@ func TestAContainerAppSendingToATaskOrTopicPassesPreflight(t *testing.T) {
 	}
 
 	var refused refusal.Refusal
-	err := p.PreflightDeploy(context.Background(), pre)
+	_, err := p.PlanPreflight(context.Background(), pre)
 	if errors.As(err, &refused) && refused.Code == refusal.CodeUnsupported {
 		t.Fatalf("preflight of a container app triggering a task = %v, want it to pass: its runtime serves the binding proxy", err)
 	}

@@ -26,6 +26,10 @@ func (p *Provider) preflight(pre provider.DeployPreflight) error {
 	return p.preflightRefusal
 }
 
-func (p *Provider) PreflightDeploy(_ context.Context, pre provider.DeployPreflight) error {
+func (p *Provider) PlanPreflight(_ context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
+	return provider.Plan{}, p.preflight(pre)
+}
+
+func (p *Provider) ApplyPreflight(_ context.Context, pre provider.DeployPreflight) error {
 	return p.preflight(pre)
 }

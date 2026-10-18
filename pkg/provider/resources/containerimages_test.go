@@ -30,7 +30,7 @@ func TestTheImageIsPushedBeforeTheContainerItIsProvisionedFrom(t *testing.T) {
 
 	own := &withContainers{buckets: &buckets{}}
 	registry := fake.NewImages()
-	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), own.hooks())
 	spec := provider.StackSpec{
 		Ref:    appRef(),
 		Kind:   provider.StackApp,
@@ -55,7 +55,7 @@ func TestAReleaseWhoseImageCannotBePushedProvisionsNothing(t *testing.T) {
 	own := &withContainers{buckets: &buckets{}}
 	registry := fake.NewImages()
 	registry.FailPushes(errors.New("the registry refused the token"))
-	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), own.hooks())
 	spec := provider.StackSpec{
 		Ref:    appRef(),
 		Kind:   provider.StackApp,
@@ -204,7 +204,7 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 		t.Run(name, func(t *testing.T) {
 			own := &retaining{buckets: &buckets{}}
 			spec := breaking(own)
-			stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), own.hooks())
+			stacks := resources.NewHookStacks(fake.NewKeyValues(), own.hooks())
 
 			_, err := stacks.Provision(context.Background(), spec, nil)
 			if name != "the release succeeds" && err == nil {
@@ -246,7 +246,7 @@ func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) 
 
 			own := &retaining{buckets: &buckets{}}
 			store, spec := breaking()
-			stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+			stacks := resources.NewHookStacks(store, own.hooks())
 
 			if _, err := stacks.Provision(context.Background(), spec, nil); err == nil {
 				t.Fatal("Provision() succeeded, and this case is the failure path")
@@ -262,7 +262,7 @@ func TestAServerlessReleaseReconcilesNoImages(t *testing.T) {
 	t.Parallel()
 
 	own := &retaining{buckets: &buckets{}}
-	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), own.hooks())
 
 	spec := containerSpec()
 	spec.App = nil
@@ -289,7 +289,7 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasRetaining(t *testing.T)
 
 	own := &retaining{buckets: &buckets{}}
 	own.promote("web", testImage)
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(store, own.hooks())
 	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
@@ -324,7 +324,7 @@ func TestATeardownThatStoppedReconcilingSaysSoWithNoProgressListening(t *testing
 
 			own := &retaining{buckets: &buckets{}}
 			breaking(own)
-			stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+			stacks := resources.NewHookStacks(store, own.hooks())
 
 			err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil)
 			if !errors.Is(err, refused) {
@@ -373,7 +373,7 @@ func TestATeardownThatStoppedReconcilingWarnsWhatItLeftInPlace(t *testing.T) {
 
 			own := &retaining{buckets: &buckets{}}
 			tc.breaking(own)
-			stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+			stacks := resources.NewHookStacks(store, own.hooks())
 			progress := &fake.Log{}
 
 			if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, progress); !errors.Is(err, refused) {
@@ -390,7 +390,7 @@ func TestAReleaseHandsTheStoreItPushedToTheReconcile(t *testing.T) {
 	t.Parallel()
 
 	own := &retaining{buckets: &buckets{}}
-	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), own.hooks())
 	pushed := fake.NewImages()
 	spec := containerSpec()
 	spec.Images = provider.ImagePushes{Store: pushed, Pushes: []provider.ImagePush{{App: "web", ImageRef: testImage}}}
@@ -416,7 +416,7 @@ func TestATeardownHandsTheStoreItWasGivenToTheReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 	own := &retaining{buckets: &buckets{}}
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(store, own.hooks())
 	given := fake.NewImages()
 
 	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref, Images: given}, nil); err != nil {
@@ -440,7 +440,7 @@ func TestATeardownGivenNoStoreReconcilesWithNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	own := &retaining{buckets: &buckets{}}
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(store, own.hooks())
 
 	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
@@ -466,7 +466,7 @@ func TestATeardownReconcilesWithAProviderThatKeepsNoReleaseWindow(t *testing.T) 
 	hooks := own.hooks()
 	hooks.Retention.Forget = nil
 
-	if err := resources.NewHookStacks(store, fake.NewArtifacts(), hooks).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
+	if err := resources.NewHookStacks(store, hooks).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.swept) != 1 {
@@ -481,7 +481,7 @@ func TestAReleaseOfAProviderThatReconcilesNothingStillProvisions(t *testing.T) {
 	hooks := own.hooks()
 	hooks.Retention.Reconcile = nil
 
-	if _, err := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), hooks).Provision(context.Background(), containerSpec(), nil); err != nil {
+	if _, err := resources.NewHookStacks(fake.NewKeyValues(), hooks).Provision(context.Background(), containerSpec(), nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 }
@@ -548,7 +548,7 @@ func TestTwoPreviewsSharingAnImageTornDownTogetherLeaveNoImageBehind(t *testing.
 		}
 	}
 	destroy := func(store records.Store, ref provider.StackRef, own *claimedImages) {
-		if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
+		if err := resources.NewHookStacks(store, own.hooks()).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 			t.Errorf("Destroy(%s) = %v", ref.Name, err)
 		}
 		if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {

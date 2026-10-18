@@ -19,14 +19,6 @@ type reached struct {
 
 func (r *reached) Parts() []provider.Part { return nil }
 
-func (r *reached) CheckHost(context.Context, provider.HostCheckRequest) ([]provider.HostCheck, error) {
-	return nil, nil
-}
-
-func (r *reached) RemovePartUser(context.Context, environment.Tier, string, progress.Log) error {
-	return nil
-}
-
 func (r *reached) Describe(context.Context, environment.Tier) (provider.BootstrapDescription, error) {
 	return provider.BootstrapDescription{}, nil
 }

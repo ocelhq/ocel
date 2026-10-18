@@ -115,10 +115,11 @@ func (p *Provider) Facts() provider.Facts {
 
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
-		PreflightDeploy:    p.PreflightDeploy,
+		Preflight:          &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight},
 		OpenRegistryImages: p.OpenRegistryImages,
 		OpenDirectImages:   p.OpenDirectImages,
 		CheckBucket:        s3store.Check,
+		CheckHost:          p.CheckHost,
 		BindingAccess:      &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Retirement:         &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
 	}
@@ -137,7 +138,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
-	bootstrap := elevating{Bootstrap: checkedHost{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), checkHost: p.CheckHost}, elevated: p.elevated}
+	bootstrap := elevating{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), elevated: p.elevated}
 	if kind == edge.None {
 		bootstrap.served = p.refuseServingPortsClosedFromOutside
 	}
@@ -145,7 +146,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 }
 
 func (p *Provider) Stacks() provider.Stacks {
-	return resources.NewHookStacks(p.keyValues, p.Artifacts(), p.resourceHooks())
+	return resources.NewHookStacks(p.keyValues, p.resourceHooks())
 }
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return resources.NoArtifacts{} }

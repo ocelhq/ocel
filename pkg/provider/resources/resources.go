@@ -72,8 +72,8 @@ func ServedBindingTypes(hooks Hooks) []provider.BindingType {
 	return served
 }
 
-func NewHookStacks(store records.Store, artifacts provider.ArtifactStore, hooks Hooks) provider.Stacks {
-	return &hookStacks{keyValues: store, artifacts: artifacts, hooks: hooks}
+func NewHookStacks(store records.Store, hooks Hooks) provider.Stacks {
+	return &hookStacks{keyValues: store, hooks: hooks}
 }
 
 type primitive struct {
@@ -92,7 +92,6 @@ var primitives = []primitive{
 
 type hookStacks struct {
 	keyValues records.Store
-	artifacts provider.ArtifactStore
 	hooks     Hooks
 	running   RunningStacks
 }

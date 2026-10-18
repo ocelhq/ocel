@@ -59,15 +59,15 @@ func TestNewRefusesOptionsTheReferenceProviderDoesNotAccept(t *testing.T) {
 func TestAFakeProviderForAProjectShipsANextServerRuntimeWithItsPreload(t *testing.T) {
 	t.Parallel()
 
-	files, err := fake.NewForProject(fake.Options{}).Runtime().NextServer(context.Background())
+	files, err := fake.NewForProject(fake.Options{}).Hooks().NextServerRuntime(context.Background())
 	if err != nil {
-		t.Fatalf("Runtime().NextServer() error = %v", err)
+		t.Fatalf("NextServerRuntime() error = %v", err)
 	}
 	if got := string(files[containerimage.NextServerPreloadFile]); got != fake.NextServerPreload {
 		t.Errorf("ReadNextServerRuntime()[%s] = %q, want %q", containerimage.NextServerPreloadFile, got, fake.NextServerPreload)
 	}
-	if bare, err := fake.NewProvider(fake.Options{}).Runtime().NextServer(context.Background()); err != nil || len(bare) != 0 {
-		t.Errorf("a bare fake provider ships the Next server runtime %v, %v, want none", bare, err)
+	if bare := fake.NewProvider(fake.Options{}).Hooks().NextServerRuntime; bare != nil {
+		t.Errorf("a bare fake provider ships a Next server runtime, want none")
 	}
 }
 
@@ -75,7 +75,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	t.Parallel()
 
 	p := fake.NewProvider(fake.Options{})
-	stacks := resources.NewHookStacks(p.KeyValues(), p.Artifacts(), p.ResourceHooks())
+	stacks := resources.NewHookStacks(p.KeyValues(), p.ResourceHooks())
 	ref := provider.StackRef{
 		Project: "shop",
 		Tier:    environment.TierProduction,

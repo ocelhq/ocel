@@ -64,12 +64,8 @@ type preflighting struct {
 
 func (p *preflighting) Hooks() provider.Hooks {
 	hooks := p.Provider.Hooks()
-	hooks.PreflightDeploy = p.PreflightDeploy
+	hooks.Preflight = &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight}
 	return hooks
-}
-
-func (p *preflighting) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
-	return p.Provider.PreflightDeploy(ctx, pre)
 }
 
 func (p *preflighting) Artifacts() provider.ArtifactStore {

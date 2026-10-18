@@ -70,9 +70,9 @@ func (l *leaseTimers) elapse(t *testing.T, d time.Duration) {
 	}
 }
 
-func newTimedLeases() (*environmentLeases, *leaseTimers) {
+func newTimedLeases() (*subjectLeases, *leaseTimers) {
 	timers := &leaseTimers{waits: make(chan time.Duration, 16), fire: make(chan time.Time), now: time.Unix(1_700_000_000, 0)}
-	leases := &environmentLeases{
+	leases := &subjectLeases{
 		ttl:     5 * time.Minute,
 		renewal: 2 * time.Minute,
 		retry:   15 * time.Second,
@@ -127,7 +127,7 @@ func readLeaseRevision(t *testing.T, store records.Store) records.Revision {
 	return recorded.Revision
 }
 
-func readStopCause(t *testing.T, hold *environmentHold) error {
+func readStopCause(t *testing.T, hold *leaseHold) error {
 	t.Helper()
 	select {
 	case <-hold.context(context.Background()).Done():
@@ -330,9 +330,9 @@ func (c *leaseClock) run(until <-chan struct{}) {
 	}
 }
 
-func newClockedLeases() (*environmentLeases, *leaseClock) {
+func newClockedLeases() (*subjectLeases, *leaseClock) {
 	clock := &leaseClock{now: time.Unix(1_700_000_000, 0)}
-	leases := &environmentLeases{
+	leases := &subjectLeases{
 		ttl:     5 * time.Minute,
 		renewal: 2 * time.Minute,
 		retry:   15 * time.Second,
@@ -515,7 +515,7 @@ func TestAHeldLeaseCoversTheStacksOfItsScopeForTheWorkRunUnderIt(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	store := fake.NewKeyValues()
-	leases := newEnvironmentLeases()
+	leases := newSubjectLeases()
 	project, err := leases.take(ctx, store, projectScope{tier: environment.TierPreview, slug: "shop"}, renewedLease, stackrecords.LeaseRemoval)
 	if err != nil {
 		t.Fatal(err)
@@ -550,7 +550,7 @@ func TestTheWorkOfARemovalOverSeveralEnvironmentLeasesIsCoveredOnAnAppStackInEac
 	t.Parallel()
 	ctx := context.Background()
 	store := fake.NewKeyValues()
-	leases := newEnvironmentLeases()
+	leases := newSubjectLeases()
 	envs := []string{"pr-7", "pr-8", "pr-9"}
 	scopes := make([]leaseSubject, 0, len(envs))
 	for _, env := range envs {

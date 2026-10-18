@@ -63,9 +63,7 @@ type DeployPreflight struct {
 	Apps              []AppUsage
 	Progress          progress.Log
 	WrittenBy         WrittenBy
-	Dry               bool
 	Uses              []buildoutput.Uses
-	AddToPlan         func(groups ...ChangeGroup)
 }
 
 type AppUsage struct {

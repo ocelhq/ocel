@@ -40,10 +40,10 @@ func TestADeployDeclaringRealtimeIsRefusedOnABoxWhoseGatewayPredatesThisBuild(t 
 	})
 	err := preflightingResources(t, machine, aDeclaredRealtime)
 	if err == nil {
-		t.Fatal("PreflightDeploy() let realtime onto a box whose gateway this build never placed, and its gateway would not start")
+		t.Fatal("ApplyPreflight() let realtime onto a box whose gateway this build never placed, and its gateway would not start")
 	}
 	if !strings.Contains(err.Error(), "ocel bootstrap") {
-		t.Errorf("PreflightDeploy() = %q, want it to name `ocel bootstrap` as the remedy", err)
+		t.Errorf("ApplyPreflight() = %q, want it to name `ocel bootstrap` as the remedy", err)
 	}
 }
 
@@ -55,7 +55,7 @@ func TestADeployDeclaringRealtimeIsLetOntoABoxRunningThisBuildsGateway(t *testin
 		host.RealtimeBinary: gatewaySurveyed(t, currentGateway(t)),
 	})
 	if err := preflightingResources(t, machine, aDeclaredRealtime); err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want a box running this build's gateway let through", err)
+		t.Fatalf("ApplyPreflight() = %v, want a box running this build's gateway let through", err)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestADeployDeclaringNoRealtimeNeverAsksAboutTheGateway(t *testing.T) {
 
 	machine := boxSaying(map[string]answer{"uname -m": {stdout: "x86_64\n"}})
 	if err := preflightingResources(t, machine); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+		t.Fatalf("ApplyPreflight() = %v", err)
 	}
 	for _, command := range machine.ran {
 		if strings.Contains(command, host.RealtimeBinary) {

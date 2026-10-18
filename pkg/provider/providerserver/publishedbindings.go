@@ -71,15 +71,15 @@ type publishedBindings struct {
 	environment string
 
 	mu       sync.Mutex
-	carried  []provider.Binding
+	inline   []provider.Binding
 	resolved []provider.Binding
 	loaded   bool
 }
 
-func (p *publishedBindings) carry(bindings []provider.Binding) {
+func (p *publishedBindings) publishInline(bindings []provider.Binding) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.carried = bindings
+	p.inline = bindings
 	p.resolved, p.loaded = nil, false
 }
 
@@ -103,9 +103,9 @@ func (p *publishedBindings) Published(ctx context.Context) ([]provider.Binding, 
 	if err != nil {
 		return nil, err
 	}
-	bindings := slices.Clone(p.carried)
+	bindings := slices.Clone(p.inline)
 	for i, published := range resolved {
-		if slices.ContainsFunc(p.carried, func(carried provider.Binding) bool { return carried.Name == names[i] }) {
+		if slices.ContainsFunc(p.inline, func(inline provider.Binding) bool { return inline.Name == names[i] }) {
 			continue
 		}
 		binding, err := bindingPublished(names[i], published)

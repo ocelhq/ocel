@@ -207,7 +207,7 @@ type releases struct {
 }
 
 func newReleases(t *testing.T, store records.Store, hooks resources.Hooks) releases {
-	return releases{t: t, store: store, stacks: resources.NewHookStacks(store, fake.NewArtifacts(), hooks)}
+	return releases{t: t, store: store, stacks: resources.NewHookStacks(store, hooks)}
 }
 
 func (r releases) provision(ref provider.StackRef, app *provider.AppSpec) {
@@ -437,7 +437,7 @@ func TestAStackWhoseProvisionFailedPartwayIsDestroyedThroughWhatItsVendorNamed(t
 
 	store := fake.NewKeyValues()
 	service := &serviceEveryReleaseRevises{revision: "shop-prod-web-api-00001", failProvision: errors.New("the revision never became ready")}
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), service.hooks())
+	stacks := resources.NewHookStacks(store, service.hooks())
 	ref := releaseRef("d1")
 	if _, err := stacks.Provision(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: functionApp()}, nil); err == nil {
 		t.Fatal("Provision() = nil, want the vendor's failure")
@@ -623,7 +623,7 @@ func TestAProvisionWhoseSharedPhysicalMovesUnderEveryWriteIsGivenUpOnAsContended
 	t.Parallel()
 
 	service := &serviceEveryReleaseRevises{revision: "shop-prod-web-api-00001"}
-	stacks := resources.NewHookStacks(sharedPhysicalsMoving{fake.NewKeyValues()}, fake.NewArtifacts(), service.hooks())
+	stacks := resources.NewHookStacks(sharedPhysicalsMoving{fake.NewKeyValues()}, service.hooks())
 	_, err := stacks.Provision(context.Background(), provider.StackSpec{Ref: releaseRef("d1"), Kind: provider.StackApp, App: functionApp()}, nil)
 	if !errors.Is(err, records.ErrContended) {
 		t.Errorf("Provision() = %v, want it given up on as contended", err)

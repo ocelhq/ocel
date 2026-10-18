@@ -143,13 +143,9 @@ func TestADeployBehindTheALBWhileItIsBeingTakenDownIsRefusedAsBusy(t *testing.T)
 func TestADryDeployBehindTheALBPlansItsLoadBalancerAndRaisesNothing(t *testing.T) {
 	t.Parallel()
 	b, front := frontingALB(t)
-	var planned []provider.ChangeGroup
-	pre := deployingBehindALB("shop")
-	pre.Dry = true
-	pre.AddToPlan = func(groups ...provider.ChangeGroup) { planned = append(planned, groups...) }
-
-	if err := b.AddParts(context.Background(), pre, []string{albpart.PartName}); err != nil {
-		t.Fatalf("addParts() = %v", err)
+	planned, err := b.PlanParts(context.Background(), deployingBehindALB("shop").Deploy.Tier, []string{albpart.PartName})
+	if err != nil {
+		t.Fatalf("PlanParts() = %v", err)
 	}
 	if len(front.raised) != 0 || len(planned) != 1 || planned[0].Part != albpart.PartName || planned[0].Action != provider.ActionCreate {
 		t.Errorf("a dry deploy raised %v and planned %+v, want nothing raised and the %s part planned", front.raised, planned, albpart.PartName)
@@ -259,7 +255,7 @@ func failingALBTeardown(t *testing.T) (bootstrap.Engine, *countingFront) {
 	}
 	front.refusal = errors.New("google refused to delete the url map")
 	if err := releaseALB(ctx, b, environment.TierProduction, "shop", nil); err == nil {
-		t.Fatal("removePartUser() with a failing teardown = nil, want the failure")
+		t.Fatal("releaseALB() with a failing teardown = nil, want the failure")
 	}
 	front.refusal = nil
 	return b, front
@@ -320,7 +316,7 @@ func TestRemovingTheLastProjectAgainRetriesALoadBalancerTeardownThatFailed(t *te
 	tier := environment.TierProduction
 
 	if err := releaseALB(ctx, b, tier, "shop", nil); err != nil {
-		t.Fatalf("removePartUser() again = %v", err)
+		t.Fatalf("releaseALB() again = %v", err)
 	}
 	if users, _ := albpart.ListUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
 		t.Errorf("removing shop again tore down %v and left users %v, want the teardown retried and shop forgotten", front.torn, users)
@@ -406,7 +402,7 @@ func TestRemovingAProjectWhoseOnlyALBDeployFailedTakesItsLoadBalancerDown(t *tes
 	}
 
 	if err := releaseALB(ctx, b, tier, "shop", nil); err != nil {
-		t.Fatalf("removePartUser() = %v", err)
+		t.Fatalf("releaseALB() = %v", err)
 	}
 	if users, _ := albpart.ListUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
 		t.Errorf("removing shop tore down %v and left users %v, want the load balancer shop alone used taken down", front.torn, users)

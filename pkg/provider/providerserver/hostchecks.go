@@ -35,8 +35,12 @@ func verdictProto(verdict provider.HostVerdict) contractv1.HostCheck_Verdict {
 	}
 }
 
-func (h *handlers) hostChecks(ctx context.Context, bootstrap provider.Bootstrap, req provider.HostCheckRequest) []*contractv1.HostCheck {
-	checks, err := bootstrap.CheckHost(ctx, req)
+func (h *handlers) hostChecks(ctx context.Context, vendor provider.Provider, req provider.HostCheckRequest) []*contractv1.HostCheck {
+	checkHost := vendor.Hooks().CheckHost
+	if checkHost == nil {
+		return nil
+	}
+	checks, err := checkHost(ctx, req)
 	if err != nil {
 		return HostChecksProto([]provider.HostCheck{{
 			Verdict: provider.HostFail,

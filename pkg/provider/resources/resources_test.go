@@ -125,7 +125,7 @@ func TestHookStacksFanEachResourceOutToItsPrimitive(t *testing.T) {
 	t.Parallel()
 
 	store := fake.NewKeyValues()
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), neon{&buckets{}}.hooks())
+	stacks := resources.NewHookStacks(store, neon{&buckets{}}.hooks())
 
 	result, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  infraRef(),
@@ -149,7 +149,7 @@ func TestHookStacksFanEachResourceOutToItsPrimitive(t *testing.T) {
 func TestHookStacksProvisionNothingForAResourceOcelJSONBindsToAPublishedRecord(t *testing.T) {
 	t.Parallel()
 
-	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), neon{&buckets{}}.hooks())
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), neon{&buckets{}}.hooks())
 
 	result, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  infraRef(),
@@ -170,7 +170,7 @@ func TestHookStacksProvisionNothingForAResourceOcelJSONBindsToAPublishedRecord(t
 func TestHookStacksRefuseAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
-	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), (&buckets{}).hooks())
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), (&buckets{}).hooks())
 
 	_, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:       infraRef(),
@@ -189,7 +189,7 @@ func TestHookStacksRefuseAPrimitiveNothingServes(t *testing.T) {
 func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
-	_, err := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), (&buckets{}).hooks()).Plan(context.Background(), provider.StackSpec{
+	_, err := resources.NewHookStacks(fake.NewKeyValues(), (&buckets{}).hooks()).Plan(context.Background(), provider.StackSpec{
 		Ref:       infraRef(),
 		Kind:      provider.StackInfra,
 		Resources: []provider.Resource{{Name: "orders", Type: provider.BindingPostgres}},
@@ -203,7 +203,7 @@ func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 func TestHookStacksRefuseABindingMissingAPropertyItsTypePromises(t *testing.T) {
 	t.Parallel()
 
-	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), halfBinding{}.hooks())
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), halfBinding{}.hooks())
 
 	_, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:       infraRef(),
@@ -224,7 +224,7 @@ func TestHookStacksRemoveAResourceTheSpecNoLongerDeclares(t *testing.T) {
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	own := &buckets{}
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(store, own.hooks())
 	ref := infraRef()
 
 	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
@@ -258,7 +258,7 @@ func TestHookStacksRemoveAResourceTheyProvisionedOnceOcelJSONBindsItToAPublished
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	own := &buckets{}
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(store, own.hooks())
 	ref := infraRef()
 
 	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
@@ -312,7 +312,7 @@ func TestDestroyOfAStackNothingRecordedIsANoOp(t *testing.T) {
 	t.Parallel()
 
 	own := &buckets{}
-	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), own.hooks())
 
 	if err := stacks.Destroy(context.Background(), provider.StackDestroy{Ref: infraRef()}, nil); err != nil {
 		t.Fatalf("Destroy() of a stack nothing recorded = %v, want nil", err)
@@ -336,7 +336,7 @@ func TestDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
+	if err := resources.NewHookStacks(store, own.hooks()).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.removed) != 1 {
@@ -357,7 +357,7 @@ func rowsOf(plan provider.Plan) map[string]provider.ChangeAction {
 func TestPlanOverAStackNothingRecordedCreatesEveryResourceItDeclares(t *testing.T) {
 	t.Parallel()
 
-	plan, err := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), neon{&buckets{}}.hooks()).Plan(context.Background(), provider.StackSpec{
+	plan, err := resources.NewHookStacks(fake.NewKeyValues(), neon{&buckets{}}.hooks()).Plan(context.Background(), provider.StackSpec{
 		Ref:  infraRef(),
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{
@@ -385,7 +385,7 @@ func TestPlanOverAStackNothingRecordedCreatesEveryResourceItDeclares(t *testing.
 func TestPlanShowsNothingProvisionedForAResourceOcelJSONBindsToAPublishedRecord(t *testing.T) {
 	t.Parallel()
 
-	plan, err := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), neon{&buckets{}}.hooks()).Plan(context.Background(), provider.StackSpec{
+	plan, err := resources.NewHookStacks(fake.NewKeyValues(), neon{&buckets{}}.hooks()).Plan(context.Background(), provider.StackSpec{
 		Ref:  infraRef(),
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{
@@ -421,7 +421,7 @@ func TestPlanKeepsWhatExistsAndDeletesWhatThePlanDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan, err := resources.NewHookStacks(store, fake.NewArtifacts(), (&buckets{}).hooks()).Plan(ctx, provider.StackSpec{
+	plan, err := resources.NewHookStacks(store, (&buckets{}).hooks()).Plan(ctx, provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{
@@ -463,7 +463,7 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), (&buckets{}).hooks())
+	stacks := resources.NewHookStacks(store, (&buckets{}).hooks())
 	plan, err := stacks.PlanDestroy(ctx, ref, nil)
 	if err != nil {
 		t.Fatalf("PlanDestroy() = %v", err)
@@ -542,7 +542,7 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 	recordFunctions(t, store, ref, "api", "legacy")
 
 	own := &withFunctions{buckets: &buckets{}}
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(store, own.hooks())
 	spec := provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackApp,
@@ -580,7 +580,7 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 	recordFunctions(t, store, ref, "api")
 
 	own := &withFunctions{buckets: &buckets{}}
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(store, own.hooks())
 	spec := provider.StackSpec{Ref: ref, Kind: provider.StackInfra}
 
 	shown, err := stacks.Plan(ctx, spec, nil)
@@ -610,7 +610,7 @@ func TestAWorkerAnAppStillHostsIsKeptAndOneItDroppedIsTakenDown(t *testing.T) {
 	own := &withFunctions{buckets: &buckets{}}
 	hooks := own.hooks()
 	hooks.RecordsWorkers = true
-	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), hooks)
+	stacks := resources.NewHookStacks(store, hooks)
 	spec := provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackApp,
@@ -647,7 +647,7 @@ func TestAVendorThatRecordsNoWorkersPlansNoWorkerRows(t *testing.T) {
 		ref := appRef()
 		recordFunctions(t, store, ref, "web")
 		own := &withFunctions{buckets: &buckets{}}
-		stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+		stacks := resources.NewHookStacks(store, own.hooks())
 		spec := provider.StackSpec{
 			Ref:  ref,
 			Kind: provider.StackApp,

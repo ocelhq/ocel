@@ -69,15 +69,9 @@ func (r *deployRun) enforceGate(ctx context.Context) error {
 	var enforced stackrecords.GateRecord
 	err := stackrecords.ChangeGates(ctx, r.provider.KeyValues(), r.provider.Cipher(), tier, func(records map[string]stackrecords.GateRecord) error {
 		record, recorded := records[r.spec.Slug]
-		switch {
-		case !recorded:
-			created, err := newGateRecord()
-			if err != nil {
-				return err
-			}
-			record = created
-		case !record.Enabled:
-			record.Enabled, record.Pending = true, true
+		record, err := gateToEnforce(gateReading{record: record, recorded: recorded})
+		if err != nil {
+			return err
 		}
 		records[r.spec.Slug] = record
 		enforced = record
@@ -88,6 +82,17 @@ func (r *deployRun) enforceGate(ctx context.Context) error {
 	}
 	r.protection = &enforced.Gate
 	return nil
+}
+
+func gateToEnforce(gates gateReading) (stackrecords.GateRecord, error) {
+	record := gates.record
+	switch {
+	case !gates.recorded:
+		return newGateRecord()
+	case !record.Enabled:
+		record.Enabled, record.Pending = true, true
+	}
+	return record, nil
 }
 
 func (r *deployRun) readGateInForce(ctx context.Context) (*gate.Gate, string, error) {

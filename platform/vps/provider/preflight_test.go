@@ -148,7 +148,7 @@ func preflighting(machine *scripted) error {
 	if err != nil {
 		return err
 	}
-	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
+	return p.ApplyPreflight(context.Background(), provider.DeployPreflight{
 		Deploy: provider.DeploySpec{
 			Slug: "shop",
 			Tier: environment.TierProduction,
@@ -167,7 +167,7 @@ func preflightingInstances(machine *scripted, instances provider.Instances, work
 	if err != nil {
 		return err
 	}
-	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
+	return p.ApplyPreflight(context.Background(), provider.DeployPreflight{
 		Deploy: provider.DeploySpec{
 			Slug: "shop",
 			Tier: environment.TierProduction,
@@ -183,7 +183,7 @@ func TestAContainerAppRunningOneInstanceIsLetThrough(t *testing.T) {
 	t.Parallel()
 
 	if err := preflightingInstances(boxSaying(nil), provider.Instances{Min: 1, Max: 1}); err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want one instance let through", err)
+		t.Fatalf("ApplyPreflight() = %v, want one instance let through", err)
 	}
 }
 
@@ -194,15 +194,15 @@ func TestAContainerAppAskingForOtherThanOneInstanceIsRefusedBeforeTheBoxIsAsked(
 		machine := boxSaying(nil)
 		err := preflightingInstances(machine, instances)
 		if err == nil {
-			t.Fatalf("PreflightDeploy() let %+v instances onto a box that runs one container per app", instances)
+			t.Fatalf("ApplyPreflight() let %+v instances onto a box that runs one container per app", instances)
 		}
 		for _, want := range []string{`web`, "instances.min", "instances.max", "1"} {
 			if !strings.Contains(err.Error(), want) {
-				t.Errorf("PreflightDeploy(%+v) = %q, want it to name %s", instances, err, want)
+				t.Errorf("ApplyPreflight(%+v) = %q, want it to name %s", instances, err, want)
 			}
 		}
 		if len(machine.ran) != 0 {
-			t.Errorf("PreflightDeploy(%+v) ran %v on the box before refusing what the config asks for", instances, machine.ran)
+			t.Errorf("ApplyPreflight(%+v) ran %v on the box before refusing what the config asks for", instances, machine.ran)
 		}
 	}
 }
@@ -212,7 +212,7 @@ func TestABoxThatIsReadyRefusesNothingBeforeADeploy(t *testing.T) {
 
 	machine := boxSaying(nil)
 	if err := preflighting(machine); err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want a box that answers every check to be let through", err)
+		t.Fatalf("ApplyPreflight() = %v, want a box that answers every check to be let through", err)
 	}
 	joined := strings.Join(machine.ran, "\n")
 	for what, fragment := range map[string]string{
@@ -236,11 +236,11 @@ func TestAnEngineThatRefusesThisLoginIsRefusedBeforeAnythingIsStreamed(t *testin
 		"docker version": {code: 1, stderr: "permission denied while trying to connect to the Docker daemon socket"},
 	}))
 	if err == nil {
-		t.Fatal("PreflightDeploy() let a deploy past an engine that refuses this login, and it would surface as a failed image load halfway through the transfer")
+		t.Fatal("ApplyPreflight() let a deploy past an engine that refuses this login, and it would surface as a failed image load halfway through the transfer")
 	}
 	for _, wanted := range []string{"docker", "sudo", host.DeployUser()} {
 		if !strings.Contains(err.Error(), wanted) {
-			t.Errorf("PreflightDeploy() = %q, want %q named as the remedy", err, wanted)
+			t.Errorf("ApplyPreflight() = %q, want %q named as the remedy", err, wanted)
 		}
 	}
 }
@@ -250,12 +250,12 @@ func TestADiskWithoutRoomForTheWindowRefusesAndNamesTheGuess(t *testing.T) {
 
 	err := preflighting(boxSaying(map[string]answer{"docker info": {stdout: crampedSaid}}))
 	if err == nil {
-		t.Fatal("PreflightDeploy() let a deploy onto a disk with a kibibyte free, and a disk that fills mid-transfer fails mid-transfer")
+		t.Fatal("ApplyPreflight() let a deploy onto a disk with a kibibyte free, and a disk that fills mid-transfer fails mid-transfer")
 	}
 	said := err.Error()
 	for _, wanted := range []string{"guessed", dataRoot, deployedRepo} {
 		if !strings.Contains(said, wanted) {
-			t.Errorf("PreflightDeploy() = %q, want %q in it", said, wanted)
+			t.Errorf("ApplyPreflight() = %q, want %q in it", said, wanted)
 		}
 	}
 }
@@ -311,7 +311,7 @@ func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t
 	for what, script := range proxyStates() {
 		err := preflighting(boxSaying(script))
 		if err == nil {
-			t.Fatalf("PreflightDeploy() let a deploy past a box where %s, and a deploy into a box that cannot route or terminate is a green deploy nothing reaches", what)
+			t.Fatalf("ApplyPreflight() let a deploy past a box where %s, and a deploy into a box that cannot route or terminate is a green deploy nothing reaches", what)
 		}
 		said[what] = err.Error()
 	}
@@ -347,14 +347,14 @@ func TestAForeignListenerOnAServingPortIsRefusedByName(t *testing.T) {
 		"publish=" + caddy.HTTPPort: {stdout: "not-ocels\n"},
 	}))
 	if err == nil {
-		t.Fatal("PreflightDeploy() let a deploy onto a box where something else publishes port 80")
+		t.Fatal("ApplyPreflight() let a deploy onto a box where something else publishes port 80")
 	}
 	if !strings.Contains(err.Error(), "not-ocels") {
-		t.Errorf("PreflightDeploy() = %q, want the container publishing the port named", err)
+		t.Errorf("ApplyPreflight() = %q, want the container publishing the port named", err)
 	}
 	for _, want := range []string{"stop it", "move it off " + caddy.HTTPPort} {
 		if !strings.Contains(err.Error(), want) {
-			t.Errorf("PreflightDeploy() = %q, want %q in it: a refusal an operator cannot act on is a wall", err, want)
+			t.Errorf("ApplyPreflight() = %q, want %q in it: a refusal an operator cannot act on is a wall", err, want)
 		}
 	}
 }
@@ -368,7 +368,7 @@ func TestAProcessOutsideDockerOnAServingPortIsRefusedByWhereItIsBound(t *testing
 	})
 	err := preflighting(machine)
 	if err == nil || !strings.Contains(err.Error(), "port 80 is bound outside docker at 0.0.0.0:80") {
-		t.Errorf("PreflightDeploy() = %v, want the port named by where it is bound", err)
+		t.Errorf("ApplyPreflight() = %v, want the port named by where it is bound", err)
 	}
 	for _, command := range machine.ran {
 		if strings.Contains(command, listeners.SocketsMark) {
@@ -384,10 +384,10 @@ func TestAServingPortNothingListensOnIsRefusedBecauseItMustBeTaken(t *testing.T)
 		"publish=" + caddy.HTTPPort: {stdout: "\n"},
 	}))
 	if err == nil {
-		t.Fatal("PreflightDeploy() read a free port 80 as fine, and on a bootstrapped box these ports are taken by the proxy rather than free")
+		t.Fatal("ApplyPreflight() read a free port 80 as fine, and on a bootstrapped box these ports are taken by the proxy rather than free")
 	}
 	if !strings.Contains(err.Error(), "nothing listens on port "+caddy.HTTPPort) {
-		t.Errorf("PreflightDeploy() = %q, want the port named as one nothing listens on", err)
+		t.Errorf("ApplyPreflight() = %q, want the port named as one nothing listens on", err)
 	}
 }
 
@@ -430,7 +430,7 @@ func TestASwitchboardAPruneRemovedIsRestartedAndTheDeployGoesOn(t *testing.T) {
 
 	machine := pruned(prunedBoard(), answer{})
 	if err := preflighting(machine); err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want a switchboard a prune removed restarted from what bootstrap left: Dokploy prunes every stopped container nightly, and the box still has everything the switchboard is made of", err)
+		t.Fatalf("ApplyPreflight() = %v, want a switchboard a prune removed restarted from what bootstrap left: Dokploy prunes every stopped container nightly, and the box still has everything the switchboard is made of", err)
 	}
 	runCommand := ranWith(machine, "'docker' 'create'")
 	if runCommand == "" {
@@ -470,7 +470,7 @@ func TestASwitchboardAPruneRemovedIsRefusedWhenWhatItMountsIsGoneToo(t *testing.
 		machine := pruned(script, answer{})
 		err := preflighting(machine)
 		if err == nil {
-			t.Fatalf("PreflightDeploy() let a deploy past a box missing its switchboard and %s", what)
+			t.Fatalf("ApplyPreflight() let a deploy past a box missing its switchboard and %s", what)
 		}
 		for _, wanted := range []string{boxapi.Switchboard, "bootstrap", strings.TrimPrefix(strings.Fields(said)[0], "missing=")} {
 			if !strings.Contains(err.Error(), wanted) {
@@ -488,11 +488,11 @@ func TestASwitchboardThatCouldNotBeRestartedIsRefusedWithWhatTheBoxSaid(t *testi
 
 	err := preflighting(pruned(prunedBoard(), answer{code: 1, stderr: "gcr.io/distroless/static-debian12 was not pulled in 5 attempts"}))
 	if err == nil {
-		t.Fatal("PreflightDeploy() let a deploy past a switchboard it could not restart")
+		t.Fatal("ApplyPreflight() let a deploy past a switchboard it could not restart")
 	}
 	for _, wanted := range []string{boxapi.Switchboard, "not pulled", "bootstrap"} {
 		if !strings.Contains(err.Error(), wanted) {
-			t.Errorf("PreflightDeploy() = %q, want %q in it", err, wanted)
+			t.Errorf("ApplyPreflight() = %q, want %q in it", err, wanted)
 		}
 	}
 }
@@ -502,6 +502,6 @@ func TestAContainerAppThatOnlyHostsItsWorkerMayLeaveItsFloorAtNone(t *testing.T)
 
 	err := preflightingInstances(boxSaying(nil), provider.Instances{Min: 0, Max: 1}, provider.WorkerSpec{Name: "web", App: "web", Compute: provider.ComputeContainer})
 	if err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want the box's one container let through: a worker app has no idle floor unless it sets one", err)
+		t.Fatalf("ApplyPreflight() = %v, want the box's one container let through: a worker app has no idle floor unless it sets one", err)
 	}
 }

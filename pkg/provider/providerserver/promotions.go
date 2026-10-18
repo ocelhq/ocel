@@ -58,7 +58,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 	})
 }
 
-func (h *handlers) rollBack(ctx context.Context, hold *environmentHold, req *contractv1.RollbackRequest, sender *eventStream) (*progressv1.OperationEvent, error) {
+func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv1.RollbackRequest, sender *eventStream) (*progressv1.OperationEvent, error) {
 	leased := hold.context(ctx)
 	session, err := h.openEdgeSession(leased, environment.TierProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {

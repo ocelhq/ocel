@@ -9,7 +9,7 @@ import (
 )
 
 func TestCloudRunShipsNoNativeModuleToANextContainer(t *testing.T) {
-	files, err := containerRuntime{}.NextServer(context.Background())
+	files, err := nextServerRuntime(context.Background())
 	if err != nil {
 		t.Fatalf("NextServer() = %v", err)
 	}
@@ -25,7 +25,7 @@ func TestCloudRunShipsNoNativeModuleToANextContainer(t *testing.T) {
 		}
 	}
 	delete(files, containerimage.NextServerPreloadFile)
-	again, _ := containerRuntime{}.NextServer(context.Background())
+	again, _ := nextServerRuntime(context.Background())
 	if len(again[containerimage.NextServerPreloadFile]) == 0 {
 		t.Error("NextServer() hands out the map it keeps, and a caller's change would reach every later image")
 	}

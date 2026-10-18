@@ -106,15 +106,15 @@ func RunHooks(t *testing.T, p provider.Provider) {
 		RunRetirement(t, hooks.Retirement)
 	})
 	t.Run("NextServerRuntime", func(t *testing.T) {
-		files, err := p.Runtime().NextServer(context.Background())
-		if err != nil {
-			t.Fatalf("Runtime().NextServer() error = %v", err)
-		}
-		if len(files) == 0 {
+		if hooks.NextServerRuntime == nil {
 			t.Skip("this provider ships no Next server runtime, so its Next containers run Next with Next's defaults")
 		}
+		files, err := hooks.NextServerRuntime(context.Background())
+		if err != nil {
+			t.Fatalf("NextServerRuntime() error = %v", err)
+		}
 		if _, ok := files[containerimage.NextServerPreloadFile]; !ok {
-			t.Errorf("Runtime().NextServer() has no %s, which a Next container runs in front of next start", containerimage.NextServerPreloadFile)
+			t.Errorf("NextServerRuntime() has no %s, which a Next container runs in front of next start", containerimage.NextServerPreloadFile)
 		}
 	})
 }

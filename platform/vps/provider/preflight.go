@@ -14,7 +14,15 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/release"
 )
 
-func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
+func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
+	return provider.Plan{}, p.checkDeploy(ctx, pre)
+}
+
+func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPreflight) error {
+	return p.checkDeploy(ctx, pre)
+}
+
+func (p *Provider) checkDeploy(ctx context.Context, pre provider.DeployPreflight) error {
 	if err := refuseScaledContainers(pre.Deploy); err != nil {
 		return err
 	}
