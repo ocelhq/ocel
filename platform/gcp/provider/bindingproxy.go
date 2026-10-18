@@ -42,7 +42,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 			}
 			served = append(served, bindingproxy.Grant{Grantee: grant.Grantee, Services: bindingproxy.Services{Buckets: buckets}})
 		}
-		proxy, err := bindingproxy.ServeGrants(served, req.ReportFailure)
+		proxy, err := bindingproxy.Serve(served, req.ReportFailure)
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}

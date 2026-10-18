@@ -82,7 +82,7 @@ func TestTheRuntimeFrontsTheBoxsQueueForAnAppThatBindsATask(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = served.Close() })
 	var address, token string
-	for _, entry := range served.Env {
+	for _, entry := range served.Env("") {
 		if value, found := strings.CutPrefix(entry, processenv.RuntimeAddressEnvVar+"="); found {
 			address = value
 		}
@@ -91,7 +91,7 @@ func TestTheRuntimeFrontsTheBoxsQueueForAnAppThatBindsATask(t *testing.T) {
 		}
 	}
 	if address == "" || token == "" {
-		t.Fatalf("the app is handed %q, which names no runtime to trigger through", served.Env)
+		t.Fatalf("the app is handed %q, which names no runtime to trigger through", served.Env(""))
 	}
 
 	_, err = taskv1connect.NewTaskServiceClient(http.DefaultClient, address).Trigger(context.Background(), &taskv1.TriggerRequest{Task: "send-email", Payload: []byte(`{}`)})

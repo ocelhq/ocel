@@ -84,7 +84,7 @@ func (e *ScopeError) Error() string {
 		binding = "the project root"
 	}
 	return fmt.Sprintf(
-		"'%s' is scoped to %s, but this app is bound to %s. Bind this app to one of those folders in ocel.config.ts, or widen the variable's scope.",
+		"'%s' is scoped to %s, but this app is bound to %s. Bind this app to one of those folders in ocel.json, or widen the variable's scope.",
 		e.Key, strings.Join(e.Folders, ", "), binding,
 	)
 }
@@ -211,30 +211,45 @@ func className(class resourcesv1.VariableClass) string {
 // value the type rejects fails the read. A class other than plain keeps the
 // value out of every error, since a parser's message can quote it.
 //
-// Define panics with a [*DefinitionError] when the struct declares something
+// Define fails with a [*DefinitionError] when the struct declares something
 // Ocel cannot accept, with a [*ValueError] when a value is missing or
 // unparseable, and with a [*ScopeError] when a variable's folders leave
-// this app out.
-func Define[T any]() T {
+// this app out. [MustDefine] panics with the same errors instead, for a
+// package-level variable.
+func Define[T any]() (T, error) {
+	return define[T]()
+}
+
+// MustDefine is [Define] for a package-level variable: it returns T, and
+// panics with the error Define would return.
+func MustDefine[T any]() T {
+	out, err := define[T]()
+	if err != nil {
+		panic(err)
+	}
+	return out
+}
+
+func define[T any]() (T, error) {
 	var out T
-	_, file, line, _ := runtime.Caller(1)
+	_, file, line, _ := runtime.Caller(2)
 
 	decl, err := definitions(reflect.TypeFor[T](), file)
 	if err != nil {
-		panic(err)
+		return out, err
 	}
 
 	if binding.Discovering() {
 		if err := declareEnv(decl, fmt.Sprintf("%s:%d", file, line)); err != nil {
-			panic(fmt.Sprintf("ocel: declare env: %v", err))
+			return out, fmt.Errorf("ocel: declare env: %w", err)
 		}
-		return out
+		return out, nil
 	}
 
 	if err := resolve(reflect.ValueOf(&out).Elem(), decl); err != nil {
-		panic(err)
+		return out, err
 	}
-	return out
+	return out, nil
 }
 
 func definitions(t reflect.Type, source string) (declaration, error) {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +25,7 @@ type entry[K comparable] struct {
 }
 
 func declareEntry[K comparable](store *Store, name, pattern string, shape resourcesv1.KvShape, opts []EntryOption) entry[K] {
-	_, file, line, _ := runtime.Caller(2)
+	source := binding.CallSite(1)
 	refuse := func(err error) {
 		panic(fmt.Sprintf("ocel: kv %q: entry %q: %v", store.name, name, err))
 	}
@@ -50,7 +49,7 @@ func declareEntry[K comparable](store *Store, name, pattern string, shape resour
 	if settings.missOnInvalid && shape != resourcesv1.KvShape_KV_SHAPE_JSON {
 		refuse(errors.New("MissOnInvalid applies to a json entry alone, whose stored value can fail to decode"))
 	}
-	store.addEntry(declaredEntry{name: name, pattern: parsed, source: fmt.Sprintf("%s:%d", file, line)}, shape)
+	store.addEntry(declaredEntry{name: name, pattern: parsed, source: source}, shape)
 	return entry[K]{store: store, name: name, key: builder, settings: settings}
 }
 

@@ -12,21 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
-type Served struct {
-	Address string
-	Token   string
-	Env     []string
-	Errs    <-chan error
-	server  *http.Server
-}
-
-func (s Served) Close() error {
-	if s.server == nil {
-		return nil
-	}
-	return s.server.Close()
-}
-
 type Grant struct {
 	Grantee  string
 	Services Services
@@ -37,76 +22,58 @@ type Session struct {
 	Token   string
 }
 
-type ServedGrants struct {
+type Served struct {
 	Address  string
 	Sessions []Session
 	server   *http.Server
 	watched  <-chan struct{}
 }
 
-func (s ServedGrants) Close() error {
+func (s Served) Env(grantee string) []string {
+	for _, session := range s.Sessions {
+		if session.Grantee == grantee {
+			return []string{
+				processenv.RuntimeAddressEnvVar + "=" + s.Address,
+				localrpc.SessionTokenEnvVar + "=" + session.Token,
+			}
+		}
+	}
+	return nil
+}
+
+func (s Served) Close() error {
+	if s.server == nil {
+		return nil
+	}
 	err := s.server.Close()
 	<-s.watched
 	return err
 }
 
-func ServeGrants(grants []Grant, report func(error)) (ServedGrants, error) {
+func Serve(grants []Grant, report func(error)) (Served, error) {
 	sessions := make([]Session, 0, len(grants))
 	muxes := make([]tokenMux, 0, len(grants))
 	for _, grant := range grants {
 		token, err := mintToken()
 		if err != nil {
-			return ServedGrants{}, err
+			return Served{}, err
 		}
 		sessions = append(sessions, Session{Grantee: grant.Grantee, Token: token})
-		muxes = append(muxes, tokenMux{token: token, mux: NewMux(token, grant.Services)})
+		muxes = append(muxes, tokenMux{token: token, mux: NewMux(grant.Services)})
 	}
-	srv, address, errs, err := listen(&router{muxes: muxes})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return ServedGrants{}, err
+		return Served{}, fmt.Errorf("bind the proxy listener: %w", err)
 	}
+	srv := &http.Server{Handler: &router{muxes: muxes}}
 	watched := make(chan struct{})
 	go func() {
 		defer close(watched)
-		if err := <-errs; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			report(err)
 		}
 	}()
-	return ServedGrants{Address: address, Sessions: sessions, server: srv, watched: watched}, nil
-}
-
-func Serve(services Services) (Served, error) {
-	token, err := mintToken()
-	if err != nil {
-		return Served{}, err
-	}
-
-	srv, address, errs, err := listen(NewMux(token, services))
-	if err != nil {
-		return Served{}, err
-	}
-
-	return Served{
-		Address: address,
-		Token:   token,
-		Env: []string{
-			processenv.RuntimeAddressEnvVar + "=" + address,
-			localrpc.SessionTokenEnvVar + "=" + token,
-		},
-		Errs:   errs,
-		server: srv,
-	}, nil
-}
-
-func listen(handler http.Handler) (*http.Server, string, <-chan error, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("bind the proxy listener: %w", err)
-	}
-	srv := &http.Server{Handler: handler}
-	errs := make(chan error, 1)
-	go func() { errs <- srv.Serve(ln) }()
-	return srv, "http://" + ln.Addr().String(), errs, nil
+	return Served{Address: "http://" + ln.Addr().String(), Sessions: sessions, server: srv, watched: watched}, nil
 }
 
 func mintToken() (string, error) {

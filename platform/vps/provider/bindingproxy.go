@@ -51,7 +51,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 				Granted:      buildproxy.ListBucketNames(grant),
 			})}})
 		}
-		proxy, err := bindingproxy.ServeGrants(served, req.ReportFailure)
+		proxy, err := bindingproxy.Serve(served, req.ReportFailure)
 		if err != nil {
 			stopForward()
 			return provider.BindingProxy{}, err

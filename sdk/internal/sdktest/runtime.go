@@ -24,6 +24,7 @@ type Runtime struct {
 	received []proto.Message
 	Run      *taskv1.Run
 	Letters  []*topicv1.DeadLetter
+	Refusal  error
 }
 
 func (f *Runtime) record(req proto.Message) {
@@ -40,6 +41,9 @@ func (f *Runtime) Requests() []proto.Message {
 
 func (f *Runtime) Send(_ context.Context, req *topicv1.SendRequest) (*topicv1.SendResponse, error) {
 	f.record(req)
+	if f.Refusal != nil {
+		return nil, f.Refusal
+	}
 	return &topicv1.SendResponse{MessageId: "01HZY4B6Q0Z0Z0Z0Z0Z0Z0Z0Z0"}, nil
 }
 
@@ -65,6 +69,9 @@ func (f *Runtime) CountDeadLetters(_ context.Context, req *topicv1.CountDeadLett
 
 func (f *Runtime) Trigger(_ context.Context, req *taskv1.TriggerRequest) (*taskv1.TriggerResponse, error) {
 	f.record(req)
+	if f.Refusal != nil {
+		return nil, f.Refusal
+	}
 	return &taskv1.TriggerResponse{Id: "run-1"}, nil
 }
 

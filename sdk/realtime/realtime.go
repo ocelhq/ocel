@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"runtime"
 	"sync"
 	"time"
 
@@ -85,10 +84,9 @@ type Realtime struct {
 // the project's discovery folder: during discovery the call is the declaration, and at
 // runtime the resource reads the binding the deploy delivered for that name.
 func New(name string, opts ...Option) *Realtime {
-	_, file, line, _ := runtime.Caller(1)
 	d := &Realtime{
 		name:     name,
-		source:   fmt.Sprintf("%s:%d", file, line),
+		source:   binding.CallSite(0),
 		settings: settings{ttl: defaultTokenTTL},
 	}
 	for _, opt := range opts {
@@ -116,7 +114,7 @@ func (d *Realtime) declare() {
 	for _, channel := range d.channels {
 		channels = append(channels, channel.buildManifest())
 	}
-	binding.DeclareResource(d.source, &resourcesv1.DeclareRequest{
+	binding.Declare(d.source, &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME, Name: d.name},
 		Config: &resourcesv1.DeclareRequest_Realtime{Realtime: &resourcesv1.RealtimeConfig{
 			Channels: channels,
@@ -169,14 +167,14 @@ func (d *Realtime) readBinding(access string) (realtimeBinding, error) {
 	return realtimeBinding{properties: properties, transport: transport}, nil
 }
 
-func (d *Realtime) connect(access string) (*binding.Resource[realtimev1connect.RealtimeServiceClient], error) {
-	return d.connection.Connect(fmt.Sprintf("realtime(%q)", d.name), access, func() (*binding.Resource[realtimev1connect.RealtimeServiceClient], error) {
+func (d *Realtime) connect(access string) (realtimev1connect.RealtimeServiceClient, error) {
+	return d.connection.Connect(fmt.Sprintf("realtime(%q)", d.name), access, func() (realtimev1connect.RealtimeServiceClient, error) {
 		return binding.Dial(d.name, bindingsv1.BindingType_BINDING_TYPE_REALTIME, realtimev1connect.NewRealtimeServiceClient)
 	})
 }
 
-func (d *Realtime) publishEvent(ctx context.Context, runtime *binding.Resource[realtimev1connect.RealtimeServiceClient], wire string, envelope []byte) error {
-	if _, err := runtime.Client.Publish(ctx, &realtimev1.PublishRequest{Realtime: d.name, Channel: wire, Event: string(envelope)}); err != nil {
+func (d *Realtime) publishEvent(ctx context.Context, runtime realtimev1connect.RealtimeServiceClient, wire string, envelope []byte) error {
+	if _, err := runtime.Publish(ctx, &realtimev1.PublishRequest{Realtime: d.name, Channel: wire, Event: string(envelope)}); err != nil {
 		return fmt.Errorf("ocel: realtime %q: publish on %s: %w", d.name, wire, err)
 	}
 	return nil

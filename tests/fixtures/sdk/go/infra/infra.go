@@ -8,7 +8,7 @@ import (
 
 var DB = postgres.New("main")
 
-var Env = env.Define[struct {
+var Env = env.MustDefine[struct {
 	Greeting     string     `ocel:"GREETING,default=hello"`
 	JourneyNonce env.Secret `ocel:"JOURNEY_NONCE"`
 }]()

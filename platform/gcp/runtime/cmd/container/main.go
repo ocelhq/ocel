@@ -101,7 +101,7 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 
 	env = append(env, containerimage.PortEnvVar+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
-	env = append(env, fronting.Env...)
+	env = append(env, fronting.Env("")...)
 	if worker == "" {
 		env = containerimage.AppendNextServerPreload(present, env)
 	}
@@ -215,7 +215,7 @@ func serveProxy(ctx context.Context, values *live.Values, manifest variables.Man
 	if services.Empty() {
 		return bindingproxy.Served{}, nil
 	}
-	return bindingproxy.Serve(services)
+	return bindingproxy.Serve([]bindingproxy.Grant{{Services: services}}, func(error) {})
 }
 
 func bindsBuckets(values *live.Values) bool {

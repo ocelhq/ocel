@@ -136,11 +136,12 @@ func serveProxy(ctx context.Context, values s3store.Records, cfg proxyConfig) (p
 		services.Tasks, services.Topics = engine.Tasks(), engine.Topics()
 	}
 
-	served, err := bindingproxy.Serve(services)
+	errs := make(chan error, 1)
+	served, err := bindingproxy.Serve([]bindingproxy.Grant{{Services: services}}, func(err error) { errs <- err })
 	if err != nil {
 		return proxy{}, err
 	}
-	return proxy{env: served.Env, errs: served.Errs, engine: engine}, nil
+	return proxy{env: served.Env(""), errs: errs, engine: engine}, nil
 }
 
 func superviseProxy(served <-chan error) {

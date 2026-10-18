@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/url"
 	"regexp"
-	"runtime"
 	"strconv"
 	"sync"
 
@@ -45,25 +44,31 @@ func (e *InvalidValueError) Error() string {
 }
 
 // An Option tunes the store [New] declares.
-type Option func(*resourcesv1.KvConfig)
+type Option interface {
+	applyStore(*resourcesv1.KvConfig)
+}
+
+type option func(*resourcesv1.KvConfig)
+
+func (o option) applyStore(c *resourcesv1.KvConfig) { o(c) }
 
 // Version declares the major Valkey version the store runs, "8" or "9"; without it,
 // the provider's default.
 func Version(v string) Option {
-	return func(c *resourcesv1.KvConfig) { c.Version = v }
+	return option(func(c *resourcesv1.KvConfig) { c.Version = v })
 }
 
 // Eviction declares the policy keys are evicted by once the store is full: one of
 // noeviction, allkeys-lru, allkeys-lfu, allkeys-random, volatile-lru, volatile-lfu,
 // volatile-random or volatile-ttl. Without it, noeviction.
 func Eviction(policy string) Option {
-	return func(c *resourcesv1.KvConfig) { c.Eviction = policy }
+	return option(func(c *resourcesv1.KvConfig) { c.Eviction = policy })
 }
 
 // Memory declares the memory the store holds, which eviction acts at, written with its
 // unit, such as "256mb" or "1gb". Without it, the provider's default.
 func Memory(size string) Option {
-	return func(c *resourcesv1.KvConfig) { c.Memory = size }
+	return option(func(c *resourcesv1.KvConfig) { c.Memory = size })
 }
 
 var entryNameGrammar = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,62}$`)
@@ -86,7 +91,7 @@ type Store struct {
 	config   *resourcesv1.KvConfig
 	declared []declaredEntry
 
-	client *redis.Client
+	connection binding.Connection[*redis.Client]
 }
 
 // New declares a key-value store named name and returns the handle an app reaches it
@@ -97,10 +102,9 @@ type Store struct {
 func New(name string, opts ...Option) *Store {
 	config := &resourcesv1.KvConfig{}
 	for _, opt := range opts {
-		opt(config)
+		opt.applyStore(config)
 	}
-	_, file, line, _ := runtime.Caller(1)
-	store := &Store{name: name, source: fmt.Sprintf("%s:%d", file, line), config: config}
+	store := &Store{name: name, source: binding.CallSite(0), config: config}
 	store.declare()
 	return store
 }
@@ -112,14 +116,10 @@ func (s *Store) declare() {
 	if !binding.Discovering() {
 		return
 	}
-	err := binding.Declare(&resourcesv1.DeclareRequest{
+	binding.Declare(s.source, &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV, Name: s.name},
 		Config:   &resourcesv1.DeclareRequest_Kv{Kv: proto.CloneOf(s.config)},
-		Source:   s.source,
 	})
-	if err != nil {
-		panic(fmt.Sprintf("ocel: declare kv %q: %v", s.name, err))
-	}
 }
 
 func (s *Store) addEntry(declared declaredEntry, shape resourcesv1.KvShape) {
@@ -184,11 +184,12 @@ func (s *Store) Client(ctx context.Context) (*redis.Client, error) {
 }
 
 func (s *Store) open(access string) (*redis.Client, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.client != nil {
-		return s.client, nil
-	}
+	return s.connection.Connect(s.resource(), access, func() (*redis.Client, error) {
+		return s.dial(access)
+	})
+}
+
+func (s *Store) dial(access string) (*redis.Client, error) {
 	properties, err := s.properties(access)
 	if err != nil {
 		return nil, err
@@ -208,8 +209,7 @@ func (s *Store) open(access string) (*redis.Client, error) {
 			options.TLSConfig.RootCAs = trusted
 		}
 	}
-	s.client = redis.NewClient(options)
-	return s.client, nil
+	return redis.NewClient(options), nil
 }
 
 func (s *Store) properties(access string) (*bindingsv1.KvProperties, error) {

@@ -65,7 +65,7 @@ func serveRealtimeProxy(t *testing.T, key ed25519.PrivateKey, gatewayPublishURL 
 }
 
 func readEnv(served bindingproxy.Served, key string) string {
-	for _, entry := range served.Env {
+	for _, entry := range served.Env("") {
 		if name, value, _ := strings.Cut(entry, "="); name == key {
 			return value
 		}

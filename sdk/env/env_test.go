@@ -95,7 +95,7 @@ func TestDefineRejectsAnUnusableKey(t *testing.T) {
 	type vars struct {
 		Name string `ocel:"lower-case"`
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "'lower-case' is not a usable variable name") {
 		t.Errorf("error = %q", err)
 	}
@@ -106,7 +106,7 @@ func TestDefineRejectsAnUnusableDescription(t *testing.T) {
 		type vars struct {
 			Name string "ocel:\"NAME,description=two\\nlines\""
 		}
-		err := definitionError(t, func() { env.Define[vars]() })
+		err := definitionError(t, func() { env.MustDefine[vars]() })
 		if !strings.Contains(err.Error(), "unusable description") {
 			t.Errorf("error = %q", err)
 		}
@@ -115,7 +115,7 @@ func TestDefineRejectsAnUnusableDescription(t *testing.T) {
 		type vars struct {
 			Name string "ocel:\"NAME,description=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\""
 		}
-		err := definitionError(t, func() { env.Define[vars]() })
+		err := definitionError(t, func() { env.MustDefine[vars]() })
 		if !strings.Contains(err.Error(), "unusable description") {
 			t.Errorf("error = %q", err)
 		}
@@ -125,17 +125,17 @@ func TestDefineRejectsAnUnusableDescription(t *testing.T) {
 func TestDefineRejectsAnOcelOwnedNameUnderEveryClass(t *testing.T) {
 	for class, run := range map[string]func(){
 		"plain": func() {
-			env.Define[struct {
+			env.MustDefine[struct {
 				Name string `ocel:"OCEL_THING"`
 			}]()
 		},
 		"sensitive": func() {
-			env.Define[struct {
+			env.MustDefine[struct {
 				Name string `ocel:"OCEL_THING,sensitive"`
 			}]()
 		},
 		"secret": func() {
-			env.Define[struct {
+			env.MustDefine[struct {
 				Name env.Secret `ocel:"OCEL_THING"`
 			}]()
 		},
@@ -153,15 +153,15 @@ func TestDefineRejectsTheDeploymentURLUnderEveryClass(t *testing.T) {
 			err := sdktest.PanicError(t, func() {
 				switch class {
 				case "plain":
-					env.Define[struct {
+					env.MustDefine[struct {
 						URL string `ocel:"OCEL_URL"`
 					}]()
 				case "sensitive":
-					env.Define[struct {
+					env.MustDefine[struct {
 						URL string `ocel:"OCEL_URL,sensitive"`
 					}]()
 				case "secret":
-					env.Define[struct {
+					env.MustDefine[struct {
 						URL env.Secret `ocel:"OCEL_URL"`
 					}]()
 				}
@@ -177,7 +177,7 @@ func TestDefineRejectsADefaultOnASecret(t *testing.T) {
 	type vars struct {
 		Key env.Secret `ocel:"SIGNING_KEY,default=x"`
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "A live value must fail loudly") {
 		t.Errorf("error = %q", err)
 	}
@@ -187,7 +187,7 @@ func TestDefineRejectsAnOptionalSecret(t *testing.T) {
 	type vars struct {
 		Key *env.Secret `ocel:"SIGNING_KEY"`
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "A live value must fail loudly") {
 		t.Errorf("error = %q", err)
 	}
@@ -197,7 +197,7 @@ func TestDefineRejectsTheSecretClassAsATagOption(t *testing.T) {
 	type vars struct {
 		Key string `ocel:"SIGNING_KEY,secret"`
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "make it an env.Secret and drop the option") {
 		t.Errorf("error = %q", err)
 	}
@@ -207,7 +207,7 @@ func TestDefineRejectsAClassOptionOnASecret(t *testing.T) {
 	type vars struct {
 		Key env.Secret `ocel:"SIGNING_KEY,sensitive"`
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "A Secret field is always the secret class") {
 		t.Errorf("error = %q", err)
 	}
@@ -216,7 +216,7 @@ func TestDefineRejectsAClassOptionOnASecret(t *testing.T) {
 func TestDefineDeclaresTheClassTheTagNames(t *testing.T) {
 	seen := discover(t, []cell{{Key: "P", Value: "v"}, {Key: "S", Value: "v"}, {Key: "E", Value: "v"}, {Key: "X"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		Plain     string     `ocel:"P"`
 		Sensitive string     `ocel:"S,sensitive,description=Used to call Stripe"`
 		Explicit  string     `ocel:"E,plain"`
@@ -241,7 +241,7 @@ func TestDefineRejectsAnUnknownTagOption(t *testing.T) {
 	type vars struct {
 		Key string `ocel:"KEY,required"`
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "unknown tag option 'required'") {
 		t.Errorf("error = %q", err)
 	}
@@ -258,23 +258,23 @@ func TestDefineRejectsAnUnusableFolderScope(t *testing.T) {
 		err := sdktest.PanicError(t, func() {
 			switch tc.folders {
 			case "apps/web":
-				env.Define[struct {
+				env.MustDefine[struct {
 					K string `ocel:"KEY,folders=apps/web"`
 				}]()
 			case "/":
-				env.Define[struct {
+				env.MustDefine[struct {
 					K string `ocel:"KEY,folders=/"`
 				}]()
 			case "/apps/web/":
-				env.Define[struct {
+				env.MustDefine[struct {
 					K string `ocel:"KEY,folders=/apps/web/"`
 				}]()
 			case "/apps//web":
-				env.Define[struct {
+				env.MustDefine[struct {
 					K string `ocel:"KEY,folders=/apps//web"`
 				}]()
 			case "/apps/web;/apps/web":
-				env.Define[struct {
+				env.MustDefine[struct {
 					K string `ocel:"KEY,folders=/apps/web;/apps/web"`
 				}]()
 			}
@@ -289,7 +289,7 @@ func TestDefineRejectsAFieldNothingParsesInto(t *testing.T) {
 	type vars struct {
 		Key []string `ocel:"KEY"`
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "is read into a []string, which nothing parses a value into") {
 		t.Errorf("error = %q", err)
 	}
@@ -299,7 +299,7 @@ func TestDefineRejectsADefaultItsOwnTypeRejects(t *testing.T) {
 	type vars struct {
 		Port int `ocel:"PORT,default=eighty"`
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "has a default its own type rejects") {
 		t.Errorf("error = %q", err)
 	}
@@ -309,7 +309,7 @@ func TestDefineRejectsAnUntaggedField(t *testing.T) {
 	type vars struct {
 		Name string
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "field Name has no `ocel` tag") {
 		t.Errorf("error = %q", err)
 	}
@@ -320,14 +320,14 @@ func TestDefineRejectsAKeyDeclaredTwiceInOneStruct(t *testing.T) {
 		A string `ocel:"TWICE"`
 		B string `ocel:"TWICE"`
 	}
-	err := definitionError(t, func() { env.Define[vars]() })
+	err := definitionError(t, func() { env.MustDefine[vars]() })
 	if !strings.Contains(err.Error(), "'TWICE' is declared by two fields") {
 		t.Errorf("error = %q", err)
 	}
 }
 
 func TestDefineRejectsANonStruct(t *testing.T) {
-	err := definitionError(t, func() { env.Define[string]() })
+	err := definitionError(t, func() { env.MustDefine[string]() })
 	if !strings.Contains(err.Error(), "env.Define wants a struct type") {
 		t.Errorf("error = %q", err)
 	}
@@ -338,8 +338,8 @@ func TestDefineLetsTheFileThatDeclaredAKeyDeclareItAgain(t *testing.T) {
 	type vars struct {
 		Owned string `ocel:"OWNED"`
 	}
-	env.Define[vars]()
-	if err := sdktest.PanicError(t, func() { env.Define[vars]() }); err != nil {
+	env.MustDefine[vars]()
+	if err := sdktest.PanicError(t, func() { env.MustDefine[vars]() }); err != nil {
 		t.Errorf("second declaration from the same file failed: %v", err)
 	}
 }
@@ -355,7 +355,7 @@ func TestDefineDeclaresEveryVariableWithItsClassAndWhetherItIsRequired(t *testin
 		Optional  *bool         `ocel:"OPTIONAL"`
 		Scoped    time.Duration `ocel:"SCOPED,folders=/apps/web;/apps/api"`
 	}
-	got := env.Define[vars]()
+	got := env.MustDefine[vars]()
 
 	if got != (vars{}) {
 		t.Errorf("Env() during discovery = %+v, want the zero struct", got)
@@ -404,7 +404,7 @@ func equal(got, want any) bool {
 func TestDefineReportsARequiredKeyTheStoreHasNoCellFor(t *testing.T) {
 	seen := discover(t, []cell{{Key: "PRESENT", Value: "v"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		Present string `ocel:"PRESENT"`
 		Missing string `ocel:"MISSING"`
 	}]()
@@ -434,7 +434,7 @@ func reported(t *testing.T, seen []map[string]any) []map[string]any {
 func TestDefineReportsAPresentValueItsTypeRejects(t *testing.T) {
 	seen := discover(t, []cell{{Key: "PORT", Value: "eighty"}, {Key: "PORT", Folder: "/apps/web", Value: "80"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		Port int `ocel:"PORT"`
 	}]()
 
@@ -450,7 +450,7 @@ func TestDefineReportsAPresentValueItsTypeRejects(t *testing.T) {
 func TestDefineKeepsAnEncryptedValueOutOfTheProblemItReports(t *testing.T) {
 	seen := discover(t, []cell{{Key: "LIMIT", Value: "s3cret"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		Limit int `ocel:"LIMIT,sensitive"`
 	}]()
 
@@ -467,7 +467,7 @@ func TestDefineKeepsAnEncryptedValueOutOfTheProblemItReports(t *testing.T) {
 func TestDefineSaysNothingWhenEveryCellSatisfiesItsType(t *testing.T) {
 	seen := discover(t, []cell{{Key: "PORT", Value: "80"}, {Key: "NAME", Value: "n"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		Port int    `ocel:"PORT"`
 		Name string `ocel:"NAME"`
 		Opt  *int   `ocel:"OPT"`
@@ -482,7 +482,7 @@ func TestDefineSaysNothingWhenEveryCellSatisfiesItsType(t *testing.T) {
 func TestDefineTakesALiveCellAsPresentWithoutAValueAndNeverChecksIt(t *testing.T) {
 	seen := discover(t, []cell{{Key: "KEY"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		Key env.Secret `ocel:"KEY"`
 	}]()
 
@@ -531,7 +531,7 @@ func TestDefineParsesEveryFieldIntoItsType(t *testing.T) {
 		Unset *int          `ocel:"UNSET"`
 		Def   int           `ocel:"DEF,default=42"`
 	}
-	got := env.Define[vars]()
+	got := env.MustDefine[vars]()
 
 	if got.Str != "s" || !got.B || got.I != -7 || got.U8 != 255 || got.UP != 4096 || got.F != 1.5 || got.D != 90*time.Second || got.Level != 2 || got.Addr != netip.MustParseAddr("10.0.0.1") || got.Opt == nil || *got.Opt != 9 || got.Unset != nil || got.Def != 42 {
 		t.Errorf("Env() = %+v", got)
@@ -541,7 +541,7 @@ func TestDefineParsesEveryFieldIntoItsType(t *testing.T) {
 func TestDefineReadsASensitiveValueUnderTheNameTheProcessEnvironmentHolds(t *testing.T) {
 	t.Setenv("KEY", "baked")
 
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Key string `ocel:"KEY,sensitive"`
 	}]()
 	if got.Key != "baked" || os.Getenv("KEY") != "baked" {
@@ -553,7 +553,7 @@ func TestDefineIgnoresAValueUnderTheNameTheRuntimeOnceNamespacedASealedValueWith
 	t.Setenv("OCEL_VAR_UNPREFIXED", "baked")
 
 	err := valueError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Key string `ocel:"UNPREFIXED,sensitive"`
 		}]()
 	})
@@ -564,7 +564,7 @@ func TestDefineIgnoresAValueUnderTheNameTheRuntimeOnceNamespacedASealedValueWith
 
 func TestDefineFallsBackToTheDefaultAndNowhereElse(t *testing.T) {
 	t.Setenv("KEY", "set")
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Key   string `ocel:"KEY,default=d"`
 		Unset string `ocel:"UNSET,default=d"`
 	}]()
@@ -575,7 +575,7 @@ func TestDefineFallsBackToTheDefaultAndNowhereElse(t *testing.T) {
 
 func TestDefineNamesTheFixingCommandWhenNothingIsSet(t *testing.T) {
 	err := valueError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Key string `ocel:"NOTHING_SET"`
 		}]()
 	})
@@ -588,7 +588,7 @@ func TestDefineNamesTheFixingCommandWhenNothingIsSet(t *testing.T) {
 func TestDefineFailsWhenTheValueIsPresentButOutOfType(t *testing.T) {
 	t.Setenv("PORT", "eighty")
 	err := valueError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Port int `ocel:"PORT"`
 		}]()
 	})
@@ -600,7 +600,7 @@ func TestDefineFailsWhenTheValueIsPresentButOutOfType(t *testing.T) {
 func TestDefineKeepsAnEncryptedValueOutOfTheErrorARead(t *testing.T) {
 	t.Setenv("LIMIT", "s3cret")
 	err := valueError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Limit int `ocel:"LIMIT,sensitive"`
 		}]()
 	})
@@ -611,7 +611,7 @@ func TestDefineKeepsAnEncryptedValueOutOfTheErrorARead(t *testing.T) {
 
 func TestASecretResolvesOnEveryRead(t *testing.T) {
 	t.Setenv("SIGNING_KEY", "first")
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Key env.Secret `ocel:"SIGNING_KEY"`
 	}]()
 
@@ -627,7 +627,7 @@ func TestASecretResolvesOnEveryRead(t *testing.T) {
 func TestDefineReadsAValueFromTheLiveDirectoryWhenNoVariableSetsIt(t *testing.T) {
 	t.Setenv("OCEL_LIVE_DIR", liveDir(t, map[string]string{"FILE_ONLY": "from the file\n"}))
 
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Key string `ocel:"FILE_ONLY"`
 	}]()
 	if got.Key != "from the file\n" {
@@ -641,7 +641,7 @@ func TestDefinePrefersADeliveredVariableOverTheLiveDirectoryFileOfTheSameKey(t *
 	t.Setenv("FILE_SHADOWED", "baked")
 	t.Setenv("FILE_BARE", "bare")
 
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Shadowed string `ocel:"FILE_SHADOWED"`
 		Bare     string `ocel:"FILE_BARE"`
 	}]()
@@ -654,7 +654,7 @@ func TestDefineTakesAKeyTheLiveDirectoryHasNoFileForAsUnset(t *testing.T) {
 	t.Setenv("OCEL_LIVE_DIR", liveDir(t, nil))
 
 	err := valueError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Key string `ocel:"FILE_MISSING"`
 		}]()
 	})
@@ -667,7 +667,7 @@ func TestASecretReadsTheRotatedLiveDirectoryFileOnTheNextCall(t *testing.T) {
 	dir := liveDir(t, map[string]string{"ROTATING_KEY": "first"})
 	t.Setenv("OCEL_LIVE_DIR", dir)
 
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Key env.Secret `ocel:"ROTATING_KEY"`
 	}]()
 	if v := got.Key.Value(); v != "first" {
@@ -698,7 +698,7 @@ func write(t *testing.T, path, value string) {
 
 func TestASecretWhoseValueVanishedFailsTheReadRatherThanReadEmpty(t *testing.T) {
 	t.Setenv("SIGNING_KEY", "first")
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Key env.Secret `ocel:"SIGNING_KEY"`
 	}]()
 
@@ -717,7 +717,7 @@ func TestASecretWhoseValueVanishedFailsTheReadRatherThanReadEmpty(t *testing.T) 
 
 func TestASecretPrintsARedactionUnderEveryVerb(t *testing.T) {
 	t.Setenv("SIGNING_KEY", "s3cret")
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Key env.Secret `ocel:"SIGNING_KEY"`
 	}]()
 
@@ -735,7 +735,7 @@ func TestASecretPrintsARedactionUnderEveryVerb(t *testing.T) {
 
 func TestASecretWithNoValueFailsAtInit(t *testing.T) {
 	err := valueError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Key env.Secret `ocel:"NOTHING_SET"`
 		}]()
 	})
@@ -748,7 +748,7 @@ func TestDefineRefusesAVariableThisAppsBindingPutsOutOfScope(t *testing.T) {
 	t.Setenv("OCEL_APP_FOLDER", "/apps/api")
 	t.Setenv("KEY", "v")
 	err := sdktest.PanicError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Key string `ocel:"KEY,folders=/apps/web"`
 		}]()
 	})
@@ -756,7 +756,7 @@ func TestDefineRefusesAVariableThisAppsBindingPutsOutOfScope(t *testing.T) {
 	if !errors.As(err, &scope) {
 		t.Fatalf("error = %v, want an *ScopeError", err)
 	}
-	want := "'KEY' is scoped to /apps/web, but this app is bound to /apps/api. Bind this app to one of those folders in ocel.config.ts, or widen the variable's scope."
+	want := "'KEY' is scoped to /apps/web, but this app is bound to /apps/api. Bind this app to one of those folders in ocel.json, or widen the variable's scope."
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err, want)
 	}
@@ -765,7 +765,7 @@ func TestDefineRefusesAVariableThisAppsBindingPutsOutOfScope(t *testing.T) {
 func TestDefineReadsAVariableScopedToTheFolderThisAppIsBoundTo(t *testing.T) {
 	t.Setenv("OCEL_APP_FOLDER", "/apps/web")
 	t.Setenv("KEY", "v")
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Key string `ocel:"KEY,folders=/apps/api;/apps/web"`
 	}]()
 	if got.Key != "v" {
@@ -799,7 +799,7 @@ func TestDefineLeavesAnOptionalGroupAbsentWhenNoMemberIsDelivered(t *testing.T) 
 		Region string       `ocel:"REGION,default=eu"`
 		GitHub *githubGroup `ocel:"github"`
 	}
-	got := env.Define[vars]()
+	got := env.MustDefine[vars]()
 	if got.GitHub != nil {
 		t.Errorf("GitHub = %#v, want nil", got.GitHub)
 	}
@@ -811,7 +811,7 @@ func TestDefineLeavesAnOptionalGroupAbsentWhenNoMemberIsDelivered(t *testing.T) 
 func TestDefineReportsTheMissingMemberOfAHalfDeliveredOptionalGroup(t *testing.T) {
 	seen := discover(t, []cell{{Key: "GITHUB_ID", Value: "id"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		GitHub *githubGroup `ocel:"github"`
 	}]()
 
@@ -828,7 +828,7 @@ func TestDefineResolvesAFullyDeliveredOptionalGroup(t *testing.T) {
 	t.Setenv("GITHUB_ID", "id")
 	t.Setenv("GITHUB_SECRET", "s3cret")
 
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		GitHub *githubGroup `ocel:"github"`
 	}]()
 
@@ -847,7 +847,7 @@ func TestDefineReportsEveryMemberOfARequiredGroupTheStoreHasNoCellForAsMissing(t
 	}
 	seen := discover(t, nil)
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		SMTP smtp `ocel:"smtp"`
 	}]()
 
@@ -873,7 +873,7 @@ type mixedGroup struct {
 func TestDefineDoesNotRequireAGroupMemberSpelledOptionalWhileTheGroupIsOn(t *testing.T) {
 	seen := discover(t, []cell{{Key: "MIXED_ANCHOR", Value: "a"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		Mixed *mixedGroup `ocel:"mixed"`
 	}]()
 
@@ -893,7 +893,7 @@ func TestDefineDoesNotRequireAGroupMemberSpelledOptionalWhileTheGroupIsOn(t *tes
 func TestDefineResolvesAGroupMemberSpelledOptionalToNothing(t *testing.T) {
 	t.Setenv("MIXED_ANCHOR", "a")
 
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Mixed *mixedGroup `ocel:"mixed"`
 	}]()
 
@@ -913,7 +913,7 @@ func TestDefineResolvesASecretInsideAGroup(t *testing.T) {
 	t.Setenv("STRIPE_ACCOUNT", "acct")
 	t.Setenv("STRIPE_KEY", "first")
 
-	got := env.Define[struct {
+	got := env.MustDefine[struct {
 		Stripe stripe `ocel:"stripe"`
 	}]()
 
@@ -935,7 +935,7 @@ func TestDefineRefusesAGroupNestedInAGroup(t *testing.T) {
 		Inner inner  `ocel:"inner"`
 	}
 	err := definitionError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Outer outer `ocel:"outer"`
 		}]()
 	})
@@ -953,7 +953,7 @@ func TestDefineDeclaresGroupsInDeclarationOrderWithWhatTurningThemOnDoes(t *test
 	}
 	seen := discover(t, []cell{{Key: "MAIL_HOST", Value: "h"}, {Key: "AUTH_ID", Value: "i"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		Mail mail  `ocel:"mail,description=Send mail"`
 		Auth *auth `ocel:"auth,description=Enable sign-in"`
 	}]()
@@ -983,7 +983,7 @@ func TestDefineRefusesAKeyDeclaredBothInAGroupAndAtTopLevel(t *testing.T) {
 		Key string `ocel:"SHARED_KEY"`
 	}
 	err := definitionError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Group inGroup `ocel:"grouped"`
 			Loose string  `ocel:"SHARED_KEY"`
 		}]()
@@ -1001,7 +1001,7 @@ func TestDefineRefusesTwoGroupsUnderOneName(t *testing.T) {
 		Key string `ocel:"SECOND_KEY"`
 	}
 	err := definitionError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			First  first  `ocel:"twice"`
 			Second second `ocel:"twice"`
 		}]()
@@ -1016,7 +1016,7 @@ func TestDefineRefusesAnUnexportedGroup(t *testing.T) {
 		Key string `ocel:"HIDDEN_KEY"`
 	}
 	err := definitionError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			hidden hidden `ocel:"hidden"`
 		}]()
 	})
@@ -1033,7 +1033,7 @@ type inheritedGroup struct {
 func TestDefineReportsAScopedMemberOfAGroupARootValueTurnedOnAsMissing(t *testing.T) {
 	seen := discover(t, []cell{{Key: "INHERITED_TOKEN", Value: "t"}})
 
-	env.Define[struct {
+	env.MustDefine[struct {
 		Inherited *inheritedGroup `ocel:"inherited"`
 	}]()
 
@@ -1049,7 +1049,7 @@ func TestDefineReportsAScopedMemberOfAGroupARootValueTurnedOnAsMissing(t *testin
 func TestDefineRefusesAGroupThatDeclaresNoVariables(t *testing.T) {
 	type empty struct{}
 	err := definitionError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Empty empty `ocel:"empty"`
 		}]()
 	})
@@ -1064,7 +1064,7 @@ func TestDefineRefusesAGroupNoFolderCanSatisfy(t *testing.T) {
 		API string `ocel:"SPLIT_API,folders=/api"`
 	}
 	err := definitionError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Split split `ocel:"split"`
 		}]()
 	})
@@ -1086,7 +1086,7 @@ func TestDefineAcceptsAGroupWhoseMembersShareAFolder(t *testing.T) {
 	t.Setenv("SHARED_API", "a")
 	t.Setenv("SHARED_WIDER", "w")
 	if err := sdktest.PanicError(t, func() {
-		env.Define[struct {
+		env.MustDefine[struct {
 			Shared shared `ocel:"shared"`
 		}]()
 	}); err != nil {

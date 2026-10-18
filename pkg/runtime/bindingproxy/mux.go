@@ -24,9 +24,9 @@ func (s Services) Empty() bool {
 	return s.Buckets == nil && s.Tasks == nil && s.Topics == nil && s.Realtime == nil
 }
 
-func NewMux(token string, services Services) *http.ServeMux {
+func NewMux(services Services) *http.ServeMux {
 	mux := http.NewServeMux()
-	gated := connect.WithInterceptors(&tokenGate{token: token}, validate.NewInterceptor())
+	gated := connect.WithInterceptors(validate.NewInterceptor())
 	if services.Buckets != nil {
 		mux.Handle(bucketv1connect.NewBucketServiceHandler(services.Buckets, gated))
 	}

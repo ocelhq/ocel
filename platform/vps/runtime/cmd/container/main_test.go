@@ -113,7 +113,7 @@ func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *te
 	t.Cleanup(func() { _ = served.Close() })
 
 	var address, token string
-	for _, entry := range served.Env {
+	for _, entry := range served.Env("") {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
 		case processenv.RuntimeAddressEnvVar:
@@ -128,7 +128,7 @@ func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *te
 	if token == "" {
 		t.Errorf("the app is handed no session token, and an unauthenticated proxy serves anyone in the container")
 	}
-	for _, entry := range append(slices.Clone(served.Env), values.Env()...) {
+	for _, entry := range append(slices.Clone(served.Env("")), values.Env()...) {
 		if strings.Contains(entry, "s3cr3t") {
 			t.Errorf("the app is handed %q: the store credential is the proxy's alone", entry)
 		}
@@ -162,10 +162,10 @@ func TestTheRuntimeFrontsABucketBoundToAStoreWithNoStoreOfItsOwn(t *testing.T) {
 		t.Fatalf("proxying() = %v", err)
 	}
 	t.Cleanup(func() { _ = served.Close() })
-	if len(served.Env) == 0 {
+	if len(served.Env("")) == 0 {
 		t.Fatal("proxying() started nothing, and the app reaches its bound bucket only through the proxy")
 	}
-	for _, entry := range served.Env {
+	for _, entry := range served.Env("") {
 		if strings.Contains(entry, "r2-s3cr3t") {
 			t.Errorf("the app is handed %q: the store's secret key is the proxy's alone", entry)
 		}
@@ -175,7 +175,7 @@ func TestTheRuntimeFrontsABucketBoundToAStoreWithNoStoreOfItsOwn(t *testing.T) {
 func TestTheRuntimeFrontsNothingWhereNoBindingIsProxied(t *testing.T) {
 	manifest := boxlive.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}
 	served, err := proxying(manifest, nil, filepath.Join(t.TempDir(), "absent.sock"), "127.0.0.1:1")
-	if err != nil || served.Env != nil {
+	if err != nil || served.Env("") != nil {
 		t.Errorf("proxying() = %+v, %v, want no proxy for a deployment binding nothing it must be fronted for", served, err)
 	}
 }

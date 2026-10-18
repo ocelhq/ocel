@@ -39,12 +39,12 @@ func (c *countedTopics) Send(context.Context, *topicv1.SendRequest) (*topicv1.Se
 func servingQueues(t *testing.T) (address, token string, tasks *countedTasks, topics *countedTopics) {
 	t.Helper()
 	tasks, topics = &countedTasks{}, &countedTopics{}
-	served, err := bindingproxy.Serve(bindingproxy.Services{Tasks: tasks, Topics: topics})
+	served, err := bindingproxy.Serve([]bindingproxy.Grant{{Services: bindingproxy.Services{Tasks: tasks, Topics: topics}}}, func(error) {})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { served.Close() })
-	return envValue(t, served.Env, processenv.RuntimeAddressEnvVar), envValue(t, served.Env, localrpc.SessionTokenEnvVar), tasks, topics
+	return envValue(t, served.Env(""), processenv.RuntimeAddressEnvVar), envValue(t, served.Env(""), localrpc.SessionTokenEnvVar), tasks, topics
 }
 
 func TestTheProxyTriggersAndSendsForTheAppThatHoldsItsToken(t *testing.T) {

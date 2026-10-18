@@ -38,25 +38,20 @@ var authorizing = connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) conn
 	}
 })
 
-func ReadCallSite() string {
-	_, file, line, _ := runtime.Caller(2)
+func CallSite(skip int) string {
+	_, file, line, _ := runtime.Caller(skip + 2)
 	return fmt.Sprintf("%s:%d", file, line)
 }
 
-func DeclareResource(source string, req *resourcesv1.DeclareRequest) {
+func Declare(source string, req *resourcesv1.DeclareRequest) {
 	if !Discovering() {
 		return
 	}
 	req.Source = source
-	if err := Declare(req); err != nil {
+	if _, err := resources().Declare(context.Background(), req); err != nil {
 		kind := strings.ToLower(strings.TrimPrefix(req.GetResource().GetType().String(), "RESOURCE_TYPE_"))
 		panic(fmt.Sprintf("ocel: declare %s %q: %v", kind, req.GetResource().GetName(), err))
 	}
-}
-
-func Declare(req *resourcesv1.DeclareRequest) error {
-	_, err := resources().Declare(context.Background(), req)
-	return err
 }
 
 func DeclareVariables(req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
