@@ -1661,14 +1661,14 @@ test("leaves an API route that parents no prerender out of the pages dispatch", 
   expect(manifest.dispatch["/api/hello"]).not.toHaveProperty("page");
 });
 
-const overCloudflareTagLimit = "t".repeat(1025);
+const overStatedTagLimit = "t".repeat(17);
 
-async function prerenderTagsBuiltFor(edgeKind: string): Promise<unknown> {
+async function prerenderTagsBuiltFor(tagLimits: string): Promise<unknown> {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.prerenders[0].fallback.initialHeaders = {
-    "x-next-cache-tags": `posts,${overCloudflareTagLimit},two words`,
+    "x-next-cache-tags": `posts,${overStatedTagLimit},two words`,
   };
-  vi.stubEnv("OCEL_EDGE_KIND", edgeKind);
+  vi.stubEnv("OCEL_EDGE_TAG_LIMITS", tagLimits);
   const adapter = await loadAdapterIn(projectDir);
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   try {
@@ -1680,16 +1680,20 @@ async function prerenderTagsBuiltFor(edgeKind: string): Promise<unknown> {
   return manifest.dispatch[args.outputs.prerenders[0].pathname].tags;
 }
 
-test("bounds a prerender's cache tags to Cloudflare's limits when Cloudflare is the edge", async () => {
-  expect(await prerenderTagsBuiltFor("cloudflare")).toEqual(["posts", "two%20words"]);
+test("bounds a prerender's cache tags to the limits the edge states", async () => {
+  expect(
+    await prerenderTagsBuiltFor(JSON.stringify({ tagBytes: 16, tags: 1000, headerBytes: 16384 })),
+  ).toEqual(["posts", "two%20words"]);
 });
 
-test("keeps a prerender's cache tags whole on an edge other than Cloudflare", async () => {
-  expect(await prerenderTagsBuiltFor("cloudfront")).toEqual([
-    "posts",
-    overCloudflareTagLimit,
-    "two words",
-  ]);
+test("keeps a prerender's cache tags whole when the edge states no limits", async () => {
+  expect(await prerenderTagsBuiltFor("")).toEqual(["posts", overStatedTagLimit, "two words"]);
+});
+
+test("refuses cache tag limits that are not three positive whole numbers", async () => {
+  await expect(prerenderTagsBuiltFor(JSON.stringify({ tagBytes: 16, tags: 0 }))).rejects.toThrow(
+    "OCEL_EDGE_TAG_LIMITS",
+  );
 });
 
 test("copies the html variant's headers and status onto an APP_PAGE entry", async () => {

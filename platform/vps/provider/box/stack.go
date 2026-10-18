@@ -134,12 +134,9 @@ func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, r
 }
 
 func declaredBy(record router.ReleaseRecord) []string {
-	declared := make([]string, 0, len(record.Variables)+len(record.Env))
+	declared := make([]string, 0, len(record.Variables))
 	for _, variable := range record.Variables {
 		declared = append(declared, variable.Key)
-	}
-	for name := range record.Env {
-		declared = append(declared, name)
 	}
 	slices.Sort(declared)
 	return declared

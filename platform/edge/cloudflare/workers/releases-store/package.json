@@ -12,6 +12,9 @@
     "typecheck": "tsc --noEmit",
     "cf-typegen": "wrangler types"
   },
+  "dependencies": {
+    "@platform/edge-contract": "workspace:*"
+  },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.4",
     "@types/node": "^26.1.1",

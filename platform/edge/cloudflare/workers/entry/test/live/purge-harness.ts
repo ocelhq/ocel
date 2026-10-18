@@ -1,6 +1,6 @@
 import type { Env } from "../../src/env";
 import { answerPurgeOnWorker } from "../../src/purge-request";
-import type { ReleaseRecord, ServedRecordResult } from "../../src/releases";
+import type { ServedRecordResult, StoredRecord } from "../../src/releases";
 import { Serve as ProductionServe } from "../../src/serve";
 import { ORIGIN_PURGE_SCOPE } from "../../src/serve-key";
 
@@ -34,7 +34,7 @@ function servedBy(harness: HarnessEnv): Pick<Env, "RELEASES" | "OCEL_SLUG"> {
       if (isrPrefix !== harness.OCEL_HARNESS_ISR_PREFIX) return { kind: "not-served" };
       return {
         kind: "record",
-        record: { purgeSecret: harness.OCEL_PURGE_SECRET } as ReleaseRecord,
+        record: { edge: { purgeSecret: harness.OCEL_PURGE_SECRET } } as StoredRecord,
       };
     },
   };

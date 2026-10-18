@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
-import type { ReleaseRecord, ReleasesBinding } from "../src/releases";
-import { edgeOriginFetch } from "../src/signing";
+import { openOrigin } from "../src/origin/reach";
+import type { ReleasesBinding, StoredRecord } from "../src/releases";
 import {
   answerEveryRecordWith,
+  awsOrigin,
   capturing,
   FN_URL,
   makeRecord,
@@ -12,14 +13,14 @@ import {
 import { resolveBase } from "./resolve-base";
 import { objectStoreHolding, routeTableKey } from "./route-table-store";
 
-function bindingReturning(record: ReleaseRecord): ReleasesBinding {
+function bindingReturning(record: StoredRecord): ReleasesBinding {
   return answerEveryRecordWith(async () => {
     return { kind: "record", release: record.release, record };
   });
 }
 
 async function resolved(
-  record: ReleaseRecord,
+  record: StoredRecord,
   over: Partial<ResolveBase> = {},
 ): Promise<ServeFetch | Response> {
   return resolveServe(
@@ -55,7 +56,7 @@ describe("node runtime serve path", () => {
   it("forwards to the app's single Function URL, signed with SigV4", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), {
-      originFetch: edgeOriginFetch("AKIAEXAMPLE", "secretkey"),
+      originFetch: openOrigin({ OCEL_ORIGIN: awsOrigin() }).fetch,
     })) as ServeFetch;
     expect(serve).toBeTypeOf("function");
 

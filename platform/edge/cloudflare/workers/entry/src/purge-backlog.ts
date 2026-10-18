@@ -1,4 +1,5 @@
 import type { PurgeMode } from "@platform/edge-contract/purge";
+import type { PurgeBudget } from "./purge-budget";
 
 export interface RaisedTag {
   tag: string;
@@ -33,10 +34,10 @@ export interface PurgeBacklogOptions {
   serve: PurgePort;
   now(): number;
   random(): number;
+  budget: PurgeBudget;
   warn?(message: string): void;
 }
 
-export const TAGS_PER_CALL = 100;
 export const ESCALATE_AFTER_MS = 60_000;
 export const FLUSH_EVERY_MS = 1_000;
 export const FORGET_AFTER_MS = 3_600_000;
@@ -81,7 +82,7 @@ export class PurgeBacklog {
   }
 
   private async run(): Promise<number | undefined> {
-    const { store, serve, now } = this.options;
+    const { store, serve, now, budget } = this.options;
     const startedAt = now();
     store.forgetCoveredBefore(startedAt - FORGET_AFTER_MS);
 
@@ -93,8 +94,8 @@ export class PurgeBacklog {
 
     if (startedAt - oldest > ESCALATE_AFTER_MS) {
       const releases = store.readPendingReleases();
-      for (let i = 0; i < releases.length; i += TAGS_PER_CALL) {
-        const outcome = await serve.purgeTags("purge", releases.slice(i, i + TAGS_PER_CALL));
+      for (let i = 0; i < releases.length; i += budget.tagsPerPurge) {
+        const outcome = await serve.purgeTags("purge", releases.slice(i, i + budget.tagsPerPurge));
         if (!outcome.ok) {
           this.backOff(`purge ${releases.length} release(s)`, outcome);
           return this.readNextFlushAt();
@@ -106,7 +107,7 @@ export class PurgeBacklog {
     }
 
     const mode: PurgeMode = store.hasPending("purge") ? "purge" : "invalidate";
-    const tags = store.readBatch(mode, TAGS_PER_CALL);
+    const tags = store.readBatch(mode, budget.tagsPerPurge);
     const outcome = await serve.purgeTags(mode, tags);
     if (outcome.ok) {
       store.settleBatch(mode, tags, startedAt);
@@ -118,13 +119,13 @@ export class PurgeBacklog {
   }
 
   private backOff(what: string, refusal: Extract<PurgeOutcome, { ok: false }>): void {
-    const { store, now, random, warn = console.warn } = this.options;
+    const { store, now, random, budget, warn = console.warn } = this.options;
     const failures = store.readFailures() + 1;
     const ceiling = Math.min(BACKOFF_BASE_MS * 2 ** failures, BACKOFF_CEILING_MS);
     const wait = ceiling * (0.5 + 0.5 * random());
     store.writeBackoff(failures, now() + wait);
     const limited = refusal.codes.includes(RATE_LIMITED)
-      ? "the account's purge limit"
+      ? `the account's purge limit of ${budget.purgesPerMinute} purges a minute`
       : "a refusal";
     warn(
       `ocel: Cloudflare answered ${limited} (${refusal.message}) to ${what}; retrying in ${Math.round(wait)}ms`,

@@ -1,8 +1,8 @@
 package cloudflare
 
 import (
+	"encoding/json"
 	"fmt"
-	"maps"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -21,89 +21,77 @@ const (
 	purgeQueueObject = "PurgeQueue"
 )
 
-type OriginBindings struct {
-	Variables map[string]string
-	Secrets   map[string]string
+const originClientCertificateBinding = "OCEL_ORIGIN_CLIENT_CERTIFICATE"
 
-	ClientCertificate string
+type entryProgram struct {
+	name            string
+	worker          workerScript
+	pruneWorkerStem string
+	store           edge.ReleasesStore
 }
 
-type EntryProgram struct {
-	Tier              environment.Tier
-	Entry             edge.WorkerModule
-	Namespace         string
-	Slug              string
-	Env               string
-	PreviewBaseDomain string
-	PreviewKey        edge.PreviewKey
-	Origin            OriginBindings
-
-	StoreScriptName          string
-	StoreEndpoint            string
-	StoreBootstrapCredential string
-}
-
-func (p EntryProgram) Build() (provider.EdgeProgram, error) {
-	if p.Slug != "" && p.Namespace == "" {
-		return provider.EdgeProgram{}, fmt.Errorf("an edge worker is named for the namespace that installed its bootstrap, and this program names none; a name without it reaches whatever another namespace deployed for %s", p.Slug)
+func (p *cloudflare) buildEntryProgram(tier environment.Tier, slug string, program *edge.Program) (entryProgram, error) {
+	if program == nil {
+		return entryProgram{}, fmt.Errorf("the %s edge runs the entry worker, and %s was handed no program for it", Kind, describeProgramScope(slug))
 	}
-	worker, err := newEntryWorker(p.Entry, p.Origin)
+	if slug != "" && p.namespace == "" {
+		return entryProgram{}, fmt.Errorf("an edge worker is named for the namespace that installed its bootstrap, and this edge was opened with none; a name without it reaches whatever another namespace deployed for %s", slug)
+	}
+	worker, err := newEntryWorker(program.Origin)
 	if err != nil {
-		return provider.EdgeProgram{}, err
+		return entryProgram{}, err
 	}
-	spec := &edge.ProgramSpec{
-		StoreScriptName:     p.StoreScriptName,
-		StoreEndpoint:       p.StoreEndpoint,
-		BootstrapCredential: p.StoreBootstrapCredential,
-	}
-	if p.Slug == "" {
-		if p.StoreScriptName == "" {
-			return provider.EdgeProgram{}, refusal.Refuse(refusal.CodeNotReady,
+	built := entryProgram{store: program.ReleasesStore}
+	if slug == "" {
+		if program.ReleasesStore.Name == "" {
+			return entryProgram{}, refusal.Refuse(refusal.CodeNotReady,
 				"no releases-store worker found for the preview bootstrap, and the shared preview entry reads every release record through it; re-run `%s` to provision it",
 				provider.BootstrapCommand(environment.TierPreview))
 		}
-		worker = withService(worker, genericStoreBinding, p.StoreScriptName)
+		worker = withService(worker, genericStoreBinding, program.ReleasesStore.Name)
 		worker = withVar(worker, envPreview, "1")
 		worker = withVar(worker, envPreviewGlobal, "1")
-		worker = withVar(worker, envPreviewBaseDomain, p.PreviewBaseDomain)
-		if spec.Worker, err = p.addPreviewKey(worker); err != nil {
-			return provider.EdgeProgram{}, err
-		}
-		return provider.EdgeProgram{Spec: spec}, nil
+		worker = withVar(worker, envPreviewBaseDomain, program.PreviewBaseDomain)
+		built.name = previewEntryScript
+		built.worker, err = addPreviewKey(worker, slug, program)
+		return built, err
 	}
-	if p.Tier == environment.TierPreview {
-		spec.Name = previewWorkerName(p.Namespace, p.Slug)
-		spec.PruneWorkerStem = previewWorkerStem(p.Namespace, p.Slug)
-		if spec.Worker, err = p.addPreviewKey(addPreviewVariables(worker, p.PreviewBaseDomain)); err != nil {
-			return provider.EdgeProgram{}, err
-		}
-		return provider.EdgeProgram{Spec: spec}, nil
+	if tier == environment.TierPreview {
+		built.name = previewWorkerName(p.namespace, slug)
+		built.pruneWorkerStem = previewWorkerStem(p.namespace, slug)
+		built.worker, err = addPreviewKey(addPreviewVariables(worker, program.PreviewBaseDomain), slug, program)
+		return built, err
 	}
-	spec.Name = rootWorkerName(p.Namespace, p.Slug, p.Env)
-	spec.Worker = worker
-	return provider.EdgeProgram{Spec: spec}, nil
+	built.name = rootWorkerName(p.namespace, slug, program.Env)
+	built.worker = worker
+	return built, nil
 }
 
-func newEntryWorker(entry edge.WorkerModule, origin OriginBindings) (edge.Worker, error) {
-	if len(entry.Content) == 0 {
-		return edge.Worker{}, fmt.Errorf("the %s edge names no entry module for its worker to run", Kind)
+func newEntryWorker(origin edge.OriginReach) (workerScript, error) {
+	if len(entryBundle) == 0 {
+		return workerScript{}, fmt.Errorf("the %s edge was built with no entry bundle for its worker to run", Kind)
 	}
-	variables := map[string]string{}
-	maps.Copy(variables, origin.Variables)
-	worker := edge.Worker{Main: entry, Variables: variables, CachedEntrypoints: []string{serveEntrypoint}, DurableObjects: []string{purgeQueueObject}}
-	if len(origin.Secrets) > 0 {
-		worker.Secrets = maps.Clone(origin.Secrets)
+	if err := origin.RefuseIncomplete(); err != nil {
+		return workerScript{}, fmt.Errorf("the %s entry worker cannot reach its origin: %w", Kind, err)
 	}
-	if origin.ClientCertificate != "" {
-		if origin.Variables[edge.EdgeAccessKeyIDVar] != "" || origin.Secrets[edge.EdgeSecretKeyVar] != "" {
-			return edge.Worker{}, fmt.Errorf("the origin hands the %s edge both AWS signing keys and a client certificate; an origin is reached one way, so hand it one", Kind)
-		}
-		worker.ClientCertificates = map[string]string{edge.OriginClientCertificateBinding: origin.ClientCertificate}
+	reach, err := json.Marshal(origin)
+	if err != nil {
+		return workerScript{}, fmt.Errorf("encode how the %s entry worker reaches its origin: %w", Kind, err)
 	}
-	return worker, nil
+	worker := workerScript{
+		Main:              mainModule(entryBundle),
+		Variables:         map[string]string{},
+		Secrets:           map[string]string{edge.OriginReachVar: string(reach)},
+		CachedEntrypoints: []string{serveEntrypoint},
+		DurableObjects:    []string{purgeQueueObject},
+	}
+	if origin.Reach.Kind == edge.ReachClientCertificate {
+		worker.ClientCertificates = map[string]string{originClientCertificateBinding: origin.Reach.Certificate}
+	}
+	return withPurgeBudget(worker, workersCachePurgeBudget)
 }
 
-func addPreviewVariables(worker edge.Worker, baseDomain string) edge.Worker {
+func addPreviewVariables(worker workerScript, baseDomain string) workerScript {
 	worker = withVar(worker, envPreview, "1")
 	if baseDomain != "" {
 		worker = withVar(worker, envPreviewBaseDomain, baseDomain)
@@ -111,19 +99,19 @@ func addPreviewVariables(worker edge.Worker, baseDomain string) edge.Worker {
 	return worker
 }
 
-func (p EntryProgram) addPreviewKey(worker edge.Worker) (edge.Worker, error) {
-	if p.PreviewKey != "" {
-		return withSecret(worker, edge.PreviewKeyVar, string(p.PreviewKey)), nil
+func addPreviewKey(worker workerScript, slug string, program *edge.Program) (workerScript, error) {
+	if program.PreviewKey != "" {
+		return withSecret(worker, edge.PreviewKeyVar, string(program.PreviewKey)), nil
 	}
 	if worker.Variables[envPreviewBaseDomain] != "" {
-		return edge.Worker{}, fmt.Errorf("the preview worker for %s serves hostnames under %s but was given no key to verify them with, so it would answer none; deploy again so ocel hands it the preview key", p.describePreviewScope(), p.PreviewBaseDomain)
+		return workerScript{}, fmt.Errorf("the preview worker for %s serves hostnames under %s but was given no key to verify them with, so it would answer none; deploy again so ocel hands it the preview key", describeProgramScope(slug), program.PreviewBaseDomain)
 	}
 	return worker, nil
 }
 
-func (p EntryProgram) describePreviewScope() string {
-	if p.Slug == "" {
+func describeProgramScope(slug string) string {
+	if slug == "" {
 		return "every project"
 	}
-	return p.Slug
+	return slug
 }

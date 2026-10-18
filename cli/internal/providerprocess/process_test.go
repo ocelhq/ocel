@@ -267,6 +267,25 @@ func TestConfigure(t *testing.T) {
 			t.Errorf("Ready() error = %q, want no claim about unknown options", err)
 		}
 	})
+
+	t.Run("the provider is told the edge the project selects, and answers that edge's facts", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, _ := spawnFake(t, "edge-facts", LaunchSpec{
+			ProviderConfig: &contractv1.ProviderConfig{ProjectDir: t.TempDir()},
+			Edge:           &contractv1.EdgeSelection{Kind: "relay"},
+			ProviderName:   "fake",
+			ReadyTimeout:   5 * time.Second,
+		})
+
+		if err := r.Ready(ctx); err != nil {
+			t.Fatalf("Ready() error = %v", err)
+		}
+		if !r.Facts().GetEdge().GetRunsCode() {
+			t.Errorf("Facts().edge = %v, want the facts of the relay edge the launch selected", r.Facts().GetEdge())
+		}
+	})
 }
 
 func fakeOptionsConfig(t *testing.T, options map[string]any) *contractv1.ProviderConfig {

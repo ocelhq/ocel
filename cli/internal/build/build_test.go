@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -761,41 +762,23 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 
 	cases := []struct {
 		name         string
-		cfg          func(root string) *project.Project
-		wantKind     string
+		host         Host
+		degraded     []edge.Need
+		wantCode     bool
+		wantLimits   *nodeCacheTagLimits
 		wantDegraded []string
 	}{
 		{
-			name: "a project naming no edge names none to the build either",
-			cfg: func(root string) *project.Project {
-				return &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
-			},
-			wantKind: "",
-		},
-		{
-			name: "a project naming an edge builds for that edge, with its waivers",
-			cfg: func(root string) *project.Project {
-				return &project.Project{
-					Dir:           root,
-					Edge:          &project.Edge{Kind: "relay"},
-					AllowDegraded: []edge.Need{edge.NeedEdgeMiddleware, edge.NeedEdgeRuntime},
-					Apps:          []project.App{nextApp("web", "apps/web")},
-				}
-			},
-			wantKind:     "relay",
+			name:         "an edge that runs code and bounds cache tags is described to the build as it states itself",
+			host:         Host{EdgeRunsCode: true, EdgeCacheTagLimits: CacheTagLimits{TagBytes: 1024, Tags: 1000, HeaderBytes: 16 << 10}},
+			degraded:     []edge.Need{edge.NeedEdgeMiddleware, edge.NeedEdgeRuntime},
+			wantCode:     true,
+			wantLimits:   &nodeCacheTagLimits{TagBytes: 1024, Tags: 1000, HeaderBytes: 16 << 10},
 			wantDegraded: []string{"edge-middleware", "edge-runtime"},
 		},
 		{
-			name: "a project on another edge builds for that edge, with only its own waivers",
-			cfg: func(root string) *project.Project {
-				return &project.Project{
-					Dir:           root,
-					Edge:          &project.Edge{Kind: "direct"},
-					AllowDegraded: []edge.Need{edge.NeedEdgeMiddleware},
-					Apps:          []project.App{nextApp("web", "apps/web")},
-				}
-			},
-			wantKind:     "direct",
+			name:         "an edge that runs no code and bounds no tags is described as neither, with only the project's waivers",
+			degraded:     []edge.Need{edge.NeedEdgeMiddleware},
 			wantDegraded: []string{"edge-middleware"},
 		},
 	}
@@ -806,17 +789,21 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 
 			root := t.TempDir()
 			writeBuildScript(t, root)
+			cfg := &project.Project{Dir: root, AllowDegraded: tc.degraded, Apps: []project.App{nextApp("web", "apps/web")}}
 
 			var got nodeBuildRequest
-			if err := (nodeOnly{node: requestOf(&got)}).Build(context.Background(), tc.cfg(root), nil, Log{}); err != nil {
+			if err := (nodeOnly{node: requestOf(&got), host: tc.host}).Build(context.Background(), cfg, nil, Log{}); err != nil {
 				t.Fatalf("Build: %v", err)
 			}
 
 			if len(got.Apps) != 1 {
 				t.Fatalf("request had %d apps, want 1", len(got.Apps))
 			}
-			if got.Apps[0].EdgeKind != tc.wantKind {
-				t.Errorf("edgeKind = %q, want %q", got.Apps[0].EdgeKind, tc.wantKind)
+			if got.Apps[0].EdgeRunsCode != tc.wantCode {
+				t.Errorf("edgeRunsCode = %v, want %v", got.Apps[0].EdgeRunsCode, tc.wantCode)
+			}
+			if !reflect.DeepEqual(got.Apps[0].EdgeCacheTagLimits, tc.wantLimits) {
+				t.Errorf("edgeCacheTagLimits = %+v, want %+v", got.Apps[0].EdgeCacheTagLimits, tc.wantLimits)
 			}
 			if !slices.Equal(got.Apps[0].AllowDegraded, tc.wantDegraded) {
 				t.Errorf("allowDegraded = %v, want %v", got.Apps[0].AllowDegraded, tc.wantDegraded)

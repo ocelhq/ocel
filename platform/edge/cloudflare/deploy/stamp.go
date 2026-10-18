@@ -10,7 +10,7 @@ import (
 )
 
 type stampedSpec struct {
-	Generic         edge.Worker
+	Generic         workerScript
 	GenericName     string
 	Slug            string
 	StoreScriptName string
@@ -19,25 +19,23 @@ type stampedSpec struct {
 	PruneOnly       bool
 	PruneRoutes     bool
 	PruneWorkerStem string
-	RequiredRecord  string
 	CompatDate      string
 	CompatFlags     []string
 	Observability   map[string]any
 }
 
-func specStamp(spec edge.StackSpec, generic edge.Worker) (string, error) {
+func specStamp(spec edge.StackSpec, program entryProgram, generic workerScript) (string, error) {
 	sum := sha256.New()
 	if err := json.NewEncoder(sum).Encode(stampedSpec{
 		Generic:         generic,
-		GenericName:     spec.Program.Name,
+		GenericName:     program.name,
 		Slug:            spec.Slug,
-		StoreScriptName: spec.Program.StoreScriptName,
-		StoreEndpoint:   spec.Program.StoreEndpoint,
+		StoreScriptName: program.store.Name,
+		StoreEndpoint:   program.store.Endpoint,
 		Domains:         spec.Domains,
 		PruneOnly:       spec.PruneOnly,
 		PruneRoutes:     spec.PruneRoutes,
-		PruneWorkerStem: spec.Program.PruneWorkerStem,
-		RequiredRecord:  spec.Program.RequiredRecord,
+		PruneWorkerStem: program.pruneWorkerStem,
 		CompatDate:      compatDate,
 		CompatFlags:     compatFlags,
 		Observability:   observability(),

@@ -78,6 +78,7 @@ func (e *Edge) Facts() edge.Facts {
 		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming, edge.NeedRevalidation},
 		InvalidatesByCacheTag: true,
 		CachesResponses:       true,
+		CacheControlHeader:    "cdn-cache-control",
 		Gates:                 true,
 		ShieldsOrigin:         true,
 		CredentialScope:       e.deps.Project,

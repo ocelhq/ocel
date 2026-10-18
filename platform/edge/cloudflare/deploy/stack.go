@@ -122,9 +122,9 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if err != nil {
 		return nil, err
 	}
-	program := spec.Program
-	if program == nil {
-		return nil, fmt.Errorf("the Cloudflare edge runs the entry worker; stack %q has no program", spec.Slug)
+	program, err := p.buildEntryProgram(spec.Tier, spec.Slug, spec.Program)
+	if err != nil {
+		return nil, err
 	}
 	if !spec.PruneOnly {
 		if err := p.refuseBootstrapBehind(ctx, accountID, spec.Tier, bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again"}); err != nil {
@@ -133,7 +133,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	}
 
 	slug := spec.Slug
-	endpoint := program.StoreEndpoint
+	endpoint := program.store.Endpoint
 
 	var recorded private
 	if err := prior.Private.Into(&recorded); err != nil {
@@ -148,16 +148,16 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		envelopeKey = minted
 	}
 
-	generic, err := genericWorker(spec, slug, envelopeKey)
+	generic, err := genericWorker(spec, program, envelopeKey)
 	if err != nil {
 		return nil, err
 	}
-	stamp, err := specStamp(spec, generic)
+	stamp, err := specStamp(spec, program, generic)
 	if err != nil {
 		return nil, err
 	}
 
-	secret, stamps, err := p.ensureInstance(ctx, spec, prior)
+	secret, stamps, err := p.ensureInstance(ctx, spec, program.store, prior)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	opened := func(state edge.StackState) (edge.EdgeStack, error) {
 		own := private{EnvelopeKey: envelopeKey}
 		if !spec.PruneOnly {
-			own.EntryWorkers = p.recordEntryWorker(slug, program.Name)
+			own.EntryWorkers = p.recordEntryWorker(slug, program.name)
 		}
 		return &stack{p: p, state: state, own: own}, nil
 	}
@@ -183,7 +183,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		case spec.PruneOnly:
 			state.PurgeURL = ""
 		case state.PurgeURL == "":
-			workersDev, err := p.subdomainURL(ctx, accountID, program.Name)
+			workersDev, err := p.subdomainURL(ctx, accountID, program.name)
 			if err != nil {
 				return nil, fmt.Errorf("read generic worker subdomain: %w", err)
 			}
@@ -191,17 +191,17 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 		return opened(state)
 	}
-	upToDate := stamps[program.Name] == stamp
+	upToDate := stamps[program.name] == stamp
 	if upToDate && p.skipChecks {
 		return openedAsDeployed(prior)
 	}
 
-	if spec.PruneOnly && program.Name == previewEntryScript {
-		return nil, fmt.Errorf("prune-only stack may not target the shared preview entry worker %q", program.Name)
+	if spec.PruneOnly && program.name == previewEntryScript {
+		return nil, fmt.Errorf("prune-only stack may not target the shared preview entry worker %q", program.name)
 	}
 
 	var purgeURL string
-	genericUp := upload{accountID: accountID, scriptName: program.Name}
+	genericUp := upload{accountID: accountID, scriptName: program.name}
 	if !upToDate && !spec.PruneOnly {
 		genericUp.worker = generic
 		if err := p.putWorkerScript(ctx, genericUp, "generic worker"); err != nil {
@@ -214,8 +214,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		bound:           prior.Bound,
 		servedElsewhere: spec.ServedElsewhere,
 		prune:           spec.PruneRoutes,
-		pruneStem:       program.PruneWorkerStem,
-		requiredRecord:  program.RequiredRecord,
+		pruneStem:       program.pruneWorkerStem,
 		owns:            projectOwnsScript(p.namespace, slug),
 	}, spec.Warn); err != nil {
 		return nil, err
@@ -225,8 +224,8 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	}
 
 	if spec.PruneOnly {
-		if err := p.deleteScript(ctx, accountID, program.Name); err != nil {
-			return nil, fmt.Errorf("delete retired generic worker %q: %w", program.Name, err)
+		if err := p.deleteScript(ctx, accountID, program.name); err != nil {
+			return nil, fmt.Errorf("delete retired generic worker %q: %w", program.name, err)
 		}
 		if spec.GlobalPreview != "" {
 			if purgeURL, err = p.readSharedPreviewPurgeURL(ctx, accountID, slug); err != nil {
@@ -240,7 +239,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 		purgeURL = workersDev + purgePath
 	}
-	stamps[program.Name] = stamp
+	stamps[program.name] = stamp
 	encoded, err := stamps.encode()
 	if err != nil {
 		return nil, err
@@ -282,9 +281,9 @@ func (p *cloudflare) putWorkerScript(ctx context.Context, up upload, what string
 	return nil
 }
 
-func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (string, stampSet, error) {
+func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, store edge.ReleasesStore, prior edge.StackState) (string, stampSet, error) {
 	if secret := prior.Secret; secret != "" && prior.Slug == spec.Slug {
-		current, res, err := p.getVersionStamp(ctx, spec.Program.StoreEndpoint, spec.Slug, secret)
+		current, res, err := p.getVersionStamp(ctx, store.Endpoint, spec.Slug, secret)
 		switch {
 		case err == nil:
 			return secret, decodeStampSet(current), nil
@@ -297,7 +296,7 @@ func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, pr
 	if err != nil {
 		return "", nil, fmt.Errorf("mint project store secret: %w", err)
 	}
-	if err := p.initializeInstance(ctx, spec.Program.StoreEndpoint, spec.Slug, spec.Program.BootstrapCredential, secret); err != nil {
+	if err := p.initializeInstance(ctx, store.Endpoint, spec.Slug, store.BootstrapCredential, secret); err != nil {
 		return "", nil, fmt.Errorf("initialize project store instance: %w", err)
 	}
 	return secret, stampSet{}, nil
@@ -401,7 +400,7 @@ func (p *cloudflare) putBootstrapSecret(ctx context.Context, accountID, scriptNa
 	return err
 }
 
-func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorker, deployedClasses, inherited []string) ([]byte, string, error) {
+func buildDurableObjectScriptMultipart(worker workerScript, do durableObjectWorker, deployedClasses, inherited []string) ([]byte, string, error) {
 	bindings := scriptBindings(worker, false)
 	for _, class := range do.classes {
 		bindings = append(bindings, map[string]any{
@@ -440,7 +439,7 @@ func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorke
 	if err := writePart(w, "metadata", "", "application/json", metadataJSON); err != nil {
 		return nil, "", err
 	}
-	for _, mod := range append([]edge.WorkerModule{worker.Main}, worker.Modules...) {
+	for _, mod := range append([]workerModule{worker.Main}, worker.Modules...) {
 		if err := writePart(w, mod.Name, mod.Name, mod.ContentType, mod.Content); err != nil {
 			return nil, "", err
 		}
@@ -487,7 +486,7 @@ func mintSecret() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func withSecret(worker edge.Worker, name, value string) edge.Worker {
+func withSecret(worker workerScript, name, value string) workerScript {
 	secrets := make(map[string]string, len(worker.Secrets)+1)
 	for k, v := range worker.Secrets {
 		secrets[k] = v
@@ -497,9 +496,10 @@ func withSecret(worker edge.Worker, name, value string) edge.Worker {
 	return worker
 }
 
-func genericWorker(spec edge.StackSpec, slug, envelopeKey string) (edge.Worker, error) {
+func genericWorker(spec edge.StackSpec, program entryProgram, envelopeKey string) (workerScript, error) {
+	slug := spec.Slug
 	worker := withVar(
-		withService(spec.Program.Worker, genericStoreBinding, spec.Program.StoreScriptName),
+		withService(program.worker, genericStoreBinding, program.store.Name),
 		genericSlugBinding,
 		slug,
 	)
@@ -512,14 +512,14 @@ func genericWorker(spec edge.StackSpec, slug, envelopeKey string) (edge.Worker, 
 	if len(spec.DomainApps) > 0 {
 		encoded, err := json.Marshal(spec.DomainApps)
 		if err != nil {
-			return edge.Worker{}, fmt.Errorf("encode the apps each domain of %s serves: %w", slug, err)
+			return workerScript{}, fmt.Errorf("encode the apps each domain of %s serves: %w", slug, err)
 		}
 		worker = withVar(worker, genericDomainAppsBinding, string(encoded))
 	}
 	return bindCodeLoader(worker), nil
 }
 
-func withService(worker edge.Worker, name, service string) edge.Worker {
+func withService(worker workerScript, name, service string) workerScript {
 	services := make(map[string]string, len(worker.Services)+1)
 	for k, v := range worker.Services {
 		services[k] = v
@@ -529,7 +529,7 @@ func withService(worker edge.Worker, name, service string) edge.Worker {
 	return worker
 }
 
-func withVar(worker edge.Worker, name, value string) edge.Worker {
+func withVar(worker workerScript, name, value string) workerScript {
 	variables := make(map[string]string, len(worker.Variables)+1)
 	for k, v := range worker.Variables {
 		variables[k] = v

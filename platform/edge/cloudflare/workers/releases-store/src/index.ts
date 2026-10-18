@@ -55,10 +55,17 @@ export default class extends WorkerEntrypoint<Env> {
       if (!body?.promotionId || !Array.isArray(body.records)) {
         return new Response("Bad Request", { status: 400 });
       }
-      if ((await store.movePointer(body)) === "stale") {
+      const outcome = await store.movePointer(body);
+      if (outcome.kind === "stale") {
         return new Response(
           `the pointer no longer serves ${body.replaces || "nothing"}, the promotion this pointer move replaces`,
           { status: 409 },
+        );
+      }
+      if (outcome.kind === "different-record") {
+        return new Response(
+          `release ${outcome.release} of ${outcome.app} is already served with another record, and a release's record never changes once it is served`,
+          { status: 422 },
         );
       }
       return new Response(null, { status: 204 });

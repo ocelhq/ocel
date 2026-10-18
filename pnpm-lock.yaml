@@ -970,6 +970,10 @@ importers:
         version: 4.110.0
 
   platform/edge/cloudflare/workers/releases-store:
+    dependencies:
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../../contract
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.12.4

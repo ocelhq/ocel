@@ -10,7 +10,7 @@ import {
   RENDER_RELEASE_HEADER,
   SERVE_REFUSED_HEADER,
 } from "../src/serve-key";
-import { FN_URL, withGlobalFetch } from "./origin-deps";
+import { awsOrigin, FN_URL, withGlobalFetch } from "./origin-deps";
 
 const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
 const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
@@ -37,6 +37,7 @@ const record = {
   assetPrefix: PAYLOAD.assetPrefix,
   isrPrefix,
   createdAt: 1,
+  edge: {},
 };
 
 function serveWith(over: { served?: boolean; env?: Partial<Env> } = {}): Serve {
@@ -48,8 +49,7 @@ function serveWith(over: { served?: boolean; env?: Partial<Env> } = {}): Serve {
         readServedRecord: async () =>
           over.served === false ? { kind: "not-served" } : { kind: "record", record },
       },
-      OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-      OCEL_EDGE_SECRET_KEY: "secretkey",
+      OCEL_ORIGIN: awsOrigin(),
       ...over.env,
     } as unknown as Env,
   );
@@ -183,7 +183,7 @@ describe("Serve optimizing an image", () => {
     const optimizer = optimizerAnswering(() => webp());
 
     const response = await withGlobalFetch(optimizer.fetch, () =>
-      serveWith({ env: { OCEL_IMAGE_OPTIMIZER_URL: ENV_OPTIMIZER } }).fetch(
+      serveWith({ env: { OCEL_ORIGIN: awsOrigin({ optimizerUrl: ENV_OPTIMIZER }) } }).fetch(
         imageRequest(ENV_OPTIMIZER),
       ),
     );

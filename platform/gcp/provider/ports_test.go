@@ -112,7 +112,7 @@ func TestTheCloudflareFrontOnGCPRunsCodeAndShieldsItsOrigin(t *testing.T) {
 		t.Fatalf("Open(%q) = %v", cloudflare.Kind, err)
 	}
 	facts := front.Facts()
-	if !facts.RunsCode || !facts.ProxiesRecords || len(facts.Entry.Content) == 0 {
+	if !facts.RunsCode || !facts.ProxiesRecords {
 		t.Errorf("the cloudflare edge's facts = %+v, want a worker that runs code and proxies the records of forwarded containers", facts)
 	}
 	if !facts.ShieldsOrigin {

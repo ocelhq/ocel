@@ -3,10 +3,14 @@ package cloudflare
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -67,6 +71,18 @@ func (f *fakeStore) dropLabels(pointer string) {
 			delete(f.labels, label)
 		}
 	}
+}
+
+func (f *fakeStore) findDifferentRecord(records []servedRecord) (router.ReleaseRecord, bool) {
+	for _, record := range records {
+		for _, served := range f.served {
+			held, found := served[record.App]
+			if found && held.Release == record.Release && !reflect.DeepEqual(held, record.ReleaseRecord) {
+				return record.ReleaseRecord, true
+			}
+		}
+	}
+	return router.ReleaseRecord{}, false
 }
 
 func (f *fakeStore) moved() []pointerMoveBody {
@@ -147,10 +163,14 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
+		if changed, found := f.findDifferentRecord(body.Records); found {
+			http.Error(w, fmt.Sprintf("release %s of %s is already served with another record", changed.Release, changed.App), http.StatusUnprocessableEntity)
+			return
+		}
 		f.moves = append(f.moves, body)
 		f.served[pointer] = map[string]router.ReleaseRecord{}
 		for _, record := range body.Records {
-			f.served[pointer][record.App] = record
+			f.served[pointer][record.App] = record.ReleaseRecord
 			f.apps[record.App] = true
 		}
 		f.dropLabels(pointer)
@@ -296,6 +316,35 @@ func TestAPointerMoveServesItsRecordsOnItsPointerInTheStore(t *testing.T) {
 	}
 	if sent[1].Pointer != "pr-42" || sent[0].Pointer != "" {
 		t.Errorf("moves named pointers %q and %q, want the preview pointer sent and the default one left out", sent[1].Pointer, sent[0].Pointer)
+	}
+}
+
+func TestAPointerMoveCarryingAnotherRecordForAServedReleaseIsUnservedAndNamesTheRelease(t *testing.T) {
+	t.Parallel()
+
+	srv, store := fakeStoreFor(t, "s3cr3t")
+	p := &cloudflare{}
+	state := testState(srv.URL, "s3cr3t")
+	movePointer(t, p, state, pointerMoveOf("promo-1", "", router.ReleaseRecord{App: "web", Release: "b1", BuildID: "build-1"}))
+
+	move := pointerMoveOf("promo-2", "", router.ReleaseRecord{App: "web", Release: "b1", BuildID: "build-2"})
+	err := (routerStack{s: stackOn(p, state)}).MovePointer(t.Context(), move, progress.Discard())
+
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("MovePointer = %v, want router.Unserved: the store moved nothing, so the caller may unwind", err)
+	}
+	if !errors.Is(err, errServedRecordDiffers) {
+		t.Errorf("MovePointer = %v, want errServedRecordDiffers: no retry or redeploy of this promotion can move the pointer", err)
+	}
+	if !strings.Contains(err.Error(), "release b1 of web") {
+		t.Errorf("MovePointer = %q, want it to name release b1 of web", err)
+	}
+	if served := store.serving("", "web"); served != "b1" || store.served[router.DefaultPointer]["web"].BuildID != "build-1" {
+		t.Errorf("the default pointer serves %q of build %q, want b1 of build-1 as before the refused move", served, store.served[router.DefaultPointer]["web"].BuildID)
+	}
+	if moves := len(store.moved()); moves != 1 {
+		t.Errorf("the store took %d moves, want 1: a refused move is not retried", moves)
 	}
 }
 

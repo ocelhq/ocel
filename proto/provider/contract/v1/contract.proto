@@ -106,6 +106,8 @@ message ProviderConfig {
 
 message ConfigureRequest {
   ProviderConfig config = 1 [(buf.validate.field).required = true];
+
+  EdgeSelection edge = 2;
 }
 
 message ConfigureResponse {
@@ -122,6 +124,22 @@ message ProviderFacts {
   int64 max_function_bytes = 5 [(buf.validate.field).int64.gte = 0];
 
   bool forwards_ports = 8;
+
+  EdgeFacts edge = 9;
+}
+
+message EdgeFacts {
+  bool runs_code = 1;
+
+  CacheTagLimits cache_tag_limits = 2;
+}
+
+message CacheTagLimits {
+  int64 tag_bytes = 1 [(buf.validate.field).int64.gte = 0];
+
+  int64 tags = 2 [(buf.validate.field).int64.gte = 0];
+
+  int64 header_bytes = 3 [(buf.validate.field).int64.gte = 0];
 }
 
 message UsePreviewWildcardRequest {

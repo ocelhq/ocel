@@ -212,6 +212,7 @@ type edgeAccount struct {
 
 	proxies      bool
 	caches       bool
+	tagLimits    edge.CacheTagLimits
 	issues       bool
 	runsTunnels  bool
 	tunnelEvents []string
@@ -294,6 +295,12 @@ func (e *Edge) CachesResponses() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.caches = true
+}
+
+func (e *Edge) LimitsCacheTags(limits edge.CacheTagLimits) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.tagLimits = limits
 }
 
 func (e *Edge) ProxiesRecords() {
@@ -607,6 +614,7 @@ func (e *Edge) Facts() edge.Facts {
 		RunsCode:        e.kind == KindRelay,
 		ProxiesRecords:  e.proxies,
 		CachesResponses: e.caches,
+		CacheTagLimits:  e.tagLimits,
 		CredentialScope: "fake-account",
 		TunnelsToOrigin: e.options.Tunnel,
 		Gates:           e.gates == nil || *e.gates,
@@ -617,14 +625,6 @@ func (e *Edge) Facts() edge.Facts {
 	}
 	if e.serves != nil {
 		facts.Supported = slices.Clone(*e.serves)
-	}
-	if e.kind == KindRelay {
-		facts.Compatibility = edge.Compatibility{Date: CompatDate, Flags: []string{CompatFlag}}
-		facts.Entry = edge.WorkerModule{
-			Name:        "index.js",
-			ContentType: "application/javascript+module",
-			Content:     []byte("the fake entry worker"),
-		}
 	}
 	return facts
 }
@@ -671,11 +671,6 @@ func (e *Edge) AddressesItself(addresses bool) {
 	defer e.mu.Unlock()
 	e.addressesItself = addresses
 }
-
-const (
-	CompatDate = "2025-01-01"
-	CompatFlag = "nodejs_compat"
-)
 
 func (e *Edge) Hooks() edge.Hooks {
 	e.mu.Lock()

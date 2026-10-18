@@ -1,24 +1,7 @@
-import type { Static } from "@platform/edge-contract/hosting";
-import type { EdgeWorkers } from "./edge";
 import { lruSet } from "./lru";
+import type { ServedRecord } from "./served-record";
 
-export interface ReleaseRecord {
-  app: string;
-  framework: string;
-  release: string;
-  buildId: string;
-  rootFunction?: string;
-  routeTable?: { format: "next" | "ocel"; key: string } | null;
-  static?: Static | null;
-  functionUrls: Record<string, string>;
-  assetPrefix: string;
-  isrPrefix: string;
-  purgeSecret?: string;
-  createdAt: number;
-  edgeWorkers?: EdgeWorkers;
-  env?: Record<string, string>;
-  envelope?: string;
-  releaseFingerprint?: string;
+export interface StoredRecord extends ServedRecord {
   buildAssets?: Record<string, string>;
 }
 
@@ -26,10 +9,10 @@ export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "ambiguous-app" }
   | { kind: "unchanged"; release: string }
-  | { kind: "record"; release: string; record: ReleaseRecord }
+  | { kind: "record"; release: string; record: StoredRecord }
   | { kind: "dangling"; release: string };
 
-export type ServedRecordResult = { kind: "record"; record: ReleaseRecord } | { kind: "not-served" };
+export type ServedRecordResult = { kind: "record"; record: StoredRecord } | { kind: "not-served" };
 
 export interface ReleasesBinding {
   readServedRecord(args: { slug: string; isrPrefix: string }): Promise<ServedRecordResult>;
@@ -56,7 +39,7 @@ export interface ReleaseLookup {
 }
 
 export type ReleaseResolution =
-  | { kind: "found"; record: ReleaseRecord }
+  | { kind: "found"; record: StoredRecord }
   | { kind: "not-found" }
   | { kind: "unavailable" };
 
@@ -65,7 +48,7 @@ export const RECORD_CACHE_MAX = 64;
 
 interface CacheEntry {
   release: string;
-  record: ReleaseRecord;
+  record: StoredRecord;
   at: number;
 }
 

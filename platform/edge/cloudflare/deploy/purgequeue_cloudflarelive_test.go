@@ -18,8 +18,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const (
@@ -109,7 +107,7 @@ func newPurgeHarness(t *testing.T) *purgeHarness {
 	up := upload{
 		accountID:  accountID,
 		scriptName: "ocel-purge-live-" + randomHex(t, 4),
-		worker: edge.Worker{
+		worker: workerScript{
 			Main:              buildPurgeHarness(t),
 			Variables:         map[string]string{"OCEL_HARNESS_RELEASE": harnessRelease, "OCEL_HARNESS_ISR_PREFIX": harnessISRPrefix, "OCEL_PURGE_SECRET": secret},
 			CachedEntrypoints: []string{serveEntrypoint},
@@ -133,7 +131,7 @@ func newPurgeHarness(t *testing.T) *purgeHarness {
 	return h
 }
 
-func buildPurgeHarness(t *testing.T) edge.WorkerModule {
+func buildPurgeHarness(t *testing.T) workerModule {
 	t.Helper()
 	out := t.TempDir()
 	entry, err := filepath.Abs(filepath.Join("..", "workers", "entry"))
@@ -149,7 +147,7 @@ func buildPurgeHarness(t *testing.T) edge.WorkerModule {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return edge.WorkerModule{Name: "purge-harness.js", ContentType: "application/javascript+module", Content: content}
+	return workerModule{Name: "purge-harness.js", ContentType: "application/javascript+module", Content: content}
 }
 
 func randomHex(t *testing.T, bytes int) string {

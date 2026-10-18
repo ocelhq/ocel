@@ -2,8 +2,8 @@ import { createExecutionContext } from "cloudflare:test";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
-import type { ReleaseRecord } from "../src/releases";
-import { answerEveryRecordWith } from "./origin-deps";
+import type { StoredRecord } from "../src/releases";
+import { answerEveryRecordWith, awsOrigin } from "./origin-deps";
 import { routeTableKey } from "./route-table-store";
 
 const table: NextRouteTable = {
@@ -22,27 +22,26 @@ const table: NextRouteTable = {
   dispatch: {},
 };
 
-const record: ReleaseRecord = {
+const record: StoredRecord = {
   app: "web",
   framework: "next",
   release: "deploy-2",
   buildId: "build-2",
+  rootFunction: "/",
   routeTable: { format: "next", key: routeTableKey() },
   static: { immutablePrefixes: ["/_next/static/"] },
   functionUrls: { "/": "https://abc.lambda-url.eu-west-2.on.aws/" },
   assetPrefix: "prod/p1/web/deploy-2/assets",
   isrPrefix: "prod/p1/web/deploy-2/isr",
   createdAt: 1_000,
+  edge: {},
   buildAssets: { "build-1": "prod/p1/web/deploy-1/assets" },
 };
 
 const env: Env = {
   RELEASES: answerEveryRecordWith(async () => ({ kind: "record", release: "deploy-2", record })),
   OCEL_SLUG: "p1",
-  OCEL_ASSET_BUCKET: "assets-bucket",
-  OCEL_AWS_REGION: "eu-west-2",
-  OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-  OCEL_EDGE_SECRET_KEY: "secretkey",
+  OCEL_ORIGIN: awsOrigin({ bucket: "assets-bucket", region: "eu-west-2" }),
 };
 
 async function assetKeyRead(url: string): Promise<string | undefined> {

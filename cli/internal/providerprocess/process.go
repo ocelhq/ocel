@@ -45,6 +45,7 @@ type LaunchSpec struct {
 	Args            []string
 	Env             []string
 	ProviderConfig  *contractv1.ProviderConfig
+	Edge            *contractv1.EdgeSelection
 	ProviderName    string
 	Stdout          io.Writer
 	Stderr          io.Writer
@@ -111,6 +112,7 @@ type Process struct {
 	stdin           io.Closer
 	identity        *localrpc.Identity
 	providerConfig  *contractv1.ProviderConfig
+	edge            *contractv1.EdgeSelection
 	providerName    string
 	stdout          io.Writer
 	stderr          io.Writer
@@ -182,6 +184,7 @@ func Spawn(spec LaunchSpec) (*Process, error) {
 		stdin:           stdin,
 		identity:        identity,
 		providerConfig:  spec.ProviderConfig,
+		edge:            spec.Edge,
 		providerName:    spec.ProviderName,
 		stdout:          spec.Stdout,
 		stderr:          spec.Stderr,
@@ -283,7 +286,7 @@ func (r *Process) configure(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	configured, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.providerConfig})
+	configured, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.providerConfig, Edge: r.edge})
 	if err != nil {
 		var rejected *connect.Error
 		if errors.As(err, &rejected) && rejected.Code() == connect.CodeInvalidArgument {

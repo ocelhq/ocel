@@ -24,7 +24,8 @@ var buildSetNames = []string{
 	localrpc.SessionTokenEnvVar,
 	"OCEL_APP_NAME",
 	"OCEL_OUTPUT_DIR",
-	"OCEL_EDGE_KIND",
+	"OCEL_EDGE_RUNS_CODE",
+	"OCEL_EDGE_TAG_LIMITS",
 	"OCEL_ALLOW_DEGRADED",
 	"OCEL_MAX_FUNCTION_BYTES",
 }

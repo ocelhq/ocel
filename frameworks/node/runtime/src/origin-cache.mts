@@ -10,6 +10,7 @@ import {
   cachesOnlyMarked,
   edgeCacheHeader,
   edgeCacheTagHeader,
+  readEdgeCacheControlHeader,
   readEdgeCacheMode,
   releaseTokenVar,
 } from "@platform/edge-contract/edge-cache";
@@ -33,6 +34,7 @@ const cacheTagHeader = "cache-tag";
 export interface OriginCache {
   release: string;
   edgeCachesOnlyMarked: boolean;
+  edgeCacheControlHeader: string | undefined;
 }
 
 export interface RequestCache {
@@ -50,7 +52,11 @@ export function readOriginCache(env: NodeJS.ProcessEnv): OriginCache | null {
   if (!releasePattern.test(release)) {
     throw new Error(`ocel: ${releaseTokenVar} is ${release}, which is not a release token`);
   }
-  return { release, edgeCachesOnlyMarked: cachesOnlyMarked(readEdgeCacheMode(env)) };
+  return {
+    release,
+    edgeCachesOnlyMarked: cachesOnlyMarked(readEdgeCacheMode(env)),
+    edgeCacheControlHeader: readEdgeCacheControlHeader(env),
+  };
 }
 
 const requests = new AsyncLocalStorage<RequestCache>();
@@ -213,7 +219,7 @@ function shape(
       return;
     }
     res.setHeader("cache-control", [...browser, formatCacheControl(routed.cacheRule)].join(", "));
-  } else if (!isStoredBySomeEdgeOf(res)) {
+  } else if (!isStoredBySomeEdgeOf(res, cache.edgeCacheControlHeader)) {
     return;
   }
 
@@ -236,14 +242,17 @@ function shape(
 
 const sharedDirectiveNames = ["s-maxage", "stale-while-revalidate"];
 
-function isStoredBySomeEdgeOf(res: http.ServerResponse): boolean {
+function isStoredBySomeEdgeOf(
+  res: http.ServerResponse,
+  edgeCacheControlHeader: string | undefined,
+): boolean {
   const headers = {
     get(name: string): string | null {
       const value = res.getHeader(name);
       return value === undefined ? null : String(value);
     },
   };
-  return isStoredBySomeEdge(headers, Date.now());
+  return isStoredBySomeEdge(headers, Date.now(), edgeCacheControlHeader);
 }
 
 function listBrowserDirectives(declared: string): string[] {

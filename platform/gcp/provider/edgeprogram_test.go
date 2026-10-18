@@ -8,7 +8,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func programming(h *offersHarness) *Provider {
@@ -27,12 +26,8 @@ func (h *offersHarness) keyAssets(t *testing.T, tier environment.Tier) {
 	}
 }
 
-func entryRequest(tier environment.Tier, slug string) provider.EdgeProgramRequest {
-	return provider.EdgeProgramRequest{
-		Tier: tier, Kind: cloudflareKind, Slug: slug, Env: "main",
-		PreviewBaseDomain: "preview.example.com", PreviewKey: "k",
-		Entry: edge.WorkerModule{Name: "entry.mjs", ContentType: "application/javascript+module", Content: []byte("export default {}")},
-	}
+func entryRequest(tier environment.Tier) provider.EdgeProgramRequest {
+	return provider.EdgeProgramRequest{Tier: tier, Kind: cloudflareKind}
 }
 
 func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWSKeys(t *testing.T) {
@@ -43,38 +38,27 @@ func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWS
 	}
 	h.keyAssets(t, environment.TierProduction)
 
-	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction, "shop"))
+	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))
 	if err != nil {
 		t.Fatalf("ProgramEdge = %v", err)
 	}
 
-	want, err := cloudflare.EntryProgram{
-		Tier: environment.TierProduction, Entry: entryRequest(environment.TierProduction, "shop").Entry,
-		Namespace: "ocel", Slug: "shop", Env: "main", PreviewBaseDomain: "preview.example.com", PreviewKey: "k",
-		Origin:                   cloudflare.OriginBindings{ClientCertificate: "m1"},
-		StoreScriptName:          "ocel-releases-store",
-		StoreEndpoint:            "https://s.example.workers.dev",
-		StoreBootstrapCredential: "c1",
-	}.Build()
-	if err != nil {
-		t.Fatal(err)
+	wantStore := edge.ReleasesStore{Name: "ocel-releases-store", Endpoint: "https://s.example.workers.dev", BootstrapCredential: "c1"}
+	if program.ReleasesStore != wantStore {
+		t.Errorf("releases store = %+v, want %+v", program.ReleasesStore, wantStore)
 	}
-	if program.Spec.Name != want.Spec.Name || program.Spec.StoreScriptName != "ocel-releases-store" ||
-		program.Spec.StoreEndpoint != "https://s.example.workers.dev" || program.Spec.BootstrapCredential != "c1" {
-		t.Errorf("program = %+v, want %+v", program.Spec, want.Spec)
+	if want := (edge.Reach{Kind: edge.ReachClientCertificate, Certificate: "m1"}); program.Origin.Reach != want {
+		t.Errorf("reach = %+v, want %+v: GCP is reached by the client certificate alone, with no signing keys", program.Origin.Reach, want)
 	}
-	if got := program.Spec.Worker.ClientCertificates[edge.OriginClientCertificateBinding]; got != "m1" {
-		t.Errorf("client certificate binding = %q, want m1", got)
+	if want := (edge.Throttle{Status: 429, BodyContains: "no available instance"}); program.Origin.Throttle != want {
+		t.Errorf("throttle = %+v, want %+v: Cloud Run names its throttle only in the body of a 429", program.Origin.Throttle, want)
 	}
-	if _, keyed := program.Spec.Worker.Variables[edge.EdgeAccessKeyIDVar]; keyed {
-		t.Error("the worker holds an AWS access key id")
-	}
-	if _, keyed := program.Spec.Worker.Secrets[edge.EdgeSecretKeyVar]; keyed {
-		t.Error("the worker holds an AWS secret key")
+	if err := program.Origin.RefuseIncomplete(); err != nil {
+		t.Errorf("RefuseIncomplete() = %v, want the GCP reach complete", err)
 	}
 }
 
-func TestTheSharedPreviewEntryProgramReadsEveryReleaseRecordThroughTheAdoptedStore(t *testing.T) {
+func TestThePreviewEntryProgramReadsEveryReleaseRecordThroughThePreviewTiersAdoptedStore(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 	if err := h.adoptIn(environment.TierPreview, fullOffers("c1")); err != nil {
@@ -82,18 +66,18 @@ func TestTheSharedPreviewEntryProgramReadsEveryReleaseRecordThroughTheAdoptedSto
 	}
 	h.keyAssets(t, environment.TierPreview)
 
-	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierPreview, ""))
+	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierPreview))
 	if err != nil {
 		t.Fatalf("ProgramEdge = %v", err)
 	}
-	if program.Spec.StoreScriptName != "ocel-releases-store" || len(program.Spec.Worker.Services) == 0 {
-		t.Errorf("program = %+v, want the store bound as a service", program.Spec)
+	if program.ReleasesStore.Name != "ocel-releases-store" || program.ReleasesStore.Endpoint == "" {
+		t.Errorf("releases store = %+v, want the store the preview tier adopted", program.ReleasesStore)
 	}
 }
 
 func TestProgrammingAnEntryWorkerBeforeBootstrapIsNotReady(t *testing.T) {
 	t.Parallel()
-	_, err := programming(newOffersHarness(t)).ProgramEdge(t.Context(), entryRequest(environment.TierProduction, "shop"))
+	_, err := programming(newOffersHarness(t)).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))
 	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "ocel bootstrap production") {
 		t.Errorf("ProgramEdge = %v, want a not-ready refusal naming ocel bootstrap production", err)
 	}
@@ -105,7 +89,7 @@ func TestProgrammingAnEntryWorkerWithoutAnAdoptedClientCertificateIsNotReady(t *
 	if err := h.adopt([]edge.Offer{storeOffer("c1")}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction, "shop"))
+	_, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))
 	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "client certificate") {
 		t.Errorf("ProgramEdge = %v, want a not-ready refusal about the client certificate", err)
 	}
@@ -131,12 +115,12 @@ func TestAGCPEntryWorkerPresentsItsTiersClientCertificateToTheOrigin(t *testing.
 	h.keyAssets(t, environment.TierPreview)
 
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		program, err := programming(h).ProgramEdge(t.Context(), entryRequest(tier, "shop"))
+		program, err := programming(h).ProgramEdge(t.Context(), entryRequest(tier))
 		if err != nil {
 			t.Fatalf("ProgramEdge(%s) = %v", tier, err)
 		}
-		if program.Spec.Worker.ClientCertificates[edge.OriginClientCertificateBinding] == "" {
-			t.Errorf("%s worker binds no client certificate", tier)
+		if program.Origin.Reach.Kind != edge.ReachClientCertificate || program.Origin.Reach.Certificate == "" {
+			t.Errorf("%s reach = %+v, want the tier's client certificate", tier, program.Origin.Reach)
 		}
 	}
 }
@@ -149,29 +133,20 @@ func TestTheEntryWorkerReadsAssetsFromTheTiersBucketWithTheKeyOfItsAssetReader(t
 	}
 	h.keyAssets(t, environment.TierProduction)
 
-	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction, "shop"))
+	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))
 	if err != nil {
 		t.Fatalf("ProgramEdge = %v", err)
 	}
 
-	worker := program.Spec.Worker
-	for name, want := range map[string]string{
-		edge.AssetStoreEndpointVar:    "https://storage.googleapis.com",
-		edge.AssetStoreBucketVar:      h.clients.Bucket(environment.TierProduction),
-		edge.AssetStorePrefixVar:      "assets/",
-		edge.AssetStoreAccessKeyIDVar: "GOOG1EREADER",
-	} {
-		if got := worker.Variables[name]; got != want {
-			t.Errorf("worker variable %s = %q, want %q", name, got, want)
-		}
+	want := &edge.OriginStore{
+		URL:             "https://storage.googleapis.com/" + h.clients.Bucket(environment.TierProduction),
+		Prefix:          "assets/",
+		Region:          "auto",
+		AccessKeyID:     "GOOG1EREADER",
+		SecretAccessKey: "reader-secret",
 	}
-	if got := worker.Secrets[edge.AssetStoreSecretKeyVar]; got != "reader-secret" {
-		t.Errorf("worker secret %s = %q, want the reader's secret", edge.AssetStoreSecretKeyVar, got)
-	}
-	for name, got := range worker.Variables {
-		if strings.Contains(got, "reader-secret") {
-			t.Errorf("worker variable %s holds the reader's secret in the clear", name)
-		}
+	if got := program.Origin.Store; got == nil || *got != *want {
+		t.Errorf("store = %+v, want %+v: the edge reads assets with the asset reader's key and holds no cached entry the reader cannot list", got, want)
 	}
 }
 
@@ -182,7 +157,7 @@ func TestProgrammingAnEntryWorkerWithoutAnAssetReaderKeyIsNotReady(t *testing.T)
 		t.Fatal(err)
 	}
 
-	_, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction, "shop"))
+	_, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))
 	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "asset-store") || !strings.Contains(err.Error(), "ocel bootstrap production") {
 		t.Errorf("ProgramEdge = %v, want a not-ready refusal naming the asset-store credential and the bootstrap", err)
 	}

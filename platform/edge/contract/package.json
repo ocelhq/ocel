@@ -19,6 +19,8 @@
     "./request-path": "./src/request-path.mts",
     "./ocel-route-table": "./src/ocel-route-table.mts",
     "./hosting": "./src/hosting.mts",
+    "./origin-reach": "./src/origin-reach.mts",
+    "./release-record": "./src/release-record.mts",
     "./fixtures/cache-key": "./fixtures/cache-key.json",
     "./fixtures/gate": "./fixtures/gate.json",
     "./fixtures/ocel-route-table": "./fixtures/ocel-route-table.json",

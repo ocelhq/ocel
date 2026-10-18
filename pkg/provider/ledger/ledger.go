@@ -84,6 +84,9 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.ReleaseRecord) err
 	if record.App == "" || record.Release == "" {
 		return fmt.Errorf("stage a release record: it names app %q and release %q, and the ledger keys records by both", record.App, record.Release)
 	}
+	if !record.Secrets.IsZero() {
+		return fmt.Errorf("stage the release record for %s/%s: its secrets are not sealed, and the ledger keeps a release's secrets only sealed", record.App, record.Release)
+	}
 	staging, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("encode the release record for %s: %w", record.App, err)

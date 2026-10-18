@@ -17,7 +17,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -47,6 +46,7 @@ const (
 	outputPublicKey = "ConnectorPublicKey"
 
 	KeyParameterEnvVar = "OCEL_CONNECTOR_KEY_PARAMETER"
+	RegionEnvVar       = "OCEL_AWS_REGION"
 
 	heartbeatEvery = "rate(1 minute)"
 )
@@ -377,7 +377,7 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, k
 					"Code":          map[string]any{"S3Bucket": map[string]any{"Ref": "CodeBucket"}, "S3Key": at.Key},
 					"Environment": map[string]any{"Variables": map[string]any{
 						provider.NamespaceEnvVar:       string(ns),
-						edge.AWSRegionVar:              map[string]any{"Ref": "AWS::Region"},
+						RegionEnvVar:                   map[string]any{"Ref": "AWS::Region"},
 						provider.ConnectorConfigEnvVar: string(bundle.Config),
 						KeyParameterEnvVar:             KeyParameter(ns),
 					}},

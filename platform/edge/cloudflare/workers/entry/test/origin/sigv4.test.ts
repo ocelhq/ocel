@@ -1,17 +1,17 @@
+import { AwsClient } from "aws4fetch";
 import { describe, expect, it } from "vitest";
-import { edgeOriginFetch, lambdaRegion } from "../src/signing";
+import { sigv4OriginFetch } from "../../src/origin/sigv4";
 
-describe("lambdaRegion", () => {
-  it("parses the region out of a Function URL host", () => {
-    expect(lambdaRegion("abc123.lambda-url.us-east-1.on.aws")).toBe("us-east-1");
-    expect(lambdaRegion("abc123.lambda-url.eu-west-2.on.aws")).toBe("eu-west-2");
-  });
-
-  it("returns undefined for a host that is not a Function URL", () => {
-    expect(lambdaRegion("fn.example.com")).toBeUndefined();
-    expect(lambdaRegion("lambda-url")).toBeUndefined();
-  });
-});
+function signedFetch(): typeof fetch {
+  return sigv4OriginFetch(
+    new AwsClient({
+      accessKeyId: "AKIAEXAMPLE",
+      secretAccessKey: "secretkey",
+      service: "lambda",
+      region: "us-east-1",
+    }),
+  );
+}
 
 const FUNCTION_URL = "https://abc123.lambda-url.us-east-1.on.aws/api/x";
 
@@ -23,7 +23,7 @@ async function forwarded(headers: Record<string, string>): Promise<Request> {
     return new Response("ok");
   }) as typeof fetch;
   try {
-    await edgeOriginFetch("AKIAEXAMPLE", "secretkey")!(new Request(FUNCTION_URL, { headers }));
+    await signedFetch()(new Request(FUNCTION_URL, { headers }));
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -34,20 +34,14 @@ async function answering(response: Response): Promise<Response> {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () => response) as typeof fetch;
   try {
-    return await edgeOriginFetch("AKIAEXAMPLE", "secretkey")!(new Request(FUNCTION_URL));
+    return await signedFetch()(new Request(FUNCTION_URL));
   } finally {
     globalThis.fetch = originalFetch;
   }
 }
 
-describe("edgeOriginFetch", () => {
-  it("is undefined when either credential is missing", () => {
-    expect(edgeOriginFetch(undefined, "s")).toBeUndefined();
-    expect(edgeOriginFetch("k", undefined)).toBeUndefined();
-    expect(edgeOriginFetch("", "")).toBeUndefined();
-  });
-
-  it("signs the forwarded request with SigV4 against the URL's region", async () => {
+describe("sigv4OriginFetch", () => {
+  it("signs the forwarded request with SigV4 for the client's service and region", async () => {
     let signed: Request | undefined;
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -55,7 +49,7 @@ describe("edgeOriginFetch", () => {
       return new Response("ok");
     }) as typeof fetch;
     try {
-      const origin = edgeOriginFetch("AKIAEXAMPLE", "secretkey")!;
+      const origin = signedFetch();
       expect(origin).toBeDefined();
       await origin(
         new Request("https://abc123.lambda-url.us-east-1.on.aws/api/x", {
@@ -87,7 +81,7 @@ describe("edgeOriginFetch", () => {
       return new Response("ok");
     }) as typeof fetch;
     try {
-      const origin = edgeOriginFetch("AKIAEXAMPLE", "secretkey")!;
+      const origin = signedFetch();
       await origin(
         new Request("https://abc123.lambda-url.us-east-1.on.aws/resume", {
           method: "POST",
@@ -118,7 +112,7 @@ describe("edgeOriginFetch", () => {
       })) as typeof fetch;
     let answered: Response;
     try {
-      const origin = edgeOriginFetch("AKIAEXAMPLE", "secretkey")!;
+      const origin = signedFetch();
       answered = await origin(new Request("https://abc123.lambda-url.us-east-1.on.aws/api/x"));
     } finally {
       globalThis.fetch = originalFetch;
@@ -167,12 +161,5 @@ describe("edgeOriginFetch", () => {
     expect(
       [...answered.headers.keys()].filter((name) => name.startsWith("x-amzn-remapped-")),
     ).toEqual([]);
-  });
-
-  it("fails loudly rather than mis-signing a non-Function-URL host", async () => {
-    const origin = edgeOriginFetch("AKIAEXAMPLE", "secretkey")!;
-    await expect(origin(new Request("https://fn.example.com/x"))).rejects.toThrow(
-      /non-Function-URL host/,
-    );
   });
 });

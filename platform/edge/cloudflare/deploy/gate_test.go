@@ -30,8 +30,6 @@ var productionGate = gate.Gate{
 
 func productionSpec(endpoint, version string) edge.StackSpec {
 	spec := testSpec(endpoint, version)
-	spec.Program.Name = "ocel-web"
-	spec.Program.Worker = testStoreWorker()
 	return spec
 }
 

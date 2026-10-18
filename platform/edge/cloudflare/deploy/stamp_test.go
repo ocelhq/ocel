@@ -33,30 +33,31 @@ func TestSpecStampShape(t *testing.T) {
 			},
 		},
 		{
-			typ: reflect.TypeFor[edge.ProgramSpec](),
-			want: []string{
-				"BootstrapCredential", "Name", "PruneWorkerStem", "RequiredRecord",
-				"StoreEndpoint", "StoreScriptName", "Worker",
-			},
+			typ:  reflect.TypeFor[edge.Program](),
+			want: []string{"Env", "Origin", "PreviewBaseDomain", "PreviewKey", "ReleasesStore"},
+		},
+		{
+			typ:  reflect.TypeFor[entryProgram](),
+			want: []string{"name", "pruneWorkerStem", "store", "worker"},
 		},
 		{
 			typ: reflect.TypeFor[stampedSpec](),
 			want: []string{
 				"CompatDate", "CompatFlags", "Domains", "Generic", "GenericName",
-				"Observability", "PruneOnly", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug",
+				"Observability", "PruneOnly", "PruneRoutes", "PruneWorkerStem", "Slug",
 				"StoreEndpoint", "StoreScriptName",
 			},
 		},
 		{
-			typ:  reflect.TypeFor[edge.Worker](),
+			typ:  reflect.TypeFor[workerScript](),
 			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "ClientCertificates", "DurableObjects", "LoaderBinding", "Main", "Modules", "Secrets", "Services", "Variables"},
 		},
 		{
-			typ:  reflect.TypeFor[edge.WorkerModule](),
+			typ:  reflect.TypeFor[workerModule](),
 			want: []string{"Content", "ContentType", "Name"},
 		},
 		{
-			typ:  reflect.TypeFor[edge.StaticAsset](),
+			typ:  reflect.TypeFor[workerAsset](),
 			want: []string{"Content", "Path"},
 		},
 	} {
@@ -77,7 +78,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	t.Run("the deployed metadata contains nothing the stamp cannot reach", func(t *testing.T) {
 		t.Parallel()
 
-		got := slices.Sorted(maps.Keys(metadataFromMultipart(t, edge.Worker{Main: mainModule()}, "")))
+		got := slices.Sorted(maps.Keys(metadataFromMultipart(t, workerScript{Main: testModule()}, "")))
 		want := []string{"bindings", "compatibility_date", "compatibility_flags", "main_module", "observability"}
 		if !slices.Equal(got, want) {
 			t.Errorf("script metadata keys = %v, want %v: putScript sends this metadata, so a key specStamp never hashes leaves upToDate true over a worker that would deploy differently — fold the new key into stampedSpec, then bring this list back in line",
@@ -86,20 +87,20 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	})
 
 	t.Run("turning observability off restamps the spec", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
-		generic, err := genericWorker(spec, spec.Slug, "")
+		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: programmed()}
+		generic, err := genericWorker(spec, entryOf(t, spec), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
 
 		t.Setenv(envObservability, "on")
-		on, err := specStamp(spec, generic)
+		on, err := specStamp(spec, entryOf(t, spec), generic)
 		if err != nil {
 			t.Fatalf("specStamp with observability on: %v", err)
 		}
 
 		t.Setenv(envObservability, "off")
-		off, err := specStamp(spec, generic)
+		off, err := specStamp(spec, entryOf(t, spec), generic)
 		if err != nil {
 			t.Fatalf("specStamp with observability off: %v", err)
 		}
@@ -110,9 +111,9 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	})
 
 	t.Run("a worker with no domain of its own serves the app on workers.dev, and says so", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
+		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: programmed()}
 
-		worker, err := genericWorker(spec, spec.Slug, "")
+		worker, err := genericWorker(spec, entryOf(t, spec), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
@@ -124,10 +125,10 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 
 	t.Run("a worker bound to a domain keeps the app off workers.dev", func(t *testing.T) {
 		for name, spec := range map[string]edge.StackSpec{
-			"a domain":            {Slug: "acme-web", Domains: []string{"shop.example.com"}, Program: &edge.ProgramSpec{Name: "ocel-web"}},
-			"a domain served via": {Slug: "acme-web", ServedElsewhere: []string{"shop.example.com"}, Program: &edge.ProgramSpec{Name: "ocel-web"}},
+			"a domain":            {Slug: "acme-web", Domains: []string{"shop.example.com"}, Program: programmed()},
+			"a domain served via": {Slug: "acme-web", ServedElsewhere: []string{"shop.example.com"}, Program: programmed()},
 		} {
-			worker, err := genericWorker(spec, spec.Slug, "")
+			worker, err := genericWorker(spec, entryOf(t, spec), "")
 			if err != nil {
 				t.Fatalf("%s: genericWorker: %v", name, err)
 			}
@@ -138,14 +139,14 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	})
 
 	t.Run("a gate does not restamp the spec: it is published to the releases store, not deployed in the script", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
-		generic, err := genericWorker(spec, spec.Slug, "")
+		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: programmed()}
+		generic, err := genericWorker(spec, entryOf(t, spec), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
 		stampOf := func(published *gate.Gate) string {
 			spec.Gate = published
-			stamp, err := specStamp(spec, generic)
+			stamp, err := specStamp(spec, entryOf(t, spec), generic)
 			if err != nil {
 				t.Fatalf("specStamp: %v", err)
 			}
@@ -158,22 +159,22 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	})
 
 	t.Run("binding a client certificate restamps the spec", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
-		plain, err := genericWorker(spec, spec.Slug, "")
+		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: programmed()}
+		plain, err := genericWorker(spec, entryOf(t, spec), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
-		before, err := specStamp(spec, plain)
+		before, err := specStamp(spec, entryOf(t, spec), plain)
 		if err != nil {
 			t.Fatalf("specStamp: %v", err)
 		}
 
-		spec.Program.Worker.ClientCertificates = map[string]string{edge.OriginClientCertificateBinding: "c1"}
-		bound, err := genericWorker(spec, spec.Slug, "")
+		spec.Program.Origin = certifiedReach()
+		bound, err := genericWorker(spec, entryOf(t, spec), "")
 		if err != nil {
 			t.Fatalf("genericWorker with a certificate: %v", err)
 		}
-		after, err := specStamp(spec, bound)
+		after, err := specStamp(spec, entryOf(t, spec), bound)
 		if err != nil {
 			t.Fatalf("specStamp with a certificate: %v", err)
 		}

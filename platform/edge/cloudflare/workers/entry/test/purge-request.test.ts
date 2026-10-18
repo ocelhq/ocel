@@ -49,7 +49,7 @@ const raise = {
 };
 
 let raised: { scope: ReleaseScope; mode: PurgeMode; tags: RaisedTag[] }[];
-let served: Record<string, { purgeSecret?: string }>;
+let served: Record<string, { edge: { purgeSecret?: string } }>;
 let storeDown: boolean;
 let warnings: string[];
 
@@ -73,7 +73,7 @@ function deps(): PurgeGatewayPorts {
 
 beforeEach(() => {
   raised = [];
-  served = { [PREFIX]: { purgeSecret: SECRET } };
+  served = { [PREFIX]: { edge: { purgeSecret: SECRET } } };
   storeDown = false;
   warnings = [];
 });
@@ -307,7 +307,7 @@ describe("refusing a purge request", () => {
   });
 
   it("answers 401 when the served release has no purge secret to check against", async () => {
-    served[PREFIX] = {};
+    served[PREFIX] = { edge: {} };
 
     const response = await answerPurge(await signed(raise), deps());
 

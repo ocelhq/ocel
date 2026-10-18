@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -127,31 +127,26 @@ func TestTheStagedRecordIncludesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testi
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
 	record := staged[0]
-	if record.EdgeWorkers == nil {
-		t.Fatal("the staged record has no edgeWorkers, so an edge that runs the app's code has nothing to load")
+	if record.EdgeBundle == nil {
+		t.Fatal("the staged record has no edge bundle, so an edge that runs the app's code has nothing to load")
 	}
-	if record.EdgeWorkers.BundleKey == "" {
-		t.Error("edgeWorkers names no bundle key, so the edge cannot fetch the bundle the release uploaded")
+	if record.EdgeBundle.Key == "" {
+		t.Error("the edge bundle names no key, so the edge cannot fetch the bundle the release uploaded")
 	}
-	if len(record.EdgeWorkers.ID) != 64 {
-		t.Errorf("edgeWorkers.id = %q, want the sha256 of the bundle and the runtime it loads under", record.EdgeWorkers.ID)
+	if digest := sha256.Sum256(bundle); record.EdgeBundle.Digest != hex.EncodeToString(digest[:]) {
+		t.Errorf("edge bundle digest = %q, want the sha256 of the bundle on disk, so an edge loads new code only when the bundle changes", record.EdgeBundle.Digest)
 	}
-	if record.EdgeWorkers.ID != providerserver.LoaderID(bundle, fake.CompatDate, []string{fake.CompatFlag}) {
-		t.Errorf("edgeWorkers.id = %q, want the id derived from the bundle on disk and the edge's own compatibility", record.EdgeWorkers.ID)
+	secrets := providerserver.OpenSecrets(t, provider, environment.TierProduction, "shop", record)
+	if secrets.Env["PUBLIC_MODE"] != "loud" {
+		t.Errorf("env = %v, want the app's plain variables, which the edge passes into the worker", secrets.Env)
 	}
-	if record.EdgeWorkers.CompatDate != fake.CompatDate || !slices.Equal(record.EdgeWorkers.CompatFlags, []string{fake.CompatFlag}) {
-		t.Errorf("edgeWorkers compatibility = %q %v, want the one the edge names", record.EdgeWorkers.CompatDate, record.EdgeWorkers.CompatFlags)
+	if secrets.Env[processenv.AppFolderEnvVar] != "/web" {
+		t.Errorf("env[%s] = %q, want the folder the app is rooted at", processenv.AppFolderEnvVar, secrets.Env[processenv.AppFolderEnvVar])
 	}
-	if record.Env["PUBLIC_MODE"] != "loud" {
-		t.Errorf("env = %v, want the app's plain variables, which the edge passes into the worker", record.Env)
+	if _, named := secrets.Env["orders"]; named {
+		t.Errorf("env = %v, want no binding name among the variables the worker runs with", secrets.Env)
 	}
-	if record.Env[processenv.AppFolderEnvVar] != "/web" {
-		t.Errorf("env[%s] = %q, want the folder the app is rooted at", processenv.AppFolderEnvVar, record.Env[processenv.AppFolderEnvVar])
-	}
-	if _, named := record.Env["orders"]; named {
-		t.Errorf("env = %v, want no binding name among the variables the worker runs with", record.Env)
-	}
-	if record.PurgeSecret == "" {
+	if secrets.PurgeSecret == "" {
 		t.Error("the staged record has no purgeSecret, so the origin cannot sign a purge the edge accepts")
 	}
 }
@@ -222,8 +217,8 @@ func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 	client, provider := deployServed(t)
 	direct := provider.Edges().(*fake.Edges).Edge(fake.KindDirect)
 	stager := staging(t, provider)
-	if !direct.Facts().Compatibility.IsZero() {
-		t.Fatal("the reference direct edge names a compatibility, so it cannot represent an edge that runs no code")
+	if direct.Facts().RunsCode {
+		t.Fatal("the reference direct edge runs code, so it cannot represent an edge that runs none")
 	}
 
 	req := deployRequest()
@@ -237,8 +232,8 @@ func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
-	if staged[0].EdgeWorkers != nil {
-		t.Errorf("edgeWorkers = %+v, want none: the edge runs no code, so nothing loads the bundle the build left", staged[0].EdgeWorkers)
+	if staged[0].EdgeBundle != nil {
+		t.Errorf("edge bundle = %+v, want none: the edge runs no code, so nothing loads the bundle the build left", staged[0].EdgeBundle)
 	}
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { originFetchFor, originThrottleFor } from "../src/origin-fetch";
+import { clientCertificateOriginFetch } from "../../src/origin/client-certificate";
 
 const CLIENT_AUTHORIZATION = "x-ocel-client-authorization";
 
@@ -28,10 +28,10 @@ const forbiddenFetch = (async () => {
   throw new Error("global fetch must not be called");
 }) as typeof fetch;
 
-describe("originFetchFor", () => {
-  it("reaches the origin through the client certificate binding when the worker holds no AWS keys", async () => {
+describe("clientCertificateOriginFetch", () => {
+  it("reaches the origin through the client certificate binding", async () => {
     const { binding, sent } = fakeBinding();
-    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
+    const originFetch = clientCertificateOriginFetch(binding);
     await withGlobalFetch(forbiddenFetch, () =>
       originFetch(
         new Request("https://d-abc.origin.example.com/x", {
@@ -48,7 +48,7 @@ describe("originFetchFor", () => {
 
   it("adds no AWS signature to a request it sends through the client certificate binding", async () => {
     const { binding, sent } = fakeBinding();
-    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
+    const originFetch = clientCertificateOriginFetch(binding);
     await withGlobalFetch(forbiddenFetch, () =>
       originFetch(new Request("https://d-abc.origin.example.com/x")),
     );
@@ -59,7 +59,7 @@ describe("originFetchFor", () => {
 
   it("drops a client-authorization carrier the client sent on the client certificate path", async () => {
     const { binding, sent } = fakeBinding();
-    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
+    const originFetch = clientCertificateOriginFetch(binding);
     await originFetch(
       new Request("https://d-abc.origin.example.com/x", {
         headers: { [CLIENT_AUTHORIZATION]: "forged" },
@@ -70,7 +70,7 @@ describe("originFetchFor", () => {
 
   it("passes a request body through the client certificate binding unchanged", async () => {
     const { binding, sent } = fakeBinding();
-    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
+    const originFetch = clientCertificateOriginFetch(binding);
     await originFetch(
       new Request("https://d-abc.origin.example.com/x", {
         method: "POST",
@@ -97,7 +97,7 @@ describe("originFetchFor", () => {
         return new Response("ok");
       },
     } as unknown as Fetcher;
-    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
+    const originFetch = clientCertificateOriginFetch(binding);
     const sending = originFetch(
       new Request("https://d-abc.origin.example.com/x", {
         method: "POST",
@@ -118,7 +118,7 @@ describe("originFetchFor", () => {
     const { binding } = fakeBinding(
       () => new Response("x", { headers: { "x-ocel-empty-body": "1" } }),
     );
-    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
+    const originFetch = clientCertificateOriginFetch(binding);
     const response = await originFetch(new Request("https://d-abc.origin.example.com/x"));
     expect(response.headers.has("x-ocel-empty-body")).toBe(false);
     expect(await response.text()).toBe("");
@@ -126,69 +126,10 @@ describe("originFetchFor", () => {
 
   it("refuses to send a request over the client certificate to a non-https origin", async () => {
     const { binding, sent } = fakeBinding();
-    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
+    const originFetch = clientCertificateOriginFetch(binding);
     await expect(originFetch(new Request("http://d-abc.origin.example.com/x"))).rejects.toThrow(
       "ocel: refusing to present the client certificate over http:",
     );
     expect(sent).toHaveLength(0);
-  });
-
-  it("signs with SigV4 when the worker holds AWS keys", async () => {
-    let sent: Request | undefined;
-    const stub = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      sent = new Request(input as RequestInfo, init);
-      return new Response("ok");
-    }) as typeof fetch;
-    const originFetch = originFetchFor({
-      OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-      OCEL_EDGE_SECRET_KEY: "secretkey",
-    })!;
-    await withGlobalFetch(stub, () =>
-      originFetch(new Request("https://abc123.lambda-url.us-east-1.on.aws/x")),
-    );
-    expect(sent!.headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256/);
-  });
-
-  it("refuses a worker bound to both AWS keys and a client certificate", () => {
-    const { binding } = fakeBinding();
-    expect(() =>
-      originFetchFor({
-        OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-        OCEL_EDGE_SECRET_KEY: "secretkey",
-        OCEL_ORIGIN_CLIENT_CERTIFICATE: binding,
-      }),
-    ).toThrow(
-      "ocel: this worker is bound to both AWS signing keys and a client certificate; an origin is reached one way",
-    );
-  });
-
-  it("is undefined when the worker holds neither keys nor a client certificate", () => {
-    expect(originFetchFor({})).toBeUndefined();
-  });
-});
-
-describe("originThrottleFor", () => {
-  const cloudRunAbort = "The request was aborted because there was no available instance.";
-
-  it("retries Cloud Run's no-instance 429 for an origin reached by client certificate", async () => {
-    const { binding } = fakeBinding();
-    const isThrottle = originThrottleFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding });
-
-    expect(await isThrottle(new Response(cloudRunAbort, { status: 429 }))).toBe(true);
-    expect(await isThrottle(new Response("slow down", { status: 429 }))).toBe(false);
-  });
-
-  it("retries Lambda's 429 for an origin reached by AWS signing", async () => {
-    const isThrottle = originThrottleFor({
-      OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-      OCEL_EDGE_SECRET_KEY: "secretkey",
-    });
-    const lambda = new Response(null, {
-      status: 429,
-      headers: { "x-amzn-errortype": "TooManyRequestsException" },
-    });
-
-    expect(await isThrottle(lambda)).toBe(true);
-    expect(await isThrottle(new Response(null, { status: 429 }))).toBe(false);
   });
 });

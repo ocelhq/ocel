@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -189,12 +190,13 @@ func TestBindDomain(t *testing.T) {
 		p := m.provider(t)
 
 		state := testState(store.URL, "s3cr3t")
-		for _, name := range []string{"ocel--acme-web--preview--web", "ocel--acme-web--preview--api"} {
+		for _, env := range []string{"web", "api"} {
 			spec := previewSpec(store.URL, "v2")
-			spec.Program.Name = name
+			spec.Tier = environment.TierProduction
+			spec.Program.Env = env
 			opened, err := p.Reconcile(t.Context(), spec, state)
 			if err != nil {
-				t.Fatalf("Reconcile(%s): %v", name, err)
+				t.Fatalf("Reconcile(%s): %v", env, err)
 			}
 			state = opened.State()
 		}
@@ -203,7 +205,7 @@ func TestBindDomain(t *testing.T) {
 		if err == nil {
 			t.Fatal("BindDomain err = nil, want a refusal: nothing says which app's worker should answer")
 		}
-		for _, name := range []string{"ocel--acme-web--preview--web", "ocel--acme-web--preview--api"} {
+		for _, name := range []string{rootWorkerName(defaultNamespace, "acme-web", "web"), rootWorkerName(defaultNamespace, "acme-web", "api")} {
 			if !strings.Contains(err.Error(), name) {
 				t.Errorf("BindDomain err = %q, want it to name %q", err, name)
 			}
@@ -299,8 +301,8 @@ func TestReconcileRecordsItsEntryWorker(t *testing.T) {
 	if err := state.Private.Into(&own); err != nil {
 		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
-	if !slices.Equal(own.EntryWorkers, []string{spec.Program.Name}) {
-		t.Errorf("recorded entry workers = %v, want the worker a bound domain routes to (%q)", own.EntryWorkers, spec.Program.Name)
+	if name := entryOf(t, spec).name; !slices.Equal(own.EntryWorkers, []string{name}) {
+		t.Errorf("recorded entry workers = %v, want the worker a bound domain routes to (%q)", own.EntryWorkers, name)
 	}
 }
 
@@ -368,7 +370,7 @@ func TestPruneOnlyRecordsNoEntryWorker(t *testing.T) {
 	spec := pruneOnlySpec(store.URL, "v2")
 
 	prior := testState(store.URL, "s3cr3t")
-	prior.Private = edge.Own(private{EntryWorkers: []string{spec.Program.Name}})
+	prior.Private = edge.Own(private{EntryWorkers: []string{entryOf(t, spec).name}})
 
 	state, err := reconcileState(t, previewZoneMock().provider(t), spec, prior)
 	if err != nil {

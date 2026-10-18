@@ -10,17 +10,9 @@ export interface Env {
   OCEL_PREVIEW_GLOBAL?: string;
   OCEL_PREVIEW_BASE_DOMAIN?: string;
   OCEL_PREVIEW_KEY?: string;
-  OCEL_ASSET_BUCKET?: string;
-  OCEL_AWS_REGION?: string;
-  OCEL_EDGE_ACCESS_KEY_ID?: string;
-  OCEL_EDGE_SECRET_KEY?: string;
-  OCEL_ASSET_STORE_ENDPOINT?: string;
-  OCEL_ASSET_STORE_BUCKET?: string;
-  OCEL_ASSET_STORE_PREFIX?: string;
-  OCEL_ASSET_STORE_ACCESS_KEY_ID?: string;
-  OCEL_ASSET_STORE_SECRET_KEY?: string;
+  OCEL_ORIGIN: string;
   OCEL_ORIGIN_CLIENT_CERTIFICATE?: Fetcher;
   OCEL_ENVELOPE_KEY?: string;
-  OCEL_IMAGE_OPTIMIZER_URL?: string;
+  OCEL_PURGE_BUDGET?: string;
   LOADER: WorkerLoader;
 }

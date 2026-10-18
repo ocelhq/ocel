@@ -20,6 +20,8 @@ import (
 
 var errStoreRequestUnbuildable = errors.New("build releases-store request")
 
+var errServedRecordDiffers = errors.New("the releases store serves another record for a release this promotion carries, and a release's record never changes once it is served")
+
 func isUnauthorized(res *http.Response) bool {
 	return res != nil && res.StatusCode == http.StatusUnauthorized
 }
@@ -46,18 +48,19 @@ func (p *cloudflare) deleteScript(ctx context.Context, accountID, scriptName str
 	return err
 }
 
-func (s *stack) wrapEnvelopes(records map[string]router.ReleaseRecord) ([]router.ReleaseRecord, error) {
-	served := make([]router.ReleaseRecord, 0, len(records))
+func (s *stack) serveRecords(records map[string]router.ReleaseRecord) ([]servedRecord, error) {
+	served := make([]servedRecord, 0, len(records))
 	for _, app := range slices.Sorted(maps.Keys(records)) {
 		record := records[app]
-		if record.Envelope != "" && s.own.wrapsEnvelopes() {
-			wrapped, err := wrapEnvelope(s.own.EnvelopeKey, record.Envelope)
+		envelope := record.Secrets.Envelope
+		if envelope != "" && s.own.wrapsEnvelopes() {
+			wrapped, err := wrapEnvelope(s.own.EnvelopeKey, envelope)
 			if err != nil {
 				return nil, fmt.Errorf("wrap %s's envelope for the worker that serves it: %w", record.App, err)
 			}
-			record.Envelope = wrapped
+			envelope = wrapped
 		}
-		served = append(served, record)
+		served = append(served, newServedRecord(record, envelope))
 	}
 	return served, nil
 }
@@ -80,11 +83,11 @@ func (s *stack) readServedPromotion(ctx context.Context, pointer string) (string
 }
 
 type pointerMoveBody struct {
-	Pointer     string                 `json:"pointer,omitempty"`
-	Replaces    string                 `json:"replaces,omitempty"`
-	PromotionID string                 `json:"promotionId"`
-	Records     []router.ReleaseRecord `json:"records"`
-	Labels      []pointerLabel         `json:"labels,omitempty"`
+	Pointer     string         `json:"pointer,omitempty"`
+	Replaces    string         `json:"replaces,omitempty"`
+	PromotionID string         `json:"promotionId"`
+	Records     []servedRecord `json:"records"`
+	Labels      []pointerLabel `json:"labels,omitempty"`
 }
 
 type pointerLabel struct {
@@ -97,6 +100,8 @@ func (s *stack) movePointer(ctx context.Context, body pointerMoveBody) (bool, er
 	switch {
 	case res != nil && res.StatusCode == http.StatusConflict:
 		return true, nil
+	case res != nil && res.StatusCode == http.StatusUnprocessableEntity:
+		return false, router.Unserved{Err: fmt.Errorf("move the pointer to promotion %s: %w: %w", body.PromotionID, errServedRecordDiffers, err)}
 	case err != nil && res != nil:
 		return false, router.Unserved{Err: err}
 	}

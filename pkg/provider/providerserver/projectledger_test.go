@@ -2,7 +2,9 @@ package providerserver
 
 import (
 	"context"
-	"encoding/base64"
+	"encoding/json"
+	"maps"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -11,12 +13,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 )
 
-func TestAStagedEnvelopeIsSealedInTheLedgerAndHandedToARouterOpen(t *testing.T) {
-	ctx := context.Background()
-	l := openProjectLedger(fake.NewProvider(fake.Options{}), environment.TierProduction, "shop")
-	const envelope = "the data key the edge opens its secrets with"
+var stagedSecrets = router.ReleaseSecrets{
+	PurgeSecret: "the secret the edge verifies purges with",
+	Env:         map[string]string{"PUBLIC_MODE": "loud"},
+	Envelope:    "the data key the edge opens its secrets with",
+}
 
-	if err := l.putStaged(ctx, router.ReleaseRecord{App: "web", Release: "b1", Envelope: envelope}); err != nil {
+func TestAStagedRecordsSecretsAreSealedInTheLedgerAndHandedToARouterOpen(t *testing.T) {
+	ctx := context.Background()
+	p := fake.NewProvider(fake.Options{})
+	l := openProjectLedger(p, environment.TierProduction, "shop")
+
+	if err := l.putStaged(ctx, router.ReleaseRecord{App: "web", Release: "b1", Secrets: stagedSecrets}); err != nil {
 		t.Fatalf("putStaged: %v", err)
 	}
 
@@ -24,36 +32,59 @@ func TestAStagedEnvelopeIsSealedInTheLedgerAndHandedToARouterOpen(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if kept.Envelope == "" || kept.Envelope == envelope {
-		t.Errorf("the ledger keeps the envelope as %q, want it sealed: whoever reads the origin's table would otherwise hold the key to every secret the edge serves", kept.Envelope)
+	stored, err := json.Marshal(kept)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept.Sealed) == 0 || !kept.Secrets.IsZero() {
+		t.Errorf("the ledger keeps sealed %d bytes and secrets %+v, want the secrets sealed and none in the clear", len(kept.Sealed), kept.Secrets)
+	}
+	for _, plain := range []string{stagedSecrets.PurgeSecret, stagedSecrets.Envelope, "loud"} {
+		if strings.Contains(string(stored), plain) || strings.Contains(string(kept.Sealed), plain) {
+			t.Errorf("the ledger keeps %q in the clear, want every secret of the release sealed: whoever reads the origin's table would otherwise hold it", plain)
+		}
 	}
 	records, err := l.readRecords(ctx, router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}}, []string{"web"})
 	if err != nil {
 		t.Fatalf("records: %v", err)
 	}
-	if got := records["web"].Envelope; got != envelope {
-		t.Errorf("a router is handed the envelope %q, want %q, the one the deploy staged", got, envelope)
+	got := records["web"].Secrets
+	if got.PurgeSecret != stagedSecrets.PurgeSecret || got.Envelope != stagedSecrets.Envelope || !maps.Equal(got.Env, stagedSecrets.Env) {
+		t.Errorf("a router is handed secrets %+v, want %+v, the ones the deploy staged", got, stagedSecrets)
 	}
 }
 
-func TestAnEnvelopeSealedForAnotherReleaseDoesNotOpen(t *testing.T) {
+func TestTheLedgerRefusesARecordWhoseSecretsAreNotSealed(t *testing.T) {
+	ctx := context.Background()
+	l := openProjectLedger(fake.NewProvider(fake.Options{}), environment.TierProduction, "shop")
+
+	if err := l.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: "b1", Secrets: stagedSecrets}); err == nil {
+		t.Error("PutStaged kept a record with plain secrets, want it refused: a release's secrets reach the ledger only sealed")
+	}
+}
+
+func TestSecretsSealedForAnotherReleaseDoNotOpen(t *testing.T) {
 	ctx := context.Background()
 	p := fake.NewProvider(fake.Options{})
 	l := openProjectLedger(p, environment.TierProduction, "shop")
+	plain, err := json.Marshal(stagedSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
 	sealed, err := p.Cipher().Seal(ctx, environment.TierProduction, seal.AssociatedData{
 		{Name: "project", Value: "shop"},
 		{Name: "app", Value: "web"},
 		{Name: "release", Value: "b1"},
-		{Name: "field", Value: "envelope"},
-	}, []byte("the data key the edge opens its secrets with"))
+		{Name: "field", Value: "secrets"},
+	}, plain)
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	if err := l.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: "b2", Envelope: base64.StdEncoding.EncodeToString(sealed)}); err != nil {
+	if err := l.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: "b2", Sealed: sealed}); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 
 	if _, err := l.readRecords(ctx, router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b2"}}, []string{"web"}); err == nil {
-		t.Error("readRecords opened under release b2 an envelope sealed for b1, want it refused: the envelope is bound to the release it serves")
+		t.Error("readRecords opened under release b2 secrets sealed for b1, want them refused: the secrets are bound to the release they serve")
 	}
 }

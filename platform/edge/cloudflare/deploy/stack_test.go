@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func doMetadataFromMultipart(t *testing.T, worker edge.Worker, do durableObjectWorker, deployedClasses []string) map[string]any {
+func doMetadataFromMultipart(t *testing.T, worker workerScript, do durableObjectWorker, deployedClasses []string) map[string]any {
 	t.Helper()
 	body, contentType, err := buildDurableObjectScriptMultipart(worker, do, deployedClasses, nil)
 	if err != nil {
@@ -52,8 +52,21 @@ func doMetadataFromMultipart(t *testing.T, worker edge.Worker, do durableObjectW
 	return nil
 }
 
-func testStoreWorker() edge.Worker {
-	return edge.Worker{Main: mainModule()}
+func testStoreWorker() workerScript {
+	return workerScript{Main: testModule()}
+}
+
+func entryOf(t *testing.T, spec edge.StackSpec) entryProgram {
+	t.Helper()
+	built, err := newCloudflare(defaultNamespace, Options{}).buildEntryProgram(spec.Tier, spec.Slug, spec.Program)
+	if err != nil {
+		t.Fatalf("buildEntryProgram: %v", err)
+	}
+	return built
+}
+
+func storeEntry() entryProgram {
+	return entryProgram{name: "ocel-web", worker: testStoreWorker(), store: edge.ReleasesStore{Name: "ocel-releases-store"}}
 }
 
 func doBindings(t *testing.T, meta map[string]any) map[string]string {
@@ -190,9 +203,10 @@ func testSpec(endpoint, version string) edge.StackSpec {
 		Slug:    "acme-web",
 		Tier:    environment.TierProduction,
 		Version: version,
-		Program: &edge.ProgramSpec{
-			StoreEndpoint:       endpoint,
-			BootstrapCredential: storeBootstrapCredential,
+		Program: &edge.Program{
+			Origin:        signedReach(),
+			ReleasesStore: edge.ReleasesStore{Endpoint: endpoint, BootstrapCredential: storeBootstrapCredential},
+			Env:           "prod",
 		},
 	}
 }
@@ -200,10 +214,6 @@ func testSpec(endpoint, version string) edge.StackSpec {
 func previewSpec(endpoint, version string) edge.StackSpec {
 	spec := testSpec(endpoint, version)
 	spec.Tier = environment.TierPreview
-	program := *spec.Program
-	program.Name = "ocel-preview"
-	program.Worker = testStoreWorker()
-	spec.Program = &program
 	spec.Domains = []string{"*.preview.app.com"}
 	spec.PruneRoutes = true
 	return spec
@@ -213,17 +223,17 @@ func pruneOnlySpec(endpoint, version string) edge.StackSpec {
 	spec := previewSpec(endpoint, version)
 	spec.Domains = nil
 	spec.PruneOnly = true
-	spec.Program.PruneWorkerStem = "ocel-preview"
 	return spec
 }
 
 func specStampFor(t *testing.T, spec edge.StackSpec, state edge.StackState) string {
 	t.Helper()
-	generic, err := genericWorker(spec, spec.Slug, ownOf(t, state).EnvelopeKey)
+	entry := entryOf(t, spec)
+	generic, err := genericWorker(spec, entry, ownOf(t, state).EnvelopeKey)
 	if err != nil {
 		t.Fatalf("genericWorker: %v", err)
 	}
-	stamp, err := specStamp(spec, generic)
+	stamp, err := specStamp(spec, entry, generic)
 	if err != nil {
 		t.Fatalf("specStamp: %v", err)
 	}
@@ -287,7 +297,7 @@ func TestReconcile(t *testing.T) {
 		p := m.provider(t)
 		spec := previewSpec(store.URL, "v2")
 		prior := keyedState(store.URL, "s3cr3t")
-		putStampSet(t, p, store.URL, "s3cr3t", stampSet{spec.Program.Name: specStampFor(t, spec, prior)})
+		putStampSet(t, p, store.URL, "s3cr3t", stampSet{entryOf(t, spec).name: specStampFor(t, spec, prior)})
 
 		state, err := reconcileState(t, p, spec, prior)
 		if err != nil {
@@ -298,8 +308,8 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("prior = %+v, want the caller's own state left untouched", prior)
 		}
 		want := testState(store.URL, "s3cr3t")
-		want.Private = edge.Own(private{EntryWorkers: []string{spec.Program.Name}, EnvelopeKey: testEnvelopeKey})
-		want.PurgeURL = "https://ocel-preview.acct-sub.workers.dev" + purgePath
+		want.Private = edge.Own(private{EntryWorkers: []string{entryOf(t, spec).name}, EnvelopeKey: testEnvelopeKey})
+		want.PurgeURL = "https://ocel--acme-web--preview--root.acct-sub.workers.dev" + purgePath
 		if !state.Equal(want) {
 			t.Errorf("state = %+v, want prior plus the worker a domain binds to and the purge URL it answers at (%+v)", state, want)
 		}
@@ -315,7 +325,7 @@ func TestReconcile(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
-			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel--acme-web--preview--root"},
 			{"id": "other", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "someone-else"},
 		}
 
@@ -353,15 +363,15 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		if len(m.putScripts) != 1 || m.putScripts[0] != "ocel-preview" {
-			t.Errorf("uploaded scripts = %v, want [ocel-preview]", m.putScripts)
+		if len(m.putScripts) != 1 || m.putScripts[0] != entryOf(t, spec).name {
+			t.Errorf("uploaded scripts = %v, want the project's preview worker alone", m.putScripts)
 		}
 		if len(m.createdRoutes) != 1 {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
 		stamps := readStampSet(t, p, store.URL, state.Secret)
-		if want := specStampFor(t, spec, state); stamps[spec.Program.Name] != want {
-			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
+		if want := specStampFor(t, spec, state); stamps[entryOf(t, spec).name] != want {
+			t.Errorf("version stamps = %v, want %q under %q", stamps, want, entryOf(t, spec).name)
 		}
 	})
 
@@ -375,10 +385,10 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		if !m.subdomainOn[spec.Program.Name] {
-			t.Errorf("workers.dev subdomain of %s = off, want on: the origin purges through it", spec.Program.Name)
+		if !m.subdomainOn[entryOf(t, spec).name] {
+			t.Errorf("workers.dev subdomain of %s = off, want on: the origin purges through it", entryOf(t, spec).name)
 		}
-		if want := "https://ocel-preview.acct-sub.workers.dev" + purgePath; state.PurgeURL != want {
+		if want := "https://ocel--acme-web--preview--root.acct-sub.workers.dev" + purgePath; state.PurgeURL != want {
 			t.Errorf("PurgeURL = %q, want %q", state.PurgeURL, want)
 		}
 	})
@@ -476,7 +486,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("second Reconcile: %v", err)
 		}
 
-		if want := "https://ocel-preview.acct-sub.workers.dev" + purgePath; retried.PurgeURL != want {
+		if want := "https://ocel--acme-web--preview--root.acct-sub.workers.dev" + purgePath; retried.PurgeURL != want {
 			t.Errorf("PurgeURL = %q, want %q: the worker is deployed and answers purges there", retried.PurgeURL, want)
 		}
 	})
@@ -487,7 +497,7 @@ func TestReconcile(t *testing.T) {
 		p := m.provider(t)
 		spec := pruneOnlySpec(store.URL, "v2")
 		served := testState(store.URL, "s3cr3t")
-		served.PurgeURL = "https://ocel-preview.acct-sub.workers.dev" + purgePath
+		served.PurgeURL = "https://ocel--acme-web--preview--root.acct-sub.workers.dev" + purgePath
 		if _, err := reconcileState(t, p, spec, served); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
@@ -553,14 +563,14 @@ func TestReconcile(t *testing.T) {
 		p.skipChecks = true
 
 		spec := previewSpec(store.URL, "v2")
-		spec.Program.Worker = withSecret(spec.Program.Worker, edge.PreviewKeyVar, "key-1")
+		spec.Program.PreviewKey = "key-1"
 		state, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
 		rotated := previewSpec(store.URL, "v2")
-		rotated.Program.Worker = withSecret(rotated.Program.Worker, edge.PreviewKeyVar, "key-2")
+		rotated.Program.PreviewKey = "key-2"
 		if _, err := reconcileState(t, p, rotated, state); err != nil {
 			t.Fatalf("Reconcile after the signing key changed: %v", err)
 		}
@@ -578,8 +588,7 @@ func TestReconcile(t *testing.T) {
 
 		appSpec := func(name string) edge.StackSpec {
 			spec := testSpec(store.URL, "v2")
-			spec.Program.Name = "ocel-" + name
-			spec.Program.Worker = withVar(testStoreWorker(), "OCEL_APP", name)
+			spec.Program.Env = name
 			spec.Domains = []string{name + ".app.com"}
 			return spec
 		}
@@ -590,7 +599,7 @@ func TestReconcile(t *testing.T) {
 			for _, spec := range specs {
 				next, err := reconcileState(t, p, spec, state)
 				if err != nil {
-					t.Fatalf("pass %d, %s: %v", pass, spec.Program.Name, err)
+					t.Fatalf("pass %d, %s: %v", pass, entryOf(t, spec).name, err)
 				}
 				state = next
 			}
@@ -601,8 +610,8 @@ func TestReconcile(t *testing.T) {
 		}
 		stamps := readStampSet(t, p, store.URL, state.Secret)
 		for _, spec := range specs {
-			if want := specStampFor(t, spec, state); stamps[spec.Program.Name] != want {
-				t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
+			if want := specStampFor(t, spec, state); stamps[entryOf(t, spec).name] != want {
+				t.Errorf("version stamps = %v, want %q under %q", stamps, want, entryOf(t, spec).name)
 			}
 		}
 	})
@@ -641,8 +650,8 @@ func TestReconcile(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
-			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
-			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview--web"},
+			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel--acme-web--preview--root"},
+			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel--acme-web--preview--web"},
 			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": previewEntryScript},
 			{"id": "other", "pattern": "pr-3-abc1234567.preview.app.com/*", "script": "someone-else"},
 		}
@@ -660,7 +669,7 @@ func TestReconcile(t *testing.T) {
 		if len(m.subdomainCalls) != 0 {
 			t.Errorf("subdomain calls = %v, want none: a prune-only worker is never exposed on workers.dev", m.subdomainCalls)
 		}
-		if !slices.Equal(m.deletedScripts, []string{spec.Program.Name}) {
+		if !slices.Equal(m.deletedScripts, []string{entryOf(t, spec).name}) {
 			t.Errorf("deleted scripts = %v, want the retired per-project preview worker alone", m.deletedScripts)
 		}
 		if len(m.createdRoutes) != 0 {
@@ -671,8 +680,8 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("state = %v, want the store instance's identity", state)
 		}
 		stamps := readStampSet(t, p, store.URL, state.Secret)
-		if want := specStampFor(t, spec, state); stamps[spec.Program.Name] != want {
-			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
+		if want := specStampFor(t, spec, state); stamps[entryOf(t, spec).name] != want {
+			t.Errorf("version stamps = %v, want %q under %q", stamps, want, entryOf(t, spec).name)
 		}
 		if own := ownOf(t, state); own.EnvelopeKey != "" {
 			t.Errorf("envelope key = %q, want none: a stack the shared entry serves has no worker of its own to bind one to", own.EnvelopeKey)
@@ -682,7 +691,9 @@ func TestReconcile(t *testing.T) {
 	t.Run("a prune-only spec refuses to target the shared entry worker", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		spec := pruneOnlySpec(store.URL, "v2")
-		spec.Program.Name = previewEntryScript
+		spec.Slug = ""
+		spec.Program.ReleasesStore.Name = "ocel-releases-store-preview"
+		spec.Program.PreviewKey = previewKey
 
 		if _, err := reconcileState(t, previewZoneMock().provider(t), spec, testState(store.URL, "s3cr3t")); err == nil {
 			t.Fatal("Reconcile err = nil, want a refusal to prune the shared entry worker")
@@ -693,8 +704,8 @@ func TestReconcile(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
-			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
-			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview--web"},
+			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel--acme-web--preview--root"},
+			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel--acme-web--preview--web"},
 			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": previewEntryScript},
 		}
 		p := m.provider(t)
@@ -706,7 +717,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale", "sibling"})
-		if !slices.Equal(m.deletedScripts, []string{spec.Program.Name}) {
+		if !slices.Equal(m.deletedScripts, []string{entryOf(t, spec).name}) {
 			t.Errorf("deleted scripts = %v, want the retired per-project preview worker alone", m.deletedScripts)
 		}
 	})
@@ -729,9 +740,11 @@ func TestReconcileEnvelopeKey(t *testing.T) {
 		if own.EnvelopeKey == "" {
 			t.Fatal("envelope key = none after a reconcile that put a worker of the project's own")
 		}
-		meta := uploadedMetadata(t, m, spec.Program.Name)
+		meta := uploadedMetadata(t, m, entryOf(t, spec).name)
 		secrets := bindingsByType(meta, "secret_text")
-		if len(secrets) != 1 || secrets[0]["name"] != envelopeKeyBinding || secrets[0]["text"] != own.EnvelopeKey {
+		if !slices.ContainsFunc(secrets, func(secret map[string]any) bool {
+			return secret["name"] == envelopeKeyBinding && secret["text"] == own.EnvelopeKey
+		}) {
 			t.Errorf("secret_text bindings = %v, want %s containing the key the state records", secrets, envelopeKeyBinding)
 		}
 		for _, plain := range bindingsByType(meta, "plain_text") {
@@ -784,7 +797,7 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 
 	const dataKey = "Hx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8="
 
-	moved := func(t *testing.T, own private, record router.ReleaseRecord) router.ReleaseRecord {
+	moved := func(t *testing.T, own private, record router.ReleaseRecord) servedRecord {
 		t.Helper()
 		srv, store := fakeStoreFor(t, "s3cr3t")
 		state := keyedState(srv.URL, "s3cr3t")
@@ -797,19 +810,19 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 		t.Parallel()
 
 		got := moved(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
-			router.ReleaseRecord{App: "web", Release: "b1", Envelope: dataKey})
+			router.ReleaseRecord{App: "web", Release: "b1", Secrets: router.ReleaseSecrets{Envelope: dataKey}})
 
-		if got.Envelope == dataKey || got.Envelope == "" {
-			t.Fatalf("served envelope = %q, want the data key wrapped, never bare", got.Envelope)
+		if got.Edge.Envelope == dataKey || got.Edge.Envelope == "" {
+			t.Fatalf("served envelope = %q, want the data key wrapped, never bare", got.Edge.Envelope)
 		}
-		unwrapped, err := unwrapEnvelope(testEnvelopeKey, got.Envelope)
+		unwrapped, err := unwrapEnvelope(testEnvelopeKey, got.Edge.Envelope)
 		if err != nil {
 			t.Fatalf("unwrapEnvelope: %v", err)
 		}
 		if unwrapped != dataKey {
 			t.Errorf("unwrapped = %q, want the data key the origin sealed with", unwrapped)
 		}
-		if _, err := unwrapEnvelope("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", got.Envelope); err == nil {
+		if _, err := unwrapEnvelope("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", got.Edge.Envelope); err == nil {
 			t.Error("another key unwrapped the envelope")
 		}
 	})
@@ -817,9 +830,9 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 	t.Run("a stack the shared entry serves serves the envelope as the origin sealed it", func(t *testing.T) {
 		t.Parallel()
 
-		got := moved(t, private{}, router.ReleaseRecord{App: "web", Release: "b1", Envelope: dataKey})
-		if got.Envelope != dataKey {
-			t.Errorf("served envelope = %q, want the bare data key: the shared entry has no key to unwrap with", got.Envelope)
+		got := moved(t, private{}, router.ReleaseRecord{App: "web", Release: "b1", Secrets: router.ReleaseSecrets{Envelope: dataKey}})
+		if got.Edge.Envelope != dataKey {
+			t.Errorf("served envelope = %q, want the bare data key: the shared entry has no key to unwrap with", got.Edge.Envelope)
 		}
 	})
 
@@ -828,8 +841,8 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 
 		got := moved(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
 			router.ReleaseRecord{App: "web", Release: "b1"})
-		if got.Envelope != "" {
-			t.Errorf("served envelope = %q, want none", got.Envelope)
+		if got.Edge.Envelope != "" {
+			t.Errorf("served envelope = %q, want none", got.Edge.Envelope)
 		}
 	})
 }
@@ -948,7 +961,7 @@ func TestEnsureInstance(t *testing.T) {
 			t.Fatalf("destroyInstance: %v", err)
 		}
 
-		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), state)
+		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testSpec(srv.URL, "v2").Program.ReleasesStore, state)
 		if err != nil {
 			t.Fatalf("ensureInstance after a wipe: %v", err)
 		}
@@ -969,7 +982,7 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 
-		_, _, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), edge.StackState{})
+		_, _, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testSpec(srv.URL, "v2").Program.ReleasesStore, edge.StackState{})
 		if !errors.Is(err, errStoreIdentityTaken) {
 			t.Fatalf("ensureInstance err = %v, want %v", err, errStoreIdentityTaken)
 		}
@@ -984,7 +997,7 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 		putStampSet(t, p, srv.URL, "s3cr3t", stampSet{"": "stamp-v2"})
-		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"))
+		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testSpec(srv.URL, "v2").Program.ReleasesStore, testState(srv.URL, "s3cr3t"))
 		if err != nil {
 			t.Fatalf("ensureInstance: %v", err)
 		}
@@ -1002,7 +1015,7 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "")
 		p := &cloudflare{}
 
-		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), edge.StackState{})
+		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), testSpec(srv.URL, "v1").Program.ReleasesStore, edge.StackState{})
 		if err != nil {
 			t.Fatalf("ensureInstance with no prior state: %v", err)
 		}
@@ -1030,7 +1043,7 @@ func TestEnsureInstance(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if _, _, err := (&cloudflare{}).ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t")); err == nil {
+		if _, _, err := (&cloudflare{}).ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testSpec(srv.URL, "v2").Program.ReleasesStore, testState(srv.URL, "s3cr3t")); err == nil {
 			t.Fatal("ensureInstance err = nil, want the store failure surfaced")
 		}
 		if initialized != 0 {
@@ -1068,7 +1081,7 @@ func TestWorkerDecoration(t *testing.T) {
 	t.Run("withService leaves the caller's worker alone", func(t *testing.T) {
 		t.Parallel()
 
-		worker := edge.Worker{Services: map[string]string{"EXISTING": "x"}}
+		worker := workerScript{Services: map[string]string{"EXISTING": "x"}}
 		out := withService(worker, "RELEASES", "ocel-proj-store")
 
 		if _, ok := worker.Services["RELEASES"]; ok {
@@ -1082,7 +1095,7 @@ func TestWorkerDecoration(t *testing.T) {
 	t.Run("withSecret leaves the caller's worker alone", func(t *testing.T) {
 		t.Parallel()
 
-		worker := edge.Worker{Secrets: map[string]string{"EXISTING": "1"}}
+		worker := workerScript{Secrets: map[string]string{"EXISTING": "1"}}
 		out := withSecret(worker, "WRITE_SECRET", "s")
 
 		if _, ok := worker.Secrets["WRITE_SECRET"]; ok {
@@ -1096,12 +1109,9 @@ func TestWorkerDecoration(t *testing.T) {
 	t.Run("the generic worker binds the account worker it reaches", func(t *testing.T) {
 		t.Parallel()
 
-		spec := edge.StackSpec{Program: &edge.ProgramSpec{
-			Worker:          testStoreWorker(),
-			StoreScriptName: "ocel-releases-store",
-		}}
+		spec := edge.StackSpec{Slug: "acme-web"}
 
-		worker, err := genericWorker(spec, "acme-web", "")
+		worker, err := genericWorker(spec, storeEntry(), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
@@ -1122,11 +1132,11 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 		t.Parallel()
 
 		spec := edge.StackSpec{
-			Program:    &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-releases-store"},
+			Slug:       "acme-web",
 			DomainApps: map[string]string{"shop.example": "web", "admin.shop.example": "admin"},
 		}
 
-		worker, err := genericWorker(spec, "acme-web", "")
+		worker, err := genericWorker(spec, storeEntry(), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
@@ -1140,9 +1150,9 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 	t.Run("a project that binds no hostname to an app leaves the var unset", func(t *testing.T) {
 		t.Parallel()
 
-		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-releases-store"}}
+		spec := edge.StackSpec{Slug: "acme-web"}
 
-		worker, err := genericWorker(spec, "acme-web", "")
+		worker, err := genericWorker(spec, storeEntry(), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
@@ -1158,7 +1168,7 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 		spec := edge.StackSpec{
 			Version:    "v2",
 			Slug:       "acme-web",
-			Program:    &edge.ProgramSpec{Name: "ocel-web", Worker: testStoreWorker(), StoreScriptName: "ocel-releases-store"},
+			Program:    programmed(),
 			DomainApps: map[string]string{"shop.example": "web"},
 		}
 		moved := spec

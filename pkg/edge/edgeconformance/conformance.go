@@ -26,28 +26,14 @@ type Suite struct {
 func RunFacts(t *testing.T, newEdge func(t *testing.T) edge.Edge) {
 	t.Helper()
 
-	t.Run("the code fact and the compatibility fact are one answer", func(t *testing.T) {
+	t.Run("an edge that runs code declares a code need, and one that does not declares none", func(t *testing.T) {
 		e := newEdge(t)
 		runsCode := e.Facts().RunsCode
-		if names := !e.Facts().Compatibility.IsZero(); runsCode != names {
-			t.Errorf("Facts().RunsCode = %v, but Facts().Compatibility named = %v; the code an edge runs loads under the compatibility it names, so an edge cannot answer them differently", runsCode, names)
-		}
 		wants := slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool {
 			return slices.Contains(e.Facts().Supported, need)
 		})
 		if runsCode != wants {
 			t.Errorf("Facts().RunsCode = %v, but Facts().Supported names a code need = %v; an edge that runs code must declare one and one that does not must declare neither", runsCode, wants)
-		}
-	})
-
-	t.Run("an edge that runs code names the entry module it runs, and one that does not names none", func(t *testing.T) {
-		e := newEdge(t)
-		facts := e.Facts()
-		if names := len(facts.Entry.Content) > 0; facts.RunsCode != names {
-			t.Errorf("Facts().RunsCode = %v, but Facts().Entry names a module = %v; an origin programs the entry an edge runs from the module the edge names", facts.RunsCode, names)
-		}
-		if len(facts.Entry.Content) > 0 && (facts.Entry.Name == "" || facts.Entry.ContentType == "") {
-			t.Errorf("Facts().Entry = {Name: %q, ContentType: %q}, want both named so the edge can load the module", facts.Entry.Name, facts.Entry.ContentType)
 		}
 	})
 
@@ -72,6 +58,29 @@ func RunFacts(t *testing.T, newEdge func(t *testing.T) edge.Edge) {
 		proxied := facts.ServesUnbound || facts.ProxiesRecords
 		if names := facts.ProxiedRecordNote != ""; proxied != names {
 			t.Errorf("Facts().ServesUnbound = %v and Facts().ProxiesRecords = %v, but Facts().ProxiedRecordNote is set = %v; the records such an edge asks for are proxied, and only the edge can say how to turn that on", facts.ServesUnbound, facts.ProxiesRecords, names)
+		}
+	})
+
+	t.Run("an edge names its own cache-control header in lower case, and only if it stores responses", func(t *testing.T) {
+		facts := newEdge(t).Facts()
+		if facts.CacheControlHeader != "" && !facts.CachesResponses {
+			t.Errorf("Facts().CacheControlHeader = %q but Facts().CachesResponses = false; an edge that stores nothing reads no header telling it how long to store", facts.CacheControlHeader)
+		}
+		if lower := strings.ToLower(facts.CacheControlHeader); lower != facts.CacheControlHeader {
+			t.Errorf("Facts().CacheControlHeader = %q, want %q: origins compare header names in lower case", facts.CacheControlHeader, lower)
+		}
+	})
+
+	t.Run("an edge's cache tag limits and purge budget are each whole or absent", func(t *testing.T) {
+		facts := newEdge(t).Facts()
+		if limits := facts.CacheTagLimits; !limits.IsZero() && (limits.TagBytes <= 0 || limits.Tags <= 0 || limits.HeaderBytes <= 0) {
+			t.Errorf("Facts().CacheTagLimits = %+v; a build bounds tags by all three limits, so set each one or none", limits)
+		}
+		if budget := facts.PurgeBudget; !budget.IsZero() && (budget.PurgesPerMinute <= 0 || budget.TagsPerPurge <= 0) {
+			t.Errorf("Facts().PurgeBudget = %+v; a purge queue paces itself by both, so set each one or neither", budget)
+		}
+		if !facts.PurgeBudget.IsZero() && !facts.InvalidatesByCacheTag {
+			t.Errorf("Facts().PurgeBudget = %+v but Facts().InvalidatesByCacheTag = false; only an edge that purges by tag spends a purge budget", facts.PurgeBudget)
 		}
 	})
 

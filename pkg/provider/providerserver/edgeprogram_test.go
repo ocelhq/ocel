@@ -66,12 +66,14 @@ func TestUsePreviewWildcardSendsTheProviderProgramToAnEdgeThatRunsCode(t *testin
 	if spec.Program == nil {
 		t.Fatal("the wildcard has no program, and the relay edge answers every preview from an entry worker")
 	}
-	if spec.Program.StoreScriptName != fake.ProgramStore {
-		t.Errorf("StoreScriptName = %q, want %q", spec.Program.StoreScriptName, fake.ProgramStore)
+	if spec.Program.ReleasesStore.Name != fake.ProgramStore {
+		t.Errorf("ReleasesStore.Name = %q, want %q", spec.Program.ReleasesStore.Name, fake.ProgramStore)
 	}
-	if spec.Program.Worker.Variables[fake.ProgramPreviewVar] != "preview.acme.com" {
-		t.Errorf("Variables[%s] = %q, want the wildcard's base domain",
-			fake.ProgramPreviewVar, spec.Program.Worker.Variables[fake.ProgramPreviewVar])
+	if spec.Program.PreviewBaseDomain != "preview.acme.com" {
+		t.Errorf("PreviewBaseDomain = %q, want the wildcard's base domain", spec.Program.PreviewBaseDomain)
+	}
+	if spec.Program.Origin.Reach.Kind == "" {
+		t.Error("the program names no way to reach the origin, and the entry worker forwards every request it cannot answer there")
 	}
 }
 
@@ -131,15 +133,14 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	if spec.Program == nil {
 		t.Fatal("the stack has no program, and the relay edge answers every request from an entry worker")
 	}
-	entry := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Facts().Entry
-	if main := spec.Program.Worker.Main; main.Name != entry.Name || string(main.Content) != string(entry.Content) {
-		t.Errorf("Worker.Main = %q %q, want the entry module the edge names, %q %q", main.Name, main.Content, entry.Name, entry.Content)
+	if want := (edge.Reach{Kind: edge.ReachClientCertificate, Certificate: fake.ProgramCertificate + "-" + string(fake.KindRelay)}); spec.Program.Origin.Reach != want {
+		t.Errorf("Origin.Reach = %+v, want the reach the provider programs for the relay edge, %+v", spec.Program.Origin.Reach, want)
 	}
-	if spec.Program.Name != fake.ProgramName("shop", environment.TierProduction) {
-		t.Errorf("Name = %q, want %q", spec.Program.Name, fake.ProgramName("shop", environment.TierProduction))
+	if spec.Program.Env != "prod" {
+		t.Errorf("Env = %q, want the deploy's environment the edge names its worker for", spec.Program.Env)
 	}
-	if key, carried := spec.Program.Worker.Secrets[edge.PreviewKeyVar]; carried {
-		t.Errorf("Secrets[%s] = %q, want none: production serves no preview hostname to verify", edge.PreviewKeyVar, key)
+	if spec.Program.PreviewKey != "" {
+		t.Errorf("PreviewKey = %q, want none: production serves no preview hostname to verify", spec.Program.PreviewKey)
 	}
 	if spec.PruneOnly {
 		t.Error("the production stack is prune-only, though its worker is the one serving every request")
@@ -258,9 +259,8 @@ func TestPreviewDeployOnTheSharedWildcardPrunesItsOwnWorker(t *testing.T) {
 	if spec.GlobalPreview != "preview.acme.com" {
 		t.Errorf("GlobalPreview = %q, want the wildcard's base the shared entry answers purges for", spec.GlobalPreview)
 	}
-	if got := spec.Program.Worker.Variables[fake.ProgramPreviewVar]; got != "" {
-		t.Errorf("Variables[%s] = %q, want empty: the shared entry has the base domain, not the project's worker",
-			fake.ProgramPreviewVar, got)
+	if got := spec.Program.PreviewBaseDomain; got != "" {
+		t.Errorf("PreviewBaseDomain = %q, want empty: the shared entry has the base domain, not the project's worker", got)
 	}
 }
 
@@ -284,10 +284,10 @@ func TestPreviewDeployOnItsOwnWildcardServesFromItsOwnWorker(t *testing.T) {
 	if !slices.Equal(spec.Domains, []string{"*.preview.shop.example"}) {
 		t.Errorf("Domains = %v, want the project's preview wildcard", spec.Domains)
 	}
-	if got := spec.Program.Worker.Variables[fake.ProgramPreviewVar]; got != "preview.shop.example" {
-		t.Errorf("Variables[%s] = %q, want the base under the project's own wildcard", fake.ProgramPreviewVar, got)
+	if got := spec.Program.PreviewBaseDomain; got != "preview.shop.example" {
+		t.Errorf("PreviewBaseDomain = %q, want the base under the project's own wildcard", got)
 	}
-	key := edge.PreviewKey(spec.Program.Worker.Secrets[edge.PreviewKeyVar])
+	key := spec.Program.PreviewKey
 	aliases := servedURLs(result)
 	if len(aliases) != 1 {
 		t.Fatalf("the deploy announced %v, want one alias", aliases)
@@ -310,7 +310,7 @@ func TestUsePreviewWildcardAndAPreviewDeploySignWithOneKey(t *testing.T) {
 	}
 
 	specs := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Specs()
-	key := edge.PreviewKey(specs[len(specs)-1].Program.Worker.Secrets[edge.PreviewKeyVar])
+	key := specs[len(specs)-1].Program.PreviewKey
 	if alias := strings.TrimPrefix(servedURLs(result)[0], "https://"); key == "" || !isSignedBy(key, alias) {
 		t.Errorf("the shared preview entry's key did not sign %q, want the key every project's previews are signed with", alias)
 	}

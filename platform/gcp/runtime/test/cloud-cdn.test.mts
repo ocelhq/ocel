@@ -214,7 +214,7 @@ test.each([
 ] as const)(
   "a response with %s is withheld from Cloud CDN, because nothing tags it for clearing",
   (_name, headers) => {
-    expect(isWithheldFromCloudCdn(new Headers(headers), now)).toBe(true);
+    expect(isWithheldFromCloudCdn(new Headers(headers), now, undefined)).toBe(true);
   },
 );
 
@@ -226,12 +226,22 @@ test.each([
   ["an immutable max-age", { "cache-control": "public, max-age=31536000, immutable" }],
   ["an immutable s-maxage", { "cache-control": "public, s-maxage=60, immutable" }],
 ] as const)("a response with %s is left storable as it is", (_name, headers) => {
-  expect(isWithheldFromCloudCdn(new Headers(headers), now)).toBe(false);
+  expect(isWithheldFromCloudCdn(new Headers(headers), now, undefined)).toBe(false);
+});
+
+test("a response with a lifetime in the cache-control header its edge reads is withheld from Cloud CDN", () => {
+  const headers = new Headers({ "cloudflare-cdn-cache-control": "max-age=60" });
+  expect(isWithheldFromCloudCdn(headers, now, "cloudflare-cdn-cache-control")).toBe(true);
+});
+
+test("a response with a lifetime only another edge's header names is left storable as it is", () => {
+  const headers = new Headers({ "cloudflare-cdn-cache-control": "max-age=60" });
+  expect(isWithheldFromCloudCdn(headers, now, "cdn-cache-control")).toBe(false);
 });
 
 test("a next start response that names s-maxage leaves the server private and unstorable", async () => {
   class TestResponse extends http.ServerResponse {}
-  withholdResponsesFromCloudCdn(TestResponse.prototype);
+  withholdResponsesFromCloudCdn(TestResponse.prototype, undefined);
   const server = http.createServer({ ServerResponse: TestResponse }, (req, res) => {
     if (req.url === "/static")
       res.setHeader("cache-control", "public, max-age=31536000, immutable");
@@ -254,7 +264,7 @@ async function cacheControlSeenFor(
   respond: (res: http.ServerResponse) => void,
 ): Promise<{ cacheControl: string | null; other: string | null }> {
   class TestResponse extends http.ServerResponse {}
-  withholdResponsesFromCloudCdn(TestResponse.prototype);
+  withholdResponsesFromCloudCdn(TestResponse.prototype, undefined);
   const server = http.createServer({ ServerResponse: TestResponse }, (_req, res) => {
     respond(res);
     res.end("x");

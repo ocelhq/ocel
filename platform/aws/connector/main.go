@@ -21,7 +21,6 @@ import (
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
@@ -38,7 +37,7 @@ const runtimeAPIEnvVar = "AWS_LAMBDA_RUNTIME_API"
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:7777", "address to serve on")
-	region := flag.String("region", os.Getenv(edge.AWSRegionVar), "AWS region the target is bootstrapped in")
+	region := flag.String("region", os.Getenv(awsconnector.RegionEnvVar), "AWS region the target is bootstrapped in")
 	config := flag.String("config", os.Getenv("OCEL_CONNECTOR_CONFIG"), "path to the connector config naming the console, this connector and its grants")
 	keyParameter := flag.String("key-parameter", os.Getenv(awsconnector.KeyParameterEnvVar), "name of the SecureString parameter storing the key this connector signs heartbeats with")
 	flag.Parse()

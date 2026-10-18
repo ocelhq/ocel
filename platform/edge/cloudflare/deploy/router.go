@@ -60,7 +60,7 @@ func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
 func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _ progress.Log) error {
-	records, err := r.s.wrapEnvelopes(move.Records)
+	records, err := r.s.serveRecords(move.Records)
 	if err != nil {
 		return router.Unserved{Err: err}
 	}

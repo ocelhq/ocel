@@ -58,17 +58,16 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		base = r.previewOn
 		spec.Domains = []string{edge.PreviewWildcard(base)}
 	}
-	program, err := edgeProgramFor(ctx, r.provider, r.front, provider.EdgeProgramRequest{
-		Tier:              r.spec.Tier,
-		Slug:              r.spec.Slug,
-		Env:               r.spec.Env,
-		PreviewBaseDomain: base,
-		PreviewKey:        r.previewKey,
+	program, err := edgeProgramFor(ctx, r.provider, r.front, edgeProgramScope{
+		tier:              r.spec.Tier,
+		env:               r.spec.Env,
+		previewBaseDomain: base,
+		previewKey:        r.previewKey,
 	})
 	if err != nil {
 		return err
 	}
-	spec.Program = program.Spec
+	spec.Program = program
 	disabled, err := r.disableGate(ctx)
 	if err != nil {
 		return err

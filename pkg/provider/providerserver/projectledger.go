@@ -2,7 +2,7 @@ package providerserver
 
 import (
 	"context"
-	"encoding/base64"
+	"encoding/json"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -24,22 +24,25 @@ func openProjectLedger(p provider.Provider, tier environment.Tier, slug string) 
 	return projectLedger{Ledger: ledger.New(p.KeyValues(), tier, slug), cipher: p.Cipher(), tier: tier, slug: slug}
 }
 
-func (l projectLedger) newEnvelopeAssociatedData(app, release string) seal.AssociatedData {
+func (l projectLedger) newSecretsAssociatedData(app, release string) seal.AssociatedData {
 	return seal.AssociatedData{
 		{Name: "project", Value: l.slug},
 		{Name: "app", Value: app},
 		{Name: "release", Value: release},
-		{Name: "field", Value: "envelope"},
+		{Name: "field", Value: "secrets"},
 	}
 }
 
 func (l projectLedger) putStaged(ctx context.Context, record router.ReleaseRecord) error {
-	if record.Envelope != "" {
-		sealed, err := l.cipher.Seal(ctx, l.tier, l.newEnvelopeAssociatedData(record.App, record.Release), []byte(record.Envelope))
+	if !record.Secrets.IsZero() {
+		plain, err := json.Marshal(record.Secrets)
 		if err != nil {
-			return fmt.Errorf("seal the envelope %s/%s serves with before the ledger keeps it: %w", record.App, record.Release, err)
+			return fmt.Errorf("encode the secrets %s/%s serves with: %w", record.App, record.Release, err)
 		}
-		record.Envelope = base64.StdEncoding.EncodeToString(sealed)
+		if record.Sealed, err = l.cipher.Seal(ctx, l.tier, l.newSecretsAssociatedData(record.App, record.Release), plain); err != nil {
+			return fmt.Errorf("seal the secrets %s/%s serves with before the ledger keeps them: %w", record.App, record.Release, err)
+		}
+		record.Secrets = router.ReleaseSecrets{}
 	}
 	return l.PutStaged(ctx, record)
 }
@@ -60,7 +63,7 @@ func (l projectLedger) readRecords(ctx context.Context, promotion router.Promoti
 				"promotion %s names release %s of %s, and this project's ledger staged no record for it, so nothing says what that release is. Re-run the deploy that staged it",
 				promotion.PromotionID, release, app)
 		}
-		if record.Envelope, err = l.openEnvelope(ctx, record); err != nil {
+		if record.Secrets, err = l.openSecrets(ctx, record); err != nil {
 			return nil, err
 		}
 		records[app] = record
@@ -68,17 +71,17 @@ func (l projectLedger) readRecords(ctx context.Context, promotion router.Promoti
 	return records, nil
 }
 
-func (l projectLedger) openEnvelope(ctx context.Context, record router.ReleaseRecord) (string, error) {
-	if record.Envelope == "" {
-		return "", nil
+func (l projectLedger) openSecrets(ctx context.Context, record router.ReleaseRecord) (router.ReleaseSecrets, error) {
+	if len(record.Sealed) == 0 {
+		return router.ReleaseSecrets{}, nil
 	}
-	sealed, err := base64.StdEncoding.DecodeString(record.Envelope)
+	opened, err := l.cipher.Open(ctx, l.tier, l.newSecretsAssociatedData(record.App, record.Release), record.Sealed)
 	if err != nil {
-		return "", fmt.Errorf("read the envelope the ledger keeps for %s/%s: %w", record.App, record.Release, err)
+		return router.ReleaseSecrets{}, fmt.Errorf("open the secrets the ledger keeps for %s/%s: %w", record.App, record.Release, err)
 	}
-	opened, err := l.cipher.Open(ctx, l.tier, l.newEnvelopeAssociatedData(record.App, record.Release), sealed)
-	if err != nil {
-		return "", fmt.Errorf("open the envelope the ledger keeps for %s/%s: %w", record.App, record.Release, err)
+	var secrets router.ReleaseSecrets
+	if err := json.Unmarshal(opened, &secrets); err != nil {
+		return router.ReleaseSecrets{}, fmt.Errorf("read the secrets the ledger keeps for %s/%s: %w", record.App, record.Release, err)
 	}
-	return string(opened), nil
+	return secrets, nil
 }

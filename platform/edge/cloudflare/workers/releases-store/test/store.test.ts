@@ -1,7 +1,7 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import type { PointerMove, ReleaseRecord } from "../src/store";
+import type { PointerMove, StoredRecord } from "../src/store";
 import { ensureSchema } from "../src/store";
 
 declare module "cloudflare:test" {
@@ -13,13 +13,14 @@ function storeStub() {
   return env.RELEASES_DO.get(id);
 }
 
-function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
+function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
   return {
     app: "web",
     framework: "next",
     release: "deploy-1",
     buildId: "deploy-1",
-    routeTable: { format: "next", table: { pathnames: [] } },
+    rootFunction: "/",
+    routeTable: { format: "next", key: "prod/p1/web/route-table.json" },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
     isrPrefix: "prod/p1/web/build-1",
@@ -40,7 +41,7 @@ describe("movePointer", () => {
   it("serves the records it carries on the pointer and names the promotion it serves", async () => {
     const store = storeStub();
 
-    expect(await store.movePointer(makePointerMove())).toBe("moved");
+    expect(await store.movePointer(makePointerMove())).toEqual({ kind: "moved" });
 
     expect(await store.readServedPromotion()).toBe("promo-1");
     expect(await store.readPointerRecord("web")).toEqual({
@@ -59,7 +60,7 @@ describe("movePointer", () => {
       replaces: "promo-1",
       records: [makeRecord({ release: "deploy-2" })],
     });
-    expect(await store.movePointer(next)).toBe("moved");
+    expect(await store.movePointer(next)).toEqual({ kind: "moved" });
 
     expect(await store.readServedPromotion()).toBe("promo-2");
     expect(await store.readPointerRecord("web")).toMatchObject({
@@ -84,7 +85,7 @@ describe("movePointer", () => {
       replaces: "promo-1",
       records: [makeRecord({ release: "deploy-3" })],
     });
-    expect(await store.movePointer(stale)).toBe("stale");
+    expect(await store.movePointer(stale)).toEqual({ kind: "stale" });
 
     expect(await store.readServedPromotion()).toBe("promo-2");
     expect(await store.readPointerRecord("web")).toMatchObject({
@@ -96,7 +97,9 @@ describe("movePointer", () => {
   it("moves nothing when it names a promotion on a pointer that serves none", async () => {
     const store = storeStub();
 
-    expect(await store.movePointer(makePointerMove({ replaces: "promo-0" }))).toBe("stale");
+    expect(await store.movePointer(makePointerMove({ replaces: "promo-0" }))).toEqual({
+      kind: "stale",
+    });
 
     expect(await store.readServedPromotion()).toBeUndefined();
     expect(await store.readPointerRecord("web")).toEqual({ kind: "no-pointer" });
@@ -111,6 +114,78 @@ describe("movePointer", () => {
     await store.movePointer(makePointerMove({ promotionId: "promo-2", replaces: "promo-1" }));
 
     expect(await store.readPointerRecord("admin")).toEqual({ kind: "no-pointer" });
+  });
+
+  it("refuses a different record for a release the pointer serves, and moves nothing", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove());
+
+    const changed = makePointerMove({
+      promotionId: "promo-2",
+      replaces: "promo-1",
+      records: [makeRecord({ functionUrls: { "/": "https://other.example.com" } })],
+    });
+    expect(await store.movePointer(changed)).toEqual({
+      kind: "different-record",
+      app: "web",
+      release: "deploy-1",
+    });
+
+    expect(await store.readServedPromotion()).toBe("promo-1");
+    expect(await store.readPointerRecord("web")).toEqual({
+      kind: "record",
+      release: "deploy-1",
+      record: makeRecord(),
+    });
+  });
+
+  it("refuses a different record for a release another pointer serves", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove());
+
+    const preview = makePointerMove({
+      pointer: "pr-42",
+      promotionId: "promo-preview",
+      records: [makeRecord({ createdAt: 2_000 })],
+    });
+    expect(await store.movePointer(preview)).toEqual({
+      kind: "different-record",
+      app: "web",
+      release: "deploy-1",
+    });
+
+    expect(await store.readServedPromotion("pr-42")).toBeUndefined();
+  });
+
+  it("serves a release again with the edge payload of the later move", async () => {
+    const store = storeStub();
+    await store.movePointer(
+      makePointerMove({ records: [makeRecord({ edge: { envelope: "a" } })] }),
+    );
+
+    const rewrapped = makePointerMove({
+      promotionId: "promo-2",
+      replaces: "promo-1",
+      records: [makeRecord({ edge: { envelope: "b" } })],
+    });
+    expect(await store.movePointer(rewrapped)).toEqual({ kind: "moved" });
+
+    expect(await store.readPointerRecord("web")).toMatchObject({
+      kind: "record",
+      record: { edge: { envelope: "b" } },
+    });
+  });
+
+  it("takes the same release of another app for that app's own", async () => {
+    const store = storeStub();
+    await store.movePointer(makePointerMove());
+
+    const admin = makePointerMove({
+      pointer: "pr-42",
+      promotionId: "promo-preview",
+      records: [makeRecord({ app: "admin", isrPrefix: "prod/p1/admin/build-1" })],
+    });
+    expect(await store.movePointer(admin)).toEqual({ kind: "moved" });
   });
 
   it("moves only the pointer it names", async () => {
@@ -300,7 +375,7 @@ describe("removePointer", () => {
 });
 
 describe("the builds a pointer served before", () => {
-  const build = (n: number, over: Partial<ReleaseRecord> = {}) =>
+  const build = (n: number, over: Partial<StoredRecord> = {}) =>
     makeRecord({
       release: `deploy-${n}`,
       buildId: `build-${n}`,
@@ -308,7 +383,7 @@ describe("the builds a pointer served before", () => {
       ...over,
     });
 
-  async function promote(store: ReturnType<typeof storeStub>, records: ReleaseRecord[], n: number) {
+  async function promote(store: ReturnType<typeof storeStub>, records: StoredRecord[], n: number) {
     await store.movePointer(
       makePointerMove({
         promotionId: `promo-${n}`,

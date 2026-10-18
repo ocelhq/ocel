@@ -3,7 +3,7 @@ import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import type { ImageConfig } from "@framework/next-router/image";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
-import type { ReleaseRecord, ReleasesBinding } from "../src/releases";
+import type { ReleasesBinding, StoredRecord } from "../src/releases";
 import { servedNextRelease, UNTOKENED_ISR_PREFIX } from "./next-release";
 import { answerEveryRecordWith, capturing } from "./origin-deps";
 import { resolveBase } from "./resolve-base";
@@ -20,24 +20,26 @@ const TABLE: NextRouteTable = {
   i18n: { locales: ["en", "fr"], defaultLocale: "en" },
 };
 
-function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
+function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
   return {
     app: "web",
     framework: "next",
     release: "deploy-1",
     buildId: "deploy-1",
+    rootFunction: "/",
     routeTable: { format: "next", key: routeTableKey() },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "build-1",
     isrPrefix: "prod/p1/web/build-1",
     createdAt: 1_000,
+    edge: {},
     ...over,
   };
 }
 
 function bindingReturning(
   release: string | undefined,
-  record: ReleaseRecord | undefined,
+  record: StoredRecord | undefined,
 ): ReleasesBinding {
   return answerEveryRecordWith(async () => {
     if (!release) return { kind: "no-pointer" };
@@ -59,7 +61,7 @@ function baseWith(over: Partial<ResolveBase> = {}): ResolveBase {
   });
 }
 
-function lookup(record: ReleaseRecord, slug = "p1") {
+function lookup(record: StoredRecord, slug = "p1") {
   return {
     binding: bindingReturning("deploy-1", record),
     slug,
@@ -71,10 +73,13 @@ function lookup(record: ReleaseRecord, slug = "p1") {
 describe("a routed release", () => {
   it("refuses a record whose edge bundle lies outside the deployment's own prefix", async () => {
     const record = makeRecord({
-      edgeWorkers: {
-        bundleKey: "prod/other/web/build-1/edge/bundle.json",
-        id: "e1",
-        compatDate: "2026-03-10",
+      edge: {
+        code: {
+          bundleKey: "prod/other/web/build-1/edge/bundle.json",
+          loaderId: "e1",
+          compatDate: "2026-03-10",
+          compatFlags: [],
+        },
       },
     });
 
@@ -85,10 +90,13 @@ describe("a routed release", () => {
 
   it("accepts a record whose edge bundle sits under the deployment's own prefix", async () => {
     const record = makeRecord({
-      edgeWorkers: {
-        bundleKey: "prod/p1/web/build-1/edge/bundle.json",
-        id: "e1",
-        compatDate: "2026-03-10",
+      edge: {
+        code: {
+          bundleKey: "prod/p1/web/build-1/edge/bundle.json",
+          loaderId: "e1",
+          compatDate: "2026-03-10",
+          compatFlags: [],
+        },
       },
     });
 
@@ -373,9 +381,9 @@ describe("the image origin of a routed deployment", () => {
       headers: { accept: "image/webp" },
     });
 
-  it("asks the deployment's own service for an image when no optimizer is bound", async () => {
+  it("asks the deployment's own service for an image when its origin names images but no optimizer", async () => {
     const fetched: string[] = [];
-    const serve = imageRelease({ imagesAtDeployment: true, originFetch: reached(fetched) });
+    const serve = imageRelease({ images: {}, originFetch: reached(fetched) });
 
     const response = await serve(imageRequest());
 
@@ -383,16 +391,16 @@ describe("the image origin of a routed deployment", () => {
     expect(fetched).toEqual(["https://r1-x.o.example.com/_ocel/image"]);
   });
 
-  it("keeps the AWS optimizer when one is bound", async () => {
+  it("keeps an image origin the host binds", async () => {
     const optimizer = async () => new Response("optimizer", { status: 200 });
-    const serve = imageRelease({ imagesAtDeployment: false, imageOrigin: optimizer });
+    const serve = imageRelease({ imageOrigin: optimizer });
 
     const response = await serve(imageRequest());
 
     expect(await response.text()).toBe("optimizer");
   });
 
-  it("leaves an origin reached with AWS keys without a deployment image origin", async () => {
+  it("leaves a deployment whose origin names no images without an image origin", async () => {
     const fetched: string[] = [];
     const serve = imageRelease({ originFetch: reached(fetched) });
 
@@ -402,9 +410,67 @@ describe("the image origin of a routed deployment", () => {
     expect(fetched).toEqual([]);
   });
 
+  function routeImageRelease(base: Partial<ResolveBase>) {
+    return servedNextRelease({
+      table: {
+        rootFunction: "bundle-0",
+        images,
+        assetHashes: {},
+        pathnames: ["/api/og"],
+        dispatch: { "/api/og": { kind: "function", id: "/api/og" } },
+      },
+      record: {
+        functionUrls: { "bundle-0": entryUrl, "/api/og": "https://og.fn.example" },
+        isrPrefix: UNTOKENED_ISR_PREFIX,
+      },
+      base: {
+        originFetch: (async () =>
+          new Response(new Uint8Array(400), {
+            headers: { "content-type": "image/png" },
+          })) as typeof fetch,
+        ...base,
+      },
+    });
+  }
+
+  const routeImageRequest = () =>
+    new Request("https://shop.example.com/_next/image?url=%2Fapi%2Fog&w=640&q=75");
+
+  it("refuses a route image past the request limit the origin names for its images", async () => {
+    const optimized: unknown[] = [];
+    const serve = routeImageRelease({
+      images: { maxRequestBytes: 100 },
+      imageOrigin: async (payload) => {
+        optimized.push(payload);
+        return new Response("optimized", { headers: { "content-type": "image/webp" } });
+      },
+    });
+
+    const response = await serve(routeImageRequest());
+
+    expect(response.status).toBe(413);
+    expect(await response.text()).toContain("at most 100 bytes");
+    expect(optimized).toEqual([]);
+  });
+
+  it("hands a route image to the optimizer when the origin names no request limit", async () => {
+    const optimized: unknown[] = [];
+    const serve = routeImageRelease({
+      images: {},
+      imageOrigin: async (payload) => {
+        optimized.push(payload);
+        return new Response("optimized", { headers: { "content-type": "image/webp" } });
+      },
+    });
+
+    await serve(routeImageRequest());
+
+    expect(optimized).toHaveLength(1);
+  });
+
   it("answers unprovisioned when the deployment's service cannot be reached", async () => {
     const serve = imageRelease({
-      imagesAtDeployment: true,
+      images: {},
       originFetch: (async () => {
         throw new Error("unreachable");
       }) as typeof fetch,

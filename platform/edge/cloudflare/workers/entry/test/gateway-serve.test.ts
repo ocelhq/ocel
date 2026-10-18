@@ -7,7 +7,13 @@ import {
   readRenderCall,
   type ServeProps,
 } from "../src/serve-key";
-import { answerEveryRecordWith, capturing, withGlobalFetch } from "./origin-deps";
+import {
+  answerEveryRecordWith,
+  awsOrigin,
+  capturing,
+  storeOrigin,
+  withGlobalFetch,
+} from "./origin-deps";
 import { routeTableKey } from "./route-table-store";
 import { contextWithExports, serveAnswering } from "./worker-context";
 
@@ -16,20 +22,19 @@ const record = {
   framework: "next",
   release: "deploy-1",
   buildId: "deploy-1",
-  routeTable: { format: "next" as const, key: routeTableKey() },
+  rootFunction: "/",
+  routeTable: { format: "next", key: routeTableKey() },
   functionUrls: { "/": "https://abc.lambda-url.eu-west-2.on.aws/" },
   assetPrefix: "prod/p1/web/deploy-1/assets",
   isrPrefix: "prod/p1/web/deploy-1/isr",
   createdAt: 1_000,
+  edge: {},
 };
 
 const env: Env = {
   RELEASES: answerEveryRecordWith(async () => ({ kind: "record", release: "deploy-1", record })),
   OCEL_SLUG: "p1",
-  OCEL_ASSET_BUCKET: "assets-bucket",
-  OCEL_AWS_REGION: "eu-west-2",
-  OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-  OCEL_EDGE_SECRET_KEY: "secretkey",
+  OCEL_ORIGIN: awsOrigin({ bucket: "assets-bucket", region: "eu-west-2" }),
 };
 
 function ctxWithServe(answer: (key: string) => Response) {
@@ -76,11 +81,7 @@ describe("the gateway on an origin whose bucket an HMAC key reads", () => {
   const hmacEnv: Env = {
     RELEASES: env.RELEASES,
     OCEL_SLUG: "p1",
-    OCEL_ASSET_STORE_ENDPOINT: "https://objects.example.com",
-    OCEL_ASSET_STORE_BUCKET: "ocel-acme-production",
-    OCEL_ASSET_STORE_PREFIX: "assets/",
-    OCEL_ASSET_STORE_ACCESS_KEY_ID: "GOOG1EXAMPLEACCESSID",
-    OCEL_ASSET_STORE_SECRET_KEY: "examplesecret",
+    ...storeOrigin({ url: "https://objects.example.com/ocel-acme-production" }),
   };
   const table: NextRouteTable = {
     rootFunction: "/",

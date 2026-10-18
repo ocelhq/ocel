@@ -2,51 +2,56 @@ package gcp
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bucket"
 )
 
-func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {
+const (
+	storeSigningRegion = "auto"
+
+	imageEndpointMaxRequestBytes = 32 << 20
+
+	cloudRunThrottleMessage = "no available instance"
+)
+
+func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequest) (edge.Program, error) {
 	c, err := p.openClients(ctx)
 	if err != nil {
-		return provider.EdgeProgram{}, err
+		return edge.Program{}, err
 	}
 	adopted, credentials, err := requireAdoptedEdge(ctx, c, p.KeyValues(), req.Tier, req.Kind)
 	if err != nil {
-		return provider.EdgeProgram{}, err
+		return edge.Program{}, err
 	}
 	if adopted.ClientCertificate.ID == "" {
-		return provider.EdgeProgram{}, refusal.Refuse(refusal.CodeNotReady,
+		return edge.Program{}, refusal.Refuse(refusal.CodeNotReady,
 			"the %s edge's worker reaches GCP only through its client certificate, and the bootstrap adopted none: run `%s` again",
 			req.Kind, provider.BootstrapCommand(req.Tier))
 	}
 	if !credentials.hasAssetStoreKey() {
-		return provider.EdgeProgram{}, notBootstrapped(req.Tier, req.Kind, "no asset-store credential")
+		return edge.Program{}, notBootstrapped(req.Tier, req.Kind, "no asset-store credential")
 	}
-	return cloudflare.EntryProgram{
-		Tier:              req.Tier,
-		Entry:             req.Entry,
-		Namespace:         string(p.namespace),
-		Slug:              req.Slug,
-		Env:               req.Env,
-		PreviewBaseDomain: req.PreviewBaseDomain,
-		PreviewKey:        req.PreviewKey,
-		Origin: cloudflare.OriginBindings{
-			ClientCertificate: adopted.ClientCertificate.ID,
-			Variables: map[string]string{
-				edge.AssetStoreEndpointVar:    bucket.GoogleStorage,
-				edge.AssetStoreBucketVar:      c.Bucket(req.Tier),
-				edge.AssetStorePrefixVar:      provider.StoreAssets + "/",
-				edge.AssetStoreAccessKeyIDVar: credentials.AssetStoreAccessKeyID,
+	return edge.Program{
+		Origin: edge.OriginReach{
+			Reach: edge.Reach{Kind: edge.ReachClientCertificate, Certificate: adopted.ClientCertificate.ID},
+			Store: &edge.OriginStore{
+				URL:             bucket.GoogleStorage + "/" + url.PathEscape(c.Bucket(req.Tier)),
+				Prefix:          provider.StoreAssets + "/",
+				Region:          storeSigningRegion,
+				AccessKeyID:     credentials.AssetStoreAccessKeyID,
+				SecretAccessKey: credentials.AssetStoreSecretAccessKey,
 			},
-			Secrets: map[string]string{edge.AssetStoreSecretKeyVar: credentials.AssetStoreSecretAccessKey},
+			Throttle: edge.Throttle{Status: 429, BodyContains: cloudRunThrottleMessage},
+			Images:   &edge.OriginImages{MaxRequestBytes: imageEndpointMaxRequestBytes},
 		},
-		StoreScriptName:          adopted.ReleasesStore.ScriptName,
-		StoreEndpoint:            adopted.ReleasesStore.Endpoint,
-		StoreBootstrapCredential: credentials.ReleasesStore,
-	}.Build()
+		ReleasesStore: edge.ReleasesStore{
+			Name:                adopted.ReleasesStore.ScriptName,
+			Endpoint:            adopted.ReleasesStore.Endpoint,
+			BootstrapCredential: credentials.ReleasesStore,
+		},
+	}, nil
 }

@@ -1,7 +1,7 @@
 import { createExecutionContext, env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import type { ReleaseRecord } from "../src/store";
+import type { StoredRecord } from "../src/store";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
@@ -35,13 +35,14 @@ function authedReq(path: string, init: RequestInit = {}) {
   return bearerReq(`/${SLUG}${path}`, SECRET, init);
 }
 
-function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
+function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
   return {
     app: "web",
     framework: "next",
     release: "deploy-1",
     buildId: "deploy-1",
-    routeTable: { format: "next", table: { pathnames: [] } },
+    rootFunction: "/",
+    routeTable: { format: "next", key: "prod/p1/web/route-table.json" },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
     isrPrefix: "prod/p1/web/build-1",
@@ -146,6 +147,22 @@ describe("authenticated endpoints", () => {
 
     const res = await movePointer({ promotionId: "promo-2", replaces: "promo-0" });
     expect(res.status).toBe(409);
+
+    const served = await SELF.fetch(authedReq("/pointer"));
+    expect(await served.json()).toEqual({ promotionId: "promo-1" });
+  });
+
+  it("refuses with 422 a pointer move that carries a different record for a release it serves", async () => {
+    await initialize();
+    await movePointer();
+
+    const res = await movePointer({
+      promotionId: "promo-2",
+      replaces: "promo-1",
+      records: [makeRecord({ buildId: "deploy-2" })],
+    });
+    expect(res.status).toBe(422);
+    expect(await res.text()).toContain("release deploy-1 of web");
 
     const served = await SELF.fetch(authedReq("/pointer"));
     expect(await served.json()).toEqual({ promotionId: "promo-1" });

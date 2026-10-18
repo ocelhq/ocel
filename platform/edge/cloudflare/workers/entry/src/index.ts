@@ -1,12 +1,9 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { serve as dispatch, type HostRequestExtras, type RouteDeps } from "@framework/next-router";
 import type { AssetStoreDeps } from "@framework/next-router/assets";
-import {
-  deploymentImageOrigin,
-  functionUrlImageOrigin,
-  originImagePath,
-} from "@framework/next-router/image";
+import { functionUrlImageOrigin, originImagePath } from "@framework/next-router/image";
 import type { CompiledRouteTable } from "@platform/edge-contract/ocel-route-table";
+import type { OriginImages } from "@platform/edge-contract/origin-reach";
 import { readReleaseToken } from "@platform/edge-contract/purge";
 import { readAssetPrefix } from "./build-assets";
 import { withClientAddress } from "./client-address";
@@ -28,7 +25,7 @@ import {
 } from "./gate";
 import { workersCacheImage } from "./image";
 import { nodeOrigin } from "./node";
-import { originFetchFor, originThrottleFor } from "./origin-fetch";
+import { openOrigin } from "./origin/reach";
 import { findPreviewTarget } from "./preview";
 import {
   answerPurgeOnWorker,
@@ -36,9 +33,8 @@ import {
   isPurgeRequest,
   respondOnControlHost,
 } from "./purge-request";
-import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
+import { type ReleaseLookup, resolveRelease, type StoredRecord } from "./releases";
 import { ownRouteTableKey, readRouteTable, readStoredOcelRouteTable } from "./route-table";
-import { readsObjects } from "./serve";
 import { serveNodeOrigin } from "./serve-node";
 import { serveObjects } from "./serve-objects";
 import { type Serving, servePrerender } from "./serve-prerender";
@@ -67,10 +63,9 @@ export type ResolveBase = Pick<
   RouteDeps,
   "fetch" | "originFetch" | "imageOrigin" | "isOriginThrottle"
 > & {
-  imageOptimizerUrl?: string;
+  images?: OriginImages;
   serving: ServingPorts;
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
-  imagesAtDeployment?: boolean;
   routeTableStore?: EdgeObjectStore;
   edgeRuntime: EdgeRuntime;
 };
@@ -79,13 +74,13 @@ export type ServeFetch = (request: Request) => Promise<Response>;
 
 interface OriginRelease {
   kind: "origin";
-  record: ReleaseRecord;
+  record: StoredRecord;
   routes?: CompiledRouteTable;
 }
 
 interface RoutedRelease {
   kind: "routed";
-  record: ReleaseRecord;
+  record: StoredRecord;
   routeTable: NextRouteTable;
   store: EdgeObjectStore;
 }
@@ -172,7 +167,7 @@ export async function resolveServe(
 
 function newReleaseServing(
   base: ServingPorts,
-  record: ReleaseRecord,
+  record: StoredRecord,
   releases: ReleaseLookup,
   app: string,
 ): Serving | undefined {
@@ -187,10 +182,15 @@ function newReleaseServing(
   });
 }
 
-function deploymentOptimizerUrl(entryUrl: string | undefined): string | undefined {
-  if (!entryUrl) return undefined;
+function readImageOptimizerUrl(
+  images: OriginImages | undefined,
+  rootUrl: string | undefined,
+): string | undefined {
+  if (!images) return undefined;
+  if (images.optimizerUrl !== undefined) return images.optimizerUrl;
+  if (!rootUrl) return undefined;
   try {
-    return new URL(originImagePath, entryUrl).href;
+    return new URL(originImagePath, rootUrl).href;
   } catch {
     return undefined;
   }
@@ -201,27 +201,24 @@ function routedDeps(
   releases: ReleaseLookup,
   base: ResolveBase,
 ): RouteDeps {
-  const { edgeWorkers } = record;
+  const { code } = record.edge;
   const app = releases.app ?? record.app;
-  if (edgeWorkers && !ownBundleKey(edgeWorkers.bundleKey, releases.slug, app)) {
+  if (code && !ownBundleKey(code.bundleKey, releases.slug, app)) {
     throw new Error(
       `release ${record.release} of ${releases.slug}/${app} names an edge bundle outside its own prefix`,
     );
   }
   const rootUrl = record.functionUrls[manifest.rootFunction];
   const serving = newReleaseServing(base.serving, record, releases, app);
-  const optimizerUrl =
-    base.imageOptimizerUrl ??
-    (base.imagesAtDeployment ? deploymentOptimizerUrl(rootUrl) : undefined);
+  const optimizerUrl = readImageOptimizerUrl(base.images, rootUrl);
   return {
     fetch: base.fetch,
     originFetch: base.originFetch,
     hostRequestInit,
     imageOrigin:
       base.imageOrigin ??
-      (base.imagesAtDeployment
-        ? deploymentImageOrigin(rootUrl, base.originFetch ?? base.fetch ?? fetch)
-        : undefined),
+      functionUrlImageOrigin(optimizerUrl, base.originFetch ?? base.fetch ?? fetch),
+    maxImageRequestBytes: base.images?.maxRequestBytes,
     imageCache:
       serving && optimizerUrl ? workersCacheImage({ serving, app, optimizerUrl }) : undefined,
     prerender: serving ? servePrerender({ serving, app }) : undefined,
@@ -229,9 +226,7 @@ function routedDeps(
     slug: releases.slug,
     app,
     appBuildId: record.buildId,
-    edge: edgeWorkers
-      ? createReleaseEdgeInvoker(base.edgeRuntime, store, { ...record, edgeWorkers })
-      : undefined,
+    edge: code ? createReleaseEdgeInvoker(base.edgeRuntime, store, record, code) : undefined,
     manifest,
     functionUrls: record.functionUrls,
     assetStore: {
@@ -319,17 +314,14 @@ export default {
     const { request: visitor, responseHeaders: gateHeaders } = gated;
 
     const serve = ctx.exports.Serve;
-    const objects = readsObjects(env) ? serveObjects(serve, host) : undefined;
-    const originFetch = originFetchFor(env);
+    const origin = openOrigin(env);
+    const objects = origin.objects ? serveObjects(serve, host) : undefined;
 
     const serveRequest = await resolveServe(releases, {
       fetch,
-      originFetch,
-      isOriginThrottle: originThrottleFor(env),
-      imageOrigin: functionUrlImageOrigin(env.OCEL_IMAGE_OPTIMIZER_URL, originFetch ?? fetch),
-      imagesAtDeployment:
-        !env.OCEL_IMAGE_OPTIMIZER_URL && env.OCEL_ORIGIN_CLIENT_CERTIFICATE !== undefined,
-      imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL,
+      originFetch: origin.fetch,
+      isOriginThrottle: origin.isThrottle,
+      images: origin.images,
       routeTableStore: objects,
       assetStore: {
         store: objects,

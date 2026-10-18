@@ -1,44 +1,20 @@
+import type { ReleaseRecord } from "@platform/edge-contract/release-record";
+
 export interface SqlStore {
   sql: SqlStorage;
   transactionSync<T>(closure: () => T): T;
 }
 
-export interface ReleaseRecord {
-  app: string;
-  framework: string;
-  release: string;
-  buildId: string;
-  routeTable?: unknown;
-  functionUrls: Record<string, string>;
-  assetPrefix: string;
-  isrPrefix: string;
-  purgeSecret?: string;
-  createdAt: number;
-  edgeWorkers?: EdgeWorkers;
-  releaseFingerprint?: string;
-  variables?: VariableRecord[];
+export interface StoredRecord extends ReleaseRecord {
+  edge?: unknown;
   buildAssets?: Record<string, string>;
-}
-
-export interface VariableRecord {
-  key: string;
-  folder?: string;
-  version?: number;
-  live?: boolean;
-}
-
-export interface EdgeWorkers {
-  bundleKey: string;
-  id: string;
-  compatDate: string;
-  compatFlags?: string[];
 }
 
 export interface PointerMove {
   pointer?: string;
   replaces?: string | null;
   promotionId: string;
-  records: ReleaseRecord[];
+  records: StoredRecord[];
   labels?: ServedLabel[];
 }
 
@@ -47,7 +23,10 @@ export interface ServedLabel {
   app: string;
 }
 
-export type PointerMoveOutcome = "moved" | "stale";
+export type PointerMoveOutcome =
+  | { kind: "moved" }
+  | { kind: "stale" }
+  | { kind: "different-record"; app: string; release: string };
 
 const DEFAULT_POINTER = "@production";
 const VERSION_KEY = "versionStamp";
@@ -124,7 +103,11 @@ export function readServedPromotion(
 export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutcome {
   const pointer = move.pointer || DEFAULT_POINTER;
   return store.transactionSync(() => {
-    if ((readServedPromotion(store, pointer) ?? null) !== (move.replaces || null)) return "stale";
+    if ((readServedPromotion(store, pointer) ?? null) !== (move.replaces || null)) {
+      return { kind: "stale" };
+    }
+    const changed = move.records.find((record) => servesDifferentCore(store, record));
+    if (changed) return { kind: "different-record", app: changed.app, release: changed.release };
     store.sql.exec(`DELETE FROM served WHERE pointer = ?`, pointer);
     for (const record of move.records) {
       store.sql.exec(
@@ -152,14 +135,34 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
       pointer,
       move.promotionId,
     );
-    return "moved";
+    return { kind: "moved" };
   });
+}
+
+function coreJson(record: StoredRecord): string {
+  const { edge: _edge, buildAssets: _buildAssets, ...core } = record;
+  return JSON.stringify(core, (_key, value: unknown) =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : value,
+  );
+}
+
+function servesDifferentCore(store: SqlStore, record: StoredRecord): boolean {
+  const row = store.sql
+    .exec<{ data: string }>(
+      `SELECT data FROM served WHERE app = ? AND release = ? LIMIT 1`,
+      record.app,
+      record.release,
+    )
+    .toArray()[0];
+  return row !== undefined && coreJson(JSON.parse(row.data) as StoredRecord) !== coreJson(record);
 }
 
 function recordBuild(
   store: SqlStore,
   pointer: string,
-  record: ReleaseRecord,
+  record: StoredRecord,
 ): Record<string, string> {
   store.sql.exec(
     `INSERT INTO builds (pointer, app, build_id, asset_prefix, seq)
@@ -193,10 +196,7 @@ function recordBuild(
   return Object.fromEntries(rows.map((row) => [row.build_id, row.asset_prefix]));
 }
 
-function withBuildAssets(
-  record: ReleaseRecord,
-  buildAssets: Record<string, string>,
-): ReleaseRecord {
+function withBuildAssets(record: StoredRecord, buildAssets: Record<string, string>): StoredRecord {
   const { buildAssets: _, ...rest } = record;
   return Object.keys(buildAssets).length === 0 ? rest : { ...rest, buildAssets };
 }
@@ -221,7 +221,7 @@ export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "ambiguous-app" }
   | { kind: "unchanged"; release: string }
-  | { kind: "record"; release: string; record: ReleaseRecord };
+  | { kind: "record"; release: string; record: StoredRecord };
 
 type ServedRow = { app: string; release: string; data: string };
 
@@ -237,7 +237,7 @@ function selectServedResult(
   return {
     kind: "record",
     release: row.release,
-    record: JSON.parse(row.data) as ReleaseRecord,
+    record: JSON.parse(row.data) as StoredRecord,
   };
 }
 
@@ -273,7 +273,7 @@ export function readPointerRecord(
   return selectServedResult(rows, app, knownRelease);
 }
 
-export type ServedRecordResult = { kind: "record"; record: ReleaseRecord } | { kind: "not-served" };
+export type ServedRecordResult = { kind: "record"; record: StoredRecord } | { kind: "not-served" };
 
 export function readServedRecord(store: SqlStore, isrPrefix: string): ServedRecordResult {
   const row = store.sql
@@ -283,7 +283,7 @@ export function readServedRecord(store: SqlStore, isrPrefix: string): ServedReco
     )
     .toArray()[0];
   if (!row) return { kind: "not-served" };
-  return { kind: "record", record: JSON.parse(row.data) as ReleaseRecord };
+  return { kind: "record", record: JSON.parse(row.data) as StoredRecord };
 }
 
 export type Initialization = "adopted" | "refused";

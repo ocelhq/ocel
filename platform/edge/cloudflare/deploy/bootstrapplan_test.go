@@ -350,7 +350,7 @@ func endpoints(out edge.BootstrapOutput) map[edge.OfferKind]string {
 }
 
 func TestDeployedScriptWithoutTheModuleItExpected(t *testing.T) {
-	body, contentType, err := buildScriptMultipart(edge.Worker{Main: edge.WorkerModule{
+	body, contentType, err := buildScriptMultipart(workerScript{Main: workerModule{
 		Name:        "worker.js",
 		ContentType: "application/javascript+module",
 		Content:     []byte("export default {}"),

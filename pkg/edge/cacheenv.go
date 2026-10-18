@@ -30,5 +30,8 @@ func NewCachingOriginEnv(facts Facts, release string) map[string]string {
 	}
 	env[EdgeCacheVar] = string(mode)
 	env[ReleaseTokenVar] = release
+	if facts.CacheControlHeader != "" {
+		env[EdgeCacheControlHeaderVar] = facts.CacheControlHeader
+	}
 	return env
 }

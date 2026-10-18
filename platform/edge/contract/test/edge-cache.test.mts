@@ -1,5 +1,9 @@
 import { expect, test } from "vitest";
-import { cachesOnlyMarked, readEdgeCacheMode } from "../src/edge-cache.mjs";
+import {
+  cachesOnlyMarked,
+  readEdgeCacheControlHeader,
+  readEdgeCacheMode,
+} from "../src/edge-cache.mjs";
 
 test("an origin with no edge cache variable has no edge that caches its responses", () => {
   expect(readEdgeCacheMode({})).toBeUndefined();
@@ -23,4 +27,12 @@ test("only an edge that caches the requests it marks caches only marked requests
   expect(cachesOnlyMarked("marked")).toBe(true);
   expect(cachesOnlyMarked("all")).toBe(false);
   expect(cachesOnlyMarked(undefined)).toBe(false);
+});
+
+test("an origin is told the cache-control header its edge reads, or none when the edge names none", () => {
+  expect(
+    readEdgeCacheControlHeader({ OCEL_EDGE_CACHE_CONTROL_HEADER: "cloudflare-cdn-cache-control" }),
+  ).toBe("cloudflare-cdn-cache-control");
+  expect(readEdgeCacheControlHeader({ OCEL_EDGE_CACHE_CONTROL_HEADER: "" })).toBeUndefined();
+  expect(readEdgeCacheControlHeader({})).toBeUndefined();
 });

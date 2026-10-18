@@ -1,19 +1,19 @@
 import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { cacheKey } from "@framework/next-cache/naming";
-import { boundCacheTags } from "@platform/edge-contract/cache-tags";
+import { boundCacheTags, type CacheTagLimits } from "@platform/edge-contract/cache-tags";
 import type { AdapterOutput } from "next";
 
 export function cacheTags(
   prerender: AdapterOutput["PRERENDER"],
-  programmableEdge: boolean,
+  limits: CacheTagLimits | undefined,
 ): string[] {
   const header = prerender.fallback?.initialHeaders?.["x-next-cache-tags"];
   const raw = Array.isArray(header) ? header.join(",") : header;
   if (!raw) return [];
-  if (!programmableEdge) return [...new Set(raw.split(",").filter(Boolean))];
+  if (!limits) return [...new Set(raw.split(",").filter(Boolean))];
 
-  const { tags, dropped } = boundCacheTags(raw.split(","));
+  const { tags, dropped } = boundCacheTags(raw.split(","), limits);
   if (dropped > 0) {
     console.warn(
       `ocel: dropped ${dropped} cache tag(s) over the edge's cache tag limits for "${prerender.pathname}" — purges naming them will not hit this route`,

@@ -10,23 +10,24 @@ import {
 import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segment";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
+import type { OriginImages } from "@platform/edge-contract/origin-reach";
 import {
   type PurgeMode,
   purgeHeader,
   readPurge,
   readReleaseToken,
 } from "@platform/edge-contract/purge";
-import { type BucketAccess, findBucketAccess, signBucket } from "./bucket-access";
 import { createReleaseEdgeInvoker, ownBundleKey } from "./edge";
 import type { Env } from "./env";
 import { openPurgeQueue } from "./exports";
-import { originFetchFor } from "./origin-fetch";
+import { openOrigin } from "./origin/reach";
+import type { OriginObjects } from "./origin/store";
 import { PPR_SHELL_VARIANT } from "./ppr";
 import type { PurgeOutcome } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
 import type { ReleaseScope } from "./purge-times";
-import type { ReleaseRecord } from "./releases";
+import type { StoredRecord } from "./releases";
 import {
   BROWSER_REVALIDATES,
   type CachedResponse,
@@ -37,7 +38,6 @@ import {
 import {
   buildEdgeUrl,
   buildOriginUrl,
-  encodeKeyPath,
   IMAGE_CALL_HEADER,
   type ObjectProps,
   parseKeyRelease,
@@ -58,7 +58,6 @@ import {
 import { serveObjects } from "./serve-objects";
 import { settledWithin } from "./settled";
 import { readFromStore, type StoreAnswer } from "./store-read";
-import { openEntrySource } from "./store-source";
 
 const OBJECT_EDGE_CACHE = "max-age=31536000";
 
@@ -219,7 +218,7 @@ async function readRenderRecord(
   env: Env,
   request: Request,
   release: string,
-): Promise<{ record: ReleaseRecord; render: RenderRelease } | undefined> {
+): Promise<{ record: StoredRecord; render: RenderRelease } | undefined> {
   const render = parseRenderRelease(request.headers.get(RENDER_RELEASE_HEADER));
   if (!render) return undefined;
   const served = await env.RELEASES.readServedRecord({
@@ -232,8 +231,12 @@ async function readRenderRecord(
   return { record: served.record, render };
 }
 
-function isReleaseImageOptimizer(env: Env, record: ReleaseRecord, optimizerUrl: string): boolean {
-  if (optimizerUrl === env.OCEL_IMAGE_OPTIMIZER_URL) return true;
+function isReleaseImageOptimizer(
+  images: OriginImages | undefined,
+  record: StoredRecord,
+  optimizerUrl: string,
+): boolean {
+  if (images?.optimizerUrl !== undefined && optimizerUrl === images.optimizerUrl) return true;
   try {
     const url = new URL(optimizerUrl);
     return url.pathname === originImagePath && isReleaseOrigin(record, url.origin);
@@ -242,7 +245,7 @@ function isReleaseImageOptimizer(env: Env, record: ReleaseRecord, optimizerUrl: 
   }
 }
 
-function isReleaseOrigin(record: ReleaseRecord, origin: string): boolean {
+function isReleaseOrigin(record: StoredRecord, origin: string): boolean {
   return Object.values(record.functionUrls).some((functionUrl) => {
     try {
       return new URL(functionUrl).origin === origin;
@@ -273,19 +276,18 @@ function respondMissing(release: string): Response {
   });
 }
 
-export function readsObjects(env: Env): boolean {
-  return findBucketAccess(env) !== undefined;
-}
-
-async function readBucket(access: BucketAccess, key: string, release: string): Promise<Response> {
-  const { bucket, origin, prefix } = access;
-  const res = await signBucket(access).fetch(`${origin}/${encodeKeyPath(prefix + key)}`);
+async function readStoredObject(
+  objects: OriginObjects,
+  key: string,
+  release: string,
+): Promise<Response> {
+  const res = await objects.readObject(key);
   if (res.ok) {
     return respondStored({ body: res.body, etag: res.headers.get("etag") ?? undefined }, release);
   }
   await res.body?.cancel();
   if (res.status === 404) return respondMissing(release);
-  console.error(`ocel: the bucket ${bucket} answered ${res.status} for ${prefix}${key}`);
+  console.error(`ocel: the origin's store answered ${res.status} for ${objects.objectUrl(key)}`);
   return respondNotStored(502, "Bad Gateway");
 }
 
@@ -318,19 +320,20 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (release !== props.release) {
       throw new Error(`ocel: ${key} is not an object of release ${props.release}`);
     }
-    const access = findBucketAccess(this.env);
-    if (access) return readBucket(access, key, release);
+    const { objects } = openOrigin(this.env);
+    if (objects) return readStoredObject(objects, key, release);
     return respondNotStored(503, "no store to read from");
   }
 
   private async fromImage(request: Request, optimizerUrl: string): Promise<Response> {
     const { release } = readRenderCall(request.url);
+    const origin = openOrigin(this.env);
     const found = await readRenderRecord(this.env, request, release);
-    if (!found || !isReleaseImageOptimizer(this.env, found.record, optimizerUrl)) {
+    if (!found || !isReleaseImageOptimizer(origin.images, found.record, optimizerUrl)) {
       return respondRefused("the image optimizer is not one of the served release's");
     }
     const call = readImageCall(request.headers.get(IMAGE_CALL_HEADER));
-    const optimize = functionUrlImageOrigin(optimizerUrl, originFetchFor(this.env) ?? fetch);
+    const optimize = functionUrlImageOrigin(optimizerUrl, origin.fetch);
     if (!call || !optimize) return respondRefused("there is no image to optimize");
     const optimized = servedImage(
       withoutServeMarkers(await optimize(call.payload)),
@@ -437,7 +440,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   ): Promise<StoreAnswer | null> {
     const { entry } = render;
     if (!entry || request.method !== "GET") return null;
-    const source = openEntrySource(this.env);
+    const source = openOrigin(this.env).entries;
     if (!source) return null;
     return readFromStore(
       {
@@ -477,7 +480,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       headers.delete("if-none-match");
       headers.delete("if-modified-since");
     }
-    const originFetch = originFetchFor(this.env) ?? fetch;
+    const originFetch = openOrigin(this.env).fetch;
     headers.set("x-forwarded-host", host);
     headers.set("x-forwarded-proto", "https");
     const res = await originFetch(
@@ -509,15 +512,18 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     const found = await readRenderRecord(this.env, request, release);
     if (!found) return respondRefused("the release is not served");
     const { record, render: edge } = found;
-    const { edgeWorkers } = record;
-    if (!edgeWorkers || !ownBundleKey(edgeWorkers.bundleKey, edge.slug, app)) {
+    const { code } = record.edge;
+    if (!code || !ownBundleKey(code.bundleKey, edge.slug, app)) {
       return respondRefused("the release has no edge bundle of its own to render with");
     }
-    if (!readsObjects(this.env)) return respondRefused("no store to read the edge bundle from");
+    if (!openOrigin(this.env).objects) {
+      return respondRefused("no store to read the edge bundle from");
+    }
     const invoke = createReleaseEdgeInvoker(
       { loader: this.env.LOADER, envelopeKey: this.env.OCEL_ENVELOPE_KEY },
       serveObjects(this.ctx.exports.Serve, host),
-      { ...record, edgeWorkers },
+      record,
+      code,
     );
     const headers = new Headers(request.headers);
     headers.delete(RENDER_RELEASE_HEADER);

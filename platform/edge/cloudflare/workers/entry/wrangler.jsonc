@@ -14,7 +14,9 @@
   },
   "vars": {
     "OCEL_APP": "web",
-    "OCEL_SLUG": "dev"
+    "OCEL_SLUG": "dev",
+    "OCEL_ORIGIN": "{\"reach\":{\"kind\":\"sigv4\",\"service\":\"lambda\",\"region\":\"eu-west-2\",\"accessKeyId\":\"AKIAEXAMPLE\",\"secretAccessKey\":\"secretkey\"},\"throttle\":{\"status\":429,\"header\":\"x-amzn-errortype\"}}",
+    "OCEL_PURGE_BUDGET": "{\"purgesPerMinute\":5,\"tagsPerPurge\":100}"
   },
   "services": [{ "binding": "RELEASES", "service": "releases-store" }],
   "worker_loaders": [{ "binding": "LOADER" }],

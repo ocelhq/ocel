@@ -11,7 +11,8 @@ import {
 
 export interface NextBuild extends OutputBuild {
   buildId: string;
-  edgeKind?: string;
+  edgeRunsCode?: boolean;
+  edgeCacheTagLimits?: { tagBytes: number; tags: number; headerBytes: number };
   allowDegraded?: string[];
   publicKeys?: string[];
   maxFunctionBytes?: number;
@@ -31,7 +32,8 @@ export async function buildNext(app: NextBuild, adapterPath: string, log: BuildL
       refuseBuild: (env) => refuseOwnAdapter(app, adapterPath, env),
     },
     {
-      OCEL_EDGE_KIND: app.edgeKind ?? "",
+      OCEL_EDGE_RUNS_CODE: app.edgeRunsCode ? "1" : "",
+      OCEL_EDGE_TAG_LIMITS: app.edgeCacheTagLimits ? JSON.stringify(app.edgeCacheTagLimits) : "",
       OCEL_ALLOW_DEGRADED: (app.allowDegraded ?? []).join(","),
       OCEL_PUBLIC_KEYS: (app.publicKeys ?? []).join(","),
       OCEL_MAX_FUNCTION_BYTES: app.maxFunctionBytes ? String(app.maxFunctionBytes) : "",

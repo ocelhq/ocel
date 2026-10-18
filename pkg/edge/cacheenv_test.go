@@ -41,6 +41,20 @@ func TestAnOriginIsToldWhichResponsesItsEdgeCaches(t *testing.T) {
 	}
 }
 
+func TestAnOriginIsToldTheCacheControlHeaderItsEdgeReads(t *testing.T) {
+	t.Parallel()
+
+	got := NewCachingOriginEnv(Facts{CachesResponses: true, RunsCode: true, CacheControlHeader: "cloudflare-cdn-cache-control"}, "r0a1b2c3d")
+	want := map[string]string{
+		EdgeCacheVar:              string(EdgeCacheMarked),
+		EdgeCacheControlHeaderVar: "cloudflare-cdn-cache-control",
+		ReleaseTokenVar:           "r0a1b2c3d",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("env = %v, want %v", got, want)
+	}
+}
+
 func TestAnOriginBehindNoCachingEdgeIsToldNothing(t *testing.T) {
 	t.Parallel()
 
