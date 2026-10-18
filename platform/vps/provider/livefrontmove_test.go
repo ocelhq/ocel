@@ -149,7 +149,7 @@ func TestLiveABoxMovesFromOcelsOwnProxyToAnNginxAndBack(t *testing.T) {
 	}
 	vm.routesThrough(t, frontedHostname, "one")
 
-	err := ours.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
+	err := ours.ApplyPreflight(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 		Slug: frontedSlug, Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}})
 	if said := refused(t, err, refusal.CodeInvalid); !strings.Contains(said.Message, "add `\"proxy\": \"manual\"`") {

@@ -258,10 +258,10 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm liveBox)) liveBo
 
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
-	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
+	if err := d.ApplyPreflight(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 		Slug: frontedSlug, Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
-		t.Fatalf("PreflightDeploy() behind %s = %v", front, err)
+		t.Fatalf("ApplyPreflight() behind %s = %v", front, err)
 	}
 
 	opened, err := d.Edges().Open(edge.None, nil)

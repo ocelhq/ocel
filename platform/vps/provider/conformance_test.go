@@ -144,8 +144,8 @@ func TestTheProviderNamesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
 	if hooks.EnvSource != nil {
 		t.Error("the box's hooks set EnvSource, a step no box takes")
 	}
-	if hooks.PreflightDeploy == nil {
-		t.Error("the box's hooks leave PreflightDeploy nil, and a box then learns its engine, its disk, its proxy or its ports are not ready halfway through an image transfer")
+	if hooks.Preflight == nil {
+		t.Error("the box's hooks leave Preflight nil, and a box then learns its engine, its disk, its proxy or its ports are not ready halfway through an image transfer")
 	}
 }
 

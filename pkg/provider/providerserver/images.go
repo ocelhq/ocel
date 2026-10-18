@@ -77,7 +77,11 @@ func (r *deployRun) readNextServerRuntime(ctx context.Context, entry provider.Ap
 	if entry.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext {
 		return nil, nil
 	}
-	files, err := r.provider.Runtime().NextServer(ctx)
+	nextServerRuntime := r.provider.Hooks().NextServerRuntime
+	if nextServerRuntime == nil {
+		return nil, nil
+	}
+	files, err := nextServerRuntime(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read the Next server runtime %s's container loads: %w", entry.App, err)
 	}

@@ -79,14 +79,6 @@ func (stubBootstrap) DescribeParts(context.Context, provider.BootstrapDescriptio
 	return nil, nil
 }
 
-func (stubBootstrap) CheckHost(context.Context, provider.HostCheckRequest) ([]provider.HostCheck, error) {
-	return nil, nil
-}
-
-func (stubBootstrap) RemovePartUser(context.Context, environment.Tier, string, progress.Log) error {
-	return nil
-}
-
 func unkeyed(context.Context, environment.Tier) (string, error) { return "", nil }
 
 func keyedAs(keys ...string) func(context.Context, environment.Tier) (string, error) {

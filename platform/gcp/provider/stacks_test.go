@@ -178,7 +178,7 @@ type releasedStacks struct {
 func newReleasedStacks(p *Provider) releasedStacks {
 	store := fake.NewKeyValues()
 	p.records = store
-	return releasedStacks{stacks: resources.NewHookStacks(store, resources.NoArtifacts{}, p.resourceHooks()), store: store}
+	return releasedStacks{stacks: resources.NewHookStacks(store, p.resourceHooks()), store: store}
 }
 
 func (r releasedStacks) provision(t *testing.T, spec provider.StackSpec) provider.Function {

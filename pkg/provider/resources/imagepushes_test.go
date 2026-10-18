@@ -16,7 +16,7 @@ func TestAnImageRemovedWhileItsReleaseProvisionedIsPushedAgainAndSaidSo(t *testi
 
 	const pushed = "registry.invalid/shop/web:sha256-abc"
 	images := fake.NewImages()
-	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), resources.Hooks{
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), resources.Hooks{
 		Containers: &resources.ContainerHooks{
 			Provision: func(ctx context.Context, spec provider.StackSpec, _ progress.Log) ([]provider.AppContainer, error) {
 				if err := images.Remove(ctx, pushed); err != nil {

@@ -195,6 +195,16 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 			Action: planv1.Change_ACTION_DELETE,
 			Reason: "the artifacts, assets and cache entries every release of this project wrote",
 		})
+	if removal := r.provider.Hooks().ProjectRemoval; removal != nil && removal.Plan != nil {
+		held, err := removal.Plan(ctx, r.tier, r.slug)
+		if err != nil {
+			return nil, err
+		}
+		for _, group := range held {
+			group.Name = vendor + "/" + group.Name
+			plan.Groups = append(plan.Groups, GroupProto(group))
+		}
+	}
 	return plan, nil
 }
 
@@ -372,9 +382,11 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 	}
 	written, certificates := r.state.PointerRecords(), r.state.Certificates()
 	originCertificates := r.originCertificates()
+	edgeTornDown := false
 	if err := r.tearDownEdge(ctx, progress); err != nil {
 		errs = append(errs, err)
 	} else {
+		edgeTornDown = true
 		for _, id := range originCertificates {
 			revokeOriginCertificate(ctx, r.front, id, progress)
 		}
@@ -384,15 +396,17 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 		if err := r.discardCertificates(ctx, certificates, progress); err != nil {
 			errs = append(errs, err)
 		}
-		if err := r.removePartUser(ctx, progress); err != nil {
-			errs = append(errs, fmt.Errorf("remove %s as a user of the %s bootstrap's parts: %w", r.slug, r.tier, err))
-		}
 	}
 	if err := r.purgeValues(ctx, progress); err != nil {
 		errs = append(errs, err)
 	}
 	if err := r.purgeObjects(ctx, progress); err != nil {
 		errs = append(errs, err)
+	}
+	if removal := r.provider.Hooks().ProjectRemoval; removal != nil && edgeTornDown {
+		if err := removal.Remove(ctx, r.tier, r.slug, progress); err != nil {
+			errs = append(errs, fmt.Errorf("remove what %s's %s project holds outside its stacks: %w", r.provider.Facts().Vendor, r.slug, err))
+		}
 	}
 	if err := errors.Join(errs...); err != nil {
 		progress.Say(fmt.Sprintf("Keeping %s on record in %s: a rerun reads its progress from what is still here", r.slug, r.tier))
@@ -445,14 +459,6 @@ func (r *projectRemoval) pointers() []string {
 		return []string{router.DefaultPointer}
 	}
 	return r.pointer
-}
-
-func (r *projectRemoval) removePartUser(ctx context.Context, progress progress.Log) error {
-	bootstrap, err := r.provider.Bootstrap(r.front.Kind())
-	if err != nil {
-		return err
-	}
-	return bootstrap.RemovePartUser(ctx, r.tier, r.slug, progress)
 }
 
 func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName) error {

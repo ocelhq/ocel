@@ -162,12 +162,12 @@ func TestLiveTheFirstDeployOfAnAppThatOptimizesImagesAddsTheImageOptimizerAndRem
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
-	if err := p.Hooks().PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
+	if err := p.Hooks().Preflight.Apply(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 		Slug: "shop",
 		Tier: tier,
 		Apps: []provider.AppEntry{{App: "web", Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}}}},
 	}}); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+		t.Fatalf("Preflight.Apply() = %v", err)
 	}
 	function := imageoptimizer.NamesFor(string(defaultNamespace), tier).Function
 	if !a.functionExists(function) {

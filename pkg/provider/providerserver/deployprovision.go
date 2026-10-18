@@ -23,12 +23,16 @@ import (
 )
 
 func (r *deployRun) provision(ctx context.Context) error {
-	if !r.infraProvisioned || r.infraHoldsUndeclared {
+	if r.provisionsInfra() {
 		if err := r.provisionInfra(ctx, nil); err != nil {
 			return err
 		}
 	}
 	return r.provisionApps(ctx)
+}
+
+func (r *deployRun) provisionsInfra() bool {
+	return !r.infraProvisioned || r.infraHoldsUndeclared
 }
 
 const appConcurrency = 4
@@ -79,9 +83,21 @@ func appOutcome(app string, err error) *progressv1.AppResult {
 }
 
 func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1.ManifestResource) error {
+	return r.spanEvents.run(r.spans.Infra, func(u *spanRun) error {
+		return u.phase(func(progress progress.Log) error {
+			stack, held, err := r.infraStack(ctx, undeclared)
+			if err != nil {
+				return err
+			}
+			return r.mode.infra(ctx, r, stack, held, progress)
+		})
+	})
+}
+
+func (r *deployRun) infraStack(ctx context.Context, undeclared []*contractv1.ManifestResource) (provider.StackSpec, infraHeld, error) {
 	declaredResources, err := manifestResources(r.manifest)
 	if err != nil {
-		return err
+		return provider.StackSpec{}, infraHeld{}, err
 	}
 	undeclaredNames := map[string]bool{}
 	for _, held := range undeclared {
@@ -98,38 +114,33 @@ func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1
 	for _, message := range undeclared {
 		resource, err := manifestResource(message)
 		if err != nil {
-			return err
+			return provider.StackSpec{}, infraHeld{}, err
 		}
 		held = append(held, message)
 		resources = append(resources, resource)
 	}
 	declared, err := encodeResources(r.manifest.GetResources())
 	if err != nil {
-		return err
+		return provider.StackSpec{}, infraHeld{}, err
 	}
 	holds, err := encodeResources(held)
 	if err != nil {
-		return err
+		return provider.StackSpec{}, infraHeld{}, err
 	}
-	return r.spanEvents.run(r.spans.Infra, func(u *spanRun) error {
-		return u.phase(func(progress progress.Log) error {
-			recorded, err := r.isRecorded(ctx, r.spec.Infra)
-			if err != nil {
-				return err
-			}
-			stack := provider.StackSpec{
-				Recorded:  recorded,
-				Ref:       r.ref(r.spec.Infra),
-				Kind:      provider.StackInfra,
-				Lease:     r.hold.lease(),
-				Edge:      r.front,
-				Tags:      infraTags(r.spec),
-				Resources: resources,
-				Bindings:  r.publishedBindings(),
-			}
-			return r.mode.infra(ctx, r, stack, infraHeld{holds: holds, declared: declared}, progress)
-		})
-	})
+	recorded, err := r.isRecorded(ctx, r.spec.Infra)
+	if err != nil {
+		return provider.StackSpec{}, infraHeld{}, err
+	}
+	return provider.StackSpec{
+		Recorded:  recorded,
+		Ref:       r.ref(r.spec.Infra),
+		Kind:      provider.StackInfra,
+		Lease:     r.hold.lease(),
+		Edge:      r.front,
+		Tags:      infraTags(r.spec),
+		Resources: resources,
+		Bindings:  r.publishedBindings(),
+	}, infraHeld{holds: holds, declared: declared}, nil
 }
 
 type infraHeld struct {
@@ -161,6 +172,27 @@ func (r *deployRun) provisionInfraStack(ctx context.Context, stack provider.Stac
 		ResourceDigest: digestResources(held.declared),
 		WrittenBy:      r.readiness.WrittenBy,
 	})
+}
+
+func (r *deployRun) planBindings(ctx context.Context, stack provider.StackSpec) error {
+	recorded, _, err := stackrecords.Read(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra)
+	if err != nil {
+		return err
+	}
+	var bindings []provider.Binding
+	for _, resource := range stack.Resources {
+		if resource.Binding != "" {
+			continue
+		}
+		at := slices.IndexFunc(recorded.Bindings, func(binding provider.Binding) bool { return binding.Name == resource.Name })
+		if at < 0 {
+			bindings = append(bindings, provider.Binding{Type: resource.Type, Name: resource.Name})
+			continue
+		}
+		bindings = append(bindings, recorded.Bindings[at])
+	}
+	r.bindings = bindings
+	return nil
 }
 
 func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.AppEntry) (appProvisioned, error) {

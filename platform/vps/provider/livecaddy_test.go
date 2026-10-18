@@ -140,10 +140,10 @@ func deploysOneBehindCaddy(t *testing.T, vm liveBox, cf caddyFront, proxy *front
 	ctx := context.Background()
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
-	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
+	if err := d.ApplyPreflight(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 		Slug: frontedSlug, Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
-		t.Fatalf("PreflightDeploy() behind %s = %v", cf.front, err)
+		t.Fatalf("ApplyPreflight() behind %s = %v", cf.front, err)
 	}
 	opened, err := d.Edges().Open(edge.None, nil)
 	if err != nil {

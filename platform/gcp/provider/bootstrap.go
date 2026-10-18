@@ -18,14 +18,6 @@ func (g bootstrapGate) Parts() []provider.Part {
 	return bootstrap.Engine{Removable: tierParts()}.Parts()
 }
 
-func (g bootstrapGate) CheckHost(context.Context, provider.HostCheckRequest) ([]provider.HostCheck, error) {
-	return nil, nil
-}
-
-func (g bootstrapGate) RemovePartUser(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error {
-	return g.p.removePartUser(ctx, tier, project, progress)
-}
-
 func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, error) {
 	opened, err := g.p.openClients(ctx)
 	if err != nil {
@@ -95,15 +87,4 @@ func (g bootstrapGate) DescribeParts(ctx context.Context, described provider.Boo
 		return nil, err
 	}
 	return bootstrap.DescribeParts(ctx, b, described)
-}
-
-func (p *Provider) removePartUser(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error {
-	b, err := bootstrapGate{p}.openBootstrap(ctx)
-	if err != nil {
-		return err
-	}
-	if err := variables.TakeProjectWritableDatabase(ctx, b, tier, project, progress); err != nil {
-		return err
-	}
-	return releaseALB(ctx, b, tier, project, progress)
 }

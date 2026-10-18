@@ -168,7 +168,7 @@ func (r *deployRun) readInlineRecords(ctx context.Context) error {
 		written:  map[string]int64{},
 	}
 	var present []string
-	carried := make([]provider.Binding, 0, len(r.inline))
+	inline := make([]provider.Binding, 0, len(r.inline))
 	for _, bound := range r.inline {
 		name := bound.record.GetName()
 		pair, err := variablestoreserver.BindingPair(bindings.InlineRecordOwner, &variablestorev1.PublishedBinding{Binding: bound.record})
@@ -183,7 +183,7 @@ func (r *deployRun) readInlineRecords(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		carried = append(carried, binding)
+		inline = append(inline, binding)
 	}
 	resolved, err := r.values.ResolveBindings(ctx, r.scope, bindingEnvironment(r.spec), present)
 	if err != nil {
@@ -194,7 +194,7 @@ func (r *deployRun) readInlineRecords(ctx context.Context) error {
 		records.versions[previous.Name] = previous.Version
 	}
 	r.inlineRecords = records
-	r.publishedBindings().carry(carried)
+	r.publishedBindings().publishInline(inline)
 	return nil
 }
 

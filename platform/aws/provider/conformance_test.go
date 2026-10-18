@@ -51,7 +51,7 @@ func TestTheProviderNamesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 
 	hooks := p.Hooks()
 	for name, set := range map[string]bool{
-		"PreflightDeploy":     hooks.PreflightDeploy != nil,
+		"Preflight":           hooks.Preflight != nil,
 		"ProgramEdge":         hooks.ProgramEdge != nil,
 		"EnsureImageRegistry": hooks.EnsureImageRegistry != nil,
 		"OpenRegistryImages":  hooks.OpenRegistryImages != nil,

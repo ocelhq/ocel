@@ -81,20 +81,56 @@ func TestPlanRemoveProjectNamesEveryStackTheDeployProvisioned(t *testing.T) {
 	}
 }
 
-func TestRemovingAProjectNoEdgeStackServedRemovesItAsAUserOfTheBootstrapParts(t *testing.T) {
+func TestRemovingAProjectRemovesWhatTheVendorHoldsForItOnceItsValuesArePurged(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
+	ctx := context.Background()
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	if _, err := store.Set(ctx, scope, variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/", Key: "REGION"}}, "eu", nil); err != nil {
+		t.Fatal(err)
+	}
 	var removed []string
-	vendor.FakeBootstrap().RemovingPartUser(func(_ context.Context, tier environment.Tier, project string, _ progress.Log) error {
-		removed = append(removed, string(tier)+"/"+project)
-		return nil
+	var leftAtRemoval []variablestore.Metadata
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ProjectRemoval = &provider.ProjectRemovalHooks{
+			Remove: func(ctx context.Context, tier environment.Tier, project string, _ progress.Log) error {
+				removed = append(removed, string(tier)+"/"+project)
+				var err error
+				leftAtRemoval, err = store.List(ctx, scope)
+				return err
+			},
+		}
 	})
 
 	if result := removeProject(t, client, projectRequest()); !result.GetSuccess() {
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
-	if !slices.Equal(removed, []string{"production/shop"}) {
-		t.Errorf("removing shop removed part users %v, want shop removed from the parts its first deploy claimed before it failed", removed)
+	if !slices.Equal(removed, []string{"production/shop"}) || len(leftAtRemoval) != 0 {
+		t.Errorf("removing shop ran the vendor's removal for %v with %d values still stored, want it run once for production/shop after the values were purged", removed, len(leftAtRemoval))
+	}
+}
+
+func TestPlanRemoveProjectShowsWhatTheVendorHoldsForTheProject(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ProjectRemoval = &provider.ProjectRemovalHooks{
+			Plan: func(_ context.Context, tier environment.Tier, project string) ([]provider.ChangeGroup, error) {
+				return []provider.ChangeGroup{{Kind: "part user", Name: string(tier) + "/" + project, Action: provider.ActionDelete}}, nil
+			},
+			Remove: func(context.Context, environment.Tier, string, progress.Log) error { return nil },
+		}
+	})
+
+	plan, err := client.PlanRemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	if !slices.ContainsFunc(plan.GetGroups(), func(group *planv1.ChangeGroup) bool {
+		return group.GetKind() == "part user" && strings.HasSuffix(group.GetName(), "/production/shop")
+	}) {
+		t.Errorf("the plan has groups %v, want the vendor's own removal for production/shop among them", kinds(plan))
 	}
 }
 

@@ -89,8 +89,6 @@ func New[S any](config Config[S]) *Automation[S] {
 	return &Automation[S]{config: config, plugins: &hostedPlugins{declared: config.Plugins}}
 }
 
-func (a *Automation[S]) Backend() Backend { return a.config.Backend }
-
 func (a *Automation[S]) StackName(ref provider.StackRef) string { return ref.Name.String() }
 
 func (a *Automation[S]) ProjectName(ref provider.StackRef) string {

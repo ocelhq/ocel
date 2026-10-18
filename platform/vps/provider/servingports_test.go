@@ -70,7 +70,7 @@ func preflightOver(machine *scripted, kind edge.Kind, reach vps.Reach) ([]string
 		return nil, err
 	}
 	log := &warned{}
-	err = p.PreflightDeploy(context.Background(), provider.DeployPreflight{
+	err = p.ApplyPreflight(context.Background(), provider.DeployPreflight{
 		Deploy: provider.DeploySpec{
 			Slug: "shop",
 			Tier: environment.TierProduction,
@@ -90,10 +90,10 @@ func TestADeployOntoABoxWhosePortsAreFilteredFromOutsideGoesAheadAndNamesTheClou
 		"box.invalid:80": filtered, "box.invalid:443": filtered,
 	}, &dialed))
 	if err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want the deploy let through: its containers run either way, and a firewall rule opened later serves them", err)
+		t.Fatalf("ApplyPreflight() = %v, want the deploy let through: its containers run either way, and a firewall rule opened later serves them", err)
 	}
 	if len(warnings) != 1 {
-		t.Fatalf("PreflightDeploy() warned %q, want one warning that the box's hostnames cannot be reached from outside", warnings)
+		t.Fatalf("ApplyPreflight() warned %q, want one warning that the box's hostnames cannot be reached from outside", warnings)
 	}
 	for _, wanted := range []string{"box.invalid", "ports 80 and 443", "(timed out)", "firewall", "GCP", "security group"} {
 		if !strings.Contains(warnings[0], wanted) {
@@ -116,10 +116,10 @@ func TestAPortRefusedFromOutsideIsToldApartFromAPortThatTimesOut(t *testing.T) {
 		"box.invalid:80": rejected, "box.invalid:443": filtered,
 	}, &dialed))
 	if err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want the deploy let through with a warning", err)
+		t.Fatalf("ApplyPreflight() = %v, want the deploy let through with a warning", err)
 	}
 	if len(warnings) != 1 {
-		t.Fatalf("PreflightDeploy() warned %q, want one warning", warnings)
+		t.Fatalf("ApplyPreflight() warned %q, want one warning", warnings)
 	}
 	if !strings.Contains(warnings[0], "(80 refused, 443 timed out)") {
 		t.Errorf("warning = %q, want port 80 told refused and 443 timed out: a refusal is an active reject, a timeout a silent drop", warnings[0])
@@ -138,10 +138,10 @@ func TestAPortWindowsRefusesIsToldAsRefusedRatherThanByItsRawError(t *testing.T)
 		"box.invalid:80": refusedOnWindows,
 	}, &dialed))
 	if err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want the deploy let through with a warning", err)
+		t.Fatalf("ApplyPreflight() = %v, want the deploy let through with a warning", err)
 	}
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "port 80 on box.invalid is unreachable from this machine (refused)") {
-		t.Fatalf("PreflightDeploy() warned %q, want port 80 told as refused", warnings)
+		t.Fatalf("ApplyPreflight() warned %q, want port 80 told as refused", warnings)
 	}
 }
 
@@ -151,10 +151,10 @@ func TestADeployOntoABoxThatAnswersOnBothPortsFromOutsideWarnsNothing(t *testing
 	var dialed []string
 	warnings, err := preflightOver(boxSaying(nil), edge.None, reachingWith(nil, &dialed))
 	if err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want a reachable box let through", err)
+		t.Fatalf("ApplyPreflight() = %v, want a reachable box let through", err)
 	}
 	if len(warnings) != 0 {
-		t.Errorf("PreflightDeploy() warned %q about a box that answers on both ports", warnings)
+		t.Errorf("ApplyPreflight() warned %q about a box that answers on both ports", warnings)
 	}
 	slices.Sort(dialed)
 	if want := []string{"box.invalid:443", "box.invalid:80"}; !slices.Equal(dialed, want) {
@@ -170,7 +170,7 @@ func TestABoxAnEdgeFrontsIsNotProbedFromOutside(t *testing.T) {
 		"box.invalid:80": filtered, "box.invalid:443": filtered,
 	}, &dialed))
 	if err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want the deploy let through", err)
+		t.Fatalf("ApplyPreflight() = %v, want the deploy let through", err)
 	}
 	if len(dialed) != 0 || len(warnings) != 0 {
 		t.Errorf("dialed %q and warned %q, want neither: an edge reaches the box through a tunnel or from its own addresses, which a firewall may rightly allow alone", dialed, warnings)
@@ -187,7 +187,7 @@ func TestABoxWhoseProxyDoesNotOwnItsPortsIsRefusedWithoutAProbeFromOutside(t *te
 		"cat /proc/net/tcp\n": {stdout: socketTable(80)},
 	}), edge.None, reachingWith(nil, &dialed))
 	if err == nil || !strings.Contains(err.Error(), "443") {
-		t.Fatalf("PreflightDeploy() = %v, want the box refused for nothing listening on 443", err)
+		t.Fatalf("ApplyPreflight() = %v, want the box refused for nothing listening on 443", err)
 	}
 	if len(dialed) != 0 {
 		t.Errorf("dialed %q, want nothing dialed: a port nothing on the box listens on is already refused with its own fix", dialed)
@@ -220,10 +220,10 @@ func TestBothPortsAreProbedAtOnceUnderAShortDeadline(t *testing.T) {
 	}
 	warnings, err := preflightOver(boxSaying(nil), edge.None, reach)
 	if err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want the deploy let through", err)
+		t.Fatalf("ApplyPreflight() = %v, want the deploy let through", err)
 	}
 	if len(warnings) != 0 {
-		t.Errorf("PreflightDeploy() warned %q, want the two probes run side by side, each waiting for the other", warnings)
+		t.Errorf("ApplyPreflight() warned %q, want the two probes run side by side, each waiting for the other", warnings)
 	}
 	if len(deadlines) != 2 {
 		t.Fatalf("probes ran with deadlines %v, want each probe bounded", deadlines)

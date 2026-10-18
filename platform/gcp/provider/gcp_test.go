@@ -12,7 +12,7 @@ func TestCloudRunDeclaresNoFunctionSizeBudget(t *testing.T) {
 }
 
 func TestCloudRunSaysItShipsANextServerRuntime(t *testing.T) {
-	if files, err := pushing(t, "").Runtime().NextServer(context.Background()); err != nil || len(files) == 0 {
-		t.Errorf("Runtime().NextServer() = %d files, %v, want the Next server runtime a Cloud Run Next container loads its cache handlers from", len(files), err)
+	if files, err := pushing(t, "").Hooks().NextServerRuntime(context.Background()); err != nil || len(files) == 0 {
+		t.Errorf("NextServerRuntime() = %d files, %v, want the Next server runtime a Cloud Run Next container loads its cache handlers from", len(files), err)
 	}
 }

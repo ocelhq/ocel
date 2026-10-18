@@ -33,7 +33,7 @@ func preflightTier(machine *scripted, options vps.Options, tier environment.Tier
 	if err != nil {
 		return err
 	}
-	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
+	return p.ApplyPreflight(context.Background(), provider.DeployPreflight{
 		Deploy: provider.DeploySpec{
 			Slug: "shop",
 			Tier: tier,
@@ -49,7 +49,7 @@ func TestAPreviewDeployWhoseHostnamesWouldEachBeCertifiedPubliclyIsRefusedBefore
 	machine := newBoxServingPreviews(t, "preview.example.com")
 	err := preflightTier(machine, vps.Options{}, environment.TierPreview)
 	if err == nil {
-		t.Fatal("PreflightDeploy() let a preview through whose every hostname the box's proxy orders a publicly logged certificate for")
+		t.Fatal("ApplyPreflight() let a preview through whose every hostname the box's proxy orders a publicly logged certificate for")
 	}
 	if !strings.Contains(err.Error(), `"perHostnamePreviewCertificates"`) {
 		t.Errorf("the refusal reads %q, want it to name the option that accepts it", err)
@@ -60,7 +60,7 @@ func TestAPreviewDeployThatOptedIntoPerHostnameCertificatesIsLetThrough(t *testi
 	t.Parallel()
 
 	if err := preflightTier(newBoxServingPreviews(t, "preview.example.com"), vps.Options{PerHostnamePreviewCertificates: true}, environment.TierPreview); err != nil {
-		t.Errorf("PreflightDeploy() = %v, want a preview whose project accepted published hostnames let through", err)
+		t.Errorf("ApplyPreflight() = %v, want a preview whose project accepted published hostnames let through", err)
 	}
 }
 
@@ -68,6 +68,6 @@ func TestAProductionDeployIsNeverRefusedForHowPreviewsAreCertified(t *testing.T)
 	t.Parallel()
 
 	if err := preflightTier(newBoxServingPreviews(t, "preview.example.com"), vps.Options{}, environment.TierProduction); err != nil {
-		t.Errorf("PreflightDeploy() = %v, want production let through: its hostnames are its own domains", err)
+		t.Errorf("ApplyPreflight() = %v, want production let through: its hostnames are its own domains", err)
 	}
 }

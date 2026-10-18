@@ -419,6 +419,8 @@ message ProvisionInfraRequest {
   string alias_token = 5 [(buf.validate.field).string.pattern = "^([a-z2-7]{16})?$"];
 
   string lease_token = 6 [(buf.validate.field).string.pattern = "^[a-f0-9]{32}$"];
+
+  common.plan.v1.ChangePlan consented = 7;
 }
 
 message RenewDeployLeaseRequest {

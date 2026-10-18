@@ -44,7 +44,7 @@ func preflightingResources(t *testing.T, machine *scripted, declared ...provider
 	if err != nil {
 		t.Fatal(err)
 	}
-	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
+	return p.ApplyPreflight(context.Background(), provider.DeployPreflight{
 		Deploy: provider.DeploySpec{
 			Slug:  "shop",
 			Tier:  environment.TierProduction,
@@ -66,10 +66,10 @@ func TestADeployDeclaringATaskIsRefusedOnABoxWhoseAgentPredatesThisBuild(t *test
 	})
 	err := preflightingResources(t, machine, aDeclaredTask)
 	if err == nil {
-		t.Fatal("PreflightDeploy() let a task onto a box whose agent serves no queue, and every trigger would fail at runtime")
+		t.Fatal("ApplyPreflight() let a task onto a box whose agent serves no queue, and every trigger would fail at runtime")
 	}
 	if !strings.Contains(err.Error(), "ocel bootstrap") {
-		t.Errorf("PreflightDeploy() = %q, want it to name `ocel bootstrap` as the remedy", err)
+		t.Errorf("ApplyPreflight() = %q, want it to name `ocel bootstrap` as the remedy", err)
 	}
 }
 
@@ -81,7 +81,7 @@ func TestADeployDeclaringATaskIsLetOntoABoxRunningThisBuildsAgent(t *testing.T) 
 		host.LiveBinary: agentSurveyed(t, currentAgent(t)),
 	})
 	if err := preflightingResources(t, machine, aDeclaredTask); err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want a box running this build's agent let through", err)
+		t.Fatalf("ApplyPreflight() = %v, want a box running this build's agent let through", err)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestADeployDeclaringNoTopicOrTaskNeverAsksAboutTheAgent(t *testing.T) {
 
 	machine := boxSaying(map[string]answer{"uname -m": {stdout: "x86_64\n"}})
 	if err := preflightingResources(t, machine); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+		t.Fatalf("ApplyPreflight() = %v", err)
 	}
 	for _, command := range machine.ran {
 		if strings.Contains(command, host.LiveBinary) {

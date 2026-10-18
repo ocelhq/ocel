@@ -86,15 +86,15 @@ type leaseSubject interface {
 	lease() provider.Lease
 }
 
-type environmentLeases struct {
+type subjectLeases struct {
 	ttl, renewal, retry, margin time.Duration
 
 	now   func() time.Time
 	after func(time.Duration) <-chan time.Time
 }
 
-func newEnvironmentLeases() *environmentLeases {
-	return &environmentLeases{
+func newSubjectLeases() *subjectLeases {
+	return &subjectLeases{
 		ttl:     environmentLeaseTTL,
 		renewal: environmentLeaseRenewal,
 		retry:   environmentLeaseRetry,
@@ -104,11 +104,11 @@ func newEnvironmentLeases() *environmentLeases {
 	}
 }
 
-func (l *environmentLeases) terms() stackrecords.LeaseTerms {
+func (l *subjectLeases) terms() stackrecords.LeaseTerms {
 	return stackrecords.LeaseTerms{TTL: l.ttl, Watch: environmentLeaseWatch, Now: l.now, Wait: l.wait}
 }
 
-func (l *environmentLeases) wait(ctx context.Context, d time.Duration) error {
+func (l *subjectLeases) wait(ctx context.Context, d time.Duration) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -117,8 +117,8 @@ func (l *environmentLeases) wait(ctx context.Context, d time.Duration) error {
 	}
 }
 
-type environmentHold struct {
-	leases *environmentLeases
+type leaseHold struct {
+	leases *subjectLeases
 	store  records.Store
 	scope  leaseSubject
 	token  string
@@ -136,7 +136,7 @@ type environmentHold struct {
 	lostWith error
 }
 
-func (l *environmentLeases) take(ctx context.Context, store records.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder) (*environmentHold, error) {
+func (l *subjectLeases) take(ctx context.Context, store records.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder) (*leaseHold, error) {
 	held, err := scope.take(ctx, store, token, holder, l.terms())
 	if err != nil {
 		return nil, err
@@ -144,7 +144,7 @@ func (l *environmentLeases) take(ctx context.Context, store records.Store, scope
 	return l.startHold(ctx, store, scope, token, holder, held), nil
 }
 
-func (l *environmentLeases) takeUnderNewToken(ctx context.Context, store records.Store, scope leaseSubject, holder stackrecords.LeaseHolder) (*environmentHold, error) {
+func (l *subjectLeases) takeUnderNewToken(ctx context.Context, store records.Store, scope leaseSubject, holder stackrecords.LeaseHolder) (*leaseHold, error) {
 	token, err := lease.NewToken()
 	if err != nil {
 		return nil, err
@@ -152,16 +152,16 @@ func (l *environmentLeases) takeUnderNewToken(ctx context.Context, store records
 	return l.take(ctx, store, scope, token, holder)
 }
 
-func (l *environmentLeases) keep(ctx context.Context, store records.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder) (*environmentHold, error) {
+func (l *subjectLeases) keep(ctx context.Context, store records.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder) (*leaseHold, error) {
 	if err := scope.renew(ctx, store, token, holder, l.terms()); err != nil {
 		return nil, err
 	}
 	return l.startHold(ctx, store, scope, token, holder, true), nil
 }
 
-func (l *environmentLeases) startHold(ctx context.Context, store records.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder, held bool) *environmentHold {
+func (l *subjectLeases) startHold(ctx context.Context, store records.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder, held bool) *leaseHold {
 	leased, cancel := context.WithCancelCause(ctx)
-	h := &environmentHold{
+	h := &leaseHold{
 		leases: l, store: store, scope: scope, token: token, holder: holder, held: held,
 		leased: leased, cancel: cancel,
 		stop: make(chan struct{}), done: make(chan struct{}), lost: make(chan struct{}),
@@ -170,7 +170,7 @@ func (l *environmentLeases) startHold(ctx context.Context, store records.Store, 
 	return h
 }
 
-func (h *environmentHold) renew() {
+func (h *leaseHold) renew() {
 	defer close(h.done)
 	renewed, wait := h.leases.now(), h.leases.renewal
 	for {
@@ -207,7 +207,7 @@ func isBusy(err error) bool {
 	return errors.As(err, &refused) && refused.Code == refusal.CodeBusy
 }
 
-func (h *environmentHold) lose(err error) {
+func (h *leaseHold) lose(err error) {
 	h.loss.Do(func() {
 		h.lostWith = err
 		close(h.lost)
@@ -215,7 +215,7 @@ func (h *environmentHold) lose(err error) {
 	})
 }
 
-func (h *environmentHold) readLoss() error {
+func (h *leaseHold) readLoss() error {
 	select {
 	case <-h.lost:
 		return h.lostWith
@@ -224,21 +224,21 @@ func (h *environmentHold) readLoss() error {
 	}
 }
 
-func (h *environmentHold) context(ctx context.Context) context.Context {
+func (h *leaseHold) context(ctx context.Context) context.Context {
 	if h == nil {
 		return ctx
 	}
 	return h.leased
 }
 
-func (h *environmentHold) lease() provider.Lease {
+func (h *leaseHold) lease() provider.Lease {
 	if h == nil {
 		return provider.Lease{}
 	}
 	return h.scope.lease()
 }
 
-func (h *environmentHold) explain(err error) error {
+func (h *leaseHold) explain(err error) error {
 	if h == nil || err == nil {
 		return err
 	}
@@ -248,7 +248,7 @@ func (h *environmentHold) explain(err error) error {
 	return err
 }
 
-func (h *environmentHold) confirm(ctx context.Context) error {
+func (h *leaseHold) confirm(ctx context.Context) error {
 	if h == nil {
 		return nil
 	}
@@ -262,7 +262,7 @@ func (h *environmentHold) confirm(ctx context.Context) error {
 	return err
 }
 
-func (h *environmentHold) end() {
+func (h *leaseHold) end() {
 	if h == nil {
 		return
 	}
@@ -271,7 +271,7 @@ func (h *environmentHold) end() {
 	h.cancel(nil)
 }
 
-func (h *environmentHold) release(ctx context.Context) error {
+func (h *leaseHold) release(ctx context.Context) error {
 	if h == nil {
 		return nil
 	}
@@ -281,7 +281,7 @@ func (h *environmentHold) release(ctx context.Context) error {
 	return h.scope.forget(ctx, h.store, h.token)
 }
 
-func (l *environmentLeases) sayRunOutWatch(leased map[string]stackrecords.EnvironmentLease, progress progress.Log) {
+func (l *subjectLeases) sayRunOutWatch(leased map[string]stackrecords.EnvironmentLease, progress progress.Log) {
 	now, runOut := l.now(), 0
 	for _, lease := range leased {
 		switch {
@@ -303,15 +303,15 @@ func (l *environmentLeases) sayRunOutWatch(leased map[string]stackrecords.Enviro
 		now.Add(l.ttl).UTC().Format("15:04 MST"), runOut, environments))
 }
 
-type environmentHolds struct {
-	held   []*environmentHold
+type leaseHolds struct {
+	held   []*leaseHold
 	leased context.Context
 	cancel context.CancelCauseFunc
 }
 
-func (l *environmentLeases) takeEach(ctx context.Context, store records.Store, token string, scopes []leaseSubject, holder stackrecords.LeaseHolder) (environmentHolds, error) {
+func (l *subjectLeases) takeEach(ctx context.Context, store records.Store, token string, scopes []leaseSubject, holder stackrecords.LeaseHolder) (leaseHolds, error) {
 	leased, cancel := context.WithCancelCause(ctx)
-	holds := environmentHolds{held: make([]*environmentHold, len(scopes)), leased: leased, cancel: cancel}
+	holds := leaseHolds{held: make([]*leaseHold, len(scopes)), leased: leased, cancel: cancel}
 	bounded := newBoundedStore(store, environmentLeaseConcurrency)
 	var group errgroup.Group
 	for i, scope := range scopes {
@@ -329,16 +329,16 @@ func (l *environmentLeases) takeEach(ctx context.Context, store records.Store, t
 	if group.Wait() != nil {
 		err := context.Cause(leased)
 		_ = holds.release(ctx)
-		return environmentHolds{}, err
+		return leaseHolds{}, err
 	}
 	return holds, nil
 }
 
-func (hs environmentHolds) context() context.Context {
+func (hs leaseHolds) context() context.Context {
 	return hs.leased
 }
 
-func (hs environmentHolds) explain(err error) error {
+func (hs leaseHolds) explain(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -350,7 +350,7 @@ func (hs environmentHolds) explain(err error) error {
 	return err
 }
 
-func (hs environmentHolds) release(ctx context.Context) error {
+func (hs leaseHolds) release(ctx context.Context) error {
 	var errs []error
 	for i := len(hs.held) - 1; i >= 0; i-- {
 		errs = append(errs, hs.held[i].release(ctx))
@@ -359,7 +359,7 @@ func (hs environmentHolds) release(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func (h *handlers) takeEnvironment(ctx context.Context, spec provider.DeploySpec, token string) (*environmentHold, error) {
+func (h *handlers) takeEnvironment(ctx context.Context, spec provider.DeploySpec, token string) (*leaseHold, error) {
 	p, err := h.session.use()
 	if err != nil {
 		return nil, err
@@ -367,7 +367,7 @@ func (h *handlers) takeEnvironment(ctx context.Context, spec provider.DeploySpec
 	return h.leases.take(ctx, p.KeyValues(), newEnvironmentScope(spec), token, stackrecords.LeaseDeploy)
 }
 
-func (h *handlers) claimEnvironment(ctx context.Context, spec provider.DeploySpec, provisionedUnder string) (*environmentHold, error) {
+func (h *handlers) claimEnvironment(ctx context.Context, spec provider.DeploySpec, provisionedUnder string) (*leaseHold, error) {
 	p, err := h.session.use()
 	if err != nil {
 		return nil, err

@@ -46,14 +46,14 @@ func preflightedOn(t *testing.T, p *vps.Provider) error {
 
 func preflightedFor(t *testing.T, p *vps.Provider, image string) error {
 	t.Helper()
-	return p.PreflightDeploy(context.Background(), liveDeployPreflight(t, image))
+	return p.ApplyPreflight(context.Background(), liveDeployPreflight(t, image))
 }
 
 func TestLiveARunningBoxIsLetThroughAndAnEngineThatDoesNotAnswerIsNot(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	if err := preflightedOn(t, p); err != nil {
-		t.Fatalf("PreflightDeploy() on a bootstrapped box = %v, want it let through", err)
+		t.Fatalf("ApplyPreflight() on a bootstrapped box = %v, want it let through", err)
 	}
 
 	vm.ssh(t, "sudo systemctl stop docker.socket docker.service")
@@ -70,13 +70,13 @@ func TestLiveARunningBoxIsLetThroughAndAnEngineThatDoesNotAnswerIsNot(t *testing
 
 	err := preflightedOn(t, vm.deploying(t))
 	if err == nil {
-		t.Fatal("PreflightDeploy() let a deploy past an engine that is not running, and it would surface as a failed image load halfway through the transfer")
+		t.Fatal("ApplyPreflight() let a deploy past an engine that is not running, and it would surface as a failed image load halfway through the transfer")
 	}
 	if !strings.Contains(err.Error(), "docker") {
-		t.Errorf("PreflightDeploy() = %q, want the engine named", err)
+		t.Errorf("ApplyPreflight() = %q, want the engine named", err)
 	}
 	if !strings.Contains(err.Error(), "`ocel bootstrap") {
-		t.Errorf("PreflightDeploy() = %q, want the remedy named: a refusal an operator cannot act on is a wall", err)
+		t.Errorf("ApplyPreflight() = %q, want the remedy named: a refusal an operator cannot act on is a wall", err)
 	}
 }
 
@@ -130,12 +130,12 @@ func TestLiveADiskWithoutRoomForTheKeepWindowRefusesAndNamesTheGuess(t *testing.
 
 	err := preflightedOn(t, p)
 	if err == nil {
-		t.Fatalf("PreflightDeploy() let a deploy onto %s with %d bytes left, and a disk that fills while an image streams fails mid-transfer", root, keep)
+		t.Fatalf("ApplyPreflight() let a deploy onto %s with %d bytes left, and a disk that fills while an image streams fails mid-transfer", root, keep)
 	}
 	said := err.Error()
 	for _, want := range []string{root, "guessed", "Free space on " + root} {
 		if !strings.Contains(said, want) {
-			t.Errorf("PreflightDeploy() = %q, want %q in it", said, want)
+			t.Errorf("ApplyPreflight() = %q, want %q in it", said, want)
 		}
 	}
 }
@@ -172,7 +172,7 @@ func TestLiveADiskThatClearsTheFloorIsStillRefusedByWhatThisBoxStores(t *testing
 
 	err = preflightedFor(t, p, bulkRepo+":next")
 	if err == nil {
-		t.Fatalf("PreflightDeploy() let a deploy onto %s with %d bytes left against a box storing a %d byte image, and the keep window has %d unfilled slot(s) to fill with images that size",
+		t.Fatalf("ApplyPreflight() let a deploy onto %s with %d bytes left against a box storing a %d byte image, and the keep window has %d unfilled slot(s) to fill with images that size",
 			root, keep, bulk.Largest, host.KeepWindow-1)
 	}
 	if free := vm.freeOn(t, root); free <= host.FirstDeployFloor {
@@ -182,7 +182,7 @@ func TestLiveADiskThatClearsTheFloorIsStillRefusedByWhatThisBoxStores(t *testing
 	said := err.Error()
 	for _, want := range []string{bulkRepo + ": ", "empty slot(s) + incoming =", "Free space on " + root} {
 		if !strings.Contains(said, want) {
-			t.Errorf("PreflightDeploy() = %q, want %q in it", said, want)
+			t.Errorf("ApplyPreflight() = %q, want %q in it", said, want)
 		}
 	}
 }
@@ -191,7 +191,7 @@ func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testin
 	vm, p := onABoxServingContainers(t)
 
 	if err := preflightedOn(t, p); err != nil {
-		t.Fatalf("PreflightDeploy() over a running proxy = %v, and the answered state is the control the others are read against", err)
+		t.Fatalf("ApplyPreflight() over a running proxy = %v, and the answered state is the control the others are read against", err)
 	}
 
 	seen := map[string]string{}
@@ -241,7 +241,7 @@ func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testin
 			defer induced.restore()
 			err := preflightedOn(t, vm.deploying(t))
 			if err == nil {
-				t.Fatalf("PreflightDeploy() let a deploy past a box where %s, and a deploy into a proxy that cannot be cut over is a green deploy nothing routes to", induced.what)
+				t.Fatalf("ApplyPreflight() let a deploy past a box where %s, and a deploy into a proxy that cannot be cut over is a green deploy nothing routes to", induced.what)
 			}
 			said := err.Error()
 			for _, want := range induced.wants {
@@ -261,7 +261,7 @@ func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testin
 		t.Fatalf("%d proxy states were induced, want the five this check tells apart", len(seen))
 	}
 	if err := preflightedOn(t, vm.deploying(t)); err != nil {
-		t.Fatalf("PreflightDeploy() after every induced state was undone = %v, so the five messages above were read off a box left broken", err)
+		t.Fatalf("ApplyPreflight() after every induced state was undone = %v, so the five messages above were read off a box left broken", err)
 	}
 }
 

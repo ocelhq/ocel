@@ -31,7 +31,6 @@ type Provider struct {
 	wrappedFor       []string
 	runtimeArch      string
 	runtimeBinary    []byte
-	servesNextServer bool
 
 	runsFunctionsAsImages bool
 	hooks                 provider.Hooks

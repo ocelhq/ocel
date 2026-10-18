@@ -20,11 +20,6 @@ const cacheDirName = ".ocel"
 
 var pinned installation
 
-func Install(ctx context.Context, progress progress.Log) error {
-	_, err := pinned.install(ctx, progress)
-	return err
-}
-
 type installation struct {
 	once    sync.Once
 	command auto.PulumiCommand

@@ -17,7 +17,39 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
-func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
+func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
+	if err := p.checkDeploy(ctx, pre); err != nil {
+		return provider.Plan{}, err
+	}
+	if err := p.resolveRuntimeLayers(ctx, pre, func(account.APIs, account.Deployed) (map[string]string, error) {
+		return account.ReadRuntimeLayersToPlan(ctx, lambda.NewFromConfig(p.aws), p.namespace, pre.Deploy.Tier)
+	}); err != nil {
+		return provider.Plan{}, err
+	}
+	if err := p.stacks.Preflight(ctx, pre); err != nil {
+		return provider.Plan{}, err
+	}
+	groups, err := p.planDeployParts(ctx, pre)
+	return provider.Plan{Groups: groups}, err
+}
+
+func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPreflight) error {
+	if err := p.checkDeploy(ctx, pre); err != nil {
+		return err
+	}
+	if err := p.resolveRuntimeLayers(ctx, pre, func(apis account.APIs, deployed account.Deployed) (map[string]string, error) {
+		return account.EnsureRuntimeLayers(ctx, apis, p.namespace, pre.Deploy.Tier,
+			account.RuntimeLayerRequest{ArtifactBucket: deployed.ArtifactBucket, StateTable: deployed.StateTable}, pre.Progress)
+	}); err != nil {
+		return err
+	}
+	if err := p.ensureDeployParts(ctx, pre); err != nil {
+		return err
+	}
+	return p.stacks.Preflight(ctx, pre)
+}
+
+func (p *Provider) checkDeploy(ctx context.Context, pre provider.DeployPreflight) error {
 	if err := refusePublicBuckets(pre); err != nil {
 		return err
 	}
@@ -30,22 +62,13 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := p.refuseUnreadableOriginSecret(ctx, pre); err != nil {
 		return err
 	}
-	if err := p.nagStaleOriginSecret(ctx, pre); err != nil {
-		return err
-	}
-	if err := p.resolveRuntimeLayers(ctx, pre); err != nil {
-		return err
-	}
-	if err := p.ensureDeployParts(ctx, pre); err != nil {
-		return err
-	}
-	return p.stacks.Preflight(ctx, pre)
+	return p.nagStaleOriginSecret(ctx, pre)
 }
 
 func (p *Provider) ensureDeployParts(ctx context.Context, pre provider.DeployPreflight) error {
 	tier := pre.Deploy.Tier
 	deployed, err := p.bootstrapped(ctx, tier)
-	if err != nil || !deployed.Present || pre.Dry {
+	if err != nil || !deployed.Present {
 		return err
 	}
 	records := p.partRecords()
@@ -106,7 +129,7 @@ func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre provider.Deploy
 	return nil
 }
 
-func (p *Provider) resolveRuntimeLayers(ctx context.Context, pre provider.DeployPreflight) error {
+func (p *Provider) resolveRuntimeLayers(ctx context.Context, pre provider.DeployPreflight, resolve func(account.APIs, account.Deployed) (map[string]string, error)) error {
 	tier := pre.Deploy.Tier
 	deployed, err := p.bootstrapped(ctx, tier)
 	if err != nil || !deployed.Present {
@@ -114,14 +137,11 @@ func (p *Provider) resolveRuntimeLayers(ctx context.Context, pre provider.Deploy
 	}
 	p.layers.forget()
 	_, err = p.layers.resolve(tier, func() (map[string]string, error) {
-		if pre.Dry {
-			return account.ReadRuntimeLayersToPlan(ctx, lambda.NewFromConfig(p.aws), p.namespace, tier)
-		}
-		return account.EnsureRuntimeLayers(ctx, account.APIs{
+		return resolve(account.APIs{
 			Layers:  lambda.NewFromConfig(p.aws),
 			Store:   s3.NewFromConfig(p.aws),
 			Records: account.DynamoRecords(dynamodb.NewFromConfig(p.aws)),
-		}, p.namespace, tier, account.RuntimeLayerRequest{ArtifactBucket: deployed.ArtifactBucket, StateTable: deployed.StateTable}, pre.Progress)
+		}, deployed)
 	})
 	return err
 }

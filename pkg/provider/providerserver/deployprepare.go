@@ -27,25 +27,16 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.checkInlineBindings(ctx, progress); err != nil {
 		return err
 	}
-	if err := r.ensureBootstrap(ctx, progress); err != nil {
+	if err := r.refuseUnreadyBootstrap(ctx, progress); err != nil {
 		return err
 	}
 	if err := r.resolveServingDomains(ctx); err != nil {
-		return err
-	}
-	if err := r.mode.previewHosts(ctx, r, progress); err != nil {
-		return err
-	}
-	if err := r.enforceProtection(ctx, progress); err != nil {
 		return err
 	}
 	if err := r.readInlineRecords(ctx); err != nil {
 		return err
 	}
 	if err := r.admitBindings(ctx, progress); err != nil {
-		return err
-	}
-	if err := r.mode.recordProject(ctx, r); err != nil {
 		return err
 	}
 	appRouters, err := pairApps(r.provider.Facts(), r.front.Kind(), r.spec.Apps)
@@ -58,6 +49,24 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	}
 	maps.Copy(r.state.Apps, appRouters)
 	if err := r.checkNeeds(ctx); err != nil {
+		return err
+	}
+	if err := r.refuseUnsupportedDeclarations(ctx); err != nil {
+		return err
+	}
+	if err := r.refuseContainerValues(ctx); err != nil {
+		return err
+	}
+	if err := r.refuseUnconsentedDeploy(ctx); err != nil {
+		return err
+	}
+	if err := r.mode.previewHosts(ctx, r, progress); err != nil {
+		return err
+	}
+	if err := r.enforceProtection(ctx, progress); err != nil {
+		return err
+	}
+	if err := r.mode.recordProject(ctx, r); err != nil {
 		return err
 	}
 	if err := r.preflight(ctx, progress); err != nil {
@@ -84,7 +93,7 @@ func (r *deployRun) ensureLifecycle(ctx context.Context) error {
 	return stackrecords.EnsureLifecycle(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, r.lifecycle, r.aliasToken)
 }
 
-func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
+func (r *deployRun) refuseUnreadyBootstrap(ctx context.Context, progress progress.Log) error {
 	_, err := r.readiness.EnsureReady(ctx, r.spec.Tier, r.mode.wantedBy(r.spec.Slug), r.parts, progress)
 	return err
 }
@@ -265,29 +274,43 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 }
 
 func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error {
-	if err := r.refuseUnsupportedDeclarations(ctx); err != nil {
-		return err
-	}
-	if err := r.refuseContainerValues(ctx); err != nil {
-		return err
-	}
-	preflightDeploy := r.provider.Hooks().PreflightDeploy
-	if preflightDeploy == nil {
+	hooks := r.provider.Hooks().Preflight
+	if hooks == nil {
 		return nil
 	}
-	resources, err := manifestResources(r.manifest)
+	pre, err := r.deployPreflight(ctx, progress)
 	if err != nil {
 		return err
+	}
+	return r.mode.preflight(ctx, hooks, pre)
+}
+
+func (r *deployRun) planPreflight(ctx context.Context) (provider.Plan, error) {
+	hooks := r.provider.Hooks().Preflight
+	if hooks == nil {
+		return provider.Plan{}, nil
+	}
+	pre, err := r.deployPreflight(ctx, progress.Discard())
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	return hooks.Plan(ctx, pre)
+}
+
+func (r *deployRun) deployPreflight(ctx context.Context, progress progress.Log) (provider.DeployPreflight, error) {
+	resources, err := manifestResources(r.manifest)
+	if err != nil {
+		return provider.DeployPreflight{}, err
 	}
 	grants, err := r.publishedBindings().Published(ctx)
 	if err != nil {
-		return err
+		return provider.DeployPreflight{}, err
 	}
 	apps, err := r.usage(resources, grants)
 	if err != nil {
-		return err
+		return provider.DeployPreflight{}, err
 	}
-	return preflightDeploy(ctx, provider.DeployPreflight{
+	return provider.DeployPreflight{
 		Deploy:            r.spec,
 		PreviewBaseDomain: r.previewOn,
 		Edge:              r.front.Kind(),
@@ -296,10 +319,8 @@ func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error 
 		Apps:              apps,
 		Progress:          progress,
 		WrittenBy:         r.readiness.WrittenBy,
-		Dry:               r.mode.dry(),
 		Uses:              r.uses,
-		AddToPlan:         r.mode.addToPlan,
-	})
+	}, nil
 }
 
 func (r *deployRun) refuseUnsupportedDeclarations(ctx context.Context) error {

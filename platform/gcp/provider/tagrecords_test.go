@@ -92,8 +92,8 @@ func TestTheFirstDeployThatRevalidatesMakesItsProjectsWritableDatabaseAndTheNext
 	p, _ := deployingNetworks(t)
 	ctx := context.Background()
 
-	if err := p.PreflightDeploy(ctx, revalidating(true)); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+	if err := p.ApplyPreflight(ctx, revalidating(true)); err != nil {
+		t.Fatalf("ApplyPreflight() = %v", err)
 	}
 	if planned := plannedBy(t, p, revalidating(true)); len(planned) != 0 {
 		t.Errorf("a dry deploy after the first planned %+v, want nothing: the first recorded the database it made", planned)
@@ -103,12 +103,12 @@ func TestTheFirstDeployThatRevalidatesMakesItsProjectsWritableDatabaseAndTheNext
 func TestRemovingAProjectFromATierForgetsTheDatabaseOfItsRunsAndTagRecords(t *testing.T) {
 	p, _ := deployingNetworks(t)
 	ctx := context.Background()
-	if err := p.PreflightDeploy(ctx, revalidating(true)); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+	if err := p.ApplyPreflight(ctx, revalidating(true)); err != nil {
+		t.Fatalf("ApplyPreflight() = %v", err)
 	}
 
-	if err := p.removePartUser(ctx, environment.TierProduction, "shop", progress.Discard()); err != nil {
-		t.Fatalf("removePartUser() = %v", err)
+	if err := p.RemoveProject(ctx, environment.TierProduction, "shop", progress.Discard()); err != nil {
+		t.Fatalf("RemoveProject() = %v", err)
 	}
 	if planned := plannedBy(t, p, revalidating(true)); !plansWritableDatabase(planned, ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")) {
 		t.Errorf("a dry deploy after shop left the tier planned %+v, want its database made again", planned)

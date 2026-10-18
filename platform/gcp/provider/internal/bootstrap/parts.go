@@ -232,24 +232,31 @@ func (b Engine) AddParts(ctx context.Context, pre provider.DeployPreflight, name
 		if !slices.Contains(names, want.Name) {
 			continue
 		}
-		if !pre.Dry {
-			if want.Claim != nil {
-				if err := want.Claim(ctx, pre.Deploy.Slug); err != nil {
-					return err
-				}
-			}
-			if err := b.EnsurePart(ctx, tier, pre.Deploy.Slug, want); err != nil {
+		if want.Claim != nil {
+			if err := want.Claim(ctx, pre.Deploy.Slug); err != nil {
 				return err
 			}
+		}
+		if err := b.EnsurePart(ctx, tier, pre.Deploy.Slug, want); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b Engine) PlanParts(ctx context.Context, tier environment.Tier, names []string) ([]provider.ChangeGroup, error) {
+	var groups []provider.ChangeGroup
+	for _, want := range b.listDeployedParts(tier) {
+		if !slices.Contains(names, want.Name) {
 			continue
 		}
 		group, planned, err := b.planPart(ctx, tier, want)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if planned && pre.AddToPlan != nil {
-			pre.AddToPlan(group)
+		if planned {
+			groups = append(groups, group)
 		}
 	}
-	return nil
+	return groups, nil
 }

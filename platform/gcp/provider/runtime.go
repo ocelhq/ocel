@@ -24,6 +24,6 @@ func (p containerRuntime) Binary(_ context.Context, architecture string) ([]byte
 	return payloads.ContainerRuntime(architecture)
 }
 
-func (containerRuntime) NextServer(context.Context) (map[string][]byte, error) {
+func nextServerRuntime(context.Context) (map[string][]byte, error) {
 	return maps.Clone(payloads.NextServerRuntime()), nil
 }

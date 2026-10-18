@@ -2,11 +2,7 @@ package aws
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
@@ -16,10 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
@@ -120,29 +113,23 @@ func (p *Provider) ensurePartNamed(ctx context.Context, tier environment.Tier, n
 	return part.Added.Ensure(ctx, tier, addedBy, addedWith, say)
 }
 
-func (p *Provider) planDeployParts(ctx context.Context, spec provider.StackSpec) ([]provider.ChangeGroup, error) {
-	tier := spec.Ref.Tier
+func (p *Provider) planDeployParts(ctx context.Context, pre provider.DeployPreflight) ([]provider.ChangeGroup, error) {
+	tier := pre.Deploy.Tier
 	deployed, err := p.bootstrapped(ctx, tier)
 	if err != nil || !deployed.Present {
 		return nil, err
 	}
-	if spec.App == nil {
-		return p.planVPCClients(ctx, tier, spec.Resources)
-	}
-	var uses []buildoutput.Uses
-	if spec.App.Compute != provider.ComputeContainer {
-		used, err := usesOf(spec.App.OutputRoot, spec.App.App, spec.App.Framework)
-		if err != nil {
-			return nil, err
+	parts := p.tierParts(p.partRecords())
+	used := parts.AddedFor(pre.Uses, pre.Edge)
+	if len(awsresources.Registry(awsresources.Clients{}).PlacesInVPC(pre.Resources)) > 0 {
+		clients, found := parts.Named(vpcclients.Part)
+		if !found || clients.Added == nil {
+			return nil, fmt.Errorf("this provider adds no bootstrap part named %q", vpcclients.Part)
 		}
-		uses = []buildoutput.Uses{used}
-	}
-	front := edge.None
-	if spec.Edge != nil {
-		front = spec.Edge.Kind()
+		used = append(used, clients)
 	}
 	var groups []provider.ChangeGroup
-	for _, part := range p.tierParts(p.partRecords()).AddedFor(uses, front) {
+	for _, part := range used {
 		group, err := part.Added.Plan(ctx, tier)
 		if err != nil {
 			return nil, err
@@ -152,37 +139,6 @@ func (p *Provider) planDeployParts(ctx context.Context, spec provider.StackSpec)
 		}
 	}
 	return groups, nil
-}
-
-func usesOf(root, app, framework string) (buildoutput.Uses, error) {
-	if root == "" {
-		return buildoutput.PresumeUses(framework), nil
-	}
-	hosting, present, err := buildoutput.ReadHosting(root, app)
-	if err != nil || !present {
-		return buildoutput.PresumeUses(framework), err
-	}
-	_, revalidates := hosting.Needs[edge.NeedRevalidation]
-	_, err = os.Stat(filepath.Join(buildoutput.AppRoot(root, app), naming.ImageConfigFile))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return buildoutput.Uses{}, fmt.Errorf("read the image config of %s: %w", app, err)
-	}
-	return buildoutput.Uses{Revalidation: revalidates, ImageOptimization: err == nil}, nil
-}
-
-func (p *Provider) planVPCClients(ctx context.Context, tier environment.Tier, resources []provider.Resource) ([]provider.ChangeGroup, error) {
-	if len(awsresources.Registry(awsresources.Clients{}).PlacesInVPC(resources)) == 0 {
-		return nil, nil
-	}
-	part, found := p.tierParts(p.partRecords()).Named(vpcclients.Part)
-	if !found || part.Added == nil {
-		return nil, fmt.Errorf("this provider adds no bootstrap part named %q", vpcclients.Part)
-	}
-	group, err := part.Added.Plan(ctx, tier)
-	if err != nil || group == nil {
-		return nil, err
-	}
-	return []provider.ChangeGroup{*group}, nil
 }
 
 func (p *Provider) vpcClients(ctx context.Context, tier environment.Tier) (string, error) {

@@ -79,8 +79,6 @@ type Stacks struct {
 	containers      *containers.Stacks
 	functionNetwork *functionnetwork.Stacks
 
-	PlanParts func(ctx context.Context, spec provider.StackSpec) ([]provider.ChangeGroup, error)
-
 	Statements postgres.StatementsAPI
 }
 
@@ -393,16 +391,7 @@ func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress pro
 	if err := opened.refuseToAdopt(ctx, spec); err != nil {
 		return provider.Plan{}, err
 	}
-	planned, err := opened.plan(ctx, spec, progress)
-	if err != nil || r.PlanParts == nil {
-		return planned, err
-	}
-	parts, err := r.PlanParts(ctx, spec)
-	if err != nil {
-		return provider.Plan{}, err
-	}
-	planned.Groups = append(parts, planned.Groups...)
-	return planned, nil
+	return opened.plan(ctx, spec, progress)
 }
 
 func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress progress.Log) (provider.Plan, error) {

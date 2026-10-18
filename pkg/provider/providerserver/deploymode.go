@@ -16,15 +16,15 @@ import (
 
 type deployMode interface {
 	verbs() spanVerbs
-	dry() bool
-	claim(ctx context.Context, h *handlers, spec provider.DeploySpec, token string) (*environmentHold, error)
+	claim(ctx context.Context, h *handlers, spec provider.DeploySpec, token string) (*leaseHold, error)
 	finish(ctx context.Context, r *deployRun, err error) error
 
 	wantedBy(slug string) string
 	previewHosts(ctx context.Context, r *deployRun, progress progress.Log) error
 	protection(ctx context.Context, r *deployRun, gates gateReading) error
 	recordProject(ctx context.Context, r *deployRun) error
-	addToPlan(groups ...provider.ChangeGroup)
+	preflight(ctx context.Context, hooks *provider.PreflightHooks, pre provider.DeployPreflight) error
+	refuseUnconsented(fresh func() (provider.Plan, error)) error
 	recordLifecycle(ctx context.Context, r *deployRun) error
 
 	edge(ctx context.Context, r *deployRun, progress progress.Log) error
@@ -42,7 +42,7 @@ func deployModeOf(req *contractv1.DeployRequest, apps int) (deployMode, error) {
 		}
 		return &planned{drawn: dryRunPlan{apps: make([]provider.Plan, apps)}}, nil
 	}
-	consented, err := consentedPlanOf(req)
+	consented, err := consentedPlanOf(req.GetConsented())
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +62,7 @@ func (*planned) verbs() spanVerbs {
 	return spanVerbs{routes: progress.Reading, infra: progress.Planning, app: progress.Planning, onto: "for"}
 }
 
-func (*planned) dry() bool { return true }
-
-func (*planned) claim(context.Context, *handlers, provider.DeploySpec, string) (*environmentHold, error) {
+func (*planned) claim(context.Context, *handlers, provider.DeploySpec, string) (*leaseHold, error) {
 	return nil, nil
 }
 
@@ -77,17 +75,26 @@ func (*planned) previewHosts(ctx context.Context, r *deployRun, progress progres
 }
 
 func (*planned) protection(_ context.Context, r *deployRun, gates gateReading) error {
-	if gates.recorded {
-		r.protection = &gates.record.Gate
+	enforced, err := gateToEnforce(gates)
+	if err != nil {
+		return err
 	}
+	r.protection = &enforced.Gate
 	return nil
 }
 
 func (*planned) recordProject(context.Context, *deployRun) error { return nil }
 
-func (p *planned) addToPlan(groups ...provider.ChangeGroup) {
-	p.drawn.parts = append(p.drawn.parts, groups...)
+func (p *planned) preflight(ctx context.Context, hooks *provider.PreflightHooks, pre provider.DeployPreflight) error {
+	drawn, err := hooks.Plan(ctx, pre)
+	if err != nil {
+		return err
+	}
+	p.drawn.parts = drawn.Groups
+	return nil
 }
+
+func (*planned) refuseUnconsented(func() (provider.Plan, error)) error { return nil }
 
 func (*planned) recordLifecycle(context.Context, *deployRun) error { return nil }
 
@@ -102,6 +109,9 @@ func (p *planned) infra(ctx context.Context, r *deployRun, stack provider.StackS
 		return err
 	}
 	p.drawn.infra = drawn
+	if err := r.planBindings(ctx, stack); err != nil {
+		return err
+	}
 	p.drawn.parameters, err = r.planValuesGroup(ctx)
 	return err
 }
@@ -138,9 +148,7 @@ func (applied) verbs() spanVerbs {
 	return spanVerbs{routes: progress.Reconciling, infra: progress.Provisioning, app: progress.Deploying, onto: "to"}
 }
 
-func (applied) dry() bool { return false }
-
-func (applied) claim(ctx context.Context, h *handlers, spec provider.DeploySpec, token string) (*environmentHold, error) {
+func (applied) claim(ctx context.Context, h *handlers, spec provider.DeploySpec, token string) (*leaseHold, error) {
 	return h.claimEnvironment(ctx, spec, token)
 }
 
@@ -170,7 +178,9 @@ func (applied) recordProject(ctx context.Context, r *deployRun) error {
 	return nil
 }
 
-func (applied) addToPlan(...provider.ChangeGroup) {}
+func (applied) preflight(ctx context.Context, hooks *provider.PreflightHooks, pre provider.DeployPreflight) error {
+	return hooks.Apply(ctx, pre)
+}
 
 func (applied) recordLifecycle(ctx context.Context, r *deployRun) error {
 	return r.ensureLifecycle(ctx)
@@ -181,14 +191,14 @@ func (applied) edge(ctx context.Context, r *deployRun, progress progress.Log) er
 }
 
 func (a applied) infra(ctx context.Context, r *deployRun, stack provider.StackSpec, held infraHeld, progress progress.Log) error {
-	if err := a.refuseUnconsented(ctx, r, stack, progress, nil); err != nil {
+	if err := a.refuseUnconsentedStack(ctx, r, stack, progress, nil); err != nil {
 		return err
 	}
 	return r.provisionInfraStack(ctx, stack, held, progress)
 }
 
 func (a applied) app(ctx context.Context, r *deployRun, _ int, release appStack, progress progress.Log) (appProvisioned, error) {
-	if err := a.refuseUnconsented(ctx, r, release.spec, progress, &release.entry); err != nil {
+	if err := a.refuseUnconsentedStack(ctx, r, release.spec, progress, &release.entry); err != nil {
 		return appProvisioned{}, err
 	}
 	return r.provisionAppStack(ctx, release, progress)

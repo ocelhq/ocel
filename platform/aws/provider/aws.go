@@ -83,7 +83,6 @@ func NewProvider(options Options, transforms []string, cfg aws.Config, ns accoun
 	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns, sts: sts.NewFromConfig(cfg)}
 	p.ProbeAddress = emulatedProbeAddress(cfg)
 	p.stacks = deploy.NewStacks(p.release, &deploy.Realized{})
-	p.stacks.PlanParts = p.planDeployParts
 	p.stacks.Statements = rdsdata.NewFromConfig(cfg)
 	return p
 }
@@ -108,7 +107,7 @@ func (p *Provider) Facts() provider.Facts {
 
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
-		PreflightDeploy:     p.PreflightDeploy,
+		Preflight:           &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight},
 		CheckBucket:         s3store.Check,
 		ProgramEdge:         p.ProgramEdge,
 		EnsureImageRegistry: p.EnsureImageRegistry,

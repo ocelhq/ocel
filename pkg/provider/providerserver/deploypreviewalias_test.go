@@ -274,18 +274,18 @@ func TestAPreviewKeepsTheAliasItsBuildWasGivenWhenAFailedRunForgetsItBeforeTheDe
 	previewBootstrapped(t, client)
 	ensureAlias(t, client, "abcdefghijklmnop")
 	vendor.WithHooks(func(hooks *provider.Hooks) {
-		hooks.PreflightDeploy = func(context.Context, provider.DeployPreflight) error {
+		hooks.Preflight = &provider.PreflightHooks{Plan: vendor.PlanPreflight, Apply: func(context.Context, provider.DeployPreflight) error {
 			_, err := client.ForgetPreviewAlias(context.Background(), &contractv1.ForgetPreviewAliasRequest{
 				Slug: "shop", Environment: previewRequest().GetEnvironment(), Token: "abcdefghijklmnop",
 			})
 			return err
-		}
+		}}
 	})
 
 	if result := deployBuiltFor(t, client, "abcdefghijklmnop"); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	vendor.WithHooks(func(hooks *provider.Hooks) { hooks.PreflightDeploy = nil })
+	vendor.WithHooks(func(hooks *provider.Hooks) { hooks.Preflight = nil })
 	next := deployBuiltFor(t, client, "")
 
 	if !next.GetSuccess() {

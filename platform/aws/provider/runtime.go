@@ -13,8 +13,6 @@ func (p containerRuntime) Arch(_ context.Context, app, declared string) (string,
 	return container.Arch(app, declared)
 }
 
-func (containerRuntime) NextServer(context.Context) (map[string][]byte, error) { return nil, nil }
-
 func (p containerRuntime) Binary(_ context.Context, arch string) ([]byte, error) {
 	payload, err := payloads.ContainerRuntime(arch)
 	if err != nil {

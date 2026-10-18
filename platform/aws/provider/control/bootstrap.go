@@ -98,14 +98,6 @@ func (b Bootstrap) request(req provider.BootstrapRequest) account.Request {
 
 func (b Bootstrap) Parts() []provider.Part { return account.Parts() }
 
-func (b Bootstrap) CheckHost(context.Context, provider.HostCheckRequest) ([]provider.HostCheck, error) {
-	return nil, nil
-}
-
-func (b Bootstrap) RemovePartUser(context.Context, environment.Tier, string, progress.Log) error {
-	return nil
-}
-
 func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
 	read, err := b.read(ctx, tier)
 	if err != nil {
