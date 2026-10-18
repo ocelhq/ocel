@@ -2,6 +2,8 @@ package s3
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -50,32 +52,53 @@ func (s *Service) sweep(granted scope) {
 }
 
 func (s *Service) sweepSessions(ctx context.Context) {
-	old := s.now().Add(-sessionRecordLifetime)
-	in := &s3.ListObjectsV2Input{
-		Bucket:  aws.String(s.sessions.bucket),
-		Prefix:  aws.String(s.sessions.key(SessionKeyPrefix)),
-		MaxKeys: aws.Int32(sweptPerSweep),
-	}
-	for page := 0; page < sweepPageLimit; page++ {
-		out, err := s.cfg.Objects.ListObjectsV2(ctx, in)
-		if err != nil {
+	cutoff := s.now().Add(-sessionRecordLifetime)
+	pages := sweepPageLimit
+	for _, bucket := range slices.Sorted(maps.Keys(s.granted)) {
+		if !s.sweepSessionsOf(ctx, bucket, cutoff, &pages) {
 			return
 		}
+	}
+}
+
+func (s *Service) sweepSessionsOf(ctx context.Context, bucket string, cutoff time.Time, pages *int) bool {
+	owned := ownedSessionPrefix(s.cfg.Tag, bucket)
+	in := &s3.ListObjectsV2Input{
+		Bucket:  aws.String(s.sessions.bucket),
+		Prefix:  aws.String(s.sessions.key(sessionKey(owned))),
+		MaxKeys: aws.Int32(sweptPerSweep),
+	}
+	for *pages > 0 {
+		*pages--
+		out, err := s.cfg.Objects.ListObjectsV2(ctx, in)
+		if err != nil {
+			return false
+		}
 		var settled []string
+		reachedYoung := false
 		for _, object := range out.Contents {
-			if object.LastModified == nil || object.LastModified.After(old) {
+			id := strings.TrimPrefix(s.sessions.strip(aws.ToString(object.Key)), SessionKeyPrefix)
+			openedAt, stamped := sessionOpenedAt(owned, id)
+			if !stamped {
 				continue
 			}
-			id := strings.TrimPrefix(s.sessions.strip(aws.ToString(object.Key)), SessionKeyPrefix)
+			if openedAt.After(cutoff) {
+				reachedYoung = true
+				break
+			}
 			if s.settleAbandoned(ctx, id) {
 				settled = append(settled, sessionKey(id))
 			}
 		}
-		if err := s.remove(ctx, s.sessions, settled); err != nil || aws.ToString(out.NextContinuationToken) == "" {
-			return
+		if err := s.remove(ctx, s.sessions, settled); err != nil {
+			return false
+		}
+		if reachedYoung || aws.ToString(out.NextContinuationToken) == "" {
+			return true
 		}
 		in.ContinuationToken = out.NextContinuationToken
 	}
+	return false
 }
 
 func (s *Service) settleAbandoned(ctx context.Context, id string) bool {

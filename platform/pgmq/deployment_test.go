@@ -164,3 +164,32 @@ func TestADeploymentThatFailsToApplyLeavesNoQueueOrClaimBehind(t *testing.T) {
 		t.Errorf("Apply(blog) after shop's Apply failed = %v, want the database still unclaimed", err)
 	}
 }
+
+func TestADeploymentWhoseDroppedRunsFailToCancelStillWakesTheDispatcher(t *testing.T) {
+	ctx := context.Background()
+	email, audit := &contractv1.ManifestConsumer{Name: "email", Worker: "mail"}, &contractv1.ManifestConsumer{Name: "audit", Worker: "mail"}
+	engine := applied(t, map[string]*contractv1.ManifestTopic{"orders": aTopic(email, audit)}, nil)
+	<-engine.applied
+	message := runs.NewMessageID(time.Now())
+	run := runs.Run{Execution: runs.ExecutionOf(message, "audit"), Topic: "orders", Consumer: "audit", Status: provider.RunExecuting, MaxAttempts: 3, Message: message, CreatedAt: time.Now(), DueAt: time.Now()}
+	if _, err := engine.Store().CreateRun(ctx, run); err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+	if _, err := engine.pool.Exec(ctx, `CREATE FUNCTION ocel.refuse() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'refused'; END$$`); err != nil {
+		t.Fatalf("create the refusing trigger function: %v", err)
+	}
+	if _, err := engine.pool.Exec(ctx, `CREATE TRIGGER refuse BEFORE UPDATE ON ocel.runs FOR EACH ROW EXECUTE FUNCTION ocel.refuse()`); err != nil {
+		t.Fatalf("refuse run updates: %v", err)
+	}
+	bill := &contractv1.ManifestConsumer{Name: "bill", Worker: "mail"}
+
+	if err := engine.Apply(ctx, Deployment{Slug: "app", Topics: map[string]*contractv1.ManifestTopic{"orders": aTopic(email), "invoices": aTopic(bill)}}); err == nil {
+		t.Fatal("Apply hid that audit's runs failed to cancel")
+	}
+
+	select {
+	case <-engine.applied:
+	default:
+		t.Error("the dispatcher was never told of the new deployment, so invoices' queue goes unread")
+	}
+}
