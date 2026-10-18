@@ -16,9 +16,9 @@ func runningWorkers(facts *provider.Facts) {
 	facts.Bindings = append(facts.Bindings, provider.BindingTask, provider.BindingTopic)
 }
 
-func TestAnAppIsPackedAndProvisionedWithTheTopicsTheDeployDeclares(t *testing.T) {
+func TestAnAppIsProvisionedWithTheTopicsTheDeployDeclares(t *testing.T) {
 	builtProject(t)
-	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{}).WithFacts(runningWorkers)}
+	vendor := fake.NewProvider(fake.Options{}).WithFacts(runningWorkers)
 	client := servedBy(t, vendor)
 	bootstrappedOverRPC(t, client)
 
@@ -37,15 +37,11 @@ func TestAnAppIsPackedAndProvisionedWithTheTopicsTheDeployDeclares(t *testing.T)
 	if app := specs[len(specs)-1].App; !declared(app.Topics) {
 		t.Errorf("the app spec carries topics %+v, want the task resize-image with its consumer", app.Topics)
 	}
-	requests := vendor.packings()
-	if len(requests) != 1 || !declared(requests[0].Topics) {
-		t.Errorf("the vendor was asked to pack %+v, want the declared topics handed to it", requests)
-	}
 }
 
-func TestEveryAppAndItsPackIsToldWhichAppHostsEachWorkerAndOnWhatCompute(t *testing.T) {
+func TestEveryAppIsToldWhichAppHostsEachWorkerAndOnWhatCompute(t *testing.T) {
 	builtProject(t)
-	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{}).WithFacts(runningWorkers)}
+	vendor := fake.NewProvider(fake.Options{}).WithFacts(runningWorkers)
 	client := servedBy(t, vendor)
 	bootstrappedOverRPC(t, client)
 
@@ -63,11 +59,6 @@ func TestEveryAppAndItsPackIsToldWhichAppHostsEachWorkerAndOnWhatCompute(t *test
 		}
 		if !reflect.DeepEqual(spec.App.DeploymentWorkers, want) {
 			t.Errorf("app %s was handed deployment workers %+v, want %+v: a sender must know where the worker it wakes runs", spec.App.App, spec.App.DeploymentWorkers, want)
-		}
-	}
-	for _, request := range vendor.packings() {
-		if !reflect.DeepEqual(request.Workers, want) {
-			t.Errorf("pack of %s was handed workers %+v, want %+v", request.App, request.Workers, want)
 		}
 	}
 }

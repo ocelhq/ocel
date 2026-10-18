@@ -44,6 +44,8 @@ type Facts struct {
 
 	RetainsContainerReleases bool
 	RunsGates                bool
+	RunsFunctionsAsImages    bool
+	CachesBytecode           bool
 	MaxFunctionBytes         int64
 }
 

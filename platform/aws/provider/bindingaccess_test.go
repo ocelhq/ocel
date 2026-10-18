@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	connect "connectrpc.com/connect"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -31,6 +33,62 @@ func TestAnAWSTargetForwardsPortsAndForwardsNothingWhenNoBindingAsksWithoutReach
 
 	if err != nil || len(forwards) != 0 {
 		t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and no call to AWS", forwards, err)
+	}
+}
+
+const forwardedSecretARN = "arn:aws:secretsmanager:eu-west-2:111122223333:secret:rds!cluster-0a1b2c3d-AbCdEf"
+
+type clusterSecret struct {
+	password string
+	reads    []string
+}
+
+func (s *clusterSecret) GetSecretValue(_ context.Context, in *secretsmanager.GetSecretValueInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
+	s.reads = append(s.reads, *in.SecretId)
+	value := fmt.Sprintf(`{"username":"ocel","password":%q}`, s.password)
+	return &secretsmanager.GetSecretValueOutput{SecretString: &value}, nil
+}
+
+func forwardedPostgres(password string, grants ...provider.Grant) provider.Binding {
+	properties := map[string]string{
+		provider.PropertyHost: "shop-prod-main.cluster-cxyz.eu-west-2.rds.amazonaws.com", provider.PropertyPort: "5432",
+		provider.PropertyDatabase: "ocel", provider.PropertyUsername: "ocel",
+	}
+	if password != "" {
+		properties[provider.PropertyPassword] = password
+	}
+	return provider.Binding{Type: provider.BindingPostgres, Name: "db--main", Properties: properties, Grants: grants}
+}
+
+func TestAForwardOfAPostgresBindingThatNamesItsPasswordBySecretHandsBackThePasswordInTheSecret(t *testing.T) {
+	t.Parallel()
+
+	secret := &clusterSecret{password: "rotated-yesterday"}
+	binding := forwardedPostgres("", provider.Grant{Label: provider.GrantPasswordSecret, Actions: []string{"secretsmanager:GetSecretValue"}, Resources: []string{forwardedSecretARN}})
+
+	resolved, err := readForwardedPasswords(context.Background(), secret, []provider.Binding{binding})
+	if err != nil {
+		t.Fatalf("readForwardedPasswords() = %v", err)
+	}
+	if got := resolved[binding.Name][provider.PropertyPassword]; got != "rotated-yesterday" {
+		t.Errorf("the forward of %s carries a password of %d bytes, want the one the cluster secret holds now", binding.Name, len(got))
+	}
+	if !slices.Equal(secret.reads, []string{forwardedSecretARN}) {
+		t.Errorf("read secrets %v, want the one the binding names", secret.reads)
+	}
+}
+
+func TestAForwardOfAPostgresBindingCarryingItsPasswordPassesItThroughAndReadsNoSecret(t *testing.T) {
+	t.Parallel()
+
+	secret := &clusterSecret{password: "never-read"}
+
+	resolved, err := readForwardedPasswords(context.Background(), secret, []provider.Binding{forwardedPostgres("published-password")})
+	if err != nil {
+		t.Fatalf("readForwardedPasswords() = %v", err)
+	}
+	if len(resolved) != 0 || len(secret.reads) != 0 {
+		t.Errorf("resolved %d bindings reading %v, want the binding passed through untouched and no secret read", len(resolved), secret.reads)
 	}
 }
 

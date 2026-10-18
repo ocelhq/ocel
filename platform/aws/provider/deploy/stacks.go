@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -31,10 +32,11 @@ import (
 )
 
 type Scope struct {
-	Tier environment.Tier
-	Slug string
-	Env  string
-	Edge edge.Kind
+	Tier       environment.Tier
+	Slug       string
+	Env        string
+	Edge       edge.Kind
+	OutputRoot string
 }
 
 func scopeOf(ref provider.StackRef, kind edge.Kind) Scope {
@@ -108,7 +110,18 @@ func (r *Stacks) assetSetPlugin() (pulumi.Plugin, error) {
 }
 
 func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) (*release, error) {
-	scope := scopeOf(ref, kind)
+	return r.open(ctx, scopeOf(ref, kind))
+}
+
+func (r *Stacks) atSpec(ctx context.Context, spec provider.StackSpec) (*release, error) {
+	scope := scopeOf(spec.Ref, edgeKindOf(spec))
+	if spec.App != nil {
+		scope.OutputRoot = spec.App.OutputRoot
+	}
+	return r.open(ctx, scope)
+}
+
+func (r *Stacks) open(ctx context.Context, scope Scope) (*release, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if existing, opened := r.opened[scope]; opened {
@@ -164,9 +177,6 @@ type infraWork struct {
 func (r *release) infraProgram(spec provider.StackSpec, work *infraWork) stackProgram {
 	return stackProgram{
 		run: func(pctx *sdk.Context) error {
-			if _, err := r.shipArtifacts(pctx, spec.Uploads); err != nil {
-				return err
-			}
 			if err := work.transformed.install(pctx); err != nil {
 				return err
 			}
@@ -179,7 +189,7 @@ func (r *release) infraProgram(spec provider.StackSpec, work *infraWork) stackPr
 func (r *release) appProgram(spec provider.StackSpec, work *appWork) stackProgram {
 	return stackProgram{
 		run: func(pctx *sdk.Context) error {
-			shipped, err := r.shipArtifacts(pctx, spec.Uploads)
+			shipped, err := r.shipArtifacts(pctx, work.uploads)
 			if err != nil {
 				return err
 			}
@@ -313,7 +323,7 @@ func (r *release) decodeInfra(ctx context.Context, spec provider.StackSpec, outp
 		var binding *bindingsv1.Binding
 		switch resource.Type {
 		case provider.BindingPostgres:
-			binding, err = collectPostgresBinding(ctx, r.cfg.Secrets, r.cfg.Region, resource.Name, fields)
+			binding, err = collectPostgresBinding(r.cfg.Region, resource.Name, fields)
 		case provider.BindingBucket:
 			binding, err = collectBucketBinding(resource.Name, sessions, fields)
 		case provider.BindingKV:
@@ -340,7 +350,6 @@ func bindingOf(kind provider.BindingType, binding *bindingsv1.Binding) provider.
 		properties[provider.PropertyPort] = strconv.Itoa(int(p.GetPort()))
 		properties[provider.PropertyDatabase] = p.GetDatabase()
 		properties[provider.PropertyUsername] = p.GetUsername()
-		properties[provider.PropertyPassword] = p.GetPassword()
 		properties[provider.PropertyTLSMode] = p.GetTlsMode().String()
 		properties[provider.PropertyTLSCA] = p.GetTlsCa()
 	case provider.BindingBucket:
@@ -394,29 +403,42 @@ func (r *release) refuseHandover(ctx context.Context, spec provider.StackSpec) e
 	return &HandoverError{Bindings: handed, Stack: spec.Ref.Name.String()}
 }
 
-func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ progress.Log) (provider.PackAppResult, error) {
-	opened, err := r.at(ctx, req.Ref, req.Edge)
+func (r *release) packApp(spec provider.StackSpec) (appBundle, error) {
+	bundle, err := r.sealApp(spec.Ref.Project, spec.App.App, spec.App.Values)
 	if err != nil {
-		return provider.PackAppResult{}, err
+		return appBundle{}, err
 	}
-	bundle, err := opened.sealApp(req.Ref.Project, req.App, req.Values)
+	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
+	topology, err := queueTopology(r.cfg, project, env, topicsOf(project, env, spec.App.Topics), containerWorkers(r.cfg.Tier, project, env, spec.App.DeploymentWorkers))
 	if err != nil {
-		return provider.PackAppResult{}, err
-	}
-	project, env := naming.Sanitize(req.Ref.Project), req.Ref.Name.Env
-	topology, err := queueTopology(opened.cfg, project, env, topicsOf(project, env, req.Topics), containerWorkers(opened.cfg.Tier, project, env, req.Workers))
-	if err != nil {
-		return provider.PackAppResult{}, err
+		return appBundle{}, err
 	}
 	if bundle.Queues, err = queues.Render(topology); err != nil {
-		return provider.PackAppResult{}, err
+		return appBundle{}, err
 	}
-	return provider.PackAppResult{Overlay: bundle.overlay(), VendorState: bundle}, nil
+	return bundle, nil
+}
+
+func (r *release) refuseToAdopt(ctx context.Context, spec provider.StackSpec) error {
+	if spec.Recorded {
+		return nil
+	}
+	outputs, err := r.automation.Outputs(ctx, spec.Ref, nil)
+	if err != nil || len(outputs) == 0 {
+		return err
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"%s already exists and this project has no record of it: ocel deploys over what it provisioned itself, never over what it finds. "+
+			"Remove it, or deploy this project under another name",
+		spec.Ref.Name)
 }
 
 func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {
-	opened, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
+	opened, err := r.atSpec(ctx, spec)
 	if err != nil {
+		return provider.Plan{}, err
+	}
+	if err := opened.refuseToAdopt(ctx, spec); err != nil {
 		return provider.Plan{}, err
 	}
 	planned, err := opened.plan(ctx, spec, progress)
@@ -449,8 +471,11 @@ func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progres
 }
 
 func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
-	opened, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
+	opened, err := r.atSpec(ctx, spec)
 	if err != nil {
+		return provider.StackResult{}, err
+	}
+	if err := opened.refuseToAdopt(ctx, spec); err != nil {
 		return provider.StackResult{}, err
 	}
 	return opened.provision(ctx, spec, progress)
@@ -468,6 +493,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if err != nil {
 		return provider.StackResult{}, err
 	}
+	defer prepared.discard()
 	work := prepared.app
 	if work != nil && len(work.sets) > 0 {
 		r.pending.add(work.stack, work.sets, progress)
@@ -482,7 +508,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 			return provider.StackResult{}, err
 		}
 	}
-	outputs, err := r.automation.Run(ctx, spec.Ref, prepared.program, progress)
+	outputs, err := r.automation.Run(ctx, spec.Ref, prepared.program, spec.Lease, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -509,7 +535,26 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if err := deleteSigningKeys(ctx, r.cfg.SigningKeys, r.findUndeclaredSigningKeys(listedKeys, spec)); err != nil {
 		return provider.StackResult{}, err
 	}
+	if work != nil {
+		r.warmAndEmbed(ctx, work, result.Functions, progress)
+	}
 	return result, nil
+}
+
+func (r *release) warmAndEmbed(ctx context.Context, work *appWork, functions []provider.Function, progress progress.Log) {
+	targets := make([]string, 0, len(functions))
+	for _, fn := range functions {
+		if fn.Physical != "" {
+			targets = append(targets, fn.Physical)
+		}
+	}
+	_ = r.Warm(ctx, targets, progress)
+	refs := functioncode.Refs(work.uploads)
+	for _, fn := range functions {
+		if ref, staged := refs[fn.Name]; staged && fn.Physical != "" {
+			_ = r.EmbedCode(ctx, fn.Physical, ref, progress)
+		}
+	}
 }
 
 func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {
@@ -520,8 +565,9 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	if err != nil {
 		return provider.Plan{}, err
 	}
+	defer prepared.discard()
 	work := prepared.app
-	previewed, err := r.automation.Preview(ctx, spec.Ref, prepared.program, progress)
+	previewed, err := r.automation.Preview(ctx, spec.Ref, prepared.program, spec.Lease, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -543,6 +589,12 @@ type preparedStack struct {
 	program     stackProgram
 	transformed *transformPatches
 	app         *appWork
+}
+
+func (p preparedStack) discard() {
+	if p.app != nil {
+		functioncode.Discard(p.app.uploads)
+	}
 }
 
 func (r *release) decode(ctx context.Context, spec provider.StackSpec, prepared preparedStack, outputs auto.OutputMap) (provider.StackResult, error) {
@@ -599,8 +651,17 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 	if err != nil {
 		return preparedStack{}, err
 	}
-	work, err := r.appWork(spec, transformed, network)
+	bundle, err := r.packApp(spec)
 	if err != nil {
+		return preparedStack{}, fmt.Errorf("pack %s's function package: %w", spec.App.App, err)
+	}
+	uploads, err := functioncode.Stage(spec, bundle.overlay())
+	if err != nil {
+		return preparedStack{}, err
+	}
+	work, err := r.appWork(spec, transformed, network, bundle, uploads)
+	if err != nil {
+		functioncode.Discard(uploads)
 		return preparedStack{}, err
 	}
 	work.networkPending = pending
@@ -608,18 +669,19 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 	return preparedStack{program: r.appProgram(spec, work), transformed: transformed, app: work}, nil
 }
 
-func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+func (r *Stacks) Destroy(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
+	ref := req.Ref
 	opened, err := r.at(ctx, ref, "")
 	if err != nil {
 		return err
 	}
-	if err := opened.destroyWorkersOfLastRelease(ctx, ref, progress); err != nil {
+	if err := opened.destroyWorkersOfLastRelease(ctx, ref, req.Lease, progress); err != nil {
 		return err
 	}
 	if err := opened.disableDeletionProtection(ctx, ref, progress); err != nil {
 		return err
 	}
-	if err := opened.automation.Destroy(ctx, ref, progress); err != nil {
+	if err := opened.automation.Destroy(ctx, ref, req.Lease, progress); err != nil {
 		return err
 	}
 	if ref.Name.IsInfra() {
@@ -652,15 +714,7 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images prov
 	if ref.Name.IsInfra() {
 		return nil
 	}
-	return resources.ForgetReleases(ctx, opened.cfg.Retention, ref, ref.Name.App, images, progress)
-}
-
-func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.InspectedStack, error) {
-	outputs, err := r.Outputs(ctx, ref, nil)
-	if err != nil {
-		return provider.InspectedStack{}, err
-	}
-	return provider.InspectedStack{Present: len(outputs) > 0}, nil
+	return resources.ForgetReleases(ctx, opened.cfg.Retention, ref, ref.Name.App, req.Images, progress)
 }
 
 func (r *Stacks) Outputs(ctx context.Context, ref provider.StackRef, progress progress.Log) (auto.OutputMap, error) {

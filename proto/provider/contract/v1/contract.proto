@@ -383,6 +383,10 @@ message DeployRequest {
   string lease_token = 10 [(buf.validate.field).string.pattern = "^([a-f0-9]{32})?$"];
 
   bool protect = 11;
+
+  string output_root = 12;
+
+  common.plan.v1.ChangePlan consented = 13;
 }
 
 message ProvisionInfraRequest {
@@ -425,6 +429,8 @@ message ShapeRequest {
   common.environment.v1.Environment environment = 2;
 
   EdgeSelection edge = 3;
+
+  string output_root = 4;
 }
 
 message ImageRegistry {

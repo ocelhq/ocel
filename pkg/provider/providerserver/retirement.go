@@ -34,11 +34,11 @@ func (r *deployRun) liveApps() provider.LiveApps {
 		}
 		apps = append(apps, provider.LiveApp{App: entry.App, Compute: entry.Compute(), Workers: workers})
 	}
-	return provider.LiveApps{Slug: r.spec.Slug, Tier: r.spec.Tier, Env: r.spec.Env, Apps: apps}
+	return provider.LiveApps{Slug: r.spec.Slug, Tier: r.spec.Tier, Env: r.spec.Env, Apps: apps, Lease: r.hold.lease()}
 }
 
-func noAppLive(slug string, tier environment.Tier, env string) provider.LiveApps {
-	return provider.LiveApps{Slug: slug, Tier: tier, Env: env}
+func noAppLive(slug string, tier environment.Tier, env string, lease provider.Lease) provider.LiveApps {
+	return provider.LiveApps{Slug: slug, Tier: tier, Env: env, Lease: lease}
 }
 
 func unretiredWarning(promotionID string, err error) string {

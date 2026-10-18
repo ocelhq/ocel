@@ -55,14 +55,18 @@ func (r *deployRun) enforceProtection(ctx context.Context, progress progress.Log
 	if err := r.warnGateIgnored(ctx, progress); err != nil {
 		return err
 	}
-	if r.dry {
-		if recorded {
-			r.protection = &record.Gate
-		}
-		return nil
-	}
+	return r.mode.protection(ctx, r, gateReading{record: record, recorded: recorded})
+}
+
+type gateReading struct {
+	record   stackrecords.GateRecord
+	recorded bool
+}
+
+func (r *deployRun) enforceGate(ctx context.Context) error {
+	tier := r.spec.Tier
 	var enforced stackrecords.GateRecord
-	err = stackrecords.ChangeGates(ctx, r.provider.KeyValues(), r.provider.Cipher(), tier, func(records map[string]stackrecords.GateRecord) error {
+	err := stackrecords.ChangeGates(ctx, r.provider.KeyValues(), r.provider.Cipher(), tier, func(records map[string]stackrecords.GateRecord) error {
 		record, recorded := records[r.spec.Slug]
 		switch {
 		case !recorded:
@@ -86,9 +90,6 @@ func (r *deployRun) enforceProtection(ctx context.Context, progress progress.Log
 }
 
 func (r *deployRun) readGateInForce(ctx context.Context) (*gate.Gate, error) {
-	if r.dry {
-		return r.protection, nil
-	}
 	held, err := stackrecords.ReadGate(ctx, r.provider.KeyValues(), r.provider.Cipher(), r.spec.Tier, r.spec.Slug)
 	if err != nil {
 		return nil, err
@@ -100,9 +101,6 @@ func (r *deployRun) readGateInForce(ctx context.Context) (*gate.Gate, error) {
 }
 
 func (r *deployRun) settleGate(ctx context.Context, written *gate.Gate, progress progress.Log) error {
-	if r.dry {
-		return nil
-	}
 	publish := gatePublisher(ctx, r.front, r.edgeStack().State(), progress)
 	err := settleGate(ctx, r.provider, r.spec.Tier, r.spec.Slug, written, publish)
 	if errors.Is(err, errGateUnpublished) {
@@ -123,7 +121,7 @@ func tierFlag(tier environment.Tier) string {
 }
 
 func (r *deployRun) disableGate(ctx context.Context) (bool, error) {
-	if r.dry || r.protect {
+	if r.protect {
 		return false, nil
 	}
 	disabled := false
@@ -193,9 +191,9 @@ func (r *deployRun) warnGateIgnored(ctx context.Context, progress progress.Log) 
 	return nil
 }
 
-func (r *deployRun) warnGateTurnedOn(ctx context.Context, functions []provider.Function, progress progress.Log) error {
-	if r.dry || r.protect || !r.front.Facts().GatesAtOrigin {
-		return nil
+func (r *deployRun) gateTurnedOn(ctx context.Context, functions []provider.Function) (string, error) {
+	if r.protect || !r.front.Facts().GatesAtOrigin {
+		return "", nil
 	}
 	tier := r.spec.Tier
 	var ignoring []gatedFunction
@@ -205,20 +203,17 @@ func (r *deployRun) warnGateTurnedOn(ctx context.Context, functions []provider.F
 		}
 	}
 	if len(ignoring) == 0 {
-		return nil
+		return "", nil
 	}
 	records, err := stackrecords.ReadGates(ctx, r.provider.KeyValues(), r.provider.Cipher(), tier)
 	if err != nil || !records[r.spec.Slug].Enabled {
-		return err
+		return "", err
 	}
-	r.notePending(progress, protectionKey(tier)+" was turned on for "+r.spec.Slug+" while this deploy ran with it off, and "+describeGateIgnored(tier, ignoring))
-	return nil
+	return protectionKey(tier) + " was turned on for " + r.spec.Slug + " while this deploy ran with it off, and " + describeGateIgnored(tier, ignoring), nil
 }
 
 func (r *deployRun) notePending(progress progress.Log, note string) {
 	progress.Warn(note)
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.pending = append(r.pending, note)
 }
 

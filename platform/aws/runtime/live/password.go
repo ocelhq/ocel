@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
 type SecretsAPI interface {
@@ -30,7 +30,7 @@ func currentPasswords(ctx context.Context, secrets SecretsAPI, bindings []live.B
 		if err := protojson.Unmarshal([]byte(raw), binding); err != nil {
 			continue
 		}
-		secretARN := variables.PostgresPasswordSecret(binding)
+		secretARN := provider.BindingOf(binding).PasswordSecret()
 		if secretARN == "" {
 			continue
 		}

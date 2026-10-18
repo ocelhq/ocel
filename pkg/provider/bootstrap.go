@@ -23,6 +23,10 @@ type Bootstrap interface {
 	Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error
 
 	DescribeParts(ctx context.Context, described BootstrapDescription) ([]BootstrapPart, error)
+
+	CheckHost(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
+
+	RemovePartUser(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error
 }
 
 type BootstrapDescription struct {

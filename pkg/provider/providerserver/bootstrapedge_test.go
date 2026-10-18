@@ -11,11 +11,11 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
-func fronting(t *testing.T, kind edge.Kind) (providerserver.Readiness, *fake.Provider) {
+func fronting(t *testing.T, kind edge.Kind) (bootstrapplan.Readiness, *fake.Provider) {
 	t.Helper()
 
 	readiness, p := newReadiness(t, provider.WrittenBy("1.0.0"))
@@ -23,7 +23,7 @@ func fronting(t *testing.T, kind edge.Kind) (providerserver.Readiness, *fake.Pro
 	return readiness, p
 }
 
-func planParts(t *testing.T, readiness providerserver.Readiness, req providerserver.ApplyRequest) []string {
+func planParts(t *testing.T, readiness bootstrapplan.Readiness, req bootstrapplan.ApplyRequest) []string {
 	t.Helper()
 
 	plan, err := readiness.Plan(context.Background(), environment.TierProduction, req)
@@ -43,7 +43,7 @@ func TestABootstrapEnsuresThePartItsEdgeRequires(t *testing.T) {
 	t.Parallel()
 
 	readiness, _ := fronting(t, fake.KindRelay)
-	planned := planParts(t, readiness, providerserver.ApplyRequest{})
+	planned := planParts(t, readiness, bootstrapplan.ApplyRequest{})
 	if !slices.Contains(planned, fake.PartImages) {
 		t.Fatalf("a plain bootstrap behind the %s edge plans %v, want the part that edge requires", fake.KindRelay, planned)
 	}
@@ -53,7 +53,7 @@ func TestABootstrapBehindAnotherEdgeEnsuresNothing(t *testing.T) {
 	t.Parallel()
 
 	readiness, _ := fronting(t, fake.KindDirect)
-	if planned := planParts(t, readiness, providerserver.ApplyRequest{}); len(planned) != 0 {
+	if planned := planParts(t, readiness, bootstrapplan.ApplyRequest{}); len(planned) != 0 {
 		t.Fatalf("a plain bootstrap behind the %s edge plans %v, want nothing: no part names that edge", fake.KindDirect, planned)
 	}
 }
@@ -64,7 +64,7 @@ func TestAnInstalledEdgePartLeftOutIsKept(t *testing.T) {
 	readiness, p := fronting(t, fake.KindRelay)
 	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 
-	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{})
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, bootstrapplan.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
@@ -81,7 +81,7 @@ func TestAnEdgePartGoesOnlyWhenTheRunNamesIt(t *testing.T) {
 	readiness, p := fronting(t, fake.KindDirect)
 	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 
-	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, bootstrapplan.ApplyRequest{
 		Remove: []string{fake.PartImages},
 	})
 	if err != nil {
@@ -104,7 +104,7 @@ func TestAnUnrequestedInstalledEdgePartIsKept(t *testing.T) {
 	readiness, p := fronting(t, fake.KindDirect)
 	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 
-	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{})
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, bootstrapplan.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
@@ -122,7 +122,7 @@ func TestRemovingAnEdgePartNamesTheProjectsBehindIt(t *testing.T) {
 	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 	recordProject(t, p, "shop", fake.PartImages)
 
-	req := providerserver.ApplyRequest{Remove: []string{fake.PartImages}, Force: true}
+	req := bootstrapplan.ApplyRequest{Remove: []string{fake.PartImages}, Force: true}
 	plan, err := readiness.Plan(context.Background(), environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
@@ -144,7 +144,7 @@ func TestRemovingThePartTheChosenEdgeFrontsThroughIsRefused(t *testing.T) {
 	readiness, vendor := fronting(t, fake.KindRelay)
 	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache, fake.PartImages)
 
-	_, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{
+	_, err := readiness.Plan(context.Background(), environment.TierProduction, bootstrapplan.ApplyRequest{
 		Remove: []string{fake.PartImages},
 	})
 	if err == nil {
@@ -165,7 +165,7 @@ func TestRemovingAnEdgePartThatFrontsNothingHereGoesAhead(t *testing.T) {
 	bootstrapped(t, vendor, environment.TierProduction, fake.PartCache, fake.PartImages)
 
 	ctx := context.Background()
-	req := providerserver.ApplyRequest{Remove: []string{fake.PartImages}}
+	req := bootstrapplan.ApplyRequest{Remove: []string{fake.PartImages}}
 	plan, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)

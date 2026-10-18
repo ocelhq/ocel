@@ -12,6 +12,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -142,7 +143,7 @@ func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 	}
 	uploads := false
 	for _, group := range plan.GetGroups() {
-		if slices.Contains(changeNames(group), provider.UploadKind+":server") {
+		if slices.Contains(changeNames(group), functioncode.Kind+":server") {
 			uploads = true
 		}
 	}

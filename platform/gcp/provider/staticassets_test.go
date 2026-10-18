@@ -13,12 +13,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func plantStatic(t *testing.T, p *Provider, files map[string]string) {
+func plantStatic(t *testing.T, files map[string]string) string {
 	t.Helper()
-	root, err := buildoutput.Root(p.projectDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := t.TempDir()
 	app := buildoutput.AppRoot(root, "web")
 	for rel, body := range files {
 		path := filepath.Join(app, filepath.FromSlash(rel))
@@ -29,6 +26,7 @@ func plantStatic(t *testing.T, p *Provider, files map[string]string) {
 			t.Fatal(err)
 		}
 	}
+	return root
 }
 
 func staticSpec() provider.StackSpec {
@@ -51,14 +49,14 @@ func uploadNamed(t *testing.T, uploads []upload, name string) upload {
 func TestANextDeployUploadsItsStaticFilesAndImageConfigUnderTheReleasesStoragePrefix(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	plantStatic(t, p, map[string]string{
+	root := plantStatic(t, map[string]string{
 		"static/_next/static/app.js": "chunk",
 		"static/logo.svg":            "<svg/>",
 		"image-config.json":          "{}",
 		"routing.json":               "{}",
 	})
 
-	if _, err := p.ProvisionFunctions(context.Background(), staticSpec(), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(staticSpec(), root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
@@ -77,9 +75,9 @@ func TestANextDeployUploadsItsStaticFilesAndImageConfigUnderTheReleasesStoragePr
 func TestAStaticFileIsUploadedTypedAndCachedAsTheRouterServesIt(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	plantStatic(t, p, map[string]string{"static/_next/static/app.js": "chunk", "static/logo.svg": "<svg/>"})
+	root := plantStatic(t, map[string]string{"static/_next/static/app.js": "chunk", "static/logo.svg": "<svg/>"})
 
-	if _, err := p.ProvisionFunctions(context.Background(), staticSpec(), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(staticSpec(), root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
@@ -100,9 +98,9 @@ func TestAStaticFileIsUploadedTypedAndCachedAsTheRouterServesIt(t *testing.T) {
 func TestTheStaticFilesAreUploadedBeforeTheServiceIsCreated(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	plantStatic(t, p, map[string]string{"static/logo.svg": "<svg/>"})
+	root := plantStatic(t, map[string]string{"static/logo.svg": "<svg/>"})
 
-	if _, err := p.ProvisionFunctions(context.Background(), staticSpec(), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(staticSpec(), root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
@@ -117,9 +115,9 @@ func TestARedeployOfTheSameReleaseUploadsOnlyTheStaticFilesItLacks(t *testing.T)
 	const chunk = "assets/prod/shop/web/r1/assets/_next/static/app.js"
 	server := &runServer{present: map[string]bool{logo: true}}
 	p := server.open(t)
-	plantStatic(t, p, map[string]string{"static/logo.svg": "<svg/>", "static/_next/static/app.js": "chunk"})
+	root := plantStatic(t, map[string]string{"static/logo.svg": "<svg/>", "static/_next/static/app.js": "chunk"})
 
-	if _, err := p.ProvisionFunctions(context.Background(), staticSpec(), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(staticSpec(), root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
@@ -135,9 +133,9 @@ func TestARedeployOfTheSameReleaseReplacesItsImageConfig(t *testing.T) {
 	const imageConfig = "assets/prod/shop/web/r1/image-config.json"
 	server := &runServer{present: map[string]bool{imageConfig: true}}
 	p := server.open(t)
-	plantStatic(t, p, map[string]string{"image-config.json": `{"sizes":[640]}`})
+	root := plantStatic(t, map[string]string{"image-config.json": `{"sizes":[640]}`})
 
-	if _, err := p.ProvisionFunctions(context.Background(), staticSpec(), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(staticSpec(), root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
@@ -149,9 +147,9 @@ func TestARedeployOfTheSameReleaseReplacesItsImageConfig(t *testing.T) {
 func TestAServiceThatRoutesNothingUploadsNoStaticFiles(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	plantStatic(t, p, map[string]string{"static/logo.svg": "<svg/>", "image-config.json": "{}"})
+	root := plantStatic(t, map[string]string{"static/logo.svg": "<svg/>", "image-config.json": "{}"})
 
-	if _, err := p.ProvisionFunctions(context.Background(), nextSpec(), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(nextSpec(), root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
@@ -163,11 +161,11 @@ func TestAServiceThatRoutesNothingUploadsNoStaticFiles(t *testing.T) {
 func TestAStaticFilesAssetPrefixThatIsNotAReleasesAssetsIsRefused(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	plantStatic(t, p, map[string]string{"static/logo.svg": "<svg/>"})
+	root := plantStatic(t, map[string]string{"static/logo.svg": "<svg/>"})
 	spec := staticSpec()
 	spec.App.AssetPrefix = "prod/shop/web/r1/files"
 
-	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err == nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(spec, root), nil); err == nil {
 		t.Fatal("ProvisionFunctions() = nil, want a refusal: the router reads assets under the prefix and the image config beside it")
 	}
 }

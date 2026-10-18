@@ -15,20 +15,21 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func (h *handlers) readiness(requested string) (provider.Provider, Readiness, error) {
+func (h *handlers) readiness(requested string) (provider.Provider, bootstrapplan.Readiness, error) {
 	p, err := h.session.use()
 	if err != nil {
-		return nil, Readiness{}, err
+		return nil, bootstrapplan.Readiness{}, err
 	}
 	kind := edgeKind(p, requested)
 	bootstrap, err := p.Bootstrap(kind)
 	if err != nil {
-		return nil, Readiness{}, provider.RefusalError(err)
+		return nil, bootstrapplan.Readiness{}, provider.RefusalError(err)
 	}
-	return p, Readiness{
+	return p, bootstrapplan.Readiness{
 		Bootstrap: bootstrap,
 		KeyValues: p.KeyValues(),
 		WrittenBy: h.session.writer,
@@ -78,8 +79,8 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	})
 }
 
-func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
-	return ApplyRequest{
+func applyRequestOf(req *contractv1.BootstrapRequest) bootstrapplan.ApplyRequest {
+	return bootstrapplan.ApplyRequest{
 		Remove:             req.GetRemove(),
 		Force:              req.GetForce(),
 		AcceptReplacements: req.GetAcceptReplacements(),
@@ -107,7 +108,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 		if cost := p.Hooks().Cost; cost != nil {
 			price = cost.Estimate
 		}
-		if resp.Parts, err = readiness.Parts(ctx, status, price); err != nil {
+		if resp.Parts, err = bootstrapPartsOf(ctx, readiness, status, price); err != nil {
 			return nil, provider.RefusalError(err)
 		}
 	}
@@ -185,7 +186,7 @@ func changeAction(drawn planv1.Change_Action) (provider.ChangeAction, error) {
 	return action, nil
 }
 
-func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
+func BootstrapStatusProto(current bootstrapplan.Status, writing provider.WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
 	status := &contractv1.BootstrapStatus{
 		Tier:       tier,
 		Present:    current.Present,

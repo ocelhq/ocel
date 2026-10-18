@@ -1,4 +1,4 @@
-package providerserver
+package bootstrapplan
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-type BootstrapStatuses struct {
+type Statuses struct {
 	mu         sync.Mutex
-	read       map[bootstrapStatusKey]BootstrapStatus
+	read       map[bootstrapStatusKey]Status
 	generation int
 }
 
@@ -19,9 +19,9 @@ type bootstrapStatusKey struct {
 	edge edge.Kind
 }
 
-func (s *BootstrapStatuses) find(key bootstrapStatusKey) (BootstrapStatus, int, bool) {
+func (s *Statuses) find(key bootstrapStatusKey) (Status, int, bool) {
 	if s == nil {
-		return BootstrapStatus{}, 0, false
+		return Status{}, 0, false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -29,7 +29,7 @@ func (s *BootstrapStatuses) find(key bootstrapStatusKey) (BootstrapStatus, int, 
 	return status, s.generation, found
 }
 
-func (s *BootstrapStatuses) keep(key bootstrapStatusKey, status BootstrapStatus, readAt int) {
+func (s *Statuses) keep(key bootstrapStatusKey, status Status, readAt int) {
 	if s == nil {
 		return
 	}
@@ -39,12 +39,12 @@ func (s *BootstrapStatuses) keep(key bootstrapStatusKey, status BootstrapStatus,
 		return
 	}
 	if s.read == nil {
-		s.read = map[bootstrapStatusKey]BootstrapStatus{}
+		s.read = map[bootstrapStatusKey]Status{}
 	}
 	s.read[key] = status
 }
 
-func (s *BootstrapStatuses) forget() {
+func (s *Statuses) Forget() {
 	if s == nil {
 		return
 	}
@@ -54,7 +54,7 @@ func (s *BootstrapStatuses) forget() {
 	s.generation++
 }
 
-func (r Readiness) SessionStatus(ctx context.Context, tier environment.Tier) (BootstrapStatus, error) {
+func (r Readiness) SessionStatus(ctx context.Context, tier environment.Tier) (Status, error) {
 	key := bootstrapStatusKey{tier: tier, edge: r.Edge}
 	status, readAt, found := r.Statuses.find(key)
 	if found {
@@ -62,7 +62,7 @@ func (r Readiness) SessionStatus(ctx context.Context, tier environment.Tier) (Bo
 	}
 	status, err := r.Status(ctx, tier)
 	if err != nil {
-		return BootstrapStatus{}, err
+		return Status{}, err
 	}
 	r.Statuses.keep(key, status, readAt)
 	return status, nil

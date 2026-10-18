@@ -21,12 +21,6 @@ type checkingProvider struct {
 	refusal error
 }
 
-func (s *checkingProvider) Hooks() provider.Hooks {
-	hooks := s.Provider.Hooks()
-	hooks.CheckHost = s.CheckHost
-	return hooks
-}
-
 func (s *checkingProvider) CheckHost(_ context.Context, req provider.HostCheckRequest) ([]provider.HostCheck, error) {
 	s.asked = append(s.asked, req)
 	return s.answer, s.refusal
@@ -39,6 +33,7 @@ func hostChecksServed(t *testing.T, answer []provider.HostCheck, refusal error) 
 		answer:   answer,
 		refusal:  refusal,
 	}
+	p.FakeBootstrap().CheckingHost(p.CheckHost)
 	client := servedProvider(t, "1.2.3", p)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
@@ -220,6 +215,7 @@ func TestADeployProceedsAgainstABoxWhoseHostCheckFailed(t *testing.T) {
 			{Subject: "shop.example.com", Verdict: provider.HostFail, Finding: "points somewhere else", Fix: "move the record"},
 		},
 	}
+	p.FakeBootstrap().CheckingHost(p.CheckHost)
 	client := servedProvider(t, "1.2.3", p)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 

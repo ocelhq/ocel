@@ -45,10 +45,7 @@ func (p *Provider) ensureDeployParts(ctx context.Context, pre provider.DeployPre
 	if err != nil || !deployed.Present || pre.Dry {
 		return err
 	}
-	used, err := p.partsUsedBy(pre.Deploy.Apps, pre.Edge)
-	if err != nil {
-		return err
-	}
+	used := partsUsedBy(pre.Uses, pre.Edge)
 	var say func(string)
 	if pre.Progress != nil {
 		say = pre.Progress.Say

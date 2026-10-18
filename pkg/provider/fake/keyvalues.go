@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -19,6 +20,31 @@ type KeyValues struct {
 	refusals map[string]error
 	moving   string
 	hooks    map[string]func()
+	under    *prefixedWrite
+}
+
+type prefixedWrite struct {
+	partition keyvalue.Partition
+	prefix    string
+	run       func() error
+}
+
+func (s *KeyValues) BeforeNextWriteUnder(partition keyvalue.Partition, prefix string, run func() error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.under = &prefixedWrite{partition: partition, prefix: prefix, run: run}
+}
+
+func (s *KeyValues) runPrefixedHook(key keyvalue.Key) error {
+	s.mu.Lock()
+	under := s.under
+	if under == nil || key.Partition.String() != under.partition.String() || !strings.HasPrefix(strings.Join(key.Path, "/"), under.prefix) {
+		s.mu.Unlock()
+		return nil
+	}
+	s.under = nil
+	s.mu.Unlock()
+	return under.run()
 }
 
 func NewKeyValues() *KeyValues {
@@ -76,6 +102,9 @@ func (s *KeyValues) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Rev
 		return "", err
 	}
 	s.runWriteHook(entry.Key)
+	if err := s.runPrefixedHook(entry.Key); err != nil {
+		return "", err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if row := encodeKey(entry.Key); row == s.moving {

@@ -1,15 +1,14 @@
-package bootstrapplan
+package provider
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func RefuseUnconsentedChanges(shown, fresh provider.Plan) error {
-	rows := map[string]provider.ChangeAction{}
+func RefuseUnconsentedChanges(shown, fresh Plan) error {
+	rows := map[string]ChangeAction{}
 	for _, group := range shown.Groups {
 		rows[group.Name] = group.Action
 		for _, change := range group.Changes {
@@ -30,7 +29,7 @@ func RefuseUnconsentedChanges(shown, fresh provider.Plan) error {
 	return drift.refuse()
 }
 
-func rowKey(group provider.ChangeGroup, change provider.Change) string {
+func rowKey(group ChangeGroup, change Change) string {
 	return group.Name + "/" + change.Kind + "/" + change.Name
 }
 
@@ -38,7 +37,7 @@ type unconsentedDrift struct {
 	grown, destroying []string
 }
 
-func (d *unconsentedDrift) note(name string, shown, current provider.ChangeAction) {
+func (d *unconsentedDrift) note(name string, shown, current ChangeAction) {
 	switch {
 	case !current.Writes():
 	case shown == "" || !shown.Writes():
@@ -65,9 +64,9 @@ func (d unconsentedDrift) refuse() error {
 		strings.Join(moved, "; "))
 }
 
-func destroys(action provider.ChangeAction) bool {
+func destroys(action ChangeAction) bool {
 	switch action {
-	case provider.ActionDelete, provider.ActionReplace, provider.ActionDisableThenDelete:
+	case ActionDelete, ActionReplace, ActionDisableThenDelete:
 		return true
 	default:
 		return false

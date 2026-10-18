@@ -239,16 +239,16 @@ func (a *Automation[S]) engine() Engine {
 	return autoEngine{}
 }
 
-func (a *Automation[S]) Preview(ctx context.Context, ref provider.StackRef, work S, progress progress.Log) (provider.Plan, error) {
-	return a.preview(ctx, ref, work, OperationProvision, progress)
+func (a *Automation[S]) Preview(ctx context.Context, ref provider.StackRef, work S, lease provider.Lease, progress progress.Log) (provider.Plan, error) {
+	return a.preview(ctx, ref, work, OperationProvision, lease, progress)
 }
 
 func (a *Automation[S]) PreviewDestroy(ctx context.Context, ref provider.StackRef, progress progress.Log) (provider.Plan, error) {
 	var none S
-	return a.preview(ctx, ref, none, OperationDestroy, progress)
+	return a.preview(ctx, ref, none, OperationDestroy, provider.Lease{}, progress)
 }
 
-func (a *Automation[S]) preview(ctx context.Context, ref provider.StackRef, work S, op Operation, progress progress.Log) (provider.Plan, error) {
+func (a *Automation[S]) preview(ctx context.Context, ref provider.StackRef, work S, op Operation, lease provider.Lease, progress progress.Log) (provider.Plan, error) {
 	setup, err := a.setup(ctx, ref, work, op, progress)
 	if err != nil {
 		return provider.Plan{}, err
@@ -260,7 +260,7 @@ func (a *Automation[S]) preview(ctx context.Context, ref provider.StackRef, work
 		}
 		progress.Say("Planning " + planned + " stack " + setup.Stack)
 	}
-	changes, err := runReleasingStaleLock(ctx, a, setup, progress, func() ([]provider.Change, error) {
+	changes, err := runReleasingStaleLock(ctx, a, setup, lease, progress, func() ([]provider.Change, error) {
 		return a.engine().Preview(ctx, setup, op, progress)
 	})
 	if err != nil {
@@ -328,12 +328,12 @@ func plannedAction(op apitype.OpType) (provider.ChangeAction, bool) {
 	}
 }
 
-func (a *Automation[S]) Run(ctx context.Context, ref provider.StackRef, work S, progress progress.Log) (auto.OutputMap, error) {
+func (a *Automation[S]) Run(ctx context.Context, ref provider.StackRef, work S, lease provider.Lease, progress progress.Log) (auto.OutputMap, error) {
 	setup, err := a.setup(ctx, ref, work, OperationProvision, progress)
 	if err != nil {
 		return nil, err
 	}
-	outputs, err := runReleasingStaleLock(ctx, a, setup, progress, func() (auto.OutputMap, error) {
+	outputs, err := runReleasingStaleLock(ctx, a, setup, lease, progress, func() (auto.OutputMap, error) {
 		return a.engine().Up(ctx, setup, progress)
 	})
 	if err != nil {
@@ -342,13 +342,13 @@ func (a *Automation[S]) Run(ctx context.Context, ref provider.StackRef, work S, 
 	return outputs, nil
 }
 
-func (a *Automation[S]) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+func (a *Automation[S]) Destroy(ctx context.Context, ref provider.StackRef, lease provider.Lease, progress progress.Log) error {
 	var none S
 	setup, err := a.setup(ctx, ref, none, OperationDestroy, progress)
 	if err != nil {
 		return err
 	}
-	_, err = runReleasingStaleLock(ctx, a, setup, progress, func() (struct{}, error) {
+	_, err = runReleasingStaleLock(ctx, a, setup, lease, progress, func() (struct{}, error) {
 		return struct{}{}, a.engine().Destroy(ctx, setup, progress)
 	})
 	if err != nil {

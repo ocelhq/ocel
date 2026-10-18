@@ -48,6 +48,7 @@ func TestProvisioningARealtimeResourceMintsItsKeyAndBindsTheAppToAppSync(t *test
 	result, err := realtimeStacks(engine, keys).Provision(context.Background(), provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
+		Recorded:  true,
 		Resources: []provider.Resource{{Name: "c-realtime", Declared: "c-realtime", Type: provider.BindingRealtime, Realtime: &provider.RealtimeSpec{}}},
 	}, nil)
 	if err != nil {
@@ -76,6 +77,7 @@ func TestARealtimeResourceRemovedFromTheStackHasItsKeyDeletedOnceTheDeployLands(
 	if _, err := realtimeStacks(engine, keys).Provision(context.Background(), provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
+		Recorded:  true,
 		Resources: []provider.Resource{{Name: "c-kept", Declared: "c-kept", Type: provider.BindingRealtime, Realtime: &provider.RealtimeSpec{}}},
 	}, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
@@ -92,8 +94,9 @@ func TestARealtimeDeployThatFailsKeepsEveryKey(t *testing.T) {
 	keys.values[conformanceSigningKey("c-realtime")] = conformanceSeed
 	engine := &mockedEngine{outputs: auto.OutputMap{}, upErr: func(string) error { return context.DeadlineExceeded }}
 	if _, err := realtimeStacks(engine, keys).Provision(context.Background(), provider.StackSpec{
-		Ref:  conformanceInfra,
-		Kind: provider.StackInfra,
+		Ref:      conformanceInfra,
+		Kind:     provider.StackInfra,
+		Recorded: true,
 	}, nil); err == nil {
 		t.Fatal("Provision() succeeded, want the engine's failure")
 	}
@@ -110,7 +113,7 @@ func TestDestroyingAStackDeletesEveryRealtimeKeyOfItsEnvironmentAndNoOther(t *te
 	keys.values[conformanceSigningKey("c-chat")] = conformanceSeed
 	otherEnv := signingKeySecret(conformanceSigningKeyRoot, "conformance", "staging", "c-realtime")
 	keys.values[otherEnv] = conformanceSeed
-	if err := realtimeStacks(&mockedEngine{outputs: auto.OutputMap{}}, keys).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
+	if err := realtimeStacks(&mockedEngine{outputs: auto.OutputMap{}}, keys).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	want := []string{conformanceSigningKey("c-chat"), conformanceSigningKey("c-realtime")}
@@ -131,6 +134,7 @@ func TestProvisioningRealtimePlacesTheAuthorizerItDeclares(t *testing.T) {
 	if _, err := stacksPlacingInto(engine, uploader).Provision(context.Background(), provider.StackSpec{
 		Ref:       provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
 		Kind:      provider.StackInfra,
+		Recorded:  true,
 		Resources: []provider.Resource{{Name: "c-realtime", Declared: "c-realtime", Type: provider.BindingRealtime, Realtime: &provider.RealtimeSpec{}}},
 	}, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)

@@ -10,8 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -185,12 +183,6 @@ func (standInCloud) Call(sdk.MockCallArgs) (resource.PropertyMap, error) {
 	return resource.PropertyMap{}, nil
 }
 
-type standInSecrets struct{}
-
-func (standInSecrets) GetSecretValue(context.Context, *secretsmanager.GetSecretValueInput, ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
-	return &secretsmanager.GetSecretValueOutput{SecretString: aws.String(`{"password":"a-master-password"}`)}, nil
-}
-
 func provisionedOutputs() auto.OutputMap {
 	return auto.OutputMap{
 		"c-postgres": auto.OutputValue{Value: map[string]any{
@@ -225,7 +217,6 @@ func conformingConfig(uploader *fakeArtifactStore) Config {
 		BackendURL:     "s3://ocel-state/conformance",
 		Passphrase:     "a-passphrase",
 		PulumiProject:  "ocel-conformance",
-		Secrets:        standInSecrets{},
 		StateTable:     "ocel-state",
 		StateTableARN:  "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state",
 		AppBoundaryARN: "arn:aws:iam::111122223333:policy/ocel-app-boundary",
@@ -337,8 +328,9 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 
 	engine := &mockedEngine{outputs: provisionedOutputs()}
 	result, err := conformingStacks(engine).Provision(context.Background(), provider.StackSpec{
-		Ref:  provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
-		Kind: provider.StackInfra,
+		Ref:      provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
+		Kind:     provider.StackInfra,
+		Recorded: true,
 		Resources: []provider.Resource{
 			{Name: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
 			{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
@@ -355,8 +347,9 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 			t.Errorf("Provision() returned a binding providerserver refuses to record: %v", err)
 		}
 	}
-	if got := result.Bindings[0].Properties[provider.PropertyPassword]; got != "a-master-password" {
-		t.Errorf("the postgres binding has password %q, want the one the managed secret stores", got)
+	if got := result.Bindings[0]; got.Properties[provider.PropertyPassword] != "" || got.PasswordSecret() != "arn:aws:secretsmanager:eu-west-1:111122223333:secret:shop" {
+		t.Errorf("the postgres binding carries a password of %d bytes and names %q as its secret, want no password and the managed secret named",
+			len(got.Properties[provider.PropertyPassword]), got.PasswordSecret())
 	}
 }
 
@@ -396,8 +389,9 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 	recorder := &lambdaCodeRecorder{}
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: recorder}
 	if _, err := stacksPlacingInto(engine, uploader).Provision(context.Background(), provider.StackSpec{
-		Ref:  provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
-		Kind: provider.StackInfra,
+		Ref:      provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
+		Kind:     provider.StackInfra,
+		Recorded: true,
 		Resources: []provider.Resource{
 			{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 		},

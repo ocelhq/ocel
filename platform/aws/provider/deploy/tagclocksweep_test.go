@@ -75,7 +75,7 @@ func TestATeardownSweepsTheTagClockOfTheStackItDestroyed(t *testing.T) {
 	var engine []string
 	release := tearingDown(t, clock, &fakeEngine{record: func(s string) { engine = append(engine, s) }})
 
-	if err := release.Destroy(context.Background(), teardownRef(), nil, nil); err != nil {
+	if err := release.Destroy(context.Background(), provider.StackDestroy{Ref: teardownRef()}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(engine) != 1 {
@@ -91,7 +91,7 @@ func TestATagClockThatWillNotSweepFailsTheTeardown(t *testing.T) {
 	clock := &sweepingClock{err: errors.New("dynamo is down")}
 	release := tearingDown(t, clock, &fakeEngine{record: func(string) {}})
 
-	if err := release.Destroy(context.Background(), teardownRef(), nil, nil); err == nil {
+	if err := release.Destroy(context.Background(), provider.StackDestroy{Ref: teardownRef()}, nil); err == nil {
 		t.Fatal("Destroy() = nil where the tag clock refused to sweep, want the failure surfaced")
 	}
 }
@@ -99,7 +99,7 @@ func TestATagClockThatWillNotSweepFailsTheTeardown(t *testing.T) {
 func TestAnAccountThatKeepsNoTagClockTearsDownAllTheSame(t *testing.T) {
 	release := tearingDown(t, nil, &fakeEngine{record: func(string) {}})
 
-	if err := release.Destroy(context.Background(), teardownRef(), nil, nil); err != nil {
+	if err := release.Destroy(context.Background(), provider.StackDestroy{Ref: teardownRef()}, nil); err != nil {
 		t.Fatalf("Destroy() with no tag clock = %v", err)
 	}
 }

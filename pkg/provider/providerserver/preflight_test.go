@@ -874,7 +874,7 @@ func TestPreflightReportsCredentialsTheEdgeAndItsDNSShareOnce(t *testing.T) {
 
 	dns := fake.NewDNS()
 	dns.Verifies(errors.New("token revoked"))
-	vendor := edgeVendorDNS{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)), dns: dns}
+	vendor := edgeVendorDNS{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), dns: dns}
 	vendor.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, errors.New("token revoked"))
 	client := servedProvider(t, "1.2.3", vendor)
 
@@ -897,7 +897,7 @@ func TestPreflightChecksNoDNSCredentialsTheEdgeOfTheSameVendorAlreadyPassed(t *t
 
 	dns := fake.NewDNS()
 	dns.Verifies(errors.New("token revoked"))
-	vendor := edgeVendorDNS{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)), dns: dns}
+	vendor := edgeVendorDNS{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), dns: dns}
 	vendor.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "edge-account"}, nil)
 	client := servedProvider(t, "1.2.3", vendor)
 
@@ -934,7 +934,7 @@ func (v frontRefusingDNS) Open(kind provider.DNSKind, zone string, front edge.Ki
 func TestPreflightRefusesADNSWriterThatCannotServeTheSelectedEdge(t *testing.T) {
 	t.Parallel()
 
-	vendor := frontRefusingDNS{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))}
+	vendor := frontRefusingDNS{Provider: fake.NewProvider(fake.Options{Region: "nowhere"})}
 	client := servedProvider(t, "1.2.3", vendor)
 
 	selection := dnsSelection(fake.KindZone)
@@ -1006,7 +1006,7 @@ func TestPreflightOfARecordedProjectReadsItsRecordWithoutListingTheOthers(t *tes
 	t.Parallel()
 
 	ctx := context.Background()
-	vendor := &projectListingProvider{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))}
+	vendor := &projectListingProvider{Provider: fake.NewProvider(fake.Options{Region: "nowhere"})}
 	client := servedProvider(t, "1.2.3", vendor)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,

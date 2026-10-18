@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -19,15 +17,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
-
-type stubSecrets struct{ secretString string }
-
-func (s stubSecrets) GetSecretValue(_ context.Context, in *secretsmanager.GetSecretValueInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
-	value := s.secretString
-	return &secretsmanager.GetSecretValueOutput{SecretString: &value, ARN: in.SecretId}, nil
-}
 
 func fixtureDir(t *testing.T) string {
 	t.Helper()
@@ -138,14 +130,11 @@ func differingFields(got, want protoreflect.Message, prefix string) []string {
 func TestPostgresProducerEmitsTheFixture(t *testing.T) {
 	t.Parallel()
 
-	want := bindingFixture(t, bindingsv1.BindingType_BINDING_TYPE_POSTGRES).GetPostgres()
-
-	secret, err := json.Marshal(map[string]string{
-		"username": "fixture_secret_principal",
-		"password": want.GetPassword(),
-	})
-	if err != nil {
-		t.Fatalf("encode stub secret: %v", err)
+	fixture := bindingFixture(t, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+	want := fixture.GetPostgres()
+	secretARN := provider.BindingOf(fixture).PasswordSecret()
+	if secretARN == "" {
+		t.Fatalf("fixture %s names no %q grant, and the AWS record names its password by one", fixtureFile(bindingsv1.BindingType_BINDING_TYPE_POSTGRES), provider.GrantPasswordSecret)
 	}
 
 	fields := map[string]any{
@@ -153,17 +142,20 @@ func TestPostgresProducerEmitsTheFixture(t *testing.T) {
 		outputKeyPort:      float64(want.GetPort()),
 		outputKeyDatabase:  want.GetDatabase(),
 		outputKeyUsername:  want.GetUsername(),
-		outputKeySecretARN: "arn:aws:secretsmanager:us-east-1:111122223333:secret:shop-prod-main-AbCdEf",
+		outputKeySecretARN: secretARN,
 	}
 
-	got, err := collectPostgresBinding(context.Background(), stubSecrets{secretString: string(secret)}, "us-east-1", "db--main", fields)
+	got, err := collectPostgresBinding("us-east-1", "db--main", fields)
 	if err != nil {
 		t.Fatalf("collectPostgresBinding: %v", err)
 	}
-	// TODO(binding-fixture): drop this once proto/common/bindings/v1/fixtures/postgres.json carries the TLS mode, CA and secret grant AWS emits.
-	got.Grants = nil
-	got.GetPostgres().TlsMode = bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_UNSPECIFIED
-	got.GetPostgres().TlsCa = ""
+	if password := got.GetPostgres().GetPassword(); password != "" {
+		t.Errorf("AWS emitted a password of %d bytes, want none: the runtime reads it from the secret the record names", len(password))
+	}
+	if named := provider.BindingOf(got).PasswordSecret(); named != secretARN {
+		t.Errorf("AWS named %q as the password secret, want %s", named, secretARN)
+	}
+	got.GetPostgres().Password = want.GetPassword()
 	assertMatchesFixture(t, got, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
 }
 

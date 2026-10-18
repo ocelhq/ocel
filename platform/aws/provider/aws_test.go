@@ -78,6 +78,14 @@ func (stubBootstrap) DescribeParts(context.Context, provider.BootstrapDescriptio
 	return nil, nil
 }
 
+func (stubBootstrap) CheckHost(context.Context, provider.HostCheckRequest) ([]provider.HostCheck, error) {
+	return nil, nil
+}
+
+func (stubBootstrap) RemovePartUser(context.Context, environment.Tier, string, progress.Log) error {
+	return nil
+}
+
 func unkeyed(context.Context, environment.Tier) (string, error) { return "", nil }
 
 func keyedAs(keys ...string) func(context.Context, environment.Tier) (string, error) {
@@ -478,5 +486,30 @@ func TestLambdaDeclaresA200MiBFunctionSizeBudget(t *testing.T) {
 	p := NewProvider(Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
 	if got := p.Facts().MaxFunctionBytes; got != 200*1024*1024 {
 		t.Errorf("Facts().MaxFunctionBytes = %d, want 200 MiB, the room Lambda leaves under its 250 MB unzipped limit", got)
+	}
+}
+
+func TestAnAWSProjectWarmsNoCompileCacheUnlessItsOptionsAskForOne(t *testing.T) {
+	t.Parallel()
+
+	cfg := aws.Config{Region: "eu-west-2"}
+	if NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace).Facts().CachesBytecode {
+		t.Error("a project that sets no bytecode option caches bytecode, so every deploy warms and writes a cache nobody asked for")
+	}
+	cached := Options{Region: "eu-west-2", Bytecode: BytecodeOptions{Cache: true}}
+	if !NewProvider(cached, nil, cfg, defaultNamespace).Facts().CachesBytecode {
+		t.Error("a project that sets bytecode.cache caches no bytecode")
+	}
+}
+
+func TestEmbeddingACompileCacheNobodyWarmsIsRefused(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(context.Background(), provider.Settings{Options: provider.Options{
+		"region":   "eu-west-2",
+		"bytecode": map[string]any{"embed": true},
+	}})
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid || !strings.Contains(err.Error(), "bytecode.cache") {
+		t.Fatalf("New() with bytecode.embed and no bytecode.cache = %v, want it refused as invalid naming bytecode.cache", err)
 	}
 }

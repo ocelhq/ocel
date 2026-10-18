@@ -1,4 +1,4 @@
-package resources
+package functioncode
 
 import (
 	"context"
@@ -50,17 +50,17 @@ func (s *countingStore) RemovePrefix(context.Context, environment.Tier, string, 
 	return nil
 }
 
-func uploadsOf(t *testing.T, count int) []provider.Upload {
+func uploadsOf(t *testing.T, count int) []Upload {
 	t.Helper()
 	dir := t.TempDir()
-	uploads := make([]provider.Upload, 0, count)
+	uploads := make([]Upload, 0, count)
 	for slot := range count {
 		name := strconv.Itoa(slot)
 		path := filepath.Join(dir, name)
 		if err := os.WriteFile(path, []byte(name), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		uploads = append(uploads, provider.Upload{Name: name, Path: path, Ref: provider.ArtifactRef{Key: name}})
+		uploads = append(uploads, Upload{Name: name, Path: path, Ref: provider.ArtifactRef{Key: name}})
 	}
 	return uploads
 }
@@ -80,7 +80,7 @@ func TestShipUploadsSharesOneBudgetAcrossTheAppsShippingAtOnce(t *testing.T) {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			failures[slot] = ShipUploads(context.Background(), store, uploads, nil)
+			failures[slot] = Ship(context.Background(), store, uploads, nil)
 		}()
 	}
 
@@ -97,7 +97,7 @@ func TestShipUploadsSharesOneBudgetAcrossTheAppsShippingAtOnce(t *testing.T) {
 
 	for slot, err := range failures {
 		if err != nil {
-			t.Fatalf("ShipUploads() for app %d = %v", slot, err)
+			t.Fatalf("Ship() for app %d = %v", slot, err)
 		}
 	}
 	if store.peak > UploadConcurrency {

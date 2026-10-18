@@ -170,7 +170,7 @@ func provisionFunctionNetwork(ctx context.Context, owner *release, ref provider.
 	}); err != nil {
 		return functionNetwork{}, err
 	}
-	outputs, err := owner.automation.Run(ctx, ref, stackProgram{run: work.run, tags: work.tags}, progress)
+	outputs, err := owner.automation.Run(ctx, ref, stackProgram{run: work.run, tags: work.tags}, provider.Lease{}, progress)
 	if err != nil {
 		return functionNetwork{}, fmt.Errorf("provision the shared function network for the %s tier: %w", tier, err)
 	}

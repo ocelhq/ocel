@@ -55,7 +55,7 @@ func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedB
 	}
 
 	for _, ref := range []provider.StackRef{spec.Ref, blog.Ref} {
-		if err := stacks.Destroy(ctx, ref, nil, progress.Discard()); err != nil {
+		if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, progress.Discard()); err != nil {
 			t.Fatalf("Destroy(%s) = %v", ref.Project, err)
 		}
 	}

@@ -2,16 +2,14 @@ package providerserver
 
 import (
 	"context"
-	"errors"
 	"maps"
 	"slices"
-	"time"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -19,21 +17,12 @@ const partScope = "part"
 
 type estimate func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
 
-func (s BootstrapStatus) description() provider.BootstrapDescription {
-	return provider.BootstrapDescription{
-		Tier:       s.Tier,
-		Present:    s.Present,
-		Stacks:     s.Stacks,
-		Unfinished: s.Unfinished,
-	}
-}
-
-func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price estimate) ([]*contractv1.BootstrapPart, error) {
-	described, err := r.Bootstrap.DescribeParts(ctx, status.description())
+func bootstrapPartsOf(ctx context.Context, r bootstrapplan.Readiness, status bootstrapplan.Status, price estimate) ([]*contractv1.BootstrapPart, error) {
+	described, err := r.Bootstrap.DescribeParts(ctx, status.Description())
 	if err != nil {
 		return nil, err
 	}
-	records, err := r.recordedParts(ctx, status.Tier)
+	records, err := r.PartRecords(ctx, status.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +35,7 @@ func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price esti
 		return nil, err
 	}
 	offer := r.Bootstrap.Parts()
-	wants, err := r.wantedParts(ctx, status.Tier, offer, nil)
+	wants, err := r.WantedParts(ctx, status.Tier, offer, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +56,7 @@ func (r Readiness) Parts(ctx context.Context, status BootstrapStatus, price esti
 			Summary: part.Summary,
 			State:   contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_READY,
 			Current: part.Current,
-			UsedBy:  usersOf(part, recorded, offered[part.Name]),
+			UsedBy:  bootstrapplan.UsersOf(part, recorded, offered[part.Name]),
 
 			RetiresWithLastUser: part.RetiresWithLastUser,
 		}
@@ -111,14 +100,6 @@ func boolOrder(b bool) int {
 	return 0
 }
 
-func (r Readiness) recordedParts(ctx context.Context, tier environment.Tier) (map[string]stackrecords.BootstrapPart, error) {
-	records, err := stackrecords.ListBootstrapParts(ctx, r.KeyValues, tier)
-	if storeAbsent(err) {
-		return map[string]stackrecords.BootstrapPart{}, nil
-	}
-	return records, err
-}
-
 func applyRecord(out *contractv1.BootstrapPart, record stackrecords.BootstrapPart) {
 	out.AddedBy, out.AddedWith = record.AddedBy, record.AddedWith
 	if !record.AddedAt.IsZero() {
@@ -129,18 +110,6 @@ func applyRecord(out *contractv1.BootstrapPart, record stackrecords.BootstrapPar
 	} else {
 		out.State = contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_READY
 	}
-}
-
-func usersOf(part provider.BootstrapPart, recorded map[string][]string, offered bool) []string {
-	switch {
-	case part.UsedBy != nil:
-		return part.UsedBy
-	case part.Name == provider.BasePart || part.UsedByEveryProject:
-		return slices.Sorted(maps.Keys(recorded))
-	case offered:
-		return ProjectsDependingOn(recorded, []string{part.Name})
-	}
-	return nil
 }
 
 func idleCosts(ctx context.Context, parts []provider.BootstrapPart, price estimate) (map[string]string, string, error) {
@@ -183,108 +152,4 @@ func idleCosts(ctx context.Context, parts []provider.BootstrapPart, price estima
 		}
 	}
 	return idle, estimated.GetCurrency(), nil
-}
-
-func (r Readiness) claimParts(ctx context.Context, status BootstrapStatus, adding []string, wants map[string][]string) (map[string]stackrecords.BootstrapPart, error) {
-	var names []string
-	if !status.Present {
-		names = append(names, provider.BasePart)
-	}
-	for _, part := range adding {
-		if !slices.Contains(status.Parts, part) {
-			names = append(names, part)
-		}
-	}
-	claimed := map[string]stackrecords.BootstrapPart{}
-	for _, name := range names {
-		claim := stackrecords.BootstrapPart{WrittenBy: string(r.WrittenBy), AddedWith: addedWithBootstrap, AddedAt: time.Now().UTC()}
-		if wanting := wants[name]; len(wanting) > 0 {
-			claim.AddedBy = wanting[0]
-		}
-		claim, won, err := stackrecords.ClaimBootstrapPart(ctx, r.KeyValues, status.Tier, name, claim)
-		if storeAbsent(err) {
-			return claimed, nil
-		}
-		if err != nil {
-			return claimed, err
-		}
-		if won {
-			claimed[name] = claim
-		}
-	}
-	return claimed, nil
-}
-
-func (r Readiness) releaseParts(ctx context.Context, tier environment.Tier, claimed map[string]stackrecords.BootstrapPart) error {
-	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), claimReleaseTimeout)
-	defer cancel()
-	var errs []error
-	for _, name := range slices.Sorted(maps.Keys(claimed)) {
-		errs = append(errs, stackrecords.ReleaseBootstrapPart(settle, r.KeyValues, tier, name, claimed[name]))
-	}
-	return errors.Join(errs...)
-}
-
-const claimReleaseTimeout = 30 * time.Second
-
-const addedWithBootstrap = "ocel bootstrap"
-
-func (r Readiness) recordParts(ctx context.Context, tier environment.Tier, parts, removed []string) error {
-	status, err := r.Status(ctx, tier)
-	if err != nil {
-		return err
-	}
-	described, err := r.Bootstrap.DescribeParts(ctx, status.description())
-	if err != nil {
-		return err
-	}
-	named := make(map[string]provider.BootstrapPart, len(described))
-	for _, part := range described {
-		named[part.Name] = part
-	}
-	for _, name := range append([]string{provider.BasePart}, parts...) {
-		if err := stackrecords.MarkBootstrapPartReady(ctx, r.KeyValues, tier, name, stackrecords.BootstrapPart{
-			WrittenBy: string(r.WrittenBy),
-			Digest:    named[name].Digest,
-			AddedAt:   time.Now().UTC(),
-			Resources: named[name].Resources,
-		}); err != nil {
-			return err
-		}
-	}
-	for _, name := range removed {
-		if err := stackrecords.ForgetBootstrapPart(ctx, r.KeyValues, tier, name); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r Readiness) forgetWants(ctx context.Context, tier environment.Tier, wants map[string][]string) error {
-	for _, part := range slices.Sorted(maps.Keys(wants)) {
-		if err := stackrecords.ForgetBootstrapWants(ctx, r.KeyValues, tier, part); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r Readiness) forgetParts(ctx context.Context, tier environment.Tier) error {
-	records, err := r.recordedParts(ctx, tier)
-	if err != nil {
-		return err
-	}
-	for name := range records {
-		if err := stackrecords.ForgetBootstrapPart(ctx, r.KeyValues, tier, name); err != nil {
-			return err
-		}
-	}
-	wants, err := stackrecords.ListBootstrapWants(ctx, r.KeyValues, tier)
-	if storeAbsent(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return r.forgetWants(ctx, tier, wants)
 }

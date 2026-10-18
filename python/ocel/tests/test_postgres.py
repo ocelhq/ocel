@@ -151,6 +151,7 @@ def test_a_binding_the_deploy_delivers_is_read_past_the_fields_this_app_uses(mon
     assert postgres("main").connection_string == (
         "postgres://fixture_operator:fixture-password-not-a-secret"
         "@shop-prod-main-r1a2b3c4.cluster-cxyz.us-east-1.rds.amazonaws.com:5433/fixture_catalog"
+        "?sslmode=verify-full"
     )
 
 

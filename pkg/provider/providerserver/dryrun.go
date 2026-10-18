@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
-	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 )
@@ -124,8 +123,4 @@ func (r *deployRun) planPromotionGroup() provider.ChangeGroup {
 	}
 	group.Action, group.Reason = provider.RollUp(changes)
 	return group
-}
-
-func (r *deployRun) dryRunPlanProto() *planv1.ChangePlan {
-	return ChangePlanProto(r.dryRunPlan.plan(), r.spec.Slug, string(r.front.Kind()))
 }

@@ -30,7 +30,8 @@ func previewSpec() provider.StackSpec {
 			Tier:    environment.TierPreview,
 			Name:    naming.StackName{Env: "pr-7", App: "web"},
 		},
-		Kind: provider.StackApp,
+		Kind:   provider.StackApp,
+		Images: provider.ImagePushes{Store: alreadyPushed{}, Pushes: []provider.ImagePush{{App: "fn--web--checkout", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:abc", Function: true}}},
 		App: &provider.AppSpec{
 			App:             "web",
 			Compute:         provider.ComputeContainer,
@@ -38,7 +39,6 @@ func previewSpec() provider.StackSpec {
 			HealthCheckPath: "/",
 			Functions: []provider.FunctionSpec{{
 				Name:      "fn--web--checkout",
-				Image:     "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:abc",
 				Framework: buildoutput.Framework{Name: "nodejs", Arch: string(arch.X8664)},
 			}},
 		},
@@ -152,13 +152,13 @@ func functionRelease(buildID, image string) provider.StackSpec {
 			Tier:    environment.TierProduction,
 			Name:    naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewReleaseToken(buildID, "f1")),
 		},
-		Kind: provider.StackApp,
+		Kind:   provider.StackApp,
+		Images: provider.ImagePushes{Store: alreadyPushed{}, Pushes: []provider.ImagePush{{App: "fn--web--checkout", ImageRef: image, Function: true}}},
 		App: &provider.AppSpec{
 			App:     "web",
 			Compute: provider.ComputeServerless,
 			Functions: []provider.FunctionSpec{{
 				Name:      "fn--web--checkout",
-				Image:     image,
 				Framework: buildoutput.Framework{Name: "nodejs", Arch: string(arch.X8664)},
 			}},
 		},
@@ -196,7 +196,7 @@ func (r releasedStacks) provision(t *testing.T, spec provider.StackSpec) provide
 func (r releasedStacks) destroy(t *testing.T, ref provider.StackRef) {
 	t.Helper()
 	ctx := context.Background()
-	if err := r.stacks.Destroy(ctx, ref, nil, nil); err != nil {
+	if err := r.stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy(%s) = %v", ref.Name, err)
 	}
 	if err := stackrecords.Forget(ctx, r.store, ref.Tier, ref.Project, ref.Name); err != nil {

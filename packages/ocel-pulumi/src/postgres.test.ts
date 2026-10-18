@@ -20,7 +20,9 @@ const fixture = JSON.parse(
 );
 
 describe("the record a postgres binding publishes as", () => {
-  it("is the conformance fixture, sourced to pulumi", () => {
+  it("is the conformance fixture less its tls settings, sourced to pulumi", () => {
+    const { tlsMode, tlsCa, ...published } = fixture.postgres;
+
     expect(
       postgresBinding(fixture.name, {
         properties: {
@@ -30,8 +32,9 @@ describe("the record a postgres binding publishes as", () => {
           port: fixture.postgres.port,
           host: fixture.postgres.host,
         },
+        grants: fixture.grants,
       }),
-    ).toEqual({ ...fixture, source });
+    ).toEqual({ ...fixture, postgres: published, source });
   });
 
   it("keeps the grants it was handed", () => {

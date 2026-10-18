@@ -107,7 +107,7 @@ func TestDestroyingProductionDisablesEachPostgresClustersDeletionProtectionBefor
 		"c-bucket":   auto.OutputValue{Value: map[string]any{outputKeyBucket: "shop-prod-uploads"}},
 	}}
 	clusters := &fakeClusters{engine: engine}
-	if err := clustersStacks(engine, clusters).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
+	if err := clustersStacks(engine, clusters).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	want := []string{"ocel-app-conformance-main-abc", "ocel-app-conformance-reports-def"}
@@ -127,7 +127,7 @@ func TestDestroyingProductionGoesOnWhenAPostgresClusterIsAlreadyGone(t *testing.
 
 	engine := &mockedEngine{outputs: auto.OutputMap{"c-postgres": postgresOutputOf("ocel-app-conformance-main-abc")}}
 	clusters := &fakeClusters{engine: engine, missing: "ocel-app-conformance-main-abc"}
-	if err := clustersStacks(engine, clusters).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
+	if err := clustersStacks(engine, clusters).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {
 		t.Fatalf("Destroy() = %v, want a cluster already deleted to leave nothing to disable", err)
 	}
 	if len(engine.torn()) != 1 {
@@ -141,7 +141,7 @@ func TestDestroyingAPreviewLeavesPostgresDeletionProtectionAlone(t *testing.T) {
 	engine := &mockedEngine{outputs: auto.OutputMap{"c-postgres": postgresOutputOf("ocel-app-conformance-pr-7-main-abc")}}
 	clusters := &fakeClusters{engine: engine}
 	ref := provider.StackRef{Project: "conformance", Tier: environment.TierPreview, Name: naming.InfraStack("pr-7")}
-	if err := clustersStacks(engine, clusters).Destroy(context.Background(), ref, nil, nil); err != nil {
+	if err := clustersStacks(engine, clusters).Destroy(context.Background(), provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(clusters.disabled) > 0 {

@@ -153,11 +153,11 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 			return err
 		}
 		defer func() { _ = hold.release(ctx) }()
-		return hold.explain(h.removePreview(hold.context(ctx), req, pointer, progress))
+		return hold.explain(h.removePreview(hold.context(ctx), hold.lease(), req, pointer, progress))
 	})
 }
 
-func (h *handlers) removePreview(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, pointer string, progress progress.Log) error {
+func (h *handlers) removePreview(ctx context.Context, lease provider.Lease, req *contractv1.RemoveEnvironmentRequest, pointer string, progress progress.Log) error {
 	session, err := h.openEdgeSession(ctx, environment.TierPreview, req.GetSlug(), req.GetEdge())
 	if err != nil {
 		return err
@@ -183,10 +183,11 @@ func (h *handlers) removePreview(ctx context.Context, req *contractv1.RemoveEnvi
 	if err := session.checkpoint(ctx); err != nil {
 		return err
 	}
-	if err := retire(ctx, session.provider, noAppLive(req.GetSlug(), environment.TierPreview, pointer), progress); err != nil {
+	if err := retire(ctx, session.provider, noAppLive(req.GetSlug(), environment.TierPreview, pointer, lease), progress); err != nil {
 		return err
 	}
-	if err := ReclaimPreview(ctx, session.provider, removalImages(ctx, session.provider, req.GetProjectRegistry(), progress), req.GetSlug(), pointer, removed, progress); err != nil {
+	teardown := provider.StackDestroy{Images: removalImages(ctx, session.provider, req.GetProjectRegistry(), progress), Lease: lease}
+	if err := ReclaimPreview(ctx, session.provider, teardown, req.GetSlug(), pointer, removed, progress); err != nil {
 		return err
 	}
 	if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {

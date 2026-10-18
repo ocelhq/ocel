@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"maps"
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -21,4 +22,8 @@ func (p containerRuntime) Arch(_ context.Context, app, declared string) (string,
 
 func (p containerRuntime) Binary(_ context.Context, architecture string) ([]byte, error) {
 	return payloads.ContainerRuntime(architecture)
+}
+
+func (containerRuntime) NextServer(context.Context) (map[string][]byte, error) {
+	return maps.Clone(payloads.NextServerRuntime()), nil
 }

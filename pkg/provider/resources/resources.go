@@ -104,7 +104,7 @@ func (f *hookStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progre
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return synthesizedPlan(ctx, f.artifacts, spec, recordedResult(recorded), f.hooks.RecordsWorkers, f.planResource)
+	return synthesizedPlan(ctx, spec, recordedResult(recorded), f.hooks.RecordsWorkers, f.planResource, nil)
 }
 
 func (f *hookStacks) planResource(ctx context.Context, spec provider.StackSpec, resource provider.Resource, recorded *provider.Binding) (provider.ChangeAction, string, error) {
@@ -151,9 +151,6 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 	if err := spec.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := ShipUploads(ctx, f.artifacts, spec.Uploads, progress); err != nil {
-		return provider.StackResult{}, err
-	}
 
 	var result provider.StackResult
 	for _, resource := range spec.Resources {
@@ -185,6 +182,9 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 	}
 	reportProvisionedCompute(progress, recorded, provisioned, start)
 	result.Functions, result.Containers = provisioned.Functions, provisioned.Containers
+	if err := spec.Images.PushRemoved(ctx, progress); err != nil {
+		return provider.StackResult{}, err
+	}
 	return result, nil
 }
 
@@ -265,7 +265,8 @@ func (f *hookStacks) hooksFor(kind provider.BindingType, name string) (*Resource
 		name, kind, served(ServedBindingTypes(f.hooks)))
 }
 
-func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+func (f *hookStacks) Destroy(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
+	ref, images := req.Ref, req.Images
 	recorded, err := f.recorded(ctx, ref)
 	if err != nil {
 		return err

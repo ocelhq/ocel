@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -59,11 +60,11 @@ func (r *recorder) warnings() string {
 	return strings.Join(r.warned, "\n")
 }
 
-func newReadiness(t *testing.T, writer provider.WrittenBy) (providerserver.Readiness, *fake.Provider) {
+func newReadiness(t *testing.T, writer provider.WrittenBy) (bootstrapplan.Readiness, *fake.Provider) {
 	t.Helper()
 
 	p := fake.NewProvider(fake.Options{Region: "nowhere"})
-	return providerserver.Readiness{
+	return bootstrapplan.Readiness{
 		Bootstrap: p.FakeBootstrap(),
 		KeyValues: p.KeyValues(),
 		WrittenBy: writer,
@@ -376,7 +377,7 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	ctx := context.Background()
 	readiness, vendor := newReadiness(t, "2.0.0")
 
-	users, err := readiness.BootstrapUsers(ctx, environment.TierPreview)
+	users, err := readiness.Users(ctx, environment.TierPreview)
 	if err != nil {
 		t.Fatalf("BootstrapUsers() error = %v", err)
 	}
@@ -400,7 +401,7 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	users, err = readiness.BootstrapUsers(ctx, environment.TierPreview)
+	users, err = readiness.Users(ctx, environment.TierPreview)
 	if err != nil {
 		t.Fatalf("BootstrapUsers() error = %v", err)
 	}

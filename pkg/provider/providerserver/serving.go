@@ -31,6 +31,7 @@ type AppServingInput struct {
 	Coordinate        naming.Coordinate
 	EdgeRunsCode      bool
 	EdgeSignsForwards bool
+	CachesBytecode    bool
 }
 
 type AppServing struct {
@@ -58,9 +59,9 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	if err != nil {
 		return AppServing{}, err
 	}
-	facts := AppServing{
-		AssetPrefix: q.Coordinate.AssetKey(""),
-		Bytecode:    &provider.BytecodeSpec{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())},
+	facts := AppServing{AssetPrefix: q.Coordinate.AssetKey("")}
+	if q.CachesBytecode {
+		facts.Bytecode = &provider.BytecodeSpec{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())}
 	}
 	if present {
 		facts.RootFunction = hosting.RootFunction

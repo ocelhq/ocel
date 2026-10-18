@@ -7,10 +7,10 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 )
 
-func (r *release) shipArtifacts(pctx *sdk.Context, uploads []provider.Upload) (map[string]sdk.Resource, error) {
+func (r *release) shipArtifacts(pctx *sdk.Context, uploads []functioncode.Upload) (map[string]sdk.Resource, error) {
 	if len(uploads) == 0 {
 		return nil, nil
 	}
@@ -20,7 +20,7 @@ func (r *release) shipArtifacts(pctx *sdk.Context, uploads []provider.Upload) (m
 		if err != nil {
 			return nil, fmt.Errorf("ship %s's artifact: %w", upload.Name, err)
 		}
-		object, err := s3.NewBucketObjectv2(pctx, naming.ResourceID(provider.UploadKind, upload.Name), &s3.BucketObjectv2Args{
+		object, err := s3.NewBucketObjectv2(pctx, naming.ResourceID(functioncode.Kind, upload.Name), &s3.BucketObjectv2Args{
 			Bucket:     sdk.String(bucket),
 			Key:        sdk.String(upload.Ref.Key),
 			Source:     sdk.NewFileAsset(upload.Path),

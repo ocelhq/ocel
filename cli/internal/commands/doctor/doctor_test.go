@@ -585,19 +585,17 @@ export default {
 func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(t *testing.T) {
 	project := healthyProject(t)
 	p := project.Provider
-	p.WithHooks(func(hooks *provider.Hooks) {
-		hooks.CheckHost = func(_ context.Context, req provider.HostCheckRequest) ([]provider.HostCheck, error) {
-			checks := []provider.HostCheck{{Subject: "port 80", Finding: "something listens on port 80"}}
-			for _, hostname := range req.Hostnames {
-				checks = append(checks, provider.HostCheck{
-					Subject: hostname,
-					Verdict: provider.HostNeedsAction,
-					Finding: hostname + " does not resolve",
-					Fix:     "add the record `ocel domain add` printed",
-				})
-			}
-			return checks, nil
+	p.FakeBootstrap().CheckingHost(func(_ context.Context, req provider.HostCheckRequest) ([]provider.HostCheck, error) {
+		checks := []provider.HostCheck{{Subject: "port 80", Finding: "something listens on port 80"}}
+		for _, hostname := range req.Hostnames {
+			checks = append(checks, provider.HostCheck{
+				Subject: hostname,
+				Verdict: provider.HostNeedsAction,
+				Finding: hostname + " does not resolve",
+				Fix:     "add the record `ocel domain add` printed",
+			})
 		}
+		return checks, nil
 	})
 	recordPreviewWildcard(t, p, "preview.example.com")
 	p.ReportCertificateFor("*.preview.example.com", provider.CertificateHealth{Renewal: "you placed it on this box and you renew it", ExpiresAt: 4102444800})
@@ -720,7 +718,7 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 }
 `)
 
-	p := fake.NewForProject(fake.Options{}, root)
+	p := fake.NewForProject(fake.Options{})
 	clitest.Bootstrap(t, p, environment.TierProduction)
 	clitest.Bootstrap(t, p, environment.TierPreview)
 	clitest.ServeFake(t, p)

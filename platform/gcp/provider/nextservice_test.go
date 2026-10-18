@@ -29,7 +29,8 @@ func nextSpec() provider.StackSpec {
 			Tier:    environment.TierProduction,
 			Name:    naming.StackName{Env: stackrecords.ProductionEnv, App: "web"},
 		},
-		Kind: provider.StackApp,
+		Kind:   provider.StackApp,
+		Images: provider.ImagePushes{Store: alreadyPushed{}, Pushes: []provider.ImagePush{{App: "bundle-0", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc", Function: true}}},
 		App: &provider.AppSpec{
 			App:          "web",
 			Framework:    buildoutput.FrameworkNext,
@@ -40,7 +41,6 @@ func nextSpec() provider.StackSpec {
 			Functions: []provider.FunctionSpec{{
 				Name:      "bundle-0",
 				Route:     "bundle-0",
-				Image:     "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 				Framework: buildoutput.Framework{Name: buildoutput.FrameworkNext, Arch: string(arch.X8664)},
 			}},
 		},

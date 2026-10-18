@@ -8,47 +8,43 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-type occupied struct{ *fake.Provider }
-
-func (o occupied) Hooks() provider.Hooks {
-	hooks := o.Provider.Hooks()
-	hooks.InspectStack = o.InspectStack
-	return hooks
-}
-
-func (occupied) InspectStack(context.Context, provider.StackRef) (provider.InspectedStack, error) {
-	return provider.InspectedStack{Present: true}, nil
-}
-
-func TestDeployRefusesToAdoptAStackItHasNoRecordOf(t *testing.T) {
+func TestDeployTellsTheStacksPortWhetherItsRecordsAlreadyNameEachStack(t *testing.T) {
 	builtProject(t)
-	client := servedBy(t, occupied{fake.NewProvider(fake.Options{})})
+	vendor := fake.NewProvider(fake.Options{})
+	client := servedBy(t, vendor)
+	bootstrappedOverRPC(t, client)
 
-	stream, err := client.Deploy(context.Background(), deployRequest())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var failure string
-	for stream.Receive() {
-		if result := stream.Msg().GetResult(); result != nil {
-			failure = result.GetError()
+	for range 2 {
+		if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+			t.Fatalf("Deploy() = %q", result.GetError())
 		}
 	}
-	streamErr := stream.Err()
-	stream.Close()
-
-	if failure == "" && streamErr == nil {
-		t.Fatal("Deploy() provisioned a project over a stack it never recorded, want it refused")
+	specs := vendor.FakeStacks().Provisioned()
+	infra := specs[0].Ref.Name
+	var first, second *provider.StackSpec
+	for at := range specs {
+		if specs[at].Ref.Name != infra {
+			continue
+		}
+		if first == nil {
+			first = &specs[at]
+		} else {
+			second = &specs[at]
+		}
 	}
-	said := failure + connectMessage(streamErr)
-	if !strings.Contains(said, "already exists") {
-		t.Errorf("Deploy() failed with %q, want it to say the stack already exists", said)
+	if first == nil || second == nil {
+		t.Fatalf("the two deploys provisioned %d specs, want the infra stack twice", len(specs))
+	}
+	if first.Recorded {
+		t.Error("the first deploy says its records name the infra stack, so a vendor would deploy over a stack it finds but never made")
+	}
+	if !second.Recorded {
+		t.Error("the second deploy says its records name no infra stack, so a vendor would refuse to deploy over what it provisioned itself")
 	}
 }
 
@@ -57,75 +53,6 @@ func connectMessage(err error) string {
 		return ""
 	}
 	return err.Error()
-}
-
-type embedding struct {
-	*fake.Provider
-
-	mu       sync.Mutex
-	embedded []string
-}
-
-func (e *embedding) Hooks() provider.Hooks {
-	hooks := e.Provider.Hooks()
-	hooks.EmbedCode = e.EmbedCode
-	return hooks
-}
-
-func (e *embedding) EmbedCode(_ context.Context, function string, ref provider.ArtifactRef, _ progress.Log) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.embedded = append(e.embedded, function+" "+ref.Key)
-	return nil
-}
-
-type warming struct {
-	*fake.Provider
-
-	mu     sync.Mutex
-	warmed []string
-}
-
-func (w *warming) Hooks() provider.Hooks {
-	hooks := w.Provider.Hooks()
-	hooks.WarmFunctions = w.WarmFunctions
-	return hooks
-}
-
-func (w *warming) WarmFunctions(_ context.Context, targets []string, _ progress.Log) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.warmed = append(w.warmed, targets...)
-	return nil
-}
-
-func TestDeployWarmsEveryFunctionAProviderKnowsHowToWarm(t *testing.T) {
-	builtProject(t)
-	vendor := &warming{Provider: fake.NewProvider(fake.Options{})}
-	client := servedBy(t, vendor)
-
-	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q", result.GetError())
-	}
-	if len(vendor.warmed) != 1 {
-		t.Fatalf("the deploy warmed %v, want the function it provisioned", vendor.warmed)
-	}
-}
-
-func TestDeployEmbedsTheBytecodeCacheOfEveryFunctionItShipped(t *testing.T) {
-	builtProject(t)
-	vendor := &embedding{Provider: fake.NewProvider(fake.Options{})}
-	client := servedBy(t, vendor)
-
-	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q", result.GetError())
-	}
-	if len(vendor.embedded) != 1 {
-		t.Fatalf("the deploy embedded %v, want the artifact of the one function it shipped", vendor.embedded)
-	}
-	if !strings.Contains(vendor.embedded[0], ".zip") {
-		t.Errorf("the deploy embedded %q, want it to name the artifact the function runs from", vendor.embedded[0])
-	}
 }
 
 type preflighting struct {
@@ -220,7 +147,7 @@ func TestDeployRefusedByPreflightUploadsNothing(t *testing.T) {
 	vendor.RefusePreflight(refusal.Refuse(refusal.CodeInvalid, "this account has no room for what the manifest asks for"))
 	client := servedBy(t, vendor)
 
-	stream, err := client.Deploy(context.Background(), deployRequest())
+	stream, err := client.Deploy(context.Background(), rooted(deployRequest()))
 	if err != nil {
 		t.Fatal(err)
 	}

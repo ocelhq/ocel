@@ -70,7 +70,7 @@ func TestADeployDeclaringRealtimeIsRefusedAtPreflightBeforeAnythingUploads(t *te
 
 	req := deployRequest()
 	req.Manifest.Resources = append(req.Manifest.Resources, realtimeResource("app"))
-	stream, err := client.Deploy(context.Background(), req)
+	stream, err := client.Deploy(context.Background(), rooted(req))
 	if err != nil {
 		t.Fatal(err)
 	}

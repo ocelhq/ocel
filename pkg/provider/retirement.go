@@ -7,6 +7,8 @@ type LiveApps struct {
 	Tier environment.Tier
 	Env  string
 	Apps []LiveApp
+
+	Lease Lease
 }
 
 type LiveApp struct {

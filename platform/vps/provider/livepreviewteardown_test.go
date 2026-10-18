@@ -186,11 +186,11 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err != nil {
 		t.Fatalf("ledger RemovePointer(%s) = %v", pointer, err)
 	}
-	if err := providerserver.ReclaimPreview(ctx, p, nil, teardownSlug, pointer, removed, spoken); err != nil {
+	if err := providerserver.ReclaimPreview(ctx, p, provider.StackDestroy{}, teardownSlug, pointer, removed, spoken); err != nil {
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)
 	}
 	infra := provider.StackRef{Project: teardownSlug, Tier: environment.TierPreview, Name: naming.InfraStack(pointer)}
-	if err := p.Stacks().Destroy(ctx, infra, nil, spoken); err != nil {
+	if err := p.Stacks().Destroy(ctx, provider.StackDestroy{Ref: infra}, spoken); err != nil {
 		t.Fatalf("Destroy(%s) = %v, want teardown to destroy the infra stack the preview provisioned", infra.Name, err)
 	}
 	return spoken

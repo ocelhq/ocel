@@ -33,7 +33,7 @@ func (s albStacks) Up(
 	if err != nil {
 		return nil, err
 	}
-	if _, err := automation.Run(ctx, ref, program, progress); err != nil {
+	if _, err := automation.Run(ctx, ref, program, provider.Lease{}, progress); err != nil {
 		return nil, err
 	}
 	return outputsOf(ctx, automation, ref)
@@ -44,7 +44,7 @@ func (s albStacks) Destroy(ctx context.Context, target alb.Target, progress prog
 	if err != nil {
 		return err
 	}
-	return automation.Destroy(ctx, ref, progress)
+	return automation.Destroy(ctx, ref, provider.Lease{}, progress)
 }
 
 func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]string, error) {

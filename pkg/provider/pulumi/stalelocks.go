@@ -8,9 +8,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func runReleasingStaleLock[S, T any](ctx context.Context, a *Automation[S], setup WorkspaceSpec, progress progress.Log, run func() (T, error)) (T, error) {
+func runReleasingStaleLock[S, T any](ctx context.Context, a *Automation[S], setup WorkspaceSpec, lease provider.Lease, progress progress.Log, run func() (T, error)) (T, error) {
 	result, err := run()
-	if !isLocked(err) || !provider.HasLease(ctx, setup.Ref) {
+	if !isLocked(err) || ctx.Err() != nil || !lease.Covers(setup.Ref) {
 		return result, err
 	}
 	if err := a.engine().Unlock(ctx, setup); err != nil {

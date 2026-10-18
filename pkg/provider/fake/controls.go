@@ -23,11 +23,6 @@ func (p *Provider) WithHooks(set func(*provider.Hooks)) *Provider {
 	return p
 }
 
-func (p *Provider) WithProjectDir(dir string) *Provider {
-	p.stacks.projectDir = dir
-	return p
-}
-
 func (p *Provider) WithFacts(set func(*provider.Facts)) *Provider {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -50,14 +45,9 @@ func EnsureBindingAccess(hooks *provider.Hooks) *provider.BindingAccessHooks {
 }
 
 func (p *Provider) everyHook(hooks *provider.Hooks) {
-	hooks.WarmFunctions = func(context.Context, []string, progress.Log) error { return nil }
-	hooks.EmbedCode = func(context.Context, string, provider.ArtifactRef, progress.Log) error { return nil }
-	hooks.InspectStack = p.InspectStack
-	hooks.VerifyGrants = func(context.Context, provider.Binding) error { return nil }
 	hooks.PreflightDeploy = p.PreflightDeploy
 	hooks.EnsureImageRegistry = p.EnsureImageRegistry
 	hooks.EnvSource = &provider.EnvSourceHooks{ProveIdentity: p.ProveIdentity, EnsureSync: func(context.Context, environment.Tier, string) error { return nil }}
-	hooks.ReadNextServerRuntime = p.ReadNextServerRuntime
 }
 
 func (p *Provider) ResourceHooks() resources.Hooks {

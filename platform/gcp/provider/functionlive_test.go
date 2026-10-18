@@ -21,14 +21,14 @@ func functionStackDeclaring(tier environment.Tier, env string, values provider.A
 			Tier:    tier,
 			Name:    naming.StackName{Env: env, App: "api"},
 		},
-		Kind: provider.StackApp,
+		Kind:   provider.StackApp,
+		Images: provider.ImagePushes{Store: alreadyPushed{}, Pushes: []provider.ImagePush{{App: "fn--api--index", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/api-index@sha256:abc", Function: true}}},
 		App: &provider.AppSpec{
 			App:     "api",
 			Compute: provider.ComputeServerless,
 			Values:  values,
 			Functions: []provider.FunctionSpec{{
 				Name:      "fn--api--index",
-				Image:     "europe-west1-docker.pkg.dev/acme/ocel/api-index@sha256:abc",
 				Framework: buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: arch.X8664},
 				Env:       map[string]string{"OCEL_ROUTE": "index"},
 			}},
@@ -113,7 +113,7 @@ func TestTheProviderBakesNothingIntoAFunctionRevision(t *testing.T) {
 	t.Parallel()
 	p := pushing(t, "")
 
-	if p.Hooks().FunctionImages == nil {
+	if !p.Facts().RunsFunctionsAsImages {
 		t.Fatal("the provider builds no function image, and only one it builds can be wrapped in its runtime")
 	}
 }

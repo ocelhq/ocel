@@ -21,7 +21,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -43,6 +42,7 @@ type projectRemoval struct {
 	pointer []string
 
 	images provider.ImageStore
+	lease  provider.Lease
 	spans  *spanEvents
 }
 
@@ -130,7 +130,7 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 		})
 	}
 	for _, env := range r.environments() {
-		removed, err := planRetirement(ctx, r.provider, noAppLive(r.slug, r.tier, env), progress.Discard())
+		removed, err := planRetirement(ctx, r.provider, noAppLive(r.slug, r.tier, env, provider.Lease{}), progress.Discard())
 		if err != nil {
 			return nil, err
 		}
@@ -273,7 +273,8 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		if err != nil {
 			return err
 		}
-		project, err := h.leases.takeEach(ctx, vendor.KeyValues(), token, []leaseSubject{projectScope{tier: tier, slug: req.GetSlug()}}, stackrecords.LeaseRemoval)
+		owned := projectScope{tier: tier, slug: req.GetSlug()}
+		project, err := h.leases.takeEach(ctx, vendor.KeyValues(), token, []leaseSubject{owned}, stackrecords.LeaseRemoval)
 		if err != nil {
 			return err
 		}
@@ -296,6 +297,7 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		}
 		defer func() { _ = environments.release(ctx) }()
 		removal.images = removalImages(ctx, removal.provider, req.GetProjectRegistry(), progress)
+		removal.lease = owned.lease()
 		removal.spans = newSpanEvents(sender)
 		return project.explain(environments.explain(removal.run(environments.context(), progress)))
 	})
@@ -348,7 +350,7 @@ func (r *projectRemoval) refuseIfPlanGrew(ctx context.Context, consented *planv1
 	if err != nil {
 		return err
 	}
-	return bootstrapplan.RefuseUnconsentedChanges(shown, drawn)
+	return provider.RefuseUnconsentedChanges(shown, drawn)
 }
 
 func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
@@ -358,7 +360,7 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 		errs = append(errs, err)
 	}
 	for _, env := range r.environments() {
-		if err := retire(ctx, r.provider, noAppLive(r.slug, r.tier, env), progress); err != nil {
+		if err := retire(ctx, r.provider, noAppLive(r.slug, r.tier, env, r.lease), progress); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -382,10 +384,8 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 		if err := r.discardCertificates(ctx, certificates, progress); err != nil {
 			errs = append(errs, err)
 		}
-		if remove := r.provider.Hooks().RemovePartUser; remove != nil {
-			if err := remove(ctx, r.tier, r.slug, progress); err != nil {
-				errs = append(errs, fmt.Errorf("remove %s as a user of the %s bootstrap's parts: %w", r.slug, r.tier, err))
-			}
+		if err := r.removePartUser(ctx, progress); err != nil {
+			errs = append(errs, fmt.Errorf("remove %s as a user of the %s bootstrap's parts: %w", r.slug, r.tier, err))
 		}
 	}
 	if err := r.purgeValues(ctx, progress); err != nil {
@@ -447,12 +447,20 @@ func (r *projectRemoval) pointers() []string {
 	return r.pointer
 }
 
+func (r *projectRemoval) removePartUser(ctx context.Context, progress progress.Log) error {
+	bootstrap, err := r.provider.Bootstrap(r.front.Kind())
+	if err != nil {
+		return err
+	}
+	return bootstrap.RemovePartUser(ctx, r.tier, r.slug, progress)
+}
+
 func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName) error {
 	span := RootSpan(stack.String(), stack.String(), stackDestroyTitle(stack), progressv1.Phase_PHASE_DESTROY)
 	return r.spans.run(span, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
-			ref := provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}
-			if err := r.provider.Stacks().Destroy(ctx, ref, r.images, progress); err != nil {
+			teardown := provider.StackDestroy{Ref: provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}, Images: r.images, Lease: r.lease}
+			if err := r.provider.Stacks().Destroy(ctx, teardown, progress); err != nil {
 				return fmt.Errorf("destroy %s: %w", stack, err)
 			}
 			return stackrecords.Forget(ctx, r.provider.KeyValues(), r.tier, r.slug, stack)

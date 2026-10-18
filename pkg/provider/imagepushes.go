@@ -37,8 +37,9 @@ type ImageStore interface {
 }
 
 type ImagePushes struct {
-	Store  ImageStore
-	Pushes []ImagePush
+	Store    ImageStore
+	Registry RegistryTarget
+	Pushes   []ImagePush
 }
 
 func (p ImagePushes) String() string {
@@ -87,6 +88,33 @@ func (p ImagePushes) PushMissing(ctx context.Context, progress progress.Log) err
 		}
 	}
 	return nil
+}
+
+func (p ImagePushes) PushRemoved(ctx context.Context, progress progress.Log) error {
+	if p.Store == nil {
+		return nil
+	}
+	var removed []ImagePush
+	for _, push := range p.Pushes {
+		present, err := p.Store.Has(ctx, push)
+		if err != nil {
+			if progress != nil {
+				progress.Warn(fmt.Sprintf("Could not confirm %s still holds %s after its release provisioned, so a removal that ran meanwhile would go unnoticed: %v",
+					p.Store.Destination(), push.ImageRef, err))
+			}
+			continue
+		}
+		if !present {
+			if progress != nil {
+				progress.Warn(fmt.Sprintf("%s left %s while its release provisioned, and is sent again so the release can still start tasks from it", push.ImageRef, p.Store.Destination()))
+			}
+			removed = append(removed, push)
+		}
+	}
+	if len(removed) == 0 {
+		return nil
+	}
+	return ImagePushes{Store: p.Store, Registry: p.Registry, Pushes: removed}.PushMissing(ctx, progress)
 }
 
 func (p ImagePushes) push(ctx context.Context, push ImagePush, progress progress.Log) error {

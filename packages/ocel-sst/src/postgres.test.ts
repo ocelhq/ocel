@@ -24,7 +24,7 @@ function sstPostgres(properties: Record<string, unknown>) {
 }
 
 describe("the record a postgres binding publishes as", () => {
-  it("is the conformance fixture, sourced to sst", () => {
+  it("is the conformance fixture less its tls settings, sourced to sst", () => {
     const resource = sstPostgres({
       database: fixture.postgres.database,
       username: fixture.postgres.username,
@@ -32,11 +32,11 @@ describe("the record a postgres binding publishes as", () => {
       port: fixture.postgres.port,
       host: fixture.postgres.host,
     });
+    const { tlsMode, tlsCa, ...published } = fixture.postgres;
 
-    expect(postgresBinding(fixture.name, resource.getSSTBinding())).toEqual({
-      ...fixture,
-      source,
-    });
+    expect(
+      postgresBinding(fixture.name, { ...resource.getSSTBinding(), grants: fixture.grants }),
+    ).toEqual({ ...fixture, postgres: published, source });
   });
 
   it("turns an sst include into grants", () => {

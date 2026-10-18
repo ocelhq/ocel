@@ -91,13 +91,13 @@ func TestTheFirstAppThatReachesAPostgresProvisionsTheFunctionNetworkAndTheLastTa
 		t.Errorf("function-network record = %+v, %v, %v, want it ready, added by %s, with its resources", recorded, present, err, web.Ref.Project)
 	}
 
-	if err := stacks.Destroy(ctx, web.Ref, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: web.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(web) = %v", err)
 	}
 	if torn := engine.torn(); len(torn) != 1 {
 		t.Fatalf("destroying one of two apps tore down %v, want only its own: the other still runs in the network", torn)
 	}
-	if err := stacks.Destroy(ctx, admin.Ref, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: admin.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(admin) = %v", err)
 	}
 	torn := engine.torn()
@@ -305,7 +305,7 @@ func TestTheWorkersOfAnAppHoldTheFunctionNetworkUntilRetirementTakesTheirStackDo
 		t.Fatalf("Provision(web) with no postgres and no workers = %v", err)
 	}
 	recordRelease(t, store, next.Ref)
-	if err := stacks.Destroy(ctx, live.Ref, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: live.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(the superseded release) = %v", err)
 	}
 	if torn := engine.torn(); slices.Contains(torn, networkStackName()) || slices.Contains(torn, workersStack("prod", "web").String()) {
@@ -336,7 +336,7 @@ func TestAnAppNoLongerDeployedLetsTheFunctionNetworkGoOnceItsWorkersAndLastRelea
 	if slices.Contains(engine.torn(), networkStackName()) {
 		t.Fatalf("torn down = %v, want the function network kept: the release kept for rollback still runs its functions in it", engine.torn())
 	}
-	if err := stacks.Destroy(ctx, web.Ref, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: web.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(web) = %v", err)
 	}
 
@@ -354,7 +354,7 @@ func TestDestroyingTheOnlyReleaseOfAnAppTakesItsWorkersAndThenTheFunctionNetwork
 	}
 	recordRelease(t, store, web.Ref)
 
-	if err := stacks.Destroy(ctx, web.Ref, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: web.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(web) = %v", err)
 	}
 

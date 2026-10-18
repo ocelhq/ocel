@@ -74,13 +74,15 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 }
 
 func (r *deployRun) readNextServerRuntime(ctx context.Context, entry provider.AppEntry) (*images.NextServerRuntime, error) {
-	read := r.provider.Hooks().ReadNextServerRuntime
-	if read == nil || entry.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext {
+	if entry.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext {
 		return nil, nil
 	}
-	files, err := read(ctx)
+	files, err := r.provider.Runtime().NextServer(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read the Next server runtime %s's container loads: %w", entry.App, err)
+	}
+	if len(files) == 0 {
+		return nil, nil
 	}
 	return &images.NextServerRuntime{Files: files}, nil
 }
@@ -142,12 +144,9 @@ func (r *deployRun) containerPush(ctx context.Context, entry provider.AppEntry) 
 	return r.wrappedPush(ctx, entry)
 }
 
-func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry, functions []provider.ImagePush) (provider.ImagePushes, error) {
-	if len(functions) > 0 {
-		return provider.ImagePushes{Store: r.images, Pushes: functions}, nil
-	}
+func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry) (provider.ImagePushes, error) {
 	if entry.Compute() != provider.ComputeContainer || entry.Image == "" {
-		return provider.ImagePushes{}, nil
+		return provider.ImagePushes{Store: r.images, Registry: r.registry}, nil
 	}
 	if r.images == nil {
 		return provider.ImagePushes{}, refusal.Refuse(refusal.CodeInvalid,
@@ -160,28 +159,5 @@ func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry, fu
 	if err != nil {
 		return provider.ImagePushes{}, err
 	}
-	return provider.ImagePushes{Store: r.images, Pushes: []provider.ImagePush{push}}, nil
-}
-
-func pushRemovedImages(ctx context.Context, images provider.ImagePushes, log progress.Log) (bool, error) {
-	if images.Store == nil {
-		return false, nil
-	}
-	var removed []provider.ImagePush
-	for _, push := range images.Pushes {
-		present, err := images.Store.Has(ctx, push)
-		if err != nil {
-			log.Warn(fmt.Sprintf("Could not confirm %s still holds %s after its release provisioned, so a removal that ran meanwhile would go unnoticed: %v",
-				images.Store.Destination(), push.ImageRef, err))
-			continue
-		}
-		if !present {
-			log.Warn(fmt.Sprintf("%s left %s while its release provisioned, and is sent again so the release can still start tasks from it", push.ImageRef, images.Store.Destination()))
-			removed = append(removed, push)
-		}
-	}
-	if len(removed) == 0 {
-		return false, nil
-	}
-	return true, provider.ImagePushes{Store: images.Store, Pushes: removed}.PushMissing(ctx, log)
+	return provider.ImagePushes{Store: r.images, Registry: r.registry, Pushes: []provider.ImagePush{push}}, nil
 }

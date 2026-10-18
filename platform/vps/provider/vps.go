@@ -100,7 +100,6 @@ func (p *Provider) Hooks() provider.Hooks {
 		PreflightDeploy:    p.PreflightDeploy,
 		OpenRegistryImages: p.OpenRegistryImages,
 		OpenDirectImages:   p.OpenDirectImages,
-		CheckHost:          p.CheckHost,
 		CheckBucket:        s3store.Check,
 		BindingAccess:      &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Retirement:         &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
@@ -120,7 +119,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
-	bootstrap := elevating{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), elevated: p.elevated}
+	bootstrap := elevating{Bootstrap: checkedHost{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), checkHost: p.CheckHost}, elevated: p.elevated}
 	if kind == edge.None {
 		bootstrap.served = p.refuseServingPortsClosedFromOutside
 	}

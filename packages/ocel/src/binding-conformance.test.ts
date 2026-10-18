@@ -71,7 +71,7 @@ describe("the binding conformance fixtures", () => {
       password: want.password,
     });
     expect(pool.connectionString).toBe(
-      `postgres://${want.username}:${want.password}@${want.host}:${want.port}/${want.database}`,
+      `postgres://${want.username}:${want.password}@${want.host}:${want.port}/${want.database}?sslmode=verify-full`,
     );
   });
 

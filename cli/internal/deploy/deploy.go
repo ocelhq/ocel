@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -112,9 +113,14 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		if err != nil {
 			return err
 		}
+		outputRoot, err := buildoutput.Root(cfg.Dir)
+		if err != nil {
+			return err
+		}
 
 		req := &contractv1.DeployRequest{
 			Manifest:    manifest,
+			OutputRoot:  outputRoot,
 			Environment: env,
 			Tag:         target.tag,
 			Edge:        cfg.EdgeSelection(),

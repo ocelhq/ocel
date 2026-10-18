@@ -11,12 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func plantPrerenders(t *testing.T, p *Provider, files map[string]string) {
+func plantPrerenders(t *testing.T, files map[string]string) string {
 	t.Helper()
-	root, err := buildoutput.Root(p.projectDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := t.TempDir()
 	for rel, body := range files {
 		path := filepath.Join(buildoutput.AppRoot(root, "web"), filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -26,6 +23,7 @@ func plantPrerenders(t *testing.T, p *Provider, files map[string]string) {
 			t.Fatal(err)
 		}
 	}
+	return root
 }
 
 func uploadNames(uploads []upload) []string {
@@ -39,9 +37,9 @@ func uploadNames(uploads []upload) []string {
 func TestANextDeploySeedsUnderTheCacheStoreProjectFirst(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	plantPrerenders(t, p, map[string]string{"cache/index.cache.json": "{}", "fetch-cache/abc": "x"})
+	root := plantPrerenders(t, map[string]string{"cache/index.cache.json": "{}", "fetch-cache/abc": "x"})
 
-	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(routedNextSpec(), root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
@@ -69,9 +67,9 @@ func TestARedeployOfTheSameReleaseKeepsTheEntriesItHas(t *testing.T) {
 		"cache/shop/web/prod/r1/isr/fetch-cache/abc":        true,
 	}}
 	p := server.open(t)
-	plantPrerenders(t, p, map[string]string{"cache/index.cache.json": "{}", "fetch-cache/abc": "x"})
+	root := plantPrerenders(t, map[string]string{"cache/index.cache.json": "{}", "fetch-cache/abc": "x"})
 
-	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(routedNextSpec(), root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
@@ -85,9 +83,9 @@ func TestARedeployOfTheSameReleaseKeepsTheEntriesItHas(t *testing.T) {
 func TestANextAppWithoutAnIncrementalCacheSeedsNothing(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	plantPrerenders(t, p, map[string]string{"cache/index.cache.json": "{}"})
+	root := plantPrerenders(t, map[string]string{"cache/index.cache.json": "{}"})
 
-	if _, err := p.ProvisionFunctions(context.Background(), nextSpec(), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(nextSpec(), root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
@@ -103,13 +101,18 @@ func TestANodeAppSeedsNothing(t *testing.T) {
 	spec.App.ISR = &provider.ISRSpec{Prefix: "prod/shop/web/r1/isr"}
 	server := &runServer{}
 	p := server.open(t)
-	plantPrerenders(t, p, map[string]string{"cache/index.cache.json": "{}"})
+	root := plantPrerenders(t, map[string]string{"cache/index.cache.json": "{}"})
 
-	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), builtAt(spec, root), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
 	if got := server.stored(); len(got) != 0 {
 		t.Errorf("a node app uploaded %v, want nothing", uploadNames(got))
 	}
+}
+
+func builtAt(spec provider.StackSpec, root string) provider.StackSpec {
+	spec.App.OutputRoot = root
+	return spec
 }

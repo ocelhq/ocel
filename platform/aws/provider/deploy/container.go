@@ -685,16 +685,19 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	work.infra = infra
 	result, err := r.runContainer(ctx, spec, work, progress)
 	if err != nil {
-		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, progress))
+		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, spec.Lease, progress))
 	}
 	if err := work.transformed.refuseUnclaimed(); err != nil {
-		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, progress))
+		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, spec.Lease, progress))
 	}
 	workers, err := r.provisionContainerWorkers(ctx, spec, work, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
 	result.Containers = append(result.Containers, workers...)
+	if err := spec.Images.PushRemoved(ctx, progress); err != nil {
+		return provider.StackResult{}, err
+	}
 	return result, nil
 }
 
@@ -705,7 +708,7 @@ func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, wor
 			return provider.StackResult{}, err
 		}
 		var outputs auto.OutputMap
-		if outputs, err = r.automation.Run(ctx, spec.Ref, r.containerProgram(spec, work), progress); err == nil {
+		if outputs, err = r.automation.Run(ctx, spec.Ref, r.containerProgram(spec, work), spec.Lease, progress); err == nil {
 			return r.decodeContainer(work, outputs)
 		}
 		if !priorityTaken(err) {
@@ -733,8 +736,8 @@ func readPublicRanges(spec provider.StackSpec) ([]string, error) {
 	return ranges, nil
 }
 
-func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
-	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
+func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, lease provider.Lease, progress progress.Log) error {
+	if err := r.automation.Destroy(ctx, ref, lease, progress); err != nil {
 		return err
 	}
 	return r.releaseContainerInfra(ctx, r.cfg.KeyValues, ref, progress)
@@ -773,7 +776,7 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err := r.placeRule(ctx, work); err != nil {
 		return provider.Plan{}, err
 	}
-	previewed, err := r.automation.Preview(ctx, spec.Ref, r.containerProgram(spec, work), progress)
+	previewed, err := r.automation.Preview(ctx, spec.Ref, r.containerProgram(spec, work), spec.Lease, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}

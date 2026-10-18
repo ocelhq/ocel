@@ -79,6 +79,14 @@ type bootstrapGate struct{ p *Provider }
 
 func (g bootstrapGate) Parts() []provider.Part { return bootstrap{}.Parts() }
 
+func (g bootstrapGate) CheckHost(context.Context, provider.HostCheckRequest) ([]provider.HostCheck, error) {
+	return nil, nil
+}
+
+func (g bootstrapGate) RemovePartUser(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error {
+	return g.p.removePartUser(ctx, tier, project, progress)
+}
+
 func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 	opened, err := g.p.openClients(ctx)
 	if err != nil {

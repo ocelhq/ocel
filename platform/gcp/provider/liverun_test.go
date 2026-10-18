@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -26,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -267,13 +269,14 @@ func serverlessSpecOn(app, image string, framework buildoutput.Framework, values
 			Tier:    environment.TierPreview,
 			Name:    naming.AppStack(stackrecords.ProductionEnv, app, liveRelease),
 		},
-		Kind: provider.StackApp,
+		Kind:   provider.StackApp,
+		Images: provider.ImagePushes{Store: pushedEarlier{}, Pushes: []provider.ImagePush{{App: app, ImageRef: image, Function: true}}},
 		App: &provider.AppSpec{
 			App:     app,
 			Compute: provider.ComputeServerless,
 			Values:  provider.AppValues{ContainerEnv: values},
 			Functions: []provider.FunctionSpec{
-				{Name: app, Framework: framework, Image: image},
+				{Name: app, Framework: framework},
 			},
 		},
 	}
@@ -424,3 +427,17 @@ func TestLiveAGoFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 func TestLiveAPythonFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 	servesItsOwn(t, "pyfn", pythonRuntime, stagedPython, "python-answered")
 }
+
+type pushedEarlier struct{}
+
+func (pushedEarlier) Destination() string { return "the registry the live test pushed to" }
+
+func (pushedEarlier) Has(context.Context, provider.ImagePush) (bool, error) { return true, nil }
+
+func (pushedEarlier) Push(_ context.Context, push provider.ImagePush, _ progress.Log) error {
+	return fmt.Errorf("%s was pushed before the release, and nothing pushes it again", push.ImageRef)
+}
+
+func (pushedEarlier) ProbePush(context.Context, string) error { return nil }
+
+func (pushedEarlier) Remove(context.Context, string) error { return nil }

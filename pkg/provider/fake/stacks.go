@@ -13,16 +13,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type Stacks struct {
-	Grants []provider.Grant
+	Grants         []provider.Grant
+	PasswordSecret string
 
-	artifacts  provider.ArtifactStore
-	projectDir string
-	journal    *Journal
-	refusal    error
+	artifacts provider.ArtifactStore
+	journal   *Journal
+	refusal   error
 
 	mu             sync.Mutex
 	stacks         map[string]provider.StackResult
@@ -34,6 +36,8 @@ type Stacks struct {
 	destroying     func(provider.StackRef) error
 	teardown       func(provider.StackRef) provider.Plan
 
+	shipped              map[string][]functioncode.Upload
+	images               *functioncode.ImageSource
 	routeTables          map[string][]byte
 	withholdsRouteTables bool
 	ignoresGate          bool
@@ -85,7 +89,23 @@ func (r *Stacks) Provisioned() []provider.StackSpec {
 }
 
 func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Log) (provider.Plan, error) {
-	return resources.SynthesizedPlan(ctx, r.artifacts, spec, r.Inspect(spec.Ref).Result)
+	spec, imaged, err := r.withFunctionImages(ctx, spec)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	if imaged {
+		return resources.SynthesizedPlan(ctx, spec, r.Inspect(spec.Ref).Result)
+	}
+	staged, err := functioncode.Stage(spec, nil)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	defer functioncode.Discard(staged)
+	shipped, err := functioncode.Rows(ctx, r.artifacts, staged)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	return resources.SynthesizedPlan(ctx, spec, r.Inspect(spec.Ref).Result, shipped...)
 }
 
 func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Log) (provider.Plan, error) {
@@ -110,23 +130,35 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 			return provider.StackResult{}, err
 		}
 	}
+	if !spec.Recorded && r.Inspect(spec.Ref).Present {
+		return provider.StackResult{}, refusal.Refuse(refusal.CodeNotReady,
+			"%s already exists and this project has no record of it: ocel deploys over what it provisioned itself, never over what it finds. "+
+				"Remove it, or deploy this project under another name", spec.Ref.Name)
+	}
+	spec, imaged, err := r.withFunctionImages(ctx, spec)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
 	if err := spec.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := resources.ShipUploads(ctx, r.artifacts, spec.Uploads, progress); err != nil {
+	var staged []functioncode.Upload
+	if !imaged {
+		if staged, err = functioncode.Stage(spec, nil); err != nil {
+			return provider.StackResult{}, err
+		}
+	}
+	defer functioncode.Discard(staged)
+	if err := functioncode.Ship(ctx, r.artifacts, staged, progress); err != nil {
 		return provider.StackResult{}, err
 	}
+	r.recordShipped(spec, staged)
 	result := provider.StackResult{}
 	for _, resource := range spec.Resources {
 		if resource.Binding != "" {
 			continue
 		}
-		result.Bindings = append(result.Bindings, provider.Binding{
-			Type:       resource.Type,
-			Name:       resource.Name,
-			Properties: propertiesFor(resource.Type, resource.Name),
-			Grants:     r.Grants,
-		})
+		result.Bindings = append(result.Bindings, r.bindingFor(resource))
 	}
 	result.Functions = ProvisionedFunctions(spec)
 	if r.functionsIgnoreGate(spec) {
@@ -141,6 +173,9 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 		if spec.App.ISR != nil {
 			result.PurgeSecret = "isr-" + spec.Ref.Name.String()
 		}
+	}
+	if err := spec.Images.PushRemoved(ctx, progress); err != nil {
+		return provider.StackResult{}, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -170,11 +205,12 @@ func (r *Stacks) ListDestroysUnderLease() []string {
 	return slices.Clone(r.leasedDestroys)
 }
 
-func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+func (r *Stacks) Destroy(_ context.Context, req provider.StackDestroy, progress progress.Log) error {
+	ref, images := req.Ref, req.Images
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	destroying := r.destroying
-	if provider.HasLease(ctx, ref) {
+	if req.Lease.Covers(ref) {
 		r.leasedDestroys = append(r.leasedDestroys, ref.Name.String())
 	}
 	r.mu.Unlock()
@@ -198,11 +234,31 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images prov
 	return nil
 }
 
-func (r *Stacks) Inspect(ref provider.StackRef) provider.InspectedStack {
+type InspectedStack struct {
+	Present bool
+	Result  provider.StackResult
+}
+
+func (r *Stacks) Inspect(ref provider.StackRef) InspectedStack {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	result, present := r.stacks[stackKey(ref)]
-	return provider.InspectedStack{Present: present, Result: result}
+	return InspectedStack{Present: present, Result: result}
+}
+
+func (r *Stacks) recordShipped(spec provider.StackSpec, staged []functioncode.Upload) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.shipped == nil {
+		r.shipped = map[string][]functioncode.Upload{}
+	}
+	r.shipped[stackKey(spec.Ref)] = staged
+}
+
+func (r *Stacks) Shipped(ref provider.StackRef) []functioncode.Upload {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.shipped[stackKey(ref)])
 }
 
 func (r *Stacks) WithholdRouteTables() {
@@ -232,11 +288,7 @@ func (r *Stacks) deliverRouteTable(spec provider.StackSpec) string {
 }
 
 func (r *Stacks) deliveredEdgeBundle(spec provider.StackSpec) string {
-	outputRoot, err := buildoutput.Root(r.projectDir)
-	if err != nil {
-		return ""
-	}
-	root := buildoutput.AppRoot(outputRoot, spec.App.App)
+	root := buildoutput.AppRoot(spec.App.OutputRoot, spec.App.App)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(edge.AppBundleFile))); err != nil {
 		return ""
 	}
@@ -314,6 +366,28 @@ func (r *Stacks) Destroyed() []string {
 
 func stackKey(ref provider.StackRef) string {
 	return ref.Project + "/" + string(ref.Tier) + "/" + ref.Name.String()
+}
+
+func (r *Stacks) bindingFor(resource provider.Resource) provider.Binding {
+	binding := provider.Binding{
+		Type:       resource.Type,
+		Name:       resource.Name,
+		Properties: propertiesFor(resource.Type, resource.Name),
+		Grants:     r.Grants,
+	}
+	if resource.Type != provider.BindingPostgres {
+		return binding
+	}
+	if r.PasswordSecret == "" {
+		binding.Properties[provider.PropertyPassword] = "fake-password"
+		return binding
+	}
+	binding.Grants = append(slices.Clone(r.Grants), provider.Grant{
+		Label:     provider.GrantPasswordSecret,
+		Actions:   []string{"fake:ReadSecret"},
+		Resources: []string{r.PasswordSecret},
+	})
+	return binding
 }
 
 func propertiesFor(t provider.BindingType, name string) map[string]string {

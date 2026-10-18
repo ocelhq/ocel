@@ -41,12 +41,24 @@ func writeBuild(t *testing.T, root, app, hosting string, imageConfig bool) {
 	}
 }
 
+func partsNeededByBuilds(root string, appsAndFrameworks ...string) ([]string, error) {
+	var uses []buildoutput.Uses
+	for i := 0; i+1 < len(appsAndFrameworks); i += 2 {
+		used, err := usesOf(root, appsAndFrameworks[i], appsAndFrameworks[i+1])
+		if err != nil {
+			return nil, err
+		}
+		uses = append(uses, used)
+	}
+	return partsNeededBy(uses), nil
+}
+
 func TestADeployNeedsThePartsItsBuildsUse(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeBuild(t, root, "web", `{"version":1,"framework":"next","needs":{"revalidation":{}}}`, true)
 	writeBuild(t, root, "docs", `{"version":1,"framework":"next"}`, false)
-	needed, err := partsNeededBy(root, []builtApp{{name: "web", framework: "next"}, {name: "docs", framework: "next"}})
+	needed, err := partsNeededByBuilds(root, "web", "next", "docs", "next")
 	if err != nil {
 		t.Fatalf("partsNeededBy() = %v", err)
 	}
@@ -62,7 +74,7 @@ func TestADeployWhoseBuildsUseNeitherNeedsNoPart(t *testing.T) {
 	root := t.TempDir()
 	writeBuild(t, root, "api", `{"version":1,"framework":"go"}`, false)
 
-	needed, err := partsNeededBy(root, []builtApp{{name: "api", framework: "go"}})
+	needed, err := partsNeededByBuilds(root, "api", "go")
 	if err != nil {
 		t.Fatalf("partsNeededBy() = %v", err)
 	}
@@ -74,7 +86,7 @@ func TestADeployWhoseBuildsUseNeitherNeedsNoPart(t *testing.T) {
 func TestAnAppWithNoBuildToReadIsPresumedToUseWhatItsFrameworkCan(t *testing.T) {
 	t.Parallel()
 
-	needed, err := partsNeededBy(t.TempDir(), []builtApp{{name: "web", framework: "next"}})
+	needed, err := partsNeededByBuilds(t.TempDir(), "web", "next")
 	if err != nil {
 		t.Fatalf("partsNeededBy() = %v", err)
 	}

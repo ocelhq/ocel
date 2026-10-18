@@ -56,7 +56,7 @@ type shuttingDownServer struct {
 
 func serveUntilShutdown(t *testing.T) *shuttingDownServer {
 	t.Helper()
-	vendor := fake.NewProvider(fake.Options{}).WithProjectDir(workingDir(t))
+	vendor := fake.NewProvider(fake.Options{})
 	store := &stallingStore{Store: vendor.KeyValues(), entered: make(chan struct{}), release: make(chan struct{})}
 	mux := providerserver.ConformanceMux(providerserver.Config{Version: "test", New: func(context.Context, provider.Settings) (provider.Provider, error) {
 		return stallingProvider{Provider: vendor, store: store}, nil

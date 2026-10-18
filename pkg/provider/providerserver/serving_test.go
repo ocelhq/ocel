@@ -56,8 +56,20 @@ func servingQuery(root, app, framework string) providerserver.AppServingInput {
 	}
 }
 
-func TestEveryAppIncludesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T) {
+func TestAnAppOnAProviderThatCachesNoBytecodeIsHandedNoBytecodeCache(t *testing.T) {
 	facts, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", "astro"))
+	if err != nil {
+		t.Fatalf("AppServingFor() = %v", err)
+	}
+	if facts.Bytecode != nil {
+		t.Errorf("Bytecode = %+v, want none: the compile cache is something a project opts into through its provider", facts.Bytecode)
+	}
+}
+
+func TestEveryAppIncludesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T) {
+	query := servingQuery(t.TempDir(), "web", "astro")
+	query.CachesBytecode = true
+	facts, err := providerserver.AppServingFor(query)
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
@@ -291,7 +303,7 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1", Needs: revalidating}, routing)
 
-	vendor := fake.NewProvider(fake.Options{})
+	vendor := fake.NewProvider(fake.Options{}).WithFacts(func(facts *provider.Facts) { facts.CachesBytecode = true })
 	client := servedBy(t, vendor)
 
 	req := deployRequest()

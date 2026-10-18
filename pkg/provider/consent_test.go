@@ -1,4 +1,4 @@
-package bootstrapplan_test
+package provider_test
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -30,7 +29,7 @@ func TestAnApplyMayShrinkThePlanItShowedAndNeverGrowIt(t *testing.T) {
 			{Kind: "unit", Name: "docker", Action: provider.ActionKeep},
 		},
 	}}}
-	if err := bootstrapplan.RefuseUnconsentedChanges(shown, shrunk); err != nil {
+	if err := provider.RefuseUnconsentedChanges(shown, shrunk); err != nil {
 		t.Fatalf("RefuseUnconsentedChanges() over a plan that only shrank = %v, want the apply to run", err)
 	}
 
@@ -42,7 +41,7 @@ func TestAnApplyMayShrinkThePlanItShowedAndNeverGrowIt(t *testing.T) {
 			{Kind: "unit", Name: "docker", Action: provider.ActionCreate},
 		},
 	}}}
-	err := bootstrapplan.RefuseUnconsentedChanges(shown, grown)
+	err := provider.RefuseUnconsentedChanges(shown, grown)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("RefuseUnconsentedChanges() over work the plan never showed = %v, want an invalid refusal", err)
@@ -63,7 +62,7 @@ func TestAGroupTheShownPlanNeverIncludedIsWorkNobodyConsentedTo(t *testing.T) {
 		{Kind: provider.StackGroupKind, Name: "cache-stack", Action: provider.ActionCreate},
 	}}
 
-	err := bootstrapplan.RefuseUnconsentedChanges(shown, grown)
+	err := provider.RefuseUnconsentedChanges(shown, grown)
 	if err == nil {
 		t.Fatal("RefuseUnconsentedChanges() let a group the plan never showed through, and consent was attached to the plan")
 	}
@@ -86,11 +85,11 @@ func TestAnAdoptionWritesNothingAndSoNeverGrowsThePlan(t *testing.T) {
 		provider.ActionAdopt: provider.ActionAdopt,
 		provider.ActionKeep:  provider.ActionAdopt,
 	} {
-		if err := bootstrapplan.RefuseUnconsentedChanges(plan(shown), plan(current)); err != nil {
+		if err := provider.RefuseUnconsentedChanges(plan(shown), plan(current)); err != nil {
 			t.Errorf("RefuseUnconsentedChanges() from %s to %s = %v, want the apply to run", shown, current, err)
 		}
 	}
-	if err := bootstrapplan.RefuseUnconsentedChanges(plan(provider.ActionAdopt), plan(provider.ActionCreate)); err == nil {
+	if err := provider.RefuseUnconsentedChanges(plan(provider.ActionAdopt), plan(provider.ActionCreate)); err == nil {
 		t.Error("RefuseUnconsentedChanges() let an install through where the plan showed the engine adopted, and nobody consented to one")
 	}
 }
@@ -112,7 +111,7 @@ func TestAConsentedChangeThatBecameADeleteOrReplaceIsWorkNobodyConsentedTo(t *te
 		{provider.ActionReplace, provider.ActionDelete},
 		{provider.ActionDisableThenDelete, provider.ActionDelete},
 	} {
-		err := bootstrapplan.RefuseUnconsentedChanges(plan(moved[0]), plan(moved[1]))
+		err := provider.RefuseUnconsentedChanges(plan(moved[0]), plan(moved[1]))
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Errorf("RefuseUnconsentedChanges() from %s to %s = %v, want an invalid refusal: nobody consented to the %s", moved[0], moved[1], err, moved[1])
@@ -128,7 +127,7 @@ func TestAConsentedChangeThatBecameADeleteOrReplaceIsWorkNobodyConsentedTo(t *te
 		{provider.ActionReplace, provider.ActionUpdate},
 		{provider.ActionDelete, provider.ActionKeep},
 	} {
-		if err := bootstrapplan.RefuseUnconsentedChanges(plan(kept[0]), plan(kept[1])); err != nil {
+		if err := provider.RefuseUnconsentedChanges(plan(kept[0]), plan(kept[1])); err != nil {
 			t.Errorf("RefuseUnconsentedChanges() from %s to %s = %v, want the apply to run: it does no more than the plan showed", kept[0], kept[1], err)
 		}
 	}

@@ -9,24 +9,24 @@ import (
 )
 
 func TestCloudRunShipsNoNativeModuleToANextContainer(t *testing.T) {
-	files, err := (&Provider{}).ReadNextServerRuntime(context.Background())
+	files, err := containerRuntime{}.NextServer(context.Background())
 	if err != nil {
-		t.Fatalf("ReadNextServerRuntime() = %v", err)
+		t.Fatalf("NextServer() = %v", err)
 	}
 	allowed := []string{containerimage.NextServerPreloadFile}
 	for name := range files {
 		if !slices.Contains(allowed, name) {
-			t.Errorf("ReadNextServerRuntime() ships %s, and a Next container runs only %v", name, allowed)
+			t.Errorf("NextServer() ships %s, and a Next container runs only %v", name, allowed)
 		}
 	}
 	for _, name := range allowed {
 		if len(files[name]) == 0 {
-			t.Errorf("ReadNextServerRuntime() ships no %s", name)
+			t.Errorf("NextServer() ships no %s", name)
 		}
 	}
 	delete(files, containerimage.NextServerPreloadFile)
-	again, _ := (&Provider{}).ReadNextServerRuntime(context.Background())
+	again, _ := containerRuntime{}.NextServer(context.Background())
 	if len(again[containerimage.NextServerPreloadFile]) == 0 {
-		t.Error("ReadNextServerRuntime() hands out the map it keeps, and a caller's change would reach every later image")
+		t.Error("NextServer() hands out the map it keeps, and a caller's change would reach every later image")
 	}
 }

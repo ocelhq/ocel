@@ -10,8 +10,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
 const masterSecretARN = "arn:aws:secretsmanager:us-east-1:111122223333:secret:rds!cluster-0a1b2c3d-AbCdEf"
@@ -45,7 +45,7 @@ func deployedPostgres(t *testing.T, grants ...*bindingsv1.Grant) map[string]stri
 }
 
 func masterSecretGrant() *bindingsv1.Grant {
-	return &bindingsv1.Grant{Label: variables.PostgresPasswordGrant, Actions: []string{"secretsmanager:GetSecretValue"}, Resources: []string{masterSecretARN}}
+	return &bindingsv1.Grant{Label: provider.GrantPasswordSecret, Actions: []string{"secretsmanager:GetSecretValue"}, Resources: []string{masterSecretARN}}
 }
 
 func TestCurrentPasswords(t *testing.T) {

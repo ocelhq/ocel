@@ -358,7 +358,7 @@ func TestReadLogsRefusesALimitOutsideWhatAReadCanReturn(t *testing.T) {
 
 func TestReadLogsStopsWhenTheProviderRefusesTheRead(t *testing.T) {
 	t.Parallel()
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	client := servedProvider(t, "1.0.0", failingLogs{Provider: vendor})
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	recordApps(t, vendor, environment.TierProduction, stackrecords.ProductionEnv, recordedApp{app: "web", seq: 0, functions: webFunction(0)})
@@ -390,7 +390,7 @@ func (m missingLogs) Read(ctx context.Context, q provider.LogQuery, emit func([]
 
 func TestReadLogsNamesTheReleaseOfASourceThatNoLongerExists(t *testing.T) {
 	t.Parallel()
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	client := servedProvider(t, "1.0.0", partlyMissingLogs{Provider: vendor})
 	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
 	recordApps(t, vendor, environment.TierProduction, stackrecords.ProductionEnv, recordedApp{app: "web", seq: 0, functions: webFunction(0)})
@@ -687,7 +687,7 @@ func spiedWeb(t *testing.T, spy *spyingLogs) contractv1connect.ProviderServiceCl
 
 func TestReadLogsTailsFromBeforeWhereTheHistoryStopped(t *testing.T) {
 	t.Parallel()
-	spy := &spyingLogs{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))}
+	spy := &spyingLogs{Provider: fake.NewProvider(fake.Options{Region: "nowhere"})}
 	client := spiedWeb(t, spy)
 
 	tailed := tailLogsOf(t, client, logsRequest())
@@ -720,7 +720,7 @@ func TestReadLogsTailsFromBeforeWhereTheHistoryStopped(t *testing.T) {
 
 func TestReadLogsTailsOnlyTheTargetsWhoseLogsStillExist(t *testing.T) {
 	t.Parallel()
-	spy := &spyingLogs{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)), gone: []string{"web-fn-a"}}
+	spy := &spyingLogs{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), gone: []string{"web-fn-a"}}
 	client := spiedWeb(t, spy)
 
 	req := logsRequest()
@@ -805,7 +805,7 @@ func TestReadLogsFailsOnASampledOrReconnectedNoticeWithNoMessage(t *testing.T) {
 func TestReadLogsStopsWhenTheProviderRefusesTheTail(t *testing.T) {
 	t.Parallel()
 	spy := &spyingLogs{
-		Provider:   fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)),
+		Provider:   fake.NewProvider(fake.Options{Region: "nowhere"}),
 		refuseTail: refusal.Refuse(refusal.CodeNotReady, "the log stream is not reachable"),
 	}
 	client := spiedWeb(t, spy)
@@ -822,7 +822,7 @@ func TestReadLogsStopsWhenTheProviderRefusesTheTail(t *testing.T) {
 
 func TestReadLogsKeepsTheStreamOpenWhenTheProvidersTailEndsBeforeTheCallerCancels(t *testing.T) {
 	t.Parallel()
-	spy := &spyingLogs{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)), endTail: true}
+	spy := &spyingLogs{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), endTail: true}
 	client := spiedWeb(t, spy)
 
 	tailed := tailLogsOf(t, client, logsRequest())
@@ -893,7 +893,7 @@ func (r replayingLogs) Read(ctx context.Context, q provider.LogQuery, emit func(
 
 func TestReadLogsSendsAnEntryThatBothHistoryAndTheTailReadOnce(t *testing.T) {
 	t.Parallel()
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	both := provider.LogEntry{ID: "both", Time: time.Now(), Message: "at the boundary"}
 	client := servedProvider(t, "1.0.0", replayingLogs{
 		Provider: vendor,

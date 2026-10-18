@@ -324,18 +324,16 @@ func TestADeployThatFailsAfterProvisioningRemovesTheFunctionsItsStackHolds(t *te
 			return nil
 		},
 	}})
-	vendor.WithHooks(func(hooks *provider.Hooks) {
-		hooks.WarmFunctions = func(context.Context, []string, progress.Log) error {
-			return errors.New("the function never answered its warm-up")
-		}
+	vendor.KeyValues().(*fake.KeyValues).BeforeNextWriteUnder(ledger.Partition(environment.TierProduction, "shop"), "records/", func() error {
+		return errors.New("the ledger refused the staged record")
 	})
 	req := deployRequest()
 	req.Manifest.Resources, req.Manifest.Usages = nil, nil
 
 	result, _ := deploy(t, client, req)
 
-	if result.GetSuccess() || !strings.Contains(result.GetError(), "the function never answered its warm-up") {
-		t.Fatalf("Deploy() whose warm-up failed = %v, %q, want it failed with the warm-up's reason", result.GetSuccess(), result.GetError())
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "the ledger refused the staged record") {
+		t.Fatalf("Deploy() whose staged record was refused = %v, %q, want it failed with the ledger's reason", result.GetSuccess(), result.GetError())
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -460,17 +458,14 @@ func TestADeployWhoseCallerHungUpStillReclaimsWhatItProvisioned(t *testing.T) {
 	}})
 	ctx, hangUp := context.WithCancel(context.Background())
 	defer hangUp()
-	vendor.WithHooks(func(hooks *provider.Hooks) {
-		hooks.WarmFunctions = func(ctx context.Context, _ []string, _ progress.Log) error {
-			hangUp()
-			<-ctx.Done()
-			return ctx.Err()
-		}
+	vendor.KeyValues().(*fake.KeyValues).BeforeNextWriteUnder(ledger.Partition(environment.TierProduction, "shop"), "records/", func() error {
+		hangUp()
+		return context.Canceled
 	})
 	req := deployRequest()
 	req.Manifest.Resources, req.Manifest.Usages = nil, nil
 
-	stream, err := client.Deploy(ctx, req)
+	stream, err := client.Deploy(ctx, rooted(req))
 	if err == nil {
 		for stream.Receive() {
 		}
@@ -978,14 +973,14 @@ func TestADeployReclaimsTheBuildItsPromoteDroppedUnderItsEnvironmentLease(t *tes
 
 func TestADeployRetiresWhatItNoLongerDeploysUnderItsEnvironmentLease(t *testing.T) {
 	builtProject(t)
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	var mu sync.Mutex
 	var leased []bool
 	vendor.WithHooks(func(hooks *provider.Hooks) {
 		retire := hooks.Retirement.Retire
 		hooks.Retirement = &provider.RetirementHooks{Plan: hooks.Retirement.Plan, Retire: func(ctx context.Context, live provider.LiveApps, progress progress.Log) error {
 			mu.Lock()
-			leased = append(leased, provider.HasLease(ctx, provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: naming.StackName{Env: live.Env}}))
+			leased = append(leased, live.Lease.Covers(provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: naming.StackName{Env: live.Env}}))
 			mu.Unlock()
 			return retire(ctx, live, progress)
 		}}
@@ -1270,9 +1265,10 @@ type registryRefusingStacks struct {
 	provider.Stacks
 }
 
-func (s registryRefusingStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+func (s registryRefusingStacks) Destroy(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
+	ref := req.Ref
 	progress.Warn("Left " + ref.Name.String() + "'s image in the registry it was pushed to: UNSUPPORTED")
-	return s.Stacks.Destroy(ctx, ref, images, progress)
+	return s.Stacks.Destroy(ctx, req, progress)
 }
 
 func TestARollbackWarnsOfTheImagesItsReclaimLeftInTheProjectsRegistry(t *testing.T) {

@@ -382,11 +382,11 @@ func TestTakingDownAnEnvironmentTakesItsContainerWorkersAndLetsGoTheirHoldOnTheC
 	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	if err := stacks.Destroy(ctx, spec.Ref, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(app) = %v", err)
 	}
 	infra := provider.StackRef{Project: spec.Ref.Project, Tier: spec.Ref.Tier, Name: naming.InfraStack("prod")}
-	if err := stacks.Destroy(ctx, infra, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: infra}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(environment) = %v", err)
 	}
 
@@ -634,7 +634,7 @@ func TestReclaimingAFailedDeploysContainerReleaseLeavesTheContainerWorkersTheLiv
 	}
 	recordRelease(t, store, failed.Ref)
 
-	if err := stacks.Destroy(ctx, failed.Ref, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: failed.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(the failed deploy's release) = %v", err)
 	}
 

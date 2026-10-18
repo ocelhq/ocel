@@ -201,3 +201,74 @@ func TestARealtimeBindingWhoseKeyIsNotBase64IsRefusedWithoutQuotingIt(t *testing
 		t.Errorf("BindingMessage() = %v, want a signing key that is not base64 refused without quoting it", err)
 	}
 }
+
+const testPasswordSecret = "arn:aws:secretsmanager:us-east-1:111122223333:secret:rds!cluster-0a1b2c3d-AbCdEf"
+
+func postgresWithoutPassword(grants ...provider.Grant) provider.Binding {
+	return provider.Binding{
+		Type: provider.BindingPostgres,
+		Name: "orders",
+		Properties: map[string]string{
+			provider.PropertyHost: "orders.cluster.internal", provider.PropertyPort: "5432",
+			provider.PropertyDatabase: "ocel", provider.PropertyUsername: "ocel",
+		},
+		Grants: grants,
+	}
+}
+
+func passwordSecretGrant(resources ...string) provider.Grant {
+	return provider.Grant{Label: provider.GrantPasswordSecret, Actions: []string{"secretsmanager:GetSecretValue"}, Resources: resources}
+}
+
+func TestAPostgresBindingThatNamesThePasswordSecretInsteadOfCarryingThePasswordIsAccepted(t *testing.T) {
+	t.Parallel()
+
+	binding := postgresWithoutPassword(passwordSecretGrant(testPasswordSecret))
+
+	if err := provider.VerifyProperties(binding); err != nil {
+		t.Errorf("VerifyProperties() = %v, want a binding naming the secret its password rotates in accepted", err)
+	}
+	if got := binding.PasswordSecret(); got != testPasswordSecret {
+		t.Errorf("PasswordSecret() = %q, want %s", got, testPasswordSecret)
+	}
+}
+
+func TestAPostgresBindingWithNeitherAPasswordNorAPasswordSecretIsRefusedNamingBoth(t *testing.T) {
+	t.Parallel()
+
+	err := provider.VerifyProperties(postgresWithoutPassword())
+
+	if err == nil || !strings.Contains(err.Error(), provider.PropertyPassword) || !strings.Contains(err.Error(), provider.GrantPasswordSecret) {
+		t.Errorf("VerifyProperties() = %v, want it refused naming the password and the %q grant", err, provider.GrantPasswordSecret)
+	}
+}
+
+func TestAPostgresBindingNamingMoreThanOnePasswordSecretIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for name, binding := range map[string]provider.Binding{
+		"two grants":             postgresWithoutPassword(passwordSecretGrant(testPasswordSecret), passwordSecretGrant(testPasswordSecret+"-other")),
+		"one grant, two secrets": postgresWithoutPassword(passwordSecretGrant(testPasswordSecret, testPasswordSecret+"-other")),
+	} {
+		if err := provider.VerifyProperties(binding); err == nil {
+			t.Errorf("VerifyProperties() of %s = nil, want it refused: a password is read from one secret", name)
+		}
+		if got := binding.PasswordSecret(); got != "" {
+			t.Errorf("PasswordSecret() of %s = %q, want none", name, got)
+		}
+	}
+}
+
+func TestAPostgresBindingCarryingItsPasswordNamesNoPasswordSecret(t *testing.T) {
+	t.Parallel()
+
+	binding := postgresWithoutPassword()
+	binding.Properties[provider.PropertyPassword] = "fixture-password"
+
+	if err := provider.VerifyProperties(binding); err != nil {
+		t.Errorf("VerifyProperties() = %v, want a binding carrying its password accepted", err)
+	}
+	if got := binding.PasswordSecret(); got != "" {
+		t.Errorf("PasswordSecret() = %q, want none", got)
+	}
+}

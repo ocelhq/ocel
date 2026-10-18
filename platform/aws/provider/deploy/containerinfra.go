@@ -200,7 +200,7 @@ func provisionContainerInfra(ctx context.Context, owner *release, ref provider.S
 	}); err != nil {
 		return containerInfra{}, err
 	}
-	outputs, err := owner.automation.Run(ctx, ref, stackProgram{run: work.run, tags: work.tags}, progress)
+	outputs, err := owner.automation.Run(ctx, ref, stackProgram{run: work.run, tags: work.tags}, provider.Lease{}, progress)
 	if err != nil {
 		return containerInfra{}, fmt.Errorf("provision the shared container infrastructure for the %s tier: %w", tier, err)
 	}

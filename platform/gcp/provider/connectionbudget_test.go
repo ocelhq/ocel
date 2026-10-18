@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -59,7 +60,10 @@ func TestAnAppsServicesBoundToOneDatabaseShareItsConnections(t *testing.T) {
 	p := server.open(t)
 	spec := boundToADatabase(productionSpec())
 	spec.App.Functions = append(spec.App.Functions, provider.FunctionSpec{
-		Name: "fn--web--orders", Image: spec.App.Functions[0].Image, Framework: spec.App.Functions[0].Framework,
+		Name: "fn--web--orders", Framework: spec.App.Functions[0].Framework,
+	})
+	spec.Images.Pushes = append(spec.Images.Pushes, provider.ImagePush{
+		App: "fn--web--orders", ImageRef: functioncode.FunctionImageRef(spec.Images, spec.App.Functions[0].Name), Function: true,
 	})
 
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
@@ -107,7 +111,10 @@ func TestAnAppWithMoreServicesThanItsDatabaseHasConnectionsForIsWarned(t *testin
 	p := server.open(t)
 	spec := boundToADatabase(previewSpec())
 	for _, name := range []string{"fn--web--orders", "fn--web--search"} {
-		spec.App.Functions = append(spec.App.Functions, provider.FunctionSpec{Name: name, Image: spec.App.Functions[0].Image, Framework: spec.App.Functions[0].Framework})
+		spec.App.Functions = append(spec.App.Functions, provider.FunctionSpec{Name: name, Framework: spec.App.Functions[0].Framework})
+		spec.Images.Pushes = append(spec.Images.Pushes, provider.ImagePush{
+			App: name, ImageRef: functioncode.FunctionImageRef(spec.Images, spec.App.Functions[0].Name), Function: true,
+		})
 	}
 	progress := &fake.Log{}
 

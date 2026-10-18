@@ -91,11 +91,9 @@ func TestRemovingAProjectNoEdgeStackServedRemovesItAsAUserOfTheBootstrapParts(t 
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
 	var removed []string
-	vendor.WithHooks(func(h *provider.Hooks) {
-		h.RemovePartUser = func(_ context.Context, tier environment.Tier, project string, _ progress.Log) error {
-			removed = append(removed, string(tier)+"/"+project)
-			return nil
-		}
+	vendor.FakeBootstrap().RemovingPartUser(func(_ context.Context, tier environment.Tier, project string, _ progress.Log) error {
+		removed = append(removed, string(tier)+"/"+project)
+		return nil
 	})
 
 	if result := removeProject(t, client, projectRequest()); !result.GetSuccess() {
@@ -320,7 +318,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	ctx := context.Background()
 
 	specs := vendor.FakeStacks().Provisioned()
-	ref := specs[1].App.Functions[0].Artifact
+	ref := vendor.FakeStacks().Shipped(specs[1].Ref)[0].Ref
 
 	stream, err := client.RemoveProject(ctx, projectRequest())
 	if err != nil {

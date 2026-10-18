@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -259,3 +261,17 @@ func TestABaseFetchedForOneRequestStillReadsItsLayersAfterThatRequestEnds(t *tes
 		t.Errorf("the shared base reads its layers with a context that is %v once the request that first pulled it ended, so a later deploy's image load fails", err)
 	}
 }
+
+type alreadyPushed struct{}
+
+func (alreadyPushed) Destination() string { return "the registry the release pushed to" }
+
+func (alreadyPushed) Has(context.Context, provider.ImagePush) (bool, error) { return true, nil }
+
+func (alreadyPushed) Push(_ context.Context, push provider.ImagePush, _ progress.Log) error {
+	return fmt.Errorf("%s is already pushed, and nothing pushes it again", push.ImageRef)
+}
+
+func (alreadyPushed) ProbePush(context.Context, string) error { return nil }
+
+func (alreadyPushed) Remove(context.Context, string) error { return nil }

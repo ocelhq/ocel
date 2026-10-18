@@ -23,7 +23,13 @@ type Stacks interface {
 
 	PlanDestroy(ctx context.Context, ref StackRef, progress progress.Log) (Plan, error)
 
-	Destroy(ctx context.Context, ref StackRef, images ImageStore, progress progress.Log) error
+	Destroy(ctx context.Context, req StackDestroy, progress progress.Log) error
+}
+
+type StackDestroy struct {
+	Ref    StackRef
+	Images ImageStore
+	Lease  Lease
 }
 
 type StackRef struct {
@@ -40,8 +46,9 @@ const (
 )
 
 type StackSpec struct {
-	Ref  StackRef
-	Kind StackKind
+	Ref   StackRef
+	Kind  StackKind
+	Lease Lease
 
 	Edge edge.Edge
 
@@ -49,9 +56,9 @@ type StackSpec struct {
 
 	Resources []Resource
 
-	Uploads []Upload
-
 	Images ImagePushes
+
+	Recorded bool
 
 	Bindings Bindings
 
@@ -98,8 +105,7 @@ type AppSpec struct {
 
 	AssetPrefix string
 	Static      *edge.Static
-
-	VendorState any
+	OutputRoot  string
 
 	Proxied bool
 
@@ -178,14 +184,14 @@ type SecretRef struct {
 }
 
 type FunctionSpec struct {
-	Name      string
-	Route     string
-	EntryFile string
-	Framework buildoutput.Framework
-	Artifact  ArtifactRef
-	Image     string
-	Env       map[string]string
-	Memory    int
+	Name        string
+	Route       string
+	EntryFile   string
+	Framework   buildoutput.Framework
+	ArtifactDir string
+	Overlay     map[string][]byte
+	Env         map[string]string
+	Memory      int
 
 	HasWorkerEntry bool
 }
@@ -247,9 +253,4 @@ type AppContainer struct {
 	Image                     string `json:"image,omitempty"`
 	Revision                  string `json:"revision,omitempty"`
 	DiscoveredHealthCheckPath string `json:"discoveredHealthCheckPath,omitempty"`
-}
-
-type InspectedStack struct {
-	Present bool
-	Result  StackResult
 }

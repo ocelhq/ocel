@@ -1,19 +1,9 @@
 package vps_test
 
 import (
-	"context"
-	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
-	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
@@ -35,61 +25,4 @@ func TestTheArtifactPortRunsTheConformancePortTier(t *testing.T) {
 
 	p := storeless(t)
 	conformance.RunArtifactStore(t, p.Facts(), p.Artifacts())
-}
-
-func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	store := storeless(t).Artifacts()
-	path := filepath.Join(t.TempDir(), "artifact.zip")
-	if err := os.WriteFile(path, []byte("a build artifact"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	spec := provider.StackSpec{
-		Ref: provider.StackRef{
-			Project: "shop",
-			Tier:    environment.TierProduction,
-			Name:    naming.InfraStack("prod"),
-		},
-		Kind: provider.StackInfra,
-		Uploads: []provider.Upload{{
-			Name: "web",
-			Ref:  provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
-			Path: path,
-		}},
-	}
-
-	drawn, err := resources.SynthesizedPlan(ctx, store, spec, provider.StackResult{})
-	if err != nil {
-		t.Fatalf("SynthesizedPlan() of a stack shipping one artifact = %v, want the row the human consents to", err)
-	}
-	rows := uploadRows(drawn)
-	if len(rows) != 1 {
-		t.Fatalf("the plan drew %d artifact rows, want 1: the row must precede the write even when the write is going to refuse", len(rows))
-	}
-	if rows[0].Action != provider.ActionCreate {
-		t.Fatalf("the artifact row's action is %q, want %q: a store containing nothing has nothing to keep, and a keep row reads to the human as nothing to do", rows[0].Action, provider.ActionCreate)
-	}
-
-	var rejection refusal.Refusal
-	err = resources.ShipUploads(ctx, store, spec.Uploads, progress.Discard())
-	if !errors.As(err, &rejection) {
-		t.Fatalf("ShipUploads() after the plan showed the row = %v, want a loud refusal rather than a write that vanishes", err)
-	}
-	if rejection.Code != refusal.CodeInvalid {
-		t.Errorf("ShipUploads() refused with %q, want %q", rejection.Code, refusal.CodeInvalid)
-	}
-}
-
-func uploadRows(plan provider.Plan) []provider.Change {
-	var rows []provider.Change
-	for _, group := range plan.Groups {
-		for _, change := range group.Changes {
-			if change.Kind == provider.UploadKind {
-				rows = append(rows, change)
-			}
-		}
-	}
-	return rows
 }

@@ -24,29 +24,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 )
 
-func TestAFunctionsRepositoryIsANameARegistryTakes(t *testing.T) {
-	got := providerserver.FunctionRepository("web", "fn--web--index")
-	if got != "web-index" {
-		t.Errorf("providerserver.FunctionRepository() = %q, want %q: a registry refuses a path component that repeats a separator", got, "web-index")
-	}
-	if only := providerserver.FunctionRepository("web", "web"); only != "web" {
-		t.Errorf("providerserver.FunctionRepository() = %q, want the app itself where the function is the whole app", only)
-	}
-}
-
 type imaging struct {
-	*fake.Provider
-
 	base v1.Image
 }
 
-func (i imaging) Hooks() provider.Hooks {
-	hooks := i.Provider.Hooks()
-	hooks.FunctionImages = &provider.FunctionImageHooks{ResolveBase: i.ResolveBase, ReadRuntime: i.ReadRuntime}
-	return hooks
+func (i imaging) on(p *fake.Provider) *fake.Provider {
+	return p.RunningFunctionsAsImages(i.ResolveBase, i.ReadRuntime)
 }
 
 func (i imaging) ResolveBase(context.Context, buildoutput.Framework) (v1.Image, error) {
@@ -88,8 +74,8 @@ func imagingDeployRequest() *contractv1.DeployRequest {
 
 func imagingServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
-	base := fake.NewProvider(fake.Options{})
-	served := servedBy(t, imaging{Provider: base})
+	base := imaging{}.on(fake.NewProvider(fake.Options{}))
+	served := servedBy(t, base)
 	bootstrappedOverRPC(t, served)
 	return served, base
 }
@@ -119,22 +105,19 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 
 	specs := p.FakeStacks().Provisioned()
 	app := specs[len(specs)-1]
-	if len(app.Uploads) != 0 {
-		t.Errorf("the app spec has %d uploads, want none: the function travels as an image", len(app.Uploads))
+	if shipped := p.FakeStacks().Shipped(app.Ref); len(shipped) != 0 {
+		t.Errorf("the release shipped %d function packages, want none: the function travels as an image", len(shipped))
 	}
 	if len(app.App.Functions) != 1 {
 		t.Fatalf("the app spec has %d functions, want the one the manifest declares", len(app.App.Functions))
 	}
-	spec := app.App.Functions[0]
-	if spec.Image == "" {
-		t.Fatal("the function spec names no image, so the provider has nothing to run it from")
+	image := functioncode.FunctionImageRef(app.Images, app.App.Functions[0].Name)
+	if image == "" {
+		t.Fatal("the release names no image for the function, so the provider has nothing to run it from")
 	}
-	if spec.Image != pushed[0].ImageRef || !strings.Contains(spec.Image, ":sha256-") {
-		t.Errorf("the function spec runs %q, want the %q it was pushed under: the tag is the image's digest, so it never moves, "+
-			"and a docker daemon an emulator runs out of resolves a tag where it resolves no digest", spec.Image, pushed[0].ImageRef)
-	}
-	if spec.Artifact.Key != "" {
-		t.Errorf("the function spec names artifact %q as well as an image, want the image alone", spec.Artifact.Key)
+	if image != pushed[0].ImageRef || !strings.Contains(image, ":sha256-") {
+		t.Errorf("the function runs %q, want the %q it was pushed under: the tag is the image's digest, so it never moves, "+
+			"and a docker daemon an emulator runs out of resolves a tag where it resolves no digest", image, pushed[0].ImageRef)
 	}
 }
 
@@ -155,9 +138,8 @@ func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
 	if app.App.Image != "" {
 		t.Errorf("the app spec runs the image %q, want none: the app is serverless and only its functions travel as images", app.App.Image)
 	}
-	spec := app.App.Functions[0]
-	if !strings.Contains(spec.Image, ":sha256-") {
-		t.Errorf("the function spec runs %q, want the digest tag of its own image", spec.Image)
+	if image := functioncode.FunctionImageRef(app.Images, app.App.Functions[0].Name); !strings.Contains(image, ":sha256-") {
+		t.Errorf("the function runs %q, want the digest tag of its own image", image)
 	}
 }
 
@@ -167,7 +149,7 @@ func refusedImagedDeploy(t *testing.T, name, value, provisioned string) string {
 	served, _ := imagingServed(t)
 
 	req := declaring(imagingDeployRequest(), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, name, value)
-	stream, err := served.Deploy(context.Background(), req)
+	stream, err := served.Deploy(context.Background(), rooted(req))
 	if err != nil {
 		t.Fatalf("Deploy() error = %v", err)
 	}
@@ -329,21 +311,13 @@ func TestNoFunctionsImageCarriesTheAppsStaticAssets(t *testing.T) {
 	}
 }
 
-type imagingWithoutRuntime struct{ imaging }
-
-func (w imagingWithoutRuntime) Hooks() provider.Hooks {
-	hooks := w.imaging.Hooks()
-	hooks.FunctionImages = &provider.FunctionImageHooks{ResolveBase: w.ResolveBase, ReadRuntime: w.ReadRuntime}
-	return hooks
-}
-
-func (imagingWithoutRuntime) ReadRuntime(context.Context, buildoutput.Framework) (map[string][]byte, error) {
+func noRuntime(context.Context, buildoutput.Framework) (map[string][]byte, error) {
 	return nil, nil
 }
 
 func TestANodeFunctionIsRefusedWhereTheProviderShipsNoRuntime(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	served := servedBy(t, imagingWithoutRuntime{imaging{Provider: fake.NewProvider(fake.Options{})}})
+	served := servedBy(t, fake.NewProvider(fake.Options{}).RunningFunctionsAsImages(imaging{}.ResolveBase, noRuntime))
 	bootstrappedOverRPC(t, served)
 
 	result, _ := deploy(t, served, imagingDeployRequest())
@@ -357,21 +331,13 @@ func TestANodeFunctionIsRefusedWhereTheProviderShipsNoRuntime(t *testing.T) {
 	}
 }
 
-type imagingWithoutEntrypoint struct{ imaging }
-
-func (w imagingWithoutEntrypoint) Hooks() provider.Hooks {
-	hooks := w.imaging.Hooks()
-	hooks.FunctionImages = &provider.FunctionImageHooks{ResolveBase: w.ResolveBase, ReadRuntime: w.ReadRuntime}
-	return hooks
-}
-
-func (imagingWithoutEntrypoint) ReadRuntime(context.Context, buildoutput.Framework) (map[string][]byte, error) {
+func runtimeWithoutEntrypoint(context.Context, buildoutput.Framework) (map[string][]byte, error) {
 	return map[string][]byte{"serve.mjs": []byte("export const runtime = 1")}, nil
 }
 
 func TestANodeFunctionIsRefusedWhereTheProvidersRuntimeHasNoEntrypoint(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	served := servedBy(t, imagingWithoutEntrypoint{imaging{Provider: fake.NewProvider(fake.Options{})}})
+	served := servedBy(t, fake.NewProvider(fake.Options{}).RunningFunctionsAsImages(imaging{}.ResolveBase, runtimeWithoutEntrypoint))
 	bootstrappedOverRPC(t, served)
 
 	_, _, err := deployStream(t, served, imagingDeployRequest())
@@ -387,8 +353,8 @@ func TestANodeFunctionIsRefusedWhereTheProvidersRuntimeHasNoEntrypoint(t *testin
 
 func wrappingImagingServed(t *testing.T, runtime []byte) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
-	base := fake.NewProvider(fake.Options{})
-	served := servedBy(t, imaging{Provider: base.WrappingContainers("amd64", runtime)})
+	base := imaging{}.on(fake.NewProvider(fake.Options{}).WrappingContainers("amd64", runtime))
+	served := servedBy(t, base)
 	bootstrappedOverRPC(t, served)
 	return served, base
 }
@@ -464,8 +430,9 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderShipsOne(t *testing.
 		t.Fatal(err)
 	}
 	specs := vendor.FakeStacks().Provisioned()
-	if spec := specs[len(specs)-1].App.Functions[0]; !strings.HasSuffix(spec.Image, ":"+naming.DigestTag(digest.String())) {
-		t.Errorf("the function spec runs %q, want it tagged with the wrapped image's digest %s", spec.Image, digest)
+	app := specs[len(specs)-1]
+	if image := functioncode.FunctionImageRef(app.Images, app.App.Functions[0].Name); !strings.HasSuffix(image, ":"+naming.DigestTag(digest.String())) {
+		t.Errorf("the function runs %q, want it tagged with the wrapped image's digest %s", image, digest)
 	}
 }
 

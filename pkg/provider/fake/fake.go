@@ -31,10 +31,13 @@ type Provider struct {
 	wrappedFor       []string
 	runtimeArch      string
 	runtimeBinary    []byte
-	hooks            provider.Hooks
-	retirements      []provider.LiveApps
-	retired          []retiredApp
-	setFacts         func(*provider.Facts)
+	servesNextServer bool
+
+	runsFunctionsAsImages bool
+	hooks                 provider.Hooks
+	retirements           []provider.LiveApps
+	retired               []retiredApp
+	setFacts              func(*provider.Facts)
 
 	journal        *Journal
 	options        Options
@@ -58,11 +61,11 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 	if err != nil {
 		return nil, err
 	}
-	return NewForProject(decoded, settings.ProjectDir), nil
+	return NewForProject(decoded), nil
 }
 
-func NewForProject(options Options, projectDir string) *Provider {
-	p := NewProvider(options).WithProjectDir(projectDir)
+func NewForProject(options Options) *Provider {
+	p := NewProvider(options).ServingNextServer()
 	return p.WithHooks(p.everyHook)
 }
 
@@ -121,6 +124,7 @@ func (p *Provider) Facts() provider.Facts {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	facts.RunsFunctionsAsImages = p.runsFunctionsAsImages
 	if p.setFacts != nil {
 		p.setFacts(&facts)
 	}

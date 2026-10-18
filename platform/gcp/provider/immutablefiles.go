@@ -15,7 +15,7 @@ import (
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -38,13 +38,13 @@ func (p *Provider) CopyImmutableFiles(ctx context.Context, tier environment.Tier
 			return objects.storeless(ctx, tier, err)
 		}
 		group, ctx := errgroup.WithContext(ctx)
-		group.SetLimit(resources.UploadConcurrency)
+		group.SetLimit(functioncode.UploadConcurrency)
 		for _, rel := range slices.Sorted(maps.Keys(own)) {
 			if _, present := held[rel]; present || revalidated(from.Revalidate, prefix+rel) {
 				continue
 			}
 			group.Go(func() error {
-				defer resources.TakeUploadSlot()()
+				defer functioncode.TakeUploadSlot()()
 				return copyImmutableFile(ctx, bucket, source+prefix+rel, target+prefix+rel, own[rel], from.Objects)
 			})
 		}

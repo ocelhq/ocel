@@ -264,7 +264,7 @@ func (r *Stacks) removeShared(ctx context.Context, share sharedStack, tier envir
 
 func retireShared(ctx context.Context, share sharedStack, owner *release, store keyvalue.Store, tier environment.Tier, progress progress.Log) error {
 	stack := share.ref(tier)
-	if err := owner.automation.Destroy(ctx, stack, progress); err != nil {
+	if err := owner.automation.Destroy(ctx, stack, provider.Lease{}, progress); err != nil {
 		failed := fmt.Errorf("take down the shared %s for the %s tier: %w\n"+
 			"It stays recorded as the %s part, used by no project: run `%s --remove %s` to take it down again, or deploy a %s and it raises it again",
 			share.subject, tier, err, share.part, provider.BootstrapCommand(tier), share.part, share.consumer)

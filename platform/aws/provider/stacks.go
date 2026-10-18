@@ -16,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -59,17 +58,11 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		return deploy.Config{}, err
 	}
 
-	artifactRoot, err := buildoutput.Root(p.projectDir)
-	if err != nil {
-		return deploy.Config{}, err
-	}
-
 	cfg := deploy.Config{
 		Region:         p.aws.Region,
 		BackendURL:     stateBackendURL(deployed.StateBucket, scope.Slug),
 		Passphrase:     params.Passphrase,
 		PulumiProject:  naming.PulumiProject(scope.Slug),
-		Secrets:        secretsmanager.NewFromConfig(p.aws),
 		Parameters:     ssm.NewFromConfig(p.aws),
 		KVTokenRoot:    p.namespace.KVTokenRoot(),
 		Clusters:       rds.NewFromConfig(p.aws),
@@ -97,7 +90,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		RuntimeLayers: layers,
 		BytecodeEmbed: p.options.Bytecode.Embed,
 
-		ArtifactRoot:      artifactRoot,
+		ArtifactRoot:      scope.OutputRoot,
 		ArtifactBucket:    deployed.ArtifactBucket,
 		AssetBucket:       deployed.AssetBucket,
 		ImageOptimizerURL: optimizer,

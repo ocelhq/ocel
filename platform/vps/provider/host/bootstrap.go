@@ -209,7 +209,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		return err
 	}
 	items := current.Items()
-	if err := bootstrapplan.RefuseUnconsentedChanges(itemPlan(shown), itemPlan(current)); err != nil {
+	if err := provider.RefuseUnconsentedChanges(itemPlan(shown), itemPlan(current)); err != nil {
 		return err
 	}
 

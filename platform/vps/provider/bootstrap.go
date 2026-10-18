@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 func (p *Provider) elevated(ctx context.Context) error {
@@ -15,6 +16,19 @@ func (p *Provider) elevated(ctx context.Context) error {
 	}
 	_, err = live.Preflight(ctx)
 	return err
+}
+
+type checkedHost struct {
+	host.Bootstrap
+	checkHost func(context.Context, provider.HostCheckRequest) ([]provider.HostCheck, error)
+}
+
+func (b checkedHost) CheckHost(ctx context.Context, req provider.HostCheckRequest) ([]provider.HostCheck, error) {
+	return b.checkHost(ctx, req)
+}
+
+func (checkedHost) RemovePartUser(context.Context, environment.Tier, string, progress.Log) error {
+	return nil
 }
 
 type elevating struct {

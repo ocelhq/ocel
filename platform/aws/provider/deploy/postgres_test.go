@@ -270,6 +270,7 @@ func provisionPostgresIn(t *testing.T, tier environment.Tier) *clusterRecorder {
 	if _, err := conformingStacks(engine).Provision(context.Background(), provider.StackSpec{
 		Ref:       provider.StackRef{Project: "conformance", Tier: tier, Name: naming.InfraStack("conformance")},
 		Kind:      provider.StackInfra,
+		Recorded:  true,
 		Resources: []provider.Resource{{Name: "c-postgres", Declared: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}}},
 	}, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)

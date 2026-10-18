@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -62,11 +62,7 @@ func (p *Provider) uploadStaticFiles(ctx context.Context, spec provider.StackSpe
 	if err != nil {
 		return err
 	}
-	root, err := buildoutput.Root(p.projectDir)
-	if err != nil {
-		return err
-	}
-	appRoot := buildoutput.AppRoot(root, spec.App.App)
+	appRoot := buildoutput.AppRoot(spec.App.OutputRoot, spec.App.App)
 	files, err := staticFilesOf(appRoot, keys)
 	if err != nil {
 		return err
@@ -77,10 +73,10 @@ func (p *Provider) uploadStaticFiles(ctx context.Context, spec provider.StackSpe
 
 	ensureProgress(runProgress).Say("Uploading " + spec.App.App + "'s " + staticFileCount(len(files)))
 	group, ctx := errgroup.WithContext(ctx)
-	group.SetLimit(resources.UploadConcurrency)
+	group.SetLimit(functioncode.UploadConcurrency)
 	for _, file := range files {
 		group.Go(func() error {
-			defer resources.TakeUploadSlot()()
+			defer functioncode.TakeUploadSlot()()
 			if file.key != keys.imageConfig {
 				present, err := artifacts{p}.Has(ctx, provider.ArtifactRef{Tier: spec.Ref.Tier, Bucket: provider.StoreAssets, Key: file.key})
 				if err != nil || present {
