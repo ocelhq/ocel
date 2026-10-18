@@ -19,6 +19,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 )
@@ -54,12 +55,12 @@ func TestLiveOcelServesBehindACaddyContainerOnItsOwnNetwork(t *testing.T) {
 	})
 }
 
-func (vm machine) servedThroughCaddy(t *testing.T, hostname string) string {
+func (vm liveBox) servedThroughCaddy(t *testing.T, hostname string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.ssh(t, "curl -sk -m 10 --resolve "+quote(hostname+":443:127.0.0.1")+" "+quote("https://"+hostname+"/")+" || true"))
 }
 
-func (vm machine) awaitsCaddy(t *testing.T, hostname, want string) {
+func (vm liveBox) awaitsCaddy(t *testing.T, hostname, want string) {
 	t.Helper()
 	deadline := time.Now().Add(caddyServeWait)
 	for served := vm.servedThroughCaddy(t, hostname); served != want; served = vm.servedThroughCaddy(t, hostname) {
@@ -70,7 +71,7 @@ func (vm machine) awaitsCaddy(t *testing.T, hostname, want string) {
 	}
 }
 
-func (vm machine) placedCaddy(t *testing.T, directory string) string {
+func (vm liveBox) placedCaddy(t *testing.T, directory string) string {
 	t.Helper()
 	return vm.ssh(t, "sudo cat "+quote(directory+"/"+caddyfile.FileName)+" 2>/dev/null || true")
 }
@@ -107,7 +108,7 @@ func unbindsBehindCaddy(t *testing.T, d *vps.Provider, hostname string) {
 	}
 }
 
-func bootstrapsBehindCaddy(t *testing.T, vm machine, cf caddyFront) (*vps.Proxy, provider.Bootstrap) {
+func bootstrapsBehindCaddy(t *testing.T, vm liveBox, cf caddyFront) (*front.Proxy, provider.Bootstrap) {
 	t.Helper()
 	proxy := frontProxy(t, cf.front)
 	p := vm.provider(t, func(o *vps.Options) { o.Proxy = proxy })
@@ -134,7 +135,7 @@ func bootstrapsBehindCaddy(t *testing.T, vm machine, cf caddyFront) (*vps.Proxy,
 	return proxy, bootstrap
 }
 
-func deploysOneBehindCaddy(t *testing.T, vm machine, cf caddyFront, proxy *vps.Proxy) (*vps.Provider, edge.Edge, edge.EdgeStack) {
+func deploysOneBehindCaddy(t *testing.T, vm liveBox, cf caddyFront, proxy *front.Proxy) (*vps.Provider, edge.Edge, edge.EdgeStack) {
 	t.Helper()
 	ctx := context.Background()
 	fixtures(t, vm)
@@ -157,7 +158,7 @@ func deploysOneBehindCaddy(t *testing.T, vm machine, cf caddyFront, proxy *vps.P
 	return d, opened, stack
 }
 
-func (vm machine) refusesTheirs(t *testing.T, d *vps.Provider, cf caddyFront) {
+func (vm liveBox) refusesTheirs(t *testing.T, d *vps.Provider, cf caddyFront) {
 	t.Helper()
 	if refused := bindsBehindCaddy(t, d, cf.theirs); !strings.Contains(refused, "already served by your Caddy") {
 		t.Errorf("binding %s, which a site of yours serves, = %q, want it refused naming where your Caddy serves it", cf.theirs, refused)
@@ -167,7 +168,7 @@ func (vm machine) refusesTheirs(t *testing.T, d *vps.Provider, cf caddyFront) {
 	}
 }
 
-func (vm machine) destroysBehindCaddy(t *testing.T, bootstrap provider.Bootstrap, stack edge.EdgeStack, cf caddyFront) {
+func (vm liveBox) destroysBehindCaddy(t *testing.T, bootstrap provider.Bootstrap, stack edge.EdgeStack, cf caddyFront) {
 	t.Helper()
 	ctx := context.Background()
 	if err := stack.Destroy(ctx); err != nil {
@@ -189,7 +190,7 @@ func (vm machine) destroysBehindCaddy(t *testing.T, bootstrap provider.Bootstrap
 	vm.frontUntouched(t, cf.front)
 }
 
-func servesBehindCaddy(t *testing.T, vm machine, cf caddyFront) {
+func servesBehindCaddy(t *testing.T, vm liveBox, cf caddyFront) {
 	t.Helper()
 	vm.purges(t)
 	t.Cleanup(func() { vm.purges(t) })
@@ -273,7 +274,7 @@ func servesBehindCaddy(t *testing.T, vm machine, cf caddyFront) {
 	vm.destroysBehindCaddy(t, bootstrap, stack, cf)
 }
 
-func servesAPreviewBehindCaddy(t *testing.T, vm machine, d *vps.Provider, opened edge.Edge, cf caddyFront) {
+func servesAPreviewBehindCaddy(t *testing.T, vm liveBox, d *vps.Provider, opened edge.Edge, cf caddyFront) {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := opened.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
@@ -303,7 +304,7 @@ func servesAPreviewBehindCaddy(t *testing.T, vm machine, d *vps.Provider, opened
 	}
 }
 
-func coolifysCaddyBox(t *testing.T) machine {
+func coolifysCaddyBox(t *testing.T) liveBox {
 	t.Helper()
 	if os.Getenv("OCEL_INCUS_ADDR") == "" {
 		t.Fatal(unreachable)
@@ -324,7 +325,7 @@ type caddyServer struct {
 	} `json:"routes"`
 }
 
-func (vm machine) coolifysOwnHostname(t *testing.T) string {
+func (vm liveBox) coolifysOwnHostname(t *testing.T) string {
 	t.Helper()
 	said := vm.ssh(t, "sudo docker exec coolify-proxy wget -qO- "+quote(caddyAdminServers))
 	var servers map[string]caddyServer

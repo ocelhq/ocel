@@ -15,8 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 const (
@@ -27,7 +27,7 @@ const (
 
 func sweepAt(tag string) string { return sweepRepo + ":" + tag }
 
-func onABoxSweeping(t *testing.T, tags ...string) (machine, *vps.Provider) {
+func onABoxSweeping(t *testing.T, tags ...string) (liveBox, *vps.Provider) {
 	t.Helper()
 	vm, p := onABoxServingContainers(t)
 	for _, tag := range tags {
@@ -39,7 +39,7 @@ func onABoxSweeping(t *testing.T, tags ...string) (machine, *vps.Provider) {
 	}
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker images -q --filter reference="+sweepRepo+":* | xargs -r sudo docker rmi -f >/dev/null 2>&1 || true")
-		vm.ssh(t, "sudo rm -rf "+host.ReleasesDir()+"/"+sweepProject)
+		vm.ssh(t, "sudo rm -rf "+boxapi.ReleasesDir+"/"+sweepProject)
 	})
 	return vm, p
 }
@@ -71,17 +71,17 @@ func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 	}
 }
 
-func windowOf(t *testing.T, vm machine, project, app string, tier environment.Tier) []string {
+func windowOf(t *testing.T, vm liveBox, project, app string, tier environment.Tier) []string {
 	t.Helper()
 	listed := strings.TrimSpace(vm.sshAs(t, deployLogin,
-		"cat "+host.ReleasesDir()+"/"+project+"/"+app+"/"+string(tier)))
+		"cat "+boxapi.ReleasesDir+"/"+project+"/"+app+"/"+string(tier)))
 	if listed == "" {
 		return nil
 	}
 	return strings.Split(listed, "\n")
 }
 
-func sweepImages(t *testing.T, vm machine) string {
+func sweepImages(t *testing.T, vm liveBox) string {
 	t.Helper()
 	return strings.TrimSpace(vm.ssh(t,
 		"sudo docker images --filter reference="+sweepRepo+":* --format '{{.Repository}}:{{.Tag}}' | sort"))

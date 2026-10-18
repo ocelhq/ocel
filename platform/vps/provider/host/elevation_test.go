@@ -10,6 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -43,12 +45,12 @@ func (c *sudoless) Stream(_ context.Context, command string, _ io.Reader) (ssh.R
 		return ssh.Result{Stdout: "x86_64\n"}, nil
 	case command == frontReading():
 		return ssh.Result{Stdout: c.recorded}, nil
-	case c.stamped != "" && command == "cat "+shell.Quote(StampPath(environment.TierProduction)):
+	case c.stamped != "" && command == "cat "+shell.Quote(machine.StampPath(environment.TierProduction)):
 		return ssh.Result{Stdout: c.stamped}, nil
 	case c.stamped != "" && strings.Contains(command, "for p in"):
-		return ssh.Result{Stdout: KindFile + "\t" + StampPath(environment.TierProduction) + "\t644\troot\tabc\n" +
-			KindFile + "\t" + FrontRecordPath + "\t644\troot\tdef\n" +
-			KindSealKey + "\t" + SealKeyPath(environment.TierProduction) + "\t400\troot\t\t2026-09-23T23:27:00Z\n"}, nil
+		return ssh.Result{Stdout: machine.KindFile + "\t" + machine.StampPath(environment.TierProduction) + "\t644\troot\tabc\n" +
+			machine.KindFile + "\t" + FrontRecordPath + "\t644\troot\tdef\n" +
+			machine.KindSealKey + "\t" + SealKeyPath(environment.TierProduction) + "\t400\troot\t\t2026-09-23T23:27:00Z\n"}, nil
 	default:
 		return ssh.Result{}, nil
 	}
@@ -82,7 +84,7 @@ func (c *sudoless) elevated() []string {
 }
 
 func hostFor(conn *sudoless) *Host {
-	return New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return conn, nil }, nil), Keys{}, nil, Front{})
+	return New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return conn, nil }, nil), Keys{}, nil, front.Proxy{})
 }
 
 func TestDescribingAHostNeedsNoPowerToWriteToIt(t *testing.T) {
@@ -119,16 +121,16 @@ func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	record, err := frontRecordItem(Front{}, "shop", environment.TierProduction)
+	record, err := frontRecordItem(front.Proxy{}, "shop", environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
 	conn.recorded = string(record.Content)
-	written := digests(append(Items(environment.TierProduction, keys, ssh.AMD64, Front{}), record))
+	written := machine.DigestsOf(append(Items(environment.TierProduction, keys, ssh.AMD64, front.Proxy{}), record))
 	change(written)
-	stamp, err := json.Marshal(Stamp{
-		State:   StateComplete,
-		Seal:    Seal{Fingerprint: "abc"},
+	stamp, err := json.Marshal(machine.Stamp{
+		State:   machine.StateComplete,
+		Seal:    machine.Seal{Fingerprint: "abc"},
 		Digests: written,
 	})
 	if err != nil {

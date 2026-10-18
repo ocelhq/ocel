@@ -6,17 +6,25 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/kv"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/realtime"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/topic"
 )
 
 var ProviderOver = newProvider
 
 const (
-	RealtimeGatewayMemoryBytes = realtimeGatewayMemoryBytes
-	RealtimeSocketBytes        = realtimeSocketBytes
+	RealtimeGatewayMemoryBytes = realtime.GatewayMemoryBytes
+	RealtimeSocketBytes        = realtime.SocketBytes
 )
 
 func (p *Provider) FindTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
@@ -27,13 +35,77 @@ func (p *Provider) Timing(now func() time.Time) { p.now = now }
 
 func (p *Provider) Clock() func() time.Time { return p.now }
 
-var MintStoreSecret = mintStoreSecret
+var MintStoreSecret = bucket.MintSecret
 
-var NewStoreSecretAssociatedData = newStoreSecretAssociatedData
+var NewStoreSecretAssociatedData = bucket.NewSecretAssociatedData
 
-var NewPostgresSecretAssociatedData = newPostgresSecretAssociatedData
+var StoreAccountKey = bucket.AccountKey
 
-func StoreName(ref provider.StackRef) string { return storeName(ref) }
+var CheckStoreSecret = bucket.CheckSecret
+
+var NewPostgresSecretAssociatedData = postgres.NewSecretAssociatedData
+
+func (p *Provider) PlanPostgres(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	return postgres.New(p.components()).Plan(ctx, in, recorded)
+}
+
+func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, log progress.Log) (provider.Binding, error) {
+	return postgres.New(p.components()).Provision(ctx, in, log)
+}
+
+func (p *Provider) RemovePostgres(ctx context.Context, ref provider.StackRef, binding provider.Binding, log progress.Log) error {
+	return postgres.New(p.components()).Remove(ctx, ref, binding, log)
+}
+
+func (p *Provider) PlanKV(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	return kv.New(p.components()).Plan(ctx, in, recorded)
+}
+
+func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionRequest, log progress.Log) (provider.Binding, error) {
+	return kv.New(p.components()).Provision(ctx, in, log)
+}
+
+func (p *Provider) RemoveKV(ctx context.Context, ref provider.StackRef, binding provider.Binding, log progress.Log) error {
+	return kv.New(p.components()).Remove(ctx, ref, binding, log)
+}
+
+func (p *Provider) PlanTopic(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	return topic.New(p.components(), &p.queues).Plan(ctx, in, recorded)
+}
+
+func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionRequest, log progress.Log) (provider.Binding, error) {
+	return topic.New(p.components(), &p.queues).Provision(ctx, in, log)
+}
+
+func (p *Provider) RemoveTopic(ctx context.Context, ref provider.StackRef, binding provider.Binding, log progress.Log) error {
+	return topic.New(p.components(), &p.queues).Remove(ctx, ref, binding, log)
+}
+
+func (p *Provider) PlanRealtime(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	return realtime.New(p.components()).Plan(ctx, in, recorded)
+}
+
+func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.ProvisionRequest, log progress.Log) (provider.Binding, error) {
+	return realtime.New(p.components()).Provision(ctx, in, log)
+}
+
+func (p *Provider) RemoveRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, log progress.Log) error {
+	return realtime.New(p.components()).Remove(ctx, ref, binding, log)
+}
+
+func (p *Provider) PlanBucket(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	return p.buckets().Plan(ctx, in, recorded)
+}
+
+func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, log progress.Log) (provider.Binding, error) {
+	return p.buckets().Provision(ctx, in, log)
+}
+
+func (p *Provider) RemoveBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, log progress.Log) error {
+	return p.buckets().Remove(ctx, ref, binding, log)
+}
+
+func StoreName(ref provider.StackRef) string { return bucket.StoreName(ref) }
 
 func Whoami(ctx context.Context, live hostSurvey) (provider.Principal, error) {
 	return whoami(ctx, live)
@@ -70,9 +142,7 @@ func ReachVerdict(ctx context.Context, dial Reach, address string) provider.Host
 	return reachVerdict(ctx, dial, address)
 }
 
-func (p *Provider) Fronted() *Proxy { return p.options.Proxy }
-
-func FrontOf(p *Proxy) host.Front { return p.front() }
+func (p *Provider) Fronted() *front.Proxy { return p.options.Proxy }
 
 func (p *Provider) RefuseServingPortsClosedFromOutside(ctx context.Context, tier environment.Tier) error {
 	return p.refuseServingPortsClosedFromOutside(ctx, tier)

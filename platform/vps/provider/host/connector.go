@@ -8,13 +8,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
 	ConnectorBinary   = boxapi.LibDir + "/connector"
-	connectorRoot     = tierRoot + "/connector"
+	connectorRoot     = boxapi.TierRoot + "/connector"
 	ConnectorConfig   = connectorRoot + "/config.json"
 	ConnectorKey      = connectorRoot + "/key"
 	ConnectorUnit     = "ocel-connector.service"
@@ -47,19 +48,19 @@ func connectorRuntimeConf() []byte {
 	return []byte("d " + ConnectorRun + " 0755 " + deployUser + " " + deployUser + " -\n")
 }
 
-func ConnectorItems(binary, config []byte) []Item {
+func ConnectorItems(binary, config []byte) []machine.Item {
 	unit := connectorUnit()
-	return []Item{
-		{Kind: KindFile, Name: ConnectorBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
+	return []machine.Item{
+		{Kind: machine.KindFile, Name: ConnectorBinary, Mode: 0o755, Owner: machine.RootOwner, Content: binary,
 			Note: "console connector"},
-		dir(tierRoot, 0o755, rootOwner, "ocel's config root"),
-		dir(connectorRoot, 0o700, stateOwner, ""),
-		{Kind: KindFile, Name: ConnectorConfig, Mode: 0o600, Owner: stateOwner, Content: config,
+		machine.Dir(boxapi.TierRoot, 0o755, machine.RootOwner, "ocel's config root"),
+		machine.Dir(connectorRoot, 0o700, stateOwner, ""),
+		{Kind: machine.KindFile, Name: ConnectorConfig, Mode: 0o600, Owner: stateOwner, Content: config,
 			Note: "the console it trusts"},
-		{Kind: KindFile, Name: connectorTmpfiles, Mode: 0o644, Owner: rootOwner, Content: connectorRuntimeConf()},
-		dir(ConnectorRun, 0o755, stateOwner, ""),
-		{Kind: KindFile, Name: connectorUnitFile, Mode: 0o644, Owner: rootOwner, Content: unit},
-		systemdUnit(Item{Name: ConnectorUnit, Owner: rootOwner, Content: unitWatchFacts(unit, binary, config),
+		{Kind: machine.KindFile, Name: connectorTmpfiles, Mode: 0o644, Owner: machine.RootOwner, Content: connectorRuntimeConf()},
+		machine.Dir(ConnectorRun, 0o755, stateOwner, ""),
+		{Kind: machine.KindFile, Name: connectorUnitFile, Mode: 0o644, Owner: machine.RootOwner, Content: unit},
+		machine.SystemdUnit(machine.Item{Name: ConnectorUnit, Owner: machine.RootOwner, Content: machine.UnitWatchFacts(unit, binary, config),
 			Watch: []string{connectorUnitFile, ConnectorBinary, ConnectorConfig},
 			Slow:  true}),
 	}
@@ -133,23 +134,23 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 		return ConnectorState{}, err
 	}
 	items := ConnectorItems(binary, written)
-	rendered, err := c.host.Run(ctx, ssh.Root, "survey the connector this host has installed", survey(items), nil)
+	rendered, err := c.host.Run(ctx, ssh.Root, "survey the connector this host has installed", machine.SurveyScript(items), nil)
 	if err != nil {
 		return ConnectorState{}, err
 	}
-	observed, _, err := readSurvey(rendered)
+	observed, _, err := machine.ReadSurvey(rendered)
 	if err != nil {
 		return ConnectorState{}, err
 	}
 	for _, item := range items {
 		if observed[item.ID()] == item.Digest() {
-			progress.Debug(capitalized(item.phrase()) + " is " + reasonCurrent)
+			progress.Debug(machine.Capitalized(item.Phrase()) + " is " + machine.ReasonCurrent)
 			continue
 		}
 		if err := c.host.Install(ctx, item); err != nil {
 			return ConnectorState{}, err
 		}
-		progress.Say("Installed " + item.phrase())
+		progress.Say("Installed " + item.Phrase())
 	}
 	if err := c.Route(ctx, hostname); err != nil {
 		return ConnectorState{}, err

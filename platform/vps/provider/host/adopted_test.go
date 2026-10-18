@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
@@ -115,7 +116,7 @@ const coolifyDynamic = "/data/coolify/proxy/dynamic"
 func TestTheSwitchboardMountsNoDirectoryOfYourProxysSoMovingItLeavesTheSwitchboardAsItIs(t *testing.T) {
 	t.Parallel()
 
-	for what, front := range map[string]Front{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand(), "Coolify's Traefik": coolifysTraefik(), "Coolify's Caddy": coolifysCaddy()} {
+	for what, front := range map[string]front.Proxy{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand(), "Coolify's Traefik": coolifysTraefik(), "Coolify's Caddy": coolifysCaddy()} {
 		board := switchboardOf(t, front)
 		for _, bound := range board.Binds {
 			if !strings.HasSuffix(bound, ":ro") && !slices.Contains([]string{boxapi.SwitchboardControlDir, boxapi.FrontDir}, strings.SplitN(bound, ":", 2)[0]) {
@@ -204,7 +205,7 @@ func (a *adoptedBench) refusal() string {
 func adoptedBox(t *testing.T, state boxapi.RoutingTable) *adoptedBench {
 	t.Helper()
 
-	adopted := &adoptedBench{claimBench: &claimBench{bench: machine(nil), recorded: string(mustWrite(t, state))}}
+	adopted := &adoptedBench{claimBench: &claimBench{bench: newBench(nil), recorded: string(mustWrite(t, state))}}
 	adopted.placed = string(mustPlace(t, state))
 	absent := ""
 	proxied := servesPair(adopted.bench, &adopted.recorded, &absent)
@@ -487,7 +488,7 @@ func TestADeployThatFindsThePlacedFileGoneOrRewrittenPlacesItsRenderingAgain(t *
 
 			adopted := adoptedBox(t, serving)
 			drift(adopted)
-			if err := adopted.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
+			if err := adopted.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 				t.Fatalf("Release() = %v", err)
 			}
 			state, err := routing.ReadRoutingTable([]byte(adopted.recorded))
@@ -565,7 +566,7 @@ func TestAPlacedFileThatMatchesWhatTheTableRendersIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
 	adopted := adoptedBox(t, boxapi.RoutingTable{Grace: routing.DrainWindow, Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: retired}}})
-	if err := adopted.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
+	if err := adopted.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 	if adopted.count(writesProxy) == 0 {
@@ -756,12 +757,12 @@ func TestEveryRoutingFailureNamesTheFilesTheProxyActuallyKeeps(t *testing.T) {
 		"a release whose write fails beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, boxapi.RoutingTable{Grace: routing.DrainWindow, Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: retired}}})
 			failing(adopted, ssh.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{boxapi.RoutingTablePath}, []string{ProxyConfig}, adopted.fronted(routedByHand()).RollOut(context.Background(), aRollout(), progress.Discard())
+			return []string{boxapi.RoutingTablePath}, []string{ProxyConfig}, adopted.fronted(routedByHand()).containers.RollOut(context.Background(), aRollout(), progress.Discard())
 		},
 		"a release whose write fails beside a proxy that keeps its file elsewhere": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, boxapi.RoutingTable{Grace: routing.DrainWindow, Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: retired}}})
 			failing(adopted, ssh.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{boxapi.RoutingTablePath, coolifyFile}, []string{ProxyConfig}, adopted.host().RollOut(context.Background(), aRollout(), progress.Discard())
+			return []string{boxapi.RoutingTablePath, coolifyFile}, []string{ProxyConfig}, adopted.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 		},
 		"a placement whose revert fails too": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, routed())

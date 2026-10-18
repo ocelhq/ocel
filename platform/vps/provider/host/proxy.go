@@ -9,18 +9,12 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
-)
-
-const (
-	KindNetwork      = "docker:network"
-	KindContainer    = "docker:container"
-	KindProxyConfig  = "ocel:proxy-config"
-	KindRoutingTable = "ocel:routing-table"
-	KindPlaced       = "ocel:placed-file"
 )
 
 const (
@@ -49,35 +43,35 @@ func embedded(name, arch string) []byte {
 	return read
 }
 
-func ProxyItems(arch string, front Front) []Item {
+func ProxyItems(arch string, fronting front.Proxy) []machine.Item {
 	binary := switchboardBinary(arch)
-	board := switchboardBox(binary, front)
-	if front.adopted() {
-		return append([]Item{
-			dir(boxapi.SwitchboardDir, 0o755, rootOwner, ""),
-			{Kind: KindFile, Name: boxapi.SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
+	board := switchboardBox(binary, fronting)
+	if fronting.Adopted() {
+		return append([]machine.Item{
+			machine.Dir(boxapi.SwitchboardDir, 0o755, machine.RootOwner, ""),
+			{Kind: machine.KindFile, Name: boxapi.SwitchboardBinary, Mode: 0o755, Owner: machine.RootOwner, Content: binary,
 				Note: "routes every hostname and switches releases"},
-			dir(boxapi.RoutingDir, 0o750, stateOwner, ""),
+			machine.Dir(boxapi.RoutingDir, 0o750, stateOwner, ""),
 			routingTable(nil),
 			networkItem(),
-			dir(boxapi.SwitchboardControlDir, 0o755, rootOwner, "the switchboard's control socket"),
-			dir(boxapi.FrontDir, 0o700, rootOwner, ""),
-			containerItem(board, front.switchboardNote()),
-		}, front.reloadGrant()...)
+			machine.Dir(boxapi.SwitchboardControlDir, 0o755, machine.RootOwner, "the switchboard's control socket"),
+			machine.Dir(boxapi.FrontDir, 0o700, machine.RootOwner, ""),
+			containerItem(board, switchboardNote(fronting)),
+		}, fronting.Front().ReloadGrant()...)
 	}
-	return []Item{
-		dir(boxapi.SwitchboardDir, 0o755, rootOwner, ""),
-		{Kind: KindFile, Name: boxapi.SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
+	return []machine.Item{
+		machine.Dir(boxapi.SwitchboardDir, 0o755, machine.RootOwner, ""),
+		{Kind: machine.KindFile, Name: boxapi.SwitchboardBinary, Mode: 0o755, Owner: machine.RootOwner, Content: binary,
 			Note: "routes every hostname and switches releases"},
-		dir(proxyRoot, 0o750, stateOwner, ""),
-		dir(boxapi.PinsDir, 0o700, rootOwner, "your pinned certificates"),
-		dir(boxapi.RoutingDir, 0o750, stateOwner, ""),
+		machine.Dir(proxyRoot, 0o750, stateOwner, ""),
+		machine.Dir(boxapi.PinsDir, 0o700, machine.RootOwner, "your pinned certificates"),
+		machine.Dir(boxapi.RoutingDir, 0o750, stateOwner, ""),
 		proxyConfigItem(),
 		routingTableItem(),
-		dir(ProxyData, 0o700, rootOwner, "certificates and acme key"),
+		machine.Dir(ProxyData, 0o700, machine.RootOwner, "certificates and acme key"),
 		networkItem(),
-		dir(boxapi.SwitchboardControlDir, 0o755, rootOwner, "the switchboard's control socket"),
-		dir(boxapi.FrontDir, 0o700, rootOwner, "where the front proxy reaches the switchboard"),
+		machine.Dir(boxapi.SwitchboardControlDir, 0o755, machine.RootOwner, "the switchboard's control socket"),
+		machine.Dir(boxapi.FrontDir, 0o700, machine.RootOwner, "where the front proxy reaches the switchboard"),
 		containerItem(board, "routes :"+routing.SwitchboardPort+" on the "+ProxyNetwork+" network"),
 		containerItem(frontProxy(), "serves :"+caddy.HTTPPort+" and :"+caddy.HTTPSPort),
 	}
@@ -96,13 +90,13 @@ func seeded(table boxapi.RoutingTable) ([]byte, []byte) {
 	return rows, rendered
 }
 
-func proxyConfigItem() Item {
-	return Item{
-		Kind:      KindProxyConfig,
+func proxyConfigItem() machine.Item {
+	return machine.Item{
+		Kind:      machine.KindProxyConfig,
 		Name:      ProxyConfig,
-		script:    func(config Item) string { return seedingRouting(routingTable(&config), &config) },
-		survey:    seededProbe,
-		rewritten: true,
+		Script:    func(config machine.Item) string { return seedingRouting(routingTable(&config), &config) },
+		Survey:    seededProbe,
+		Rewritten: true,
 		Mode:      0o640,
 		Owner:     stateOwner,
 		Content:   seededRendering,
@@ -110,27 +104,27 @@ func proxyConfigItem() Item {
 	}
 }
 
-func routingTableItem() Item {
+func routingTableItem() machine.Item {
 	config := proxyConfigItem()
 	return routingTable(&config)
 }
 
-func routingTable(config *Item) Item {
-	return Item{
-		Kind:      KindRoutingTable,
+func routingTable(config *machine.Item) machine.Item {
+	return machine.Item{
+		Kind:      machine.KindRoutingTable,
 		Name:      boxapi.RoutingTablePath,
 		Mode:      0o640,
 		Owner:     stateOwner,
 		Content:   seededRows,
 		Note:      "seeded here, rewritten by deploys",
-		script:    func(table Item) string { return seedingRouting(table, config) },
-		survey:    seededProbe,
-		rewritten: true,
+		Script:    func(table machine.Item) string { return seedingRouting(table, config) },
+		Survey:    seededProbe,
+		Rewritten: true,
 	}
 }
 
-func seedingRouting(table Item, config *Item) string {
-	seeded := []Item{table}
+func seedingRouting(table machine.Item, config *machine.Item) string {
+	seeded := []machine.Item{table}
 	if config != nil {
 		seeded = append(seeded, *config)
 	}
@@ -141,7 +135,7 @@ func seedingRouting(table Item, config *Item) string {
 		script.WriteString("if [ -e " + at + " ] && [ ! -f " + at + " ]; then " + docker.NotAFile(item.Name) + "; fi\n")
 	}
 	script.WriteString(routing.Locked("-x") + "staged=''\ntrap 'rm -f \"$staged\"' EXIT\n")
-	seed := func(item Item) string {
+	seed := func(item machine.Item) string {
 		at := shell.Quote(item.Name)
 		return "staged=$(mktemp " + shell.Quote(item.Name+".XXXXXX") + ")\n" +
 			"printf '%s' " + shell.Quote(string(item.Content)) + " > \"$staged\"\n" +
@@ -161,21 +155,21 @@ func seedingRouting(table Item, config *Item) string {
 	return strings.TrimSuffix(script.String(), "\n")
 }
 
-func seededProbe(item Item) string {
+func seededProbe(item machine.Item) string {
 	at := shell.Quote(item.Name)
 	return "if [ -h " + at + " ]; then " +
-		reports(shell.Quote(kindLink), at, "0", "''", `"$(readlink `+at+`)"`) + "\n" +
+		machine.Reports(shell.Quote(machine.KindLink), at, "0", "''", `"$(readlink `+at+`)"`) + "\n" +
 		"elif [ -f " + at + " ]; then " +
-		reports(shell.Quote(item.Kind), at, `"$(stat -c %a `+at+`)"`, `"$(stat -c %U `+at+`)"`, "''") + "\nfi"
+		machine.Reports(shell.Quote(item.Kind), at, `"$(stat -c %a `+at+`)"`, `"$(stat -c %U `+at+`)"`, "''") + "\nfi"
 }
 
-func networkItem() Item {
-	return Item{
-		Kind:    KindNetwork,
+func networkItem() machine.Item {
+	return machine.Item{
+		Kind:    machine.KindNetwork,
 		Name:    ProxyNetwork,
-		script:  func(Item) string { return networkCommand() },
-		survey:  func(Item) string { return networkProbe() },
-		Owner:   rootOwner,
+		Script:  func(machine.Item) string { return networkCommand() },
+		Survey:  func(machine.Item) string { return networkProbe() },
+		Owner:   machine.RootOwner,
 		Content: []byte(docker.NetworkFact + "\n"),
 	}
 }
@@ -210,16 +204,16 @@ func frontProxy() docker.Service {
 	}
 }
 
-func containerItem(s docker.Service, note string) Item {
-	return Item{
-		Kind:    KindContainer,
+func containerItem(s docker.Service, note string) machine.Item {
+	return machine.Item{
+		Kind:    machine.KindContainer,
 		Name:    s.Name,
-		Owner:   rootOwner,
+		Owner:   machine.RootOwner,
 		Content: s.Facts(),
 		Slow:    true,
 		Note:    note,
-		script:  func(Item) string { return s.Writing(docker.ContainerRising) },
-		survey:  func(Item) string { return containerProbe(s) },
+		Script:  func(machine.Item) string { return s.Writing(docker.ContainerRising) },
+		Survey:  func(machine.Item) string { return containerProbe(s) },
 	}
 }
 
@@ -237,12 +231,12 @@ func networkCommand() string { return docker.EnsuringNetwork(ProxyNetwork) }
 
 func presenceProbe(kind, name, ask, fact string) string {
 	return "if command -v " + shell.Quote(dockerEngine) + " >/dev/null 2>&1 && " + ask + "; then\n" +
-		reports(shell.Quote(kind), shell.Quote(name), "0", shell.Quote(rootOwner),
+		machine.Reports(shell.Quote(kind), shell.Quote(name), "0", shell.Quote(machine.RootOwner),
 			`"$(printf '%s\n' `+shell.Quote(fact)+` | sha256sum | cut -d' ' -f1)"`) + "\nfi"
 }
 
 func networkProbe() string {
-	return presenceProbe(KindNetwork, ProxyNetwork,
+	return presenceProbe(machine.KindNetwork, ProxyNetwork,
 		"docker network inspect "+shell.Quote(ProxyNetwork)+" >/dev/null 2>&1", docker.NetworkFact)
 }
 
@@ -259,7 +253,7 @@ func containerProbe(s docker.Service) string {
 		"facts=$(docker inspect --type container --format " + shell.Quote(template) + " " + shell.Quote(s.Name) + " 2>/dev/null); then\n" +
 		normalized +
 		containerMountsProbe(s) +
-		reports(shell.Quote(KindContainer), shell.Quote(s.Name), "0", shell.Quote(rootOwner),
+		machine.Reports(shell.Quote(machine.KindContainer), shell.Quote(s.Name), "0", shell.Quote(machine.RootOwner),
 			`"$(printf '%s\n' "$facts" | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"`) + "\nfi"
 }
 
@@ -280,39 +274,37 @@ func containerMountsProbe(s docker.Service) string {
 		"facts=\"$facts\n" + docker.MountsFact + "$mounts\"\n"
 }
 
-func (f Front) placedRemovals() []removal {
-	at := routing.Destination(openFront(f, frontBox{}))
+func placedRemovals(f front.Proxy) []machine.Removal {
+	at := routing.Destination(f.Front().Open(frontBox{}))
 	if at == "" {
 		return nil
 	}
-	placed := taking(KindPlaced, at, "ocel's routes in your proxy's directory")
-	placed.origins = filepath.Dir(at)
-	if f.Caddy != nil {
-		placed.reload = f.caddyReloadCommand()
-	}
-	removals := []removal{placed}
-	for _, grant := range f.reloadGrant() {
-		removals = append(removals, taking(KindFile, grant.Name, ""))
+	placed := machine.Taking(machine.KindPlaced, at, "ocel's routes in your proxy's directory")
+	placed.Origins = filepath.Dir(at)
+	placed.Reload = f.Front().ReloadCommand()
+	removals := []machine.Removal{placed}
+	for _, grant := range f.Front().ReloadGrant() {
+		removals = append(removals, machine.Taking(machine.KindFile, grant.Name, ""))
 	}
 	return removals
 }
 
-func proxyRemovals() []removal {
-	return []removal{
-		taking(KindContainer, caddy.Container, "ocel's front proxy"),
-		taking(KindContainer, tunnel.ContainerName, "the tunnel to your edge"),
-		taking(KindContainer, boxapi.Switchboard, "ocel's switchboard"),
-		taking(KindNetwork, tunnel.Network, "kept while anything is attached"),
-		taking(KindDir, tunnel.Dir, ""),
-		taking(KindDir, boxapi.SwitchboardControlDir, ""),
-		taking(KindDir, boxapi.FrontDir, ""),
-		taking(KindDir, ProxyData, "certificates and acme key"),
-		taking(KindNetwork, ProxyNetwork, "kept while anything is attached"),
-		taking(KindProxyConfig, ProxyConfig, ""),
-		taking(KindRoutingTable, boxapi.RoutingTablePath, "every app's routes"),
-		taking(KindDir, boxapi.RoutingDir, ""),
-		taking(KindDir, proxyRoot, ""),
-		sharing(boxapi.PinsDir, "only if empty"),
-		taking(KindFile, FrontRecordPath, "which proxy fronts this box"),
+func proxyRemovals() []machine.Removal {
+	return []machine.Removal{
+		machine.Taking(machine.KindContainer, caddy.Container, "ocel's front proxy"),
+		machine.Taking(machine.KindContainer, tunnel.ContainerName, "the tunnel to your edge"),
+		machine.Taking(machine.KindContainer, boxapi.Switchboard, "ocel's switchboard"),
+		machine.Taking(machine.KindNetwork, tunnel.Network, "kept while anything is attached"),
+		machine.Taking(machine.KindDir, tunnel.Dir, ""),
+		machine.Taking(machine.KindDir, boxapi.SwitchboardControlDir, ""),
+		machine.Taking(machine.KindDir, boxapi.FrontDir, ""),
+		machine.Taking(machine.KindDir, ProxyData, "certificates and acme key"),
+		machine.Taking(machine.KindNetwork, ProxyNetwork, "kept while anything is attached"),
+		machine.Taking(machine.KindProxyConfig, ProxyConfig, ""),
+		machine.Taking(machine.KindRoutingTable, boxapi.RoutingTablePath, "every app's routes"),
+		machine.Taking(machine.KindDir, boxapi.RoutingDir, ""),
+		machine.Taking(machine.KindDir, proxyRoot, ""),
+		machine.Sharing(boxapi.PinsDir, "only if empty"),
+		machine.Taking(machine.KindFile, FrontRecordPath, "which proxy fronts this box"),
 	}
 }

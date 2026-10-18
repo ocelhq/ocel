@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -373,7 +372,7 @@ func TestABoxReportsARollbackTargetWhoseContainerAndArchiveAreBothGone(t *testin
 	checks := checksOver(boxSaying(map[string]answer{`"$scope" lost `: {stdout: "shop/web ocel/shop/web:one\n"}}))
 
 	for _, check := range checks {
-		if check.Subject == host.ReleasesDir() {
+		if check.Subject == boxapi.ReleasesDir {
 			if check.Verdict != provider.HostNeedsAction || !strings.Contains(check.Finding, "ocel/shop/web:one") {
 				t.Errorf("check = %+v, want needs-action naming ocel/shop/web:one", check)
 			}

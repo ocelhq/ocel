@@ -12,7 +12,11 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -23,11 +27,11 @@ type Host struct {
 	*ssh.Box
 	deploy      Keys
 	pins        *certs.Pins
-	proxyOption Front
+	proxyOption front.Proxy
 	front       proxy.Proxy
 
-	keying sync.Mutex
-	keyed  []byte
+	keysRead   sync.Mutex
+	cachedKeys []byte
 
 	described sync.Mutex
 	readings  map[environment.Tier]Reading
@@ -35,55 +39,62 @@ type Host struct {
 	engine  *docker.Engine
 	routing *routing.Table
 	tunnel  *tunnel.Container
+
+	images     *release.Images
+	containers *release.Containers
+	resources  *container.Containers
 }
 
-func New(box *ssh.Box, deploy Keys, pins []boxapi.Pin, front Front) *Host {
-	h := &Host{Box: box, engine: docker.NewEngine(box), deploy: deploy, pins: certs.NewPins(box, pins), proxyOption: front}
-	h.front = openFront(front, frontBox{h})
+func New(box *ssh.Box, deploy Keys, pins []boxapi.Pin, fronting front.Proxy) *Host {
+	h := &Host{Box: box, engine: docker.NewEngine(box), deploy: deploy, pins: certs.NewPins(box, pins), proxyOption: fronting}
+	h.front = fronting.Front().Open(frontBox{h})
 	h.routing = routing.NewTable(box, h.front, h.pins.Verified)
 	h.tunnel = tunnel.New(box, h.routing)
+	h.images = release.NewImages(box)
+	h.resources = container.New(box, h.engine)
+	h.containers = release.NewContainers(box, h.engine, h.routing, h.front, h.images)
 	return h
 }
 
 func (h *Host) Pins() *certs.Pins { return h.pins }
 
-func (h *Host) Install(ctx context.Context, item Item) error {
-	_, err := h.Run(ctx, ssh.Root, "write "+item.ID(), item.command(), item.stdin())
+func (h *Host) Install(ctx context.Context, item machine.Item) error {
+	_, err := h.Run(ctx, ssh.Root, "write "+item.ID(), item.Command(), item.Stdin())
 	return err
 }
 
-func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
-	switch taken.kind {
-	case KindUser:
-		_, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, "userdel -f "+shell.Quote(taken.path), nil)
+func (h *Host) remove(ctx context.Context, taken machine.Removal) (bool, error) {
+	switch taken.Kind {
+	case machine.KindUser:
+		_, err := h.Run(ctx, ssh.Root, "remove "+taken.Kind+" "+taken.Path, "userdel -f "+shell.Quote(taken.Path), nil)
 		return err == nil, err
-	case KindNetwork:
-		rendered, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
+	case machine.KindNetwork:
+		rendered, err := h.Run(ctx, ssh.Root, "remove "+taken.Kind+" "+taken.Path, taken.Command(), nil)
 		return strings.TrimSpace(rendered) != docker.NetworkInUse, err
-	case KindContainer, KindApps, KindResourceVolumes, KindAppNetworks:
-		_, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
+	case machine.KindContainer, machine.KindApps, machine.KindResourceVolumes, machine.KindAppNetworks:
+		_, err := h.Run(ctx, ssh.Root, "remove "+taken.Kind+" "+taken.Path, taken.Command(), nil)
 		return err == nil, err
-	case KindUnit:
+	case machine.KindUnit:
 		if !slices.Contains([]string{LiveService, LiveSocketUnit, BackupsTimer,
-			EnvSourceSyncService(environment.TierProduction), EnvSourceSyncService(environment.TierPreview)}, taken.path) {
+			EnvSourceSyncService(environment.TierProduction), EnvSourceSyncService(environment.TierPreview)}, taken.Path) {
 			return false, refusal.Refuse(refusal.CodeInvalid,
-				"%s %s is not ocel's to remove", taken.kind, taken.path)
+				"%s %s is not ocel's to remove", taken.Kind, taken.Path)
 		}
-		_, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
+		_, err := h.Run(ctx, ssh.Root, "remove "+taken.Kind+" "+taken.Path, taken.Command(), nil)
 		return err == nil, err
-	case KindDir, KindFile, KindSealKey, KindProxyConfig, KindRoutingTable, KindPlaced:
-		if !strings.HasPrefix(taken.path, "/") {
+	case machine.KindDir, machine.KindFile, machine.KindSealKey, machine.KindProxyConfig, machine.KindRoutingTable, machine.KindPlaced:
+		if !strings.HasPrefix(taken.Path, "/") {
 			return false, refusal.Refuse(refusal.CodeInvalid,
-				"%q is not an absolute path", taken.path)
+				"%q is not an absolute path", taken.Path)
 		}
-		rendered, err := h.Run(ctx, ssh.Root, "remove "+taken.path, taken.command(), nil)
-		if taken.kind == KindDir && taken.shared {
-			return strings.TrimSpace(rendered) != dirNonEmpty, err
+		rendered, err := h.Run(ctx, ssh.Root, "remove "+taken.Path, taken.Command(), nil)
+		if taken.Kind == machine.KindDir && taken.Shared {
+			return strings.TrimSpace(rendered) != machine.DirNonEmpty, err
 		}
 		return err == nil, err
 	default:
 		return false, refusal.Refuse(refusal.CodeInvalid,
-			"%s %s is not ocel's to remove", taken.kind, taken.path)
+			"%s %s is not ocel's to remove", taken.Kind, taken.Path)
 	}
 }
 
@@ -92,32 +103,32 @@ type Reading struct {
 	Present  bool
 	Keys     []byte
 	Arch     string
-	Stamp    Stamp
-	Seal     Seal
+	Stamp    machine.Stamp
+	Seal     machine.Seal
 	Observed map[string]string
-	Front    Front
+	Front    front.Proxy
 	Engine   InstalledEngine
 
-	recorded    []Item
+	recorded    []machine.Item
 	move        *frontMove
 	unelevated  bool
 	rerendering bool
 }
 
-func (r Reading) current(item Item) bool { return r.Observed[item.ID()] == item.Digest() }
+func (r Reading) current(item machine.Item) bool { return r.Observed[item.ID()] == item.Digest() }
 
 func (r Reading) observed(kind, path string) bool {
 	_, seen := r.Observed[kind+" "+path]
 	return seen
 }
 
-func (r Reading) unfinished() bool { return r.Present && r.Stamp.State != StateComplete }
+func (r Reading) unfinished() bool { return r.Present && r.Stamp.State != machine.StateComplete }
 
-func (r Reading) Items() []Item { return partItems(new(Host).parts(), r) }
+func (r Reading) Items() []machine.Item { return partItems(new(Host).parts(), r) }
 
 func (r Reading) upToDate() bool {
 	items := r.Items()
-	if !r.Present || r.Stamp.State != StateComplete || !r.Stamp.records(items) {
+	if !r.Present || r.Stamp.State != machine.StateComplete || !r.Stamp.Records(items) {
 		return false
 	}
 	if r.unelevated {
@@ -200,14 +211,14 @@ func (h *Host) observe(ctx context.Context, tier environment.Tier, keys []byte, 
 
 func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte, arch string, as ssh.Acting) (Reading, error) {
 	surveying := Items(tier, keys, arch, h.proxyOption)
-	if h.proxyOption.adopted() {
+	if h.proxyOption.Adopted() {
 		surveying = append(surveying, containerItem(frontProxy(), ""))
 	}
-	rendered, err := h.Run(ctx, as, "survey what "+string(tier)+" has installed", survey(surveying, StampPath(tier), FrontRecordPath, imagesLock), nil)
+	rendered, err := h.Run(ctx, as, "survey what "+string(tier)+" has installed", machine.SurveyScript(surveying, machine.StampPath(tier), FrontRecordPath, boxapi.ImagesLock), nil)
 	if err != nil {
 		return Reading{}, err
 	}
-	observed, seal, err := readSurvey(rendered)
+	observed, seal, err := machine.ReadSurvey(rendered)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -219,7 +230,7 @@ func (h *Host) read(ctx context.Context, tier environment.Tier, keys []byte, as 
 	if err != nil {
 		return Reading{}, err
 	}
-	if _, stamped := read.Observed[KindFile+" "+StampPath(tier)]; !stamped {
+	if _, stamped := read.Observed[machine.KindFile+" "+machine.StampPath(tier)]; !stamped {
 		return read, nil
 	}
 	stamp, err := h.readStamp(ctx, tier, as)
@@ -230,136 +241,33 @@ func (h *Host) read(ctx context.Context, tier environment.Tier, keys []byte, as 
 	return read, nil
 }
 
-func (h *Host) readStamp(ctx context.Context, tier environment.Tier, as ssh.Acting) (Stamp, error) {
-	rendered, err := h.Run(ctx, as, "read the stamp", "cat "+shell.Quote(StampPath(tier)), nil)
+func (h *Host) readStamp(ctx context.Context, tier environment.Tier, as ssh.Acting) (machine.Stamp, error) {
+	rendered, err := h.Run(ctx, as, "read the stamp", "cat "+shell.Quote(machine.StampPath(tier)), nil)
 	if err != nil {
-		return Stamp{}, err
+		return machine.Stamp{}, err
 	}
-	var stamp Stamp
+	var stamp machine.Stamp
 	if err := json.Unmarshal([]byte(rendered), &stamp); err != nil {
-		return Stamp{}, refusal.Refuse(refusal.CodeInvalid,
-			"%s is not a stamp this ocel can read: %s", StampPath(tier), err)
+		return machine.Stamp{}, refusal.Refuse(refusal.CodeInvalid,
+			"%s is not a stamp this ocel can read: %s", machine.StampPath(tier), err)
 	}
 	return stamp, nil
 }
 
-func (h *Host) Stamp(ctx context.Context, tier environment.Tier, stamp Stamp) error {
-	item, err := stamp.item(tier)
+func (h *Host) Stamp(ctx context.Context, tier environment.Tier, stamp machine.Stamp) error {
+	item, err := stamp.Item(tier)
 	if err != nil {
 		return err
 	}
 	return h.Install(ctx, item)
 }
 
-func survey(items []Item, also ...string) string {
-	return surveying(`[ -f "$p" ]`, items, also...)
-}
-
-func surveying(file string, items []Item, also ...string) string {
-	var probes, script strings.Builder
-	script.WriteString("for p in")
-	for _, item := range items {
-		if probe := item.probe(); probe != "" {
-			probes.WriteString(probe + "\n")
-			continue
-		}
-		script.WriteString(" " + shell.Quote(item.Name))
-	}
-	for _, path := range also {
-		script.WriteString(" " + shell.Quote(path))
-	}
-	stated, owner := `"$(stat -c %a "$p")"`, `"$(stat -c %U "$p")"`
-	script.WriteString(`; do
-if [ -h "$p" ]; then ` + reports(shell.Quote(kindLink), `"$p"`, `0`, `''`, `"$(readlink "$p")"`) + `
-elif [ -d "$p" ]; then ` + reports(shell.Quote(KindDir), `"$p"`, stated, owner, `''`) + `
-elif ` + file + `; then ` + reports(shell.Quote(KindFile), `"$p"`, stated, owner, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
-fi
-done`)
-	return probes.String() + script.String()
-}
-
-const (
-	kindLink       = "fs:link"
-	kindUnreadable = "probe:unreadable"
-)
-
-func unreadable(kind, name, why string) string {
-	return reports(shell.Quote(kindUnreadable), name, "0", shell.Quote(kind), why)
-}
-
-func column(columns []string, at int, absent string) string {
-	if at < len(columns) && columns[at] != "" {
-		return columns[at]
-	}
-	return absent
-}
-
-func remainder(columns []string, separator, absent string) string {
-	if len(columns) > 4 && columns[4] != "" {
-		return strings.Join(columns[4:], separator)
-	}
-	return absent
-}
-
-const unnamedPath = "(unnamed)"
-
-func couldNotLook(columns []string) error {
-	return refusal.Refuse(refusal.CodeNotReady,
-		"could not check %s %s on this host: %s",
-		column(columns, 3, "path"),
-		column(columns, 1, unnamedPath),
-		remainder(columns, " ", "no reason given"))
-}
-
-func pointedAway(columns []string) error {
-	named := column(columns, 1, unnamedPath)
-	return refusal.Refuse(refusal.CodeDenied,
-		"%s is a symbolic link to %s\n"+
-			"Put a real directory or file at %s",
-		named, remainder(columns, "\t", "an unreadable target"), named)
-}
-
-func reports(kind, name, mode, owner, sum string) string {
-	return strings.Join([]string{`printf '%s\t%s\t%s\t%s\t%s\n'`, kind, name, mode, owner, sum}, " ")
-}
-
-func readSurvey(rendered string) (map[string]string, Seal, error) {
-	observed := make(map[string]string)
-	var seal Seal
-	for _, line := range strings.Split(strings.Trim(rendered, "\n"), "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		columns := strings.Split(strings.TrimRight(line, "\r"), "\t")
-		if columns[0] == engineFactsRow {
-			continue
-		}
-		if columns[0] == kindLink {
-			return nil, Seal{}, pointedAway(columns)
-		}
-		if columns[0] == kindUnreadable {
-			return nil, Seal{}, couldNotLook(columns)
-		}
-		sealed := columns[0] == KindSealKey
-		if (sealed && len(columns) != 6) || (!sealed && len(columns) != 5) {
-			return nil, Seal{}, refusal.Refuse(refusal.CodeDenied,
-				"the host answered a survey line ocel cannot read: %q", line)
-		}
-		parsed, err := mode(columns[2])
-		if err != nil {
-			return nil, Seal{}, refusal.Refuse(refusal.CodeDenied,
-				"the host reported %q as the mode of %s", columns[2], columns[1])
-		}
-		content := columns[4]
-		if sealed {
-			seal = Seal{Fingerprint: columns[4], Algorithm: SealAlgorithm, CreatedAt: columns[5]}
-			content = ""
-		}
-		observed[columns[0]+" "+columns[1]] = digest(columns[0], columns[1], parsed, columns[3], content)
-	}
-	return observed, seal, nil
-}
-
 func (h *Host) Routing() *routing.Table { return h.routing }
 
 func (h *Host) Tunnel() *tunnel.Container { return h.tunnel }
+
+func (h *Host) Images() *release.Images { return h.images }
+
+func (h *Host) Containers() *release.Containers { return h.containers }
+
+func (h *Host) Resources() *container.Containers { return h.resources }

@@ -13,9 +13,10 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 )
 
-func (vm machine) queries(t *testing.T, binding provider.Binding, statement string) string {
+func (vm liveBox) queries(t *testing.T, binding provider.Binding, statement string) string {
 	t.Helper()
 	props := binding.Properties
 	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.Config.Image}}' "+quote(props[provider.PropertyHost])))
@@ -48,7 +49,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	if published := strings.TrimSpace(vm.ssh(t, "sudo docker port "+quote(name))); published != "" {
 		t.Errorf("the server publishes %q on the box, and a database the machine's own address reaches is one the internet does", published)
 	}
-	kept := strings.TrimSpace(vm.ssh(t, "sudo cat "+quote(host.KeptPath(environment.TierProduction, name))))
+	kept := strings.TrimSpace(vm.ssh(t, "sudo cat "+quote(container.KeptPath(environment.TierProduction, name))))
 	if kept == "" || strings.Contains(kept, binding.Properties[provider.PropertyPassword]) {
 		t.Errorf("the box keeps %d bytes for %s, and what it keeps is the password itself or nothing", len(kept), name)
 	}
@@ -68,7 +69,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Errorf("the data a second deploy finds is %q, want the row the first one wrote", said)
 	}
 
-	dumped := strings.TrimSpace(vm.ssh(t, "sudo "+host.BackupsHelper+" production dump "+quote(name)+" main"))
+	dumped := strings.TrimSpace(vm.ssh(t, "sudo "+boxapi.BackupsHelper+" production dump "+quote(name)+" main"))
 	if !vm.exists(t, dumped) {
 		t.Fatalf("the helper said it dumped %s to %q and nothing exists there", name, dumped)
 	}
@@ -99,10 +100,10 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	if volumes := strings.TrimSpace(vm.ssh(t, "sudo docker volume ls -q --filter name="+quote("^"+name))); volumes != "" {
 		t.Errorf("the volume %q outlives the stack that declared it, and nothing after this reclaims the disk", volumes)
 	}
-	if vm.exists(t, host.BackupsDir(environment.TierProduction, name)) {
+	if vm.exists(t, boxapi.BackupsDir(environment.TierProduction, name)) {
 		t.Errorf("the dumps taken of %s outlive the stack that declared it", name)
 	}
-	if vm.exists(t, host.KeptPath(environment.TierProduction, name)) {
+	if vm.exists(t, container.KeptPath(environment.TierProduction, name)) {
 		t.Errorf("the sealed password for %s outlives the server it opened", name)
 	}
 }

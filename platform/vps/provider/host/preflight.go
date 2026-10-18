@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
@@ -37,12 +37,12 @@ func (h *Host) CheckEngine(ctx context.Context) error {
 		return refusal.Refuse(refusal.CodeDenied,
 			"%s is refused by the docker socket: %s\n"+
 				"Deploy as %s (set `user` under `ssh` to it), whose docker `ocel bootstrap %s` routes through checked sudo, or as a login with sudo without a password",
-			h.Named(), ssh.Spoken(result), deployUser, environment.TierProduction)
+			h.Named(), ssh.Reason(result), deployUser, environment.TierProduction)
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s cannot run docker: %s\n"+
 			"Run `ocel bootstrap %s` or install docker",
-		h.Named(), ssh.Spoken(result), environment.TierProduction)
+		h.Named(), ssh.Reason(result), environment.TierProduction)
 }
 
 type RepoImages struct {
@@ -232,7 +232,7 @@ func (h *Host) CheckProxy(ctx context.Context) error {
 		return err
 	}
 	asking := []docker.Service{switchboardBox(nil, h.proxyOption)}
-	if !h.proxyOption.adopted() {
+	if !h.proxyOption.Adopted() {
 		asking = append(asking, frontProxy())
 	}
 	for _, asked := range asking {
@@ -264,7 +264,7 @@ func (h *Host) answers(ctx context.Context, asked docker.Service, elevation ssh.
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s on %s %s: %s\n"+
 			"Run `ocel bootstrap %s`",
-		asked.Name, h.Named(), asked.Unready, ssh.Spoken(result), environment.TierProduction)
+		asked.Name, h.Named(), asked.Unready, ssh.Reason(result), environment.TierProduction)
 }
 
 const (
@@ -301,7 +301,7 @@ func (h *Host) containerTrouble(name, state string) error {
 
 func (h *Host) ProxyOwnsServingPorts(ctx context.Context) error {
 	trouble, owner := h.ownProxyTrouble, caddy.Container
-	if h.proxyOption.adopted() {
+	if h.proxyOption.Adopted() {
 		trouble, owner = h.yourProxyTrouble, "your proxy"
 	}
 	found, err := trouble(ctx)
@@ -426,7 +426,7 @@ func withOwner(owners []portOwner, name string, container bool, port string) []p
 }
 
 func (h *Host) publisherOf(read Reading, elevation ssh.Acting) func(context.Context, string) ([]string, error) {
-	if !read.observed(KindEngine, dockerEngine) {
+	if !read.observed(machine.KindEngine, dockerEngine) {
 		return func(context.Context, string) ([]string, error) { return nil, nil }
 	}
 	return func(ctx context.Context, port string) ([]string, error) {
@@ -435,32 +435,12 @@ func (h *Host) publisherOf(read Reading, elevation ssh.Acting) func(context.Cont
 	}
 }
 
-func (h *Host) refuseTraefikUnreachable(ctx context.Context, read Reading) error {
-	fronting := h.proxyOption.Traefik
-	if fronting.Network != "" {
-		return nil
-	}
-	elevation, err := ssh.Root, h.Assume(ctx, ssh.Root)
-	if err != nil {
-		return err
-	}
-	containers, err := h.publisherOf(read, elevation)(ctx, proxy.HTTPSPort)
-	if err != nil || len(containers) == 0 {
-		return err
-	}
-	named := strings.Join(containers, " and ")
-	return refusal.Refuse(refusal.CodeNotReady,
-		"container %s publishes :%s from a docker network, where %s:%d is its own loopback and not this box's, so it cannot reach ocel's switchboard\n"+
-			"Set `proxy.traefik.network` to the docker network %s is on, or run %s with network_mode: host",
-		named, proxy.HTTPSPort, loopbackAddr, fronting.Port, named, named)
-}
-
 func (h *Host) refuseServingPortsHeld(ctx context.Context, read Reading) error {
 	move := read.move
 	switch {
-	case move == nil && h.proxyOption.adopted(), move != nil && move.isSameProcess():
+	case move == nil && h.proxyOption.Adopted(), move != nil && move.isSameProcess():
 		return h.refuseProxyUnreachable(ctx, read)
-	case move != nil && move.resumed && move.to.adopted():
+	case move != nil && move.resumed && move.to.Adopted():
 		return nil
 	case move != nil && move.resumed:
 		move = nil
@@ -473,7 +453,7 @@ func (h *Host) refuseServingPortsHeld(ctx context.Context, read Reading) error {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s, which %s takes over from %s\n"+
 				"Ocel never stops a proxy it does not run: %s, then run `%s` again",
-			owners.uses(), move.to.named(), move.from.named(), owners.freed("docker stop"), provider.BootstrapCommand(read.Tier))
+			owners.uses(), move.to.Front().Named(), move.from.Front().Named(), owners.freed("docker stop"), provider.BootstrapCommand(read.Tier))
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s, where ocel's own proxy serves\n"+
@@ -483,14 +463,12 @@ func (h *Host) refuseServingPortsHeld(ctx context.Context, read Reading) error {
 }
 
 func (h *Host) refuseProxyUnreachable(ctx context.Context, read Reading) error {
-	switch {
-	case h.proxyOption.Caddy != nil:
-		return h.proxyOption.caddyfile(frontBox{h}).RefuseUnreachable(ctx)
-	case h.proxyOption.Traefik != nil:
-		return h.refuseTraefikUnreachable(ctx, read)
-	default:
-		return nil
-	}
+	return h.proxyOption.Front().RefuseUnreachable(ctx, frontBox{h}, func(ctx context.Context, port string) ([]string, error) {
+		if err := h.Assume(ctx, ssh.Root); err != nil {
+			return nil, err
+		}
+		return h.publisherOf(read, ssh.Root)(ctx, port)
+	})
 }
 
 func (h *Host) readServingOwners(ctx context.Context, read Reading) (portOwners, error) {

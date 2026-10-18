@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 )
 
 func executable(t *testing.T, path, body string) {
@@ -107,7 +109,7 @@ func TestAStubTheHarnessWritesRunsWhileTheRestOfTheSuiteForks(t *testing.T) {
 					missed.progress(string(rendered))
 					continue
 				}
-				observed, _, err := readSurvey(string(rendered))
+				observed, _, err := machine.ReadSurvey(string(rendered))
 				if err != nil {
 					missed.progress(err.Error())
 					continue

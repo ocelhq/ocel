@@ -7,17 +7,18 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func servingAs(t *testing.T, box *bench, served ResourceContainer, status string) {
+func servingAs(t *testing.T, box *bench, served container.Spec, status string) {
 	t.Helper()
-	limited, err := box.host().limited(context.Background(), served)
+	limited, err := box.host().resources.Limited(context.Background(), served)
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest, err := limited.digest()
+	digest, err := limited.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,9 +44,9 @@ func refuseResourceWrites(t *testing.T, box *bench) {
 func TestAResourceServingTheSpecItWasRunWithPlansKeep(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	servingAs(t, box, resourced(), "running")
-	action, reason, err := box.host().PlanResource(context.Background(), resourced())
+	action, reason, err := box.host().resources.Plan(context.Background(), resourced())
 	if err != nil {
 		t.Fatalf("PlanResource() = %v", err)
 	}
@@ -58,8 +59,8 @@ func TestAResourceServingTheSpecItWasRunWithPlansKeep(t *testing.T) {
 func TestAMissingResourcePlansACreate(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
-	action, _, err := box.host().PlanResource(context.Background(), resourced())
+	box := newBench(nil)
+	action, _, err := box.host().resources.Plan(context.Background(), resourced())
 	if err != nil {
 		t.Fatalf("PlanResource() = %v", err)
 	}
@@ -72,11 +73,11 @@ func TestAMissingResourcePlansACreate(t *testing.T) {
 func TestAResourceWhoseImageChangesPlansAReplaceNamingBothImages(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	older := resourced()
 	older.Image = "public.ecr.aws/docker/library/postgres:16.10@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	servingAs(t, box, older, "running")
-	action, reason, err := box.host().PlanResource(context.Background(), resourced())
+	action, reason, err := box.host().resources.Plan(context.Background(), resourced())
 	if err != nil {
 		t.Fatalf("PlanResource() = %v", err)
 	}
@@ -94,11 +95,11 @@ func TestAResourceWhoseImageChangesPlansAReplaceNamingBothImages(t *testing.T) {
 func TestAResourceWhoseSettingsChangePlansAReplace(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	servingAs(t, box, resourced(), "running")
 	changed := resourced()
 	changed.Env = map[string]string{"POSTGRES_DB": "orders"}
-	action, reason, err := box.host().PlanResource(context.Background(), changed)
+	action, reason, err := box.host().resources.Plan(context.Background(), changed)
 	if err != nil {
 		t.Fatalf("PlanResource() = %v", err)
 	}
@@ -111,9 +112,9 @@ func TestAResourceWhoseSettingsChangePlansAReplace(t *testing.T) {
 func TestAStoppedResourcePlansAReplaceSayingItIsStartedAnew(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	servingAs(t, box, resourced(), "exited")
-	action, reason, err := box.host().PlanResource(context.Background(), resourced())
+	action, reason, err := box.host().resources.Plan(context.Background(), resourced())
 	if err != nil {
 		t.Fatalf("PlanResource() = %v", err)
 	}
@@ -127,7 +128,7 @@ func TestAResourceOnDataOfAnotherVersionPlansAReplaceNamingBothVersions(t *testi
 
 	spec := resourced()
 	spec.Volume.Generation = "17"
-	box := machine(nil)
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, shell.Quote(docker.ServingSelectors())):
@@ -137,7 +138,7 @@ func TestAResourceOnDataOfAnotherVersionPlansAReplaceNamingBothVersions(t *testi
 		}
 		return ssh.Result{}, false
 	}
-	action, reason, err := box.host().PlanResource(context.Background(), spec)
+	action, reason, err := box.host().resources.Plan(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("PlanResource() = %v", err)
 	}
@@ -152,7 +153,7 @@ func TestPlanningAnUpgradeOverAStoppedServerIsRefusedAsRunningItWouldBe(t *testi
 
 	spec := resourced()
 	spec.Volume.Generation = "17"
-	box := machine(nil)
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, shell.Quote(docker.ServingSelectors())):
@@ -162,7 +163,7 @@ func TestPlanningAnUpgradeOverAStoppedServerIsRefusedAsRunningItWouldBe(t *testi
 		}
 		return ssh.Result{}, false
 	}
-	_, _, err := box.host().PlanResource(context.Background(), spec)
+	_, _, err := box.host().resources.Plan(context.Background(), spec)
 	if err == nil || !strings.Contains(err.Error(), "Run `docker start "+spec.Name+"`") {
 		t.Errorf("PlanResource() = %v, want the refusal RunResource gives over a stopped server with older data", err)
 	}

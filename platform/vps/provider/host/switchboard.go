@@ -9,6 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -17,7 +19,7 @@ import (
 
 func switchboardBinary(arch string) []byte { return embedded(boxapi.Switchboard, arch) }
 
-func switchboardBox(binary []byte, front Front) docker.Service {
+func switchboardBox(binary []byte, fronting front.Proxy) docker.Service {
 	return docker.Service{
 		Memory: switchboardMemoryBytes,
 		Name:   boxapi.Switchboard,
@@ -28,10 +30,10 @@ func switchboardBox(binary []byte, front Front) docker.Service {
 			"--admit", boxapi.AdmitSocket,
 			"--table", boxapi.RoutingTablePath,
 			"--tunnel-listen", tunnel.Network + ":" + boxapi.TunnelListenPort,
-		}, front.listening()...),
-		Ports:    front.published(),
-		Networks: append(front.joined(), docker.Network{Name: tunnel.Network, CreatedByOcel: true}),
-		Config:   contentSum(binary),
+		}, fronting.Front().Listening()...),
+		Ports:    fronting.Front().Published(),
+		Networks: append(fronting.Front().Joined(), docker.Network{Name: tunnel.Network, CreatedByOcel: true}),
+		Config:   machine.ContentSum(binary),
 		Binds: []string{
 			boxapi.SwitchboardDir + ":" + boxapi.SwitchboardMount + ":ro",
 			boxapi.RoutingDir + ":" + boxapi.RoutingDir + ":ro",
@@ -98,7 +100,7 @@ func (h *Host) restoreSwitchboard(ctx context.Context, elevation ssh.Acting) err
 		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s container on %s, and starting it again failed: %s\n"+
 				"Run `ocel bootstrap %s`",
-			board.Name, h.Named(), ssh.Spoken(result), environment.TierProduction)
+			board.Name, h.Named(), ssh.Reason(result), environment.TierProduction)
 	}
 	return nil
 }

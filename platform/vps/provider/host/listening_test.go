@@ -12,7 +12,7 @@ import (
 )
 
 func unprivileged() *bench {
-	b := machine(nil)
+	b := newBench(nil)
 	b.facts = ssh.Facts{Root: false, Systemd: true, Arch: "x86_64"}
 	b.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, listeners.TCPPath) {

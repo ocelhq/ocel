@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
-type machine struct {
+type liveBox struct {
 	addr   string
 	user   string
 	key    string
@@ -30,7 +30,7 @@ type machine struct {
 	dir    string
 }
 
-var suite machine
+var suite liveBox
 
 const unreachable = "no incus VM in the environment; run under `scripts/incus.sh run <name> -- go test ./...`"
 
@@ -50,19 +50,19 @@ func TestMain(m *testing.M) {
 	code = m.Run()
 }
 
-func handed() (vm machine, err error) {
-	vm = machine{
+func handed() (vm liveBox, err error) {
+	vm = liveBox{
 		addr: os.Getenv("OCEL_INCUS_ADDR"),
 		user: os.Getenv("OCEL_INCUS_USER"),
 		key:  os.Getenv("OCEL_INCUS_KEY"),
 	}
 	if vm.user == "" || vm.key == "" {
-		return machine{}, errors.New("OCEL_INCUS_ADDR is set and OCEL_INCUS_USER or OCEL_INCUS_KEY is not")
+		return liveBox{}, errors.New("OCEL_INCUS_ADDR is set and OCEL_INCUS_USER or OCEL_INCUS_KEY is not")
 	}
 
 	dir, err := os.MkdirTemp("", "ocel-live-")
 	if err != nil {
-		return machine{}, err
+		return liveBox{}, err
 	}
 	vm.dir = dir
 	defer func() {
@@ -73,13 +73,13 @@ func handed() (vm machine, err error) {
 	vm.known = filepath.Join(dir, "known_hosts")
 	scanned, err := exec.Command("ssh-keyscan", "-T", "10", vm.addr).Output()
 	if err != nil {
-		return machine{}, fmt.Errorf("ssh-keyscan %s: %w", vm.addr, err)
+		return liveBox{}, fmt.Errorf("ssh-keyscan %s: %w", vm.addr, err)
 	}
 	if len(strings.TrimSpace(string(scanned))) == 0 {
-		return machine{}, fmt.Errorf("ssh-keyscan %s offered no host key", vm.addr)
+		return liveBox{}, fmt.Errorf("ssh-keyscan %s offered no host key", vm.addr)
 	}
 	if err := os.WriteFile(vm.known, scanned, 0o600); err != nil {
-		return machine{}, err
+		return liveBox{}, err
 	}
 
 	vm.config = filepath.Join(dir, "config")
@@ -87,33 +87,33 @@ func handed() (vm machine, err error) {
 		"  ControlMaster auto\n  ControlPath %s\n  ControlPersist %s\n",
 		vm.known, filepath.Join(dir, "%C"), masterIdle)
 	if err := os.WriteFile(vm.config, []byte(written), 0o600); err != nil {
-		return machine{}, err
+		return liveBox{}, err
 	}
 	return vm, nil
 }
 
 const masterIdle = "600"
 
-func (vm machine) hangsUp() {
+func (vm liveBox) hangsUp() {
 	for _, login := range []string{vm.user, deployLogin} {
 		vm.hangsUpAs(login)
 	}
 	os.RemoveAll(vm.dir)
 }
 
-func (vm machine) hangsUpAs(login string) {
+func (vm liveBox) hangsUpAs(login string) {
 	_ = exec.Command("ssh", "-F", vm.config, "-i", vm.key,
 		"-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
 		"-O", "exit", login+"@"+vm.addr).Run()
 }
 
-func (vm machine) purges(t *testing.T) {
+func (vm liveBox) purges(t *testing.T) {
 	t.Helper()
 	vm.ssh(t, "sudo docker rm -f "+caddy.Container+" "+boxapi.Switchboard+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
 }
 
-func (vm machine) forgetsTheDeployLogin(t *testing.T) {
+func (vm liveBox) forgetsTheDeployLogin(t *testing.T) {
 	t.Helper()
 	vm.hangsUpAs(deployLogin)
 	vm.ssh(t, "sudo userdel "+deployLogin+" 2>/dev/null || true")
@@ -123,7 +123,7 @@ func (vm machine) forgetsTheDeployLogin(t *testing.T) {
 	}
 }
 
-func liveMachine(t *testing.T) machine {
+func liveMachine(t *testing.T) liveBox {
 	t.Helper()
 	if suite.addr == "" {
 		t.Fatal(unreachable)
@@ -137,7 +137,7 @@ func withPins(pinned map[string]string) shaping {
 	return func(o *vps.Options) { o.Certificates = pinned }
 }
 
-func (vm machine) provider(t *testing.T, shaped ...shaping) *vps.Provider {
+func (vm liveBox) provider(t *testing.T, shaped ...shaping) *vps.Provider {
 	t.Helper()
 	options := vps.Options{SSH: vps.Target{
 		Host:         vm.addr,

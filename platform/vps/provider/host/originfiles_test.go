@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
@@ -155,13 +156,13 @@ func TestADeployPlacesTheOriginCertificatesYourProxyNamesWithTheRenderingThatNam
 func TestDestroyUnplacesTheOriginCertificatesBesideOcelsFileOnceYourProxyNoLongerNamesThem(t *testing.T) {
 	t.Parallel()
 
-	for name, front := range map[string]func(dir string) Front{
-		"your Caddy": func(dir string) Front {
-			filled := CaddyFront{Directory: dir, Container: "caddy", Network: "web"}.Filled()
-			return Front{Caddy: &filled}
+	for name, front := range map[string]func(dir string) front.Proxy{
+		"your Caddy": func(dir string) front.Proxy {
+			filled := front.Caddy{Directory: dir, Container: "caddy", Network: "web"}.Filled()
+			return front.Proxy{Caddy: &filled}
 		},
-		"your Traefik": func(dir string) Front {
-			return Front{Traefik: &TraefikFront{Directory: dir, Resolver: "letsencrypt", Entrypoints: Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "web"}}
+		"your Traefik": func(dir string) front.Proxy {
+			return front.Proxy{Traefik: &front.Traefik{Directory: dir, Resolver: "letsencrypt", Entrypoints: &front.Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "web"}}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -174,11 +175,11 @@ func TestDestroyUnplacesTheOriginCertificatesBesideOcelsFileOnceYourProxyNoLonge
 					t.Fatal(err)
 				}
 			}
-			taken := front(dir).placedRemovals()[0]
-			if command := taken.command(); !strings.Contains(command, shell.Quote("unplace-origins")) {
+			taken := placedRemovals(front(dir))[0]
+			if command := taken.Command(); !strings.Contains(command, shell.Quote("unplace-origins")) {
 				t.Errorf("the destroy runs\n%s\nwant the origin certificates unplaced", command)
 			}
-			run := exec.Command("sh", "-c", taken.command())
+			run := exec.Command("sh", "-c", taken.Command())
 			run.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 			if said, err := run.CombinedOutput(); err != nil {
 				t.Fatalf("the removal failed: %v\n%s", err, said)

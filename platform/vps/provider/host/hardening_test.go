@@ -7,6 +7,9 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
@@ -25,7 +28,7 @@ func capabilitiesAdded(argv []string) []string {
 func TestAnAppContainerIsConfinedAndItsLogIsRotated(t *testing.T) {
 	t.Parallel()
 
-	argv := containerRun(valued(), handedTo(valued()))
+	argv := release.ContainerRun(valued(), handedTo(valued()))
 	command := shell.Words(argv)
 	for what, wanted := range map[string]string{
 		"every capability dropped before any is handed back": shell.Quote("--cap-drop") + " " + shell.Quote("ALL"),
@@ -40,8 +43,8 @@ func TestAnAppContainerIsConfinedAndItsLogIsRotated(t *testing.T) {
 		}
 	}
 	added := capabilitiesAdded(argv)
-	if !slices.Equal(added, appCapabilities) {
-		t.Errorf("the container is handed back %v, want %v", added, appCapabilities)
+	if !slices.Equal(added, release.AppCapabilities) {
+		t.Errorf("the container is handed back %v, want %v", added, release.AppCapabilities)
 	}
 	for _, refused := range []string{"NET_RAW", "SYS_ADMIN", "MKNOD", "SYS_CHROOT", "AUDIT_WRITE", "SETFCAP", "NET_ADMIN", "SYS_PTRACE"} {
 		if slices.Contains(added, refused) {
@@ -82,10 +85,10 @@ func TestNoContainerOcelRunsMayOpenHostFilesByHandle(t *testing.T) {
 
 	for what, argv := range map[string][]string{
 		"the proxy":          frontProxy().Run(),
-		"the switchboard":    switchboardBox(nil, Front{}).Run(),
+		"the switchboard":    switchboardBox(nil, front.Proxy{}).Run(),
 		"a placement":        routing.Placement("/data/proxy", "origin-group"),
-		"an app":             containerRun(valued(), handedTo(valued())),
-		"a resource":         resourceRun(resourced(), "0123456789ab", "/tmp/handed.env"),
+		"an app":             release.ContainerRun(valued(), handedTo(valued())),
+		"a resource":         container.Run(resourced(), "0123456789ab", "/tmp/handed.env"),
 		"the tunnel":         tunnel.Service(boxapi.Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector()).Run(),
 		"the tunnel's token": tunnel.TokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d"),
 	} {

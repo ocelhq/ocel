@@ -19,31 +19,47 @@ import (
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/component"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/kv"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/realtime"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 const Vendor provider.Vendor = "vps"
 
 type Provider struct {
-	options   Options
-	project   string
-	host      *host.Host
-	routing   *routing.Table
-	keyValues records.Store
-	cipher    *boxstore.Cipher
+	options    Options
+	project    string
+	host       *host.Host
+	routing    *routing.Table
+	tunnel     *tunnel.Container
+	pins       *certs.Pins
+	containers *release.Containers
+	images     *release.Images
+	ssh        *ssh.Box
+	resources  *container.Containers
+	keyValues  records.Store
+	cipher     *boxstore.Cipher
 
 	transform transform.Pass
 	resolve   Lookup
 	reaches   Reach
 	now       func() time.Time
 
-	stores liveStores
-	queues queueDatabases
+	stores bucket.Stores
+	queues topic.QueueDatabases
 
-	dial sync.Mutex
-	live *ssh.Session
+	dial       sync.Mutex
+	sshSession *ssh.Session
 
 	liveness.Net
 }
@@ -59,7 +75,7 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 	if port := decoded.SSH.Port; port != 0 && (port < 1 || port > 65535) {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "option %q names port %d, which is outside 1-65535", "ssh", port)
 	}
-	if err := decoded.Proxy.usable(decoded.Certificates); err != nil {
+	if err := decoded.Proxy.RefuseUnusable(decoded.Certificates); err != nil {
 		return nil, err
 	}
 	p := NewProvider(decoded)
@@ -110,11 +126,11 @@ func (p *Provider) Hooks() provider.Hooks {
 
 func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
-		Postgres:   &resources.ResourceHooks{Plan: p.PlanPostgres, Provision: p.ProvisionPostgres, Remove: p.RemovePostgres},
-		Bucket:     &resources.ResourceHooks{Plan: p.PlanBucket, Provision: p.ProvisionBucket, Remove: p.RemoveBucket},
-		KV:         &resources.ResourceHooks{Plan: p.PlanKV, Provision: p.ProvisionKV, Remove: p.RemoveKV},
-		Topic:      &resources.ResourceHooks{Plan: p.PlanTopic, Provision: p.ProvisionTopic, Remove: p.RemoveTopic},
-		Realtime:   &resources.ResourceHooks{Plan: p.PlanRealtime, Provision: p.ProvisionRealtime, Remove: p.RemoveRealtime},
+		Postgres:   component.Hooks(postgres.New(p.components())),
+		Bucket:     component.Hooks(p.buckets()),
+		KV:         component.Hooks(kv.New(p.components())),
+		Topic:      component.Hooks(topic.New(p.components(), &p.queues)),
+		Realtime:   component.Hooks(realtime.New(p.components())),
 		Containers: &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
 		Retention:  &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
 	}
@@ -155,3 +171,10 @@ func (p *Provider) Runtime() provider.Runtime { return containerRuntime{p} }
 func (p *Provider) Liveness() provider.Liveness { return &p.Net }
 
 func (p *Provider) Logs() provider.Logs { return logs{p} }
+
+func nodePass(root string, modules []string) transform.Pass {
+	return transform.NodePass{
+		Root: root, Modules: modules,
+		Uninstalled: "Install `@ocel/transforms` as a devDependency",
+	}
+}

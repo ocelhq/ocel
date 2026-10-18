@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -39,10 +41,10 @@ func imaged(b *bench, present bool) {
 }
 
 func TestAnImageTheMachineAlreadyHasIsAnswered(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	imaged(rig, true)
 
-	has, err := rig.host().HasImage(context.Background(), imageRef)
+	has, err := rig.host().images.Has(context.Background(), imageRef)
 	if err != nil {
 		t.Fatalf("HasImage() = %v", err)
 	}
@@ -58,10 +60,10 @@ func TestAnImageTheMachineAlreadyHasIsAnswered(t *testing.T) {
 }
 
 func TestAnImageTheMachineDoesNotHaveIsAbsentRatherThanAFailure(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	imaged(rig, false)
 
-	has, err := rig.host().HasImage(context.Background(), imageRef)
+	has, err := rig.host().images.Has(context.Background(), imageRef)
 	if err != nil {
 		t.Fatalf("HasImage() over a machine that does not have it = %v, want an absence", err)
 	}
@@ -71,7 +73,7 @@ func TestAnImageTheMachineDoesNotHaveIsAbsentRatherThanAFailure(t *testing.T) {
 }
 
 func TestADaemonThatDoesNotAnswerIsRefusedRatherThanReadAsAnAbsence(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	rig.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker image ls") {
 			return ssh.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true
@@ -79,7 +81,7 @@ func TestADaemonThatDoesNotAnswerIsRefusedRatherThanReadAsAnAbsence(t *testing.T
 		return ssh.Result{}, false
 	}
 
-	_, err := rig.host().HasImage(context.Background(), imageRef)
+	_, err := rig.host().images.Has(context.Background(), imageRef)
 	if err == nil {
 		t.Fatal("HasImage() read a daemon that is not running as an image that is merely absent, so the transfer would be attempted against nothing")
 	}
@@ -89,10 +91,10 @@ func TestADaemonThatDoesNotAnswerIsRefusedRatherThanReadAsAnAbsence(t *testing.T
 }
 
 func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	imaged(rig, false)
 
-	said, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes"))
+	said, err := rig.host().images.Load(context.Background(), imageRef, strings.NewReader("tar-bytes"))
 	if err != nil {
 		t.Fatalf("LoadImage() = %v", err)
 	}
@@ -108,7 +110,7 @@ func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.
 		switch {
 		case strings.Contains(command, "docker load"):
 			loaded = true
-			if !strings.Contains(command, "flock -x "+shell.Quote(imagesLock)+" docker load") {
+			if !strings.Contains(command, "flock -x "+shell.Quote(boxapi.ImagesLock)+" docker load") {
 				t.Errorf("the load runs as %q and takes no lock: two deploys loading onto one box at once share base layers, and the daemon's import writes each blob under one ingest ref, so the second load finds the first's lock and ends with an image missing content", command)
 			}
 		case loaded && strings.Contains(command, "docker image ls"):
@@ -121,7 +123,7 @@ func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.
 }
 
 func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	rig.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker image ls"):
@@ -135,7 +137,7 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 		}
 	}
 
-	_, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes"))
+	_, err := rig.host().images.Load(context.Background(), imageRef, strings.NewReader("tar-bytes"))
 	if err == nil {
 		t.Fatal("LoadImage() succeeded where the machine answers to no such imageRef afterwards")
 	}
@@ -147,7 +149,7 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 }
 
 func refusedPull(said string) (*bench, *int) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	var asked int
 	rig.answer = func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, "docker pull") {
@@ -166,7 +168,7 @@ const (
 
 func pulled(t *testing.T, rig *bench, server, hex string) error {
 	t.Helper()
-	_, err := rig.host().PullImage(context.Background(),
+	_, err := rig.host().images.Pull(context.Background(),
 		provider.RegistryTarget{Server: server, Namespace: "acme"},
 		server+"/acme/web:sha256-"+hex, "sha256:"+hex)
 	return err
@@ -202,13 +204,13 @@ func TestAThrottledPullIsStillAskedAgainWhereTheDaemonSaysSo(t *testing.T) {
 	if err := pulled(t, rig, "registry.example.com:9443", plainHex); err == nil {
 		t.Fatal("PullImage() = nil over a registry that throttled every pull")
 	}
-	if *asked != pullAttempts {
-		t.Errorf("the machine was told to pull %d times over a registry that throttled it, want %d", *asked, pullAttempts)
+	if *asked != release.PullAttempts {
+		t.Errorf("the machine was told to pull %d times over a registry that throttled it, want %d", *asked, release.PullAttempts)
 	}
 }
 
 func TestALoginOutsideTheDockerGroupReachesTheDaemonAsRoot(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	rig.facts = ssh.Facts{Systemd: true}
 	rig.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker") && !strings.HasPrefix(command, "sudo -n ") {
@@ -220,7 +222,7 @@ func TestALoginOutsideTheDockerGroupReachesTheDaemonAsRoot(t *testing.T) {
 		return ssh.Result{}, false
 	}
 
-	has, err := rig.host().HasImage(context.Background(), imageRef)
+	has, err := rig.host().images.Has(context.Background(), imageRef)
 	if err != nil {
 		t.Fatalf("HasImage() as a login outside the docker group = %v", err)
 	}
@@ -230,7 +232,7 @@ func TestALoginOutsideTheDockerGroupReachesTheDaemonAsRoot(t *testing.T) {
 }
 
 func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	rig.facts = ssh.Facts{Systemd: true}
 	var probes int
 	rig.answer = func(command string) (ssh.Result, bool) {
@@ -245,7 +247,7 @@ func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
 	}
 	h := rig.host()
 
-	_, err := h.HasImage(context.Background(), imageRef)
+	_, err := h.images.Has(context.Background(), imageRef)
 	if err == nil {
 		t.Fatal("HasImage() over a machine whose daemon is down succeeded")
 	}
@@ -256,7 +258,7 @@ func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
 		t.Errorf("HasImage() = %v: a daemon that is down is reported as a login that cannot become root", err)
 	}
 
-	if _, err := h.HasImage(context.Background(), imageRef); err == nil {
+	if _, err := h.images.Has(context.Background(), imageRef); err == nil {
 		t.Fatal("HasImage() = nil on a second ask over the same dead daemon")
 	}
 	if probes != 2 {
@@ -265,12 +267,12 @@ func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
 }
 
 func TestTheDaemonIsFoundOnceHoweverManyImagesAreAskedAbout(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	imaged(rig, true)
 	h := rig.host()
 
 	for range 3 {
-		if _, err := h.HasImage(context.Background(), imageRef); err != nil {
+		if _, err := h.images.Has(context.Background(), imageRef); err != nil {
 			t.Fatal(err)
 		}
 	}

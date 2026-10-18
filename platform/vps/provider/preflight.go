@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
@@ -100,7 +101,7 @@ func refuseScaledContainers(spec provider.DeploySpec) error {
 func repositories(spec provider.DeploySpec) []string {
 	var named []string
 	for _, app := range spec.Apps {
-		repository, ok := host.Repository(app.Image)
+		repository, ok := release.Repository(app.Image)
 		if !ok || slices.Contains(named, repository) {
 			continue
 		}

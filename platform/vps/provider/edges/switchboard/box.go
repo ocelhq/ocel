@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
@@ -23,15 +23,21 @@ const (
 
 type Machine interface {
 	Address(ctx context.Context) (string, error)
-	EnsureImage(ctx context.Context, project, app, imageRef string) (bool, error)
-	RunContainer(ctx context.Context, spec host.Container) (host.Run, error)
-	ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error
-	Promote(ctx context.Context, tier environment.Tier, project, app, imageRef string) error
-	RollOut(ctx context.Context, rollout host.Rollout, progress progress.Log) error
-	Discard(ctx context.Context, rollout host.Rollout) string
 	Pins() *certs.Pins
 	RouteBy(hostname string) string
 	RefuseUnshielded(ctx context.Context, hostname string) error
+}
+
+type Containers interface {
+	Run(ctx context.Context, spec release.Container) (release.Run, error)
+	ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error
+	RollOut(ctx context.Context, rollout release.Rollout, progress progress.Log) error
+	Discard(ctx context.Context, rollout release.Rollout) string
+}
+
+type Images interface {
+	Ensure(ctx context.Context, project, app, imageRef string) (bool, error)
+	Promote(ctx context.Context, tier environment.Tier, project, app, imageRef string) error
 }
 
 type TunnelContainer interface {
@@ -65,20 +71,35 @@ type Origins func(ctx context.Context, project string, tier environment.Tier) er
 
 type RecordedGate func(ctx context.Context, tier environment.Tier, project string) (*gate.Gate, error)
 
+type Box struct {
+	Machine    Machine
+	Containers Containers
+	Images     Images
+	Routes     Routes
+	Tunnel     TunnelContainer
+	Origins    Origins
+	Scope      string
+	Tunnels    Tunnels
+	ReadGate   RecordedGate
+}
+
 type Edge struct {
-	machine  Machine
-	routes   Routes
-	tunnel   TunnelContainer
-	origins  Origins
-	scope    string
-	tunnels  Tunnels
-	readGate RecordedGate
+	machine    Machine
+	containers Containers
+	images     Images
+	routes     Routes
+	tunnel     TunnelContainer
+	origins    Origins
+	scope      string
+	tunnels    Tunnels
+	readGate   RecordedGate
 }
 
 var _ edge.Edge = (*Edge)(nil)
 
-func New(machine Machine, routes Routes, tunnel TunnelContainer, origins Origins, scope string, tunnels Tunnels, readGate RecordedGate) *Edge {
-	return &Edge{machine: machine, routes: routes, tunnel: tunnel, origins: origins, scope: scope, tunnels: tunnels, readGate: readGate}
+func New(box Box) *Edge {
+	return &Edge{machine: box.Machine, containers: box.Containers, images: box.Images, routes: box.Routes, tunnel: box.Tunnel,
+		origins: box.Origins, scope: box.Scope, tunnels: box.Tunnels, readGate: box.ReadGate}
 }
 
 func (e *Edge) Kind() edge.Kind { return edge.None }

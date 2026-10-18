@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -77,7 +78,7 @@ func TestTheDeployDocumentNamesEveryGrantTheApplyMakes(t *testing.T) {
 
 	document := rendered(t, edge.PurposeDeploy).Document
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		for _, grant := range host.Grants(tier, host.Front{}) {
+		for _, grant := range host.Grants(tier, front.Proxy{}) {
 			for _, want := range []string{grant.Name, grant.Detail} {
 				if !strings.Contains(document, want) {
 					t.Errorf("the deploy document does not include %q, so it claims less than a bootstrap hands out:\n%s", want, document)
@@ -92,7 +93,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 
 	document := rendered(t, edge.PurposeDeploy).Document
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		for _, item := range host.Items(tier, nil, ssh.AMD64, host.Front{}) {
+		for _, item := range host.Items(tier, nil, ssh.AMD64, front.Proxy{}) {
 			if item.Owner != "ocel-deploy" || item.Kind == "linux:user" {
 				continue
 			}
@@ -105,7 +106,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 
 func describedGroups(t *testing.T, tier environment.Tier) string {
 	t.Helper()
-	for _, item := range host.Items(tier, nil, ssh.AMD64, host.Front{}) {
+	for _, item := range host.Items(tier, nil, ssh.AMD64, front.Proxy{}) {
 		if item.Kind != "linux:user" {
 			continue
 		}
@@ -128,7 +129,7 @@ func TestTheDeployDocumentSaysTheDeployLoginReachesDockerOnlyThroughTheCheck(t *
 		t.Fatalf("apply writes the deploy login into %q, and the docker group is root on the machine under another name", groups)
 	}
 	var claim host.Grant
-	for _, grant := range host.Grants(tier, host.Front{}) {
+	for _, grant := range host.Grants(tier, front.Proxy{}) {
 		if strings.HasPrefix(grant.Name, "runs docker only through ") {
 			claim = grant
 		}
@@ -149,7 +150,7 @@ func TestTheDeployDocumentIncludesEverySudoersLineBootstrapWrites(t *testing.T) 
 
 	document := rendered(t, edge.PurposeDeploy).Document
 	sealing := false
-	for _, item := range host.Items(environment.TierProduction, nil, ssh.AMD64, host.Front{}) {
+	for _, item := range host.Items(environment.TierProduction, nil, ssh.AMD64, front.Proxy{}) {
 		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
 			continue
 		}
@@ -166,11 +167,11 @@ func TestTheDeployDocumentIncludesEverySudoersLineBootstrapWrites(t *testing.T) 
 func TestTheDeployDocumentNamesTheCaddyReloadLineOnlyBehindACaddyService(t *testing.T) {
 	t.Parallel()
 
-	for proxy, want := range map[*vps.Proxy]bool{
+	for proxy, want := range map[*front.Proxy]bool{
 		nil: false,
-		{Caddy: &vps.Caddy{Directory: "/etc/caddy/ocel.d"}}:                                     true,
-		{Caddy: &vps.Caddy{Directory: "/etc/caddy/ocel.d", Container: "caddy", Network: "web"}}: false,
-		{Caddy: &vps.Caddy{Preset: "coolify"}}:                                                  false,
+		{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d"}}:                                     true,
+		{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d", Container: "caddy", Network: "web"}}: false,
+		{Caddy: &front.Caddy{Preset: "coolify"}}:                                                  false,
 	} {
 		p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}, Proxy: proxy})
 		document, err := p.Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)

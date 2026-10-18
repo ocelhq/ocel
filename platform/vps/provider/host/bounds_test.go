@@ -12,6 +12,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
@@ -120,7 +123,7 @@ func TestAnImageInspectThatStallsIsCutOffAndThePullStillRuns(t *testing.T) {
 func TestAContainerWhoseInspectStallsIsReportedNotRisenWithinItsAttempts(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, switchboardBox(nil, Front{}).Rising(2))
+	ran := runAgainstStalledDocker(t, switchboardBox(nil, front.Proxy{}).Rising(2))
 	if ran.failed == nil {
 		t.Fatalf("a container docker never described rose:\n%s", ran.said)
 	}
@@ -178,7 +181,7 @@ func TestAResourceWhoseProbeNeverReturnsIsGivenUpOnWithinItsWindow(t *testing.T)
 
 	spec := resourced()
 	spec.Ready = []string{"curl", "-fsS", "http://127.0.0.1:9000/health/ready"}
-	ran := runAgainstStalledDocker(t, readyCommand(spec, 2))
+	ran := runAgainstStalledDocker(t, container.ReadyCommand(spec, 2))
 	if ran.failed == nil {
 		t.Fatalf("a resource whose probe never returned was called ready:\n%s", ran.said)
 	}
@@ -195,17 +198,17 @@ func TestEveryDockerCallThatTakesAContainerDownIsBounded(t *testing.T) {
 
 	for what, take := range map[string]func(*Host) error{
 		"TakeDown": func(h *Host) error {
-			return h.TakeDown(context.Background(), environment.TierProduction, physical)
+			return h.containers.TakeDown(context.Background(), environment.TierProduction, physical)
 		},
-		"RetireContainer": func(h *Host) error { return h.RetireContainer(context.Background(), physical) },
-		"RemoveContainer": func(h *Host) error { return h.RemoveContainer(context.Background(), physical) },
+		"RetireContainer": func(h *Host) error { return h.containers.Retire(context.Background(), physical) },
+		"RemoveContainer": func(h *Host) error { return h.containers.Remove(context.Background(), physical) },
 		"RemoveResource": func(h *Host) error {
-			return h.RemoveResource(context.Background(), ResourceRef{
+			return h.resources.Remove(context.Background(), container.Ref{
 				Tier: environment.TierProduction, Project: "shop", Resource: "store", Name: "shop-prod-store-s3",
 			})
 		},
 	} {
-		box := machine(nil)
+		box := newBench(nil)
 		if err := take(box.host()); err != nil {
 			t.Fatalf("%s() = %v", what, err)
 		}
@@ -224,7 +227,7 @@ func TestEveryDockerCallThatTakesAContainerDownIsBounded(t *testing.T) {
 func TestAResourceIsRunWithinABound(t *testing.T) {
 	t.Parallel()
 
-	script := runResourceScript(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name))
+	script := container.RunScript(resourced(), "0123456789ab", envfile.Path(resourced().Tier, resourced().Name))
 	for _, line := range strings.Split(script, "\n") {
 		if at := strings.Index(line, shell.Quote("docker")+" "+shell.Quote("run")); at >= 0 && !strings.Contains(line[:at], "timeout ") {
 			t.Errorf("the resource is started with no time bound on docker run:\n%s", line)
@@ -266,7 +269,7 @@ func TestAWaitOnTheRoutingLockGivesUpNamingTheLockRatherThanWaitingForever(t *te
 func TestASwitchboardStartedAgainPullsItsImageBeforeItTakesTheRoutingLock(t *testing.T) {
 	t.Parallel()
 
-	script := switchboardBox(nil, Front{}).Restoring(docker.ContainerRising, routing.Locked("-x"))
+	script := switchboardBox(nil, front.Proxy{}).Restoring(docker.ContainerRising, routing.Locked("-x"))
 	pull, locked := strings.Index(script, "docker pull"), strings.Index(script, routing.Locked("-x"))
 	if pull < 0 || locked < 0 {
 		t.Fatalf("restoring the switchboard neither pulls nor locks:\n%s", script)

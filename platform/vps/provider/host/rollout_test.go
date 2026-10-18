@@ -18,7 +18,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -41,17 +43,17 @@ var (
 	apiNextTarget = apiCurrent + ":" + containerimage.PortText
 )
 
-func aRollout() Rollout {
-	return Rollout{
-		Apps:          []AppRollout{{RouteKey: keyed("web"), Target: nextTarget, HealthPath: "/healthz"}},
+func aRollout() release.Rollout {
+	return release.Rollout{
+		Apps:          []release.AppRollout{{RouteKey: keyed("web"), Target: nextTarget, HealthPath: "/healthz"}},
 		DeployTimeout: 30 * time.Second,
 		DrainTimeout:  30 * time.Second,
 	}
 }
 
-func bothApps() Rollout {
+func bothApps() release.Rollout {
 	rollout := aRollout()
-	rollout.Apps = append(rollout.Apps, AppRollout{RouteKey: keyed("api"), Target: apiNextTarget, HealthPath: "/up"})
+	rollout.Apps = append(rollout.Apps, release.AppRollout{RouteKey: keyed("api"), Target: apiNextTarget, HealthPath: "/up"})
 	return rollout
 }
 
@@ -145,7 +147,7 @@ func upstreamsOf(state boxapi.RoutingTable) map[string]string {
 
 func benchedOn(t *testing.T, recorded string, gate, cutover ssh.Result) *rolloutBench {
 	t.Helper()
-	box := &rolloutBench{bench: machine(nil), recorded: recorded}
+	box := &rolloutBench{bench: newBench(nil), recorded: recorded}
 	proxied := servesProxy(box.bench, &box.recorded)
 	var once sync.Once
 	box.answer = func(command string) (ssh.Result, bool) {
@@ -173,10 +175,10 @@ func benched(t *testing.T, gate, cutover ssh.Result) *rolloutBench {
 	return benchedOn(t, configFor(t, retired), gate, cutover)
 }
 
-func rolledOut(t *testing.T, rollout Rollout, gate, cutover ssh.Result, progress progress.Log) (*rolloutBench, error) {
+func rolledOut(t *testing.T, rollout release.Rollout, gate, cutover ssh.Result, progress progress.Log) (*rolloutBench, error) {
 	t.Helper()
 	box := benched(t, gate, cutover)
-	return box, box.host().RollOut(context.Background(), rollout, progress)
+	return box, box.host().containers.RollOut(context.Background(), rollout, progress)
 }
 
 func unserved(err error) bool {
@@ -196,7 +198,7 @@ func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneCutover(t *testing.T) {
 		}
 		return proxied(command)
 	}
-	if err := box.host().RollOut(context.Background(), bothApps(), progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), bothApps(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut(web and api) = %v", err)
 	}
 
@@ -254,7 +256,7 @@ func TestAGateOneAppFailsWritesNothingAndCutsOverNoApp(t *testing.T) {
 	box := benchedOn(t, before,
 		ssh.Result{Code: 4, Stdout: boxapi.Ungated + " " + apiNextTarget + "/up\n", Stderr: apiNextTarget + " never answered /up within 30s"},
 		ssh.Result{})
-	err := box.host().RollOut(context.Background(), bothApps(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), bothApps(), progress.Discard())
 	if err == nil {
 		t.Fatal("a promotion whose api never came up released successfully")
 	}
@@ -278,7 +280,7 @@ func TestAGateOneAppFailsWritesNothingAndCutsOverNoApp(t *testing.T) {
 	if strings.Contains(err.Error(), "gate: http://"+nextTarget) {
 		t.Errorf("the refusal reads\n%s\nand blames web, whose gate passed", err)
 	}
-	if box.at(logCommand(apiCurrent)) < 0 {
+	if box.at(release.LogCommand(apiCurrent)) < 0 {
 		t.Errorf("the refusal read no logs off %s, the container whose gate failed: %v", apiCurrent, box.commands())
 	}
 }
@@ -288,7 +290,7 @@ func TestACutoverThatFailsPutsEveryAppBackOntoItsPreviousUpstreamAndPostsIt(t *t
 
 	box := benchedOn(t, twoAppsServing(t), ssh.Result{},
 		ssh.Result{Code: 2, Stderr: "the proxy answered /load with 400 Bad Request: unknown module"})
-	err := box.host().RollOut(context.Background(), bothApps(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), bothApps(), progress.Discard())
 	if err == nil {
 		t.Fatal("a promotion whose cutover the proxy rejected released successfully")
 	}
@@ -344,7 +346,7 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 		return proxied(command)
 	}
 
-	if err := box.host().RollOut(context.Background(), bothApps(), progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), bothApps(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() beside a neighbour that wrote after the gate = %v: a moved digest is recomposed onto, not refused", err)
 	}
 	if gated := box.count(gates); gated != 1 {
@@ -370,7 +372,7 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndCutsOverNothing(t *testing.T) {
 		}
 		return proxied(command)
 	}
-	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("a write refused on every attempt failed with %v, want %s: another writer is writing to the box, and the deploy is told to run again", err, refusal.CodeBusy)
@@ -401,7 +403,7 @@ func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) 
 			t.Parallel()
 
 			box := benchedOn(t, configFor(t, nextTarget), answer[0], answer[1])
-			if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
+			if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
 				t.Fatalf("a release failing at %s released successfully", what)
 			}
 			if box.at("docker rm --force "+shell.Quote(physical)) >= 0 {
@@ -516,7 +518,7 @@ func TestACutoverThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.
 		}
 		return err
 	}
-	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("a cutover that never came back released successfully")
 	}
@@ -546,7 +548,7 @@ func TestAFirstDeployThatFailsLeavesNothingServingAndIsNotAPathOfItsOwn(t *testi
 
 	box := benchedOn(t, documentOf(t, boxapi.RoutingTable{Grace: 30 * time.Second}),
 		ssh.Result{Code: 3, Stderr: "answered /healthz with status 500"}, ssh.Result{})
-	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
+	if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
 		t.Fatal("a first deploy whose app never came up released successfully")
 	}
 	if box.at("docker stop") >= 0 {
@@ -566,7 +568,7 @@ func TestAGateOnADiscoveredHealthPathThatFailsSaysItWasFoundByProbingAndHowToNam
 	if err == nil {
 		t.Fatal("a release whose gate failed released successfully")
 	}
-	for _, want := range []string{"found earlier by probing", `"compute.container.health.path"`, healthPathExample} {
+	for _, want := range []string{"found earlier by probing", `"compute.container.health.path"`, release.HealthPathExample} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal reads\n%s\nand never says %q", err, want)
 		}
@@ -593,7 +595,7 @@ func TestAReleaseWithNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing.T) 
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 				t.Errorf("a release with %s failed with %v, want the seam to name what is missing rather than the helper's usage error", what, err)
 			}
-			if !strings.Contains(err.Error(), healthKey) || !strings.Contains(err.Error(), "api") {
+			if !strings.Contains(err.Error(), release.HealthKey) || !strings.Contains(err.Error(), "api") {
 				t.Errorf("a release with %s is refused with\n%s\nwhich never names the app or the key that sets it", what, err)
 			}
 			if box.at(shell.Quote("gate")) >= 0 || box.after(-1, writesProxy) >= 0 {
@@ -615,7 +617,7 @@ func TestAReleaseWithNothingToRetireNeverAsksForADrain(t *testing.T) {
 	t.Parallel()
 
 	box := benchedOn(t, documentOf(t, boxapi.RoutingTable{Grace: 30 * time.Second}), ssh.Result{}, ssh.Result{})
-	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	for _, command := range box.commands() {
@@ -640,7 +642,7 @@ func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUps
 		}
 		return proxied(command)
 	}
-	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	want, err := routing.RenderProxyConfig(caddy.Builtin{}, boxapi.RoutingTable{
@@ -772,7 +774,7 @@ func TestAWriteThatDiesBetweenItsMovesLeavesTheTableItWroteRatherThanTheConfig(t
 
 	after := string(mustWrite(t, routed()))
 	here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routing.Lock, dir).Replace
-	write := exec.Command("/bin/sh", "-c", here(routing.StagedWrite(routing.Digest(contentSum([]byte(before))), ProxyConfig, nil)))
+	write := exec.Command("/bin/sh", "-c", here(routing.StagedWrite(routing.Digest(machine.ContentSum([]byte(before))), ProxyConfig, nil)))
 	write.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 	write.Stdin = strings.NewReader(routing.PairFed(routing.Pair{Table: []byte(after), Config: mustRender(t, routed())}))
 	if err := write.Run(); err == nil {
@@ -790,7 +792,7 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 	t.Parallel()
 
 	prior := configFor(t, retired)
-	box := &rolloutBench{bench: machine(nil), recorded: prior}
+	box := &rolloutBench{bench: newBench(nil), recorded: prior}
 	config := renderedFrom(prior)
 	proxied := servesPair(box.bench, &box.recorded, &config)
 	died := false
@@ -817,7 +819,7 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 		}
 	}
 
-	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("RollOut() over a write that died between its moves = nil, want the release refused")
 	}
@@ -856,7 +858,7 @@ func TestAWriteOntoABoxMissingEitherFileSaysToBootstrapIt(t *testing.T) {
 			}
 		}
 		here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routing.Lock, dir).Replace
-		write := exec.Command("/bin/sh", "-c", here(routing.StagedWrite(routing.Digest(contentSum(written)), ProxyConfig, nil)))
+		write := exec.Command("/bin/sh", "-c", here(routing.StagedWrite(routing.Digest(machine.ContentSum(written)), ProxyConfig, nil)))
 		write.Stdin = strings.NewReader(routing.PairFed(routing.Pair{Table: mustWrite(t, routed()), Config: mustRender(t, routed())}))
 		err := write.Run()
 		var exited *exec.ExitError
@@ -937,7 +939,7 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 			t.Fatal(err)
 		}
 	}
-	read := routing.Digest(contentSum([]byte("the table both writers read")))
+	read := routing.Digest(machine.ContentSum([]byte("the table both writers read")))
 
 	racing := make(chan error, 2)
 	for _, writer := range []string{"one", "the other"} {
@@ -991,7 +993,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 		return proxied(command)
 	}
 
-	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() beside a deploy that rewrote %s after it was read = %v: the compare-and-set exists to refuse a lost update, not a neighbour", ProxyConfig, err)
 	}
 	state := box.state(t)
@@ -1013,7 +1015,7 @@ func TestAFailureAfterTheCutoverSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(
 		return proxied(command)
 	}
 
-	err := box.host().RollOut(context.Background(), aRollout(), progress)
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress)
 	if err == nil {
 		t.Fatal("the stop after the cutover was refused and the release reported success")
 	}
@@ -1055,7 +1057,7 @@ func diagnosed(t *testing.T, gate ssh.Result, state, logs string) string {
 			return proxied(command)
 		}
 	}
-	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("a release the gate refused returned no error at all")
 	}
@@ -1080,11 +1082,11 @@ func TestAHungAppIsDiagnosedByTheCombinationAndNeverByOneLine(t *testing.T) {
 		"the verdict the helper reached":      "never answered",
 		"the exact target it probed":          physical + ":" + containerimage.PortText,
 		"the path it probed":                  "/healthz",
-		"the config key that changes it":      healthKey,
+		"the config key that changes it":      release.HealthKey,
 		"the deploy timeout that expired":     "30s",
 		"the state that says it never exited": "Status=running",
 		"the restart count":                   "RestartCount=0",
-		"the absence of logs, said out loud":  noLogOutput,
+		"the absence of logs, said out loud":  release.NoLogOutput,
 	} {
 		if !strings.Contains(said, wanted) {
 			t.Errorf("a hung app is refused with\n%s\nand that names no %s (%s)", said, what, wanted)
@@ -1157,7 +1159,7 @@ func refusedAfter(t *testing.T, putBack ssh.Result) (*rolloutBench, error) {
 		}
 		return proxied(command)
 	}
-	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("a release the helper refused returned no error at all")
 	}
@@ -1210,7 +1212,7 @@ func strandedByWrite(t *testing.T, landed bool, back ssh.Result) (*rolloutBench,
 		}
 		return proxied(command)
 	}
-	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("a release whose cutover configuration was never written released successfully")
 	}
@@ -1290,7 +1292,7 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 
 	quiet := &fake.Log{}
 	first := benchedOn(t, documentOf(t, boxapi.RoutingTable{Grace: 30 * time.Second}), ssh.Result{}, ssh.Result{})
-	if err := first.host().RollOut(context.Background(), aRollout(), quiet); err != nil {
+	if err := first.host().containers.RollOut(context.Background(), aRollout(), quiet); err != nil {
 		t.Fatal(err)
 	}
 	if stated := strings.Join(quiet.Lines(), "\n"); strings.Contains(stated, "Draining") {
@@ -1328,7 +1330,7 @@ func TestAReleaseInterruptedAtTheCutoverStillPutsTheProxyBackAndRemovesWhatItSta
 		}
 		return hit
 	}, ssh.Result{Code: 2, Stderr: "the proxy answered nothing"})
-	err := box.host().RollOut(ctx, aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(ctx, aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("a release whose cutover failed under a cancelled context released successfully")
 	}
@@ -1355,7 +1357,7 @@ func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItS
 		writes++
 		return writes == 1
 	}, ssh.Result{Code: 1, Stderr: "connection reset after the move"})
-	err := box.host().RollOut(ctx, aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(ctx, aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("a release whose cutover configuration was never confirmed released successfully")
 	}
@@ -1391,7 +1393,7 @@ func TestWhatFollowsTheCutoverLeavesARouteAnotherReleaseCutOverSinceOnItsUpstrea
 		return proxied(command)
 	}
 
-	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	if got := upstreamsOf(box.state(t))["web"]; got != overtaking {
@@ -1411,7 +1413,7 @@ func TestARetireeThatWouldNotStopSaysTheCutoverTookAndStillStopsEveryOther(t *te
 		return proxied(command)
 	}
 
-	err := box.host().RollOut(context.Background(), bothApps(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), bothApps(), progress.Discard())
 	if err == nil {
 		t.Fatal("a release whose retiree would not stop reported success")
 	}
@@ -1460,7 +1462,7 @@ func TestARetireeAlreadyGoneFromTheBoxIsNoStopTheReleaseFailedToMake(t *testing.
 				return proxied(command)
 			}
 
-			err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+			err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 			stopped := !strings.HasSuffix(running, " true\n") && running != ""
 			if stopped && err != nil {
 				t.Errorf("a release whose refused stop of %s was followed by a box that %s = %v, want it served: a container that is not running is the end the stop was for",
@@ -1486,7 +1488,7 @@ func TestWhatFollowsTheCutoverNeverStopsARetireeARouteDialsAgainOrAnotherCutover
 		return proxied(command)
 	}
 
-	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	if box.at("docker stop "+shell.Quote(retiring)) >= 0 {
@@ -1511,7 +1513,7 @@ func TestWhatFollowsTheCutoverNeverStopsARetireeARollbackRoutedBeforeItsCutoverR
 		return proxied(command)
 	}
 
-	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	if box.at("docker stop "+shell.Quote(retiring)) >= 0 {
@@ -1531,7 +1533,7 @@ func TestWhatFollowsTheCutoverCannotAskWhetherItsRetireeIsIdleStopsNothingAndSay
 		return proxied(command)
 	}
 
-	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 	if box.at("docker stop "+shell.Quote(retiring)) >= 0 {
 		t.Errorf("the release stopped %s without knowing whether a route dials it again", retiring)
 	}
@@ -1550,7 +1552,7 @@ func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.
 		return refusal.Refuse(refusal.CodeBusy, "promotion p2 no longer owns production: p3 took it")
 	}
 
-	err := box.host().RollOut(context.Background(), rollout, progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), rollout, progress.Discard())
 	if err == nil {
 		t.Fatal("a release whose promotion was overtaken released successfully")
 	}
@@ -1589,7 +1591,7 @@ func TestAFailedReleaseLeavesATargetAnotherReleaseIsStillDrainingForThatReleaseT
 				}
 				return answered(command)
 			}
-			if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
+			if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
 				t.Fatalf("a release failing at %s released successfully", what)
 			}
 			if box.at("docker rm --force "+shell.Quote(physical)) >= 0 {
@@ -1610,7 +1612,7 @@ func TestAFailedReleaseThatCannotAskWhetherItsTargetIsIdleRemovesNothingAndSaysS
 		}
 		return answered(command)
 	}
-	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("a release whose gate failed released successfully")
 	}
@@ -1638,10 +1640,10 @@ func TestARefusedRollbackStopsTheContainerItStartedAgainRatherThanRemovingIt(t *
 			t.Parallel()
 
 			rollback := aRollout()
-			rollback.Apps[0].Run = RunRestarted
+			rollback.Apps[0].Run = release.RunRestarted
 			rollback.StillActive = refused.refuse
 			box := benched(t, refused.gate, ssh.Result{})
-			err := box.host().RollOut(context.Background(), rollback, progress.Discard())
+			err := box.host().containers.RollOut(context.Background(), rollback, progress.Discard())
 			if !unserved(err) {
 				t.Fatalf("RollOut() refused by %s = %v, want a refusal that says the box never served it", what, err)
 			}
@@ -1662,9 +1664,9 @@ func TestARefusedRollOutRemovesAContainerItKeptWhereNothingRoutesToIt(t *testing
 	t.Parallel()
 
 	kept := aRollout()
-	kept.Apps[0].Run = RunKept
+	kept.Apps[0].Run = release.RunKept
 	box := benched(t, ssh.Result{Code: 3, Stderr: "answered /healthz with status 503"}, ssh.Result{})
-	if err := box.host().RollOut(context.Background(), kept, progress.Discard()); !unserved(err) {
+	if err := box.host().containers.RollOut(context.Background(), kept, progress.Discard()); !unserved(err) {
 		t.Fatalf("RollOut() whose gate failed = %v, want a refusal that says the box never served it", err)
 	}
 	if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
@@ -1687,7 +1689,7 @@ func TestAReleaseThatCannotReachDockerStillRemovesTheContainersItWouldHaveServed
 		}
 		return answered(command)
 	}
-	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard())
 	if !unserved(err) {
 		t.Fatalf("RollOut() over an unreachable daemon = %v, want a refusal that says the box never served it", err)
 	}
@@ -1703,7 +1705,7 @@ func TestAReleaseOfNoAppsTouchesNothing(t *testing.T) {
 	t.Parallel()
 
 	box := benched(t, ssh.Result{}, ssh.Result{})
-	if err := box.host().RollOut(context.Background(), Rollout{DeployTimeout: 30 * time.Second, DrainTimeout: 30 * time.Second}, progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), release.Rollout{DeployTimeout: 30 * time.Second, DrainTimeout: 30 * time.Second}, progress.Discard()); err != nil {
 		t.Fatalf("RollOut() of no apps = %v", err)
 	}
 	if ran := box.commands(); len(ran) != 0 {
@@ -1732,7 +1734,7 @@ func TestACutoverConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *te
 		return proxied(command)
 	}
 
-	err := box.host().RollOut(context.Background(), bothApps(), progress.Discard())
+	err := box.host().containers.RollOut(context.Background(), bothApps(), progress.Discard())
 	if err == nil {
 		t.Fatal("a promotion whose cutover configuration reported failure released successfully")
 	}
@@ -1761,7 +1763,7 @@ func TestARoutingTableThatReadsBackTornIsRefusedWithoutQuotingIt(t *testing.T) {
 
 	const key = "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----\n"
 	table := base64.StdEncoding.EncodeToString([]byte(`{"shields":[{"hostname":"shop.example.com","key":"` + key + `"}]}`))
-	box := machine(nil)
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "base64 <") {
 			return ssh.Result{Stdout: "+" + table}, true
@@ -1790,7 +1792,7 @@ func TestAPreviewMovingOnLeavesTheContainerADeploymentPointerStillRoutesToRunnin
 		},
 	}), ssh.Result{}, ssh.Result{})
 
-	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	if box.at("docker stop "+shell.Quote(retiring)) >= 0 {

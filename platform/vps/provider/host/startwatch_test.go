@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -22,7 +23,7 @@ func searchedOnCrashing(found ssh.Result, state string) *bench {
 		switch {
 		case command == docker.StateCommand(physical):
 			return ssh.Result{Stdout: state}, true
-		case command == renderLastRunLogs(physical):
+		case command == release.RenderLastRunLogs(physical):
 			return ssh.Result{Stdout: "Error: Cannot find module '/app/index.js'\nocel: the app exited: exit status 1\n"}, true
 		case strings.HasPrefix(command, "docker logs"):
 			return ssh.Result{Stdout: "2026-01-01T00:00:01Z first run\n2026-01-01T00:00:09Z last run\n"}, true
@@ -41,22 +42,22 @@ func TestAnAppWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStartAndNeve
 	t.Parallel()
 
 	for what, found := range map[string]ssh.Result{
-		"the watcher stopped the probe": {Code: 1, Stdout: unstartedMarker + " " + physical + "\n"},
+		"the watcher stopped the probe": {Code: 1, Stdout: release.UnstartedMarker + " " + physical + "\n"},
 		"the probe ran out its window":  {Code: 4, Stderr: nextTarget + " never answered /up within 1m0s"},
 	} {
 		box := searchedOnCrashing(found, crashLooping)
-		_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
+		_, err := box.host().containers.FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 			t.Fatalf("%s: FindHealthPath() = %v, want a not-ready refusal", what, err)
 		}
 		said := err.Error()
-		for _, want := range []string{"start node on", "failing to start, not failing a health check", "RestartCount=10", "logs (its last run, last " + appLogTail + " lines):\nError: Cannot find module '/app/index.js'", physical + " removed"} {
+		for _, want := range []string{"start node on", "failing to start, not failing a health check", "RestartCount=10", "logs (its last run, last " + release.LogTail + " lines):\nError: Cannot find module '/app/index.js'", physical + " removed"} {
 			if !strings.Contains(said, want) {
 				t.Errorf("%s: the refusal reads\n%s\nand never says %q", what, said, want)
 			}
 		}
-		for _, misleading := range []string{healthKey, "never answered", "first run"} {
+		for _, misleading := range []string{release.HealthKey, "never answered", "first run"} {
 			if strings.Contains(said, misleading) {
 				t.Errorf("%s: the refusal reads\n%s\nand says %q, which points at a health check or at a run before the last", what, said, misleading)
 			}
@@ -69,7 +70,7 @@ func TestAnAppStillRunningWhenTheProbeGivesUpIsRefusedAsNeverAnswering(t *testin
 
 	box := searchedOnCrashing(ssh.Result{Code: 4, Stderr: nextTarget + " never answered /up within 1m0s"},
 		"Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0")
-	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
+	_, err := box.host().containers.FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "never answered /up") || strings.Contains(err.Error(), "failing to start") {
 		t.Errorf("FindHealthPath() = %v, want a running app that never answered refused as never answering", err)
 	}
@@ -79,7 +80,7 @@ func TestAGateWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStart(t *tes
 	t.Parallel()
 
 	for what, gate := range map[string]ssh.Result{
-		"the watcher stopped the gate": {Code: 1, Stdout: unstartedMarker + " " + physical + "\n"},
+		"the watcher stopped the gate": {Code: 1, Stdout: release.UnstartedMarker + " " + physical + "\n"},
 		"the gate ran out its window":  {Code: 4, Stderr: nextTarget + " never answered /healthz within 30s"},
 	} {
 		said := diagnosed(t, gate, crashLooping, "Error: Cannot find module '/app/index.js'\n")
@@ -99,7 +100,7 @@ func TestTheGateWatchesEveryContainerItReleases(t *testing.T) {
 		t.Fatalf("Release() = %v", err)
 	}
 	gated := box.commands()[box.at(shell.Quote("gate"))]
-	for _, name := range []string{containerOf(nextTarget), containerOf(apiNextTarget)} {
+	for _, name := range []string{release.ContainerOf(nextTarget), release.ContainerOf(apiNextTarget)} {
 		if !strings.Contains(gated, insideWatch("crashed "+shell.Quote(name))) {
 			t.Errorf("the gate ran\n%s\nand never watches %s", gated, name)
 		}
@@ -109,8 +110,8 @@ func TestTheGateWatchesEveryContainerItReleases(t *testing.T) {
 func TestTheLastRunsLogsAreReadFromWhenItStartedAndNoMoreThanTheTail(t *testing.T) {
 	t.Parallel()
 
-	command := renderLastRunLogs(physical)
-	for _, want := range []string{`--since "$started"`, "--tail " + appLogTail} {
+	command := release.RenderLastRunLogs(physical)
+	for _, want := range []string{`--since "$started"`, "--tail " + release.LogTail} {
 		if !strings.Contains(command, want) {
 			t.Errorf("the last run's logs are read with\n%s\nwhich has no %s: an app that logs fast before it dies would hand back every line it wrote", command, want)
 		}

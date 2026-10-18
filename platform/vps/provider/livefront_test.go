@@ -21,6 +21,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
@@ -59,7 +60,7 @@ func frontScript(t *testing.T, front, step string) []byte {
 	return script
 }
 
-func (vm machine) fronted(t *testing.T, front string, names ...string) {
+func (vm liveBox) fronted(t *testing.T, front string, names ...string) {
 	t.Helper()
 	quoted := make([]string, 0, len(names))
 	for _, name := range names {
@@ -70,17 +71,17 @@ func (vm machine) fronted(t *testing.T, front string, names ...string) {
 	vm.feeds(t, "sudo sh -s -- "+strings.Join(quoted, " "), frontScript(t, front, "up.sh"))
 }
 
-func (vm machine) frontUntouched(t *testing.T, front string) {
+func (vm liveBox) frontUntouched(t *testing.T, front string) {
 	t.Helper()
 	vm.feeds(t, "sudo sh -s", frontScript(t, front, "check.sh"))
 }
 
-func (vm machine) throughTheFront(t *testing.T, hostname, path string) string {
+func (vm liveBox) throughTheFront(t *testing.T, hostname, path string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.ssh(t, "curl -sSk -m 10 --resolve "+quote(hostname+":443:127.0.0.1")+" "+quote("https://"+hostname+path)))
 }
 
-func (vm machine) clock(t *testing.T) float64 {
+func (vm liveBox) clock(t *testing.T) float64 {
 	t.Helper()
 	read := strings.TrimSpace(vm.ssh(t, "date +%s.%N"))
 	at, err := strconv.ParseFloat(read, 64)
@@ -97,7 +98,7 @@ type answered struct {
 	code string
 }
 
-func (vm machine) loads(t *testing.T, hostnames ...string) {
+func (vm liveBox) loads(t *testing.T, hostnames ...string) {
 	t.Helper()
 	vm.ssh(t, "rm -rf "+loadDir+" && mkdir -p "+loadDir)
 	vm.feeds(t, "cat > "+loadDir+"/loop.sh", []byte(loadScript))
@@ -108,7 +109,7 @@ func (vm machine) loads(t *testing.T, hostnames ...string) {
 	}
 }
 
-func (vm machine) answers(t *testing.T) []answered {
+func (vm liveBox) answers(t *testing.T) []answered {
 	t.Helper()
 	var read []answered
 	for _, line := range lines(vm.ssh(t, "cat "+loadDir+"/[0-9]* 2>/dev/null || true")) {
@@ -125,7 +126,7 @@ func (vm machine) answers(t *testing.T) []answered {
 	return read
 }
 
-func (vm machine) awaitAnswers(t *testing.T, what string, count func([]answered) int) {
+func (vm liveBox) awaitAnswers(t *testing.T, what string, count func([]answered) int) {
 	t.Helper()
 	deadline := time.Now().Add(loadWait)
 	for count(vm.answers(t)) < loadWarmup {
@@ -136,7 +137,7 @@ func (vm machine) awaitAnswers(t *testing.T, what string, count func([]answered)
 	}
 }
 
-func (vm machine) stopsLoad(t *testing.T) []answered {
+func (vm liveBox) stopsLoad(t *testing.T) []answered {
 	t.Helper()
 	vm.ssh(t, "touch "+loadDir+"/stop")
 	deadline := time.Now().Add(loadWait)
@@ -161,18 +162,18 @@ func counting(body string, from float64) func([]answered) int {
 	}
 }
 
-func frontProxy(t *testing.T, front string) *vps.Proxy {
+func frontProxy(t *testing.T, named string) *front.Proxy {
 	t.Helper()
 	var declared struct {
-		Proxy *vps.Proxy `json:"proxy"`
+		Proxy *front.Proxy `json:"proxy"`
 	}
-	if err := json.Unmarshal(frontScript(t, front, "front.json"), &declared); err != nil || declared.Proxy == nil {
-		t.Fatalf("the %s front's front.json names no proxy its projects use: %v", front, err)
+	if err := json.Unmarshal(frontScript(t, named, "front.json"), &declared); err != nil || declared.Proxy == nil {
+		t.Fatalf("the %s front's front.json names no proxy its projects use: %v", named, err)
 	}
 	return declared.Proxy
 }
 
-func (vm machine) deployingBehind(t *testing.T, proxy *vps.Proxy) *vps.Provider {
+func (vm liveBox) deployingBehind(t *testing.T, proxy *front.Proxy) *vps.Provider {
 	t.Helper()
 	p := vps.NewProvider(vps.Options{
 		SSH:   vps.Target{Host: vm.addr, User: deployLogin, IdentityFile: vm.key, Config: vm.config},
@@ -182,7 +183,7 @@ func (vm machine) deployingBehind(t *testing.T, proxy *vps.Proxy) *vps.Provider 
 	return p
 }
 
-func frontNetworks(t *testing.T, vm machine, container string) []string {
+func frontNetworks(t *testing.T, vm liveBox, container string) []string {
 	t.Helper()
 	return strings.Fields(vm.inspects(t, "container", container, "{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}"))
 }
@@ -200,7 +201,7 @@ func TestLiveOcelServesBehindAnNginxInAContainerOnItsNetwork(t *testing.T) {
 
 func TestLiveOcelServesBehindAProxyOnItsOwnNetworkAcrossTheProxysRecreation(t *testing.T) {
 	const container, network = "ocel-front-nginx-network", "ocel-front"
-	servesBehind(t, "nginx-network", func(vm machine) {
+	servesBehind(t, "nginx-network", func(vm liveBox) {
 		if networks := frontNetworks(t, vm, container); !slices.Equal(networks, []string{network}) {
 			t.Fatalf("the front container sits on %q, want %s alone: this front proves ocel reaches a proxy on the proxy's own network", networks, network)
 		}
@@ -225,7 +226,7 @@ func TestLiveOcelServesBehindAProxyOnItsOwnNetworkAcrossTheProxysRecreation(t *t
 	})
 }
 
-func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machine {
+func servesBehind(t *testing.T, front string, meanwhile func(vm liveBox)) liveBox {
 	t.Helper()
 	vm := liveMachine(t)
 	vm.purges(t)
@@ -372,7 +373,7 @@ func bindsBehind(t *testing.T, d *vps.Provider, front string) {
 	}
 }
 
-func servesAPreviewBehind(t *testing.T, vm machine, d *vps.Provider, opened edge.Edge, front string) {
+func servesAPreviewBehind(t *testing.T, vm liveBox, d *vps.Provider, opened edge.Edge, front string) {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := opened.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{

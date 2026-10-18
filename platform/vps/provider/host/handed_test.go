@@ -9,6 +9,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -16,7 +19,7 @@ import (
 func noted(box *bench, answer string) {
 	imaged := box.answer
 	box.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, shell.Quote(HandedNote(environment.TierProduction, physical))) && strings.Contains(command, "echo "+handedUnknown) {
+		if strings.Contains(command, shell.Quote(release.HandedNote(environment.TierProduction, physical))) && strings.Contains(command, "echo "+release.HandedUnknown) {
 			return ssh.Result{Stdout: answer}, true
 		}
 		if imaged != nil {
@@ -31,9 +34,9 @@ func TestADeployNotesTheNamesItHandedBeforeTheRunAndATakeDownForgetsThem(t *test
 
 	spec := valued()
 	box := runningWith(t, spec)
-	note := HandedNote(spec.Tier, spec.Name)
+	note := release.HandedNote(spec.Tier, spec.Name)
 	wrote := box.at("install -D -m 0600 /dev/stdin " + shell.Quote(note))
-	handed := box.at("install -m 0600 /dev/stdin " + shell.Quote(EnvFile(spec.Tier, spec.Name)))
+	handed := box.at("install -m 0600 /dev/stdin " + shell.Quote(envfile.Path(spec.Tier, spec.Name)))
 	ran := box.at(shell.Quote("run") + " " + shell.Quote("--detach"))
 	if wrote < 0 || handed < 0 || ran < 0 || wrote < handed || wrote > ran {
 		t.Fatalf("the note was written at %d, the values at %d and the container run at %d: the note is what a later promotion reads once the container is gone, so it is written before there is a container to lose", wrote, handed, ran)
@@ -41,7 +44,7 @@ func TestADeployNotesTheNamesItHandedBeforeTheRunAndATakeDownForgetsThem(t *test
 	box.mu.Lock()
 	fed := box.fed[wrote]
 	box.mu.Unlock()
-	parsed, err := ParseNote([]byte(fed))
+	parsed, err := release.ParseNote([]byte(fed))
 	if err != nil {
 		t.Fatalf("the note reads %q, which the box cannot read back: %v", fed, err)
 	}
@@ -54,11 +57,11 @@ func TestADeployNotesTheNamesItHandedBeforeTheRunAndATakeDownForgetsThem(t *test
 	if strings.Contains(fed, sensitiveValue) {
 		t.Errorf("the note contains %q, and a note that outlives the container it describes is a value left on disk", sensitiveValue)
 	}
-	if !strings.HasPrefix(note, StateDir(spec.Tier)+"/") || strings.HasSuffix(note, envFileSuffix) {
+	if !strings.HasPrefix(note, boxapi.StateDir(spec.Tier)+"/") || strings.HasSuffix(note, envfile.Suffix) {
 		t.Errorf("the note is written at %s, which the sweep of env files would take with the values a deploy left", note)
 	}
 
-	if err := box.host().TakeDown(context.Background(), spec.Tier, spec.Name); err != nil {
+	if err := box.host().containers.TakeDown(context.Background(), spec.Tier, spec.Name); err != nil {
 		t.Fatalf("TakeDown() = %v", err)
 	}
 	if box.at("rm -f "+shell.Quote(note)) < 0 {
@@ -69,10 +72,10 @@ func TestADeployNotesTheNamesItHandedBeforeTheRunAndATakeDownForgetsThem(t *test
 func TestAPromotionOfAnAppHandedABakedValueWhoseContainerIsGoneIsRefusedByName(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	imaging(box, "false ")
 	noted(box, "known\n"+`{"handed":["API_TOKEN"],"live":{"slug":"shop","tier":"production","keys":[{"key":"DATABASE_URL"}]}}`+"\n")
-	_, err := box.host().RunContainer(context.Background(), promoted())
+	_, err := box.host().containers.Run(context.Background(), promoted())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("a promotion of an app whose record declares no variable started it without the value its deploy baked in: %v\n%v", err, box.commands())
@@ -94,20 +97,20 @@ func TestAPromotionOfALiveOnlyAppWhoseContainerIsGoneRunsItAgainWithTheManifestI
 	t.Parallel()
 
 	manifest := `{"slug":"shop","tier":"production","keys":[{"key":"DATABASE_URL"}],"bindings":[{"name":"main","key":"OCEL_RESOURCE_POSTGRES_main","type":"BINDING_TYPE_POSTGRES"}]}`
-	box := machine(nil)
+	box := newBench(nil)
 	imaging(box, "false ")
 	noted(box, "known\n"+`{"handed":[],"live":`+manifest+`}`+"\n")
 	spec := promoted()
 	spec.HealthPath = "/healthz"
 	spec.Declared = []string{"DATABASE_URL"}
-	if _, err := box.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := box.host().containers.Run(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() of an app that reads everything live = %v, want it running again: the values reach it from the box, not from the deploy", err)
 	}
 	command := ranContainer(t, box)
-	if !strings.Contains(command, shell.Quote("--mount")) || !strings.Contains(command, LiveSocketDir) {
+	if !strings.Contains(command, shell.Quote("--mount")) || !strings.Contains(command, boxapi.SocketDir) {
 		t.Errorf("the re-created container runs %q and is handed no socket to read its values through", command)
 	}
-	file := wrote(t, box, EnvFile(spec.Tier, spec.Name))
+	file := wrote(t, box, envfile.Path(spec.Tier, spec.Name))
 	if !strings.Contains(file, "OCEL_LIVE_MANIFEST="+manifest) || !strings.Contains(file, "OCEL_HEALTH_PATH=/healthz") {
 		t.Errorf("the re-created container is handed %q, want the manifest its deploy noted and the health path the record names", file)
 	}
@@ -119,10 +122,10 @@ func TestAPromotionOfALiveOnlyAppWhoseContainerIsGoneRunsItAgainWithTheManifestI
 func TestAPromotionOfAContainerThisBoxHasNoNoteForIsRefusedRatherThanGuessedEmpty(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	imaging(box, "false ")
 	noted(box, "unknown\n")
-	_, err := box.host().RunContainer(context.Background(), promoted())
+	_, err := box.host().containers.Run(context.Background(), promoted())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("a promotion of a container nothing on this box describes started it: %v\n%v", err, box.commands())
@@ -140,17 +143,17 @@ func TestAPromotionWhoseRecordDeclaresNamesIsRefusedByThemWhenTheBoxHasNoNote(t 
 
 	spec := promoted()
 	spec.Declared = []string{"API_TOKEN"}
-	box := machine(nil)
+	box := newBench(nil)
 	imaging(box, "false ")
 	noted(box, "unknown\n")
-	_, err := box.host().RunContainer(context.Background(), spec)
+	_, err := box.host().containers.Run(context.Background(), spec)
 	if err == nil {
 		t.Fatal("a promotion of a gone container that declares a variable started it")
 	}
 	if !strings.Contains(err.Error(), "API_TOKEN") {
 		t.Errorf("the refusal reads %q and never names what the record declares", err)
 	}
-	if box.at("echo "+handedUnknown) < 0 {
+	if box.at("echo "+release.HandedUnknown) < 0 {
 		t.Errorf("a promotion refused a container without reading the note, and the record cannot tell a baked name from one read live: %v", box.commands())
 	}
 }

@@ -27,7 +27,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 )
 
 const queueContainer = "shop-prod-infra-ocel-queue"
@@ -125,7 +125,7 @@ func TestTheAgentReachesTheQueueAsARoleThatOwnsOnlyItsDatabaseAndHoldsNoPassword
 	if _, err := p.ProvisionTopic(context.Background(), aTask(t, "send-email"), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
-	if machine.at(host.KeptPath(environment.TierProduction, queueContainer)) < 0 {
+	if machine.at(container.KeptPath(environment.TierProduction, queueContainer)) < 0 {
 		t.Errorf("the queue's superuser password is not kept on the box:\n%s", strings.Join(machine.commands(), "\n"))
 	}
 	granted := ""
@@ -239,8 +239,8 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 	joined := strings.Join(machine.commands()[before:], "\n")
 	for _, want := range []string{
 		"docker rm --force '" + queueContainer + "'",
-		host.KeptPath(environment.TierProduction, queueContainer),
-		host.KeptPath(environment.TierProduction, queueContainer+"-"+boxapi.QueueDeliverySecretName),
+		container.KeptPath(environment.TierProduction, queueContainer),
+		container.KeptPath(environment.TierProduction, queueContainer+"-"+boxapi.QueueDeliverySecretName),
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("removing the last task ran %q and never reached %s", joined, want)

@@ -14,6 +14,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -330,12 +332,12 @@ func TestTheTunnelListenerIsBoundOnANetworkOnlyTheSwitchboardAndTheTunnelJoin(t 
 	if tunnel := running()[tunnelContainer]; strings.Contains(tunnel, shell.Quote("--network")+" "+shell.Quote(ProxyNetwork)) {
 		t.Errorf("the tunnel runs %q, want it off the %s network", tunnel, ProxyNetwork)
 	}
-	for name, front := range map[string]Front{
+	for name, front := range map[string]front.Proxy{
 		"ocel's caddy":            {},
-		"a manual proxy":          {Manual: &ManualFront{Port: 8080}},
-		"a manual proxy on ocel":  {Manual: &ManualFront{Port: 8080, Network: ProxyNetwork}},
-		"your caddy on a network": {Caddy: &CaddyFront{Directory: "/etc/caddy", Network: "coolify"}},
-		"your traefik":            {Traefik: &TraefikFront{Directory: "/etc/traefik", Network: "coolify"}},
+		"a manual proxy":          {Manual: &front.Manual{Port: 8080}},
+		"a manual proxy on ocel":  {Manual: &front.Manual{Port: 8080, Network: ProxyNetwork}},
+		"your caddy on a network": {Caddy: &front.Caddy{Directory: "/etc/caddy", Network: "coolify"}},
+		"your traefik":            {Traefik: &front.Traefik{Directory: "/etc/traefik", Network: "coolify"}},
 	} {
 		board := switchboardBox(nil, front)
 		command := shell.Words(board.Command)
@@ -347,7 +349,7 @@ func TestTheTunnelListenerIsBoundOnANetworkOnlyTheSwitchboardAndTheTunnelJoin(t 
 				t.Errorf("behind %s the switchboard publishes its tunnel listener as %v", name, port)
 			}
 		}
-		if slices.ContainsFunc(front.joined(), func(joined docker.Network) bool { return joined.Name == tunnel.Network }) {
+		if slices.ContainsFunc(front.Front().Joined(), func(joined docker.Network) bool { return joined.Name == tunnel.Network }) {
 			t.Errorf("behind %s your proxy's network is %s", name, tunnel.Network)
 		}
 		for what, script := range map[string]string{"started": board.Writing(docker.ContainerRising), "started again": board.Restoring(docker.ContainerRising, routing.Locked("-x"))} {
@@ -356,7 +358,9 @@ func TestTheTunnelListenerIsBoundOnANetworkOnlyTheSwitchboardAndTheTunnelJoin(t 
 			}
 		}
 	}
-	if !slices.ContainsFunc(proxyRemovals(), func(taken removal) bool { return taken.kind == KindNetwork && taken.path == tunnel.Network }) {
+	if !slices.ContainsFunc(proxyRemovals(), func(taken machine.Removal) bool {
+		return taken.Kind == machine.KindNetwork && taken.Path == tunnel.Network
+	}) {
 		t.Errorf("a teardown leaves the %s network behind", tunnel.Network)
 	}
 }

@@ -3,25 +3,18 @@ package host
 import (
 	"strings"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
-const (
-	KindLiveRestore = "docker:live-restore"
-
-	daemonConfig    = "/etc/docker/daemon.json"
-	liveRestoreFact = "live-restore=decided\n"
-	swarmStates     = "active|pending|locked"
-)
-
-func liveRestoreItem() Item {
-	return Item{
-		Kind:    KindLiveRestore,
-		Name:    daemonConfig,
-		script:  func(Item) string { return liveRestoreCommand(daemonConfig) },
-		survey:  func(Item) string { return liveRestoreProbe(daemonConfig) },
-		Owner:   rootOwner,
-		Content: []byte(liveRestoreFact),
+func liveRestoreItem() machine.Item {
+	return machine.Item{
+		Kind:    machine.KindLiveRestore,
+		Name:    machine.DaemonConfig,
+		Script:  func(machine.Item) string { return liveRestoreCommand(machine.DaemonConfig) },
+		Survey:  func(machine.Item) string { return liveRestoreProbe(machine.DaemonConfig) },
+		Owner:   machine.RootOwner,
+		Content: []byte(machine.LiveRestoreFact),
 		Note:    "keeps every container running while the daemon restarts or upgrades",
 	}
 }
@@ -34,7 +27,7 @@ func liveRestoreProbe(config string) string {
 		"'true '*|*' active'|*' pending'|*' locked') decided=decided ;;\n" +
 		"*) if [ -f " + named + " ] && grep -q '\"live-restore\"' " + named + "; then decided=decided; else decided=undecided; fi ;;\n" +
 		"esac\n" +
-		reports(shell.Quote(KindLiveRestore), named, "0", shell.Quote(rootOwner), `"$(printf 'live-restore=%s\n' "$decided" | sha256sum | cut -d' ' -f1)"`) + "\n" +
+		machine.Reports(shell.Quote(machine.KindLiveRestore), named, "0", shell.Quote(machine.RootOwner), `"$(printf 'live-restore=%s\n' "$decided" | sha256sum | cut -d' ' -f1)"`) + "\n" +
 		"fi"
 }
 
@@ -42,7 +35,7 @@ func liveRestoreCommand(config string) string {
 	named := shell.Quote(config)
 	return strings.Join([]string{
 		"set -e",
-		"case \"$(timeout 10 " + shell.Quote(dockerEngine) + " info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || true)\" in " + swarmStates + ") exit 0 ;; esac",
+		"case \"$(timeout 10 " + shell.Quote(dockerEngine) + " info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || true)\" in " + machine.SwarmStates + ") exit 0 ;; esac",
 		"if [ -f " + named + " ] && grep -q '\"live-restore\"' " + named + "; then exit 0; fi",
 		"mkdir -p \"$(dirname " + named + ")\"",
 		"next=$(mktemp " + shell.Quote(config+".XXXXXX") + ")",

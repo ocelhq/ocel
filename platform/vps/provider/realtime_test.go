@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 )
 
 const (
@@ -204,7 +205,7 @@ func TestASigningKeyReachesTheBoxOnlySealedAndNeverOnACommandLine(t *testing.T) 
 			t.Fatalf("the gateway was handed the signing key, and it verifies with the public key alone:\n%s", command)
 		}
 	}
-	if machine.at(host.KeptPath(environment.TierProduction, realtimeKeyKept)) < 0 {
+	if machine.at(container.KeptPath(environment.TierProduction, realtimeKeyKept)) < 0 {
 		t.Errorf("the signing key is not kept on the box:\n%s", strings.Join(machine.commands(), "\n"))
 	}
 	if !strings.Contains(strings.Join(machine.commands(), "\n"), "13:realtime--app,") {
@@ -264,7 +265,7 @@ func TestARemovedRealtimeIsDroppedFromTheGatewayAndTheLastTakesTheGatewayWithIt(
 	if keys := gatewayKeys(t, machine); len(keys) != 1 || keys["app"] == "" {
 		t.Errorf("after chat is removed the gateway verifies %v, want app alone", keys)
 	}
-	if machine.at("rm -f '"+host.KeptPath(environment.TierProduction, "shop-prod-infra-realtime-chat-signing-key")+"'") < 0 {
+	if machine.at("rm -f '"+container.KeptPath(environment.TierProduction, "shop-prod-infra-realtime-chat-signing-key")+"'") < 0 {
 		t.Errorf("chat's signing key is still kept:\n%s", strings.Join(machine.commands(), "\n"))
 	}
 	if machine.at("docker rm --force '"+realtimeGateway+"'") >= 0 {

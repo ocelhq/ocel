@@ -18,7 +18,7 @@ import (
 
 const livePreviewBase = "preview.ocel.home.arpa"
 
-func (vm machine) loadedProxyConfig(t *testing.T) map[string]any {
+func (vm liveBox) loadedProxyConfig(t *testing.T) map[string]any {
 	t.Helper()
 
 	var read map[string]any
@@ -28,7 +28,7 @@ func (vm machine) loadedProxyConfig(t *testing.T) map[string]any {
 	return read
 }
 
-func (vm machine) asksFor(t *testing.T, hostname string) int {
+func (vm liveBox) asksFor(t *testing.T, hostname string) int {
 	t.Helper()
 
 	said := vm.peers(t, "wget -q -S -O /dev/null --header="+quote("Host: "+hostname)+
@@ -42,7 +42,7 @@ func (vm machine) asksFor(t *testing.T, hostname string) int {
 	return 0
 }
 
-func previewEntryOn(t *testing.T, vm machine) edge.Edge {
+func previewEntryOn(t *testing.T, vm liveBox) edge.Edge {
 	t.Helper()
 
 	p := vm.deploying(t)

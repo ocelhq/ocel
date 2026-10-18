@@ -3,6 +3,7 @@ package vps
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/bindings"
@@ -14,7 +15,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/realtime"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
@@ -27,8 +30,8 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image", app.App)
 	}
-	physical := host.ContainerName(spec.Ref.Name.String(), app.App, app.BuildID, app.Image)
-	store, err := p.storeSection(ctx, spec)
+	physical := release.ContainerName(spec.Ref.Name.String(), app.App, app.BuildID, app.Image)
+	store, err := p.buckets().GrantApp(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)
 	}
@@ -39,7 +42,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		Keys:               liveKeys(app.Values),
 		Bindings:           liveBindings(app.Values),
 		Store:              store,
-		RealtimePublishURL: findRealtimePublishURL(app.Values.Bindings),
+		RealtimePublishURL: realtime.FindPublishURL(app.Values.Bindings),
 	}
 	if hasQueue(app) {
 		pinned.Queue = spec.Ref.Name.Env
@@ -59,7 +62,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if healthPath == "" {
 		healthPath, discovered = app.DiscoveredHealthCheckPath, app.DiscoveredHealthCheckPath
 	}
-	if _, err := p.host.RunContainer(ctx, host.Container{
+	if _, err := p.containers.Run(ctx, release.Container{
 		Name: physical, Project: spec.Ref.Project, App: app.App, Image: app.Image,
 		Tier: spec.Ref.Tier, Env: app.Values.ContainerEnv, HealthPath: healthPath, Manifest: manifest, Resolved: true,
 	}); err != nil {
@@ -68,16 +71,16 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	target := physical + ":" + containerimage.PortText
 	switch {
 	case healthPath == "":
-		if discovered, err = p.host.FindHealthPath(ctx, host.HealthPathSearch{App: app.App, Target: target, Window: routing.DeployWindow}, progress); err != nil {
+		if discovered, err = p.containers.FindHealthPath(ctx, release.HealthPathSearch{App: app.App, Target: target, Window: routing.DeployWindow}, progress); err != nil {
 			return nil, err
 		}
 	case discovered != "":
 		progress.Say(app.App + " answers its health check on " + discovered + ", found by probing on an earlier release")
 	}
-	if err := p.host.Promote(ctx, spec.Ref.Tier, spec.Ref.Project, app.App, app.Image); err != nil {
+	if err := p.images.Promote(ctx, spec.Ref.Tier, spec.Ref.Project, app.App, app.Image); err != nil {
 		return nil, err
 	}
-	if err := p.runWorkers(ctx, spec, manifest, progress); err != nil {
+	if err := topic.NewWorkers(p.components()).Run(ctx, spec, manifest, progress); err != nil {
 		return nil, err
 	}
 	return []provider.AppContainer{{
@@ -90,7 +93,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 }
 
 func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, _ provider.ImageStore, progress progress.Log) error {
-	if err := p.removeWorkers(ctx, ref); err != nil {
+	if err := topic.NewWorkers(p.components()).Remove(ctx, ref); err != nil {
 		return err
 	}
 	for _, container := range containers {
@@ -98,14 +101,20 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, 
 			continue
 		}
 		progress.Say("Removing " + container.Name + "'s container " + container.Physical)
-		if err := p.host.TakeDown(ctx, ref.Tier, container.Physical); err != nil {
+		if err := p.containers.TakeDown(ctx, ref.Tier, container.Physical); err != nil {
 			return err
 		}
-		if err := p.removeStoreAccount(ctx, ref, container.Name); err != nil {
+		if err := p.buckets().RevokeApp(ctx, ref, container.Name); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func hasQueue(app *provider.AppSpec) bool {
+	return len(app.Workers) > 0 || slices.ContainsFunc(app.Values.Bindings, func(binding provider.Binding) bool {
+		return binding.Type == provider.BindingTopic || binding.Type == provider.BindingTask
+	})
 }
 
 func liveEnvironment(ref provider.StackRef) string {

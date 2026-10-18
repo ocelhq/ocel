@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -33,7 +34,7 @@ func routedByHand(overrides map[string]answer) *scripted {
 
 func preflightingByHand(machine *scripted) error {
 	p := vps.ProviderOver(
-		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Manual: &vps.Manual{}}},
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &front.Proxy{Manual: &front.Manual{}}},
 		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	p.Reaching(reachedFromOutside)

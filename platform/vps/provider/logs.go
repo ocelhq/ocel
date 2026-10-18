@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 )
 
 type logs struct{ *Provider }
@@ -27,8 +27,8 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 		if err := refuseNonContainer(target); err != nil {
 			return err
 		}
-		lines, err := p.host.ReadContainerLogs(ctx, target.Physical(), q.Since, q.Until, q.Limit, q.Contains)
-		if errors.Is(err, host.ErrContainerMissing) {
+		lines, err := p.containers.ReadLogs(ctx, target.Physical(), q.Since, q.Until, q.Limit, q.Contains)
+		if errors.Is(err, release.ErrContainerMissing) {
 			missing.Targets = append(missing.Targets, target)
 			continue
 		}
@@ -70,7 +70,7 @@ func (p logs) tail(ctx context.Context, q provider.LogQuery, emit func([]provide
 		}
 		names[i] = target.Physical()
 	}
-	err := p.host.FollowContainerLogs(ctx, names, q.Since, func(container int, line host.Line) error {
+	err := p.containers.FollowLogs(ctx, names, q.Since, func(container int, line release.Line) error {
 		if !strings.Contains(line.Text, q.Contains) {
 			return nil
 		}
@@ -84,7 +84,7 @@ func (p logs) tail(ctx context.Context, q provider.LogQuery, emit func([]provide
 	return err
 }
 
-func logEntryOf(target provider.LogTarget, line host.Line) provider.LogEntry {
+func logEntryOf(target provider.LogTarget, line release.Line) provider.LogEntry {
 	stream := provider.LogStreamStdout
 	if line.Stderr {
 		stream = provider.LogStreamStderr

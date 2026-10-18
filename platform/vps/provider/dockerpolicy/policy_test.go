@@ -86,6 +86,14 @@ func TestEveryWayADockerCommandReachesRootIsRefused(t *testing.T) {
 		"a container renamed to a granted name":   {"rename", "shop-web-abc", "coolify-proxy"},
 		"a host-bound volume, mounted":            {"run", "--network", "ocel", "--mount", "type=volume,src=coolify-data,dst=/x", "alpine"},
 		"a host-bound volume, named":              {"run", "--network", "ocel", "--volume", "coolify-data:/x", "alpine"},
+		"the working directory bound in":          {"run", "--network", "ocel", "--volume", ".:/h", "alpine"},
+		"its parent bound in":                     {"run", "--network", "ocel", "--volume", "..:/h", "alpine"},
+		"a relative path bound in":                {"run", "--network", "ocel", "--volume", "./etc:/e", "alpine"},
+		"the home directory bound in":             {"run", "--network", "ocel", "--volume", "~:/h", "alpine"},
+		"a network named only to the image":       {"run", "-d", "alpine", "sleep", "--network"},
+		"a network given only to the image":       {"run", "alpine", "--network=ocel"},
+		"a foreign container joined to ocel":      {"network", "connect", "ocel-production-shop", "coolify-db"},
+		"a foreign container cut from a network":  {"network", "disconnect", "coolify", "coolify-db"},
 	} {
 		inv, err := policy.Open(context.Background(), argv)
 		inv.Close()
@@ -119,6 +127,8 @@ func TestTheCommandsADeployRunsAreLetThrough(t *testing.T) {
 		{"exec", "coolify-proxy", "caddy", "reload"},
 		{"network", "create", "--label", "ocel.tier=production", "ocel-production-shop"},
 		{"network", "connect", "ocel-production-shop", "ocel-switchboard"},
+		{"network", "disconnect", "--force", "ocel-production-shop", "ocel-switchboard"},
+		{"network", "connect", "ocel-production-shop", "shop-web-abc"},
 		{"volume", "create", "--label", "ocel.tier=production", "--driver", "local", "--opt", "type=tmpfs", "shop-cache-kv"},
 		{"image", "ls", "-q", "registry/shop:web"},
 		{"logs", "--follow", "--timestamps", "shop-web-abc"},

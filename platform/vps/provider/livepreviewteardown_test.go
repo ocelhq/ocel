@@ -37,7 +37,7 @@ const (
 
 func teardownAt(pointer string) string { return teardownRepo + ":" + pointer }
 
-func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack) {
+func onABoxServingPreviews(t *testing.T) (liveBox, *vps.Provider, edge.EdgeStack) {
 	t.Helper()
 
 	vm := liveMachine(t)
@@ -47,7 +47,7 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+docker.LabelApp+"="+teardownApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 		vm.ssh(t, "sudo docker images -q --filter reference="+teardownRepo+":* | xargs -r sudo docker rmi -f >/dev/null 2>&1 || true")
-		vm.ssh(t, "sudo rm -rf "+host.ReleasesDir()+"/"+teardownSlug)
+		vm.ssh(t, "sudo rm -rf "+boxapi.ReleasesDir+"/"+teardownSlug)
 	})
 
 	p := vm.deploying(t)
@@ -110,7 +110,7 @@ func previewStack(t *testing.T, slug, app, pointer string) provider.StackRef {
 	}
 }
 
-func (vm machine) ships(t *testing.T, pointer string) {
+func (vm liveBox) ships(t *testing.T, pointer string) {
 	t.Helper()
 
 	if strings.TrimSpace(vm.ssh(t, "sudo docker image inspect "+teardownAt(pointer)+" >/dev/null 2>&1 && echo present || echo gone")) == "present" {
@@ -120,7 +120,7 @@ func (vm machine) ships(t *testing.T, pointer string) {
 		[]byte("FROM "+fixtureBase+"\nENV RELEASE="+pointer+"\n"))
 }
 
-func previewUp(t *testing.T, vm machine, p *vps.Provider, stack edge.EdgeStack, pointer string, at int64) {
+func previewUp(t *testing.T, vm liveBox, p *vps.Provider, stack edge.EdgeStack, pointer string, at int64) {
 	t.Helper()
 
 	vm.ships(t, pointer)
@@ -197,7 +197,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	return spoken
 }
 
-func (vm machine) plants(t *testing.T, hostname string) string {
+func (vm liveBox) plants(t *testing.T, hostname string) string {
 	t.Helper()
 
 	dir := host.ProxyData + "/caddy/certificates/" + liveIssuer + "/" + hostname
@@ -208,21 +208,21 @@ func (vm machine) plants(t *testing.T, hostname string) string {
 	return dir
 }
 
-func (vm machine) certificates(t *testing.T) string {
+func (vm liveBox) certificates(t *testing.T) string {
 	t.Helper()
 
 	return vm.ssh(t, "sudo find "+quote(host.ProxyData+"/caddy/certificates")+" -mindepth 2 -maxdepth 2 -type d -name "+
 		quote(teardownSlug+"-*")+" -printf '%f\\n' 2>/dev/null | sort")
 }
 
-func (vm machine) teardownImages(t *testing.T) string {
+func (vm liveBox) teardownImages(t *testing.T) string {
 	t.Helper()
 
 	return strings.TrimSpace(vm.ssh(t,
 		"sudo docker images --filter reference="+teardownRepo+":* --format '{{.Repository}}:{{.Tag}}' | sort"))
 }
 
-func (vm machine) routedHosts(t *testing.T) []string {
+func (vm liveBox) routedHosts(t *testing.T) []string {
 	t.Helper()
 
 	table, err := routing.ReadRoutingTable([]byte(vm.ssh(t, "sudo cat "+quote(boxapi.RoutingTablePath))))
@@ -239,7 +239,7 @@ func (vm machine) routedHosts(t *testing.T) []string {
 	return hosts
 }
 
-func (vm machine) handshakes(t *testing.T, hostname string) {
+func (vm liveBox) handshakes(t *testing.T, hostname string) {
 	t.Helper()
 	vm.ssh(t, quote(boxapi.SwitchboardBinary)+" leaf "+quote(hostname)+" >/dev/null 2>&1 || true")
 }

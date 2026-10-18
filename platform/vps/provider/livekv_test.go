@@ -12,10 +12,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 )
 
-func (vm machine) commandsStore(t *testing.T, binding provider.Binding, password string, command ...string) string {
+func (vm liveBox) commandsStore(t *testing.T, binding provider.Binding, password string, command ...string) string {
 	t.Helper()
 	props := binding.Properties
 	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.Config.Image}}' "+quote(props[provider.PropertyHost])))
@@ -59,7 +59,7 @@ func TestLiveADeclaredKVStoreAnswersOnlyItsUserOnItsProjectAndLeavesNothingBehin
 	if inspected := vm.ssh(t, "sudo docker inspect "+quote(name)); strings.Contains(inspected, password) {
 		t.Error("docker inspect shows the store's password")
 	}
-	kept := strings.TrimSpace(vm.ssh(t, "sudo cat "+quote(host.KeptPath(environment.TierProduction, name))))
+	kept := strings.TrimSpace(vm.ssh(t, "sudo cat "+quote(container.KeptPath(environment.TierProduction, name))))
 	if kept == "" || strings.Contains(kept, password) {
 		t.Errorf("the box keeps %d bytes for %s, and what it keeps is the password itself or nothing", len(kept), name)
 	}
@@ -101,7 +101,7 @@ func TestLiveADeclaredKVStoreAnswersOnlyItsUserOnItsProjectAndLeavesNothingBehin
 	if volumes := strings.TrimSpace(vm.ssh(t, "sudo docker volume ls -q --filter name="+quote("^"+name))); volumes != "" {
 		t.Errorf("the volume %q outlives the stack that declared it", volumes)
 	}
-	if vm.exists(t, host.KeptPath(environment.TierProduction, name)) {
+	if vm.exists(t, container.KeptPath(environment.TierProduction, name)) {
 		t.Errorf("the sealed password for %s outlives the store it opened", name)
 	}
 }

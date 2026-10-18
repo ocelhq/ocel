@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 )
 
 const (
@@ -43,16 +44,16 @@ func envSourceSyncUnit() []byte {
 	}, "\n"))
 }
 
-func EnvSourceSyncItems(tier environment.Tier, architecture string) []Item {
+func EnvSourceSyncItems(tier environment.Tier, architecture string) []machine.Item {
 	template := envSourceSyncUnit()
-	return []Item{
-		{Kind: KindFile, Name: envSourceSyncTemplateFile, Mode: 0o644, Owner: rootOwner, Content: template},
-		systemdUnit(Item{Name: EnvSourceSyncService(tier), Owner: rootOwner, Content: unitWatchFacts(template, liveAgent(architecture)),
+	return []machine.Item{
+		{Kind: machine.KindFile, Name: envSourceSyncTemplateFile, Mode: 0o644, Owner: machine.RootOwner, Content: template},
+		machine.SystemdUnit(machine.Item{Name: EnvSourceSyncService(tier), Owner: machine.RootOwner, Content: machine.UnitWatchFacts(template, liveAgent(architecture)),
 			Watch: []string{envSourceSyncTemplateFile, LiveBinary},
 			Slow:  true, Note: "keeps values in step with env sources"}),
 	}
 }
 
-func envSourceSyncRemovals() []removal {
-	return []removal{taking(KindFile, envSourceSyncTemplateFile, "")}
+func envSourceSyncRemovals() []machine.Removal {
+	return []machine.Removal{machine.Taking(machine.KindFile, envSourceSyncTemplateFile, "")}
 }

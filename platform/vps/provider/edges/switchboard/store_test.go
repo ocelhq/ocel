@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
 )
 
-func storeRouted(m *machine, slug string) {
+func storeRouted(m *fakeBox, slug string) {
 	m.upstream[boxapi.RouteKey{
 		Owner:   switchboard.Surface(slug, environment.TierProduction),
 		Pointer: router.DefaultPointer,
@@ -20,7 +20,7 @@ func storeRouted(m *machine, slug string) {
 	}] = "shop-prod-store-s3:9000"
 }
 
-func claimedHosts(m *machine, app string) []string {
+func claimedHosts(m *fakeBox, app string) []string {
 	claimed := make([]string, 0, len(m.claims))
 	for _, claim := range m.claims {
 		if claim.App == app {

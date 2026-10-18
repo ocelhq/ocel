@@ -10,7 +10,12 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/dockerpolicy"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
@@ -22,15 +27,15 @@ func (everyContainerOcels) IsOcels(context.Context, string) (bool, error) { retu
 
 func (everyContainerOcels) IsHostBound(context.Context, string) (bool, error) { return false, nil }
 
-func composedArgvs(front Front) map[string][]string {
+func composedArgvs(fronting front.Proxy) map[string][]string {
 	tunneled := tunnel.Service(boxapi.Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector())
-	board := switchboardBox(nil, front)
+	board := switchboardBox(nil, fronting)
 	gateway := resourced()
-	gateway.Mounts = []Mount{{Source: RealtimeDir, Target: RealtimeMount}}
+	gateway.Mounts = []container.Mount{{Source: RealtimeDir, Target: RealtimeMount}}
 	argvs := map[string][]string{
-		"an app":                       containerRun(valued(), handedTo(valued())),
-		"a resource":                   resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name)),
-		"the realtime gateway":         resourceRun(gateway, "0123456789ab", EnvFile(gateway.Tier, gateway.Name)),
+		"an app":                       release.ContainerRun(valued(), handedTo(valued())),
+		"a resource":                   container.Run(resourced(), "0123456789ab", envfile.Path(resourced().Tier, resourced().Name)),
+		"the realtime gateway":         container.Run(gateway, "0123456789ab", envfile.Path(gateway.Tier, gateway.Name)),
 		"the switchboard, recreated":   board.Create(),
 		"the switchboard, run":         board.Run(),
 		"the tunnel":                   tunneled.Run(),
@@ -42,12 +47,12 @@ func composedArgvs(front Front) map[string][]string {
 		"the proxy's readiness":        frontProxy().Readiness(),
 		"the proxy's mounts, compared": append([]string{"docker", "exec", caddy.Container}, frontProxy().Inodes...),
 	}
-	if placed := routing.Destination(openFront(front, frontBox{})); placed != "" {
+	if placed := routing.Destination(fronting.Front().Open(frontBox{})); placed != "" {
 		argvs["a placement"] = routing.Placement(filepath.Dir(placed), "origin-group")
 		argvs["a fed placement"] = routing.PlacementFed(filepath.Dir(placed), "place-origin", placed)
 	}
-	if front.Caddy != nil && front.Caddy.Container != "" {
-		argvs["the adopted proxy's reload"] = []string{"docker", "exec", front.Caddy.Container, "caddy", "reload"}
+	if fronting.Caddy != nil && fronting.Caddy.Container != "" {
+		argvs["the adopted proxy's reload"] = []string{"docker", "exec", fronting.Caddy.Container, "caddy", "reload"}
 	}
 	return argvs
 }
@@ -55,7 +60,7 @@ func composedArgvs(front Front) map[string][]string {
 func TestEveryDockerCommandADeployComposesIsOneTheCheckLetsThrough(t *testing.T) {
 	t.Parallel()
 
-	for name, front := range map[string]Front{"ocel's own proxy": {}, "coolify's traefik": coolifysTraefik(), "coolify's caddy": coolifysCaddy(), "a proxy on a network": routedOnANetwork()} {
+	for name, front := range map[string]front.Proxy{"ocel's own proxy": {}, "coolify's traefik": coolifysTraefik(), "coolify's caddy": coolifysCaddy(), "a proxy on a network": routedOnANetwork()} {
 		mirror := t.TempDir()
 		policy := dockerpolicy.Policy{
 			DockerGrants: dockerGrants(front),
@@ -71,8 +76,8 @@ func TestEveryDockerCommandADeployComposesIsOneTheCheckLetsThrough(t *testing.T)
 		for what, argv := range composedArgvs(front) {
 			mirrored := make([]string, 0, len(argv))
 			for _, arg := range argv {
-				if strings.HasPrefix(arg, stateRoot+"/") && strings.HasSuffix(arg, envFileSuffix) {
-					arg = filepath.Join(mirror, strings.TrimPrefix(arg, stateRoot+"/"))
+				if strings.HasPrefix(arg, boxapi.StateRoot+"/") && strings.HasSuffix(arg, envfile.Suffix) {
+					arg = filepath.Join(mirror, strings.TrimPrefix(arg, boxapi.StateRoot+"/"))
 					if err := os.MkdirAll(filepath.Dir(arg), 0o755); err != nil {
 						t.Fatal(err)
 					}
@@ -113,7 +118,7 @@ func TestTheDeployLoginsDockerIsTheCheckedOneOnEveryPathItRunsCommandsBy(t *test
 		t.Errorf("the deploy login's shell sets %q, so the docker it runs is the daemon's own client, which it is no longer allowed to reach", loginShell())
 	}
 	for _, login := range []string{"root", "ubuntu"} {
-		box := machine(nil)
+		box := newBench(nil)
 		box.dest.User = login
 		box.facts.Root = login == "root"
 		if _, err := box.host().Run(context.Background(), ssh.Deploy, "act as the deploy login", "true", nil); err != nil {
@@ -134,7 +139,7 @@ func TestEveryBindTheCheckedDockerAllowsSitsUnderDirectoriesTheDeployLoginCannot
 
 	owned := map[string]bool{}
 	for _, item := range Items("production", nil, ssh.AMD64, coolifysTraefik()) {
-		if item.Kind == KindDir && item.Owner == deployUser {
+		if item.Kind == machine.KindDir && item.Owner == deployUser {
 			owned[item.Name] = true
 		}
 	}
@@ -145,9 +150,9 @@ func TestEveryBindTheCheckedDockerAllowsSitsUnderDirectoriesTheDeployLoginCannot
 			}
 		}
 	}
-	if !slices.ContainsFunc(Items("production", nil, ssh.AMD64, Front{}), func(item Item) bool {
-		return item.Kind == KindDir && item.Name == stateRoot && item.Owner == rootOwner
+	if !slices.ContainsFunc(Items("production", nil, ssh.AMD64, front.Proxy{}), func(item machine.Item) bool {
+		return item.Kind == machine.KindDir && item.Name == boxapi.StateRoot && item.Owner == machine.RootOwner
 	}) {
-		t.Errorf("%s is not root's, and every bind beneath it is one the deploy login can swap", stateRoot)
+		t.Errorf("%s is not root's, and every bind beneath it is one the deploy login can swap", boxapi.StateRoot)
 	}
 }

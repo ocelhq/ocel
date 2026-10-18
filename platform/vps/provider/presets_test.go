@@ -9,16 +9,16 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 )
 
-func frontFrom(t *testing.T, proxy any) host.Front {
+func frontFrom(t *testing.T, proxy any) front.Proxy {
 	t.Helper()
 	decoded, err := provider.Decode[vps.Options](vps.Vendor, proxied(proxy))
 	if err != nil {
 		t.Fatalf("Decode(%v) = %v", proxy, err)
 	}
-	return vps.FrontOf(decoded.Proxy)
+	return decoded.Proxy.Filled()
 }
 
 func TestEveryPresetFillsInHowItsHostToolRunsItsProxy(t *testing.T) {
@@ -26,25 +26,25 @@ func TestEveryPresetFillsInHowItsHostToolRunsItsProxy(t *testing.T) {
 
 	for name, tc := range map[string]struct {
 		proxy any
-		want  host.Front
+		want  front.Proxy
 	}{
 		"Coolify's Traefik": {
 			proxy: map[string]any{"traefik": map[string]any{"preset": "coolify"}},
-			want: host.Front{Traefik: &host.TraefikFront{
+			want: front.Proxy{Traefik: &front.Traefik{
 				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt",
-				Entrypoints: host.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
+				Entrypoints: &front.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
 			}},
 		},
 		"Dokploy's Traefik": {
 			proxy: map[string]any{"traefik": map[string]any{"preset": "dokploy"}},
-			want: host.Front{Traefik: &host.TraefikFront{
+			want: front.Proxy{Traefik: &front.Traefik{
 				Preset: "dokploy", Directory: "/etc/dokploy/traefik/dynamic", Resolver: "letsencrypt",
-				Entrypoints: host.Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "dokploy-network",
+				Entrypoints: &front.Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "dokploy-network",
 			}},
 		},
 		"Coolify's Caddy": {
 			proxy: map[string]any{"caddy": map[string]any{"preset": "coolify"}},
-			want: host.Front{Caddy: &host.CaddyFront{
+			want: front.Proxy{Caddy: &front.Caddy{
 				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "coolify-proxy",
 				Config: "/config/caddy/Caddyfile.autosave", Network: "coolify",
 			}},
@@ -65,46 +65,46 @@ func TestAFieldWrittenBesideAPresetOverridesItAndTheRestApply(t *testing.T) {
 
 	for name, tc := range map[string]struct {
 		proxy any
-		want  host.Front
+		want  front.Proxy
 	}{
 		"Coolify's Traefik with a DNS resolver of its own": {
 			proxy: map[string]any{"traefik": map[string]any{"preset": "coolify", "resolver": "le-dns", "previewResolver": "cloudflare"}},
-			want: host.Front{Traefik: &host.TraefikFront{
+			want: front.Proxy{Traefik: &front.Traefik{
 				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "le-dns", PreviewResolver: "cloudflare",
-				Entrypoints: host.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
+				Entrypoints: &front.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
 			}},
 		},
 		"Coolify's Traefik reading a directory of your own, mounted where Coolify mounts none": {
 			proxy: map[string]any{"traefik": map[string]any{"preset": "coolify", "directory": "/srv/traefik/dynamic"}},
-			want: host.Front{Traefik: &host.TraefikFront{
+			want: front.Proxy{Traefik: &front.Traefik{
 				Preset: "coolify", Directory: "/srv/traefik/dynamic", Resolver: "letsencrypt",
-				Entrypoints: host.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
+				Entrypoints: &front.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
 			}},
 		},
 		"Dokploy's Traefik with one entry point renamed": {
 			proxy: map[string]any{"traefik": map[string]any{"preset": "dokploy", "entrypoints": map[string]any{"https": "secure"}}},
-			want: host.Front{Traefik: &host.TraefikFront{
+			want: front.Proxy{Traefik: &front.Traefik{
 				Preset: "dokploy", Directory: "/etc/dokploy/traefik/dynamic", Resolver: "letsencrypt",
-				Entrypoints: host.Entrypoints{HTTP: "web", HTTPS: "secure"}, Network: "dokploy-network",
+				Entrypoints: &front.Entrypoints{HTTP: "web", HTTPS: "secure"}, Network: "dokploy-network",
 			}},
 		},
 		"Coolify's Traefik reaching the switchboard on a port in place of its network": {
 			proxy: map[string]any{"traefik": map[string]any{"preset": "coolify", "port": 9000}},
-			want: host.Front{Traefik: &host.TraefikFront{
+			want: front.Proxy{Traefik: &front.Traefik{
 				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt",
-				Entrypoints: host.Entrypoints{HTTP: "http", HTTPS: "https"}, Port: 9000,
+				Entrypoints: &front.Entrypoints{HTTP: "http", HTTPS: "https"}, Port: 9000,
 			}},
 		},
 		"Coolify's Caddy reaching the switchboard on a port in place of its network": {
 			proxy: map[string]any{"caddy": map[string]any{"preset": "coolify", "port": 9000}},
-			want: host.Front{Caddy: &host.CaddyFront{
+			want: front.Proxy{Caddy: &front.Caddy{
 				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "coolify-proxy",
 				Config: "/config/caddy/Caddyfile.autosave", Port: 9000,
 			}},
 		},
 		"Coolify's Caddy in a container of another name": {
 			proxy: map[string]any{"caddy": map[string]any{"preset": "coolify", "container": "edge"}},
-			want: host.Front{Caddy: &host.CaddyFront{
+			want: front.Proxy{Caddy: &front.Caddy{
 				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "edge",
 				Config: "/config/caddy/Caddyfile.autosave", Network: "coolify",
 			}},
@@ -125,33 +125,33 @@ func TestAProxySpelledOutTakesTheDefaultsItLeavesOut(t *testing.T) {
 
 	for name, tc := range map[string]struct {
 		proxy any
-		want  host.Front
+		want  front.Proxy
 	}{
 		"a Traefik on the host": {
 			proxy: map[string]any{"traefik": map[string]any{"directory": "/etc/traefik/dynamic", "resolver": "letsencrypt"}},
-			want: host.Front{Traefik: &host.TraefikFront{
+			want: front.Proxy{Traefik: &front.Traefik{
 				Directory: "/etc/traefik/dynamic", Resolver: "letsencrypt",
-				Entrypoints: host.Entrypoints{HTTP: "web", HTTPS: "websecure"}, Port: 8480,
+				Entrypoints: &front.Entrypoints{HTTP: "web", HTTPS: "websecure"}, Port: 8480,
 			}},
 		},
 		"a Traefik on a network": {
 			proxy: map[string]any{"traefik": map[string]any{"directory": "/etc/traefik/dynamic", "resolver": "letsencrypt", "network": "traefik"}},
-			want: host.Front{Traefik: &host.TraefikFront{
+			want: front.Proxy{Traefik: &front.Traefik{
 				Directory: "/etc/traefik/dynamic", Resolver: "letsencrypt",
-				Entrypoints: host.Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "traefik",
+				Entrypoints: &front.Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "traefik",
 			}},
 		},
 		"a systemd Caddy": {
 			proxy: map[string]any{"caddy": map[string]any{"directory": "/etc/caddy/ocel.d"}},
-			want:  host.Front{Caddy: &host.CaddyFront{Directory: "/etc/caddy/ocel.d", Config: "/etc/caddy/Caddyfile", Port: 8480}},
+			want:  front.Proxy{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d", Config: "/etc/caddy/Caddyfile", Port: 8480}},
 		},
 		"a Caddy in a container on a network": {
 			proxy: map[string]any{"caddy": map[string]any{"directory": "/etc/caddy/ocel.d", "container": "caddy", "network": "web"}},
-			want:  host.Front{Caddy: &host.CaddyFront{Directory: "/etc/caddy/ocel.d", Container: "caddy", Config: "/etc/caddy/Caddyfile", Network: "web"}},
+			want:  front.Proxy{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d", Container: "caddy", Config: "/etc/caddy/Caddyfile", Network: "web"}},
 		},
 		"a proxy routed by hand on a network": {
 			proxy: map[string]any{"manual": map[string]any{"network": "coolify"}},
-			want:  host.Front{Manual: &host.ManualFront{Port: 8480, Network: "coolify"}},
+			want:  front.Proxy{Manual: &front.Manual{Port: 8480, Network: "coolify"}},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -250,8 +250,8 @@ func TestEveryPresetTheSchemaOffersIsOneTheProviderFills(t *testing.T) {
 		option any
 		fills  []string
 	}{
-		"traefik": {option: vps.Traefik{}, fills: host.TraefikPresets()},
-		"caddy":   {option: vps.Caddy{}, fills: host.CaddyPresets()},
+		"traefik": {option: front.Traefik{}, fills: front.TraefikPresets()},
+		"caddy":   {option: front.Caddy{}, fills: front.CaddyPresets()},
 	} {
 		field, _ := reflect.TypeOf(tc.option).FieldByName("Preset")
 		if offered := strings.Split(field.Tag.Get("enum"), ","); !slices.Equal(offered, tc.fills) {
@@ -260,7 +260,7 @@ func TestEveryPresetTheSchemaOffersIsOneTheProviderFills(t *testing.T) {
 	}
 }
 
-func described(front host.Front) any {
+func described(front front.Proxy) any {
 	switch {
 	case front.Traefik != nil:
 		return *front.Traefik

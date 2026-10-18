@@ -16,11 +16,12 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 )
 
 const sealed = "postgres://example"
 
-func (vm machine) deploying(t *testing.T) *vps.Provider {
+func (vm liveBox) deploying(t *testing.T) *vps.Provider {
 	t.Helper()
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{
 		Host:         vm.addr,
@@ -32,7 +33,7 @@ func (vm machine) deploying(t *testing.T) *vps.Provider {
 	return p
 }
 
-func bootstrapped(t *testing.T, vm machine, tier environment.Tier) *vps.Provider {
+func bootstrapped(t *testing.T, vm liveBox, tier environment.Tier) *vps.Provider {
 	t.Helper()
 	p := vm.provider(t)
 	t.Cleanup(func() { closing(t, p) })
@@ -55,7 +56,7 @@ func bootstrapped(t *testing.T, vm machine, tier environment.Tier) *vps.Provider
 	return p
 }
 
-func dirties(t *testing.T, vm machine) {
+func dirties(t *testing.T, vm liveBox) {
 	t.Helper()
 	t.Cleanup(func() {
 		vm.forgetsTheDeployLogin(t)
@@ -82,8 +83,8 @@ func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
 	if rendered, err := vm.attempt(deployLogin, "sudo -n cat "+key); err == nil {
 		t.Errorf("%s read %s through sudo and got %q, so the sudoers line grants more than the helper", deployLogin, key, rendered)
 	}
-	if rendered, err := vm.attempt(deployLogin, "docker run --rm --network none --volume "+host.TierDir(tier)+":/k:ro "+docker.StaticImage+" /k/seal.key"); err == nil {
-		t.Errorf("%s mounted %s into a container and got %q, so the docker it drives reaches every file root owns", deployLogin, host.TierDir(tier), rendered)
+	if rendered, err := vm.attempt(deployLogin, "docker run --rm --network none --volume "+boxapi.TierDir(tier)+":/k:ro "+docker.StaticImage+" /k/seal.key"); err == nil {
+		t.Errorf("%s mounted %s into a container and got %q, so the docker it drives reaches every file root owns", deployLogin, boxapi.TierDir(tier), rendered)
 	}
 }
 
@@ -151,8 +152,8 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	if replaced.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls a host whose seal key was replaced current, so drift in what every secret opens to is invisible")
 	}
-	if !strings.Contains(vm.ssh(t, "sudo cat "+host.StampPath(tier)), host.SealAlgorithm) {
-		t.Errorf("the stamp says nothing about how a value is sealed, and %q is what the record claims", host.SealAlgorithm)
+	if !strings.Contains(vm.ssh(t, "sudo cat "+machine.StampPath(tier)), machine.SealAlgorithm) {
+		t.Errorf("the stamp says nothing about how a value is sealed, and %q is what the record claims", machine.SealAlgorithm)
 	}
 
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err == nil {

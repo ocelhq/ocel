@@ -65,7 +65,7 @@ func installedOn(dir, command string) ssh.Result {
 }
 
 func installsOn(dir string, progress *fake.Log) (*bench, *[]int) {
-	box := machine(nil)
+	box := newBench(nil)
 	box.dest.User = "ada"
 	var toldBefore []int
 	box.answer = func(command string) (ssh.Result, bool) {
@@ -180,7 +180,7 @@ echo 'E: Some index files failed to download.' >&2`)
 func TestAnInstallSudoRefusedIsNotTriedAgain(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	box.facts.Root, box.facts.Sudo = false, true
 	box.answer = func(command string) (ssh.Result, bool) {
 		return ssh.Result{Code: 1, Stderr: "sudo: a password is required"}, strings.Contains(command, dockerSource)

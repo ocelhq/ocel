@@ -7,37 +7,38 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const publicPreviewBase = "preview.example.com"
 
-func refusePreviewCertificates(t *testing.T, state boxapi.RoutingTable, front Front, pins []boxapi.Pin) error {
+func refusePreviewCertificates(t *testing.T, state boxapi.RoutingTable, fronting front.Proxy, pins []boxapi.Pin) error {
 	t.Helper()
-	return refusePreviewCertificatesDeployingTo(t, state, front, pins, "")
+	return refusePreviewCertificatesDeployingTo(t, state, fronting, pins, "")
 }
 
-func refusePreviewCertificatesDeployingTo(t *testing.T, state boxapi.RoutingTable, front Front, pins []boxapi.Pin, destination string) error {
+func refusePreviewCertificatesDeployingTo(t *testing.T, state boxapi.RoutingTable, fronting front.Proxy, pins []boxapi.Pin, destination string) error {
 	t.Helper()
 	state.Grace = 30 * time.Second
 	table := string(mustWrite(t, state))
-	b := machine(nil)
+	b := newBench(nil)
 	b.answer = servesProxy(b, &table)
-	h := New(ssh.NewBox(b.dial, nil), Keys{}, pins, front)
+	h := New(ssh.NewBox(b.dial, nil), Keys{}, pins, fronting)
 	return h.RefusePerHostnamePreviewCertificates(context.Background(), destination)
 }
 
-func newTraefikFront(previewResolver string) Front {
-	return Front{Traefik: &TraefikFront{Directory: "/etc/traefik/dynamic", Resolver: "le", PreviewResolver: previewResolver}}
+func newTraefikFront(previewResolver string) front.Proxy {
+	return front.Proxy{Traefik: &front.Traefik{Directory: "/etc/traefik/dynamic", Resolver: "le", PreviewResolver: previewResolver}}
 }
 
 func TestAPreviewWhoseHostnamesEachGetAPublicCertificateIsRefusedNamingEveryWayOut(t *testing.T) {
 	t.Parallel()
 
-	for name, front := range map[string]Front{
+	for name, front := range map[string]front.Proxy{
 		"ocel's own proxy":           {},
 		"a Traefik with no wildcard": newTraefikFront(""),
-		"your Caddy":                 {Caddy: &CaddyFront{Directory: "/etc/caddy/ocel", Config: "/etc/caddy/Caddyfile"}},
+		"your Caddy":                 {Caddy: &front.Caddy{Directory: "/etc/caddy/ocel", Config: "/etc/caddy/Caddyfile"}},
 	} {
 		err := refusePreviewCertificates(t, boxapi.RoutingTable{PreviewBase: publicPreviewBase}, front, nil)
 		if err == nil {
@@ -67,11 +68,11 @@ func TestAPreviewServedUnderOneWildcardCertificateIsNotRefused(t *testing.T) {
 	origin := boxapi.CertificatePair{Certificate: "ORIGIN", Key: "KEY"}
 	for name, bench := range map[string]struct {
 		state boxapi.RoutingTable
-		front Front
+		front front.Proxy
 		pins  []boxapi.Pin
 	}{
 		"a Traefik with a preview resolver": {state: boxapi.RoutingTable{PreviewBase: publicPreviewBase}, front: newTraefikFront("dns")},
-		"a proxy you route yourself":        {state: boxapi.RoutingTable{PreviewBase: publicPreviewBase}, front: Front{Manual: &ManualFront{Port: 8480}}},
+		"a proxy you route yourself":        {state: boxapi.RoutingTable{PreviewBase: publicPreviewBase}, front: front.Proxy{Manual: &front.Manual{Port: 8480}}},
 		"a pinned wildcard":                 {state: boxapi.RoutingTable{PreviewBase: publicPreviewBase}, pins: []boxapi.Pin{{Hostname: "*." + publicPreviewBase, Path: boxapi.PinsDir + "/preview"}}},
 		"an edge's origin certificate": {state: boxapi.RoutingTable{PreviewBase: publicPreviewBase, Shields: []boxapi.Shield{{
 			Hostname: "*." + publicPreviewBase, Owner: "ocel-preview-entry", ClientCAs: []string{"zone"}, OriginCertificate: origin,
@@ -90,7 +91,7 @@ func TestAnEdgeThatShieldsThePreviewsWithoutAnOriginCertificateStillLeavesEachHo
 
 	err := refusePreviewCertificates(t, boxapi.RoutingTable{PreviewBase: publicPreviewBase, Shields: []boxapi.Shield{{
 		Hostname: "*." + publicPreviewBase, Owner: "ocel-preview-entry", ClientCAs: []string{"zone"},
-	}}}, Front{}, nil)
+	}}}, front.Proxy{}, nil)
 	if err == nil {
 		t.Error("a shield with no origin certificate let the preview through, and the box still orders a public certificate per hostname behind it")
 	}
@@ -99,7 +100,7 @@ func TestAnEdgeThatShieldsThePreviewsWithoutAnOriginCertificateStillLeavesEachHo
 func TestTheFirstPreviewOnABoxIsRefusedByTheBaseItDeploysTo(t *testing.T) {
 	t.Parallel()
 
-	err := refusePreviewCertificatesDeployingTo(t, boxapi.RoutingTable{}, Front{}, nil, publicPreviewBase)
+	err := refusePreviewCertificatesDeployingTo(t, boxapi.RoutingTable{}, front.Proxy{}, nil, publicPreviewBase)
 	if err == nil || !strings.Contains(err.Error(), publicPreviewBase) {
 		t.Errorf("the first preview on an empty box was let through with %v, want it refused by %s, the base it installs", err, publicPreviewBase)
 	}

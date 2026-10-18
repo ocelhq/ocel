@@ -121,7 +121,7 @@ func TestABoxAlreadyServingOnePreviewBaseRefusesASecondRatherThanSwappingIt(t *t
 	}
 }
 
-func previewStack(t *testing.T, m *machine) boxStack {
+func previewStack(t *testing.T, m *fakeBox) boxStack {
 	t.Helper()
 	return previewStackOn(t, edgeOver(m, fake.NewKeyValues()))
 }
@@ -162,7 +162,7 @@ func movePointerOnto(t *testing.T, stack boxStack, pointer, promotionID string, 
 	}
 }
 
-func claimedOn(t *testing.T, m *machine) []boxapi.Claim {
+func claimedOn(t *testing.T, m *fakeBox) []boxapi.Claim {
 	t.Helper()
 
 	claims, err := m.Claims(context.Background())
@@ -394,11 +394,11 @@ func TestAPreviewDeploymentClaimsNoStoreOfItsOwn(t *testing.T) {
 func TestAFirstPreviewTheBoxRefusedLeavesNoHostnameClaimed(t *testing.T) {
 	t.Parallel()
 
-	for what, refuse := range map[string]func(*machine){
-		"a container that would not run": func(m *machine) {
+	for what, refuse := range map[string]func(*fakeBox){
+		"a container that would not run": func(m *fakeBox) {
 			m.refuseOn("RunContainer", errors.New("docker run failed"))
 		},
-		"a release the box kept off": func(m *machine) {
+		"a release the box kept off": func(m *fakeBox) {
 			m.refuseOn("Release", router.Unserved{Err: errors.New("the gate exited 4; the previous release is still live")})
 		},
 	} {

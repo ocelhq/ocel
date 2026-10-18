@@ -480,7 +480,11 @@ func (s Store) Resolve(ctx context.Context, manifest boxapi.Manifest) (map[strin
 	if manifest.Store == nil {
 		return answer, nil
 	}
-	if base := s.storeBase(manifest); base != "" {
+	base, err := s.storeBase(manifest)
+	if err != nil {
+		return nil, err
+	}
+	if base != "" {
 		answer[boxapi.StorePublicKey] = base
 		published(answer, manifest.Bindings, base)
 	}
@@ -495,23 +499,26 @@ func (s Store) Resolve(ctx context.Context, manifest boxapi.Manifest) (map[strin
 	return answer, nil
 }
 
-func (s Store) storeBase(manifest boxapi.Manifest) string {
+func (s Store) storeBase(manifest boxapi.Manifest) (string, error) {
 	if manifest.Store.Pointer == "" {
-		return ""
+		return "", nil
 	}
 	at := s.RoutingTable
 	if at == "" {
 		at = boxapi.RoutingTablePath
 	}
 	table, err := os.ReadFile(at)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("the routing table %s cannot be read: %w", at, err)
 	}
 	read, err := boxapi.ReadRoutingTable(table)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("the routing table %s is refused: %w", at, err)
 	}
-	return boxapi.StoreBase(read.Claims, boxapi.Surface(manifest.Slug, manifest.Tier), manifest.Store.Pointer)
+	return boxapi.StoreBase(read.Claims, boxapi.Surface(manifest.Slug, manifest.Tier), manifest.Store.Pointer), nil
 }
 
 func (s Store) storeSecret(ctx context.Context, manifest boxapi.Manifest) (string, error) {

@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 	awayDir    = "/var/tmp/ocel-live-away"
 )
 
-func purged(t *testing.T, vm machine) {
+func purged(t *testing.T, vm liveBox) {
 	t.Helper()
 	vm.ssh(t, "sudo systemctl disable --now "+socketName+" "+unitName+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo DEBIAN_FRONTEND=noninteractive apt-get purge -y "+
@@ -37,7 +37,7 @@ func purged(t *testing.T, vm machine) {
 	}
 }
 
-func unitPaths(t *testing.T, vm machine) []string {
+func unitPaths(t *testing.T, vm liveBox) []string {
 	t.Helper()
 	var paths []string
 	for _, line := range strings.Split(vm.ssh(t, "systemctl show -p FragmentPath,SourcePath,DropInPaths "+unitName), "\n") {
@@ -49,7 +49,7 @@ func unitPaths(t *testing.T, vm machine) []string {
 	return append(paths, strings.Fields(vm.ssh(t, "for p in "+initScript+" /etc/systemd/system/"+unitName+"; do [ -e \"$p\" ] && echo \"$p\"; done; true"))...)
 }
 
-func unmade(t *testing.T, vm machine) ([]string, string) {
+func unmade(t *testing.T, vm liveBox) ([]string, string) {
 	t.Helper()
 	vm.ssh(t, "sudo systemctl stop "+socketName+" "+unitName+" >/dev/null 2>&1 || true")
 	var moved []string
@@ -193,7 +193,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("an idle daemon plans %q for %s, want the unit enabled", unit.Action, unitName)
 	}
 	for _, change := range waking.Changes {
-		if change.Kind == host.KindNetwork || change.Kind == host.KindContainer || change.Name == unitName {
+		if change.Kind == machine.KindNetwork || change.Kind == machine.KindContainer || change.Name == unitName {
 			continue
 		}
 		if change.Action.Writes() {

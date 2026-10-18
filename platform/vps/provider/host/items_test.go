@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -20,23 +22,23 @@ const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
 func TestWhatATierKeepsIsRootsAndItsStateIsTheDeployPrincipalsAlone(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, Front{})
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 	owners := map[string]string{}
 	for _, item := range items {
 		owners[item.Name] = item.Owner
 	}
 	for name, want := range map[string]string{
-		tierRoot:                                 rootOwner,
-		TierDir(environment.TierProduction):      rootOwner,
-		boxapi.LibDir:                            rootOwner,
-		LiveBinary:                               rootOwner,
-		releasesHelper:                           rootOwner,
-		stateRoot:                                rootOwner,
-		releasesRoot:                             deployUser,
-		sshDir:                                   deployUser,
-		authorizedKeys:                           deployUser,
-		StateDir(environment.TierProduction):     deployUser,
-		KeyValuesDir(environment.TierProduction): deployUser,
+		boxapi.TierRoot: machine.RootOwner,
+		boxapi.TierDir(environment.TierProduction): machine.RootOwner,
+		boxapi.LibDir:         machine.RootOwner,
+		LiveBinary:            machine.RootOwner,
+		boxapi.ReleasesHelper: machine.RootOwner,
+		boxapi.StateRoot:      machine.RootOwner,
+		boxapi.ReleasesDir:    deployUser,
+		sshDir:                deployUser,
+		authorizedKeys:        deployUser,
+		boxapi.StateDir(environment.TierProduction): deployUser,
+		KeyValuesDir(environment.TierProduction):    deployUser,
 	} {
 		if owners[name] != want {
 			t.Errorf("%s is written to %q, want %q: a path with two owners is a path with none", name, owners[name], want)
@@ -48,12 +50,12 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 	t.Parallel()
 
 	tableDir := filepath.Dir(boxapi.RoutingTablePath)
-	if tableDir == stateRoot || tableDir == proxyRoot {
+	if tableDir == boxapi.StateRoot || tableDir == proxyRoot {
 		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", tableDir)
 	}
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, Front{})
-	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == tableDir })
-	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), boxapi.RoutingTablePath) })
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	made := slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == machine.KindDir && item.Name == tableDir })
+	table := slices.IndexFunc(items, func(item machine.Item) bool { return strings.Contains(item.Command(), boxapi.RoutingTablePath) })
 	if made < 0 || table < 0 || made > table {
 		t.Fatalf("%s is made at %d and the table in it first written at %d by %s: the table is written by renaming a file staged beside it, so its directory must exist first", tableDir, made, table, items[max(table, 0)].ID())
 	}
@@ -67,8 +69,8 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 func TestThePrincipalIsWrittenBeforeAnythingItOwns(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, Front{})
-	account := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUser })
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	account := slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == machine.KindUser })
 	if account < 0 {
 		t.Fatal("nothing in the item set creates the deploy principal")
 	}
@@ -83,8 +85,8 @@ func TestTheDeployKeysAreTheOnesTheItemContains(t *testing.T) {
 	t.Parallel()
 
 	keys := []byte(aKey + "\n")
-	var written Item
-	for _, item := range Items(environment.TierProduction, keys, ssh.AMD64, Front{}) {
+	var written machine.Item
+	for _, item := range Items(environment.TierProduction, keys, ssh.AMD64, front.Proxy{}) {
 		if item.Name == authorizedKeys {
 			written = item
 		}
@@ -140,7 +142,7 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatExistsIsKept(t *testing.T
 		t.Errorf("a host with no %s plans %q, want it created", deployUser, fresh.Action)
 	}
 
-	installed := Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: digests(Items(tier, keys, ssh.AMD64, Front{}))}
+	installed := Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{}))}
 	if kept := planFor(planned(installed), principal().ID()); kept.Action != provider.ActionKeep {
 		t.Errorf("a host whose principal is unchanged from what ocel writes plans %q, want it kept", kept.Action)
 	}
@@ -155,8 +157,8 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	installed := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})
-	moved := Reading{Arch: ssh.AMD64, Tier: tier, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(installed)}
+	installed := Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	moved := Reading{Arch: ssh.AMD64, Tier: tier, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: machine.DigestsOf(installed)}
 	for _, change := range planned(moved) {
 		want := provider.ActionKeep
 		switch change.Name {
@@ -176,21 +178,21 @@ func TestThePrincipalGoesWithTheLastTierAndStaysWhileASiblingRemains(t *testing.
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := digests(Items(production, keys, ssh.AMD64, Front{}))
+	installed := machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))
 
 	alone := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
-	taken := slices.IndexFunc(alone, func(r removal) bool { return r.kind == KindUser && r.path == deployUser })
+	taken := slices.IndexFunc(alone, func(r machine.Removal) bool { return r.Kind == machine.KindUser && r.Path == deployUser })
 	if taken < 0 {
 		t.Fatal("destroying the last tier leaves the deploy principal behind, and a login nothing uses is a login nobody revokes")
 	}
-	if state := slices.IndexFunc(alone, func(r removal) bool { return r.path == stateRoot }); state > taken {
+	if state := slices.IndexFunc(alone, func(r machine.Removal) bool { return r.Path == boxapi.StateRoot }); state > taken {
 		t.Error("the principal is removed before its home, and userdel over a home ocel still keeps state in is a home nothing owns")
 	}
 
-	beside := digests(Items(preview, keys, ssh.AMD64, Front{}))
+	beside := machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))
 	shared := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
 	for _, r := range shared {
-		if r.kind == KindUser {
+		if r.Kind == machine.KindUser {
 			t.Error("destroying one tier takes the deploy principal an installed sibling still deploys as")
 		}
 	}
@@ -201,22 +203,22 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
+	installed := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))}
 
 	for name, sibling := range map[string]Reading{
 		"the last tier on the host": {Tier: preview, Observed: map[string]string{}},
-		"a tier beside its sibling": {Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))},
+		"a tier beside its sibling": {Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))},
 	} {
 		taken := removing(installed, sibling, appsPresent{})
-		stamp := index(taken, TierDir(production))
+		stamp := index(taken, boxapi.TierDir(production))
 		if stamp < 0 {
-			t.Fatalf("destroying %s never takes %s, and the stamp stays on a host that has nothing", name, TierDir(production))
+			t.Fatalf("destroying %s never takes %s, and the stamp stays on a host that has nothing", name, boxapi.TierDir(production))
 		}
 		for at, r := range taken {
-			if r.action != provider.ActionDelete || at <= stamp || r.path == tierRoot {
+			if r.Action != provider.ActionDelete || at <= stamp || r.Path == boxapi.TierRoot {
 				continue
 			}
-			t.Errorf("destroying %s takes %s after the stamp, so an interrupted destroy leaves a host that lies about what it has installed", name, r.path)
+			t.Errorf("destroying %s takes %s after the stamp, so an interrupted destroy leaves a host that lies about what it has installed", name, r.Path)
 		}
 	}
 }
@@ -234,15 +236,15 @@ func TestDestroyOfAHalfWrittenHostNamesWhatExistsAndNothingBeside(t *testing.T) 
 		Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{},
 	)
 	for _, r := range taken {
-		if _, present := half[r.kind+" "+r.path]; !present {
-			t.Errorf("destroy takes %s %s off a host that never had it, and an apply that died halfway needs no mode of its own", r.kind, r.path)
+		if _, present := half[r.Kind+" "+r.Path]; !present {
+			t.Errorf("destroy takes %s %s off a host that never had it, and an apply that died halfway needs no mode of its own", r.Kind, r.Path)
 		}
 	}
-	if last := index(taken, tierRoot); last != len(taken)-1 {
+	if last := index(taken, boxapi.TierRoot); last != len(taken)-1 {
 		t.Errorf("destroy of a half-written host takes %s at %d of %d rows, want the shared root taken after the tier tier beneath it",
-			tierRoot, last, len(taken))
+			boxapi.TierRoot, last, len(taken))
 	}
-	if index(taken, TierDir(production)) > index(taken, tierRoot) {
+	if index(taken, boxapi.TierDir(production)) > index(taken, boxapi.TierRoot) {
 		t.Error("the tier directory containing the stamp is taken after the root above it, so an interrupted destroy loses what the host says it is")
 	}
 }
@@ -273,7 +275,7 @@ func TestTheAccountFactsIncludeEveryFieldTheWriteSets(t *testing.T) {
 	t.Parallel()
 
 	facts := string(principal().Content)
-	for _, want := range []string{deployShell, stateRoot, "groups=\n", "locked"} {
+	for _, want := range []string{deployShell, boxapi.StateRoot, "groups=\n", "locked"} {
 		if !strings.Contains(facts, want) {
 			t.Errorf("the account digest reads %q, which says nothing about %q, so drift there would never re-plan", facts, want)
 		}
@@ -330,21 +332,21 @@ func TestOnlyTheOwnerDrawnSurveyPassesOverAFileItCannotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items := []Item{
-		{Kind: KindFile, Name: readable, Mode: 0o644, Owner: stateOwner},
-		{Kind: KindFile, Name: sealed, Mode: 0o750, Owner: rootOwner},
+	items := []machine.Item{
+		{Kind: machine.KindFile, Name: readable, Mode: 0o644, Owner: stateOwner},
+		{Kind: machine.KindFile, Name: sealed, Mode: 0o750, Owner: machine.RootOwner},
 	}
-	whole, _, err := readSurvey(sh(t, root, survey(items)))
+	whole, _, err := machine.ReadSurvey(sh(t, root, machine.SurveyScript(items)))
 	if err != nil {
 		t.Fatalf("the survey every write is planned against = %v over a tier containing a file this login may not read", err)
 	}
-	if _, present := whole[KindFile+" "+readable]; !present {
+	if _, present := whole[machine.KindFile+" "+readable]; !present {
 		t.Fatalf("the survey read nothing at all for %s, so what it says about %s means nothing", readable, sealed)
 	}
-	if reported := whole[KindFile+" "+sealed]; reported == items[1].Digest() {
+	if reported := whole[machine.KindFile+" "+sealed]; reported == items[1].Digest() {
 		t.Fatalf("the survey hashed %s without reading it, so this machine is not the one this test needs", sealed)
 	}
-	if _, present := whole[KindFile+" "+sealed]; !present {
+	if _, present := whole[machine.KindFile+" "+sealed]; !present {
 		t.Errorf("the survey every write is planned against reports nothing for %s, and absence is a lie on the reading a plan is drawn from: what it cannot read is drift it must name, not a path that is gone",
 			sealed)
 	}
@@ -364,12 +366,12 @@ func TestASymlinkWhereAnItemsPathShouldBeIsRefusedRatherThanFollowed(t *testing.
 	}
 
 	for name, script := range map[string]string{
-		"a path the survey stats": survey([]Item{dir(pointed, 0o750, stateOwner, "")}),
-		"the seal key's own probe": sealSurvey(Item{
-			Kind: KindSealKey, Name: pointed, Mode: sealKeyMode, Owner: rootOwner, Tier: environment.TierProduction,
+		"a path the survey stats": machine.SurveyScript([]machine.Item{machine.Dir(pointed, 0o750, stateOwner, "")}),
+		"the seal key's own probe": sealSurvey(machine.Item{
+			Kind: machine.KindSealKey, Name: pointed, Mode: sealKeyMode, Owner: machine.RootOwner, Tier: environment.TierProduction,
 		}),
 	} {
-		_, _, err := readSurvey(sh(t, root, script))
+		_, _, err := machine.ReadSurvey(sh(t, root, script))
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) {
 			t.Fatalf("%s over a symlink = %v, want a refusal the CLI can render", name, err)

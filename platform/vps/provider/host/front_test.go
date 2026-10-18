@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
@@ -19,12 +21,14 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func routedByHand() Front { return Front{Manual: &ManualFront{Port: manual.DefaultPort}} }
+func routedByHand() front.Proxy {
+	return front.Proxy{Manual: &front.Manual{Port: manual.DefaultPort}}
+}
 
-func coolifysTraefik() Front {
-	return Front{Traefik: &TraefikFront{
+func coolifysTraefik() front.Proxy {
+	return front.Proxy{Traefik: &front.Traefik{
 		Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt",
-		Entrypoints: Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
+		Entrypoints: &front.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
 	}}
 }
 
@@ -34,33 +38,33 @@ func TestABoxFrontedByHandInstallsNothingOfOcelsOwnProxy(t *testing.T) {
 	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, routedByHand())
 	for _, item := range items {
 		switch {
-		case item.Kind == KindContainer && item.Name == caddy.Container,
-			item.Kind == KindProxyConfig,
+		case item.Kind == machine.KindContainer && item.Name == caddy.Container,
+			item.Kind == machine.KindProxyConfig,
 			item.Name == ProxyData, item.Name == boxapi.PinsDir, item.Name == proxyRoot:
 			t.Errorf("a box fronted by your own proxy installs %s, which only ocel's own proxy reads", item.ID())
 		}
 	}
 	for _, wanted := range []string{boxapi.SwitchboardBinary, boxapi.RoutingTablePath, ProxyNetwork, boxapi.Switchboard} {
-		if !slices.ContainsFunc(items, func(item Item) bool { return item.Name == wanted }) {
+		if !slices.ContainsFunc(items, func(item machine.Item) bool { return item.Name == wanted }) {
 			t.Errorf("a box fronted by your own proxy installs no %s; the switchboard still routes it", wanted)
 		}
 	}
 }
 
-func switchboardOf(t *testing.T, front Front) docker.Service {
+func switchboardOf(t *testing.T, fronting front.Proxy) docker.Service {
 	t.Helper()
-	itemAt(t, ProxyItems(ssh.AMD64, front), KindContainer, boxapi.Switchboard)
-	return switchboardBox(switchboardBinary(ssh.AMD64), front)
+	itemAt(t, ProxyItems(ssh.AMD64, fronting), machine.KindContainer, boxapi.Switchboard)
+	return switchboardBox(switchboardBinary(ssh.AMD64), fronting)
 }
 
 func TestTheSwitchboardPublishesOnLoopbackOnlyForAProxyRoutedByHand(t *testing.T) {
 	t.Parallel()
 
-	byHand := strings.Join(switchboardOf(t, Front{Manual: &ManualFront{Port: 9000}}).Run(), " ")
+	byHand := strings.Join(switchboardOf(t, front.Proxy{Manual: &front.Manual{Port: 9000}}).Run(), " ")
 	if !strings.Contains(byHand, "--publish 127.0.0.1:9000:"+routing.SwitchboardPort) {
 		t.Errorf("the switchboard runs as %q, want it published on 127.0.0.1:9000 for your proxy to reach", byHand)
 	}
-	builtIn := strings.Join(switchboardOf(t, Front{}).Run(), " ")
+	builtIn := strings.Join(switchboardOf(t, front.Proxy{}).Run(), " ")
 	if strings.Contains(builtIn, "--publish") {
 		t.Errorf("the switchboard runs as %q beside ocel's own proxy, want it reached over the %s network alone", builtIn, ProxyNetwork)
 	}
@@ -73,14 +77,14 @@ func TestAProxyRoutedByHandIsTrustedForItsSchemeAndHostButNeverTheClientItNames(
 	if at := slices.Index(byHand, "--relay-network"); at < 0 || byHand[at+1] != ProxyNetwork {
 		t.Errorf("the switchboard serves as %q beside your proxy, want it relaying from the %s network alone, never an app network it joins, and trusting nobody's X-Forwarded-For", byHand, ProxyNetwork)
 	}
-	builtIn := switchboardOf(t, Front{}).Command
+	builtIn := switchboardOf(t, front.Proxy{}).Command
 	if at := slices.Index(builtIn, "--front"); at < 0 || builtIn[at+1] != boxapi.FrontSocket || slices.Contains(builtIn, "--relay") {
 		t.Errorf("the switchboard serves as %q beside ocel's own proxy, want it trusting %s alone, over %s", builtIn, caddy.Container, boxapi.FrontSocket)
 	}
 }
 
-func routedOnANetwork() Front {
-	return Front{Manual: &ManualFront{Port: manual.DefaultPort, Network: "coolify"}}
+func routedOnANetwork() front.Proxy {
+	return front.Proxy{Manual: &front.Manual{Port: manual.DefaultPort, Network: "coolify"}}
 }
 
 func TestAProxyRoutedByHandOnItsOwnNetworkIsHeardFromItAsFromTheBoxNetwork(t *testing.T) {
@@ -135,7 +139,7 @@ func TestASwitchboardThatLeftYourProxysNetworkReadsAsDrift(t *testing.T) {
 func TestAClaimOnABoxFrontedByHandWritesTheTableAloneAndReloadsNothing(t *testing.T) {
 	t.Parallel()
 
-	box := &claimBench{bench: machine(nil), recorded: string(mustWrite(t, routed()))}
+	box := &claimBench{bench: newBench(nil), recorded: string(mustWrite(t, routed()))}
 	absent := ""
 	box.answer = servesPair(box.bench, &box.recorded, &absent)
 	h := box.fronted(routedByHand())
@@ -168,7 +172,7 @@ func TestAClaimOnABoxFrontedByHandWritesTheTableAloneAndReloadsNothing(t *testin
 func TestTheConnectorOnABoxYourProxyFrontsSaysWhatToRouteToIt(t *testing.T) {
 	t.Parallel()
 
-	box := &claimBench{bench: machine(nil), recorded: string(mustWrite(t, routed()))}
+	box := &claimBench{bench: newBench(nil), recorded: string(mustWrite(t, routed()))}
 	absent := ""
 	box.answer = servesPair(box.bench, &box.recorded, &absent)
 	progress := &said{}
@@ -190,21 +194,21 @@ func TestAProxyRoutedByHandOnItsOwnNetworkIsToldTheSwitchboardsNameOnIt(t *testi
 	}
 }
 
-func frontRecordItem(front Front, project string, tier environment.Tier) (Item, error) {
-	return frontRecord{Proxy: front.recorded(), Project: project, Tier: tier}.item()
+func frontRecordItem(fronting front.Proxy, project string, tier environment.Tier) (machine.Item, error) {
+	return frontRecord{Proxy: fronting.Recorded(), Project: project, Tier: tier}.item()
 }
 
-func recordOn(t *testing.T, box *bench, tier environment.Tier, front Front, project string) {
+func recordOn(t *testing.T, box *bench, tier environment.Tier, fronting front.Proxy, project string) {
 	t.Helper()
-	record, err := frontRecordItem(front, project, tier)
+	record, err := frontRecordItem(fronting, project, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
 	box.installed[tier] = append(unrecorded(box, tier), record)
 }
 
-func unrecorded(box *bench, tier environment.Tier) []Item {
-	return slices.DeleteFunc(box.installed[tier], func(item Item) bool { return item.Name == FrontRecordPath })
+func unrecorded(box *bench, tier environment.Tier) []machine.Item {
+	return slices.DeleteFunc(box.installed[tier], func(item machine.Item) bool { return item.Name == FrontRecordPath })
 }
 
 func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
@@ -234,7 +238,7 @@ func TestABootstrapLeavesARecordThatAgreesUnchanged(t *testing.T) {
 
 	tier := environment.TierPreview
 	box := bootstrappedOn(t, tier)
-	recordOn(t, box, tier, Front{}, "blog")
+	recordOn(t, box, tier, front.Proxy{}, "blog")
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
 		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
@@ -248,20 +252,20 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		recorded Front
-		ours     Front
+		recorded front.Proxy
+		ours     front.Proxy
 		wanted   []string
 	}{
 		"the box routes by hand, the project leaves the option out": {
-			recorded: routedByHand(), ours: Front{},
+			recorded: routedByHand(), ours: front.Proxy{},
 			wanted: []string{"a proxy you route yourself", "set by blog/preview", "add `\"proxy\": \"manual\"`"},
 		},
 		"the box routes by hand on another port": {
-			recorded: Front{Manual: &ManualFront{Port: 9000}}, ours: routedByHand(),
+			recorded: front.Proxy{Manual: &front.Manual{Port: 9000}}, ours: routedByHand(),
 			wanted: []string{"set by blog/preview", "add `\"proxy\": { \"manual\": { \"port\": 9000 } }`"},
 		},
 		"the box routes by hand beside a network": {
-			recorded: Front{Manual: &ManualFront{Port: manual.DefaultPort, Network: "coolify"}}, ours: routedByHand(),
+			recorded: front.Proxy{Manual: &front.Manual{Port: manual.DefaultPort, Network: "coolify"}}, ours: routedByHand(),
 			wanted: []string{"a proxy you route yourself", "add `\"proxy\": { \"manual\": { \"network\": \"coolify\" } }`"},
 		},
 		"the box runs Coolify's Traefik": {
@@ -269,7 +273,7 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 			wanted: []string{"Coolify's Traefik", "set by blog/preview", "add `\"proxy\": { \"traefik\": { \"preset\": \"coolify\" } }`"},
 		},
 		"the box runs Coolify's Traefik with a resolver of its own": {
-			recorded: func() Front {
+			recorded: func() front.Proxy {
 				front := coolifysTraefik()
 				front.Traefik.Resolver = "le-dns"
 				return front
@@ -283,25 +287,25 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 			wanted:   []string{"Coolify's Traefik", "add `\"proxy\": { \"traefik\": { \"preset\": \"coolify\", \"port\": 9000 } }`"},
 		},
 		"the box runs a Traefik spelled out": {
-			recorded: Front{Traefik: &TraefikFront{
+			recorded: front.Proxy{Traefik: &front.Traefik{
 				Directory: "/etc/traefik/dynamic", Resolver: "letsencrypt", PreviewResolver: "cloudflare",
-				Entrypoints: Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "traefik",
+				Entrypoints: &front.Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "traefik",
 			}},
-			ours: Front{},
+			ours: front.Proxy{},
 			wanted: []string{"your Traefik", "add `\"proxy\": { \"traefik\": { \"directory\": \"/etc/traefik/dynamic\", \"resolver\": \"letsencrypt\", " +
 				"\"previewResolver\": \"cloudflare\", \"network\": \"traefik\" } }`"},
 		},
 		"the box runs a Traefik on its own port and entry points": {
-			recorded: Front{Traefik: &TraefikFront{
+			recorded: front.Proxy{Traefik: &front.Traefik{
 				Directory: "/etc/traefik/dynamic", Resolver: "letsencrypt",
-				Entrypoints: Entrypoints{HTTP: "insecure", HTTPS: "secure"}, Port: 9000,
+				Entrypoints: &front.Entrypoints{HTTP: "insecure", HTTPS: "secure"}, Port: 9000,
 			}},
-			ours: Front{},
+			ours: front.Proxy{},
 			wanted: []string{"add `\"proxy\": { \"traefik\": { \"directory\": \"/etc/traefik/dynamic\", \"resolver\": \"letsencrypt\", " +
 				"\"entrypoints\": { \"http\": \"insecure\", \"https\": \"secure\" }, \"port\": 9000 } }`"},
 		},
 		"the box runs Coolify's Caddy": {
-			recorded: Front{Caddy: &CaddyFront{
+			recorded: front.Proxy{Caddy: &front.Caddy{
 				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "coolify-proxy",
 				Config: "/config/caddy/Caddyfile.autosave", Network: "coolify",
 			}},
@@ -309,12 +313,12 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 			wanted: []string{"Coolify's Caddy", "add `\"proxy\": { \"caddy\": { \"preset\": \"coolify\" } }`"},
 		},
 		"the box runs a systemd Caddy": {
-			recorded: Front{Caddy: &CaddyFront{Directory: "/etc/caddy/ocel.d", Config: "/etc/caddy/Caddyfile", Port: 8480}},
+			recorded: front.Proxy{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d", Config: "/etc/caddy/Caddyfile", Port: 8480}},
 			ours:     routedByHand(),
 			wanted:   []string{"your Caddy", "add `\"proxy\": { \"caddy\": { \"directory\": \"/etc/caddy/ocel.d\" } }`"},
 		},
 		"the box runs ocel's own proxy, the project routes by hand": {
-			recorded: Front{}, ours: routedByHand(),
+			recorded: front.Proxy{}, ours: routedByHand(),
 			wanted: []string{"ocel's own proxy", "set by blog/preview", "remove `\"proxy\"`"},
 		},
 	} {
@@ -346,16 +350,16 @@ func TestADeployOntoABoxRecordedForItsOwnProxyGoesAhead(t *testing.T) {
 func TestAPresetAndTheSameProxySpelledOutAreOneProxy(t *testing.T) {
 	t.Parallel()
 
-	spelled := Front{Traefik: &TraefikFront{
+	spelled := front.Proxy{Traefik: &front.Traefik{
 		Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt",
-		Entrypoints: Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
+		Entrypoints: &front.Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
 	}}
-	for name, tc := range map[string]struct{ recorded, ours Front }{
+	for name, tc := range map[string]struct{ recorded, ours front.Proxy }{
 		"recorded as the preset, deployed spelled out": {recorded: coolifysTraefik(), ours: spelled},
 		"recorded spelled out, deployed as the preset": {recorded: spelled, ours: coolifysTraefik()},
 		"recorded as the preset on a port, deployed spelled out on it": {
 			recorded: onAPort(coolifysTraefik()),
-			ours:     onAPort(Front{Traefik: spelled.Traefik}),
+			ours:     onAPort(front.Proxy{Traefik: spelled.Traefik}),
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -370,10 +374,10 @@ func TestAPresetAndTheSameProxySpelledOutAreOneProxy(t *testing.T) {
 	}
 }
 
-func onAPort(front Front) Front {
-	moved := *front.Traefik
+func onAPort(fronting front.Proxy) front.Proxy {
+	moved := *fronting.Traefik
 	moved.Network, moved.Port = "", 9000
-	return Front{Traefik: &moved}
+	return front.Proxy{Traefik: &moved}
 }
 
 func TestADeployOntoABoxThatRecordsNoProxyIsSentToBootstrap(t *testing.T) {
@@ -391,8 +395,8 @@ func TestTheLastTierToGoTakesTheRecordWithIt(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
-	recordOn(t, box, tier, Front{}, "shop")
+	box := newBench(map[environment.Tier][]machine.Item{tier: bootstrapped(t, tier)})
+	recordOn(t, box, tier, front.Proxy{}, "shop")
 	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), tier)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
@@ -460,7 +464,7 @@ func TestABootstrapOverADeletedRecordPlansItAsDriftAndWritesItBack(t *testing.T)
 func TestABootstrapOfAFreshBoxUnderAProxyRoutedByHandPlansItsRecord(t *testing.T) {
 	t.Parallel()
 
-	fresh := machine(nil)
+	fresh := newBench(nil)
 	fresh.answer = func(command string) (ssh.Result, bool) {
 		return ssh.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
@@ -477,10 +481,10 @@ func TestABootstrapOfAFreshBoxUnderAProxyRoutedByHandPlansItsRecord(t *testing.T
 func TestWhatABoxInstallsFollowsWhetherItsProxyOwnsThePorts(t *testing.T) {
 	t.Parallel()
 
-	for name, front := range map[string]Front{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand(), "a Traefik on the host": traefikOnTheHost()} {
-		owns := openFront(front, frontBox{}).Guarantees().OwnsPorts
-		installsProxy := slices.ContainsFunc(ProxyItems(ssh.AMD64, front), func(item Item) bool {
-			return item.Kind == KindContainer && item.Name == caddy.Container
+	for name, front := range map[string]front.Proxy{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand(), "a Traefik on the host": traefikOnTheHost()} {
+		owns := front.Front().Open(frontBox{}).Guarantees().OwnsPorts
+		installsProxy := slices.ContainsFunc(ProxyItems(ssh.AMD64, front), func(item machine.Item) bool {
+			return item.Kind == machine.KindContainer && item.Name == caddy.Container
 		})
 		if installsProxy != owns {
 			t.Errorf("%s: the box installs %s = %v, want %v: only a proxy that owns 80 and 443 is one ocel runs", name, caddy.Container, installsProxy, owns)
@@ -488,7 +492,7 @@ func TestWhatABoxInstallsFollowsWhetherItsProxyOwnsThePorts(t *testing.T) {
 		if published := len(switchboardOf(t, front).Ports) > 0; published == owns {
 			t.Errorf("%s: the switchboard publishes a port = %v, want it published only for a proxy that does not own the ports", name, published)
 		}
-		if recorded := front.recorded() != nil; recorded == owns {
+		if recorded := front.Recorded() != nil; recorded == owns {
 			t.Errorf("%s: the record names a proxy = %v, want one named only for a proxy that does not own the ports", name, recorded)
 		}
 	}

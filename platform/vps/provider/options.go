@@ -2,20 +2,14 @@ package vps
 
 import (
 	"bytes"
-	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/configdoc"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -23,222 +17,9 @@ type Options struct {
 	SSH          Target            `json:"ssh" doc:"The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out."`
 	DeployKey    string            `json:"deployKey,omitempty" doc:"Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys."`
 	Certificates map[string]string `json:"certificates,omitempty" doc:"Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine."`
-	Proxy        *Proxy            `json:"proxy,omitempty" doc:"What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it."`
+	Proxy        *front.Proxy      `json:"proxy,omitempty" doc:"What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it."`
 
 	PerHostnamePreviewCertificates bool `json:"perHostnamePreviewCertificates,omitempty" doc:"Deploy previews even though the proxy orders a publicly trusted certificate for each preview hostname, which Certificate Transparency logs publish within minutes. Left out, such a preview deploy is refused: set proxy.traefik.previewResolver, pin a wildcard certificate for the preview base, or front the box with an edge that shields it with an origin certificate instead."`
-}
-
-type Proxy struct {
-	Traefik *Traefik `json:"traefik,omitempty" doc:"A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches."`
-	Caddy   *Caddy   `json:"caddy,omitempty" doc:"A Caddy the machine already runs, importing ocel's site blocks from a directory."`
-	Manual  *Manual  `json:"manual,omitempty" doc:"A proxy you route to ocel yourself; ocel writes nothing to it."`
-}
-
-type Traefik struct {
-	Preset             string       `json:"preset,omitempty" enum:"coolify,dokploy" doc:"The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides."`
-	Directory          string       `json:"directory" unless:"preset" doc:"The directory Traefik's file provider watches, where ocel writes its routers."`
-	ContainerDirectory string       `json:"containerDirectory,omitempty" doc:"Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself."`
-	Resolver           string       `json:"resolver" unless:"preset" doc:"The certificate resolver every hostname router ocel writes names."`
-	PreviewResolver    string       `json:"previewResolver,omitempty" doc:"A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver."`
-	Entrypoints        *Entrypoints `json:"entrypoints,omitempty" doc:"The entry points ocel's routers attach to."`
-	Network            string       `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port."`
-	Port               int          `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
-}
-
-type Entrypoints struct {
-	HTTP  string `json:"http,omitempty" doc:"The entry point ocel's http-to-https redirect routers attach to; web when left out."`
-	HTTPS string `json:"https,omitempty" doc:"The entry point ocel's hostname routers attach to; websecure when left out."`
-}
-
-type Caddy struct {
-	Preset             string `json:"preset,omitempty" enum:"coolify" doc:"The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides."`
-	Directory          string `json:"directory" unless:"preset" doc:"The directory the running Caddy imports site blocks from."`
-	ContainerDirectory string `json:"containerDirectory,omitempty" doc:"Where directory is mounted in the container Caddy runs in; ocel.caddy names the origin certificates it places in directory by this path. Left out, directory itself."`
-	Container          string `json:"container,omitempty" doc:"The container Caddy runs in; left out, Caddy runs as the systemd caddy.service."`
-	Config             string `json:"config,omitempty" doc:"The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out."`
-	Network            string `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port."`
-	Port               int    `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
-}
-
-type Manual struct {
-	Port    int    `json:"port,omitempty" doc:"The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out."`
-	Network string `json:"network,omitempty" doc:"A docker network ocel's switchboard also joins, so a proxy on it reaches the switchboard by name even after it is recreated."`
-}
-
-const (
-	proxyTraefik = "traefik"
-	proxyCaddy   = "caddy"
-	proxyManual  = "manual"
-)
-
-func (Proxy) Shorthands() []string { return []string{proxyManual} }
-
-func (p *Proxy) UnmarshalJSON(data []byte) error {
-	trimmed := bytes.TrimSpace(data)
-	if len(trimmed) > 0 && trimmed[0] == '"' {
-		var shorthand string
-		if err := json.Unmarshal(trimmed, &shorthand); err != nil {
-			return err
-		}
-		if !slices.Contains(p.Shorthands(), shorthand) {
-			return fmt.Errorf(`option "proxy" names %q, which is none of %s`, shorthand, strings.Join(p.Shorthands(), ", "))
-		}
-		*p = Proxy{Manual: &Manual{}}
-		return nil
-	}
-	var keyed map[string]json.RawMessage
-	if err := json.Unmarshal(trimmed, &keyed); err != nil {
-		return fmt.Errorf(`option "proxy": %w`, err)
-	}
-	if len(keyed) != 1 {
-		return fmt.Errorf(`option "proxy" must set exactly one of the keys %s`, strings.Join(configdoc.KeysOf(Proxy{}), ", "))
-	}
-	type fields Proxy
-	var decoded fields
-	if err := json.Unmarshal(trimmed, &decoded); err != nil {
-		return fmt.Errorf(`option "proxy": %w`, err)
-	}
-	*p = Proxy(decoded)
-	if _, set := keyed[proxyTraefik]; set && p.Traefik == nil {
-		p.Traefik = &Traefik{}
-	}
-	if _, set := keyed[proxyCaddy]; set && p.Caddy == nil {
-		p.Caddy = &Caddy{}
-	}
-	if _, set := keyed[proxyManual]; set && p.Manual == nil {
-		p.Manual = &Manual{}
-	}
-	return nil
-}
-
-func (p *Proxy) front() host.Front {
-	switch {
-	case p == nil:
-		return host.Front{}
-	case p.Traefik != nil:
-		filled := p.Traefik.written().Filled()
-		return host.Front{Traefik: &filled}
-	case p.Caddy != nil:
-		filled := p.Caddy.written().Filled()
-		return host.Front{Caddy: &filled}
-	case p.Manual != nil:
-		return host.Front{Manual: &host.ManualFront{Port: cmp.Or(p.Manual.Port, manual.DefaultPort), Network: p.Manual.Network}}
-	default:
-		return host.Front{}
-	}
-}
-
-func (t *Traefik) written() host.TraefikFront {
-	var entrypoints host.Entrypoints
-	if t.Entrypoints != nil {
-		entrypoints = host.Entrypoints{HTTP: t.Entrypoints.HTTP, HTTPS: t.Entrypoints.HTTPS}
-	}
-	return host.TraefikFront{
-		Preset:             t.Preset,
-		Directory:          t.Directory,
-		ContainerDirectory: t.ContainerDirectory,
-		Resolver:           t.Resolver,
-		PreviewResolver:    t.PreviewResolver,
-		Entrypoints:        entrypoints,
-		Network:            t.Network,
-		Port:               t.Port,
-	}
-}
-
-func (c *Caddy) written() host.CaddyFront {
-	return host.CaddyFront{
-		Preset:             c.Preset,
-		Directory:          c.Directory,
-		ContainerDirectory: c.ContainerDirectory,
-		Container:          c.Container,
-		Config:             c.Config,
-		Network:            c.Network,
-		Port:               c.Port,
-	}
-}
-
-func (p *Proxy) usable(certificates map[string]string) error {
-	if p == nil {
-		return nil
-	}
-	if len(certificates) > 0 {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"options %q and %q are both set: your proxy serves certificates; configure them there", "certificates", "proxy")
-	}
-	switch {
-	case p.Traefik != nil:
-		return p.Traefik.usable()
-	case p.Caddy != nil:
-		return p.Caddy.usable()
-	}
-	return reaching("proxy.manual", p.Manual.Network, p.Manual.Port)
-}
-
-func (t *Traefik) usable() error {
-	filled := t.written().Filled()
-	return adoptable("proxy."+proxyTraefik, t.Preset, host.TraefikPresets(), t.Network, t.Port,
-		required{"directory", filled.Directory}, required{"resolver", filled.Resolver})
-}
-
-func (c *Caddy) usable() error {
-	filled := c.written().Filled()
-	return adoptable("proxy."+proxyCaddy, c.Preset, host.CaddyPresets(), c.Network, c.Port,
-		required{"directory", filled.Directory})
-}
-
-type required struct{ field, filled string }
-
-func adoptable(at, preset string, presets []string, writtenNetwork string, writtenPort int, fields ...required) error {
-	if err := presetKnown(at, preset, presets); err != nil {
-		return err
-	}
-	for _, needed := range fields {
-		if err := needs(at, needed.field, needed.filled); err != nil {
-			return err
-		}
-	}
-	return reachedOnce(at, writtenNetwork, writtenPort)
-}
-
-func presetKnown(at, preset string, known []string) error {
-	if preset == "" || slices.Contains(known, preset) {
-		return nil
-	}
-	quoted := make([]string, 0, len(known))
-	for _, name := range known {
-		quoted = append(quoted, strconv.Quote(name))
-	}
-	return refusal.Refuse(refusal.CodeInvalid,
-		"option %q names %q, which is none of %s", at+".preset", preset, strings.Join(quoted, ", "))
-}
-
-func needs(at, field, filled string) error {
-	if filled != "" {
-		return nil
-	}
-	return refusal.Refuse(refusal.CodeInvalid,
-		"option %q names no %q: write one, or a %q that fills it", at, field, "preset")
-}
-
-func reachedOnce(at, writtenNetwork string, writtenPort int) error {
-	if writtenNetwork != "" && writtenPort != 0 {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"option %q sets both %q and %q: the proxy reaches the switchboard by one of them", at, "network", "port")
-	}
-	return reaching(at, writtenNetwork, writtenPort)
-}
-
-var dockerNetworkName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
-
-func reaching(at, network string, port int) error {
-	if port < 0 || port > 65535 {
-		return refusal.Refuse(refusal.CodeInvalid, "option %q names %d, which is outside 1-65535", at+".port", port)
-	}
-	if network != "" && !dockerNetworkName.MatchString(network) {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"option %q names %q, which is no docker network name: letters, digits, _, . and -, starting with a letter or digit", at+".network", network)
-	}
-	return nil
 }
 
 type Target struct {

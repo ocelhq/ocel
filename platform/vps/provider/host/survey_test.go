@@ -6,17 +6,18 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 )
 
 func TestASurveyLineCutShortIsRefusedRatherThanRead(t *testing.T) {
 	t.Parallel()
 
 	for what, probe := range map[string]struct{ line, said string }{
-		"a probe that could not look": {kindUnreadable, "could not check"},
-		"a path that pointed away":    {kindLink, "Put a real directory or file"},
-		"a probe naming only a kind":  {kindUnreadable + "\t", "could not check"},
+		"a probe that could not look": {machine.KindUnreadable, "could not check"},
+		"a path that pointed away":    {machine.KindLink, "Put a real directory or file"},
+		"a probe naming only a kind":  {machine.KindUnreadable + "\t", "could not check"},
 	} {
-		_, _, err := readSurvey(probe.line + "\n")
+		_, _, err := machine.ReadSurvey(probe.line + "\n")
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) {
 			t.Errorf("readSurvey over %s = %v, want a refusal rather than a host read as having nothing", what, err)
@@ -42,11 +43,11 @@ func TestTheEngineProbeSaysSystemdCouldNotBeAskedAndWhatToDoAboutIt(t *testing.T
 func TestAProbeThatCouldNotLookNamesWhatItCouldNotRead(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := readSurvey(strings.Join([]string{kindUnreadable, "docker", "0", KindEngine, "systemctl would not run"}, "\t") + "\n")
+	_, _, err := machine.ReadSurvey(strings.Join([]string{machine.KindUnreadable, "docker", "0", machine.KindEngine, "systemctl would not run"}, "\t") + "\n")
 	if err == nil {
 		t.Fatal("readSurvey over a probe that could not look = nil, want a refusal")
 	}
-	for _, want := range []string{"docker", KindEngine, "systemctl would not run"} {
+	for _, want := range []string{"docker", machine.KindEngine, "systemctl would not run"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("refusal = %v, want it to include %q", err, want)
 		}

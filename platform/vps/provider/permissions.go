@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -22,7 +23,7 @@ func bootstrapDocument(login string) string {
 	return written.String()
 }
 
-func deployDocument(front host.Front) string {
+func deployDocument(front front.Proxy) string {
 	var written strings.Builder
 	written.WriteString("A bootstrapped host runs every deploy as " + host.DeployUser() + ", which is granted:\n")
 	for _, grant := range deployGrants(front) {
@@ -32,7 +33,7 @@ func deployDocument(front host.Front) string {
 	return written.String()
 }
 
-func deployGrants(front host.Front) []host.Grant {
+func deployGrants(front front.Proxy) []host.Grant {
 	var grants []host.Grant
 	named := map[string]bool{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {

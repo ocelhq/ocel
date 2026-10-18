@@ -19,6 +19,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
@@ -34,22 +36,22 @@ type engineState struct {
 func engineAsWritten() engineState {
 	return engineState{network: true, volume: true, facts: map[string]string{
 		caddy.Container:    engineSays(frontProxy(), docker.MigrateSet),
-		boxapi.Switchboard: engineSays(switchboardBox(switchboardBinary(ssh.AMD64), Front{}), docker.MigrateSet),
+		boxapi.Switchboard: engineSays(switchboardBox(switchboardBinary(ssh.AMD64), front.Proxy{}), docker.MigrateSet),
 	}}
 }
 
-func containerNamed(name string) Item {
-	for _, item := range ProxyItems(ssh.AMD64, Front{}) {
-		if item.Kind == KindContainer && item.Name == name {
+func containerNamed(name string) machine.Item {
+	for _, item := range ProxyItems(ssh.AMD64, front.Proxy{}) {
+		if item.Kind == machine.KindContainer && item.Name == name {
 			return item
 		}
 	}
-	return Item{}
+	return machine.Item{}
 }
 
-func frontItem() Item { return containerNamed(caddy.Container) }
+func frontItem() machine.Item { return containerNamed(caddy.Container) }
 
-func boardItem() Item { return containerNamed(boxapi.Switchboard) }
+func boardItem() machine.Item { return containerNamed(boxapi.Switchboard) }
 
 func containerCommand() string { return frontProxy().Writing(docker.ContainerRising) }
 
@@ -80,7 +82,7 @@ func dockered(t *testing.T, engine engineState) map[string]string {
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), containerProbe(frontProxy()), containerProbe(switchboardBox(switchboardBinary(ssh.AMD64), Front{}))}, "\n"))
+	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), containerProbe(frontProxy()), containerProbe(switchboardBox(switchboardBinary(ssh.AMD64), front.Proxy{}))}, "\n"))
 	cmd.Env = []string{"PATH=" + dir}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -88,7 +90,7 @@ func dockered(t *testing.T, engine engineState) map[string]string {
 	if err != nil {
 		t.Fatalf("probe the proxy: %v\n%s", err, stderr.String())
 	}
-	observed, _, err := readSurvey(string(rendered))
+	observed, _, err := machine.ReadSurvey(string(rendered))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,13 +104,13 @@ func answering(present bool) string {
 	return "1"
 }
 
-func proxyItem(kind string) Item {
-	for _, item := range ProxyItems(ssh.AMD64, Front{}) {
+func proxyItem(kind string) machine.Item {
+	for _, item := range ProxyItems(ssh.AMD64, front.Proxy{}) {
 		if item.Kind == kind {
 			return item
 		}
 	}
-	return Item{}
+	return machine.Item{}
 }
 
 func nested(t *testing.T, read map[string]any, path ...string) any {
@@ -128,8 +130,8 @@ func TestTheProbeAndTheWriteAgreeOnWhatAServingProxyIs(t *testing.T) {
 	t.Parallel()
 
 	observed := dockered(t, engineAsWritten())
-	for _, item := range ProxyItems(ssh.AMD64, Front{}) {
-		if item.Kind == KindFile || item.Kind == KindDir || item.rewritten {
+	for _, item := range ProxyItems(ssh.AMD64, front.Proxy{}) {
+		if item.Kind == machine.KindFile || item.Kind == machine.KindDir || item.Rewritten {
 			continue
 		}
 		if observed[item.ID()] != item.Digest() {
@@ -143,8 +145,8 @@ func TestAHostWithNoEngineRunsNoProxyAtAll(t *testing.T) {
 	t.Parallel()
 
 	observed := dockered(t, engineState{})
-	for _, item := range ProxyItems(ssh.AMD64, Front{}) {
-		if item.Kind == KindFile || item.Kind == KindDir || item.Kind == KindProxyConfig {
+	for _, item := range ProxyItems(ssh.AMD64, front.Proxy{}) {
+		if item.Kind == machine.KindFile || item.Kind == machine.KindDir || item.Kind == machine.KindProxyConfig {
 			continue
 		}
 		if _, present := observed[item.ID()]; present {
@@ -158,14 +160,14 @@ func TestAProxyThatIsGoneIsPlannedBackAndARunningOneIsLeftAlone(t *testing.T) {
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	whole := Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: digests(Items(tier, keys, ssh.AMD64, Front{}))}
+	whole := Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{}))}
 	for _, change := range planned(whole) {
-		if change.Kind == KindContainer && change.Action != provider.ActionKeep {
+		if change.Kind == machine.KindContainer && change.Action != provider.ActionKeep {
 			t.Errorf("a re-run over a host whose proxy serves plans %q for it, and a bootstrap that reinstalls what is running is one nobody dares re-run", change.Action)
 		}
 	}
 
-	torn := digests(Items(tier, keys, ssh.AMD64, Front{}))
+	torn := machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{}))
 	delete(torn, frontItem().ID())
 	gone := planFor(planned(Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: torn}), frontItem().ID())
 	if gone.Action != provider.ActionCreate {
@@ -175,9 +177,9 @@ func TestAProxyThatIsGoneIsPlannedBackAndARunningOneIsLeftAlone(t *testing.T) {
 		t.Error("pulling the proxy image is planned as quick work, and a plan that lies about its cost is one nobody waits through")
 	}
 
-	stopped := digests(Items(tier, keys, ssh.AMD64, Front{}))
-	stopped[frontItem().ID()] = digest(KindContainer, caddy.Container, 0, rootOwner,
-		contentSum([]byte(strings.Replace(string(frontItem().Content), "state=running", "state=exited", 1))))
+	stopped := machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{}))
+	stopped[frontItem().ID()] = machine.DigestOf(machine.KindContainer, caddy.Container, 0, machine.RootOwner,
+		machine.ContentSum([]byte(strings.Replace(string(frontItem().Content), "state=running", "state=exited", 1))))
 	idle := Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: stopped}
 	if idle.current(frontItem()) {
 		t.Fatal("a proxy container that has exited reads as serving, and nothing would ever start it")
@@ -252,7 +254,7 @@ func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t 
 			t.Errorf("the proxy is surveyed without %q, so a host that lost it would never be told:\n%s", fact, facts)
 		}
 	}
-	if network := proxyItem(KindNetwork); network.Name != ProxyNetwork {
+	if network := proxyItem(machine.KindNetwork); network.Name != ProxyNetwork {
 		t.Errorf("the network every target resolves across is %q, want %q written as state of its own", network.Name, ProxyNetwork)
 	}
 }
@@ -281,8 +283,8 @@ func TestOnlyTheFrontProxyPublishesAPortAndOnlyThePortsRequestsArriveOn(t *testi
 	if strings.Contains(starting(t, command), caddy.AdminSocket) {
 		t.Errorf("the admin socket is named on the host side of the run command, and a socket that leaves the container is one anything on the box can dial:\n%s", command)
 	}
-	if strings.Contains(switchboardBox(nil, Front{}).Writing(docker.ContainerRising), "--publish") {
-		t.Errorf("the switchboard publishes a port, and nothing but the front proxy is reached from off the box:\n%s", switchboardBox(nil, Front{}).Writing(docker.ContainerRising))
+	if strings.Contains(switchboardBox(nil, front.Proxy{}).Writing(docker.ContainerRising), "--publish") {
+		t.Errorf("the switchboard publishes a port, and nothing but the front proxy is reached from off the box:\n%s", switchboardBox(nil, front.Proxy{}).Writing(docker.ContainerRising))
 	}
 }
 
@@ -323,8 +325,8 @@ func TestWhatTheProxyPersistsGoesNoWiderThanTheProxy(t *testing.T) {
 		t.Errorf("%s is bound from %q, want %s: a docker named volume appears in no removal plan, so a destroy would report a clean teardown and leave every private key and the acme account key on this box",
 			caddy.DataMount, data, ProxyData)
 	}
-	dataDir := itemAt(t, ProxyItems(ssh.AMD64, Front{}), KindDir, ProxyData)
-	if dataDir.Owner != rootOwner || dataDir.Mode != 0o700 {
+	dataDir := itemAt(t, ProxyItems(ssh.AMD64, front.Proxy{}), machine.KindDir, ProxyData)
+	if dataDir.Owner != machine.RootOwner || dataDir.Mode != 0o700 {
 		t.Errorf("%s is written as %s at %04o, want root at 0700: it stores every certificate's private key and the acme account key that issues for every other hostname on the account",
 			ProxyData, dataDir.Owner, dataDir.Mode)
 	}
@@ -336,9 +338,9 @@ func TestWhatTheProxyPersistsGoesNoWiderThanTheProxy(t *testing.T) {
 	}
 }
 
-func itemAt(t *testing.T, items []Item, kind, name string) Item {
+func itemAt(t *testing.T, items []machine.Item, kind, name string) machine.Item {
 	t.Helper()
-	at := slices.IndexFunc(items, func(i Item) bool { return i.Kind == kind && i.Name == name })
+	at := slices.IndexFunc(items, func(i machine.Item) bool { return i.Kind == kind && i.Name == name })
 	if at < 0 {
 		t.Fatalf("the proxy's items include no %s %s", kind, name)
 	}
@@ -348,19 +350,19 @@ func itemAt(t *testing.T, items []Item, kind, name string) Item {
 func TestTheSwitchboardBinaryIsRootsToWriteAndAnyonesToRunAndReachesItsContainerAsADirectory(t *testing.T) {
 	t.Parallel()
 
-	items := ProxyItems(ssh.AMD64, Front{})
-	binary := itemAt(t, items, KindFile, boxapi.SwitchboardBinary)
-	if binary.Owner != rootOwner || binary.Mode&0o022 != 0 {
+	items := ProxyItems(ssh.AMD64, front.Proxy{})
+	binary := itemAt(t, items, machine.KindFile, boxapi.SwitchboardBinary)
+	if binary.Owner != machine.RootOwner || binary.Mode&0o022 != 0 {
 		t.Errorf("%s is written by %s at %04o, want root alone able to write it: the switchboard routes every hostname on the box", boxapi.SwitchboardBinary, binary.Owner, binary.Mode)
 	}
 	if binary.Mode&0o005 != 0o005 {
 		t.Errorf("%s is written %04o, and the deploy login runs it on the box to read what the box serves on :443", boxapi.SwitchboardBinary, binary.Mode)
 	}
-	boardDir := itemAt(t, items, KindDir, boxapi.SwitchboardDir)
-	if boardDir.Owner != rootOwner || slices.IndexFunc(items, func(item Item) bool { return item.Name == boxapi.SwitchboardDir }) > slices.IndexFunc(items, func(item Item) bool { return item.Name == boxapi.SwitchboardBinary }) {
+	boardDir := itemAt(t, items, machine.KindDir, boxapi.SwitchboardDir)
+	if boardDir.Owner != machine.RootOwner || slices.IndexFunc(items, func(item machine.Item) bool { return item.Name == boxapi.SwitchboardDir }) > slices.IndexFunc(items, func(item machine.Item) bool { return item.Name == boxapi.SwitchboardBinary }) {
 		t.Errorf("%s is written by %s after the binary in it", boxapi.SwitchboardDir, boardDir.Owner)
 	}
-	board := switchboardBox(binary.Content, Front{})
+	board := switchboardBox(binary.Content, front.Proxy{})
 	if !slices.Contains(board.Binds, boxapi.SwitchboardDir+":"+boxapi.SwitchboardMount+":ro") {
 		t.Errorf("the switchboard is handed %v, want its binary's directory read-only: a bind of the file keeps the inode a rewrite replaced", board.Binds)
 	}
@@ -375,15 +377,15 @@ func TestTheSwitchboardIsWrittenAgainWhenItsBinaryMoves(t *testing.T) {
 	t.Parallel()
 
 	binary := switchboardBinary(ssh.AMD64)
-	stamped := contentSum(binary)
-	board := switchboardBox(binary, Front{})
+	stamped := machine.ContentSum(binary)
+	board := switchboardBox(binary, front.Proxy{})
 	if !strings.Contains(shell.Words(board.Run()), shell.Quote(docker.ConfigLabel+"="+stamped)) {
 		t.Errorf("the switchboard is run with no record of the binary it runs, so a box already running one would never be handed the next:\n%s", shell.Words(board.Run()))
 	}
 	if !strings.Contains(string(boardItem().Content), "config="+stamped) {
 		t.Errorf("the switchboard is surveyed without the binary it was written under:\n%s", boardItem().Content)
 	}
-	if other := switchboardBox(append(slices.Clone(binary), 0), Front{}); bytes.Equal(other.Facts(), board.Facts()) {
+	if other := switchboardBox(append(slices.Clone(binary), 0), front.Proxy{}); bytes.Equal(other.Facts(), board.Facts()) {
 		t.Error("a switchboard written from another binary states the same facts, and bootstrap would leave the old one running")
 	}
 }
@@ -441,8 +443,8 @@ func TestWhatTheDeployLoopWritesOverTheRoutingTableAndTheProxysConfigIsNeverCall
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	deployed := digests(Items(tier, keys, ssh.AMD64, Front{}))
-	for _, seeded := range []Item{routingTableItem(), proxyConfigItem()} {
+	deployed := machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{}))
+	for _, seeded := range []machine.Item{routingTableItem(), proxyConfigItem()} {
 		routed := seeded
 		routed.Content = []byte("every route this box serves")
 		if routed.Digest() != seeded.Digest() {
@@ -455,13 +457,13 @@ func TestWhatTheDeployLoopWritesOverTheRoutingTableAndTheProxysConfigIsNeverCall
 		if planned := planFor(planned(read), seeded.ID()); planned.Action != provider.ActionKeep {
 			t.Errorf("a re-run over a box with deployed routes plans %q for %s, and a bootstrap that reseeds it takes every app on the box down", planned.Action, seeded.Name)
 		}
-		if sum := seeded.sum(); sum != "" {
+		if sum := seeded.Sum(); sum != "" {
 			t.Errorf("%s is digested over %q, and every deploy invalidates it", seeded.Name, sum)
 		}
-		if strings.Contains(seeded.probe(), "sha256sum") {
-			t.Errorf("the survey hashes what a deploy wrote:\n%s", seeded.probe())
+		if strings.Contains(seeded.Probe(), "sha256sum") {
+			t.Errorf("the survey hashes what a deploy wrote:\n%s", seeded.Probe())
 		}
-		seeding := seeded.command()
+		seeding := seeded.Command()
 		if !strings.Contains(seeding, "if [ ! -f "+shell.Quote(boxapi.RoutingTablePath)+" ]; then") || !strings.Contains(seeding, "elif [ ! -f "+shell.Quote(ProxyConfig)+" ]; then") {
 			t.Errorf("the write of %s replaces what exists there rather than seeding what does not:\n%s", seeded.Name, seeding)
 		}
@@ -471,7 +473,7 @@ func TestWhatTheDeployLoopWritesOverTheRoutingTableAndTheProxysConfigIsNeverCall
 	}
 }
 
-func seedsIn(t *testing.T) (string, string, Item, Item) {
+func seedsIn(t *testing.T) (string, string, machine.Item, machine.Item) {
 	t.Helper()
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bin")
@@ -484,11 +486,11 @@ func seedsIn(t *testing.T) (string, string, Item, Item) {
 	return dir, bin, table, config
 }
 
-func seedScript(table, config Item) string {
+func seedScript(table, config machine.Item) string {
 	return strings.ReplaceAll(seedingRouting(table, &config), shell.Quote(routing.Lock), shell.Quote(filepath.Dir(table.Name)))
 }
 
-func seeding(t *testing.T, bin string, table, config Item) {
+func seeding(t *testing.T, bin string, table, config machine.Item) {
 	t.Helper()
 	if said, err := writing(t, bin, seedScript(table, config)); err != nil {
 		t.Fatalf("seeding %s and %s = %v: %s", table.Name, config.Name, err, said)
@@ -540,13 +542,13 @@ func TestTheRoutingTableAndItsConfigAreRemovedUnderTheLockEveryWriterTakes(t *te
 	t.Parallel()
 
 	for _, removal := range proxyRemovals() {
-		if removal.kind != KindRoutingTable && removal.kind != KindProxyConfig {
+		if removal.Kind != machine.KindRoutingTable && removal.Kind != machine.KindProxyConfig {
 			continue
 		}
-		command := removal.command()
+		command := removal.Command()
 		locked := strings.Index(command, strings.TrimSuffix(routing.Locked("-x"), "\n"))
 		if locked < 0 || strings.Index(command, "rm ") < locked {
-			t.Errorf("%s is removed by\n%s\nwhich does not hold %s first, so a deploy mid-write moves a file back beside a removal", removal.path, command, routing.Lock)
+			t.Errorf("%s is removed by\n%s\nwhich does not hold %s first, so a deploy mid-write moves a file back beside a removal", removal.Path, command, routing.Lock)
 		}
 	}
 }
@@ -563,7 +565,7 @@ func fileContents(t *testing.T, path string) string {
 func TestTheDeployLoginIsToldItOwnsTheRoutingTable(t *testing.T) {
 	t.Parallel()
 
-	owned := slices.ContainsFunc(grants(environment.TierProduction, ssh.AMD64, Front{}), func(grant Grant) bool {
+	owned := slices.ContainsFunc(grants(environment.TierProduction, ssh.AMD64, front.Proxy{}), func(grant Grant) bool {
 		return grant.Name == "owns "+boxapi.RoutingTablePath
 	})
 	if !owned {
@@ -636,7 +638,7 @@ func TestABootstrapOverABoxWithOnlyItsTableKeepsEveryRoute(t *testing.T) {
 func TestANetworkAnotherWorkloadUsesIsReportedKeptRatherThanRemoved(t *testing.T) {
 	t.Parallel()
 
-	command := (removal{kind: KindNetwork, path: ProxyNetwork}).command()
+	command := (machine.Removal{Kind: machine.KindNetwork, Path: ProxyNetwork}).Command()
 	for inspectExit, want := range map[string]string{"0": docker.NetworkInUse, "1": ""} {
 		stub := t.TempDir()
 		script := "#!/bin/sh\n" +
@@ -663,12 +665,12 @@ func TestAReplacementRefusingApplyWritesOcelsOwnProxyBackWithoutAsking(t *testin
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	observed := digests(Items(tier, keys, ssh.AMD64, Front{}))
-	observed[frontItem().ID()] = digest(KindContainer, caddy.Container, 0, rootOwner, contentSum([]byte("state=exited\n")))
-	observed[networkItem().ID()] = digest(KindNetwork, ProxyNetwork, 0, rootOwner, contentSum([]byte("moved\n")))
+	observed := machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{}))
+	observed[frontItem().ID()] = machine.DigestOf(machine.KindContainer, caddy.Container, 0, machine.RootOwner, machine.ContentSum([]byte("state=exited\n")))
+	observed[networkItem().ID()] = machine.DigestOf(machine.KindNetwork, ProxyNetwork, 0, machine.RootOwner, machine.ContentSum([]byte("moved\n")))
 
 	read := Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: observed}
-	if err := refuseReplacements(read, Items(tier, keys, ssh.AMD64, Front{})); err != nil {
+	if err := refuseReplacements(read, Items(tier, keys, ssh.AMD64, front.Proxy{})); err != nil {
 		t.Errorf("a replacement-refusing apply over a host whose proxy has moved = %v, want it written back: the proxy has ocel's own name and nothing of the user's", err)
 	}
 }
@@ -678,42 +680,42 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
-	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))}
+	installed := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))}
+	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))}
 	proxied := []string{caddy.Container, boxapi.Switchboard, ProxyData, ProxyNetwork, proxyRoot, boxapi.SwitchboardBinary, boxapi.SwitchboardDir, boxapi.SwitchboardControlDir, boxapi.FrontDir, ProxyConfig, boxapi.RoutingTablePath, boxapi.RoutingDir}
 
 	for _, taken := range removing(installed, beside, appsPresent{}) {
-		if slices.Contains(proxied, taken.path) && taken.action == provider.ActionDelete {
-			t.Errorf("destroying one tier takes %s, and the sibling tier still installed on this host deploys through it", taken.path)
+		if slices.Contains(proxied, taken.Path) && taken.Action == provider.ActionDelete {
+			t.Errorf("destroying one tier takes %s, and the sibling tier still installed on this host deploys through it", taken.Path)
 		}
 	}
 
 	last := removing(installed, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	for _, path := range proxied {
 		gone := removalOf(last, path)
-		if gone.action != provider.ActionDelete {
-			t.Errorf("destroying the last tier plans %s as %q, want it taken: what ocel wrote is what ocel takes back", path, gone.action)
+		if gone.Action != provider.ActionDelete {
+			t.Errorf("destroying the last tier plans %s as %q, want it taken: what ocel wrote is what ocel takes back", path, gone.Action)
 		}
 	}
-	if reason := removalOf(last, caddy.Container).reason; reason == "" {
+	if reason := removalOf(last, caddy.Container).Reason; reason == "" {
 		t.Error("the proxy is taken with no reason, and the typed confirmation must name what goes before a user types")
 	}
-	if reason := removalOf(last, ProxyData).reason; reason == "" {
+	if reason := removalOf(last, ProxyData).Reason; reason == "" {
 		t.Error("the proxy's data directory is taken with no reason, and every private key and the acme account key it stores go with it")
 	}
 	for container, used := range map[string][]string{
 		caddy.Container:    {ProxyData, ProxyNetwork, proxyRoot, boxapi.FrontDir},
 		boxapi.Switchboard: {boxapi.SwitchboardControlDir, boxapi.FrontDir, boxapi.SwitchboardDir, boxapi.RoutingDir, ProxyNetwork},
 	} {
-		running := slices.IndexFunc(last, func(r removal) bool { return r.path == container })
+		running := slices.IndexFunc(last, func(r machine.Removal) bool { return r.Path == container })
 		for _, after := range used {
-			if at := slices.IndexFunc(last, func(r removal) bool { return r.path == after }); at < running {
+			if at := slices.IndexFunc(last, func(r machine.Removal) bool { return r.Path == after }); at < running {
 				t.Errorf("%s is taken at %d and %s using it at %d, and nothing takes what a running container uses", after, at, container, running)
 			}
 		}
 	}
-	if kept := removalOf(last, dockerEngine); kept.action != provider.ActionKeep {
-		t.Errorf("destroying the last tier plans the engine as %q, want it kept with every container it runs", kept.action)
+	if kept := removalOf(last, dockerEngine); kept.Action != provider.ActionKeep {
+		t.Errorf("destroying the last tier plans the engine as %q, want it kept with every container it runs", kept.Action)
 	}
 }
 
@@ -733,12 +735,12 @@ func TestAPinRootStillContainingAnOperatorsPairIsReportedKeptRatherThanRemoved(t
 				t.Fatal(err)
 			}
 		}
-		run := exec.Command("/bin/sh", "-c", sharing(at, "").command())
+		run := exec.Command("/bin/sh", "-c", machine.Sharing(at, "").Command())
 		rendered, err := run.Output()
 		if err != nil {
 			t.Fatalf("taking %s = %v, and a destroy that fails on a root it shares leaves the host half-taken", what, err)
 		}
-		if kept := strings.TrimSpace(string(rendered)) == dirNonEmpty; kept != pinned {
+		if kept := strings.TrimSpace(string(rendered)) == machine.DirNonEmpty; kept != pinned {
 			t.Errorf("taking %s answered %q, and a removal that always exits zero tells an operator ocel deleted their private key",
 				what, strings.TrimSpace(string(rendered)))
 		}
@@ -756,13 +758,13 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 		"a pin root containing the pair you placed": true,
 	} {
 		tier := environment.TierProduction
-		rig := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+		rig := newBench(map[environment.Tier][]machine.Item{tier: bootstrapped(t, tier)})
 		rig.answer = func(command string) (ssh.Result, bool) {
 			if !strings.HasPrefix(command, "rmdir "+shell.Quote(boxapi.PinsDir)+" ") {
 				return ssh.Result{}, false
 			}
 			if pinned {
-				return ssh.Result{Stdout: dirNonEmpty + "\n"}, true
+				return ssh.Result{Stdout: machine.DirNonEmpty + "\n"}, true
 			}
 			return ssh.Result{}, true
 		}
@@ -787,15 +789,15 @@ func TestThePinRootIsPlannedAsReclaimedOnlyIfEmptyRatherThanAsABareDelete(t *tes
 	t.Parallel()
 
 	pins := removalOf(proxyRemovals(), boxapi.PinsDir)
-	if pins.action != provider.ActionDelete {
-		t.Fatalf("the pin root is planned as %q, and this test states nothing about the row a destroy prints for it", pins.action)
+	if pins.Action != provider.ActionDelete {
+		t.Fatalf("the pin root is planned as %q, and this test states nothing about the row a destroy prints for it", pins.Action)
 	}
-	if pins.reason == "" {
+	if pins.Reason == "" {
 		t.Fatal("the typed confirmation offers to delete the directory containing an operator's key material and says nothing about what happens to it")
 	}
 	for _, said := range []string{"empty"} {
-		if !strings.Contains(pins.reason, said) {
-			t.Errorf("the pin root is offered as %q, which never says %q: what the destroy runs reclaims it only when nothing is pinned under it", pins.reason, said)
+		if !strings.Contains(pins.Reason, said) {
+			t.Errorf("the pin root is offered as %q, which never says %q: what the destroy runs reclaims it only when nothing is pinned under it", pins.Reason, said)
 		}
 	}
 }
@@ -804,20 +806,20 @@ func TestRemovingTheProxyNamesOcelsOwnContainerAndNeverAsksTheEngineWhatElseItRu
 	t.Parallel()
 
 	for _, taken := range proxyRemovals() {
-		command := removal{kind: taken.kind, path: taken.path}.command()
-		if taken.kind == KindDir {
+		command := machine.Removal{Kind: taken.Kind, Path: taken.Path}.Command()
+		if taken.Kind == machine.KindDir {
 			continue
 		}
-		if !strings.Contains(command, shell.Quote(taken.path)) {
-			t.Errorf("%s is taken by %q, want a command naming ocel's own %s and nothing else", taken.path, command, taken.kind)
+		if !strings.Contains(command, shell.Quote(taken.Path)) {
+			t.Errorf("%s is taken by %q, want a command naming ocel's own %s and nothing else", taken.Path, command, taken.Kind)
 		}
 		for _, sweeping := range []string{"ps", "--all", "-a", "prune", "--filter"} {
 			if strings.Contains(command, " "+sweeping) {
-				t.Errorf("%s is taken by %q, which asks the engine what else it runs: a destroy reaches one name it wrote", taken.path, command)
+				t.Errorf("%s is taken by %q, which asks the engine what else it runs: a destroy reaches one name it wrote", taken.Path, command)
 			}
 		}
 	}
-	command := (removal{kind: KindNetwork, path: ProxyNetwork}).command()
+	command := (machine.Removal{Kind: machine.KindNetwork, Path: ProxyNetwork}).Command()
 	if !strings.HasPrefix(command, "if ! docker network rm ") {
 		t.Errorf("the network is taken by %q, and a destroy fails on a host still running something attached to it", command)
 	}
@@ -829,9 +831,9 @@ func TestRemovingTheProxyNamesOcelsOwnContainerAndNeverAsksTheEngineWhatElseItRu
 func TestNothingButWhatOcelWroteIsEverOcelsToTake(t *testing.T) {
 	t.Parallel()
 
-	rig := machine(map[environment.Tier][]Item{environment.TierProduction: bootstrapped(t, environment.TierProduction)})
-	for _, kind := range []string{KindEngine, KindUnit} {
-		_, err := rig.host().remove(context.Background(), removal{kind: kind, path: dockerEngine, action: provider.ActionDelete})
+	rig := newBench(map[environment.Tier][]machine.Item{environment.TierProduction: bootstrapped(t, environment.TierProduction)})
+	for _, kind := range []string{machine.KindEngine, machine.KindUnit} {
+		_, err := rig.host().remove(context.Background(), machine.Removal{Kind: kind, Path: dockerEngine, Action: provider.ActionDelete})
 		if err == nil {
 			t.Fatalf("removing %s landed, and what this host runs stays when ocel goes", kind)
 		}
@@ -878,7 +880,7 @@ func TestTheHelperIsAStaticBinaryOcelBuildsForEveryArchitectureABoxMayRun(t *tes
 	if bytes.Equal(shipped[ssh.AMD64], shipped[ssh.ARM64]) {
 		t.Error("both architectures are shipped the same bytes, so one of the two boxes runs a binary built for the other")
 	}
-	if bytes.Equal(itemAt(t, ProxyItems(ssh.AMD64, Front{}), KindFile, boxapi.SwitchboardBinary).Content, itemAt(t, ProxyItems(ssh.ARM64, Front{}), KindFile, boxapi.SwitchboardBinary).Content) {
+	if bytes.Equal(itemAt(t, ProxyItems(ssh.AMD64, front.Proxy{}), machine.KindFile, boxapi.SwitchboardBinary).Content, itemAt(t, ProxyItems(ssh.ARM64, front.Proxy{}), machine.KindFile, boxapi.SwitchboardBinary).Content) {
 		t.Error("the switchboard item has the same bytes whatever the box reports, and the architecture is then not what selects it")
 	}
 }
@@ -892,7 +894,7 @@ func TestTheHelperHasNoDependenceOnWhatTheProxyImageHappensToShip(t *testing.T) 
 			t.Errorf("the proxy is run naming %q, and a gate whose precondition is that the image happens to ship a program is not a contract:\n%s", borrowed, command)
 		}
 	}
-	if got := proxyItem(KindFile).Content; !bytes.Equal(got, switchboardBinary(ssh.AMD64)) && !bytes.Equal(got, switchboardBinary(ssh.ARM64)) {
+	if got := proxyItem(machine.KindFile).Content; !bytes.Equal(got, switchboardBinary(ssh.AMD64)) && !bytes.Equal(got, switchboardBinary(ssh.ARM64)) {
 		t.Error("the file bootstrap ships to the box is not one of the switchboards ocel builds")
 	}
 }
@@ -901,7 +903,7 @@ func TestABoxOcelBuildsNoHelperForIsStillABoxOcelCanDestroy(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	rig := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+	rig := newBench(map[environment.Tier][]machine.Item{tier: bootstrapped(t, tier)})
 	rig.facts.Arch = "riscv64"
 
 	if _, err := NewBootstrap(rig.host(), testVendor, "shop").PlanRemove(context.Background(), tier); err != nil {
@@ -916,7 +918,7 @@ func TestWhatTheDeployLoginIsGrantedIsTheSameWhicheverArchitectureTheBoxRuns(t *
 	t.Parallel()
 
 	tier := environment.TierProduction
-	if !slices.Equal(grants(tier, ssh.AMD64, Front{}), grants(tier, ssh.ARM64, Front{})) {
+	if !slices.Equal(grants(tier, ssh.AMD64, front.Proxy{}), grants(tier, ssh.ARM64, front.Proxy{})) {
 		t.Error("`ocel permissions deploy` prints one thing on an amd64 box and another on an arm64 one, and what a login is granted does not depend on what the box runs")
 	}
 }
@@ -1041,7 +1043,7 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 	tier := environment.TierProduction
 	rig := bootstrappedOn(t, tier)
 	for at, item := range rig.installed[tier] {
-		if item.Kind == KindEngine {
+		if item.Kind == machine.KindEngine {
 			rig.installed[tier][at].Content = []byte("engine=" + string(engineUnserved) + "\n")
 		}
 	}
@@ -1053,7 +1055,7 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 		defer b.mu.Unlock()
 		items := b.installed[tier]
 		for at, item := range items {
-			if item.Kind == KindContainer {
+			if item.Kind == machine.KindContainer {
 				items[at].Content = []byte("state=exited\n")
 			}
 		}
@@ -1074,7 +1076,7 @@ func TestSomethingOtherThanTheProxysConfigAtItsPathIsRefusedRatherThanChowned(t 
 	t.Parallel()
 
 	_, bin, table, config := seedsIn(t)
-	for _, over := range []Item{config, table} {
+	for _, over := range []machine.Item{config, table} {
 		if err := os.MkdirAll(over.Name, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -1122,23 +1124,23 @@ func TestAProxyConfiguredAsWrittenButNotRunningIsPlannedBackAndNeverCalledUpToDa
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ssh.AMD64, Front{})
+	items := Items(tier, keys, ssh.AMD64, front.Proxy{})
 	minted := []byte("the key this box minted for itself")
 
 	for _, between := range []string{"created", "restarting", "exited", "paused"} {
-		observed := digests(items)
+		observed := machine.DigestsOf(items)
 		idle := bytes.Replace(frontItem().Content, []byte("state=running"), []byte("state="+between), 1)
 		if bytes.Equal(idle, frontItem().Content) {
 			t.Fatalf("the container is surveyed without a state at all, so what %q proves here is nothing", between)
 		}
-		observed[frontItem().ID()] = digest(KindContainer, caddy.Container, 0, rootOwner, contentSum(idle))
+		observed[frontItem().ID()] = machine.DigestOf(machine.KindContainer, caddy.Container, 0, machine.RootOwner, machine.ContentSum(idle))
 
 		read := Reading{
 			Tier: tier, Present: true, Keys: keys, Arch: ssh.AMD64, Observed: observed,
-			Seal: Seal{Fingerprint: contentSum(minted)},
-			Stamp: Stamp{
-				State: StateComplete,
-				Seal:  Seal{Fingerprint: contentSum(minted)}, Digests: digests(items),
+			Seal: machine.Seal{Fingerprint: machine.ContentSum(minted)},
+			Stamp: machine.Stamp{
+				State: machine.StateComplete,
+				Seal:  machine.Seal{Fingerprint: machine.ContentSum(minted)}, Digests: machine.DigestsOf(items),
 			},
 		}
 
@@ -1223,9 +1225,9 @@ func TestEveryFactTheProbeReadsIsOneTheItemStates(t *testing.T) {
 func TestThePinRootIsNoWiderThanTheRootThatReadsIt(t *testing.T) {
 	t.Parallel()
 
-	var pins Item
-	for _, item := range ProxyItems(ssh.AMD64, Front{}) {
-		if item.Kind == KindDir && item.Name == boxapi.PinsDir {
+	var pins machine.Item
+	for _, item := range ProxyItems(ssh.AMD64, front.Proxy{}) {
+		if item.Kind == machine.KindDir && item.Name == boxapi.PinsDir {
 			pins = item
 		}
 	}

@@ -6,7 +6,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -15,7 +18,7 @@ const sensitiveValue = "sk-live-0123456789"
 
 const aManifest = `{"slug":"shop","tier":"production","keys":[{"key":"DATABASE_URL"}],"bindings":[{"name":"main","key":"OCEL_RESOURCE_POSTGRES_main","type":"BINDING_TYPE_POSTGRES"}]}`
 
-func valued() Container {
+func valued() release.Container {
 	spec := aContainer()
 	spec.Tier = environment.TierProduction
 	spec.Resolved = true
@@ -28,18 +31,18 @@ func valued() Container {
 	return spec
 }
 
-func promoted() Container {
+func promoted() release.Container {
 	spec := aContainer()
 	spec.Tier = environment.TierProduction
 	spec.Resolved = false
 	return spec
 }
 
-func runningWith(t *testing.T, spec Container) *bench {
+func runningWith(t *testing.T, spec release.Container) *bench {
 	t.Helper()
-	rig := machine(nil)
+	rig := newBench(nil)
 	imaging(rig, "false ")
-	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := rig.host().containers.Run(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	return rig
@@ -62,14 +65,14 @@ func TestAContainerIsHandedItsValuesInAFileRatherThanOnTheCommandLine(t *testing
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Tier, spec.Name)
+	path := envfile.Path(spec.Tier, spec.Name)
 	rig := runningWith(t, spec)
 
 	command := ranContainer(t, rig)
 	if !strings.Contains(command, shell.Quote("--env-file")+" "+shell.Quote(path)) {
 		t.Fatalf("starting a container runs %q, which hands it no env file", command)
 	}
-	if !strings.HasPrefix(path, StateDir(spec.Tier)+"/") {
+	if !strings.HasPrefix(path, boxapi.StateDir(spec.Tier)+"/") {
 		t.Errorf("the env file sits at %q, want it under the state directory of the tier whose key sealed what is in it", path)
 	}
 	for name, value := range spec.Env {
@@ -95,11 +98,11 @@ func TestTheEnvFileIsWrittenAtSixHundredToTheDeployPrincipalWithNoElevation(t *t
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Tier, spec.Name)
-	rig := machine(nil)
+	path := envfile.Path(spec.Tier, spec.Name)
+	rig := newBench(nil)
 	rig.facts.Root = false
 	denyingDocker(rig, "false ")
-	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := rig.host().containers.Run(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 
@@ -140,7 +143,7 @@ func TestTheEnvFileIsTakenBackOnTheSuccessPath(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Tier, spec.Name)
+	path := envfile.Path(spec.Tier, spec.Name)
 	rig := runningWith(t, spec)
 
 	taken, ran := rig.at("rm -f "+shell.Quote(path)), rig.at(shell.Quote("--env-file"))
@@ -159,8 +162,8 @@ func TestTheEnvFileIsTakenBackWhenTheContainerCannotBeStarted(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Tier, spec.Name)
-	rig := machine(nil)
+	path := envfile.Path(spec.Tier, spec.Name)
+	rig := newBench(nil)
 	rig.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return ssh.Result{Stdout: "false \n"}, true
@@ -170,7 +173,7 @@ func TestTheEnvFileIsTakenBackWhenTheContainerCannotBeStarted(t *testing.T) {
 		}
 		return ssh.Result{}, false
 	}
-	_, err := rig.host().RunContainer(context.Background(), spec)
+	_, err := rig.host().containers.Run(context.Background(), spec)
 	if err == nil {
 		t.Fatal("RunContainer() over a daemon that refused the run = nil")
 	}
@@ -188,8 +191,8 @@ func TestTheEnvFileIsTakenBackWhenTheWriteItselfFallsOver(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Tier, spec.Name)
-	rig := machine(nil)
+	path := envfile.Path(spec.Tier, spec.Name)
+	rig := newBench(nil)
 	rig.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return ssh.Result{Stdout: "false \n"}, true
@@ -199,7 +202,7 @@ func TestTheEnvFileIsTakenBackWhenTheWriteItselfFallsOver(t *testing.T) {
 		}
 		return ssh.Result{}, false
 	}
-	if _, err := rig.host().RunContainer(context.Background(), spec); err == nil {
+	if _, err := rig.host().containers.Run(context.Background(), spec); err == nil {
 		t.Fatal("RunContainer() over a write that fell over = nil")
 	}
 	if rig.at("install -m 0600") < 0 {
@@ -214,8 +217,8 @@ func TestTheEnvFileIsTakenBackWhenTheDeployIsInterrupted(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Tier, spec.Name)
-	rig := machine(nil)
+	path := envfile.Path(spec.Tier, spec.Name)
+	rig := newBench(nil)
 	imaging(rig, "false ")
 	ctx, stop := context.WithCancel(context.Background())
 	rig.after = func(_ *bench, command string) {
@@ -223,7 +226,7 @@ func TestTheEnvFileIsTakenBackWhenTheDeployIsInterrupted(t *testing.T) {
 			stop()
 		}
 	}
-	if _, err := rig.host().RunContainer(ctx, spec); err == nil {
+	if _, err := rig.host().containers.Run(ctx, spec); err == nil {
 		t.Fatal("RunContainer() over a deploy interrupted after the write = nil")
 	}
 	if rig.at("install -m 0600") < 0 {
@@ -238,7 +241,7 @@ func TestNoValueTheDeployResolvesIsSpokenAnywhereButIntoTheFile(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Tier, spec.Name)
+	path := envfile.Path(spec.Tier, spec.Name)
 	rig := runningWith(t, spec)
 
 	file := wrote(t, rig, path)
@@ -257,11 +260,11 @@ func TestNoValueTheDeployResolvesIsSpokenAnywhereButIntoTheFile(t *testing.T) {
 func TestTheEnvFileIsRenderedInOneOrderWhateverOrderItIsBuiltIn(t *testing.T) {
 	t.Parallel()
 
-	first, err := RenderEnvFile(map[string]string{"B": "2", "A": "1", "C": "3"})
+	first, err := envfile.Render(map[string]string{"B": "2", "A": "1", "C": "3"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := RenderEnvFile(map[string]string{"C": "3", "A": "1", "B": "2"})
+	second, err := envfile.Render(map[string]string{"C": "3", "A": "1", "B": "2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +286,7 @@ func TestAValueNoEnvFileLineCanContainIsRefusedRatherThanTruncated(t *testing.T)
 		"a name a parser reads as a note": {"#A": "one"},
 		"a name with nothing in it":       {"": "one"},
 	} {
-		if _, err := RenderEnvFile(env); err == nil {
+		if _, err := envfile.Render(env); err == nil {
 			t.Errorf("%s was rendered rather than refused, and docker reads an env file one line at a time", what)
 		}
 	}
@@ -293,29 +296,29 @@ func TestTheLabelOnAContainerTellsOneAppsValuesFromAnothers(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	delivery, err := handing(spec)
+	delivery, err := release.Handing(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(delivery.digest) != envDigestLen {
-		t.Errorf("a container is labelled %q, want %d characters: the label is read back off a running container and compared as a whole", delivery.digest, envDigestLen)
+	if len(delivery.Digest) != envfile.DigestLen {
+		t.Errorf("a container is labelled %q, want %d characters: the label is read back off a running container and compared as a whole", delivery.Digest, envfile.DigestLen)
 	}
 
 	elsewhere := spec
 	elsewhere.Name = spec.Name + "-two"
-	other, err := handing(elsewhere)
+	other, err := release.Handing(elsewhere)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if other.digest == delivery.digest {
-		t.Errorf("two containers handed the same values are both labelled %q, and whoever reads the labels alone on this box or another learns that two apps share one value set", delivery.digest)
+	if other.Digest == delivery.Digest {
+		t.Errorf("two containers handed the same values are both labelled %q, and whoever reads the labels alone on this box or another learns that two apps share one value set", delivery.Digest)
 	}
 
-	empty, err := handing(promoted())
+	empty, err := release.Handing(promoted())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if empty.digest == "" {
+	if empty.Digest == "" {
 		t.Error("an app that resolved no value at all is labelled with nothing, and a container still running with the values a since-emptied deploy handed it would read as still serving")
 	}
 }
@@ -324,13 +327,13 @@ func TestAContainerRunningTheSameImageWithOtherValuesIsReplaced(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	delivery, err := handing(spec)
+	delivery, err := release.Handing(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rig := machine(nil)
-	imaging(rig, "running "+appImage+" "+delivery.digest)
-	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	rig := newBench(nil)
+	imaging(rig, "running "+appImage+" "+delivery.Digest)
+	if _, err := rig.host().containers.Run(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	for _, command := range rig.commands() {
@@ -339,9 +342,9 @@ func TestAContainerRunningTheSameImageWithOtherValuesIsReplaced(t *testing.T) {
 		}
 	}
 
-	moved := machine(nil)
+	moved := newBench(nil)
 	imaging(moved, "running "+appImage+" 0000000000000000")
-	if _, err := moved.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := moved.host().containers.Run(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	if ranContainer(t, moved) == "" {
@@ -353,23 +356,23 @@ func TestADeployThatResolvedNoValueReplacesAContainerRunningWithTheOnesItDropped
 	t.Parallel()
 
 	declared := valued()
-	delivery, err := handing(declared)
+	delivery, err := release.Handing(declared)
 	if err != nil {
 		t.Fatal(err)
 	}
 	emptied := declared
 	emptied.Env, emptied.Manifest = nil, nil
 
-	rig := machine(nil)
-	imaging(rig, "running "+appImage+" "+delivery.digest)
-	if _, err := rig.host().RunContainer(context.Background(), emptied); err != nil {
+	rig := newBench(nil)
+	imaging(rig, "running "+appImage+" "+delivery.Digest)
+	if _, err := rig.host().containers.Run(context.Background(), emptied); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	joined := strings.Join(rig.commands(), "\n")
 	if !strings.Contains(joined, shell.Quote("run")+" "+shell.Quote("--detach")) {
 		t.Fatalf("a deploy that resolved no value at all kept the container running with the values the deploy before it handed over, so removing the last value an app declares never reaches what serves it and API_TOKEN goes on being served for the life of the release:\n%s", joined)
 	}
-	if file := wrote(t, rig, EnvFile(emptied.Tier, emptied.Name)); file != "OCEL_HEALTH_PATH=/healthz\n" {
+	if file := wrote(t, rig, envfile.Path(emptied.Tier, emptied.Name)); file != "OCEL_HEALTH_PATH=/healthz\n" {
 		t.Errorf("a deploy that resolved no value handed the container %q, want the health path alone", file)
 	}
 }
@@ -379,9 +382,9 @@ func TestAPromotionKeepsTheContainerItRePointsAtRatherThanReRenderingIt(t *testi
 
 	spec := promoted()
 	spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
-	rig := machine(nil)
+	rig := newBench(nil)
 	imaging(rig, "running "+appImage+" 7f3a9c1e2b4d")
-	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := rig.host().containers.Run(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	for _, command := range rig.commands() {
@@ -396,10 +399,10 @@ func TestAPromotionIsRefusedByNameRatherThanStartingAnAppWithNoValues(t *testing
 
 	spec := promoted()
 	spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
-	rig := machine(nil)
+	rig := newBench(nil)
 	imaging(rig, "false ")
 
-	_, err := rig.host().RunContainer(context.Background(), spec)
+	_, err := rig.host().containers.Run(context.Background(), spec)
 	if err == nil {
 		t.Fatalf("a promotion that had to put %s back started it with none of the values it declares: %v", spec.Name, rig.commands())
 	}
@@ -418,10 +421,10 @@ func TestAPromotionIsRefusedByNameRatherThanStartingAnAppWithNoValues(t *testing
 func TestAPromotionOfAnAppDeclaringNoValueStartsItBackUp(t *testing.T) {
 	t.Parallel()
 
-	rig := machine(nil)
+	rig := newBench(nil)
 	imaging(rig, "false ")
-	noted(rig, handedKnown+"\n"+`{"handed":[]}`+"\n")
-	if _, err := rig.host().RunContainer(context.Background(), promoted()); err != nil {
+	noted(rig, release.HandedKnown+"\n"+`{"handed":[]}`+"\n")
+	if _, err := rig.host().containers.Run(context.Background(), promoted()); err != nil {
 		t.Fatalf("RunContainer() of an app that declares no value = %v, want a rollback of it to start it back up", err)
 	}
 	if ranContainer(t, rig) == "" {
@@ -434,9 +437,9 @@ func TestAPromotionStartsTheStoppedContainerItRePointsAtRatherThanRefusingIt(t *
 
 	spec := promoted()
 	spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
-	rig := machine(nil)
+	rig := newBench(nil)
 	imaging(rig, "exited "+appImage+" 7f3a9c1e2b4d")
-	if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
+	if _, err := rig.host().containers.Run(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() of a stopped container = %v, want it started back up: a deploy stops the container it replaces and never removes it, so a rollback re-points at the one that still has the values its own deploy handed it", err)
 	}
 	joined := strings.Join(rig.commands(), "\n")
@@ -460,9 +463,9 @@ func TestAPromotionStartsEveryStateDockerCanStartRatherThanRefusingIt(t *testing
 	} {
 		spec := promoted()
 		spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
-		rig := machine(nil)
+		rig := newBench(nil)
 		imaging(rig, state+" "+appImage+" 7f3a9c1e2b4d")
-		if _, err := rig.host().RunContainer(context.Background(), spec); err != nil {
+		if _, err := rig.host().containers.Run(context.Background(), spec); err != nil {
 			t.Errorf("RunContainer() of a %s container = %v, want it put back into service: the container object still has the environment its own deploy baked into it, and a promotion that refuses it loses every value a rollback exists to preserve", state, err)
 			continue
 		}

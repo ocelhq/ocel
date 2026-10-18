@@ -11,7 +11,7 @@ import (
 )
 
 func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, app, imageRef string, images provider.ImageStore, log progress.Log) error {
-	swept, err := p.host.Reconcile(ctx, ref.Project, app, imageRef)
+	swept, err := p.images.Reconcile(ctx, ref.Project, app, imageRef)
 	if err != nil {
 		return err
 	}
@@ -23,7 +23,7 @@ func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, a
 		case images == nil:
 			continue
 		default:
-			claimed, err := p.host.IsClaimed(ctx, ref.Project, app, image)
+			claimed, err := p.images.IsClaimed(ctx, ref.Project, app, image)
 			if err != nil {
 				log.Warn(fmt.Sprintf("Left %s in the registry it was pushed to, as whether a release claimed it again could not be read, and the next removal tries again: %v", image, err))
 				continue
@@ -39,7 +39,7 @@ func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, a
 		}
 		settled = append(settled, image)
 	}
-	if err := p.host.Settle(ctx, ref.Project, app, settled); err != nil {
+	if err := p.images.Settle(ctx, ref.Project, app, settled); err != nil {
 		log.Warn(fmt.Sprintf("Removed %s, and the box could not note it, so the next removal asks for it again: %v", strings.Join(settled, ", "), err))
 	}
 	return nil
@@ -51,5 +51,5 @@ func namesRegistry(imageRef string) bool {
 }
 
 func (p *Provider) ForgetReleases(ctx context.Context, ref provider.StackRef, app string, _ provider.ImageStore, _ progress.Log) error {
-	return p.host.Forget(ctx, ref.Tier, ref.Project, app)
+	return p.images.Forget(ctx, ref.Tier, ref.Project, app)
 }

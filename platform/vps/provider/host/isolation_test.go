@@ -7,13 +7,17 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
-func handedTo(spec Container) handoff {
-	delivery, err := handing(spec)
+func handedTo(spec release.Container) envfile.Delivery {
+	delivery, err := release.Handing(spec)
 	if err != nil {
 		panic(err)
 	}
@@ -29,22 +33,22 @@ const (
 	tokenPlacer       = "the container that places the tunnel's token"
 )
 
-func resourced() ResourceContainer {
-	return ResourceContainer{
+func resourced() container.Spec {
+	return container.Spec{
 		Name: "prod-web-r0a1b2c3d-main-pg", Project: valued().Project, Resource: "main", Tier: valued().Tier,
 		Image:        "public.ecr.aws/docker/library/postgres:17.6@sha256:00bc86618629af00d2937fdc5a5d63db3ff8450acf52f0636ec813c7f4902929",
 		Capabilities: []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"},
-		Volume:       Volume{Path: "/var/lib/postgresql/data"},
-		Credential:   Credential{Env: "POSTGRES_PASSWORD"},
+		Volume:       container.Volume{Path: "/var/lib/postgresql/data"},
+		Credential:   container.Credential{Env: "POSTGRES_PASSWORD"},
 	}
 }
 
 func running() map[string]string {
 	return map[string]string{
-		appContainer:      shell.Words(containerRun(valued(), handedTo(valued()))),
+		appContainer:      shell.Words(release.ContainerRun(valued(), handedTo(valued()))),
 		proxyContainer:    shell.Words(frontProxy().Run()),
-		boardContainer:    shell.Words(switchboardBox(nil, Front{}).Run()),
-		resourceContainer: shell.Words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name))),
+		boardContainer:    shell.Words(switchboardBox(nil, front.Proxy{}).Run()),
+		resourceContainer: shell.Words(container.Run(resourced(), "0123456789ab", envfile.Path(resourced().Tier, resourced().Name))),
 		tunnelContainer:   shell.Words(tunnel.Service(boxapi.Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector()).Run()),
 		tokenPlacer:       shell.Words(tunnel.TokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d")),
 	}
@@ -52,10 +56,10 @@ func running() map[string]string {
 
 func entitledPaths() map[string][]string {
 	return map[string][]string{
-		appContainer:      {EnvFile(valued().Tier, valued().Name)},
+		appContainer:      {envfile.Path(valued().Tier, valued().Name)},
 		proxyContainer:    {proxyRoot, boxapi.PinsDir, ProxyData},
 		boardContainer:    {boxapi.RoutingDir, boxapi.RoutingTablePath},
-		resourceContainer: {EnvFile(resourced().Tier, resourced().Name)},
+		resourceContainer: {envfile.Path(resourced().Tier, resourced().Name)},
 		tunnelContainer:   {tunnel.Dir},
 		tokenPlacer:       {tunnel.Dir},
 	}
@@ -104,7 +108,7 @@ func source(token string) string {
 }
 
 func underARoot(path string) bool {
-	for _, root := range []string{tierRoot, stateRoot} {
+	for _, root := range []string{boxapi.TierRoot, boxapi.StateRoot} {
 		if path == root || strings.HasPrefix(path, root+"/") {
 			return true
 		}
@@ -128,7 +132,7 @@ func TestEveryPathAContainerIsToldAboutUnderTheKeyOrTheRecordsIsOneItIsEntitledT
 	for what, command := range running() {
 		if len(allowed[what]) == 0 {
 			t.Fatalf("%s is rendered by this bench and nothing says which paths under %s and %s it is entitled to, so what it names proves nothing",
-				what, tierRoot, stateRoot)
+				what, boxapi.TierRoot, boxapi.StateRoot)
 		}
 		named := 0
 		for _, token := range strings.Fields(command) {
@@ -139,12 +143,12 @@ func TestEveryPathAContainerIsToldAboutUnderTheKeyOrTheRecordsIsOneItIsEntitledT
 			named++
 			if !includes(allowed[what], path) {
 				t.Errorf("%s runs %q and names %q, which is none of %v: the seal key, every sealed record and every other app's values live under %s and %s, and a run has business with nothing there but what it is entitled to",
-					what, command, path, allowed[what], tierRoot, stateRoot)
+					what, command, path, allowed[what], boxapi.TierRoot, boxapi.StateRoot)
 			}
 		}
 		if named == 0 {
 			t.Errorf("%s names no path under %s or %s at all, so this walk reads no token of it and would say the same of a run that mounted every one of them",
-				what, tierRoot, stateRoot)
+				what, boxapi.TierRoot, boxapi.StateRoot)
 		}
 	}
 }
@@ -155,7 +159,7 @@ func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheTierStateItself(t *
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		for what, allowed := range entitledPaths() {
 			for _, path := range allowed {
-				for _, refused := range []string{TierDir(tier), KeyValuesDir(tier), SealKeyPath(tier)} {
+				for _, refused := range []string{boxapi.TierDir(tier), KeyValuesDir(tier), SealKeyPath(tier)} {
 					if path == refused || strings.HasPrefix(path, refused+"/") {
 						t.Errorf("%s is entitled to %q, which sits under %s: the key that opens every sealed value and the records it sealed are what that path contains",
 							what, path, refused)
@@ -169,7 +173,7 @@ func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheTierStateItself(t *
 func TestEveryContainerThisPackageRunsIsBoundByTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "volumeCopy", "placementRun", "TokenArgv", "resourceRun", "Run"},
+	rendered(t, `[]string{"docker", "run"`, []string{"ContainerRun", "VolumeCopy", "placementRun", "TokenArgv", "Run"},
 		"a container run built somewhere this bench does not read is bound by none of the rules in this file")
 }
 
@@ -191,7 +195,7 @@ func TestAPlacementContainerIsBoundByTheIsolationRulesAndMountsNothingButItsDire
 		}
 	}
 	if want := []string{boxapi.SwitchboardDir, "/etc/traefik/dynamic"}; !slices.Equal(mounted, want) {
-		t.Errorf("a placement runs %q and mounts %q, want %q alone: nothing under %s or %s is its business", command, mounted, want, tierRoot, stateRoot)
+		t.Errorf("a placement runs %q and mounts %q, want %q alone: nothing under %s or %s is its business", command, mounted, want, boxapi.TierRoot, boxapi.StateRoot)
 	}
 }
 
@@ -200,7 +204,7 @@ func TestAVolumeCopyRunsOfflineWithoutCapabilitiesAndMountsNothingButTheTwoVolum
 
 	spec := resourced()
 	spec.User, spec.Volume.Generation = "valkey:valkey", "9"
-	command := volumeCopy(spec, "8").before
+	command := container.VolumeCopy(spec, "8").Before
 	for _, want := range []string{shell.Quote("--network") + " " + shell.Quote("none"), shell.Quote("--cap-drop") + " " + shell.Quote("ALL"), shell.Quote("--user") + " " + shell.Quote("valkey:valkey")} {
 		if !strings.Contains(command, want) {
 			t.Errorf("a volume copy runs %q, without %s", command, want)

@@ -7,7 +7,10 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
@@ -16,20 +19,20 @@ func inspecting() map[string]string {
 	return map[string]string{
 		"what a release reads to see if the app is already serving":              docker.ServingCommand(physical),
 		"what a release that fell over captures as evidence":                     docker.StateCommand(physical),
-		"what a release that fell over captures as logs":                         logCommand(physical),
-		"what a container that failed to start gives as its last run's logs":     renderLastRunLogs(physical),
-		"what a probe watches its container with while it waits":                 renderStartWatch([]string{physical}, []string{"true"}),
+		"what a release that fell over captures as logs":                         release.LogCommand(physical),
+		"what a container that failed to start gives as its last run's logs":     release.RenderLastRunLogs(physical),
+		"what a probe watches its container with while it waits":                 release.RenderStartWatch([]string{physical}, []string{"true"}),
 		"what a proxy that did not come up reports":                              frontProxy().Rising(3),
-		"what a switchboard that did not come up reports":                        switchboardBox(nil, Front{}).Rising(3),
+		"what a switchboard that did not come up reports":                        switchboardBox(nil, front.Proxy{}).Rising(3),
 		"what a bootstrap probes the proxy with":                                 containerProbe(frontProxy()),
 		"what a preflight reads the proxy's state with":                          docker.StateCommand(caddy.Container),
 		"what doctor reads a switchboard a deploy started again with":            restoredCommand(),
-		"what a release reads to tell a stopped retiree from one still draining": runningCommand([]string{retiring}),
-		"what a destroy asks before it reloads your Caddy's container":           coolifysCaddy().caddyReloadCommand(),
+		"what a release reads to tell a stopped retiree from one still draining": release.RunningCommand([]string{retiring}),
+		"what a destroy asks before it reloads your Caddy's container":           coolifysCaddy().Front().ReloadCommand(),
 		"what a claim through a tunnel reads to tell whether the tunnel runs":    tunnel.Inspecting(),
 		"what a release reads to tell whether the tunnel it retires still runs":  tunnel.Removing(boxapi.Tunnel{Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}),
-		"what a port forward reads its container's address with":                 containerAddressCommand(physical),
-		"what a release reads to archive the image of the container it retires":  releaseCommand(physical),
+		"what a port forward reads its container's address with":                 release.ContainerAddressCommand(physical),
+		"what a release reads to archive the image of the container it retires":  release.ReleaseCommand(physical),
 	}
 }
 
@@ -84,8 +87,8 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"caddyReloadCommand", "containerAddressCommand", "containerProbe", "Inspecting", "Removing", "releaseCommand", "restoredCommand", "Restoring", "Rising", "renderLastRunLogs", "runningCommand", "ServingCommand", "StateCommand", "renderStartWatch"},
-		"docker network inspect": {"command", "JoiningNetwork", "CreatingNetwork", "EnsuringNetwork", "ForgettingNetwork", "networkProbe", "NetworksPresent"},
+		"docker inspect":         {"ReloadCommand", "ContainerAddressCommand", "containerProbe", "Inspecting", "Removing", "ReleaseCommand", "restoredCommand", "Restoring", "Rising", "RenderLastRunLogs", "RunningCommand", "ServingCommand", "StateCommand", "RenderStartWatch"},
+		"docker network inspect": {"Command", "JoiningNetwork", "CreatingNetwork", "EnsuringNetwork", "ForgettingNetwork", "networkProbe", "NetworksPresent"},
 		"docker image inspect":   {"Pulled"},
 	}
 }
@@ -126,12 +129,12 @@ func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 	networking := map[string]struct{ command, network string }{
 		"what a bootstrap creates the proxy network with":     {networkCommand(), ProxyNetwork},
 		"what a bootstrap probes the proxy network with":      {networkProbe(), ProxyNetwork},
-		"what a destroy removes the proxy network with":       {removal{kind: KindNetwork, path: ProxyNetwork}.command(), ProxyNetwork},
+		"what a destroy removes the proxy network with":       {machine.Removal{Kind: machine.KindNetwork, Path: ProxyNetwork}.Command(), ProxyNetwork},
 		"what a deploy puts a project's network up with":      {docker.JoiningNetwork(valued().Tier, valued().Project), project},
 		"what a resource puts a project's network up with":    {docker.CreatingNetwork(valued().Tier, valued().Project), project},
 		"what a teardown takes a project's network down with": {docker.ForgettingNetwork(valued().Tier, valued().Project), project},
 		"what a switchboard write finds your proxy's network with": {
-			docker.Service{Networks: Front{Manual: &ManualFront{Port: 8480, Network: "coolify"}}.joined()}.NetworksPresent(), "coolify",
+			docker.Service{Networks: front.Proxy{Manual: &front.Manual{Port: 8480, Network: "coolify"}}.Front().Joined()}.NetworksPresent(), "coolify",
 		},
 	}
 	if len(networking) != len(inspectRosters()["docker network inspect"]) {
@@ -166,8 +169,8 @@ func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 func TestTheLogsARefusalQuotesAreBounded(t *testing.T) {
 	t.Parallel()
 
-	command := logCommand(physical)
-	if !strings.Contains(command, "--tail "+appLogTail) {
+	command := release.LogCommand(physical)
+	if !strings.Contains(command, "--tail "+release.LogTail) {
 		t.Errorf("a refusal quotes %q, and an unbounded log is a deploy's whole output", command)
 	}
 }

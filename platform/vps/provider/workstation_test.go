@@ -29,7 +29,7 @@ const (
 )
 
 type workstation struct {
-	vm        machine
+	vm        liveBox
 	bin       string
 	project   string
 	settings  string

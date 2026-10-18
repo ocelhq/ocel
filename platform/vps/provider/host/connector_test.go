@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
@@ -22,13 +23,13 @@ func TestTheUnitIsWrittenAfterEverythingItWatches(t *testing.T) {
 	t.Parallel()
 
 	items := ConnectorItems([]byte("#!/bin/sh\n"), connectorConfig())
-	at := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUnit })
+	at := slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == machine.KindUnit })
 	if at < 0 {
 		t.Fatal("nothing starts the connector, so a reboot leaves the console dialling a socket nobody is listening on")
 	}
 	unit := items[at]
 	for _, watched := range unit.Watch {
-		written := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindFile && item.Name == watched })
+		written := slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == machine.KindFile && item.Name == watched })
 		if written < 0 {
 			t.Errorf("the unit watches %s and nothing writes it", watched)
 			continue
@@ -42,12 +43,12 @@ func TestTheUnitIsWrittenAfterEverythingItWatches(t *testing.T) {
 func TestTheUnitIsRestartedWhenTheBinaryOrTheConfigChanges(t *testing.T) {
 	t.Parallel()
 
-	unitOf := func(items []Item) Item {
-		at := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUnit })
+	unitOf := func(items []machine.Item) machine.Item {
+		at := slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == machine.KindUnit })
 		return items[at]
 	}
 	first := unitOf(ConnectorItems([]byte("one"), connectorConfig()))
-	for name, items := range map[string][]Item{
+	for name, items := range map[string][]machine.Item{
 		"another binary": ConnectorItems([]byte("two"), connectorConfig()),
 		"another config": ConnectorItems([]byte("one"), []byte(`{"console":"https://elsewhere.example"}`)),
 	} {
@@ -110,11 +111,11 @@ func TestTheConnectorConfigAndKeyAreReadableByNobodyElse(t *testing.T) {
 		kind, name, owner string
 		mode              os.FileMode
 	}{
-		{KindDir, connectorRoot, stateOwner, 0o700},
-		{KindFile, ConnectorConfig, stateOwner, 0o600},
-		{KindFile, ConnectorBinary, rootOwner, 0o755},
+		{machine.KindDir, connectorRoot, stateOwner, 0o700},
+		{machine.KindFile, ConnectorConfig, stateOwner, 0o600},
+		{machine.KindFile, ConnectorBinary, machine.RootOwner, 0o755},
 	} {
-		at := slices.IndexFunc(items, func(item Item) bool { return item.Kind == tc.kind && item.Name == tc.name })
+		at := slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == tc.kind && item.Name == tc.name })
 		if at < 0 {
 			t.Errorf("nothing writes %s %s", tc.kind, tc.name)
 			continue
@@ -155,14 +156,14 @@ esac`)
 		}
 	}
 
-	stated := systemdUnit(Item{
-		Kind:    KindUnit,
+	stated := machine.SystemdUnit(machine.Item{
+		Kind:    machine.KindUnit,
 		Name:    ConnectorUnit,
-		Owner:   rootOwner,
-		Content: unitWatchFacts(connectorUnit(), []byte("#!/bin/sh\n"), connectorConfig()),
+		Owner:   machine.RootOwner,
+		Content: machine.UnitWatchFacts(connectorUnit(), []byte("#!/bin/sh\n"), connectorConfig()),
 		Watch:   []string{unit, binary, config},
 	})
-	cmd := exec.Command("/bin/sh", "-c", stated.probe())
+	cmd := exec.Command("/bin/sh", "-c", stated.Probe())
 	cmd.Env = []string{"PATH=" + path}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -170,7 +171,7 @@ esac`)
 	if err != nil {
 		t.Fatalf("probe the unit: %v\n%s", err, stderr.String())
 	}
-	observed, _, err := readSurvey(string(rendered))
+	observed, _, err := machine.ReadSurvey(string(rendered))
 	if err != nil {
 		t.Fatal(err)
 	}

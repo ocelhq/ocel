@@ -12,28 +12,30 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func coolifysCaddy() Front {
-	filled := CaddyFront{Preset: "coolify"}.Filled()
-	return Front{Caddy: &filled}
+func coolifysCaddy() front.Proxy {
+	filled := front.Caddy{Preset: "coolify"}.Filled()
+	return front.Proxy{Caddy: &filled}
 }
 
-func caddyService() Front {
-	filled := CaddyFront{Directory: "/etc/caddy/ocel.d"}.Filled()
-	return Front{Caddy: &filled}
+func caddyService() front.Proxy {
+	filled := front.Caddy{Directory: "/etc/caddy/ocel.d"}.Filled()
+	return front.Proxy{Caddy: &filled}
 }
 
 func TestACaddyOptionOpensTheCaddyfileProxyOverTheDirectoryItImports(t *testing.T) {
 	t.Parallel()
 
-	opened, ok := openFront(coolifysCaddy(), frontBox{}).(caddyfile.Caddyfile)
+	opened, ok := coolifysCaddy().Front().Open(frontBox{}).(caddyfile.Caddyfile)
 	if !ok {
-		t.Fatalf("openFront() = %T, want caddyfile.Caddyfile", openFront(coolifysCaddy(), frontBox{}))
+		t.Fatalf("openFront() = %T, want caddyfile.Caddyfile", coolifysCaddy().Front().Open(frontBox{}))
 	}
 	want := caddyfile.Caddyfile{Box: frontBox{}, Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic",
 		Container: "coolify-proxy", Config: "/config/caddy/Caddyfile.autosave", Network: "coolify"}
@@ -80,36 +82,36 @@ func TestACaddyServiceIsReloadedThroughOneSudoersLineThatBootstrapWritesAndGrant
 	t.Parallel()
 
 	items := ProxyItems(ssh.AMD64, caddyService())
-	line := itemAt(t, items, KindFile, sudoersCaddyReload)
-	if want := deployUser + " ALL=(root) NOPASSWD: /usr/bin/systemctl reload caddy.service\n"; string(line.Content) != want || line.Mode != 0o440 || line.Owner != rootOwner {
-		t.Errorf("%s holds %q at %04o owned by %s, want %q at 0440 owned by root", sudoersCaddyReload, line.Content, line.Mode, line.Owner, want)
+	line := itemAt(t, items, machine.KindFile, machine.SudoersCaddyReload)
+	if want := deployUser + " ALL=(root) NOPASSWD: /usr/bin/systemctl reload caddy.service\n"; string(line.Content) != want || line.Mode != 0o440 || line.Owner != machine.RootOwner {
+		t.Errorf("%s holds %q at %04o owned by %s, want %q at 0440 owned by root", machine.SudoersCaddyReload, line.Content, line.Mode, line.Owner, want)
 	}
-	if slices.ContainsFunc(ProxyItems(ssh.AMD64, coolifysCaddy()), func(item Item) bool { return item.Name == sudoersCaddyReload }) {
-		t.Errorf("a Caddy in a container is given %s, want no sudo: docker exec reloads it", sudoersCaddyReload)
+	if slices.ContainsFunc(ProxyItems(ssh.AMD64, coolifysCaddy()), func(item machine.Item) bool { return item.Name == machine.SudoersCaddyReload }) {
+		t.Errorf("a Caddy in a container is given %s, want no sudo: docker exec reloads it", machine.SudoersCaddyReload)
 	}
 	granted := slices.ContainsFunc(grants(environment.TierProduction, ssh.AMD64, caddyService()), func(grant Grant) bool {
-		return strings.Contains(grant.Name, sudoersCaddyReload) && strings.Contains(grant.Detail, strings.TrimSpace(string(line.Content)))
+		return strings.Contains(grant.Name, machine.SudoersCaddyReload) && strings.Contains(grant.Detail, strings.TrimSpace(string(line.Content)))
 	})
 	if !granted {
-		t.Errorf("the grants never name %s and the line it holds", sudoersCaddyReload)
+		t.Errorf("the grants never name %s and the line it holds", machine.SudoersCaddyReload)
 	}
 }
 
 func TestTheCaddyReloadLineIsGrantedOnlyWhereBootstrapWritesIt(t *testing.T) {
 	t.Parallel()
 
-	for name, front := range map[string]Front{
+	for name, front := range map[string]front.Proxy{
 		"ocel's own proxy":  {},
 		"Coolify's Caddy":   coolifysCaddy(),
-		"a manual proxy":    {Manual: &ManualFront{Port: 8480}},
-		"a Caddy container": {Caddy: &CaddyFront{Directory: "/etc/caddy/ocel.d", Container: "caddy", Network: "web"}},
+		"a manual proxy":    {Manual: &front.Manual{Port: 8480}},
+		"a Caddy container": {Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d", Container: "caddy", Network: "web"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			for _, grant := range grants(environment.TierProduction, ssh.AMD64, front) {
-				if strings.Contains(grant.Name, sudoersCaddyReload) {
-					t.Errorf("the grants behind %s name %q, want no %s: bootstrap writes it only for a Caddy that runs as caddy.service", name, grant.Name, sudoersCaddyReload)
+				if strings.Contains(grant.Name, machine.SudoersCaddyReload) {
+					t.Errorf("the grants behind %s name %q, want no %s: bootstrap writes it only for a Caddy that runs as caddy.service", name, grant.Name, machine.SudoersCaddyReload)
 				}
 			}
 		})
@@ -120,26 +122,28 @@ func TestDestroyUnplacesOcelCaddyReloadsYourCaddyAndTakesTheSudoersLine(t *testi
 	t.Parallel()
 
 	read := Reading{Tier: environment.TierProduction, Front: caddyService(), Observed: map[string]string{
-		KindFile + " " + sudoersCaddyReload:      "",
-		KindContainer + " " + boxapi.Switchboard: "",
+		machine.KindFile + " " + machine.SudoersCaddyReload: "",
+		machine.KindContainer + " " + boxapi.Switchboard:    "",
 	}}
 	taken := removing(read, Reading{Tier: environment.TierPreview}, appsPresent{})
-	at := slices.IndexFunc(taken, func(r removal) bool { return r.kind == KindPlaced })
+	at := slices.IndexFunc(taken, func(r machine.Removal) bool { return r.Kind == machine.KindPlaced })
 	if at < 0 {
 		t.Fatalf("the last tier's destroy takes %v, want /etc/caddy/ocel.d/ocel.caddy unplaced", taken)
 	}
-	command := taken[at].command()
+	command := taken[at].Command()
 	for _, want := range []string{"'unplace' '/etc/caddy/ocel.d/ocel.caddy'", "rm -f '/etc/caddy/ocel.d/ocel.caddy'", "'reload' 'caddy.service'"} {
 		if !strings.Contains(command, want) {
 			t.Errorf("the destroy runs\n%s\nwant %s in it: your Caddy otherwise keeps routing ocel's hostnames to a switchboard that is gone", command, want)
 		}
 	}
-	board := slices.IndexFunc(taken, func(r removal) bool { return r.kind == KindContainer && r.path == boxapi.Switchboard })
+	board := slices.IndexFunc(taken, func(r machine.Removal) bool { return r.Kind == machine.KindContainer && r.Path == boxapi.Switchboard })
 	if board < at {
 		t.Errorf("the destroy removes the switchboard before it unplaces %s, want it unplaced through the switchboard first", caddyfile.FileName)
 	}
-	if !slices.ContainsFunc(taken, func(r removal) bool { return r.kind == KindFile && r.path == sudoersCaddyReload }) {
-		t.Errorf("the destroy takes %v, want %s taken with it", taken, sudoersCaddyReload)
+	if !slices.ContainsFunc(taken, func(r machine.Removal) bool {
+		return r.Kind == machine.KindFile && r.Path == machine.SudoersCaddyReload
+	}) {
+		t.Errorf("the destroy takes %v, want %s taken with it", taken, machine.SudoersCaddyReload)
 	}
 }
 
@@ -161,9 +165,9 @@ func TestDestroyReloadsYourCaddyOnlyWhenOcelCaddyWasThereToTake(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			filled := CaddyFront{Directory: dir, Container: "caddy", Network: "web"}.Filled()
-			taken := Front{Caddy: &filled}.placedRemovals()[0]
-			run := exec.Command("sh", "-c", taken.command())
+			filled := front.Caddy{Directory: dir, Container: "caddy", Network: "web"}.Filled()
+			taken := placedRemovals(front.Proxy{Caddy: &filled})[0]
+			run := exec.Command("sh", "-c", taken.Command())
 			run.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 			said, err := run.CombinedOutput()
 			if err != nil {
@@ -185,7 +189,7 @@ func TestDestroyReloadsYourCaddyOnlyWhenOcelCaddyWasThereToTake(t *testing.T) {
 func TestBootstrapRefusesACaddyWhoseAdminEndpointIsOff(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "/config/apps/http/servers") {
 			return ssh.Result{Code: 7, Stderr: "curl: (7) Failed to connect to 127.0.0.1 port 2019"}, true
@@ -204,9 +208,9 @@ func TestBootstrapRefusesACaddyWhoseAdminEndpointIsOff(t *testing.T) {
 func TestBootstrapRefusesACaddyContainerOffTheHostsNetworkWithoutANetworkNamingIt(t *testing.T) {
 	t.Parallel()
 
-	filled := CaddyFront{Directory: "/etc/caddy/ocel.d", Container: "caddy"}.Filled()
-	front := Front{Caddy: &filled}
-	box := machine(nil)
+	filled := front.Caddy{Directory: "/etc/caddy/ocel.d", Container: "caddy"}.Filled()
+	front := front.Proxy{Caddy: &filled}
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "NetworkMode") {
 			return ssh.Result{Stdout: "bridge\n"}, true

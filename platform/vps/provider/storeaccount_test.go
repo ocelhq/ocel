@@ -12,7 +12,6 @@ import (
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 func TestAnAppReachesTheStoreUnderAnAccountOfItsOwn(t *testing.T) {
@@ -21,7 +20,7 @@ func TestAnAppReachesTheStoreUnderAnAccountOfItsOwn(t *testing.T) {
 	machine := &box{kept: sealedRootKey()}
 	manifest := storeManifest(t, machine, vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}})
 
-	own := host.StoreAccountKey("shop", manifest.Store.Env, "web")
+	own := vps.StoreAccountKey("shop", manifest.Store.Env, "web")
 	if manifest.Store.AccessKeyID != own {
 		t.Errorf("the app reaches the store as %q, want the account %q this app alone owns: the root credential reaches every bucket on the box",
 			manifest.Store.AccessKeyID, own)

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
@@ -16,7 +18,7 @@ const (
 	dockerShims   = boxapi.LibDir + "/bin"
 	DockerShim    = dockerShims + "/docker"
 	LoginShell    = boxapi.LibDir + "/login"
-	sudoersDocker = sudoersRoot + "/ocel-docker"
+	sudoersDocker = machine.SudoersRoot + "/ocel-docker"
 
 	deployPath = dockerShims + ":/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
@@ -33,12 +35,12 @@ func dockerSudoers() []byte {
 	return []byte(deployUser + " ALL=(root) NOPASSWD: " + LiveBinary + " " + boxapi.DockerCommand + " *\n")
 }
 
-func dockerGrants(front Front) boxapi.DockerGrants {
+func dockerGrants(fronting front.Proxy) boxapi.DockerGrants {
 	grants := boxapi.DockerGrants{
 		Binds: []boxapi.DockerBind{
 			{Path: boxapi.SwitchboardDir},
 			{Path: RealtimeDir},
-			{Path: LiveSocketDir},
+			{Path: boxapi.SocketDir},
 			{Path: boxapi.RoutingDir},
 			{Path: ConnectorRun},
 			{Path: boxapi.SwitchboardControlDir, Writable: true},
@@ -48,45 +50,43 @@ func dockerGrants(front Front) boxapi.DockerGrants {
 		Containers: []string{boxapi.Switchboard, caddy.Container, tunnel.ContainerName},
 		Networks:   []string{},
 	}
-	if placed := routing.Destination(openFront(front, frontBox{})); placed != "" {
+	if placed := routing.Destination(fronting.Front().Open(frontBox{})); placed != "" {
 		grants.Binds = append(grants.Binds, boxapi.DockerBind{Path: filepath.Dir(placed), Writable: true})
 	}
-	for _, joined := range front.joined() {
+	for _, joined := range fronting.Front().Joined() {
 		grants.Networks = append(grants.Networks, joined.Name)
 	}
-	if front.Caddy != nil && front.Caddy.Container != "" {
-		grants.Containers = append(grants.Containers, front.Caddy.Container)
-	}
+	grants.Containers = append(grants.Containers, fronting.Front().GrantedContainers()...)
 	slices.SortFunc(grants.Binds, func(a, b boxapi.DockerBind) int { return strings.Compare(a.Path, b.Path) })
 	return grants
 }
 
-func dockerGrantsContent(front Front) []byte {
-	written, err := json.MarshalIndent(dockerGrants(front), "", "  ")
+func dockerGrantsContent(fronting front.Proxy) []byte {
+	written, err := json.MarshalIndent(dockerGrants(fronting), "", "  ")
 	if err != nil {
 		panic(err)
 	}
 	return append(written, '\n')
 }
 
-func DockerAccessItems(front Front) []Item {
-	return []Item{
-		dir(dockerShims, 0o755, rootOwner, ""),
-		{Kind: KindFile, Name: DockerShim, Mode: 0o755, Owner: rootOwner, Content: dockerShim(), Note: "docker for the deploy login, through the checks in " + LiveBinary},
-		{Kind: KindFile, Name: LoginShell, Mode: 0o755, Owner: rootOwner, Content: loginShell(), Note: "the deploy login's shell"},
-		dir(boxapi.DockerConfigDir, 0o700, rootOwner, "registry logins, one per pull"),
-		{Kind: KindFile, Name: boxapi.DockerGrantsPath, Mode: 0o644, Owner: rootOwner, Content: dockerGrantsContent(front), Note: "what deploys may mount, join and run inside"},
-		{Kind: KindFile, Name: sudoersDocker, Mode: 0o440, Owner: rootOwner, Content: dockerSudoers(), Note: "sudo for docker, checked"},
+func DockerAccessItems(fronting front.Proxy) []machine.Item {
+	return []machine.Item{
+		machine.Dir(dockerShims, 0o755, machine.RootOwner, ""),
+		{Kind: machine.KindFile, Name: DockerShim, Mode: 0o755, Owner: machine.RootOwner, Content: dockerShim(), Note: "docker for the deploy login, through the checks in " + LiveBinary},
+		{Kind: machine.KindFile, Name: LoginShell, Mode: 0o755, Owner: machine.RootOwner, Content: loginShell(), Note: "the deploy login's shell"},
+		machine.Dir(boxapi.DockerConfigDir, 0o700, machine.RootOwner, "registry logins, one per pull"),
+		{Kind: machine.KindFile, Name: boxapi.DockerGrantsPath, Mode: 0o644, Owner: machine.RootOwner, Content: dockerGrantsContent(fronting), Note: "what deploys may mount, join and run inside"},
+		{Kind: machine.KindFile, Name: sudoersDocker, Mode: 0o440, Owner: machine.RootOwner, Content: dockerSudoers(), Note: "sudo for docker, checked"},
 	}
 }
 
-func dockerAccessRemovals() []removal {
-	return []removal{
-		taking(KindFile, sudoersDocker, ""),
-		taking(KindFile, boxapi.DockerGrantsPath, ""),
-		taking(KindDir, boxapi.DockerConfigDir, ""),
-		taking(KindFile, LoginShell, ""),
-		taking(KindFile, DockerShim, ""),
-		taking(KindDir, dockerShims, ""),
+func dockerAccessRemovals() []machine.Removal {
+	return []machine.Removal{
+		machine.Taking(machine.KindFile, sudoersDocker, ""),
+		machine.Taking(machine.KindFile, boxapi.DockerGrantsPath, ""),
+		machine.Taking(machine.KindDir, boxapi.DockerConfigDir, ""),
+		machine.Taking(machine.KindFile, LoginShell, ""),
+		machine.Taking(machine.KindFile, DockerShim, ""),
+		machine.Taking(machine.KindDir, dockerShims, ""),
 	}
 }

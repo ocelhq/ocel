@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 )
 
 const (
@@ -72,7 +72,7 @@ func refused(t *testing.T, err error, code refusal.Code) refusal.Refusal {
 	return refused
 }
 
-func mode(t *testing.T, vm machine, path string) string {
+func mode(t *testing.T, vm liveBox, path string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.ssh(t, "sudo stat -c %a "+path))
 }
@@ -130,8 +130,8 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 		t.Fatal("the apply ran to completion, and a half-applied host is what this proves recovery from")
 	}
 
-	if stamp := stampOn(t, vm); stamp.State != host.StateApplying {
-		t.Fatalf("the stamp reads state %q after an apply that died, want %q", stamp.State, host.StateApplying)
+	if stamp := stampOn(t, vm); stamp.State != machine.StateApplying {
+		t.Fatalf("the stamp reads state %q after an apply that died, want %q", stamp.State, machine.StateApplying)
 	}
 	described, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
@@ -174,8 +174,8 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	if !slices.Contains(said, unchanged) {
 		t.Errorf("the apply said %q, want %q: what the plan showed as a no-op is declared rather than passed over", said, unchanged)
 	}
-	if stamp := stampOn(t, vm); stamp.State != host.StateComplete {
-		t.Errorf("the stamp reads state %q after the run that finished it, want %q", stamp.State, host.StateComplete)
+	if stamp := stampOn(t, vm); stamp.State != machine.StateComplete {
+		t.Errorf("the stamp reads state %q after the run that finished it, want %q", stamp.State, machine.StateComplete)
 	}
 	finished, err := bootstrap.Describe(ctx, tier)
 	if err != nil {

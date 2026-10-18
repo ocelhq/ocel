@@ -9,6 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -22,15 +24,15 @@ func currentHost() Reading {
 		Tier:     tier,
 		Present:  true,
 		Keys:     keys,
-		Stamp:    Stamp{State: StateComplete, Digests: digests(Items(tier, keys, ssh.AMD64, Front{}))},
-		Observed: digests(Items(tier, keys, ssh.AMD64, Front{})),
+		Stamp:    machine.Stamp{State: machine.StateComplete, Digests: machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{}))},
+		Observed: machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{})),
 	}
 }
 
 func drifted(t *testing.T, read Reading, name string) Reading {
 	t.Helper()
 
-	for _, item := range Items(read.Tier, read.Keys, ssh.AMD64, Front{}) {
+	for _, item := range Items(read.Tier, read.Keys, ssh.AMD64, front.Proxy{}) {
 		if item.Name != name {
 			continue
 		}
@@ -59,7 +61,7 @@ func TestAReplacementRefusingApplyInstallsWhatIsAbsent(t *testing.T) {
 
 	tier := environment.TierProduction
 	fresh := Reading{Arch: ssh.AMD64, Tier: tier, Observed: map[string]string{}}
-	if err := refuseReplacements(fresh, Items(tier, nil, ssh.AMD64, Front{})); err != nil {
+	if err := refuseReplacements(fresh, Items(tier, nil, ssh.AMD64, front.Proxy{})); err != nil {
 		t.Errorf("a replacement-refusing apply over a machine nothing has bootstrapped = %v, want the installs to proceed", err)
 	}
 }
@@ -70,7 +72,7 @@ func TestAReplacementRefusingApplyWillNotWriteOverWhatAlreadyExists(t *testing.T
 	tier := environment.TierProduction
 	for _, name := range []string{LiveBinary, SealKeyPath(tier), deployUser, dockerEngine} {
 		read := drifted(t, currentHost(), name)
-		refused := refusalOf(t, refuseReplacements(read, Items(read.Tier, read.Keys, ssh.AMD64, Front{})), refusal.CodeNotReady)
+		refused := refusalOf(t, refuseReplacements(read, Items(read.Tier, read.Keys, ssh.AMD64, front.Proxy{})), refusal.CodeNotReady)
 		if !strings.Contains(refused.Message, name) {
 			t.Errorf("the refusal says %q, want it to name %s as the thing it would write over", refused.Message, name)
 		}
@@ -84,9 +86,9 @@ func TestAReplacementRefusingApplyConvergesAHostRatherThanRefusingEveryChange(t 
 	t.Parallel()
 
 	tier := environment.TierProduction
-	for _, name := range []string{dockerUnit, KeyValuesDir(tier), stateRoot, boxapi.LibDir} {
+	for _, name := range []string{dockerUnit, KeyValuesDir(tier), boxapi.StateRoot, boxapi.LibDir} {
 		read := drifted(t, currentHost(), name)
-		if err := refuseReplacements(read, Items(read.Tier, read.Keys, ssh.AMD64, Front{})); err != nil {
+		if err := refuseReplacements(read, Items(read.Tier, read.Keys, ssh.AMD64, front.Proxy{})); err != nil {
 			t.Errorf("a replacement-refusing apply over a host whose %s has moved = %v, want a converge that destroys nothing to proceed", name, err)
 		}
 	}

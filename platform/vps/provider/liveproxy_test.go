@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
-func (vm machine) inspects(t *testing.T, what, name, format string) string {
+func (vm liveBox) inspects(t *testing.T, what, name, format string) string {
 	t.Helper()
 	rendered, err := vm.attempt(vm.user, "sudo docker "+what+" inspect -f "+quote(format)+" "+quote(name))
 	if err != nil {
@@ -30,7 +30,7 @@ func (vm machine) inspects(t *testing.T, what, name, format string) string {
 	return strings.TrimSpace(rendered)
 }
 
-func (vm machine) ran(t *testing.T, what, command string) string {
+func (vm liveBox) ran(t *testing.T, what, command string) string {
 	t.Helper()
 	rendered, err := vm.attempt(vm.user, command)
 	said, ran := spoken(rendered)
@@ -40,19 +40,19 @@ func (vm machine) ran(t *testing.T, what, command string) string {
 	return said
 }
 
-func (vm machine) inside(t *testing.T, command string) string {
+func (vm liveBox) inside(t *testing.T, command string) string {
 	t.Helper()
 	return vm.ran(t, "a command in "+caddy.Container,
 		"sudo docker exec "+caddy.Container+" sh -c "+containerScript(command))
 }
 
-func (vm machine) drives(t *testing.T, argv string) string {
+func (vm liveBox) drives(t *testing.T, argv string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.ran(t, boxapi.SwitchboardMounted+" in "+boxapi.Switchboard,
 		"sudo sh -c "+containerScript("docker exec "+boxapi.Switchboard+" "+boxapi.SwitchboardMounted+" "+argv)))
 }
 
-func (vm machine) frontGrace(t *testing.T) string {
+func (vm liveBox) frontGrace(t *testing.T) string {
 	t.Helper()
 	saved := vm.ssh(t, "sudo cat "+quote(host.ProxyData+"/config/caddy/autosave.json")+" 2>/dev/null || true")
 	var running struct {
@@ -68,14 +68,14 @@ func (vm machine) frontGrace(t *testing.T) string {
 	return string(running.Apps.HTTP.GracePeriod)
 }
 
-func (vm machine) peers(t *testing.T, command string) string {
+func (vm liveBox) peers(t *testing.T, command string) string {
 	t.Helper()
 	return vm.ran(t, "a container on "+host.ProxyNetwork,
 		"sudo docker run --rm --network "+quote(host.ProxyNetwork)+" "+quote(caddy.Image())+
 			" sh -c "+containerScript(command))
 }
 
-func (vm machine) beside(t *testing.T, container, command string) string {
+func (vm liveBox) beside(t *testing.T, container, command string) string {
 	t.Helper()
 	return vm.ran(t, "a container sharing the network of "+container,
 		"sudo docker run --rm --network "+quote("container:"+container)+" "+quote(caddy.Image())+

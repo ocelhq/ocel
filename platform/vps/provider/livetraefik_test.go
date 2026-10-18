@@ -71,7 +71,7 @@ func TestHostToolOcelServesBehindDokploysTraefikThroughItsPreset(t *testing.T) {
 	})
 }
 
-func hostTool(t *testing.T, tool string) machine {
+func hostTool(t *testing.T, tool string) liveBox {
 	t.Helper()
 	if os.Getenv("OCEL_INCUS_ADDR") == "" {
 		t.Fatal(unreachable)
@@ -83,7 +83,7 @@ func hostTool(t *testing.T, tool string) machine {
 	return vm
 }
 
-func (vm machine) routesThrough(t *testing.T, hostname, want string) {
+func (vm liveBox) routesThrough(t *testing.T, hostname, want string) {
 	t.Helper()
 	deadline := time.Now().Add(traefikServeWait)
 	for served := vm.throughTheFront(t, hostname, "/"); served != want; served = vm.throughTheFront(t, hostname, "/") {
@@ -141,7 +141,7 @@ func unbindsThrough(t *testing.T, d *vps.Provider, hostname string) {
 	}
 }
 
-func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
+func servesBehindTraefik(t *testing.T, vm liveBox, tf traefikFront) {
 	t.Helper()
 	vm.purges(t)
 	t.Cleanup(func() { vm.purges(t) })
@@ -282,7 +282,7 @@ func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
 	vm.frontUntouched(t, tf.front)
 }
 
-func servesAPreviewBehindTraefik(t *testing.T, vm machine, d *vps.Provider, opened edge.Edge, tf traefikFront) {
+func servesAPreviewBehindTraefik(t *testing.T, vm liveBox, d *vps.Provider, opened edge.Edge, tf traefikFront) {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := opened.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{

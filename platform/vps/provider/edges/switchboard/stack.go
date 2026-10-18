@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
@@ -42,13 +42,13 @@ type promotable struct {
 }
 
 func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []promotable, progress progress.Log) error {
-	apps := make([]host.AppRollout, 0, len(ready))
-	for _, release := range ready {
-		apps = append(apps, host.AppRollout{
-			RouteKey:             release.key,
-			Target:               release.record.Physical + ":" + containerimage.PortText,
-			HealthPath:           release.record.HealthPath,
-			HealthPathDiscovered: release.record.HealthPathDiscovered,
+	apps := make([]release.AppRollout, 0, len(ready))
+	for _, promoted := range ready {
+		apps = append(apps, release.AppRollout{
+			RouteKey:             promoted.key,
+			Target:               promoted.record.Physical + ":" + containerimage.PortText,
+			HealthPath:           promoted.record.HealthPath,
+			HealthPathDiscovered: promoted.record.HealthPathDiscovered,
 		})
 	}
 	claims, err := s.listPreviewClaims(ctx, move.Pointer, move.Hosts)
@@ -64,18 +64,18 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	if err != nil {
 		return s.refuse(ctx, move, nil, added, err)
 	}
-	var touched []host.AppRollout
-	for at, release := range ready {
-		ran, err := s.rerun(ctx, release, progress)
+	var touched []release.AppRollout
+	for at, promoted := range ready {
+		ran, err := s.rerun(ctx, promoted, progress)
 		apps[at].Run = ran
-		if ran != host.RunKept {
+		if ran != release.RunKept {
 			touched = append(touched, apps[at])
 		}
 		if err != nil {
 			return s.refuse(ctx, move, touched, added, err)
 		}
 	}
-	err = s.e.machine.RollOut(ctx, host.Rollout{
+	err = s.e.containers.RollOut(ctx, release.Rollout{
 		Apps:          apps,
 		DeployTimeout: routing.DeployWindow,
 		DrainTimeout:  routing.DrainWindow,
@@ -87,11 +87,11 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	return errors.Join(err, s.recordServed(ctx, move, claims, ready))
 }
 
-func (s *stack) refuse(ctx context.Context, move router.PointerMove, touched []host.AppRollout, added []boxapi.Claim, why error) error {
-	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), host.UnwindWindow)
+func (s *stack) refuse(ctx context.Context, move router.PointerMove, touched []release.AppRollout, added []boxapi.Claim, why error) error {
+	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), release.UnwindWindow)
 	defer stop()
 	if len(touched) > 0 {
-		why = fmt.Errorf("%w%s", why, s.e.machine.Discard(ctx, host.Rollout{Apps: touched}))
+		why = fmt.Errorf("%w%s", why, s.e.containers.Discard(ctx, release.Rollout{Apps: touched}))
 	}
 	return router.Unserved{Err: errors.Join(why, s.disclaimAdded(ctx, move, added))}
 }
@@ -101,8 +101,8 @@ func (s *stack) recordServed(ctx context.Context, move router.PointerMove, claim
 	if len(claims) > 0 {
 		errs = append(errs, s.disclaimUnnamed(ctx, move.Pointer, claims))
 	}
-	for _, release := range ready {
-		errs = append(errs, s.e.machine.Promote(ctx, s.state.Tier, s.state.Slug, release.app, release.record.Image))
+	for _, promoted := range ready {
+		errs = append(errs, s.e.images.Promote(ctx, s.state.Tier, s.state.Slug, promoted.app, promoted.record.Image))
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("promotion %s serves on this box, but the box did not record all of it: %w", move.Promotion.PromotionID, err)
@@ -111,23 +111,23 @@ func (s *stack) recordServed(ctx context.Context, move router.PointerMove, claim
 }
 
 func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, record router.ReleaseRecord) (promotable, bool, error) {
-	app, release := record.App, record.Release
+	app, recorded := record.App, record.Release
 	if record.Physical == "" {
 		return promotable{}, false, nil
 	}
 	if record.Image == "" || record.HealthPath == "" {
 		return promotable{}, false, refusal.Refuse(refusal.CodeInvalid,
 			"promote %s: the record for %s/%s (container %s) lacks an image (%q) or health path (%q)",
-			promotionID, app, release, record.Physical, record.Image, record.HealthPath)
+			promotionID, app, recorded, record.Physical, record.Image, record.HealthPath)
 	}
-	hasImage, err := s.e.machine.EnsureImage(ctx, s.state.Slug, app, record.Image)
+	hasImage, err := s.e.images.Ensure(ctx, s.state.Slug, app, record.Image)
 	if err != nil {
 		return promotable{}, false, err
 	}
 	if !hasImage {
 		return promotable{}, false, refusal.Refuse(refusal.CodeNotReady,
 			"promote %s: this box no longer has %s for %s/%s; %s is unchanged\nDeploy again",
-			promotionID, record.Image, app, release, app)
+			promotionID, record.Image, app, recorded, app)
 	}
 	return promotable{key: s.routeKey(pointer, app), app: app, record: record}, true, nil
 }
@@ -141,11 +141,11 @@ func declaredBy(record router.ReleaseRecord) []string {
 	return declared
 }
 
-func (s *stack) rerun(ctx context.Context, release promotable, progress progress.Log) (host.Run, error) {
-	record := release.record
-	progress.Say("Starting " + release.app + "'s container " + record.Physical + " again")
-	return s.e.machine.RunContainer(ctx, host.Container{
-		Name: record.Physical, Project: s.state.Slug, App: release.app, Image: record.Image, Tier: s.state.Tier,
+func (s *stack) rerun(ctx context.Context, promoted promotable, progress progress.Log) (release.Run, error) {
+	record := promoted.record
+	progress.Say("Starting " + promoted.app + "'s container " + record.Physical + " again")
+	return s.e.containers.Run(ctx, release.Container{
+		Name: record.Physical, Project: s.state.Slug, App: promoted.app, Image: record.Image, Tier: s.state.Tier,
 		HealthPath: record.HealthPath, Declared: declaredBy(record),
 	})
 }
@@ -403,7 +403,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err := s.e.routes.UnrouteSurface(ctx, s.surface()); err != nil {
 		errs = append(errs, err)
 	}
-	if err := s.e.machine.ForgetNetwork(ctx, s.state.Tier, s.state.Slug); err != nil {
+	if err := s.e.containers.ForgetNetwork(ctx, s.state.Tier, s.state.Slug); err != nil {
 		errs = append(errs, err)
 	}
 	if err := s.e.releaseTunnel(ctx); err != nil {

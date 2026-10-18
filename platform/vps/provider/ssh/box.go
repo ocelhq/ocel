@@ -52,7 +52,7 @@ type Box struct {
 
 	preflighting sync.Mutex
 	preflighted  bool
-	floor        error
+	preflightErr error
 	login        memo[bool]
 	docker       memo[prefix]
 	arch         memo[string]
@@ -223,14 +223,14 @@ func (b *Box) preflightOnce(ctx context.Context) error {
 	b.preflighting.Lock()
 	defer b.preflighting.Unlock()
 	if b.preflighted {
-		return b.floor
+		return b.preflightErr
 	}
 	conn, err := b.conn(ctx)
 	if err != nil {
 		return err
 	}
 	facts, err := conn.Preflight(ctx)
-	b.preflighted, b.floor = true, err
+	b.preflighted, b.preflightErr = true, err
 	if err == nil {
 		b.login.set(facts.Root)
 	}
@@ -288,7 +288,7 @@ func (b *Box) dockering(ctx context.Context) (prefix, error) {
 			}
 			if result.Code != 0 {
 				return asLogin, refusal.Refuse(refusal.CodeNotReady,
-					"%s cannot run docker as %s: %s", b.Named(), boxapi.DeployLogin, Spoken(result))
+					"%s cannot run docker as %s: %s", b.Named(), boxapi.DeployLogin, Reason(result))
 			}
 			return deploy, nil
 		}
@@ -300,7 +300,7 @@ func (b *Box) dockering(ctx context.Context) (prefix, error) {
 			return asLogin, nil
 		}
 		if !IsSocketDenied(result.Stderr) {
-			return asLogin, refusal.Refuse(refusal.CodeNotReady, "%s cannot run docker: %s", b.Named(), Spoken(result))
+			return asLogin, refusal.Refuse(refusal.CodeNotReady, "%s cannot run docker: %s", b.Named(), Reason(result))
 		}
 		return b.elevated(ctx)
 	})
@@ -395,7 +395,7 @@ func (b *Box) Attempt(ctx context.Context, as Acting, what, command string, stdi
 		return "", "", err
 	}
 	if result.Code != 0 {
-		return "", Spoken(result), b.Refuse(what, result)
+		return "", Reason(result), b.Refuse(what, result)
 	}
 	return result.Stdout, "", nil
 }
@@ -457,7 +457,7 @@ func (b *Box) Refuse(what string, result Result) error {
 	if IsSudoRefused(result) {
 		failed = refusal.CodeDenied
 	}
-	why := refusal.Refuse(failed, "%s on %s: %s", what, b.Named(), Spoken(result))
+	why := refusal.Refuse(failed, "%s on %s: %s", what, b.Named(), Reason(result))
 	if result.unelevated == nil {
 		return why
 	}
@@ -471,7 +471,7 @@ func IsSudoRefused(result Result) bool {
 	return result.sudo && result.Code == 1 && slices.ContainsFunc(sudoRefusals, func(message string) bool { return strings.Contains(first, message) })
 }
 
-func Spoken(result Result) string {
+func Reason(result Result) string {
 	said := strings.TrimSpace(result.Stderr)
 	if said == "" && IsUnstarted(result.Code) {
 		said = strings.TrimSpace(result.Stdout)

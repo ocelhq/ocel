@@ -8,13 +8,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func gatewaySurveyed(t *testing.T, content []byte) answer {
 	t.Helper()
 	sum := sha256.Sum256(content)
-	return answer{stdout: host.KindFile + "\t" + host.RealtimeBinary + "\t755\troot\t" + hex.EncodeToString(sum[:]) + "\n"}
+	return answer{stdout: machine.KindFile + "\t" + host.RealtimeBinary + "\t755\troot\t" + hex.EncodeToString(sum[:]) + "\n"}
 }
 
 func currentGateway(t *testing.T) []byte {

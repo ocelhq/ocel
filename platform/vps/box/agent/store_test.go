@@ -245,6 +245,33 @@ func TestAStoreNoDomainPointsAtHasNoPublicAddress(t *testing.T) {
 	}
 }
 
+func TestAStoreWhoseRoutingTableCannotBeReadIsRefusedRatherThanHandedNoPublicAddress(t *testing.T) {
+	t.Parallel()
+	for what, table := range map[string]func(t *testing.T, b *box){
+		"a table the schema refuses": func(t *testing.T, b *box) {
+			b.claims(t, `{"grace":"30s","tunneled":[{"hostname":"storage.shop.example.com"}]}`)
+		},
+		"a table that cannot be read": func(t *testing.T, b *box) {
+			b.routingTable = filepath.Join(b.stateRoot, "routing.json")
+			if err := os.MkdirAll(b.routingTable, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+			b := aBox(t, t.TempDir())
+			b.dump(t)
+			table(t, b)
+
+			if resolved, err := b.resolver().Resolve(context.Background(), aStoreManifest("")); err == nil {
+				t.Errorf("Resolve() over %s = %q under %s and no error, want it refused: the app would serve without its public addresses and nothing would say why",
+					what, resolved[boxapi.StorePublicKey], boxapi.StorePublicKey)
+			}
+		})
+	}
+}
+
 var shop = variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 
 func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t *testing.T) {

@@ -43,3 +43,19 @@ func TestBothSidesRefuseATableWithARowTheSchemaHasNot(t *testing.T) {
 		}
 	}
 }
+
+func TestAPreviewClaimUnderATunneledPreviewBaseIsNotRenderedForTheProxy(t *testing.T) {
+	t.Parallel()
+
+	table := boxapi.RoutingTable{
+		Grace:           30 * time.Second,
+		PreviewBase:     "preview.example.com",
+		PreviewTunneled: true,
+		Claims: []boxapi.Claim{
+			{Owner: "ocel--shop--pr-1", Hostname: "pr-1.preview.example.com", Pointer: "@pr-1", App: "web"},
+		},
+	}
+	if named := table.Hostnames(); slices.Contains(named, "pr-1.preview.example.com") {
+		t.Errorf("Hostnames() = %v, want the preview claim behind the tunneled base left out: the proxy would serve and certify a name whose DNS points at the tunnel", named)
+	}
+}

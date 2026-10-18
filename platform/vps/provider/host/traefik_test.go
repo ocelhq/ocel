@@ -14,6 +14,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
@@ -21,10 +23,10 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func traefikOnTheHost() Front {
-	return Front{Traefik: &TraefikFront{
+func traefikOnTheHost() front.Proxy {
+	return front.Proxy{Traefik: &front.Traefik{
 		Directory: "/etc/traefik/dynamic", Resolver: "letsencrypt", PreviewResolver: "cloudflare",
-		Entrypoints: Entrypoints{HTTP: "web", HTTPS: "websecure"}, Port: 9000,
+		Entrypoints: &front.Entrypoints{HTTP: "web", HTTPS: "websecure"}, Port: 9000,
 	}}
 }
 
@@ -41,9 +43,9 @@ func flagged(command []string, flag string) []string {
 func TestYourTraefikOpensAsTheTraefikProxyWithEverythingTheOptionFills(t *testing.T) {
 	t.Parallel()
 
-	opened, ok := openFront(coolifysTraefik(), frontBox{}).(traefik.Traefik)
+	opened, ok := coolifysTraefik().Front().Open(frontBox{}).(traefik.Traefik)
 	if !ok {
-		t.Fatalf("Coolify's Traefik opens as %T, want the traefik proxy", openFront(coolifysTraefik(), frontBox{}))
+		t.Fatalf("Coolify's Traefik opens as %T, want the traefik proxy", coolifysTraefik().Front().Open(frontBox{}))
 	}
 	want := traefik.Traefik{Box: frontBox{}, Directory: "/data/coolify/proxy/dynamic", ContainerDirectory: "/traefik/dynamic", Resolver: "letsencrypt", HTTP: "http", HTTPS: "https", Network: "coolify"}
 	if opened != want {
@@ -94,7 +96,7 @@ func TestTheSwitchboardBesideATraefikOnTheHostHearsHTTPSOnItsBoxNetworkAddressPu
 func TestYourTraefikIsAskedWhetherItRoutesAHostnameWhateverCertificateItHasForItYet(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	if _, _, err := (frontBox{box.host()}).ProbeAnyCertificate(context.Background(), "web.localhost"); err != nil {
 		t.Fatalf("Routed() = %v", err)
 	}
@@ -108,7 +110,7 @@ func TestTheLastDestroyBehindYourTraefikTakesOcelYmlOutOfItsDirectoryBeforeTheSw
 	t.Parallel()
 
 	tier := environment.TierProduction
-	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+	box := newBench(map[environment.Tier][]machine.Item{tier: bootstrapped(t, tier)})
 	bootstrap := NewBootstrap(box.fronted(coolifysTraefik()), testVendor, "shop")
 	plan, err := bootstrap.PlanRemove(context.Background(), tier)
 	if err != nil {
@@ -145,7 +147,7 @@ func TestABootstrapBehindATraefikInABridgedContainerWithNoNetworkNamedIsRefusedN
 func TestABootstrapBehindATraefikOnTheHostsOwnNetworkGoesAhead(t *testing.T) {
 	t.Parallel()
 
-	for name, front := range map[string]Front{"a Traefik on the host": traefikOnTheHost(), "Coolify's Traefik on its network": coolifysTraefik()} {
+	for name, front := range map[string]front.Proxy{"a Traefik on the host": traefikOnTheHost(), "Coolify's Traefik on its network": coolifysTraefik()} {
 		rig := withDocker()
 		published := "\n"
 		if front.Traefik.Network != "" {
@@ -163,14 +165,14 @@ func TestBootstrapBesideYourProxyFindsTheDirectoryItPlacesInAndNamesTheOptionWhe
 	t.Parallel()
 
 	root := t.TempDir()
-	caddyIn := CaddyFront{Directory: root + "/caddy"}.Filled()
-	for what, front := range map[string]Front{"Traefik": traefikIn(root + "/traefik"), "Caddy": {Caddy: &caddyIn}} {
-		present := front.directoryPresent()
+	caddyIn := front.Caddy{Directory: root + "/caddy"}.Filled()
+	for what, front := range map[string]front.Proxy{"Traefik": traefikIn(root + "/traefik"), "Caddy": {Caddy: &caddyIn}} {
+		present := directoryPresent(front)
 		said, err := exec.Command("sh", "-c", present).CombinedOutput()
-		if err == nil || !strings.Contains(string(said), front.directoryOption()) || !strings.Contains(string(said), root) {
-			t.Errorf("finding %s's missing directory = %v, %q; want it refused naming %s and the directory", what, err, said, front.directoryOption())
+		if err == nil || !strings.Contains(string(said), front.Front().DirectoryOption()) || !strings.Contains(string(said), root) {
+			t.Errorf("finding %s's missing directory = %v, %q; want it refused naming %s and the directory", what, err, said, front.Front().DirectoryOption())
 		}
-		dir := filepath.Dir(front.resolvePlacedFile())
+		dir := filepath.Dir(resolvePlacedFile(front))
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -178,8 +180,8 @@ func TestBootstrapBesideYourProxyFindsTheDirectoryItPlacesInAndNamesTheOptionWhe
 			t.Errorf("finding %s's directory %s = %v, %q; want it found", what, dir, err, said)
 		}
 	}
-	for what, front := range map[string]Front{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand()} {
-		if present := front.directoryPresent(); present != "" {
+	for what, front := range map[string]front.Proxy{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand()} {
+		if present := directoryPresent(front); present != "" {
 			t.Errorf("bootstrap beside %s looks for a directory as\n%s\nwant none: nothing is placed", what, present)
 		}
 	}
@@ -189,7 +191,7 @@ func TestBootstrapOntoYourTraefikInADirectoryTheBoxLacksIsRefusedBeforeOcelsProx
 	t.Parallel()
 
 	tier := environment.TierProduction
-	box := boxRecordedFor(t, tier, Front{})
+	box := boxRecordedFor(t, tier, front.Proxy{})
 	prior := box.answer
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "[ ! -d "+shell.Quote("/etc/traefik/dynamic")+" ]") {
@@ -221,7 +223,7 @@ func TestASwitchboardADeployRecreatesBesideYourTraefikHearsHTTPSWhereBootstrapHa
 }
 
 func TestYourTraefiksRoutersAreReadAsRootByALoginOutsideTheDockerGroup(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	rig.facts = ssh.Facts{Systemd: true}
 	var unelevated []string
 	rig.answer = func(command string) (ssh.Result, bool) {
@@ -235,7 +237,7 @@ func TestYourTraefiksRoutersAreReadAsRootByALoginOutsideTheDockerGroup(t *testin
 		return ssh.Result{}, false
 	}
 
-	front := openFront(traefikOnTheHost(), frontBox{rig.host()})
+	front := traefikOnTheHost().Front().Open(frontBox{rig.host()})
 	if err := front.RefuseRouted(context.Background(), []string{"shop.example.com"}); err != nil {
 		t.Errorf("RefuseRouted() as a login outside the docker group = %v, want the labels read as root", err)
 	}

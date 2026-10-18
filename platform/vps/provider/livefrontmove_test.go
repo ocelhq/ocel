@@ -17,6 +17,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
@@ -51,7 +52,7 @@ func (p *prompted) Debug(string) {}
 
 func (p *prompted) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
-func (vm machine) bootstrapsBehind(t *testing.T, proxy *vps.Proxy) provider.Bootstrap {
+func (vm liveBox) bootstrapsBehind(t *testing.T, proxy *front.Proxy) provider.Bootstrap {
 	t.Helper()
 	p := vm.provider(t, func(o *vps.Options) { o.Proxy = proxy })
 	t.Cleanup(func() { closing(t, p) })
@@ -62,12 +63,12 @@ func (vm machine) bootstrapsBehind(t *testing.T, proxy *vps.Proxy) provider.Boot
 	return bootstrap
 }
 
-func (vm machine) recordReads(t *testing.T) string {
+func (vm liveBox) recordReads(t *testing.T) string {
 	t.Helper()
 	return vm.ssh(t, "sudo cat "+quote(host.FrontRecordPath))
 }
 
-func servingOne(t *testing.T, vm machine, proxy *vps.Proxy, hostname string) (*vps.Provider, edge.EdgeStack) {
+func servingOne(t *testing.T, vm liveBox, proxy *front.Proxy, hostname string) (*vps.Provider, edge.EdgeStack) {
 	t.Helper()
 	ctx := context.Background()
 	fixtures(t, vm)
@@ -195,7 +196,7 @@ func TestLiveABoxMovesOcelsFileToAnotherDirectoryYourTraefikWatchesWithoutDroppi
 	vm.ssh(t, "sudo install -d -m 0755 "+quote(to))
 	moving := *proxy.Traefik
 	moving.Directory = to
-	moved := &vps.Proxy{Traefik: &moving}
+	moved := &front.Proxy{Traefik: &moving}
 
 	boardID := "sudo docker inspect --type container --format '{{.Id}}' " + quote(boxapi.Switchboard)
 	board := vm.ssh(t, boardID)
