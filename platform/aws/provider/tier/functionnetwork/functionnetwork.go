@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
@@ -264,7 +265,7 @@ func ReadPart(ctx context.Context, store records.Store, region string, tier envi
 		Current:   recorded.State == stackrecords.PartReady,
 		Resources: recorded.Resources,
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: component.Vendor, Region: region, Resources: Shape(tier)},
+		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier)},
 
 		RetiresWithLastUser: true,
 	}, true, nil

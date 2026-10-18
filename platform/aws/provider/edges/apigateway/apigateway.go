@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -96,7 +96,7 @@ type Clients struct {
 }
 
 type apiGateway struct {
-	ns         bootstrap.Namespace
+	ns         account.Namespace
 	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
 	open       func(context.Context) (Clients, error)
 
@@ -106,13 +106,13 @@ type apiGateway struct {
 	leaseWait func(context.Context, time.Duration) error
 }
 
-func New(ns bootstrap.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error)) edge.Edge {
+func New(ns account.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error)) edge.Edge {
 	front := newAPIGateway(ns, open)
 	front.ensurePart = ensurePart
 	return front
 }
 
-func newAPIGateway(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) *apiGateway {
+func newAPIGateway(ns account.Namespace, open func(context.Context) (Clients, error)) *apiGateway {
 	return &apiGateway{ns: ns, open: open, delete: NewDeletion(), leaseWait: waitFor}
 }
 
@@ -241,14 +241,14 @@ func knownTier(tier environment.Tier) error {
 	return nil
 }
 
-func (p *apiGateway) bootstrap(ctx context.Context, c Clients, tier environment.Tier) (bootstrap.Deployed, error) {
+func (p *apiGateway) bootstrap(ctx context.Context, c Clients, tier environment.Tier) (account.Deployed, error) {
 	if err := knownTier(tier); err != nil {
-		return bootstrap.Deployed{}, err
+		return account.Deployed{}, err
 	}
 	if tier == environment.TierPreview {
-		return bootstrap.CheckDeployedPreview(ctx, c.CFN, p.ns)
+		return account.CheckDeployedPreview(ctx, c.CFN, p.ns)
 	}
-	return bootstrap.CheckDeployed(ctx, c.CFN, p.ns)
+	return account.CheckDeployed(ctx, c.CFN, p.ns)
 }
 
 func (p *apiGateway) Bootstrap(_ context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
@@ -386,7 +386,7 @@ func (p *apiGateway) DomainOwner(ctx context.Context, hostname string) (string, 
 	return "", nil
 }
 
-func apiName(ns bootstrap.Namespace, slug string, tier environment.Tier, pointer string) string {
+func apiName(ns account.Namespace, slug string, tier environment.Tier, pointer string) string {
 	if p := router.ResolvePointer(pointer); p != router.DefaultPointer {
 		return surface.Name(ns, slug, tier, p)
 	}

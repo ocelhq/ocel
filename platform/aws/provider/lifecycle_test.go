@@ -19,7 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 const lifecycleSlug = "ocel-aws-e2e"
@@ -27,7 +27,7 @@ const lifecycleSlug = "ocel-aws-e2e"
 const patience = 15 * time.Minute
 
 type journey struct {
-	account   account
+	account   liveAccount
 	bin       string
 	project   string
 	settings  string
@@ -149,7 +149,7 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 	if status := run.account.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
 		t.Fatalf("%s is in state %q after the CLI applied it, want CREATE_COMPLETE", coreStackName, status)
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(run.account.aws), defaultNamespace, tier)
+	deployed, err := account.CheckDeployedFor(ctx, cloudformation.NewFromConfig(run.account.aws), defaultNamespace, tier)
 	if err != nil {
 		t.Fatal(err)
 	}

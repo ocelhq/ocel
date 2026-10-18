@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
@@ -78,7 +78,7 @@ func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPrefl
 	if params.EdgeCredentialsErr != nil {
 		return nil
 	}
-	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), pre.Deploy.Tier); notice != "" {
+	if notice := account.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), pre.Deploy.Tier); notice != "" {
 		pre.Progress.Warn(notice)
 	}
 	return nil
@@ -100,7 +100,7 @@ func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre provider.Deploy
 	if err != nil {
 		return err
 	}
-	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), pre.Deploy.Tier); notice != "" {
+	if notice := account.StaleOriginSecretNotice(params.OriginSecret, time.Now(), pre.Deploy.Tier); notice != "" {
 		pre.Progress.Warn(notice)
 	}
 	return nil
@@ -115,13 +115,13 @@ func (p *Provider) resolveRuntimeLayers(ctx context.Context, pre provider.Deploy
 	p.layers.forget()
 	_, err = p.layers.resolve(tier, func() (map[string]string, error) {
 		if pre.Dry {
-			return bootstrap.ReadRuntimeLayersToPlan(ctx, lambda.NewFromConfig(p.aws), p.namespace, tier)
+			return account.ReadRuntimeLayersToPlan(ctx, lambda.NewFromConfig(p.aws), p.namespace, tier)
 		}
-		return bootstrap.EnsureRuntimeLayers(ctx, bootstrap.APIs{
+		return account.EnsureRuntimeLayers(ctx, account.APIs{
 			Layers:  lambda.NewFromConfig(p.aws),
 			Store:   s3.NewFromConfig(p.aws),
-			Records: bootstrap.DynamoRecords(dynamodb.NewFromConfig(p.aws)),
-		}, p.namespace, tier, bootstrap.RuntimeLayerRequest{ArtifactBucket: deployed.ArtifactBucket, StateTable: deployed.StateTable}, pre.Progress)
+			Records: account.DynamoRecords(dynamodb.NewFromConfig(p.aws)),
+		}, p.namespace, tier, account.RuntimeLayerRequest{ArtifactBucket: deployed.ArtifactBucket, StateTable: deployed.StateTable}, pre.Progress)
 	})
 	return err
 }

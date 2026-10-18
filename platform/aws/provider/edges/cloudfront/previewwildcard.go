@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -62,7 +62,7 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	return wildcardFront.domainName, nil
 }
 
-func wildcardRecords(c Clients, deployed bootstrap.Deployed) distributionRecords {
+func wildcardRecords(c Clients, deployed account.Deployed) distributionRecords {
 	return distributionRecords{
 		keyValues: awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(deployed.StateTable)},
 		tier:      environment.TierPreview,
@@ -87,7 +87,7 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, records distr
 	return existing, nil
 }
 
-func wildcardInvalidationTargets(c Clients, tier environment.Tier, deployed bootstrap.Deployed) invalidationTargets {
+func wildcardInvalidationTargets(c Clients, tier environment.Tier, deployed account.Deployed) invalidationTargets {
 	return invalidationTargets{
 		keyValues: awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(deployed.StateTable)},
 		partition: newInvalidationPartition(tier, ""),
@@ -122,17 +122,17 @@ func convergeWildcard(ctx context.Context, c Clients, spec distributionSpec, id,
 	return putConfig(ctx, c, id, etag, spec.keeping(current).config([]string{wildcard}, certificate))
 }
 
-func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDomain string, say func(string)) (distributionSpec, bootstrap.Deployed, error) {
+func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDomain string, say func(string)) (distributionSpec, account.Deployed, error) {
 	deployed, err := p.bootstrap(ctx, c, environment.TierPreview)
 	if err != nil {
-		return distributionSpec{}, bootstrap.Deployed{}, err
+		return distributionSpec{}, account.Deployed{}, err
 	}
 	if !deployed.Present {
-		return distributionSpec{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not installed, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
+		return distributionSpec{}, account.Deployed{}, fmt.Errorf("the preview bootstrap is not installed, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
 	}
 	set, err := p.ensureEdgeSet(ctx, environment.TierPreview, "", previewWildcardAddedWith, say)
 	if err != nil {
-		return distributionSpec{}, bootstrap.Deployed{}, err
+		return distributionSpec{}, account.Deployed{}, err
 	}
 	return distributionSpec{
 		name:          previewWildcardName(baseDomain),
@@ -178,7 +178,7 @@ func (p *cloudFront) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 	return errors.Join(errs...)
 }
 
-var previewResolverSuffix = bootstrap.Namespace("").EdgeResolverName(environment.TierPreview)
+var previewResolverSuffix = account.Namespace("").EdgeResolverName(environment.TierPreview)
 
 func (p *cloudFront) ownsSharedPreviewEntry(ctx context.Context, c Clients, id, baseDomain string) error {
 	config, _, err := configOf(ctx, c, id)
@@ -225,7 +225,7 @@ func (p *cloudFront) forgetPreviewWildcardTarget(ctx context.Context, c Clients,
 	return wildcardRecords(c, deployed).forget(ctx, name)
 }
 
-func sweepPreviewRoutes(ctx context.Context, c Clients, ns bootstrap.Namespace, baseDomain string) error {
+func sweepPreviewRoutes(ctx context.Context, c Clients, ns account.Namespace, baseDomain string) error {
 	store, err := c.CloudFront.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{
 		Name: aws.String(ns.EdgeRoutesStoreName(environment.TierPreview)),
 	})

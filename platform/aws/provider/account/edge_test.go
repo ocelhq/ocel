@@ -1,0 +1,702 @@
+package account
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+)
+
+type fakeSSM struct {
+	params       map[string]string
+	descriptions map[string]string
+	puts         int
+	batches      int
+	wanted       []string
+}
+
+func newFakeSSM() *fakeSSM {
+	return &fakeSSM{params: map[string]string{}, descriptions: map[string]string{}}
+}
+
+func (f *fakeSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
+	v, ok := f.params[aws.ToString(in.Name)]
+	if !ok {
+		return nil, &ssmtypes.ParameterNotFound{}
+	}
+	return &ssm.GetParameterOutput{Parameter: &ssmtypes.Parameter{Value: aws.String(v)}}, nil
+}
+
+func (f *fakeSSM) GetParameters(_ context.Context, in *ssm.GetParametersInput, _ ...func(*ssm.Options)) (*ssm.GetParametersOutput, error) {
+	f.batches++
+	out := &ssm.GetParametersOutput{}
+	for _, name := range in.Names {
+		f.wanted = append(f.wanted, name)
+		v, ok := f.params[name]
+		if !ok {
+			out.InvalidParameters = append(out.InvalidParameters, name)
+			continue
+		}
+		out.Parameters = append(out.Parameters, ssmtypes.Parameter{Name: aws.String(name), Value: aws.String(v)})
+	}
+	return out, nil
+}
+
+func (f *fakeSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
+	f.puts++
+	if _, exists := f.params[aws.ToString(in.Name)]; exists && !aws.ToBool(in.Overwrite) {
+		return nil, &ssmtypes.ParameterAlreadyExists{}
+	}
+	f.params[aws.ToString(in.Name)] = aws.ToString(in.Value)
+	f.descriptions[aws.ToString(in.Name)] = aws.ToString(in.Description)
+	return &ssm.PutParameterOutput{}, nil
+}
+
+func (f *fakeSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInput, _ ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
+	name := aws.ToString(in.Name)
+	if _, exists := f.params[name]; !exists {
+		return nil, &ssmtypes.ParameterNotFound{}
+	}
+	delete(f.params, name)
+	return &ssm.DeleteParameterOutput{}, nil
+}
+
+type fakeIAM struct {
+	created  []string
+	keys     []string
+	deleted  []string
+	minted   map[string]time.Time
+	lastUsed map[string]time.Time
+}
+
+var mintedAt = time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
+
+func (f *fakeIAM) GetAccessKeyLastUsed(_ context.Context, in *iam.GetAccessKeyLastUsedInput, _ ...func(*iam.Options)) (*iam.GetAccessKeyLastUsedOutput, error) {
+	out := &iam.GetAccessKeyLastUsedOutput{AccessKeyLastUsed: &iamtypes.AccessKeyLastUsed{}}
+	if at, ok := f.lastUsed[aws.ToString(in.AccessKeyId)]; ok {
+		out.AccessKeyLastUsed.LastUsedDate = aws.Time(at)
+	}
+	return out, nil
+}
+
+func (f *fakeIAM) DeleteAccessKey(_ context.Context, in *iam.DeleteAccessKeyInput, _ ...func(*iam.Options)) (*iam.DeleteAccessKeyOutput, error) {
+	id := aws.ToString(in.AccessKeyId)
+	if at := slices.Index(f.keys, id); at >= 0 {
+		f.keys = slices.Delete(f.keys, at, at+1)
+	}
+	f.deleted = append(f.deleted, id)
+	return &iam.DeleteAccessKeyOutput{}, nil
+}
+
+func (f *fakeIAM) ListAccessKeys(_ context.Context, in *iam.ListAccessKeysInput, _ ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error) {
+	meta := make([]iamtypes.AccessKeyMetadata, 0, len(f.keys))
+	for _, id := range f.keys {
+		key := iamtypes.AccessKeyMetadata{UserName: in.UserName, AccessKeyId: aws.String(id)}
+		if at, ok := f.minted[id]; ok {
+			key.CreateDate = aws.Time(at)
+		}
+		meta = append(meta, key)
+	}
+	return &iam.ListAccessKeysOutput{AccessKeyMetadata: meta}, nil
+}
+
+func (f *fakeIAM) CreateAccessKey(_ context.Context, in *iam.CreateAccessKeyInput, _ ...func(*iam.Options)) (*iam.CreateAccessKeyOutput, error) {
+	f.created = append(f.created, aws.ToString(in.UserName))
+	id := "AKIAEDGE"
+	if len(f.created) > 1 {
+		id = fmt.Sprintf("AKIAEDGE%d", len(f.created))
+	}
+	f.keys = append(f.keys, id)
+	return &iam.CreateAccessKeyOutput{AccessKey: &iamtypes.AccessKey{
+		AccessKeyId:     aws.String(id),
+		SecretAccessKey: aws.String("secret-edge"),
+	}}, nil
+}
+
+func TestEnsureEdgeCredentials(t *testing.T) {
+	t.Run("mints when absent", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		iamc := &fakeIAM{}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if !outcome.minted {
+			t.Error("expected a mint on first run")
+		}
+		if len(iamc.created) != 1 || iamc.created[0] != edgeUserName {
+			t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, edgeUserName)
+		}
+
+		stored, ok := ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam]
+		if !ok {
+			t.Fatalf("credentials were not written to %s", cloudflareNames(environment.TierProduction).credentialsParam)
+		}
+		var creds EdgeCredentials
+		if err := json.Unmarshal([]byte(stored), &creds); err != nil {
+			t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
+		}
+		if creds.AccessKeyID != "AKIAEDGE" || creds.SecretAccessKey != "secret-edge" {
+			t.Errorf("stored creds = %+v, want the minted key", creds)
+		}
+		if !creds.CreatedAt.Equal(mintedAt) {
+			t.Errorf("stored CreatedAt = %v, want the mint time %v, which is what a deploy ages the key by", creds.CreatedAt, mintedAt)
+		}
+	})
+
+	t.Run("reuses a recorded key the user still has", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"old"}`
+		iamc := &fakeIAM{keys: []string{"AKOLD"}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome.minted {
+			t.Error("expected no mint when the recorded key is still live")
+		}
+		if len(iamc.created) != 0 {
+			t.Errorf("minted a key despite a live recorded one: %v", iamc.created)
+		}
+		if ssmc.puts != 0 {
+			t.Errorf("overwrote the existing parameter (%d puts)", ssmc.puts)
+		}
+	})
+
+	t.Run("re-mints when the recorded key is gone from the user", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
+		iamc := &fakeIAM{}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if !outcome.minted {
+			t.Error("expected a mint: a CloudFormation replacement of the user takes its key, and the parameter outlives it")
+		}
+		var creds EdgeCredentials
+		if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam]), &creds); err != nil {
+			t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
+		}
+		if creds.AccessKeyID != "AKIAEDGE" {
+			t.Errorf("stored key = %q, want the freshly minted AKIAEDGE: the edge signs with a key AWS no longer knows otherwise", creds.AccessKeyID)
+		}
+	})
+
+	t.Run("names the dead key when the cap blocks a re-mint", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
+		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
+
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
+		if err == nil {
+			t.Fatal("expected an error when the user is already at the 2-key cap")
+		}
+		if !strings.Contains(err.Error(), "AKGONE") {
+			t.Errorf("err = %v, want it to name the key the parameter still claims", err)
+		}
+	})
+
+	t.Run("fails when key cap reached", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
+
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
+		if err == nil {
+			t.Fatal("expected an error when the user is already at the 2-key cap")
+		}
+		if len(iamc.created) != 0 {
+			t.Errorf("minted a key despite the cap: %v", iamc.created)
+		}
+		if ssmc.puts != 0 {
+			t.Errorf("wrote a parameter despite the cap (%d puts)", ssmc.puts)
+		}
+	})
+
+	t.Run("preview uses preview identity", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		iamc := &fakeIAM{}
+
+		if _, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierPreview, KindCloudflare, mintedAt); err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if len(iamc.created) != 1 || iamc.created[0] != previewEdgeUser {
+			t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, previewEdgeUser)
+		}
+		if _, ok := ssmc.params[cloudflareNames(environment.TierPreview).credentialsParam]; !ok {
+			t.Errorf("preview credentials were not written to %s", cloudflareNames(environment.TierPreview).credentialsParam)
+		}
+	})
+}
+
+func recordedCreds(t *testing.T, ssmc *fakeSSM) EdgeCredentials {
+	t.Helper()
+	var creds EdgeCredentials
+	if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam]), &creds); err != nil {
+		t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
+	}
+	return creds
+}
+
+func TestEdgeCredentialRotation(t *testing.T) {
+	stale := mintedAt.Add(EdgeKeyMaxAge)
+	fresh := mintedAt.Add(EdgeKeyMaxAge - time.Hour)
+	recorded := func(ssmc *fakeSSM, id string, at time.Time) {
+		payload, _ := json.Marshal(EdgeCredentials{AccessKeyID: id, SecretAccessKey: "s", CreatedAt: at})
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = string(payload)
+	}
+
+	t.Run("a key younger than the maximum age is kept", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKOLD", mintedAt)
+		iamc := &fakeIAM{keys: []string{"AKOLD"}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, fresh)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome != (edgeKeyOutcome{}) {
+			t.Errorf("outcome = %+v, want nothing minted, rotated or retired", outcome)
+		}
+		if len(iamc.created) != 0 || len(iamc.deleted) != 0 || ssmc.puts != 0 {
+			t.Errorf("created %v, deleted %v, puts %d; want the account untouched", iamc.created, iamc.deleted, ssmc.puts)
+		}
+	})
+
+	t.Run("a key at the maximum age is rotated: a fresh key is minted and recorded, the old one stays for the workers still signing with it", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKOLD", mintedAt)
+		iamc := &fakeIAM{keys: []string{"AKOLD"}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, stale)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if !outcome.rotated || !outcome.minted || outcome.retired != "" {
+			t.Errorf("outcome = %+v, want a rotation that retires nothing yet", outcome)
+		}
+		if creds := recordedCreds(t, ssmc); creds.AccessKeyID != "AKIAEDGE" || !creds.CreatedAt.Equal(stale) {
+			t.Errorf("recorded = %+v, want the fresh key stamped with the rotation time", creds)
+		}
+		if len(iamc.deleted) != 0 {
+			t.Errorf("deleted %v, want the old key left for every worker still signing with it", iamc.deleted)
+		}
+		if !slices.Equal(iamc.keys, []string{"AKOLD", "AKIAEDGE"}) {
+			t.Errorf("keys = %v, want both generations live", iamc.keys)
+		}
+	})
+
+	t.Run("the age falls back to what IAM recorded when the parameter records none", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"s"}`
+		iamc := &fakeIAM{keys: []string{"AKOLD"}, minted: map[string]time.Time{"AKOLD": mintedAt}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, stale)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if !outcome.rotated {
+			t.Errorf("outcome = %+v, want a rotation from IAM's own CreateDate", outcome)
+		}
+	})
+
+	t.Run("the next bootstrap retires the superseded key once nothing has signed with it for a day", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", stale)
+		iamc := &fakeIAM{
+			keys:     []string{"AKOLD", "AKNEW"},
+			lastUsed: map[string]time.Time{"AKOLD": stale.Add(2 * time.Hour)},
+		}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, stale.Add(48*time.Hour))
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome.retired != "AKOLD" || outcome.minted {
+			t.Errorf("outcome = %+v, want the idle old key retired and nothing minted", outcome)
+		}
+		if !slices.Equal(iamc.deleted, []string{"AKOLD"}) || !slices.Equal(iamc.keys, []string{"AKNEW"}) {
+			t.Errorf("deleted %v, keys %v; want only AKOLD gone", iamc.deleted, iamc.keys)
+		}
+	})
+
+	t.Run("a superseded key a worker signed with today is left in place", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", stale)
+		now := stale.Add(48 * time.Hour)
+		iamc := &fakeIAM{
+			keys:     []string{"AKOLD", "AKNEW"},
+			lastUsed: map[string]time.Time{"AKOLD": now.Add(-time.Hour)},
+		}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, now)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome.retired != "" || len(iamc.deleted) != 0 {
+			t.Errorf("outcome = %+v, deleted %v; want a key still in use kept until every worker has moved off it", outcome, iamc.deleted)
+		}
+	})
+
+	t.Run("a never-used superseded key is retired at once", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", stale)
+		iamc := &fakeIAM{keys: []string{"AKOLD", "AKNEW"}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, stale.Add(time.Hour))
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome.retired != "AKOLD" {
+			t.Errorf("outcome = %+v, want the never-used key retired", outcome)
+		}
+	})
+
+	t.Run("a rotation with no room refuses and names the key still in use", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", mintedAt)
+		now := mintedAt.Add(EdgeKeyMaxAge)
+		iamc := &fakeIAM{
+			keys:     []string{"AKOLD", "AKNEW"},
+			lastUsed: map[string]time.Time{"AKOLD": now.Add(-time.Minute)},
+		}
+
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, now)
+		if err == nil {
+			t.Fatal("ensureEdgeCredentials err = nil, want a refusal: two keys exist and both are in use")
+		}
+		if !strings.Contains(err.Error(), "AKNEW") {
+			t.Errorf("err = %v, want it to name the key every project must move onto", err)
+		}
+		if len(iamc.created) != 0 || len(iamc.deleted) != 0 {
+			t.Errorf("created %v, deleted %v; want the account untouched by a refused rotation", iamc.created, iamc.deleted)
+		}
+	})
+
+	t.Run("a rotation whose predecessor went idle retires it and rotates in one run", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", mintedAt)
+		now := mintedAt.Add(EdgeKeyMaxAge)
+		iamc := &fakeIAM{keys: []string{"AKOLD", "AKNEW"}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, now)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome.retired != "AKOLD" || !outcome.rotated {
+			t.Errorf("outcome = %+v, want AKOLD retired and AKNEW succeeded", outcome)
+		}
+		if !slices.Equal(iamc.keys, []string{"AKNEW", "AKIAEDGE"}) {
+			t.Errorf("keys = %v, want the two newest generations", iamc.keys)
+		}
+	})
+}
+
+func TestStaleEdgeKeyNotice(t *testing.T) {
+	creds := EdgeCredentials{AccessKeyID: "AKOLD", CreatedAt: mintedAt}
+
+	if notice := StaleEdgeKeyNotice(creds, mintedAt.Add(EdgeKeyMaxAge-time.Second), environment.TierProduction); notice != "" {
+		t.Errorf("notice = %q, want none for a key within its age", notice)
+	}
+	notice := StaleEdgeKeyNotice(creds, mintedAt.Add(EdgeKeyMaxAge+24*time.Hour), environment.TierProduction)
+	for _, want := range []string{"AKOLD", "91 days", "ocel bootstrap"} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("notice = %q, want it to contain %q", notice, want)
+		}
+	}
+	if notice := StaleEdgeKeyNotice(EdgeCredentials{AccessKeyID: "AKOLD"}, mintedAt.Add(10*EdgeKeyMaxAge), environment.TierProduction); notice != "" {
+		t.Errorf("notice = %q, want none when the mint time is unknown", notice)
+	}
+}
+
+func TestReadEdgeCredentials(t *testing.T) {
+	ssmc := newFakeSSM()
+	ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AK1","secretAccessKey":"s1"}`
+
+	creds, err := ReadEdgeCredentials(context.Background(), ssmc, defaultNamespace, environment.TierProduction, KindCloudflare)
+	if err != nil {
+		t.Fatalf("ReadEdgeCredentials: %v", err)
+	}
+	if creds.AccessKeyID != "AK1" || creds.SecretAccessKey != "s1" {
+		t.Errorf("creds = %+v, want AK1/s1", creds)
+	}
+}
+
+func TestEdgeCredentials(t *testing.T) {
+	t.Run("unknown tier", func(t *testing.T) {
+		if _, err := ensureEdgeCredentials(context.Background(), &fakeIAM{}, newFakeSSM(), defaultNamespace, "nonsense", KindCloudflare, mintedAt); err == nil {
+			t.Error("expected an error for an unknown tier")
+		}
+	})
+}
+
+func offeredReleasesStore() map[string]string {
+	return map[string]string{
+		edge.OfferKeyStoreEndpoint:            "https://ocel-releases-store.acct.workers.dev",
+		edge.OfferKeyStoreScriptName:          "ocel-releases-store",
+		edge.OfferKeyStoreBootstrapCredential: "cred-prod",
+	}
+}
+
+func TestReleasesStoreParamFor(t *testing.T) {
+	for _, tc := range []struct {
+		tier environment.Tier
+		want string
+	}{
+		{environment.TierProduction, "/ocel/edge/fake/releases-store"},
+		{environment.TierPreview, "/ocel/edge/fake-preview/releases-store"},
+	} {
+		got, err := ReleasesStoreParamFor(defaultNamespace, tc.tier, "fake")
+		if err != nil {
+			t.Fatalf("ReleasesStoreParamFor(defaultNamespace, %q): %v", tc.tier, err)
+		}
+		if got != tc.want {
+			t.Errorf("ReleasesStoreParamFor(defaultNamespace, %q) = %q, want %q", tc.tier, got, tc.want)
+		}
+	}
+	if _, err := ReleasesStoreParamFor(defaultNamespace, "nonsense", "fake"); err == nil {
+		t.Error("ReleasesStoreParamFor(defaultNamespace, unknown tier) = nil error, want an error")
+	}
+	if _, err := ReleasesStoreParamFor(defaultNamespace, environment.TierProduction, ""); err == nil {
+		t.Error("ReleasesStoreParamFor(defaultNamespace, no kind) = nil error, want an error: every edge parameter is namespaced by the kind that owns it")
+	}
+}
+
+func TestAdoptReleasesStore(t *testing.T) {
+	t.Run("preview stores separately", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		preview := offeredReleasesStore()
+		preview[edge.OfferKeyStoreEndpoint] = "https://ocel-releases-store-preview.acct.workers.dev"
+		preview[edge.OfferKeyStoreScriptName] = "ocel-releases-store-preview"
+		preview[edge.OfferKeyStoreBootstrapCredential] = "cred-preview"
+
+		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredReleasesStore()); err != nil {
+			t.Fatalf("production adopt: %v", err)
+		}
+		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake", preview); err != nil {
+			t.Fatalf("preview adopt: %v", err)
+		}
+
+		prod, err := ReadReleasesStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
+		if err != nil {
+			t.Fatalf("ReadReleasesStoreFor(production): %v", err)
+		}
+		prev, err := ReadReleasesStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake")
+		if err != nil {
+			t.Fatalf("ReadReleasesStoreFor(preview): %v", err)
+		}
+		wantProd := ReleasesStore{Endpoint: "https://ocel-releases-store.acct.workers.dev", ScriptName: "ocel-releases-store", BootstrapCredential: "cred-prod"}
+		wantPrev := ReleasesStore{Endpoint: "https://ocel-releases-store-preview.acct.workers.dev", ScriptName: "ocel-releases-store-preview", BootstrapCredential: "cred-preview"}
+		if prod != wantProd {
+			t.Errorf("production store = %+v, want %+v", prod, wantProd)
+		}
+		if prev != wantPrev {
+			t.Errorf("preview store = %+v, want %+v", prev, wantPrev)
+		}
+	})
+}
+
+func TestAdoptReleasesStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
+	t.Run("a stored credential survives a re-offer without one", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredReleasesStore()); err != nil {
+			t.Fatalf("first adopt: %v", err)
+		}
+
+		reoffer := offeredReleasesStore()
+		delete(reoffer, edge.OfferKeyStoreBootstrapCredential)
+		reoffer[edge.OfferKeyStoreEndpoint] = "https://ocel-releases-store.acct.workers.dev/v2"
+		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", reoffer); err != nil {
+			t.Fatalf("second adopt: %v", err)
+		}
+
+		got, err := ReadReleasesStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
+		if err != nil {
+			t.Fatalf("ReadReleasesStoreFor: %v", err)
+		}
+		if got.BootstrapCredential != "cred-prod" {
+			t.Errorf("credential = %q, want the stored one kept where the edge offered none", got.BootstrapCredential)
+		}
+		if got.Endpoint != "https://ocel-releases-store.acct.workers.dev/v2" {
+			t.Errorf("endpoint = %q, want the reoffered coordinate", got.Endpoint)
+		}
+	})
+
+	t.Run("nothing on either side is a refusal, not an empty credential", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		offer := offeredReleasesStore()
+		delete(offer, edge.OfferKeyStoreBootstrapCredential)
+
+		err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
+		if err == nil {
+			t.Fatal("adoptReleasesStore stored a credential-less store rather than refusing")
+		}
+		if !strings.Contains(err.Error(), "ocel-releases-store") || !strings.Contains(err.Error(), namesFor(environment.TierProduction, "fake").releasesStoreParam) {
+			t.Errorf("error = %v, want it to name the worker and the parameter that stores nothing", err)
+		}
+		if _, stored := ssmc.params[namesFor(environment.TierProduction, "fake").releasesStoreParam]; stored {
+			t.Error("a credential-less store was written despite the refusal")
+		}
+	})
+}
+
+func TestReadReleasesStore(t *testing.T) {
+	t.Run("absent is not an error", func(t *testing.T) {
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+			got, err := ReadReleasesStoreFor(context.Background(), newFakeSSM(), defaultNamespace, tier, "fake")
+			if err != nil {
+				t.Fatalf("ReadReleasesStoreFor(%q) on an absent parameter: %v", tier, err)
+			}
+			if got != (ReleasesStore{}) {
+				t.Errorf("ReadReleasesStoreFor(%q) = %+v, want the zero store", tier, got)
+			}
+		}
+	})
+}
+
+func TestEachTierKeepsItsPurgeSeedUnderItsOwnEdgeParameter(t *testing.T) {
+	for _, tc := range []struct {
+		tier environment.Tier
+		want string
+	}{
+		{environment.TierProduction, "/ocel/edge/fake/purge-seed"},
+		{environment.TierPreview, "/ocel/edge/fake-preview/purge-seed"},
+	} {
+		got, err := PurgeSeedParamFor(defaultNamespace, tc.tier, "fake")
+		if err != nil {
+			t.Fatalf("PurgeSeedParamFor(%q): %v", tc.tier, err)
+		}
+		if got != tc.want {
+			t.Errorf("PurgeSeedParamFor(%q) = %q, want %q", tc.tier, got, tc.want)
+		}
+	}
+}
+
+func TestABootstrapMintsAPurgeSeedOnceAndKeepsIt(t *testing.T) {
+	t.Run("is create only", func(t *testing.T) {
+		ssmc := newFakeSSM()
+
+		first, err := ensurePurgeSeed(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
+		if err != nil {
+			t.Fatalf("ensurePurgeSeed: %v", err)
+		}
+		if first == "" {
+			t.Fatal("ensurePurgeSeed minted no seed")
+		}
+		again, err := ensurePurgeSeed(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
+		if err != nil {
+			t.Fatalf("ensurePurgeSeed (second run): %v", err)
+		}
+		if again != first {
+			t.Errorf("second bootstrap returned seed %q, want the stored %q", again, first)
+		}
+
+		preview, err := ensurePurgeSeed(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake")
+		if err != nil {
+			t.Fatalf("ensurePurgeSeed (preview): %v", err)
+		}
+		if preview == first {
+			t.Error("preview and production share a seed; each bootstrap has its own seed")
+		}
+	})
+
+	t.Run("converges on a concurrent bootstrap", func(t *testing.T) {
+		ssmc := &racingSSM{fakeSSM: newFakeSSM(), winner: "the-other-bootstraps-seed"}
+
+		seed, err := ensurePurgeSeed(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
+		if err != nil {
+			t.Fatalf("ensurePurgeSeed lost a race instead of converging: %v", err)
+		}
+		if seed != ssmc.winner {
+			t.Errorf("seed = %q, want the winner's %q", seed, ssmc.winner)
+		}
+	})
+}
+
+type racingSSM struct {
+	*fakeSSM
+	winner string
+	raced  bool
+}
+
+func (r *racingSSM) PutParameter(ctx context.Context, in *ssm.PutParameterInput, opts ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
+	if !r.raced {
+		r.raced = true
+		r.params[aws.ToString(in.Name)] = r.winner
+	}
+	return r.fakeSSM.PutParameter(ctx, in, opts...)
+}
+
+type adoption struct {
+	what  string
+	first func(context.Context, SSMAPI) error
+	again func(context.Context, SSMAPI) error
+}
+
+func adoptions() []adoption {
+	releasesStore := func(offer map[string]string) func(context.Context, SSMAPI) error {
+		return func(ctx context.Context, ssmc SSMAPI) error {
+			return adoptReleasesStore(ctx, ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
+		}
+	}
+	return []adoption{
+		{"the releases store", releasesStore(offeredReleasesStore()), releasesStore(without(offeredReleasesStore(), edge.OfferKeyStoreBootstrapCredential))},
+	}
+}
+
+func without(offer map[string]string, key string) map[string]string {
+	delete(offer, key)
+	return offer
+}
+
+func TestAdoptionWritesNothingWhenWhatIsStoredIsWhatItWouldWrite(t *testing.T) {
+	for _, tc := range adoptions() {
+		t.Run(tc.what, func(t *testing.T) {
+			ssmc := newFakeSSM()
+			if err := tc.first(context.Background(), ssmc); err != nil {
+				t.Fatalf("first adopt: %v", err)
+			}
+			if ssmc.puts != 1 {
+				t.Fatalf("puts = %d, want the first adopt to write once", ssmc.puts)
+			}
+			if err := tc.first(context.Background(), ssmc); err != nil {
+				t.Fatalf("second adopt: %v", err)
+			}
+			if ssmc.puts != 1 {
+				t.Errorf("puts = %d, want the second adopt to write nothing: what is stored is what it would write", ssmc.puts)
+			}
+		})
+	}
+}
+
+func TestAdoptionWritesNothingWhenAReofferOmitsTheStoredCredential(t *testing.T) {
+	for _, tc := range adoptions() {
+		t.Run(tc.what, func(t *testing.T) {
+			ssmc := newFakeSSM()
+			if err := tc.first(context.Background(), ssmc); err != nil {
+				t.Fatalf("first adopt: %v", err)
+			}
+			if err := tc.again(context.Background(), ssmc); err != nil {
+				t.Fatalf("re-offer without the credential: %v", err)
+			}
+			if ssmc.puts != 1 {
+				t.Errorf("puts = %d, want the backfilled re-offer to write nothing", ssmc.puts)
+			}
+		})
+	}
+}

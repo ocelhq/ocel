@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 const bootstrapTTL = 5 * time.Minute
 
 type bootstrapCache struct {
-	namespace bootstrap.Namespace
+	namespace account.Namespace
 	stacks    cfn.StacksAPI
 	now       func() time.Time
 
@@ -22,20 +22,20 @@ type bootstrapCache struct {
 }
 
 type cachedBootstrap struct {
-	deployed bootstrap.Deployed
+	deployed account.Deployed
 	at       time.Time
 }
 
-func (d *bootstrapCache) resolve(ctx context.Context, tier environment.Tier) (bootstrap.Deployed, error) {
+func (d *bootstrapCache) resolve(ctx context.Context, tier environment.Tier) (account.Deployed, error) {
 	d.mu.Lock()
 	memo, known := d.read[tier]
 	d.mu.Unlock()
 	if known && d.now().Sub(memo.at) < bootstrapTTL {
 		return memo.deployed, nil
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, tier)
+	deployed, err := account.CheckDeployedFor(ctx, d.stacks, d.namespace, tier)
 	if err != nil {
-		return bootstrap.Deployed{}, err
+		return account.Deployed{}, err
 	}
 	d.mu.Lock()
 	d.read[tier] = cachedBootstrap{deployed: deployed, at: d.now()}

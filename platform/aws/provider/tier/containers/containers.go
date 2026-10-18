@@ -242,7 +242,7 @@ func ReadPart(ctx context.Context, store records.Store, region string, tier envi
 		Current:   true,
 		Resources: listResources(tier, front),
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: component.Vendor, Region: region, Resources: Shape(tier)},
+		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier)},
 
 		RetiresWithLastUser: true,
 	}, true, nil

@@ -25,12 +25,12 @@ const (
 	liveWriter = provider.WrittenBy("live-suite")
 )
 
-type account struct {
+type liveAccount struct {
 	endpoint string
 	aws      awssdk.Config
 }
 
-func live(t *testing.T) account {
+func live(t *testing.T) liveAccount {
 	t.Helper()
 	endpoint := os.Getenv("OCEL_FLOCI_ENDPOINT")
 	if endpoint == "" {
@@ -45,12 +45,12 @@ func live(t *testing.T) account {
 	if err != nil {
 		t.Fatalf("sdkconfig.Control() against %s = %v", endpoint, err)
 	}
-	return account{endpoint: endpoint, aws: cfg}
+	return liveAccount{endpoint: endpoint, aws: cfg}
 }
 
-func (a account) emulated() bool { return a.endpoint != "" }
+func (a liveAccount) emulated() bool { return a.endpoint != "" }
 
-func (a account) boot(t *testing.T) provider.Bootstrap {
+func (a liveAccount) boot(t *testing.T) provider.Bootstrap {
 	t.Helper()
 	p, err := aws.New(context.Background(), provider.Settings{Options: provider.Options{"region": liveRegion}})
 	if err != nil {
@@ -63,7 +63,7 @@ func (a account) boot(t *testing.T) provider.Bootstrap {
 	return boot
 }
 
-func (a account) emptied(t *testing.T, tiers ...environment.Tier) provider.Bootstrap {
+func (a liveAccount) emptied(t *testing.T, tiers ...environment.Tier) provider.Bootstrap {
 	t.Helper()
 	boot := a.boot(t)
 	ctx := context.Background()
@@ -79,7 +79,7 @@ func (a account) emptied(t *testing.T, tiers ...environment.Tier) provider.Boots
 	return boot
 }
 
-func (a account) stackStatus(t *testing.T, name string) string {
+func (a liveAccount) stackStatus(t *testing.T, name string) string {
 	t.Helper()
 	out, err := cloudformation.NewFromConfig(a.aws).DescribeStacks(context.Background(),
 		&cloudformation.DescribeStacksInput{StackName: awssdk.String(name)})
@@ -92,20 +92,20 @@ func (a account) stackStatus(t *testing.T, name string) string {
 	return string(out.Stacks[0].StackStatus)
 }
 
-func (a account) bucketExists(t *testing.T, name string) bool {
+func (a liveAccount) bucketExists(t *testing.T, name string) bool {
 	t.Helper()
 	_, err := s3.NewFromConfig(a.aws).HeadBucket(context.Background(), &s3.HeadBucketInput{Bucket: awssdk.String(name)})
 	return err == nil
 }
 
-func (a account) tableExists(t *testing.T, name string) bool {
+func (a liveAccount) tableExists(t *testing.T, name string) bool {
 	t.Helper()
 	_, err := dynamodb.NewFromConfig(a.aws).DescribeTable(context.Background(),
 		&dynamodb.DescribeTableInput{TableName: awssdk.String(name)})
 	return err == nil
 }
 
-func (a account) paramExists(t *testing.T, name string) bool {
+func (a liveAccount) paramExists(t *testing.T, name string) bool {
 	t.Helper()
 	_, err := ssm.NewFromConfig(a.aws).GetParameter(context.Background(),
 		&ssm.GetParameterInput{Name: awssdk.String(name), WithDecryption: awssdk.Bool(true)})

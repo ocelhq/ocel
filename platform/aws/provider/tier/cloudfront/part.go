@@ -10,13 +10,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
-func NewPart(records tier.Records, ns bootstrap.Namespace, front edge.Kind, open func(context.Context) (API, error)) tier.Part {
+func NewPart(records tier.Records, ns account.Namespace, front edge.Kind, open func(context.Context) (API, error)) tier.Part {
 	return tier.Recorded(records, tier.RecordedSpec{
 		Name:    Part,
 		Summary: Summary,

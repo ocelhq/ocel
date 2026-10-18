@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
@@ -27,18 +27,18 @@ import (
 const groupVendor provider.Vendor = "aws"
 
 type SSMAPI interface {
-	bootstrap.SSMAPI
+	account.SSMAPI
 }
 
 type IAMAPI interface {
-	bootstrap.IAMAPI
-	bootstrap.IAMKeyAPI
-	bootstrap.IAMBoundaryAPI
+	account.IAMAPI
+	account.IAMKeyAPI
+	account.IAMBoundaryAPI
 }
 
 type LayerAPI interface {
-	bootstrap.LayerAPI
-	bootstrap.LayerTeardownAPI
+	account.LayerAPI
+	account.LayerTeardownAPI
 }
 
 type Bootstrap struct {
@@ -46,28 +46,28 @@ type Bootstrap struct {
 	SSM          SSMAPI
 	IAM          IAMAPI
 	Layers       LayerAPI
-	Records      bootstrap.RecordStore
-	KMS          bootstrap.KeyAPI
-	Store        bootstrap.ObjectStore
+	Records      account.RecordStore
+	KMS          account.KeyAPI
+	Store        account.ObjectStore
 	Buckets      cfn.BucketEmptierAPI
 	Edge         edge.Edge
 	Edges        provider.Edges
 	Kinds        []edge.Kind
 	Region       string
 	VariablesKey string
-	Read         func(context.Context, environment.Tier) (bootstrap.Reading, error)
+	Read         func(context.Context, environment.Tier) (account.Reading, error)
 	TierParts    []tier.Part
 
-	Namespace bootstrap.Namespace
+	Namespace account.Namespace
 }
 
-func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kinds []edge.Kind, variablesKey string, ns bootstrap.Namespace, read func(context.Context, environment.Tier) (bootstrap.Reading, error)) Bootstrap {
+func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kinds []edge.Kind, variablesKey string, ns account.Namespace, read func(context.Context, environment.Tier) (account.Reading, error)) Bootstrap {
 	return Bootstrap{
 		CFN:          cloudformation.NewFromConfig(cfg),
 		SSM:          ssm.NewFromConfig(cfg),
 		IAM:          iam.NewFromConfig(cfg),
 		Layers:       lambda.NewFromConfig(cfg),
-		Records:      bootstrap.DynamoRecords(dynamodb.NewFromConfig(cfg)),
+		Records:      account.DynamoRecords(dynamodb.NewFromConfig(cfg)),
 		KMS:          kms.NewFromConfig(cfg),
 		Store:        s3.NewFromConfig(cfg),
 		Buckets:      s3.NewFromConfig(cfg),
@@ -82,12 +82,12 @@ func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kind
 	}
 }
 
-func (b Bootstrap) paramAPIs() bootstrap.ParamAPIs {
-	return bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM, KMS: b.KMS, Region: b.Region}
+func (b Bootstrap) paramAPIs() account.ParamAPIs {
+	return account.ParamAPIs{SSM: b.SSM, IAM: b.IAM, KMS: b.KMS, Region: b.Region}
 }
 
-func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
-	return bootstrap.Request{
+func (b Bootstrap) request(req provider.BootstrapRequest) account.Request {
+	return account.Request{
 		VariablesKey:       b.VariablesKey,
 		Parts:              req.Parts,
 		Remove:             req.Remove,
@@ -96,7 +96,7 @@ func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
 	}
 }
 
-func (b Bootstrap) Parts() []provider.Part { return bootstrap.Parts() }
+func (b Bootstrap) Parts() []provider.Part { return account.Parts() }
 
 func (b Bootstrap) CheckHost(context.Context, provider.HostCheckRequest) ([]provider.HostCheck, error) {
 	return nil, nil
@@ -120,7 +120,7 @@ func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provide
 	return description, nil
 }
 
-func described(tier environment.Tier, deployed bootstrap.Deployed) provider.BootstrapDescription {
+func described(tier environment.Tier, deployed account.Deployed) provider.BootstrapDescription {
 	described := provider.BootstrapDescription{Tier: tier, Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, provider.BootstrapStack{
@@ -139,8 +139,8 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups, err := bootstrap.PlanChanges(ctx, b.CFN, b.Layers, read, b.request(req),
-		bootstrapplan.ChangeGroups(bootstrap.WithDefaultStackNames(b.Namespace, described(req.Tier, read.Deployed)), bootstrap.Parts(), req))
+	groups, err := account.PlanChanges(ctx, b.CFN, b.Layers, read, b.request(req),
+		bootstrapplan.ChangeGroups(account.WithDefaultStackNames(b.Namespace, described(req.Tier, read.Deployed)), account.Parts(), req))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -148,7 +148,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	params, err := bootstrap.PlanParameters(ctx, b.paramAPIs(), b.Namespace, req.Tier, adoptions, b.request(req))
+	params, err := account.PlanParameters(ctx, b.paramAPIs(), b.Namespace, req.Tier, adoptions, b.request(req))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -161,9 +161,9 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	return plan, nil
 }
 
-func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (bootstrap.Reading, error) {
+func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (account.Reading, error) {
 	if b.Read == nil {
-		return bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
+		return account.Read(ctx, b.CFN, b.Namespace, tier)
 	}
 	return b.Read(ctx, tier)
 }
@@ -175,9 +175,9 @@ func (b Bootstrap) open(kind edge.Kind) (edge.Edge, error) {
 	return b.Edges.Open(kind, nil)
 }
 
-func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest) ([]bootstrap.EdgeAdoption, error) {
-	var out []bootstrap.EdgeAdoption
-	for _, kind := range bootstrap.EdgeKindsFor(req.Parts) {
+func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest) ([]account.EdgeAdoption, error) {
+	var out []account.EdgeAdoption
+	for _, kind := range account.EdgeKindsFor(req.Parts) {
 		front, err := b.open(kind)
 		if err != nil {
 			return nil, err
@@ -190,14 +190,14 @@ func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest)
 		if err != nil {
 			return nil, fmt.Errorf("read what the %s edge hands this account to store: %w", kind, err)
 		}
-		out = append(out, bootstrap.EdgeAdoption{Kind: kind, Adoption: adoption})
+		out = append(out, account.EdgeAdoption{Kind: kind, Adoption: adoption})
 	}
 	return out, nil
 }
 
 func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
-	for _, kind := range bootstrap.EdgeKindsFor(req.Parts) {
+	for _, kind := range account.EdgeKindsFor(req.Parts) {
 		group, err := b.installedEdgeGroup(ctx, req.Tier, kind)
 		if err != nil {
 			return nil, err
@@ -206,7 +206,7 @@ func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest
 			groups = append(groups, *group)
 		}
 	}
-	for _, kind := range bootstrap.EdgeKindsFor(bootstrap.Removing(req.Parts, req.Remove)) {
+	for _, kind := range account.EdgeKindsFor(account.Removing(req.Parts, req.Remove)) {
 		group, err := b.severedEdge(ctx, req.Tier, kind)
 		if err != nil {
 			return nil, err
@@ -227,7 +227,7 @@ func (b Bootstrap) installedEdgeGroup(ctx context.Context, tier environment.Tier
 	if err != nil || len(planned) == 0 {
 		return nil, err
 	}
-	group, err := bootstrapplan.EdgeGroup(kind, bootstrapplan.PartFrontingEdge(bootstrap.Parts(), kind), planned)
+	group, err := bootstrapplan.EdgeGroup(kind, bootstrapplan.PartFrontingEdge(account.Parts(), kind), planned)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func (b Bootstrap) severedEdge(ctx context.Context, tier environment.Tier, kind 
 	if err != nil {
 		return nil, err
 	}
-	part := bootstrapplan.PartFrontingEdge(bootstrap.Parts(), kind)
+	part := bootstrapplan.PartFrontingEdge(account.Parts(), kind)
 	if group == nil {
 		planned, err := plannedBootstrap(ctx, front, tier)
 		if err != nil {
@@ -294,15 +294,15 @@ func installedEdgeChanges(kind edge.Kind, part string, planned []edge.PlanChange
 }
 
 func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	err := bootstrap.Run(ctx, b.apis(), b.Namespace, req.Tier, b.request(req), progress)
-	if bootstrap.RefusedWrite(err) {
+	err := account.Run(ctx, b.apis(), b.Namespace, req.Tier, b.request(req), progress)
+	if account.RefusedWrite(err) {
 		return refusal.Refuse(refusal.CodeDenied, "%s", err.Error())
 	}
 	return err
 }
 
 func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
-	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
+	read, err := account.Read(ctx, b.CFN, b.Namespace, tier)
 	if err != nil {
 		return err
 	}
@@ -318,7 +318,7 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 			return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
 		}
 	}
-	return bootstrap.Teardown(ctx, bootstrap.TeardownAPIs{
+	return account.Teardown(ctx, account.TeardownAPIs{
 		CFN:     b.CFN,
 		SSM:     b.SSM,
 		IAM:     b.IAM,
@@ -342,8 +342,8 @@ func (b Bootstrap) tearDownParts(ctx context.Context, tier environment.Tier, pro
 	return nil
 }
 
-func (b Bootstrap) apis() bootstrap.APIs {
-	return bootstrap.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Layers: b.Layers, Store: b.Store, Records: b.Records, Edge: b.Edge, Edges: b.Edges}
+func (b Bootstrap) apis() account.APIs {
+	return account.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Layers: b.Layers, Store: b.Store, Records: b.Records, Edge: b.Edge, Edges: b.Edges}
 }
 
 var _ provider.Bootstrap = Bootstrap{}

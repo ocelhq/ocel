@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 )
 
@@ -53,7 +53,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	params := groupNamed(t, plan, "aws/"+bootstrap.ParamGroupName)
+	params := groupNamed(t, plan, "aws/"+account.ParamGroupName)
 	if params.Action != provider.ActionCreate {
 		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", params.Name, params.Action, provider.ActionCreate)
 	}
@@ -85,7 +85,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if status := a.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
 		t.Errorf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", coreStackName, status)
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, tier)
+	deployed, err := account.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, tier)
 	if err != nil {
 		t.Fatalf("reading back what the bootstrap deployed = %v", err)
 	}

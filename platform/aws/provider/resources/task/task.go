@@ -13,9 +13,10 @@ import (
 
 func New() component.Component {
 	return component.Component{
-		Types:   []provider.BindingType{provider.BindingTask},
-		Declare: declare,
-		Collect: topic.Collect,
+		Types:      []provider.BindingType{provider.BindingTask},
+		Declare:    declare,
+		Collect:    topic.Collect,
+		Credential: credential,
 		Shape: func(cost component.CostTree, scope string, at component.Stack, declared []provider.Resource) error {
 			topic.Shape(cost, scope, topic.Of(at.Project, at.Env, declared))
 			return nil

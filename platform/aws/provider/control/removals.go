@@ -9,19 +9,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
+	read, err := account.Read(ctx, b.CFN, b.Namespace, tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	stacks, err := bootstrap.PlanRemove(ctx, b.CFN, b.Layers, b.Records, read)
+	stacks, err := account.PlanRemove(ctx, b.CFN, b.Layers, b.Records, read)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	params, err := bootstrap.PlanParameterRemoval(ctx, b.paramAPIs(), b.Namespace, tier)
+	params, err := account.PlanParameterRemoval(ctx, b.paramAPIs(), b.Namespace, tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -68,8 +68,8 @@ func (b Bootstrap) planPartTeardown(ctx context.Context, tier environment.Tier) 
 	return groups, nil
 }
 
-func (b Bootstrap) installedEdges(ctx context.Context, tier environment.Tier, deployed bootstrap.Deployed) ([]edge.Edge, error) {
-	partKinds := bootstrap.EdgeKindsFor(deployed.Parts.Names())
+func (b Bootstrap) installedEdges(ctx context.Context, tier environment.Tier, deployed account.Deployed) ([]edge.Edge, error) {
+	partKinds := account.EdgeKindsFor(deployed.Parts.Names())
 	fronts := []edge.Edge{b.Edge}
 	for _, kind := range b.Kinds {
 		if kind == b.Edge.Kind() {
@@ -78,7 +78,7 @@ func (b Bootstrap) installedEdges(ctx context.Context, tier environment.Tier, de
 		installed := slices.Contains(partKinds, kind)
 		if !installed {
 			var err error
-			if installed, err = bootstrap.EdgeInstalled(ctx, b.SSM, b.Namespace, tier, kind); err != nil {
+			if installed, err = account.EdgeInstalled(ctx, b.SSM, b.Namespace, tier, kind); err != nil {
 				return nil, err
 			}
 		}
@@ -113,7 +113,7 @@ func (b Bootstrap) removedEdgeGroup(ctx context.Context, tier environment.Tier, 
 	return &provider.ChangeGroup{
 		Kind:    edge.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(front.Kind()),
-		Part:    bootstrapplan.PartFrontingEdge(bootstrap.Parts(), front.Kind()),
+		Part:    bootstrapplan.PartFrontingEdge(account.Parts(), front.Kind()),
 		Action:  provider.ActionDelete,
 		Changes: changes,
 	}, nil

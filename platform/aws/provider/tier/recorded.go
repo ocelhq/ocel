@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 type Records struct {
@@ -138,7 +138,7 @@ func (r Records) Read(ctx context.Context, tier environment.Tier, name string) (
 }
 
 func (r Records) Shape(resources []pricing.Shaped) *provider.PartShape {
-	return &provider.PartShape{Vendor: component.Vendor, Region: r.Region, Resources: resources}
+	return &provider.PartShape{Vendor: awsports.Vendor, Region: r.Region, Resources: resources}
 }
 
 func (r Records) Removal(name string, remove func(ctx context.Context, tier environment.Tier, recorded []provider.PartResource) error) *Removal {

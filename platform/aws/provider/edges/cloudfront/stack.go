@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -301,22 +301,22 @@ func (s *stack) serveContainers(ctx context.Context, c Clients, promotionID, app
 	return front, s.p.declareContainerFront(ctx, c, s.spec(), kindDistribution, dist.id, front)
 }
 
-func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSecret, error) {
+func (s *stack) originSecret(ctx context.Context, c Clients) (account.OriginSecret, error) {
 	command := provider.BootstrapCommand(s.tier())
 	name, err := s.p.ns.OriginSecretParamFor(s.tier())
 	if err != nil {
-		return bootstrap.OriginSecret{}, err
+		return account.OriginSecret{}, err
 	}
 	out, err := c.SSM.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(name),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
-		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the root function demands of the front that reaches it: %s is unreadable. Re-run `%s` against this account to mint it: %w", name, command, err)
+		return account.OriginSecret{}, fmt.Errorf("read the secret the root function demands of the front that reaches it: %s is unreadable. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
-	secret, err := bootstrap.OriginSecretOf(aws.ToString(out.Parameter.Value))
+	secret, err := account.OriginSecretOf(aws.ToString(out.Parameter.Value))
 	if err != nil {
-		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the root function demands of the front that reaches it: %s contains something else. Re-run `%s` against this account to mint it: %w", name, command, err)
+		return account.OriginSecret{}, fmt.Errorf("read the secret the root function demands of the front that reaches it: %s contains something else. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
 	return secret, nil
 }

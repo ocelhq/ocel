@@ -9,12 +9,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 type Router struct{ p *apiGateway }
 
-func NewRouter(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) Router {
+func NewRouter(ns account.Namespace, open func(context.Context) (Clients, error)) Router {
 	return Router{p: newAPIGateway(ns, open)}
 }
 

@@ -7,7 +7,7 @@ import (
 )
 
 var controlPlane = []string{
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap",
+	"github.com/ocelhq/ocel/platform/aws/provider/account",
 	"github.com/ocelhq/ocel/platform/aws/provider/control",
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy",
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads",

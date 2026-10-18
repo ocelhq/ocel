@@ -27,8 +27,6 @@ const (
 	TokenAppSyncChannelNamespace     = "aws:appsync/channelNamespace:ChannelNamespace"
 )
 
-const Vendor = "aws"
-
 type ResourceRef struct {
 	Token string
 	Name  string

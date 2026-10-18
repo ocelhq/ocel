@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
@@ -52,9 +52,9 @@ const (
 	heartbeatEvery = "rate(1 minute)"
 )
 
-func StackName(ns bootstrap.Namespace) string { return string(ns) + "-connector" }
+func StackName(ns account.Namespace) string { return string(ns) + "-connector" }
 
-func KeyParameter(ns bootstrap.Namespace) string { return "/" + string(ns) + "/connector/key" }
+func KeyParameter(ns account.Namespace) string { return "/" + string(ns) + "/connector/key" }
 
 type Wake struct {
 	Ocel string `json:"ocel"`
@@ -62,8 +62,8 @@ type Wake struct {
 
 const WakeHeartbeat = "heartbeat"
 
-func reviewing(ns bootstrap.Namespace, progress progress.Log) cfn.ChangeReview {
-	return bootstrap.AdmitReplacements(ns, false, progress)
+func reviewing(ns account.Namespace, progress progress.Log) cfn.ChangeReview {
+	return account.AdmitReplacements(ns, false, progress)
 }
 
 type APIs struct {
@@ -78,7 +78,7 @@ type KeyStore interface {
 	DeleteParameter(ctx context.Context, in *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error)
 }
 
-func mintKey(ctx context.Context, store KeyStore, ns bootstrap.Namespace) (string, error) {
+func mintKey(ctx context.Context, store KeyStore, ns account.Namespace) (string, error) {
 	seed := make([]byte, ed25519.SeedSize)
 	if _, err := rand.Read(seed); err != nil {
 		return "", fmt.Errorf("mint the connector's key: %w", err)
@@ -99,7 +99,7 @@ func PublicKeyOf(seed []byte) string {
 	return base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
 }
 
-func takeKey(ctx context.Context, store KeyStore, ns bootstrap.Namespace) error {
+func takeKey(ctx context.Context, store KeyStore, ns account.Namespace) error {
 	_, err := store.DeleteParameter(ctx, &ssm.DeleteParameterInput{Name: aws.String(KeyParameter(ns))})
 	var gone *ssmtypes.ParameterNotFound
 	if err != nil && !errors.As(err, &gone) {
@@ -122,7 +122,7 @@ type Bundle struct {
 	PublicKey string
 }
 
-func Read(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) (Installation, error) {
+func Read(ctx context.Context, api cfn.StacksAPI, ns account.Namespace) (Installation, error) {
 	stack, err := cfn.DescribeStack(ctx, api, StackName(ns))
 	if err != nil || stack == nil {
 		return Installation{}, err
@@ -139,10 +139,10 @@ func Read(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) (Insta
 	}, nil
 }
 
-func variablesKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([]string, error) {
+func variablesKeys(ctx context.Context, api cfn.StacksAPI, ns account.Namespace) ([]string, error) {
 	keys := make([]string, 0, 2)
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		deployed, err := bootstrap.CheckDeployedFor(ctx, api, ns, tier)
+		deployed, err := account.CheckDeployedFor(ctx, api, ns, tier)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func variablesKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespac
 	return keys, nil
 }
 
-func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, bundle Bundle,
+func Install(ctx context.Context, apis APIs, ns account.Namespace, bundle Bundle,
 	writer provider.WrittenBy, progress progress.Log) (Installation, error) {
 	keys, err := variablesKeys(ctx, apis.CFN, ns)
 	if err != nil {
@@ -209,7 +209,7 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, bundle Bund
 	return installed, nil
 }
 
-func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress progress.Log) error {
+func Remove(ctx context.Context, apis APIs, ns account.Namespace, progress progress.Log) error {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
 		return err
@@ -235,7 +235,7 @@ func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress pro
 	return nil
 }
 
-func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
+func codeBucket(ctx context.Context, apis APIs, ns account.Namespace,
 	writer provider.WrittenBy, progress progress.Log) (string, error) {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
@@ -282,7 +282,7 @@ func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
 	return opened[outputBucket], nil
 }
 
-func tagsFor(ns bootstrap.Namespace, template string, writer provider.WrittenBy) []cfntypes.Tag {
+func tagsFor(ns account.Namespace, template string, writer provider.WrittenBy) []cfntypes.Tag {
 	return []cfntypes.Tag{
 		{Key: aws.String(cfn.TagNamespace), Value: aws.String(string(ns))},
 		{Key: aws.String(cfn.TagDigest), Value: aws.String(cfn.TemplateDigest(template))},
@@ -326,7 +326,7 @@ func codeTemplate() (string, error) {
 	}.Body()
 }
 
-func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, keys []string) (string, error) {
+func templateFor(ns account.Namespace, at payloads.Placement, bundle Bundle, keys []string) (string, error) {
 	if len(bundle.Config) == 0 {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install ships no connector config, so nothing would name the console the function trusts")
@@ -499,8 +499,8 @@ func codeBucketResource() cfn.Resource {
 	}
 }
 
-func grants(ns bootstrap.Namespace, keys []string) []iam.Statement {
-	production, preview := ns.ScopedARNs(environment.TierProduction), ns.ScopedARNs(environment.TierPreview)
+func grants(ns account.Namespace, keys []string) []iam.Statement {
+	production, preview := ns.Scope(environment.TierProduction), ns.Scope(environment.TierPreview)
 	return []iam.Statement{
 		{
 			Actions: []string{
@@ -516,7 +516,7 @@ func grants(ns bootstrap.Namespace, keys []string) []iam.Statement {
 			Actions:   []string{"kms:Decrypt", "kms:Encrypt"},
 			Resources: keys,
 			Condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + bootstrap.VariablesKeyComponentTagKey: bootstrap.VariablesKeyComponentTagValue},
+				"StringEquals": map[string]any{"aws:ResourceTag/" + account.VariablesKeyComponentTagKey: account.VariablesKeyComponentTagValue},
 			},
 		},
 		{

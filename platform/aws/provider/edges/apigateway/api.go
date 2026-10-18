@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -59,7 +59,7 @@ type apiSpec struct {
 	assetBucket string
 }
 
-func namespaceTags(ns bootstrap.Namespace, tier environment.Tier) map[string]string {
+func namespaceTags(ns account.Namespace, tier environment.Tier) map[string]string {
 	return map[string]string{
 		managedByTagKey:      managedByOcel,
 		cfn.TagNamespace:     string(ns),

@@ -19,7 +19,7 @@ import (
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 func TestAnAWSTargetForwardsPortsAndForwardsNothingWhenNoBindingAsksWithoutReachingAWS(t *testing.T) {
@@ -163,8 +163,8 @@ func servedGrants(t *testing.T, grants ...provider.BindingGrant) (provider.Bindi
 	store := &storeSeen{}
 	cfg := aws.Config{Region: "eu-west-2", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", ""), BaseEndpoint: aws.String(store.serve(t))}
 	p := NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace)
-	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
-		return bootstrap.Reading{Deployed: bootstrap.Deployed{StateBucket: "state", ArtifactBucket: "artifacts", AssetBucket: "assets", StateTable: "state-table", VariablesTable: "variables"}}, nil
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
+		return account.Reading{Deployed: account.Deployed{StateBucket: "state", ArtifactBucket: "artifacts", AssetBucket: "assets", StateTable: "state-table", VariablesTable: "variables"}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}

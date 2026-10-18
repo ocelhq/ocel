@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
@@ -73,10 +74,10 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 		}
 	}
 	if hasContainers {
-		tree.AddShaped(scopes.Shared, component.Vendor, region, containers.Shape(req.Deploy.Tier))
+		tree.AddShaped(scopes.Shared, awsports.Vendor, region, containers.Shape(req.Deploy.Tier))
 	}
 	if reachesVPCFromFunctions(req) {
-		tree.AddShaped(scopes.Shared, component.Vendor, region, functionnetwork.Shape(req.Deploy.Tier))
+		tree.AddShaped(scopes.Shared, awsports.Vendor, region, functionnetwork.Shape(req.Deploy.Tier))
 	}
 	return nil
 }
@@ -97,11 +98,11 @@ func (s costShape) Add(scope, typ, name string, properties map[string]any, ref c
 		}
 		properties[field] = snakeValue(value)
 	}
-	s.tree.Add(scope, component.Vendor, typ, name, s.region, properties, unknown...)
+	s.tree.Add(scope, awsports.Vendor, typ, name, s.region, properties, unknown...)
 }
 
 func (s costShape) AddPlain(scope, typ, name string, properties map[string]any) {
-	s.tree.Add(scope, component.Vendor, typ, name, s.region, properties)
+	s.tree.Add(scope, awsports.Vendor, typ, name, s.region, properties)
 }
 
 func (s costShape) functions(scope, project string, app provider.AppEntry, specs []provider.FunctionSpec) error {

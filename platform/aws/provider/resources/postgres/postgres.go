@@ -31,6 +31,7 @@ func New(clusters ClustersAPI) component.Component {
 		WidestGrants: func(component.Stack, provider.Resource) []*variablestorev1.Grant {
 			return grants(widestDBUserARN)
 		},
+		Credential: credential,
 		Teardown: &component.Teardown{
 			Plan: markProtectedClusters,
 			Before: func(ctx context.Context, ref provider.StackRef, outputs func(context.Context) (auto.OutputMap, error), progress progress.Log) error {

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -19,12 +21,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
-const defaultNamespace = bootstrap.Namespace(provider.DefaultNamespace)
+const defaultNamespace = account.Namespace(provider.DefaultNamespace)
 
 var sealingKeys = []string{
 	"arn:aws:kms:eu-west-1:111122223333:key/production-key",
@@ -310,8 +312,8 @@ func TestTheKeyGrantNamesTheKeysThisNamespaceSealedUnderAndNoOther(t *testing.T)
 		t.Fatalf("templateFor: %v", err)
 	}
 
-	if strings.Contains(rendered, bootstrap.AnyKeyARN) {
-		t.Errorf("the connector policy names %s, so a compromised connector would decrypt every namespace's variables in the account", bootstrap.AnyKeyARN)
+	if strings.Contains(rendered, iam.AnyKeyARN) {
+		t.Errorf("the connector policy names %s, so a compromised connector would decrypt every namespace's variables in the account", iam.AnyKeyARN)
 	}
 	for _, key := range sealingKeys {
 		if !strings.Contains(rendered, key) {

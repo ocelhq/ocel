@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
@@ -42,7 +42,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	account, err := p.accountID(ctx)
+	accountID, err := p.accountID(ctx)
 	if err != nil {
 		return deploy.Config{}, err
 	}
@@ -91,9 +91,9 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		Edge:                front,
 		Env:                 scope.Env,
 		StateTable:          deployed.StateTable,
-		StateTableARN:       tableARN(p.aws.Region, account, deployed.StateTable),
+		StateTableARN:       tableARN(p.aws.Region, accountID, deployed.StateTable),
 		VariablesTable:      deployed.VariablesTable,
-		VariablesTableARN:   tableARN(p.aws.Region, account, deployed.VariablesTable),
+		VariablesTableARN:   tableARN(p.aws.Region, accountID, deployed.VariablesTable),
 		VariablesKeyARN:     deployed.VariablesKeyARN,
 		AppBoundaryARN:      deployed.AppBoundaryARN,
 		AppRolePath:         p.namespace.AppRolePathFor(scope.Tier),
@@ -130,13 +130,13 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	case params.EdgeCredentialsErr == nil:
 		cfg.EdgeAccessKeyID = params.EdgeCredentials.AccessKeyID
 		cfg.EdgeSecretKey = params.EdgeCredentials.SecretAccessKey
-	case !errors.Is(params.EdgeCredentialsErr, bootstrap.ErrEdgeCredentialsAbsent):
+	case !errors.Is(params.EdgeCredentialsErr, account.ErrEdgeCredentialsAbsent):
 		cfg.EdgeCredentialsErr = params.EdgeCredentialsErr
 	}
 	return cfg, nil
 }
 
-func (p *Provider) requireBootstrapped(deployed bootstrap.Deployed, tier environment.Tier) error {
+func (p *Provider) requireBootstrapped(deployed account.Deployed, tier environment.Tier) error {
 	command := provider.BootstrapCommand(tier)
 	for _, missing := range []struct {
 		value string

@@ -3,7 +3,11 @@ package apigateway
 import (
 	"context"
 	"maps"
+	"strings"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -112,5 +116,53 @@ func TestAPreviewPointerMoveAndRemovalListAsMuchHoweverManyRestAPIsOtherProjects
 	alone, among := moveAndRemoveAmong(0), moveAndRemoveAmong(20)
 	if alone != among {
 		t.Errorf("a pointer move and removal list %d times beside no other project's REST APIs and %d times beside 20 of them; their listing must be bounded by their own project", alone, among)
+	}
+}
+
+func TestCreateAPINamesTheQuota(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := bootstrapped(t, w)
+	w.gateway.createErr = &agtypes.LimitExceededException{
+		Message: aws.String("Maximum number of Regional APIs has been reached"),
+	}
+
+	_, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+	if err == nil {
+		t.Fatal("Reconcile succeeded, want the quota surfaced")
+	}
+	for _, want := range []string{"Regional APIs per Region per account", "Service Quotas", "Amazon API Gateway"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %v, want it to name %q", err, want)
+		}
+	}
+}
+
+func TestCreateAPITellsAThrottleFromTheQuota(t *testing.T) {
+	t.Parallel()
+
+	for name, refusal := range map[string]error{
+		"too many requests": &agtypes.TooManyRequestsException{Message: aws.String("Too Many Requests")},
+		"rate exceeded":     &agtypes.LimitExceededException{Message: aws.String("Rate exceeded")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w := newWorld()
+			e := bootstrapped(t, w)
+			w.gateway.createErr = refusal
+
+			_, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+			if err == nil {
+				t.Fatal("Reconcile succeeded, want the throttle surfaced")
+			}
+			if strings.Contains(err.Error(), "Service Quotas") {
+				t.Errorf("error = %v, want a throttle told apart from the account's API ceiling", err)
+			}
+			if !strings.Contains(err.Error(), "re-run the deploy") {
+				t.Errorf("error = %v, want it to name retrying as the way out", err)
+			}
+		})
 	}
 }

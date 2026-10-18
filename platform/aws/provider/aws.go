@@ -23,7 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
@@ -41,10 +41,10 @@ type Provider struct {
 	projectDir string
 	writtenBy  provider.WrittenBy
 	aws        aws.Config
-	namespace  bootstrap.Namespace
+	namespace  account.Namespace
 
-	deployed  memo[environment.Tier, bootstrap.Reading]
-	params    memo[tierEdge, bootstrap.TierParams]
+	deployed  memo[environment.Tier, account.Reading]
+	params    memo[tierEdge, account.TierParams]
 	layers    memo[environment.Tier, map[string]string]
 	partReads tier.Reads
 	identity  memo[struct{}, *sts.GetCallerIdentityOutput]
@@ -73,13 +73,13 @@ func New(ctx context.Context, settings provider.Settings) (provider.Provider, er
 	if err != nil {
 		return nil, err
 	}
-	p := NewProvider(decoded, settings.Transforms, addRegionCheck(cfg, decoded.Region), bootstrap.Namespace(ns))
+	p := NewProvider(decoded, settings.Transforms, addRegionCheck(cfg, decoded.Region), account.Namespace(ns))
 	p.projectDir = settings.ProjectDir
 	p.writtenBy = settings.WrittenBy
 	return p, nil
 }
 
-func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootstrap.Namespace) *Provider {
+func NewProvider(options Options, transforms []string, cfg aws.Config, ns account.Namespace) *Provider {
 	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns, sts: sts.NewFromConfig(cfg)}
 	p.ProbeAddress = emulatedProbeAddress(cfg)
 	p.stacks = deploy.NewStacks(p.release, &deploy.Realized{})

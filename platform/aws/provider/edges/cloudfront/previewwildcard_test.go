@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 func TestTheSharedPreviewNameFitsTheCommentCloudFrontAccepts(t *testing.T) {
@@ -331,7 +331,7 @@ func TestDestroyPreviewWildcardLeavesTheEntryAnotherNamespaceIsServingPreviewsTh
 
 	w := newWorld()
 	e := previewBootstrapped(t, w)
-	other := bootstrap.Namespace("other")
+	other := account.Namespace("other")
 	w.front.distributions["E9"] = &fakeDistribution{
 		id:     "E9",
 		domain: "e9.cloudfront.net",

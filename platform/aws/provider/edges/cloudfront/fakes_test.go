@@ -33,7 +33,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	cloudfrontpart "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
 )
@@ -233,11 +233,11 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 
 type fakeSSM struct {
 	absent bool
-	secret bootstrap.OriginSecret
+	secret account.OriginSecret
 }
 
 func newFakeSSM() *fakeSSM {
-	return &fakeSSM{secret: bootstrap.OriginSecret{Current: fakeSecret, CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}}
+	return &fakeSSM{secret: account.OriginSecret{Current: fakeSecret, CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}}
 }
 
 func (f *fakeSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {

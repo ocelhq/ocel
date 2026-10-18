@@ -11,7 +11,8 @@ import (
 
 func NewPart(stacks *Stacks, store records.Store, region string) tier.Part {
 	return tier.Shared(tier.SharedSpec{
-		Stack:         Shared,
+		Part:          Shared.Part,
+		RefuseInUse:   Shared.RefuseInUse,
 		Summary:       Summary,
 		RemovalReason: "this run removes it; the next deploy of a serverless app that reaches a postgres or kv Ocel provisions adds it again",
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {

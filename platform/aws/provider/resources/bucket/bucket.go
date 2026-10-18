@@ -31,6 +31,7 @@ func New(artifacts component.Artifacts) component.Component {
 		WidestGrants: func(at component.Stack, _ provider.Resource) []*variablestorev1.Grant {
 			return Grants(strings.Repeat("b", maxS3BucketNameLen), NewSessions(at.Project, at.Env, at.StateTableARN))
 		},
+		Credential: credential,
 		Transform: func(project, env, name string) component.Transformable {
 			return component.Transformable{Kind: transformKind, Names: resourceNames(project, env, name)}
 		},

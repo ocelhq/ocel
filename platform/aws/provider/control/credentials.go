@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,7 +18,25 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/registry"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources"
+	tiercloudfront "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
 
 const credentialHeading = "AWS credentials"
@@ -41,11 +60,11 @@ type Credentials struct {
 	Region  string
 	Profile string
 
-	Namespace    bootstrap.Namespace
+	Namespace    account.Namespace
 	VariablesKey string
 }
 
-func CredentialsFor(cfg aws.Config, ns bootstrap.Namespace, variablesKey string) Credentials {
+func CredentialsFor(cfg aws.Config, ns account.Namespace, variablesKey string) Credentials {
 	return Credentials{
 		STS:     sts.NewFromConfig(cfg),
 		Region:  cfg.Region,
@@ -77,9 +96,9 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environmen
 	)
 	switch purpose {
 	case edge.PurposeBootstrap:
-		document, err = bootstrap.BootstrapCredentialPermissions(c.Namespace, tier, c.VariablesKey)
+		document, err = BootstrapCredentialPermissions(c.Namespace, tier, c.VariablesKey)
 	case edge.PurposeDeploy:
-		document, err = bootstrap.DeployCredentialPermissions(c.Namespace, tier, c.VariablesKey)
+		document, err = DeployCredentialPermissions(c.Namespace, tier, c.VariablesKey)
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
 			"credential permissions are rendered for bootstrap or deploy credentials; this request named neither")
@@ -88,6 +107,79 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environmen
 		return edge.CredentialDocument{}, err
 	}
 	return edge.CredentialDocument{Heading: fmt.Sprintf("%s for the %s tier, one managed policy per entry", credentialHeading, tier), Document: document}, nil
+}
+
+func deployStatements(s iam.Scope) []iam.Statement {
+	statements := slices.Concat(
+		account.AccessCredential(s),
+		account.RuntimeLayerCredential(s),
+		component.NetworkCredential(s),
+		function.Credential(s),
+		container.Credential(s),
+		worker.Credential(s),
+		bastion.Credential(s),
+		registry.Credential(s),
+		certs.Credential(s),
+		functionnetwork.Credential(s),
+		containers.Credential(s),
+		envsourcesync.Credential(s),
+		taginvalidator.Credential(s),
+		tiercloudfront.Credential(s),
+		notfoundapi.Credential(s),
+		cloudfront.Credential(s),
+		apigateway.Credential(s),
+		alb.Credential(s),
+	)
+	for _, declaring := range resources.Registry(resources.Clients{}).Components() {
+		statements = append(statements, declaring.Credential(s)...)
+	}
+	return statements
+}
+
+func bootstrapStatements(s iam.Scope) []iam.Statement {
+	return slices.Concat(
+		deployStatements(s),
+		account.ProvisionCredential(s),
+		account.EdgePrincipalCredential(s),
+		account.RuntimeLayerReclaimCredential(s),
+		tiercloudfront.ReclaimCredential(s),
+		notfoundapi.ReclaimCredential(s),
+	)
+}
+
+func refuseUnservedTier(tier environment.Tier) error {
+	if tier == environment.TierProduction || tier == environment.TierPreview {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid, "credential permissions are rendered for the production or preview tier, not %q", tier)
+}
+
+func scopeOf(ns account.Namespace, tier environment.Tier, broughtKey string) iam.Scope {
+	s := ns.Scope(tier)
+	s.BroughtVariablesKey = broughtKey
+	return s
+}
+
+func DeployCredentialPermissions(ns account.Namespace, tier environment.Tier, broughtKey string) (string, error) {
+	if err := refuseUnservedTier(tier); err != nil {
+		return "", err
+	}
+	return credentialPolicies(ns, "deploy", tier, deployStatements(scopeOf(ns, tier, broughtKey)))
+}
+
+func BootstrapCredentialPermissions(ns account.Namespace, tier environment.Tier, broughtKey string) (string, error) {
+	if err := refuseUnservedTier(tier); err != nil {
+		return "", err
+	}
+	return credentialPolicies(ns, "bootstrap", tier, bootstrapStatements(scopeOf(ns, tier, broughtKey)))
+}
+
+func credentialPolicies(ns account.Namespace, purpose string, tier environment.Tier, grants []iam.Statement) (string, error) {
+	policies, err := iam.Split(purpose, func(i int) string { return ns.PolicyName(fmt.Sprintf("%s-%s-%d", purpose, tier, i)) }, grants)
+	if err != nil {
+		return "", err
+	}
+	return iam.RenderManagedPolicies(purpose, policies)
 }
 
 func refuseCallerIdentity(err error) error {

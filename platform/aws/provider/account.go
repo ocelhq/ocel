@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 type tierEdge struct {
@@ -23,29 +23,29 @@ type tierEdge struct {
 
 func (p *Provider) Region() string { return p.aws.Region }
 
-func (p *Provider) bootstrapped(ctx context.Context, tier environment.Tier) (bootstrap.Deployed, error) {
+func (p *Provider) bootstrapped(ctx context.Context, tier environment.Tier) (account.Deployed, error) {
 	read, err := p.readBootstrap(ctx, tier)
 	return read.Deployed, err
 }
 
-func (p *Provider) readBootstrap(ctx context.Context, tier environment.Tier) (bootstrap.Reading, error) {
-	return p.deployed.resolve(tier, func() (bootstrap.Reading, error) {
-		return bootstrap.Read(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, tier)
+func (p *Provider) readBootstrap(ctx context.Context, tier environment.Tier) (account.Reading, error) {
+	return p.deployed.resolve(tier, func() (account.Reading, error) {
+		return account.Read(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, tier)
 	})
 }
 
 func (p *Provider) runtimeLayers(ctx context.Context, tier environment.Tier) (map[string]string, error) {
 	return p.layers.resolve(tier, func() (map[string]string, error) {
-		return bootstrap.ReadRuntimeLayers(ctx, lambda.NewFromConfig(p.aws), p.namespace, tier)
+		return account.ReadRuntimeLayers(ctx, lambda.NewFromConfig(p.aws), p.namespace, tier)
 	})
 }
 
-func (p *Provider) tierParams(ctx context.Context, tier environment.Tier, kind edge.Kind) (bootstrap.TierParams, error) {
-	return p.params.resolve(tierEdge{tier: tier, kind: kind}, func() (bootstrap.TierParams, error) {
+func (p *Provider) tierParams(ctx context.Context, tier environment.Tier, kind edge.Kind) (account.TierParams, error) {
+	return p.params.resolve(tierEdge{tier: tier, kind: kind}, func() (account.TierParams, error) {
 		if kind == "" {
-			return bootstrap.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, tier)
+			return account.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, tier)
 		}
-		return bootstrap.ReadTierParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, tier, kind)
+		return account.ReadTierParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, tier, kind)
 	})
 }
 

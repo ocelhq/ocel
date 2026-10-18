@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	cloudfrontpart "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
 )
@@ -221,14 +221,14 @@ func (a *fakeCloudFront) DeleteOriginAccessControl(_ context.Context, in *cloudf
 }
 
 func spec(tier environment.Tier) cloudfrontpart.Spec {
-	return cloudfrontpart.Spec{Namespace: bootstrap.Namespace("ocel"), Tier: tier}
+	return cloudfrontpart.Spec{Namespace: account.Namespace("ocel"), Tier: tier}
 }
 
 func TestEnsureMakesEverythingADistributionSharesAndRecordsHowToFindIt(t *testing.T) {
 	t.Parallel()
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		a := newAccount()
-		names := cloudfrontpart.NamesFor(bootstrap.Namespace("ocel"), tier)
+		names := cloudfrontpart.NamesFor(account.Namespace("ocel"), tier)
 
 		resources, err := cloudfrontpart.Ensure(context.Background(), a, spec(tier), nil)
 		if err != nil {
@@ -320,7 +320,7 @@ func TestEnsureFindsACachePolicyItMadeWhoseRecordWasLost(t *testing.T) {
 		t.Fatalf("Ensure() with no record = %v", err)
 	}
 
-	names := cloudfrontpart.NamesFor(bootstrap.Namespace("ocel"), environment.TierProduction)
+	names := cloudfrontpart.NamesFor(account.Namespace("ocel"), environment.TierProduction)
 	if got, want := cloudfrontpart.SetOf(names, again).CachePolicy, cloudfrontpart.SetOf(names, first).CachePolicy; got != want || len(a.caches) != 1 {
 		t.Errorf("cache policy = %q of %d, want the one already made, %q", got, len(a.caches), want)
 	}

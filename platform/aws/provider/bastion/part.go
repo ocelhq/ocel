@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
@@ -56,7 +56,7 @@ func describe(ctx context.Context, c Clients, region string, tier environment.Ti
 		Summary:   Summary,
 		Current:   true,
 		Resources: resources,
-		Shape: &provider.PartShape{Vendor: component.Vendor, Region: region, Resources: []pricing.Shaped{
+		Shape: &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: []pricing.Shaped{
 			{Name: NameFor(tier), Type: "aws_ecs_cluster", Properties: map[string]any{}},
 		}},
 	}, true, nil
