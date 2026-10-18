@@ -25,7 +25,7 @@ import (
 const conformanceKVTokenRoot = "/ocel/kv"
 
 func conformanceKVToken(name string) string {
-	return kv.TokenParameter(conformanceKVTokenRoot, "conformance", "conformance", name)
+	return kv.TokenParameter(conformanceKVTokenRoot, environment.TierProduction, "conformance", "conformance", name)
 }
 
 func kvOutput(name string) auto.OutputValue {
@@ -145,7 +145,7 @@ func TestATokenLeftByAFailedFirstDeployIsDeletedByTheNextDeployThatDropsTheStore
 	params := newFakeParameters()
 	params.values[conformanceKVToken("c-kv")] = "minted-before-the-deploy-failed"
 	params.values[conformanceKVToken("c-kept")] = "the-kept-token"
-	otherEnv := kv.TokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
+	otherEnv := kv.TokenParameter(conformanceKVTokenRoot, environment.TierProduction, "conformance", "staging", "c-kv")
 	params.values[otherEnv] = "another-environments-token"
 	engine := &mockedEngine{outputs: auto.OutputMap{
 		"c-kept":   kvOutput("c-kept"),
@@ -179,7 +179,7 @@ func TestDestroyingAStackDeletesEveryTokenUnderItsEnvironmentAndNoOther(t *testi
 		want = append(want, name)
 	}
 	slices.Sort(want)
-	otherEnv := kv.TokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
+	otherEnv := kv.TokenParameter(conformanceKVTokenRoot, environment.TierProduction, "conformance", "staging", "c-kv")
 	params.values[otherEnv] = "another-environments-token"
 	engine := &mockedEngine{outputs: auto.OutputMap{}}
 	if err := kvStacks(engine, params).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {

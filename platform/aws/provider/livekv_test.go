@@ -116,7 +116,7 @@ func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 		t.Fatalf("the store's binding is one providerserver refuses: %v", err)
 	}
 	token := binding.Properties[provider.PropertyPassword]
-	parameter := liveKVTokenRoot + "/kvlive/production/kv--cache"
+	parameter := liveKVTokenRoot + "/production/kvlive/production/kv--cache"
 	if !a.paramExists(t, parameter) {
 		t.Errorf("no parameter %s holds the store's token", parameter)
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 )
 
 func TestAnAWSTargetForwardsPortsAndForwardsNothingWhenNoBindingAsksWithoutReachingAWS(t *testing.T) {
@@ -66,7 +67,7 @@ func TestAForwardOfAPostgresBindingThatNamesItsPasswordBySecretHandsBackThePassw
 	secret := &clusterSecret{password: "rotated-yesterday"}
 	binding := forwardedPostgres("", provider.Grant{Label: provider.GrantPasswordSecret, Actions: []string{"secretsmanager:GetSecretValue"}, Resources: []string{forwardedSecretARN}})
 
-	resolved, err := readForwardedPasswords(context.Background(), passwordSources{secrets: secret}, []provider.Binding{binding})
+	resolved, err := readForwardedPasswords(context.Background(), signin.Sources{Secrets: secret}, []provider.Binding{binding})
 	if err != nil {
 		t.Fatalf("readForwardedPasswords() = %v", err)
 	}
@@ -83,7 +84,7 @@ func TestAForwardOfAPostgresBindingCarryingItsPasswordPassesItThroughAndReadsNoS
 
 	secret := &clusterSecret{password: "never-read"}
 
-	resolved, err := readForwardedPasswords(context.Background(), passwordSources{secrets: secret}, []provider.Binding{forwardedPostgres("published-password")})
+	resolved, err := readForwardedPasswords(context.Background(), signin.Sources{Secrets: secret}, []provider.Binding{forwardedPostgres("published-password")})
 	if err != nil {
 		t.Fatalf("readForwardedPasswords() = %v", err)
 	}
@@ -103,7 +104,7 @@ func TestAForwardOfAnIAMAuthenticatedDatabaseHandsBackATokenTheOperatorMintsAndR
 	}
 	binding := forwardedPostgres("", provider.Grant{Label: provider.GrantIAMAuthentication, Actions: []string{"rds-db:connect"}, Resources: []string{"arn:aws:rds-db:eu-west-2:111122223333:dbuser:cluster-ABC/ocel"}})
 
-	resolved, err := readForwardedPasswords(context.Background(), passwordSources{secrets: secret, mintToken: mint}, []provider.Binding{binding})
+	resolved, err := readForwardedPasswords(context.Background(), signin.Sources{Secrets: secret, MintToken: mint}, []provider.Binding{binding})
 	if err != nil {
 		t.Fatalf("readForwardedPasswords() = %v", err)
 	}

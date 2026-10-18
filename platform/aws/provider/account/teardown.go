@@ -143,11 +143,6 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		}
 	}
 
-	progress.Say(fmt.Sprintf("Deleting the %s tier's runtime layers (Lambda)", tier))
-	if err := deleteRuntimeLayers(ctx, apis.Layers, apis.Records(deployed.StateTable), tier, progress); err != nil {
-		return err
-	}
-
 	if apis.RemoveParts != nil {
 		if err := apis.RemoveParts(ctx, tier, progress); err != nil {
 			return err

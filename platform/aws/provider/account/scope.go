@@ -47,8 +47,8 @@ func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 		EdgeUser:            "arn:aws:iam::*:user/" + edgeUser,
 		PassphraseParameter: iam.ParameterARNPrefix + n.PassphraseParamFor(tier),
 		OriginParameter:     iam.ParameterARNPrefix + origin,
-		KVTokens:            iam.ParameterARNPrefix + n.KVTokenRoot() + "/*",
-		SigningKeys:         "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/*",
+		KVTokens:            iam.ParameterARNPrefix + n.KVTokenRoot() + "/" + string(tier) + "/*",
+		SigningKeys:         "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/" + string(tier) + "/*",
 	}
 	for _, bucket := range coreStackBuckets {
 		named := "arn:aws:s3:::" + strings.ToLower(core+"-"+bucket) + "-*"

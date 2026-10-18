@@ -15,10 +15,9 @@ import (
 type Part struct {
 	Name    string
 	Summary string
-	Edges   []edge.Kind
-	Chosen  bool
 
 	Describe func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)
+	Shape    func(tier environment.Tier) []pricing.Shaped
 	Removal  *Removal
 	Teardown *Removal
 	Repair   func(ctx context.Context, tier environment.Tier) (bool, error)
@@ -33,7 +32,6 @@ type Removal struct {
 
 type Use struct {
 	IsUsedBy func(uses []buildoutput.Uses, front edge.Kind) bool
-	Shape    func(tier environment.Tier) []pricing.Shaped
 }
 
 type Added struct {
@@ -41,14 +39,10 @@ type Added struct {
 	Ensure func(ctx context.Context, tier environment.Tier, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
 }
 
-func Stacked(offered provider.Part) Part {
-	return Part{Name: offered.Name, Summary: offered.Summary, Edges: slices.Clone(offered.Edges), Chosen: true}
-}
-
-func (p Part) IsOffered() bool { return p.Chosen || p.Removal != nil }
+func (p Part) IsOffered() bool { return p.Removal != nil }
 
 func (p Part) Offer() provider.Part {
-	return provider.Part{Name: p.Name, Summary: p.Summary, Edges: slices.Clone(p.Edges)}
+	return provider.Part{Name: p.Name, Summary: p.Summary}
 }
 
 func (p Part) IsAddedFor(uses []buildoutput.Uses, front edge.Kind) bool {

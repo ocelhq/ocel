@@ -2,12 +2,8 @@ package live
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net"
-	"strconv"
 
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -15,18 +11,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 )
 
-type SecretsAPI interface {
-	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
-}
-
-type passwordSources struct {
-	secrets   SecretsAPI
-	mintToken func(ctx context.Context, endpoint, username string) (string, error)
-}
-
-func currentPasswords(ctx context.Context, sources passwordSources, bindings []live.Binding, records []variablestore.StoredBinding, values map[string]string) error {
+func currentPasswords(ctx context.Context, sources signin.Sources, bindings []live.Binding, records []variablestore.StoredBinding, values map[string]string) (bool, error) {
+	minted := false
 	for i, record := range records {
 		l := bindings[i]
 		if l.Type != bindingsv1.BindingType_BINDING_TYPE_POSTGRES {
@@ -36,52 +25,21 @@ func currentPasswords(ctx context.Context, sources passwordSources, bindings []l
 		if err := protojson.Unmarshal(record.Value, published); err != nil || published.GetBinding().GetPostgres() == nil {
 			continue
 		}
-		password, err := currentPassword(ctx, sources, published)
+		password, signsIn, err := sources.Read(ctx, provider.PublishedBindingOf(published))
 		if err != nil {
-			return fmt.Errorf("read the current password of %s: %w", l.Name, err)
+			return false, fmt.Errorf("read the current password of %s: %w", l.Name, err)
 		}
-		if password == "" {
+		if !signsIn {
 			continue
 		}
+		minted = minted || password.Minted
 		binding := published.GetBinding()
-		binding.GetPostgres().Password = password
+		binding.GetPostgres().Password = password.Value
 		encoded, err := protojson.Marshal(binding)
 		if err != nil {
-			return fmt.Errorf("render %s with its current password: %w", l.Name, err)
+			return false, fmt.Errorf("render %s with its current password: %w", l.Name, err)
 		}
 		values[l.Key] = string(encoded)
 	}
-	return nil
-}
-
-func currentPassword(ctx context.Context, sources passwordSources, published *variablestorev1.PublishedBinding) (string, error) {
-	binding := provider.PublishedBindingOf(published)
-	if binding.HasIAMAuthentication() {
-		postgres := published.GetBinding().GetPostgres()
-		if sources.mintToken == nil {
-			return "", fmt.Errorf("this runtime mints no IAM authentication token")
-		}
-		return sources.mintToken(ctx, net.JoinHostPort(postgres.GetHost(), strconv.Itoa(int(postgres.GetPort()))), postgres.GetUsername())
-	}
-	if secretARN := binding.PasswordSecret(); secretARN != "" {
-		return readPassword(ctx, sources.secrets, secretARN)
-	}
-	return "", nil
-}
-
-func readPassword(ctx context.Context, secrets SecretsAPI, secretARN string) (string, error) {
-	out, err := secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: &secretARN})
-	if err != nil {
-		return "", err
-	}
-	if out.SecretString == nil {
-		return "", fmt.Errorf("secret %s has no string value", secretARN)
-	}
-	var parsed struct {
-		Password string `json:"password"`
-	}
-	if err := json.Unmarshal([]byte(*out.SecretString), &parsed); err != nil || parsed.Password == "" {
-		return "", fmt.Errorf("secret %s holds no password", secretARN)
-	}
-	return parsed.Password, nil
+	return minted, nil
 }

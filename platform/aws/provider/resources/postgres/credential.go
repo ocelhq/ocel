@@ -2,7 +2,7 @@ package postgres
 
 import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 
-func credential(iam.Scope) []iam.Statement {
+func credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions: []string{
@@ -11,8 +11,8 @@ func credential(iam.Scope) []iam.Statement {
 				"rds:CreateDBInstance",
 				"rds:CreateDBSubnetGroup",
 			},
-			Resources: []string{iam.AppClusterARN, iam.AppInstanceARN, iam.AppSubnetGroupARN},
-			Condition: iam.TaggedOnCreate(),
+			Resources: []string{s.Clusters(), iam.AppInstanceARN, iam.AppSubnetGroupARN},
+			Condition: s.TaggedOnCreateOnlyForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -29,11 +29,11 @@ func credential(iam.Scope) []iam.Statement {
 				"rds:RemoveTagsFromResource",
 			},
 			Resources: []string{iam.AppClusterARN, iam.AppInstanceARN, iam.AppSubnetGroupARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"rds:DeleteDBCluster"},
-			Resources: []string{iam.AppClusterSnapshotARN},
+			Resources: []string{s.ClusterSnapshots()},
 		},
 		{
 			Actions:   []string{"rds:DescribeDBEngineVersions", "rds:DescribeOrderableDBInstanceOptions"},
@@ -42,15 +42,16 @@ func credential(iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"rds-data:ExecuteStatement"},
 			Resources: []string{iam.AppClusterARN},
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"rds-db:connect"},
-			Resources: []string{"arn:aws:rds-db:*:*:dbuser:*/" + AppRole},
+			Resources: []string{"arn:aws:rds-db:*:*:dbuser:*/" + AppRoleFor(s.Tier)},
 		},
 		{
 			Actions:   []string{"secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"},
 			Resources: []string{iam.AppSecretARN},
-			Condition: iam.ManagedByAnAppCluster(),
+			Condition: s.ManagedByItsClusters(),
 		},
 	}
 }

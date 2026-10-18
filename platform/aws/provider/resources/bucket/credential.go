@@ -2,11 +2,11 @@ package bucket
 
 import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 
-func credential(iam.Scope) []iam.Statement {
+func credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions:   []string{"s3:CreateBucket"},
-			Resources: []string{iam.AppBucketARN},
+			Resources: []string{s.Buckets()},
 			Condition: iam.InCallerAccount(),
 		},
 		{
@@ -22,7 +22,7 @@ func credential(iam.Scope) []iam.Statement {
 				"s3:PutBucketPublicAccessBlock",
 				"s3:PutBucketTagging",
 			},
-			Resources: []string{iam.AppBucketARN},
+			Resources: []string{s.Buckets()},
 			Condition: iam.InCallerAccount(),
 		},
 	}

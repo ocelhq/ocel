@@ -48,16 +48,12 @@ func removingParts(t *testing.T) (tierBootstrap, *fake.Bootstrap, *partsRemoved)
 		t.Fatal(err)
 	}
 	removed := &partsRemoved{}
-	var parts tier.Parts
-	for _, offered := range inner.Parts() {
-		parts = append(parts, tier.Stacked(offered))
-	}
 	return tierBootstrap{
 		Bootstrap: inner,
 		forget:    func() {},
 		key:       func(context.Context, environment.Tier) (string, error) { return "", nil },
 		keyValues: store,
-		parts:     append(parts, removed.removable(imageoptimizer.Part)),
+		parts:     tier.Parts{removed.removable(imageoptimizer.Part)},
 	}, inner, removed
 }
 
@@ -126,7 +122,7 @@ func TestTheContainerInfrastructureTheFunctionNetworkAndTheBastionAreOfferedForR
 			t.Errorf("tierParts() offers no %s for removal, want `ocel bootstrap <tier> --remove %s` to take it down", name, name)
 			continue
 		}
-		if each.Summary == "" || len(each.Edges) != 0 || each.Removal.Plan == nil || each.Removal.Remove == nil {
+		if each.Summary == "" || each.Removal.Plan == nil || each.Removal.Remove == nil {
 			t.Errorf("%s is offered as %+v, want its summary, no edge, and a way to plan and take it down", name, each.Offer())
 		}
 	}

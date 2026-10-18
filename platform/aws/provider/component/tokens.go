@@ -34,6 +34,7 @@ type ResourceRef struct {
 
 const (
 	TerraformLambdaFunction              = "aws_lambda_function"
+	TerraformSecurityGroup               = "aws_security_group"
 	TerraformLambdaFunctionURL           = "aws_lambda_function_url"
 	TerraformLogGroup                    = "aws_cloudwatch_log_group"
 	TerraformAppSyncAPI                  = "aws_appsync_api"

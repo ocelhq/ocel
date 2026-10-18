@@ -58,13 +58,13 @@ func declare(ctx *pulumi.Context, at component.Stack, realtimes []provider.Resou
 	}
 	args := realtimeArgs{Authorizer: authorizer, BoundaryARN: at.AppBoundaryARN, RolePath: at.AppRolePath}
 	for _, resource := range realtimes {
-		secret := SigningKeySecret(keys.Root, at.Project, at.Env, resource.Name)
+		secret := SigningKeySecret(keys.Root, at.Tier(), at.Project, at.Env, resource.Name)
 		var seed []byte
 		var err error
 		if at.Previewing {
 			seed, err = previewSigningKey(ctx.Context(), keys.SigningKeys, secret)
 		} else {
-			seed, err = ensureSigningKey(ctx.Context(), keys.SigningKeys, secret)
+			seed, err = ensureSigningKey(ctx.Context(), keys.SigningKeys, at.Tier(), secret)
 		}
 		if err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
@@ -80,14 +80,14 @@ func declare(ctx *pulumi.Context, at component.Stack, realtimes []provider.Resou
 }
 
 func sweep(ctx context.Context, at component.Stack, kept []provider.Resource, keys Keys) error {
-	listed, err := listSigningKeys(ctx, keys.SigningKeys, signingKeyPath(keys.Root, at.Project, at.Env))
+	listed, err := listSigningKeys(ctx, keys.SigningKeys, signingKeyPath(keys.Root, at.Tier(), at.Project, at.Env))
 	if err != nil {
 		return err
 	}
 	var undeclared []string
 	for _, name := range listed {
 		declared := slices.ContainsFunc(kept, func(resource provider.Resource) bool {
-			return SigningKeySecret(keys.Root, at.Project, at.Env, resource.Name) == name
+			return SigningKeySecret(keys.Root, at.Tier(), at.Project, at.Env, resource.Name) == name
 		})
 		if !declared {
 			undeclared = append(undeclared, name)

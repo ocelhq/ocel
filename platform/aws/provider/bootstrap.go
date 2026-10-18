@@ -28,7 +28,9 @@ type tierBootstrap struct {
 	parts     tier.Parts
 }
 
-func (s tierBootstrap) Parts() []provider.Part { return s.parts.Offered() }
+func (s tierBootstrap) Parts() []provider.Part {
+	return append(s.Bootstrap.Parts(), s.parts.Offered()...)
+}
 
 func (s tierBootstrap) removals(req provider.BootstrapRequest) (tier.Parts, provider.BootstrapRequest) {
 	var removed tier.Parts

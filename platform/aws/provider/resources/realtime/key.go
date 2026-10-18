@@ -13,9 +13,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 const (
@@ -34,12 +37,12 @@ type SigningKeysAPI interface {
 	ListSecrets(ctx context.Context, in *secretsmanager.ListSecretsInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretsOutput, error)
 }
 
-func signingKeyPath(root, project, env string) string {
-	return strings.Join([]string{root, project, env}, "/")
+func signingKeyPath(root string, tier environment.Tier, project, env string) string {
+	return strings.Join([]string{root, string(tier), project, env}, "/")
 }
 
-func SigningKeySecret(root, project, env, logicalName string) string {
-	return signingKeyPath(root, project, env) + "/" + logicalName
+func SigningKeySecret(root string, tier environment.Tier, project, env, logicalName string) string {
+	return signingKeyPath(root, tier, project, env) + "/" + logicalName
 }
 
 func readSigningKey(ctx context.Context, keys SigningKeysAPI, name string) ([]byte, bool, error) {
@@ -69,7 +72,7 @@ func mintSigningKey() ([]byte, error) {
 	return seed, nil
 }
 
-func ensureSigningKey(ctx context.Context, keys SigningKeysAPI, name string) ([]byte, error) {
+func ensureSigningKey(ctx context.Context, keys SigningKeysAPI, tier environment.Tier, name string) ([]byte, error) {
 	seed, found, err := readSigningKey(ctx, keys, name)
 	if err != nil || found {
 		return seed, err
@@ -82,7 +85,10 @@ func ensureSigningKey(ctx context.Context, keys SigningKeysAPI, name string) ([]
 		Name:         aws.String(name),
 		Description:  aws.String("Ocel: the Ed25519 key an app signs its realtime tokens with."),
 		SecretString: aws.String(base64.StdEncoding.EncodeToString(minted)),
-		Tags:         []smtypes.Tag{{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")}},
+		Tags: []smtypes.Tag{
+			{Key: aws.String(iam.ManagedByTagKey), Value: aws.String(iam.ManagedByTagValue)},
+			{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(tier))},
+		},
 	})
 	var exists *smtypes.ResourceExistsException
 	switch {

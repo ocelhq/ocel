@@ -24,10 +24,18 @@ func NewPart(records tier.Records, c Clients, namespace string, specFor func(con
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
 			return describe(ctx, records, specFor, tier)
 		},
+		Shape: func(tier environment.Tier) []pricing.Shaped { return Shape(namespace, tier) },
 		Removal: records.Removal(Part, func(ctx context.Context, tier environment.Tier, _ []provider.PartResource) error {
 			return Remove(ctx, c, namespace, tier)
 		}),
 		Teardown: &tier.Removal{
+			Plan: func(ctx context.Context, at environment.Tier) (*provider.ChangeGroup, error) {
+				_, present, err := stackrecords.ReadBootstrapPart(ctx, records.KeyValues, at, Part)
+				if err != nil || !present {
+					return nil, err
+				}
+				return tier.Deletion(Part, "the bootstrap it belongs to is being removed", Resources(namespace, at)), nil
+			},
 			Remove: func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 				if progress != nil {
 					progress.Say(fmt.Sprintf("Removing the %s tier's env source sync (Lambda, EventBridge Scheduler, IAM)", tier))
@@ -42,10 +50,7 @@ func NewPart(records tier.Records, c Clients, namespace string, specFor func(con
 			}
 			return Work(c, spec), true, nil
 		}),
-		Use: &tier.Use{
-			IsUsedBy: isUsedByEveryDeploy,
-			Shape:    func(tier environment.Tier) []pricing.Shaped { return Shape(namespace, tier) },
-		},
+		Use: &tier.Use{IsUsedBy: isUsedByEveryDeploy},
 	}
 }
 

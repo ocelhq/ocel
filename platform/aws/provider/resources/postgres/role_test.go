@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rdsdata"
 	rdsdatatypes "github.com/aws/aws-sdk-go-v2/service/rdsdata/types"
 	"github.com/pulumi/pulumi-go-provider/infer"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type recordedStatements struct {
@@ -37,7 +39,7 @@ var testRoleArgs = roleArgs{
 	Secret:   "arn:aws:secretsmanager:us-east-1:111122223333:secret:rds!cluster-abc",
 	Database: "ocel",
 	Master:   "ocel",
-	Role:     AppRole,
+	Role:     AppRoleFor(environment.TierProduction),
 }
 
 func TestTheAppRoleOwnsTheDatabaseAndAuthenticatesByIAMAndTheMasterMayActAsIt(t *testing.T) {
@@ -55,11 +57,11 @@ func TestTheAppRoleOwnsTheDatabaseAndAuthenticatesByIAMAndTheMasterMayActAsIt(t 
 		sql = append(sql, aws.ToString(in.Sql))
 	}
 	want := []string{
-		`CREATE ROLE "ocel_app" LOGIN`,
-		`GRANT rds_iam TO "ocel_app"`,
-		`GRANT "ocel_app" TO "ocel"`,
-		`ALTER DATABASE "ocel" OWNER TO "ocel_app"`,
-		`ALTER SCHEMA public OWNER TO "ocel_app"`,
+		`CREATE ROLE "ocel_app_production" LOGIN`,
+		`GRANT rds_iam TO "ocel_app_production"`,
+		`GRANT "ocel_app_production" TO "ocel"`,
+		`ALTER DATABASE "ocel" OWNER TO "ocel_app_production"`,
+		`ALTER SCHEMA public OWNER TO "ocel_app_production"`,
 	}
 	if len(sql) != len(want) {
 		t.Fatalf("executed %q, want %d statements", sql, len(want))

@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 )
 
 type rotatingSecret struct {
@@ -86,8 +87,12 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret := &rotatingSecret{password: "rotated-once"}
 		records, values := deployedPostgres(t, publishedPostgresFixture(t))
-		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err != nil {
+		minted, err := currentPasswords(context.Background(), signin.Sources{Secrets: secret}, bindings, records, values)
+		if err != nil {
 			t.Fatalf("currentPasswords: %v", err)
+		}
+		if minted {
+			t.Error("currentPasswords reports a token minted for a password read from a secret")
 		}
 		if got := decodeBinding(t, values[postgresBinding().Key]).GetPostgres().GetPassword(); got != "rotated-once" {
 			t.Errorf("password = %q, want the one the cluster's secret holds now: RDS rotates it every 7 days, so the deploy's copy stops working", got)
@@ -95,7 +100,7 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret.password = "rotated-twice"
 		records, values = deployedPostgres(t, publishedPostgresFixture(t))
-		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err != nil {
+		if _, err := currentPasswords(context.Background(), signin.Sources{Secrets: secret}, bindings, records, values); err != nil {
 			t.Fatalf("currentPasswords: %v", err)
 		}
 		if got := decodeBinding(t, values[postgresBinding().Key]).GetPostgres().GetPassword(); got != "rotated-twice" {
@@ -111,8 +116,12 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret := &rotatingSecret{password: "rotated-once"}
 		records, values := deployedPostgres(t, publishedPostgresFixture(t))
-		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err != nil {
+		minted, err := currentPasswords(context.Background(), signin.Sources{Secrets: secret}, bindings, records, values)
+		if err != nil {
 			t.Fatalf("currentPasswords: %v", err)
+		}
+		if minted {
+			t.Error("currentPasswords reports a token minted for a password read from a secret")
 		}
 		handed := values[postgresBinding().Key]
 		if strings.Contains(handed, "secretsmanager") || strings.Contains(handed, fixtureSecretARN(t)) {
@@ -128,7 +137,7 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret := &rotatingSecret{password: "unused"}
 		records, values := deployedPostgres(t, withoutGrants(t))
-		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err != nil {
+		if _, err := currentPasswords(context.Background(), signin.Sources{Secrets: secret}, bindings, records, values); err != nil {
 			t.Fatalf("currentPasswords: %v", err)
 		}
 		if got := decodeBinding(t, values[postgresBinding().Key]).GetPostgres().GetPassword(); got != "fixture-password-not-a-secret" {
@@ -144,7 +153,7 @@ func TestCurrentPasswords(t *testing.T) {
 
 		secret := &rotatingSecret{err: errors.New("AccessDeniedException")}
 		records, values := deployedPostgres(t, publishedPostgresFixture(t))
-		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, bindings, records, values); err == nil {
+		if _, err := currentPasswords(context.Background(), signin.Sources{Secrets: secret}, bindings, records, values); err == nil {
 			t.Error("currentPasswords = nil, want the failure surfaced rather than a password the cluster may have rotated away")
 		}
 	})
@@ -156,7 +165,7 @@ func TestCurrentPasswords(t *testing.T) {
 		bucket := live.Binding{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}
 		records := []variablestore.StoredBinding{{Name: bucket.Name, Value: publishedPostgresFixture(t), Version: 1}}
 		values := live.MergeBindings(nil, []live.Binding{bucket}, records)
-		if err := currentPasswords(context.Background(), passwordSources{secrets: secret}, []live.Binding{bucket}, records, values); err != nil {
+		if _, err := currentPasswords(context.Background(), signin.Sources{Secrets: secret}, []live.Binding{bucket}, records, values); err != nil {
 			t.Fatalf("currentPasswords: %v", err)
 		}
 		if len(secret.reads) != 0 {
@@ -195,8 +204,12 @@ func TestAnIAMAuthenticatedDatabaseIsHandedATokenMintedAtEachReadAndNoSecretIsRe
 	}
 	for want := range []string{"token-1", "token-2"} {
 		records, values := deployedPostgres(t, withIAMAuthentication(t))
-		if err := currentPasswords(context.Background(), passwordSources{secrets: secret, mintToken: mint}, []live.Binding{postgresBinding()}, records, values); err != nil {
+		renews, err := currentPasswords(context.Background(), signin.Sources{Secrets: secret, MintToken: mint}, []live.Binding{postgresBinding()}, records, values)
+		if err != nil {
 			t.Fatalf("currentPasswords: %v", err)
+		}
+		if !renews {
+			t.Error("currentPasswords reports nothing minted, want the token reported so its values are read again before it expires")
 		}
 		if got := decodeBinding(t, values[postgresBinding().Key]).GetPostgres().GetPassword(); got != fmt.Sprintf("token-%d", want+1) {
 			t.Errorf("password = %q, want the token minted at this read: a token lives 15 minutes, so each read mints its own", got)

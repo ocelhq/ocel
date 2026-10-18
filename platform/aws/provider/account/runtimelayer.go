@@ -332,7 +332,7 @@ func ReadRuntimeLayersPart(ctx context.Context, layers LayerVersionsAPI, store r
 	}, true, nil
 }
 
-func removeRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, store records.Store, ns Namespace, tier environment.Tier) (provider.ChangeGroup, bool) {
+func PlanRuntimeLayersRemoval(ctx context.Context, layers LayerTeardownAPI, store records.Store, ns Namespace, tier environment.Tier) (provider.ChangeGroup, bool) {
 	group := provider.ChangeGroup{Kind: runtimeLayerGroupKind, Name: runtimeLayerGroupName(ns, tier), Action: provider.ActionDelete}
 	versions, err := runtimeLayerVersions(ctx, layers, store, tier)
 	if err != nil {
@@ -345,7 +345,7 @@ func removeRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, store rec
 	return group, len(versions) > 0
 }
 
-func deleteRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, store records.Store, tier environment.Tier, progress progress.Log) error {
+func DeleteRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, store records.Store, tier environment.Tier, progress progress.Log) error {
 	versions, err := runtimeLayerVersions(ctx, layers, store, tier)
 	if err != nil {
 		return err

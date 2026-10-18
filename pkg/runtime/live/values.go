@@ -23,6 +23,10 @@ type Source interface {
 	Fetch(ctx context.Context) (map[string]string, error)
 }
 
+type Expiring interface {
+	RenewWithin() (time.Duration, bool)
+}
+
 type valuesMsg struct {
 	Type       string            `json:"type"`
 	Generation uint32            `json:"generation"`
@@ -244,6 +248,31 @@ func (l *Values) Reread(ctx context.Context) {
 		return
 	}
 	l.apply(values, started)
+}
+
+func (l *Values) Freshen(ctx context.Context) {
+	if l == nil {
+		return
+	}
+	if l.isDueForRenewal() {
+		l.Reread(ctx)
+		return
+	}
+	l.Refresh(ctx)
+}
+
+func (l *Values) isDueForRenewal() bool {
+	source, expiring := l.source.(Expiring)
+	if !expiring {
+		return false
+	}
+	within, expires := source.RenewWithin()
+	if !expires {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.generation > 0 && l.now().Sub(l.fetchedAt) >= within
 }
 
 func (l *Values) Keep(ctx context.Context) {

@@ -24,7 +24,7 @@ const conformanceSigningKeyRoot = "ocel/realtime"
 var conformanceSeed = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("s", ed25519.SeedSize)))
 
 func conformanceSigningKey(name string) string {
-	return realtime.SigningKeySecret(conformanceSigningKeyRoot, "conformance", "conformance", name)
+	return realtime.SigningKeySecret(conformanceSigningKeyRoot, environment.TierProduction, "conformance", "conformance", name)
 }
 
 func realtimeOutput(name string) auto.OutputValue {
@@ -114,7 +114,7 @@ func TestDestroyingAStackDeletesEveryRealtimeKeyOfItsEnvironmentAndNoOther(t *te
 	keys := newFakeSigningKeys()
 	keys.values[conformanceSigningKey("c-realtime")] = conformanceSeed
 	keys.values[conformanceSigningKey("c-chat")] = conformanceSeed
-	otherEnv := realtime.SigningKeySecret(conformanceSigningKeyRoot, "conformance", "staging", "c-realtime")
+	otherEnv := realtime.SigningKeySecret(conformanceSigningKeyRoot, environment.TierProduction, "conformance", "staging", "c-realtime")
 	keys.values[otherEnv] = conformanceSeed
 	if err := realtimeStacks(&mockedEngine{outputs: auto.OutputMap{}}, keys).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -24,7 +25,7 @@ func postgresOutputs() map[string]any {
 		component.OutputKeyHost: "shop-prod-main.cluster-cxyz.us-east-1.rds.amazonaws.com",
 		component.OutputKeyPort: float64(Port),
 		OutputKeyDatabase:       postgresDatabaseName,
-		OutputKeyUsername:       AppRole,
+		OutputKeyUsername:       AppRoleFor(environment.TierProduction),
 		OutputKeyClusterARN:     testClusterARN,
 		OutputKeyResourceID:     testResourceID,
 	}
@@ -61,13 +62,13 @@ func TestThePostgresBindingConnectsAsTheAppRoleByIAMAndMayReachNoSecret(t *testi
 	if err != nil {
 		t.Fatalf("collectBinding: %v", err)
 	}
-	if got := binding.GetBinding().GetPostgres().GetUsername(); got != AppRole {
-		t.Errorf("username = %q, want the app role %s: an app never connects as the master user", got, AppRole)
+	if got := binding.GetBinding().GetPostgres().GetUsername(); got != AppRoleFor(environment.TierProduction) {
+		t.Errorf("username = %q, want the app role %s: an app never connects as the master user", got, AppRoleFor(environment.TierProduction))
 	}
 	if got := binding.GetBinding().GetPostgres().GetPassword(); got != "" {
 		t.Errorf("the binding carries a password of %d bytes, want none: the app's role mints a 15-minute token instead", len(got))
 	}
-	want := "arn:aws:rds-db:us-east-1:111122223333:dbuser:" + testResourceID + "/" + AppRole
+	want := "arn:aws:rds-db:us-east-1:111122223333:dbuser:" + testResourceID + "/" + AppRoleFor(environment.TierProduction)
 	if len(binding.GetGrants()) != 1 {
 		t.Fatalf("grants = %v, want exactly the IAM authentication grant", binding.GetGrants())
 	}

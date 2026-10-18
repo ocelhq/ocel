@@ -44,12 +44,8 @@ func (p *Provider) partRecords() tier.Records {
 func (p *Provider) tierParts(records tier.Records) tier.Parts {
 	namespace := string(p.namespace)
 	region := p.aws.Region
-	var parts tier.Parts
-	for _, offered := range account.Parts() {
-		parts = append(parts, tier.Stacked(offered))
-	}
-	return append(parts,
-		control.RuntimeLayersPart(lambda.NewFromConfig(p.aws), account.DynamoRecords(dynamodb.NewFromConfig(p.aws)), region, p.readBootstrap),
+	return tier.Parts{
+		control.RuntimeLayersPart(lambda.NewFromConfig(p.aws), account.DynamoRecords(dynamodb.NewFromConfig(p.aws)), p.namespace, region, p.readBootstrap),
 		bastion.NewPart(bastion.NewClients(p.aws), region),
 		vpcclients.NewPart(records, ec2.NewFromConfig(p.aws), namespace),
 		containers.NewPart(p.stacks.Containers(), records.KeyValues, region),
@@ -59,7 +55,7 @@ func (p *Provider) tierParts(records tier.Records) tier.Parts {
 		cloudfrontpart.NewPart(records, p.namespace, cloudfront.Kind, cloudfrontpart.OpenAPI),
 		imageoptimizer.NewPart(records, imageoptimizer.NewClients(p.aws), namespace, p.imageOptimizerSpec),
 		taginvalidator.NewPart(records, taginvalidator.NewClients(p.aws), namespace, p.tagInvalidatorSpec),
-	)
+	}
 }
 
 func (p *Provider) imageOptimizerSpec(ctx context.Context, tier environment.Tier) (imageoptimizer.Spec, error) {

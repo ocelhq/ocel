@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -13,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -70,13 +72,30 @@ type RecordedSpec struct {
 }
 
 func Recorded(r Records, spec RecordedSpec) Part {
+	if spec.Shape == nil || spec.Work == nil || spec.Remove == nil {
+		panic(fmt.Sprintf("the recorded tier part %q must shape, make and remove what it holds", spec.Name))
+	}
+	removal := r.Removal(spec.Name, spec.Remove)
+	planRemoval := removal.Plan
+	removal.Plan = func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
+		users, err := r.usersOf(ctx, tier, spec.Name, spec.Wildcard)
+		if err != nil {
+			return nil, err
+		}
+		if len(users) > 0 {
+			return nil, refusal.Refuse(refusal.CodeInvalid, "%s still use the %s part of the %s tier, and removing it pulls it from under them: destroy their environments, or deploy them without what needs it, first",
+				strings.Join(users, ", "), spec.Name, tier)
+		}
+		return planRemoval(ctx, tier)
+	}
 	part := Part{
 		Name:    spec.Name,
 		Summary: spec.Summary,
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
 			return r.describe(ctx, tier, spec)
 		},
-		Removal: r.Removal(spec.Name, spec.Remove),
+		Shape:   spec.Shape,
+		Removal: removal,
 		Teardown: &Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
 				return r.planDeletion(ctx, tier, spec.Name, "the bootstrap it belongs to is being removed")
@@ -114,7 +133,7 @@ func Recorded(r Records, spec RecordedSpec) Part {
 		},
 	}
 	if spec.IsUsedBy != nil {
-		part.Use = &Use{IsUsedBy: spec.IsUsedBy, Shape: spec.Shape}
+		part.Use = &Use{IsUsedBy: spec.IsUsedBy}
 	}
 	return part
 }

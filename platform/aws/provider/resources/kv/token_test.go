@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -185,8 +186,8 @@ func TestAPreviewReadsATokenAndWritesNone(t *testing.T) {
 func TestAStoresTokenParameterIsNamedForItsProjectEnvironmentAndName(t *testing.T) {
 	t.Parallel()
 
-	if got := TokenParameter("/ocel/kv", "shop", "prod", "kv--cache"); got != "/ocel/kv/shop/prod/kv--cache" {
-		t.Errorf("TokenParameter() = %q, want /ocel/kv/shop/prod/kv--cache", got)
+	if got := TokenParameter("/ocel/kv", environment.TierPreview, "shop", "prod", "kv--cache"); got != "/ocel/kv/preview/shop/prod/kv--cache" {
+		t.Errorf("TokenParameter() = %q, want /ocel/kv/preview/shop/prod/kv--cache", got)
 	}
 }
 

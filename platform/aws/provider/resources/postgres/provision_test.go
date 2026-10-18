@@ -105,17 +105,16 @@ func TestRDSIdentifierPrefix(t *testing.T) {
 
 	at := component.ResourceCoordinate("shop", "prod", "db--main", naming.KindDatabase)
 
-	t.Run("names the app scope, project, env, resource and role", func(t *testing.T) {
+	t.Run("names the app scope, tier, project, env and resource", func(t *testing.T) {
 		t.Parallel()
 
-		cases := map[string]string{
-			"":         "ocel-app-shop-prod-main-",
-			"instance": "ocel-app-shop-prod-main-instance-",
-			"subnets":  "ocel-app-shop-prod-main-subnets-",
+		cases := map[environment.Tier]string{
+			environment.TierProduction: "ocel-app-production-shop-prod-main-",
+			environment.TierPreview:    "ocel-app-preview-shop-prod-main-",
 		}
-		for role, want := range cases {
-			if got := rdsIdentifierPrefix(at, role); got != want {
-				t.Errorf("rdsIdentifierPrefix(%q) = %q, want %q", role, got, want)
+		for tier, want := range cases {
+			if got := rdsIdentifierPrefix(tier, at, ""); got != want {
+				t.Errorf("rdsIdentifierPrefix(%s, %q) = %q, want %q", tier, "", got, want)
 			}
 		}
 	})
@@ -124,21 +123,21 @@ func TestRDSIdentifierPrefix(t *testing.T) {
 		t.Parallel()
 
 		long := component.ResourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "db--"+strings.Repeat("m", 30), naming.KindDatabase)
-		got := rdsIdentifierPrefix(long, "instance")
+		got := rdsIdentifierPrefix(environment.TierProduction, long, "instance")
 		if len(got) > maxRDSIdentifierPrefixLen {
-			t.Errorf("rdsIdentifierPrefix() = %q, length %d, want <= %d", got, len(got), maxRDSIdentifierPrefixLen)
+			t.Errorf("rdsIdentifierPrefix(environment.TierProduction, ) = %q, length %d, want <= %d", got, len(got), maxRDSIdentifierPrefixLen)
 		}
 		if len(got)+rdsAutonameSuffixLen > maxRDSIdentifierLen {
-			t.Errorf("rdsIdentifierPrefix() length %d leaves no room for the %d-character suffix within %d", len(got), rdsAutonameSuffixLen, maxRDSIdentifierLen)
+			t.Errorf("rdsIdentifierPrefix(environment.TierProduction, ) length %d leaves no room for the %d-character suffix within %d", len(got), rdsAutonameSuffixLen, maxRDSIdentifierLen)
 		}
 	})
 
 	t.Run("starts with a letter even when the project does not", func(t *testing.T) {
 		t.Parallel()
 
-		got := rdsIdentifierPrefix(component.ResourceCoordinate("7shop", "prod", "db--main", naming.KindDatabase), "")
+		got := rdsIdentifierPrefix(environment.TierProduction, component.ResourceCoordinate("7shop", "prod", "db--main", naming.KindDatabase), "")
 		if first := got[0]; first < 'a' || first > 'z' {
-			t.Errorf("rdsIdentifierPrefix() = %q, want a letter first — RDS rejects a leading digit", got)
+			t.Errorf("rdsIdentifierPrefix(environment.TierProduction, ) = %q, want a letter first — RDS rejects a leading digit", got)
 		}
 	})
 
@@ -146,10 +145,10 @@ func TestRDSIdentifierPrefix(t *testing.T) {
 		t.Parallel()
 
 		shared := strings.Repeat("reporting-", 5)
-		a := rdsIdentifierPrefix(component.ResourceCoordinate("shop", "prod", "db--"+shared+"alpha", naming.KindDatabase), "")
-		b := rdsIdentifierPrefix(component.ResourceCoordinate("shop", "prod", "db--"+shared+"beta", naming.KindDatabase), "")
+		a := rdsIdentifierPrefix(environment.TierProduction, component.ResourceCoordinate("shop", "prod", "db--"+shared+"alpha", naming.KindDatabase), "")
+		b := rdsIdentifierPrefix(environment.TierProduction, component.ResourceCoordinate("shop", "prod", "db--"+shared+"beta", naming.KindDatabase), "")
 		if a == b {
-			t.Errorf("rdsIdentifierPrefix() collided: both %q", a)
+			t.Errorf("rdsIdentifierPrefix(environment.TierProduction, ) collided: both %q", a)
 		}
 	})
 }
@@ -249,8 +248,8 @@ func TestAClusterLetsItsAppRoleSignInByIAMAndTheDeployCreateItThroughTheDataAPI(
 		t.Error("enableHttpEndpoint = false, want true: the deploy creates the app role through the Data API, from outside the VPC")
 	}
 	role := rec.InputsOf(t, RoleToken, "db-main-app-role")
-	if role["role"].StringValue() != AppRole || role["database"].StringValue() != postgresDatabaseName {
-		t.Errorf("app role inputs = %v, want %s on the %s database", role, AppRole, postgresDatabaseName)
+	if role["role"].StringValue() != AppRoleFor(environment.TierProduction) || role["database"].StringValue() != postgresDatabaseName {
+		t.Errorf("app role inputs = %v, want %s on the %s database", role, AppRoleFor(environment.TierProduction), postgresDatabaseName)
 	}
 	if got := role["secret"].StringValue(); got != "arn:aws:secretsmanager:eu-west-1:111122223333:secret:db-main" {
 		t.Errorf("app role secret = %q, want the cluster's managed master secret: only the deploy signs in as master", got)

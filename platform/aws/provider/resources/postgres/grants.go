@@ -1,11 +1,14 @@
 package postgres
 
 import (
+	"github.com/ocelhq/ocel/pkg/environment"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const widestDBUserARN = "arn:aws:rds-db:ap-southeast-5:123456789012:dbuser:cluster-ABCDEFGHIJKLMNOPQRSTUVWXYZ/" + AppRole
+func widestDBUserARN(tier environment.Tier) string {
+	return "arn:aws:rds-db:ap-southeast-5:123456789012:dbuser:cluster-ABCDEFGHIJKLMNOPQRSTUVWXYZ/" + AppRoleFor(tier)
+}
 
 func dbUserARN(region, account, resourceID, username string) string {
 	return "arn:aws:rds-db:" + region + ":" + account + ":dbuser:" + resourceID + "/" + username
