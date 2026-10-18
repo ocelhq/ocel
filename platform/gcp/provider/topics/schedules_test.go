@@ -7,10 +7,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -95,26 +93,5 @@ func TestLiveATaskThatStopsRunningOnAScheduleLosesItsJob(t *testing.T) {
 	}
 	if status := readTopicStatus(t, endpoint, clients.Project, names.Topic("digest")); status != http.StatusOK {
 		t.Errorf("the digest topic answered %d, want it kept: the task is still declared", status)
-	}
-}
-
-func TestLiveAScheduledMessageRunsWithTheMinuteItWasDueAt(t *testing.T) {
-	worker := newFakeWorker(t, always(http.StatusOK, `{}`))
-	d := newDelivering(t, worker)
-	fired := time.Date(2026, 10, 2, 9, 5, 0, 412_000_000, time.UTC)
-
-	if code := d.push("resize", "resize", push{publishedAt: fired, attributes: map[string]string{topics.ScheduleAttribute: "true"}}); !acked(code) {
-		t.Fatalf("the scheduled push answered %d, want it acked", code)
-	}
-	received := worker.received()
-	if len(received) != 1 {
-		t.Fatalf("the worker got %d envelopes, want 1", len(received))
-	}
-	if want := `{"timestamp":"2026-10-02T09:05:00Z"}`; string(received[0]["payload"]) != want {
-		t.Errorf("the scheduled run's payload is %s, want %s as pgmq hands it", received[0]["payload"], want)
-	}
-	execution := runs.MessageIDFrom(fired, "17") + "-resize"
-	if run := d.run(execution); run.Status != provider.RunCompleted {
-		t.Errorf("the scheduled run is %s, want completed", run.Status)
 	}
 }

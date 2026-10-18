@@ -27,9 +27,12 @@ const (
 	recordsCollection = "records"
 
 	maxRunScan = 1000
+	countAlias = "n"
 
 	RunRetention = 30 * 24 * time.Hour
 )
+
+var _ runs.Store = Store{}
 
 type Scope struct {
 	Slug        string
@@ -52,58 +55,62 @@ type recordDocument struct {
 }
 
 type runDocument struct {
-	Topic      string     `firestore:"topic"`
-	Consumer   string     `firestore:"consumer"`
-	Status     string     `firestore:"status"`
-	Payload    *string    `firestore:"payload"`
-	Output     *string    `firestore:"output"`
-	Error      string     `firestore:"error"`
-	Attempts   int        `firestore:"attempts"`
-	Tags       []string   `firestore:"tags"`
-	Metadata   *string    `firestore:"metadata"`
-	CreatedAt  time.Time  `firestore:"createdAt"`
-	DueAt      *time.Time `firestore:"dueAt"`
-	StartedAt  *time.Time `firestore:"startedAt"`
-	FinishedAt *time.Time `firestore:"finishedAt"`
-	ExpiresAt  *time.Time `firestore:"expiresAt"`
-	PurgeAt    *time.Time `firestore:"purgeAt"`
-	Revision   string     `firestore:"revision"`
-
-	Delivery deliveryFields `firestore:"delivery"`
-}
-
-type deliveryFields struct {
-	MessageID   string     `firestore:"messageId"`
-	PublishedAt *time.Time `firestore:"publishedAt"`
+	Topic       string     `firestore:"topic"`
+	Consumer    string     `firestore:"consumer"`
+	Status      string     `firestore:"status"`
+	Payload     *string    `firestore:"payload"`
+	Output      *string    `firestore:"output"`
+	Error       string     `firestore:"error"`
+	Attempts    int        `firestore:"attempts"`
 	MaxAttempts int        `firestore:"maxAttempts"`
+	Tags        []string   `firestore:"tags"`
+	Metadata    *string    `firestore:"metadata"`
+	Message     string     `firestore:"message"`
+	PublishedAt *time.Time `firestore:"publishedAt"`
 	Key         string     `firestore:"key"`
 	Lane        string     `firestore:"lane"`
-	DelayTask   string     `firestore:"delayTask"`
+	Delivery    string     `firestore:"delivery"`
+	Held        string     `firestore:"held"`
+	LeaseUntil  *time.Time `firestore:"leaseUntil"`
+	CreatedAt   time.Time  `firestore:"createdAt"`
+	DueAt       *time.Time `firestore:"dueAt"`
+	StartedAt   *time.Time `firestore:"startedAt"`
+	FinishedAt  *time.Time `firestore:"finishedAt"`
+	ExpiresAt   *time.Time `firestore:"expiresAt"`
+	PurgeAt     time.Time  `firestore:"purgeAt"`
+	Revision    string     `firestore:"revision"`
 }
 
-type storedRun struct {
-	provider.Run
-	delivery deliveryFields
+func (s Store) client() (*firestore.Client, error) {
+	return s.Clients.TaskFirestore(s.Scope.Tier)
 }
 
 func (s Store) scopeDocument() (*firestore.DocumentRef, error) {
-	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
+	client, err := s.client()
 	if err != nil {
 		return nil, err
 	}
 	return client.Collection(storeCollection).Doc(s.Scope.documentID()), nil
 }
 
-func (s Store) runCollection() (*firestore.CollectionRef, error) {
+func (s Store) runDocument(execution string) (*firestore.DocumentRef, error) {
 	scope, err := s.scopeDocument()
 	if err != nil {
 		return nil, err
 	}
-	return scope.Collection(runsCollection), nil
+	return scope.Collection(runsCollection).Doc(execution), nil
 }
 
 func recordID(purpose provider.RecordPurpose, topic, key string) string {
 	return string(purpose) + "~" + topic + "~" + base64.RawURLEncoding.EncodeToString([]byte(key))
+}
+
+func (s Store) recordDocument(record provider.ExpiringRecord) (*firestore.DocumentRef, error) {
+	scope, err := s.scopeDocument()
+	if err != nil {
+		return nil, err
+	}
+	return scope.Collection(recordsCollection).Doc(recordID(record.Purpose, record.Topic, record.Key)), nil
 }
 
 func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord) (provider.ExpiringRecord, bool, error) {
@@ -111,7 +118,7 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 	if err != nil {
 		return provider.ExpiringRecord{}, false, err
 	}
-	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
+	client, err := s.client()
 	if err != nil {
 		return provider.ExpiringRecord{}, false, err
 	}
@@ -141,15 +148,7 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 	return kept, created, nil
 }
 
-func (s Store) recordDocument(record provider.ExpiringRecord) (*firestore.DocumentRef, error) {
-	scope, err := s.scopeDocument()
-	if err != nil {
-		return nil, err
-	}
-	return scope.Collection(recordsCollection).Doc(recordID(record.Purpose, record.Topic, record.Key)), nil
-}
-
-func (s Store) writeRecord(ctx context.Context, record provider.ExpiringRecord) error {
+func (s Store) WriteRecord(ctx context.Context, record provider.ExpiringRecord) error {
 	doc, err := s.recordDocument(record)
 	if err != nil {
 		return err
@@ -160,16 +159,16 @@ func (s Store) writeRecord(ctx context.Context, record provider.ExpiringRecord) 
 	return nil
 }
 
-func (s Store) changeRecordHolding(ctx context.Context, record provider.ExpiringRecord, change func(*firestore.Transaction, *firestore.DocumentRef) error) error {
+func (s Store) DeleteRecord(ctx context.Context, record provider.ExpiringRecord) error {
 	doc, err := s.recordDocument(record)
 	if err != nil {
 		return err
 	}
-	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
+	client, err := s.client()
 	if err != nil {
 		return err
 	}
-	return client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snapshot, found, err := readInTransaction(tx, doc)
 		if err != nil || !found {
 			return err
@@ -181,109 +180,12 @@ func (s Store) changeRecordHolding(ctx context.Context, record provider.Expiring
 		if current.Value != string(record.Value) {
 			return nil
 		}
-		return change(tx, doc)
-	})
-}
-
-func (s Store) deleteRecordHolding(ctx context.Context, record provider.ExpiringRecord) error {
-	err := s.changeRecordHolding(ctx, record, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
 		return tx.Delete(doc)
 	})
 	if err != nil {
 		return fmt.Errorf("delete the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
 	}
 	return nil
-}
-
-func (s Store) extendRecordHolding(ctx context.Context, record provider.ExpiringRecord) error {
-	err := s.changeRecordHolding(ctx, record, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
-		return tx.Update(doc, []firestore.Update{{Path: "expiresAt", Value: record.ExpiresAt}})
-	})
-	if err != nil {
-		return fmt.Errorf("extend the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
-	}
-	return nil
-}
-
-func (s Store) ensureDebouncedRun(ctx context.Context, record provider.ExpiringRecord, run storedRun) (string, error) {
-	recordDoc, err := s.recordDocument(record)
-	if err != nil {
-		return "", err
-	}
-	collection, err := s.runCollection()
-	if err != nil {
-		return "", err
-	}
-	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
-	if err != nil {
-		return "", err
-	}
-	next, err := keyvalue.NewRevision()
-	if err != nil {
-		return "", err
-	}
-	var pending string
-	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		recorded, err := readPendingRun(tx, recordDoc, collection)
-		if err != nil || recorded != "" {
-			pending = recorded
-			return err
-		}
-		pending = run.Execution
-		if err := tx.Set(recordDoc, recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt}); err != nil {
-			return err
-		}
-		return tx.Create(collection.Doc(run.Execution), documentOf(run.Run, run.delivery, next))
-	})
-	if err != nil {
-		return "", fmt.Errorf("record the debounced run %s under %q of %s: %w", run.Execution, record.Key, record.Topic, err)
-	}
-	return pending, nil
-}
-
-func readPendingRun(tx *firestore.Transaction, recordDoc *firestore.DocumentRef, collection *firestore.CollectionRef) (string, error) {
-	snapshot, found, err := readInTransaction(tx, recordDoc)
-	if err != nil || !found {
-		return "", err
-	}
-	var current recordDocument
-	if err := snapshot.DataTo(&current); err != nil {
-		return "", err
-	}
-	now := time.Now()
-	if !current.ExpiresAt.After(now) {
-		return "", nil
-	}
-	recorded, err := runs.ReadRecordedRun(provider.ExpiringRecord{Value: json.RawMessage(current.Value)})
-	if err != nil {
-		return "", err
-	}
-	runSnapshot, found, err := readInTransaction(tx, collection.Doc(recorded))
-	if err != nil || !found {
-		return "", err
-	}
-	pending, err := storedRunOf(runSnapshot)
-	if err != nil || refuseUnreschedulable(pending, now) != nil {
-		return "", err
-	}
-	return recorded, nil
-}
-
-func (s Store) deleteRecordsHolding(ctx context.Context, records ...provider.ExpiringRecord) error {
-	var errs []error
-	for _, record := range records {
-		if record.Key != "" {
-			errs = append(errs, s.deleteRecordHolding(ctx, record))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func (s Store) pointRecordAt(ctx context.Context, record provider.ExpiringRecord, execution string) error {
-	if record.Key == "" {
-		return nil
-	}
-	return s.writeRecord(ctx, runs.NewRecordNamingRun(record.Purpose, record.Topic, record.Key, execution, record.ExpiresAt))
 }
 
 func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*firestore.DocumentSnapshot, bool, error) {
@@ -297,104 +199,59 @@ func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*
 	return snapshot, snapshot.Exists(), nil
 }
 
-func (s Store) ReadRun(ctx context.Context, execution string) (provider.Run, error) {
-	run, err := s.readStoredRun(ctx, execution)
-	return run.Run, err
-}
-
 func isNotFound(err error) bool { return status.Code(err) == codes.NotFound }
 
-func runOf(snapshot *firestore.DocumentSnapshot) (provider.Run, error) {
-	run, err := storedRunOf(snapshot)
-	return run.Run, err
-}
-
-func storedRunOf(snapshot *firestore.DocumentSnapshot) (storedRun, error) {
-	var doc runDocument
-	if err := snapshot.DataTo(&doc); err != nil {
-		return storedRun{}, fmt.Errorf("decode run %s: %w", snapshot.Ref.ID, err)
-	}
-	return storedRun{delivery: doc.Delivery, Run: provider.Run{
-		Execution:  snapshot.Ref.ID,
-		Topic:      doc.Topic,
-		Consumer:   doc.Consumer,
-		Status:     provider.RunStatus(doc.Status),
-		Payload:    rawOf(doc.Payload),
-		Output:     rawOf(doc.Output),
-		Error:      doc.Error,
-		Attempts:   doc.Attempts,
-		Tags:       doc.Tags,
-		Metadata:   rawOf(doc.Metadata),
-		CreatedAt:  doc.CreatedAt,
-		DueAt:      timeOf(doc.DueAt),
-		StartedAt:  timeOf(doc.StartedAt),
-		FinishedAt: timeOf(doc.FinishedAt),
-		ExpiresAt:  timeOf(doc.ExpiresAt),
-		Revision:   keyvalue.Revision(doc.Revision),
-	}}, nil
-}
-
-func documentOf(run provider.Run, delivery deliveryFields, revision keyvalue.Revision) runDocument {
-	doc := runDocument{
-		Delivery:   delivery,
-		Topic:      run.Topic,
-		Consumer:   run.Consumer,
-		Status:     string(run.Status),
-		Payload:    textOf(run.Payload),
-		Output:     textOf(run.Output),
-		Error:      run.Error,
-		Attempts:   run.Attempts,
-		Tags:       run.Tags,
-		Metadata:   textOf(run.Metadata),
-		CreatedAt:  run.CreatedAt,
-		DueAt:      instantOf(run.DueAt),
-		StartedAt:  instantOf(run.StartedAt),
-		FinishedAt: instantOf(run.FinishedAt),
-		ExpiresAt:  instantOf(run.ExpiresAt),
-		Revision:   string(revision),
-	}
-	if doc.Tags == nil {
-		doc.Tags = []string{}
-	}
-	if !run.FinishedAt.IsZero() {
-		doc.PurgeAt = instantOf(run.FinishedAt.Add(RunRetention))
-	}
-	return doc
-}
-
-func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revision, error) {
-	collection, err := s.runCollection()
+func (s Store) CreateRun(ctx context.Context, run runs.Run) (keyvalue.Revision, error) {
+	doc, err := s.runDocument(run.Execution)
 	if err != nil {
 		return "", err
 	}
-	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
+	revision, err := keyvalue.NewRevision()
 	if err != nil {
 		return "", err
+	}
+	_, err = doc.Create(ctx, documentOf(run, revision))
+	if status.Code(err) == codes.AlreadyExists {
+		return "", keyvalue.ErrStale
+	}
+	if err != nil {
+		return "", fmt.Errorf("record run %s: %w", run.Execution, err)
+	}
+	return revision, nil
+}
+
+func (s Store) ReadRun(ctx context.Context, topic, execution string) (runs.Run, error) {
+	doc, err := s.runDocument(execution)
+	if err != nil {
+		return runs.Run{}, err
+	}
+	snapshot, err := doc.Get(ctx)
+	if isNotFound(err) {
+		return runs.Run{}, keyvalue.ErrNotFound
+	}
+	if err != nil {
+		return runs.Run{}, fmt.Errorf("read run %s: %w", execution, err)
+	}
+	run, err := runOf(snapshot)
+	if err != nil {
+		return runs.Run{}, err
+	}
+	if run.Topic != topic {
+		return runs.Run{}, keyvalue.ErrNotFound
+	}
+	return run, nil
+}
+
+func (s Store) WriteRun(ctx context.Context, run runs.Run) (keyvalue.Revision, error) {
+	if run.Revision == "" {
+		return "", keyvalue.ErrStale
 	}
 	next, err := keyvalue.NewRevision()
 	if err != nil {
 		return "", err
 	}
-	doc := collection.Doc(run.Execution)
-	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snapshot, found, err := readInTransaction(tx, doc)
-		if err != nil {
-			return err
-		}
-		if !found {
-			if run.Revision != "" {
-				return keyvalue.ErrStale
-			}
-			return tx.Create(doc, documentOf(run, deliveryFields{}, next))
-		}
-		current, err := storedRunOf(snapshot)
-		if err != nil {
-			return err
-		}
-		if run.Revision == "" || current.Revision != run.Revision {
-			return keyvalue.ErrStale
-		}
-		return tx.Set(doc, documentOf(run, current.delivery, next))
+	err = s.atRevision(ctx, run, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
+		return tx.Set(doc, documentOf(run, next))
 	})
 	if errors.Is(err, keyvalue.ErrStale) {
 		return "", keyvalue.ErrStale
@@ -405,134 +262,329 @@ func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revisio
 	return next, nil
 }
 
-var errRunUnchanged = errors.New("the run is left as it was")
-
-func (s Store) changeRun(ctx context.Context, execution string, change func(run *storedRun, found bool) error) (storedRun, error) {
-	collection, err := s.runCollection()
-	if err != nil {
-		return storedRun{}, err
+func (s Store) DeleteRun(ctx context.Context, run runs.Run) error {
+	if run.Revision == "" {
+		return keyvalue.ErrStale
 	}
-	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
-	if err != nil {
-		return storedRun{}, err
-	}
-	doc := collection.Doc(execution)
-	var changed storedRun
-	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snapshot, found, err := readInTransaction(tx, doc)
-		if err != nil {
-			return err
-		}
-		changed = storedRun{Run: provider.Run{Execution: execution}}
-		if found {
-			if changed, err = storedRunOf(snapshot); err != nil {
-				return err
-			}
-		}
-		if err := change(&changed, found); err != nil {
-			return err
-		}
-		next, err := keyvalue.NewRevision()
-		if err != nil {
-			return err
-		}
-		changed.Revision = next
-		return tx.Set(doc, documentOf(changed.Run, changed.delivery, next))
+	err := s.atRevision(ctx, run, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
+		return tx.Delete(doc)
 	})
-	if err != nil {
-		return changed, err
+	if errors.Is(err, keyvalue.ErrStale) {
+		return keyvalue.ErrStale
 	}
-	return changed, nil
-}
-
-var errRunExists = errors.New("a run with this execution is already recorded")
-
-func (s Store) createRun(ctx context.Context, run storedRun) error {
-	_, err := s.changeRun(ctx, run.Execution, func(current *storedRun, found bool) error {
-		if found {
-			return errRunExists
-		}
-		*current = run
-		return nil
-	})
 	if err != nil {
-		return fmt.Errorf("record run %s: %w", run.Execution, err)
+		return fmt.Errorf("delete run %s: %w", run.Execution, err)
 	}
 	return nil
 }
 
-func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provider.RunPage, error) {
-	collection, err := s.runCollection()
+func (s Store) atRevision(ctx context.Context, run runs.Run, change func(*firestore.Transaction, *firestore.DocumentRef) error) error {
+	doc, err := s.runDocument(run.Execution)
 	if err != nil {
-		return provider.RunPage{}, err
+		return err
 	}
-	limit := runs.PageLimit(filter.Limit)
-	query := collection.Query
-	if filter.Topic != "" {
-		query = query.Where("topic", "==", filter.Topic)
+	client, err := s.client()
+	if err != nil {
+		return err
 	}
-	if len(filter.Statuses) > 0 {
-		statuses := make([]string, len(filter.Statuses))
-		for i, status := range filter.Statuses {
-			statuses[i] = string(status)
-		}
-		query = query.Where("status", "in", statuses)
-	}
-	if len(filter.Tags) > 0 {
-		query = query.Where("tags", "array-contains", filter.Tags[0])
-	}
-	query = query.OrderBy("createdAt", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc)
-	if filter.Cursor != "" {
-		created, execution, err := parseRunCursor(filter.Cursor)
+	return client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snapshot, found, err := readInTransaction(tx, doc)
 		if err != nil {
-			return provider.RunPage{}, err
+			return err
 		}
-		query = query.StartAfter(created, execution)
+		if !found {
+			return keyvalue.ErrStale
+		}
+		current, err := runOf(snapshot)
+		if err != nil {
+			return err
+		}
+		if current.Topic != run.Topic || current.Revision != run.Revision {
+			return keyvalue.ErrStale
+		}
+		return change(tx, doc)
+	})
+}
+
+func runOf(snapshot *firestore.DocumentSnapshot) (runs.Run, error) {
+	var doc runDocument
+	if err := snapshot.DataTo(&doc); err != nil {
+		return runs.Run{}, fmt.Errorf("decode run %s: %w", snapshot.Ref.ID, err)
+	}
+	return runs.Run{
+		Execution:   snapshot.Ref.ID,
+		Topic:       doc.Topic,
+		Consumer:    doc.Consumer,
+		Status:      provider.RunStatus(doc.Status),
+		Payload:     rawOf(doc.Payload),
+		Output:      rawOf(doc.Output),
+		Error:       doc.Error,
+		Attempts:    doc.Attempts,
+		MaxAttempts: doc.MaxAttempts,
+		Tags:        doc.Tags,
+		Metadata:    rawOf(doc.Metadata),
+		Message:     doc.Message,
+		PublishedAt: timeOf(doc.PublishedAt),
+		Key:         doc.Key,
+		Lane:        provider.Lane(doc.Lane),
+		Delivery:    doc.Delivery,
+		Held:        doc.Held,
+		LeaseUntil:  timeOf(doc.LeaseUntil),
+		CreatedAt:   doc.CreatedAt,
+		DueAt:       timeOf(doc.DueAt),
+		StartedAt:   timeOf(doc.StartedAt),
+		FinishedAt:  timeOf(doc.FinishedAt),
+		ExpiresAt:   timeOf(doc.ExpiresAt),
+		Revision:    keyvalue.Revision(doc.Revision),
+	}, nil
+}
+
+func documentOf(run runs.Run, revision keyvalue.Revision) runDocument {
+	doc := runDocument{
+		Topic:       run.Topic,
+		Consumer:    run.Consumer,
+		Status:      string(run.Status),
+		Payload:     textOf(run.Payload),
+		Output:      textOf(run.Output),
+		Error:       run.Error,
+		Attempts:    run.Attempts,
+		MaxAttempts: run.MaxAttempts,
+		Tags:        run.Tags,
+		Metadata:    textOf(run.Metadata),
+		Message:     run.Message,
+		PublishedAt: instantOf(run.PublishedAt),
+		Key:         run.Key,
+		Lane:        string(run.Lane),
+		Delivery:    run.Delivery,
+		Held:        run.Held,
+		LeaseUntil:  instantOf(run.LeaseUntil),
+		CreatedAt:   run.CreatedAt,
+		DueAt:       instantOf(run.DueAt),
+		StartedAt:   instantOf(run.StartedAt),
+		FinishedAt:  instantOf(run.FinishedAt),
+		ExpiresAt:   instantOf(run.ExpiresAt),
+		PurgeAt:     purgeAtOf(run),
+		Revision:    string(revision),
+	}
+	if doc.Tags == nil {
+		doc.Tags = []string{}
+	}
+	return doc
+}
+
+func purgeAtOf(run runs.Run) time.Time {
+	if !runs.IsUnfinished(run.Status) && !run.FinishedAt.IsZero() {
+		return run.FinishedAt.Add(RunRetention)
+	}
+	return maxTime(run.DueAt, run.CreatedAt).Add(RunRetention)
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
+func (s Store) queriesOf(filter runs.RunFilter) ([]firestore.Query, error) {
+	scope, err := s.scopeDocument()
+	if err != nil {
+		return nil, err
+	}
+	collection := scope.Collection(runsCollection)
+	queries := make([]firestore.Query, 0, len(filter.Topics))
+	for _, topic := range slices.Compact(slices.Sorted(slices.Values(filter.Topics))) {
+		query := collection.Where("topic", "==", topic)
+		if filter.Consumer != "" {
+			query = query.Where("consumer", "==", filter.Consumer)
+		}
+		if len(filter.Statuses) > 0 {
+			statuses := make([]string, len(filter.Statuses))
+			for i, status := range filter.Statuses {
+				statuses[i] = string(status)
+			}
+			query = query.Where("status", "in", statuses)
+		}
+		if len(filter.Tags) > 0 {
+			query = query.Where("tags", "array-contains", filter.Tags[0])
+		}
+		queries = append(queries, query)
+	}
+	return queries, nil
+}
+
+type topicListing struct {
+	documents *firestore.DocumentIterator
+	scanLimit int
+	tags      []string
+	scanned   int
+	head      *runs.Run
+	bounded   bool
+	capped    bool
+}
+
+func (l *topicListing) advance() error {
+	l.head = nil
+	for {
+		snapshot, err := l.documents.Next()
+		if errors.Is(err, iterator.Done) {
+			l.capped = l.scanned == l.scanLimit
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("list runs: %w", err)
+		}
+		l.scanned++
+		run, err := runOf(snapshot)
+		if err != nil {
+			return err
+		}
+		if holdsEveryTag(run.Tags, l.tags) {
+			l.head = &run
+			return nil
+		}
+		if l.scanned == l.scanLimit {
+			l.head, l.bounded = &run, true
+			return nil
+		}
+	}
+}
+
+func (s Store) ListRuns(ctx context.Context, filter runs.RunFilter) (runs.RunPage, error) {
+	limit := runs.PageLimit(filter.Limit)
+	var after runs.Run
+	if filter.Cursor != "" {
+		created, execution, err := runs.ParseCursor(filter.Cursor)
+		if err != nil {
+			return runs.RunPage{}, err
+		}
+		if execution == "" {
+			return runs.RunPage{}, fmt.Errorf("cursor %q names no run: %w", filter.Cursor, runs.ErrUnknownCursor)
+		}
+		after = runs.Run{CreatedAt: created, Execution: execution}
+	}
+	queries, err := s.queriesOf(filter)
+	if err != nil {
+		return runs.RunPage{}, err
 	}
 	scanLimit := limit + 1
 	if len(filter.Tags) > 1 {
 		scanLimit = max(maxRunScan, scanLimit)
 	}
-	documents := query.Limit(scanLimit).Documents(ctx)
-	defer documents.Stop()
-	var page provider.RunPage
-	var scanned int
-	var last provider.Run
+	listings := make([]*topicListing, 0, len(queries))
+	defer func() {
+		for _, listing := range listings {
+			listing.documents.Stop()
+		}
+	}()
+	for _, query := range queries {
+		query = query.OrderBy("createdAt", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc)
+		if filter.Cursor != "" {
+			query = query.StartAfter(after.CreatedAt, after.Execution)
+		}
+		listing := &topicListing{documents: query.Limit(scanLimit).Documents(ctx), scanLimit: scanLimit, tags: filter.Tags}
+		listings = append(listings, listing)
+		if err := listing.advance(); err != nil {
+			return runs.RunPage{}, err
+		}
+	}
+	var page runs.RunPage
 	for {
-		snapshot, err := documents.Next()
-		if errors.Is(err, iterator.Done) {
-			if scanned == scanLimit {
-				page.NextCursor = runs.CursorOf(last.CreatedAt, last.Execution)
-			}
+		next := newestHead(listings)
+		switch {
+		case next == nil:
 			return page, nil
-		}
-		if err != nil {
-			return provider.RunPage{}, fmt.Errorf("list runs: %w", err)
-		}
-		run, err := runOf(snapshot)
-		if err != nil {
-			return provider.RunPage{}, err
-		}
-		scanned++
-		if !holdsEveryTag(run.Tags, filter.Tags) {
-			last = run
-			continue
-		}
-		if len(page.Runs) == limit {
+		case len(page.Runs) == limit:
+			last := page.Runs[limit-1]
 			page.NextCursor = runs.CursorOf(last.CreatedAt, last.Execution)
 			return page, nil
+		case next.bounded:
+			page.NextCursor = runs.CursorOf(next.head.CreatedAt, next.head.Execution)
+			return page, nil
 		}
+		run := *next.head
 		page.Runs = append(page.Runs, run)
-		last = run
+		if err := next.advance(); err != nil {
+			return runs.RunPage{}, err
+		}
+		if next.head == nil && next.capped {
+			page.NextCursor = runs.CursorOf(run.CreatedAt, run.Execution)
+			return page, nil
+		}
 	}
 }
 
-func parseRunCursor(cursor string) (time.Time, string, error) {
-	at, execution, err := runs.ParseCursor(cursor)
-	if err == nil && execution == "" {
-		return time.Time{}, "", fmt.Errorf("cursor %q names no run: %w", cursor, runs.ErrUnknownCursor)
+func newestHead(listings []*topicListing) *topicListing {
+	var newest *topicListing
+	for _, listing := range listings {
+		if listing.head == nil {
+			continue
+		}
+		if newest == nil || newerThan(*listing.head, *newest.head) {
+			newest = listing
+		}
 	}
-	return at, execution, err
+	return newest
+}
+
+func newerThan(a, b runs.Run) bool {
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return a.CreatedAt.After(b.CreatedAt)
+	}
+	return a.Execution > b.Execution
+}
+
+func (s Store) CountRuns(ctx context.Context, filter runs.RunFilter) (int64, error) {
+	queries, err := s.queriesOf(filter)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, query := range queries {
+		counted, err := countOf(ctx, query, filter.Tags)
+		if err != nil {
+			return 0, fmt.Errorf("count runs: %w", err)
+		}
+		total += counted
+	}
+	return total, nil
+}
+
+func countOf(ctx context.Context, query firestore.Query, tags []string) (int64, error) {
+	if len(tags) <= 1 {
+		result, err := query.NewAggregationQuery().WithCount(countAlias).Get(ctx)
+		if err != nil {
+			return 0, err
+		}
+		var counted struct {
+			N int64 `firestore:"n"`
+		}
+		if err := result.DataTo(&counted); err != nil {
+			return 0, err
+		}
+		return counted.N, nil
+	}
+	documents := query.Select("tags").Documents(ctx)
+	defer documents.Stop()
+	var counted int64
+	for {
+		snapshot, err := documents.Next()
+		if errors.Is(err, iterator.Done) {
+			return counted, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		var tagged struct {
+			Tags []string `firestore:"tags"`
+		}
+		if err := snapshot.DataTo(&tagged); err != nil {
+			return 0, err
+		}
+		if holdsEveryTag(tagged.Tags, tags) {
+			counted++
+		}
+	}
 }
 
 func holdsEveryTag(tags, wanted []string) bool {

@@ -2,11 +2,10 @@ package topics
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"fmt"
 	"maps"
 	"net/http"
-	"time"
 
 	cloudscheduler "google.golang.org/api/cloudscheduler/v1"
 
@@ -27,7 +26,7 @@ func (t Topology) buildJob(clients *ports.Clients, task, cron string) *cloudsche
 		TimeZone: scheduleTimeZone,
 		PubsubTarget: &cloudscheduler.PubsubTarget{
 			TopicName:  TopicPath(clients.Project, t.Names.Topic(task)),
-			Data:       base64Of([]byte("{}")),
+			Data:       base64.StdEncoding.EncodeToString([]byte("{}")),
 			Attributes: map[string]string{ScheduleAttribute: "true"},
 		},
 	}
@@ -126,13 +125,4 @@ func (t Topology) removeSchedule(ctx context.Context, clients *ports.Clients, ta
 		return fmt.Errorf("delete Cloud Scheduler job %s: %w", path, err)
 	}
 	return nil
-}
-
-type scheduledPayload struct {
-	Timestamp string `json:"timestamp"`
-}
-
-func scheduledPayloadOf(fired time.Time) json.RawMessage {
-	payload, _ := json.Marshal(scheduledPayload{Timestamp: fired.UTC().Truncate(time.Minute).Format(time.RFC3339)})
-	return payload
 }

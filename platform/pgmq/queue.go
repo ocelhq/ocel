@@ -267,16 +267,9 @@ func (q queue) Hide(ctx context.Context, topic, consumer, handle string, hidden 
 }
 
 func laneOf(consumer *contractv1.ManifestConsumer, asked provider.Lane) provider.Lane {
-	if asked == "" {
-		return provider.LaneDefault
+	reads := make([]provider.Lane, 0, len(consumer.GetLanes()))
+	for _, read := range consumer.GetLanes() {
+		reads = append(reads, runs.LaneOf(read))
 	}
-	if reads := consumer.GetLanes(); len(reads) > 0 {
-		for _, read := range reads {
-			if runs.LaneOf(read) == asked {
-				return asked
-			}
-		}
-		return provider.LaneDefault
-	}
-	return asked
+	return runs.LaneFor(reads, asked)
 }

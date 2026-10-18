@@ -23,7 +23,6 @@ const (
 	workerSettleMargin     = 30 * time.Second
 
 	eventSourceVisibilityFactor = 6
-	queueRetentionSecs          = 14 * 24 * 60 * 60
 	snsServicePrincipal         = "sns.amazonaws.com"
 	outputKeyTopicQueues        = "queues"
 	outputKeyTopicARN           = "topic"
@@ -176,7 +175,7 @@ func registerTopic(ctx *pulumi.Context, topic deployedTopic, visibility func(que
 		deadLetter, err := sqs.NewQueue(ctx, naming.ResourceID(naming.KindTopic, at, consumer, "dead-letters"), &sqs.QueueArgs{
 			Name:                    pulumi.String(queue.deadLetter),
 			FifoQueue:               pulumi.Bool(queue.fifo),
-			MessageRetentionSeconds: pulumi.Int(queueRetentionSecs),
+			MessageRetentionSeconds: pulumi.Int(int(queues.MessageRetention / time.Second)),
 			Tags:                    tags,
 		}, pulumi.DeleteBeforeReplace(true))
 		if err != nil {
@@ -191,7 +190,7 @@ func registerTopic(ctx *pulumi.Context, topic deployedTopic, visibility func(que
 			FifoQueue:                 pulumi.Bool(queue.fifo),
 			ContentBasedDeduplication: pulumi.Bool(queue.fifo && topic.isTask() && topic.declared.Cron != ""),
 			VisibilityTimeoutSeconds:  pulumi.Int(visibility(queue)),
-			MessageRetentionSeconds:   pulumi.Int(queueRetentionSecs),
+			MessageRetentionSeconds:   pulumi.Int(int(queues.MessageRetention / time.Second)),
 			RedrivePolicy:             redrive,
 			Tags:                      tags,
 		}, pulumi.DeleteBeforeReplace(true))
@@ -265,7 +264,7 @@ func tasksPolicy(cfg Config, project, env string, topics []deployedTopic, wakes 
 		},
 		map[string]any{
 			"Effect":   "Allow",
-			"Action":   []string{"sqs:GetQueueUrl", "sqs:SendMessage"},
+			"Action":   []string{"sqs:ChangeMessageVisibility", "sqs:GetQueueUrl", "sqs:SendMessage"},
 			"Resource": queueARNs,
 		},
 	}

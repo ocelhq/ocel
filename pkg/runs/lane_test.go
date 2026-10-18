@@ -29,13 +29,13 @@ func TestAMessageRunsInTheLaneItAsksForWhenItsConsumerReadsThatLane(t *testing.T
 	for _, tc := range []struct {
 		name  string
 		reads []provider.Lane
-		asked topicv1.Lane
+		asked provider.Lane
 		want  provider.Lane
 	}{
-		{"no lane asked", nil, topicv1.Lane_LANE_UNSPECIFIED, provider.LaneDefault},
-		{"a consumer reading every lane", nil, topicv1.Lane_LANE_HIGH, provider.LaneHigh},
-		{"a lane the consumer reads", []provider.Lane{provider.LaneLow, provider.LaneHigh}, topicv1.Lane_LANE_LOW, provider.LaneLow},
-		{"a lane the consumer does not read", []provider.Lane{provider.LaneHigh}, topicv1.Lane_LANE_LOW, provider.LaneDefault},
+		{"no lane asked", nil, "", provider.LaneDefault},
+		{"a consumer reading every lane", nil, provider.LaneHigh, provider.LaneHigh},
+		{"a lane the consumer reads", []provider.Lane{provider.LaneLow, provider.LaneHigh}, provider.LaneLow, provider.LaneLow},
+		{"a lane the consumer does not read", []provider.Lane{provider.LaneHigh}, provider.LaneLow, provider.LaneDefault},
 	} {
 		if got := runs.LaneFor(tc.reads, tc.asked); got != tc.want {
 			t.Errorf("%s: LaneFor(%v, %v) = %q, want %q", tc.name, tc.reads, tc.asked, got, tc.want)

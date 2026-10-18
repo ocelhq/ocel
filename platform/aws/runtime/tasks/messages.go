@@ -1,96 +1,88 @@
 package tasks
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/sns"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
-)
-
-const (
-	maxMessageDelay    = 15 * time.Minute
-	maxVisibilityDelay = 12 * time.Hour
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 type queueMessage struct {
-	Execution         string          `json:"execution,omitempty"`
-	Delivery          string          `json:"delivery,omitempty"`
-	Message           string          `json:"message,omitempty"`
-	PublishedAtMicros int64           `json:"publishedAt,omitempty"`
-	DueAtMicros       int64           `json:"dueAt,omitempty"`
-	Key               string          `json:"key,omitempty"`
-	Lane              string          `json:"lane,omitempty"`
-	Payload           json.RawMessage `json:"payload,omitempty"`
+	Execution         string `json:"execution,omitempty"`
+	Delivery          string `json:"delivery,omitempty"`
+	Message           string `json:"message,omitempty"`
+	PublishedAtMicros int64  `json:"publishedAt,omitempty"`
+	DueAtMicros       int64  `json:"dueAt,omitempty"`
+	Key               string `json:"key,omitempty"`
+	Lane              string `json:"lane,omitempty"`
+	MaxAttempts       int    `json:"maxAttempts,omitempty"`
+	Payload           string `json:"payload,omitempty"`
 }
 
-func (m queueMessage) executionFor(consumer string) string {
-	if m.Execution != "" {
-		return m.Execution
-	}
-	return m.Message + "-" + consumer
+func bodyOf(msg runs.Message) (string, error) {
+	body, err := json.Marshal(queueMessage{
+		Execution:         msg.Execution,
+		Delivery:          msg.Delivery,
+		Message:           msg.ID,
+		PublishedAtMicros: microsOf(msg.PublishedAt),
+		DueAtMicros:       microsOf(msg.DueAt),
+		Key:               msg.Key,
+		Lane:              string(msg.Lane),
+		MaxAttempts:       msg.MaxAttempts,
+		Payload:           string(msg.Payload),
+	})
+	return string(body), err
 }
 
-func groupOf(key, execution string) string {
-	if key != "" {
-		return key
+func messageOf(topic, consumer, body string) (runs.Message, error) {
+	var decoded queueMessage
+	if err := json.Unmarshal([]byte(body), &decoded); err != nil {
+		return runs.Message{}, fmt.Errorf("the message is not one this engine sent: %w", err)
 	}
-	return execution
+	msg := runs.Message{
+		Topic:       topic,
+		Consumer:    consumer,
+		Execution:   decoded.Execution,
+		Delivery:    decoded.Delivery,
+		ID:          decoded.Message,
+		PublishedAt: timeOfMicros(decoded.PublishedAtMicros),
+		DueAt:       timeOfMicros(decoded.DueAtMicros),
+		Key:         decoded.Key,
+		Lane:        provider.Lane(decoded.Lane),
+		MaxAttempts: decoded.MaxAttempts,
+	}
+	if decoded.Payload != "" {
+		msg.Payload = json.RawMessage(decoded.Payload)
+	}
+	return msg, nil
 }
 
-func (e *Engine) enqueue(ctx context.Context, deployed deployedConsumer, msg queueMessage, delay time.Duration) error {
-	url, err := e.queueURL(ctx, deployed.queue)
-	if err != nil {
-		return err
+func executionOf(msg runs.Message) string {
+	if msg.Execution != "" {
+		return msg.Execution
 	}
-	body, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	in := &sqs.SendMessageInput{QueueUrl: aws.String(url), MessageBody: aws.String(string(body))}
-	if deployed.fifo() {
-		execution := msg.executionFor(deployed.consumer.Name)
-		in.MessageGroupId = aws.String(groupOf(msg.Key, execution))
-		in.MessageDeduplicationId = aws.String(execution + "." + msg.Delivery)
-	} else if seconds := delaySeconds(delay, maxMessageDelay); seconds > 0 {
-		in.DelaySeconds = seconds
-	}
-	if _, err := e.cfg.Queues.SendMessage(ctx, in); err != nil {
-		return fmt.Errorf("send %s to queue %s: %w", msg.executionFor(deployed.consumer.Name), deployed.queue, err)
-	}
-	e.wake(ctx, deployed.consumer.Worker, delay)
-	return nil
+	return runs.ExecutionOf(msg.ID, msg.Consumer)
 }
 
-func (e *Engine) publish(ctx context.Context, topicName, topicARN string, fifo bool, msg queueMessage) error {
-	body, err := json.Marshal(msg)
-	if err != nil {
-		return err
+func groupOf(msg runs.Message, fallback string) string {
+	if msg.Key != "" {
+		return msg.Key
 	}
-	in := &sns.PublishInput{TopicArn: aws.String(topicARN), Message: aws.String(string(body))}
-	if fifo {
-		in.MessageGroupId = aws.String(groupOf(msg.Key, msg.Message))
-		in.MessageDeduplicationId = aws.String(msg.Message)
-	}
-	if _, err := e.cfg.Topics.Publish(ctx, in); err != nil {
-		return fmt.Errorf("publish message %s to topic %s: %w", msg.Message, topicName, err)
-	}
-	if topic, found := e.topic(topicName); found {
-		for _, consumer := range topic.Declared.Consumers {
-			e.wake(ctx, consumer.Worker, time.Until(time.UnixMicro(msg.DueAtMicros)))
-		}
-	}
-	return nil
+	return fallback
 }
 
-func delaySeconds(delay, ceiling time.Duration) int32 {
-	if delay <= 0 {
+func microsOf(at time.Time) int64 {
+	if at.IsZero() {
 		return 0
 	}
-	delay = min(delay, ceiling)
-	seconds := int32((delay + time.Second - 1) / time.Second)
-	return seconds
+	return at.UnixMicro()
+}
+
+func timeOfMicros(micros int64) time.Time {
+	if micros == 0 {
+		return time.Time{}
+	}
+	return time.UnixMicro(micros)
 }

@@ -1,74 +1,34 @@
 package topics
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
-	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
+	pubsub "google.golang.org/api/pubsub/v1"
+
 	"github.com/ocelhq/ocel/pkg/runs"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
-	MessageAttribute     = "ocel-message"
-	PublishedAtAttribute = "ocel-published-at"
-	DueAtAttribute       = "ocel-due-at"
-	DelayTaskAttribute   = "ocel-delay-task"
-	MaxAttemptsAttribute = "ocel-max-attempts"
-	LaneAttribute        = "ocel-lane"
-	ScheduleAttribute    = "ocel-schedule"
-	ConsumerAttribute    = "ocel-consumer"
-
 	pushPrefix    = "/topics/"
 	consumerInfix = "/consumers/"
-
-	cancelPoll = 500 * time.Millisecond
 )
 
 type Deliveries struct {
-	Store  Store
-	Topics map[string]*provider.TopicSpec
-	Worker string
+	Engine *runs.Engine
 }
 
 type pushRequest struct {
-	Message struct {
-		Data        []byte            `json:"data"`
-		Attributes  map[string]string `json:"attributes"`
-		MessageID   string            `json:"messageId"`
-		PublishTime string            `json:"publishTime"`
-		OrderingKey string            `json:"orderingKey"`
-	} `json:"message"`
-}
-
-type pushedRun struct {
-	topicName   string
-	topic       *provider.TopicSpec
-	consumer    provider.ConsumerSpec
-	messageID   string
-	publishedAt time.Time
-	dueAt       time.Time
-	payload     json.RawMessage
-	key         string
-	lane        string
-	maxAttempts int
-	delayTask   string
+	Message pubsub.PubsubMessage `json:"message"`
 }
 
 func (d Deliveries) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	topicName, consumerName, routed := pushedTo(r)
-	topic, consumer, deployed := d.consumerOf(topicName, consumerName)
-	if !routed || !deployed {
-		http.Error(w, fmt.Sprintf("no consumer %q of topic %q is deployed on this worker", consumerName, topicName), http.StatusNotFound)
+	topic, consumer, routed := pushedTo(r)
+	if !routed {
+		http.Error(w, fmt.Sprintf("%s %s is not a push to a consumer", r.Method, r.URL.Path), http.StatusNotFound)
 		return
 	}
 	var pushed pushRequest
@@ -76,12 +36,14 @@ func (d Deliveries) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("the push is not a Pub/Sub message: %v", err), http.StatusBadRequest)
 		return
 	}
-	delivered := pushedRunOf(topicName, topic, consumer, pushed)
-	if err := d.deliver(r.Context(), delivered); err != nil {
-		if r.Context().Err() == nil {
-			slog.Warn("deliver a message", "topic", topicName, "consumer", consumerName, "message", delivered.messageID, "error", err)
-		}
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+	msg, err := messageOf(&pushed.Message, time.Now())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	dispositions := d.Engine.Deliver(r.Context(), topic, consumer, []runs.Received{{Message: msg}})
+	if !dispositions[0].Done {
+		http.Error(w, fmt.Sprintf("message %s is redelivered: its run is not settled", msg.ID), http.StatusServiceUnavailable)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -97,225 +59,4 @@ func pushedTo(r *http.Request) (string, string, bool) {
 	}
 	topic, consumer, found := strings.Cut(rest, consumerInfix)
 	return topic, consumer, found && topic != "" && consumer != "" && !strings.Contains(consumer, "/")
-}
-
-func (d Deliveries) consumerOf(topicName, consumerName string) (*provider.TopicSpec, provider.ConsumerSpec, bool) {
-	topic, found := d.Topics[topicName]
-	if !found {
-		return nil, provider.ConsumerSpec{}, false
-	}
-	for _, consumer := range topic.Consumers {
-		if consumer.Name == consumerName {
-			return topic, consumer, true
-		}
-	}
-	return nil, provider.ConsumerSpec{}, false
-}
-
-func pushedRunOf(topicName string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, pushed pushRequest) pushedRun {
-	attributes := pushed.Message.Attributes
-	publishTime, err := time.Parse(time.RFC3339Nano, pushed.Message.PublishTime)
-	idTime := publishTime
-	if err != nil {
-		idTime, publishTime = time.Unix(0, 0), time.Now()
-	}
-	delivered := pushedRun{
-		topicName:   topicName,
-		topic:       topic,
-		consumer:    consumer,
-		messageID:   attributes[MessageAttribute],
-		publishedAt: publishTime,
-		payload:     pushed.Message.Data,
-		key:         pushed.Message.OrderingKey,
-		lane:        attributes[LaneAttribute],
-		delayTask:   attributes[DelayTaskAttribute],
-	}
-	if at, err := time.Parse(time.RFC3339Nano, attributes[PublishedAtAttribute]); err == nil {
-		delivered.publishedAt = at
-	}
-	delivered.dueAt = delivered.publishedAt
-	if at, err := time.Parse(time.RFC3339Nano, attributes[DueAtAttribute]); err == nil {
-		delivered.dueAt = at
-	}
-	if _, scheduled := attributes[ScheduleAttribute]; scheduled {
-		delivered.payload = scheduledPayloadOf(publishTime)
-	}
-	if delivered.messageID == "" {
-		delivered.messageID = runs.MessageIDFrom(idTime, pushed.Message.MessageID)
-	}
-	requested, _ := strconv.Atoi(attributes[MaxAttemptsAttribute])
-	delivered.maxAttempts = runs.AttemptsFor(consumer.Retry, int32(requested))
-	return delivered
-}
-
-func (p pushedRun) execution() string { return runs.ExecutionOf(p.messageID, p.consumer.Name) }
-
-func (d Deliveries) deliver(ctx context.Context, delivered pushedRun) error {
-	claimed, err := d.claim(ctx, delivered)
-	if errors.Is(err, errRunUnchanged) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if claimed.Status != provider.RunExecuting {
-		return nil
-	}
-	attemptCtx, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
-	if maxDuration := delivered.consumer.MaxDuration; maxDuration > 0 {
-		var stop context.CancelFunc
-		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, runs.ErrTimedOut)
-		defer stop()
-	}
-	watching, stopWatching := context.WithCancel(attemptCtx)
-	go d.watchForCancel(watching, delivered.execution(), cancel)
-	res := runs.PostEnvelope(ctx, attemptCtx, http.DefaultClient, d.Worker, envelopeOf(delivered, claimed))
-	stopWatching()
-	retry, err := d.finish(ctx, delivered, res)
-	if err != nil && !errors.Is(err, errRunUnchanged) {
-		return err
-	}
-	if retry {
-		return fmt.Errorf("attempt %d of %s failed and is retried: %s", claimed.Attempts, delivered.execution(), res.Reason)
-	}
-	return nil
-}
-
-func (d Deliveries) watchForCancel(ctx context.Context, execution string, cancel context.CancelCauseFunc) {
-	ticker := time.NewTicker(cancelPoll)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-		run, err := d.Store.readStoredRun(ctx, execution)
-		if errors.Is(err, keyvalue.ErrNotFound) || (err == nil && run.Status == provider.RunCanceled) {
-			cancel(runs.ErrCanceled)
-			return
-		}
-	}
-}
-
-func (d Deliveries) claim(ctx context.Context, delivered pushedRun) (storedRun, error) {
-	return d.Store.changeRun(ctx, delivered.execution(), func(run *storedRun, found bool) error {
-		return claimRun(run, found, delivered, time.Now())
-	})
-}
-
-func claimRun(run *storedRun, found bool, delivered pushedRun, now time.Time) error {
-	if !found {
-		startStoredRun(run, delivered)
-	}
-	if run.delivery.MaxAttempts == 0 {
-		run.delivery.MaxAttempts = delivered.maxAttempts
-	}
-	if !runs.IsUnfinished(run.Status) || isSuperseded(*run, delivered) {
-		return errRunUnchanged
-	}
-	if run.Attempts == 0 && !run.ExpiresAt.IsZero() && !run.ExpiresAt.After(now) {
-		run.Status, run.FinishedAt = provider.RunExpired, now
-		return nil
-	}
-	if run.Attempts >= run.delivery.MaxAttempts {
-		settleRun(run, delivered, provider.RunFailed, nil, fmt.Sprintf("its %d attempts ran out before one settled the run", run.Attempts), now)
-		return nil
-	}
-	run.Status, run.Error = provider.RunExecuting, ""
-	run.Attempts++
-	if run.StartedAt.IsZero() {
-		run.StartedAt = now
-	}
-	return nil
-}
-
-func isSuperseded(run storedRun, delivered pushedRun) bool {
-	return delivered.delayTask != "" && delivered.delayTask != run.delivery.DelayTask
-}
-
-func startStoredRun(run *storedRun, delivered pushedRun) {
-	publishedAt := delivered.publishedAt
-	run.Topic, run.Consumer = delivered.topicName, delivered.consumer.Name
-	run.Status, run.CreatedAt, run.DueAt = provider.RunQueued, publishedAt, delivered.dueAt
-	run.delivery = deliveryFields{
-		MessageID:   delivered.messageID,
-		PublishedAt: &publishedAt,
-		MaxAttempts: delivered.maxAttempts,
-		Key:         delivered.key,
-		Lane:        delivered.lane,
-		DelayTask:   delivered.delayTask,
-	}
-	if ttl := delivered.topic.TTL; ttl > 0 {
-		run.ExpiresAt = delivered.dueAt.Add(ttl)
-	}
-	if runs.IsTask(delivered.topic) {
-		run.Payload = delivered.payload
-	}
-}
-
-func envelopeOf(delivered pushedRun, claimed storedRun) *topicv1.Envelope {
-	message := &topicv1.Message{Id: delivered.messageID, PublishedAt: timestamppb.New(delivered.publishedAt)}
-	attempt := &topicv1.Attempt{
-		Number:           int32(claimed.Attempts),
-		Of:               int32(claimed.delivery.MaxAttempts),
-		FirstAttemptedAt: timestamppb.New(claimed.StartedAt),
-	}
-	posted := &topicv1.Envelope{
-		V:        runs.EnvelopeVersion,
-		Topic:    delivered.topicName,
-		Consumer: delivered.consumer.Name,
-		Schema:   runs.SchemaOf(delivered.topic.Schema),
-	}
-	if delivered.consumer.Batch != nil {
-		posted.Messages = []*topicv1.Delivery{{Execution: delivered.execution(), Message: message, Attempt: attempt, Payload: delivered.payload}}
-		return posted
-	}
-	posted.Execution, posted.Message, posted.Attempt, posted.Payload = delivered.execution(), message, attempt, delivered.payload
-	return posted
-}
-
-func (d Deliveries) finish(ctx context.Context, delivered pushedRun, res runs.Answer) (bool, error) {
-	retry := false
-	_, err := d.Store.changeRun(ctx, delivered.execution(), func(run *storedRun, found bool) error {
-		if !found || run.Status != provider.RunExecuting {
-			return errRunUnchanged
-		}
-		now := time.Now()
-		settle := func(status provider.RunStatus, output json.RawMessage, reason string) {
-			settleRun(run, delivered, status, output, reason, now)
-		}
-		switch res.Outcome {
-		case runs.Canceled, runs.Interrupted:
-			retry = true
-			return errRunUnchanged
-		case runs.Succeeded:
-			settle(provider.RunCompleted, res.Output, "")
-			return nil
-		case runs.Aborted, runs.Refused:
-			settle(provider.RunFailed, nil, res.Reason)
-			return nil
-		case runs.TimedOut:
-			if runs.IsTask(delivered.topic) {
-				settle(provider.RunTimedOut, nil, res.Reason)
-				return nil
-			}
-		}
-		if run.Attempts >= run.delivery.MaxAttempts {
-			settle(provider.RunFailed, nil, res.Reason)
-			return nil
-		}
-		run.Status, run.Error = provider.RunQueued, res.Reason
-		retry = true
-		return nil
-	})
-	return retry, err
-}
-
-func settleRun(run *storedRun, delivered pushedRun, status provider.RunStatus, output json.RawMessage, reason string, now time.Time) {
-	run.Status, run.Output, run.Error, run.FinishedAt = status, output, reason, now
-	if status != provider.RunCompleted && len(run.Payload) == 0 {
-		run.Payload = delivered.payload
-	}
 }

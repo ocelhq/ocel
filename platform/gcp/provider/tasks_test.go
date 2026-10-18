@@ -116,7 +116,7 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing
 	}
 }
 
-func TestTheRunsOfATierAreListedByTopicStatusAndTagThroughItsIndexes(t *testing.T) {
+func TestEveryListingOfATiersRunsByTopicConsumerStatusAndTagHasItsIndex(t *testing.T) {
 	t.Parallel()
 
 	shapes := map[string]bool{}
@@ -130,15 +130,13 @@ func TestTheRunsOfATierAreListedByTopicStatusAndTagThroughItsIndexes(t *testing.
 			t.Errorf("an index on runs is scoped to %s, want each environment's own runs collection", index.QueryScope)
 		}
 	}
-	for _, want := range []string{
-		"topic:ASCENDING createdAt:DESCENDING ",
-		"status:ASCENDING createdAt:DESCENDING ",
-		"tags:CONTAINS createdAt:DESCENDING ",
-		"topic:ASCENDING status:ASCENDING tags:CONTAINS createdAt:DESCENDING ",
-		"topic:ASCENDING consumer:ASCENDING status:ASCENDING finishedAt:ASCENDING ",
-	} {
-		if !shapes[want] {
-			t.Errorf("the runs indexes are %v, want one on %s", shapes, want)
+	for _, consumer := range []string{"", "consumer:ASCENDING "} {
+		for _, status := range []string{"", "status:ASCENDING "} {
+			for _, tags := range []string{"", "tags:CONTAINS "} {
+				if want := "topic:ASCENDING " + consumer + status + tags + "createdAt:DESCENDING "; !shapes[want] {
+					t.Errorf("the runs indexes are %v, want one on %s", shapes, want)
+				}
+			}
 		}
 	}
 }

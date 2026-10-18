@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+const recordPurgeDelay = time.Hour
+
 type recordItem struct {
 	PK            string `dynamodbav:"pk"`
 	SK            string `dynamodbav:"sk"`
@@ -23,21 +25,21 @@ type recordItem struct {
 	ExpiresAtUnix int64  `dynamodbav:"expires_at"`
 }
 
-func (s store) recordPartition(purpose provider.RecordPurpose, topic string) string {
+func (s Store) recordPartition(purpose provider.RecordPurpose, topic string) string {
 	return s.prefix + "record#" + string(purpose) + "#" + topic
 }
 
-func (s store) recordItemOf(record provider.ExpiringRecord) recordItem {
+func (s Store) recordItemOf(record provider.ExpiringRecord) recordItem {
 	return recordItem{
 		PK:            s.recordPartition(record.Purpose, record.Topic),
 		SK:            record.Key,
 		Value:         string(record.Value),
 		UntilMillis:   record.ExpiresAt.UnixMilli(),
-		ExpiresAtUnix: record.ExpiresAt.Add(time.Hour).Unix(),
+		ExpiresAtUnix: record.ExpiresAt.Add(recordPurgeDelay).Unix(),
 	}
 }
 
-func (s store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord) (provider.ExpiringRecord, bool, error) {
+func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord) (provider.ExpiringRecord, bool, error) {
 	item := s.recordItemOf(record)
 	encoded, err := attributevalue.MarshalMap(item)
 	if err != nil {
@@ -72,7 +74,7 @@ func (s store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 	return record, false, nil
 }
 
-func (s store) rewriteRecord(ctx context.Context, record provider.ExpiringRecord) error {
+func (s Store) WriteRecord(ctx context.Context, record provider.ExpiringRecord) error {
 	encoded, err := attributevalue.MarshalMap(s.recordItemOf(record))
 	if err != nil {
 		return err
@@ -83,16 +85,16 @@ func (s store) rewriteRecord(ctx context.Context, record provider.ExpiringRecord
 	return nil
 }
 
-func (s store) deleteRecord(ctx context.Context, purpose provider.RecordPurpose, topic, key string) error {
-	if _, err := s.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{TableName: aws.String(s.table), Key: stringKey(s.recordPartition(purpose, topic), key)}); err != nil {
-		return fmt.Errorf("delete the %s key %q of %s: %w", purpose, key, topic, err)
+func (s Store) DeleteRecord(ctx context.Context, record provider.ExpiringRecord) error {
+	_, err := s.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName:                 aws.String(s.table),
+		Key:                       stringKey(s.recordPartition(record.Purpose, record.Topic), record.Key),
+		ConditionExpression:       aws.String("#value = :value"),
+		ExpressionAttributeNames:  map[string]string{"#value": "value"},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":value": &ddbtypes.AttributeValueMemberS{Value: string(record.Value)}},
+	})
+	if err != nil && !isConditionFailed(err) {
+		return fmt.Errorf("delete the %s key %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
 	}
 	return nil
-}
-
-func stringKey(pk, sk string) map[string]ddbtypes.AttributeValue {
-	return map[string]ddbtypes.AttributeValue{
-		keyPK: &ddbtypes.AttributeValueMemberS{Value: pk},
-		keySK: &ddbtypes.AttributeValueMemberS{Value: sk},
-	}
 }

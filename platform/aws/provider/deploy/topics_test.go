@@ -109,6 +109,33 @@ func mapKeys[V any](m map[string]V) func(func(string) bool) {
 	}
 }
 
+func TestAnAppReachingTasksMayReleaseTheMessageAnOrderedRunHoldsOnItsQueue(t *testing.T) {
+	t.Parallel()
+
+	topics := topicsOf("shop", "prod", []provider.Resource{taskResource("resize", provider.ConsumerSpec{Worker: "worker"})})
+	policy, err := tasksPolicy(Config{Region: "us-east-1", StateTableARN: testStateTableARN}, "shop", "prod", topics, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Statement []struct {
+			Action   []string `json:"Action"`
+			Resource any      `json:"Resource"`
+		} `json:"Statement"`
+	}
+	if err := json.Unmarshal([]byte(policy), &document); err != nil {
+		t.Fatalf("the policy %s is not the shape this test reads: %v", policy, err)
+	}
+	queue := sqsQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "resize", "resize", false))
+	for _, statement := range document.Statement {
+		resources, _ := json.Marshal(statement.Resource)
+		if slices.Contains(statement.Action, "sqs:ChangeMessageVisibility") && strings.Contains(string(resources), queue) {
+			return
+		}
+	}
+	t.Errorf("the tasks policy %s grants no sqs:ChangeMessageVisibility on %s, so canceling or rescheduling a delayed ordered run cannot release the message holding its key", policy, queue)
+}
+
 func TestAnAppReachingTasksMaySendToEveryQueuePublishToEveryTopicAndKeepRunsUnderTheDeploymentsKeys(t *testing.T) {
 	t.Parallel()
 
