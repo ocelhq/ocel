@@ -51,7 +51,7 @@ function createCountingBinding(opts: {
     if (!release) return { kind: "no-pointer" };
     if (release === knownRelease) return { kind: "unchanged", release };
     const record = opts.records[`${app}/${release}`];
-    if (!record) return { kind: "dangling", release };
+    if (!record) return { kind: "no-pointer" };
     binding.lastReturnedRecord = true;
     return { kind: "record", release, record };
   };
@@ -248,18 +248,6 @@ describe("resolveRelease", () => {
     await resolveRelease(lookup);
 
     expect(errors).not.toHaveBeenCalled();
-  });
-
-  it("returns unavailable when the pointer names a build with no record", async () => {
-    const binding = createCountingBinding({
-      pointerRelease: { "web/": "deploy-1" },
-      records: {},
-    });
-    const clock = { ms: 0 };
-
-    const resolution = await resolveRelease(lookupOf(binding, clock));
-
-    expect(resolution).toEqual({ kind: "unavailable" });
   });
 
   it("keeps caches independent across apps", async () => {

@@ -6,7 +6,7 @@ import { Serve } from "../src/serve";
 import {
   buildImageCall,
   IMAGE_CALL_HEADER,
-  ORIGIN_PURGE_SCOPE,
+  RENDER_PROPS,
   RENDER_RELEASE_HEADER,
   SERVE_REFUSED_HEADER,
 } from "../src/serve-key";
@@ -41,7 +41,7 @@ const record = {
 };
 
 function serveWith(over: { served?: boolean; env?: Partial<Env> } = {}): Serve {
-  const ctx = Object.assign(createExecutionContext(), { props: ORIGIN_PURGE_SCOPE });
+  const ctx = Object.assign(createExecutionContext(), { props: RENDER_PROPS });
   return new Serve(
     ctx as never,
     {

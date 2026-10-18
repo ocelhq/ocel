@@ -533,6 +533,30 @@ describe("initialize / authorized", () => {
     expect(await store.authorized("s3cret")).toBe(true);
     expect(await store.authorized("other")).toBe(false);
   });
+
+  it("adopts a retried initialize that offers the secret it already holds", async () => {
+    const store = storeStub();
+    await store.initialize("s3cret");
+
+    expect(await store.initialize("s3cret")).toBe("adopted");
+
+    expect(await store.authorized("s3cret")).toBe(true);
+  });
+
+  it("creates no storage for a slug it only authenticates against", async () => {
+    const stranger = env.RELEASES_DO.get(env.RELEASES_DO.idFromName("never-initialized"));
+
+    expect(await stranger.authorized("x")).toBe(false);
+
+    await runInDurableObject(stranger, (_instance, ctx) => {
+      const tables = ctx.storage.sql
+        .exec(
+          `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '\\_%' ESCAPE '\\'`,
+        )
+        .toArray();
+      expect(tables).toEqual([]);
+    });
+  });
 });
 
 describe("destroy", () => {

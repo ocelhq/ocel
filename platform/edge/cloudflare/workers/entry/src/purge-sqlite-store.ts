@@ -1,11 +1,12 @@
+import { stampTag } from "@platform/edge-contract/cache-tags";
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { BacklogStore } from "./purge-backlog";
 
 const RETRY_AT = "retryAt";
 const FAILURES = "failures";
 const COVERED_AT = "MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0))";
-const TAG_RELEASE =
-  "CASE WHEN instr(tag, '|') > 0 THEN substr(tag, 1, instr(tag, '|') - 1) ELSE tag END";
+const SEPARATOR = stampTag("", "");
+const TAG_RELEASE = `CASE WHEN instr(tag, '${SEPARATOR}') > 0 THEN substr(tag, 1, instr(tag, '${SEPARATOR}') - 1) ELSE tag END`;
 
 export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogStore {
   const { sql } = storage;

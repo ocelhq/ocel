@@ -1,12 +1,7 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
-import {
-  buildOriginUrl,
-  type RenderCoordinates,
-  readRenderCall,
-  type ServeProps,
-} from "../src/serve-key";
+import type { RenderCoordinates, ServeProps } from "../src/serve-key";
 import {
   answerEveryRecordWith,
   awsOrigin,
@@ -14,7 +9,8 @@ import {
   storeOrigin,
   withGlobalFetch,
 } from "./origin-deps";
-import { routeTableKey } from "./route-table-store";
+import { freshRouteTableKey, routeTableKey } from "./route-table-store";
+import { readRenderTarget } from "./serving-deps";
 import { contextWithExports, serveAnswering } from "./worker-context";
 
 const record = {
@@ -169,8 +165,10 @@ describe("the gateway calling Serve", () => {
 });
 
 describe("the gateway serving a prerender", () => {
+  const prerenderTableKey = freshRouteTableKey();
   const prerenderRecord = {
     ...record,
+    routeTable: { format: "next", key: prerenderTableKey },
     release: "deploy-1~f1",
     isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
   };
@@ -202,18 +200,15 @@ describe("the gateway serving a prerender", () => {
     const origin: (RenderCoordinates & { props: ServeProps; originUrl: string })[] = [];
     const serve = ({ props }: { props: ServeProps }) => ({
       fetch: async (request: Request) => {
-        if (props.kind === "origin") {
-          origin.push({
-            props,
-            ...readRenderCall(request.url),
-            originUrl: buildOriginUrl(request.url),
-          });
+        if (props.kind === "render") {
+          const { coordinates, originUrl } = readRenderTarget(request.url);
+          origin.push({ props, ...coordinates, originUrl });
           return new Response("cached page", {
             headers: { "cf-cache-status": "HIT", "cache-tag": "r0a1b2c3d" },
           });
         }
         const key = decodeURIComponent(new URL(request.url).pathname.slice(1));
-        return key === routeTableKey()
+        return key === prerenderTableKey
           ? new Response(JSON.stringify(table))
           : new Response("", { status: 404 });
       },
@@ -233,7 +228,7 @@ describe("the gateway serving a prerender", () => {
 
     expect(origin).toEqual([
       {
-        props: { kind: "origin" },
+        props: { kind: "render" },
         host: "shop.example.com",
         app: "web",
         release: "r0a1b2c3d",
@@ -265,7 +260,7 @@ describe("the gateway serving a prerender", () => {
 
     expect(origin).toEqual([
       {
-        props: { kind: "origin" },
+        props: { kind: "render" },
         host,
         app: "web",
         release: "r0a1b2c3d",

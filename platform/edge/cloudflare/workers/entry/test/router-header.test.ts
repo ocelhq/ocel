@@ -46,8 +46,8 @@ describe("the Cloudflare router names itself on every response", () => {
 
   it("marks the response of a store that cannot answer", async () => {
     const served = await resolved(
-      bindingReturning({ kind: "dangling", release: "b1" }),
-      "dangling.example.com",
+      bindingReturning({ kind: "unchanged", release: "b1" }),
+      "unchanged.example.com",
     );
 
     expect(served).toBeInstanceOf(Response);

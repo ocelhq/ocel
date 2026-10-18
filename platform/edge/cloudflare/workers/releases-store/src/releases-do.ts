@@ -12,13 +12,18 @@ import type {
 import * as store from "./store";
 
 export class ReleasesStore extends DurableObject<Env> {
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    store.ensureSchema(ctx.storage);
+  #schemaReady = false;
+
+  private get storage(): DurableObjectStorage {
+    if (!this.#schemaReady) {
+      store.ensureSchema(this.ctx.storage);
+      this.#schemaReady = true;
+    }
+    return this.ctx.storage;
   }
 
   async initialize(secret: string): Promise<Initialization> {
-    return store.initialize(this.ctx.storage, secret);
+    return store.initialize(this.storage, secret);
   }
 
   async authorized(token: string): Promise<boolean> {
@@ -29,50 +34,50 @@ export class ReleasesStore extends DurableObject<Env> {
 
   async destroy(): Promise<void> {
     await this.ctx.storage.deleteAll();
-    store.ensureSchema(this.ctx.storage);
+    this.#schemaReady = false;
   }
 
   async movePointer(move: PointerMove): Promise<PointerMoveOutcome> {
-    return store.movePointer(this.ctx.storage, move);
+    return store.movePointer(this.storage, move);
   }
 
   async readServedPromotion(pointer?: string): Promise<string | undefined> {
-    return store.readServedPromotion(this.ctx.storage, pointer);
+    return store.readServedPromotion(this.storage, pointer);
   }
 
   async removePointer(pointer: string): Promise<void> {
-    store.removePointer(this.ctx.storage, pointer);
+    store.removePointer(this.storage, pointer);
   }
 
   async listApps(): Promise<string[]> {
-    return store.listApps(this.ctx.storage);
+    return store.listApps(this.storage);
   }
 
   async readPointerRecord(app?: string, knownRelease?: string): Promise<PointerRecordResult> {
-    return store.readPointerRecord(this.ctx.storage, app, knownRelease);
+    return store.readPointerRecord(this.storage, app, knownRelease);
   }
 
   async readLabelRecord(label: string, knownRelease?: string): Promise<PointerRecordResult> {
-    return store.readLabelRecord(this.ctx.storage, label, knownRelease);
+    return store.readLabelRecord(this.storage, label, knownRelease);
   }
 
   async readServedRecord(isrPrefix: string): Promise<ServedRecordResult> {
-    return store.readServedRecord(this.ctx.storage, isrPrefix);
+    return store.readServedRecord(this.storage, isrPrefix);
   }
 
   async readVersionStamp(): Promise<string | undefined> {
-    return store.readVersionStamp(this.ctx.storage);
+    return store.readVersionStamp(this.storage);
   }
 
   async setVersionStamp(version: string): Promise<void> {
-    store.setVersionStamp(this.ctx.storage, version);
+    store.setVersionStamp(this.storage, version);
   }
 
   async readGate(): Promise<string | undefined> {
-    return store.readGate(this.ctx.storage);
+    return store.readGate(this.storage);
   }
 
   async setGate(gate: string | undefined): Promise<void> {
-    store.setGate(this.ctx.storage, gate);
+    store.setGate(this.storage, gate);
   }
 }

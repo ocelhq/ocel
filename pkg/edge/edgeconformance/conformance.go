@@ -76,8 +76,8 @@ func RunFacts(t *testing.T, newEdge func(t *testing.T) edge.Edge) {
 		if limits := facts.CacheTagLimits; !limits.IsZero() && (limits.TagBytes <= 0 || limits.Tags <= 0 || limits.HeaderBytes <= 0) {
 			t.Errorf("Facts().CacheTagLimits = %+v; a build bounds tags by all three limits, so set each one or none", limits)
 		}
-		if budget := facts.PurgeBudget; !budget.IsZero() && (budget.PurgesPerMinute <= 0 || budget.TagsPerPurge <= 0) {
-			t.Errorf("Facts().PurgeBudget = %+v; a purge queue paces itself by both, so set each one or neither", budget)
+		if budget := facts.PurgeBudget; budget.TagsPerPurge < 0 {
+			t.Errorf("Facts().PurgeBudget = %+v; a purge queue batches by a positive count of tags, or none", budget)
 		}
 		if !facts.PurgeBudget.IsZero() && !facts.InvalidatesByCacheTag {
 			t.Errorf("Facts().PurgeBudget = %+v but Facts().InvalidatesByCacheTag = false; only an edge that purges by tag spends a purge budget", facts.PurgeBudget)

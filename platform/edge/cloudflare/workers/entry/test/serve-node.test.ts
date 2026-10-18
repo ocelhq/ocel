@@ -16,7 +16,7 @@ import { serveNodeOrigin } from "../src/serve-node";
 import type { ServingPorts } from "../src/serving";
 import { answerEveryRecordWith, capturing, FN_URL, makeRecord } from "./origin-deps";
 import { resolveBase } from "./resolve-base";
-import { objectStoreHolding, routeTableKey } from "./route-table-store";
+import { freshRouteTableKey, objectStoreHolding, routeTableKey } from "./route-table-store";
 import { fakeServing } from "./serving-deps";
 
 const ORIGIN = "https://abc123.lambda-url.eu-west-2.on.aws/";
@@ -89,7 +89,7 @@ describe("a request a cached route names", () => {
       release: "r0a1b2c3d",
       variant: "",
     });
-    expect(calls[0]!.props).toEqual({ kind: "origin" });
+    expect(calls[0]!.props).toEqual({ kind: "render" });
   });
 
   it("asks the origin to shape its response for the edge, names no stored entry, and lets Serve set the browser's Cache-Control as for a prerender", async () => {
@@ -325,7 +325,7 @@ describe("a request on a route no cache rule governs", () => {
       expect(forwarded).toHaveLength(0);
       expect(calls).toHaveLength(1);
       expect(calls[0]!.originUrl).toBe(`${ORIGIN}${new URL(url).pathname.slice(1)}?a=1&b=2`);
-      expect(calls[0]!.props).toEqual({ kind: "origin" });
+      expect(calls[0]!.props).toEqual({ kind: "render" });
     });
   }
 
@@ -695,14 +695,17 @@ describe("a node release resolved by the gateway", () => {
     routes: OcelRouteTable | string | undefined,
     serving: ServingPorts,
   ) {
-    const record = makeRecord({ isrPrefix: "prod/p1/api/r0a1b2c3d/isr", ...over });
+    const tableKey = freshRouteTableKey();
+    const record = makeRecord({
+      isrPrefix: "prod/p1/api/r0a1b2c3d/isr",
+      ...over,
+      ...(over.routeTable && { routeTable: { ...over.routeTable, key: tableKey } }),
+    });
     const wire = capturing();
     const base = resolveBase({
       originFetch: wire.fetch,
       routeTableStore:
-        routes === undefined
-          ? undefined
-          : objectStoreHolding({ [routeTableKey()]: routes as never }),
+        routes === undefined ? undefined : objectStoreHolding({ [tableKey]: routes as never }),
       serving,
     });
     const serve = await resolveServe(

@@ -1,3 +1,4 @@
+import { stampTag } from "@platform/edge-contract/cache-tags";
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { RaisedTag } from "./purge-backlog";
 
@@ -29,7 +30,9 @@ export interface TagTimesStore {
 const TAGS_PER_QUERY = 100;
 
 function releaseTagRange(release: string): [string, string] {
-  return [`${release}|`, `${release}}`];
+  const from = stampTag(release, "");
+  const last = from.length - 1;
+  return [from, from.slice(0, last) + String.fromCharCode(from.charCodeAt(last) + 1)];
 }
 
 export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore {

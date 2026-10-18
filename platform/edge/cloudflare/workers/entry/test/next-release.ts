@@ -8,7 +8,7 @@ import type { ServeFactory } from "../src/serve-objects";
 import type { ServingPorts } from "../src/serving";
 import { answerEveryRecordWith } from "./origin-deps";
 import { resolveBase, servingPorts } from "./resolve-base";
-import { objectStoreHolding, routeTableKey } from "./route-table-store";
+import { freshRouteTableKey, objectStoreHolding } from "./route-table-store";
 
 export const RELEASE_TOKEN = "r0a1b2c3d";
 
@@ -39,14 +39,14 @@ export interface NextRelease {
 
 let edgeBundles = 0;
 
-function nextRecord(over: Partial<StoredRecord> = {}): StoredRecord {
+function nextRecord(tableKey: string, over: Partial<StoredRecord> = {}): StoredRecord {
   return {
     app: "web",
     framework: "next",
     release: "deploy-1",
     buildId: "d1",
     rootFunction: "",
-    routeTable: { format: "next", key: routeTableKey() },
+    routeTable: { format: "next", key: tableKey },
     functionUrls: {},
     assetPrefix: "",
     isrPrefix: ISR_PREFIX,
@@ -81,8 +81,9 @@ function assetBucket(files: Record<string, string>, assetPrefix: string): AssetB
 }
 
 export function servedNextRelease(release: NextRelease = {}): ServeFetch {
+  const tableKey = freshRouteTableKey();
   const objects: Record<string, NextRouteTable | string> = {
-    [routeTableKey()]: nextTable(release.table),
+    [tableKey]: nextTable(release.table),
   };
   const bundled: Partial<StoredRecord> = {};
   if (release.edgeBundle !== undefined) {
@@ -93,7 +94,7 @@ export function servedNextRelease(release: NextRelease = {}): ServeFetch {
       code: { bundleKey, loaderId: id, compatDate: "2026-03-10", compatFlags: ["nodejs_compat"] },
     };
   }
-  const record = nextRecord({ ...bundled, ...release.record });
+  const record = nextRecord(tableKey, { ...bundled, ...release.record });
   const base = resolveBase({
     fetch: release.fetch,
     routeTableStore: objectStoreHolding(objects),

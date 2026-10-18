@@ -12,7 +12,7 @@ const ROUTE_TABLE_FILE = /^[0-9a-f]{64}\.json$/;
 
 export const ROUTE_TABLE_CACHE_MAX = 16;
 
-const routeTables = new WeakMap<EdgeObjectStore, Map<string, Promise<unknown>>>();
+const routeTables = new Map<string, Promise<unknown>>();
 
 export function ownRouteTableKey(key: string, slug: string): boolean {
   const segments = key.split("/");
@@ -30,17 +30,15 @@ function readStoredTable<T>(
   key: string,
   parse: (table: object, key: string) => T,
 ): Promise<T> {
-  let tables = routeTables.get(store);
-  if (!tables) routeTables.set(store, (tables = new Map()));
-  const cached = tables.get(key);
+  const cached = routeTables.get(key);
   if (cached) {
-    lruSet(tables, key, cached, ROUTE_TABLE_CACHE_MAX);
+    lruSet(routeTables, key, cached, ROUTE_TABLE_CACHE_MAX);
     return cached as Promise<T>;
   }
   const reading = parseStoredRouteTable(store, key, parse);
-  lruSet(tables, key, reading, ROUTE_TABLE_CACHE_MAX);
+  lruSet(routeTables, key, reading, ROUTE_TABLE_CACHE_MAX);
   reading.catch(() => {
-    if (tables.get(key) === reading) tables.delete(key);
+    if (routeTables.get(key) === reading) routeTables.delete(key);
   });
   return reading;
 }

@@ -69,6 +69,15 @@ export function boundCacheTags(raw: readonly string[], limits: CacheTagLimits): 
   return { tags, dropped };
 }
 
+export function stampTag(release: string, tag: string): string {
+  return release + releaseSeparator + tag;
+}
+
+export function readTagRelease(tag: string): string {
+  const separator = tag.indexOf(releaseSeparator);
+  return separator === -1 ? tag : tag.slice(0, separator);
+}
+
 export function buildPathCacheTag(pathname: string): string {
   return pathTagPrefix + new URL(pathBase + pathname).pathname.replaceAll(",", "%2C");
 }
@@ -103,7 +112,7 @@ export function storedCacheTags(
   const seen = new Set<string>();
 
   for (const tag of ordered) {
-    const stamped = release + releaseSeparator + tag;
+    const stamped = stampTag(release, tag);
     if (stamped.length > maxStoredTagLength || !isStorable(tag)) {
       unstorable.push(tag);
       continue;

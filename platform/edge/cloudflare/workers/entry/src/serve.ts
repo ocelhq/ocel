@@ -36,17 +36,14 @@ import {
   withholdFromEdge,
 } from "./serve-headers";
 import {
-  buildEdgeUrl,
-  buildOriginUrl,
   IMAGE_CALL_HEADER,
   type ObjectProps,
   parseKeyRelease,
   parseObjectKey,
+  parseRenderCall,
   RENDER_RELEASE_HEADER,
+  type RenderCall,
   type RenderRelease,
-  readEdgeEntry,
-  readImageOptimizer,
-  readRenderCall,
   SERVE_LOOKUP_ONLY_HEADER,
   SERVE_MISS_HEADER,
   SERVE_NO_SHELL_HEADER,
@@ -295,17 +292,28 @@ type PurgeableCache = CacheContext & {
   invalidate(options: { tags: string[] }): Promise<CachePurgeResult>;
 };
 
+interface StoreCoordinates {
+  release: string;
+  variant: string;
+  keyedUrl: string;
+}
+
 export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   async fetch(request: Request): Promise<Response> {
     const props = this.ctx.props;
     if (request.method !== "GET" && request.method !== "HEAD") {
       return respondNotStored(405, "Method Not Allowed");
     }
-    if (props?.kind === "origin") {
-      const optimizer = readImageOptimizer(request.url);
-      if (optimizer !== undefined) return this.fromImage(request, optimizer);
-      const entryKey = readEdgeEntry(request.url);
-      return entryKey === undefined ? this.fromOrigin(request) : this.fromEdge(request, entryKey);
+    if (props?.kind === "render") {
+      const call = parseRenderCall(request.url);
+      switch (call.source.kind) {
+        case "image":
+          return this.fromImage(request, call, call.source.optimizerUrl);
+        case "edge":
+          return this.fromEdge(request, call, call.source);
+        case "origin":
+          return this.fromOrigin(request, call, call.source.url);
+      }
     }
     if (!props?.host || !props.app || !props.release) {
       throw new Error("ocel: Serve was called with no host, app and release to key its cache by");
@@ -325,8 +333,11 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     return respondNotStored(503, "no store to read from");
   }
 
-  private async fromImage(request: Request, optimizerUrl: string): Promise<Response> {
-    const { release } = readRenderCall(request.url);
+  private async fromImage(
+    request: Request,
+    { release }: RenderCall,
+    optimizerUrl: string,
+  ): Promise<Response> {
     const origin = openOrigin(this.env);
     const found = await readRenderRecord(this.env, request, release);
     if (!found || !isReleaseImageOptimizer(origin.images, found.record, optimizerUrl)) {
@@ -342,16 +353,18 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     return forCache(imageForCache(optimized), { release, pathname: IMAGE_PATH_TAG_PATHNAME });
   }
 
-  private async fromOrigin(request: Request): Promise<Response> {
-    const { host, release, variant } = readRenderCall(request.url);
-    const keyedUrl = buildOriginUrl(request.url);
+  private async fromOrigin(
+    request: Request,
+    { host, release, variant }: RenderCall,
+    keyedUrl: string,
+  ): Promise<Response> {
     const found = await readRenderRecord(this.env, request, release);
     if (!found || !isReleaseOrigin(found.record, new URL(keyedUrl).origin)) {
       return respondRefused("the origin is not one of the served release's functions");
     }
     const cached = { release, pathname: new URL(keyedUrl).pathname };
     if (found.render.sharesFallbackShell) {
-      return this.fromFallbackShell(request, found.render, release, cached);
+      return this.fromFallbackShell(request, found.render, { release, variant, keyedUrl }, cached);
     }
     const honoursAppCacheHeaders = found.render.honoursAppCacheHeaders === true;
     if (
@@ -369,14 +382,14 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         this.renderAtOrigin(request, { host, release, scope, keyedUrl, unconditional: true });
       return this.fromStoredShell(
         request,
-        { render: regenerate, release, keyedUrl, cached },
+        { render: regenerate, release, variant, keyedUrl, cached },
         found.render,
       );
     }
     if (isRevalidation(request) || !isKeyedByPath(found.render, keyedUrl)) return render();
     let stored: StoreAnswer | null = null;
     try {
-      stored = await this.askStore(request, found.render, release);
+      stored = await this.askStore(request, found.render, { release, variant, keyedUrl });
     } catch (error) {
       console.error("ocel: the durable store was not read; rendering at the origin", error);
     }
@@ -390,6 +403,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     call: {
       render: () => Promise<Response>;
       release: string;
+      variant: string;
       keyedUrl: string;
       cached: CachedResponse;
     },
@@ -398,7 +412,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     let shell: StoreAnswer | null = null;
     try {
       if (isKeyedByPath(render, call.keyedUrl)) {
-        shell = await this.askStore(request, render, call.release);
+        shell = await this.askStore(request, render, call);
       }
     } catch (error) {
       console.error("ocel: the durable store was not read for a PPR shell", error);
@@ -418,12 +432,12 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   private async fromFallbackShell(
     request: Request,
     render: RenderRelease,
-    release: string,
+    at: StoreCoordinates,
     cached: CachedResponse,
   ): Promise<Response> {
     let shell: StoreAnswer | null;
     try {
-      shell = await this.askStore(request, render, release, true);
+      shell = await this.askStore(request, render, at, true);
     } catch (error) {
       console.error("ocel: the durable store was not read for a fallback shell", error);
       return respondUnshared(false, cached);
@@ -435,7 +449,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
   private async askStore(
     request: Request,
     render: RenderRelease,
-    release: string,
+    { release, variant, keyedUrl }: StoreCoordinates,
     sharedShell = false,
   ): Promise<StoreAnswer | null> {
     const { entry } = render;
@@ -449,10 +463,10 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
         entryPath: entry.path,
         fallbackPath: sharedShell ? undefined : entry.fallbackPath,
         window: { revalidate: entry.revalidate, expire: entry.expire },
-        variant: readRenderCall(request.url).variant,
+        variant,
         headers: request.headers,
         sharedShell,
-        documentRequest: !DATA_REQUEST_PATH.test(new URL(buildOriginUrl(request.url)).pathname),
+        documentRequest: !DATA_REQUEST_PATH.test(new URL(keyedUrl).pathname),
       },
       {
         source,
@@ -507,8 +521,11 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     );
   }
 
-  private async fromEdge(request: Request, entryKey: string): Promise<Response> {
-    const { host, app, release } = readRenderCall(request.url);
+  private async fromEdge(
+    request: Request,
+    { host, app, release }: RenderCall,
+    { entryKey, url: publicUrl }: { entryKey: string; url: string },
+  ): Promise<Response> {
     const found = await readRenderRecord(this.env, request, release);
     if (!found) return respondRefused("the release is not served");
     const { record, render: edge } = found;
@@ -527,7 +544,6 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     );
     const headers = new Headers(request.headers);
     headers.delete(RENDER_RELEASE_HEADER);
-    const publicUrl = buildEdgeUrl(request.url);
     const rendered = await invoke(
       entryKey,
       new Request(publicUrl, { method: request.method, headers, redirect: "manual" }),

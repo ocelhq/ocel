@@ -94,6 +94,14 @@ describe("initialize", () => {
     expect((await SELF.fetch(bearerReq(`/${SLUG}/apps`, "other"))).status).toBe(401);
   });
 
+  it("answers a retried initialize that offers the stored secret as a success", async () => {
+    await initialize();
+    const res = await initialize();
+    expect(res.status).toBe(204);
+
+    expect((await movePointer()).status).toBe(204);
+  });
+
   it("refuses to disclose the identity to the project secret", async () => {
     await initialize();
     const res = await SELF.fetch(

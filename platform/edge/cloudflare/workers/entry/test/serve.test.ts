@@ -7,7 +7,7 @@ import {
   buildObjectCall,
   buildOriginCall,
   buildServeRequest,
-  ORIGIN_PURGE_SCOPE,
+  RENDER_PROPS,
   RENDER_RELEASE_HEADER,
   SERVE_LOOKUP_ONLY_HEADER,
   SERVE_MISS_HEADER,
@@ -264,7 +264,7 @@ describe("Serve reading an object where the origin has no asset bucket", () => {
 });
 
 describe("Serve fetching from the origin", () => {
-  const originProps: ServeProps = ORIGIN_PURGE_SCOPE;
+  const originProps: ServeProps = RENDER_PROPS;
   const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
   const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
   const renderRelease = { [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix }) };
@@ -730,7 +730,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
       },
     };
     const ctx = Object.assign(createExecutionContext(), {
-      props: ORIGIN_PURGE_SCOPE,
+      props: RENDER_PROPS,
       exports: { Serve: () => ({ fetch: async () => new Response("{}") }) },
     });
     const serve = new Serve(

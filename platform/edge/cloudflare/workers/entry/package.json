@@ -24,6 +24,7 @@
     "@framework/next-protocol": "workspace:*",
     "@framework/next-router": "workspace:*",
     "@next/routing": "^16.2.10",
+    "@platform/cf-releases-store": "workspace:*",
     "@platform/edge-contract": "workspace:*",
     "aws4fetch": "^1.0.20"
   }

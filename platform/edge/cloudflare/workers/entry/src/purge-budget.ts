@@ -1,5 +1,4 @@
 export interface PurgeBudget {
-  purgesPerMinute: number;
   tagsPerPurge: number;
 }
 
@@ -17,13 +16,10 @@ function parseDeclared(declared: string): Partial<PurgeBudget> | undefined {
 
 export function readPurgeBudget(declared: string | undefined): PurgeBudget {
   const budget = declared ? parseDeclared(declared) : undefined;
-  if (
-    !isPositiveWholeNumber(budget?.purgesPerMinute) ||
-    !isPositiveWholeNumber(budget.tagsPerPurge)
-  ) {
+  if (!isPositiveWholeNumber(budget?.tagsPerPurge)) {
     throw new Error(
-      `ocel: OCEL_PURGE_BUDGET is "${declared ?? ""}", and the purge budget the deploy writes is a JSON object of positive whole purgesPerMinute and tagsPerPurge`,
+      `ocel: OCEL_PURGE_BUDGET is "${declared ?? ""}", and the purge budget the deploy writes is a JSON object of a positive whole tagsPerPurge`,
     );
   }
-  return { purgesPerMinute: budget.purgesPerMinute, tagsPerPurge: budget.tagsPerPurge };
+  return { tagsPerPurge: budget.tagsPerPurge };
 }

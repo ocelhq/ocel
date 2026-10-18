@@ -1,3 +1,7 @@
+import type {
+  PointerRecordResult as StorePointerRecordResult,
+  ServedRecordResult as StoreServedRecordResult,
+} from "@platform/cf-releases-store/store";
 import { lruSet } from "./lru";
 import type { ServedRecord } from "./served-record";
 
@@ -5,17 +9,9 @@ export interface StoredRecord extends ServedRecord {
   buildAssets?: Record<string, string>;
 }
 
-export type PointerRecordResult =
-  | { kind: "no-pointer" }
-  | { kind: "ambiguous-app" }
-  | { kind: "unchanged"; release: string }
-  | { kind: "record"; release: string; record: StoredRecord }
-  | { kind: "dangling"; release: string };
+export type PointerRecordResult = StorePointerRecordResult<StoredRecord>;
 
-export type ServedRecordResult =
-  | { kind: "record"; record: StoredRecord }
-  | { kind: "not-served" }
-  | { kind: "forgotten" };
+export type ServedRecordResult = StoreServedRecordResult<StoredRecord>;
 
 export interface ReleasesBinding {
   readServedRecord(args: { slug: string; isrPrefix: string }): Promise<ServedRecordResult>;
@@ -129,7 +125,5 @@ export async function resolveRelease(lookup: ReleaseLookup): Promise<ReleaseReso
         RECORD_CACHE_MAX,
       );
       return { kind: "found", record: result.record };
-    case "dangling":
-      return { kind: "unavailable" };
   }
 }
