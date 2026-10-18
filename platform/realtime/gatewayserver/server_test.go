@@ -1,4 +1,4 @@
-package main
+package gatewayserver
 
 import (
 	"context"
@@ -55,6 +55,11 @@ func keysOf(t *testing.T, keys map[string]ed25519.PrivateKey) string {
 
 func startGateway(t *testing.T, keys map[string]ed25519.PrivateKey) (string, func() error) {
 	t.Helper()
+	return startGatewayOn(t, keys, newMemoryBus())
+}
+
+func startGatewayOn(t *testing.T, keys map[string]ed25519.PrivateKey, bus Bus) (string, func() error) {
+	t.Helper()
 	cfg, err := readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keysOf(t, keys)}), time.Now)
 	if err != nil {
 		t.Fatalf("readConfig = %v", err)
@@ -65,7 +70,7 @@ func startGateway(t *testing.T, keys map[string]ed25519.PrivateKey) (string, fun
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
-	go func() { served <- serve(ctx, listener, cfg) }()
+	go func() { served <- serve(ctx, listener, cfg, bus) }()
 	stop := sync.OnceValue(func() error {
 		cancel()
 		return <-served
@@ -169,6 +174,64 @@ func TestAServerPublishReachesTheSubscribersOfItsChannel(t *testing.T) {
 	}
 }
 
+type sharedBus struct {
+	*gateway.MemoryBus
+	closed atomic.Int32
+}
+
+func (b *sharedBus) Close(context.Context) error {
+	b.closed.Add(1)
+	return nil
+}
+
+func publish(t *testing.T, address, connectToken, event string) {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, "http://"+address+gatewayenv.PublishPath, strings.NewReader(event))
+	req.Header.Set("Authorization", "Bearer "+connectToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("publish answered %s, want 204", resp.Status)
+	}
+}
+
+func TestAPublishOneGatewayInstanceTakesReachesTheSubscribersOfAnotherOnTheSameBus(t *testing.T) {
+	t.Parallel()
+
+	key := newKey(t)
+	bus := &sharedBus{MemoryBus: gateway.NewMemoryBus()}
+	taking, _ := startGatewayOn(t, map[string]ed25519.PrivateKey{"app": key}, bus)
+	holding, _ := startGatewayOn(t, map[string]ed25519.PrivateKey{"app": key}, bus)
+	conn, _ := connect(t, holding, mint(t, key, "app", token.Connect, "/app", "u1"))
+	channel := "/app/orders/o-1"
+	subscribe := map[string]any{"type": "subscribe", "id": "s-1", "channel": channel, "authorization": map[string]string{"Authorization": mint(t, key, "app", token.Subscribe, channel, "u1")}}
+	if got := exchange(t, conn, subscribe); got["type"] != "subscribe_success" {
+		t.Fatalf("subscribe = %v, want subscribe_success", got)
+	}
+
+	event := `{"v":1,"id":"0123456789abcdef0123456789abcdef","ch":"/app/orders/o-1","ts":1790000000000,"kind":"live","data":{"status":"shipped"}}`
+	publish(t, taking, mint(t, key, "app", token.Publish, channel, "server"), event)
+	if got := exchange(t, conn, nil); got["type"] != "data" || got["event"] != event {
+		t.Fatalf("the socket on the other instance got %v, want the published event", got)
+	}
+}
+
+func TestStoppingTheGatewayClosesItsBus(t *testing.T) {
+	t.Parallel()
+
+	bus := &sharedBus{MemoryBus: gateway.NewMemoryBus()}
+	_, stop := startGatewayOn(t, map[string]ed25519.PrivateKey{"app": newKey(t)}, bus)
+	if err := stop(); err != nil {
+		t.Fatalf("stop = %v", err)
+	}
+	if got := bus.closed.Load(); got != 1 {
+		t.Errorf("the bus was closed %d times once the gateway stopped, want once: a Pub/Sub bus deletes its subscription on close", got)
+	}
+}
+
 func TestStoppingTheGatewayClosesItsSocketsGoingAway(t *testing.T) {
 	t.Parallel()
 
@@ -243,7 +306,7 @@ func startGatewayFrom(t *testing.T, env map[string]string, clock *fakeClock) str
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
-	go func() { served <- serve(ctx, listener, cfg) }()
+	go func() { served <- serve(ctx, listener, cfg, newMemoryBus()) }()
 	t.Cleanup(func() {
 		cancel()
 		<-served

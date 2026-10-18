@@ -10,17 +10,19 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
 var IngressFor = run.IngressFor
 
-const (
-	TasksPart       = task.PartName
-	NetworkPart     = network.PartName
-	TagDatabasePart = tagDatabasePart
-)
+const NetworkPart = network.PartName
+
+func MakeWritableDatabase(ctx context.Context, p *Provider, tier environment.Tier, project string) error {
+	return p.ensureProjectWritableDatabase(ctx, provider.DeployPreflight{
+		Deploy:    provider.DeploySpec{Tier: tier, Slug: project},
+		Resources: []provider.Resource{{Type: provider.BindingTask}},
+	})
+}
 
 func AddParts(ctx context.Context, p *Provider, tier environment.Tier, names ...string) error {
 	return p.addParts(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: tier, Slug: "live-suite"}}, names)

@@ -39,6 +39,7 @@ func projectRecordsCondition(names names.Names, region string) string {
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		clauses = append(clauses,
 			fmt.Sprintf("resource.name.startsWith(%q)", "projects/"+names.Project()+"/databases/"+names.ProjectDatabasePrefix(tier)),
+			fmt.Sprintf("resource.name.startsWith(%q)", "projects/"+names.Project()+"/databases/"+names.ProjectWritableDatabasePrefix(tier)),
 			fmt.Sprintf("resource.name.startsWith(%q)", ring+"/cryptoKeys/"+ports.ProjectKeyPrefix(tier)))
 	}
 	return strings.Join(clauses, " || ")
@@ -177,10 +178,10 @@ func TakeProjectRecords(ctx context.Context, b bootstrap.Engine, tier environmen
 	if err != nil {
 		return fmt.Errorf("list the Firestore databases of project %s: %w", b.Clients.Project(), err)
 	}
-	prefix := b.Clients.ProjectDatabasePrefix(tier)
+	prefixes := []string{b.Clients.ProjectDatabasePrefix(tier), b.Clients.ProjectWritableDatabasePrefix(tier)}
 	for _, database := range listed.Databases {
 		_, id, _ := strings.Cut(database.Name, projectDatabasesFilter)
-		if !strings.HasPrefix(id, prefix) {
+		if !slices.ContainsFunc(prefixes, func(prefix string) bool { return strings.HasPrefix(id, prefix) }) {
 			continue
 		}
 		if err := b.TakeDatabase(ctx, id); err != nil {

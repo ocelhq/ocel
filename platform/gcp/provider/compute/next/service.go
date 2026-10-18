@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -151,11 +150,11 @@ func FillContainerDefaults(s run.Serving) run.Serving {
 	return s
 }
 
-func NewCache(names names.Names, tier environment.Tier, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
+func NewCache(names names.Names, ref provider.StackRef, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
 	return nextCache{
 		purgeSecret:     purgeSecret,
-		bucket:          names.Bucket(tier),
-		tagDatabase:     "projects/" + names.Project() + "/databases/" + names.TagDatabase(tier),
+		bucket:          names.Bucket(ref.Tier),
+		tagDatabase:     "projects/" + names.Project() + "/databases/" + names.ProjectWritableDatabase(ref.Tier, ref.Project),
 		storageEndpoint: storageEndpoint,
 		tagEndpoint:     tagEndpoint,
 	}

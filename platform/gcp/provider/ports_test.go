@@ -511,12 +511,15 @@ func TestADeployMayAddTheBootstrapPartsGoogleNamesNoConditionForThroughOneCustom
 			t.Errorf("Permissions(deploy) grants %s, which deletes what a deploy only creates", line)
 		}
 	}
-	databases := "projects/acme-prod/roles/ocel_part_databases, on the condition "
+	databases := "projects/acme-prod/roles/ocel_project_records, on the condition "
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		named := ports.TaskDatabase("ocel", tier)
-		if !strings.Contains(document.Document, databases) || !strings.Contains(document.Document, `resource.name == "projects/acme-prod/databases/`+named+`"`) {
-			t.Errorf("Permissions(deploy) =\n%s\nwant the part databases role granted on the condition it names %s: a deploy makes a tier's task database and no other", document.Document, named)
+		named := ports.ProjectWritableDatabasePrefix("ocel", tier)
+		if !strings.Contains(document.Document, databases) || !strings.Contains(document.Document, `resource.name.startsWith("projects/acme-prod/databases/`+named+`")`) {
+			t.Errorf("Permissions(deploy) =\n%s\nwant the project records role granted on the condition it names the databases under %s: a deploy makes each project's database of runs and tag records", document.Document, named)
 		}
+	}
+	if strings.Contains(document.Document, "part_databases") {
+		t.Errorf("Permissions(deploy) =\n%s\nwant no part databases role: no tier part keeps a database", document.Document)
 	}
 	if strings.Contains(document.Document, "roles/datastore.owner") {
 		t.Errorf("Permissions(deploy) grants roles/datastore.owner, which deletes every Firestore database in the project")

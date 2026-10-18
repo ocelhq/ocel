@@ -17,16 +17,14 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 )
 
 func TestTheBootstrapOffersEveryPartADeployAddsAndNoEdgeRequiresOne(t *testing.T) {
 	t.Parallel()
 
 	offered := composed(bootstrap.Engine{}).Parts()
-	for _, name := range []string{network.PartName, task.PartName, tagDatabasePart, albpart.PartName, envsource.PartName, bastion.PartName} {
+	for _, name := range []string{network.PartName, albpart.PartName, envsource.PartName, bastion.PartName} {
 		at := slices.IndexFunc(offered, func(part provider.Part) bool { return part.Name == name })
 		if at < 0 {
 			t.Errorf("Parts() = %v, want %s offered, so `ocel bootstrap <tier> --remove %s` can name it", offered, name, name)
@@ -86,32 +84,5 @@ func TestARemovalSplitsThePartsADeployAddedFromTheBootstrapsOwn(t *testing.T) {
 	named, rest := composed(bootstrap.Engine{Removable: tierParts()}).SplitRemovals(provider.BootstrapRequest{Remove: []string{network.PartName, bootstrap.CloudflareOriginPart, envsource.PartName}})
 	if !slices.Equal(named, []string{network.PartName, envsource.PartName}) || !slices.Equal(rest.Remove, []string{bootstrap.CloudflareOriginPart}) {
 		t.Errorf("splitRemovals() = %v, %v, want the parts a deploy added apart from %s", named, rest.Remove, bootstrap.CloudflareOriginPart)
-	}
-}
-
-func recordingTasks(t *testing.T) bootstrap.Engine {
-	t.Helper()
-	b := composed(bootstrap.Engine{Clients: googletest.GrantedIAM().Open(t), Records: recordingTopics(t, environment.TierProduction,
-		provider.Binding{Type: provider.BindingTask, Name: "task--resize", Properties: map[string]string{stackrecords.PropertyDeclared: "resize"}},
-	)})
-	if err := stackrecords.MarkBootstrapPartReady(context.Background(), b.Records, environment.TierProduction, task.PartName, stackrecords.BootstrapPart{AddedBy: "shop"}); err != nil {
-		t.Fatal(err)
-	}
-	return b
-}
-
-func TestRemovingTheTasksPartByNameWhileATaskIsDeclaredIsRefusedUnlessForced(t *testing.T) {
-	t.Parallel()
-	b := recordingTasks(t)
-
-	_, err := b.PlanRemovedParts(context.Background(), environment.TierProduction, []string{task.PartName}, false)
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "task resize of project shop environment prod") || !strings.Contains(refused.Message, "`ocel bootstrap production --remove tasks`") {
-		t.Fatalf("planRemovedParts() while a task is declared = %v, want a refusal naming the task and the removal to run again", err)
-	}
-
-	groups, err := b.PlanRemovedParts(context.Background(), environment.TierProduction, []string{task.PartName}, true)
-	if err != nil || len(groups) != 1 || groups[0].Part != task.PartName || groups[0].Action != provider.ActionDelete {
-		t.Errorf("a forced planRemovedParts() = %+v, %v, want the tasks part planned for deletion: the declared task is only who uses it, which --force overrides", groups, err)
 	}
 }

@@ -80,10 +80,11 @@ func TestLiveStacks(t *testing.T) {
 	facts := p.Facts()
 	if emulated() {
 		facts.Bindings = slices.DeleteFunc(slices.Clone(facts.Bindings), func(b provider.BindingType) bool { return b == provider.BindingKV })
-		bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart)
+		bootstrappedWith(t, p, environment.TierPreview)
 	} else {
-		bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart, gcp.NetworkPart)
+		bootstrappedWith(t, p, environment.TierPreview, gcp.NetworkPart)
 	}
+	writableDatabaseMade(t, p, environment.TierPreview, "conformance")
 
 	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues(), realtime.RootRealtime, postgres.RootPostgres)
 }

@@ -18,11 +18,11 @@ const (
 func Purpose(b bootstrap.Engine, tier environment.Tier) bootstrap.AccountPurpose {
 	return bootstrap.AccountPurpose{
 		DisplayName: "ocel " + string(tier) + " realtime",
-		Description: "the identity the realtime gateways of the " + string(tier) + " tier run as, which may read the tier's realtime keys and nothing else",
-		Ungranted:   "it exists, and it may not read the tier's realtime keys, so a gateway mounting them would never start",
-		Grant:       grantRealtimeKeysRead,
-		Forget:      forgetRealtimeKeysRead,
-		Granted:     realtimeKeysReadGranted,
+		Description: "the identity the realtime gateways of the " + string(tier) + " tier run as, which may read the tier's realtime keys and hold the Pub/Sub subscriptions its instances hear their topic through, and nothing else",
+		Ungranted:   "it exists, and it may not read the tier's realtime keys or hold its instances' Pub/Sub subscriptions, so a gateway would never start",
+		Grant:       grantRealtimeRoles,
+		Forget:      forgetRealtimeRoles,
+		Granted:     realtimeRolesGranted,
 	}
 }
 
@@ -42,30 +42,40 @@ func realtimeKeysCondition(ctx context.Context, b bootstrap.Engine, tier environ
 	}, nil
 }
 
-func grantRealtimeKeysRead(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
-	return bindRealtimeKeysRead(ctx, b, tier, true)
+func grantRealtimeRoles(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	return bindRealtimeRoles(ctx, b, tier, true)
 }
 
-func forgetRealtimeKeysRead(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
-	return bindRealtimeKeysRead(ctx, b, tier, false)
+func forgetRealtimeRoles(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	return bindRealtimeRoles(ctx, b, tier, false)
 }
 
-func bindRealtimeKeysRead(ctx context.Context, b bootstrap.Engine, tier environment.Tier, granting bool) error {
+func bindRealtimeRoles(ctx context.Context, b bootstrap.Engine, tier environment.Tier, granting bool) error {
 	condition, err := realtimeKeysCondition(ctx, b, tier)
 	if err != nil {
 		return err
 	}
 	member := realtimeMember(b.Clients, tier)
-	if err := gcloud.BindProjectRole(ctx, b.Clients, member, realtimeKeysReaderRole, condition, granting); err != nil {
-		return fmt.Errorf("set whether %s may read the %s tier's realtime keys: %w", member, tier, err)
+	changes := policy.Each(
+		gcloud.GrantedOrRevoked(realtimeKeysReaderRole, member, condition, granting),
+		gcloud.GrantedOrRevoked(b.Clients.RealtimeSubscriptionsRolePath(), member, nil, granting),
+	)
+	if _, err := policy.Edit(ctx, gcloud.ProjectPolicy(b.Clients), changes); err != nil {
+		return fmt.Errorf("set whether %s may read the %s tier's realtime keys and hold its gateway instances' Pub/Sub subscriptions: %w", member, tier, err)
 	}
 	return nil
 }
 
-func realtimeKeysReadGranted(ctx context.Context, b bootstrap.Engine, tier environment.Tier) (bool, error) {
+func realtimeRolesGranted(ctx context.Context, b bootstrap.Engine, tier environment.Tier) (bool, error) {
 	condition, err := realtimeKeysCondition(ctx, b, tier)
 	if err != nil {
 		return false, err
 	}
-	return gcloud.ProjectRoleGranted(ctx, b.Clients, realtimeMember(b.Clients, tier), realtimeKeysReaderRole, condition)
+	bindings, err := policy.Read(ctx, gcloud.ProjectPolicy(b.Clients))
+	if err != nil {
+		return false, err
+	}
+	member := realtimeMember(b.Clients, tier)
+	return policy.Holds(bindings, realtimeKeysReaderRole, member, condition) &&
+		policy.Holds(bindings, b.Clients.RealtimeSubscriptionsRolePath(), member, nil), nil
 }

@@ -52,7 +52,7 @@ func TestLiveFirestoreStoreKeepsRunsAndRecordsAsEveryRunStoreMust(t *testing.T) 
 	})
 }
 
-func TestLiveATiersRunsAreKeptInItsOwnTaskDatabaseApartFromTheNamespaceRecords(t *testing.T) {
+func TestLiveAProjectsRunsAreKeptInItsOwnWritableDatabaseApartFromTheNamespaceRecords(t *testing.T) {
 	clients := liveClients(t)
 	scope := scopeOf(t)
 	store := topics.Store{Clients: clients, Scope: scope}
@@ -64,7 +64,8 @@ func TestLiveATiersRunsAreKeptInItsOwnTaskDatabaseApartFromTheNamespaceRecords(t
 
 	path := "taskstores/" + string(scope.Tier) + "~" + scope.Slug + "~" + scope.Environment + "/runs/kept"
 	for database, want := range map[string]bool{
-		ports.TaskDatabase(clients.Namespace, scope.Tier): true,
+		ports.ProjectWritableDatabase(clients.Namespace, scope.Tier, scope.Slug): true,
+		ports.ProjectWritableDatabase(clients.Namespace, scope.Tier, "blog"):     false,
 		clients.Database(): false,
 	} {
 		client, err := firestore.NewClientWithDatabase(ctx, clients.Project, database, ports.EmulatorGRPC(clients.Endpoint)...)
@@ -88,7 +89,7 @@ func TestLiveAnUnfinishedRunIsPurgedAMonthAfterItWasDue(t *testing.T) {
 	if _, err := store.CreateRun(ctx, runs.Run{Execution: "pending", Topic: "resize", Consumer: "gone", Status: provider.RunDelayed, CreatedAt: time.Now(), DueAt: due}); err != nil {
 		t.Fatal(err)
 	}
-	client, err := clients.TaskFirestore(scope.Tier)
+	client, err := clients.RunsFirestore(scope.Tier, scope.Slug)
 	if err != nil {
 		t.Fatal(err)
 	}

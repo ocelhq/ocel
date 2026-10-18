@@ -53,9 +53,8 @@ ocel deploy
 ```
 
 The bootstrap makes only what every deploy needs. The first deploy that needs something more adds
-it to the tier with the deploy credential and shows it in its plan: the tag database a Next app
-that revalidates writes to, the network a database or kv store is reached over, the database
-topics and tasks keep their runs in, and the load balancer of the `alb` edge. `ocel bootstrap status`
+it to the tier with the deploy credential and shows it in its plan: the network a database or kv
+store is reached over, and the load balancer of the `alb` edge. `ocel bootstrap status`
 lists each of these parts, who added it, which projects use it and what it costs idle, and
 `ocel bootstrap production` makes each recorded part again if it was changed or deleted by hand.
 `ocel bootstrap production --remove <part>` takes one part down, `cloudflare-origin` included, and
@@ -63,9 +62,11 @@ refuses while a project here uses it unless you pass `--force`; the next deploy 
 deploy adds adds it back. `--force` never takes `private-network` down while a kv store or database
 is on it, or `alb` while a hostname is bound to it: remove those first.
 
-The first deploy whose build revalidates adds a Firestore database of the tier's own,
-`<namespace>-<tier>-tags`, that holds the revalidated tags of the tier's Next apps. It has no
-standing charge, only the reads, writes and storage its records use.
+A project that declares a topic or task, or whose build revalidates, also gets a Firestore
+database of its own in each tier, `<namespace>-<tier>-w-<hash>`, which holds its runs and its Next
+tag records. Only that project's apps may write it. The first deploy that needs it makes it, a dry
+deploy plans it, and removing the project from the tier deletes it. It has no standing charge, only
+the reads, writes and storage its records use.
 
 ## Next.js
 
@@ -361,19 +362,25 @@ gcloud services enable compute.googleapis.com certificatemanager.googleapis.com 
 
 `bucket("uploads")` is one Cloud Storage bucket per environment, in the bootstrap's region, under
 uniform bucket-level access with public access prevention enforced. Only the service accounts of the
-apps that bind it may read and write its objects. An app has one account per tier, shared by its
-environments there, so access is per app across the tier's environments: `web` running in one preview can
-reach another preview's buckets of `web`, and no other app's. See [Buckets](/docs/sdk/bucket#on-google-cloud) for how
+apps that bind it may read and write its objects. Each environment of an app runs as an account of
+its own, so `web` running in one preview reaches no other preview's buckets. See [Buckets](/docs/sdk/bucket#on-google-cloud) for how
 signed urls and uploads work there.
 
 ## Postgres
 
-`postgres("orders")` is one Cloud SQL for PostgreSQL instance per environment: the Enterprise
-edition's shared-core `db-f1-micro` (about $7.70 a month in `us-central1`) in one zone, with
-10 GB of SSD that grows as it fills (about $0.17 per GB a month) and daily backups. It bills by
-the hour whether it serves anything or not, and Google's SLA does not cover shared-core
-instances. `version` `"14"` to `"17"` picks the major version, `"17"` when you leave it out; a
-major version is not changed in place, so a deploy asking for another one is refused.
+`postgres("orders")` is one Cloud SQL for PostgreSQL instance per environment, sized by the
+environment's tier. In production it runs the Enterprise edition's dedicated-core `db-custom-1-3840`
+(1 vCPU, 3.75 GB; about $98.60 a month in `us-central1` at the high-availability rate) as a regional
+instance with a standby in a second zone, 10 GB of SSD that grows as it fills (about $0.34 per GB a
+month), daily backups with point-in-time recovery, and deletion protection, which ocel lifts only
+when it removes the database. A preview runs the shared-core `db-f1-micro` (about $7.70 a month) in
+one zone, with 10 GB of SSD (about $0.17 per GB a month) and daily backups; Google's SLA does not
+cover shared-core instances. An instance bills by the hour whether it serves anything or not, and a
+deploy patches an instance that has drifted from its tier's size back to it, which restarts the
+instance. Each app's Cloud Run services together open at most what the instance's connections
+allow: 100 in production and 25 in a preview, less 3 Cloud SQL reserves, at up to 10 per instance.
+`version` `"14"` to `"17"` picks the major version, `"17"` when you leave it out; a major version is
+not changed in place, so a deploy asking for another one is refused.
 
 The instance has no public address. It is reached at a private address on the tier's
 [private network](#private-network), made for it by a Private Service Connect endpoint that
@@ -387,7 +394,7 @@ a new, empty instance.
 ## KV stores
 
 `kv("cache")` runs as one Memorystore for Valkey instance per store: cluster mode off, one
-node, no replica. The node is the smallest whose keyspace holds the store's `memory`, from
+node, plus one replica in another zone in production and none in a preview. The node is the smallest whose keyspace holds the store's `memory`, from
 `custom-pico` (1.08 GB, about $22 a month in `us-central1`) up to `highmem-xlarge`, and
 `maxmemory` is set to `memory`. A store above 32gb is refused when the deploy is planned. `eviction` is sent as declared, and as
 `noeviction` when you leave it out, since Memorystore's own default is `volatile-lru`.
@@ -395,8 +402,10 @@ node, no replica. The node is the smallest whose keyspace holds the store's `mem
 
 Writes go to an append-only file synced every second, so a crash loses about the last second
 of writes. A node bills by the hour whether it serves anything or not, and the append-only
-file adds a charge for the node's capacity. A non-replicated instance loses its data if its
-zone goes down.
+file adds a charge for the node's capacity. A production store's replica bills as a second node
+with its own append-only file, and Memorystore promotes it if the primary or its zone fails. A
+preview store has no replica, so it loses its data if its zone goes down, and a failed node takes
+minutes to repair.
 
 Apps authenticate with the token Memorystore generates for the default user, which ocel
 reads back on every deploy, and reach the store over TLS under the instance's own certificate
@@ -432,8 +441,8 @@ or database is still on it, naming them. The bootstrap credential needs
 Each topic and task is a Pub/Sub topic, and each of its consumers gets a push subscription of
 its own. Pub/Sub redelivers a message until its run settles, and a run that spends its attempts
 settles failed, a dead letter to list or redrive. A task with a `cron` is a Cloud Scheduler job publishing to its
-topic. Runs are kept in a Firestore database of the tier's own, and a delayed send or trigger
-waits in the tier's Cloud Tasks queue until it is due.
+topic. Runs are kept in the project's own Firestore database, which no other project's apps may
+read or write, and a delayed send or trigger waits in the tier's Cloud Tasks queue until it is due.
 
 Each worker runs as a second Cloud Run service from its app's image, scaled from zero, reached
 by Pub/Sub alone: its ingress is internal, and only the tier's push account may invoke it. A run
@@ -441,12 +450,12 @@ gets at most 600 seconds, the longest a push subscription waits for an answer.
 
 The bootstrap makes the tier's delay queue, `<namespace>-<tier>-delays`, and the push account
 Pub/Sub signs each push as, so it wants Cloud Tasks and Pub/Sub on. The first deploy declaring a
-topic or task adds the tier's task database as the tier's `tasks` part.
+topic or task makes the project's own database of runs.
 
 None of it bills while idle. A Next app that declares neither uses no queue. `ocel bootstrap
-destroy` deletes the database and purges the queue, keeping it, since Cloud Tasks will not make
-a queue under a deleted queue's name for 7 days. It needs `roles/cloudtasks.admin` in the bootstrap credential, and is refused
-while any project on the tier still declares a topic or task.
+destroy` deletes every project's databases and purges the queue, keeping it, since Cloud Tasks will
+not make a queue under a deleted queue's name for 7 days. It needs `roles/cloudtasks.admin` in the
+bootstrap credential.
 
 What differs from `ocel dev`: lanes are recorded but not weighted, a batch consumer receives
 batches of one, a task's own `concurrency` is not enforced (its worker's is), and a batch trigger
@@ -473,6 +482,16 @@ Each environment's realtime resources share one Cloud Run service running the Oc
 which runs as a service account of the tier's own that may read the tier's realtime keys
 and no other secret. See [Realtime](/docs/sdk/realtime#on-google-cloud) for how sockets,
 publishes, keys, upgrades and cost work there.
+
+Each environment's gateway runs up to 10 instances of 950 sockets each. Cloud Run cannot route a
+publish to one instance, so each instance hears every publish through its own subscription to the
+environment's Pub/Sub topic: it makes the subscription when it starts and deletes it when it stops,
+and a subscription left by an instance that was killed expires a day after its last pull. Sockets
+on an older revision keep receiving while it drains. The tier's realtime account may publish on and
+subscribe to its environment's topic, and holds the `<namespace>_realtime_subscriptions` role on the
+project to make, pull and delete subscriptions; Pub/Sub honours no IAM condition, so that role
+reaches every subscription in the project. A tier bootstrapped before this needs `ocel bootstrap`
+again.
 
 ## Logs
 
@@ -515,10 +534,8 @@ gcloud projects add-iam-policy-binding my-project \
 An app that reaches topics, tasks or workers may act as its own account, and so may Cloud Tasks,
 because a delayed message is published as the app that sent it.
 
-The first deploy that needs a part of the bootstrap adds it with two more custom roles the
-bootstrap keeps. `<namespace with _ for ->_part_databases` makes the tag and task databases and
-their indexes, granted on a condition naming those four databases, so it reaches no other
-Firestore database. `<namespace with _ for ->_parts` creates the tier's network, subnetwork and
+The first deploy that needs a part of the bootstrap adds it with one more custom role the
+bootstrap keeps. `<namespace with _ for ->_parts` creates the tier's network, subnetwork and
 service connection policies, uses that network and subnetwork as the policies need, creates the
 repository the load balancer's gate plugin is kept in, and reads whether a service is on. Compute
 Engine, Network Connectivity, Artifact Registry and Service Usage name no resource attribute a
@@ -529,11 +546,13 @@ repository, which the last project behind the load balancer takes down with it.
 gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=projects/my-project/roles/ocel_parts --condition=None
-gcloud projects add-iam-policy-binding my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=projects/my-project/roles/ocel_part_databases \
-  --condition="title=ocel part databases,expression=resource.name == 'projects/my-project/databases/ocel-production-tags' || resource.name.startsWith('projects/my-project/databases/ocel-production-tags/') || resource.name == 'projects/my-project/databases/ocel-production-tasks' || resource.name.startsWith('projects/my-project/databases/ocel-production-tasks/') || resource.name == 'projects/my-project/databases/ocel-preview-tags' || resource.name.startsWith('projects/my-project/databases/ocel-preview-tags/') || resource.name == 'projects/my-project/databases/ocel-preview-tasks' || resource.name.startsWith('projects/my-project/databases/ocel-preview-tasks/')"
 ```
+
+`<namespace with _ for ->_project_records` makes the Firestore databases each project keeps its
+values, runs and tag records in, with their indexes and time to live, and the key its values are
+sealed under. It can also delete the database of a project's runs when the project is removed. It is
+granted on a condition naming the `<namespace>-<tier>-v-` and `-w-` database prefixes and the
+`<tier>-p-` keys, so it reaches no other database or key.
 
 `ocel permissions deploy` prints each grant with its condition for your namespace.
 
@@ -542,10 +561,11 @@ days and nothing could make it again in that time. A role deleted by hand is und
 Google's first 7 days, and one whose permissions drifted is put back.
 
 Each app runs as a service account of its own, which a deploy creates the first time the app
-ships to a tier and grants only what the app's runtime reads: the namespace's database, the
-tier's key, for a Next app the tier's tags database, and for an app that reaches topics, tasks or
-workers the tier's task database, the delay queue and its topics, and for a serverless Next app
-the delay queue. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
+ships to a tier and grants only what the app's runtime reads: read access to its project's values
+database and decrypt on its project's key (and the same for any project its values reference); for
+a Next app with an incremental cache, or an app that reaches topics, tasks or workers, write access
+to its project's own database of runs and tag records and no other; for an app that reaches topics,
+tasks or workers, the delay queue and its topics; and for a serverless Next app the delay queue. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
 a deploy holds it under a condition that lets it grant and revoke the four roles an app needs and
 the custom role that clears Cloud CDN, and no others:
 

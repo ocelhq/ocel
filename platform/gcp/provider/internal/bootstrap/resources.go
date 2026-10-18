@@ -80,6 +80,10 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 			Note: "the role a deploy credential is granted to add the parts of a bootstrap Google names no condition for, such as a tier's private network, and no more",
 		},
 		{
+			Kind: KindRole, Name: names.RealtimeSubscriptionsRole(), Shared: true,
+			Note: "the role each tier's realtime account is granted on the project to make, pull and delete the Pub/Sub subscription each gateway instance hears its environment's topic through, and no more",
+		},
+		{
 			Kind: KindServiceAccount, Name: names.RealtimeAccount(tier),
 			Note: "the identity this tier's realtime gateways run as, which may read this tier's realtime keys and no other secret",
 		},
@@ -100,12 +104,8 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 			Note: "the queue a delayed message of this tier waits in, which a deploy grants each app that publishes the right to enqueue on, and may only grant on a queue that already exists",
 		},
 		{
-			Kind: KindRole, Name: names.PartDatabasesRole(), Shared: true,
-			Note: "the role a deploy credential is granted, on the condition it names the tier databases a part holds, to make those databases and their indexes, and no more",
-		},
-		{
 			Kind: KindRole, Name: names.ProjectRecordsRole(), Shared: true,
-			Note: "the role a deploy credential is granted, on the condition it names them, to make the Firestore database and the key each project's values are kept and sealed in, and no more",
+			Note: "the role a deploy credential is granted, on the condition it names them, to make the Firestore databases each project's values, runs and tag records are kept in and the key its values are sealed under, and no more",
 		},
 		{
 			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier),

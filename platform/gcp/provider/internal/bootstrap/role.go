@@ -73,7 +73,7 @@ func NewAppAccountsRole(names names.Names) customRole {
 }
 
 func FindCustomRole(names names.Names, id string) (customRole, bool) {
-	for _, role := range []customRole{NewAppAccountsRole(names), NewCDNPurgeRole(names), NewPartsRole(names), NewPartDatabasesRole(names), newProjectRecordsRole(names)} {
+	for _, role := range []customRole{NewAppAccountsRole(names), NewCDNPurgeRole(names), NewPartsRole(names), NewProjectRecordsRole(names), newRealtimeSubscriptionsRole(names)} {
 		if role.ID == id {
 			return role, true
 		}
@@ -191,18 +191,33 @@ var projectRecordsPermissions = []string{
 	"datastore.databases.create",
 	"datastore.databases.get",
 	"datastore.databases.getMetadata",
+	"datastore.databases.update",
+	"datastore.databases.delete",
 	"datastore.operations.get",
+	"datastore.schemas.create",
+	"datastore.schemas.list",
+	"datastore.schemas.update",
 	"cloudkms.cryptoKeys.create",
 	"cloudkms.cryptoKeys.get",
 }
 
-func newProjectRecordsRole(names names.Names) customRole {
+func NewProjectRecordsRole(names names.Names) customRole {
 	return customRole{
 		ID:          names.ProjectRecordsRole(),
 		title:       "ocel project records (" + string(names.Namespace()) + ")",
-		description: "lets a deploy make the Firestore database and the key a project's values are kept and sealed in, granted on the condition it names them, and nothing else",
+		description: "lets a deploy make the Firestore databases a project's values, runs and tag records are kept in, with their indexes, and the key its values are sealed under, and remove the database of its runs and tag records, granted on the condition it names them, and nothing else",
 		Permissions: projectRecordsPermissions,
-		DriftReason: "it holds other permissions than a deploy needs to make a project's records database and key",
+		DriftReason: "it holds other permissions than a deploy needs to make a project's records databases and key",
+	}
+}
+
+func newRealtimeSubscriptionsRole(names names.Names) customRole {
+	return customRole{
+		ID:          names.RealtimeSubscriptionsRole(),
+		title:       "ocel realtime subscriptions (" + string(names.Namespace()) + ")",
+		description: "lets a realtime gateway instance make, pull and delete the Pub/Sub subscription it hears its environment's topic through, and nothing else",
+		Permissions: []string{"pubsub.subscriptions.create", "pubsub.subscriptions.consume", "pubsub.subscriptions.delete"},
+		DriftReason: "it holds other permissions than a realtime gateway instance needs to hold its own Pub/Sub subscription",
 	}
 }
 

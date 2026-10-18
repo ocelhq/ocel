@@ -117,6 +117,15 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/google_project_iam_custom_role:ocel_realtime_subscriptions",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_project_iam_custom_role",
+      "name": "ocel_realtime_subscriptions",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_service_account:ocel-345a57cc3f",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
@@ -152,15 +161,6 @@
       "vendor": "gcp",
       "type": "google_service_account",
       "name": "ocel-c971a2492c",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:preview/google_project_iam_custom_role:ocel_part_databases",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_project_iam_custom_role",
-      "name": "ocel_part_databases",
       "region": "europe-west1",
       "properties": {}
     },

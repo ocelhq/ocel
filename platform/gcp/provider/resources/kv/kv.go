@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -29,6 +30,7 @@ const (
 	maxMemoryConfig       = "maxmemory"
 	maxMemoryPolicyConfig = "maxmemory-policy"
 	defaultEviction       = "noeviction"
+	productionReplicas    = 1
 	Port                  = 6379
 )
 
@@ -59,6 +61,7 @@ type kvStore struct {
 	node        memorystoreNode
 	memoryBytes int64
 	eviction    string
+	replicas    int
 }
 
 func readKVStore(resource provider.Resource) (kvStore, error) {
@@ -84,6 +87,17 @@ func readKVStore(resource provider.Resource) (kvStore, error) {
 	return kvStore{version: engine, node: memorystoreNodes[at], memoryBytes: spec.MemoryBytes, eviction: cmp.Or(spec.Eviction, defaultEviction)}, nil
 }
 
+func readKVStoreOn(resource provider.Resource, tier environment.Tier) (kvStore, error) {
+	store, err := readKVStore(resource)
+	if err != nil {
+		return kvStore{}, err
+	}
+	if tier == environment.TierProduction {
+		store.replicas = productionReplicas
+	}
+	return store, nil
+}
+
 func (s kvStore) engineConfigs() map[string]string {
 	return map[string]string{
 		maxMemoryConfig:       strconv.FormatInt(s.memoryBytes, 10),
@@ -92,12 +106,12 @@ func (s kvStore) engineConfigs() map[string]string {
 }
 
 func (s kvStore) instance(project, network string, labels map[string]string) *gcloud.MemorystoreInstance {
-	none, off := 0, false
+	replicas, off := s.replicas, false
 	return &gcloud.MemorystoreInstance{
 		Labels:                    labels,
 		Mode:                      clusterModeOff,
 		ShardCount:                1,
-		ReplicaCount:              &none,
+		ReplicaCount:              &replicas,
 		NodeType:                  s.node.nodeType,
 		EngineVersion:             s.version,
 		EngineConfigs:             s.engineConfigs(),
@@ -118,7 +132,7 @@ func (s kvStore) shapeProperties(region string) map[string]any {
 		"node_type":          s.node.terraformNodeType(),
 		"node_capacity_gb":   s.node.capacityGB,
 		"shard_count":        1,
-		"replica_count":      0,
+		"replica_count":      s.replicas,
 		"persistence_config": map[string]any{"mode": appendOnly, "aof_config": map[string]any{"append_fsync": fsyncEverySecond}},
 	}
 }
@@ -144,7 +158,17 @@ func (s kvStore) changes(current *gcloud.MemorystoreInstance) ([]string, []strin
 	if configs {
 		mask = append(mask, "engine_configs")
 	}
+	if replicas := replicasOf(current); replicas != s.replicas {
+		differences = append(differences, fmt.Sprintf("replica count changes from %d to %d", replicas, s.replicas))
+	}
 	return mask, differences
+}
+
+func replicasOf(instance *gcloud.MemorystoreInstance) int {
+	if instance.ReplicaCount == nil {
+		return 0
+	}
+	return *instance.ReplicaCount
 }
 
 type kvInstance struct {
@@ -167,7 +191,7 @@ func (p *KV) openKVInstance(ctx context.Context, ref provider.StackRef, store st
 }
 
 func (p *KV) Provision(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
-	store, err := readKVStore(in.Resource)
+	store, err := readKVStoreOn(in.Resource, in.Ref.Tier)
 	if err != nil {
 		return provider.Binding{}, err
 	}
@@ -200,7 +224,7 @@ func (p *KV) Provision(ctx context.Context, in resources.ProvisionRequest, progr
 }
 
 func (p *KV) Plan(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
-	store, err := readKVStore(in.Resource)
+	store, err := readKVStoreOn(in.Resource, in.Ref.Tier)
 	if err != nil {
 		return "", "", err
 	}
@@ -217,7 +241,7 @@ func (p *KV) Plan(ctx context.Context, in resources.ProvisionRequest, _ *provide
 	case gcloud.IsSettling(current.State):
 		_, differences := store.changes(current)
 		settling := "Memorystore instance " + instance.id + " is " + current.State +
-			", so the deploy waits for it to settle and then applies any change to its node type, engine version or engine configs"
+			", so the deploy waits for it to settle and then applies any change to its node type, engine version, engine configs or replica count"
 		return provider.ActionUpdate, strings.Join(append([]string{settling}, differences...), "; "), nil
 	case current.State != gcloud.InstanceActive:
 		return "", "", instance.refuseInactive(current, clients.Region)
@@ -248,22 +272,35 @@ func (i kvInstance) create(ctx context.Context, clients *gcloud.Clients, desired
 
 func (i kvInstance) update(ctx context.Context, store kvStore, current *gcloud.MemorystoreInstance, progress progress.Log) (*gcloud.MemorystoreInstance, error) {
 	mask, differences := store.changes(current)
-	if len(mask) == 0 {
+	if len(differences) == 0 {
 		return current, nil
 	}
 	gcloud.EnsureProgress(progress).Say("Updating kv " + i.storeName + " on Memorystore instance " + i.id + ": " + strings.Join(differences, "; "))
-	started, err := i.service.UpdateInstance(ctx, i.path, mask, &gcloud.MemorystoreInstance{
-		NodeType:      store.node.nodeType,
-		EngineVersion: store.version,
-		EngineConfigs: store.engineConfigs(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("update the Memorystore instance kv %s runs on: %w", i.storeName, err)
+	if len(mask) > 0 {
+		if err := i.patch(ctx, mask, &gcloud.MemorystoreInstance{
+			NodeType:      store.node.nodeType,
+			EngineVersion: store.version,
+			EngineConfigs: store.engineConfigs(),
+		}); err != nil {
+			return nil, err
+		}
 	}
-	if _, err := i.service.Awaited(ctx, "updating kv "+i.storeName, started); err != nil {
-		return nil, err
+	if replicasOf(current) != store.replicas {
+		replicas := store.replicas
+		if err := i.patch(ctx, []string{"replica_count"}, &gcloud.MemorystoreInstance{ReplicaCount: &replicas}); err != nil {
+			return nil, err
+		}
 	}
 	return i.service.ReadInstance(ctx, i.path)
+}
+
+func (i kvInstance) patch(ctx context.Context, mask []string, changed *gcloud.MemorystoreInstance) error {
+	started, err := i.service.UpdateInstance(ctx, i.path, mask, changed)
+	if err != nil {
+		return fmt.Errorf("update the Memorystore instance kv %s runs on: %w", i.storeName, err)
+	}
+	_, err = i.service.Awaited(ctx, "updating kv "+i.storeName, started)
+	return err
 }
 
 func (i kvInstance) refuseInactive(current *gcloud.MemorystoreInstance, region string) error {
@@ -403,7 +440,7 @@ func (p *KV) Component() component.Component {
 
 func shapeKV(shape component.Shape, declared []provider.Resource) error {
 	for _, resource := range declared {
-		store, err := readKVStore(resource)
+		store, err := readKVStoreOn(resource, shape.Request.Deploy.Tier)
 		if err != nil {
 			return err
 		}

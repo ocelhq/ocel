@@ -294,7 +294,7 @@ func TestANextAppIsToldTheTagsDatabaseItsRecordsLiveIn(t *testing.T) {
 	}
 	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
-	if got, want := env["OCEL_TAG_DATABASE"], "projects/"+namesOf(t, p).Project()+"/databases/"+namesOf(t, p).TagDatabase(environment.TierProduction); got != want {
+	if got, want := env["OCEL_TAG_DATABASE"], "projects/"+namesOf(t, p).Project()+"/databases/"+namesOf(t, p).ProjectWritableDatabase(environment.TierProduction, "shop"); got != want {
 		t.Errorf("the Next service reads OCEL_TAG_DATABASE=%q, want %q", got, want)
 	}
 	endpoint, err := url.Parse(env["OCEL_FIRESTORE_ENDPOINT"])
@@ -429,7 +429,7 @@ func TestANextContainerIsToldTheCacheBucketObjectPrefixAndTagsDatabaseItsEntries
 		"OCEL_ISR_OBJECT_PREFIX": "cache/shop/web/prod/r1/isr",
 		"OCEL_ISR_PREFIX":        "prod/shop/web/r1/isr",
 		"OCEL_ISR_TAG_NAMESPACE": "PROJECT#shop#STACK#prod--web--r1#TAG#",
-		"OCEL_TAG_DATABASE":      "projects/" + namesOf(t, p).Project() + "/databases/" + namesOf(t, p).TagDatabase(environment.TierProduction),
+		"OCEL_TAG_DATABASE":      "projects/" + namesOf(t, p).Project() + "/databases/" + namesOf(t, p).ProjectWritableDatabase(environment.TierProduction, "shop"),
 	} {
 		if got := env[name]; got != want {
 			t.Errorf("a Next container reads %s=%q, want %q", name, got, want)

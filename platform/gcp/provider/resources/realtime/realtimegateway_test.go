@@ -15,13 +15,14 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/realtime/pubsubbus"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
 func gatewayService(t *testing.T, host string) *runv2.GoogleCloudRunV2Service {
 	t.Helper()
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
-	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), host, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-realtime:abc", ""))
+	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), host, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-realtime:abc", "", ""))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}
@@ -40,12 +41,12 @@ func TestTheGatewayServiceTakesBrowsersFromAnywhereWithoutCloudRunsInvokerCheck(
 	}
 }
 
-func TestTheGatewayRunsOneInstanceOfOneVCPUAndAGibibyteHoldingAThousandSocketsForAnHour(t *testing.T) {
+func TestTheGatewayRunsUpToTenInstancesOfOneVCPUAndAGibibyteEachHoldingAThousandSocketsForAnHour(t *testing.T) {
 	t.Parallel()
 
 	template := gatewayService(t, "ocel-shop-prod-realtime-abc123-ew.a.run.app").Template
-	if template.Scaling.MinInstanceCount != 0 || template.Scaling.MaxInstanceCount != 1 {
-		t.Errorf("instances = %d to %d, want 0 to 1: a second instance would hold sockets the first never publishes to",
+	if template.Scaling.MinInstanceCount != 0 || template.Scaling.MaxInstanceCount != 10 {
+		t.Errorf("instances = %d to %d, want 0 to 10: every instance hears every publish through its own subscription",
 			template.Scaling.MinInstanceCount, template.Scaling.MaxInstanceCount)
 	}
 	if template.MaxInstanceRequestConcurrency != 1000 {
@@ -106,12 +107,38 @@ func TestTheGatewayChecksTokensForItsOwnHostAdmitsAnyOriginAndCapsItsSockets(t *
 	}
 }
 
+func TestTheGatewayHearsItsSiblingInstancesThroughItsEnvironmentsRealtimeTopic(t *testing.T) {
+	t.Parallel()
+
+	env := googletest.EnvOf(gatewayService(t, "ocel-shop-prod-realtime-abc123-ew.a.run.app").Template.Containers[0])
+	names := names.New(provider.Namespace("ocel"), "acme-prod")
+	if want := "projects/acme-prod/topics/" + names.RealtimeGateway("shop", "prod"); env[pubsubbus.TopicVar] != want {
+		t.Errorf("%s = %q, want %q", pubsubbus.TopicVar, env[pubsubbus.TopicVar], want)
+	}
+	if endpoint, set := env[pubsubbus.EndpointVar]; set {
+		t.Errorf("%s = %q, want it unset so the gateway reaches Google's Pub/Sub", pubsubbus.EndpointVar, endpoint)
+	}
+}
+
+func TestOnTheEmulatorTheGatewayReachesTheEmulatorsPubSub(t *testing.T) {
+	t.Parallel()
+
+	names := names.New(provider.Namespace("ocel"), "acme-prod")
+	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), "gateway.run.app", "ocel-realtime:abc", `{"app":"AAAA"}`, "http://host.docker.internal:4588"))
+	if err != nil {
+		t.Fatalf("serviceOf() = %v", err)
+	}
+	if got := googletest.EnvOf(desired.Template.Containers[0])[pubsubbus.EndpointVar]; got != "http://host.docker.internal:4588" {
+		t.Errorf("%s = %q, want the emulator as a container reaches it", pubsubbus.EndpointVar, got)
+	}
+}
+
 func TestOnTheEmulatorTheGatewayTakesItsKeysFromItsEnvironmentForWantOfSecretVolumes(t *testing.T) {
 	t.Parallel()
 
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
 	keys := `{"app":"AAAA"}`
-	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), "gateway.run.app", "ocel-realtime:abc", keys))
+	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), "gateway.run.app", "ocel-realtime:abc", keys, "http://host.docker.internal:4588"))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}

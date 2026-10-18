@@ -15,8 +15,6 @@ import (
 	"google.golang.org/api/iam/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
-	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -58,24 +56,12 @@ func accountGrants(t *testing.T, email, role, member string) bool {
 	})
 }
 
-func TestLiveTheBaseGivesTheTierADelayQueueAndAPushAccountAndTheTasksPartItsDatabase(t *testing.T) {
+func TestLiveTheBaseGivesTheTierADelayQueueAndAPushAccount(t *testing.T) {
 	p := live(t)
 	tier := environment.TierProduction
-	bootstrap := bootstrappedWith(t, p, tier, gcp.TasksPart)
+	bootstrappedWith(t, p, tier)
 	names := liveNames(t)
 	ctx := context.Background()
-
-	described, err := bootstrap.Describe(ctx, tier)
-	if err != nil {
-		t.Fatal(err)
-	}
-	parts, err := bootstrap.DescribeParts(ctx, described)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.ContainsFunc(parts, func(part provider.BootstrapPart) bool { return part.Name == gcp.TasksPart && part.Current }) {
-		t.Errorf("DescribeParts() = %+v, want the %s part current", parts, gcp.TasksPart)
-	}
 
 	tierAccount := "serviceAccount:ocel-" + string(tier) + "@" + liveProject() + ".iam.gserviceaccount.com"
 	tasksClient, err := workloadClients(t).CloudTasks()

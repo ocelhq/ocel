@@ -30,6 +30,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 )
 
 func endpoint() string { return os.Getenv("OCEL_FLOCI_GCP_ENDPOINT") }
@@ -91,6 +92,13 @@ func bootstrappedWith(t *testing.T, p *gcp.Provider, tier environment.Tier, part
 		t.Fatalf("AddParts(%s, %v) = %v, want the parts a deploy adds on first use", tier, parts, err)
 	}
 	return bootstrap
+}
+
+func writableDatabaseMade(t *testing.T, p *gcp.Provider, tier environment.Tier, project string) {
+	t.Helper()
+	if err := gcp.MakeWritableDatabase(context.Background(), p, tier, project); err != nil {
+		t.Fatalf("MakeWritableDatabase(%s, %s) = %v, want the database a deploy makes for its runs and tag records", tier, project, err)
+	}
 }
 
 func TestLiveBootstrapper(t *testing.T) {
@@ -478,24 +486,29 @@ func TestProjectTheDatabaseIsARowOfItsOwnProvisionedUnderDeleteProtection(t *tes
 	}
 }
 
-func TestProjectATiersTagsDatabasePartIsProtectedIndexedAndGoneOnceTheTierIsRemoved(t *testing.T) {
+func TestProjectAProjectsWritableDatabaseIsProtectedIndexedAndGoneOnceTheTierIsRemoved(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
 	tier := environment.TierPreview
-	bootstrap := bootstrappedWith(t, p, tier, gcp.TagDatabasePart)
+	bootstrap := bootstrappedWith(t, p, tier)
+	writableDatabaseMade(t, p, tier, liveSlug)
 
 	ctx := context.Background()
 	service, err := firestoreadmin.NewService(ctx)
 	if err != nil {
 		t.Fatalf("reach the Firestore admin API: %v", err)
 	}
-	path := "projects/" + liveProject() + "/databases/" + liveNames(t).TagDatabase(tier)
+	path := "projects/" + liveProject() + "/databases/" + liveNames(t).ProjectWritableDatabase(tier, liveSlug)
 	database, err := service.Projects.Databases.Get(path).Context(ctx).Do()
 	if err != nil {
-		t.Fatalf("read the tags database the part added: %v", err)
+		t.Fatalf("read the database the deploy made: %v", err)
 	}
 	if database.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
-		t.Errorf("the tags database has delete protection %q, want it on", database.DeleteProtectionState)
+		t.Errorf("the database of %s's runs and tag records has delete protection %q, want it on", liveSlug, database.DeleteProtectionState)
+	}
+	runIndexes, err := service.Projects.Databases.CollectionGroups.Indexes.List(path + "/collectionGroups/runs").Context(ctx).Do()
+	if err != nil || len(runIndexes.Indexes) < len(task.RunIndexes()) {
+		t.Errorf("the runs have the indexes %+v (%v), want the %d they are listed through", runIndexes, err, len(task.RunIndexes()))
 	}
 	listed, err := service.Projects.Databases.CollectionGroups.Indexes.List(path + "/collectionGroups/tags").Context(ctx).Do()
 	if err != nil {
@@ -517,7 +530,7 @@ func TestProjectATiersTagsDatabasePartIsProtectedIndexedAndGoneOnceTheTierIsRemo
 		t.Fatalf("Remove(%s) = %v", tier, err)
 	}
 	if _, err := service.Projects.Databases.Get(path).Context(ctx).Do(); err == nil {
-		t.Errorf("the tags database %s still exists after its tier was removed", path)
+		t.Errorf("the database %s still exists after its tier was removed", path)
 	}
 }
 

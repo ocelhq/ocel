@@ -8,13 +8,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 func TestTheTagRecordsOfAnISRPrefixAreReadThroughOneIndexOnPrefixThenWriteTime(t *testing.T) {
@@ -48,22 +48,24 @@ func TestNoTagRecordFieldAQueryNeverFiltersOnIsIndexed(t *testing.T) {
 	}
 }
 
-func TestTheTagDatabaseIsAPartADeployAddsAndNoLongerInTheBase(t *testing.T) {
+func TestNoTierKeepsADatabaseOfRunsOrTagRecordsAndADeployMayMakeEachProjectsOwn(t *testing.T) {
 	t.Parallel()
 
 	names := names.New("ocel", "acme-prod")
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names, Region: "europe-west1"}})
 	for _, tier := range googletest.BothTiers {
-		database := bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.TagDatabase(tier)}
-		if slices.Contains(googletest.IdsOf(bootstrap.Resources(names, tier, false)), database.ID()) {
-			t.Errorf("a %s bootstrap provisions %s, which the first deploy that revalidates adds", tier, database.ID())
+		for _, item := range bootstrap.Resources(names, tier, false) {
+			if item.Kind == bootstrap.KindDatabase && item.Name != names.Database() {
+				t.Errorf("a %s bootstrap provisions database %s, and every database but the namespace's is a project's own", tier, item.Name)
+			}
 		}
-		tags := newTagDatabasePart(b, tier)
-		if tags.Name != tagDatabasePart || len(tags.Resources) != 1 || tags.Resources[0].ID != names.TagDatabase(tier) {
-			t.Errorf("the %s tag database part is %+v, want it holding %s", tier, tags, names.TagDatabase(tier))
+		prefix := `resource.name.startsWith("projects/acme-prod/databases/` + names.ProjectWritableDatabasePrefix(tier) + `")`
+		if grant := variables.ProjectRecordsGrant(names, "europe-west1"); !strings.Contains(grant, prefix) {
+			t.Errorf("a deploy is granted %s, want it to name the %s databases of projects' runs and tag records it makes", grant, tier)
 		}
-		if condition := bootstrap.PartDatabasesCondition(names); !strings.Contains(condition, `"projects/acme-prod/databases/`+names.TagDatabase(tier)+`"`) {
-			t.Errorf("a deploy is granted the part databases role on %s, want it to name the %s tag database it makes", condition, tier)
+	}
+	for _, offered := range composed(bootstrap.Engine{}).Parts() {
+		if offered.Name == "tasks" || offered.Name == "tag-database" {
+			t.Errorf("the bootstrap offers the %s part, and runs and tag records are kept in each project's own database", offered.Name)
 		}
 	}
 }
@@ -75,76 +77,40 @@ func revalidating(revalidates bool) provider.DeployPreflight {
 	}
 }
 
-func TestADryDeployWhoseBuildRevalidatesPlansTheTagDatabaseAndOneThatDoesNotReadsNothing(t *testing.T) {
-	var planned []provider.ChangeGroup
-	pre := revalidating(true)
-	pre.Dry = true
-	pre.AddToPlan = func(groups ...provider.ChangeGroup) { planned = append(planned, groups...) }
-
-	if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
-	}
-	if len(planned) != 1 || planned[0].Part != tagDatabasePart || planned[0].Action != provider.ActionCreate {
-		t.Errorf("a dry deploy whose build revalidates planned %+v, want the %s part created", planned, tagDatabasePart)
+func TestADryDeployWhoseBuildRevalidatesPlansItsProjectsWritableDatabaseAndOneThatDoesNotPlansNothing(t *testing.T) {
+	database := ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")
+	if planned := plannedBy(t, failingOnAnyCall(t), revalidating(true)); !plansWritableDatabase(planned, database) {
+		t.Errorf("a dry deploy whose build revalidates planned %+v, want %s created", planned, database)
 	}
 	p := failingOnAnyCall(t)
-	if err := p.PreflightDeploy(context.Background(), revalidating(false)); err != nil {
-		t.Errorf("PreflightDeploy() of a build that revalidates nothing = %v", err)
-	}
-	if entries, err := stackrecords.ListBootstrapParts(context.Background(), p.KeyValues(), environment.TierProduction); err != nil || len(entries) != 0 {
-		t.Errorf("a deploy that revalidates nothing recorded %v, %v, want no part", entries, err)
+	if planned := plannedBy(t, p, revalidating(false)); len(planned) != 0 {
+		t.Errorf("a dry deploy of a build that revalidates nothing planned %+v, want nothing", planned)
 	}
 }
 
-func TestTheFirstDeployThatRevalidatesRecordsTheTagDatabasePart(t *testing.T) {
+func TestTheFirstDeployThatRevalidatesMakesItsProjectsWritableDatabaseAndTheNextPlansNothing(t *testing.T) {
 	p, _ := deployingNetworks(t)
 	ctx := context.Background()
 
 	if err := p.PreflightDeploy(ctx, revalidating(true)); err != nil {
 		t.Fatalf("PreflightDeploy() = %v", err)
 	}
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), environment.TierProduction, tagDatabasePart)
-	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" {
-		t.Errorf("the part record = %+v, %t, %v, want it ready and added by shop", recorded, present, err)
+	if planned := plannedBy(t, p, revalidating(true)); len(planned) != 0 {
+		t.Errorf("a dry deploy after the first planned %+v, want nothing: the first recorded the database it made", planned)
 	}
 }
 
-func tagDatabaseUsers(t *testing.T, p *Provider) []string {
-	t.Helper()
-	ctx := context.Background()
-	b, err := bootstrapGate{p}.openBootstrap(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	parts, err := b.ListDescribedParts(ctx, environment.TierProduction)
-	if err != nil {
-		t.Fatal(err)
-	}
-	at := slices.IndexFunc(parts, func(part provider.BootstrapPart) bool { return part.Name == tagDatabasePart })
-	if at < 0 {
-		t.Fatalf("listDescribedParts() = %+v, want the %s part described", parts, tagDatabasePart)
-	}
-	return parts[at].UsedBy
-}
-
-func TestTheTagDatabaseIsUsedByTheProjectsWhoseLastDeployRevalidated(t *testing.T) {
+func TestRemovingAProjectFromATierForgetsTheDatabaseOfItsRunsAndTagRecords(t *testing.T) {
 	p, _ := deployingNetworks(t)
 	ctx := context.Background()
-	if _, err := p.KeyValues().Write(ctx, records.Entry{Key: stackrecords.ProjectKey(environment.TierProduction, "shop"), Value: []byte(`{}`)}); err != nil {
-		t.Fatal(err)
-	}
-
 	if err := p.PreflightDeploy(ctx, revalidating(true)); err != nil {
 		t.Fatalf("PreflightDeploy() = %v", err)
 	}
-	if got := tagDatabaseUsers(t, p); !slices.Equal(got, []string{"shop"}) {
-		t.Errorf("the tag database is used by %v, want shop, whose deploy revalidates, so removing it is refused while shop needs it", got)
-	}
 
-	if err := p.PreflightDeploy(ctx, revalidating(false)); err != nil {
-		t.Fatalf("PreflightDeploy() = %v", err)
+	if err := p.removePartUser(ctx, environment.TierProduction, "shop", progress.Discard()); err != nil {
+		t.Fatalf("removePartUser() = %v", err)
 	}
-	if got := tagDatabaseUsers(t, p); got == nil || len(got) != 0 {
-		t.Errorf("the tag database is used by %#v, want a known empty list once shop deploys a build that revalidates nothing", got)
+	if planned := plannedBy(t, p, revalidating(true)); !plansWritableDatabase(planned, ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")) {
+		t.Errorf("a dry deploy after shop left the tier planned %+v, want its database made again", planned)
 	}
 }

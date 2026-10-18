@@ -197,10 +197,6 @@ func PartsGrant(names names.Names) string {
 	return names.PartsRolePath() + ", unconditioned: Compute Engine, Network Connectivity, Artifact Registry and Service Usage name no resource attribute an IAM condition could hold a part by"
 }
 
-func PartDatabasesGrant(names names.Names) string {
-	return names.PartDatabasesRolePath() + ", on the condition " + PartDatabasesCondition(names)
-}
-
 func ProjectPermissionsGrant() string {
 	return "a custom role holding " + strings.Join(projectPermissions, ", ") +
 		", unconditioned: Google checks creating a bucket, an instance or a secret, listing instances and reading Cloud SQL operations against the project, " +

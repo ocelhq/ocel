@@ -18,7 +18,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -33,20 +32,9 @@ const (
 	CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 
 	credentialHint = "authenticate with Google Cloud: run `gcloud auth application-default login`"
-
-	taskDatabaseSuffix = "-tasks"
-	tagDatabaseSuffix  = "-tags"
 )
 
 func Database(namespace provider.Namespace) string { return string(namespace) }
-
-func TaskDatabase(namespace provider.Namespace, tier environment.Tier) string {
-	return string(namespace) + "-" + string(tier) + taskDatabaseSuffix
-}
-
-func TagDatabase(namespace provider.Namespace, tier environment.Tier) string {
-	return string(namespace) + "-" + string(tier) + tagDatabaseSuffix
-}
 
 func KeyRing(namespace provider.Namespace) string { return string(namespace) }
 
@@ -69,8 +57,8 @@ type Clients struct {
 	TagEndpoint string
 
 	firestore     memo[*firestore.Client]
-	taskStores    sync.Map
 	projectStores sync.Map
+	runStores     sync.Map
 	tagStores     sync.Map
 	kms           memo[*kms.KeyManagementClient]
 	pubsub        memo[*pubsub.Service]
@@ -121,22 +109,6 @@ func (c *Clients) Firestore() (*firestore.Client, error) {
 	return Opened(c, &c.firestore, "Firestore", func() (*firestore.Client, error) {
 		return firestore.NewClientWithDatabase(
 			context.Background(), c.Project, c.Database(), EmulatorGRPC(c.Endpoint)...)
-	})
-}
-
-func (c *Clients) TaskFirestore(tier environment.Tier) (*firestore.Client, error) {
-	held, _ := c.taskStores.LoadOrStore(tier, &memo[*firestore.Client]{})
-	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
-		return firestore.NewClientWithDatabase(
-			context.Background(), c.Project, TaskDatabase(c.Namespace, tier), EmulatorGRPC(c.Endpoint)...)
-	})
-}
-
-func (c *Clients) TagFirestore(tier environment.Tier) (*firestore.Client, error) {
-	held, _ := c.tagStores.LoadOrStore(tier, &memo[*firestore.Client]{})
-	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
-		return firestore.NewClientWithDatabase(
-			context.Background(), c.Project, TagDatabase(c.Namespace, tier), append(EmulatorGRPC(c.tagEndpoint()), EmulatorAdmin(c.TagEndpoint)...)...)
 	})
 }
 

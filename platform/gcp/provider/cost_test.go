@@ -211,12 +211,12 @@ func storeManifest(memory string) *contractv1.Manifest {
 	return manifest
 }
 
-func shapeOfAStore(t *testing.T, region, memory string) (*costv1.ResourceSet, *costv1.Estimate) {
+func shapeOfAStore(t *testing.T, environment *environmentv1.Environment, memory string) (*costv1.ResourceSet, *costv1.Estimate) {
 	t.Helper()
-	client, costs := costServedIn(t, region)
+	client, costs := costServedIn(t, "us-central1")
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    storeManifest(memory),
-		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		Environment: environment,
 	})
 	if err != nil {
 		t.Fatalf("Shape() = %v", err)
@@ -239,17 +239,19 @@ func resourceOfType(t *testing.T, set *costv1.ResourceSet, typ string) *costv1.R
 	return nil
 }
 
-func TestShapeOfADeclaredStoreIsOneMemorystoreNodeOnTheTiersNetwork(t *testing.T) {
-	set, _ := shapeOfAStore(t, "us-central1", "2gb")
+var productionEnvironment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
+
+func TestShapeOfADeclaredStoreIsAMemorystoreNodeWithOneReplicaOnTheTiersNetwork(t *testing.T) {
+	set, _ := shapeOfAStore(t, productionEnvironment, "2gb")
 
 	instance := resourceOfType(t, set, "google_memorystore_instance")
 	if instance.GetScope() != "project:shop/environment:prod" {
 		t.Errorf("the store is shaped under %s, want the environment that declares it", instance.GetScope())
 	}
 	properties := instance.GetProperties().AsMap()
-	if properties["node_type"] != "custom-mini" || properties["replica_count"] != float64(0) ||
+	if properties["node_type"] != "custom-mini" || properties["replica_count"] != float64(1) ||
 		properties["persistence_config"].(map[string]any)["mode"] != "AOF" {
-		t.Errorf("the store is shaped as %v, want one custom-mini node with append-only persistence", properties)
+		t.Errorf("the store is shaped as %v, want a custom-mini node and its one replica with append-only persistence", properties)
 	}
 	for _, typ := range []string{"google_compute_network", "google_compute_subnetwork", "google_network_connectivity_service_connection_policy"} {
 		if scope := resourceOfType(t, set, typ).GetScope(); scope != "project:shop/shared:production" {
@@ -258,15 +260,23 @@ func TestShapeOfADeclaredStoreIsOneMemorystoreNodeOnTheTiersNetwork(t *testing.T
 	}
 }
 
-func TestPriceOfAStoreBillsItsNodeAndItsAppendOnlyFileEveryHourAndTrafficFromOtherZonesByTheGiB(t *testing.T) {
-	set, est := shapeOfAStore(t, "us-central1", "256mb")
+func TestShapeOfAPreviewStoreIsAMemorystoreNodeWithoutAReplica(t *testing.T) {
+	set, _ := shapeOfAStore(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"}, "256mb")
+
+	if replicas := resourceOfType(t, set, "google_memorystore_instance").GetProperties().AsMap()["replica_count"]; replicas != float64(0) {
+		t.Errorf("a preview store is shaped with %v replicas, want none", replicas)
+	}
+}
+
+func TestPriceOfAStoreBillsItsNodeItsReplicaAndTheirAppendOnlyFilesEveryHourAndTrafficFromOtherZonesByTheGiB(t *testing.T) {
+	set, est := shapeOfAStore(t, productionEnvironment, "256mb")
 
 	store := estimateOfType(t, est, set, "google_memorystore_instance", "project:shop/environment:prod")
-	if got := componentNamed(t, est, store.GetResource(), "Node").GetMonthlyCost(); got != "22.48" {
-		t.Errorf("the node costs %s, want 22.48 (730 h of custom-pico at 0.0308)", got)
+	if got := componentNamed(t, est, store.GetResource(), "Node").GetMonthlyCost(); got != "44.97" {
+		t.Errorf("the node and its replica cost %s, want 44.97 (2 nodes for 730 h of custom-pico at 0.0308)", got)
 	}
-	if got := componentNamed(t, est, store.GetResource(), "Append-only persistence").GetMonthlyCost(); got != "0.50" {
-		t.Errorf("persistence costs %s, want 0.50 (1.25 GB for 730 h at 0.00054795)", got)
+	if got := componentNamed(t, est, store.GetResource(), "Append-only persistence").GetMonthlyCost(); got != "1.00" {
+		t.Errorf("persistence costs %s, want 1.00 (1.25 GB on each of 2 nodes for 730 h at 0.00054795)", got)
 	}
 	traffic := componentNamed(t, est, store.GetResource(), "Inter-zone data processed")
 	if got := traffic.GetMonthlyCost(); got != "0.10" || !traffic.GetUsageBased() {

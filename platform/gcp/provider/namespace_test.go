@@ -35,7 +35,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 				"key ring":          names.KeyRing(),
 				"passphrase secret": names.PassphraseSecret(environment.TierProduction),
 				"image repository":  names.Repository(environment.TierProduction),
-				"task database":     names.TaskDatabase(environment.TierProduction),
+				"runs database":     names.ProjectWritableDatabase(environment.TierProduction, "shop"),
 				"delay queue":       names.DelayQueue(environment.TierProduction),
 				"push account":      names.PushAccount(environment.TierProduction),
 			} {
@@ -74,8 +74,8 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 			if got, want := names.RepositoryPath("europe-west1", environment.TierPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
 				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
 			}
-			if got, want := names.TaskDatabase(environment.TierPreview), tc.stem+"-preview-tasks"; got != want {
-				t.Errorf("TaskDatabase() = %q, want %q", got, want)
+			if got, want := names.ProjectWritableDatabasePrefix(environment.TierPreview), tc.stem+"-preview-w-"; got != want || !strings.HasPrefix(names.ProjectWritableDatabase(environment.TierPreview, "shop"), want) {
+				t.Errorf("ProjectWritableDatabasePrefix() = %q, want %q naming every preview project's database of runs and tag records", got, want)
 			}
 			if got, want := names.DelayQueue(environment.TierProduction), tc.stem+"-production-delays"; got != want {
 				t.Errorf("DelayQueue() = %q, want %q", got, want)
@@ -301,13 +301,20 @@ func TestAnAppsAccountIsNamedForItsNamespaceAndAHashOfItsTierProjectEnvironmentA
 	}
 }
 
-func TestEachTiersTagsDatabaseIsNamedForTheNamespaceAndTheTier(t *testing.T) {
+func TestEachProjectOfEachTierKeepsItsRunsAndTagRecordsInADatabaseOfItsOwn(t *testing.T) {
 	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 
-	if got, want := names.TagDatabase(environment.TierProduction), "ocel-production-tags"; got != want {
-		t.Errorf("TagDatabase(production) = %q, want %q", got, want)
-	}
-	if got, want := names.TagDatabase(environment.TierPreview), "ocel-preview-tags"; got != want {
-		t.Errorf("TagDatabase(preview) = %q, want %q", got, want)
+	databases := map[string]string{}
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for _, project := range []string{"shop", "blog"} {
+			database := names.ProjectWritableDatabase(tier, project)
+			if other, taken := databases[database]; taken {
+				t.Errorf("%s of %s and %s share the database %s", project, tier, other, database)
+			}
+			if database == names.ProjectDatabase(tier, project) {
+				t.Errorf("%s of %s keeps its runs in %s, the database of its values", project, tier, database)
+			}
+			databases[database] = project + " of " + string(tier)
+		}
 	}
 }

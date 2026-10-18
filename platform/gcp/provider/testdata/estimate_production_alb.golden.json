@@ -160,6 +160,10 @@
       "status": "STATUS_FREE"
     },
     {
+      "resource": "project:shop/shared:production/google_project_iam_custom_role:ocel_realtime_subscriptions",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/google_service_account:ocel-ce6fea64cc",
       "status": "STATUS_FREE"
     },
@@ -187,10 +191,6 @@
     },
     {
       "resource": "project:shop/shared:production/google_service_account:ocel-4bf20eeb8e",
-      "status": "STATUS_FREE"
-    },
-    {
-      "resource": "project:shop/shared:production/google_project_iam_custom_role:ocel_part_databases",
       "status": "STATUS_FREE"
     },
     {

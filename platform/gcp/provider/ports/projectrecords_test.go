@@ -41,14 +41,25 @@ func TestAProjectsValuesAreKeptInADatabaseOfTheProjectsOwn(t *testing.T) {
 
 func TestAProjectDatabaseIsNamedUnderItsTiersPrefixAndFitsWhatFirestoreTakes(t *testing.T) {
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		database := ProjectDatabase(provider19, tier, "a-project-slug-that-runs-long")
-		if !strings.HasPrefix(database, ProjectDatabasePrefix(provider19, tier)) || len(database) > 63 {
-			t.Errorf("ProjectDatabase(%s) = %q, want it under %q and at most 63 characters", tier, database, ProjectDatabasePrefix(provider19, tier))
+		for named, prefix := range map[string]string{
+			ProjectDatabase(provider19, tier, "a-project-slug-that-runs-long"):         ProjectDatabasePrefix(provider19, tier),
+			ProjectWritableDatabase(provider19, tier, "a-project-slug-that-runs-long"): ProjectWritableDatabasePrefix(provider19, tier),
+		} {
+			if !strings.HasPrefix(named, prefix) || len(named) > 63 {
+				t.Errorf("%s database %q, want it under %q and at most 63 characters", tier, named, prefix)
+			}
 		}
 	}
-	if strings.HasPrefix(ProjectDatabasePrefix("ocel", environment.TierProduction), ProjectDatabasePrefix("ocel", environment.TierPreview)) ||
-		strings.HasPrefix(TaskDatabase("ocel", environment.TierProduction), ProjectDatabasePrefix("ocel", environment.TierProduction)) {
-		t.Error("a tier's project database prefix also names another tier's or a part's database, so a condition on it reaches them")
+	prefixes := []string{
+		ProjectDatabasePrefix("ocel", environment.TierProduction), ProjectDatabasePrefix("ocel", environment.TierPreview),
+		ProjectWritableDatabasePrefix("ocel", environment.TierProduction), ProjectWritableDatabasePrefix("ocel", environment.TierPreview),
+	}
+	for i, prefix := range prefixes {
+		for j, other := range prefixes {
+			if i != j && strings.HasPrefix(other, prefix) {
+				t.Errorf("the prefix %q also names the databases under %q, so a condition on it reaches them", prefix, other)
+			}
+		}
 	}
 }
 

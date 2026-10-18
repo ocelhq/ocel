@@ -100,12 +100,15 @@ func (g bootstrapGate) DescribeParts(ctx context.Context, described provider.Boo
 }
 
 func (p *Provider) removePartUser(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error {
-	consumer, err := records.ReadOrEmpty(ctx, p.KeyValues(), albpart.ConsumerAt(tier, project))
-	if err != nil || len(consumer.Value) == 0 {
-		return err
-	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
 	if err != nil {
+		return err
+	}
+	if err := variables.TakeProjectWritableDatabase(ctx, b, tier, project, progress); err != nil {
+		return err
+	}
+	consumer, err := records.ReadOrEmpty(ctx, p.KeyValues(), albpart.ConsumerAt(tier, project))
+	if err != nil || len(consumer.Value) == 0 {
 		return err
 	}
 	return removePartUser(ctx, b, tier, project, progress)

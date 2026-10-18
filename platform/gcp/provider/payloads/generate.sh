@@ -3,7 +3,6 @@ set -eu
 
 payloads_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 runtime_dir=$(CDPATH= cd -- "$payloads_dir/../../runtime" && pwd)
-realtime_dir=$(CDPATH= cd -- "$payloads_dir/../../../realtime" && pwd)
 gateplugin_dir=$(CDPATH= cd -- "$payloads_dir/../../gateplugin" && pwd)
 dist="$payloads_dir/dist"
 
@@ -20,11 +19,8 @@ cp -R "$runtime_dir/dist/next" "$dist/next"
     go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/envsourcesync-amd64" ./cmd/envsourcesync
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/bastion-amd64" ./cmd/bastion
-)
-(
-  cd "$realtime_dir"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/realtime-gateway-amd64" ./cmd/gateway
+    go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/realtime-gateway-amd64" ./cmd/realtimegateway
 )
 (
   cd "$gateplugin_dir"

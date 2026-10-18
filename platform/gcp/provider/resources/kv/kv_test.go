@@ -62,8 +62,8 @@ func TestAStoreIsOneMemorystoreNodeWithAppendOnlyPersistenceAndTokenAuthOverTLS(
 		t.Fatalf("Memorystore was asked to create %d instances, want one per store", len(created))
 	}
 	sent := created[0]
-	if sent.Mode != "CLUSTER_DISABLED" || sent.ShardCount != 1 || sent.ReplicaCount == nil || *sent.ReplicaCount != 0 {
-		t.Errorf("created mode %q with %d shards and replicas %v, want cluster mode off on one node", sent.Mode, sent.ShardCount, sent.ReplicaCount)
+	if sent.Mode != "CLUSTER_DISABLED" || sent.ShardCount != 1 {
+		t.Errorf("created mode %q with %d shards, want cluster mode off on one shard", sent.Mode, sent.ShardCount)
 	}
 	if sent.PersistenceConfig == nil || sent.PersistenceConfig.Mode != "AOF" || sent.PersistenceConfig.AOFConfig == nil ||
 		sent.PersistenceConfig.AOFConfig.AppendFsync != "EVERY_SEC" {
@@ -109,6 +109,89 @@ func TestAStoreIsOneMemorystoreNodeWithAppendOnlyPersistenceAndTokenAuthOverTLS(
 	}
 }
 
+func aPreviewKVStore(t *testing.T, spec provider.KVSpec) resources.ProvisionRequest {
+	t.Helper()
+	in := aKVStore(t, spec)
+	in.Ref = provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.InfraStack("prod")}
+	return in
+}
+
+func TestAProductionStoreIsCreatedWithOneReplicaAndAPreviewStoreWithNone(t *testing.T) {
+	for name, tiered := range map[string]struct {
+		in       func(*testing.T, provider.KVSpec) resources.ProvisionRequest
+		replicas int
+	}{
+		"production": {in: aKVStore, replicas: 1},
+		"preview":    {in: aPreviewKVStore, replicas: 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p, server := servingMemorystore(t)
+
+			if _, err := p.Provision(context.Background(), tiered.in(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil); err != nil {
+				t.Fatalf("ProvisionKV() = %v", err)
+			}
+			created := server.Creates()
+			if len(created) != 1 || created[0].ReplicaCount == nil || *created[0].ReplicaCount != tiered.replicas {
+				t.Errorf("a %s store was created with replicas %s, want %d", name, googletest.JSON(t, created), tiered.replicas)
+			}
+		})
+	}
+}
+
+func TestAProductionStoreWithoutAReplicaIsGivenOneInPlace(t *testing.T) {
+	p, server := servingMemorystore(t)
+	in := aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20})
+	if _, err := p.Provision(context.Background(), in, nil); err != nil {
+		t.Fatalf("ProvisionKV() = %v", err)
+	}
+	server.HeldWithReplicas(storeInstance(t), 0)
+
+	if _, err := p.Provision(context.Background(), in, nil); err != nil {
+		t.Fatalf("ProvisionKV() of a production store without a replica = %v", err)
+	}
+	if masks := server.Masks(); len(masks) != 1 || masks[0] != "replica_count" {
+		t.Errorf("Memorystore was updated with masks %v, want the replica count alone", masks)
+	}
+	if current := server.Instance(storeInstance(t)); current.ReplicaCount == nil || *current.ReplicaCount != 1 {
+		t.Errorf("the instance holds replicas %s, want one", googletest.JSON(t, current.ReplicaCount))
+	}
+	if len(server.Creates()) != 1 {
+		t.Errorf("Memorystore was asked to create %d instances, want the one store updated in place", len(server.Creates()))
+	}
+}
+
+func TestAProductionStoreWhoseMemoryAndReplicasChangedIsUpdatedByTwoRequests(t *testing.T) {
+	p, server := servingMemorystore(t)
+	if _, err := p.Provision(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil); err != nil {
+		t.Fatalf("ProvisionKV() = %v", err)
+	}
+	server.HeldWithReplicas(storeInstance(t), 0)
+
+	if _, err := p.Provision(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 2 << 30}), nil); err != nil {
+		t.Fatalf("ProvisionKV() with a new memory = %v", err)
+	}
+	if masks := server.Masks(); !slices.Equal(masks, []string{"node_type,engine_configs", "replica_count"}) {
+		t.Errorf("Memorystore was updated with masks %v, want the node and its configs first, then the replica count on its own", masks)
+	}
+	current := server.Instance(storeInstance(t))
+	if current.NodeType != "CUSTOM_MINI" || current.ReplicaCount == nil || *current.ReplicaCount != 1 {
+		t.Errorf("the instance is a %s with replicas %s, want a CUSTOM_MINI with one replica", current.NodeType, googletest.JSON(t, current.ReplicaCount))
+	}
+}
+
+func TestAProductionStoreWithoutAReplicaPlansAnUpdateNamingTheReplica(t *testing.T) {
+	p, server := servingMemorystore(t)
+	if _, err := p.Provision(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil); err != nil {
+		t.Fatal(err)
+	}
+	server.HeldWithReplicas(storeInstance(t), 0)
+
+	action, reason, err := planKV(t, p, server, provider.KVSpec{MemoryBytes: 256 << 20})
+	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "replica count changes from 0 to 1") {
+		t.Errorf("PlanKV() = %s %q, %v, want %s naming the replica count change", action, reason, err, provider.ActionUpdate)
+	}
+}
+
 func TestAStoreSaysWhenItsCreateOperationRanFromAndTo(t *testing.T) {
 	p, _ := servingMemorystore(t)
 	log := &said{Log: progress.Discard()}
@@ -150,21 +233,23 @@ func TestAStoreRunsOnTheSmallestNodeWhoseKeyspaceHoldsItsMemory(t *testing.T) {
 func TestTheStoreShapeMatchesTheInstanceProvisionSends(t *testing.T) {
 	t.Parallel()
 
-	for _, memory := range []int64{256 << 20, 8 << 30} {
-		store, err := readKVStore(provider.Resource{Name: "cache", KV: &provider.KVSpec{MemoryBytes: memory}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		sent := store.instance("acme-prod", "network", nil)
-		shaped := store.shapeProperties("us-central1")
-		if strings.ReplaceAll(strings.ToUpper(shaped["node_type"].(string)), "-", "_") != sent.NodeType {
-			t.Errorf("shaped node %v, provision sends %s", shaped["node_type"], sent.NodeType)
-		}
-		if shaped["replica_count"] != *sent.ReplicaCount || shaped["shard_count"] != sent.ShardCount {
-			t.Errorf("shaped %v replicas and %v shards, provision sends %d and %d", shaped["replica_count"], shaped["shard_count"], *sent.ReplicaCount, sent.ShardCount)
-		}
-		if shaped["persistence_config"].(map[string]any)["mode"] != sent.PersistenceConfig.Mode {
-			t.Errorf("shaped persistence %v, provision sends %s", shaped["persistence_config"], sent.PersistenceConfig.Mode)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for _, memory := range []int64{256 << 20, 8 << 30} {
+			store, err := readKVStoreOn(provider.Resource{Name: "cache", KV: &provider.KVSpec{MemoryBytes: memory}}, tier)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sent := store.instance("acme-prod", "network", nil)
+			shaped := store.shapeProperties("us-central1")
+			if strings.ReplaceAll(strings.ToUpper(shaped["node_type"].(string)), "-", "_") != sent.NodeType {
+				t.Errorf("shaped node %v, provision sends %s", shaped["node_type"], sent.NodeType)
+			}
+			if shaped["replica_count"] != *sent.ReplicaCount || shaped["shard_count"] != sent.ShardCount {
+				t.Errorf("shaped %v replicas and %v shards, provision sends %d and %d", shaped["replica_count"], shaped["shard_count"], *sent.ReplicaCount, sent.ShardCount)
+			}
+			if shaped["persistence_config"].(map[string]any)["mode"] != sent.PersistenceConfig.Mode {
+				t.Errorf("shaped persistence %v, provision sends %s", shaped["persistence_config"], sent.PersistenceConfig.Mode)
+			}
 		}
 	}
 }

@@ -2,77 +2,24 @@ package gcp
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
-	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 )
 
-func recordingTopics(t *testing.T, tier environment.Tier, bindings ...provider.Binding) records.Store {
-	t.Helper()
-	ctx := context.Background()
-	store := fake.NewKeyValues()
-	if _, err := store.Write(ctx, records.Entry{Key: stackrecords.ProjectKey(tier, "shop"), Value: []byte(`{}`)}); err != nil {
-		t.Fatal(err)
-	}
-	if err := stackrecords.Write(ctx, store, tier, "shop", naming.InfraStack("prod"), stackrecords.Stack{Kind: provider.StackInfra, Bindings: bindings}); err != nil {
-		t.Fatal(err)
-	}
-	return store
-}
-
-func TestRemovingATierWhileAnEnvironmentDeclaresATaskIsRefusedNamingIt(t *testing.T) {
+func TestTheBaseGivesATierThePushAccountAndDelayQueueItsTopicsAndTasksRunThrough(t *testing.T) {
 	t.Parallel()
 
-	b := composed(bootstrap.Engine{Records: recordingTopics(t, environment.TierProduction,
-		provider.Binding{Type: provider.BindingBucket, Name: "uploads"},
-		provider.Binding{Type: provider.BindingTask, Name: "task--resize", Properties: map[string]string{stackrecords.PropertyDeclared: "resize"}},
-	)})
-
-	err := task.RefuseInUse(context.Background(), b, environment.TierProduction, bootstrap.PartRemoval{})
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "task resize of project shop environment prod") {
-		t.Fatalf("refuseTasksInUse() while a task is declared = %v, want a refusal naming the task, its project and environment", err)
-	}
-	if strings.Contains(refused.Message, "uploads") {
-		t.Errorf("the refusal names %q, want only what runs on the part", refused.Message)
-	}
-	if users, err := task.ListUsers(context.Background(), b, environment.TierProduction); err != nil || !slices.Equal(users, []string{"shop"}) {
-		t.Errorf("listTaskUsers() = %v, %v, want shop, whose environment runs a task", users, err)
-	}
-}
-
-func TestRemovingATierIgnoresATopicOnAnotherTier(t *testing.T) {
-	t.Parallel()
-
-	b := composed(bootstrap.Engine{Clients: googletest.GrantedIAM().Open(t), Records: recordingTopics(t, environment.TierPreview,
-		provider.Binding{Type: provider.BindingTopic, Name: "topic--orders", Properties: map[string]string{stackrecords.PropertyDeclared: "orders"}},
-	)})
-	if err := task.RefuseInUse(context.Background(), b, environment.TierProduction, bootstrap.PartRemoval{}); err != nil {
-		t.Errorf("refuseTasksInUse() with a topic only on another tier = %v, want the part free", err)
-	}
-}
-
-func TestTopicsAndTasksRunOnAPartADeployAdds(t *testing.T) {
-	t.Parallel()
-
-	if slices.ContainsFunc(bootstrap.CredentialParts(), func(f provider.Part) bool { return f.Name == task.PartName }) {
-		t.Errorf("credentialParts() = %v, want no %q part only the bootstrap credential adds: the first deploy declaring a topic or a task adds what they run on", bootstrap.CredentialParts(), task.PartName)
-	}
 	names := names.New("ocel", "acme-prod")
 	push := bootstrap.Resource{Kind: bootstrap.KindServiceAccount, Name: names.PushAccount(environment.TierProduction)}
 	if !slices.Contains(googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), push.ID()) {
@@ -87,11 +34,7 @@ func TestTopicsAndTasksRunOnAPartADeployAdds(t *testing.T) {
 func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing.T) {
 	t.Parallel()
 	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
-	tasks := task.NewPart(b, environment.TierProduction)
 
-	if slices.ContainsFunc(tasks.Resources, func(resource provider.PartResource) bool { return resource.Kind == string(bootstrap.KindQueue) }) {
-		t.Errorf("the tasks part holds %v, want no queue: the base makes the delay queue", tasks.Resources)
-	}
 	for _, api := range []string{"pubsub.googleapis.com", "cloudtasks.googleapis.com"} {
 		if !slices.Contains(bootstrap.APIsFor(environment.TierProduction, nil), api) {
 			t.Errorf("a bootstrap checks %v, want %s: the base grants Pub/Sub's agent the push account and makes the delay queue", bootstrap.APIsFor(environment.TierProduction, nil), api)
@@ -105,10 +48,10 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing
 			t.Errorf("a bootstrap checks %v, want %s among them: the base makes, purges and grants on the delay queue", bootstrap.BootstrapPermissions, permission)
 		}
 	}
-	databases := bootstrap.NewPartDatabasesRole(b.Clients.Names).Permissions
-	for _, permission := range []string{"datastore.databases.create", "datastore.databases.update", "datastore.operations.get", "datastore.schemas.create", "datastore.schemas.update"} {
+	databases := bootstrap.NewProjectRecordsRole(b.Clients.Names).Permissions
+	for _, permission := range []string{"datastore.databases.create", "datastore.databases.update", "datastore.databases.delete", "datastore.operations.get", "datastore.schemas.create", "datastore.schemas.update"} {
 		if !slices.Contains(databases, permission) {
-			t.Errorf("the part databases role holds %v, want %s among them: a deploy makes the task database, its indexes and time to live", databases, permission)
+			t.Errorf("the project records role holds %v, want %s among them: a deploy makes a project's database of runs, its indexes and time to live, and removing the project deletes it", databases, permission)
 		}
 	}
 	if !slices.Contains(bootstrap.RolesFor(edge.PurposeBootstrap), "roles/cloudtasks.admin") {
@@ -183,49 +126,53 @@ func TestABootstrapChecksEveryPermissionItsFirestoreAdminCallsNeed(t *testing.T)
 func TestABootstrapChecksFirestoreIndexPermissionsByTheirCurrentNames(t *testing.T) {
 	t.Parallel()
 
-	for _, permission := range slices.Concat(bootstrap.PermissionsFor(nil), bootstrap.NewPartDatabasesRole(names.New("ocel", "acme-prod")).Permissions) {
+	for _, permission := range slices.Concat(bootstrap.PermissionsFor(nil), bootstrap.NewProjectRecordsRole(names.New("ocel", "acme-prod")).Permissions) {
 		if strings.HasPrefix(permission, "datastore.indexes.") {
 			t.Errorf("a bootstrap or a deploy is granted %s, want datastore.schemas.*: Google's role reference lists only the schemas names", permission)
 		}
 	}
 }
 
-func addingTasks(t *testing.T) (*googletest.IAM, bootstrap.Engine) {
+func plannedBy(t *testing.T, p *Provider, pre provider.DeployPreflight) []provider.ChangeGroup {
 	t.Helper()
-	server := googletest.GrantedIAM()
-	return server, composed(bootstrap.Engine{Clients: server.Open(t), Records: fake.NewKeyValues()})
-}
-
-func TestTheFirstTopicOrTaskAddsTheTasksPartItRecordsAndMakesNoQueue(t *testing.T) {
-	t.Parallel()
-	server, b := addingTasks(t)
-	ctx := context.Background()
-	tier := environment.TierProduction
-
-	if err := b.EnsurePart(ctx, tier, "shop", task.NewPart(b, tier)); err != nil {
-		t.Fatalf("ensurePart(tasks) = %v", err)
-	}
-	if len(server.QueuesMade) != 0 {
-		t.Errorf("adding the tasks part made queues %v, want none: the base makes the delay queue", server.QueuesMade)
-	}
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, task.PartName)
-	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" {
-		t.Errorf("the part record = %+v, %t, %v, want it ready and added by shop", recorded, present, err)
-	}
-
-}
-
-func TestADryDeployDeclaringATaskPlansTheTasksPartAndMakesNothing(t *testing.T) {
 	var planned []provider.ChangeGroup
-	pre := declaringATask()
 	pre.Dry = true
 	pre.AddToPlan = func(groups ...provider.ChangeGroup) { planned = append(planned, groups...) }
-
-	if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {
+	if err := p.PreflightDeploy(context.Background(), pre); err != nil {
 		t.Fatalf("PreflightDeploy() = %v", err)
 	}
-	if len(planned) != 1 || planned[0].Part != task.PartName || planned[0].Action != provider.ActionCreate {
-		t.Errorf("a dry deploy declaring a task planned %+v, want the %s part created", planned, task.PartName)
+	return planned
+}
+
+func plansWritableDatabase(planned []provider.ChangeGroup, database string) bool {
+	return len(planned) == 1 && planned[0].Action == provider.ActionCreate && len(planned[0].Changes) == 1 &&
+		planned[0].Changes[0].Name == database && planned[0].Changes[0].Action == provider.ActionCreate
+}
+
+func declaringATaskOf(project string) provider.DeployPreflight {
+	pre := declaringATask()
+	pre.Deploy.Slug = project
+	return pre
+}
+
+func TestADryDeployDeclaringATaskPlansItsProjectsWritableDatabaseAndMakesNothing(t *testing.T) {
+	database := ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")
+	if planned := plannedBy(t, failingOnAnyCall(t), declaringATaskOf("shop")); !plansWritableDatabase(planned, database) {
+		t.Errorf("a dry deploy declaring a task planned %+v, want %s created", planned, database)
+	}
+}
+
+func TestTheFirstDeployDeclaringATaskMakesItsProjectsWritableDatabaseAndAnotherProjectsIsStillPlanned(t *testing.T) {
+	p, _ := deployingNetworks(t)
+
+	if err := p.PreflightDeploy(context.Background(), declaringATaskOf("shop")); err != nil {
+		t.Fatalf("PreflightDeploy() = %v", err)
+	}
+	if planned := plannedBy(t, p, declaringATaskOf("shop")); len(planned) != 0 {
+		t.Errorf("a dry deploy of shop after its first planned %+v, want nothing", planned)
+	}
+	if planned := plannedBy(t, p, declaringATaskOf("blog")); !plansWritableDatabase(planned, ports.ProjectWritableDatabase("ocel", environment.TierProduction, "blog")) {
+		t.Errorf("a dry deploy of blog planned %+v, want blog's own database created", planned)
 	}
 }
 

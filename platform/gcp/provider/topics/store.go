@@ -82,7 +82,7 @@ type runDocument struct {
 }
 
 func (s Store) client() (*firestore.Client, error) {
-	return s.Clients.TaskFirestore(s.Scope.Tier)
+	return s.Clients.RunsFirestore(s.Scope.Tier, s.Scope.Slug)
 }
 
 func (s Store) scopeDocument() (*firestore.DocumentRef, error) {
