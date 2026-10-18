@@ -206,7 +206,7 @@ func TestASigningKeyReachesTheBoxOnlySealedAndNeverOnACommandLine(t *testing.T) 
 	if machine.at(host.KeptPath(environment.TierProduction, realtimeKeyKept)) < 0 {
 		t.Errorf("the signing key is not kept on the box:\n%s", strings.Join(machine.commands(), "\n"))
 	}
-	if !strings.Contains(strings.Join(machine.commands(), "\n"), "'--binding' 'realtime--app'") {
+	if !strings.Contains(strings.Join(machine.commands(), "\n"), "13:realtime--app,") {
 		t.Error("the signing key is not sealed to the realtime it belongs to")
 	}
 }

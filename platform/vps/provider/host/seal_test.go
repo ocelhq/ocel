@@ -133,14 +133,7 @@ func TestTheSealHelperMintsAKeyOnceAndMintsNothingOverIt(t *testing.T) {
 	}
 }
 
-var bound = seal.AssociatedData{
-	{Name: "project", Value: "shop"},
-	{Name: "class", Value: sealTier},
-	{Name: "environment", Value: "*"},
-	{Name: "folder", Value: "/a%2Fb"},
-	{Name: "binding", Value: ""},
-	{Name: "key", Value: "DATABASE_URL"},
-}
+var bound = seal.BindToProject("shop", "variable", sealTier, "*", "/a%2Fb", "", "DATABASE_URL")
 
 var boundFlags = sealFlags(bound)
 
@@ -196,17 +189,17 @@ func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
 		t.Errorf("open answered %q, want %q", got, plaintext)
 	}
 
-	for i, field := range bound {
-		moved := slices.Clone(bound)
-		moved[i].Value = field.Value + "moved"
+	for name, moved := range map[string]seal.AssociatedData{
+		"purpose":     seal.BindToProject("shop", "variablemoved", sealTier, "*", "/a%2Fb", "", "DATABASE_URL"),
+		"project":     seal.BindToProject("shopmoved", "variable", sealTier, "*", "/a%2Fb", "", "DATABASE_URL"),
+		"folder":      seal.BindToProject("shop", "variable", sealTier, "*", "/a%2Fbmoved", "", "DATABASE_URL"),
+		"empty value": seal.BindToProject("shop", "variable", sealTier, "*", "/a%2Fb", "moved", "DATABASE_URL"),
+		"key":         seal.BindToProject("shop", "variable", sealTier, "*", "/a%2Fb", "", "DATABASE_URLmoved"),
+		"value order": seal.BindToProject("shop", "variable", sealTier, "*", "/a%2Fb", "DATABASE_URL", ""),
+	} {
 		if _, code := sealHelperAt(t, root, sealed, append([]string{"open"}, sealFlags(moved)...)...); code == 0 {
-			t.Errorf("a value sealed here opened with another %s, so the associated data authenticates nothing", field.Name)
+			t.Errorf("a value sealed here opened with its %s changed, so the associated data authenticates nothing", name)
 		}
-	}
-	reordered := slices.Clone(bound)
-	reordered[0], reordered[len(reordered)-1] = reordered[len(reordered)-1], reordered[0]
-	if _, code := sealHelperAt(t, root, sealed, append([]string{"open"}, sealFlags(reordered)...)...); code == 0 {
-		t.Error("a value sealed here opened with its fields handed in another order, so the order authenticates nothing")
 	}
 }
 
@@ -244,19 +237,12 @@ func TestTheSealHelperOpensAValueSealedUnderTheKeyAndAssociatedDataItWasSealedWi
 	if err := os.WriteFile(filepath.Join(root, "production", "seal.key"), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
-	at := seal.AssociatedData{
-		{Name: "project", Value: "shop"},
-		{Name: "class", Value: "production"},
-		{Name: "environment", Value: "staging"},
-		{Name: "folder", Value: "/web"},
-		{Name: "binding", Value: ""},
-		{Name: "key", Value: "STRIPE_API_KEY"},
-	}
-	sealed := "oKGio6SlpqeoqaqrlXMjQSy9Z+ARAOShYg78hOZr+SZv+OoHsggDIp1z"
+	at := seal.BindToProject("shop", "variable", "production", "staging", "/web", "STRIPE_API_KEY")
+	sealed := "oKGio6SlpqeoqaqrlXMjQSy9Z+ARAOShYg7UlbGBMatxpNpQTeD5bD/s"
 
 	opened, code := sealHelperAt(t, root, sealed, append([]string{"open"}, sealFlags(at)...)...)
 	if code != 0 {
-		t.Fatalf("open exited %d, want the value sealed at shop/production/staging/%%2Fweb//STRIPE_API_KEY/ to open: every value on a box is bound to those bytes", code)
+		t.Fatalf("open exited %d, want the value sealed as a variable of shop at production/staging//web/STRIPE_API_KEY to open: every value on a box is bound to those", code)
 	}
 	if got := decoded(t, opened); got != "sk_live_secret" {
 		t.Errorf("open answered %q, want %q", got, "sk_live_secret")
@@ -278,7 +264,7 @@ func TestABindingValueTheSealHelperSealedUnderItsNameOpensThroughTheBoxCipher(t 
 	scope := variablestore.Scope{Project: "shop", Tier: sealTier}
 	for name, body := range map[string]string{
 		"records": `{"version":1,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`,
-		"values":  `{"version":1,"sealed":"CX0mtCiLOU33J+IBAIofm6utJftVMG2ehAO1QnHkyAdwJtmaBxEIsCZIQtFxqRz0OdtdvSg0/g=="}`,
+		"values":  `{"version":1,"sealed":"CX0mtCiLOU33J+IBAIofm6utJftVMG2ehAO1QnHkyAdwJtmaBxEIE2yEtFqPsLJioxJLs4Vvqg=="}`,
 	} {
 		if _, err := rows.Write(context.Background(), records.Entry{
 			Key:   variablestore.ValuesPartition(scope).Key("bindings", "orders", name, "*"),
@@ -291,7 +277,7 @@ func TestABindingValueTheSealHelperSealedUnderItsNameOpensThroughTheBoxCipher(t 
 
 	resolved, err := store.ResolveBinding(context.Background(), scope, "", "orders")
 	if err != nil || string(resolved.Value) != `{"url":"postgres://orders"}` {
-		t.Fatalf("ResolveBinding() = %q, %v, want the value the helper sealed at shop/production/*/%%2F/orders/PROPERTIES/ to open: every binding on a box is bound to those bytes", resolved.Value, err)
+		t.Fatalf("ResolveBinding() = %q, %v, want the value the helper sealed as the binding orders of shop at production/* to open: every binding on a box is bound to those", resolved.Value, err)
 	}
 }
 
@@ -591,12 +577,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t 
 func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 	t.Parallel()
 
-	argv, err := sealArgv("open", environment.TierProduction, seal.AssociatedData{
-		{Name: "project", Value: "shop"},
-		{Name: "folder", Value: "/apps/web"},
-		{Name: "binding", Value: ""},
-		{Name: "key", Value: "DATABASE_URL"},
-	})
+	argv, err := sealArgv("open", environment.TierProduction, seal.BindToProject("shop", "variable", "/apps/web", "", "DATABASE_URL"))
 	if err != nil {
 		t.Fatalf("sealArgv() = %v", err)
 	}
@@ -609,10 +590,10 @@ func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 	}
 	want := []string{
 		boxstore.SealHelper, string(environment.TierProduction), "open",
-		"--project", "shop", "--folder", "/apps/web", "--binding", "", "--key", "DATABASE_URL",
+		"8:variable,4:shop,9:/apps/web,0:,12:DATABASE_URL,",
 	}
 	if !slices.Equal(argv, want) {
-		t.Errorf("the provider runs %q, want %q: the tier it seals under, the verb, then every field it is bound to in order", argv, want)
+		t.Errorf("the provider runs %q, want %q: the tier it seals under, the verb, then the associated data it is bound to", argv, want)
 	}
 }
 
@@ -643,28 +624,19 @@ func TestAValueSealedToNoTierIsRefusedRatherThanSealedToWhateverTierExists(t *te
 	}
 }
 
-func TestTheSealHelperRefusesAFieldItIsHandedTwice(t *testing.T) {
+func TestTheSealHelperRefusesASealHandedNoAssociatedDataOrMoreThanOne(t *testing.T) {
 	t.Parallel()
 
 	root := sealDir(t)
 	if _, code := sealHelperAt(t, root, "", "init"); code != 0 {
 		t.Fatalf("init exited %d", code)
 	}
-	if _, code := sealHelperAt(t, root, encoded("v"), "seal", "--key", "A", "--key", "B"); code == 0 {
-		t.Error("the helper sealed a value bound to key twice, and a field named twice is two callers' fields read as one")
-	}
-}
-
-func TestTheSealHelperRefusesAFlagThatNamesNoField(t *testing.T) {
-	t.Parallel()
-
-	root := sealDir(t)
-	if _, code := sealHelperAt(t, root, "", "init"); code != 0 {
-		t.Fatalf("init exited %d", code)
-	}
-	for _, flag := range []string{"key", "--", "--Key", "--a/b"} {
-		if _, code := sealHelperAt(t, root, encoded("v"), "seal", flag, "v"); code == 0 {
-			t.Errorf("the helper sealed a value handed %q, which names no field", flag)
+	for name, args := range map[string][]string{
+		"none": {"seal"},
+		"two":  {"seal", "5:gates,0:,", "5:gates,0:,"},
+	} {
+		if _, code := sealHelperAt(t, root, encoded("v"), args...); code == 0 {
+			t.Errorf("the helper sealed a value handed %s associated data, and a value is bound to exactly one", name)
 		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
@@ -139,7 +140,7 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	}
 }
 
-func TestACellIsSealedUnderAnEncryptionContextNamingItsProjectClassEnvironmentFolderAndKey(t *testing.T) {
+func TestACellIsSealedUnderAnEncryptionContextBindingItAsAVariableOfItsProjectTierEnvironmentFolderAndKey(t *testing.T) {
 	table, _ := newKeyValues(t)
 	cipher, crypto := newCipher()
 	store := variablestore.Store{KeyValues: table, Cipher: cipher}
@@ -150,13 +151,7 @@ func TestACellIsSealedUnderAnEncryptionContextNamingItsProjectClassEnvironmentFo
 		t.Fatalf("Set err = %v", err)
 	}
 
-	want := map[string]string{
-		"project":     "shop",
-		"class":       "production",
-		"environment": "staging",
-		"folder":      "/web",
-		"key":         "STRIPE_API_KEY",
-	}
+	want := map[string]string{"ocel:associated-data": encodedContext("8:variable,4:shop,10:production,7:staging,4:/web,14:STRIPE_API_KEY,")}
 	if len(crypto.contexts) != 1 || !maps.Equal(crypto.contexts[0], want) {
 		t.Fatalf("encryption context = %v, want exactly one %v: every value already stored is bound to it", crypto.contexts, want)
 	}
@@ -165,10 +160,10 @@ func TestACellIsSealedUnderAnEncryptionContextNamingItsProjectClassEnvironmentFo
 	}
 }
 
-func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
+func TestACellWhoseEncryptionContextBindsItAsAVariableOpens(t *testing.T) {
 	table, _ := newKeyValues(t)
 	cipher, _ := newCipher()
-	sealed := fakeCipherMarker + keyARN + "#class=production,environment=staging,folder=/web,key=STRIPE_API_KEY,project=shop|" +
+	sealed := fakeCipherMarker + keyARN + "#ocel:associated-data=" + encodedContext("8:variable,4:shop,10:production,7:staging,4:/web,14:STRIPE_API_KEY,") + "|" +
 		base64.StdEncoding.EncodeToString([]byte("sk_live_secret"))
 	body, err := json.Marshal(map[string]any{"version": 1, "size": 14, "sealed": []byte(sealed)})
 	if err != nil {
@@ -185,11 +180,11 @@ func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
 
 	value, err := store.Get(context.Background(), variablestore.Scope{Project: "shop", Tier: environment.TierProduction}, at, true)
 	if err != nil || value.Plaintext != "sk_live_secret" {
-		t.Fatalf("Get() = %q, %v, want the value KMS sealed under class=production to open: the encryption context is data every stored value is bound to", value.Plaintext, err)
+		t.Fatalf("Get() = %q, %v, want the value KMS sealed as a variable of shop to open: the encryption context is data every stored value is bound to", value.Plaintext, err)
 	}
 }
 
-func TestABindingIsSealedUnderAnEncryptionContextThatNamesIt(t *testing.T) {
+func TestABindingIsSealedUnderAnEncryptionContextBindingItAsABindingOfItsProjectTierEnvironmentAndName(t *testing.T) {
 	table, _ := newKeyValues(t)
 	cipher, crypto := newCipher()
 	store := variablestore.Store{KeyValues: table, Cipher: cipher}
@@ -199,24 +194,17 @@ func TestABindingIsSealedUnderAnEncryptionContextThatNamesIt(t *testing.T) {
 		t.Fatalf("SetBinding err = %v", err)
 	}
 
-	want := map[string]string{
-		"project":     "shop",
-		"class":       "preview",
-		"environment": "*",
-		"folder":      "/",
-		"binding":     "orders",
-		"key":         "PROPERTIES",
-	}
+	want := map[string]string{"ocel:associated-data": encodedContext("7:binding,4:shop,7:preview,1:*,6:orders,")}
 	if len(crypto.contexts) != 1 || !maps.Equal(crypto.contexts[0], want) {
 		t.Fatalf("encryption context = %v, want exactly one %v: every binding already stored is bound to it", crypto.contexts, want)
 	}
 }
 
-func TestABindingWhoseEncryptionContextNamesItOpens(t *testing.T) {
+func TestABindingWhoseEncryptionContextBindsItAsABindingOpens(t *testing.T) {
 	table, _ := newKeyValues(t)
 	cipher, _ := newCipher()
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
-	sealed := fakeCipherMarker + keyARN + "#binding=orders,class=production,environment=*,folder=/,key=PROPERTIES,project=shop|" +
+	sealed := fakeCipherMarker + keyARN + "#ocel:associated-data=" + encodedContext("7:binding,4:shop,10:production,1:*,6:orders,") + "|" +
 		base64.StdEncoding.EncodeToString([]byte(`{"url":"postgres://orders"}`))
 	value, err := json.Marshal(map[string]any{"version": 1, "sealed": []byte(sealed)})
 	if err != nil {
@@ -237,26 +225,42 @@ func TestABindingWhoseEncryptionContextNamesItOpens(t *testing.T) {
 
 	resolved, err := store.ResolveBinding(context.Background(), scope, "", "orders")
 	if err != nil || string(resolved.Value) != `{"url":"postgres://orders"}` {
-		t.Fatalf("ResolveBinding() = %q, %v, want the value KMS sealed under binding=orders to open: the encryption context is data every stored binding is bound to", resolved.Value, err)
+		t.Fatalf("ResolveBinding() = %q, %v, want the value KMS sealed as the binding orders to open: the encryption context is data every stored binding is bound to", resolved.Value, err)
 	}
 }
 
-func TestAssociatedDataThatNamesOneFieldTwiceIsRefused(t *testing.T) {
+func TestAnEncryptionContextIsValidUTF8ThatDecodesBackToTheAssociatedDataEvenWhenAValueIsNot(t *testing.T) {
 	cipher, crypto := newCipher()
-	bound := seal.AssociatedData{{Name: "key", Value: "A"}, {Name: "key", Value: "B"}}
+	bound := []seal.AssociatedData{seal.Bind("variable", "\xff"), seal.Bind("variable", "\xfe"), seal.Bind("variable", "\xff")}
+	for _, each := range bound {
+		if _, err := cipher.Seal(context.Background(), environment.TierProduction, each, []byte("v")); err != nil {
+			t.Fatalf("Seal() err = %v", err)
+		}
+	}
 
-	if _, err := cipher.Seal(context.Background(), environment.TierProduction, bound, []byte("v")); err == nil {
-		t.Fatal("Seal() with key named twice succeeded, and an encryption context keeps one of the two values")
+	for i, sent := range crypto.contexts {
+		value := sent["ocel:associated-data"]
+		if len(sent) != 1 || !utf8.ValidString(value) {
+			t.Fatalf("encryption context = %q, want one valid UTF-8 value: KMS takes a context as JSON strings, which replace each invalid byte and merge distinct associated data", sent)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(value)
+		if err != nil || !bytes.Equal(decoded, bound[i].Bytes()) {
+			t.Errorf("encryption context %q decodes to %q, %v, want the associated data's bytes %q", value, decoded, err, bound[i].Bytes())
+		}
 	}
-	if len(crypto.contexts) != 0 {
-		t.Errorf("KMS was asked to encrypt under %v, want no call", crypto.contexts)
+	if maps.Equal(crypto.contexts[0], crypto.contexts[1]) || !maps.Equal(crypto.contexts[0], crypto.contexts[2]) {
+		t.Errorf("encryption contexts = %q, want the first and last alike and the middle one apart", crypto.contexts)
 	}
+}
+
+func encodedContext(rendered string) string {
+	return base64.StdEncoding.EncodeToString([]byte(rendered))
 }
 
 func TestAValueNamingNoTierIsRefusedRatherThanSealedUnderSomeKey(t *testing.T) {
 	cipher, crypto := newCipher()
 
-	_, err := cipher.Seal(context.Background(), "", seal.AssociatedData{{Name: "key", Value: "K"}}, []byte("v"))
+	_, err := cipher.Seal(context.Background(), "", seal.Bind("variable", "K"), []byte("v"))
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Seal() under no tier = %v, want an invalid refusal: each tier is sealed under the key its own bootstrap made", err)

@@ -38,12 +38,12 @@ func newKeyValuesHolding(t *testing.T, rows map[string]records.Key) *fake.KeyVal
 	return store
 }
 
-func TestACellsValueIsBoundToItsProjectClassEnvironmentFolderEmptyBindingAndKeyInThatOrder(t *testing.T) {
+func TestACellsValueIsBoundAsAVariableToItsProjectTierEnvironmentFolderAndKey(t *testing.T) {
 	t.Parallel()
 
 	store := variablestore.Store{
 		KeyValues: newKeyValuesHolding(t, map[string]records.Key{
-			`{"version":1,"updatedAt":1790580978,"size":14,"sealed":"+VgAViEpXXIk4f9gdIkzfy1DSDSCljR35ULyG/f4QqTpm7DEoFaNMcm+"}`: shop.Key("cells", "/web", "STRIPE_API_KEY", "staging"),
+			`{"version":1,"updatedAt":1790580978,"size":14,"sealed":"+qO3M5S8MwOK2Gkpow0p88BOvmOIcGhcaD8yDkAqDwYyR/53Ng/XZnxn"}`: shop.Key("cells", "/web", "STRIPE_API_KEY", "staging"),
 		}),
 		Cipher: newFixtureKeyCipher(t),
 	}
@@ -52,17 +52,17 @@ func TestACellsValueIsBoundToItsProjectClassEnvironmentFolderEmptyBindingAndKeyI
 
 	value, err := store.Get(context.Background(), scope, at, true)
 	if err != nil || value.Plaintext != "sk_live_secret" {
-		t.Fatalf("Get() = %q, %v, want the value sealed at shop/production/staging/%%2Fweb//STRIPE_API_KEY/ to open: every stored cell is bound to those bytes", value.Plaintext, err)
+		t.Fatalf("Get() = %q, %v, want the value sealed as a variable of shop at production/staging//web/STRIPE_API_KEY to open: every stored cell is bound to those", value.Plaintext, err)
 	}
 }
 
-func TestABindingsValueIsBoundToTheRootFolderItsNameAndThePropertiesKey(t *testing.T) {
+func TestABindingsValueIsBoundAsABindingToItsProjectTierEnvironmentAndName(t *testing.T) {
 	t.Parallel()
 
 	store := variablestore.Store{
 		KeyValues: newKeyValuesHolding(t, map[string]records.Key{
 			`{"version":1,"updatedAt":1790580978,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`:               shop.Key("bindings", "orders", "records", "*"),
-			`{"version":1,"sealed":"kH20mriYvg2PFri7a1XPVAmM0y9YqXkDfsjQMCWX6gyemVuOD8Ro1RkBDEdPnJpRyqOs/YGNHQ=="}`: shop.Key("bindings", "orders", "values", "*"),
+			`{"version":1,"sealed":"Gr+tqkmj7M4Aef7sQCz70w/KupM/W3cuKa69Nk3UwZkN4xfKIaAj+IC+pkJ2dkFP3YYcTea8cw=="}`: shop.Key("bindings", "orders", "values", "*"),
 		}),
 		Cipher: newFixtureKeyCipher(t),
 	}
@@ -70,7 +70,7 @@ func TestABindingsValueIsBoundToTheRootFolderItsNameAndThePropertiesKey(t *testi
 
 	resolved, err := store.ResolveBinding(context.Background(), scope, "", "orders")
 	if err != nil || string(resolved.Value) != `{"url":"postgres://orders"}` {
-		t.Fatalf("ResolveBinding() = %q, %v, want the value sealed at shop/production/*/%%2F/orders/PROPERTIES/ to open: every stored binding is bound to those bytes", resolved.Value, err)
+		t.Fatalf("ResolveBinding() = %q, %v, want the value sealed as a binding of shop at production/*/orders to open: every stored binding is bound to those", resolved.Value, err)
 	}
 }
 
@@ -128,7 +128,7 @@ func TestABindingThatNamesNoBindingIsRefusedBeforeItIsSealed(t *testing.T) {
 	_, err := store.SetBinding(context.Background(), variablestore.Scope{Project: "shop", Tier: environment.TierProduction}, "", variablestore.OwnerOcel, "",
 		variablestore.BindingWrite{Record: []byte(`{}`), Value: []byte(`{}`)})
 	if err == nil {
-		t.Fatal("SetBinding() with no name = nil, want a refusal: a binding with no name is bound to the bytes of the root-folder PROPERTIES cell")
+		t.Fatal("SetBinding() with no name = nil, want a refusal: a binding with no name names nothing to seal its value to")
 	}
 	if cipher.sealed != 0 {
 		t.Fatalf("the cipher sealed %d value(s) before the write was refused", cipher.sealed)

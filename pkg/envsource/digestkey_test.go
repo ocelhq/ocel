@@ -199,7 +199,7 @@ func TestEachTierVersionsAValueUnderItsOwnKey(t *testing.T) {
 	}
 }
 
-func TestTheDigestKeyIsBoundToEveryProjectInItsTierAtTheEnvSourceBinding(t *testing.T) {
+func TestTheDigestKeyIsBoundAsItsTiersEnvSourceDigestKey(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	key, err := base64.StdEncoding.DecodeString("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
@@ -212,12 +212,12 @@ func TestTheDigestKeyIsBoundToEveryProjectInItsTierAtTheEnvSourceBinding(t *test
 	}
 	if _, err := store.KeyValues.Write(ctx, records.Entry{
 		Key:   digestKeyAt(environment.TierProduction),
-		Value: []byte(`{"sealed":"9F/RJPgNa4porS/1Q8ItSL/KGK95oGpw8VmDf5tE0cWEbE3WkZMbSiX44Znd7nOg83GJcnPO7ZR86eqg"}`),
+		Value: []byte(`{"sealed":"9F/RJPgNa4porS/1Q8ItSL/KGK95oGpw8VmDf5tE0cWEbE3WkZMbSiX44Zk2QHJqazuIqVGZw3fv6wsl"}`),
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := envsource.EnsureDigestKey(ctx, store, environment.TierProduction); err != nil {
-		t.Fatalf("EnsureDigestKey() = %v, want the key sealed at */production/*/%%2F/envsource/digestkey/ to open: every value an env source copied is versioned under it", err)
+		t.Fatalf("EnsureDigestKey() = %v, want the key sealed as the production env source digest key to open: every value an env source copied is versioned under it", err)
 	}
 }

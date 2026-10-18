@@ -15,7 +15,7 @@ func TestACipherToldToRefuseOpeningRefusesWhatItSealed(t *testing.T) {
 
 	ctx := context.Background()
 	cipher := fake.NewCipher()
-	bound := seal.AssociatedData{{Name: "key", Value: "STRIPE_API_KEY"}}
+	bound := seal.Bind("variable", "STRIPE_API_KEY")
 	sealed, err := cipher.Seal(ctx, environment.TierProduction, bound, []byte("sk_live"))
 	if err != nil {
 		t.Fatal(err)

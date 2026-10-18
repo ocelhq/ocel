@@ -9,7 +9,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -99,14 +98,7 @@ func aKey(t *testing.T) []byte {
 	return key
 }
 
-var bound = seal.AssociatedData{
-	{Name: "project", Value: "shop"},
-	{Name: "class", Value: "production"},
-	{Name: "environment", Value: "*"},
-	{Name: "folder", Value: "/"},
-	{Name: "binding", Value: ""},
-	{Name: "key", Value: "DATABASE_URL"},
-}
+var bound = seal.BindToProject("shop", "variable", "production", "*", "/", "DATABASE_URL")
 
 func TestAValueOpensUnderItsOwnAssociatedDataAndNoOther(t *testing.T) {
 	t.Parallel()
@@ -117,8 +109,7 @@ func TestAValueOpensUnderItsOwnAssociatedDataAndNoOther(t *testing.T) {
 	if err != nil || string(opened) != "postgres://example" {
 		t.Fatalf("Open() = %q, %v", opened, err)
 	}
-	elsewhere := slices.Clone(bound)
-	elsewhere[0].Value = "other"
+	elsewhere := seal.BindToProject("other", "variable", "production", "*", "/", "DATABASE_URL")
 	if _, err := Open(key, elsewhere, sealed); err == nil {
 		t.Error("a value sealed for shop opened for other, so the associated data authenticates nothing")
 	}
@@ -133,7 +124,7 @@ func TestAValueOpensUnderItsOwnAssociatedDataAndNoOther(t *testing.T) {
 
 const (
 	keySealedWith      = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
-	valueSealedAlready = "oKGio6SlpqeoqaqrlXMjQSy9Z+ARAOShYg78hOZr+SZv+OoHsggDIp1z"
+	valueSealedAlready = "oKGio6SlpqeoqaqrlXMjQSy9Z+ARAOShYg7UlbGBMatxpNpQTeD5bD/s"
 )
 
 func TestAValueOnTheBoxOpensUnderTheKeyAndAssociatedDataItWasSealedWith(t *testing.T) {
@@ -153,17 +144,10 @@ func TestAValueOnTheBoxOpensUnderTheKeyAndAssociatedDataItWasSealedWith(t *testi
 	if err := os.WriteFile(filepath.Join(root, "production", "seal.key"), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
-	at := seal.AssociatedData{
-		{Name: "project", Value: "shop"},
-		{Name: "class", Value: "production"},
-		{Name: "environment", Value: "staging"},
-		{Name: "folder", Value: "/web"},
-		{Name: "binding", Value: ""},
-		{Name: "key", Value: "STRIPE_API_KEY"},
-	}
+	at := seal.BindToProject("shop", "variable", "production", "staging", "/web", "STRIPE_API_KEY")
 	opened, err := Cipher{Root: root}.Open(context.Background(), environment.TierProduction, at, sealed)
 	if err != nil || string(opened) != "sk_live_secret" {
-		t.Fatalf("Open() = %q, %v, want the value sealed at shop/production/staging/%%2Fweb//STRIPE_API_KEY/ to open: every value on a box is bound to those bytes", opened, err)
+		t.Fatalf("Open() = %q, %v, want the value sealed as a variable of shop at production/staging//web/STRIPE_API_KEY to open: every value on a box is bound to those", opened, err)
 	}
 }
 

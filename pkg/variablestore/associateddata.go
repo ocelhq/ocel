@@ -7,26 +7,25 @@ import (
 
 func newCellAssociatedData(scope Scope, at Coordinate) (seal.AssociatedData, error) {
 	at = at.canonical()
-	return newAssociatedData(scope, at.Environment, at.Folder, "", at.Key)
+	if err := refuseUnsealable(scope, at.Key); err != nil {
+		return seal.AssociatedData{}, err
+	}
+	return seal.BindToProject(scope.Project, "variable", string(scope.Tier), at.Environment, at.Folder, at.Key), nil
 }
 
 func newBindingAssociatedData(scope Scope, environment, name string) (seal.AssociatedData, error) {
-	return newAssociatedData(scope, canonicalEnvironment(environment), rootFolder, name, bindingValueKey)
+	if err := refuseUnsealable(scope, name); err != nil {
+		return seal.AssociatedData{}, err
+	}
+	return seal.BindToProject(scope.Project, "binding", string(scope.Tier), canonicalEnvironment(environment), name), nil
 }
 
-func newAssociatedData(scope Scope, environment, folder, binding, key string) (seal.AssociatedData, error) {
+func refuseUnsealable(scope Scope, name string) error {
 	if scope.Project == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid, "a value names no project, and its project is what the value is sealed to")
+		return refusal.Refuse(refusal.CodeInvalid, "a value names no project, and its project is what the value is sealed to")
 	}
-	if key == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid, "a value names no key, and its key is what the value is sealed to")
+	if name == "" {
+		return refusal.Refuse(refusal.CodeInvalid, "a value names no key, and its key is what the value is sealed to")
 	}
-	return seal.AssociatedData{
-		{Name: "project", Value: scope.Project},
-		{Name: "class", Value: string(scope.Tier)},
-		{Name: "environment", Value: environment},
-		{Name: "folder", Value: folder},
-		{Name: "binding", Value: binding},
-		{Name: "key", Value: key},
-	}, nil
+	return nil
 }

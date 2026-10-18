@@ -33,10 +33,7 @@ func (s *Cipher) runSealHelper(ctx context.Context, verb string, tier environmen
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"a value bound to %s names no tier", bound.Bytes())
 	}
-	argv := []string{SealHelper, string(tier), verb}
-	for _, field := range bound {
-		argv = append(argv, "--"+field.Name, field.Value)
-	}
+	argv := []string{SealHelper, string(tier), verb, string(bound.Bytes())}
 	fed := append([]byte(base64.StdEncoding.EncodeToString(body)), '\n')
 	rendered, err := s.over.Seal(ctx, verb+" a value bound to "+string(bound.Bytes()), tier, argv, bytes.NewReader(fed))
 	if err != nil {

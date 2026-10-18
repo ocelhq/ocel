@@ -3,7 +3,6 @@ package conformance
 import (
 	"bytes"
 	"context"
-	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -16,13 +15,7 @@ func RunCipher(t *testing.T, cipher seal.Cipher) {
 	ctx := context.Background()
 
 	tier := environment.TierProduction
-	bound := seal.AssociatedData{
-		{Name: "project", Value: "shop"},
-		{Name: "environment", Value: "*"},
-		{Name: "folder", Value: "/"},
-		{Name: "binding", Value: ""},
-		{Name: "key", Value: "DATABASE_URL"},
-	}
+	bound := seal.BindToProject("shop", "conformance", "*", "/", "", "DATABASE_URL")
 	plaintext := []byte("postgres://example")
 
 	sealed, err := cipher.Seal(ctx, tier, bound, plaintext)
@@ -46,12 +39,17 @@ func RunCipher(t *testing.T, cipher seal.Cipher) {
 			t.Fatal("Open() under another tier succeeded, so one tier's key opens another's values")
 		}
 	})
-	for i, field := range bound {
-		t.Run("a value sealed here does not open with another "+field.Name, func(t *testing.T) {
-			moved := slices.Clone(bound)
-			moved[i].Value = field.Value + "moved"
+	for name, moved := range map[string]seal.AssociatedData{
+		"purpose":     seal.BindToProject("shop", "conformance moved", "*", "/", "", "DATABASE_URL"),
+		"project":     seal.BindToProject("shopmoved", "conformance", "*", "/", "", "DATABASE_URL"),
+		"first value": seal.BindToProject("shop", "conformance", "*moved", "/", "", "DATABASE_URL"),
+		"empty value": seal.BindToProject("shop", "conformance", "*", "/", "moved", "DATABASE_URL"),
+		"last value":  seal.BindToProject("shop", "conformance", "*", "/", "", "DATABASE_URLmoved"),
+		"value count": seal.BindToProject("shop", "conformance", "*", "/", ""),
+	} {
+		t.Run("a value sealed here does not open with its "+name+" changed", func(t *testing.T) {
 			if _, err := cipher.Open(ctx, tier, moved, sealed); err == nil {
-				t.Fatalf("Open() with %s %q succeeded, so the associated data is not authenticated", field.Name, moved[i].Value)
+				t.Fatalf("Open() bound to %s succeeded, so the associated data is not authenticated", moved.Bytes())
 			}
 		})
 	}

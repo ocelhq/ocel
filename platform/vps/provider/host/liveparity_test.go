@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -40,8 +40,7 @@ func TestWhatTheSealHelperSealsTheBoxOpensNativelyUnderTheSameAssociatedData(t *
 	if string(opened) != "postgres://example" {
 		t.Errorf("Open() = %q, want what was sealed", opened)
 	}
-	moved := slices.Clone(bound)
-	moved[2].Value = "staging"
+	moved := seal.BindToProject("shop", "variable", sealTier, "staging", "/a%2Fb", "", "DATABASE_URL")
 	if _, err := vault.Open(context.Background(), sealTier, moved, raw); err == nil {
 		t.Error("a value the helper sealed for one environment opened natively for another")
 	}

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -31,16 +32,14 @@ const tier = environment.TierProduction
 type cipher struct{}
 
 func (cipher) Open(_ context.Context, _ environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	opened := "opened:"
-	for _, field := range bound {
-		if field.Name == "stack" && field.Value != "prod--infra" {
-			return nil, errors.New("sealed to another stack")
-		}
-		if field.Name == "name" && field.Value == live.QueueDeliverySecretName {
-			opened = "delivery:"
-		}
+	rendered := string(bound.Bytes())
+	if !strings.Contains(rendered, ":prod--infra,") {
+		return nil, errors.New("sealed to another stack")
 	}
-	return []byte(opened + string(sealed)), nil
+	if strings.HasSuffix(rendered, ":"+live.QueueDeliverySecretName+",") {
+		return []byte("delivery:" + string(sealed)), nil
+	}
+	return []byte("opened:" + string(sealed)), nil
 }
 
 type located map[string]string

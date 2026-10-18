@@ -43,8 +43,6 @@ const (
 	postgresAccount        = "ocel"
 	postgresDatabaseName   = "ocel"
 	postgresPasswordBytes  = 24
-	postgresSecretName     = "password"
-	recordedPasswordFolder = "postgres"
 )
 
 var cloudSQLVersions = map[string]string{
@@ -570,14 +568,7 @@ func (i postgresInstances) passwordKey(database string) records.Key {
 }
 
 func (i postgresInstances) passwordBound(database string) seal.AssociatedData {
-	return seal.AssociatedData{
-		{Name: "project", Value: i.ref.Project},
-		{Name: "tier", Value: string(i.ref.Tier)},
-		{Name: "environment", Value: i.ref.Name.Env},
-		{Name: "folder", Value: recordedPasswordFolder},
-		{Name: "binding", Value: database},
-		{Name: "name", Value: postgresSecretName},
-	}
+	return seal.BindToProject(i.ref.Project, "postgres password", string(i.ref.Tier), i.ref.Name.Env, database)
 }
 
 func (i postgresInstances) ensurePassword(ctx context.Context, database string) (recordedPassword, error) {

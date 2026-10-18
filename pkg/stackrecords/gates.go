@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 )
 
-var GatesAssociatedData = seal.AssociatedData{{Name: "record", Value: "gates"}}
+var GatesAssociatedData = seal.Bind("gates")
 
 type GateRecord struct {
 	Gate     gate.Gate `json:"gate"`

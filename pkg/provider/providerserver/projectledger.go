@@ -25,12 +25,7 @@ func openProjectLedger(p provider.Provider, tier environment.Tier, slug string) 
 }
 
 func (l projectLedger) newSecretsAssociatedData(app, release string) seal.AssociatedData {
-	return seal.AssociatedData{
-		{Name: "project", Value: l.slug},
-		{Name: "app", Value: app},
-		{Name: "release", Value: release},
-		{Name: "field", Value: "secrets"},
-	}
+	return seal.BindToProject(l.slug, "release secrets", app, release)
 }
 
 func (l projectLedger) putStaged(ctx context.Context, record router.ReleaseRecord) error {

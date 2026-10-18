@@ -23,8 +23,6 @@ const (
 	digestKeyBytes    = 32
 	digestBytes       = 16
 	digestKeyAttempts = 3
-	digestKeyFolder   = "/"
-	digestKeyBinding  = "envsource"
 	digestKeyName     = "digestkey"
 )
 
@@ -41,14 +39,7 @@ func digestKeyAt(tier environment.Tier) records.Key {
 }
 
 func newDigestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
-	return seal.AssociatedData{
-		{Name: "project", Value: variablestore.EveryProject},
-		{Name: "class", Value: string(tier)},
-		{Name: "environment", Value: variablestore.TierWideEnvironment},
-		{Name: "folder", Value: digestKeyFolder},
-		{Name: "binding", Value: digestKeyBinding},
-		{Name: "key", Value: digestKeyName},
-	}
+	return seal.Bind("env source digest key", string(tier))
 }
 
 func EnsureDigestKey(ctx context.Context, store variablestore.Store, tier environment.Tier) (DigestKey, error) {

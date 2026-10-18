@@ -71,12 +71,7 @@ func TestSecretsSealedForAnotherReleaseDoNotOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := p.Cipher().Seal(ctx, environment.TierProduction, seal.AssociatedData{
-		{Name: "project", Value: "shop"},
-		{Name: "app", Value: "web"},
-		{Name: "release", Value: "b1"},
-		{Name: "field", Value: "secrets"},
-	}, plain)
+	sealed, err := p.Cipher().Seal(ctx, environment.TierProduction, seal.BindToProject("shop", "release secrets", "web", "b1"), plain)
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
