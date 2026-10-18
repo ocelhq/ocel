@@ -1,18 +1,24 @@
 import { createHash } from "node:crypto";
-import { loadImageConfig } from "./config.mjs";
 import {
   type CompiledImageConfig,
   IMAGE_PASSTHROUGH,
   type ImageOriginRequest,
-  type OriginResponse,
-} from "./contract.mjs";
+  type RouteImage,
+  validateImage,
+} from "@framework/next-protocol/image";
+import { loadImageConfig } from "./config.mjs";
 import { BOOTSTRAP_MESSAGE, ImageError, upstreamFailure } from "./errors.mjs";
 import { assetKey, releaseAssetPrefix } from "./keys.mjs";
 import { extensionFor } from "./sniff.mjs";
 import type { ObjectStore } from "./store.mjs";
 import { type Transformed, transform } from "./transform.mjs";
 import { fetchUpstream, type UpstreamDeps, type UpstreamImage } from "./upstream.mjs";
-import { validate } from "./validate.mjs";
+
+export interface OriginResponse {
+  status: number;
+  headers: Record<string, string>;
+  body: Uint8Array;
+}
 
 export interface OptimizeDeps {
   store: ObjectStore;
@@ -41,13 +47,15 @@ async function run(payload: ImageOriginRequest, deps: OptimizeDeps): Promise<Ori
   const assetPrefix = releaseAssetPrefix(payload.assetPrefix);
   const config = await loadImageConfig(deps.store, assetPrefix, payload.configHash);
 
-  const result = validate(payload, config);
+  const result = validateImage(payload, config);
   if (!result.ok) throw new ImageError(result.status, result.message);
   const { href, isAbsolute } = result.params;
 
   const source = isAbsolute
     ? await fetchUpstream(href, config, deps.upstream)
-    : await readLocal(deps.store, assetPrefix, href, config);
+    : payload.routeImage
+      ? decodeRouteImage(payload.routeImage, config)
+      : await readLocal(deps.store, assetPrefix, href, config);
 
   const transformed = await transform({
     bytes: source.bytes,
@@ -76,6 +84,22 @@ async function readLocal(
   }
   if (!object) throw upstreamFailure(`no object at ${key}`);
   return object;
+}
+
+function decodeRouteImage(image: RouteImage, config: CompiledImageConfig): UpstreamImage {
+  if (typeof image?.base64 !== "string")
+    throw upstreamFailure("route image carries no base64 body");
+  const bytes = new Uint8Array(Buffer.from(image.base64, "base64"));
+  if (bytes.byteLength > config.maximumResponseBody) {
+    throw upstreamFailure(
+      `route image of ${bytes.byteLength} bytes over ${config.maximumResponseBody}`,
+    );
+  }
+  return {
+    bytes,
+    cacheControl: typeof image.cacheControl === "string" ? image.cacheControl : null,
+    etag: typeof image.etag === "string" ? image.etag : null,
+  };
 }
 
 function respond(

@@ -1,3 +1,6 @@
+import { type EdgeBundle, edgeBundleVersion } from "@platform/edge-contract/edge-bundle";
+import { renderWorkersShim, WORKERS_SHIM_MODULE } from "./workers-shim";
+
 export interface EdgeStoredObject {
   text(): Promise<string>;
   arrayBuffer(): Promise<ArrayBuffer>;
@@ -13,18 +16,6 @@ export interface EdgeWorkers {
   compatDate: string;
   compatFlags?: string[];
 }
-
-interface EdgeBundle {
-  version: number;
-  mainModule: string;
-  shim: string;
-  chunks: Record<string, string>;
-  wasm?: Record<string, string>;
-  assets?: Record<string, string>;
-  env?: Record<string, string>;
-}
-
-const BUNDLE_VERSION = 2;
 
 const SEALED_FILE = "sealed.bin";
 
@@ -106,14 +97,14 @@ export function createEdgeInvoker(
       throw new Error(`ocel: no sealed edge variables at ${sealedKey}`);
     }
     const bundle = JSON.parse(await object.text()) as EdgeBundle;
-    if (bundle.version !== BUNDLE_VERSION) {
+    if (bundle.version !== edgeBundleVersion) {
       throw new Error(
         `ocel: edge bundle at ${workers.bundleKey} is version ${bundle.version}, which this worker cannot read`,
       );
     }
 
     const modules: Record<string, WorkerLoaderModule> = {
-      [bundle.mainModule]: { js: bundle.shim },
+      [WORKERS_SHIM_MODULE]: { js: renderWorkersShim(bundle) },
     };
     for (const [id, cjs] of Object.entries(bundle.chunks)) modules[id] = { cjs };
     for (const [id, base64] of Object.entries(bundle.wasm ?? {})) {
@@ -126,7 +117,7 @@ export function createEdgeInvoker(
     return {
       compatibilityDate: workers.compatDate,
       compatibilityFlags: workers.compatFlags,
-      mainModule: bundle.mainModule,
+      mainModule: WORKERS_SHIM_MODULE,
       modules,
       env: {
         ...(bundle.env ?? {}),

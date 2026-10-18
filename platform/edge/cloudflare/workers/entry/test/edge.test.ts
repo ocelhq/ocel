@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { edgeBundleVersion } from "@platform/edge-contract/edge-bundle";
 import { describe, expect, it } from "vitest";
 import {
   createEdgeInvoker,
@@ -9,7 +10,7 @@ import {
   ownBundleKey,
 } from "../src/edge";
 import type { ServeFetch } from "../src/index";
-import { chunkFor, countingLoader, edgeBundle, shimFor } from "./edge-bundle";
+import { chunkFor, countingLoader, edgeBundle } from "./edge-bundle";
 import {
   EMPTY_ROUTES,
   type NextRelease,
@@ -544,7 +545,7 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   });
 
   it("returns 500 for a bundle whose version this worker cannot read", async () => {
-    const res = await edgeRoute({ edgeBundle: edgeBundle({}, { version: 3 }) });
+    const res = await edgeRoute({ edgeBundle: edgeBundle({}, { version: edgeBundleVersion - 1 }) });
 
     expect(res.status).toBe(500);
   });
@@ -1034,11 +1035,11 @@ describe("the variables a deployment declares", () => {
     const bundleKey = `${prefix}/bundle.json`;
     const entries = { e: { chunks: ["c/0.js"], handlerExport: "handler" } };
     const json = JSON.stringify({
-      version: 2,
-      mainModule: "main.js",
-      shim: shimFor(entries),
+      version: edgeBundleVersion,
+      entries,
       chunks: { "c/0.js": chunkFor("e", bundle.handler ?? DUMP) },
       env: bundle.bundleEnv ?? { __NEXT_BUILD_ID: "t" },
+      clientAssetSuffix: "",
     });
 
     const reads: string[] = [];

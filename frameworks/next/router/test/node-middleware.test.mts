@@ -85,11 +85,11 @@ function fakeOrigin(handler: (request: Request) => Response | Promise<Response>)
 }
 
 function serviceThrottle() {
-  return new Response(null, {
-    status: 429,
-    headers: { "x-amzn-errortype": "TooManyRequestsException" },
-  });
+  return new Response(null, { status: 429, headers: { "x-host-throttle": "1" } });
 }
+
+const isOriginThrottle = (response: Response) =>
+  response.status === 429 && response.headers.has("x-host-throttle");
 
 function mwResponse(
   headers: Record<string, string> = {},
@@ -407,7 +407,7 @@ describe("node middleware retries a throttled origin", () => {
 
     const res = await serve(
       new Request("https://app.example/static.txt"),
-      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch, isOriginThrottle }),
     );
 
     expect(res.status).toBe(200);
@@ -423,7 +423,7 @@ describe("node middleware retries a throttled origin", () => {
 
       const resPromise = serve(
         new Request("https://app.example/static.txt"),
-        staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+        staticDeps(nodeMiddleware(), { fetch: origin.fetch, isOriginThrottle }),
       );
       await vi.runAllTimersAsync();
       const res = await resPromise;
@@ -434,6 +434,17 @@ describe("node middleware retries a throttled origin", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("does not retry a 429 where the host names no throttle check", async () => {
+    const origin = fakeOrigin(() => serviceThrottle());
+
+    await serve(
+      new Request("https://app.example/static.txt"),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(origin.requests.length).toBe(1);
   });
 
   it("does not retry a real 500 the app produced on purpose", async () => {

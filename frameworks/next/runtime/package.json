@@ -15,7 +15,6 @@
     "./incremental-cache": "./src/incremental-cache.mts",
     "./instance-cache": "./src/instance-cache.mts",
     "./origin-tags": "./src/origin-tags.mts",
-    "./project-manifest": "./src/project-manifest.mts",
     "./served-route": "./src/served-route.mts",
     "./server-preload": "./src/server-preload.mts",
     "./purge-signal": "./src/purge-signal.mts",

@@ -1,3 +1,5 @@
+import { UPSTREAM_INVALID_MESSAGE } from "@framework/next-protocol/image";
+
 export class ImageError extends Error {
   constructor(
     readonly status: number,
@@ -10,7 +12,7 @@ export class ImageError extends Error {
 }
 
 export function upstreamFailure(detail: unknown): ImageError {
-  return new ImageError(400, '"url" parameter is valid but upstream response is invalid', detail);
+  return new ImageError(400, UPSTREAM_INVALID_MESSAGE, detail);
 }
 
 export class BootstrapError extends Error {

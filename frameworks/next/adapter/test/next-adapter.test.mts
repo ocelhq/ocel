@@ -7,6 +7,7 @@ import {
   readFile,
   readlink,
   realpath,
+  rm,
   stat,
   symlink,
   utimes,
@@ -18,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { variantHeadersFile } from "@framework/next-cache/naming";
 import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { defaultImages } from "./fixtures.mts";
+import { defaultImages, writePrerenderManifest } from "./fixtures.mts";
 
 let originalCwd: string;
 
@@ -40,6 +41,7 @@ async function loadAdapterIn(projectDir: string) {
 
 async function synthProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-"));
+  await writePrerenderManifest(join(projectDir, ".next"));
 
   await mkdir(join(projectDir, "public", "icons"), { recursive: true });
   await writeFile(join(projectDir, "public", "next.svg"), "<svg/>");
@@ -106,6 +108,7 @@ async function allFileNames(dir: string): Promise<string[]> {
 
 async function synthDedupProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-dedup-"));
+  await writePrerenderManifest(join(projectDir, ".next"));
 
   const pageHandler = join(projectDir, ".next/server/app/page.js");
   const routeHandler = join(projectDir, ".next/server/app/api/documents/route.js");
@@ -197,6 +200,7 @@ async function synthDedupProject() {
 
 async function synthPrerenderProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-isr-"));
+  await writePrerenderManifest(join(projectDir, ".next"));
 
   const pageHandler = join(projectDir, ".next/server/app/page.js");
   await mkdir(dirname(pageHandler), { recursive: true });
@@ -357,6 +361,7 @@ async function readLauncher(projectDir: string, bundle = "bundle-0") {
     entries: table("ENTRIES"),
     primary: table("PRIMARY"),
     routes: table("ROUTES"),
+    nextConfig: table("NEXT_CONFIG"),
   };
 }
 
@@ -1070,25 +1075,6 @@ test("omits the image config when the app opted out of optimization", async () =
   warn.mockRestore();
 });
 
-test("records the x-vercel-cache opt-in when the deploying process set the flag", async () => {
-  const { projectDir, args } = await synthProject();
-  vi.stubEnv("OCEL_E2E_VERCEL_CACHE_HEADER", "1");
-  const adapter = await loadAdapterIn(projectDir);
-
-  await adapter.onBuildComplete(args as never);
-
-  expect((await readManifest(projectDir)).vercelCacheAlias).toBe(true);
-});
-
-test("omits the x-vercel-cache opt-in from an ordinary build", async () => {
-  const { projectDir, args } = await synthProject();
-  const adapter = await loadAdapterIn(projectDir);
-
-  await adapter.onBuildComplete(args as never);
-
-  expect(await readManifest(projectDir)).not.toHaveProperty("vercelCacheAlias");
-});
-
 test("passes the app's trailing-slash config into the route table", async () => {
   const { projectDir, args } = await synthProject();
   args.config = {
@@ -1793,6 +1779,7 @@ test("projects only the variant headers, and only for routes that have them", as
 
 test("keeps content-type on an APP_ROUTE cache entry", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-route-"));
+  await writePrerenderManifest(join(projectDir, ".next"));
   const handler = join(projectDir, ".next/server/app/api/data/route.js");
   await mkdir(dirname(handler), { recursive: true });
   await writeFile(handler, "module.exports = () => {}");
@@ -1920,7 +1907,7 @@ test("states the runtime and next's own build id in hosting.json", async () => {
 });
 
 test("states next's static dir as immutable under whatever base path the build serves it at", async () => {
-  const { deriveNextStatic } = await import("../src/next-adapter.mts");
+  const { deriveNextStatic } = await import("../src/static-assets.mts");
 
   expect(
     deriveNextStatic([
@@ -2649,7 +2636,7 @@ async function withNodeMiddleware(
 }
 
 test("pins the dispatcher's hardcoded middleware key to the adapter's exported constant", async () => {
-  const { middlewareEntryKey } = await import("../src/next-adapter.mts");
+  const { middlewareEntryKey } = await import("../src/launcher.mts");
   const dispatchSource = await readFile(
     fileURLToPath(new URL("../src/next-dispatch.cjs", import.meta.url)),
     "utf8",
@@ -2975,4 +2962,51 @@ test("dereferences a symlink asset whose target leaves the repo root", async () 
     "module.exports = 2",
   );
   expect(await readFile(join(bundle, "node_modules/data.txt"), "utf8")).toBe("OUT");
+});
+
+test("hands the runtime the revalidate windows Next's prerender manifest states, in the launcher", async () => {
+  const { projectDir, args } = await synthProject();
+  args.config = {
+    ...args.config,
+    cacheMaxMemorySize: 0,
+    experimental: { fetchCacheKeyPrefix: "prefix", isrFlushToDisk: true },
+  } as typeof args.config;
+  await writePrerenderManifest(join(projectDir, ".next"), {
+    routes: {
+      "/isr": { initialRevalidateSeconds: 60, initialExpireSeconds: 660 },
+      "/short": { initialRevalidateSeconds: 60, initialExpireSeconds: 30 },
+      "/never": { initialRevalidateSeconds: false },
+      "/zero": { initialRevalidateSeconds: 0 },
+    },
+    dynamicRoutes: {
+      "/blog/[slug]": { routeRegex: "^/blog/([^/]+?)(?:/)?$", fallbackRevalidate: 120 },
+      "/static/[slug]": { routeRegex: "^/static/([^/]+?)(?:/)?$", fallbackRevalidate: false },
+    },
+    preview: { previewModeId: "preview-id" },
+  });
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const { nextConfig } = await readLauncher(projectDir);
+  expect(nextConfig.distDir).toBe(".next");
+  expect(nextConfig.cache).toEqual({
+    fetchCacheKeyPrefix: "prefix",
+    isrFlushToDisk: true,
+    cacheMaxMemorySize: 0,
+    previewModeId: "preview-id",
+    routes: {
+      "/isr": { revalidate: 60, expire: 660 },
+      "/short": { revalidate: 60 },
+    },
+    dynamicRoutes: [{ routeRegex: "^/blog/([^/]+?)(?:/)?$", window: { revalidate: 120 } }],
+  });
+});
+
+test("refuses a build Next wrote no prerender manifest for", async () => {
+  const { projectDir, args } = await synthProject();
+  await rm(join(projectDir, ".next/prerender-manifest.json"), { force: true });
+  const adapter = await loadAdapterIn(projectDir);
+
+  await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(/prerender-manifest\.json/);
 });

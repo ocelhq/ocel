@@ -1,12 +1,7 @@
+import type { ImageConfig } from "@framework/next-protocol/image";
 import { describe, expect, it } from "vitest";
-
 import fixtures from "../fixtures/image-conformance.json" with { type: "json" };
-import {
-  getSupportedMimeType,
-  type ImageConfig,
-  serveImage,
-  unprovisionedImageOrigin,
-} from "../src/image.mjs";
+import { getSupportedMimeType, serveImage, unprovisionedImageOrigin } from "../src/image.mjs";
 
 const ORIGIN_REJECTIONS = new Set([
   '"url" parameter is valid but image type is not allowed',

@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { newIncrementalCacheFactory } from "../src/incremental-cache.mjs";
-import { loadProjectManifest } from "../src/project-manifest.mjs";
 import { previewModeId, writeNextProjectFixture } from "../test-support/next-project-fixture.mjs";
 
 let dir: string;
@@ -17,17 +16,13 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-async function factoryFor(projectDir: string, CacheHandler: unknown) {
-  return newIncrementalCacheFactory(await loadProjectManifest(projectDir), CacheHandler as never);
-}
-
-async function makeFixture(name: string, overrides: Record<string, unknown> = {}) {
+async function makeFixture(name: string) {
   const projectDir = join(dir, name);
-  await writeNextProjectFixture(projectDir, overrides);
+  const { nextConfig } = await writeNextProjectFixture(projectDir);
   const requireFromApp = createRequire(join(projectDir, "package.json"));
   const StubCacheHandler = requireFromApp(join(projectDir, "stub-cache-handler.cjs")).default;
-  const make = await factoryFor(projectDir, StubCacheHandler);
-  return { projectDir, make: make!, StubCacheHandler };
+  const make = newIncrementalCacheFactory(nextConfig, projectDir, StubCacheHandler);
+  return { projectDir, make, StubCacheHandler };
 }
 
 function fakeReq(headers: Record<string, string> = {}): any {
@@ -117,12 +112,4 @@ test("each request constructs its own handler with that request's headers", asyn
   expect(second.opts._requestHeaders["x-probe"]).toBe("two");
   expect(first.opts.fetchCacheKeyPrefix).toBe("prefix");
   expect(first.opts.serverDistDir).toMatch(/\.next\/server$/);
-});
-
-test("returns null when the bundle has no required-server-files manifest", async () => {
-  const projectDir = join(dir, "no-manifest");
-  await writeNextProjectFixture(projectDir);
-  await rm(join(projectDir, ".next/required-server-files.json"));
-
-  expect(await factoryFor(projectDir, class {})).toBeNull();
 });

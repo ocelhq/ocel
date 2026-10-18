@@ -1,4 +1,5 @@
 import type { I18nConfig } from "@next/routing";
+import type { ImageConfig } from "./image.mjs";
 
 export type RouteHas =
   | {
@@ -11,38 +12,6 @@ export type RouteHas =
       key?: undefined;
       value: string;
     };
-
-export interface CompiledRemotePattern {
-  protocol?: string;
-  hostname: string;
-  port?: string;
-  pathname: string;
-  search?: string;
-}
-
-export interface CompiledLocalPattern {
-  pathname: string;
-  search?: string;
-}
-
-export interface ImageConfig {
-  path: string;
-  deviceSizes: number[];
-  imageSizes: number[];
-  qualities?: number[];
-  formats: string[];
-  domains: string[];
-  minimumCacheTTL: number;
-  maximumRedirects: number;
-  maximumResponseBody: number;
-  dangerouslyAllowSVG: boolean;
-  dangerouslyAllowLocalIP: boolean;
-  contentSecurityPolicy: string;
-  contentDispositionType: string;
-  remotePatterns: CompiledRemotePattern[];
-  localPatterns?: CompiledLocalPattern[];
-  configHash: string;
-}
 
 export type DispatchTarget =
   | { kind: "static" }
@@ -112,5 +81,4 @@ export interface NextRouteTable {
   images?: ImageConfig;
   i18n?: I18nConfig;
   assetHashes?: Record<string, string>;
-  vercelCacheAlias?: boolean;
 }

@@ -87,6 +87,7 @@ test("refuses an authentic config missing any single field this side reads", asy
     "domains",
     "remotePatterns",
     "minimumCacheTTL",
+    "maximumRedirects",
     "maximumResponseBody",
     "dangerouslyAllowSVG",
     "dangerouslyAllowLocalIP",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { originFetchFor } from "../src/origin-fetch";
+import { originFetchFor, originThrottleFor } from "../src/origin-fetch";
 
 const CLIENT_AUTHORIZATION = "x-ocel-client-authorization";
 
@@ -164,5 +164,31 @@ describe("originFetchFor", () => {
 
   it("is undefined when the worker holds neither keys nor a client certificate", () => {
     expect(originFetchFor({})).toBeUndefined();
+  });
+});
+
+describe("originThrottleFor", () => {
+  const cloudRunAbort = "The request was aborted because there was no available instance.";
+
+  it("retries Cloud Run's no-instance 429 for an origin reached by client certificate", async () => {
+    const { binding } = fakeBinding();
+    const isThrottle = originThrottleFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding });
+
+    expect(await isThrottle(new Response(cloudRunAbort, { status: 429 }))).toBe(true);
+    expect(await isThrottle(new Response("slow down", { status: 429 }))).toBe(false);
+  });
+
+  it("retries Lambda's 429 for an origin reached by AWS signing", async () => {
+    const isThrottle = originThrottleFor({
+      OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
+      OCEL_EDGE_SECRET_KEY: "secretkey",
+    });
+    const lambda = new Response(null, {
+      status: 429,
+      headers: { "x-amzn-errortype": "TooManyRequestsException" },
+    });
+
+    expect(await isThrottle(lambda)).toBe(true);
+    expect(await isThrottle(new Response(null, { status: 429 }))).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import type http from "node:http";
 import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { LauncherConfig } from "@framework/next-protocol/launcher";
 import { runWithWaitUntil } from "@framework/node-runtime/background";
 import {
   dispatchesAtOrigin,
@@ -31,7 +32,6 @@ import {
 } from "./cache-shaping.mjs";
 import { getNextHost, refuseIncompleteHost } from "./host.mjs";
 import { newIncrementalCacheFactory } from "./incremental-cache.mjs";
-import { loadProjectManifest } from "./project-manifest.mjs";
 import { purgedSince, purgeMark } from "./purge-signal.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { noteRscRequest } from "./rsc-request.mjs";
@@ -73,13 +73,21 @@ async function boot(): Promise<void> {
     throw new Error(`Next launcher ${handlerPath} does not export a handler function`);
   }
 
+  const nextConfig: LauncherConfig | undefined = mod?.nextConfig;
+  if (!nextConfig?.cache) {
+    throw new Error(`Next launcher ${handlerPath} does not export the config its build wrote`);
+  }
+
   installCompileCacheWarm(mod?.warm);
 
   mirrorTagsInto(loadTagsManifest(dirname(handlerPath)));
 
-  const manifest = await loadProjectManifest(dirname(handlerPath));
-  const newIncrementalCache = newIncrementalCacheFactory(manifest, CacheHandler);
-  const routes = revalidatingRoutes(manifest);
+  const newIncrementalCache = newIncrementalCacheFactory(
+    nextConfig,
+    dirname(handlerPath),
+    CacheHandler,
+  );
+  const routes = revalidatingRoutes(nextConfig);
   const shaping = originShaping(routes, process.env, getNextHost().cacheTagsPerObject);
   const freshOnly = servesOnlyFresh(process.env);
   const edgeCachesOnlyMarked = cachesOnlyMarked(readEdgeCacheMode(process.env));
@@ -99,9 +107,7 @@ async function boot(): Promise<void> {
         noteUncachedRender(req.headers as RequestHeaders);
       }
     }
-    if (newIncrementalCache) {
-      (globalThis as any).__incrementalCache = newIncrementalCache(req);
-    }
+    (globalThis as any).__incrementalCache = newIncrementalCache(req);
     return runWithWaitUntil(ocel.waitUntil, () =>
       handler(req, res, {
         waitUntil: ocel.waitUntil,

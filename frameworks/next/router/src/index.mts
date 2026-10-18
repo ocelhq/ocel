@@ -18,7 +18,7 @@ import {
 } from "@platform/edge-contract/request-path";
 
 import { type AssetStoreDeps, isImmutablePathname, serveStaticAsset } from "./assets.mjs";
-import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
+import { withStatus } from "./http-cache.mjs";
 import { localeOf, resolveLocale } from "./i18n.mjs";
 import {
   type ImageCache,
@@ -29,7 +29,7 @@ import {
 } from "./image.mjs";
 import { retainOwner } from "./origin-response.mjs";
 import { encodeRequestTarget } from "./request-target.mjs";
-import { retryTransientOrigin } from "./retry.mjs";
+import { type OriginThrottle, retryTransientOrigin } from "./retry.mjs";
 import { asSegmentPayload, isSegmentPrefetch } from "./segment.mjs";
 import {
   canonicalPathname,
@@ -174,6 +174,8 @@ export interface RouteDeps {
 
   originFetch?: typeof fetch;
 
+  isOriginThrottle?: OriginThrottle;
+
   imageOrigin?: ImageOrigin;
 
   imageCache?: ImageCache;
@@ -203,6 +205,7 @@ function imageResponse(request: Request, deps: RouteDeps): Promise<Response> | u
     origin: deps.imageOrigin ?? unprovisionedImageOrigin,
     assetHashes: manifest.assetHashes,
     imageCache: deps.imageCache,
+    route: (routed) => serve(routed, deps),
   });
 }
 
@@ -286,10 +289,6 @@ async function trailingSlashRedirect(
 }
 
 export async function serve(request: Request, deps: RouteDeps): Promise<Response> {
-  return withVercelCacheAlias(await serveRequest(request, deps), deps.manifest.vercelCacheAlias);
-}
-
-async function serveRequest(request: Request, deps: RouteDeps): Promise<Response> {
   if (needsSlashNormalization(readRawPath(request.url))) {
     return new Response(null, {
       status: 308,
@@ -1140,7 +1139,7 @@ function invokeMiddleware(
           middleware.entryKey,
         ),
       );
-    }).then(originAuthoredResponse);
+    }, deps.isOriginThrottle).then(originAuthoredResponse);
   }
 
   if (!deps.edge) {

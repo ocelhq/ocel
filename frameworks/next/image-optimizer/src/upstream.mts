@@ -1,15 +1,14 @@
 import { lookup as dnsLookup, type LookupAddress } from "node:dns";
 import { isIP } from "node:net";
+import {
+  type CompiledImageConfig,
+  isAllowedRemote,
+  UPSTREAM_TIMEOUT_MS,
+} from "@framework/next-protocol/image";
 import { Agent, request } from "undici";
 import { isReachableAddress } from "./addresses.mjs";
-import type { CompiledImageConfig } from "./contract.mjs";
 import { upstreamFailure } from "./errors.mjs";
-import { isAllowedRemote } from "./patterns.mjs";
 import { readCapped } from "./stream.mjs";
-
-const UPSTREAM_TIMEOUT_MS = 7_000;
-
-const MAX_REDIRECTS = 3;
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -113,7 +112,6 @@ async function follow(
 ): Promise<UpstreamImage> {
   const signal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
   const limit = config.maximumResponseBody;
-  const maxHops = Math.min(config.maximumRedirects ?? MAX_REDIRECTS, MAX_REDIRECTS);
 
   let current: URL;
   try {
@@ -143,7 +141,7 @@ async function follow(
     const location = header(response.headers.location);
     if (REDIRECT_STATUSES.has(response.statusCode) && location) {
       await response.body.dump().catch(() => {});
-      if (hop >= maxHops) throw upstreamFailure(`too many redirects for ${href}`);
+      if (hop >= config.maximumRedirects) throw upstreamFailure(`too many redirects for ${href}`);
       current = resolveHop(location, current, config);
       continue;
     }

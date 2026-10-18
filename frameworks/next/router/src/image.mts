@@ -1,24 +1,17 @@
-import type {
-  CompiledLocalPattern,
-  CompiledRemotePattern,
-  ImageConfig,
-} from "@framework/next-protocol/route-table";
+import {
+  IMAGE_PASSTHROUGH,
+  type ImageConfig,
+  type ImageOriginRequest,
+  type ImageParams,
+  type RouteImage,
+  UPSTREAM_INVALID_MESSAGE,
+  UPSTREAM_TIMEOUT_MS,
+  validateImage,
+} from "@framework/next-protocol/image";
 
 import { mediaType } from "./accept.mjs";
 import { deltaSeconds, headResponse, NEXT_CACHE_STATUS, withStatus } from "./http-cache.mjs";
 import { retainOwner } from "./origin-response.mjs";
-
-export type { CompiledLocalPattern, CompiledRemotePattern, ImageConfig };
-
-export interface ImageOriginRequest {
-  assetPrefix: string;
-  url: string;
-  w: number;
-  q: number;
-  accept: string;
-  mimeType: string;
-  configHash: string;
-}
 
 export type ImageOrigin = (payload: ImageOriginRequest) => Promise<Response>;
 
@@ -46,38 +39,33 @@ export interface ImageDeps {
   origin: ImageOrigin;
   assetHashes?: Record<string, string>;
   imageCache?: ImageCache;
+  route?: (request: Request) => Promise<Response>;
 }
 
 const DUMMY_ORIGIN = "http://n";
 
-const RECURSIVE = /\/_next\/image($|\/)/;
-
 const INTEGER = /^[0-9]+$/;
 
-export type ImageValidation =
-  | { ok: true; params: ImageParams }
+export type ImageRequestValidation =
+  | { ok: true; params: ImageRequestParams }
   | { ok: false; status: number; message: string };
 
-export interface ImageParams {
-  href: string;
-  width: number;
-  quality: number;
+export interface ImageRequestParams extends ImageParams {
   mimeType: string;
-  isAbsolute: boolean;
   isStatic: boolean;
-}
-
-function invalid(message: string): ImageValidation {
-  return { ok: false, status: 400, message };
-}
-
-function malformed(): ImageValidation {
-  return { ok: false, status: 500, message: "Internal Server Error" };
 }
 
 function parseUrl(url: string): URL | undefined {
   try {
     return new URL(url, DUMMY_ORIGIN);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseAbsolute(url: string): URL | undefined {
+  try {
+    return new URL(url);
   } catch {
     return undefined;
   }
@@ -91,44 +79,15 @@ function decode(value: string): string | undefined {
   }
 }
 
-const REGEXES = new Map<string, RegExp>();
-
-function regex(source: string): RegExp {
-  let compiled = REGEXES.get(source);
-  if (!compiled) REGEXES.set(source, (compiled = new RegExp(source)));
-  return compiled;
-}
-
-function matchLocalPattern(pattern: CompiledLocalPattern, url: URL): boolean {
-  if (pattern.search !== undefined && pattern.search !== url.search) {
-    return false;
-  }
-  return regex(pattern.pathname).test(url.pathname);
-}
-
-function matchRemotePattern(pattern: CompiledRemotePattern, url: URL): boolean {
-  if (pattern.protocol !== undefined && pattern.protocol !== url.protocol.replace(/:$/, "")) {
-    return false;
-  }
-  if (pattern.port !== undefined && pattern.port !== url.port) return false;
-  if (!regex(pattern.hostname).test(url.hostname)) return false;
-  if (pattern.search !== undefined && pattern.search !== url.search) {
-    return false;
-  }
-  return regex(pattern.pathname).test(url.pathname);
-}
-
-function hasRemoteMatch(domains: string[], patterns: CompiledRemotePattern[], url: URL): boolean {
-  return (
-    domains.some((domain) => url.hostname === domain) ||
-    patterns.some((pattern) => matchRemotePattern(pattern, url))
-  );
-}
-
 function param(url: URL, name: string): string | string[] | undefined {
   const values = url.searchParams.getAll(name);
   if (values.length === 0) return undefined;
   return values.length === 1 ? values[0] : values;
+}
+
+function integerParam(value: string | string[] | undefined): unknown {
+  if (value === undefined || value === "" || Array.isArray(value)) return value;
+  return INTEGER.test(value) ? parseInt(value, 10) : Number.NaN;
 }
 
 export function validateImageRequest(
@@ -136,97 +95,26 @@ export function validateImageRequest(
   accept: string,
   config: ImageConfig,
   basePath: string,
-): ImageValidation {
+): ImageRequestValidation {
   const rawUrl = param(url, "url");
-  const w = param(url, "w");
-  const q = param(url, "q");
-
-  if (!rawUrl) return invalid('"url" parameter is required');
-  if (Array.isArray(rawUrl)) return invalid('"url" parameter cannot be an array');
-  if (rawUrl.length > 3072) return invalid('"url" parameter is too long');
-  if (rawUrl.startsWith("//")) {
-    return invalid('"url" parameter cannot be a protocol-relative URL (//)');
-  }
-
-  let href: string;
-  let isAbsolute: boolean;
-  if (rawUrl.startsWith("/")) {
-    href = rawUrl;
-    isAbsolute = false;
-    const parsed = parseUrl(rawUrl);
-    const pathname = decode(parsed?.pathname ?? "");
-    if (pathname === undefined) return malformed();
-    if (RECURSIVE.test(pathname)) {
-      return invalid('"url" parameter cannot be recursive');
-    }
-    if (config.localPatterns) {
-      if (!parsed) return malformed();
-      const allowed = config.localPatterns.some((pattern) => matchLocalPattern(pattern, parsed));
-      if (!allowed) return invalid('"url" parameter is not allowed');
-    }
-  } else {
-    const parsed = parseAbsolute(rawUrl);
-    if (!parsed) return invalid('"url" parameter is invalid');
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return invalid('"url" parameter is invalid');
-    }
-    if (!hasRemoteMatch(config.domains, config.remotePatterns, parsed)) {
-      return invalid('"url" parameter is not allowed');
-    }
-    href = parsed.toString();
-    isAbsolute = true;
-  }
-
-  if (!w) return invalid('"w" parameter (width) is required');
-  if (Array.isArray(w)) return invalid('"w" parameter (width) cannot be an array');
-  if (!INTEGER.test(w)) {
-    return invalid('"w" parameter (width) must be an integer greater than 0');
-  }
-
-  if (!q) return invalid('"q" parameter (quality) is required');
-  if (Array.isArray(q)) return invalid('"q" parameter (quality) cannot be an array');
-  if (!INTEGER.test(q)) {
-    return invalid('"q" parameter (quality) must be an integer between 1 and 100');
-  }
-
-  const width = parseInt(w, 10);
-  if (width <= 0 || Number.isNaN(width)) {
-    return invalid('"w" parameter (width) must be an integer greater than 0');
-  }
-  if (![...config.deviceSizes, ...config.imageSizes].includes(width)) {
-    return invalid(`"w" parameter (width) of ${width} is not allowed`);
-  }
-
-  const quality = parseInt(q, 10);
-  if (Number.isNaN(quality) || quality < 1 || quality > 100) {
-    return invalid('"q" parameter (quality) must be an integer between 1 and 100');
-  }
-  if (config.qualities && !config.qualities.includes(quality)) {
-    return invalid(`"q" parameter (quality) of ${q} is not allowed`);
-  }
-
+  const result = validateImage(
+    { url: rawUrl, w: integerParam(param(url, "w")), q: integerParam(param(url, "q")) },
+    config,
+  );
+  if (!result.ok) return result;
   return {
     ok: true,
     params: {
-      href,
-      width,
-      quality,
+      ...result.params,
       mimeType: getSupportedMimeType(config.formats, accept),
-      isAbsolute,
-      isStatic: STATIC_IMPORT_PREFIXES.some((prefix) => rawUrl.startsWith(`${basePath}${prefix}`)),
+      isStatic: STATIC_IMPORT_PREFIXES.some((prefix) =>
+        (rawUrl as string).startsWith(`${basePath}${prefix}`),
+      ),
     },
   };
 }
 
 const STATIC_IMPORT_PREFIXES = ["/_next/static/media", "/_next/static/immutable/media"];
-
-function parseAbsolute(url: string): URL | undefined {
-  try {
-    return new URL(url);
-  } catch {
-    return undefined;
-  }
-}
 
 export function getSupportedMimeType(formats: string[], accept = ""): string {
   const mimeType = mediaType(accept, formats);
@@ -264,6 +152,12 @@ export async function serveImage(request: Request, url: URL, deps: ImageDeps): P
     mimeType: params.mimeType,
     configHash: deps.config.configHash,
   };
+  const route = isRouteSource(params, deps) ? deps.route : undefined;
+  if (route) {
+    const routeImage = await readRouteImage(route, request, params.href, deps.config);
+    if (!routeImage) return withStatus(errorResponse(400, UPSTREAM_INVALID_MESSAGE), "BYPASS");
+    payload.routeImage = routeImage;
+  }
   const origin = async () => servedImage(await deps.origin(payload), deps.config.minimumCacheTTL);
 
   const context: ImageCacheContext = {
@@ -274,7 +168,84 @@ export async function serveImage(request: Request, url: URL, deps: ImageDeps): P
     minimumCacheTTL: deps.config.minimumCacheTTL,
     origin,
   };
-  return deps.imageCache ? deps.imageCache(context) : serveUncachedImage(context);
+  return deps.imageCache && !route ? deps.imageCache(context) : serveUncachedImage(context);
+}
+
+function isRouteSource(params: ImageRequestParams, deps: ImageDeps): boolean {
+  if (params.isAbsolute || !deps.route) return false;
+  const path = assetPath(params.href, deps.basePath);
+  return path === undefined || deps.assetHashes?.[path] === undefined;
+}
+
+async function readRouteImage(
+  route: (request: Request) => Promise<Response>,
+  request: Request,
+  href: string,
+  config: ImageConfig,
+): Promise<RouteImage | undefined> {
+  const routed = new Request(new URL(href, request.url), {
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
+  try {
+    const response = await route(routed);
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      console.error(`ocel image: route ${href} answered ${response.status}`);
+      return undefined;
+    }
+    const bytes = await readCapped(response, config.maximumResponseBody);
+    if (!bytes) {
+      console.error(`ocel image: route ${href} answered over ${config.maximumResponseBody} bytes`);
+      return undefined;
+    }
+    return {
+      base64: encodeBase64(bytes),
+      cacheControl: response.headers.get("cache-control"),
+      etag: response.headers.get("etag"),
+    };
+  } catch (error) {
+    console.error(`ocel image: route ${href} failed`, error);
+    return undefined;
+  }
+}
+
+async function readCapped(response: Response, limit: number): Promise<Uint8Array | undefined> {
+  const declared = Number(response.headers.get("content-length") ?? Number.NaN);
+  if (Number.isFinite(declared) && declared > limit) {
+    await response.body?.cancel();
+    return undefined;
+  }
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+const BASE64_CHUNK = 0x8000;
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + BASE64_CHUNK));
+  }
+  return btoa(binary);
 }
 
 export async function serveUncachedImage(context: ImageCacheContext): Promise<Response> {
@@ -287,8 +258,6 @@ export function withServedCacheControl(response: Response, context: ImageCacheCo
   }
   return context.request.method === "HEAD" ? headResponse(response) : response;
 }
-
-export const IMAGE_PASSTHROUGH = "x-ocel-image-passthrough";
 
 const IMMUTABLE = "public, max-age=315360000, immutable";
 
@@ -316,7 +285,7 @@ export function servedImage(response: Response, minimumCacheTTL: number): Respon
 
 const KEY_VERSION = 1;
 
-async function imageDigest(params: ImageParams, deps: ImageDeps): Promise<string> {
+async function imageDigest(params: ImageRequestParams, deps: ImageDeps): Promise<string> {
   return sha256(
     JSON.stringify([
       KEY_VERSION,
@@ -330,7 +299,7 @@ async function imageDigest(params: ImageParams, deps: ImageDeps): Promise<string
   );
 }
 
-function sourceIdentity(params: ImageParams, deps: ImageDeps): string {
+function sourceIdentity(params: ImageRequestParams, deps: ImageDeps): string {
   if (params.isAbsolute) return params.href;
   const path = assetPath(params.href, deps.basePath);
   const hash = path === undefined ? undefined : deps.assetHashes?.[path];

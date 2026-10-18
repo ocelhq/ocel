@@ -3,6 +3,7 @@ import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { CONTROL_HEADERS, type RouteDeps, serve } from "@framework/next-router";
 import type { AssetBucket, AssetStoreDeps } from "@framework/next-router/assets";
 import { functionUrlImageOrigin, type ImageOrigin } from "@framework/next-router/image";
+import type { OriginThrottle } from "@framework/next-router/retry";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import { type Invoke, invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { withRouterHeader } from "@framework/node-runtime/router-header";
@@ -36,6 +37,7 @@ export interface DispatchHost {
   imageOptimizerUrl?: string;
   imageOrigin?: ImageOrigin;
   originFetch: typeof fetch;
+  isOriginThrottle?: OriginThrottle;
 }
 
 function newRouteDeps(
@@ -52,6 +54,7 @@ function newRouteDeps(
     app: host.app,
     appBuildId: host.appBuildId,
     originFetch: host.originFetch,
+    ...(host.isOriginThrottle ? { isOriginThrottle: host.isOriginThrottle } : {}),
     keepCacheTags: host.keepCacheTags,
     imageOrigin:
       host.imageOrigin ?? functionUrlImageOrigin(host.imageOptimizerUrl, host.originFetch),
@@ -86,6 +89,7 @@ export interface DispatchAccess {
   assetBucket?: AssetBucket;
   imageOrigin?: ImageOrigin;
   originFetch: typeof fetch;
+  isOriginThrottle?: OriginThrottle;
 }
 
 const routeTablePathVar = "OCEL_NEXT_ROUTE_TABLE";
@@ -147,5 +151,6 @@ export function readDispatchHost(
     ...(env.OCEL_IMAGE_OPTIMIZER_URL ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL } : {}),
     ...(access.imageOrigin ? { imageOrigin: access.imageOrigin } : {}),
     originFetch: access.originFetch,
+    ...(access.isOriginThrottle ? { isOriginThrottle: access.isOriginThrottle } : {}),
   };
 }

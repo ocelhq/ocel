@@ -380,7 +380,7 @@ describe("redirects", () => {
     expect(calls).toBe(2);
   });
 
-  test("stop at three hops", async () => {
+  test("stop at the three hops the default config allows", async () => {
     const { port, requests } = await serve((_req, res) => {
       res.writeHead(302, { location: "/again" });
       res.end();
@@ -400,6 +400,37 @@ describe("redirects", () => {
       fetchUpstream(`http://cdn.test:${port}/start`, config({ maximumRedirects: 1 }), loopback),
     ).rejects.toThrow();
     expect(requests.length).toBe(2);
+  });
+
+  test("a higher maximumRedirects in the config is followed to the image", async () => {
+    let hops = 0;
+    const { port, requests } = await serve((_req, res) => {
+      if (hops++ < 5) {
+        res.writeHead(302, { location: "/again" });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "image/jpeg" });
+      res.end(Buffer.from([0xff, 0xd8, 0xff, 0x00]));
+    });
+    const image = await fetchUpstream(
+      `http://cdn.test:${port}/start`,
+      config({ maximumRedirects: 5 }),
+      loopback,
+    );
+    expect(image.bytes).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 0x00]));
+    expect(requests.length).toBe(6);
+  });
+
+  test("a maximumRedirects of zero follows no redirect", async () => {
+    const { port, requests } = await serve((_req, res) => {
+      res.writeHead(302, { location: "/again" });
+      res.end();
+    });
+    await expect(
+      fetchUpstream(`http://cdn.test:${port}/start`, config({ maximumRedirects: 0 }), loopback),
+    ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+    expect(requests.length).toBe(1);
   });
 });
 

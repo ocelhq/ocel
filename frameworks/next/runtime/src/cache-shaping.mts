@@ -1,4 +1,5 @@
 import type http from "node:http";
+import type { LauncherConfig, RevalidateWindow } from "@framework/next-protocol/launcher";
 import { invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import {
@@ -8,7 +9,6 @@ import {
   readEdgeCacheMode,
 } from "@platform/edge-contract/edge-cache";
 import { collectTags, notedTags } from "./origin-tags.mjs";
-import { type ProjectManifest, walkPrerender } from "./project-manifest.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 
 const cacheTagHeader = "cache-tag";
@@ -16,15 +16,10 @@ const cacheTagHeader = "cache-tag";
 const releasePattern = /^r[0-9a-f]{8}$/;
 const dataRoutePattern = /^\/_next\/data\/[^/]+\/(.*)\.json$/;
 
-export interface Window {
-  revalidate: number;
-  expire?: number;
-}
-
 export interface RevalidatingRoutes {
   basePath: string;
-  routes: ReadonlyMap<string, Window>;
-  dynamicRoutes: readonly { pattern: RegExp; window: Window }[];
+  routes: ReadonlyMap<string, RevalidateWindow>;
+  dynamicRoutes: readonly { pattern: RegExp; window: RevalidateWindow }[];
 }
 
 export interface OriginShaping extends RevalidatingRoutes {
@@ -39,24 +34,19 @@ export function releaseOf(isrPrefix: string | undefined): string | null {
   return releasePattern.test(segments[3]!) ? segments[3]! : null;
 }
 
-function windowOf(revalidate: unknown, expire: unknown): Window | null {
-  if (typeof revalidate !== "number" || revalidate <= 0) return null;
+export function revalidatingRoutes(config: LauncherConfig): RevalidatingRoutes {
+  const dynamicRoutes: { pattern: RegExp; window: RevalidateWindow }[] = [];
+  for (const { routeRegex, window } of config.cache.dynamicRoutes) {
+    try {
+      dynamicRoutes.push({ pattern: new RegExp(routeRegex), window });
+    } catch (error) {
+      console.error(`ocel: route pattern ${routeRegex} does not compile`, error);
+    }
+  }
   return {
-    revalidate,
-    ...(typeof expire === "number" && expire > revalidate && { expire }),
-  };
-}
-
-export function revalidatingRoutes(manifest: ProjectManifest | null): RevalidatingRoutes {
-  const { basePath, routes, dynamicRoutes } = walkPrerender(
-    manifest,
-    (entry) => windowOf(entry?.initialRevalidateSeconds, entry?.initialExpireSeconds),
-    (entry) => windowOf(entry.fallbackRevalidate, entry.fallbackExpire),
-  );
-  return {
-    basePath,
-    routes,
-    dynamicRoutes: dynamicRoutes.map(({ pattern, value }) => ({ pattern, window: value })),
+    basePath: config.basePath,
+    routes: new Map(Object.entries(config.cache.routes)),
+    dynamicRoutes,
   };
 }
 
@@ -140,7 +130,7 @@ function isHtml(res: http.ServerResponse): boolean {
   return String(res.getHeader("content-type") ?? "").startsWith("text/html");
 }
 
-function cacheControlOf({ revalidate, expire }: Window): string {
+function cacheControlOf({ revalidate, expire }: RevalidateWindow): string {
   const swr = expire === undefined ? 0 : expire - revalidate;
   return swr > 0
     ? `s-maxage=${revalidate}, stale-while-revalidate=${swr}`
@@ -150,7 +140,7 @@ function cacheControlOf({ revalidate, expire }: Window): string {
 export function findRouteWindow(
   url: string | undefined,
   routes: RevalidatingRoutes,
-): Window | undefined {
+): RevalidateWindow | undefined {
   const route = routeOf(url, routes.basePath);
   const exact = routes.routes.get(route);
   if (exact) return exact;

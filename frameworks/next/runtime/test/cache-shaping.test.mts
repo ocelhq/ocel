@@ -8,15 +8,15 @@ import {
   shapeOriginCache,
 } from "../src/cache-shaping.mjs";
 import { noteTags } from "../src/origin-tags.mjs";
-import type { ProjectManifest } from "../src/project-manifest.mjs";
+import { launcherConfig } from "../test-support/next-project-fixture.mjs";
 
 const prefix = "prod/shop/web/r0a1b2c3d/isr";
 
 function manifest(
-  prerender: Record<string, unknown> = {},
-  config: Record<string, unknown> = {},
-): ProjectManifest {
-  return { config, distDir: "/app/.next", prerender };
+  cache: Parameters<typeof launcherConfig>[0] = {},
+  config: { basePath?: string } = {},
+) {
+  return { ...launcherConfig(cache), ...config };
 }
 
 function fakeRes(headers: Record<string, string> = {}, statusCode = 200) {
@@ -50,20 +50,16 @@ function serve(
 }
 
 const isrRoutes = {
-  routes: {
-    "/isr": { initialRevalidateSeconds: 60, initialExpireSeconds: 660 },
-    "/never": { initialRevalidateSeconds: false },
-    "/zero": { initialRevalidateSeconds: 0 },
-  },
-  dynamicRoutes: {
-    "/blog/[slug]": { routeRegex: "^/blog/([^/]+?)(?:/)?$", fallbackRevalidate: 120 },
-    "/bad/[slug]": { routeRegex: "^/bad/([^/]+?(", fallbackRevalidate: 30 },
-  },
+  routes: { "/isr": { revalidate: 60, expire: 660 } },
+  dynamicRoutes: [
+    { routeRegex: "^/blog/([^/]+?)(?:/)?$", window: { revalidate: 120 } },
+    { routeRegex: "^/bad/([^/]+?(", window: { revalidate: 30 } },
+  ],
 };
 
 function shaping(
   env: Record<string, string> = {},
-  config: Record<string, unknown> = {},
+  config: { basePath?: string } = {},
   tagsPerObject?: number,
   extra: Record<string, string> = {},
 ) {

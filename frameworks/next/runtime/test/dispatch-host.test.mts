@@ -162,6 +162,7 @@ test("an image request is answered by the image origin its host handed the dispa
         contentDispositionType: "inline",
         configHash: "c".repeat(64),
       },
+      assetHashes: { "/logo.png": "logo-hash" },
     }),
   );
   const asked: { url: string; w: number }[] = [];
@@ -317,4 +318,50 @@ test("a dispatch host serves by the static rules its host states", async () => {
 
 test("a dispatch host refuses static rules that state no immutable prefixes", async () => {
   expect(() => parseStaticRules(`{"mustRevalidatePrefixes":[]}`)).toThrow(/OCEL_STATIC_RULES/);
+});
+
+test("node middleware is retried on the responses its host's throttle check names", async () => {
+  let calls = 0;
+  const origin = (async (input: Request) => {
+    const request = new Request(input);
+    if (request.url.startsWith(localOrigin)) return fetch(request);
+    calls++;
+    return calls === 1
+      ? new Response(null, { status: 429, headers: { "x-host-throttle": "1" } })
+      : new Response(null, { headers: { "x-middleware-next": "1" } });
+  }) as unknown as typeof fetch;
+
+  const response = await dispatchRequest(
+    new Request("https://app.example/local"),
+    {
+      ...host(),
+      manifest: {
+        ...manifest,
+        middleware: { runtime: "nodejs", id: SIBLING_BUNDLE, entryKey: "/_middleware" },
+      },
+      originFetch: origin,
+      isOriginThrottle: (throttled) => throttled.headers.has("x-host-throttle"),
+    },
+    () => {},
+  );
+
+  expect(await response.text()).toBe("local");
+  expect(calls).toBe(2);
+});
+
+test("a dispatch host carries the throttle check its host's access names", async () => {
+  const { writeFile, mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "ocel-dispatch-throttle-"));
+  const path = join(dir, "next-route-table.json");
+  await writeFile(path, JSON.stringify(manifest));
+  const isOriginThrottle = () => true;
+
+  const built = readDispatchHost({ OCEL_NEXT_ROUTE_TABLE: path }, localOrigin, {
+    originFetch: fetch,
+    isOriginThrottle,
+  });
+
+  expect(built.isOriginThrottle).toBe(isOriginThrottle);
 });

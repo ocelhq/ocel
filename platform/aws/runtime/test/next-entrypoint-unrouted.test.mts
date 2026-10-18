@@ -2,7 +2,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeNextProjectFixture } from "@framework/next-runtime/test-support/next-project-fixture";
+import {
+  withLauncherConfig,
+  writeNextProjectFixture,
+} from "@framework/next-runtime/test-support/next-project-fixture";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 const launcherModule = `module.exports = { async handler(req, res) { res.end("ok"); } };
@@ -24,9 +27,9 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => controlServer.listen(sockPath, resolve));
 
   const projectDir = join(dir, "project");
-  await writeNextProjectFixture(projectDir);
+  const fixture = await writeNextProjectFixture(projectDir);
   const launcherPath = join(projectDir, "__next_launcher.cjs");
-  await writeFile(launcherPath, launcherModule);
+  await writeFile(launcherPath, withLauncherConfig(launcherModule, fixture.nextConfig));
 
   process.env.OCEL_ROUTER_KIND = "cloudfront";
   process.env.OCEL_ORIGIN_DISPATCH = "1";

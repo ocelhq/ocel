@@ -6,16 +6,20 @@
   "description": "what a next build emits and whatever serves it reads",
   "license": "Apache-2.0",
   "exports": {
+    "./image": "./src/image.mts",
+    "./launcher": "./src/launcher.mts",
     "./route-table": "./src/route-table.mts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@next/routing": "^16.2.10"
   },
   "devDependencies": {
     "@types/node": "^24",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   }
 }
