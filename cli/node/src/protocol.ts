@@ -31,7 +31,7 @@ export function reportError(message: string, app?: string, stage?: string): void
   emit({ type: "error", message, app, stage });
 }
 
-function errorMessage(err: unknown): string {
+export function errorMessage(err: unknown): string {
   if (err instanceof Refusal) return err.message;
   return err instanceof Error ? (err.stack ?? err.message) : String(err);
 }
@@ -48,20 +48,30 @@ export function reportFailure(err: unknown): void {
 
 let spanCounter = 0;
 
+export function openSpan(stage: string, app?: string): (ok: boolean) => void {
+  const id = `${stage}:${app ?? ""}:${++spanCounter}`;
+  emit({ type: "span_start", id, stage, app });
+  let ended = false;
+  return (ok) => {
+    if (ended) return;
+    ended = true;
+    emit({ type: "span_end", id, ok });
+  };
+}
+
 export async function withSpan<T>(
   stage: string,
   app: string | undefined,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const id = `${stage}:${app ?? ""}:${++spanCounter}`;
-  emit({ type: "span_start", id, stage, app });
+  const end = openSpan(stage, app);
   try {
     const result = await fn();
-    emit({ type: "span_end", id, ok: true });
+    end(true);
     return result;
   } catch (err) {
     reportError(errorMessage(err), app, stage);
-    emit({ type: "span_end", id, ok: false });
+    end(false);
     if (typeof err === "object" && err !== null) reported.add(err);
     throw err;
   }

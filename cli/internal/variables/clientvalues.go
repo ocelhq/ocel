@@ -1,4 +1,4 @@
-package clientenv
+package variables
 
 import (
 	"crypto/sha256"
@@ -13,31 +13,29 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-var recordPath = filepath.Join(buildoutput.StateDir, "output", "client-digests.json")
+var clientRecordPath = filepath.Join(buildoutput.StateDir, "output", "client-digests.json")
 
-type App struct {
-	variables.App
+type ClientApp struct {
+	App
 	Declared  []*resourcesv1.VariableDefinition
-	Variables []variables.Variable
+	Variables []Variable
 }
 
-func AppsOf(cfg *project.Project, definitions []*resourcesv1.VariableDefinition, values map[string][]variables.Variable) []App {
-	scoped := variablescope.Apps(cfg)
-	apps := make([]App, 0, len(scoped))
+func ClientAppsOf(cfg *project.Project, definitions []*resourcesv1.VariableDefinition, values map[string][]Variable) []ClientApp {
+	scoped := AppsOf(cfg)
+	apps := make([]ClientApp, 0, len(scoped))
 	for _, app := range scoped {
-		apps = append(apps, App{App: app, Declared: declaredFor(app, definitions), Variables: values[app.Name]})
+		apps = append(apps, ClientApp{App: app, Declared: declaredForApp(app, definitions), Variables: values[app.Name]})
 	}
 	return apps
 }
 
-func declaredFor(app variables.App, definitions []*resourcesv1.VariableDefinition) []*resourcesv1.VariableDefinition {
+func declaredForApp(app App, definitions []*resourcesv1.VariableDefinition) []*resourcesv1.VariableDefinition {
 	var declared []*resourcesv1.VariableDefinition
 	for _, definition := range definitions {
 		if app.IsInScope(definition.GetFolders()) {
@@ -47,12 +45,12 @@ func declaredFor(app variables.App, definitions []*resourcesv1.VariableDefinitio
 	return declared
 }
 
-func PublicKeys(app variables.App, definitions []*resourcesv1.VariableDefinition) []string {
+func PublicKeys(app App, definitions []*resourcesv1.VariableDefinition) []string {
 	if app.Framework != buildoutput.FrameworkNext {
 		return nil
 	}
 	keys := []string{processenv.NextPublicURLEnvVar}
-	for _, definition := range declaredFor(app, definitions) {
+	for _, definition := range declaredForApp(app, definitions) {
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && processenv.IsNextPublic(definition.GetKey()) {
 			keys = append(keys, definition.GetKey())
 		}
@@ -61,7 +59,7 @@ func PublicKeys(app variables.App, definitions []*resourcesv1.VariableDefinition
 	return slices.Compact(keys)
 }
 
-func inlinedKeys(app App) []string {
+func inlinedKeys(app ClientApp) []string {
 	switch app.Framework {
 	case buildoutput.FrameworkNext:
 		return PublicKeys(app.App, app.Declared)
@@ -77,32 +75,32 @@ func inlinedKeys(app App) []string {
 	return nil
 }
 
-type buildRecord struct {
+type clientRecord struct {
 	Digests map[string]map[string]string `json:"digests,omitempty"`
 }
 
-func Record(projectDir string, apps []App) error {
-	record := buildRecord{Digests: make(map[string]map[string]string, len(apps))}
+func RecordClientValues(projectDir string, apps []ClientApp) error {
+	record := clientRecord{Digests: make(map[string]map[string]string, len(apps))}
 	for _, app := range apps {
-		record.Digests[app.Name] = digests(app)
+		record.Digests[app.Name] = clientDigests(app)
 	}
-	return writeRecord(projectDir, record)
+	return writeClientRecord(projectDir, record)
 }
 
-func writeRecord(projectDir string, record buildRecord) error {
+func writeClientRecord(projectDir string, record clientRecord) error {
 	data, err := json.Marshal(record)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(projectDir, recordPath)
+	path := filepath.Join(projectDir, clientRecordPath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
 }
 
-func CheckFresh(projectDir string, apps []App) error {
-	record, err := readRecord(projectDir)
+func CheckClientValuesFresh(projectDir string, apps []ClientApp) error {
+	record, err := readClientRecord(projectDir)
 	if err != nil {
 		return err
 	}
@@ -110,17 +108,17 @@ func CheckFresh(projectDir string, apps []App) error {
 	var missing, changed []string
 	for _, app := range apps {
 		recorded := record.Digests[app.Name]
-		current := digests(app)
+		current := clientDigests(app)
 		for key, built := range recorded {
-			if _, selected := current[key]; !selected && built != unsetDigest {
+			if _, selected := current[key]; !selected && built != unsetClientDigest {
 				changed = append(changed, key)
 			}
 		}
 		for key, digest := range current {
 			built, ok := recorded[key]
 			switch {
-			case !ok && digest == unsetDigest:
-			case !ok, built == unsetDigest && digest != unsetDigest:
+			case !ok && digest == unsetClientDigest:
+			case !ok, built == unsetClientDigest && digest != unsetClientDigest:
 				missing = append(missing, key)
 			case built != digest:
 				changed = append(changed, key)
@@ -158,24 +156,24 @@ func were(keys []string) string {
 	return "were"
 }
 
-func readRecord(projectDir string) (buildRecord, error) {
-	data, err := os.ReadFile(filepath.Join(projectDir, recordPath))
+func readClientRecord(projectDir string) (clientRecord, error) {
+	data, err := os.ReadFile(filepath.Join(projectDir, clientRecordPath))
 	if errors.Is(err, fs.ErrNotExist) {
-		return buildRecord{}, nil
+		return clientRecord{}, nil
 	}
 	if err != nil {
-		return buildRecord{}, err
+		return clientRecord{}, err
 	}
-	var record buildRecord
+	var record clientRecord
 	if err := json.Unmarshal(data, &record); err != nil {
-		return buildRecord{}, fmt.Errorf("read %s: %w", recordPath, err)
+		return clientRecord{}, fmt.Errorf("read %s: %w", clientRecordPath, err)
 	}
 	return record, nil
 }
 
-const unsetDigest = "unset"
+const unsetClientDigest = "unset"
 
-func digests(app App) map[string]string {
+func clientDigests(app ClientApp) map[string]string {
 	out := map[string]string{}
 	values := make(map[string]string, len(app.Variables))
 	for _, v := range app.Variables {
@@ -184,7 +182,7 @@ func digests(app App) map[string]string {
 	for _, key := range inlinedKeys(app) {
 		value, resolved := values[key]
 		if !resolved {
-			out[key] = unsetDigest
+			out[key] = unsetClientDigest
 			continue
 		}
 		sum := sha256.Sum256([]byte(value))

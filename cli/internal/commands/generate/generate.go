@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/realtimetypes"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
 
@@ -52,7 +51,7 @@ func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, std
 		return err
 	}
 
-	declarations := variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
+	declarations := variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variables.AppsOf(cfg)})
 	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, stderr, stderr)
 	if err != nil {
 		return err

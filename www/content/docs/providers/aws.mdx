@@ -28,7 +28,9 @@ export default defineConfig({
 ```
 
 Credentials come from the shell, the same ones `aws sts get-caller-identity` answers to.
-`ocel permissions deploy` prints the policy they need.
+`ocel permissions deploy` prints what they need as a list of managed policies, each a
+`PolicyName` and `PolicyDocument` small enough for IAM to accept; attach every one to the role
+or user that deploys.
 
 ```bash
 ocel deploy

@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -22,12 +21,12 @@ func resolveOnce(ctx context.Context, server *devserver.Server, cfg *project.Pro
 		return nil, err
 	}
 	reportUnreadableLines(span, values)
-	server.UseValues(values.merged(), variablescope.ForDev(cfg))
-	return discoverAndSync(ctx, server, cfg, values, variablescope.ForDev(cfg), local, span)
+	server.UseValues(values.merged(), variables.DevScope(cfg))
+	return discoverAndSync(ctx, server, cfg, values, variables.DevScope(cfg), local, span)
 }
 
 func targetScope(cfg *project.Project, cwd string) variables.Scope {
-	scope := variablescope.ForDev(cfg)
+	scope := variables.DevScope(cfg)
 	target, deepest := -1, -1
 	for i, app := range cfg.Apps {
 		rel, err := filepath.Rel(filepath.Join(cfg.Dir, app.Path), cwd)

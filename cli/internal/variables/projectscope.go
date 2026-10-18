@@ -1,25 +1,24 @@
-package variablescope
+package variables
 
 import (
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func Of(cfg *project.Project, tier environmentv1.Tier, environment string) variables.Scope {
-	return variables.Scope{
-		Apps:        Apps(cfg),
+func ScopeOf(cfg *project.Project, tier environmentv1.Tier, environment string) Scope {
+	return Scope{
+		Apps:        AppsOf(cfg),
 		Tier:        tier,
 		Environment: environment,
-		Bindings:    BindingVariables(cfg, tier),
-		OtherTiers:  BindingVariables(cfg, OtherTier(tier)),
+		Bindings:    inlineBindingVariables(cfg, tier),
+		OtherTiers:  inlineBindingVariables(cfg, OtherTier(tier)),
 		EnvSource:   ConfiguredEnvSource(cfg, tier),
 	}
 }
 
-func ForDev(cfg *project.Project) variables.Scope {
-	return variables.Scope{Apps: Apps(cfg)}
+func DevScope(cfg *project.Project) Scope {
+	return Scope{Apps: AppsOf(cfg)}
 }
 
 func OtherTier(tier environmentv1.Tier) environmentv1.Tier {
@@ -29,13 +28,13 @@ func OtherTier(tier environmentv1.Tier) environmentv1.Tier {
 	return environmentv1.Tier_TIER_PREVIEW
 }
 
-func BindingVariables(cfg *project.Project, tier environmentv1.Tier) []variables.BindingVariables {
-	var out []variables.BindingVariables
+func inlineBindingVariables(cfg *project.Project, tier environmentv1.Tier) []BindingVariables {
+	var out []BindingVariables
 	for _, binding := range cfg.BindingsFor(tier) {
 		if binding.Inline == nil {
 			continue
 		}
-		out = append(out, variables.BindingVariables{
+		out = append(out, BindingVariables{
 			Group: binding.Group(),
 			Site:  "bindings." + binding.Group(),
 			Keys:  binding.Inline.Variables(),
@@ -44,10 +43,10 @@ func BindingVariables(cfg *project.Project, tier environmentv1.Tier) []variables
 	return out
 }
 
-func Apps(cfg *project.Project) []variables.App {
-	apps := make([]variables.App, 0, len(cfg.Apps))
+func AppsOf(cfg *project.Project) []App {
+	apps := make([]App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		apps = append(apps, variables.App{
+		apps = append(apps, App{
 			Name:      a.Name,
 			Folder:    a.Folder,
 			Framework: a.Framework(),
@@ -63,7 +62,7 @@ func EnvSourceDescriptor(cfg *project.Project, tier environmentv1.Tier) envsourc
 	return cfg.EnvSource.Production
 }
 
-func ConfiguredEnvSource(cfg *project.Project, tier environmentv1.Tier) variables.EnvSource {
+func ConfiguredEnvSource(cfg *project.Project, tier environmentv1.Tier) EnvSource {
 	descriptor := EnvSourceDescriptor(cfg, tier)
-	return variables.EnvSource{ID: descriptor.ID(), Credentials: descriptor.CredentialVariables()}
+	return EnvSource{ID: descriptor.ID(), Credentials: descriptor.CredentialVariables()}
 }

@@ -5,7 +5,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -63,7 +62,7 @@ func Variables(framework, appURL string) []variables.Variable {
 
 func Prepend(cfg *project.Project, byApp map[string][]variables.Variable, byURL map[string]string) {
 	scoped := make(map[string]variables.App, len(cfg.Apps))
-	for _, a := range variablescope.Apps(cfg) {
+	for _, a := range variables.AppsOf(cfg) {
 		scoped[a.Name] = a
 	}
 	for app, variables := range byApp {

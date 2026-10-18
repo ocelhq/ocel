@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
@@ -14,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -148,14 +149,16 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 		return err
 	}
 	tally.noteKinds(server.ResourceKinds())
-	updates := make(chan map[string]string, 1)
-	watching, err := startWatching(background, server, cfg, local, opts.session(), func(env map[string]string) {
+	updates := make(chan reload, 1)
+	watching, err := startWatching(background, server, cfg, local, opts.session(), func(env map[string]string, changed []string) {
 		tally.noteKinds(server.ResourceKinds())
+		next := reload{env: env, changed: changed}
 		select {
-		case <-updates:
+		case pending := <-updates:
+			next.changed = slices.Concat(pending.changed, changed)
 		default:
 		}
-		updates <- env
+		updates <- next
 	}, tally.noteError)
 	if err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
@@ -182,17 +185,18 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	}
 	workers := newWorkerProcesses(opts, host.resources.Queue())
 	defer workers.close(ctx)
-	workers.restart(ctx, appEnv)
+	workers.restart(ctx, appEnv, nil)
 	for {
 		select {
 		case err := <-child.Exited():
 			return exitError(ctx, err)
-		case env := <-updates:
+		case update := <-updates:
+			env := update.env
 			appEnv, err := live.project(env)
 			if err != nil {
 				return err
 			}
-			workers.restart(ctx, appEnv)
+			workers.restart(ctx, appEnv, update.changed)
 			if maps.Equal(env, resolved) {
 				live.retire()
 				continue
@@ -207,6 +211,11 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 			live.retire()
 		}
 	}
+}
+
+type reload struct {
+	env     map[string]string
+	changed []string
 }
 
 func follow(ctx context.Context, opts Options, running leader.Leader) (err error) {
@@ -312,7 +321,7 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 		return err
 	}
 	defer host.close()
-	host.server.UseValues(values.merged(), variablescope.ForDev(cfg))
+	host.server.UseValues(values.merged(), variables.DevScope(cfg))
 
 	resolved, err := discoverAndSync(ctx, host.server, cfg, values, targetScope(cfg, cwd), localCommand{name: "run", source: source}, startup)
 	if err != nil {

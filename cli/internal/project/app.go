@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
-	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
@@ -135,7 +134,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 		}
 
 		if a.Folder != "" {
-			if err := variables.ValidateFolder(a.Folder); err != nil {
+			if err := ValidateFolder(a.Folder); err != nil {
 				return nil, newInvalidConfigError(fmt.Errorf("app %q: %w", a.Name, err), field("folder"))
 			}
 			if other, taken := boundFolders[a.Folder]; taken {

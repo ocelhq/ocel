@@ -501,7 +501,7 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, server *devserver.Server, cfg *project.Project, local localCommand, session *run.Span, onResolved func(map[string]string), onFailed func(error)) (*filewatch.Watcher, error) {
+		startWatching = func(ctx context.Context, server *devserver.Server, cfg *project.Project, local localCommand, session *run.Span, onResolved func(map[string]string, []string), onFailed func(error)) (*filewatch.Watcher, error) {
 			time.Sleep(300 * time.Millisecond)
 			return stalled(ctx, server, cfg, local, session, onResolved, onFailed)
 		}

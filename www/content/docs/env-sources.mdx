@@ -102,7 +102,8 @@ never the config. So an `envSource` change takes effect at the next deploy; unti
 
 - A missing or invalid declared value stops the deploy, linking each key to its Infisical
   folder, or opens the variables page where a browser can. With `write`, that page creates the
-  key from what you type, and a deploy in CI creates it empty for you to fill in.
+  key from what you type. A deploy in CI writes nothing to Infisical: it stops, naming each key
+  to create there.
 - A key nothing declares is drift: the deploy warns, and `ocel env ui` lists it as Undeclared.
 
 ### Writing into Infisical

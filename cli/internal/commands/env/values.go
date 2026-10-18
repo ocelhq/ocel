@@ -12,9 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -22,8 +20,8 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
-func envValues(provider *providerprocess.Provider, cfg *project.Project, opts envOptions) valuestore.Store {
-	return valuestore.Store{Provider: provider, Project: cfg, Tier: opts.tier()}
+func envValues(provider *providerprocess.Provider, cfg *project.Project, opts envOptions) variables.Store {
+	return variables.Store{Provider: provider, Project: cfg, Tier: opts.tier()}
 }
 
 func staleCell(err error, key string, opts envOptions) error {
@@ -40,7 +38,7 @@ func runEnvSet(ctx context.Context, dependencies Dependencies, cwd, key, value s
 
 func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, pairs []envSetPair, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
 	if opts.folder != "" {
-		if err := variables.ValidateFolder(opts.folder); err != nil {
+		if err := project.ValidateFolder(opts.folder); err != nil {
 			return err
 		}
 	}
@@ -54,7 +52,7 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 			return err
 		}
 		for _, pair := range pairs {
-			if err := variables.RefuseImpliedInFolder(variablescope.Of(cfg, opts.tier(), ""), pair.key, opts.folder); err != nil {
+			if err := variables.RefuseImpliedInFolder(variables.ScopeOf(cfg, opts.tier(), ""), pair.key, opts.folder); err != nil {
 				return err
 			}
 			if err := variables.RefuseUnwritable(definitions, pair.key, opts.folder); err != nil {
@@ -97,7 +95,7 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 	})
 }
 
-func setInEnvSource(ctx context.Context, values valuestore.Store, id string, at variables.Coordinate, value string, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
+func setInEnvSource(ctx context.Context, values variables.Store, id string, at variables.Coordinate, value string, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
 	description := ""
 	if i := slices.IndexFunc(definitions, func(definition *resourcesv1.VariableDefinition) bool { return definition.GetKey() == at.Cell.Key }); i >= 0 {
 		description = definitions[i].GetDescription()

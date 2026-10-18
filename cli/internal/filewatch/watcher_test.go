@@ -202,7 +202,7 @@ func TestWatch(t *testing.T) {
 		var once sync.Once
 		startWith(t, Config{
 			Paths: Paths{Dirs: []string{dir}},
-			OnChange: func() {
+			OnChange: func([]string) {
 				once.Do(func() { close(handling) })
 				<-release
 			},
@@ -244,6 +244,33 @@ func TestWatch(t *testing.T) {
 	})
 }
 
+func TestAChangeHandsTheCallbackThePathsThatChangedSinceTheLastOne(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	clock := newFakeClock()
+	start(t, clock, Paths{Dirs: []string{dir}})
+
+	a, b := filepath.Join(dir, "a.ts"), filepath.Join(dir, "b.ts")
+	writeFile(t, a, "export {};")
+	writeFile(t, b, "export {};")
+	clock.waitArmed(t, 2)
+	time.Sleep(100 * time.Millisecond)
+	clock.elapse(t)
+	if got := clock.lastChanged(); !slices.Contains(got, a) || !slices.Contains(got, b) {
+		t.Errorf("the change named %v, want both %s and %s", got, a, b)
+	}
+
+	armed := clock.arms()
+	writeFile(t, b, "export const b = 1;")
+	clock.waitArmed(t, armed+1)
+	time.Sleep(100 * time.Millisecond)
+	clock.elapse(t)
+	if got := clock.lastChanged(); slices.Contains(got, a) || !slices.Contains(got, b) {
+		t.Errorf("the next change named %v, want only %s", got, b)
+	}
+}
+
 func start(t *testing.T, clock *fakeClock, paths Paths) *Watcher {
 	t.Helper()
 	return startWith(t, Config{Paths: paths, OnChange: clock.onChange, newTimer: clock.newTimer})
@@ -278,8 +305,9 @@ type fakeClock struct {
 	mu    sync.Mutex
 	armed bool
 
-	tick  chan time.Time
-	fired chan struct{}
+	tick    chan time.Time
+	fired   chan struct{}
+	changed []string
 
 	resets atomic.Int32
 	fires  atomic.Int32
@@ -310,9 +338,18 @@ func (c *fakeClock) Reset(time.Duration) bool {
 	return was
 }
 
-func (c *fakeClock) onChange() {
+func (c *fakeClock) onChange(changed []string) {
 	c.fires.Add(1)
+	c.mu.Lock()
+	c.changed = changed
+	c.mu.Unlock()
 	c.fired <- struct{}{}
+}
+
+func (c *fakeClock) lastChanged() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.changed
 }
 
 func (c *fakeClock) arms() int32 { return c.resets.Load() }

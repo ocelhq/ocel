@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -808,7 +807,7 @@ func lintEdgeWarnings(t *testing.T, cfg *project.Project) []string {
 	}
 	warnings, err := variables.LintEdgeSecrets(
 		[]*resourcesv1.VariableDefinition{definition},
-		variablescope.Apps(cfg),
+		variables.AppsOf(cfg),
 		onEdge,
 	)
 	if err != nil {

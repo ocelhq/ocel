@@ -1,4 +1,4 @@
-package valuestore
+package variables
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
-	"github.com/ocelhq/ocel/cli/internal/variables"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -21,7 +20,7 @@ type Store struct {
 	Tier     environmentv1.Tier
 }
 
-func (s Store) List(ctx context.Context) ([]variables.ValueMetadata, error) {
+func (s Store) List(ctx context.Context) ([]ValueMetadata, error) {
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return nil, err
@@ -34,9 +33,9 @@ func (s Store) List(ctx context.Context) ([]variables.ValueMetadata, error) {
 		return nil, err
 	}
 
-	var stored []variables.ValueMetadata
+	var stored []ValueMetadata
 	for _, value := range resp.GetValues() {
-		stored = append(stored, variables.ValueMetadata{
+		stored = append(stored, ValueMetadata{
 			Coordinate: coordinateOf(value.GetCoordinate()),
 			Version:    value.GetVersion(),
 			Reference:  referenceOf(value.GetTarget()),
@@ -46,18 +45,18 @@ func (s Store) List(ctx context.Context) ([]variables.ValueMetadata, error) {
 	return stored, nil
 }
 
-func coordinateOf(c *variablestorev1.Coordinate) variables.Coordinate {
-	return variables.Coordinate{Cell: variables.Cell{Key: c.GetKey(), Folder: c.GetFolder()}, Environment: c.GetEnvironment()}
+func coordinateOf(c *variablestorev1.Coordinate) Coordinate {
+	return Coordinate{Cell: Cell{Key: c.GetKey(), Folder: c.GetFolder()}, Environment: c.GetEnvironment()}
 }
 
-func referenceOf(target *variablestorev1.Coordinate) *variables.Reference {
+func referenceOf(target *variablestorev1.Coordinate) *Reference {
 	if target == nil {
 		return nil
 	}
-	return &variables.Reference{Slug: target.GetSlug(), Folder: target.GetFolder(), Key: target.GetKey()}
+	return &Reference{Slug: target.GetSlug(), Folder: target.GetFolder(), Key: target.GetKey()}
 }
 
-func (s Store) Reveal(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (s Store) Reveal(ctx context.Context, rows []Coordinate) (map[Coordinate]string, error) {
 	named := make([]*variablestorev1.Coordinate, 0, len(rows))
 	for _, row := range rows {
 		named = append(named, s.coordinate(row))
@@ -74,18 +73,18 @@ func (s Store) Reveal(ctx context.Context, rows []variables.Coordinate) (map[var
 	if err != nil {
 		return nil, err
 	}
-	found := make(map[variables.Coordinate]string, len(resp.GetValues()))
+	found := make(map[Coordinate]string, len(resp.GetValues()))
 	for _, value := range resp.GetValues() {
 		found[coordinateOf(value.GetMetadata().GetCoordinate())] = value.GetValue()
 	}
 	return found, nil
 }
 
-func (s Store) coordinate(at variables.Coordinate) *variablestorev1.Coordinate {
+func (s Store) coordinate(at Coordinate) *variablestorev1.Coordinate {
 	return &variablestorev1.Coordinate{Slug: s.Project.Slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
 }
 
-func (s Store) Version(ctx context.Context, at variables.Coordinate) (int64, error) {
+func (s Store) Version(ctx context.Context, at Coordinate) (int64, error) {
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return 0, err
@@ -100,7 +99,7 @@ func (s Store) Version(ctx context.Context, at variables.Coordinate) (int64, err
 	return resp.GetMetadata().GetVersion(), nil
 }
 
-func (s Store) Set(ctx context.Context, at variables.Coordinate, value string, expected *int64) (int64, error) {
+func (s Store) Set(ctx context.Context, at Coordinate, value string, expected *int64) (int64, error) {
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return 0, err
@@ -117,7 +116,7 @@ func (s Store) Set(ctx context.Context, at variables.Coordinate, value string, e
 	return resp.GetMetadata().GetVersion(), nil
 }
 
-func (s Store) Delete(ctx context.Context, at variables.Coordinate, expected *int64) (bool, error) {
+func (s Store) Delete(ctx context.Context, at Coordinate, expected *int64) (bool, error) {
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return false, err
@@ -140,10 +139,10 @@ func staleValueError(err error) error {
 	if _, refused := provider.RefusedCode(err); refused {
 		return err
 	}
-	return variables.ErrStaleValue
+	return ErrStaleValue
 }
 
-func (s Store) History(ctx context.Context, at variables.Coordinate) ([]variables.Version, error) {
+func (s Store) History(ctx context.Context, at Coordinate) ([]Version, error) {
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return nil, err
@@ -156,9 +155,9 @@ func (s Store) History(ctx context.Context, at variables.Coordinate) ([]variable
 		return nil, err
 	}
 
-	versions := make([]variables.Version, 0, len(resp.GetVersions()))
+	versions := make([]Version, 0, len(resp.GetVersions()))
 	for _, entry := range resp.GetVersions() {
-		versions = append(versions, variables.Version{
+		versions = append(versions, Version{
 			Version:   entry.GetVersion(),
 			CreatedAt: entry.GetCreatedAt(),
 			Size:      entry.GetSize(),

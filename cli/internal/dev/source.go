@@ -77,7 +77,7 @@ type valueLayers []valueLayer
 func (s valueSource) read(dir string) (valueLayers, error) {
 	var layers valueLayers
 	if s.ownStore {
-		shared, err := project.ReadDotenv(dir)
+		shared, err := readDotenv(dir)
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +85,7 @@ func (s valueSource) read(dir string) (valueLayers, error) {
 	} else {
 		layers = append(layers, valueLayer{from: s.id, values: s.values})
 	}
-	local, err := project.ReadLocalDotenv(dir)
+	local, err := readLocalDotenv(dir)
 	if err != nil {
 		return nil, err
 	}

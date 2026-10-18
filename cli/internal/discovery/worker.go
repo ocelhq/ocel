@@ -350,6 +350,49 @@ func WorkerRoot(configDir string, roots []Root, worker string, sources []string)
 	return Root{}, fmt.Errorf("worker %q serves nothing declared in a discovery folder", worker)
 }
 
+func WorkerRoots(configDir string, roots []Root, served Root) ([]Root, error) {
+	switch served.Language {
+	case language.JS:
+		var js []Root
+		for _, root := range roots {
+			if root.Language == language.JS {
+				js = append(js, root)
+			}
+		}
+		return js, nil
+	case language.Go:
+		moduleRoot, _, err := goPackage(configDir, served)
+		if err != nil {
+			return nil, err
+		}
+		var module []Root
+		for _, root := range roots {
+			if root.Language != language.Go {
+				continue
+			}
+			rootModule, _, err := goPackage(configDir, root)
+			if err != nil {
+				return nil, err
+			}
+			if rootModule == moduleRoot {
+				module = append(module, root)
+			}
+		}
+		return module, nil
+	case language.Python:
+		packages, err := ListPythonPackages(configDir, roots, served.Dir)
+		if err != nil {
+			return nil, err
+		}
+		imported := make([]Root, 0, len(packages))
+		for _, pkg := range packages {
+			imported = append(imported, Root{Dir: pkg.Dir, Language: language.Python})
+		}
+		return imported, nil
+	}
+	return []Root{served}, nil
+}
+
 func displayedSite(configDir, file, line string) string {
 	if isWithin(configDir, file) {
 		rel, _ := filepath.Rel(configDir, file)
