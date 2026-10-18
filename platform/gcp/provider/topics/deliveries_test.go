@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/pkg/topiclimits"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -66,7 +66,7 @@ func pushBody(p push) []byte {
 
 func aMessage(payload string) push {
 	at := time.Now().UTC().Truncate(time.Millisecond)
-	return push{messageID: envelope.NewMessageID(at), publishedAt: at, payload: payload}
+	return push{messageID: runs.NewMessageID(at), publishedAt: at, payload: payload}
 }
 
 func TestAPushForAConsumerNoOneDeclaredIsRefused(t *testing.T) {

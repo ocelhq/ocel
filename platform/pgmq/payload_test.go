@@ -41,7 +41,7 @@ func TestATaskPayloadAndOutputKeepTheirJSONTextFromTriggerThroughTheEnvelopeToTh
 	if payload := rawFieldOf(t, got[0].body, "payload"); payload != exactJSON {
 		t.Errorf("the envelope's payload = %s, want the triggered JSON %s inline and unchanged", payload, exactJSON)
 	}
-	run, err := engine.Store().ReadRun(context.Background(), id)
+	run, err := engine.Store().ReadRun(context.Background(), "resize", id)
 	if err != nil {
 		t.Fatalf("ReadRun: %v", err)
 	}

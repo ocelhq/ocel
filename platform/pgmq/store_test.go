@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/taskstoretest"
+	"github.com/ocelhq/ocel/pkg/runs"
+	"github.com/ocelhq/ocel/pkg/runs/runsconformance"
 )
 
 func anEngine(t *testing.T) *Engine {
@@ -18,6 +18,6 @@ func anEngine(t *testing.T) *Engine {
 	return engine
 }
 
-func TestTheEngineStoreKeepsRunsAndRecordsAsEveryTaskStoreMust(t *testing.T) {
-	taskstoretest.Run(t, func(t *testing.T) provider.TaskStore { return anEngine(t).Store() })
+func TestTheEngineStoreKeepsRunsAndRecordsAsEveryRunStoreMust(t *testing.T) {
+	runsconformance.Store(t, func(t *testing.T) runs.Store { return anEngine(t).Store() })
 }

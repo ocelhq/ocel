@@ -5,15 +5,15 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/pgmq"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 func TestAnAttemptIsDescribedByWhatItRanAndWhatBecameOfTheRun(t *testing.T) {
 	t.Parallel()
-	task := pgmq.Attempt{Topic: "greet", Consumer: "greet", IsTask: true, Execution: "01JZ-greet", Number: 1, MaxAttempts: 3, Took: 12 * time.Millisecond}
-	consumer := pgmq.Attempt{Topic: "orders", Consumer: "audit", Execution: "01JZ-audit", Number: 3, MaxAttempts: 3, Took: 1500 * time.Millisecond}
+	task := runs.Attempt{Topic: "greet", Consumer: "greet", IsTask: true, Execution: "01JZ-greet", Number: 1, MaxAttempts: 3, Took: 12 * time.Millisecond}
+	consumer := runs.Attempt{Topic: "orders", Consumer: "audit", Execution: "01JZ-audit", Number: 3, MaxAttempts: 3, Took: 1500 * time.Millisecond}
 	for _, tc := range []struct {
-		attempt pgmq.Attempt
+		attempt runs.Attempt
 		status  provider.RunStatus
 		reason  string
 		want    string

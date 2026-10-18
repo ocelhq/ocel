@@ -13,14 +13,14 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 const (
 	Database = "ocel"
 
-	defaultLease         = 60 * time.Second
-	defaultShutdownGrace = 10 * time.Second
+	defaultLease = 60 * time.Second
+	maxInFlight  = 1000
 
 	minimumPgmq = "1.11.1"
 	openLock    = "ocel.pgmq.open"
@@ -31,21 +31,18 @@ type Config struct {
 	Database      string
 	Lease         time.Duration
 	ShutdownGrace time.Duration
-	ReportAttempt func(Attempt)
+	ReportAttempt func(runs.Attempt)
 }
 
 type Engine struct {
-	pool          *pgxpool.Pool
-	lease         time.Duration
-	shutdownGrace time.Duration
-	reportAttempt func(Attempt)
+	pool *pgxpool.Pool
+	runs *runs.Engine
 
-	mu          sync.Mutex
-	deployment  Deployment
-	workerSlots map[string]*slots
-	applied     chan struct{}
-	wakes       map[string]chan struct{}
-	inFlight    map[string]context.CancelFunc
+	mu         sync.Mutex
+	deployment Deployment
+	applied    chan struct{}
+	wakes      map[string]chan struct{}
+	turns      map[string]*laneTurns
 }
 
 func Open(ctx context.Context, cfg Config) (*Engine, error) {
@@ -54,12 +51,6 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 	}
 	if cfg.Lease <= 0 {
 		cfg.Lease = defaultLease
-	}
-	if cfg.ShutdownGrace <= 0 {
-		cfg.ShutdownGrace = defaultShutdownGrace
-	}
-	if cfg.ReportAttempt == nil {
-		cfg.ReportAttempt = func(Attempt) {}
 	}
 	if err := ensureDatabase(ctx, cfg); err != nil {
 		return nil, err
@@ -77,28 +68,31 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 		pool.Close()
 		return nil, err
 	}
-	return &Engine{
-		pool:          pool,
-		lease:         cfg.Lease,
-		shutdownGrace: cfg.ShutdownGrace,
-		reportAttempt: cfg.ReportAttempt,
-		workerSlots:   map[string]*slots{},
-		applied:       make(chan struct{}, 1),
-		wakes:         map[string]chan struct{}{},
-		inFlight:      map[string]context.CancelFunc{},
-	}, nil
+	e := &Engine{
+		pool:    pool,
+		applied: make(chan struct{}, 1),
+		wakes:   map[string]chan struct{}{},
+		turns:   map[string]*laneTurns{},
+	}
+	e.runs = runs.New(runs.Config{
+		Store:         e.Store(),
+		Queue:         queue{engine: e},
+		Lease:         cfg.Lease,
+		ShutdownGrace: cfg.ShutdownGrace,
+		InFlight:      maxInFlight,
+		ReportAttempt: cfg.ReportAttempt,
+	})
+	return e, nil
 }
 
 func (e *Engine) Close() { e.pool.Close() }
 
+func (e *Engine) Tasks() runs.Tasks { return e.runs.Tasks() }
+
+func (e *Engine) Topics() runs.Topics { return e.runs.Topics() }
+
 func (e *Engine) inTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	return pgx.BeginFunc(ctx, e.pool, fn)
-}
-
-func (e *Engine) signalTopic(name string, topic *contractv1.ManifestTopic) {
-	for _, consumer := range topic.GetConsumers() {
-		e.signal(queueName(name, consumer.GetName()))
-	}
 }
 
 func (e *Engine) signalApplied() {
@@ -124,6 +118,17 @@ func (e *Engine) signal(queue string) {
 	case e.ensureWakeChannel(queue) <- struct{}{}:
 	default:
 	}
+}
+
+func (e *Engine) laneTurnsOf(queue string) *laneTurns {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	turns, found := e.turns[queue]
+	if !found {
+		turns = &laneTurns{}
+		e.turns[queue] = turns
+	}
+	return turns
 }
 
 func ensureDatabase(ctx context.Context, cfg Config) error {

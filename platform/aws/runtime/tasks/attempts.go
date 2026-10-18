@@ -15,8 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
-
-	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
@@ -440,10 +438,10 @@ func attemptBudget(deployed deployedConsumer) time.Duration {
 
 func (e *Engine) envelopeOf(deployed deployedConsumer, claimed []arrival) *topicv1.Envelope {
 	envelope := &topicv1.Envelope{
-		V:        envelope.Version,
+		V:        runs.EnvelopeVersion,
 		Topic:    deployed.topicName,
 		Consumer: deployed.consumer.Name,
-		Schema:   envelope.SchemaOf(deployed.topic.Schema),
+		Schema:   runs.SchemaOf(deployed.topic.Schema),
 	}
 	deliveries := make([]*topicv1.Delivery, 0, len(claimed))
 	for _, got := range claimed {
@@ -470,14 +468,14 @@ func (e *Engine) envelopeOf(deployed deployedConsumer, claimed []arrival) *topic
 	return envelope
 }
 
-func (e *Engine) attempt(ctx context.Context, deployed deployedConsumer, claimed []arrival) envelope.Result {
+func (e *Engine) attempt(ctx context.Context, deployed deployedConsumer, claimed []arrival) runs.Answer {
 	postCtx, stopPost := context.WithDeadline(ctx, invocationDeadline(ctx).Add(-settleMargin))
 	defer stopPost()
 	attemptCtx, cancel := context.WithCancelCause(postCtx)
 	defer cancel(nil)
 	if maxDuration := deployed.consumer.MaxDuration; maxDuration > 0 {
 		var stop context.CancelFunc
-		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, envelope.ErrTimedOut)
+		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, runs.ErrTimedOut)
 		defer stop()
 	}
 	if len(claimed) == 1 {
@@ -485,7 +483,7 @@ func (e *Engine) attempt(ctx context.Context, deployed deployedConsumer, claimed
 		defer stopWatching()
 		go e.watchForCancel(watching, deployed, claimed[0], cancel)
 	}
-	return envelope.Post(postCtx, attemptCtx, e.cfg.Client, e.cfg.WorkerURL, e.envelopeOf(deployed, claimed))
+	return runs.PostEnvelope(postCtx, attemptCtx, e.cfg.Client, e.cfg.WorkerURL, e.envelopeOf(deployed, claimed))
 }
 
 func (e *Engine) watchForCancel(ctx context.Context, deployed deployedConsumer, got arrival, cancel context.CancelCauseFunc) {
@@ -502,18 +500,18 @@ func (e *Engine) watchForCancel(ctx context.Context, deployed deployedConsumer, 
 			continue
 		}
 		if !found || provider.RunStatus(item.Status) == provider.RunCanceled || item.Delivery != got.msg.Delivery {
-			cancel(envelope.ErrCanceled)
+			cancel(runs.ErrCanceled)
 			return
 		}
 	}
 }
 
-func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, got arrival, answer envelope.Result) (disposition, time.Duration) {
+func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, got arrival, answer runs.Answer) (disposition, time.Duration) {
 	ctx = context.WithoutCancel(ctx)
 	switch answer.Outcome {
-	case envelope.Canceled:
+	case runs.Canceled:
 		return acknowledged, 0
-	case envelope.Interrupted:
+	case runs.Interrupted:
 		if _, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
 			set:        map[string]any{"status": string(provider.RunQueued), "error": answer.Reason, "lease_until": 0},
 			condition:  "#status = :executing AND #delivery = :token",
@@ -522,13 +520,13 @@ func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, got arri
 			slog.Warn("give back the lease of an interrupted run", "execution", got.execution, "error", err)
 		}
 		return retained, 0
-	case envelope.Succeeded:
+	case runs.Succeeded:
 		e.settle(ctx, deployed, got, provider.RunCompleted, answer.Output, "")
 		return acknowledged, 0
-	case envelope.Aborted, envelope.Refused:
+	case runs.Aborted, runs.Refused:
 		e.settle(ctx, deployed, got, provider.RunFailed, nil, answer.Reason)
 		return acknowledged, 0
-	case envelope.TimedOut:
+	case runs.TimedOut:
 		if deployed.isTask() {
 			e.settle(ctx, deployed, got, provider.RunTimedOut, nil, answer.Reason)
 			return acknowledged, 0
@@ -549,7 +547,7 @@ func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, got arri
 		}
 		return retryInPlace, backoff
 	}
-	token := envelope.NewMessageID(time.Now())
+	token := runs.NewMessageID(time.Now())
 	if _, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
 		set:        map[string]any{"status": string(provider.RunQueued), "error": answer.Reason, "delivery": token, "lease_until": 0},
 		condition:  "#status = :executing AND #delivery = :token",

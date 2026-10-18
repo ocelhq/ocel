@@ -14,11 +14,11 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/ocelhq/ocel/pkg/envelope"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/pkg/topiclimits"
 )
 
@@ -61,7 +61,7 @@ func (w *aWorker) serve(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "want a JSON POST", http.StatusBadRequest)
 		return
 	}
-	posted, err := envelope.Decode(body)
+	posted, err := runs.DecodeEnvelope(body)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return

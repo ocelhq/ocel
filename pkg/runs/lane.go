@@ -27,3 +27,10 @@ func LaneFor(reads []provider.Lane, lane topicv1.Lane) provider.Lane {
 	}
 	return asked
 }
+
+func laneFor(reads []provider.Lane, asked provider.Lane) provider.Lane {
+	if asked == "" || (len(reads) > 0 && !slices.Contains(reads, asked)) {
+		return provider.LaneDefault
+	}
+	return asked
+}

@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/pgmq"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
-func describeAttempt(attempt pgmq.Attempt) string {
+func describeAttempt(attempt runs.Attempt) string {
 	subject := fmt.Sprintf("consumer %q of topic %q execution %s", attempt.Consumer, attempt.Topic, attempt.Execution)
 	if attempt.IsTask {
 		subject = fmt.Sprintf("task %q run %s", attempt.Topic, attempt.Execution)

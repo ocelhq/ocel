@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 
@@ -314,7 +313,7 @@ func newFakeWorker(t *testing.T, respond func(*topicv1.Envelope) answer) *fakeWo
 	w := &fakeWorker{respond: respond}
 	w.server = httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		body, _ := io.ReadAll(req.Body)
-		envelope, err := envelope.Decode(body)
+		envelope, err := runs.DecodeEnvelope(body)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusBadRequest)
 			return

@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/pgmq"
 )
 
@@ -207,7 +208,7 @@ func (b *Backend) running(ctx context.Context, project string) (*pgmq.Engine, er
 		return nil, fmt.Errorf("the queue database never accepted a connection: %w", err)
 	}
 	serverURL := (&url.URL{Scheme: "postgres", User: url.UserPassword(superuser, password), Host: b.container.Address, Path: "/postgres", RawQuery: "sslmode=disable"}).String()
-	engine, err := pgmq.Open(ctx, pgmq.Config{ServerURL: serverURL, ReportAttempt: func(attempt pgmq.Attempt) { b.report(describeAttempt(attempt)) }})
+	engine, err := pgmq.Open(ctx, pgmq.Config{ServerURL: serverURL, ReportAttempt: func(attempt runs.Attempt) { b.report(describeAttempt(attempt)) }})
 	if err != nil {
 		return nil, fmt.Errorf("open the queue database: %w", err)
 	}

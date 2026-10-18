@@ -7,11 +7,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 func TestADeploymentTakesTheManifestsTopicsAndTheWorkersThatHaveAnAddress(t *testing.T) {
@@ -120,8 +122,13 @@ func TestAConsumerDroppedFromTheDeploymentTakesItsQueueAndCancelsItsUnfinishedRu
 	ctx := context.Background()
 	email, audit := &contractv1.ManifestConsumer{Name: "email", Worker: "mail"}, &contractv1.ManifestConsumer{Name: "audit", Worker: "mail"}
 	engine := applied(t, map[string]*contractv1.ManifestTopic{"orders": aTopic(email, audit)}, nil)
-	send(t, engine, "orders", `{}`, nil)
-	claimedRun(t, engine, queueName("orders", "audit"))
+	message := runs.NewMessageID(time.Now())
+	for consumer, status := range map[string]provider.RunStatus{"audit": provider.RunExecuting, "email": provider.RunQueued} {
+		run := runs.Run{Execution: runs.ExecutionOf(message, consumer), Topic: "orders", Consumer: consumer, Status: status, MaxAttempts: 3, Message: message, CreatedAt: time.Now(), DueAt: time.Now()}
+		if _, err := engine.Store().CreateRun(ctx, run); err != nil {
+			t.Fatalf("CreateRun: %v", err)
+		}
+	}
 
 	if err := engine.Apply(ctx, Deployment{Slug: "app", Topics: map[string]*contractv1.ManifestTopic{"orders": aTopic(email)}}); err != nil {
 		t.Fatalf("Apply without audit: %v", err)

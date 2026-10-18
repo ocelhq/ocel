@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-
-	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -58,7 +56,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *provider.TopicSp
 	toPublish := publication{
 		topicName:   name,
 		topic:       topic,
-		messageID:   envelope.NewMessageID(now),
+		messageID:   runs.NewMessageID(now),
 		publishedAt: now,
 		dueAt:       now,
 		payload:     payload,

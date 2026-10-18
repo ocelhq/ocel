@@ -11,13 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -143,7 +141,7 @@ func pushedRunOf(topicName string, topic *provider.TopicSpec, consumer provider.
 		delivered.payload = scheduledPayloadOf(publishTime)
 	}
 	if delivered.messageID == "" {
-		delivered.messageID = envelope.MessageIDFrom(idTime, pushed.Message.MessageID)
+		delivered.messageID = runs.MessageIDFrom(idTime, pushed.Message.MessageID)
 	}
 	requested, _ := strconv.Atoi(attributes[MaxAttemptsAttribute])
 	delivered.maxAttempts = runs.AttemptsFor(consumer.Retry, int32(requested))
@@ -167,12 +165,12 @@ func (d Deliveries) deliver(ctx context.Context, delivered pushedRun) error {
 	defer cancel(nil)
 	if maxDuration := delivered.consumer.MaxDuration; maxDuration > 0 {
 		var stop context.CancelFunc
-		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, envelope.ErrTimedOut)
+		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, runs.ErrTimedOut)
 		defer stop()
 	}
 	watching, stopWatching := context.WithCancel(attemptCtx)
 	go d.watchForCancel(watching, delivered.execution(), cancel)
-	res := envelope.Post(ctx, attemptCtx, http.DefaultClient, d.Worker, envelopeOf(delivered, claimed))
+	res := runs.PostEnvelope(ctx, attemptCtx, http.DefaultClient, d.Worker, envelopeOf(delivered, claimed))
 	stopWatching()
 	retry, err := d.finish(ctx, delivered, res)
 	if err != nil && !errors.Is(err, errRunUnchanged) {
@@ -195,7 +193,7 @@ func (d Deliveries) watchForCancel(ctx context.Context, execution string, cancel
 		}
 		run, err := d.Store.readStoredRun(ctx, execution)
 		if errors.Is(err, keyvalue.ErrNotFound) || (err == nil && run.Status == provider.RunCanceled) {
-			cancel(envelope.ErrCanceled)
+			cancel(runs.ErrCanceled)
 			return
 		}
 	}
@@ -265,10 +263,10 @@ func envelopeOf(delivered pushedRun, claimed storedRun) *topicv1.Envelope {
 		FirstAttemptedAt: timestamppb.New(claimed.StartedAt),
 	}
 	posted := &topicv1.Envelope{
-		V:        envelope.Version,
+		V:        runs.EnvelopeVersion,
 		Topic:    delivered.topicName,
 		Consumer: delivered.consumer.Name,
-		Schema:   envelope.SchemaOf(delivered.topic.Schema),
+		Schema:   runs.SchemaOf(delivered.topic.Schema),
 	}
 	if delivered.consumer.Batch != nil {
 		posted.Messages = []*topicv1.Delivery{{Execution: delivered.execution(), Message: message, Attempt: attempt, Payload: delivered.payload}}
@@ -278,7 +276,7 @@ func envelopeOf(delivered pushedRun, claimed storedRun) *topicv1.Envelope {
 	return posted
 }
 
-func (d Deliveries) finish(ctx context.Context, delivered pushedRun, res envelope.Result) (bool, error) {
+func (d Deliveries) finish(ctx context.Context, delivered pushedRun, res runs.Answer) (bool, error) {
 	retry := false
 	_, err := d.Store.changeRun(ctx, delivered.execution(), func(run *storedRun, found bool) error {
 		if !found || run.Status != provider.RunExecuting {
@@ -289,16 +287,16 @@ func (d Deliveries) finish(ctx context.Context, delivered pushedRun, res envelop
 			settleRun(run, delivered, status, output, reason, now)
 		}
 		switch res.Outcome {
-		case envelope.Canceled, envelope.Interrupted:
+		case runs.Canceled, runs.Interrupted:
 			retry = true
 			return errRunUnchanged
-		case envelope.Succeeded:
+		case runs.Succeeded:
 			settle(provider.RunCompleted, res.Output, "")
 			return nil
-		case envelope.Aborted, envelope.Refused:
+		case runs.Aborted, runs.Refused:
 			settle(provider.RunFailed, nil, res.Reason)
 			return nil
-		case envelope.TimedOut:
+		case runs.TimedOut:
 			if runs.IsTask(delivered.topic) {
 				settle(provider.RunTimedOut, nil, res.Reason)
 				return nil

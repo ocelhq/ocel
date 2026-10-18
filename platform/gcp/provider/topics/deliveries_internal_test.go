@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 func aDeliveredRun(maxAttempts int) pushedRun {
@@ -15,7 +15,7 @@ func aDeliveredRun(maxAttempts int) pushedRun {
 		topicName:   "orders",
 		topic:       &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: "ship"}}},
 		consumer:    provider.ConsumerSpec{Name: "ship"},
-		messageID:   envelope.NewMessageID(at),
+		messageID:   runs.NewMessageID(at),
 		publishedAt: at,
 		dueAt:       at,
 		payload:     []byte(`{"order":7}`),
