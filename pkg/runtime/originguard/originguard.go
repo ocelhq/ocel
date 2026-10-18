@@ -42,9 +42,10 @@ func NewGuard(secrets ...string) *Guard {
 	return guard
 }
 
-func GuardFromEnv(env []string, required bool) (*Guard, []string, error) {
+func GuardFromEnv(env []string) (*Guard, []string, error) {
 	kept := make([]string, 0, len(env))
 	var (
+		fronted  bool
 		given    bool
 		current  string
 		previous string
@@ -52,6 +53,8 @@ func GuardFromEnv(env []string, required bool) (*Guard, []string, error) {
 	for _, entry := range env {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
+		case edge.OriginFrontedVar:
+			fronted = true
 		case edge.OriginSecretVar:
 			current, given = value, true
 		case edge.OriginSecretPreviousVar:
@@ -61,10 +64,10 @@ func GuardFromEnv(env []string, required bool) (*Guard, []string, error) {
 		}
 	}
 	switch {
+	case fronted && current == "" && previous == "":
+		return nil, nil, fmt.Errorf("the deployment is reached only through its front, and no secret is set in %s", edge.OriginSecretVar)
 	case given:
 		return NewGuard(current, previous), kept, nil
-	case required:
-		return nil, nil, fmt.Errorf("the deployment is reached only through its front, and %s is not set", edge.OriginSecretVar)
 	default:
 		return nil, kept, nil
 	}

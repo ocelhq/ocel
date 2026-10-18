@@ -17,7 +17,7 @@ func (e *Edge) openTunnel(ctx context.Context, kind edge.Kind) (host.Tunnel, err
 	if err != nil {
 		return host.Tunnel{}, err
 	}
-	reserved, err := e.machine.ReserveTunnel(ctx, kind)
+	reserved, err := e.machine.ReserveTunnel(ctx, kind, hooks.Connector)
 	if err != nil {
 		return host.Tunnel{}, err
 	}
@@ -32,7 +32,7 @@ func (e *Edge) openTunnel(ctx context.Context, kind edge.Kind) (host.Tunnel, err
 	}
 	reserved.ID, reserved.Address = opened.ID, opened.Address
 	token := func(ctx context.Context) (string, error) { return hooks.ReadToken(ctx, opened.ID) }
-	if err := e.machine.RunTunnel(ctx, reserved, token); err != nil {
+	if err := e.machine.RunTunnel(ctx, reserved, hooks.Connector, token); err != nil {
 		if errors.Is(err, host.ErrTunnelReleased) {
 			return host.Tunnel{}, errors.Join(err, hooks.Delete(ctx, opened.ID))
 		}

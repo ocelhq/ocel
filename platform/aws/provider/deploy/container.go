@@ -193,11 +193,11 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	if err != nil {
 		return nil, err
 	}
-	guard, previousGuard := r.cfg.OriginSecret, r.cfg.PreviousOriginSecret
-	if isRoutedPublicly(spec) {
-		guard, previousGuard = "", ""
+	var front *originGuard
+	if !isRoutedPublicly(spec) {
+		front = &originGuard{Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}
 	}
-	env, err := containerEnv(app.App, app.Values, guard, previousGuard, bundle.Live)
+	env, err := containerEnv(app.App, app.Values, front, bundle.Live)
 	if err != nil {
 		return nil, err
 	}
@@ -344,8 +344,8 @@ func presentedSecrets(current, previous string) []string {
 	return []string{current, previous}
 }
 
-func containerEnv(app string, values provider.AppValues, originSecret, previousSecret string, manifest []byte) (map[string]string, error) {
-	env := make(map[string]string, len(values.Plain)+len(values.Sensitive)+7)
+func containerEnv(app string, values provider.AppValues, front *originGuard, manifest []byte) (map[string]string, error) {
+	env := make(map[string]string, len(values.Plain)+len(values.Sensitive)+8)
 	maps.Copy(env, values.Plain)
 	maps.Copy(env, values.Sensitive)
 	if values.Folder != "" {
@@ -358,12 +358,7 @@ func containerEnv(app string, values provider.AppValues, originSecret, previousS
 			app, containerPortEnv, containerPort, containerPortEnv)
 	}
 	env[containerPortEnv] = containerPort
-	if originSecret != "" {
-		env[edge.OriginSecretVar] = originSecret
-	}
-	if previousSecret != "" {
-		env[edge.OriginSecretPreviousVar] = previousSecret
-	}
+	front.front(env)
 	if len(manifest) > 0 {
 		env[variables.EnvVar] = string(manifest)
 	}

@@ -21,14 +21,22 @@ func (f *originGuard) rootFunctionEnv(base map[string]string) map[string]string 
 	if f == nil {
 		return base
 	}
-	env := make(map[string]string, len(base)+1)
+	env := make(map[string]string, len(base)+3)
 	maps.Copy(env, base)
 	delete(env, edge.OriginSignedVar)
+	f.front(env)
+	return env
+}
+
+func (f *originGuard) front(env map[string]string) {
+	if f == nil {
+		return
+	}
+	env[edge.OriginFrontedVar] = "1"
 	env[edge.OriginSecretVar] = f.Secret
 	if f.Previous != "" {
 		env[edge.OriginSecretPreviousVar] = f.Previous
 	}
-	return env
 }
 
 func (f *originGuard) rootFunctionURLAuth() string {

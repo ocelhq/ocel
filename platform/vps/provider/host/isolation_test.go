@@ -43,7 +43,7 @@ func running() map[string]string {
 		proxyContainer:    words(frontProxy().run()),
 		boardContainer:    words(switchboardBox(nil, Front{}).run()),
 		resourceContainer: words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name))),
-		tunnelContainer:   words(tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, tunnelConnectors["cloudflare"]).run()),
+		tunnelContainer:   words(tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector()).run()),
 		tokenPlacer:       words(renderTunnelTokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d")),
 	}
 }

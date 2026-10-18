@@ -76,7 +76,7 @@ func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 			"onto the revision tag its deploy created")
 	}
 	for _, need := range []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming, edge.NeedRevalidation} {
-		if !edge.Supports(front, need) {
+		if !slices.Contains(front.Facts().Supported, need) {
 			t.Errorf("Supported() does not name %q, and the load balancer with Cloud CDN in front of Cloud Run serves it", need)
 		}
 	}

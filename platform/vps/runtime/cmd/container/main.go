@@ -174,7 +174,7 @@ func readFront(environ []string) (front, []string, error) {
 		}
 		env = append(env, entry)
 	}
-	guard, env, err := originguard.GuardFromEnv(env, slices.ContainsFunc(environ, isWorkerEntry))
+	guard, env, err := originguard.GuardFromEnv(env)
 	read.guard = guard
 	return read, env, err
 }

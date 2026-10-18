@@ -9,7 +9,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
@@ -59,7 +58,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if result.Envelope != "an-envelope" {
 		t.Errorf("Envelope = %q, want the one sealed beside the bundle", result.Envelope)
 	}
-	if result.PurgeSecret != cloudflare.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Prefix) {
+	if result.PurgeSecret != edge.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Prefix) {
 		t.Errorf("PurgeSecret = %q, want the secret the edge accepts a purge signed with", result.PurgeSecret)
 	}
 }
@@ -99,7 +98,7 @@ func TestAReleaseNamesEverySecretItsProgramsCarrySoTheEngineCanMaskThem(t *testi
 
 	release := releasing(t, cfg)
 	got := release.secrets(stackProgram{secrets: release.appSecrets(spec)})
-	for _, want := range []string{"origin-now", "origin-before", "a-seed", cloudflare.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Prefix)} {
+	for _, want := range []string{"origin-now", "origin-before", "a-seed", edge.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Prefix)} {
 		if !slices.Contains(got, want) {
 			t.Errorf("the release names %d secrets and not %q, want every secret its programs carry", len(got), want)
 		}

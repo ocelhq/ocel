@@ -561,7 +561,7 @@ func TestRemovingAPreviewLeavesTheCatchAllInPlaceAndRendersItAsKeptWithAReason(t
 		t.Fatalf("the catch-all is owned by %q after a preview came down, want %q: it is a bootstrap item answering for every project this box serves, and taking it with one project's preview takes every other project's previews off the air",
 			owner, edge.PreviewEntryOwner)
 	}
-	kept := front.SharedPreviewRemoval()
+	kept := front.PlanSharedPreviewRemoval()
 	if kept.Action != edge.PlanKeep || kept.Reason == "" {
 		t.Errorf("the catch-all renders as %+v, want a kept row saying why it is kept", kept)
 	}

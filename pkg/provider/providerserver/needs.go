@@ -150,7 +150,7 @@ func (c EdgeNeedCheck) forApp(
 		}
 		detail := hosting.Needs[need]
 		waived := slices.Contains(c.AllowDegraded, string(need))
-		serves := edge.Supports(c.Edge, need) && c.isRouted(name, need)
+		serves := slices.Contains(c.Edge.Facts().Supported, need) && c.isRouted(name, need)
 
 		if serves && entitles && slices.Contains(edge.CodeNeeds(), need) {
 			granted, err := entitlement()
@@ -183,7 +183,7 @@ func (c EdgeNeedCheck) forApp(
 }
 
 func (c EdgeNeedCheck) isRouted(app string, need edge.Need) bool {
-	return router.Supports(c.Router(app), need)
+	return slices.Contains(c.Router(app).Facts().Supported, need)
 }
 
 func declaredNeeds(hosting buildoutput.Hosting) []edge.Need {

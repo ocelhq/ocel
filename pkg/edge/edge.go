@@ -39,10 +39,6 @@ func NeedNames(needs []Need) []string {
 	return names
 }
 
-func Supports(e Edge, need Need) bool {
-	return slices.Contains(e.Facts().Supported, need)
-}
-
 func ValidNeed(need Need) bool {
 	return slices.Contains(AllNeeds(), need)
 }
@@ -97,11 +93,11 @@ type Edge interface {
 
 	ProjectOwner(slug string, tier environment.Tier) string
 
-	ProjectRemovals(scope ProjectScope) []PlanGroup
+	PlanProjectRemoval(scope ProjectScope) []PlanGroup
 
-	PreviewWildcardRemovals(wildcard string) (removed, kept PlanGroup)
+	PlanPreviewWildcardRemoval(wildcard string) (removed, kept PlanGroup)
 
-	SharedPreviewRemoval() PlanGroup
+	PlanSharedPreviewRemoval() PlanGroup
 }
 
 type ProjectScope struct {

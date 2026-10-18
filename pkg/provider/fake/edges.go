@@ -689,7 +689,7 @@ func (e *Edge) Hooks() edge.Hooks {
 		hooks.PurgeHostnames = e.purge
 	}
 	if e.runsTunnels {
-		hooks.Tunnels = &edge.TunnelHooks{Ensure: e.ensureTunnel, Configure: e.configureTunnel, ReadToken: e.readTunnelToken, Delete: e.deleteTunnel}
+		hooks.Tunnels = &edge.TunnelHooks{Connector: newTunnelConnector(), Ensure: e.ensureTunnel, Configure: e.configureTunnel, ReadToken: e.readTunnelToken, Delete: e.deleteTunnel}
 	}
 	if e.issues {
 		hooks.OriginCertificates = &edge.OriginCertificateHooks{Issue: e.issueOriginCertificate, Revoke: e.revokeOriginCertificate}
@@ -835,7 +835,7 @@ func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
 	return "ocel-" + slug + "-" + string(tier)
 }
 
-func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := []edge.PlanChange{{
 		Kind:   "Fake::EdgeStack",
 		Name:   scope.Slug + "-" + string(scope.Tier),
@@ -857,7 +857,7 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}}
 }
 
-func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {
+func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup) {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(e.kind),
@@ -868,10 +868,10 @@ func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.Plan
 			Action: edge.PlanDelete,
 			Reason: "the shared entry every preview on this wildcard is served through",
 		}},
-	}, e.SharedPreviewRemoval()
+	}, e.PlanSharedPreviewRemoval()
 }
 
-func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
+func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(e.kind),
@@ -954,6 +954,15 @@ func (e *Edge) recordTunnelEvent(event string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.tunnelEvents = append(e.tunnelEvents, event)
+}
+
+func newTunnelConnector() edge.TunnelConnector {
+	return edge.TunnelConnector{
+		Image:        "ocel/fake-connector@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+		Command:      []string{"connect"},
+		TokenFileEnv: "FAKE_TUNNEL_TOKEN_FILE",
+		Ready:        []string{"fake-connector", "ready"},
+	}
 }
 
 func (e *Edge) ensureTunnel(_ context.Context, name string) (edge.Tunnel, error) {

@@ -80,7 +80,7 @@ func TestNoContainerOcelRunsMayOpenHostFilesByHandle(t *testing.T) {
 		"a placement":        placementCommand("/data/proxy", "origin-group"),
 		"an app":             containerRun(valued(), handedTo(valued())),
 		"a resource":         resourceRun(resourced(), "0123456789ab", "/tmp/handed.env"),
-		"the tunnel":         tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, tunnelConnectors["cloudflare"]).run(),
+		"the tunnel":         tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector()).run(),
 		"the tunnel's token": renderTunnelTokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d"),
 	} {
 		if slices.Contains(capabilitiesAdded(argv), "DAC_READ_SEARCH") {

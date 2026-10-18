@@ -512,7 +512,7 @@ func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv
 }
 
 func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error) {
-	removed, kept := front.PreviewWildcardRemovals(w.recorded.Hostname())
+	removed, kept := front.PlanPreviewWildcardRemoval(w.recorded.Hostname())
 	removedGroup, err := edgeGroupProto(removed)
 	if err != nil {
 		return nil, err

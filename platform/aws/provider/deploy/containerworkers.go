@@ -122,6 +122,7 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 		return nil, err
 	}
 	workerEnv := maps.Clone(web.env)
+	delete(workerEnv, edge.OriginFrontedVar)
 	delete(workerEnv, edge.OriginSecretVar)
 	delete(workerEnv, edge.OriginSecretPreviousVar)
 	workerEnv[queues.EnvVar] = string(rendered)

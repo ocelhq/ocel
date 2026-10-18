@@ -24,7 +24,7 @@ func TestAnAppBehindAnEdgeHoldingAKeyToTheAssetBucketTagsItsPagesEdgeReadableAnd
 	if !cache.EdgeReadable {
 		t.Error("EdgeReadable = false, want the origin to tag its page entries for an edge that reads them")
 	}
-	if want := cloudflare.DerivePurgeSecret("a-seed", spec.App.ISR.Prefix); cache.PurgeSecret != want {
+	if want := edge.DerivePurgeSecret("a-seed", spec.App.ISR.Prefix); cache.PurgeSecret != want {
 		t.Errorf("PurgeSecret = %q, want %q", cache.PurgeSecret, want)
 	}
 	env := cache.env()

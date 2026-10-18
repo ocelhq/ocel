@@ -34,18 +34,6 @@ type OriginCertificateHooks struct {
 	Revoke func(ctx context.Context, id string) error
 }
 
-type Tunnel struct {
-	ID      string
-	Address string
-}
-
-type TunnelHooks struct {
-	Ensure    func(ctx context.Context, name string) (Tunnel, error)
-	Configure func(ctx context.Context, id, service string) error
-	ReadToken func(ctx context.Context, id string) (string, error)
-	Delete    func(ctx context.Context, id string) error
-}
-
 type GatePublication struct {
 	State StackState
 	Gate  *gate.Gate

@@ -50,7 +50,6 @@ func TestStackState(t *testing.T) {
 			Tier:          environment.TierProduction,
 			Endpoint:      "https://store.example",
 			Secret:        "s3cr3t",
-			OwnerToken:    "owner",
 			Address:       "d123.cloudfront.net",
 			GlobalPreview: "preview.acme.com",
 			PurgeURL:      "https://shop.acct.workers.dev/purge",

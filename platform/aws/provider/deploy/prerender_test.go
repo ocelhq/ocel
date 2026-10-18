@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/prerender"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func nextManifest() *contractv1.Manifest {
@@ -131,7 +130,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 		}
 		if edgeReadsAssetBucket(cfg) {
 			cache.EdgeReadable = true
-			cache.PurgeSecret = cloudflare.DerivePurgeSecret(cfg.PurgeSeed, prefix)
+			cache.PurgeSecret = edge.DerivePurgeSecret(cfg.PurgeSeed, prefix)
 		}
 		builds.caches[name] = cache
 	}

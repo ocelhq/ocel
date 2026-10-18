@@ -24,8 +24,6 @@ const (
 	tunnelStartAttempts   = 30
 	tunnelNameSuffixBytes = 4
 	rootUser              = "0:0"
-
-	cloudflaredMetrics = "127.0.0.1:20241"
 )
 
 var ErrTunnelReleased = errors.New("the tunnel was released")
@@ -37,31 +35,6 @@ type Tunnel struct {
 	Address              string    `json:"address,omitempty"`
 	VisitorAddressHeader string    `json:"visitorAddressHeader,omitempty"`
 	VisitorSchemeHeader  string    `json:"visitorSchemeHeader,omitempty"`
-}
-
-type tunnelConnector struct {
-	image                string
-	command              []string
-	tokenFileEnv         string
-	ready                []string
-	visitorAddressHeader string
-	visitorSchemeHeader  string
-}
-
-var tunnelConnectors = map[edge.Kind]tunnelConnector{
-	"cloudflare": {
-		image:                "cloudflare/cloudflared@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c",
-		command:              []string{"tunnel", "--no-autoupdate", "--metrics", cloudflaredMetrics, "run"},
-		tokenFileEnv:         "TUNNEL_TOKEN_FILE",
-		ready:                []string{"cloudflared", "tunnel", "--metrics", cloudflaredMetrics, "ready"},
-		visitorAddressHeader: "Cf-Connecting-Ip",
-		visitorSchemeHeader:  "Cf-Visitor",
-	},
-}
-
-func CanRunTunnelTo(kind edge.Kind) bool {
-	_, known := tunnelConnectors[kind]
-	return known
 }
 
 type TunneledHost struct {
@@ -77,22 +50,22 @@ func tunneledHostnames(tunneled []TunneledHost) switchboard.TunneledHostnames {
 	return switchboard.NewTunneledHostnames(hostnames)
 }
 
-func tunnelBox(tunnel Tunnel, connector tunnelConnector) boxContainer {
+func tunnelBox(tunnel Tunnel, connector edge.TunnelConnector) boxContainer {
 	return boxContainer{
 		name:    TunnelContainer,
-		image:   connector.image,
+		image:   connector.Image,
 		network: TunnelNetwork,
-		command: connector.command,
+		command: connector.Command,
 		config:  tunnel.ID,
-		env:     []string{connector.tokenFileEnv + "=" + tunnelTokenMounted(tunnel.Name)},
+		env:     []string{connector.TokenFileEnv + "=" + tunnelTokenMounted(tunnel.Name)},
 		binds:   []string{TunnelDir + ":" + tunnelMount + ":ro"},
 		user:    rootUser,
-		ready:   connector.ready,
+		ready:   connector.Ready,
 		unready: "did not report a connection to its edge",
 	}
 }
 
-func (h *Host) ReserveTunnel(ctx context.Context, front edge.Kind) (Tunnel, error) {
+func (h *Host) ReserveTunnel(ctx context.Context, front edge.Kind, connector edge.TunnelConnector) (Tunnel, error) {
 	address, err := h.Address(ctx)
 	if err != nil {
 		return Tunnel{}, err
@@ -103,17 +76,13 @@ func (h *Host) ReserveTunnel(ctx context.Context, front edge.Kind) (Tunnel, erro
 	}
 	var reserved Tunnel
 	err = h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
-		connector, known := tunnelConnectors[front]
 		switch {
-		case state.Tunnel == nil && !known:
-			return RoutingTable{}, refusal.Refuse(refusal.CodeInvalid,
-				"%s runs no tunnel to the %s edge\nRemove `tunnel` from the %s edge's options", h.named(), front, front)
 		case state.Tunnel == nil:
 			state.Tunnel = &Tunnel{
 				Edge:                 front,
 				Name:                 tunnelName(address, hex.EncodeToString(suffix)),
-				VisitorAddressHeader: connector.visitorAddressHeader,
-				VisitorSchemeHeader:  connector.visitorSchemeHeader,
+				VisitorAddressHeader: connector.VisitorAddressHeader,
+				VisitorSchemeHeader:  connector.VisitorSchemeHeader,
 			}
 		case state.Tunnel.Edge != front:
 			return RoutingTable{}, refusal.Refuse(refusal.CodeBusy,
@@ -150,13 +119,9 @@ func (r releasedTunnel) Unwrap() error { return r.error }
 
 func (releasedTunnel) Is(target error) bool { return target == ErrTunnelReleased }
 
-func (h *Host) RunTunnel(ctx context.Context, tunnel Tunnel, token func(context.Context) (string, error)) error {
+func (h *Host) RunTunnel(ctx context.Context, tunnel Tunnel, connector edge.TunnelConnector, token func(context.Context) (string, error)) error {
 	if tunnel.ID == "" || tunnel.Address == "" {
 		return refusal.Refuse(refusal.CodeInvalid, "the tunnel %s names no id or address to run", tunnel.Name)
-	}
-	connector, known := tunnelConnectors[tunnel.Edge]
-	if !known {
-		return refusal.Refuse(refusal.CodeInvalid, "%s runs no tunnel to the %s edge", h.named(), tunnel.Edge)
 	}
 	if err := h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		if err := refuseUnreserved(state, tunnel.Name, h.named()); err != nil {
@@ -195,7 +160,7 @@ func (h *Host) RunTunnel(ctx context.Context, tunnel Tunnel, token func(context.
 	return nil
 }
 
-func (h *Host) startTunnel(ctx context.Context, tunnel Tunnel, connector tunnelConnector, elevation acting) error {
+func (h *Host) startTunnel(ctx context.Context, tunnel Tunnel, connector edge.TunnelConnector, elevation acting) error {
 	for rewrites := 1; ; rewrites++ {
 		pair, err := h.currentTable(ctx)
 		if err != nil {

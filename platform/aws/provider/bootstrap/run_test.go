@@ -502,9 +502,9 @@ func (f *fakeEdge) DestroyPreviewWildcard(context.Context, string) error {
 	return errors.New("bootstrap never destroys the preview wildcard")
 }
 
-func (f *fakeEdge) ProjectRemovals(edge.ProjectScope) []edge.PlanGroup { return nil }
+func (f *fakeEdge) PlanProjectRemoval(edge.ProjectScope) []edge.PlanGroup { return nil }
 
-func (f *fakeEdge) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (f *fakeEdge) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(f.kind),
@@ -514,10 +514,10 @@ func (f *fakeEdge) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edg
 			Name:   wildcard,
 			Action: edge.PlanDelete,
 		}},
-	}, f.SharedPreviewRemoval()
+	}, f.PlanSharedPreviewRemoval()
 }
 
-func (f *fakeEdge) SharedPreviewRemoval() edge.PlanGroup {
+func (f *fakeEdge) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(f.kind),

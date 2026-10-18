@@ -85,7 +85,7 @@ func unbindable(what string) error {
 		what, alb.Kind, alb.BaselineCost)
 }
 
-func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	return []edge.PlanGroup{{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),
@@ -94,11 +94,11 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}}
 }
 
-func (e *Edge) PreviewWildcardRemovals(string) (removed, kept edge.PlanGroup) {
-	return e.SharedPreviewRemoval(), edge.PlanGroup{}
+func (e *Edge) PlanPreviewWildcardRemoval(string) (removed, kept edge.PlanGroup) {
+	return e.PlanSharedPreviewRemoval(), edge.PlanGroup{}
 }
 
-func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
+func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),

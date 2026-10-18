@@ -357,6 +357,27 @@ func TestRun(t *testing.T) {
 		}
 	})
 
+	t.Run("a front marked fronted and handed no origin secret refuses to start", func(t *testing.T) {
+		r := launch(t, "serve", edge.OriginFrontedVar+"=1")
+
+		if code := r.await(t); code != 1 {
+			t.Errorf("run = %d, want 1: a deployment reached only through its front would admit any caller who found it", code)
+		}
+	})
+
+	t.Run("a front marked fronted guards with the origin secret it is handed", func(t *testing.T) {
+		const secret = "s3cr3t"
+		r := launch(t, "serve", edge.OriginFrontedVar+"=1", edge.OriginSecretVar+"="+secret)
+		r.awaitFront(t, secret)
+
+		if resp := r.ask(t, "/", ""); resp.StatusCode != http.StatusForbidden {
+			t.Errorf("status without the secret = %d, want %d", resp.StatusCode, http.StatusForbidden)
+		}
+		if code := r.quit(t, secret); code != 0 {
+			t.Errorf("run = %d, want 0", code)
+		}
+	})
+
 	t.Run("the platform's probe is answered without the secret", func(t *testing.T) {
 		const secret = "s3cr3t"
 		r := launch(t, "serve", edge.OriginSecretVar+"="+secret, originguard.HealthPathVar+"="+healthPath)

@@ -251,4 +251,7 @@ func TestAWorkerAdmitsOnlyDeliveriesSignedWithItsEnvironmentsDeliverySecret(t *t
 	if !strings.Contains(handed, edge.OriginSecretVar+"="+string(secret)) {
 		t.Errorf("ledger is handed %q, want %s set to the queue's delivery secret, so its front refuses a POST the engine did not send", handed, edge.OriginSecretVar)
 	}
+	if !strings.Contains(handed, edge.OriginFrontedVar+"=") {
+		t.Errorf("ledger is handed %q, want %s, so a worker whose delivery secret is lost refuses to start rather than admit any container on the project network", handed, edge.OriginFrontedVar)
+	}
 }

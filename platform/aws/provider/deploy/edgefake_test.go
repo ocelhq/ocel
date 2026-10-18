@@ -75,16 +75,16 @@ func (f *recordingEdge) Facts() edge.Facts {
 	}
 }
 
-func (f *recordingEdge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
-	return f.declared().ProjectRemovals(scope)
+func (f *recordingEdge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+	return f.declared().PlanProjectRemoval(scope)
 }
 
-func (f *recordingEdge) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
-	return f.declared().PreviewWildcardRemovals(wildcard)
+func (f *recordingEdge) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+	return f.declared().PlanPreviewWildcardRemoval(wildcard)
 }
 
-func (f *recordingEdge) SharedPreviewRemoval() edge.PlanGroup {
-	return f.declared().SharedPreviewRemoval()
+func (f *recordingEdge) PlanSharedPreviewRemoval() edge.PlanGroup {
+	return f.declared().PlanSharedPreviewRemoval()
 }
 
 func (f *recordingEdge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {
@@ -209,7 +209,7 @@ func (s *recordingStack) Destroy(ctx context.Context) error {
 
 func fakeEdgeOf(kind edge.Kind) edge.Edge {
 	f := &recordingEdge{kind: kind}
-	if slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool { return edge.Supports(f, need) }) {
+	if slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool { return slices.Contains(f.Facts().Supported, need) }) {
 		return f
 	}
 	return codelessEdge{f}

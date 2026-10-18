@@ -46,6 +46,9 @@ func TestAnEntryDeployedDuringARotationIsHandedTheSecretItReplacedToo(t *testing
 	if _, signed := env[edge.OriginSignedVar]; signed {
 		t.Errorf("entry env = %v, still waved past the guard", env)
 	}
+	if _, fronted := env[edge.OriginFrontedVar]; !fronted {
+		t.Errorf("entry env = %v, not marked fronted", env)
+	}
 
 	unrotated := &originGuard{RootFunction: "/", Secret: testOriginSecret}
 	if _, present := unrotated.rootFunctionEnv(nil)[edge.OriginSecretPreviousVar]; present {
@@ -150,6 +153,9 @@ func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 	if entry[edge.OriginSecretVar] != testOriginSecret {
 		t.Errorf("%s = %q, want the secret the bootstrap stored", edge.OriginSecretVar, entry[edge.OriginSecretVar])
 	}
+	if _, fronted := entry[edge.OriginFrontedVar]; !fronted {
+		t.Errorf("the entry has no %s, so an entry whose secret is lost on the way answers anyone on its public URL", edge.OriginFrontedVar)
+	}
 	if _, signed := entry[edge.OriginSignedVar]; signed {
 		t.Errorf("the entry has %s, which waves its runtime past a URL nothing signs", edge.OriginSignedVar)
 	}
@@ -173,6 +179,9 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 	if _, wired := sibling[edge.OriginSecretVar]; wired {
 		t.Errorf("a sibling has %s, want the secret to reach the root function alone", edge.OriginSecretVar)
 	}
+	if _, fronted := sibling[edge.OriginFrontedVar]; fronted {
+		t.Errorf("a sibling has %s, and it is handed no secret: it would refuse to start", edge.OriginFrontedVar)
+	}
 	if sibling[edge.OriginSignedVar] == "" {
 		t.Errorf("a sibling has no %s, so its runtime refuses the entry's signed requests", edge.OriginSignedVar)
 	}
@@ -194,6 +203,9 @@ func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 		env := functionEnvOf(t, rec, functionCoordinate("shop", stack, logical).PhysicalName(maxLambdaBaseNameLen))
 		if _, wired := env[edge.OriginSecretVar]; wired {
 			t.Errorf("%s has %s behind an edge that signs its requests", logical, edge.OriginSecretVar)
+		}
+		if _, fronted := env[edge.OriginFrontedVar]; fronted {
+			t.Errorf("%s has %s behind an edge that presents no secret", logical, edge.OriginFrontedVar)
 		}
 	}
 }
@@ -245,6 +257,9 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 	env := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--api--entry").PhysicalName(maxLambdaBaseNameLen))
 	if env[edge.OriginSecretVar] != testOriginSecret {
 		t.Errorf("%s = %q, want the secret on an entry nothing else guards", edge.OriginSecretVar, env[edge.OriginSecretVar])
+	}
+	if _, fronted := env[edge.OriginFrontedVar]; !fronted {
+		t.Errorf("the entry has no %s, want it marked fronted like any entry the secret guards", edge.OriginFrontedVar)
 	}
 	if _, routed := env[functionURLsEnv]; routed {
 		t.Errorf("an app that routes nothing has %s", functionURLsEnv)

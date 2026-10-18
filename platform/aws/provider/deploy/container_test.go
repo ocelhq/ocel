@@ -140,6 +140,9 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	if work.env[edge.OriginSecretVar] != fixtureSecret {
 		t.Errorf("%s = %q, want the tier's origin secret: the runtime in the container guards with it the way the node runtime does on Lambda", edge.OriginSecretVar, work.env[edge.OriginSecretVar])
 	}
+	if _, fronted := work.env[edge.OriginFrontedVar]; !fronted {
+		t.Errorf("env has no %s, so a container whose secret is lost on the way starts open to anyone who reaches its load balancer", edge.OriginFrontedVar)
+	}
 	if _, pinned := work.env[variables.EnvVar]; pinned {
 		t.Errorf("env contains %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", variables.EnvVar)
 	}
@@ -150,7 +153,7 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 		t.Errorf("%s = %q, want the manifest's probe path, which the runtime answers without the origin secret", originguard.HealthPathVar, got)
 	}
 
-	_, err = containerEnv("web", provider.AppValues{Plain: map[string]string{containerPortEnv: "3000"}}, fixtureSecret, "", nil)
+	_, err = containerEnv("web", provider.AppValues{Plain: map[string]string{containerPortEnv: "3000"}}, &originGuard{Secret: fixtureSecret}, nil)
 	if err == nil || !strings.Contains(err.Error(), containerPortEnv) {
 		t.Errorf("containerEnv with %s = %v, want it refused by name: the load balancer would probe a port nothing listens on", containerPortEnv, err)
 	}

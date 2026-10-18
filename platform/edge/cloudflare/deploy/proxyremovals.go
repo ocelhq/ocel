@@ -9,7 +9,7 @@ const (
 	kindOriginPullCertificate = "Cloudflare::OriginPullCertificate"
 )
 
-func (x *Proxy) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (x *Proxy) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	group := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -36,7 +36,7 @@ func (x *Proxy) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}}
 }
 
-func (x *Proxy) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {
+func (x *Proxy) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup) {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -45,10 +45,10 @@ func (x *Proxy) PreviewWildcardRemovals(wildcard string) (removed, kept edge.Pla
 			Kind: kindDNSRecord, Name: wildcard, Action: edge.PlanDelete,
 			Reason: "the proxied record that would forward it to the origin",
 		}},
-	}, x.SharedPreviewRemoval()
+	}, x.PlanSharedPreviewRemoval()
 }
 
-func (x *Proxy) SharedPreviewRemoval() edge.PlanGroup {
+func (x *Proxy) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),

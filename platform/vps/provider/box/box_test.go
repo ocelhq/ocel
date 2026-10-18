@@ -1162,11 +1162,11 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 	t.Parallel()
 
 	front := edgeOver(aMachine(), fake.NewKeyValues())
-	groups := front.ProjectRemovals(edge.ProjectScope{
+	groups := front.PlanProjectRemoval(edge.ProjectScope{
 		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Address: address,
 	})
 	if len(groups) != 1 {
-		t.Fatalf("ProjectRemovals = %d groups, want one", len(groups))
+		t.Fatalf("PlanProjectRemoval = %d groups, want one", len(groups))
 	}
 	for _, change := range groups[0].Changes {
 		if change.Kind == host.KindContainer {
@@ -1203,7 +1203,7 @@ func TestTheKeptCertificateIsNamedByTheHandleThatStoresItAndSaysWhoRenewsIt(t *t
 	front := edgeOver(m, fake.NewKeyValues())
 
 	kept := map[string]edge.PlanChange{}
-	for _, change := range front.ProjectRemovals(edge.ProjectScope{
+	for _, change := range front.PlanProjectRemoval(edge.ProjectScope{
 		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com", pinned}, Address: address,
 	})[0].Changes {
 		if change.Kind == box.CertificateKind {
@@ -1231,7 +1231,7 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 
 	const wildcard = "*.preview.example.com"
 	front := edgeOver(aMachine(), fake.NewKeyValues())
-	removed, kept := front.PreviewWildcardRemovals(wildcard)
+	removed, kept := front.PlanPreviewWildcardRemoval(wildcard)
 
 	if removed.Action != edge.PlanDelete {
 		t.Errorf("the removed group is actioned %q, want %q: rollingOut the wildcard takes down the route that serves it", removed.Action, edge.PlanDelete)
@@ -1243,7 +1243,7 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 		t.Errorf("the wildcard row is %q actioned %q, want a %q delete: a box records a wildcard as a claim on its own proxy and nothing else",
 			removed.Changes[0].Kind, removed.Changes[0].Action, box.RouteKind)
 	}
-	shared := front.SharedPreviewRemoval()
+	shared := front.PlanSharedPreviewRemoval()
 	if kept.Action != shared.Action || kept.Reason != shared.Reason || len(kept.Changes) != 0 {
 		t.Errorf("the kept group is %+v, want the shared catch-all removal %+v: the wildcard and the catch-all every unclaimed hostname falls through to are two rows, and folding them into one hides which of them the release touches", kept, shared)
 	}
@@ -1252,7 +1252,7 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
 	t.Parallel()
 
-	shared := edgeOver(aMachine(), fake.NewKeyValues()).SharedPreviewRemoval()
+	shared := edgeOver(aMachine(), fake.NewKeyValues()).PlanSharedPreviewRemoval()
 	if shared.Action != edge.PlanKeep {
 		t.Errorf("the shared catch-all is actioned %q, want %q: it is a bootstrap item and it answers for every project this box serves", shared.Action, edge.PlanKeep)
 	}
@@ -1551,7 +1551,7 @@ func TestTheRemovalPlanKeepsABoundHostnamesCertificateUnderTheProxysOwnHandle(t 
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
-	certificate := keptCertificate(t, front.ProjectRemovals(edge.ProjectScope{Slug: slug, Tier: environment.TierProduction, Hostnames: []string{bound}}))
+	certificate := keptCertificate(t, front.PlanProjectRemoval(edge.ProjectScope{Slug: slug, Tier: environment.TierProduction, Hostnames: []string{bound}}))
 	if certificate.Name != certs.ProxyHandle(bound) {
 		t.Errorf("the plan keeps %q, want the proxy's own handle for %s: the row a teardown shows is the store entry it is declining to touch", certificate.Name, bound)
 	}

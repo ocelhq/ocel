@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
 import { beforeEach, describe, expect, it } from "vitest";
+import purgeSecretFixture from "../fixtures/purge-secret.json" with { type: "json" };
 
 import {
   derivePurgeSecret,
@@ -64,6 +65,12 @@ describe("derivePurgeSecret", () => {
     const expected = createHmac("sha256", SEED).update(PREFIX).digest("hex");
 
     expect(await derivePurgeSecret(SEED, PREFIX)).toBe(expected);
+  });
+
+  it("is the secret the Go edge contract derives from the same seed and prefix", async () => {
+    const { seed, isrPrefix, secret } = purgeSecretFixture;
+
+    expect(await derivePurgeSecret(seed, isrPrefix)).toBe(secret);
   });
 
   it("differs per prefix and per seed", async () => {

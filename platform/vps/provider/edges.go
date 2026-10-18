@@ -69,5 +69,6 @@ func (p *Provider) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	if tunnels := front.Hooks().Tunnels; tunnels != nil {
 		return tunnels, nil
 	}
-	return nil, refusal.Refuse(refusal.CodeInvalid, "%s opens no tunnel to this box", kind)
+	return nil, refusal.Refuse(refusal.CodeInvalid,
+		"the %s edge opens no tunnel and names no connector for this box to run\nRemove `tunnel` from the %s edge's options", kind, kind)
 }

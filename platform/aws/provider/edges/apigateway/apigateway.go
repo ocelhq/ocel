@@ -162,7 +162,7 @@ const (
 	typeDomainName = "AWS::ApiGateway::DomainName"
 )
 
-func (p *apiGateway) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (p *apiGateway) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := []edge.PlanChange{{
 		Kind:   typeRestAPI,
 		Name:   scope.Slug,
@@ -193,7 +193,7 @@ func restAPIsReason(tier environment.Tier) string {
 	return "the production API and every preview API this project is served through, and the host rules routing to them" + paced
 }
 
-func (p *apiGateway) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (p *apiGateway) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -205,10 +205,10 @@ func (p *apiGateway) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, e
 			Reason: "every project's previews are routed through it, and the rules under it go with it",
 		}},
 	}
-	return removed, p.SharedPreviewRemoval()
+	return removed, p.PlanSharedPreviewRemoval()
 }
 
-func (p *apiGateway) SharedPreviewRemoval() edge.PlanGroup {
+func (p *apiGateway) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),

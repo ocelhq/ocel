@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 type codeRunningFront struct {
@@ -83,7 +82,7 @@ func TestANextDeployBehindTheCodeRunningEdgeHandsItsPurgeSecretToTheRecord(t *te
 		t.Fatalf("Provision = %v", err)
 	}
 
-	if want := cloudflare.DerivePurgeSecret(seed, isrPrefix); result.PurgeSecret != want {
+	if want := edge.DerivePurgeSecret(seed, isrPrefix); result.PurgeSecret != want {
 		t.Errorf("PurgeSecret = %q, want %q", result.PurgeSecret, want)
 	}
 	if !slices.Equal(order.steps, []string{"provision"}) {

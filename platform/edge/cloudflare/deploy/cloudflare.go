@@ -141,7 +141,7 @@ func (p *cloudflare) Hooks() edge.Hooks {
 
 const recordTTL = 5 * time.Second
 
-func (p *cloudflare) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (p *cloudflare) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := []edge.PlanChange{{
 		Kind:   kindWorker,
 		Name:   scope.Slug,
@@ -169,7 +169,7 @@ func (p *cloudflare) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}}
 }
 
-func (p *cloudflare) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (p *cloudflare) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -189,7 +189,7 @@ func (p *cloudflare) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, e
 	return removed, kept
 }
 
-func (p *cloudflare) SharedPreviewRemoval() edge.PlanGroup {
+func (p *cloudflare) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),

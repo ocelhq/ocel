@@ -29,6 +29,7 @@ func newWorkerEnv(app *provider.AppSpec, worker, deliverySecret string) map[stri
 		env = map[string]string{}
 	}
 	delete(env, edge.OriginSecretPreviousVar)
+	env[edge.OriginFrontedVar] = "1"
 	env[edge.OriginSecretVar] = deliverySecret
 	env[processenv.WorkerEnvVar] = worker
 	return env

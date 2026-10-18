@@ -1,4 +1,4 @@
-package cloudflare
+package edge
 
 import (
 	"crypto/hmac"

@@ -28,7 +28,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 type Scope struct {
@@ -294,7 +293,7 @@ func (r *release) secrets(program stackProgram) []string {
 func (r *release) appSecrets(spec provider.StackSpec) []string {
 	secrets := slices.Collect(maps.Values(spec.App.Values.Sensitive))
 	if r.cfg.PurgeSeed != "" && spec.App.ISR != nil {
-		secrets = append(secrets, cloudflare.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.ISR.Prefix))
+		secrets = append(secrets, edge.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.ISR.Prefix))
 	}
 	return secrets
 }

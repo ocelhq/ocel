@@ -11,7 +11,21 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
-const tunnelDomain = ".cfargotunnel.com"
+const (
+	tunnelDomain       = ".cfargotunnel.com"
+	cloudflaredMetrics = "127.0.0.1:20241"
+)
+
+func newCloudflaredConnector() edge.TunnelConnector {
+	return edge.TunnelConnector{
+		Image:                "cloudflare/cloudflared@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c",
+		Command:              []string{"tunnel", "--no-autoupdate", "--metrics", cloudflaredMetrics, "run"},
+		TokenFileEnv:         "TUNNEL_TOKEN_FILE",
+		Ready:                []string{"cloudflared", "tunnel", "--metrics", cloudflaredMetrics, "ready"},
+		VisitorAddressHeader: "Cf-Connecting-Ip",
+		VisitorSchemeHeader:  "Cf-Visitor",
+	}
+}
 
 func newTunnel(id string) edge.Tunnel { return edge.Tunnel{ID: id, Address: id + tunnelDomain} }
 
