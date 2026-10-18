@@ -2,88 +2,30 @@ package pgmq
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"log/slog"
-	"math"
 	"sync"
-	"time"
-
-	"github.com/jackc/pgx/v5"
 )
-
-const (
-	pollInterval    = 200 * time.Millisecond
-	maxPollInterval = 2 * time.Second
-	maxReadPerPoll  = 100
-	maxInFlight     = 1000
-)
-
-type message struct {
-	id   int64
-	body queueMessage
-}
-
-type queueLoop struct {
-	name      string
-	consumers *slots
-	lanes     laneTurns
-
-	mu   sync.Mutex
-	held map[int64]bool
-}
-
-func (loop *queueLoop) hold(messages []message) {
-	loop.mu.Lock()
-	defer loop.mu.Unlock()
-	for _, msg := range messages {
-		loop.held[msg.id] = true
-	}
-}
-
-func (loop *queueLoop) drop(id int64) {
-	loop.mu.Lock()
-	defer loop.mu.Unlock()
-	delete(loop.held, id)
-}
-
-func (loop *queueLoop) renewHeld(renew func(ids []int64) error) error {
-	loop.mu.Lock()
-	defer loop.mu.Unlock()
-	if len(loop.held) == 0 {
-		return nil
-	}
-	ids := make([]int64, 0, len(loop.held))
-	for id := range loop.held {
-		ids = append(ids, id)
-	}
-	return renew(ids)
-}
 
 func (e *Engine) Dispatch(ctx context.Context) error {
 	var wg sync.WaitGroup
 	loops := map[string]context.CancelFunc{}
-	background := func(fn func(ctx context.Context)) {
-		wg.Go(func() { fn(ctx) })
-	}
-	background(e.sweep)
-	background(e.fireSchedules)
+	wg.Go(func() { e.sweep(ctx) })
+	wg.Go(func() { e.fireSchedules(ctx) })
+	receiver := queue{engine: e}
 	for {
-		deployment := e.current()
-		deployedConsumers := deployment.consumers()
-		for queue, stop := range loops {
-			if _, still := deployedConsumers[queue]; !still {
+		deployed := e.current().queues()
+		for name, stop := range loops {
+			if _, still := deployed[name]; !still {
 				stop()
-				delete(loops, queue)
+				delete(loops, name)
 			}
 		}
-		for queue := range deployedConsumers {
-			if _, running := loops[queue]; running {
+		for name, of := range deployed {
+			if _, running := loops[name]; running {
 				continue
 			}
 			queueCtx, stop := context.WithCancel(ctx)
-			loops[queue] = stop
-			wg.Go(func() { e.serveQueue(queueCtx, queue) })
+			loops[name] = stop
+			wg.Go(func() { e.runs.Serve(queueCtx, receiver, of.topic, of.consumer) })
 		}
 		select {
 		case <-ctx.Done():
@@ -95,225 +37,4 @@ func (e *Engine) Dispatch(ctx context.Context) error {
 		case <-e.applied:
 		}
 	}
-}
-
-func (e *Engine) serveQueue(ctx context.Context, queue string) {
-	loop := &queueLoop{name: queue, consumers: newSlots(maxInFlight), held: map[int64]bool{}}
-	attempts, stopAttempts := e.withShutdownGrace(ctx)
-	defer stopAttempts()
-	leases, stopLeases := context.WithCancel(attempts)
-	var renewing, running sync.WaitGroup
-	renewing.Go(func() { e.renewLeases(leases, loop) })
-	defer renewing.Wait()
-	defer stopLeases()
-	defer running.Wait()
-	wake := e.ensureWakeChannel(queue)
-	idle := pollInterval
-	waitIdle := func(changed [2]<-chan struct{}) {
-		if wait(ctx, idle, wake, changed[0], changed[1]) {
-			idle = pollInterval
-		} else {
-			idle = lengthenPollInterval(idle)
-		}
-	}
-	for ctx.Err() == nil {
-		deployment := e.current()
-		deployed, found := deployment.consumers()[queue]
-		if !found {
-			return
-		}
-		worker, served := deployment.Workers[deployed.consumer.GetWorker()]
-		workerSlots := e.workerSlotsOf(deployed.consumer.GetWorker())
-		if !served || workerSlots == nil {
-			waitIdle([2]<-chan struct{}{})
-			continue
-		}
-		loop.consumers.setLimit(concurrencyOf(deployed))
-		want := maxReadPerPoll
-		if deployed.consumer.GetBatch().GetSize() > 0 {
-			want = 1
-		}
-		held := reserveSlots(want, loop.consumers, workerSlots)
-		if held.n == 0 {
-			waitIdle(held.changed)
-			continue
-		}
-		messages, err := e.read(ctx, loop, deployed, held.n)
-		if err != nil && ctx.Err() == nil {
-			slog.Warn("read a queue", "queue", queue, "error", err)
-		}
-		if len(messages) == 0 {
-			held.keep(0)
-			waitIdle([2]<-chan struct{}{})
-			continue
-		}
-		idle = pollInterval
-		loop.hold(messages)
-		deliveries := [][]message{messages}
-		if deployed.consumer.GetBatch().GetSize() == 0 {
-			deliveries = deliveries[:0]
-			for _, msg := range messages {
-				deliveries = append(deliveries, []message{msg})
-			}
-		}
-		held.keep(len(deliveries))
-		for _, delivery := range deliveries {
-			running.Go(func() {
-				defer held.releaseOne()
-				e.deliver(attempts, loop, deployed, worker, delivery)
-			})
-		}
-	}
-}
-
-func (e *Engine) withShutdownGrace(ctx context.Context) (context.Context, context.CancelFunc) {
-	attempts, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	stopWaiting := context.AfterFunc(ctx, func() {
-		grace := time.NewTimer(e.shutdownGrace)
-		defer grace.Stop()
-		select {
-		case <-grace.C:
-			cancel()
-		case <-attempts.Done():
-		}
-	})
-	return attempts, func() {
-		stopWaiting()
-		cancel()
-	}
-}
-
-func concurrencyOf(deployed deployedConsumer) int {
-	if concurrency := int(deployed.consumer.GetConcurrency()); concurrency > 0 {
-		return min(concurrency, maxInFlight)
-	}
-	return maxInFlight
-}
-
-func wait(ctx context.Context, interval time.Duration, wake <-chan struct{}, consumerChanged, workerChanged <-chan struct{}) bool {
-	timer := time.NewTimer(interval)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-	case <-wake:
-		return true
-	case <-consumerChanged:
-		return true
-	case <-workerChanged:
-		return true
-	case <-timer.C:
-	}
-	return false
-}
-
-func lengthenPollInterval(interval time.Duration) time.Duration {
-	return min(interval*2, maxPollInterval)
-}
-
-func (e *Engine) renewLeases(ctx context.Context, loop *queueLoop) {
-	ticker := time.NewTicker(e.lease / 3)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-		err := loop.renewHeld(func(ids []int64) error {
-			_, err := e.pool.Exec(ctx, "SELECT pgmq.set_vt($1, $2::bigint[], clock_timestamp() + make_interval(secs => $3))", loop.name, ids, e.leaseSeconds())
-			return err
-		})
-		if err != nil && ctx.Err() == nil {
-			slog.Warn("renew the leases of a queue's messages", "queue", loop.name, "error", err)
-		}
-	}
-}
-
-func (e *Engine) leaseSeconds() int {
-	return max(int(math.Ceil(e.lease.Seconds())), 1)
-}
-
-func (e *Engine) read(ctx context.Context, loop *queueLoop, deployed deployedConsumer, n int) ([]message, error) {
-	leaseSeconds := e.leaseSeconds()
-	size := int(deployed.consumer.GetBatch().GetSize())
-	switch {
-	case deployed.topic.GetOrdered() && size > 0:
-		return e.collectBatch(ctx, loop, deployed, size, func(want int) ([]message, error) {
-			return e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read_grouped($1, $2, $3)", loop.name, leaseSeconds, want)
-		})
-	case deployed.topic.GetOrdered():
-		return e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read_grouped_head($1, $2, $3)", loop.name, leaseSeconds, n)
-	case size > 0:
-		return e.collectBatch(ctx, loop, deployed, size, func(want int) ([]message, error) { return e.readLanes(ctx, loop, deployed, want) })
-	default:
-		return e.readLanes(ctx, loop, deployed, n)
-	}
-}
-
-func (e *Engine) collectBatch(ctx context.Context, loop *queueLoop, deployed deployedConsumer, size int, read func(want int) ([]message, error)) ([]message, error) {
-	collected, err := read(size)
-	if err != nil || len(collected) == 0 || len(collected) >= size {
-		return collected, err
-	}
-	loop.hold(collected)
-	timeout := deployed.consumer.GetBatch().GetTimeout().AsDuration()
-	deadline := time.Now().Add(timeout)
-	for len(collected) < size && time.Now().Before(deadline) {
-		timer := time.NewTimer(min(pollInterval, time.Until(deadline)))
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return collected, nil
-		case <-timer.C:
-		}
-		more, err := read(size - len(collected))
-		if err != nil {
-			return collected, nil
-		}
-		loop.hold(more)
-		collected = append(collected, more...)
-	}
-	return collected, nil
-}
-
-func (e *Engine) readLanes(ctx context.Context, loop *queueLoop, deployed deployedConsumer, n int) ([]message, error) {
-	leaseSeconds := e.leaseSeconds()
-	var read []message
-	for lane, share := range loop.lanes.share(lanesOf(deployed.consumer), n) {
-		condition, err := laneCondition(lane)
-		if err != nil {
-			return nil, err
-		}
-		got, err := e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read($1, $2, $3, $4::jsonb)", loop.name, leaseSeconds, share, condition)
-		if err != nil {
-			return read, err
-		}
-		read = append(read, got...)
-	}
-	if rest := n - len(read); rest > 0 {
-		got, err := e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read($1, $2, $3)", loop.name, leaseSeconds, rest)
-		if err != nil {
-			return read, err
-		}
-		read = append(read, got...)
-	}
-	return read, nil
-}
-
-func (e *Engine) readWith(ctx context.Context, query string, args ...any) ([]message, error) {
-	rows, err := e.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (message, error) {
-		var msg message
-		var body []byte
-		if err := row.Scan(&msg.id, &body); err != nil {
-			return msg, err
-		}
-		if err := json.Unmarshal(body, &msg.body); err != nil {
-			return msg, fmt.Errorf("message %d is not one the engine sent: %w", msg.id, err)
-		}
-		return msg, nil
-	})
 }

@@ -1,4 +1,4 @@
-package pgmq
+package runs
 
 import (
 	"time"

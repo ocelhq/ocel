@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-
-	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
@@ -43,7 +41,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 	toPublish := publication{
 		topicName:   req.GetTopic(),
 		topic:       topic,
-		messageID:   envelope.NewMessageID(now),
+		messageID:   runs.NewMessageID(now),
 		publishedAt: now,
 		dueAt:       now,
 		payload:     req.GetPayload(),

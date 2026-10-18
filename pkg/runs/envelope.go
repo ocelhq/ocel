@@ -1,4 +1,4 @@
-package envelope
+package runs
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	Version = 1
+	EnvelopeVersion = 1
 
 	maxAnswerBytes       = 1 << 20
 	maxOutputBytes       = 256 << 10
@@ -46,7 +46,7 @@ const (
 	Refused
 )
 
-type Result struct {
+type Answer struct {
 	Outcome Outcome
 	Output  json.RawMessage
 	Reason  string
@@ -60,7 +60,7 @@ func SchemaOf(schema string) string {
 	return "sha256-" + hex.EncodeToString(sum[:])
 }
 
-func Encode(envelope *topicv1.Envelope) ([]byte, error) {
+func EncodeEnvelope(envelope *topicv1.Envelope) ([]byte, error) {
 	bare := proto.CloneOf(envelope)
 	bare.Payload = nil
 	for _, delivery := range bare.GetMessages() {
@@ -94,7 +94,7 @@ func Encode(envelope *topicv1.Envelope) ([]byte, error) {
 	return encodeJSONVerbatim(fields)
 }
 
-func Decode(body []byte) (*topicv1.Envelope, error) {
+func DecodeEnvelope(body []byte) (*topicv1.Envelope, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil {
 		return nil, err
@@ -144,14 +144,14 @@ func encodeJSONVerbatim(value any) ([]byte, error) {
 	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
-func Post(ctx, attemptCtx context.Context, client *http.Client, url string, envelope *topicv1.Envelope) Result {
-	body, err := Encode(envelope)
+func PostEnvelope(ctx, attemptCtx context.Context, client *http.Client, url string, envelope *topicv1.Envelope) Answer {
+	body, err := EncodeEnvelope(envelope)
 	if err != nil {
-		return Result{Outcome: Refused, Reason: fmt.Sprintf("encode the envelope: %v", err)}
+		return Answer{Outcome: Refused, Reason: fmt.Sprintf("encode the envelope: %v", err)}
 	}
 	req, err := http.NewRequestWithContext(attemptCtx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return Result{Outcome: Failed, Reason: fmt.Sprintf("address the worker: %v", err)}
+		return Answer{Outcome: Failed, Reason: fmt.Sprintf("address the worker: %v", err)}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
@@ -166,35 +166,35 @@ func Post(ctx, attemptCtx context.Context, client *http.Client, url string, enve
 	return AnswerOf(resp.StatusCode, resp.Status, answer)
 }
 
-func AnswerOf(status int, statusText string, body []byte) Result {
+func AnswerOf(status int, statusText string, body []byte) Answer {
 	if status >= 200 && status < 300 {
 		if len(body) > maxOutputBytes {
-			return Result{Outcome: Refused, Reason: fmt.Sprintf("the worker answered an output over the %d KiB a run may store", maxOutputBytes>>10)}
+			return Answer{Outcome: Refused, Reason: fmt.Sprintf("the worker answered an output over the %d KiB a run may store", maxOutputBytes>>10)}
 		}
 		if !json.Valid(body) {
 			body = nil
 		}
-		return Result{Outcome: Succeeded, Output: body}
+		return Answer{Outcome: Succeeded, Output: body}
 	}
 	var decoded topicv1.Answer
 	if protojson.Unmarshal(body, &decoded) == nil && decoded.GetAbort() != nil {
-		return Result{Outcome: Aborted, Reason: decoded.GetAbort().GetReason()}
+		return Answer{Outcome: Aborted, Reason: decoded.GetAbort().GetReason()}
 	}
 	excerpt := body
 	if len(excerpt) > maxErrorExcerptBytes {
 		excerpt = excerpt[:maxErrorExcerptBytes]
 	}
-	return Result{Outcome: Failed, Reason: fmt.Sprintf("the worker answered %s: %s", statusText, bytes.TrimSpace(excerpt))}
+	return Answer{Outcome: Failed, Reason: fmt.Sprintf("the worker answered %s: %s", statusText, bytes.TrimSpace(excerpt))}
 }
 
-func classifyInterruption(ctx, attemptCtx context.Context, err error) Result {
+func classifyInterruption(ctx, attemptCtx context.Context, err error) Answer {
 	switch cause := context.Cause(attemptCtx); {
 	case errors.Is(cause, ErrTimedOut):
-		return Result{Outcome: TimedOut, Reason: cause.Error()}
+		return Answer{Outcome: TimedOut, Reason: cause.Error()}
 	case errors.Is(cause, ErrCanceled):
-		return Result{Outcome: Canceled}
+		return Answer{Outcome: Canceled}
 	case ctx.Err() != nil:
-		return Result{Outcome: Interrupted}
+		return Answer{Outcome: Interrupted}
 	}
-	return Result{Outcome: Failed, Reason: fmt.Sprintf("reach the worker: %v", err)}
+	return Answer{Outcome: Failed, Reason: fmt.Sprintf("reach the worker: %v", err)}
 }

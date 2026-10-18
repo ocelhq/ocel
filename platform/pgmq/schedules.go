@@ -2,7 +2,6 @@ package pgmq
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -10,14 +9,13 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ocelhq/ocel/pkg/cron"
-	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const scheduleInterval = time.Second
 
-type scheduledPayload struct {
-	Timestamp string `json:"timestamp"`
+func isTask(topic *contractv1.ManifestTopic) bool {
+	return len(topic.GetConsumers()) == 1 && topic.GetConsumers()[0].GetExclusive()
 }
 
 func applySchedules(ctx context.Context, tx pgx.Tx, deployment Deployment) error {
@@ -59,8 +57,7 @@ func (e *Engine) fireSchedules(ctx context.Context) {
 
 func (e *Engine) fireDueSchedules(ctx context.Context) error {
 	deployment := e.current()
-	var fired []string
-	err := e.inTx(ctx, func(tx pgx.Tx) error {
+	return e.inTx(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, "SELECT topic, cron, next_at FROM ocel.schedules WHERE next_at <= clock_timestamp() FOR UPDATE SKIP LOCKED")
 		if err != nil {
 			return err
@@ -77,34 +74,23 @@ func (e *Engine) fireDueSchedules(ctx context.Context) error {
 			return err
 		}
 		for _, entry := range schedules {
-			topic, deployed := deployment.Topics[entry.topic]
-			if !deployed {
+			if _, deployed := deployment.Topics[entry.topic]; !deployed {
 				continue
 			}
-			if err := e.fireSchedule(ctx, tx, entry.topic, topic, entry.cron, entry.at); err != nil {
+			if err := e.fireSchedule(ctx, tx, entry.topic, entry.cron, entry.at); err != nil {
 				return err
 			}
-			fired = append(fired, entry.topic)
 		}
 		return nil
 	})
-	for _, name := range fired {
-		e.signalTopic(name, deployment.Topics[name])
-	}
-	return err
 }
 
-func (e *Engine) fireSchedule(ctx context.Context, tx pgx.Tx, name string, topic *contractv1.ManifestTopic, expr string, at time.Time) error {
+func (e *Engine) fireSchedule(ctx context.Context, tx pgx.Tx, name, expr string, at time.Time) error {
 	schedule, err := cron.Parse(expr)
 	if err != nil {
 		return err
 	}
-	stamp := at.UTC().Format(time.RFC3339)
-	payload, err := json.Marshal(scheduledPayload{Timestamp: stamp})
-	if err != nil {
-		return err
-	}
-	if _, err := e.Tasks().trigger(ctx, tx, name, topic, payload, &taskv1.TriggerOptions{IdempotencyKey: "cron-" + stamp}); err != nil {
+	if err := e.runs.FireCron(ctx, name, at); err != nil {
 		return fmt.Errorf("trigger scheduled task %s: %w", name, err)
 	}
 	_, err = tx.Exec(ctx, "UPDATE ocel.schedules SET next_at = $2 WHERE topic = $1", name, schedule.Next(time.Now()))

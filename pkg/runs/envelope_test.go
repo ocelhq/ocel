@@ -1,4 +1,4 @@
-package envelope_test
+package runs_test
 
 import (
 	"context"
@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 const exactJSON = `{"ratio":2.0,"id":9007199254740993,"count":2}`
@@ -35,7 +35,7 @@ func answering(t *testing.T, status int, body string, received *atomic.Int32, se
 }
 
 func anEnvelope(payload string) *topicv1.Envelope {
-	return &topicv1.Envelope{V: envelope.Version, Topic: "orders", Consumer: "email", Execution: "01K0000000000000000000000A-email", Payload: []byte(payload)}
+	return &topicv1.Envelope{V: runs.EnvelopeVersion, Topic: "orders", Consumer: "email", Execution: "01K0000000000000000000000A-email", Payload: []byte(payload)}
 }
 
 func TestAnEnvelopeCarriesItsPayloadInlineAndByteForByte(t *testing.T) {
@@ -43,9 +43,9 @@ func TestAnEnvelopeCarriesItsPayloadInlineAndByteForByte(t *testing.T) {
 	var seen string
 	url := answering(t, http.StatusOK, exactJSON, &received, &seen)
 
-	res := envelope.Post(context.Background(), context.Background(), http.DefaultClient, url, anEnvelope(exactJSON))
+	res := runs.PostEnvelope(context.Background(), context.Background(), http.DefaultClient, url, anEnvelope(exactJSON))
 
-	if res.Outcome != envelope.Succeeded || string(res.Output) != exactJSON {
+	if res.Outcome != runs.Succeeded || string(res.Output) != exactJSON {
 		t.Fatalf("Post = %+v, want success with the worker's output %s unchanged", res, exactJSON)
 	}
 	if !strings.Contains(seen, `"payload":`+exactJSON) {
@@ -70,9 +70,9 @@ func TestAnEnvelopeIsPostedThroughTheClientTheEngineHandsIt(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := &http.Client{Transport: signing{header: "X-Delivery-Secret", value: "s3cret"}}
 
-	res := envelope.Post(context.Background(), context.Background(), client, server.URL, anEnvelope(`{}`))
+	res := runs.PostEnvelope(context.Background(), context.Background(), client, server.URL, anEnvelope(`{}`))
 
-	if res.Outcome != envelope.Succeeded || signed.Load() != "s3cret" {
+	if res.Outcome != runs.Succeeded || signed.Load() != "s3cret" {
 		t.Errorf("Post through a signing client = %+v with header %v, want success carrying the client's header", res, signed.Load())
 	}
 }
@@ -82,16 +82,16 @@ func TestAnEnvelopeDecodesBackWithEachPayloadAsTheJSONTextItWasSentAs(t *testing
 
 	for name, sent := range map[string]*topicv1.Envelope{
 		"single": anEnvelope(exactJSON),
-		"batch": {V: envelope.Version, Topic: "orders", Consumer: "email", Messages: []*topicv1.Delivery{
+		"batch": {V: runs.EnvelopeVersion, Topic: "orders", Consumer: "email", Messages: []*topicv1.Delivery{
 			{Execution: "a-email", Payload: []byte(exactJSON)},
 			{Execution: "b-email", Payload: []byte(`[1,"two"]`)},
 		}},
 	} {
-		encoded, err := envelope.Encode(sent)
+		encoded, err := runs.EncodeEnvelope(sent)
 		if err != nil {
 			t.Fatalf("%s: Encode() = %v", name, err)
 		}
-		decoded, err := envelope.Decode(encoded)
+		decoded, err := runs.DecodeEnvelope(encoded)
 		if err != nil {
 			t.Fatalf("%s: Decode(%s) = %v", name, encoded, err)
 		}
@@ -105,7 +105,7 @@ func TestABodyThatIsNoJSONObjectDoesNotDecode(t *testing.T) {
 	t.Parallel()
 
 	for _, body := range []string{"", "[]", `{"topic":`} {
-		if _, err := envelope.Decode([]byte(body)); err == nil {
+		if _, err := runs.DecodeEnvelope([]byte(body)); err == nil {
 			t.Errorf("Decode(%q) = nil error, want it refused", body)
 		}
 	}
@@ -115,9 +115,9 @@ func TestAnEnvelopeThatCannotBeEncodedIsRefusedWithoutAnAttemptAtTheWorker(t *te
 	var received atomic.Int32
 	url := answering(t, http.StatusOK, "", &received, nil)
 
-	res := envelope.Post(context.Background(), context.Background(), http.DefaultClient, url, anEnvelope(`{`))
+	res := runs.PostEnvelope(context.Background(), context.Background(), http.DefaultClient, url, anEnvelope(`{`))
 
-	if res.Outcome != envelope.Refused || received.Load() != 0 {
+	if res.Outcome != runs.Refused || received.Load() != 0 {
 		t.Errorf("Post = %+v with %d envelopes at the worker, want a refusal that reaches no worker", res, received.Load())
 	}
 }
@@ -131,16 +131,16 @@ func TestAWorkersAnswerIsReadAsSuccessAbortOrFailure(t *testing.T) {
 		name   string
 		status int
 		body   string
-		want   envelope.Outcome
+		want   runs.Outcome
 		reason string
 	}{
-		{"an abort", http.StatusUnprocessableEntity, string(abort), envelope.Aborted, "no such image"},
-		{"a failure", http.StatusInternalServerError, "boom", envelope.Failed, "boom"},
-		{"an output over 256 KiB", http.StatusOK, `"` + strings.Repeat("a", 256<<10) + `"`, envelope.Refused, "256 KiB"},
+		{"an abort", http.StatusUnprocessableEntity, string(abort), runs.Aborted, "no such image"},
+		{"a failure", http.StatusInternalServerError, "boom", runs.Failed, "boom"},
+		{"an output over 256 KiB", http.StatusOK, `"` + strings.Repeat("a", 256<<10) + `"`, runs.Refused, "256 KiB"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var received atomic.Int32
-			res := envelope.Post(context.Background(), context.Background(), http.DefaultClient, answering(t, tc.status, tc.body, &received, nil), anEnvelope(`{}`))
+			res := runs.PostEnvelope(context.Background(), context.Background(), http.DefaultClient, answering(t, tc.status, tc.body, &received, nil), anEnvelope(`{}`))
 			if res.Outcome != tc.want || !strings.Contains(res.Reason, tc.reason) {
 				t.Errorf("Post = %+v, want outcome %v naming %q", res, tc.want, tc.reason)
 			}
@@ -151,8 +151,8 @@ func TestAWorkersAnswerIsReadAsSuccessAbortOrFailure(t *testing.T) {
 func TestAResultNobodyJudgedIsNoSuccess(t *testing.T) {
 	t.Parallel()
 
-	var unjudged envelope.Result
-	if unjudged.Outcome == envelope.Succeeded {
+	var unjudged runs.Answer
+	if unjudged.Outcome == runs.Succeeded {
 		t.Error("the zero Result reads as a success, so an attempt whose answer was never read would settle its run as completed")
 	}
 }
@@ -170,16 +170,16 @@ func TestAnAnswerReadWithoutHTTPIsJudgedAsAPostedOneIs(t *testing.T) {
 		status int
 		text   string
 		body   string
-		want   envelope.Result
+		want   runs.Answer
 	}{
-		{"a success with JSON", 200, "200 OK", exactJSON, envelope.Result{Outcome: envelope.Succeeded, Output: []byte(exactJSON)}},
-		{"a success with no JSON", 204, "204 No Content", "", envelope.Result{Outcome: envelope.Succeeded}},
-		{"an output over the cap", 200, "200 OK", `"` + strings.Repeat("a", 256<<10) + `"`, envelope.Result{Outcome: envelope.Refused, Reason: "the worker answered an output over the 256 KiB a run may store"}},
-		{"an abort", 422, "422 Unprocessable Entity", string(abort), envelope.Result{Outcome: envelope.Aborted, Reason: "no such image"}},
-		{"a failure", 500, "500 Internal Server Error", " boom \n", envelope.Result{Outcome: envelope.Failed, Reason: "the worker answered 500 Internal Server Error: boom"}},
-		{"a long failure", 503, "503 Service Unavailable", long, envelope.Result{Outcome: envelope.Failed, Reason: "the worker answered 503 Service Unavailable: " + long[:512]}},
+		{"a success with JSON", 200, "200 OK", exactJSON, runs.Answer{Outcome: runs.Succeeded, Output: []byte(exactJSON)}},
+		{"a success with no JSON", 204, "204 No Content", "", runs.Answer{Outcome: runs.Succeeded}},
+		{"an output over the cap", 200, "200 OK", `"` + strings.Repeat("a", 256<<10) + `"`, runs.Answer{Outcome: runs.Refused, Reason: "the worker answered an output over the 256 KiB a run may store"}},
+		{"an abort", 422, "422 Unprocessable Entity", string(abort), runs.Answer{Outcome: runs.Aborted, Reason: "no such image"}},
+		{"a failure", 500, "500 Internal Server Error", " boom \n", runs.Answer{Outcome: runs.Failed, Reason: "the worker answered 500 Internal Server Error: boom"}},
+		{"a long failure", 503, "503 Service Unavailable", long, runs.Answer{Outcome: runs.Failed, Reason: "the worker answered 503 Service Unavailable: " + long[:512]}},
 	} {
-		got := envelope.AnswerOf(tc.status, tc.text, []byte(tc.body))
+		got := runs.AnswerOf(tc.status, tc.text, []byte(tc.body))
 		if got.Outcome != tc.want.Outcome || got.Reason != tc.want.Reason || string(got.Output) != string(tc.want.Output) {
 			t.Errorf("%s: AnswerOf(%d) = %+v, want %+v", tc.name, tc.status, got, tc.want)
 		}
@@ -192,10 +192,10 @@ func TestAnAttemptPastItsMaxDurationTimesOut(t *testing.T) {
 		<-r.Context().Done()
 	}))
 	t.Cleanup(server.Close)
-	attempt, cancel := context.WithTimeoutCause(context.Background(), 50*time.Millisecond, envelope.ErrTimedOut)
+	attempt, cancel := context.WithTimeoutCause(context.Background(), 50*time.Millisecond, runs.ErrTimedOut)
 	defer cancel()
 
-	if res := envelope.Post(context.Background(), attempt, http.DefaultClient, server.URL, anEnvelope(`{}`)); res.Outcome != envelope.TimedOut {
+	if res := runs.PostEnvelope(context.Background(), attempt, http.DefaultClient, server.URL, anEnvelope(`{}`)); res.Outcome != runs.TimedOut {
 		t.Errorf("Post past its maxDuration = %+v, want it timed out", res)
 	}
 }

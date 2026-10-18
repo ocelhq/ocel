@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/envelope"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 const delayQueue = "projects/acme/locations/us-central1/queues/ocel-preview-delays"
@@ -21,7 +21,7 @@ func delayTaskIDs(t *testing.T, count int) []string {
 	ids := make([]string, 0, count)
 	for i := range count {
 		at := published.Add(time.Duration(i) * time.Millisecond)
-		name := deployment.delayTaskOf(publication{messageID: envelope.NewMessageID(at), publishedAt: at, dueAt: at.Add(time.Hour)})
+		name := deployment.delayTaskOf(publication{messageID: runs.NewMessageID(at), publishedAt: at, dueAt: at.Add(time.Hour)})
 		id, found := strings.CutPrefix(name, delayQueue+"/tasks/")
 		if !found || !taskID.MatchString(id) {
 			t.Fatalf("the delay task is named %q, want a Cloud Tasks task ID on queue %s", name, delayQueue)

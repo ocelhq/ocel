@@ -251,13 +251,13 @@ func TestRedrivenDeadLettersAreDeliveredAgain(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	run, err := engine.Store().ReadRun(context.Background(), sent[0])
+	run, err := engine.Store().ReadRun(context.Background(), "orders", sent[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 	for run.Status != "completed" && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
-		run, _ = engine.Store().ReadRun(context.Background(), sent[0])
+		run, _ = engine.Store().ReadRun(context.Background(), "orders", sent[0])
 	}
 	if run.Status != "completed" {
 		t.Errorf("the redriven execution is %s, want completed", run.Status)

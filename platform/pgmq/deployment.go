@@ -14,11 +14,13 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
+	"github.com/ocelhq/ocel/pkg/topiclimits"
 )
 
 const (
 	maxQueueNameLength = 47
 	applyLock          = "ocel.pgmq.apply"
+	undeployedReason   = "its consumer is no longer deployed"
 )
 
 type Deployment struct {
@@ -48,22 +50,31 @@ func DeploymentOf(manifest *contractv1.Manifest, workerURLs map[string]string) D
 	return deployment
 }
 
-type deployedConsumer struct {
-	topicName string
-	topic     *contractv1.ManifestTopic
-	consumer  *contractv1.ManifestConsumer
-	queue     string
+type queueOf struct {
+	topic, consumer string
 }
 
-func (d Deployment) consumers() map[string]deployedConsumer {
-	deployedConsumers := map[string]deployedConsumer{}
+func (d Deployment) queues() map[string]queueOf {
+	deployed := map[string]queueOf{}
 	for name, topic := range d.Topics {
 		for _, consumer := range topic.GetConsumers() {
-			queue := queueName(name, consumer.GetName())
-			deployedConsumers[queue] = deployedConsumer{topicName: name, topic: topic, consumer: consumer, queue: queue}
+			deployed[queueName(name, consumer.GetName())] = queueOf{topic: name, consumer: consumer.GetName()}
 		}
 	}
-	return deployedConsumers
+	return deployed
+}
+
+func (d Deployment) consumer(topicName, consumerName string) (*contractv1.ManifestTopic, *contractv1.ManifestConsumer, bool) {
+	topic, found := d.Topics[topicName]
+	if !found {
+		return nil, nil, false
+	}
+	for _, consumer := range topic.GetConsumers() {
+		if consumer.GetName() == consumerName {
+			return topic, consumer, true
+		}
+	}
+	return nil, nil, false
 }
 
 func queueName(topic, consumer string) string {
@@ -77,7 +88,6 @@ func queueName(topic, consumer string) string {
 }
 
 func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
-	var canceled []string
 	err := e.inTx(ctx, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", applyLock); err != nil {
 			return fmt.Errorf("wait for other engines applying a deployment: %w", err)
@@ -85,12 +95,11 @@ func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
 		if err := claimDatabase(ctx, tx, deployment.Slug); err != nil {
 			return err
 		}
-		deployed := deployment.consumers()
-		var err error
-		if canceled, err = dropUndeployedQueues(ctx, tx, deployed); err != nil {
+		deployed := deployment.queues()
+		if err := dropUndeployedQueues(ctx, tx, deployed); err != nil {
 			return err
 		}
-		if err := createQueues(ctx, tx, deployed); err != nil {
+		if err := createQueues(ctx, tx, deployment, deployed); err != nil {
 			return err
 		}
 		return applySchedules(ctx, tx, deployment)
@@ -98,61 +107,100 @@ func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
 	if err != nil {
 		return err
 	}
-	for _, execution := range canceled {
-		e.stopInFlight(execution)
-	}
 	e.mu.Lock()
 	e.deployment = deployment
-	for name, worker := range deployment.Workers {
-		if existing, found := e.workerSlots[name]; found {
-			existing.setLimit(worker.Concurrency)
-		} else {
-			e.workerSlots[name] = newSlots(worker.Concurrency)
-		}
-	}
 	e.mu.Unlock()
+	e.runs.Deploy(runsDeployment(deployment))
+	if err := e.cancelUndeployedRuns(ctx, deployment); err != nil {
+		return err
+	}
 	e.signalApplied()
 	return nil
 }
 
-func dropUndeployedQueues(ctx context.Context, tx pgx.Tx, deployed map[string]deployedConsumer) ([]string, error) {
+func (e *Engine) cancelUndeployedRuns(ctx context.Context, deployment Deployment) error {
+	rows, err := e.pool.Query(ctx, "SELECT DISTINCT topic, consumer FROM ocel.runs WHERE finished_at IS NULL")
+	if err != nil {
+		return fmt.Errorf("list the consumers with unfinished runs: %w", err)
+	}
+	pairs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (queueOf, error) {
+		var pair queueOf
+		return pair, row.Scan(&pair.topic, &pair.consumer)
+	})
+	if err != nil {
+		return fmt.Errorf("list the consumers with unfinished runs: %w", err)
+	}
+	var errs []error
+	for _, pair := range pairs {
+		if _, _, deployed := deployment.consumer(pair.topic, pair.consumer); deployed {
+			continue
+		}
+		if err := e.runs.CancelRunsOf(ctx, pair.topic, pair.consumer, undeployedReason); err != nil {
+			errs = append(errs, fmt.Errorf("cancel the runs of %s/%s: %w", pair.topic, pair.consumer, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func runsDeployment(deployment Deployment) runs.Deployment {
+	converted := runs.Deployment{Topics: map[string]*provider.TopicSpec{}, Workers: map[string]runs.Worker{}}
+	for name, topic := range deployment.Topics {
+		converted.Topics[name] = topicSpecOf(topic)
+	}
+	for name, worker := range deployment.Workers {
+		converted.Workers[name] = runs.Worker{URL: worker.URL, Client: clientFor(worker), Concurrency: worker.Concurrency}
+	}
+	return converted
+}
+
+func topicSpecOf(topic *contractv1.ManifestTopic) *provider.TopicSpec {
+	spec := &provider.TopicSpec{Schema: topic.GetSchema(), Ordered: topic.GetOrdered(), TTL: topic.GetTtl().AsDuration(), Cron: topic.GetCron()}
+	for _, consumer := range topic.GetConsumers() {
+		declared := provider.ConsumerSpec{
+			Name:        consumer.GetName(),
+			Worker:      consumer.GetWorker(),
+			Exclusive:   consumer.GetExclusive(),
+			Retry:       topiclimits.ResolveRetryPolicy(topic.GetRetry(), consumer.GetRetry()),
+			Concurrency: int(consumer.GetConcurrency()),
+			MaxDuration: consumer.GetMaxDuration().AsDuration(),
+		}
+		for _, lane := range consumer.GetLanes() {
+			declared.Lanes = append(declared.Lanes, runs.LaneOf(lane))
+		}
+		if batch := consumer.GetBatch(); batch.GetSize() > 0 {
+			declared.Batch = &provider.BatchPolicy{Size: int(batch.GetSize()), Timeout: batch.GetTimeout().AsDuration()}
+		}
+		spec.Consumers = append(spec.Consumers, declared)
+	}
+	return spec
+}
+
+func dropUndeployedQueues(ctx context.Context, tx pgx.Tx, deployed map[string]queueOf) error {
 	rows, err := tx.Query(ctx, "SELECT queue_name FROM pgmq.list_queues()")
 	if err != nil {
-		return nil, fmt.Errorf("list the engine's queues: %w", err)
+		return fmt.Errorf("list the engine's queues: %w", err)
 	}
 	queues, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		return nil, fmt.Errorf("list the engine's queues: %w", err)
+		return fmt.Errorf("list the engine's queues: %w", err)
 	}
-	var canceled []string
 	for _, queue := range queues {
 		if _, still := deployed[queue]; still {
 			continue
 		}
-		executions, err := moveRuns(ctx, tx, runMove{
-			from:  unfinishedStatuses,
-			to:    provider.RunCanceled,
-			where: "queue = @queue",
-			set:   "error = @reason, finished_at = clock_timestamp()",
-			args:  pgx.NamedArgs{"queue": queue, "reason": "its consumer is no longer deployed"},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("cancel the runs of queue %s: %w", queue, err)
-		}
-		canceled = append(canceled, executions...)
 		if _, err := tx.Exec(ctx, "SELECT pgmq.drop_queue($1)", queue); err != nil {
-			return nil, fmt.Errorf("drop queue %s: %w", queue, err)
+			return fmt.Errorf("drop queue %s: %w", queue, err)
 		}
 	}
-	return canceled, nil
+	return nil
 }
 
-func createQueues(ctx context.Context, tx pgx.Tx, deployed map[string]deployedConsumer) error {
-	for queue, consumer := range deployed {
+func createQueues(ctx context.Context, tx pgx.Tx, deployment Deployment, deployed map[string]queueOf) error {
+	for queue, of := range deployed {
 		if _, err := tx.Exec(ctx, "SELECT pgmq.create($1)", queue); err != nil {
 			return fmt.Errorf("create queue %s: %w", queue, err)
 		}
-		if !consumer.topic.GetOrdered() {
+		if !deployment.Topics[of.topic].GetOrdered() {
 			if err := indexLanes(ctx, tx, queue); err != nil {
 				return err
 			}
@@ -189,12 +237,6 @@ func (e *Engine) current() Deployment {
 	return e.deployment
 }
 
-func (e *Engine) workerSlotsOf(worker string) *slots {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.workerSlots[worker]
-}
-
 func claimDatabase(ctx context.Context, tx pgx.Tx, slug string) error {
 	if slug == "" {
 		return errors.New("the deployment names no app slug, and the engine's database serves one app")
@@ -212,4 +254,26 @@ func claimDatabase(ctx context.Context, tx pgx.Tx, slug string) error {
 		return fmt.Errorf("the engine's database serves app %s, and app %s cannot share it: give %s its own database", owner, slug, slug)
 	}
 	return nil
+}
+
+func clientFor(worker Worker) *http.Client {
+	if len(worker.Header) == 0 {
+		return http.DefaultClient
+	}
+	return &http.Client{Transport: headerTransport{header: worker.Header, next: http.DefaultTransport}}
+}
+
+type headerTransport struct {
+	header http.Header
+	next   http.RoundTripper
+}
+
+func (t headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	for name, values := range t.header {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
+	return t.next.RoundTrip(req)
 }

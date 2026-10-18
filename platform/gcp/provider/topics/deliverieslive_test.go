@@ -16,9 +16,9 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -113,7 +113,7 @@ func TestLiveATaskRunReachesTheWorkerAsAnEnvelopeAndCompletesWithItsOutput(t *te
 	execution := message.messageID + "-resize"
 	for field, want := range map[string]string{
 		"topic": `"resize"`, "consumer": `"resize"`, "execution": `"` + execution + `"`, "payload": exactJSON, "v": "1",
-		"schema": `"` + envelope.SchemaOf("{}") + `"`,
+		"schema": `"` + runs.SchemaOf("{}") + `"`,
 	} {
 		if string(got[field]) != want {
 			t.Errorf("the envelope's %s is %s, want %s", field, got[field], want)
@@ -320,7 +320,7 @@ func TestLiveAMessageWithNoOcelIDTakesOneDrawnFromItsPubSubID(t *testing.T) {
 	if received := worker.received(); len(received) != 1 {
 		t.Fatalf("the worker got %d envelopes for one scheduled message, want 1", len(received))
 	}
-	execution := envelope.MessageIDFrom(at, "17") + "-resize"
+	execution := runs.MessageIDFrom(at, "17") + "-resize"
 	if run := d.run(execution); run.Status != provider.RunCompleted {
 		t.Errorf("the scheduled run %s is %s, want completed", execution, run.Status)
 	}
@@ -339,7 +339,7 @@ func TestLiveAMessageWithNoOcelIDOrPublishTimeKeepsOneRunAcrossRedeliveries(t *t
 	if received := worker.received(); len(received) != 1 {
 		t.Errorf("the worker got %d envelopes for one message delivered twice, want 1", len(received))
 	}
-	execution := envelope.MessageIDFrom(time.Unix(0, 0), "17") + "-resize"
+	execution := runs.MessageIDFrom(time.Unix(0, 0), "17") + "-resize"
 	if run := d.run(execution); run.Status != provider.RunCompleted {
 		t.Errorf("the run %s is %s, want completed", execution, run.Status)
 	}

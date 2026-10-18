@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-
-	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -36,7 +34,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 		return nil, err
 	}
 	now := time.Now()
-	messageID := envelope.NewMessageID(now)
+	messageID := runs.NewMessageID(now)
 	if key := req.GetIdempotencyKey(); key != "" {
 		encoded, err := json.Marshal(recordedMessage{Message: messageID})
 		if err != nil {
@@ -148,7 +146,7 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 	var redriven int64
 	for _, letter := range letters {
 		now := time.Now()
-		token := envelope.NewMessageID(now)
+		token := runs.NewMessageID(now)
 		_, err := t.engine.store.updateRun(ctx, letter.Topic, letter.SK, change{
 			set:        map[string]any{"status": string(provider.RunQueued), "attempts": 0, "error": "", "due_at": now.UnixMicro(), "delivery": token, "expires_at": expiresAtUnixAfter(now.UnixMicro())},
 			remove:     []string{"started_at", "finished_at"},

@@ -8,8 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
@@ -32,7 +32,7 @@ func TestARunInterruptedMidAttemptIsQueuedAgainSoItsNextDeliveryRunsItWithoutWai
 	e := New(Config{Table: db, Topology: queues.Topology{Table: "state", KeyPrefix: "p#", Topics: map[string]queues.Topic{"resize": {Declared: declared, Queues: map[string]string{"resize": "q"}}}}})
 	deployed := deployedConsumer{topicName: "resize", topic: declared, consumer: consumer, queue: "q"}
 
-	next, _ := e.finish(context.Background(), deployed, arrival{execution: "e-resize", msg: queueMessage{Delivery: "d"}}, envelope.Result{Outcome: envelope.Interrupted})
+	next, _ := e.finish(context.Background(), deployed, arrival{execution: "e-resize", msg: queueMessage{Delivery: "d"}}, runs.Answer{Outcome: runs.Interrupted})
 
 	if next != retained {
 		t.Errorf("finish() = %v, want the message retained: the run did not finish", next)

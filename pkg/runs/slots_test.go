@@ -1,10 +1,10 @@
-package pgmq
+package runs
 
 import "testing"
 
 func TestAReservationHoldsOnlyWhatBothItsConsumerAndItsWorkerHaveFreeAndGivesBackWhatGoesUnused(t *testing.T) {
 	t.Parallel()
-	consumer, worker := newSlots(5), newSlots(2)
+	consumer, worker := newLocalSlots(5), newLocalSlots(2)
 
 	held := reserveSlots(4, consumer, worker)
 	if held.n != 2 || consumer.used != 2 || worker.used != 2 {
@@ -14,7 +14,7 @@ func TestAReservationHoldsOnlyWhatBothItsConsumerAndItsWorkerHaveFreeAndGivesBac
 	if consumer.used != 1 || worker.used != 1 {
 		t.Errorf("after keeping one, the consumer uses %d and the worker %d, want 1 each", consumer.used, worker.used)
 	}
-	held.releaseOne()
+	held.release(1)
 	if consumer.used != 0 || worker.used != 0 {
 		t.Errorf("after the delivery ended, the consumer uses %d and the worker %d, want none", consumer.used, worker.used)
 	}

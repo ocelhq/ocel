@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -113,7 +113,7 @@ func TestLiveAScheduledMessageRunsWithTheMinuteItWasDueAt(t *testing.T) {
 	if want := `{"timestamp":"2026-10-02T09:05:00Z"}`; string(received[0]["payload"]) != want {
 		t.Errorf("the scheduled run's payload is %s, want %s as pgmq hands it", received[0]["payload"], want)
 	}
-	execution := envelope.MessageIDFrom(fired, "17") + "-resize"
+	execution := runs.MessageIDFrom(fired, "17") + "-resize"
 	if run := d.run(execution); run.Status != provider.RunCompleted {
 		t.Errorf("the scheduled run is %s, want completed", run.Status)
 	}

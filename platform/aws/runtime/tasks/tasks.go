@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-
-	"github.com/ocelhq/ocel/pkg/envelope"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
@@ -114,7 +112,7 @@ func (t Tasks) trigger(ctx context.Context, deployed deployedConsumer, payload [
 		}
 		run.metadata = metadata
 	}
-	messageID := envelope.NewMessageID(now)
+	messageID := runs.NewMessageID(now)
 	execution := runs.ExecutionOf(messageID, deployed.consumer.Name)
 	store := t.engine.store
 	idempotencyKey := options.GetIdempotencyKey()
@@ -156,7 +154,7 @@ func (t Tasks) trigger(ctx context.Context, deployed deployedConsumer, payload [
 }
 
 func (e *Engine) startRun(ctx context.Context, deployed deployedConsumer, messageID string, now time.Time, execution string, run runRequest) error {
-	token := envelope.NewMessageID(now)
+	token := runs.NewMessageID(now)
 	status := provider.RunQueued
 	if run.dueAt.After(now) {
 		status = provider.RunDelayed
@@ -223,7 +221,7 @@ func (t Tasks) debounce(ctx context.Context, deployed deployedConsumer, key, exe
 	return "", store.rewriteRecord(ctx, record)
 }
 
-var messageIDLength = len(envelope.NewMessageID(time.Time{}))
+var messageIDLength = len(runs.NewMessageID(time.Time{}))
 
 func taskOf(id string) (string, bool) {
 	if len(id) <= messageIDLength+1 || id[messageIDLength] != '-' {
@@ -330,7 +328,7 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 	set := map[string]any{"status": string(status), "due_at": due.UnixMicro(), "expires_at": expiresAtUnixAfter(due.UnixMicro())}
 	token := item.Delivery
 	if !deployed.fifo() {
-		token = envelope.NewMessageID(now)
+		token = runs.NewMessageID(now)
 		set["delivery"] = token
 	}
 	if item.RunExpiresAtMicros > 0 {
@@ -387,7 +385,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 	if item.RunExpiresAtMicros > 0 && item.DueAtMicros > 0 {
 		run.ttl = time.Duration(item.RunExpiresAtMicros-item.DueAtMicros) * time.Microsecond
 	}
-	messageID := envelope.NewMessageID(now)
+	messageID := runs.NewMessageID(now)
 	execution := runs.ExecutionOf(messageID, deployed.consumer.Name)
 	if err := t.engine.startRun(ctx, deployed, messageID, now, execution, run); err != nil {
 		return nil, err

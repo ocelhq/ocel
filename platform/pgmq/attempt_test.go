@@ -9,23 +9,24 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 type reportedAttempts struct {
 	mu       sync.Mutex
-	attempts []Attempt
+	attempts []runs.Attempt
 }
 
-func (r *reportedAttempts) report(attempt Attempt) {
+func (r *reportedAttempts) report(attempt runs.Attempt) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.attempts = append(r.attempts, attempt)
 }
 
-func (r *reportedAttempts) all() []Attempt {
+func (r *reportedAttempts) all() []runs.Attempt {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]Attempt(nil), r.attempts...)
+	return append([]runs.Attempt(nil), r.attempts...)
 }
 
 func TestEveryAttemptIsReportedWithWhatItLeftTheRunIn(t *testing.T) {
@@ -51,7 +52,7 @@ func TestEveryAttemptIsReportedWithWhatItLeftTheRunIn(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("reported %d attempts (%+v), want the failed first and the completed second", len(got), got)
 	}
-	for i, want := range []Attempt{
+	for i, want := range []runs.Attempt{
 		{Topic: "resize", Consumer: "resize", IsTask: true, Execution: id, Number: 1, MaxAttempts: 3, Status: provider.RunQueued, Reason: "the worker answered 500 Internal Server Error: the disk is full"},
 		{Topic: "resize", Consumer: "resize", IsTask: true, Execution: id, Number: 2, MaxAttempts: 3, Status: provider.RunCompleted},
 	} {

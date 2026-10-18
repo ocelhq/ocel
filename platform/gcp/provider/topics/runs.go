@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-
-	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -139,7 +137,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 	}
 	now := time.Now()
 	replay := publicationOf(original, topic)
-	replay.messageID, replay.publishedAt, replay.dueAt = envelope.NewMessageID(now), now, now
+	replay.messageID, replay.publishedAt, replay.dueAt = runs.NewMessageID(now), now, now
 	ttl := topic.TTL
 	if !original.ExpiresAt.IsZero() && !original.DueAt.IsZero() {
 		ttl = original.ExpiresAt.Sub(original.DueAt)

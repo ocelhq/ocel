@@ -16,6 +16,14 @@ var wireStatuses = map[provider.RunStatus]taskv1.RunStatus{
 	provider.RunTimedOut:  taskv1.RunStatus_RUN_STATUS_TIMED_OUT,
 }
 
+var statusNames = func() map[taskv1.RunStatus]provider.RunStatus {
+	names := map[taskv1.RunStatus]provider.RunStatus{}
+	for status, wired := range wireStatuses {
+		names[wired] = status
+	}
+	return names
+}()
+
 func IsWaiting(status provider.RunStatus) bool {
 	return status == provider.RunDelayed || status == provider.RunQueued
 }
