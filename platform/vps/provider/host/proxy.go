@@ -25,7 +25,7 @@ const (
 )
 
 const (
-	ProxyNetwork       = "ocel"
+	ProxyNetwork       = live.ProxyNetwork
 	containerRestart   = "unless-stopped"
 	configLabel        = "ocel.config"
 	containerCmdLabel  = "ocel.command"
@@ -60,7 +60,7 @@ const (
 	execUnstarted = "126|127"
 )
 
-var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE", "DAC_READ_SEARCH"}
+var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE"}
 
 const (
 	networkFact   = "network=present"

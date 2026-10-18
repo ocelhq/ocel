@@ -88,7 +88,7 @@ func StorageItems(tier environment.Tier, keys []byte) []Item {
 		{Kind: KindFile, Name: boxstore.SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals secret values"},
 		principal(),
 		{Kind: KindFile, Name: sudoersSeal(tier), Mode: 0o440, Owner: rootOwner, Content: sealSudoers(tier), Note: "sudo for the seal helper"},
-		dir(stateRoot, 0o750, stateOwner, ""),
+		dir(stateRoot, 0o711, rootOwner, ""),
 		dir(releasesRoot, 0o750, stateOwner, ""),
 		dir(sshDir, 0o700, stateOwner, ""),
 		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys, Note: "keys allowed to deploy"},
@@ -99,7 +99,7 @@ func StorageItems(tier environment.Tier, keys []byte) []Item {
 }
 
 func Items(tier environment.Tier, keys []byte, arch string, front Front) []Item {
-	return slices.Concat(TierItems(tier), StorageItems(tier, keys), EngineItems(), LiveItems(arch), EnvSourceSyncItems(tier, arch), ProxyItems(arch, front), RealtimeItems(arch), BackupItems())
+	return slices.Concat(TierItems(tier), StorageItems(tier, keys), EngineItems(), LiveItems(arch), DockerAccessItems(front), EnvSourceSyncItems(tier, arch), ProxyItems(arch, front), RealtimeItems(arch), BackupItems())
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {

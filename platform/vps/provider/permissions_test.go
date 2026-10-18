@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -102,15 +103,15 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 	}
 }
 
-func describedGroup(t *testing.T, tier environment.Tier) string {
+func describedGroups(t *testing.T, tier environment.Tier) string {
 	t.Helper()
 	for _, item := range host.Items(tier, nil, host.ArchAMD64, host.Front{}) {
 		if item.Kind != "linux:user" {
 			continue
 		}
 		for _, line := range strings.Split(string(item.Content), "\n") {
-			if group, named := strings.CutPrefix(line, "group="); named {
-				return group
+			if groups, named := strings.CutPrefix(line, "groups="); named {
+				return groups
 			}
 		}
 		t.Fatalf("the deploy login is described as %q, which names no group either way", item.Content)
@@ -119,36 +120,35 @@ func describedGroup(t *testing.T, tier environment.Tier) string {
 	return ""
 }
 
-func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
+func TestTheDeployDocumentSaysTheDeployLoginReachesDockerOnlyThroughTheCheck(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	group := describedGroup(t, tier)
-
+	if groups := describedGroups(t, tier); groups != "" {
+		t.Fatalf("apply writes the deploy login into %q, and the docker group is root on the machine under another name", groups)
+	}
 	var claim host.Grant
 	for _, grant := range host.Grants(tier, host.Front{}) {
-		if grant.Name == "membership of the "+group+" group" {
+		if strings.HasPrefix(grant.Name, "runs docker only through ") {
 			claim = grant
 		}
 	}
-	if (group != "") != (claim.Name != "") {
-		t.Fatalf("apply writes the deploy login group=%q and the document claims a membership: %v", group, claim.Name != "")
+	if claim.Name == "" {
+		t.Fatal("the document claims nothing about how the deploy login reaches docker")
 	}
-	if group == "" {
-		return
-	}
-	if !strings.Contains(claim.Detail, "become root") {
-		t.Errorf("the document describes membership of %s as:\n%s\nand never says the group is root on the machine under another name", group, claim.Detail)
+	if !strings.Contains(claim.Detail, "in no group that reaches the docker socket") {
+		t.Errorf("the document describes the deploy login's docker as:\n%s\nand never says it is kept off the socket", claim.Detail)
 	}
 	if document := rendered(t, edge.PurposeDeploy).Document; !strings.Contains(document, claim.Detail) {
-		t.Errorf("the document does not include the %s grant word for word:\n%s", group, document)
+		t.Errorf("the document does not include the docker grant word for word:\n%s", document)
 	}
 }
 
-func TestTheDeployDocumentIncludesTheOneSudoersLineTheSealHelperNeeds(t *testing.T) {
+func TestTheDeployDocumentIncludesEverySudoersLineBootstrapWrites(t *testing.T) {
 	t.Parallel()
 
 	document := rendered(t, edge.PurposeDeploy).Document
+	sealing := false
 	for _, item := range host.Items(environment.TierProduction, nil, host.ArchAMD64, host.Front{}) {
 		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
 			continue
@@ -156,9 +156,11 @@ func TestTheDeployDocumentIncludesTheOneSudoersLineTheSealHelperNeeds(t *testing
 		if !strings.Contains(document, strings.TrimSpace(string(item.Content))) {
 			t.Errorf("a bootstrap writes %s and the document never prints the line it contains:\n%s", item.Name, document)
 		}
-		return
+		sealing = sealing || strings.Contains(string(item.Content), boxstore.SealHelper)
 	}
-	t.Fatal("nothing in the item set whitelists the seal helper, so the deploy login seals nothing")
+	if !sealing {
+		t.Fatal("nothing in the item set whitelists the seal helper, so the deploy login seals nothing")
+	}
 }
 
 func TestTheDeployDocumentNamesTheCaddyReloadLineOnlyBehindACaddyService(t *testing.T) {

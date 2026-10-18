@@ -13,8 +13,7 @@ import (
 
 const (
 	deployUser  = "ocel-deploy"
-	deployShell = "/bin/sh"
-	dockerGroup = "docker"
+	deployShell = LoginShell
 
 	lockedPassword = "*"
 	lockedFact     = "locked"
@@ -33,16 +32,15 @@ type login struct {
 	name     string
 	shell    string
 	home     string
-	group    string
 	password string
 }
 
 func deployLogin() login {
-	return login{name: deployUser, shell: deployShell, home: stateRoot, group: dockerGroup, password: lockedFact}
+	return login{name: deployUser, shell: deployShell, home: stateRoot, password: lockedFact}
 }
 
 func (l login) described() []byte {
-	return fmt.Appendf(nil, "shell=%s\nhome=%s\ngroup=%s\npassword=%s\n", l.shell, l.home, l.group, l.password)
+	return fmt.Appendf(nil, "shell=%s\nhome=%s\ngroups=\npassword=%s\n", l.shell, l.home, l.password)
 }
 
 func principal() Item {
@@ -50,48 +48,33 @@ func principal() Item {
 	return Item{Kind: KindUser, Name: deploy.name, Owner: deploy.name, Content: deploy.described(), Note: "deploy login"}
 }
 
-func (l login) joined(flag string) string {
-	if l.group == "" {
-		return ""
-	}
-	return " " + flag + " " + quoted(l.group)
-}
-
 func (l login) command() string {
-	lines := []string{"set -e"}
-	if l.group != "" {
-		lines = append(lines, "getent group "+quoted(l.group)+" >/dev/null 2>&1 || groupadd -r "+quoted(l.group))
-	}
 	fields := " -d " + quoted(l.home) + " -s " + quoted(l.shell) + " " + quoted(l.name)
-	return strings.Join(append(lines,
-		"getent group "+quoted(l.name)+" >/dev/null 2>&1 || groupadd -r "+quoted(l.name),
-		"if getent passwd "+quoted(l.name)+" >/dev/null 2>&1; then",
-		"usermod -g "+quoted(l.name)+l.joined("-aG")+fields,
+	return strings.Join([]string{"set -e",
+		"getent group " + quoted(l.name) + " >/dev/null 2>&1 || groupadd -r " + quoted(l.name),
+		"if getent passwd " + quoted(l.name) + " >/dev/null 2>&1; then",
+		"usermod -g " + quoted(l.name) + " -G ''" + fields,
 		"else",
-		"useradd -r -M -g "+quoted(l.name)+l.joined("-G")+fields,
+		"useradd -r -M -g " + quoted(l.name) + fields,
 		"fi",
-		"usermod -p "+quoted(lockedPassword)+" "+quoted(l.name),
-	), "\n")
+		"usermod -p " + quoted(lockedPassword) + " " + quoted(l.name),
+	}, "\n")
 }
 
 func (l login) survey() string {
-	membership := ""
-	if l.group != "" {
-		membership = "if id -nG " + quoted(l.name) + " 2>/dev/null | tr ' ' '\\n' | grep -qx " + quoted(l.group) + "; then member=" + quoted(l.group) + "; fi\n"
-	}
 	return `if entry=$(getent passwd ` + quoted(l.name) + ` 2>/dev/null); then found=0; else found=$?; fi
 if [ "$found" -ne 0 ] && [ "$found" -ne ` + strconv.Itoa(getentNoSuchKey) + ` ]; then
 ` + unreadable(KindUser, quoted(l.name), `"getent passwd exited $found"`) + `
 elif [ "$found" -eq 0 ]; then
-member=''
-` + membership + `line=$(getent shadow ` + quoted(l.name) + ` 2>/dev/null || true)
+groups=$(id -nG ` + quoted(l.name) + ` 2>/dev/null | tr ' ' '\n' | grep -vx ` + quoted(l.name) + ` | LC_ALL=C sort | tr '\n' ',' | sed 's/,$//')
+line=$(getent shadow ` + quoted(l.name) + ` 2>/dev/null || true)
 if [ -z "$line" ] && [ -r /etc/shadow ]; then line=$(grep ` + quoted("^"+l.name+":") + ` /etc/shadow 2>/dev/null || true); fi
 password=''
 if [ -n "$line" ] && [ "$(printf '%s' "$line" | cut -d: -f2)" = ` + quoted(lockedPassword) + ` ]; then password=` + quoted(lockedFact) + `
 elif [ -n "$line" ]; then password=unlocked
 fi
 if [ -n "$password" ]; then
-sum=$(printf 'shell=%s\nhome=%s\ngroup=%s\npassword=%s\n' "$(printf '%s' "$entry" | cut -d: -f7)" "$(printf '%s' "$entry" | cut -d: -f6)" "$member" "$password" | sha256sum | cut -d' ' -f1)
+sum=$(printf 'shell=%s\nhome=%s\ngroups=%s\npassword=%s\n' "$(printf '%s' "$entry" | cut -d: -f7)" "$(printf '%s' "$entry" | cut -d: -f6)" "$groups" "$password" | sha256sum | cut -d' ' -f1)
 ` + reports(quoted(KindUser), quoted(l.name), "0", quoted(l.name), `"$sum"`) + `
 fi
 fi`

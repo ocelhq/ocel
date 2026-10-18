@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -320,6 +321,61 @@ func (d *Docker) Address(ctx context.Context, network, container string) (string
 		return address, nil
 	}
 	return "", fmt.Errorf("%s holds no address on %s", container, network)
+}
+
+func (d *Docker) IsOcels(ctx context.Context, container string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(container)+"/json", nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := (&http.Client{Transport: d.transport}).Do(req)
+	if err != nil {
+		return false, fmt.Errorf("ask the daemon at %s about %s: %w", d.host.Address, container, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return false, fmt.Errorf("the daemon at %s answered %q about %s: %s", d.host.Address, resp.Status, container, strings.TrimSpace(string(said)))
+	}
+	var inspected struct {
+		Config struct {
+			Labels map[string]string `json:"Labels"`
+		} `json:"Config"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, inspectLimit)).Decode(&inspected); err != nil {
+		return false, fmt.Errorf("read what the daemon says about %s: %w", container, err)
+	}
+	return inspected.Config.Labels[variables.TierLabel] != "", nil
+}
+
+func (d *Docker) IsHostBound(ctx context.Context, volume string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/volumes/"+url.PathEscape(volume), nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := (&http.Client{Transport: d.transport}).Do(req)
+	if err != nil {
+		return false, fmt.Errorf("ask the daemon at %s about volume %s: %w", d.host.Address, volume, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return false, fmt.Errorf("the daemon at %s answered %q about volume %s: %s", d.host.Address, resp.Status, volume, strings.TrimSpace(string(said)))
+	}
+	var inspected struct {
+		Options map[string]string `json:"Options"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, inspectLimit)).Decode(&inspected); err != nil {
+		return false, fmt.Errorf("read what the daemon says about volume %s: %w", volume, err)
+	}
+	binding := slices.ContainsFunc(strings.Split(inspected.Options["o"], ","), func(option string) bool { return option == "bind" || option == "rbind" })
+	return binding || strings.HasPrefix(inspected.Options["device"], "/"), nil
 }
 
 func (d *Docker) MountSource(ctx context.Context, container, destination string) (string, error) {

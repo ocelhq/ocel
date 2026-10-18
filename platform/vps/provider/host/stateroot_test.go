@@ -41,7 +41,7 @@ func TestALoginWithSudoLoadsImagesAsTheDeployLogin(t *testing.T) {
 	if _, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as a login with sudo = %v", err)
 	}
-	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "sudo -n -u "+deployUser+" flock -x "+quoted(imagesLock)) {
+	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" flock -x "+quoted(imagesLock)) {
 		t.Errorf("the load ran as %q: %s is %s's and closed to every other login, so the lock is taken as %s", loaded, stateRoot, deployUser, deployUser)
 	}
 }
@@ -52,7 +52,7 @@ func TestARootLoginLoadsImagesAsTheDeployLogin(t *testing.T) {
 	if _, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as root = %v", err)
 	}
-	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "runuser -u "+deployUser+" -- flock -x "+quoted(imagesLock)) {
+	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "runuser -u "+deployUser+" -- env PATH="+deployPath+" flock -x "+quoted(imagesLock)) {
 		t.Errorf("the load ran as %q: a lock root creates under %s is one %s cannot open on its next deploy", loaded, stateRoot, deployUser)
 	}
 }
@@ -75,7 +75,7 @@ func TestALoginWithSudoRecordsReleasesAsTheDeployLogin(t *testing.T) {
 	if err := rig.host().Promote(context.Background(), environment.TierProduction, "shop", "web", imageRef); err != nil {
 		t.Fatalf("Promote() as a login with sudo = %v", err)
 	}
-	if recorded := commandWith(t, rig, quoted(releasesHelper)); !strings.HasPrefix(recorded, "sudo -n -u "+deployUser+" "+quoted(releasesHelper)) {
+	if recorded := commandWith(t, rig, quoted(releasesHelper)); !strings.HasPrefix(recorded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" "+quoted(releasesHelper)) {
 		t.Errorf("the release was recorded as %q, want it written as %s, who owns %s", recorded, deployUser, releasesRoot)
 	}
 }

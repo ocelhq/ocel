@@ -27,16 +27,15 @@ func grants(tier environment.Tier, arch string, front Front) []Grant {
 			Detail: "a " + deployer.shell + " shell and the keys in " + keys.Name + ". No password: locked with `usermod -p '" + lockedPassword + "'`",
 		})
 	}
-	if deployer.group != "" {
+	if line := written(items, KindFile, sudoersDocker); line.Name != "" {
 		grants = append(grants, Grant{
-			Name:   "membership of the " + deployer.group + " group",
-			Detail: "equivalent to root: the group can start a container that mounts /, so this login can become root. No smaller grant runs containers. Bootstrap uses a docker " + engineFloor + " or later it finds, or installs the daemon from " + dockerSource + "; destroy removes the login and leaves the engine and its containers",
-		})
-	}
-	if !under(items, sudoersRoot) {
-		grants = append(grants, Grant{
-			Name:   "no line in any sudoers file",
-			Detail: "bootstrap writes nothing for " + deployer.name + " under " + sudoersRoot,
+			Name: "runs docker only through " + LiveBinary + " " + live.DockerCommand + ", as root, through one line in " + line.Name,
+			Detail: "the line is\n\n      " + strings.TrimSpace(string(line.Content)) +
+				"\n\n    and " + deployer.name + " is in no group that reaches the docker socket, which docker documents as root-level (https://docs.docker.com/engine/install/linux-postinstall/). " +
+				"The " + DockerShim + " on its PATH hands every docker command to that check, which refuses what reaches the host: privileged or device access, a host namespace, a capability past the ones ocel's containers use, a published port beyond loopback, " +
+				"a mount of anything but the directories " + live.DockerGrantsPath + " lists under a path only root can change, a network not ocel's or granted, exec into a container ocel does not run, and any file it reads or writes outside " + stateRoot + ". " +
+				"An adopted proxy whose container mounts the docker socket reads the config this login writes for it, and through that config can reach the socket. " +
+				"Bootstrap uses a docker " + engineFloor + " or later it finds, or installs the daemon from " + dockerSource + "; destroy removes the login and leaves the engine and its containers",
 		})
 	}
 	if helper := written(items, KindFile, boxstore.KeyValuesHelper); helper.Name != "" {
@@ -106,7 +105,7 @@ func sealing(items []Item, tier environment.Tier, deployer login) []Grant {
 	return []Grant{{
 		Name: "runs " + boxstore.SealHelper + " as root, through one line in " + fragment.Name,
 		Detail: "the line is\n\n      " + strings.TrimSpace(string(fragment.Content)) +
-			"\n\n    the only sudo " + deployer.name + " has. The helper seals and opens values under the " + string(tier) +
+			"\n\n    one of the two lines of sudo " + deployer.name + " has. The helper seals and opens values under the " + string(tier) +
 			" key only; it mints no key, reaches no other tier, and never prints the key",
 	}, {
 		Name: "no read of " + key.Name,
@@ -122,13 +121,4 @@ func written(items []Item, kind, name string) Item {
 		}
 	}
 	return Item{}
-}
-
-func under(items []Item, root string) bool {
-	for _, item := range items {
-		if beneath(root, item.Name) {
-			return true
-		}
-	}
-	return false
 }

@@ -2,11 +2,13 @@ package host
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -22,30 +24,35 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 	}
 	command := sweepCommand()
 	for what, wanted := range map[string]string{
-		"the root it sweeps under":               "find " + quoted(stateRoot),
+		"the production records it sweeps":       quoted(StateDir(environment.TierProduction)),
+		"the preview records it sweeps":          quoted(StateDir(environment.TierPreview)),
 		"the env files a deploy hands over":      quoted("*" + envFileSuffix),
-		"the registry configs a pull writes":     quoted(registryPrefix + "*"),
 		"an age that spares a deploy in flight":  "-mmin +" + orphanMinutes,
-		"a depth that never reaches the records": "-maxdepth 2",
+		"a depth that never reaches the records": "-maxdepth 1",
 	} {
 		if !strings.Contains(command, wanted) {
 			t.Errorf("the sweep runs %q, which names no %s (%s)", command, what, wanted)
 		}
 	}
-	if !strings.HasPrefix(EnvFile(environment.TierProduction, "x"), stateRoot+"/") || strings.Count(strings.TrimPrefix(EnvFile(environment.TierProduction, "x"), stateRoot+"/"), "/") != 1 {
+	if filepath.Dir(EnvFile(environment.TierProduction, "x")) != StateDir(environment.TierProduction) {
 		t.Errorf("the env file sits at %s, which is not the depth the sweep reads", EnvFile(environment.TierProduction, "x"))
 	}
 }
 
-func TestARegistryLoginIsWrittenWhereTheSweepReadsAndSweptBeforeThePull(t *testing.T) {
+func TestARegistryLoginIsHandedToTheCheckedDockerAndNeverToAConfigTheDeployLoginWrites(t *testing.T) {
 	t.Parallel()
 
 	command, err := pull(provider.RegistryTarget{Server: "ghcr.io", Username: "ada", Password: "hunter2"}, "ghcr.io/shop/web:one", "sha256:0000")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(command, "mktemp -d "+quoted(stateRoot+"/"+registryPrefix+"XXXXXX")) {
-		t.Errorf("the pull writes its login with %q, and a config under /tmp is one a killed session leaves for nothing to sweep", command)
+	if !strings.Contains(command, "docker "+live.DockerPullAs+" "+words([]string{"ghcr.io", "ada", "ghcr.io/shop/web@sha256:0000"})) {
+		t.Errorf("the pull logs in with %q, want the checked docker to log in and pull under a config only root writes", command)
+	}
+	for _, refused := range []string{"DOCKER_CONFIG", "docker login", "hunter2"} {
+		if strings.Contains(command, refused) {
+			t.Errorf("the pull carries %q: %s", refused, command)
+		}
 	}
 	rig := machine(nil)
 	rig.answer = func(said string) (session.Result, bool) {

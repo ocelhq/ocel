@@ -32,8 +32,8 @@ func (h *Host) CheckEngine(ctx context.Context) error {
 	if deniedSocket(result.Stderr) {
 		return refusal.Refuse(refusal.CodeDenied,
 			"%s is refused by the docker socket: %s\n"+
-				"Add the login to the %q group; `ocel bootstrap %s` does it for %s",
-			h.named(), spoken(result), dockerGroup, environment.TierProduction, deployUser)
+				"Deploy as %s (set `user` under `ssh` to it), whose docker `ocel bootstrap %s` routes through checked sudo, or as a login with sudo without a password",
+			h.named(), spoken(result), deployUser, environment.TierProduction)
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s cannot run docker: %s\n"+
@@ -239,7 +239,7 @@ func (h *Host) CheckProxy(ctx context.Context) error {
 	return nil
 }
 
-func (h *Host) answers(ctx context.Context, asked boxContainer, elevation string) error {
+func (h *Host) answers(ctx context.Context, asked boxContainer, elevation acting) error {
 	result, err := h.stream(ctx, words(asked.readiness()), nil, elevation)
 	if err != nil {
 		return err
@@ -430,7 +430,7 @@ func withOwner(owners []portOwner, name string, container bool, port string) []p
 	return append(owners, portOwner{name: name, container: container, ports: []string{port}})
 }
 
-func (h *Host) publisherOf(read Reading, elevation string) func(context.Context, string) ([]string, error) {
+func (h *Host) publisherOf(read Reading, elevation acting) func(context.Context, string) ([]string, error) {
 	if !read.observed(KindEngine, dockerEngine) {
 		return func(context.Context, string) ([]string, error) { return nil, nil }
 	}

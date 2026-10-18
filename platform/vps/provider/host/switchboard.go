@@ -26,7 +26,7 @@ const (
 
 var SwitchboardPermission = proxy.Permission{Dial: "unix/" + switchboard.AdmitSocket, Path: switchboard.AdmitPath}
 
-var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
+var switchboardCapabilities = []string{"DAC_OVERRIDE"}
 
 func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
@@ -138,7 +138,7 @@ func (s boxContainer) restoring(attempts int) string {
 		s.rising(attempts)
 }
 
-func (h *Host) restoreSwitchboard(ctx context.Context, elevation string) error {
+func (h *Host) restoreSwitchboard(ctx context.Context, elevation acting) error {
 	board := switchboardBox(nil, h.proxyOption)
 	said, err := h.ran(ctx, "read what "+board.name+" is started from", presenceRead(board), nil, elevation)
 	if err != nil {
@@ -183,7 +183,7 @@ func restoredCommand() string {
 		quoted(SwitchboardContainer) + " 2>/dev/null || true"
 }
 
-func (h *Host) restoredAt(ctx context.Context, elevation string) (string, bool) {
+func (h *Host) restoredAt(ctx context.Context, elevation acting) (string, bool) {
 	by, at, _ := strings.Cut(strings.TrimSpace(h.readEvidence(ctx, restoredCommand(), elevation)), " ")
 	return at, by == restoredBy
 }

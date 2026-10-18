@@ -288,7 +288,7 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 	return h.takenUp(ctx, shaped, true, elevation)
 }
 
-func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, elevation string) error {
+func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, elevation acting) error {
 	err := shaped.failedPlace
 	if err == nil {
 		err = h.serving(ctx, loading, shaped.reloading, shaped.served, elevation)
@@ -299,7 +299,7 @@ func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, eleva
 	return nil
 }
 
-func (h *Host) serving(ctx context.Context, loading, reloading bool, served proxy.Spec, elevation string) error {
+func (h *Host) serving(ctx context.Context, loading, reloading bool, served proxy.Spec, elevation acting) error {
 	if loading {
 		if _, err := h.ran(ctx, "load the switchboard onto "+live.RoutingTable,
 			words(switchboardCommand("load", live.RoutingTable)), nil, elevation); err != nil {
@@ -312,7 +312,7 @@ func (h *Host) serving(ctx context.Context, loading, reloading bool, served prox
 	return h.front.Reload(ctx, served)
 }
 
-func (h *Host) reverted(ctx context.Context, shaped composed, loading bool, why error, elevation string) error {
+func (h *Host) reverted(ctx context.Context, shaped composed, loading bool, why error, elevation acting) error {
 	written := routingFiles(h.front.File())
 	if _, failedPlace, err := h.writePair(ctx, shaped.written, shaped.restoring, shaped.reloading); err != nil || failedPlace != nil {
 		return refusal.Refuse(refusal.CodeNotReady,

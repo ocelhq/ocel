@@ -24,7 +24,7 @@ const (
 	LabelProject = "ocel.project"
 	LabelRef     = "ocel.ref"
 	LabelEnv     = "ocel.env"
-	LabelTier    = "ocel.tier"
+	LabelTier    = live.TierLabel
 
 	LabelResource   = "ocel.resource"
 	LabelGeneration = "ocel.generation"
@@ -75,11 +75,11 @@ func networkForgetting(tier environment.Tier, project string) string {
 		"fi"
 }
 
-func (h *Host) join(ctx context.Context, spec Container, elevation string) error {
+func (h *Host) join(ctx context.Context, spec Container, elevation acting) error {
 	return h.joining(ctx, spec.App, spec.Tier, spec.Project, joinNetworkScript(spec.Tier, spec.Project), elevation)
 }
 
-func (h *Host) joining(ctx context.Context, who string, tier environment.Tier, project, command, elevation string) error {
+func (h *Host) joining(ctx context.Context, who string, tier environment.Tier, project, command string, elevation acting) error {
 	_, said, err := h.spoke(ctx, "put "+who+" on "+live.AppNetwork(tier, project), command, nil, elevation)
 	if err != nil && strings.Contains(said, poolExhausted) {
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -474,7 +474,7 @@ func parseLogLine(raw string, stderr bool) (Line, bool) {
 	return Line{Time: at.UTC(), Stderr: stderr, Text: text}, true
 }
 
-func (h *Host) said(ctx context.Context, command string, elevation string) (string, error) {
+func (h *Host) said(ctx context.Context, command string, elevation acting) (string, error) {
 	result, err := h.stream(ctx, command, nil, elevation)
 	if err != nil {
 		return "", err
@@ -482,7 +482,7 @@ func (h *Host) said(ctx context.Context, command string, elevation string) (stri
 	return strings.TrimSpace(result.Stdout + result.Stderr), nil
 }
 
-func (h *Host) readEvidence(ctx context.Context, command string, elevation string) string {
+func (h *Host) readEvidence(ctx context.Context, command string, elevation acting) string {
 	said, err := h.said(ctx, command, elevation)
 	if err != nil {
 		return "(could not be read: " + err.Error() + ")"
@@ -490,7 +490,7 @@ func (h *Host) readEvidence(ctx context.Context, command string, elevation strin
 	return said
 }
 
-func (h *Host) readServing(ctx context.Context, name, elevation string) (string, error) {
+func (h *Host) readServing(ctx context.Context, name string, elevation acting) (string, error) {
 	said, err := h.ran(ctx, "read whether "+name+" is serving", servingCommand(name), nil, elevation)
 	return strings.TrimSpace(said), err
 }

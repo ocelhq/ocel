@@ -181,7 +181,7 @@ func TestARegistryTurnsTheTransferIntoAPullTheMachineMakes(t *testing.T) {
 
 	commands := strings.Join(machine.commands(), "\n")
 	pinned := pinnedAt(push.ImageRef, pullDigest)
-	if !strings.Contains(commands, "docker pull "+quotedIn(pinned)) {
+	if !strings.Contains(commands, "docker pull "+quotedIn(pinned)) && !strings.Contains(commands, " "+quotedIn(pinned)+"\n") {
 		t.Errorf("the machine ran %q, want it to pull %s", commands, pinned)
 	}
 	if !strings.Contains(commands, "docker tag "+quotedIn(pinned)+" "+quotedIn(push.ImageRef)) {
@@ -217,7 +217,7 @@ func TestAnImageServedUnderTheTagIsNotWhatTheMachineEndsUpWith(t *testing.T) {
 	}
 }
 
-func TestTheLoginTakesThePasswordOnStdinAndLogsOutInTheSameSession(t *testing.T) {
+func TestTheLoginTakesThePasswordOnStdinThroughTheCheckedDocker(t *testing.T) {
 	aDaemon(t)
 	server, _ := aRegistry(t)
 	machine := &box{}
@@ -228,21 +228,18 @@ func TestTheLoginTakesThePasswordOnStdinAndLogsOutInTheSameSession(t *testing.T)
 	}
 
 	pulled := sessionThatPulls(t, machine)
-	if !strings.Contains(pulled, "--password-stdin") {
-		t.Errorf("the pull ran %q, want the login to take the password on stdin", pulled)
+	if !strings.Contains(pulled, "docker pull-as "+quotedIn(server)) {
+		t.Errorf("the pull ran %q, want the login and the pull handed to the checked docker, which logs in under a config only root writes", pulled)
 	}
 	if strings.Contains(pulled, pullPassword) {
 		t.Errorf("the pull ran %q, and the password is written into a command line every process on the machine can read", pulled)
-	}
-	if !strings.Contains(pulled, "docker logout "+quotedIn(server)) {
-		t.Errorf("the pull ran %q, want the login given back before the session ends", pulled)
 	}
 	if fed := strings.Join(machine.feeds(), ""); fed != pullPassword {
 		t.Errorf("the machine was fed %q, want the registry password and nothing else", fed)
 	}
 }
 
-func TestNoCredentialFileIsLeftBehindOnTheMachine(t *testing.T) {
+func TestTheSessionWritesNoRegistryConfigOfItsOwn(t *testing.T) {
 	aDaemon(t)
 	server, _ := aRegistry(t)
 	machine := &box{}
@@ -253,15 +250,14 @@ func TestNoCredentialFileIsLeftBehindOnTheMachine(t *testing.T) {
 	}
 
 	pulled := sessionThatPulls(t, machine)
-	if !strings.Contains(pulled, "DOCKER_CONFIG=") {
-		t.Errorf("the pull ran %q, so the login lands in the deploy login's own docker config and stays there", pulled)
-	}
-	if !strings.Contains(pulled, "mktemp -d") || !strings.Contains(pulled, "rm -rf") {
-		t.Errorf("the pull ran %q, want the config it writes made and taken away within the session", pulled)
+	for _, refused := range []string{"DOCKER_CONFIG=", "mktemp", "docker login"} {
+		if strings.Contains(pulled, refused) {
+			t.Errorf("the pull ran %q, and a config the deploy login writes is one the docker run as root would read: its plugins and credential helpers run as root", pulled)
+		}
 	}
 }
 
-func TestTheCredentialDirectoryGoesEvenWhereTheSessionRefuses(t *testing.T) {
+func TestASessionWhosePullIsRefusedLeavesNoCredentialBehind(t *testing.T) {
 	aDaemon(t)
 	server, registry := aRegistry(t)
 	registry.storing(true)
@@ -293,6 +289,7 @@ func underShell(t *testing.T, script string) {
 	refusing := "#!/bin/sh\ncase \"$1\" in\n" +
 		"login) cat >/dev/null; exit 0;;\n" +
 		"pull) echo 'manifest unknown' >&2; exit 1;;\n" +
+		"pull-as) cat >/dev/null; echo 'manifest unknown' >&2; exit 1;;\n" +
 		"logout) exit 1;;\n" +
 		"*) exit 0;;\nesac\n"
 	runnable(t, filepath.Join(bin, "docker"), []byte(refusing), 0o700)

@@ -74,7 +74,7 @@ func (h *Host) FindHealthPath(ctx context.Context, search HealthPathSearch, prog
 	return "", h.unfound(ctx, search, verdict, false, elevation)
 }
 
-func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict string, crashed bool, elevation string) error {
+func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict string, crashed bool, elevation acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	name := containerOf(search.Target)
@@ -92,7 +92,7 @@ func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict str
 		search.App, h.named(), verdict, state, appLogTail, logs, healthKey, search.App, healthPathExample, h.abandon(ctx, search, elevation))
 }
 
-func (h *Host) abandon(ctx context.Context, search HealthPathSearch, elevation string) string {
+func (h *Host) abandon(ctx context.Context, search HealthPathSearch, elevation acting) string {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	return h.discard(ctx, Rollout{Apps: []AppRollout{{Target: search.Target}}}, elevation)

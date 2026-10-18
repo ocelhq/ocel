@@ -64,7 +64,7 @@ func renderLastRunLogs(name string) string {
 		"docker logs --since \"$started\" --tail " + appLogTail + " " + quoted(name) + " 2>&1 || true"
 }
 
-func (h *Host) describeUnstarted(ctx context.Context, app, name, state, elevation string) string {
+func (h *Host) describeUnstarted(ctx context.Context, app, name, state string, elevation acting) string {
 	logs := h.readEvidence(ctx, renderLastRunLogs(name), elevation)
 	ran := "its last run, last " + appLogTail + " lines"
 	if logs == "" {

@@ -570,6 +570,7 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 		beneath = append(beneath, liveRemovals()...)
 		beneath = append(beneath, envSourceSyncRemovals()...)
 		beneath = append(beneath, backupRemovals()...)
+		beneath = append(beneath, dockerAccessRemovals()...)
 		beneath = append(beneath,
 			taking(KindDir, sshDir, ""),
 			taking(KindDir, releasesRoot, "images stay"),

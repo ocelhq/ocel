@@ -66,8 +66,26 @@ func TestTheProxyIsConfinedToBindingItsPortsAndItsLogIsRotated(t *testing.T) {
 			t.Errorf("the proxy is run without %s:\n%s", wanted, command)
 		}
 	}
-	if added := capabilitiesAdded(argv); !slices.Equal(added, []string{"NET_BIND_SERVICE", "DAC_OVERRIDE", "DAC_READ_SEARCH"}) {
-		t.Errorf("the proxy is handed back %v, want the three it uses: it binds 80 and 443 as root, reads a config and a socket the deploy login owns, and needs nothing else the kernel gates", added)
+	if added := capabilitiesAdded(argv); !slices.Equal(added, []string{"NET_BIND_SERVICE", "DAC_OVERRIDE"}) {
+		t.Errorf("the proxy is handed back %v, want the two it uses: it binds 80 and 443 as root, reads a config and a socket the deploy login owns, and needs nothing else the kernel gates", added)
+	}
+}
+
+func TestNoContainerOcelRunsMayOpenHostFilesByHandle(t *testing.T) {
+	t.Parallel()
+
+	for what, argv := range map[string][]string{
+		"the proxy":          frontProxy().run(),
+		"the switchboard":    switchboardBox(nil, Front{}).run(),
+		"a placement":        placementCommand("/data/proxy", "origin-group"),
+		"an app":             containerRun(valued(), handedTo(valued())),
+		"a resource":         resourceRun(resourced(), "0123456789ab", "/tmp/handed.env"),
+		"the tunnel":         tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, tunnelConnectors["cloudflare"]).run(),
+		"the tunnel's token": renderTunnelTokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d"),
+	} {
+		if slices.Contains(capabilitiesAdded(argv), "DAC_READ_SEARCH") {
+			t.Errorf("%s is handed DAC_READ_SEARCH, which docker's seccomp profile answers by allowing open_by_handle_at, so a process in it reads any file on the filesystem one of its bind mounts sits on, seal keys among them", what)
+		}
 	}
 }
 

@@ -287,7 +287,7 @@ func generationCommand(spec ResourceContainer) string {
 		" --format " + quoted(`{{.Label "`+LabelGeneration+`"}}`)
 }
 
-func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, elevation string) (string, error) {
+func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, elevation acting) (string, error) {
 	if spec.Volume.Generation == "" {
 		return "", nil
 	}
@@ -366,7 +366,7 @@ func volumeCopy(spec ResourceContainer, from string) upgradeSteps {
 	return upgradeSteps{before: words(argv) + "\n"}
 }
 
-func (h *Host) prepareUpgrade(ctx context.Context, spec ResourceContainer, from, elevation string) (upgradeSteps, error) {
+func (h *Host) prepareUpgrade(ctx context.Context, spec ResourceContainer, from string, elevation acting) (upgradeSteps, error) {
 	if spec.Volume.CopyOnUpgrade {
 		return volumeCopy(spec, from), nil
 	}
@@ -378,7 +378,7 @@ func (h *Host) prepareUpgrade(ctx context.Context, spec ResourceContainer, from,
 	return upgradeSteps{after: restoreCommand(spec.Tier, spec.Name, strings.TrimSpace(dumped)) + "\n"}, nil
 }
 
-func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest, secret, elevation string) (err error) {
+func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest, secret string, elevation acting) (err error) {
 	steps, err := h.prepareUpgrade(ctx, spec, from, elevation)
 	if err != nil {
 		return err
@@ -412,7 +412,7 @@ func (h *Host) limited(ctx context.Context, spec ResourceContainer) (ResourceCon
 	return spec, nil
 }
 
-func (h *Host) replaceResource(ctx context.Context, spec ResourceContainer, digest, secret, elevation string) (err error) {
+func (h *Host) replaceResource(ctx context.Context, spec ResourceContainer, digest, secret string, elevation acting) (err error) {
 	if err := h.sweep(ctx, elevation); err != nil {
 		return err
 	}

@@ -31,7 +31,7 @@ func TestWhatATierKeepsIsRootsAndItsStateIsTheDeployPrincipalsAlone(t *testing.T
 		boxstore.Dir:                             rootOwner,
 		boxstore.KeyValuesHelper:                 rootOwner,
 		releasesHelper:                           rootOwner,
-		stateRoot:                                deployUser,
+		stateRoot:                                rootOwner,
 		releasesRoot:                             deployUser,
 		sshDir:                                   deployUser,
 		authorizedKeys:                           deployUser,
@@ -273,7 +273,7 @@ func TestTheAccountFactsIncludeEveryFieldTheWriteSets(t *testing.T) {
 	t.Parallel()
 
 	facts := string(principal().Content)
-	for _, want := range []string{deployShell, stateRoot, dockerGroup, "locked"} {
+	for _, want := range []string{deployShell, stateRoot, "groups=\n", "locked"} {
 		if !strings.Contains(facts, want) {
 			t.Errorf("the account digest reads %q, which says nothing about %q, so drift there would never re-plan", facts, want)
 		}

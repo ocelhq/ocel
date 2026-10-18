@@ -195,7 +195,7 @@ func (h *Host) RunTunnel(ctx context.Context, tunnel Tunnel, token func(context.
 	return nil
 }
 
-func (h *Host) startTunnel(ctx context.Context, tunnel Tunnel, connector tunnelConnector, elevation string) error {
+func (h *Host) startTunnel(ctx context.Context, tunnel Tunnel, connector tunnelConnector, elevation acting) error {
 	for rewrites := 1; ; rewrites++ {
 		pair, err := h.currentTable(ctx)
 		if err != nil {

@@ -169,7 +169,7 @@ func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.L
 	return h.stopRetired(ctx, rollout, cut, progress, elevation)
 }
 
-func (h *Host) stopRetired(ctx context.Context, rollout Rollout, cut cutover, progress progress.Log, elevation string) error {
+func (h *Host) stopRetired(ctx context.Context, rollout Rollout, cut cutover, progress progress.Log, elevation acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
@@ -201,7 +201,7 @@ func (h *Host) stopRetired(ctx context.Context, rollout Rollout, cut cutover, pr
 		rollout.apps(), h.named(), rollout.names(), strings.Join(failed, "\n"))
 }
 
-func (h *Host) idleUpstreams(ctx context.Context, upstreams []string, elevation string) ([]string, error) {
+func (h *Host) idleUpstreams(ctx context.Context, upstreams []string, elevation acting) ([]string, error) {
 	if len(upstreams) == 0 {
 		return nil, nil
 	}
@@ -227,7 +227,7 @@ func runningCommand(names []string) string {
 		`elif printf '%s' "$said" | grep -qi 'no such'; then printf '%s gone\n' "$name"; fi; done`
 }
 
-func (h *Host) stopped(ctx context.Context, upstreams []string, elevation string) ([]string, error) {
+func (h *Host) stopped(ctx context.Context, upstreams []string, elevation acting) ([]string, error) {
 	if len(upstreams) == 0 {
 		return nil, nil
 	}
@@ -706,7 +706,7 @@ func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), UnwindWindow)
 }
 
-func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, said, elevation string) error {
+func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, said string, elevation acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	if verdict == "" {
@@ -741,7 +741,7 @@ func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, s
 		rollout.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) refuseUnstartedRollout(ctx context.Context, rollout Rollout, name, elevation string) error {
+func (h *Host) refuseUnstartedRollout(ctx context.Context, rollout Rollout, name string, elevation acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	app := name
@@ -754,14 +754,14 @@ func (h *Host) refuseUnstartedRollout(ctx context.Context, rollout Rollout, name
 		rollout.apps(), h.named(), h.describeUnstarted(ctx, app, name, state, elevation), h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) overtaken(ctx context.Context, rollout Rollout, why error, elevation string) error {
+func (h *Host) overtaken(ctx context.Context, rollout Rollout, why error, elevation acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	return router.Unserved{Err: fmt.Errorf("release %s onto %s: %w; nothing was written, so the box serves what it served before%s",
 		rollout.apps(), h.named(), why, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) stranded(ctx context.Context, rollout Rollout, cut cutover, why error, elevation string) error {
+func (h *Host) stranded(ctx context.Context, rollout Rollout, cut cutover, why error, elevation acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	code := refusal.CodeNotReady
@@ -781,14 +781,14 @@ func (h *Host) stranded(ctx context.Context, rollout Rollout, cut cutover, why e
 		rollout.apps(), h.named(), written, why, rolled, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) unfronted(ctx context.Context, rollout Rollout, why error, elevation string) error {
+func (h *Host) unfronted(ctx context.Context, rollout Rollout, why error, elevation acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	return router.Unserved{Err: fmt.Errorf("release %s onto %s: %w; the previous release is still live%s",
 		rollout.apps(), h.named(), why, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) refuseFailedCutover(ctx context.Context, rollout Rollout, cut cutover, outcome, verdict, elevation string) error {
+func (h *Host) refuseFailedCutover(ctx context.Context, rollout Rollout, cut cutover, outcome, verdict string, elevation acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	if verdict == "" {
@@ -804,7 +804,7 @@ func (h *Host) refuseFailedCutover(ctx context.Context, rollout Rollout, cut cut
 		rollout.apps(), h.named(), outcome, verdict, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool, error) {
+func (h *Host) putBack(ctx context.Context, cut cutover, elevation acting) (bool, error) {
 	if !cut.composed() {
 		return false, nil
 	}
@@ -827,7 +827,7 @@ func (h *Host) Discard(ctx context.Context, rollout Rollout) string {
 	return h.discard(ctx, rollout, elevation)
 }
 
-func (h *Host) discard(ctx context.Context, rollout Rollout, elevation string) string {
+func (h *Host) discard(ctx context.Context, rollout Rollout, elevation acting) string {
 	targets := make([]string, 0, len(rollout.Apps))
 	for _, app := range rollout.Apps {
 		targets = append(targets, app.Target)
