@@ -58,16 +58,36 @@ func createError(what, name string, err error) error {
 	var (
 		tooManyDistributions *cftypes.TooManyDistributions
 		tooManyAliases       *cftypes.TooManyDistributionCNAMEs
+		onFunction           *cftypes.TooManyDistributionsWithFunctionAssociations
+		onCachePolicy        *cftypes.TooManyDistributionsAssociatedToCachePolicy
+		onHeadersPolicy      *cftypes.TooManyDistributionsAssociatedToResponseHeadersPolicy
+		onAccessControl      *cftypes.TooManyDistributionsAssociatedToOriginAccessControl
 	)
 	switch {
 	case errors.As(err, &tooManyDistributions):
-		return fmt.Errorf("create the %s %q: this account is at its CloudFront limit, so there is no room for another distribution. Every project the %q edge fronts gets one distribution, and the account-wide ceiling is the \"Distributions per account\" quota for Amazon CloudFront. Open the Service Quotas console, find Amazon CloudFront, request an increase on that quota, and deploy again once AWS grants it. If you would rather not raise it, run `ocel destroy production` on a project you no longer serve and the next deploy will fit: %w", what, name, Kind, err)
+		return fmt.Errorf("create the %s %q: this account is at its CloudFront limit, so there is no room for another distribution. Every project the %q edge fronts gets one distribution, and the account-wide ceiling is the \"Distributions per AWS account\" quota for Amazon CloudFront. Open the Service Quotas console, find Amazon CloudFront, request an increase on that quota, and deploy again once AWS grants it. If you would rather not raise it, run `ocel destroy production` on a project you no longer serve and the next deploy will fit: %w", what, name, Kind, err)
+	case errors.As(err, &onFunction):
+		return tierFullError(what, name, "Distributions associated with the same function", false, err)
+	case errors.As(err, &onCachePolicy):
+		return tierFullError(what, name, "Distributions associated with the same cache policy", false, err)
+	case errors.As(err, &onHeadersPolicy):
+		return tierFullError(what, name, "Distributions associated with the same response headers policy", true, err)
+	case errors.As(err, &onAccessControl):
+		return tierFullError(what, name, "Distributions per origin access control", true, err)
 	case errors.As(err, &tooManyAliases):
 		return fmt.Errorf("create the %s %q: this distribution already has as many alternate domain names as CloudFront allows. Unbind a hostname this project no longer serves, or request an increase on the \"Alternate domain names (CNAMEs) per distribution\" quota for Amazon CloudFront: %w", what, name, err)
 	case throttled(err):
 		return fmt.Errorf("create the %s %q: CloudFront is rate-limiting this account's control-plane calls, and the SDK gave up after its own retries. This is a throttle, not a quota, so nothing needs to be raised or deleted: wait a few seconds and deploy again. If you are deploying several projects at once, deploy them one at a time: %w", what, name, err)
 	}
 	return fmt.Errorf("create the %s %q: %w", what, name, err)
+}
+
+func tierFullError(what, name, quota string, raisable bool, err error) error {
+	remedy := "AWS documents this quota as one that cannot be raised, so the tier holds at most 100 projects on this edge"
+	if raisable {
+		remedy = "request an increase on that quota in the Service Quotas console, or through AWS Support where Service Quotas does not list it, and deploy again once AWS grants it"
+	}
+	return fmt.Errorf("create the %s %q: every distribution the %q edge makes in a tier shares that tier's resolver function, cache policy, response headers policy and origin access control, and this one would exceed the %q quota for Amazon CloudFront (100 distributions). %s. Run `ocel destroy` on a project of this tier you no longer serve, or serve this project from another edge, and the next deploy will fit: %w", what, name, Kind, quota, remedy, err)
 }
 
 func pagedForever(what string) error {

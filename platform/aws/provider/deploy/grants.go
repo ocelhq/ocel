@@ -20,6 +20,8 @@ const (
 	s3ARNPrefix = "arn:aws:s3:::"
 
 	widestEventAPIARN = "arn:aws:appsync:ap-southeast-5:123456789012:apis/abcdefghijklmnopqrstuvwxyz"
+
+	widestMasterSecretARN = "arn:aws:secretsmanager:ap-southeast-5:123456789012:secret:rds!cluster-01234567-89ab-cdef-0123-456789abcdef-AbCdEf"
 )
 
 type bindingPolicy struct {
@@ -246,6 +248,8 @@ func billedPolicies(resources []provider.Resource, grants []provider.Binding, se
 			grants = bucketGrants(strings.Repeat("b", maxS3BucketNameLen), sessions)
 		case provider.BindingRealtime:
 			grants = realtimeGrants(widestEventAPIARN, resource.Declared)
+		case provider.BindingPostgres:
+			grants = postgresGrants(widestMasterSecretARN)
 		default:
 			continue
 		}

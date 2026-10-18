@@ -107,6 +107,18 @@ func (s *stack) routes(c Clients) routeStore {
 	return routeStore{clients: c, arn: s.own.KeyValueStore}
 }
 
+func (s *stack) distributions(ctx context.Context, c Clients) (distributionRecords, error) {
+	table := s.own.StateTable
+	if table == "" {
+		deployed, err := s.p.bootstrap(ctx, c, s.tier())
+		if err != nil {
+			return distributionRecords{}, err
+		}
+		table = deployed.StateTable
+	}
+	return distributionRecords{keyValues: awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(table)}, tier: s.tier()}, nil
+}
+
 func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, error) {
 	spec := s.spec()
 	dist, found, err := s.findDistributionFor(ctx, c, spec.name)
@@ -114,13 +126,20 @@ func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, er
 		return front{}, err
 	}
 	if !found {
-		created, err := createDistribution(ctx, c, spec, nil, "")
+		records, err := s.distributions(ctx, c)
 		if err != nil {
 			return front{}, err
 		}
-		dist = created
-	} else if err := reshapeDistribution(ctx, c, spec, dist.id); err != nil {
-		return front{}, err
+		created, adopted, err := raiseRecordedDistribution(ctx, c, records, spec, nil, "")
+		if err != nil {
+			return front{}, err
+		}
+		dist, found = created, adopted
+	}
+	if found {
+		if err := reshapeDistribution(ctx, c, spec, dist.id); err != nil {
+			return front{}, err
+		}
 	}
 	if err := s.invalidationTargets(c).add(ctx, dist.id); err != nil {
 		return front{}, err
@@ -136,7 +155,11 @@ func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error
 		return front{}, err
 	}
 	if !found {
-		created, err := createDistribution(ctx, c, spec, nil, "")
+		records, err := s.distributions(ctx, c)
+		if err != nil {
+			return front{}, err
+		}
+		created, _, err := raiseRecordedDistribution(ctx, c, records, spec, nil, "")
 		if err != nil {
 			return front{}, err
 		}
@@ -158,7 +181,11 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	if s.own.Distribution != "" && s.state.Address != "" {
 		return front{id: s.own.Distribution, domainName: s.state.Address}, true, nil
 	}
-	return findDistribution(ctx, c, name)
+	records, err := s.distributions(ctx, c)
+	if err != nil {
+		return front{}, false, err
+	}
+	return records.find(ctx, name)
 }
 
 func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.ReleaseRecord, hostnames, superseded []string, stillActive router.StillActive) error {
@@ -254,11 +281,11 @@ func (s *stack) serveContainers(ctx context.Context, c Clients, promotionID, app
 	}
 	if s.onPreviewWildcard() {
 		base := s.previewBase()
-		spec, _, err := s.p.previewWildcardSpec(ctx, c, base, nil)
+		spec, deployed, err := s.p.previewWildcardSpec(ctx, c, base, nil)
 		if err != nil {
 			return awsports.ContainerFront{}, err
 		}
-		wildcard, found, err := findDistribution(ctx, c, spec.name)
+		wildcard, found, err := wildcardRecords(c, deployed).find(ctx, spec.name)
 		if err != nil {
 			return awsports.ContainerFront{}, err
 		}
@@ -361,6 +388,14 @@ func (s *stack) forgetInvalidationTarget(ctx context.Context, c Clients, distrib
 	return s.invalidationTargets(c).remove(ctx, distribution)
 }
 
+func (s *stack) forgetDistribution(ctx context.Context, c Clients) error {
+	records, err := s.distributions(ctx, c)
+	if err != nil {
+		return err
+	}
+	return records.forget(ctx, s.spec().name)
+}
+
 func (s *stack) Destroy(ctx context.Context) error {
 	c, err := s.clients(ctx)
 	if err != nil {
@@ -381,6 +416,8 @@ func (s *stack) Destroy(ctx context.Context) error {
 			if err := s.p.deleteDistribution(ctx, c, kindDistribution, dist.id); err != nil {
 				errs = append(errs, err)
 			} else if err := s.forgetInvalidationTarget(ctx, c, dist.id); err != nil {
+				errs = append(errs, err)
+			} else if err := s.forgetDistribution(ctx, c); err != nil {
 				errs = append(errs, err)
 			}
 		}

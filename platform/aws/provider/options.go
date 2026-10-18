@@ -5,6 +5,11 @@ type Options struct {
 	VariablesKey string            `json:"variablesKey,omitempty" pattern:"^arn:aws:kms:" doc:"ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap makes a key ocel owns, once a project here first seals a value."`
 	Certificates map[string]string `json:"certificates,omitempty" doc:"Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again."`
 	Logs         LogOptions        `json:"logs,omitzero" doc:"How ocel logs --tail reads this account's logs."`
+	Bytecode     BytecodeOptions   `json:"bytecode,omitzero" doc:"What a deploy does with the V8 compile cache it warms for each node function."`
+}
+
+type BytecodeOptions struct {
+	Embed bool `json:"embed,omitempty" doc:"Fold each function's warmed compile cache into its own code package, so a cold start loads it with the code rather than fetching it from S3. Off, a cold start fetches it."`
 }
 
 type LogOptions struct {

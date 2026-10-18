@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -246,9 +247,25 @@ func TestTheTemplateIncludesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.
 		t.Fatalf("the connector template is not a template CloudFormation could read: %v", err)
 	}
 
-	for _, want := range []string{"CodeBucket", "ConnectorRole", "ConnectorFunction", "ConnectorUrl", "ConnectorUrlReachable"} {
+	for _, want := range []string{"CodeBucket", "ConnectorRole", "ConnectorFunction", "ConnectorUrl"} {
 		if _, present := read.Resources[want]; !present {
 			t.Errorf("the connector template has no %s", want)
+		}
+	}
+	for _, want := range functionurl.Public() {
+		permission, present := read.Resources[urlPermissionID(want)]
+		if !present || permission.Type != "AWS::Lambda::Permission" {
+			t.Errorf("the connector template has no %s permission, so its url answers the console 403", want.Action)
+			continue
+		}
+		if permission.Properties["Action"] != want.Action || permission.Properties["Principal"] != "*" {
+			t.Errorf("%s permission = %v, want %s granted to anyone", want.Action, permission.Properties, want.Action)
+		}
+		if want.URLAuthType != "" && permission.Properties["FunctionUrlAuthType"] != want.URLAuthType {
+			t.Errorf("%s permission = %v, want it held to the unsigned url", want.Action, permission.Properties)
+		}
+		if want.ViaURL && permission.Properties["InvokedViaFunctionUrl"] != true {
+			t.Errorf("%s permission = %v, want it held to calls through the url", want.Action, permission.Properties)
 		}
 	}
 	if kind := read.Resources["CodeBucket"].Type; kind != "AWS::S3::Bucket" {

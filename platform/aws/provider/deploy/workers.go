@@ -506,20 +506,26 @@ func eventSourceMapping(queue consumerQueue, worker provider.WorkerSpec, fn *lam
 	}
 	if batch := queue.consumer.Batch; batch != nil && batch.Size > 0 {
 		args.BatchSize = pulumi.Int(batch.Size)
-		if !queue.fifo {
-			window := int(batch.Timeout / time.Second)
-			if batch.Size > maxUnbatchedSize {
-				window = max(window, 1)
-			}
-			if window > 0 {
-				args.MaximumBatchingWindowInSeconds = pulumi.Int(window)
-			}
-		}
+	}
+	if window := batchingWindowSeconds(queue); window > 0 {
+		args.MaximumBatchingWindowInSeconds = pulumi.Int(window)
 	}
 	if concurrency := eventConcurrency(queue.consumer.Concurrency, worker.Concurrency); concurrency > 0 {
 		args.ScalingConfig = &lambda.EventSourceMappingScalingConfigArgs{MaximumConcurrency: pulumi.Int(concurrency)}
 	}
 	return args
+}
+
+func batchingWindowSeconds(queue consumerQueue) int {
+	batch := queue.consumer.Batch
+	if batch == nil || batch.Size <= 0 || queue.fifo {
+		return 0
+	}
+	window := int(batch.Timeout / time.Second)
+	if batch.Size > maxUnbatchedSize {
+		window = max(window, 1)
+	}
+	return window
 }
 
 func eventConcurrency(consumer, worker int) int {

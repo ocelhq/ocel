@@ -50,9 +50,6 @@ type warmTarget struct {
 }
 
 func warmTargets(manifest *contractv1.Manifest, bytecode map[string]*bytecodeConfig, names map[string]string) []warmTarget {
-	if !bytecodeCacheEnabled() {
-		return nil
-	}
 	var targets []warmTarget
 	for _, app := range manifest.GetApps() {
 		name := app.GetName()

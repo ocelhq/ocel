@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -38,13 +38,6 @@ const (
 	execWrapper = "/opt/" + providedHandler
 
 	MaxFunctionBytes = 200 << 20
-
-	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
-
-	bytecodeEmbedEnv = "OCEL_BYTECODE_EMBED"
-
-	functionURLAuthIAM  = "AWS_IAM"
-	functionURLAuthNone = "NONE"
 
 	tagComponent = "ocel:component"
 	tagBundle    = "ocel:bundle"
@@ -76,18 +69,6 @@ const (
 
 	outputKeyFunctionName = "functionName"
 )
-
-func bytecodeCacheEnabled() bool {
-	return os.Getenv(bytecodeCacheEnv) == "1"
-}
-
-func bytecodeEmbedRequested() bool {
-	return os.Getenv(bytecodeEmbedEnv) == "1"
-}
-
-func bytecodeEmbedEnabled() bool {
-	return bytecodeEmbedRequested() && bytecodeCacheEnabled()
-}
 
 type functionArgs struct {
 	Runtime        string
@@ -190,14 +171,14 @@ func renderDispatchInvokePolicy(siblings []string, account string, optimizer boo
 	if len(siblings) > 0 {
 		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
-			"Action":   []string{"lambda:InvokeFunctionUrl"},
+			"Action":   functionurl.InvokerActions(),
 			"Resource": siblings,
 		})
 	}
 	if optimizer {
 		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
-			"Action":   []string{"lambda:InvokeFunctionUrl"},
+			"Action":   functionurl.InvokerActions(),
 			"Resource": fmt.Sprintf("arn:aws:lambda:*:%s:function:*", account),
 			"Condition": map[string]any{
 				"StringEquals": map[string]any{
@@ -395,7 +376,7 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 			return nil, err
 		}
 	}
-	if r.Bytecode != nil && bytecodeCacheEnabled() {
+	if r.Bytecode != nil {
 		policy, err := bytecodePolicy(*r.Bytecode)
 		if err != nil {
 			return nil, err
@@ -465,7 +446,7 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, byte
 	if isr != nil {
 		maps.Copy(env, isr.env())
 	}
-	if bytecode != nil && bytecodeCacheEnabled() {
+	if bytecode != nil {
 		maps.Copy(env, bytecode.env())
 	}
 	return env
@@ -554,14 +535,22 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		return none, err
 	}
 
-	if urlAuth == functionURLAuthNone {
-		if _, err := lambda.NewPermission(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "url", "invoke"), &lambda.PermissionArgs{
-			Action:              pulumi.String("lambda:InvokeFunctionUrl"),
-			Function:            fn.Name,
-			Principal:           pulumi.String("*"),
-			FunctionUrlAuthType: pulumi.String(functionURLAuthNone),
-		}); err != nil {
-			return none, err
+	if urlAuth == functionurl.AuthNone {
+		for _, permission := range functionurl.Public() {
+			args := &lambda.PermissionArgs{
+				Action:    pulumi.String(permission.Action),
+				Function:  fn.Name,
+				Principal: pulumi.String("*"),
+			}
+			if permission.URLAuthType != "" {
+				args.FunctionUrlAuthType = pulumi.String(permission.URLAuthType)
+			}
+			if permission.ViaURL {
+				args.InvokedViaFunctionUrl = pulumi.Bool(true)
+			}
+			if _, err := lambda.NewPermission(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "url", strings.ToLower(permission.Verb())), args); err != nil {
+				return none, err
+			}
 		}
 	}
 

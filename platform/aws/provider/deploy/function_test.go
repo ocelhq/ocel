@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 )
 
 func fixedRelease(t *testing.T) naming.ReleaseToken {
@@ -227,7 +228,7 @@ func TestAFunctionNamesTheBundleItWasBuiltFromNotARoute(t *testing.T) {
 		}
 		_, err = registerFunction(pctx, "fn--web--bundle-0", functionCoordinate("shop", stack, "fn--web--bundle-0"),
 			"bundle-0", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
-			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionURLAuthIAM, "")
+			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionurl.AuthIAM, "")
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--web", rec)); err != nil {
@@ -272,7 +273,6 @@ func TestFunctionEnv(t *testing.T) {
 	})
 
 	t.Run("a node runtime function with no isr still takes the bytecode cache", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "1")
 		cache := bytecodeConfig{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"}
 
 		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, nil, &cache)
@@ -288,14 +288,12 @@ func TestFunctionEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("has no bytecode cache with the gate off", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "")
-
-		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, nil, &bytecodeConfig{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"})
+	t.Run("has no bytecode cache where the spec names none", func(t *testing.T) {
+		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, nil, nil)
 
 		for _, key := range []string{"OCEL_BYTECODE_PREFIX", "OCEL_BYTECODE_BUCKET"} {
 			if _, ok := env[key]; ok {
-				t.Errorf("%s = %q, want it unset without OCEL_BYTECODE_CACHE=1", key, env[key])
+				t.Errorf("%s = %q, want it unset for an app the spec gives no cache", key, env[key])
 			}
 		}
 	})

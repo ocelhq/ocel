@@ -69,9 +69,6 @@ func (s *servedApps) warmed(physical string, reply warmReply) {
 }
 
 func (r *Stacks) Warm(ctx context.Context, targets []string, progress progress.Log) error {
-	if !bytecodeCacheEnabled() {
-		return nil
-	}
 	warming := map[*release][]warmTarget{}
 	for _, physical := range targets {
 		fn, known := r.served.byPhysicalName(physical)
@@ -90,20 +87,13 @@ func (r *Stacks) Warm(ctx context.Context, targets []string, progress progress.L
 }
 
 func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provider.ArtifactRef, progress progress.Log) error {
-	if !bytecodeEmbedRequested() {
-		return nil
-	}
-	if !bytecodeEmbedEnabled() {
-		progress.Warn(bytecodeEmbedEnv + "=1 has nothing to embed without " + bytecodeCacheEnv + "=1, so no compile cache is embedded")
-		return nil
-	}
 	fn, known := r.served.byPhysicalName(physical)
-	if !known || fn.Bytecode == nil || fn.Warmed.Key == "" || fn.from == nil {
+	if !known || fn.Bytecode == nil || fn.Warmed.Key == "" || fn.from == nil || !fn.from.cfg.BytecodeEmbed {
 		return nil
 	}
 	from := fn.from
 	if missing := missingEmbedClients(from.cfg); missing != "" {
-		progress.Warn(bytecodeEmbedEnv + "=1 but this deploy has no " + missing + ", so no compile cache is embedded")
+		progress.Warn("this project's provider options ask to embed the compile cache, but this deploy has no " + missing + ", so none is embedded")
 		return nil
 	}
 	code, err := from.artifactAt(artifact)

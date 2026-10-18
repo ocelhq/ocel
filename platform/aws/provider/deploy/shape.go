@@ -108,7 +108,7 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 		shape.containerInfra(scopes.Shared, req.Deploy.Tier)
 	}
 	if reachesVPCFromFunctions(req) {
-		shape.functionNetwork(scopes.Shared)
+		shape.functionNetwork(scopes.Shared, req.Deploy.Tier)
 	}
 	return nil
 }
@@ -331,15 +331,19 @@ func reachesVPCFromFunctions(req provider.ShapeRequest) bool {
 	return false
 }
 
-func (s costShape) functionNetwork(scope string) {
-	s.tree.AddShaped(scope, vendor, s.region, ShapeFunctionNetwork())
+func (s costShape) functionNetwork(scope string, tier environment.Tier) {
+	s.tree.AddShaped(scope, vendor, s.region, ShapeFunctionNetwork(tier))
 }
 
-func ShapeFunctionNetwork() []pricing.Shaped {
-	return []pricing.Shaped{
-		{Name: FunctionNetworkSlug, Type: tfNATGateway, Properties: map[string]any{}},
-		{Name: FunctionNetworkSlug, Type: tfElasticIP, Properties: map[string]any{}},
+func ShapeFunctionNetwork(tier environment.Tier) []pricing.Shaped {
+	var shaped []pricing.Shaped
+	for n := range natGateways(tier) {
+		name := FunctionNetworkSlug + "-" + strconv.Itoa(n+1)
+		shaped = append(shaped,
+			pricing.Shaped{Name: name, Type: tfNATGateway, Properties: map[string]any{}},
+			pricing.Shaped{Name: name, Type: tfElasticIP, Properties: map[string]any{}})
 	}
+	return shaped
 }
 
 func (s costShape) postgres(scope, project, env string, resource provider.Resource) {

@@ -142,6 +142,16 @@ func (w *world) forgetPart(t *testing.T) {
 	}
 }
 
+func (w *world) forgetDistributionRecords() {
+	w.dynamo.mu.Lock()
+	defer w.dynamo.mu.Unlock()
+	for key := range w.dynamo.items {
+		if strings.Contains(key, "\x00distribution") {
+			delete(w.dynamo.items, key)
+		}
+	}
+}
+
 func newWorld() *world {
 	shared := &trail{}
 	return &world{
@@ -392,6 +402,11 @@ func (f *fakeCloudFront) CreateDistributionWithTags(_ context.Context, in *cloud
 	f.record("CreateDistribution " + comment)
 	if f.createDistributionErr != nil {
 		return nil, f.createDistributionErr
+	}
+	for _, existing := range f.distributions {
+		if aws.ToString(existing.config.CallerReference) == aws.ToString(config.CallerReference) {
+			return nil, &cftypes.DistributionAlreadyExists{Message: aws.String("a distribution with this caller reference exists")}
+		}
 	}
 	id := f.id("E")
 	created := &fakeDistribution{

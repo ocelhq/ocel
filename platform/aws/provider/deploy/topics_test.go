@@ -42,6 +42,7 @@ func TestATaskGetsAQueueAndDeadLetterQueueAndATopicFansOutThroughSNSToOneQueuePe
 		taskResource("resize", provider.ConsumerSpec{Worker: "worker", MaxDuration: time.Minute}),
 		taskResource("sequence", provider.ConsumerSpec{Worker: "worker"}, orderedTopic),
 		topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}, provider.ConsumerSpec{Name: "ledger-entry", Worker: "ledger", MaxDuration: time.Minute}),
+		taskResource("rollup", provider.ConsumerSpec{Worker: "rollup", MaxDuration: time.Minute, Batch: &provider.BatchPolicy{Size: 50, Timeout: 20 * time.Second}}),
 	}
 	rec := &inputRecorder{}
 	release := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
@@ -59,10 +60,11 @@ func TestATaskGetsAQueueAndDeadLetterQueueAndATopicFansOutThroughSNSToOneQueuePe
 		fifo            bool
 		visibility      float64
 	}{
-		{"resize", "resize", false, 930},
-		{"sequence", "sequence", true, 930},
-		{"orders", "audit-log", false, 930},
-		{"orders", "ledger-entry", false, 120},
+		{"resize", "resize", false, 5400},
+		{"sequence", "sequence", true, 5400},
+		{"orders", "audit-log", false, 5400},
+		{"orders", "ledger-entry", false, 540},
+		{"rollup", "rollup", false, 560},
 	} {
 		queue, made := queuesMade[queues.QueueName("shop", "prod", consumer.topic, consumer.consumer, consumer.fifo)]
 		if !made {
@@ -70,7 +72,7 @@ func TestATaskGetsAQueueAndDeadLetterQueueAndATopicFansOutThroughSNSToOneQueuePe
 			continue
 		}
 		if queue["fifoQueue"].BoolValue() != consumer.fifo || queue["visibilityTimeoutSeconds"].NumberValue() != consumer.visibility {
-			t.Errorf("%s's queue = fifo %v visibility %v, want fifo %v and %vs, past its worker's timeout", consumer.consumer, queue["fifoQueue"], queue["visibilityTimeoutSeconds"], consumer.fifo, consumer.visibility)
+			t.Errorf("%s's queue = fifo %v visibility %v, want fifo %v and %vs: AWS asks an event source mapping's queue for six times its function's timeout plus its batching window", consumer.consumer, queue["fifoQueue"], queue["visibilityTimeoutSeconds"], consumer.fifo, consumer.visibility)
 		}
 		if _, dead := queuesMade[queues.DeadLetterQueueName("shop", "prod", consumer.topic, consumer.consumer, consumer.fifo)]; !dead {
 			t.Errorf("no dead-letter queue for %s's consumer %s", consumer.topic, consumer.consumer)

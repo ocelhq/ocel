@@ -97,7 +97,6 @@ func (c *capturingInvoke) Invoke(ctx context.Context, in *lambda.InvokeInput, op
 
 func TestWarmTargets(t *testing.T) {
 	t.Run("only bytecode gated functions", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "1")
 		manifest := &contractv1.Manifest{
 			Slug: "proj",
 			Apps: []*contractv1.ManifestApp{
@@ -125,7 +124,6 @@ func TestWarmTargets(t *testing.T) {
 	})
 
 	t.Run("takes a node runtime function", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "1")
 		manifest := &contractv1.Manifest{
 			Slug: "proj",
 			Apps: []*contractv1.ManifestApp{{Name: "api", Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "api_handler", Framework: &contractv1.Framework{Name: "node"}})}},
@@ -139,13 +137,11 @@ func TestWarmTargets(t *testing.T) {
 		}
 	})
 
-	t.Run("skipped when the gate is off", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "")
-
-		targets := warmTargets(nextManifest(), map[string]*bytecodeConfig{"web": {Prefix: "p"}}, map[string]string{"web_index": "fn"})
+	t.Run("skipped where the spec names no cache", func(t *testing.T) {
+		targets := warmTargets(nextManifest(), map[string]*bytecodeConfig{}, map[string]string{"web_index": "fn"})
 
 		if len(targets) != 0 {
-			t.Errorf("warmTargets with the gate off = %+v, want none", targets)
+			t.Errorf("warmTargets with no cache = %+v, want none", targets)
 		}
 	})
 }

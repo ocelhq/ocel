@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -26,34 +25,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
-
-func TestBytecodeEmbedEnabled(t *testing.T) {
-	t.Run("off unless asked for exactly", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "1")
-		t.Setenv(bytecodeEmbedEnv, "")
-		if bytecodeEmbedEnabled() {
-			t.Error("bytecodeEmbedEnabled() = true with no override, want false")
-		}
-		for _, v := range []string{"true", "yes", "on", "01", "1 "} {
-			t.Setenv(bytecodeEmbedEnv, v)
-			if bytecodeEmbedEnabled() {
-				t.Errorf("bytecodeEmbedEnabled() = true with OCEL_BYTECODE_EMBED=%q, want false (only \"1\" enables)", v)
-			}
-		}
-		t.Setenv(bytecodeEmbedEnv, "1")
-		if !bytecodeEmbedEnabled() {
-			t.Error("bytecodeEmbedEnabled() = false with OCEL_BYTECODE_EMBED=1, want true")
-		}
-	})
-
-	t.Run("implies caching", func(t *testing.T) {
-		t.Setenv(bytecodeEmbedEnv, "1")
-		t.Setenv(bytecodeCacheEnv, "")
-		if bytecodeEmbedEnabled() {
-			t.Error("bytecodeEmbedEnabled() = true without OCEL_BYTECODE_CACHE=1, want false")
-		}
-	})
-}
 
 func TestEmbedGate(t *testing.T) {
 	t.Parallel()
@@ -647,16 +618,19 @@ func readTestZip(t *testing.T, path string) map[string]testZipEntry {
 	return entries
 }
 
-func TestAnEmbedAskedForWithoutTheCompileCacheIsAWarning(t *testing.T) {
-	t.Setenv(bytecodeEmbedEnv, "1")
-	t.Setenv(bytecodeCacheEnv, "")
+func TestAnEmbedIsLeftAloneUnlessTheProjectAsksForOneWhateverTheOperatorsShell(t *testing.T) {
+	t.Setenv("OCEL_BYTECODE_EMBED", "1")
+	t.Setenv("OCEL_BYTECODE_CACHE", "1")
 	var progress fake.Log
+	stacks := &Stacks{served: newServedApps()}
+	stacks.served.plan(&release{}, "web", []string{"web_index"}, &bytecodeConfig{Bucket: "b", Prefix: "p"})
+	stacks.served.realized("web_index", "ocel-web-1")
+	stacks.served.warmed("ocel-web-1", warmReply{Key: "k"})
 
-	if err := (&Stacks{}).EmbedCode(context.Background(), "ocel-web-1", provider.ArtifactRef{}, &progress); err != nil {
+	if err := stacks.EmbedCode(context.Background(), "ocel-web-1", provider.ArtifactRef{}, &progress); err != nil {
 		t.Fatalf("EmbedCode() = %v", err)
 	}
-	want := []string{"WARN " + bytecodeEmbedEnv + "=1 has nothing to embed without " + bytecodeCacheEnv + "=1, so no compile cache is embedded"}
-	if got := progress.Lines(); !slices.Equal(got, want) {
-		t.Errorf("EmbedCode() said %q, want %q", got, want)
+	if got := progress.Lines(); len(got) != 0 {
+		t.Errorf("EmbedCode() said %q, want nothing done for a project whose provider options ask for no embedding", got)
 	}
 }

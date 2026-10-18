@@ -1,8 +1,6 @@
 package bootstrap
 
 import (
-	"encoding/json"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -1595,14 +1593,14 @@ func DeployCredentialPermissions(ns Namespace, tier environment.Tier, broughtKey
 	if err := refuseUnservedTier(tier); err != nil {
 		return "", err
 	}
-	return credentialPolicy("deploy", deployGrants(ns.ScopedARNs(tier), broughtKey))
+	return credentialPolicies(ns, "deploy", tier, deployGrants(ns.ScopedARNs(tier), broughtKey))
 }
 
 func BootstrapCredentialPermissions(ns Namespace, tier environment.Tier, broughtKey string) (string, error) {
 	if err := refuseUnservedTier(tier); err != nil {
 		return "", err
 	}
-	return credentialPolicy("bootstrap", bootstrapGrants(ns.ScopedARNs(tier), broughtKey))
+	return credentialPolicies(ns, "bootstrap", tier, bootstrapGrants(ns.ScopedARNs(tier), broughtKey))
 }
 
 func PolicyStatements(grants []GrantStatement) []map[string]any {
@@ -1619,14 +1617,6 @@ func PolicyStatements(grants []GrantStatement) []map[string]any {
 		statements = append(statements, statement)
 	}
 	return statements
-}
-
-func credentialPolicy(purpose string, grants []GrantStatement) (string, error) {
-	out, err := json.MarshalIndent(map[string]any{"Version": "2012-10-17", "Statement": PolicyStatements(grants)}, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("render the %s credential policy: %w", purpose, err)
-	}
-	return string(out), nil
 }
 
 func oneOrMany(values []string) any {

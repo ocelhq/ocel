@@ -253,7 +253,7 @@ func (r *release) declareTopics(pctx *sdk.Context, project, env string, resource
 			return err
 		}
 	}
-	visibility := func(worker string) int { return queueVisibilitySeconds(topics, worker) }
+	visibility := func(queue consumerQueue) int { return queueVisibilitySeconds(topics, queue) }
 	for _, topic := range topics {
 		if err := registerTopic(pctx, topic, visibility, resourceTags(naming.KindTopic, "", map[string]string{tagResource: topic.resource.Declared})); err != nil {
 			return fmt.Errorf("declare %s: %w", topic.resource.Declared, err)
@@ -339,7 +339,7 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 		var binding *bindingsv1.Binding
 		switch resource.Type {
 		case provider.BindingPostgres:
-			binding, err = collectPostgresBinding(ctx, r.cfg.Secrets, resource.Name, fields)
+			binding, err = collectPostgresBinding(ctx, r.cfg.Secrets, r.cfg.Region, resource.Name, fields)
 		case provider.BindingBucket:
 			binding, err = collectBucketBinding(resource.Name, sessions, fields)
 		case provider.BindingKV:
@@ -367,6 +367,8 @@ func bindingOf(kind provider.BindingType, binding *bindingsv1.Binding) provider.
 		properties[provider.PropertyDatabase] = p.GetDatabase()
 		properties[provider.PropertyUsername] = p.GetUsername()
 		properties[provider.PropertyPassword] = p.GetPassword()
+		properties[provider.PropertyTLSMode] = p.GetTlsMode().String()
+		properties[provider.PropertyTLSCA] = p.GetTlsCa()
 	case provider.BindingBucket:
 		properties[provider.PropertyBucket] = binding.GetBucket().GetBucket()
 	case provider.BindingKV:
@@ -512,6 +514,11 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
 		return provider.StackResult{}, err
 	}
+	workers, err := r.provisionWorkers(ctx, prepared, work, progress)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
+	result.Functions = append(result.Functions, workers...)
 	if work != nil && !work.functionsAttach {
 		if err := r.releaseFunctionNetwork(ctx, r.cfg.KeyValues, spec.Ref, progress); err != nil {
 			return provider.StackResult{}, err
@@ -523,11 +530,6 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if err := deleteSigningKeys(ctx, r.cfg.SigningKeys, r.findUndeclaredSigningKeys(listedKeys, spec)); err != nil {
 		return provider.StackResult{}, err
 	}
-	workers, err := r.provisionWorkers(ctx, prepared, work, progress)
-	if err != nil {
-		return provider.StackResult{}, err
-	}
-	result.Functions = append(result.Functions, workers...)
 	return result, nil
 }
 
