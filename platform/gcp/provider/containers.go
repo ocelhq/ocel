@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
 )
 
 const rootHealthPath = "/"
@@ -20,19 +21,19 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if strings.TrimSpace(app.Image) == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s named no image, and a Cloud Run service runs what a registry coordinate named and nothing else", app.App)
+			"app %s names no image, and a Cloud Run service runs what a registry coordinate names and nothing else", app.App)
 	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
 		probed := *app
 		probed.HealthCheckPath = rootHealthPath
 		spec.App, app = &probed, &probed
 	}
-	budget := connectionBudgetOf(spec, 1+len(app.Workers))
-	instances, err := budget.instancesFor(app.Instances)
+	budget := postgres.ConnectionBudgetOf(spec, 1+len(app.Workers))
+	instances, err := budget.InstancesFor(app.Instances)
 	if err != nil {
 		return nil, err
 	}
-	budget.warnOversubscribed(progress)
+	budget.WarnOversubscribed(progress)
 	c, err := p.openClients(ctx)
 	if err != nil {
 		return nil, err
@@ -42,7 +43,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	tasks, declared, err := p.tasksFor(ctx, c, spec)
+	tasks, declared, err := p.topicHooks().Tasks(ctx, c, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +96,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	deployed := []provider.AppContainer{{
 		Name: app.App, Physical: service, URL: ran.Url, Image: app.Image, Revision: ran.Revision,
 	}}
-	workers, err := p.provisionWorkers(ctx, c, spec, app.Image, account, values, declared, provider.Instances{Max: budget.ceiling()}, progress)
+	workers, err := p.provisionWorkers(ctx, c, spec, app.Image, account, values, declared, provider.Instances{Max: budget.Ceiling()}, progress)
 	if err != nil {
 		return nil, err
 	}

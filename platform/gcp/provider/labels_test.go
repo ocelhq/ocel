@@ -9,13 +9,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 func TestEveryCloudRunServiceAProjectReleasesIsLabelledWithItsProject(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 
 	if _, err := p.ProvisionContainers(context.Background(), previewSpec(), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
@@ -23,7 +24,7 @@ func TestEveryCloudRunServiceAProjectReleasesIsLabelledWithItsProject(t *testing
 	if _, err := p.ProvisionFunctions(context.Background(), previewSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	released := slices.Concat(server.created, server.patched)
+	released := slices.Concat(server.Created, server.Patched)
 	if len(released) != 2 {
 		t.Fatalf("released %d services, want the container and the function", len(released))
 	}
@@ -46,8 +47,8 @@ func TestEveryCloudRunServiceAProjectReleasesIsLabelledWithItsProject(t *testing
 }
 
 func TestEveryCloudRunServiceThatServesAnAppIsLabelledWithItsApp(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 
 	if _, err := p.ProvisionContainers(context.Background(), previewSpec(), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
@@ -55,7 +56,7 @@ func TestEveryCloudRunServiceThatServesAnAppIsLabelledWithItsApp(t *testing.T) {
 	if _, err := p.ProvisionFunctions(context.Background(), previewSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	released := slices.Concat(server.created, server.patched)
+	released := slices.Concat(server.Created, server.Patched)
 	if len(released) != 2 {
 		t.Fatalf("released %d services, want the container and the function", len(released))
 	}
@@ -67,8 +68,8 @@ func TestEveryCloudRunServiceThatServesAnAppIsLabelledWithItsApp(t *testing.T) {
 }
 
 func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
-	server := &runServer{iam: appAccountsOnly()}
-	p := server.open(t)
+	server := &googletest.Run{Iam: appAccountsOnly()}
+	p := providerServing(server, t)
 	spec := functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})
 	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
 	account, err := p.ensureAppAccount(context.Background(), p.resolved, spec, nil)
@@ -80,10 +81,10 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 		t.Fatalf("provisionWorkers() = %v", err)
 	}
 
-	if len(server.created) == 0 {
+	if len(server.Created) == 0 {
 		t.Fatal("provisionWorkers() created no service")
 	}
-	for _, service := range server.created {
+	for _, service := range server.Created {
 		if got, labelled := service.Labels[names.AppLabel]; labelled {
 			t.Errorf("a worker service is labelled %s=%q, want no app label: only a service that serves the app carries it", names.AppLabel, got)
 		}

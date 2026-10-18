@@ -3,30 +3,24 @@ package gcp
 import (
 	"context"
 	"maps"
-	"slices"
-	"time"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
-	"github.com/ocelhq/ocel/platform/gcp/provider/live"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
 const invokerRole = "roles/run.invoker"
 
-const pushCeiling = 600 * time.Second
-
 var workerCeilings = []provider.WorkerCeiling{
-	{Compute: provider.ComputeServerless, MaxDuration: pushCeiling},
-	{Compute: provider.ComputeContainer, MaxDuration: pushCeiling},
+	{Compute: provider.ComputeServerless, MaxDuration: topic.PushCeiling},
+	{Compute: provider.ComputeContainer, MaxDuration: topic.PushCeiling},
 }
 
 func workerServing(worker provider.WorkerSpec, placed run.Serving) run.Serving {
@@ -36,64 +30,8 @@ func workerServing(worker provider.WorkerSpec, placed run.Serving) run.Serving {
 	}
 	env[processenv.WorkerEnvVar] = worker.Name
 	placed.Env = env
-	placed.Compute, placed.Ingress, placed.Timeout, placed.Concurrency = provider.ComputeServerless, run.IngressInternal, pushCeiling, worker.Concurrency
+	placed.Compute, placed.Ingress, placed.Timeout, placed.Concurrency = provider.ComputeServerless, run.IngressInternal, topic.PushCeiling, worker.Concurrency
 	return placed
-}
-
-func publishURL(c *gcloud.Clients) string {
-	if c.Emulated() {
-		return c.Endpoint
-	}
-	return topics.PublishURL
-}
-
-func tasksManifest(c *gcloud.Clients, ref provider.StackRef, app string, declared map[string]*provider.TopicSpec) *live.Tasks {
-	pinned := make(map[string]provider.TopicSpec, len(declared))
-	for name, spec := range declared {
-		pinned[name] = *spec
-	}
-	return &live.Tasks{
-		Environment: ref.Name.Env,
-		Topics:      pinned,
-		DelayQueue:  c.DelayQueuePath(c.Region, ref.Tier),
-		Account:     c.AppAccountEmail(ref.Tier, ref.Project, ref.Name.Env, app),
-		PublishURL:  publishURL(c),
-	}
-}
-
-func (p *Provider) declaredTopics(ctx context.Context, ref provider.StackRef) (map[string]*provider.TopicSpec, error) {
-	stack, recorded, err := stackrecords.Read(ctx, p.KeyValues(), ref.Tier, ref.Project, naming.InfraStack(ref.Name.Env))
-	if err != nil || !recorded {
-		return nil, err
-	}
-	declared := map[string]*provider.TopicSpec{}
-	for _, binding := range stack.Bindings {
-		topic, isTopic, err := readDeclaredTopic(binding)
-		if err != nil {
-			return nil, err
-		}
-		if isTopic {
-			declared[topic.declared] = topic.spec
-		}
-	}
-	return declared, nil
-}
-
-func reachesTopics(app *provider.AppSpec) bool {
-	return hostsWorkers(app) || slices.ContainsFunc(app.Values.Bindings, func(binding provider.Binding) bool {
-		return binding.Type == provider.BindingTopic || binding.Type == provider.BindingTask
-	})
-}
-
-func (p *Provider) tasksFor(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec) (*live.Tasks, map[string]*provider.TopicSpec, error) {
-	if !reachesTopics(spec.App) {
-		return nil, nil, nil
-	}
-	declared, err := p.declaredTopics(ctx, spec.Ref)
-	if err != nil {
-		return nil, nil, err
-	}
-	return tasksManifest(c, spec.Ref, spec.App.App, declared), declared, nil
 }
 
 type deployedWorker struct {
@@ -103,12 +41,8 @@ type deployedWorker struct {
 	revision string
 }
 
-func hostsWorkers(app *provider.AppSpec) bool {
-	return len(app.Workers) > 0
-}
-
 func nameWorkers(names names.Names, spec provider.StackSpec) []deployedWorker {
-	if !hostsWorkers(spec.App) {
+	if !topic.HostsWorkers(spec.App) {
 		return nil
 	}
 	named := make([]deployedWorker, 0, len(spec.App.Workers))
@@ -151,7 +85,7 @@ func (p *Provider) provisionWorkers(ctx context.Context, c *gcloud.Clients, spec
 		worker.url, worker.revision = ran.Url, ran.Revision
 		deployed = append(deployed, worker)
 	}
-	subscriptions := topics.Subscriptions{Names: taskNames(c.Names, spec.Ref), Topics: declared, Pushes: pushes}
+	subscriptions := topics.Subscriptions{Names: topic.Names(c.Names, spec.Ref), Topics: declared, Pushes: pushes}
 	if err := subscriptions.Ensure(ctx, c.Workload()); err != nil {
 		return nil, err
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
@@ -33,14 +34,14 @@ func containerStackDeclaring(tier environment.Tier, env string, values provider.
 	}
 }
 
-func revisionEnv(t *testing.T, server *runServer, spec provider.StackSpec) (*Provider, map[string]string) {
+func revisionEnv(t *testing.T, server *googletest.Run, spec provider.StackSpec) (*Provider, map[string]string) {
 	t.Helper()
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	env := map[string]string{}
-	for _, entry := range server.current().Template.Containers[0].Env {
+	for _, entry := range server.Current().Template.Containers[0].Env {
 		env[entry.Name] = entry.Value
 	}
 	return p, env
@@ -48,7 +49,7 @@ func revisionEnv(t *testing.T, server *runServer, spec provider.StackSpec) (*Pro
 
 func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
-	p, env := revisionEnv(t, &runServer{}, containerStackDeclaring(environment.TierProduction, "production", provider.AppValues{
+	p, env := revisionEnv(t, &googletest.Run{}, containerStackDeclaring(environment.TierProduction, "production", provider.AppValues{
 		Secrets:      []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
@@ -82,7 +83,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *te
 
 func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
-	_, env := revisionEnv(t, &runServer{}, containerStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{
+	_, env := revisionEnv(t, &googletest.Run{}, containerStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{
 		Secrets: []provider.SecretRef{{Key: "MARK"}},
 	}))
 
@@ -97,7 +98,7 @@ func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 func TestAContainerWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
-	_, env := revisionEnv(t, &runServer{}, containerStackDeclaring(environment.TierProduction, "production", provider.AppValues{
+	_, env := revisionEnv(t, &googletest.Run{}, containerStackDeclaring(environment.TierProduction, "production", provider.AppValues{
 		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
 
@@ -133,16 +134,16 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItShips(t *testing.T) {
 }
 
 func TestAContainerRevisionRunsBetweenTheInstanceCountsItsAppNames(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	spec := containerStackDeclaring(environment.TierProduction, "prod", provider.AppValues{})
 	spec.App.Instances = provider.Instances{Min: 0, Max: 7}
 
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	scaling := server.current().Template.Scaling
+	scaling := server.Current().Template.Scaling
 	if scaling.MinInstanceCount != 0 || scaling.MaxInstanceCount != 7 {
 		t.Errorf("the revision scales between %d and %d instances, want 0 and 7", scaling.MinInstanceCount, scaling.MaxInstanceCount)
 	}

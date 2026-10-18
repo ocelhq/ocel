@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	certmanager "google.golang.org/api/certificatemanager/v1"
 )
 
@@ -45,7 +46,7 @@ func (s *certServer) serve(t *testing.T) http.HandlerFunc {
 		name := strings.TrimPrefix(r.URL.Path, "/v1/")
 		switch {
 		case strings.Contains(name, "/operations/"):
-			writeBody(w, &certmanager.Operation{Name: name, Done: true})
+			googletest.WriteBody(w, &certmanager.Operation{Name: name, Done: true})
 		case r.Method == http.MethodPost && strings.HasSuffix(name, "/dnsAuthorizations"):
 			s.authorize(w, r, name)
 		case r.Method == http.MethodPost && strings.HasSuffix(name, "/certificates"):
@@ -64,7 +65,7 @@ func (s *certServer) serve(t *testing.T) http.HandlerFunc {
 }
 
 func (s *certServer) authorize(w http.ResponseWriter, r *http.Request, parent string) {
-	asked := readBody[certmanager.DnsAuthorization](w, r)
+	asked := googletest.ReadBody[certmanager.DnsAuthorization](w, r)
 	if asked == nil {
 		return
 	}
@@ -76,11 +77,11 @@ func (s *certServer) authorize(w http.ResponseWriter, r *http.Request, parent st
 		Data: "abc123.authorize.certificatemanager.goog.",
 	}
 	s.authorizations[name] = asked
-	writeBody(w, &certmanager.Operation{Name: "operations/authorize", Done: true})
+	googletest.WriteBody(w, &certmanager.Operation{Name: "operations/authorize", Done: true})
 }
 
 func (s *certServer) certify(w http.ResponseWriter, r *http.Request, parent string) {
-	asked := readBody[certmanager.Certificate](w, r)
+	asked := googletest.ReadBody[certmanager.Certificate](w, r)
 	if asked == nil {
 		return
 	}
@@ -92,14 +93,14 @@ func (s *certServer) certify(w http.ResponseWriter, r *http.Request, parent stri
 		asked.SanDnsnames = slices.Clone(asked.Managed.Domains)
 	}
 	s.certificates[name] = asked
-	writeBody(w, &certmanager.Operation{Name: "operations/certify", Done: true})
+	googletest.WriteBody(w, &certmanager.Operation{Name: "operations/certify", Done: true})
 }
 
 func (s *certServer) drop(w http.ResponseWriter, name string) {
 	s.deleted = append(s.deleted, name)
 	delete(s.authorizations, name)
 	delete(s.certificates, name)
-	writeBody(w, &certmanager.Operation{Name: "operations/drop", Done: true})
+	googletest.WriteBody(w, &certmanager.Operation{Name: "operations/drop", Done: true})
 }
 
 func (s *certServer) readAuthorization(w http.ResponseWriter, name string) {
@@ -108,7 +109,7 @@ func (s *certServer) readAuthorization(w http.ResponseWriter, name string) {
 		missing(w)
 		return
 	}
-	writeBody(w, authorization)
+	googletest.WriteBody(w, authorization)
 }
 
 func (s *certServer) readCertificate(w http.ResponseWriter, name string) {
@@ -120,7 +121,7 @@ func (s *certServer) readCertificate(w http.ResponseWriter, name string) {
 	if s.failure != "" {
 		certificate.Managed.State = certificateFailed
 		certificate.Managed.ProvisioningIssue = &certmanager.ProvisioningIssue{Details: s.failure}
-		writeBody(w, certificate)
+		googletest.WriteBody(w, certificate)
 		return
 	}
 	if s.provisioning > 0 {
@@ -129,10 +130,10 @@ func (s *certServer) readCertificate(w http.ResponseWriter, name string) {
 		managed := *certificate.Managed
 		managed.State = certificateProvisioning
 		provisioning.Managed = &managed
-		writeBody(w, &provisioning)
+		googletest.WriteBody(w, &provisioning)
 		return
 	}
-	writeBody(w, certificate)
+	googletest.WriteBody(w, certificate)
 }
 
 func missing(w http.ResponseWriter) {

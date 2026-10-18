@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 func basedOn(t *testing.T, config v1.Config) (*Provider, *string) {
@@ -249,7 +250,7 @@ func TestABaseFetchedForOneRequestStillReadsItsLayersAfterThatRequestEnds(t *tes
 	}}
 
 	infra, endInfra := context.WithCancel(context.Background())
-	if _, err := p.based(infra, staticImage); err != nil {
+	if _, err := p.based(infra, run.StaticImage); err != nil {
 		t.Fatalf("based() = %v", err)
 	}
 	endInfra()

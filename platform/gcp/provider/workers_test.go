@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
 func TestAWorkerIsAServiceOnlyPubSubReachesThatScalesToNothing(t *testing.T) {
@@ -82,7 +83,7 @@ func TestATasksManifestPinsTheTiersQueueAndPublishesDelaysAsTheAppsOwnAccount(t 
 
 	c := &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}
 	declared := map[string]*provider.TopicSpec{"resize": {TTL: time.Hour}}
-	tasks := tasksManifest(c, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack(stackrecords.ProductionEnv)}, "web", declared)
+	tasks := topic.Manifest(c, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack(stackrecords.ProductionEnv)}, "web", declared)
 
 	if tasks.Environment != stackrecords.ProductionEnv || tasks.Topics["resize"].TTL != time.Hour {
 		t.Errorf("tasksManifest() = %+v, want the environment's own runs and the resize topic as deployed", tasks)

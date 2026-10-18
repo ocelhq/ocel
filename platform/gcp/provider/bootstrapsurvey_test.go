@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"google.golang.org/api/secretmanager/v1"
 )
 
@@ -27,8 +28,8 @@ func TestAKeyWhosePrimaryVersionIsGoneIsSurveyedAsOneTheBootstrapReplaces(t *tes
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			found := keyPresenceOf(tc.key)
-			if found.present != tc.present || (found.replaces != "") != tc.replaces {
+			found := bootstrap.KeyPresenceOf(tc.key)
+			if found.Present != tc.present || (found.Replaces != "") != tc.replaces {
 				t.Errorf("keyPresenceOf() = %+v, want present=%t replacing=%t: a new primary version leaves what the tier sealed under the old one unopenable", found, tc.present, tc.replaces)
 			}
 		})
@@ -51,8 +52,8 @@ func TestASecretWhosePassphraseIsNoLongerEnabledIsSurveyedAsOneTheBootstrapRepla
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			found := passphrasePresenceOf(tc.latest)
-			if found.present != tc.present || (found.replaces != "") != tc.replaces {
+			found := bootstrap.PassphrasePresenceOf(tc.latest)
+			if found.Present != tc.present || (found.Replaces != "") != tc.replaces {
 				t.Errorf("passphrasePresenceOf() = %+v, want present=%t replacing=%t: a new passphrase is not the one what the tier holds was written under", found, tc.present, tc.replaces)
 			}
 		})

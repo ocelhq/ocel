@@ -3,33 +3,25 @@ package gcp
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 
 	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
-func productionRef(t *testing.T) provider.StackRef {
-	t.Helper()
-	stack, err := naming.ParseStackName("prod--infra")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
-}
-
 func gatewayService(t *testing.T, host string) *runv2.GoogleCloudRunV2Service {
 	t.Helper()
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
-	desired, err := run.ServiceOf(realtimeGatewayServing(names, productionRef(t), host, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-realtime:abc", ""))
+	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), host, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-realtime:abc", ""))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}
@@ -71,7 +63,7 @@ func TestTheGatewayRunsOneInstanceOfOneVCPUAndAGibibyteHoldingAThousandSocketsFo
 		t.Errorf("timeout = %q, want 3600s, the longest Cloud Run holds a socket", template.Timeout)
 	}
 	resources := template.Containers[0].Resources
-	if !sameLimits(resources.Limits, map[string]string{"cpu": "1", "memory": "1Gi"}) {
+	if !maps.Equal(resources.Limits, map[string]string{"cpu": "1", "memory": "1024Mi"}) {
 		t.Errorf("limits = %v, want 1 vCPU and 1Gi", resources.Limits)
 	}
 	if !resources.CpuIdle {
@@ -127,7 +119,7 @@ func TestOnTheEmulatorTheGatewayTakesItsKeysFromItsEnvironmentForWantOfSecretVol
 
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
 	keys := `{"app":"AAAA"}`
-	desired, err := run.ServiceOf(realtimeGatewayServing(names, productionRef(t), "gateway.run.app", "ocel-realtime:abc", keys))
+	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), "gateway.run.app", "ocel-realtime:abc", keys))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}
@@ -151,7 +143,7 @@ func TestATierBootstrappedBeforeRealtimeIsRefusedNamingTheBootstrapToRunAgain(t 
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "`ocel bootstrap` for this tier again") {
 		t.Errorf("provision() = %v, want a not-ready refusal saying to run `ocel bootstrap` for this tier again", err)
 	}
-	if h.run.serving() != nil {
+	if h.run.Serving() != nil {
 		t.Error("a gateway was released to run as an account the tier does not have")
 	}
 }
@@ -160,7 +152,7 @@ func TestAGatewayCloudRunServesOnAnotherHostEachReleaseIsRefused(t *testing.T) {
 	t.Parallel()
 
 	h := newRealtimeHarness(t)
-	h.run.uriEachRevision = true
+	h.run.UriEachRevision = true
 	_, err := h.env.provision(context.Background(), aRealtime("app"), nil)
 
 	var refused refusal.Refusal
@@ -174,12 +166,12 @@ func TestAGatewayReleasedAgainServesTheRevisionThatReleaseMade(t *testing.T) {
 
 	h := newRealtimeHarness(t)
 	h.provision(t, "app")
-	h.run.mu.Lock()
-	h.run.service.Template.Containers[0].Image += "-older"
-	h.run.mu.Unlock()
+	h.run.Mu.Lock()
+	h.run.Service.Template.Containers[0].Image += "-older"
+	h.run.Mu.Unlock()
 	h.provision(t, "app")
 
-	service := h.run.serving()
+	service := h.run.Serving()
 	if served, latest := run.ServedRevision(service), run.RevisionName(service.LatestReadyRevision); served != latest {
 		t.Errorf("the gateway serves %q, want %q, the revision its release made: an upgraded gateway otherwise never takes a socket", served, latest)
 	}
@@ -190,12 +182,12 @@ func TestAGatewayWhoseLatestRevisionServesNoTrafficIsRoutedToItOnTheNextDeploy(t
 
 	h := newRealtimeHarness(t)
 	h.provision(t, "app")
-	h.run.mu.Lock()
-	h.run.service.Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{{Type: run.TrafficByRevision, Revision: "an-older-revision", Percent: 100}}
-	h.run.mu.Unlock()
+	h.run.Mu.Lock()
+	h.run.Service.Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{{Type: run.TrafficByRevision, Revision: "an-older-revision", Percent: 100}}
+	h.run.Mu.Unlock()
 	h.provision(t, "app")
 
-	service := h.run.serving()
+	service := h.run.Serving()
 	if served, latest := run.ServedRevision(service), run.RevisionName(service.LatestReadyRevision); served != latest {
 		t.Errorf("the gateway serves %q, want %q: a release that came ready and was never routed is routed once the gateway is next deployed", served, latest)
 	}

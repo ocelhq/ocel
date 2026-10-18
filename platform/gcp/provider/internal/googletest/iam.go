@@ -1,0 +1,348 @@
+package googletest
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+
+	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
+	"cloud.google.com/go/firestore/apiv1/firestorepb"
+	"cloud.google.com/go/iam/apiv1/iampb"
+	"cloud.google.com/go/kms/apiv1/kmspb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"google.golang.org/api/cloudresourcemanager/v1"
+	"google.golang.org/api/iam/v1"
+	pubsub "google.golang.org/api/pubsub/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+type IAM struct {
+	kmspb.UnimplementedKeyManagementServiceServer
+	iampb.UnimplementedIAMPolicyServer
+
+	Mu        sync.Mutex
+	keys      map[string]bool
+	KeyPolicy map[string]*iampb.Policy
+	KeyRaces  int
+	Project   *cloudresourcemanager.Policy
+	Writes    int
+	Created   []*iam.CreateServiceAccountRequest
+
+	Accounts       map[string]bool
+	Unseen         int
+	QuotaFull      bool
+	QuotaThrottled bool
+
+	ProjectWrites   int
+	ProjectStale    int
+	ProjectAttempts int
+	MissingRole     string
+	MissingRoleAsks int
+
+	AccountPolicies     map[string]*iam.Policy
+	accountDescriptions map[string]string
+	AccountWrites       int
+	AccountPolicyUnseen int
+	AccountPolicyDenied bool
+
+	TopicPolicies map[string]*pubsub.Policy
+	TopicWrites   int
+	DeletedTopics map[string]bool
+
+	QueuePolicies map[string]*iampb.Policy
+	QueueWrites   int
+	QueueAborts   int
+
+	TasksAbsent  bool
+	QueuesMade   []string
+	QueuesPurged []string
+
+	DeletedAccounts []string
+}
+
+type delayQueues struct {
+	cloudtaskspb.UnimplementedCloudTasksServer
+	server *IAM
+}
+
+func (q delayQueues) CreateQueue(_ context.Context, req *cloudtaskspb.CreateQueueRequest) (*cloudtaskspb.Queue, error) {
+	q.server.Mu.Lock()
+	defer q.server.Mu.Unlock()
+	q.server.QueuesMade = append(q.server.QueuesMade, req.GetQueue().GetName())
+	return req.GetQueue(), nil
+}
+
+func (q delayQueues) GetQueue(_ context.Context, req *cloudtaskspb.GetQueueRequest) (*cloudtaskspb.Queue, error) {
+	return &cloudtaskspb.Queue{Name: req.GetName()}, nil
+}
+
+func (q delayQueues) PurgeQueue(_ context.Context, req *cloudtaskspb.PurgeQueueRequest) (*cloudtaskspb.Queue, error) {
+	q.server.Mu.Lock()
+	defer q.server.Mu.Unlock()
+	q.server.QueuesPurged = append(q.server.QueuesPurged, req.GetName())
+	return &cloudtaskspb.Queue{Name: req.GetName()}, nil
+}
+
+func (q delayQueues) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
+	q.server.Mu.Lock()
+	defer q.server.Mu.Unlock()
+	if q.server.TasksAbsent {
+		return nil, status.Error(codes.NotFound, req.GetResource())
+	}
+	if policy := q.server.QueuePolicies[req.GetResource()]; policy != nil {
+		return policy, nil
+	}
+	return &iampb.Policy{Etag: []byte("BwXhoLA=")}, nil
+}
+
+func (q delayQueues) SetIamPolicy(_ context.Context, req *iampb.SetIamPolicyRequest) (*iampb.Policy, error) {
+	q.server.Mu.Lock()
+	defer q.server.Mu.Unlock()
+	if q.server.QueueAborts > 0 {
+		q.server.QueueAborts--
+		return nil, status.Error(codes.Aborted, "the queue's policy changed under this write")
+	}
+	if q.server.QueuePolicies == nil {
+		q.server.QueuePolicies = map[string]*iampb.Policy{}
+	}
+	q.server.QueuePolicies[req.GetResource()] = req.GetPolicy()
+	q.server.QueueWrites++
+	return req.GetPolicy(), nil
+}
+
+func (s *IAM) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	if !s.keys[req.GetName()] {
+		return nil, status.Error(codes.NotFound, req.GetName())
+	}
+	return &kmspb.CryptoKey{Name: req.GetName()}, nil
+}
+
+func (s *IAM) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	if policy := s.KeyPolicy[req.GetResource()]; policy != nil {
+		return policy, nil
+	}
+	return &iampb.Policy{Etag: []byte("BwXhoLA=")}, nil
+}
+
+func (s *IAM) SetIamPolicy(_ context.Context, req *iampb.SetIamPolicyRequest) (*iampb.Policy, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	if s.KeyRaces > 0 {
+		s.KeyRaces--
+		s.KeyPolicy[req.GetResource()] = &iampb.Policy{Etag: []byte("BwXhoLB="), Bindings: []*iampb.Binding{{Role: "roles/cloudkms.viewer", Members: []string{"user:concurrent"}}}}
+		return nil, status.Error(codes.FailedPrecondition, "the key's policy changed under this write")
+	}
+	s.KeyPolicy[req.GetResource()] = req.GetPolicy()
+	s.Writes++
+	return req.GetPolicy(), nil
+}
+
+func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.Mu.Lock()
+		defer s.Mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		path := r.URL.Path
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/projects/acme-prod/services/"):
+			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": bootstrap.EnabledService})
+		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":
+			_, _ = w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
+		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":getIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):
+			_ = json.NewEncoder(w).Encode(s.Project)
+		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":setIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):
+			var asked cloudresourcemanager.SetIamPolicyRequest
+			if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			s.ProjectAttempts++
+			if s.MissingRole != "" && slices.ContainsFunc(asked.Policy.Bindings, func(b *cloudresourcemanager.Binding) bool { return b.Role == s.MissingRole }) {
+				s.MissingRoleAsks++
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Role (` + s.MissingRole + `) does not exist in the resource's hierarchy."}}`))
+				return
+			}
+			if s.ProjectStale > 0 {
+				s.ProjectStale--
+				w.WriteHeader(http.StatusPreconditionFailed)
+				_, _ = w.Write([]byte(`{"error":{"code":412,"status":"FAILED_PRECONDITION","message":"etag mismatch"}}`))
+				return
+			}
+			if s.Unseen > 0 {
+				s.Unseen--
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Service account does not exist."}}`))
+				return
+			}
+			s.Project = asked.Policy
+			s.Writes++
+			s.ProjectWrites++
+			_ = json.NewEncoder(w).Encode(s.Project)
+		case strings.Contains(path, "/topics/") && s.DeletedTopics[strings.TrimSuffix(strings.TrimSuffix(path, ":getIamPolicy"), ":setIamPolicy")]:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"topic not found"}}`))
+		case strings.Contains(path, "/topics/") && strings.HasSuffix(path, ":getIamPolicy"):
+			topic := strings.TrimSuffix(path, ":getIamPolicy")
+			policy := s.TopicPolicies[topic]
+			if policy == nil {
+				policy = &pubsub.Policy{Etag: "BwXhoLA="}
+			}
+			_ = json.NewEncoder(w).Encode(policy)
+		case strings.Contains(path, "/topics/") && strings.HasSuffix(path, ":setIamPolicy"):
+			var asked pubsub.SetIamPolicyRequest
+			if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if s.TopicPolicies == nil {
+				s.TopicPolicies = map[string]*pubsub.Policy{}
+			}
+			s.TopicPolicies[strings.TrimSuffix(path, ":setIamPolicy")] = asked.Policy
+			s.TopicWrites++
+			_ = json.NewEncoder(w).Encode(asked.Policy)
+		case s.TasksAbsent && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":getIamPolicy"):
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
+		case s.AccountPolicyUnseen > 0 && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":getIamPolicy"):
+			s.AccountPolicyUnseen--
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
+		case s.AccountPolicyDenied && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":setIamPolicy"):
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"denied"}}`))
+		case s.AccountPolicies != nil && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":getIamPolicy"):
+			policy := s.AccountPolicies[strings.TrimSuffix(path, ":getIamPolicy")]
+			if policy == nil {
+				policy = &iam.Policy{Etag: "BwXhoLA="}
+			}
+			_ = json.NewEncoder(w).Encode(policy)
+		case s.AccountPolicies != nil && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":setIamPolicy"):
+			var asked iam.SetIamPolicyRequest
+			if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			s.AccountPolicies[strings.TrimSuffix(path, ":setIamPolicy")] = asked.Policy
+			s.AccountWrites++
+			_ = json.NewEncoder(w).Encode(asked.Policy)
+		case strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":getIamPolicy"):
+			_, _ = w.Write([]byte(`{"etag":"BwXhoLA=","bindings":[{"role":"roles/iam.serviceAccountUser","members":["user:emulator"]}]}`))
+		case strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":setIamPolicy"):
+			_, _ = w.Write([]byte(`{"etag":"BwXhoLB="}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(path, "/serviceAccounts"):
+			var asked iam.CreateServiceAccountRequest
+			if err := json.NewDecoder(r.Body).Decode(&asked); err == nil {
+				s.Created = append(s.Created, &asked)
+			}
+			switch {
+			case s.QuotaFull:
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":400,"status":"FAILED_PRECONDITION","message":"Maximum number of service accounts on project acme-prod reached."}}`))
+			case s.QuotaThrottled:
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = w.Write([]byte(`{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"quota exceeded"}}`))
+			case s.Accounts != nil:
+				s.Accounts[asked.AccountId] = true
+				_, _ = w.Write([]byte(`{"email":"` + asked.AccountId + `@acme-prod.iam.gserviceaccount.com"}`))
+			default:
+				w.WriteHeader(http.StatusConflict)
+				_, _ = w.Write([]byte(`{"error":{"code":409,"message":"already exists"}}`))
+			}
+		case r.Method == http.MethodDelete && strings.Contains(path, "/serviceAccounts/"):
+			s.DeletedAccounts = append(s.DeletedAccounts, path)
+			_, _ = w.Write([]byte(`{}`))
+		case s.Accounts != nil && r.Method == http.MethodGet && strings.Contains(path, "/serviceAccounts/") &&
+			!s.Accounts[strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], "@acme-prod.iam.gserviceaccount.com")]:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
+		case r.Method == http.MethodGet && s.accountDescriptions[path[strings.LastIndex(path, "/")+1:]] != "":
+			id := strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], "@acme-prod.iam.gserviceaccount.com")
+			_ = json.NewEncoder(w).Encode(&iam.ServiceAccount{Email: id + "@acme-prod.iam.gserviceaccount.com", Description: s.accountDescriptions[path[strings.LastIndex(path, "/")+1:]]})
+		case r.Method == http.MethodGet && strings.Contains(path, "/serviceAccounts/"):
+			_, _ = w.Write([]byte(`{"email":"ocel-production@acme-prod.iam.gserviceaccount.com"}`))
+		default:
+			t.Errorf("the bootstrap called %s %s, which nothing here serves", r.Method, path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}
+}
+
+func (s *IAM) Open(t *testing.T) *gcloud.Clients {
+	t.Helper()
+	return s.Serve(t, s.Rest(t))
+}
+
+func (s *IAM) Serve(t *testing.T, rest http.HandlerFunc) *gcloud.Clients {
+	t.Helper()
+	grpcServer := grpc.NewServer()
+	kmspb.RegisterKeyManagementServiceServer(grpcServer, s)
+	iampb.RegisterIAMPolicyServer(grpcServer, s)
+	cloudtaskspb.RegisterCloudTasksServer(grpcServer, delayQueues{server: s})
+	firestorepb.RegisterFirestoreServer(grpcServer, emptyFirestore{})
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			grpcServer.ServeHTTP(w, r)
+			return
+		}
+		rest(w, r)
+	}))
+	server.Config.Protocols = new(http.Protocols)
+	server.Config.Protocols.SetHTTP1(true)
+	server.Config.Protocols.SetUnencryptedHTTP2(true)
+	server.Start()
+	t.Cleanup(server.Close)
+	t.Cleanup(grpcServer.Stop)
+	return &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
+}
+
+func (s *IAM) ProjectMembers(role string) ([]string, *cloudresourcemanager.Expr) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	for _, binding := range s.Project.Bindings {
+		if binding.Role == role {
+			return binding.Members, binding.Condition
+		}
+	}
+	return nil, nil
+}
+
+func (s *IAM) KeyMembers(key, role string) []string {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	for _, binding := range s.KeyPolicy[key].GetBindings() {
+		if binding.GetRole() == role {
+			return binding.GetMembers()
+		}
+	}
+	return nil
+}
+
+func GrantedIAM() *IAM {
+	return &IAM{
+		keys:      map[string]bool{"projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production": true},
+		KeyPolicy: map[string]*iampb.Policy{},
+		Project:   &cloudresourcemanager.Policy{Etag: "BwXhoLA="},
+	}
+}
+
+type emptyFirestore struct {
+	firestorepb.UnimplementedFirestoreServer
+}
+
+func (emptyFirestore) BatchGetDocuments(*firestorepb.BatchGetDocumentsRequest, firestorepb.Firestore_BatchGetDocumentsServer) error {
+	return status.Error(codes.NotFound, "no such document")
+}

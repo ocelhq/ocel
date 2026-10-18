@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
@@ -47,8 +48,8 @@ func previewSpec() provider.StackSpec {
 }
 
 func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	progress := &fake.Log{}
 
 	if _, err := p.ProvisionContainers(context.Background(), previewSpec(), progress); err != nil {
@@ -87,8 +88,8 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 }
 
 func TestAProductionReleaseIsNamedForItsNamespaceProjectEnvironmentAndApp(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	spec := previewSpec()
 	spec.Ref.Tier = environment.TierProduction
 	spec.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
@@ -206,8 +207,8 @@ func (r releasedStacks) destroy(t *testing.T, ref provider.StackRef) {
 }
 
 func TestReclaimingADroppedFunctionReleaseLeavesTheServiceServingTheActiveRelease(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	dropped := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one")
 	gone := released.provision(t, dropped)
@@ -221,14 +222,14 @@ func TestReclaimingADroppedFunctionReleaseLeavesTheServiceServingTheActiveReleas
 
 	released.destroy(t, dropped.Ref)
 
-	service := server.serving()
+	service := server.Serving()
 	if service == nil {
 		t.Fatalf("reclaiming the dropped release deleted Cloud Run service %s, which the active release serves from", active.Physical)
 	}
 	if !run.ServedBy(service.Traffic, active.Revision) {
 		t.Errorf("the service serves %+v after the reclaim, want all of it still on the active release's %s", service.Traffic, active.Revision)
 	}
-	if revisions := server.remaining(); !slices.Equal(revisions, []string{active.Revision}) {
+	if revisions := server.Remaining(); !slices.Equal(revisions, []string{active.Revision}) {
 		t.Errorf("the service keeps revisions %v after the reclaim, want only %s: the dropped release's revision is its own to reclaim", revisions, active.Revision)
 	}
 }
@@ -236,8 +237,8 @@ func TestReclaimingADroppedFunctionReleaseLeavesTheServiceServingTheActiveReleas
 func TestDestroyingEveryReleaseOfAFunctionDeletesItsServiceWhicheverGoesFirst(t *testing.T) {
 	for name, activeFirst := range map[string]bool{"the active release first": true, "the dropped release first": false} {
 		t.Run(name, func(t *testing.T) {
-			server := &runServer{}
-			p := server.open(t)
+			server := &googletest.Run{}
+			p := providerServing(server, t)
 			released := newReleasedStacks(p)
 			earlier := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one")
 			later := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two")
@@ -255,7 +256,7 @@ func TestDestroyingEveryReleaseOfAFunctionDeletesItsServiceWhicheverGoesFirst(t 
 				released.destroy(t, ref)
 			}
 
-			if service := server.serving(); service != nil {
+			if service := server.Serving(); service != nil {
 				t.Errorf("destroying every release left Cloud Run service %s standing", active.Physical)
 			}
 		})
@@ -263,18 +264,18 @@ func TestDestroyingEveryReleaseOfAFunctionDeletesItsServiceWhicheverGoesFirst(t 
 }
 
 func TestAContainerThatNamesNoHealthPathIsProbedAtTheRoot(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	spec := previewSpec()
 	spec.App.HealthCheckPath = ""
 
 	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if len(server.created) == 0 {
+	if len(server.Created) == 0 {
 		t.Fatal("ProvisionContainers() created no service")
 	}
-	container := server.created[len(server.created)-1].Template.Containers[0]
+	container := server.Created[len(server.Created)-1].Template.Containers[0]
 	if container.StartupProbe == nil || container.StartupProbe.HttpGet == nil || container.StartupProbe.HttpGet.Path != "/" {
 		t.Errorf("a container naming no health path is probed at %+v, want /", container.StartupProbe)
 	}
@@ -292,15 +293,15 @@ func boundToAStore(spec provider.StackSpec) provider.StackSpec {
 
 func TestAnAppBoundToADatabaseReachesPrivateRangesOverTheTiersSubnetwork(t *testing.T) {
 	want := "PRIVATE_RANGES_ONLY projects/acme-prod/global/networks/ocel-preview projects/acme-prod/regions/europe-west1/subnetworks/ocel-preview"
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	spec := previewSpec()
 	spec.App.Values.Bindings = []provider.Binding{{Type: provider.BindingPostgres, Name: "orders"}}
 
 	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if got := egressOf(server.created[len(server.created)-1]); got != want {
+	if got := egressOf(server.Created[len(server.Created)-1]); got != want {
 		t.Errorf("a service bound to a database has egress %q, want %q", got, want)
 	}
 }
@@ -315,8 +316,8 @@ func egressOf(service *runv2.GoogleCloudRunV2Service) string {
 
 func TestAnAppBoundToAStoreReachesPrivateRangesOverTheTiersSubnetwork(t *testing.T) {
 	want := "PRIVATE_RANGES_ONLY projects/acme-prod/global/networks/ocel-preview projects/acme-prod/regions/europe-west1/subnetworks/ocel-preview"
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 
 	if _, err := p.ProvisionContainers(context.Background(), boundToAStore(previewSpec()), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
@@ -324,7 +325,7 @@ func TestAnAppBoundToAStoreReachesPrivateRangesOverTheTiersSubnetwork(t *testing
 	if _, err := p.ProvisionFunctions(context.Background(), boundToAStore(previewSpec()), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	released := slices.Concat(server.created, server.patched)
+	released := slices.Concat(server.Created, server.Patched)
 	if len(released) != 2 {
 		t.Fatalf("released %d services, want the container and the function", len(released))
 	}
@@ -336,20 +337,20 @@ func TestAnAppBoundToAStoreReachesPrivateRangesOverTheTiersSubnetwork(t *testing
 }
 
 func TestAnAppBoundToNoStoreHasNoNetworkInterface(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 
 	if _, err := p.ProvisionContainers(context.Background(), previewSpec(), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if got := egressOf(server.created[0]); got != "" {
+	if got := egressOf(server.Created[0]); got != "" {
 		t.Errorf("a service bound to no store has egress %q, want none", got)
 	}
 }
 
 func TestAnAppBoundToARealtimeIsToldWhereItsGatewayTakesPublishes(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	spec := previewSpec()
 	spec.App.Values.Bindings = []provider.Binding{{
 		Type: provider.BindingRealtime, Name: "realtime--app", Resource: "app",
@@ -359,7 +360,7 @@ func TestAnAppBoundToARealtimeIsToldWhereItsGatewayTakesPublishes(t *testing.T) 
 	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	manifest, err := variables.Parse([]byte(envOf(server.created[0].Template.Containers[0])[variables.EnvVar]))
+	manifest, err := variables.Parse([]byte(envOf(server.Created[0].Template.Containers[0])[variables.EnvVar]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,13 +370,13 @@ func TestAnAppBoundToARealtimeIsToldWhereItsGatewayTakesPublishes(t *testing.T) 
 }
 
 func TestAnAppBoundToNoRealtimeIsToldOfNoGateway(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 
 	if _, err := p.ProvisionContainers(context.Background(), boundToAStore(previewSpec()), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	manifest, err := variables.Parse([]byte(envOf(server.created[0].Template.Containers[0])[variables.EnvVar]))
+	manifest, err := variables.Parse([]byte(envOf(server.Created[0].Template.Containers[0])[variables.EnvVar]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,8 +396,8 @@ func behindTheLoadBalancer(t *testing.T, p *Provider, spec provider.StackSpec) p
 }
 
 func TestEachReleaseBehindTheLoadBalancerTagsTheRevisionItCreatedWithItsReleaseToken(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	first := behindTheLoadBalancer(t, p, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"))
 	one := released.provision(t, first)
@@ -406,7 +407,7 @@ func TestEachReleaseBehindTheLoadBalancerTagsTheRevisionItCreatedWithItsReleaseT
 	second := behindTheLoadBalancer(t, p, functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two"))
 	two := released.provision(t, second)
 
-	traffic := server.serving().Traffic
+	traffic := server.Serving().Traffic
 	for tag, revision := range map[string]string{first.Ref.Name.Release.String(): one.Revision, second.Ref.Name.Release.String(): two.Revision} {
 		if !slices.ContainsFunc(traffic, func(target *runv2.GoogleCloudRunV2TrafficTarget) bool {
 			return target.Tag == tag && run.RevisionName(target.Revision) == revision
@@ -420,8 +421,8 @@ func TestEachReleaseBehindTheLoadBalancerTagsTheRevisionItCreatedWithItsReleaseT
 }
 
 func TestAReleaseWithNoEdgeInFrontTagsNoRevision(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	one := released.provision(t, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"))
 	if _, err := p.services().Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
@@ -429,17 +430,17 @@ func TestAReleaseWithNoEdgeInFrontTagsNoRevision(t *testing.T) {
 	}
 	released.provision(t, functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two"))
 
-	for _, target := range server.serving().Traffic {
+	for _, target := range server.Serving().Traffic {
 		if target.Tag != "" {
 			t.Errorf("the service carries %+v, want no tag: with nothing in front, Cloud Run answers a tag on its own run.app url, "+
-				"so a tag would publish each unpromoted revision to anyone once the service is open", server.serving().Traffic)
+				"so a tag would publish each unpromoted revision to anyone once the service is open", server.Serving().Traffic)
 		}
 	}
 }
 
 func TestPruningAReleaseUntagsTheImageNoRemainingRevisionRuns(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	dropped := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
 	released.provision(t, dropped)
@@ -451,21 +452,21 @@ func TestPruningAReleaseUntagsTheImageNoRemainingRevisionRuns(t *testing.T) {
 	}
 
 	released.destroy(t, dropped.Ref)
-	if got := server.untags(); len(got) != 0 {
+	if got := server.Untags(); len(got) != 0 {
 		t.Fatalf("pruning d1 untagged %v, want nothing: d2 still runs the same image", got)
 	}
 	released.destroy(t, unchanged.Ref)
 
 	want := []string{"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/tags/sha256-one"}
-	if got := server.untags(); !slices.Equal(got, want) {
+	if got := server.Untags(); !slices.Equal(got, want) {
 		t.Errorf("pruning the last release on sha256-one untagged %v, want %v: the repository's cleanup policy deletes an untagged image a week on, "+
 			"and a tag no release runs keeps it forever", got, want)
 	}
 }
 
 func TestDestroyingEveryReleaseOfAFunctionUntagsEveryImageItsRevisionsRan(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	only := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
 	released.provision(t, only)
@@ -473,31 +474,31 @@ func TestDestroyingEveryReleaseOfAFunctionUntagsEveryImageItsRevisionsRan(t *tes
 	released.destroy(t, only.Ref)
 
 	want := []string{"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/tags/sha256-one"}
-	if got := server.untags(); !slices.Equal(got, want) {
+	if got := server.Untags(); !slices.Equal(got, want) {
 		t.Errorf("destroying the service untagged %v, want %v", got, want)
 	}
 }
 
 func TestDestroyingAServiceLeavesTaggedAnImageAnotherServiceInTheRegionRuns(t *testing.T) {
-	server := &runServer{elsewhere: map[string]string{
+	server := &googletest.Run{Elsewhere: map[string]string{
 		"ocel-shop-prod-web-w-media-00001": "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one",
 	}}
-	p := server.open(t)
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	only := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
 	released.provision(t, only)
 
 	released.destroy(t, only.Ref)
 
-	if got := server.untags(); len(got) != 0 {
+	if got := server.Untags(); len(got) != 0 {
 		t.Errorf("destroying the service untagged %v, want nothing: a worker in the region still runs that image, "+
 			"and the repository would delete it from under the worker a week on", got)
 	}
 }
 
 func TestPruningAsksAfterEachImageByItsLabelAndListsNothingOfTheRegion(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	first := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
 	one := released.provision(t, first)
@@ -512,45 +513,45 @@ func TestPruningAsksAfterEachImageByItsLabelAndListsNothingOfTheRegion(t *testin
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}
 
-	if got := server.regionListings(); got != 0 {
+	if got := server.RegionListings(); got != 0 {
 		t.Errorf("pruning listed every revision in the region %d times, want none: that listing grows with every service in the account", got)
 	}
-	if got := server.labelQueries(); len(got) != 2 {
+	if got := server.LabelQueries(); len(got) != 2 {
 		t.Errorf("pruning asked %v, want one question per image it would untag, each naming the image's label", got)
 	}
-	if got := server.untags(); len(got) != 2 {
+	if got := server.Untags(); len(got) != 2 {
 		t.Errorf("pruning untagged %v, want both images no remaining revision runs", got)
 	}
 }
 
 func TestAReleaseTagsItsImageAgainWhenAPruneUntaggedItSinceThePush(t *testing.T) {
 	image := "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one"
-	server := &runServer{missing: []string{"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/tags/sha256-one"}}
-	p := server.open(t)
+	server := &googletest.Run{Missing: []string{"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/tags/sha256-one"}}
+	p := providerServing(server, t)
 
 	newReleasedStacks(p).provision(t, functionRelease("d1", image))
 
 	want := []string{"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/tags/sha256-one -> " +
 		"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/versions/sha256:one"}
-	if got := server.retags(); !slices.Equal(got, want) {
+	if got := server.Retags(); !slices.Equal(got, want) {
 		t.Errorf("the release tagged %v, want %v: a deploy that skipped its push because the tag was there hands Cloud Run a tag a prune may have taken since", got, want)
 	}
 }
 
 func TestAReleaseLeavesATagThatIsStillThereAlone(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 
 	newReleasedStacks(p).provision(t, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one"))
 
-	if got := server.retags(); len(got) != 0 {
+	if got := server.Retags(); len(got) != 0 {
 		t.Errorf("the release tagged %v, want nothing: the tag it hands Cloud Run is there", got)
 	}
 }
 
 func TestPruningLeavesTaggedAnImageARemainingReleaseOfTheServiceRuns(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	image := "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one"
 	first := functionRelease("d1", image)
@@ -567,7 +568,7 @@ func TestPruningLeavesTaggedAnImageARemainingReleaseOfTheServiceRuns(t *testing.
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}
 
-	if got := server.untags(); len(got) != 0 {
+	if got := server.Untags(); len(got) != 0 {
 		t.Errorf("pruning d1 untagged %v, want nothing: d2's revision runs the same image, and its release labels the revision with it", got)
 	}
 }

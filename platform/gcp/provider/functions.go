@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
 func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.Function, error) {
@@ -29,9 +31,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			return nil, err
 		}
 	}
-	budget := connectionBudgetOf(spec, len(app.Functions)+len(app.Workers))
-	instances := provider.Instances{Max: budget.ceiling()}
-	budget.warnOversubscribed(progress)
+	budget := postgres.ConnectionBudgetOf(spec, len(app.Functions)+len(app.Workers))
+	instances := provider.Instances{Max: budget.Ceiling()}
+	budget.WarnOversubscribed(progress)
 	facts, err := p.readEdgeFacts(ctx, spec)
 	if err != nil {
 		return nil, err
@@ -41,7 +43,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		return nil, err
 	}
 	named := c.Names
-	tasks, declared, err := p.tasksFor(ctx, c, spec)
+	tasks, declared, err := p.topicHooks().Tasks(ctx, c, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +77,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		image := functioncode.FunctionImageRef(spec.Images, fn.Name)
 		if strings.TrimSpace(image) == "" {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"function %s named no image, and a function on Cloud Run is the container a registry coordinate named", fn.Name)
+				"function %s names no image, and a function on Cloud Run is the container a registry coordinate names", fn.Name)
 		}
 		service, err := serviceFor(named, spec, app, fn.Name)
 		if err != nil {
@@ -146,7 +148,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			Name: fn.Name, Physical: service, URL: address, Revision: ran.Revision, IgnoresGate: gateIgnored,
 		})
 	}
-	if !hostsWorkers(app) {
+	if !topic.HostsWorkers(app) {
 		return deployed, nil
 	}
 	values, err := mergeValues(app.App, runtimeValues, app.Values.ContainerEnv, own)

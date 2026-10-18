@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
@@ -50,17 +51,17 @@ func TestTheTagDatabaseIsAPartADeployAddsAndNoLongerInTheBase(t *testing.T) {
 	t.Parallel()
 
 	names := names.New("ocel", "acme-prod")
-	b := bootstrap{clients: &gcloud.Clients{Names: names, Region: "europe-west1"}}
+	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names, Region: "europe-west1"}})
 	for _, tier := range bothTiers {
-		database := item{Kind: KindDatabase, Name: names.TagDatabase(tier)}
-		if slices.Contains(idsOf(bootstrapItems(names, tier, false)), database.ID()) {
+		database := bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.TagDatabase(tier)}
+		if slices.Contains(idsOf(bootstrap.Resources(names, tier, false)), database.ID()) {
 			t.Errorf("a %s bootstrap provisions %s, which the first deploy that revalidates adds", tier, database.ID())
 		}
-		tags := b.tagDatabasePart(tier)
-		if tags.name != tagDatabasePart || len(tags.resources) != 1 || tags.resources[0].ID != names.TagDatabase(tier) {
+		tags := newTagDatabasePart(b, tier)
+		if tags.Name != tagDatabasePart || len(tags.Resources) != 1 || tags.Resources[0].ID != names.TagDatabase(tier) {
 			t.Errorf("the %s tag database part is %+v, want it holding %s", tier, tags, names.TagDatabase(tier))
 		}
-		if condition := partDatabasesCondition(names); !strings.Contains(condition, `"projects/acme-prod/databases/`+names.TagDatabase(tier)+`"`) {
+		if condition := bootstrap.PartDatabasesCondition(names); !strings.Contains(condition, `"projects/acme-prod/databases/`+names.TagDatabase(tier)+`"`) {
 			t.Errorf("a deploy is granted the part databases role on %s, want it to name the %s tag database it makes", condition, tier)
 		}
 	}
@@ -114,7 +115,7 @@ func tagDatabaseUsers(t *testing.T, p *Provider) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parts, err := b.listDescribedParts(ctx, environment.TierProduction)
+	parts, err := b.ListDescribedParts(ctx, environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"google.golang.org/api/compute/v1"
 )
 
@@ -33,10 +34,10 @@ func invalidating(t *testing.T, status int) (*Provider, *invalidateServer) {
 		w.Header().Set("Content-Type", "application/json")
 		if server.status != 0 {
 			w.WriteHeader(server.status)
-			writeBody(w, map[string]any{"error": map[string]any{"code": server.status, "message": "refused"}})
+			googletest.WriteBody(w, map[string]any{"error": map[string]any{"code": server.status, "message": "refused"}})
 			return
 		}
-		writeBody(w, &compute.Operation{Name: "op"})
+		googletest.WriteBody(w, &compute.Operation{Name: "op"})
 	}))
 	t.Cleanup(served.Close)
 	return pushing(t, served.URL), server

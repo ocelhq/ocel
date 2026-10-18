@@ -14,10 +14,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
 func releaseOf(id string) naming.ReleaseToken { return naming.NewReleaseToken(id, "fingerprint") }
@@ -34,21 +38,21 @@ func applyAppGrants(t *testing.T, c *gcloud.Clients, spec provider.StackSpec) er
 	t.Helper()
 	ref := spec.Ref
 	account := c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, spec.App.App)
-	want, err := appGrants(context.Background(), c, spec, account, appMember(c, ref, spec.App.App), nil, nil)
+	want, err := appGrants(context.Background(), c, component.Registry{bucket.New(nil).Component()}, spec, account, appMember(c, ref, spec.App.App), nil, nil)
 	if err != nil {
 		return err
 	}
 	return grants.Apply(context.Background(), c, ref.Tier, want, nil)
 }
 
-func grantedAppAccount(t *testing.T, server *iamServer) (*Provider, *gcloud.Clients, provider.StackSpec, string) {
+func grantedAppAccount(t *testing.T, server *googletest.IAM) (*Provider, *gcloud.Clients, provider.StackSpec, string) {
 	t.Helper()
 	return grantedAccountOf(t, server, reachingTopics(routedNextSpec()), map[string]*provider.TopicSpec{"resize": {}})
 }
 
-func grantedAccountOf(t *testing.T, server *iamServer, spec provider.StackSpec, declared map[string]*provider.TopicSpec) (*Provider, *gcloud.Clients, provider.StackSpec, string) {
+func grantedAccountOf(t *testing.T, server *googletest.IAM, spec provider.StackSpec, declared map[string]*provider.TopicSpec) (*Provider, *gcloud.Clients, provider.StackSpec, string) {
 	t.Helper()
-	server.accountPolicies = map[string]*iam.Policy{}
+	server.AccountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
 	recordApp(t, p, spec.Ref, spec.Ref.Name)
@@ -73,7 +77,7 @@ func removeStack(t *testing.T, p *Provider, c *gcloud.Clients, ref provider.Stac
 	}
 }
 
-func holdings(server *iamServer, c *gcloud.Clients, member string) []string {
+func holdings(server *googletest.IAM, c *gcloud.Clients, member string) []string {
 	var held []string
 	for _, bound := range projectBindingsOf(server) {
 		if strings.Contains(bound, member) {
@@ -81,13 +85,13 @@ func holdings(server *iamServer, c *gcloud.Clients, member string) []string {
 		}
 	}
 	queue := c.DelayQueuePath("europe-west1", environment.TierProduction)
-	for _, binding := range server.queuePolicies[queue].GetBindings() {
+	for _, binding := range server.QueuePolicies[queue].GetBindings() {
 		if slices.Contains(binding.GetMembers(), member) {
 			held = append(held, "queue "+binding.GetRole())
 		}
 	}
 	own := "/v1/projects/acme-prod/serviceAccounts/" + strings.TrimPrefix(member, "serviceAccount:")
-	for _, binding := range policyOrEmpty(server.accountPolicies[own]) {
+	for _, binding := range policyOrEmpty(server.AccountPolicies[own]) {
 		if slices.Contains(binding.Members, member) {
 			held = append(held, "own account "+binding.Role)
 		}
@@ -96,13 +100,13 @@ func holdings(server *iamServer, c *gcloud.Clients, member string) []string {
 }
 
 func resizePath(c *gcloud.Clients, spec provider.StackSpec) string {
-	return "/v1/projects/acme-prod/topics/" + taskNames(c.Names, spec.Ref).Topic("resize")
+	return "/v1/projects/acme-prod/topics/" + topic.Names(c.Names, spec.Ref).Topic("resize")
 }
 
-func publishersOf(server *iamServer, path string) []string {
-	server.mu.Lock()
-	defer server.mu.Unlock()
-	for _, binding := range topicBindingsOf(server.topicPolicies[path]) {
+func publishersOf(server *googletest.IAM, path string) []string {
+	server.Mu.Lock()
+	defer server.Mu.Unlock()
+	for _, binding := range topicBindingsOf(server.TopicPolicies[path]) {
 		if binding.Role == "roles/pubsub.publisher" {
 			return binding.Members
 		}
@@ -129,8 +133,8 @@ func TestEachEnvironmentOfAnAppRunsAsAnAccountOfItsOwn(t *testing.T) {
 	if first == second {
 		t.Errorf("pr-7 and pr-8 both run as %s, and a preview's code then holds every grant another preview's resources gave it", first)
 	}
-	if len(server.created) != 2 {
-		t.Errorf("%d accounts were created, want one per environment", len(server.created))
+	if len(server.Created) != 2 {
+		t.Errorf("%d accounts were created, want one per environment", len(server.Created))
 	}
 }
 
@@ -185,8 +189,8 @@ func TestADeployThatStopsBindingABucketOfAnotherEnvironmentTakesTheGrantOnItAway
 func TestADeployRecordsWhatItGrantsBeforeItGrantsIt(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.accountPolicies = map[string]*iam.Policy{}
-	server.accountPolicyDenied = true
+	server.AccountPolicies = map[string]*iam.Policy{}
+	server.AccountPolicyDenied = true
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 
@@ -270,13 +274,13 @@ func TestRevokingAnAppsGrantsTouchesNoOtherMembersBindings(t *testing.T) {
 	server := appAccountsOnly()
 	p, c, spec, member := grantedAppAccount(t, server)
 	other := "serviceAccount:other@acme-prod.iam.gserviceaccount.com"
-	for _, binding := range server.project.Bindings {
+	for _, binding := range server.Project.Bindings {
 		if binding.Role == grants.RecordsRole {
 			binding.Members = append(binding.Members, other)
 		}
 	}
 	conditioned := &cloudresourcemanager.Expr{Expression: `resource.name == "projects/acme-prod/datasets/sales"`}
-	server.project.Bindings = append(server.project.Bindings,
+	server.Project.Bindings = append(server.Project.Bindings,
 		&cloudresourcemanager.Binding{Role: "roles/viewer", Members: []string{other}},
 		&cloudresourcemanager.Binding{Role: "roles/bigquery.dataEditor", Condition: conditioned, Members: []string{member}},
 	)
@@ -291,8 +295,8 @@ func TestRevokingAnAppsGrantsTouchesNoOtherMembersBindings(t *testing.T) {
 	if got := projectBindingsOf(server); !slices.Equal(got, want) {
 		t.Errorf("the project binds %q, want exactly %q: only what ocel granted the account is taken back and every binding left empty is dropped", got, want)
 	}
-	if server.project.Version != policy.ConditionalVersion {
-		t.Errorf("the policy was written at version %d, want %d: its bindings are conditional", server.project.Version, policy.ConditionalVersion)
+	if server.Project.Version != policy.ConditionalVersion {
+		t.Errorf("the policy was written at version %d, want %d: its bindings are conditional", server.Project.Version, policy.ConditionalVersion)
 	}
 }
 
@@ -300,8 +304,8 @@ func TestRevokingAnAppsGrantsSkipsWhatIsAlreadyGone(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c, spec, member := grantedAppAccount(t, server)
-	server.tasksAbsent = true
-	server.deletedTopics = map[string]bool{resizePath(c, spec): true}
+	server.TasksAbsent = true
+	server.DeletedTopics = map[string]bool{resizePath(c, spec): true}
 
 	removeStack(t, p, c, spec.Ref)
 
@@ -314,7 +318,7 @@ func TestADeployThatStopsReachingATopicTakesItsPublisherGrantAway(t *testing.T) 
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c, spec, member := grantedAppAccount(t, server)
-	server.topicPolicies[resizePath(c, spec)].Bindings = append(server.topicPolicies[resizePath(c, spec)].Bindings,
+	server.TopicPolicies[resizePath(c, spec)].Bindings = append(server.TopicPolicies[resizePath(c, spec)].Bindings,
 		&pubsub.Binding{Role: "roles/pubsub.publisher", Members: []string{"serviceAccount:other@acme-prod.iam.gserviceaccount.com"}})
 
 	if _, err := p.ensureAppAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{}); err != nil {
@@ -342,8 +346,8 @@ func TestRemovingAnInfraStackRevokesNoAppAccount(t *testing.T) {
 }
 
 func TestDestroyingTheLastReleaseOfAnAppRevokesItsAccountAndAnotherReleaseKeepsIt(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	first := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one")
 	second := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two")
@@ -351,10 +355,10 @@ func TestDestroyingTheLastReleaseOfAnAppRevokesItsAccountAndAnotherReleaseKeepsI
 	released.provision(t, second)
 	member := appMember(p.resolved, first.Ref, "web")
 	holding := func() bool {
-		return slices.ContainsFunc(projectBindingsOf(server.identities()), func(bound string) bool { return strings.Contains(bound, member) })
+		return slices.ContainsFunc(projectBindingsOf(server.Identities()), func(bound string) bool { return strings.Contains(bound, member) })
 	}
 	if !holding() {
-		t.Fatalf("the project binds %q before any destroy, want the app's account in it", projectBindingsOf(server.identities()))
+		t.Fatalf("the project binds %q before any destroy, want the app's account in it", projectBindingsOf(server.Identities()))
 	}
 
 	released.destroy(t, first.Ref)
@@ -363,7 +367,7 @@ func TestDestroyingTheLastReleaseOfAnAppRevokesItsAccountAndAnotherReleaseKeepsI
 	}
 	released.destroy(t, second.Ref)
 	if holding() {
-		t.Errorf("the project still binds %q after the app's last release was destroyed", projectBindingsOf(server.identities()))
+		t.Errorf("the project still binds %q after the app's last release was destroyed", projectBindingsOf(server.Identities()))
 	}
 }
 

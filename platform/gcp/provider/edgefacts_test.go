@@ -33,9 +33,9 @@ func TestTheFunctionsOfADeployReadTheEdgeFactsTheDeployReadAndNotTheStoreAgain(t
 	p := programming(h)
 	var seen edgeFacts
 	wrapped := stacks{Stacks: edgeFactsReadingStacks{seen: &seen, read: func(ctx context.Context, spec provider.StackSpec) (edgeFacts, error) {
-		h.secrets.mu.Lock()
-		clear(h.secrets.secrets)
-		h.secrets.mu.Unlock()
+		h.secrets.Mu.Lock()
+		clear(h.secrets.Secrets)
+		h.secrets.Mu.Unlock()
 		return p.readEdgeFacts(ctx, spec)
 	}}, p: p}
 

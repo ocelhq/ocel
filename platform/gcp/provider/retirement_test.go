@@ -16,10 +16,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 type deletingRun struct {
-	runServer
+	googletest.Run
 
 	mu      sync.Mutex
 	deleted []string
@@ -27,8 +28,8 @@ type deletingRun struct {
 
 func (s *deletingRun) open(t *testing.T) *Provider {
 	t.Helper()
-	serve := s.serve(t)
-	return pushing(t, s.identities().serve(t, func(w http.ResponseWriter, r *http.Request) {
+	serve := s.Serve(t)
+	return pushing(t, s.Identities().Serve(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/services/") && !strings.Contains(r.URL.Path, "/revisions/") {
 			s.mu.Lock()
 			s.deleted = append(s.deleted, r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:])
@@ -57,7 +58,7 @@ func TestRetiringDeletesTheWorkerServicesOfEachAppNoLongerDeployed(t *testing.T)
 	t.Parallel()
 
 	server := &deletingRun{}
-	server.service = &runv2.GoogleCloudRunV2Service{Name: "projects/acme-prod/locations/europe-west1/services/any"}
+	server.Service = &runv2.GoogleCloudRunV2Service{Name: "projects/acme-prod/locations/europe-west1/services/any"}
 	p := server.open(t)
 	recordWorkerRelease(t, p, "prod", "web", "r00000001", map[string]string{"media": "ocel-shop-prod-w-media"})
 	recordWorkerRelease(t, p, "prod", "jobs", "r00000001", map[string]string{"mail": "ocel-shop-prod-w-mail"})

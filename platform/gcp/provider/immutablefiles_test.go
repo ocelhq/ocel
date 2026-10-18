@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 const tierBucket = "ocel-acme-prod-production"
@@ -68,7 +69,7 @@ func (s *objectsServer) list(w http.ResponseWriter, prefix string) {
 			listed.Items = append(listed.Items, s.objects[name])
 		}
 	}
-	writeBody(w, listed)
+	googletest.WriteBody(w, listed)
 }
 
 func (s *objectsServer) rewrite(w http.ResponseWriter, r *http.Request, src, dst string) {
@@ -83,7 +84,7 @@ func (s *objectsServer) rewrite(w http.ResponseWriter, r *http.Request, src, dst
 	written.Name, written.Bucket = dst, tierBucket
 	s.objects[dst] = &written
 	s.copies++
-	writeBody(w, &raw.RewriteResponse{Kind: "storage#rewriteResponse", Done: true, Resource: &written})
+	googletest.WriteBody(w, &raw.RewriteResponse{Kind: "storage#rewriteResponse", Done: true, Resource: &written})
 }
 
 func (s *objectsServer) object(name string) *raw.Object {

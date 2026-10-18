@@ -41,7 +41,7 @@ func TestTheConnectorsHeartbeatScheduleIsCreatedMendedAndTakenThroughCloudSchedu
 	t.Parallel()
 
 	server := newSyncServer()
-	c := server.open(t).clients
+	c := server.open(t).Clients
 	ctx := context.Background()
 	url := servedAt(c.Connector())
 	path := schedulePath(c, c.Connector())

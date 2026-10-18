@@ -45,6 +45,8 @@ const (
 	TaskRecordsRole = "roles/datastore.user"
 )
 
+const TokenCreatorRole = "roles/iam.serviceAccountTokenCreator"
+
 var appGrantedRoles = []string{RecordsRole, TaskRecordsRole, OpeningRole, ObjectsRole, AssetsRole}
 
 func ListGrantedRoles(names names.Names) []string {

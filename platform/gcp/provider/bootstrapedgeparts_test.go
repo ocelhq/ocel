@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 )
 
 func TestAGCPBootstrapStatusListsTheEdgesBootstrapPartsUnderItsPart(t *testing.T) {
@@ -19,14 +20,14 @@ func TestAGCPBootstrapStatusListsTheEdgesBootstrapPartsUnderItsPart(t *testing.T
 		{Name: "ocel-releases-store/BOOTSTRAP_SECRET", Current: false},
 	}
 
-	stacks, err := b.edgeBootstrapStacks(context.Background(), surveyed(cloudflareOriginPart))
+	stacks, err := b.EdgeBootstrapStacks(context.Background(), surveyed(bootstrap.CloudflareOriginPart))
 	if err != nil {
 		t.Fatalf("edgeBootstrapStacks = %v", err)
 	}
 	kind := string(registry.front.Kind())
 	want := []provider.BootstrapStack{
-		{Name: kind + "/ocel-releases-store", Part: cloudflareOriginPart, Present: true, DigestCurrent: true},
-		{Name: kind + "/ocel-releases-store/BOOTSTRAP_SECRET", Part: cloudflareOriginPart, Present: true, DigestCurrent: false},
+		{Name: kind + "/ocel-releases-store", Part: bootstrap.CloudflareOriginPart, Present: true, DigestCurrent: true},
+		{Name: kind + "/ocel-releases-store/BOOTSTRAP_SECRET", Part: bootstrap.CloudflareOriginPart, Present: true, DigestCurrent: false},
 	}
 	if !reflect.DeepEqual(stacks, want) {
 		t.Errorf("edge stacks = %+v, want %+v", stacks, want)
@@ -39,12 +40,12 @@ func TestAGCPBootstrapStatusReportsAnUndescribableEdgeAsUnreadableRatherThanFail
 	b, registry := fronting(t)
 	registry.front.describe = errors.New("CLOUDFLARE_API_TOKEN is not set")
 
-	stacks, err := b.edgeBootstrapStacks(context.Background(), surveyed(cloudflareOriginPart))
+	stacks, err := b.EdgeBootstrapStacks(context.Background(), surveyed(bootstrap.CloudflareOriginPart))
 	if err != nil {
 		t.Fatalf("edgeBootstrapStacks = %v, want the status to survive an edge it cannot read", err)
 	}
 	want := []provider.BootstrapStack{
-		{Name: string(registry.front.Kind()) + "/bootstrap", Part: cloudflareOriginPart, Present: true, ReadError: "CLOUDFLARE_API_TOKEN is not set"},
+		{Name: string(registry.front.Kind()) + "/bootstrap", Part: bootstrap.CloudflareOriginPart, Present: true, ReadError: "CLOUDFLARE_API_TOKEN is not set"},
 	}
 	if !reflect.DeepEqual(stacks, want) {
 		t.Errorf("edge stacks = %+v, want %+v", stacks, want)

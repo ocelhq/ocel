@@ -11,7 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -45,7 +47,7 @@ func servingRunIn(t *testing.T, pages ...[]string) *gcloud.Clients {
 			page.NextPageToken = strings.Repeat("n", index+1)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		writeBody(w, page)
+		googletest.WriteBody(w, page)
 	}))
 	t.Cleanup(served.Close)
 	return &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Endpoint: served.URL}
@@ -108,9 +110,9 @@ func TestARegionCloudRunServesIsAdmittedWhicheverPageListsIt(t *testing.T) {
 func TestABootstrapChecksThePermissionToListTheRegionsCloudRunServes(t *testing.T) {
 	t.Parallel()
 
-	for _, parts := range [][]string{nil, {cloudflareOriginPart}} {
-		if !slices.Contains(permissionsFor(parts), "run.locations.list") {
-			t.Errorf("a bootstrap with parts %v checks %v, want run.locations.list among them: every run checks its region against the ones Cloud Run lists", parts, permissionsFor(parts))
+	for _, parts := range [][]string{nil, {bootstrap.CloudflareOriginPart}} {
+		if !slices.Contains(bootstrap.PermissionsFor(parts), "run.locations.list") {
+			t.Errorf("a bootstrap with parts %v checks %v, want run.locations.list among them: every run checks its region against the ones Cloud Run lists", parts, bootstrap.PermissionsFor(parts))
 		}
 	}
 }
@@ -121,7 +123,7 @@ func TestACredentialThatMayNotListTheRegionsCloudRunServesIsRefusedNamingThePerm
 	denied := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
-		writeBody(w, map[string]any{"error": map[string]any{"code": http.StatusForbidden, "status": "PERMISSION_DENIED",
+		googletest.WriteBody(w, map[string]any{"error": map[string]any{"code": http.StatusForbidden, "status": "PERMISSION_DENIED",
 			"message": "Permission 'run.locations.list' denied on resource 'projects/acme-prod'"}})
 	}))
 	t.Cleanup(denied.Close)

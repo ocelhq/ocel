@@ -14,11 +14,13 @@ import (
 	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 type syncServer struct {
-	*iamServer
+	*googletest.IAM
 
 	mu        sync.Mutex
 	services  map[string]*runv2.GoogleCloudRunV2Service
@@ -34,7 +36,7 @@ type syncServer struct {
 
 func newSyncServer() *syncServer {
 	return &syncServer{
-		iamServer: grantedIAM(),
+		IAM:       googletest.GrantedIAM(),
 		services:  map[string]*runv2.GoogleCloudRunV2Service{},
 		revisions: map[string]int{},
 		policies:  map[string]*runv2.GoogleIamV1Policy{},
@@ -44,16 +46,16 @@ func newSyncServer() *syncServer {
 
 func servedAt(name string) string { return "https://" + name + "-3k2x7lq4ta-ew.a.run.app" }
 
-func (s *syncServer) open(t *testing.T) bootstrap {
+func (s *syncServer) open(t *testing.T) bootstrap.Engine {
 	t.Helper()
-	iamRest := s.rest(t)
-	c := s.serve(t, func(w http.ResponseWriter, r *http.Request) {
+	iamRest := s.Rest(t)
+	c := s.Serve(t, func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
 		case strings.HasPrefix(path, "/v2/") && strings.Contains(path, "/services"):
 			s.serveRun(w, r, strings.TrimPrefix(path, "/v2/"))
 		case strings.HasPrefix(path, "/v2/") && strings.Contains(path, "/operations/"):
-			writeBody(w, &runv2.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
+			googletest.WriteBody(w, &runv2.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
 		case strings.HasPrefix(path, "/v1/") && strings.Contains(path, "/jobs"):
 			s.serveScheduler(w, r, strings.TrimPrefix(path, "/v1/"))
 		default:
@@ -62,17 +64,17 @@ func (s *syncServer) open(t *testing.T) bootstrap {
 	})
 	p := pushing(t, c.Endpoint)
 	p.resolved = c
-	return bootstrap{
-		clients:        c,
-		deployAndRoute: p.services().DeployAndRoute,
-		tearDown:       p.services().TearDown,
-		pushBinary: func(_ context.Context, _ environment.Tier, _, ref string, _ []byte, _ string) error {
+	return composed(bootstrap.Engine{
+		Clients:        c,
+		DeployAndRoute: p.services().DeployAndRoute,
+		TearDown:       p.services().TearDown,
+		PushBinary: func(_ context.Context, _ environment.Tier, _, ref string, _ []byte, _ string) error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			s.pushed = append(s.pushed, ref)
 			return nil
 		},
-	}
+	})
 }
 
 func notFound(w http.ResponseWriter) {
@@ -89,12 +91,12 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 	switch {
 	case verb == "getIamPolicy":
 		if policy := s.policies[name]; policy != nil {
-			writeBody(w, policy)
+			googletest.WriteBody(w, policy)
 			return
 		}
-		writeBody(w, &runv2.GoogleIamV1Policy{Etag: "BwXhoLA="})
+		googletest.WriteBody(w, &runv2.GoogleIamV1Policy{Etag: "BwXhoLA="})
 	case verb == "setIamPolicy":
-		asked := readBody[runv2.GoogleIamV1SetIamPolicyRequest](w, r)
+		asked := googletest.ReadBody[runv2.GoogleIamV1SetIamPolicyRequest](w, r)
 		if asked == nil {
 			return
 		}
@@ -105,9 +107,9 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 			return
 		}
 		s.policies[name] = asked.Policy
-		writeBody(w, asked.Policy)
+		googletest.WriteBody(w, asked.Policy)
 	case r.Method == http.MethodPost:
-		desired := readBody[runv2.GoogleCloudRunV2Service](w, r)
+		desired := googletest.ReadBody[runv2.GoogleCloudRunV2Service](w, r)
 		if desired == nil {
 			return
 		}
@@ -117,9 +119,9 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 		s.revisions[desired.Name] = 1
 		desired.LatestReadyRevision = desired.Name + "/revisions/" + id + "-00001"
 		s.services[desired.Name] = desired
-		writeBody(w, done)
+		googletest.WriteBody(w, done)
 	case r.Method == http.MethodPatch:
-		desired := readBody[runv2.GoogleCloudRunV2Service](w, r)
+		desired := googletest.ReadBody[runv2.GoogleCloudRunV2Service](w, r)
 		current := s.services[name]
 		if desired == nil || current == nil {
 			notFound(w)
@@ -130,16 +132,16 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 			if slices.Contains(strings.Split(mask, ","), "traffic") {
 				current.Traffic = desired.Traffic
 			}
-			writeBody(w, done)
+			googletest.WriteBody(w, done)
 			return
 		}
-		if !sameTemplate(current.Template, desired.Template) {
+		if !googletest.SameTemplate(current.Template, desired.Template) {
 			s.revisions[name]++
 			current.LatestReadyRevision = name + "/revisions/" + run.RevisionName(name) + "-0000" + strconv.Itoa(s.revisions[name])
 		}
 		current.Template, current.Traffic = desired.Template, desired.Traffic
 		current.Ingress, current.InvokerIamDisabled = desired.Ingress, desired.InvokerIamDisabled
-		writeBody(w, done)
+		googletest.WriteBody(w, done)
 	case r.Method == http.MethodDelete:
 		s.deleted = append(s.deleted, name)
 		if s.services[name] == nil {
@@ -147,9 +149,9 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 			return
 		}
 		delete(s.services, name)
-		writeBody(w, done)
+		googletest.WriteBody(w, done)
 	case s.services[name] != nil:
-		writeBody(w, s.services[name])
+		googletest.WriteBody(w, s.services[name])
 	default:
 		notFound(w)
 	}
@@ -173,21 +175,21 @@ func (s *syncServer) serveScheduler(w http.ResponseWriter, r *http.Request, name
 			return
 		}
 		current.State = "ENABLED"
-		writeBody(w, current)
+		googletest.WriteBody(w, current)
 	case r.Method == http.MethodPost:
-		asked := readBody[cloudscheduler.Job](w, r)
+		asked := googletest.ReadBody[cloudscheduler.Job](w, r)
 		if asked == nil {
 			return
 		}
 		if s.schedules[asked.Name] != nil {
-			conflicted(w, "already exists")
+			googletest.Conflicted(w, "already exists")
 			return
 		}
 		asked.State = "ENABLED"
 		s.schedules[asked.Name] = asked
-		writeBody(w, asked)
+		googletest.WriteBody(w, asked)
 	case r.Method == http.MethodPatch:
-		asked := readBody[cloudscheduler.Job](w, r)
+		asked := googletest.ReadBody[cloudscheduler.Job](w, r)
 		if asked == nil {
 			return
 		}
@@ -198,7 +200,7 @@ func (s *syncServer) serveScheduler(w http.ResponseWriter, r *http.Request, name
 			asked.State = current.State
 		}
 		s.schedules[name] = asked
-		writeBody(w, asked)
+		googletest.WriteBody(w, asked)
 	case r.Method == http.MethodDelete:
 		s.deleted = append(s.deleted, name)
 		if s.schedules[name] == nil {
@@ -212,7 +214,7 @@ func (s *syncServer) serveScheduler(w http.ResponseWriter, r *http.Request, name
 			notFound(w)
 			return
 		}
-		writeBody(w, s.schedules[name])
+		googletest.WriteBody(w, s.schedules[name])
 	}
 }
 

@@ -17,74 +17,76 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestTheRepositoryPrunesOnlyUntaggedImagesOlderThanAWeek(t *testing.T) {
 	t.Parallel()
 
-	policies := imageRepository().CleanupPolicies
+	policies := bootstrap.ImageRepository().CleanupPolicies
 	if len(policies) != 1 {
 		t.Fatalf("the repository is created under %d cleanup policies, want the one: a KEEP window beside a DELETE lets the window fill with tagged versions and the DELETE take every untagged one", len(policies))
 	}
-	policy, named := policies[dropUntaggedPolicy]
+	policy, named := policies[bootstrap.DropUntaggedPolicy]
 	if !named {
-		t.Fatalf("the repository is created under %v, want a policy named %q", policies, dropUntaggedPolicy)
+		t.Fatalf("the repository is created under %v, want a policy named %q", policies, bootstrap.DropUntaggedPolicy)
 	}
-	if policy.Action != deleteImages {
-		t.Errorf("the %s policy acts %q, want %q", dropUntaggedPolicy, policy.Action, deleteImages)
+	if policy.Action != bootstrap.DeleteImages {
+		t.Errorf("the %s policy acts %q, want %q", bootstrap.DropUntaggedPolicy, policy.Action, bootstrap.DeleteImages)
 	}
 	if policy.Condition == nil {
-		t.Fatalf("the %s policy names no condition, and one that matches everything deletes everything", dropUntaggedPolicy)
+		t.Fatalf("the %s policy names no condition, and one that matches everything deletes everything", bootstrap.DropUntaggedPolicy)
 	}
-	if policy.Condition.TagState != untaggedImages {
-		t.Errorf("the %s policy matches tag state %q, want %q: a tagged image is one a service still runs", dropUntaggedPolicy, policy.Condition.TagState, untaggedImages)
+	if policy.Condition.TagState != bootstrap.UntaggedImages {
+		t.Errorf("the %s policy matches tag state %q, want %q: a tagged image is one a service still runs", bootstrap.DropUntaggedPolicy, policy.Condition.TagState, bootstrap.UntaggedImages)
 	}
-	if policy.Condition.OlderThan != untaggedLifetime {
+	if policy.Condition.OlderThan != bootstrap.UntaggedLifetime {
 		t.Errorf("the %s policy matches versions older than %q, want %q: without it an in-flight push's untagged child manifests are deleted under it",
-			dropUntaggedPolicy, policy.Condition.OlderThan, untaggedLifetime)
+			bootstrap.DropUntaggedPolicy, policy.Condition.OlderThan, bootstrap.UntaggedLifetime)
 	}
 }
 
 func TestTheRepositoryIsCreatedUnderAModeAnOrgPolicyCanAllow(t *testing.T) {
 	t.Parallel()
 
-	if got := imageRepository().Mode; got != standardImages {
+	if got := bootstrap.ImageRepository().Mode; got != bootstrap.StandardImages {
 		t.Errorf("the repository is created in %q mode, want %q: unset reads as MODE_UNSPECIFIED, and an org enforcing disallowUnspecifiedMode refuses the create outright",
-			got, standardImages)
+			got, bootstrap.StandardImages)
 	}
 }
 
 func TestARepositoryThatDriftedFromWhatTheBootstrapNamesIsMended(t *testing.T) {
 	t.Parallel()
 
-	desired := imageRepository()
+	desired := bootstrap.ImageRepository()
 	for name, tc := range map[string]struct {
 		existing *artifactregistry.Repository
 		mends    bool
 	}{
 		"the repository this bootstrap made": {existing: desired},
 		"one whose policies were edited away": {
-			existing: &artifactregistry.Repository{Format: dockerImages, Mode: standardImages},
+			existing: &artifactregistry.Repository{Format: bootstrap.DockerImages, Mode: bootstrap.StandardImages},
 			mends:    true,
 		},
 		"one with a policy nothing here named": {
 			existing: &artifactregistry.Repository{
-				Format: dockerImages, Mode: standardImages,
+				Format: bootstrap.DockerImages, Mode: bootstrap.StandardImages,
 				CleanupPolicies: map[string]artifactregistry.CleanupPolicy{
-					dropUntaggedPolicy: desired.CleanupPolicies[dropUntaggedPolicy],
-					"keep-recent":      {Id: "keep-recent", Action: "KEEP"},
+					bootstrap.DropUntaggedPolicy: desired.CleanupPolicies[bootstrap.DropUntaggedPolicy],
+					"keep-recent":                {Id: "keep-recent", Action: "KEEP"},
 				},
 			},
 			mends: true,
 		},
 		"one pruning untagged images the moment they are pushed": {
 			existing: &artifactregistry.Repository{
-				Format: dockerImages, Mode: standardImages,
+				Format: bootstrap.DockerImages, Mode: bootstrap.StandardImages,
 				CleanupPolicies: map[string]artifactregistry.CleanupPolicy{
-					dropUntaggedPolicy: {
-						Id: dropUntaggedPolicy, Action: deleteImages,
-						Condition: &artifactregistry.CleanupPolicyCondition{TagState: untaggedImages},
+					bootstrap.DropUntaggedPolicy: {
+						Id: bootstrap.DropUntaggedPolicy, Action: bootstrap.DeleteImages,
+						Condition: &artifactregistry.CleanupPolicyCondition{TagState: bootstrap.UntaggedImages},
 					},
 				},
 			},
@@ -94,15 +96,15 @@ func TestARepositoryThatDriftedFromWhatTheBootstrapNamesIsMended(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			found, err := repositoryPresenceOf("ocel-acme-prod-production", tc.existing)
+			found, err := bootstrap.RepositoryPresenceOf("ocel-acme-prod-production", tc.existing)
 			if err != nil {
 				t.Fatalf("repositoryPresenceOf() = %v, want a verdict on a DOCKER repository", err)
 			}
-			if !found.present {
+			if !found.Present {
 				t.Error("a repository that exists reads as absent, and the bootstrap would try to create it again")
 			}
-			if mends := found.mends != ""; mends != tc.mends {
-				t.Errorf("repositoryPresenceOf() mends %q, want mending=%t: what the survey does not report, the apply does not do", found.mends, tc.mends)
+			if mends := found.Mends != ""; mends != tc.mends {
+				t.Errorf("repositoryPresenceOf() mends %q, want mending=%t: what the survey does not report, the apply does not do", found.Mends, tc.mends)
 			}
 		})
 	}
@@ -112,7 +114,7 @@ func TestARepositoryOfAnotherFormatIsRefusedRatherThanMended(t *testing.T) {
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := repositoryPresenceOf("ocel-acme-prod-production", &artifactregistry.Repository{Format: "MAVEN"})
+	_, err := bootstrap.RepositoryPresenceOf("ocel-acme-prod-production", &artifactregistry.Repository{Format: "MAVEN"})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("repositoryPresenceOf() over a MAVEN repository = %v, want an %s refusal: Artifact Registry never changes a format, so no patch mends this", err, refusal.CodeInvalid)
 	}
@@ -122,7 +124,7 @@ func TestRemovingAKeyDestroysEveryVersionItStillHas(t *testing.T) {
 	t.Parallel()
 
 	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production/cryptoKeyVersions/"
-	named := destroyable([]*kmspb.CryptoKeyVersion{
+	named := bootstrap.Destroyable([]*kmspb.CryptoKeyVersion{
 		{Name: key + "1", State: kmspb.CryptoKeyVersion_DESTROYED},
 		{Name: key + "2", State: kmspb.CryptoKeyVersion_ENABLED},
 		{Name: key + "3", State: kmspb.CryptoKeyVersion_DISABLED},
@@ -139,7 +141,7 @@ func TestRemovingAKeyDestroysEveryVersionItStillHas(t *testing.T) {
 func TestABucketIsCreatedUnderUniformAccessWithPublicAccessPrevented(t *testing.T) {
 	t.Parallel()
 
-	attrs := bucketAttrs("europe-west1", item{Kind: KindBucket, Name: "ocel-acme-prod-production-state", Versioned: true})
+	attrs := bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket, Name: "ocel-acme-prod-production-state", Versioned: true})
 	if !attrs.UniformBucketLevelAccess.Enabled {
 		t.Error("the bucket is created with object ACLs live, and an ACL on one object would reach past the IAM the bootstrap grants")
 	}
@@ -159,7 +161,7 @@ func TestABucketThatDriftedOpenIsMended(t *testing.T) {
 		existing *storage.BucketAttrs
 		mends    bool
 	}{
-		"the bucket this bootstrap made": {existing: bucketAttrs("europe-west1", item{Kind: KindBucket})},
+		"the bucket this bootstrap made": {existing: bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket})},
 		"one whose access went back to ACLs": {
 			existing: &storage.BucketAttrs{PublicAccessPrevention: storage.PublicAccessPreventionEnforced},
 			mends:    true,
@@ -175,15 +177,15 @@ func TestABucketThatDriftedOpenIsMended(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			found := bucketPresenceOf(tc.existing, false)
-			if !found.present {
+			found := bootstrap.BucketPresenceOf(tc.existing, false)
+			if !found.Present {
 				t.Error("a bucket that exists reads as absent, and the bootstrap would try to create it again")
 			}
-			if mends := found.mends != ""; mends != tc.mends {
-				t.Errorf("bucketPresenceOf() mends %q, want mending=%t: what the survey does not report, the apply does not do", found.mends, tc.mends)
+			if mends := found.Mends != ""; mends != tc.mends {
+				t.Errorf("bucketPresenceOf() mends %q, want mending=%t: what the survey does not report, the apply does not do", found.Mends, tc.mends)
 			}
-			if emulated := bucketPresenceOf(tc.existing, true); emulated.mends != "" {
-				t.Errorf("bucketPresenceOf() under the emulator mends %q, and the emulator keeps no access configuration to mend", emulated.mends)
+			if emulated := bootstrap.BucketPresenceOf(tc.existing, true); emulated.Mends != "" {
+				t.Errorf("bucketPresenceOf() under the emulator mends %q, and the emulator keeps no access configuration to mend", emulated.Mends)
 			}
 		})
 	}
@@ -193,42 +195,42 @@ func TestEveryBootstrapRemovalStepSaysWhatItTookOrKeptAndWhy(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		removal removal
+		removal bootstrap.Removal
 		want    string
 	}{
 		{
-			removal: removal{item: item{Kind: KindBucket, Name: "ocel-acme-prod-production"}, action: provider.ActionDelete},
+			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindBucket, Name: "ocel-acme-prod-production"}, Action: provider.ActionDelete},
 			want:    "INFO Removed bucket ocel-acme-prod-production",
 		},
 		{
-			removal: removal{item: item{Kind: KindDatabase, Name: "ocel"}, action: provider.ActionDisableThenDelete},
+			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: "ocel"}, Action: provider.ActionDisableThenDelete},
 			want:    "INFO Removed Firestore database ocel",
 		},
 		{
-			removal: removal{item: item{Kind: KindKey, Name: "production"}, action: provider.ActionDelete, reason: reasonKeyScheduled},
+			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindKey, Name: "production"}, Action: provider.ActionDelete, Reason: bootstrap.ReasonKeyScheduled},
 			want:    "INFO Scheduled every version of KMS key production for destruction, which Cloud KMS carries out after 30 days, its default",
 		},
 		{
-			removal: removal{item: item{Kind: KindKey, Name: "production"}, action: provider.ActionDelete, reason: reasonKeyScheduled, destroyAfter: 24 * time.Hour},
+			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindKey, Name: "production"}, Action: provider.ActionDelete, Reason: bootstrap.ReasonKeyScheduled, DestroyAfter: 24 * time.Hour},
 			want:    "INFO Scheduled every version of KMS key production for destruction, which Cloud KMS carries out after 24 hours, the key's own period",
 		},
 		{
-			removal: removal{item: item{Kind: KindKey, Name: "production"}, action: provider.ActionDelete, reason: reasonKeyScheduled, destroyAfter: 7 * 24 * time.Hour},
+			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindKey, Name: "production"}, Action: provider.ActionDelete, Reason: bootstrap.ReasonKeyScheduled, DestroyAfter: 7 * 24 * time.Hour},
 			want:    "INFO Scheduled every version of KMS key production for destruction, which Cloud KMS carries out after 7 days, the key's own period",
 		},
 		{
-			removal: removal{item: item{Kind: KindKeyRing, Name: "ocel"}, action: provider.ActionKeep, reason: reasonRingKept},
-			want:    "INFO Kept KMS key ring ocel: " + reasonRingKept,
+			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindKeyRing, Name: "ocel"}, Action: provider.ActionKeep, Reason: bootstrap.ReasonRingKept},
+			want:    "INFO Kept KMS key ring ocel: " + bootstrap.ReasonRingKept,
 		},
 		{
-			removal: removal{item: item{Kind: KindSecret, Name: "ocel-production"}, action: provider.ActionKeep, reason: reasonAbsent},
+			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindSecret, Name: "ocel-production"}, Action: provider.ActionKeep, Reason: bootstrap.ReasonAbsent},
 			want:    "DEBUG Nothing to remove: secret ocel-production does not exist",
 		},
 	} {
 		progress := &fake.Log{}
-		tc.removal.report(progress)
+		tc.removal.Report(progress)
 		if got := progress.Lines(); !slices.Equal(got, []string{tc.want}) {
-			t.Errorf("removing %s said %q, want %q", tc.removal.item.ID(), got, tc.want)
+			t.Errorf("removing %s said %q, want %q", tc.removal.Resource.ID(), got, tc.want)
 		}
 	}
 }
@@ -236,11 +238,11 @@ func TestEveryBootstrapRemovalStepSaysWhatItTookOrKeptAndWhy(t *testing.T) {
 func TestABootstrapResourceAlreadyCurrentIsNotedOnlyAtDebug(t *testing.T) {
 	t.Parallel()
 
-	target := item{Kind: KindRepository, Name: "ocel-acme-prod-production"}
-	read := survey{present: map[string]bool{target.ID(): true}}
+	target := bootstrap.Resource{Kind: bootstrap.KindRepository, Name: "ocel-acme-prod-production"}
+	read := bootstrap.Survey{Held: map[string]bool{target.ID(): true}}
 	progress := &fake.Log{}
 
-	if err := (bootstrap{}).provision(context.Background(), read, target, progress); err != nil {
+	if err := (composed(bootstrap.Engine{})).Provision(context.Background(), read, target, progress); err != nil {
 		t.Fatalf("provision() = %v", err)
 	}
 	want := []string{"DEBUG The Artifact Registry repository ocel-acme-prod-production is already current"}
@@ -254,15 +256,15 @@ func TestRemovingATierKeepsTheDatabaseItsSiblingShares(t *testing.T) {
 
 	names := names.New("ocel", "acme-prod")
 	tier := environment.TierProduction
-	read := survey{Tier: tier, Names: names, present: map[string]bool{}, sibling: true}
-	for _, each := range bootstrapItems(names, tier, false) {
-		read.present[each.ID()] = true
+	read := bootstrap.Survey{Tier: tier, Names: names, Held: map[string]bool{}, Sibling: true}
+	for _, each := range bootstrap.Resources(names, tier, false) {
+		read.Held[each.ID()] = true
 	}
 
 	actions := map[string]provider.ChangeAction{}
-	for _, taking := range removals(read) {
-		if taking.item.Kind == KindDatabase {
-			actions[taking.item.Name] = taking.action
+	for _, taking := range bootstrap.Removals(read) {
+		if taking.Resource.Kind == bootstrap.KindDatabase {
+			actions[taking.Resource.Name] = taking.Action
 		}
 	}
 	if got := actions[names.Database()]; got != provider.ActionKeep {
@@ -270,22 +272,22 @@ func TestRemovingATierKeepsTheDatabaseItsSiblingShares(t *testing.T) {
 	}
 }
 
-func replacingTheTierKey(t *testing.T) (bootstrap, survey, *int) {
+func replacingTheTierKey(t *testing.T) (bootstrap.Engine, bootstrap.Survey, *int) {
 	t.Helper()
 	asked := 0
-	b := bootstrap{clients: (&iamServer{}).serve(t, func(w http.ResponseWriter, r *http.Request) {
+	b := composed(bootstrap.Engine{Clients: (&googletest.IAM{}).Serve(t, func(w http.ResponseWriter, r *http.Request) {
 		asked++
 		w.WriteHeader(http.StatusNotImplemented)
-	})}
-	key := item{Kind: KindKey, Name: string(environment.TierProduction)}
-	read := survey{
+	})})
+	key := bootstrap.Resource{Kind: bootstrap.KindKey, Name: string(environment.TierProduction)}
+	read := bootstrap.Survey{
 		Tier:      environment.TierProduction,
-		Names:     b.clients.Names,
+		Names:     b.Clients.Names,
 		Project:   "acme-prod",
 		Region:    "europe-west1",
-		present:   map[string]bool{},
-		mending:   map[string]string{},
-		replacing: map[string]string{key.ID(): reasonKeyReplaced},
+		Held:      map[string]bool{},
+		Mending:   map[string]string{},
+		Replacing: map[string]string{key.ID(): bootstrap.ReasonKeyReplaced},
 	}
 	return b, read, &asked
 }
@@ -293,8 +295,8 @@ func replacingTheTierKey(t *testing.T) (bootstrap, survey, *int) {
 func TestABootstrapRefusingReplacementsRefusesBeforeWritingAnythingWhenItWouldReplaceTheTierKey(t *testing.T) {
 	b, read, asked := replacingTheTierKey(t)
 
-	b.surveyed = &surveys{}
-	b.surveyed.remember(read)
+	b.Surveyed = &bootstrap.Surveys{}
+	b.Surveyed.Remember(read)
 	err := b.Apply(t.Context(), provider.BootstrapRequest{Tier: environment.TierProduction, RefuseReplacements: true}, nil)
 
 	var refused refusal.Refusal
@@ -309,9 +311,9 @@ func TestABootstrapRefusingReplacementsRefusesBeforeWritingAnythingWhenItWouldRe
 func TestABootstrapRefusingReplacementsGoesAheadWhenNothingWouldBeReplaced(t *testing.T) {
 	t.Parallel()
 
-	read := survey{Tier: environment.TierProduction, Names: names.New("ocel", "acme-prod"), present: map[string]bool{}}
+	read := bootstrap.Survey{Tier: environment.TierProduction, Names: names.New("ocel", "acme-prod"), Held: map[string]bool{}}
 
-	if err := refuseReplacements(read, bootstrapItems(read.Names, read.Tier, false)); err != nil {
+	if err := bootstrap.RefuseReplacements(read, bootstrap.Resources(read.Names, read.Tier, false)); err != nil {
 		t.Errorf("refuseReplacements() over a tier that replaces nothing = %v, want nil: making what is missing and mending what drifted replace nothing", err)
 	}
 }
@@ -319,12 +321,12 @@ func TestABootstrapRefusingReplacementsGoesAheadWhenNothingWouldBeReplaced(t *te
 func TestABootstrapThatWouldReplaceTheTierKeyPlansItAsAReplacement(t *testing.T) {
 	_, read, _ := replacingTheTierKey(t)
 
-	for _, change := range planned(read, bootstrapItems(read.Names, read.Tier, false)) {
-		if change.Kind != string(KindKey) {
+	for _, change := range bootstrap.Planned(read, bootstrap.Resources(read.Names, read.Tier, false)) {
+		if change.Kind != string(bootstrap.KindKey) {
 			continue
 		}
-		if change.Action != provider.ActionReplace || change.Reason != reasonKeyReplaced {
-			t.Errorf("the tier key is planned as %s (%s), want %s (%s)", change.Action, change.Reason, provider.ActionReplace, reasonKeyReplaced)
+		if change.Action != provider.ActionReplace || change.Reason != bootstrap.ReasonKeyReplaced {
+			t.Errorf("the tier key is planned as %s (%s), want %s (%s)", change.Action, change.Reason, provider.ActionReplace, bootstrap.ReasonKeyReplaced)
 		}
 		return
 	}

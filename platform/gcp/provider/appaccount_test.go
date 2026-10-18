@@ -15,19 +15,23 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
-func appAccountsOnly() *iamServer {
-	server := grantedIAM()
-	server.accounts = map[string]bool{}
+func appAccountsOnly() *googletest.IAM {
+	server := googletest.GrantedIAM()
+	server.Accounts = map[string]bool{}
 	return server
 }
 
-func ensuringAccounts(t *testing.T, server *iamServer) (*Provider, *gcloud.Clients) {
+func ensuringAccounts(t *testing.T, server *googletest.IAM) (*Provider, *gcloud.Clients) {
 	t.Helper()
-	c := server.open(t)
+	c := server.Open(t)
 	return pushing(t, c.Endpoint), c
 }
 
@@ -56,11 +60,11 @@ func topicBindingsOf(policy *pubsub.Policy) []*pubsub.Binding {
 	return policy.Bindings
 }
 
-func projectBindingsOf(server *iamServer) []string {
-	server.mu.Lock()
-	defer server.mu.Unlock()
+func projectBindingsOf(server *googletest.IAM) []string {
+	server.Mu.Lock()
+	defer server.Mu.Unlock()
 	var bound []string
-	for _, binding := range server.project.Bindings {
+	for _, binding := range server.Project.Bindings {
 		condition := ""
 		if binding.Condition != nil {
 			condition = binding.Condition.Expression
@@ -91,8 +95,8 @@ func TestTwoAppsInOneProjectRunAsDifferentAccounts(t *testing.T) {
 	if web == api || web != c.AppAccountEmail(environment.TierProduction, "shop", "production", "web") || api != c.AppAccountEmail(environment.TierProduction, "shop", "production", "api") {
 		t.Errorf("web runs as %q and api as %q, want an account each named for its own app", web, api)
 	}
-	if len(server.created) != 2 {
-		t.Errorf("%d accounts were created, want one per app", len(server.created))
+	if len(server.Created) != 2 {
+		t.Errorf("%d accounts were created, want one per app", len(server.Created))
 	}
 }
 
@@ -122,17 +126,17 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			server := &runServer{iam: appAccountsOnly()}
-			p := server.open(t)
+			server := &googletest.Run{Iam: appAccountsOnly()}
+			p := providerServing(server, t)
 
 			if err := deploy(p, function); err != nil {
 				t.Fatalf("deploying %s = %v", name, err)
 			}
 			want := p.resolved.AppAccountEmail(environment.TierProduction, "shop", "production", "api")
-			if len(server.created) == 0 {
+			if len(server.Created) == 0 {
 				t.Fatalf("%s created no service", name)
 			}
-			for _, service := range server.created {
+			for _, service := range server.Created {
 				if got := service.Template.ServiceAccount; got != want {
 					t.Errorf("%s runs as %q, want its app's own %q", service.Name, got, want)
 				}
@@ -149,14 +153,14 @@ func TestAnAppsAccountIsCreatedOnceAndReusedByTheNextDeploy(t *testing.T) {
 	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err != nil {
 		t.Fatal(err)
 	}
-	created, written := len(server.created), server.writes
+	created, written := len(server.Created), server.Writes
 
 	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() again = %v", err)
 	}
 
-	if len(server.created) != created || server.writes != written {
-		t.Errorf("a second deploy created %d accounts and wrote %d policies, want none: the account and its grants stand", len(server.created)-created, server.writes-written)
+	if len(server.Created) != created || server.Writes != written {
+		t.Errorf("a second deploy created %d accounts and wrote %d policies, want none: the account and its grants stand", len(server.Created)-created, server.Writes-written)
 	}
 }
 
@@ -177,10 +181,10 @@ func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderItsProjectsKeyAndNothin
 	if got := projectBindingsOf(server); !slices.Equal(got, want) {
 		t.Errorf("the project binds %q, want exactly %q", got, want)
 	}
-	if len(server.keyPolicy) != 0 || server.queueWrites != 0 || server.topicWrites != 0 {
-		t.Errorf("the key policy, queue and topics were written (%d, %d, %d), and an app that reaches no topics needs none of them", len(server.keyPolicy), server.queueWrites, server.topicWrites)
+	if len(server.KeyPolicy) != 0 || server.QueueWrites != 0 || server.TopicWrites != 0 {
+		t.Errorf("the key policy, queue and topics were written (%d, %d, %d), and an app that reaches no topics needs none of them", len(server.KeyPolicy), server.QueueWrites, server.TopicWrites)
 	}
-	if got := server.created[0]; got.AccountId != strings.TrimSuffix(email, "@acme-prod.iam.gserviceaccount.com") ||
+	if got := server.Created[0]; got.AccountId != strings.TrimSuffix(email, "@acme-prod.iam.gserviceaccount.com") ||
 		got.ServiceAccount.DisplayName != "ocel shop/api@production (production)" ||
 		got.ServiceAccount.Description != "the identity app api of project shop runs as in environment production of the production tier" {
 		t.Errorf("the account was created as %+v, want one named for its app, project, environment and tier", got.ServiceAccount)
@@ -190,23 +194,23 @@ func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderItsProjectsKeyAndNothin
 func TestAGrantRefusedBecauseTheNewAccountIsNotYetVisibleIsRetried(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.unseen = 2
+	server.Unseen = 2
 	p, c := ensuringAccounts(t, server)
 
 	if _, err := p.ensureAppAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v, want the grant retried until the account is visible", err)
 	}
 
-	if server.projectAttempts != 3 || server.projectWrites != 1 {
-		t.Errorf("the project policy was written %d times and %d took, want 2 refused then 1 that grants both roles", server.projectAttempts, server.projectWrites)
+	if server.ProjectAttempts != 3 || server.ProjectWrites != 1 {
+		t.Errorf("the project policy was written %d times and %d took, want 2 refused then 1 that grants both roles", server.ProjectAttempts, server.ProjectWrites)
 	}
 }
 
 func TestAProjectWithNoRoomForAnotherAccountIsRefusedNamingTheQuota(t *testing.T) {
 	t.Parallel()
-	for name, configure := range map[string]func(*iamServer){
-		"by message":  func(server *iamServer) { server.quotaFull = true },
-		"by throttle": func(server *iamServer) { server.quotaThrottled = true },
+	for name, configure := range map[string]func(*googletest.IAM){
+		"by message":  func(server *googletest.IAM) { server.QuotaFull = true },
+		"by throttle": func(server *googletest.IAM) { server.QuotaThrottled = true },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -227,7 +231,7 @@ func TestAProjectWithNoRoomForAnotherAccountIsRefusedNamingTheQuota(t *testing.T
 func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTopics(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.accountPolicies = map[string]*iam.Policy{}
+	server.AccountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	declared := map[string]*provider.TopicSpec{"resize": {}}
@@ -243,7 +247,7 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 	}
 	queue := c.DelayQueuePath("europe-west1", environment.TierProduction)
 	var queueRoles []string
-	for _, binding := range server.queuePolicies[queue].GetBindings() {
+	for _, binding := range server.QueuePolicies[queue].GetBindings() {
 		if slices.Contains(binding.GetMembers(), member) {
 			queueRoles = append(queueRoles, binding.GetRole())
 		}
@@ -254,8 +258,8 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 	}
 	own := "/v1/projects/acme-prod/serviceAccounts/" + email
 	var actingAs []string
-	for _, binding := range policyOrEmpty(server.accountPolicies[own]) {
-		if binding.Role == runAsRole {
+	for _, binding := range policyOrEmpty(server.AccountPolicies[own]) {
+		if binding.Role == bootstrap.RunAsRole {
 			actingAs = append(actingAs, binding.Members...)
 		}
 	}
@@ -266,23 +270,23 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 		t.Errorf("the app's own account may be acted as by %v, want exactly %v: it enqueues tasks signed as itself, and Cloud Tasks must act as it to sign them", actingAs, wantActingAs)
 	}
 	tierAccount := "/v1/projects/acme-prod/serviceAccounts/ocel-production@acme-prod.iam.gserviceaccount.com"
-	if _, touched := server.accountPolicies[tierAccount]; touched {
+	if _, touched := server.AccountPolicies[tierAccount]; touched {
 		t.Errorf("the policy of %s was written, and no account but the app's own is acted as", tierAccount)
 	}
-	topic := "/v1/projects/acme-prod/topics/" + taskNames(c.Names, spec.Ref).Topic("resize")
+	topic := "/v1/projects/acme-prod/topics/" + topic.Names(c.Names, spec.Ref).Topic("resize")
 	published := false
-	for _, binding := range topicBindingsOf(server.topicPolicies[topic]) {
+	for _, binding := range topicBindingsOf(server.TopicPolicies[topic]) {
 		published = published || binding.Role == "roles/pubsub.publisher" && slices.Contains(binding.Members, member)
 	}
 	if !published {
-		t.Errorf("topic %s has policy %+v, want the app to publish to it", topic, server.topicPolicies[topic])
+		t.Errorf("topic %s has policy %+v, want the app to publish to it", topic, server.TopicPolicies[topic])
 	}
 }
 
 func TestAnAppReachingTopicsMayNotDeleteTasksOnTheTiersDelayQueue(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.accountPolicies = map[string]*iam.Policy{}
+	server.AccountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 
@@ -292,7 +296,7 @@ func TestAnAppReachingTopicsMayNotDeleteTasksOnTheTiersDelayQueue(t *testing.T) 
 	}
 
 	member := "serviceAccount:" + email
-	for _, binding := range server.queuePolicies[c.DelayQueuePath("europe-west1", environment.TierProduction)].GetBindings() {
+	for _, binding := range server.QueuePolicies[c.DelayQueuePath("europe-west1", environment.TierProduction)].GetBindings() {
 		if binding.GetRole() == "roles/cloudtasks.taskDeleter" && slices.Contains(binding.GetMembers(), member) {
 			t.Errorf("the app holds %s on the delay queue, and a delay queue is shared by every app of the tier", binding.GetRole())
 		}
@@ -302,15 +306,15 @@ func TestAnAppReachingTopicsMayNotDeleteTasksOnTheTiersDelayQueue(t *testing.T) 
 func TestAnAppReachingNoTopicsIsGrantedNothingOnTheQueueOrItsOwnAccount(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.accountPolicies = map[string]*iam.Policy{}
+	server.AccountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
 
 	if _, err := p.ensureAppAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil); err != nil {
 		t.Fatal(err)
 	}
 
-	if server.queueWrites != 0 || server.accountWrites != 0 || server.topicWrites != 0 {
-		t.Errorf("an app with no topics wrote %d queue, %d account and %d topic policies, want none", server.queueWrites, server.accountWrites, server.topicWrites)
+	if server.QueueWrites != 0 || server.AccountWrites != 0 || server.TopicWrites != 0 {
+		t.Errorf("an app with no topics wrote %d queue, %d account and %d topic policies, want none", server.QueueWrites, server.AccountWrites, server.TopicWrites)
 	}
 	if slices.ContainsFunc(projectBindingsOf(server), func(bound string) bool { return strings.HasPrefix(bound, "roles/datastore.user ") }) {
 		t.Errorf("the project binds %q, and an app with no topics writes no task database", projectBindingsOf(server))
@@ -320,15 +324,15 @@ func TestAnAppReachingNoTopicsIsGrantedNothingOnTheQueueOrItsOwnAccount(t *testi
 func TestAQueueGrantRacedByAnotherDeployIsReadAgainAndWritten(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.queueAborts = 2
-	c := server.open(t)
+	server.QueueAborts = 2
+	c := server.Open(t)
 
-	if err := bindQueueRoles(context.Background(), c, environment.TierProduction, "serviceAccount:app@acme-prod.iam.gserviceaccount.com", queueRoles, queueRoles); err != nil {
+	if err := task.BindQueueRoles(context.Background(), c, environment.TierProduction, "serviceAccount:app@acme-prod.iam.gserviceaccount.com", task.QueueRoles, task.QueueRoles); err != nil {
 		t.Fatalf("bindQueueRoles() = %v", err)
 	}
 
-	if server.queueWrites != 1 {
-		t.Errorf("%d queue policies were written, want the one that took after two aborted", server.queueWrites)
+	if server.QueueWrites != 1 {
+		t.Errorf("%d queue policies were written, want the one that took after two aborted", server.QueueWrites)
 	}
 }
 
@@ -337,7 +341,7 @@ func TestADeployCredentialWithoutTheAppAccountsRoleIsToldWhichRoleItLacks(t *tes
 	for name, deniedAt := range map[string]string{"reading": http.MethodGet, "creating": http.MethodPost} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			c := (&iamServer{}).serve(t, func(w http.ResponseWriter, r *http.Request) {
+			c := (&googletest.IAM{}).Serve(t, func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == deniedAt || r.Method == http.MethodGet {
 					status := http.StatusNotFound
 					if r.Method == deniedAt {
@@ -362,8 +366,8 @@ func TestADeployCredentialWithoutTheAppAccountsRoleIsToldWhichRoleItLacks(t *tes
 func TestAnAppsOwnAccountNotYetReadableIsActedAsOnceItIs(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.accountPolicies = map[string]*iam.Policy{}
-	server.accountPolicyUnseen = 2
+	server.AccountPolicies = map[string]*iam.Policy{}
+	server.AccountPolicyUnseen = 2
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 
@@ -374,19 +378,19 @@ func TestAnAppsOwnAccountNotYetReadableIsActedAsOnceItIs(t *testing.T) {
 
 	member := "serviceAccount:" + email
 	bound := false
-	for _, binding := range policyOrEmpty(server.accountPolicies["/v1/projects/acme-prod/serviceAccounts/"+email]) {
-		bound = bound || binding.Role == runAsRole && slices.Contains(binding.Members, member)
+	for _, binding := range policyOrEmpty(server.AccountPolicies["/v1/projects/acme-prod/serviceAccounts/"+email]) {
+		bound = bound || binding.Role == bootstrap.RunAsRole && slices.Contains(binding.Members, member)
 	}
 	if !bound {
-		t.Errorf("the app's own account is bound to %+v, want the app to act as it", server.accountPolicies)
+		t.Errorf("the app's own account is bound to %+v, want the app to act as it", server.AccountPolicies)
 	}
 }
 
 func TestAnAppsOwnAccountItMayNotActAsNamesTheCustomRole(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.accountPolicies = map[string]*iam.Policy{}
-	server.accountPolicyDenied = true
+	server.AccountPolicies = map[string]*iam.Policy{}
+	server.AccountPolicyDenied = true
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 
@@ -400,22 +404,22 @@ func TestAnAppsOwnAccountItMayNotActAsNamesTheCustomRole(t *testing.T) {
 func TestANextAppThatDeclaresNoTopicIsGrantedNothingOnTheQueueOrAnyAccount(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.accountPolicies = map[string]*iam.Policy{}
+	server.AccountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
 
 	if _, err := p.ensureAppAccount(context.Background(), c, routedNextSpec(), nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 
-	if server.queueWrites != 0 || server.accountWrites != 0 {
-		t.Errorf("a Next app declaring no topic wrote %d queue and %d account policies, want none", server.queueWrites, server.accountWrites)
+	if server.QueueWrites != 0 || server.AccountWrites != 0 {
+		t.Errorf("a Next app declaring no topic wrote %d queue and %d account policies, want none", server.QueueWrites, server.AccountWrites)
 	}
 }
 
 func TestANextAppOnContainerComputeIsGrantedNothingOnTheQueueOrAnyAccount(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	server.accountPolicies = map[string]*iam.Policy{}
+	server.AccountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
 	spec := routedNextSpec()
 	spec.App.Compute = provider.ComputeContainer
@@ -424,7 +428,7 @@ func TestANextAppOnContainerComputeIsGrantedNothingOnTheQueueOrAnyAccount(t *tes
 		t.Fatal(err)
 	}
 
-	if server.queueWrites != 0 || server.accountWrites != 0 {
-		t.Errorf("a container Next app wrote %d queue and %d account policies, want none", server.queueWrites, server.accountWrites)
+	if server.QueueWrites != 0 || server.AccountWrites != 0 {
+		t.Errorf("a container Next app wrote %d queue and %d account policies, want none", server.QueueWrites, server.AccountWrites)
 	}
 }

@@ -10,12 +10,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
 func aTopic(t *testing.T, kind provider.BindingType, spec *provider.TopicSpec) resources.ProvisionRequest {
 	t.Helper()
 	return resources.ProvisionRequest{
-		Ref:      productionRef(t),
+		Ref:      googletest.ProductionRef(t),
 		Resource: provider.Resource{Name: string(kind) + "-orders", Declared: "orders", Type: kind, Topic: spec},
 	}
 }
@@ -36,7 +38,7 @@ func cronTask(cron string) *provider.TopicSpec {
 
 func provisionTopic(t *testing.T, p *Provider, in resources.ProvisionRequest) *provider.Binding {
 	t.Helper()
-	binding, err := p.ProvisionTopic(context.Background(), in, nil)
+	binding, err := p.topicHooks().Provision(context.Background(), in, nil)
 	if err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
@@ -46,7 +48,7 @@ func provisionTopic(t *testing.T, p *Provider, in resources.ProvisionRequest) *p
 func planTopic(t *testing.T, p *Provider, server *topicsServer, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
 	t.Helper()
 	before := len(server.wrote())
-	action, reason, err := p.PlanTopic(context.Background(), in, recorded)
+	action, reason, err := p.topicHooks().Plan(context.Background(), in, recorded)
 	if wrote := server.wrote()[before:]; len(wrote) != 0 {
 		t.Errorf("PlanTopic() wrote %q, want a plan that only reads", wrote)
 	}
@@ -94,7 +96,7 @@ func TestATaskWhoseScheduleJobWasDeletedPlansAnUpdate(t *testing.T) {
 	p, server := servingTopics(t)
 	in := aTopic(t, provider.BindingTask, cronTask("*/5 * * * *"))
 	recorded := provisionTopic(t, p, in)
-	job := "projects/acme-prod/locations/europe-west1/jobs/" + taskNames(namesOf(t, p), in.Ref).ScheduleJob("orders")
+	job := "projects/acme-prod/locations/europe-west1/jobs/" + topic.Names(namesOf(t, p), in.Ref).ScheduleJob("orders")
 	if server.job(job) == nil {
 		t.Fatalf("no Cloud Scheduler job %s was made", job)
 	}
@@ -120,7 +122,7 @@ func TestATopicThatDropsAConsumerPlansAnUpdateNamingItsSubscription(t *testing.T
 	p, server := servingTopics(t)
 	in := aTopic(t, provider.BindingTopic, consumersNamed(false, "ship", "bill"))
 	recorded := provisionTopic(t, p, in)
-	subscription := "projects/acme-prod/subscriptions/" + taskNames(namesOf(t, p), in.Ref).Subscription("orders", "bill")
+	subscription := "projects/acme-prod/subscriptions/" + topic.Names(namesOf(t, p), in.Ref).Subscription("orders", "bill")
 	server.holdSubscription(subscription)
 
 	action, reason, err := planTopic(t, p, server, aTopic(t, provider.BindingTopic, consumersNamed(false, "ship")), recorded)

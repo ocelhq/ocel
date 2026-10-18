@@ -9,8 +9,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/networkconnectivity/v1"
 )
@@ -26,18 +29,18 @@ type networkServer struct {
 	writes   []string
 	unnamed  bool
 
-	databases *cloudSQLServer
+	databases *googletest.CloudSQL
 }
 
-func servingNetworksAndStores(t *testing.T) (bootstrap, *networkServer, *memorystoreServer) {
+func servingNetworksAndStores(t *testing.T) (bootstrap.Engine, *networkServer, *googletest.Memorystore) {
 	t.Helper()
 	b, networks := servingNetworks(t)
-	stores, url := startMemorystore(t)
-	b.stores = memorystore{base: url, client: http.DefaultClient}
+	stores, url := googletest.StartMemorystore(t)
+	b.Stores = gcloud.Memorystore{Base: url, Client: http.DefaultClient}
 	return b, networks, stores
 }
 
-func servingNetworks(t *testing.T) (bootstrap, *networkServer) {
+func servingNetworks(t *testing.T) (bootstrap.Engine, *networkServer) {
 	t.Helper()
 	server := &networkServer{
 		networks: map[string]*compute.Network{},
@@ -45,19 +48,19 @@ func servingNetworks(t *testing.T) (bootstrap, *networkServer) {
 		policies: map[string]*networkconnectivity.ServiceConnectionPolicy{},
 		iam:      map[string]*compute.Policy{},
 
-		databases: newCloudSQLServer(),
+		databases: googletest.NewCloudSQL(),
 	}
 	served := httptest.NewServer(server.serve(t))
 	t.Cleanup(served.Close)
 	names := names.New("ocel", "acme-prod")
 	registry := &frontRegistry{front: &countingFront{}}
-	return bootstrap{clients: &gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: served.URL}, fronts: registry}, server
+	return composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: served.URL}, Edges: registry}), server
 }
 
 func deployingNetworks(t *testing.T) (*Provider, *networkServer) {
 	t.Helper()
 	b, server := servingNetworks(t)
-	return pushing(t, b.clients.Endpoint), server
+	return pushing(t, b.Clients.Endpoint), server
 }
 
 func (s *networkServer) serve(t *testing.T) http.HandlerFunc {
@@ -70,13 +73,13 @@ func (s *networkServer) serve(t *testing.T) http.HandlerFunc {
 		name := path.Base(at)
 		switch {
 		case r.Method == http.MethodGet && strings.Contains(at, "/projects/acme-prod/services/"):
-			writeBody(w, map[string]any{"name": at, "state": enabledService})
+			googletest.WriteBody(w, map[string]any{"name": at, "state": bootstrap.EnabledService})
 		case strings.Contains(at, "/instances"):
-			s.databases.serve(w, r)
+			s.databases.Serve(w, r)
 		case strings.Contains(at, "/operations/"):
-			writeBody(w, map[string]any{"name": at, "status": operationDone, "done": true})
+			googletest.WriteBody(w, map[string]any{"name": at, "status": gcloud.OperationDone, "done": true})
 		case r.Method == http.MethodGet && strings.HasSuffix(at, "/v1/projects/acme-prod"):
-			writeBody(w, map[string]any{"projectId": "acme-prod", "projectNumber": "123456789"})
+			googletest.WriteBody(w, map[string]any{"projectId": "acme-prod", "projectNumber": "123456789"})
 		case strings.HasSuffix(at, "/getIamPolicy"):
 			s.readPolicy(w, path.Base(path.Dir(at)))
 		case strings.HasSuffix(at, "/setIamPolicy"):
@@ -98,12 +101,12 @@ func (s *networkServer) network(w http.ResponseWriter, r *http.Request, name str
 	switch r.Method {
 	case http.MethodGet:
 		if found := s.networks[name]; found != nil {
-			writeBody(w, found)
+			googletest.WriteBody(w, found)
 			return
 		}
 		missing(w)
 	case http.MethodPost:
-		said := readBody[map[string]any](w, r)
+		said := googletest.ReadBody[map[string]any](w, r)
 		if said == nil {
 			return
 		}
@@ -119,7 +122,7 @@ func (s *networkServer) network(w http.ResponseWriter, r *http.Request, name str
 		created.SelfLink = "https://www.googleapis.com/compute/v1/projects/acme-prod/global/networks/" + created.Name
 		s.networks[created.Name] = created
 		s.writes = append(s.writes, "create network "+created.Name)
-		writeBody(w, &compute.Operation{Name: "op-network", Status: operationDone})
+		googletest.WriteBody(w, &compute.Operation{Name: "op-network", Status: gcloud.OperationDone})
 	case http.MethodDelete:
 		if s.networks[name] == nil {
 			missing(w)
@@ -127,7 +130,7 @@ func (s *networkServer) network(w http.ResponseWriter, r *http.Request, name str
 		}
 		delete(s.networks, name)
 		s.writes = append(s.writes, "delete network "+name)
-		writeBody(w, &compute.Operation{Name: "op-network", Status: operationDone})
+		googletest.WriteBody(w, &compute.Operation{Name: "op-network", Status: gcloud.OperationDone})
 	}
 }
 
@@ -135,18 +138,18 @@ func (s *networkServer) subnet(w http.ResponseWriter, r *http.Request, name stri
 	switch r.Method {
 	case http.MethodGet:
 		if found := s.subnets[name]; found != nil {
-			writeBody(w, found)
+			googletest.WriteBody(w, found)
 			return
 		}
 		missing(w)
 	case http.MethodPost:
-		created := readBody[compute.Subnetwork](w, r)
+		created := googletest.ReadBody[compute.Subnetwork](w, r)
 		if created == nil {
 			return
 		}
 		s.subnets[created.Name] = created
 		s.writes = append(s.writes, "create subnetwork "+created.Name)
-		writeBody(w, &compute.Operation{Name: "op-subnet", Status: operationDone})
+		googletest.WriteBody(w, &compute.Operation{Name: "op-subnet", Status: gcloud.OperationDone})
 	case http.MethodDelete:
 		if s.subnets[name] == nil {
 			missing(w)
@@ -154,7 +157,7 @@ func (s *networkServer) subnet(w http.ResponseWriter, r *http.Request, name stri
 		}
 		delete(s.subnets, name)
 		s.writes = append(s.writes, "delete subnetwork "+name)
-		writeBody(w, &compute.Operation{Name: "op-subnet", Status: operationDone})
+		googletest.WriteBody(w, &compute.Operation{Name: "op-subnet", Status: gcloud.OperationDone})
 	}
 }
 
@@ -162,12 +165,12 @@ func (s *networkServer) policy(w http.ResponseWriter, r *http.Request, name stri
 	switch r.Method {
 	case http.MethodGet:
 		if found := s.policies[name]; found != nil {
-			writeBody(w, found)
+			googletest.WriteBody(w, found)
 			return
 		}
 		missing(w)
 	case http.MethodPost:
-		created := readBody[networkconnectivity.ServiceConnectionPolicy](w, r)
+		created := googletest.ReadBody[networkconnectivity.ServiceConnectionPolicy](w, r)
 		if created == nil {
 			return
 		}
@@ -175,10 +178,10 @@ func (s *networkServer) policy(w http.ResponseWriter, r *http.Request, name stri
 		s.policies[id] = created
 		s.writes = append(s.writes, "create policy "+id)
 		if s.unnamed {
-			writeBody(w, map[string]any{"done": false})
+			googletest.WriteBody(w, map[string]any{"done": false})
 			return
 		}
-		writeBody(w, map[string]any{"name": "projects/acme-prod/locations/europe-west1/operations/op-policy", "done": true})
+		googletest.WriteBody(w, map[string]any{"name": "projects/acme-prod/locations/europe-west1/operations/op-policy", "done": true})
 	case http.MethodDelete:
 		if s.policies[name] == nil {
 			missing(w)
@@ -186,26 +189,26 @@ func (s *networkServer) policy(w http.ResponseWriter, r *http.Request, name stri
 		}
 		delete(s.policies, name)
 		s.writes = append(s.writes, "delete policy "+name)
-		writeBody(w, map[string]any{"name": "projects/acme-prod/locations/europe-west1/operations/op-policy", "done": true})
+		googletest.WriteBody(w, map[string]any{"name": "projects/acme-prod/locations/europe-west1/operations/op-policy", "done": true})
 	}
 }
 
 func (s *networkServer) readPolicy(w http.ResponseWriter, subnet string) {
 	if found := s.iam[subnet]; found != nil {
-		writeBody(w, found)
+		googletest.WriteBody(w, found)
 		return
 	}
-	writeBody(w, &compute.Policy{Etag: "BwX="})
+	googletest.WriteBody(w, &compute.Policy{Etag: "BwX="})
 }
 
 func (s *networkServer) writePolicy(w http.ResponseWriter, r *http.Request, subnet string) {
-	sent := readBody[compute.RegionSetPolicyRequest](w, r)
+	sent := googletest.ReadBody[compute.RegionSetPolicyRequest](w, r)
 	if sent == nil {
 		return
 	}
 	s.iam[subnet] = sent.Policy
 	s.writes = append(s.writes, "grant on "+subnet)
-	writeBody(w, sent.Policy)
+	googletest.WriteBody(w, sent.Policy)
 }
 
 func (s *networkServer) wrote() []string {
@@ -220,9 +223,9 @@ func (s *networkServer) installedWithout(policy string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.networks["ocel-production"] = &compute.Network{Name: "ocel-production"}
-	s.subnets["ocel-production"] = &compute.Subnetwork{Name: "ocel-production", IpCidrRange: networkSubnetRange}
-	s.policies["ocel-production-memorystore"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: memorystoreServiceClass}
-	s.policies["ocel-production-cloudsql"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: cloudSQLServiceClass}
+	s.subnets["ocel-production"] = &compute.Subnetwork{Name: "ocel-production", IpCidrRange: network.SubnetRange}
+	s.policies["ocel-production-memorystore"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.MemorystoreServiceClass}
+	s.policies["ocel-production-cloudsql"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.CloudSQLServiceClass}
 	delete(s.policies, policy)
-	s.iam["ocel-production"] = &compute.Policy{Bindings: []*compute.Binding{{Role: networkUserRole, Members: []string{serviceAgent}}}}
+	s.iam["ocel-production"] = &compute.Policy{Bindings: []*compute.Binding{{Role: bootstrap.NetworkUserRole, Members: []string{serviceAgent}}}}
 }

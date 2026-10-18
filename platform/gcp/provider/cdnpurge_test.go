@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
@@ -31,7 +32,7 @@ func behindTheALB(t *testing.T, p *Provider) provider.StackSpec {
 	return spec
 }
 
-func purgeBindingsOf(server *iamServer) []string {
+func purgeBindingsOf(server *googletest.IAM) []string {
 	var bound []string
 	for _, binding := range projectBindingsOf(server) {
 		if strings.HasPrefix(binding, cdnPurgeRolePath+" ") {
@@ -42,13 +43,13 @@ func purgeBindingsOf(server *iamServer) []string {
 }
 
 func TestANextAppBehindTheALBIsToldTheURLMapItClearsCachedPagesOn(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), behindTheALB(t, p), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	env := envOf(server.created[0].Template.Containers[0])
+	env := envOf(server.Created[0].Template.Containers[0])
 	if got, want := env["OCEL_CDN_URL_MAP"], "projects/acme-prod/global/urlMaps/ocel-alb-production-routes"; got != want {
 		t.Errorf("the Next service reads OCEL_CDN_URL_MAP=%q, want %q", got, want)
 	}
@@ -80,8 +81,8 @@ func TestANextAppWithoutTheALBIsToldNoURLMap(t *testing.T) {
 		"a Next app without ISR": func(_ *testing.T, _ *Provider, spec *provider.StackSpec) { spec.App.ISR = nil },
 	} {
 		t.Run(name, func(t *testing.T) {
-			server := &runServer{}
-			p := server.open(t)
+			server := &googletest.Run{}
+			p := providerServing(server, t)
 			publishGateOn(t, p, environment.TierProduction, nil)
 			spec := behindTheALB(t, p)
 			change(t, p, &spec)
@@ -89,10 +90,10 @@ func TestANextAppWithoutTheALBIsToldNoURLMap(t *testing.T) {
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
 
-			if got, told := envOf(server.created[0].Template.Containers[0])["OCEL_CDN_URL_MAP"]; told {
+			if got, told := envOf(server.Created[0].Template.Containers[0])["OCEL_CDN_URL_MAP"]; told {
 				t.Errorf("the service reads OCEL_CDN_URL_MAP=%q, want none", got)
 			}
-			if bound := purgeBindingsOf(server.identities()); len(bound) != 0 {
+			if bound := purgeBindingsOf(server.Identities()); len(bound) != 0 {
 				t.Errorf("the app's account was granted %q, want no purge binding", bound)
 			}
 		})
@@ -100,8 +101,8 @@ func TestANextAppWithoutTheALBIsToldNoURLMap(t *testing.T) {
 }
 
 func TestANextAppBehindTheALBMayClearCloudCDNAndNothingElseOnTheLoadBalancer(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), behindTheALB(t, p), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
@@ -111,10 +112,10 @@ func TestANextAppBehindTheALBMayClearCloudCDNAndNothingElseOnTheLoadBalancer(t *
 	}
 
 	want := cdnPurgeRolePath + " serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") + " "
-	if got := purgeBindingsOf(server.identities()); len(got) != 1 || got[0] != want {
+	if got := purgeBindingsOf(server.Identities()); len(got) != 1 || got[0] != want {
 		t.Fatalf("the project's purge bindings = %q, want exactly %q: one, unconditioned, for the app's own account", got, want)
 	}
-	for _, binding := range server.identities().project.Bindings {
+	for _, binding := range server.Identities().Project.Bindings {
 		if strings.HasPrefix(binding.Role, "roles/compute.") {
 			t.Errorf("the project binds %s: the app may clear Cloud CDN through the custom role and nothing else", binding.Role)
 		}
@@ -122,26 +123,26 @@ func TestANextAppBehindTheALBMayClearCloudCDNAndNothingElseOnTheLoadBalancer(t *
 }
 
 func TestARedeployOfANextAppBehindTheALBWritesNoPolicy(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	spec := behindTheALB(t, p)
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatal(err)
 	}
-	before := server.identities().projectWrites
+	before := server.Identities().ProjectWrites
 
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("second ProvisionFunctions() = %v", err)
 	}
-	if got := server.identities().projectWrites - before; got != 0 {
+	if got := server.Identities().ProjectWrites - before; got != 0 {
 		t.Errorf("a redeploy wrote the project policy %d times, want 0", got)
 	}
 }
 
 func TestADeployBeforeTheBootstrapKeptTheCachePurgeRoleIsRefusedNamingTheBootstrap(t *testing.T) {
-	server := &runServer{}
-	server.identities().missingRole = cdnPurgeRolePath
-	p := server.open(t)
+	server := &googletest.Run{}
+	server.Identities().MissingRole = cdnPurgeRolePath
+	p := providerServing(server, t)
 
 	_, err := p.ProvisionFunctions(context.Background(), behindTheALB(t, p), nil)
 
@@ -152,14 +153,14 @@ func TestADeployBeforeTheBootstrapKeptTheCachePurgeRoleIsRefusedNamingTheBootstr
 	if !strings.Contains(err.Error(), "`ocel bootstrap preview`") && !strings.Contains(err.Error(), "`ocel bootstrap production`") {
 		t.Errorf("the refusal %q does not name the bootstrap that keeps the role", err)
 	}
-	if got := server.identities().missingRoleAsks; got != 1 {
+	if got := server.Identities().MissingRoleAsks; got != 1 {
 		t.Errorf("the purge binding was tried %d times, want 1: a role that is not there is not an account that is not visible yet", got)
 	}
 }
 
 func TestAnAppNoEnvironmentRunsLosesItsCachePurgeGrant(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), behindTheALB(t, p), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -172,14 +173,14 @@ func TestAnAppNoEnvironmentRunsLosesItsCachePurgeGrant(t *testing.T) {
 	if _, err := grants.RevokeAll(context.Background(), c, p.KeyValues(), environment.TierProduction, account); err != nil {
 		t.Fatal(err)
 	}
-	if got := purgeBindingsOf(server.identities()); len(got) != 0 {
+	if got := purgeBindingsOf(server.Identities()); len(got) != 0 {
 		t.Errorf("the project's purge bindings after the app's account lost its grants = %q, want none", got)
 	}
 }
 
 func TestANextContainerBehindTheALBIsGrantedNeitherTheCachePurgeNorItsStaticFiles(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	spec := behindTheALB(t, p)
 	spec.App.Compute = provider.ComputeContainer
 	spec.App.Image = "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc"
@@ -190,10 +191,10 @@ func TestANextContainerBehindTheALBIsGrantedNeitherTheCachePurgeNorItsStaticFile
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	if got := purgeBindingsOf(server.identities()); len(got) != 0 {
+	if got := purgeBindingsOf(server.Identities()); len(got) != 0 {
 		t.Errorf("the container's account holds %q, and a Next container keeps its pages out of Cloud CDN and is told no url map to purge", got)
 	}
-	if got := assetBindingsOf(server.identities()); len(got) != 0 {
+	if got := assetBindingsOf(server.Identities()); len(got) != 0 {
 		t.Errorf("the container's account holds %q, and a container serves its static files from its own image", got)
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
@@ -50,15 +51,15 @@ func nextSpec() provider.StackSpec {
 
 func releasedNext(t *testing.T, spec provider.StackSpec) *runv2.GoogleCloudRunV2Container {
 	t.Helper()
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	if len(server.created) != 1 {
-		t.Fatalf("released %d services, want the one service a Next app runs as", len(server.created))
+	if len(server.Created) != 1 {
+		t.Fatalf("released %d services, want the one service a Next app runs as", len(server.Created))
 	}
-	return server.created[0].Template.Containers[0]
+	return server.Created[0].Template.Containers[0]
 }
 
 func TestANextServiceAsksForTwoGibibytesOfMemoryBilledPerInstance(t *testing.T) {
@@ -76,13 +77,13 @@ func TestANextServiceAsksForTwoGibibytesOfMemoryBilledPerInstance(t *testing.T) 
 }
 
 func TestANextServiceCutsARequestOffAfterAMinute(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), nextSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got := server.created[0].Template.Timeout; got != "60s" {
+	if got := server.Created[0].Template.Timeout; got != "60s" {
 		t.Errorf("a Next request is cut off after %q, want 60s, as long as a Next request runs on Lambda", got)
 	}
 }
@@ -153,12 +154,12 @@ func TestANextServiceIsToldWhereItsIncrementalCacheLives(t *testing.T) {
 }
 
 func TestANextServiceIsToldTheCacheBucketAndTheObjectPrefixItsEntriesLiveUnder(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	env := envOf(server.created[0].Template.Containers[0])
+	env := envOf(server.Created[0].Template.Containers[0])
 
 	if got, want := env["OCEL_ISR_BUCKET"], namesOf(t, p).Bucket(environment.TierProduction); got != want {
 		t.Errorf("the Next service reads OCEL_ISR_BUCKET=%q, want its tier's bucket %q", got, want)
@@ -193,8 +194,8 @@ func TestANextServiceThatRoutesNothingIsToldNoRoutingManifest(t *testing.T) {
 }
 
 func TestAGuardedNextServiceBehindAnEdgeThatShieldsNothingIsRefused(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	front, err := fake.NewEdges().Open(fake.KindDirect, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -210,16 +211,16 @@ func TestAGuardedNextServiceBehindAnEdgeThatShieldsNothingIsRefused(t *testing.T
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("ProvisionFunctions() code = %v, want %v", code, refusal.CodeInvalid)
 	}
-	if len(server.created) != 0 {
-		t.Errorf("released %d services before refusing, want none", len(server.created))
+	if len(server.Created) != 0 {
+		t.Errorf("released %d services before refusing, want none", len(server.Created))
 	}
 }
 
 func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T) {
 	for _, kind := range []edge.Kind{edge.None, alb.Kind} {
 		t.Run(string(kind), func(t *testing.T) {
-			server := &runServer{}
-			p := server.open(t)
+			server := &googletest.Run{}
+			p := providerServing(server, t)
 			front, err := p.Edges().Open(kind, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -232,7 +233,7 @@ func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
 
-			env := envOf(server.created[0].Template.Containers[0])
+			env := envOf(server.Created[0].Template.Containers[0])
 			if env[edge.OriginDispatchVar] != "1" {
 				t.Errorf("the Next service reads %s=%q, want 1: nothing in front of it routes a request to a route", edge.OriginDispatchVar, env[edge.OriginDispatchVar])
 			}
@@ -244,8 +245,8 @@ func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T
 }
 
 func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	adoptBehindTheWorker(t, p, fake.KindRelay)
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
@@ -258,7 +259,7 @@ func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	if got, told := envOf(server.created[0].Template.Containers[0])[edge.OriginDispatchVar]; told {
+	if got, told := envOf(server.Created[0].Template.Containers[0])[edge.OriginDispatchVar]; told {
 		t.Errorf("a Next service behind an edge that routes reads %s=%q", edge.OriginDispatchVar, got)
 	}
 }
@@ -266,8 +267,8 @@ func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
 func TestAGuardedNextServiceIsReleasedWhereItsIngressKeepsClientsOffIt(t *testing.T) {
 	for _, kind := range []edge.Kind{edge.None, alb.Kind} {
 		t.Run(string(kind), func(t *testing.T) {
-			server := &runServer{}
-			p := server.open(t)
+			server := &googletest.Run{}
+			p := providerServing(server, t)
 			front, err := p.Edges().Open(kind, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -285,12 +286,12 @@ func TestAGuardedNextServiceIsReleasedWhereItsIngressKeepsClientsOffIt(t *testin
 }
 
 func TestANextAppIsToldTheTagsDatabaseItsRecordsLiveIn(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	env := envOf(server.created[0].Template.Containers[0])
+	env := envOf(server.Created[0].Template.Containers[0])
 
 	if got, want := env["OCEL_TAG_DATABASE"], "projects/"+namesOf(t, p).Project()+"/databases/"+namesOf(t, p).TagDatabase(environment.TierProduction); got != want {
 		t.Errorf("the Next service reads OCEL_TAG_DATABASE=%q, want %q", got, want)
@@ -315,25 +316,25 @@ func tagEmulatorEnv(t *testing.T, p *Provider, env map[string]string) {
 }
 
 func TestANextServiceReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	p.tagEndpoint = "http://127.0.0.1:8085"
 	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	tagEmulatorEnv(t, p, envOf(server.created[0].Template.Containers[0]))
+	tagEmulatorEnv(t, p, envOf(server.Created[0].Template.Containers[0]))
 }
 
 func TestANextContainerReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	p.tagEndpoint = "http://127.0.0.1:8085"
 	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	tagEmulatorEnv(t, p, envOf(server.created[0].Template.Containers[0]))
+	tagEmulatorEnv(t, p, envOf(server.Created[0].Template.Containers[0]))
 }
 
 func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
@@ -366,17 +367,17 @@ func nextContainerSpec() provider.StackSpec {
 	}
 }
 
-func releasedNextContainer(t *testing.T, spec provider.StackSpec) (*runv2.GoogleCloudRunV2Service, *runServer) {
+func releasedNextContainer(t *testing.T, spec provider.StackSpec) (*runv2.GoogleCloudRunV2Service, *googletest.Run) {
 	t.Helper()
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if len(server.created) == 0 {
+	if len(server.Created) == 0 {
 		t.Fatal("ProvisionContainers() released no service")
 	}
-	return server.created[0], server
+	return server.Created[0], server
 }
 
 func TestANextContainerKeepsItsCPUBetweenRequestsSoNextRefreshesInTheBackground(t *testing.T) {
@@ -415,12 +416,12 @@ func TestANextContainerAsksForTwoGibibytesOfMemory(t *testing.T) {
 }
 
 func TestANextContainerIsToldTheCacheBucketObjectPrefixAndTagsDatabaseItsEntriesLiveIn(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	env := envOf(server.created[0].Template.Containers[0])
+	env := envOf(server.Created[0].Template.Containers[0])
 
 	for name, want := range map[string]string{
 		"OCEL_ISR_BUCKET":        namesOf(t, p).Bucket(environment.TierProduction),
@@ -475,7 +476,7 @@ func TestAWorkerOfANextContainerIsToldNoCacheLocation(t *testing.T) {
 	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
 	_, server := releasedNextContainer(t, spec)
 
-	workers := slices.Concat(server.created[1:], server.releases())
+	workers := slices.Concat(server.Created[1:], server.Releases())
 	if len(workers) == 0 {
 		t.Fatal("the app's worker was never released")
 	}

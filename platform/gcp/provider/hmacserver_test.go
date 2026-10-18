@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	raw "google.golang.org/api/storage/v1"
 )
 
@@ -47,7 +48,7 @@ func (s *hmacServer) serve(t *testing.T, w http.ResponseWriter, r *http.Request)
 		}
 		s.keys[key.AccessId] = key
 		s.events = append(s.events, "create "+key.AccessId)
-		writeBody(w, &raw.HmacKey{Metadata: key, Secret: "secret-" + key.AccessId})
+		googletest.WriteBody(w, &raw.HmacKey{Metadata: key, Secret: "secret-" + key.AccessId})
 	case path == "" && r.Method == http.MethodGet:
 		var listed []*raw.HmacKeyMetadata
 		for _, key := range s.keys {
@@ -56,17 +57,17 @@ func (s *hmacServer) serve(t *testing.T, w http.ResponseWriter, r *http.Request)
 			}
 		}
 		slices.SortFunc(listed, func(a, b *raw.HmacKeyMetadata) int { return strings.Compare(a.AccessId, b.AccessId) })
-		writeBody(w, &raw.HmacKeysMetadata{Items: listed})
+		googletest.WriteBody(w, &raw.HmacKeysMetadata{Items: listed})
 	case r.Method == http.MethodGet:
-		s.withKey(w, id, func(key *raw.HmacKeyMetadata) { writeBody(w, key) })
+		s.withKey(w, id, func(key *raw.HmacKeyMetadata) { googletest.WriteBody(w, key) })
 	case r.Method == http.MethodPut:
-		update := readBody[raw.HmacKeyMetadata](w, r)
+		update := googletest.ReadBody[raw.HmacKeyMetadata](w, r)
 		if update == nil {
 			return
 		}
 		s.withKey(w, id, func(key *raw.HmacKeyMetadata) {
 			key.State = update.State
-			writeBody(w, key)
+			googletest.WriteBody(w, key)
 		})
 	case r.Method == http.MethodDelete && s.refusesDelete:
 		w.WriteHeader(http.StatusForbidden)

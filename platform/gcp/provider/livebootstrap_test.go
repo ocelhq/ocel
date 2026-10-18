@@ -27,6 +27,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -43,7 +45,7 @@ func servicesEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
-	for _, api := range gcp.BootstrapAPIs {
+	for _, api := range bootstrap.BootstrapAPIs {
 		name := "projects/" + liveProject() + "/services/" + api
 		if _, err := service.Services.Enable(name, &serviceusage.EnableServiceRequest{}).Context(ctx).Do(); err != nil {
 			t.Fatalf("enable %s: %v", api, err)
@@ -163,7 +165,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	kinds := map[string]string{}
 	groups := map[string]string{}
 	for _, group := range plan.Groups {
-		if !strings.HasPrefix(group.Name, string(gcp.Vendor)+"/") {
+		if !strings.HasPrefix(group.Name, string(gcloud.Vendor)+"/") {
 			t.Errorf("Plan() returned the group %q, want every group named under the vendor that provisions it", group.Name)
 		}
 		for _, change := range group.Changes {
@@ -226,7 +228,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {
 			rows++
-			if change.Kind == string(gcp.KindDatabase) && emulated() {
+			if change.Kind == string(bootstrap.KindDatabase) && emulated() {
 				continue
 			}
 			if change.Action != provider.ActionCreate {
@@ -338,7 +340,7 @@ func interrupt(t *testing.T, p *gcp.Provider, tier environment.Tier) {
 	}
 	t.Cleanup(func() { client.Close() })
 
-	writer := client.Bucket(liveNames(t).Bucket(tier)).Object(gcp.StampObject).NewWriter(ctx)
+	writer := client.Bucket(liveNames(t).Bucket(tier)).Object(bootstrap.StampObject).NewWriter(ctx)
 	if _, err := writer.Write([]byte(`{"state":"applying","writer":"live-suite","digest":"halfway"}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -658,7 +660,7 @@ func stamped(t *testing.T, tier environment.Tier, body string) {
 	}
 	defer client.Close()
 
-	writer := client.Bucket(liveNames(t).Bucket(tier)).Object(gcp.StampObject).NewWriter(ctx)
+	writer := client.Bucket(liveNames(t).Bucket(tier)).Object(bootstrap.StampObject).NewWriter(ctx)
 	if _, err := writer.Write([]byte(body)); err != nil {
 		t.Fatal(err)
 	}

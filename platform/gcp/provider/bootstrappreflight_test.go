@@ -6,19 +6,22 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleAccepts(t *testing.T) {
 	t.Parallel()
 
-	parts := []string{cloudflareOriginPart}
-	if n := len(permissionsFor(parts)); n <= 100 {
+	parts := []string{bootstrap.CloudflareOriginPart}
+	if n := len(bootstrap.PermissionsFor(parts)); n <= 100 {
 		t.Fatalf("the parts need %d permissions, want more than 100 to cross Google's limit", n)
 	}
 	var asked int
@@ -37,12 +40,12 @@ func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleA
 		json.NewEncoder(w).Encode(map[string][]string{"permissions": request.Permissions})
 	}))
 	t.Cleanup(server.Close)
-	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}}
+	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}})
 
-	if err := b.permitted(context.Background(), parts); err != nil {
+	if err := b.Permitted(context.Background(), parts); err != nil {
 		t.Fatalf("permitted: %v", err)
 	}
-	if want := len(permissionsFor(parts)); asked != want {
+	if want := len(bootstrap.PermissionsFor(parts)); asked != want {
 		t.Errorf("asked about %d permissions, want %d", asked, want)
 	}
 }
@@ -60,7 +63,7 @@ func servingFirestoreIn(t *testing.T, regions ...string) *gcloud.Clients {
 			locations = append(locations, map[string]string{"name": "projects/acme-prod/locations/" + region, "locationId": region})
 		}
 		w.Header().Set("Content-Type", "application/json")
-		writeBody(w, map[string]any{"locations": locations})
+		googletest.WriteBody(w, map[string]any{"locations": locations})
 	}))
 	t.Cleanup(served.Close)
 	return &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Endpoint: served.URL}
@@ -69,9 +72,9 @@ func servingFirestoreIn(t *testing.T, regions ...string) *gcloud.Clients {
 func TestARegionCloudRunServesAndFirestoreDoesNotIsRefusedNamingTheOnesFirestoreServes(t *testing.T) {
 	t.Parallel()
 
-	b := bootstrap{clients: servingFirestoreIn(t, "us-east1", "europe-west1")}
+	b := composed(bootstrap.Engine{Clients: servingFirestoreIn(t, "us-east1", "europe-west1")})
 
-	err := b.regionServed(context.Background(), survey{Region: "europe-west12"})
+	err := b.RegionServed(context.Background(), bootstrap.Survey{Region: "europe-west12"})
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
@@ -87,9 +90,24 @@ func TestARegionCloudRunServesAndFirestoreDoesNotIsRefusedNamingTheOnesFirestore
 func TestARegionFirestoreServesIsAdmitted(t *testing.T) {
 	t.Parallel()
 
-	b := bootstrap{clients: servingFirestoreIn(t, "us-east1", "europe-west1")}
+	b := composed(bootstrap.Engine{Clients: servingFirestoreIn(t, "us-east1", "europe-west1")})
 
-	if err := b.regionServed(context.Background(), survey{Region: "europe-west1"}); err != nil {
+	if err := b.RegionServed(context.Background(), bootstrap.Survey{Region: "europe-west1"}); err != nil {
 		t.Errorf("regionServed(europe-west1) = %v, want it admitted", err)
+	}
+}
+
+func TestABootstrapChecksThePermissionsItsAccountGrantsNeed(t *testing.T) {
+	t.Parallel()
+	for _, permission := range []string{
+		"resourcemanager.projects.getIamPolicy", "resourcemanager.projects.setIamPolicy",
+		"cloudkms.cryptoKeys.getIamPolicy", "cloudkms.cryptoKeys.setIamPolicy",
+	} {
+		if !slices.Contains(bootstrap.BootstrapPermissions, permission) {
+			t.Errorf("a bootstrap does not check %s, and the apply would fail at an account's grant", permission)
+		}
+	}
+	if !slices.Contains(bootstrap.RolesCovering(nil), "roles/resourcemanager.projectIamAdmin") {
+		t.Errorf("the refusal names %v, want roles/resourcemanager.projectIamAdmin among them: it is what covers a project policy write", bootstrap.RolesCovering(nil))
 	}
 }

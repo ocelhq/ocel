@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
@@ -108,8 +109,8 @@ func TestAnOriginHostnameFitsOneDNSLabel(t *testing.T) {
 }
 
 func TestAFunctionBehindTheWorkerAnswersOnItsReleasesOriginHostname(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	p.records = newOffersHarness(t).records
 	routing := &routedHosts{}
 	p.originRoutes = routing
@@ -135,8 +136,8 @@ func TestAFunctionBehindTheWorkerAnswersOnItsReleasesOriginHostname(t *testing.T
 }
 
 func TestAFunctionBehindAnEdgeThatRunsNoCodeKeepsItsCloudRunURL(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	p.records = newOffersHarness(t).records
 	routing := &routedHosts{}
 	p.originRoutes = routing
@@ -154,8 +155,8 @@ func TestAFunctionBehindAnEdgeThatRunsNoCodeKeepsItsCloudRunURL(t *testing.T) {
 }
 
 func TestAFunctionBehindTheWorkerOnATierWithNoOriginDomainIsRefused(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	p.records = newOffersHarness(t).records
 	p.originRoutes = &routedHosts{}
 
@@ -167,8 +168,8 @@ func TestAFunctionBehindTheWorkerOnATierWithNoOriginDomainIsRefused(t *testing.T
 }
 
 func TestAFunctionBehindTheWorkerWaitsForTheOriginWildcardsCertificate(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	p.records = newOffersHarness(t).records
 	p.originRoutes = &routedHosts{}
 	recordOriginWildcard(t, p.records, originWildcard{BaseDomain: "o.example.com"})
@@ -182,8 +183,8 @@ func TestAFunctionBehindTheWorkerWaitsForTheOriginWildcardsCertificate(t *testin
 
 func prunable(t *testing.T) (*Provider, *routedHosts, []provider.Function) {
 	t.Helper()
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	routing := &routedHosts{}
 	p.originRoutes = routing
@@ -244,27 +245,27 @@ func TestRemovingAFunctionUnroutesEveryOriginHostnameOfItsService(t *testing.T) 
 }
 
 func TestAFunctionBehindTheWorkerOpensAtCreation(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	withOriginBase(t, p)
 	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout:sha256-one"
 
 	if _, err := p.ProvisionFunctions(context.Background(), behindTheWorker(functionRelease("d1", image)), nil); err != nil {
 		t.Fatal(err)
 	}
-	service := server.created[0]
+	service := server.Created[0]
 	if !service.InvokerIamDisabled || service.Labels[run.OpensOnPromotionLabel] != "" {
 		t.Errorf("service opens %v with label %q, want open at creation: the worker reaches it on its origin host before any promotion, and ingress with mTLS keeps clients out",
 			service.InvokerIamDisabled, service.Labels[run.OpensOnPromotionLabel])
 	}
 
-	plain := &runServer{}
+	plain := &googletest.Run{}
 	spec := functionRelease("d2", image)
 	spec.Edge = codeRunningFront{kind: "alb", shields: true}
-	if _, err := plain.open(t).ProvisionFunctions(context.Background(), spec, nil); err != nil {
+	if _, err := providerServing(plain, t).ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := plain.created[0]; got.InvokerIamDisabled || got.Labels[run.OpensOnPromotionLabel] == "" {
+	if got := plain.Created[0]; got.InvokerIamDisabled || got.Labels[run.OpensOnPromotionLabel] == "" {
 		t.Errorf("a service behind the load balancer opens %v with label %q, want it shut until its promotion", got.InvokerIamDisabled, got.Labels[run.OpensOnPromotionLabel])
 	}
 }

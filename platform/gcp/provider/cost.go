@@ -3,44 +3,22 @@ package gcp
 import (
 	"context"
 	"slices"
-	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
+	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
-)
-
-const (
-	tfCloudRunService     = "google_cloud_run_v2_service"
-	tfFirestoreDatabase   = "google_firestore_database"
-	tfStorageBucket       = "google_storage_bucket"
-	tfKMSKeyRing          = "google_kms_key_ring"
-	tfKMSCryptoKey        = "google_kms_crypto_key"
-	tfServiceAccount      = "google_service_account"
-	tfProjectCustomRole   = "google_project_iam_custom_role"
-	tfArtifactRepository  = "google_artifact_registry_repository"
-	tfSecretManagerSecret = "google_secret_manager_secret"
-	tfSchedulerJob        = "google_cloud_scheduler_job"
-	tfMemorystoreInstance = "google_memorystore_instance"
-	tfSQLInstance         = "google_sql_database_instance"
-	tfNetwork             = "google_compute_network"
-	tfSubnetwork          = "google_compute_subnetwork"
-	tfConnectionPolicy    = "google_network_connectivity_service_connection_policy"
-	tfPubSubTopic         = "google_pubsub_topic"
-	tfPubSubSubscription  = "google_pubsub_subscription"
-	tfCloudTasksQueue     = "google_cloud_tasks_queue"
-	tfProjectIAMMember    = "google_project_iam_member"
 )
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
@@ -54,27 +32,27 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Tier))
 	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
-	for _, item := range bootstrapItems(names, req.Deploy.Tier, false) {
-		if item.Kind == KindQueue {
+	for _, item := range bootstrap.Resources(names, req.Deploy.Tier, false) {
+		if item.Kind == bootstrap.KindQueue {
 			continue
 		}
-		shaped, priced := item.shape(region)
+		shaped, priced := item.Shape(region)
 		if !priced {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap item %s has no shape", item.ID())
 		}
-		tree.Add(shared, string(Vendor), shaped.Type, item.Name, region, shaped.Properties)
+		tree.Add(shared, string(gcloud.Vendor), shaped.Type, item.Name, region, shaped.Properties)
 	}
-	projectKey := item{Kind: KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)}
-	projectDatabase := item{Kind: KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)}
-	for _, owned := range []item{projectKey, projectDatabase} {
-		shaped, _ := owned.shape(region)
-		tree.Add(shared, string(Vendor), shaped.Type, owned.Name, region, shaped.Properties)
+	projectKey := bootstrap.Resource{Kind: bootstrap.KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)}
+	projectDatabase := bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)}
+	for _, owned := range []bootstrap.Resource{projectKey, projectDatabase} {
+		shaped, _ := owned.Shape(region)
+		tree.Add(shared, string(gcloud.Vendor), shaped.Type, owned.Name, region, shaped.Properties)
 	}
-	tree.AddShaped(shared, string(Vendor), region, syncShape(names.EnvSourceSync(req.Deploy.Tier), region))
+	tree.AddShaped(shared, string(gcloud.Vendor), region, syncShape(names.EnvSourceSync(req.Deploy.Tier), region))
 	if slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {
 		return app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext
 	}) {
-		tree.AddShaped(shared, string(Vendor), region, tagDatabaseShape(names, req.Deploy.Tier, region))
+		tree.AddShaped(shared, string(gcloud.Vendor), region, tagDatabaseShape(names, req.Deploy.Tier, region))
 	}
 
 	front, err := p.Edges().Open(req.Edge, nil)
@@ -106,7 +84,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(false, app.Instances.Min, memory, ingress))
+			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, serviceProperties(false, app.Instances.Min, memory, ingress))
 		} else {
 			specs := req.Functions[app.App]
 			if len(specs) == 0 {
@@ -117,7 +95,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, memory, ingress))
+				tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, serviceProperties(app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, memory, ingress))
 			}
 		}
 		for _, shape := range shapes {
@@ -125,119 +103,15 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 		for _, worker := range app.Workers {
 			service := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(true, 0, run.RevisionMemory, run.IngressInternal))
+			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, serviceProperties(true, 0, run.RevisionMemory, run.IngressInternal))
 		}
 	}
-	shapeBuckets(tree, names, req, region, environment)
-	if err := shapeStores(tree, names, req, region, shared, environment); err != nil {
+
+	if err := p.components().Shape(component.Shape{Tree: tree, Vendor: string(gcloud.Vendor), Names: names, Request: req, Region: region, Shared: shared, Environment: environment}, req.Resources); err != nil {
 		return nil, err
 	}
-	shapeTopics(tree, names, req, region, shared, environment)
-	shapeRealtime(tree, names, req, region, environment)
+
 	return tree.Set(provider.CostSource)
-}
-
-func shapeBuckets(tree *pricing.Tree, names names.Names, req provider.ShapeRequest, region, environment string) {
-	for _, resource := range req.Resources {
-		if resource.Type != provider.BindingBucket {
-			continue
-		}
-		bucket := names.AppBucket(req.Deploy.Slug, req.Deploy.Env, resource.Name)
-		shaped, _ := item{Kind: KindBucket, Name: bucket}.shape(region)
-		tree.Add(environment, string(Vendor), shaped.Type, bucket, region, shaped.Properties)
-	}
-}
-
-func shapeStores(tree *pricing.Tree, names names.Names, req provider.ShapeRequest, region, shared, environment string) error {
-	declared := false
-	for _, resource := range req.Resources {
-		switch resource.Type {
-		case provider.BindingKV:
-			store, err := readKVStore(resource)
-			if err != nil {
-				return err
-			}
-			instance, err := names.KVInstance(req.Deploy.Slug, req.Deploy.Env, resource.Name)
-			if err != nil {
-				return err
-			}
-			tree.Add(environment, string(Vendor), tfMemorystoreInstance, instance, region, store.shapeProperties(region))
-		case provider.BindingPostgres:
-			spec, err := readPostgres(resource)
-			if err != nil {
-				return err
-			}
-			instance := names.PostgresInstance(req.Deploy.Slug, req.Deploy.Env, resource.Name)
-			tree.Add(environment, string(Vendor), tfSQLInstance, instance, region, spec.shapeProperties(region, req.Deploy.Tier))
-		default:
-			continue
-		}
-		declared = true
-	}
-	if !declared {
-		return nil
-	}
-	tree.AddShaped(shared, string(Vendor), region, networkShape(names, req.Deploy.Tier, region))
-	return nil
-}
-
-func shapeTopics(tree *pricing.Tree, names names.Names, req provider.ShapeRequest, region, shared, environment string) {
-	scope := taskNames(names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
-	declared := false
-	for _, resource := range req.Resources {
-		if resource.Type != provider.BindingTopic && resource.Type != provider.BindingTask {
-			continue
-		}
-		declared = true
-		topic := declaredTopicOf(resource)
-		tree.Add(environment, string(Vendor), tfPubSubTopic, scope.Topic(topic.declared), region, map[string]any{})
-		for _, consumer := range topic.spec.Consumers {
-			tree.Add(environment, string(Vendor), tfPubSubSubscription, scope.Subscription(topic.declared, consumer.Name), region,
-				map[string]any{"ack_deadline_seconds": int(pushCeiling.Seconds()), "enable_message_ordering": topic.spec.Ordered})
-		}
-		if topic.spec.Cron != "" {
-			tree.Add(environment, string(Vendor), tfSchedulerJob, scope.ScheduleJob(topic.declared), region, map[string]any{"region": region, "schedule": topic.spec.Cron})
-		}
-	}
-	if !declared {
-		return
-	}
-	tree.AddShaped(shared, string(Vendor), region, tasksShape(names, req.Deploy.Tier, region))
-	queue := item{Kind: KindQueue, Name: names.DelayQueue(req.Deploy.Tier)}
-	shaped, _ := queue.shape(region)
-	tree.Add(shared, string(Vendor), shaped.Type, queue.Name, region, shaped.Properties)
-}
-
-func shapeRealtime(tree *pricing.Tree, names names.Names, req provider.ShapeRequest, region, environment string) {
-	secret, _ := item{Kind: KindSecret}.shape(region)
-	declared := false
-	for _, resource := range req.Resources {
-		if resource.Type != provider.BindingRealtime {
-			continue
-		}
-		declared = true
-		namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
-		tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace), region, secret.Properties)
-	}
-	if !declared {
-		return
-	}
-	tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env), region, secret.Properties)
-	tree.Add(environment, string(Vendor), tfCloudRunService, names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env), region, map[string]any{
-		"location":      region,
-		"ingress":       run.IngressEverywhere,
-		"holds_sockets": true,
-		"template": map[string]any{
-			"scaling":                          map[string]any{"min_instance_count": 0, "max_instance_count": realtimeGatewayInstances},
-			"max_instance_request_concurrency": realtimeGatewayConcurrency,
-			"containers": []any{map[string]any{
-				"resources": map[string]any{
-					"cpu_idle": true,
-					"limits":   map[string]any{"cpu": realtimeGatewayCPU, "memory": strconv.Itoa(realtimeGatewayMemoryMiB) + "Mi"},
-				},
-			}},
-		},
-	})
 }
 
 func serviceProperties(billsPerRequest bool, minInstances int, memory, ingress string) map[string]any {
