@@ -41,9 +41,13 @@ func (o Options) session() *run.Span {
 	return o.Run.Phase(progressv1.Phase_PHASE_UNSPECIFIED)
 }
 
+func leaderKey(cfg *project.Project) string {
+	return cfg.Path
+}
+
 func Run(ctx context.Context, opts Options, reset bool) error {
 	for range 3 {
-		running, found, err := leader.Find(opts.Project.Dir)
+		running, found, err := leader.Find(leaderKey(opts.Project))
 		if err != nil {
 			return fmt.Errorf("look for a running ocel dev: %w", err)
 		}
@@ -63,7 +67,7 @@ func Run(ctx context.Context, opts Options, reset bool) error {
 }
 
 func RunOnce(ctx context.Context, opts Options, cwd string) error {
-	running, found, err := leader.Find(opts.Project.Dir)
+	running, found, err := leader.Find(leaderKey(opts.Project))
 	if err != nil {
 		return fmt.Errorf("look for a running dev server: %w", err)
 	}
@@ -125,7 +129,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	defer func() {
 		host.close()
 		if claimed {
-			_ = leader.Release(cfg.Dir, host.server.AppToken())
+			_ = leader.Release(leaderKey(cfg), host.server.AppToken())
 		}
 	}()
 	server := host.server
@@ -134,7 +138,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
 
-	if err := leader.Claim(cfg.Dir, leader.Leader{Address: host.address, Token: server.AppToken()}); err != nil {
+	if err := leader.Claim(leaderKey(cfg), leader.Leader{Address: host.address, Token: server.AppToken()}); err != nil {
 		return err
 	}
 	claimed = true
@@ -177,7 +181,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 		return err
 	}
 	workers := newWorkerProcesses(opts, host.resources.Queue())
-	defer workers.stop(ctx)
+	defer workers.close(ctx)
 	workers.restart(ctx, appEnv)
 	for {
 		select {

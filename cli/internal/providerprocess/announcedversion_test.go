@@ -16,7 +16,7 @@ import (
 func TestAProviderOfAnotherVersionIsRefusedBeforeAnyRPC(t *testing.T) {
 	t.Parallel()
 
-	process, _ := spawnFake(t, context.Background(), "", LaunchSpec{
+	process, _ := spawnFake(t, "", LaunchSpec{
 		Env: []string{fakeProviderVersionEnvVar + "=9.9.9-from-another-release"},
 	})
 
@@ -46,7 +46,7 @@ func TestAProviderOfAnotherVersionIsRefusedBeforeAnyRPC(t *testing.T) {
 func TestAProviderOfThisVersionIsAccepted(t *testing.T) {
 	t.Parallel()
 
-	process, _ := spawnFake(t, context.Background(), "", LaunchSpec{})
+	process, _ := spawnFake(t, "", LaunchSpec{})
 	if err := process.Ready(context.Background()); err != nil {
 		t.Fatalf("Ready() error = %v, want the provider of this CLI's own version accepted", err)
 	}
@@ -55,7 +55,7 @@ func TestAProviderOfThisVersionIsAccepted(t *testing.T) {
 func TestAProviderOfAnotherVersionReportsProviderVersionMismatchThroughWrapping(t *testing.T) {
 	t.Parallel()
 
-	process, _ := spawnFake(t, context.Background(), "", LaunchSpec{
+	process, _ := spawnFake(t, "", LaunchSpec{
 		Env: []string{fakeProviderVersionEnvVar + "=9.9.9-from-another-release"},
 	})
 

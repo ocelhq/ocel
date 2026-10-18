@@ -17,7 +17,7 @@ func startChild(ctx context.Context, opts Options, env map[string]string) (*chil
 	cmd.Stdin = opts.Stdin
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stderr
-	return childprocess.Start(ctx, cmd, opts.Stdin, opts.StdinIsTerminal)
+	return childprocess.Start(ctx, cmd, childprocess.Options{Stdin: opts.Stdin, Terminal: opts.StdinIsTerminal})
 }
 
 func runChild(ctx context.Context, opts Options, env map[string]string) error {

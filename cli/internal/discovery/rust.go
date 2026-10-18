@@ -14,6 +14,18 @@ import (
 
 const ocelCrate = "ocel-sdk"
 
+func rustCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*exec.Cmd, error) {
+	commands := make([]*exec.Cmd, 0, len(roots))
+	for _, root := range roots {
+		cmd, err := rustCommand(ctx, configDir, root, server)
+		if err != nil {
+			return nil, err
+		}
+		commands = append(commands, cmd)
+	}
+	return commands, nil
+}
+
 func rustCommand(ctx context.Context, _ string, root Root, server Server) (*exec.Cmd, error) {
 	cmd, workspaceRoot, err := cargoRunCommand(ctx, root)
 	if err != nil {

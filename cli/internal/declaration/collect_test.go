@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/sdkversion"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/version"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -186,18 +185,7 @@ func TestCollectPreparedRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "main.ts"), "export {};\n")
-
-	cfg := &project.Project{Slug: "test-app", Dir: root}
-	prepared, err := Prepare(cfg)
-	if err != nil {
-		t.Fatalf("Prepare: %v", err)
-	}
-	if prepared.Entry() == "" {
-		t.Fatal("Entry() is empty, want the bundle Prepare built")
-	}
-
-	writeFile(t, filepath.Join(root, buildoutput.StateDir, "entry.mjs"), `
+	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "main.ts"), `
 await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+processenv.DevServerEnvVar+`), {
   method: "POST",
   headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+processenv.DevServerTokenEnvVar+` },
@@ -207,6 +195,16 @@ await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+p
   }),
 });
 `)
+
+	cfg := &project.Project{Slug: "test-app", Dir: root}
+	prepared, err := Prepare(cfg)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if prepared.Fingerprint() == "" {
+		t.Fatal("Fingerprint() is empty, want the bundle Prepare built")
+	}
+	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "main.ts"), "throw new Error(\"bundled again\");\n")
 
 	var stdout, stderr bytes.Buffer
 	resources, err := CollectPrepared(context.Background(), cfg, variables.NewDeclarations(emptyValues{}, variables.Scope{}), prepared, &stdout, &stderr)

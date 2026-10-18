@@ -75,7 +75,7 @@ func Run(ctx context.Context, c Command) (err error) {
 	}
 	defer tree.kill()
 	defer context.AfterFunc(runCtx, tree.kill)()
-	child, err := childprocess.Start(runCtx, cmd, nil, false)
+	child, err := childprocess.Start(runCtx, cmd, childprocess.Options{})
 	if err != nil {
 		return fmt.Errorf("start %q: %w", c.Line, err)
 	}

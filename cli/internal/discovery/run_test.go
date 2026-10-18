@@ -218,8 +218,8 @@ func TestRunBuildsNoBundleAndRunsNoNodeWithoutAJSRoot(t *testing.T) {
 	if err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "entry.mjs")); !os.IsNotExist(err) {
-		t.Errorf("stat entry.mjs = %v, want a project with no js root to bundle nothing and run no node", err)
+	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir)); !os.IsNotExist(err) {
+		t.Errorf("stat %s = %v, want a project with no js root to bundle nothing and run no node", buildoutput.StateDir, err)
 	}
 }
 
@@ -240,7 +240,32 @@ func TestRunBundlesNothingForARootItCannotDiscover(t *testing.T) {
 	if err := Run(context.Background(), root, prepared, okServer(t), &stdout, &stderr); err == nil {
 		t.Fatal("Run succeeded on a root of a language ocel does not discover, want an error")
 	}
-	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "entry.mjs")); !os.IsNotExist(err) {
-		t.Errorf("stat entry.mjs = %v, want a project with no js root to bundle nothing", err)
+	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir)); !os.IsNotExist(err) {
+		t.Errorf("stat %s = %v, want a project with no js root to bundle nothing", buildoutput.StateDir, err)
+	}
+}
+
+func TestTwoRunsInOneProjectEachRunTheirOwnEntryAndLeaveNothingBehind(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, DefaultRootDirName, "main.ts"), `console.log("first");`)
+	first := prepare(t, root)
+	write(t, filepath.Join(root, DefaultRootDirName, "main.ts"), `console.log("second");`)
+	second := prepare(t, root)
+
+	var firstOut, secondOut bytes.Buffer
+	if err := Run(context.Background(), root, first, okServer(t), &firstOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if err := Run(context.Background(), root, second, okServer(t), &secondOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(firstOut.String(), "first") || strings.Contains(firstOut.String(), "second") {
+		t.Errorf("the first run printed %q, want what it bundled and nothing the second bundled", firstOut.String())
+	}
+	if !strings.Contains(secondOut.String(), "second") {
+		t.Errorf("the second run printed %q, want what it bundled", secondOut.String())
+	}
+	if entries, _ := os.ReadDir(filepath.Join(root, buildoutput.StateDir, "tmp")); len(entries) != 0 {
+		t.Errorf("%s/tmp holds %d entries after both runs, want each run to remove its own", buildoutput.StateDir, len(entries))
 	}
 }

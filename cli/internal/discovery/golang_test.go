@@ -27,17 +27,19 @@ func TestGoDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := goFixture(t, "example.com/web")
 	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Go}
 
-	cmd, err := goCommand(context.Background(), configDir, root, testServer)
+	commands, err := goCommands(context.Background(), configDir, []Root{root}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
+	cmd := commands[0]
 
 	moduleRoot := configDir
 	if cmd.Dir != moduleRoot {
 		t.Errorf("Dir = %q, want %q", cmd.Dir, moduleRoot)
 	}
-	if want := []string{"go", "run", "-trimpath=false", "./" + buildoutput.StateDir + "/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
-		t.Errorf("Args = %q, want %q", cmd.Args, want)
+	pkg := cmd.Args[len(cmd.Args)-1]
+	if want := []string{"go", "run", "-trimpath=false"}; !slices.Equal(cmd.Args[1:3], want[1:]) || filepath.Base(cmd.Args[0]) != "go" || !strings.HasPrefix(pkg, "./"+buildoutput.StateDir+"/discovery/") {
+		t.Errorf("Args = %q, want %q and a package under %s/discovery", cmd.Args, want, buildoutput.StateDir)
 	}
 	for _, want := range []string{processenv.PhaseEnvVar + "=discovery", processenv.DevServerEnvVar + "=http://127.0.0.1:1234", processenv.DevServerTokenEnvVar + "=opensesame"} {
 		if !slices.Contains(cmd.Env, want) {
@@ -45,7 +47,7 @@ func TestGoDiscoveryDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 		}
 	}
 
-	generated, err := os.ReadFile(filepath.Join(moduleRoot, buildoutput.StateDir, "discovery", "main.go"))
+	generated, err := os.ReadFile(filepath.Join(moduleRoot, filepath.FromSlash(pkg), "main.go"))
 	if err != nil {
 		t.Fatalf("read the generated main: %v", err)
 	}
@@ -58,7 +60,7 @@ func TestGoDiscoveryRefusesARootWithNoModuleAboveIt(t *testing.T) {
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "declarations", "declarations.go"), "package declarations\n")
 
-	_, err := goCommand(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "declarations"), Language: language.Go}, testServer)
+	_, err := goCommands(context.Background(), configDir, []Root{{Dir: filepath.Join(configDir, "declarations"), Language: language.Go}}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded with no go.mod above the root, want error")
 	}
@@ -193,5 +195,39 @@ func TestRunReportsWhatAGoRootThatDoesNotCompileSaid(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "undeclared") {
 		t.Errorf("error = %q, want it to include the compile error", err)
+	}
+}
+
+func TestRunImportsEveryGoRootThatSharesAModuleInOneProgram(t *testing.T) {
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "go.mod"), "module example.com/monorepo\n\ngo 1.27.0\n")
+	for _, service := range []string{"a", "b"} {
+		write(t, filepath.Join(configDir, "services", service, DefaultRootDirName, "declarations.go"), "package declarations\n\nimport \"fmt\"\n\nfunc init() { fmt.Println(\"declared from "+service+"\") }\n")
+	}
+	roots, err := Roots(configDir, []string{"services/a/" + DefaultRootDirName, "services/b/" + DefaultRootDirName})
+	if err != nil {
+		t.Fatalf("Roots: %v", err)
+	}
+	prepared, err := Prepare(configDir, roots)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	commands, err := commandsFor(context.Background(), configDir, prepared, testServer)
+	if err != nil {
+		t.Fatalf("commandsFor: %v", err)
+	}
+	if len(commands) != 1 {
+		t.Errorf("commands = %d, want one program for the one module", len(commands))
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), configDir, prepared, okServer(t), &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
+	}
+	for _, want := range []string{"declared from a", "declared from b"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want %q: every root in the module is imported", stdout.String(), want)
+		}
 	}
 }

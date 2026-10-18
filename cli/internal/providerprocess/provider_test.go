@@ -91,6 +91,28 @@ func TestAStartedProvidersStreamEventsReachTheSpan(t *testing.T) {
 	}
 }
 
+func TestACleanupCallMadeAfterTheRunIsInterruptedStillReachesTheProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, span, _ := deploySpan(t)
+	interrupted, interrupt := context.WithCancel(ctx)
+	p := startFake(t, interrupted, "success", span, Questions{})
+	interrupt()
+
+	select {
+	case <-p.process.done:
+		t.Fatal("the provider exited when the run was interrupted, before its deferred cleanup could reach it")
+	case <-time.After(500 * time.Millisecond):
+	}
+	err := p.Call(context.WithoutCancel(interrupted), func(client contractv1connect.ProviderServiceClient) error {
+		_, err := client.DescribeBootstrap(context.WithoutCancel(interrupted), &contractv1.DescribeBootstrapRequest{})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("a cleanup call after the interrupt = %v, want it served by the provider that is still open", err)
+	}
+}
+
 func TestAPlanningStreamHandsBackThePlanAndForwardsEveryOtherEvent(t *testing.T) {
 	t.Parallel()
 

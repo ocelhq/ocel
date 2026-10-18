@@ -24,6 +24,7 @@ var languageExtensions = map[string]language.Language{
 	".ts":  language.JS,
 	".tsx": language.JS,
 	".cts": language.JS,
+	".mts": language.JS,
 	".js":  language.JS,
 	".jsx": language.JS,
 	".mjs": language.JS,
@@ -125,13 +126,13 @@ func languageOf(dir string) (language.Language, error) {
 			return err
 		}
 		if d.IsDir() {
-			if path != dir && skipDir(d.Name()) {
+			if path != dir && IsSkippedDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 		written, ok := languageExtensions[filepath.Ext(path)]
-		if !ok || slices.Contains(found, written) {
+		if !ok || isTestFile(path) || slices.Contains(found, written) {
 			return nil
 		}
 		found = append(found, written)

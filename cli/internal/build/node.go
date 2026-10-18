@@ -39,6 +39,8 @@ type nodeAppBuild struct {
 
 const summaryLines = 2
 
+const capturedOutputBytes = 64 << 10
+
 func failureSummary(output string) string {
 	var lines []string
 	for _, line := range strings.Split(output, "\n") {
@@ -58,7 +60,7 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 		return fmt.Errorf("node not found on PATH: %w", err)
 	}
 
-	var captured bytes.Buffer
+	captured := &childprocess.Tail{Limit: capturedOutputBytes}
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
 	cmd.Stdin = bytes.NewReader(request)
@@ -71,11 +73,11 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 
 	appBuild := func(app string) (io.Writer, func(error)) {
 		w, ended := log.App(app)
-		return io.MultiWriter(w, &captured), ended
+		return io.MultiWriter(w, captured), ended
 	}
-	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: io.MultiWriter(log.shared(), &captured), AppBuild: appBuild, Hide: log.hidden}
+	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: io.MultiWriter(log.shared(), captured), AppBuild: appBuild, Hide: log.hidden}
 
-	group, startErr := childprocess.StartGroup(cmd)
+	child, startErr := childprocess.Start(ctx, cmd, childprocess.Options{})
 	_ = writer.Close()
 	if startErr != nil {
 		_ = reader.Close()
@@ -83,7 +85,7 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 	}
 	proc.Scan(ctx, reader)
 	_ = reader.Close()
-	runErr := group.Wait()
+	runErr := child.Wait()
 	unended := proc.Abort(ctx)
 
 	if runErr != nil {

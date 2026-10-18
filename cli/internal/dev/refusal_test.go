@@ -11,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 
-	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -36,7 +35,7 @@ func TestDescribeRefusal(t *testing.T) {
 			"no value is set",
 			"expected a URL",
 			"DATABASE_URL=<VALUE>",
-			dotfile.FileName,
+			project.DotenvFileName,
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("refusal = %q, want it to mention %q", got, want)
@@ -50,12 +49,12 @@ func TestDescribeRefusal(t *testing.T) {
 		}
 	})
 
-	t.Run("under another dev source it names that source and "+dotfile.LocalFileName, func(t *testing.T) {
+	t.Run("under another dev source it names that source and "+project.LocalDotenvFileName, func(t *testing.T) {
 		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING}}}
 
 		got := describeRefusal(refusal, nil, invocation{name: "dev", source: valueSource{id: "infisical:p-1/dev", values: map[string]string{}}}).Error()
 
-		for _, want := range []string{"set DATABASE_URL in infisical:p-1/dev", "DATABASE_URL=<VALUE> to " + dotfile.LocalFileName, "Set the values above in infisical:p-1/dev and " + dotfile.LocalFileName} {
+		for _, want := range []string{"set DATABASE_URL in infisical:p-1/dev", "DATABASE_URL=<VALUE> to " + project.LocalDotenvFileName, "Set the values above in infisical:p-1/dev and " + project.LocalDotenvFileName} {
 			if !strings.Contains(got, want) {
 				t.Errorf("refusal = %q, want it to say %q", got, want)
 			}
@@ -117,7 +116,7 @@ func TestDescribeRefusal(t *testing.T) {
 
 		for _, value := range fileValues {
 			if strings.Contains(got, value) {
-				t.Errorf("refusal = %q, want it to disclose no value from %s", got, dotfile.FileName)
+				t.Errorf("refusal = %q, want it to disclose no value from %s", got, project.DotenvFileName)
 			}
 		}
 	})
@@ -137,7 +136,7 @@ func TestADevRunNeedingUnsetVariablesKeepsVariablesMissingHintingWhereToSetTheKe
 	described := describeRefusal(fmt.Errorf("checking variables: %w", raised), nil, invocation{name: "dev", source: valueSource{id: "dotenv", ownStore: true}})
 
 	got := clierror.NewRunError(fmt.Errorf("dev: %w", described))
-	want := "set DATABASE_URL and STRIPE_KEY in " + dotfile.FileName + ", then run `ocel dev` again"
+	want := "set DATABASE_URL and STRIPE_KEY in " + project.DotenvFileName + ", then run `ocel dev` again"
 	if got.GetCode() != "variables.missing" || got.GetHint() != want {
 		t.Fatalf("run error = %s, want variables.missing hinting %q", protojson.Format(got), want)
 	}
@@ -195,7 +194,7 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 			t.Fatal("refuseUnstatableBinding = nil, want a refusal: no child of this run could read API_BASE")
 		}
 		got := err.Error()
-		for _, want := range []string{"API_BASE", "web binds /web", "api binds /api", "the project root", dotfile.FileName, "ocel.json"} {
+		for _, want := range []string{"API_BASE", "web binds /web", "api binds /api", "the project root", project.DotenvFileName, "ocel.json"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("refusal = %q, want it to mention %q", got, want)
 			}
@@ -263,7 +262,7 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 		want := "A_KEY, B_KEY, C_KEY, D_KEY are scoped to a folder this run cannot state — the app has not been started.\n" +
 			"\n  web binds /web\n  api binds /api\n\n" +
 			"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, " +
-			"so the binding they state is the project root. A scoped read refuses under it, even with the value in " + dotfile.FileName + ".\n\n" +
+			"so the binding they state is the project root. A scoped read refuses under it, even with the value in " + project.DotenvFileName + ".\n\n" +
 			"fix: bind every app to the same folder in ocel.json, or drop `folders:` from those declarations"
 
 		for range 50 {

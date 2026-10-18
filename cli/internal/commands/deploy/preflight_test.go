@@ -60,7 +60,7 @@ func TestADeployRefusesEveryHostnameAnotherProjectClaims(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := refuseClaimedDomains(tc.claims, project.DefaultFileName, func(string) {})
+			err := refuseClaimedDomains(tc.claims, project.DefaultFileName)
 			if !tc.refuse {
 				if err != nil {
 					t.Fatalf("refuseClaimedDomains err = %v, want nil", err)
@@ -78,18 +78,19 @@ func TestADeployRefusesEveryHostnameAnotherProjectClaims(t *testing.T) {
 		})
 	}
 
-	t.Run("a hostname whose owner could not be read warns and deploys", func(t *testing.T) {
+	t.Run("a hostname whose owner could not be read refuses rather than taking it over", func(t *testing.T) {
 		t.Parallel()
 
-		var warned []string
 		err := refuseClaimedDomains([]*contractv1.DomainClaim{
 			{Hostname: "acme.com", Cause: "the edge was throttled listing what it serves"},
-		}, project.DefaultFileName, func(message string) { warned = append(warned, message) })
-		if err != nil {
-			t.Fatalf("refuseClaimedDomains err = %v, want a deploy that continues when the provider could not say who serves the hostname", err)
+		}, project.DefaultFileName)
+		if err == nil {
+			t.Fatal("refuseClaimedDomains err = nil, want a refusal: a deploy that cannot say who serves a hostname would take it over")
 		}
-		if len(warned) != 1 || !strings.Contains(warned[0], "acme.com") || !strings.Contains(warned[0], "throttled") {
-			t.Errorf("warnings = %q, want one naming the hostname and why its owner could not be read", warned)
+		for _, want := range []string{"acme.com", "throttled"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %q", err, want)
+			}
 		}
 	})
 
@@ -100,7 +101,7 @@ func TestADeployRefusesEveryHostnameAnotherProjectClaims(t *testing.T) {
 			{Hostname: "acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-production-web"},
 			{Hostname: "www.acme.com", Status: contractv1.DomainClaim_STATUS_UNCLAIMED},
 			{Hostname: "shop.acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-third-production-web"},
-		}, project.DefaultFileName, func(string) {})
+		}, project.DefaultFileName)
 		if err == nil {
 			t.Fatal("refuseClaimedDomains err = nil, want a refusal")
 		}

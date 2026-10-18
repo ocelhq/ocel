@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var skippedDirs = []string{"node_modules", "venv", "__pycache__", "target"}
+var skippedDirs = []string{"node_modules", "venv", "__pycache__", "target", "__tests__"}
 
 var sourceExtensions = map[string]bool{
 	".ts":  true,
@@ -17,6 +17,8 @@ var sourceExtensions = map[string]bool{
 	".jsx": true,
 	".mjs": true,
 	".cjs": true,
+	".mts": true,
+	".cts": true,
 }
 
 func Discover(configDir string, paths []string) ([]string, error) {
@@ -105,7 +107,7 @@ func walkSourceFiles(root string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			if path != root && skipDir(d.Name()) {
+			if path != root && IsSkippedDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -139,7 +141,7 @@ func walkDirs(root string) ([]string, error) {
 		if !d.IsDir() {
 			return nil
 		}
-		if path != root && skipDir(d.Name()) {
+		if path != root && IsSkippedDir(d.Name()) {
 			return filepath.SkipDir
 		}
 		abs, absErr := filepath.Abs(path)
@@ -155,10 +157,23 @@ func walkDirs(root string) ([]string, error) {
 	return dirs, nil
 }
 
-func skipDir(name string) bool {
+func IsSkippedDir(name string) bool {
 	return strings.HasPrefix(name, ".") || slices.Contains(skippedDirs, name)
 }
 
 func isSourceFile(path string) bool {
-	return sourceExtensions[filepath.Ext(path)]
+	return sourceExtensions[filepath.Ext(path)] && !isTestFile(path)
+}
+
+func isTestFile(path string) bool {
+	name := filepath.Base(path)
+	ext := filepath.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	switch ext {
+	case ".go":
+		return strings.HasSuffix(stem, "_test")
+	case ".py":
+		return strings.HasPrefix(stem, "test_") || strings.HasSuffix(stem, "_test")
+	}
+	return strings.HasSuffix(stem, ".test") || strings.HasSuffix(stem, ".spec")
 }

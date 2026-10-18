@@ -1,18 +1,52 @@
 package project
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 
-	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/dotenv"
 )
+
+const (
+	DotenvFileName      = ".env"
+	LocalDotenvFileName = ".env.local"
+)
+
+func ReadDotenv(dir string) (dotenv.File, error) {
+	return readDotenvFile(dir, DotenvFileName)
+}
+
+func ReadLocalDotenv(dir string) (dotenv.File, error) {
+	return readDotenvFile(dir, LocalDotenvFileName)
+}
+
+func readDotenvFile(dir, name string) (dotenv.File, error) {
+	file, err := os.Open(filepath.Join(dir, name))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return dotenv.File{Values: map[string]string{}}, nil
+		}
+		return dotenv.File{}, fmt.Errorf("read %s: %w", name, err)
+	}
+	defer file.Close()
+
+	parsed, err := dotenv.Parse(file)
+	if err != nil {
+		return dotenv.File{}, fmt.Errorf("read %s: %w", name, err)
+	}
+	return parsed, nil
+}
 
 type environment struct {
 	dotenv map[string]string
 }
 
 func readEnvironment(dir string) (environment, error) {
-	file, err := dotfile.Load(dir)
+	file, err := ReadDotenv(dir)
 	if err != nil {
 		return environment{}, err
 	}

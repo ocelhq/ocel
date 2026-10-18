@@ -286,3 +286,19 @@ func TestATreeLinkedToAnotherConsoleThatIsNotLoggedInIsToldToLogIn(t *testing.T)
 		t.Errorf("reports %d, stderr %q, want no call and the login warning rather than the link hint", len(fake.reports), stderr.String())
 	}
 }
+
+func TestAnUnlinkedTreeThatIsNotLoggedInMakesNoCallAndPrintsNothing(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	serveConsole(t, fake)
+	reporting := Console{LoadCredentials: func() (console.Credentials, error) {
+		return console.Credentials{}, console.ErrNotLoggedIn
+	}}
+	var stderr bytes.Buffer
+
+	reporting.ReportDeployment(context.Background(), t.TempDir(), productionDeployment(), &stderr)
+
+	if len(fake.reports) != 0 || stderr.Len() != 0 {
+		t.Errorf("reports %d, stderr %q, want no call and no output for a tree that uses no console", len(fake.reports), stderr.String())
+	}
+}

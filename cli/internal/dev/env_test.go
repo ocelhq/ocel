@@ -17,11 +17,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
-	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -206,7 +204,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			if !strings.Contains(stderr.String(), "NEXT_PUBLIC_SITE_URL") {
 				t.Errorf("stderr = %q, want a declarable key accounted for", stderr.String())
 			}
-			if !strings.Contains(stderr.String(), valueLayers{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(true)) {
+			if !strings.Contains(stderr.String(), valueLayers{{from: project.DotenvFileName, file: true}, {from: project.LocalDotenvFileName, file: true}}.advice(true)) {
 				t.Errorf("stderr = %q, want the advice for a run that re-resolves on save", stderr.String())
 			}
 		})
@@ -232,8 +230,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if err == nil {
 			t.Fatal("runDev = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), dotfile.FileName) {
-			t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), dotfile.FileName)
+		if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), project.DotenvFileName) {
+			t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), project.DotenvFileName)
 		}
 		if _, statErr := os.Stat(startedPath); statErr == nil {
 			t.Error("the app was started despite the refusal")
@@ -353,7 +351,7 @@ export default {
 		}
 	})
 
-	t.Run(dotfile.LocalFileName+" outranks the dev source", func(t *testing.T) {
+	t.Run(project.LocalDotenvFileName+" outranks the dev source", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -362,19 +360,19 @@ export default {
 		t.Cleanup(func() { releaseLeader(root) })
 
 		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "printf 'STRIPE_API_KEY=sk_from_source\\nLOG_LEVEL=info'"], format: "dotenv" } }`)
-		clitest.WriteFile(t, filepath.Join(root, dotfile.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
+		clitest.WriteFile(t, filepath.Join(root, project.LocalDotenvFileName), "STRIPE_API_KEY=sk_mine\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		env, reported := dumpDevEnv(t, devDeps(), root)
 		if env["STRIPE_API_KEY"] != "sk_mine" || env["LOG_LEVEL"] != "info" {
-			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over the source and the source beneath it", env["STRIPE_API_KEY"], env["LOG_LEVEL"], dotfile.LocalFileName)
+			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over the source and the source beneath it", env["STRIPE_API_KEY"], env["LOG_LEVEL"], project.LocalDotenvFileName)
 		}
-		if !strings.Contains(reported, dotfile.LocalFileName) {
-			t.Errorf("reported = %q, want it to say what came from %s", reported, dotfile.LocalFileName)
+		if !strings.Contains(reported, project.LocalDotenvFileName) {
+			t.Errorf("reported = %q, want it to say what came from %s", reported, project.LocalDotenvFileName)
 		}
 	})
 
-	t.Run(dotfile.LocalFileName+" outranks .env under the default source", func(t *testing.T) {
+	t.Run(project.LocalDotenvFileName+" outranks .env under the default source", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -382,13 +380,13 @@ export default {
 		root := t.TempDir()
 		t.Cleanup(func() { releaseLeader(root) })
 
-		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "STRIPE_API_KEY=sk_shared\nLOG_LEVEL=info\n")
-		clitest.WriteFile(t, filepath.Join(root, dotfile.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
+		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "STRIPE_API_KEY=sk_shared\nLOG_LEVEL=info\n")
+		clitest.WriteFile(t, filepath.Join(root, project.LocalDotenvFileName), "STRIPE_API_KEY=sk_mine\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		env, _ := dumpDevEnv(t, devDeps(), root)
 		if env["STRIPE_API_KEY"] != "sk_mine" || env["LOG_LEVEL"] != "info" {
-			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over %s", env["STRIPE_API_KEY"], env["LOG_LEVEL"], dotfile.LocalFileName, dotfile.FileName)
+			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over %s", env["STRIPE_API_KEY"], env["LOG_LEVEL"], project.LocalDotenvFileName, project.DotenvFileName)
 		}
 	})
 
@@ -532,8 +530,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: ".", compute: { s
 		if _, ok := env["NEXT_PUBLIC_NEXT_PUBLIC_SITE_URL"]; ok {
 			t.Error("a value was exported under a prefixed name; a key is delivered as it was declared")
 		}
-		if got, want := env[processenv.NextAdapterPathEnvVar], node.NextAdapterPath(root); got != want {
-			t.Errorf("%s = %q, want ocel's adapter %q", processenv.NextAdapterPathEnvVar, got, want)
+		if got := env[processenv.NextAdapterPathEnvVar]; strings.HasPrefix(got, root) {
+			t.Errorf("%s = %q, want ocel's adapter outside the project", processenv.NextAdapterPathEnvVar, got)
 		}
 		if _, statErr := os.Stat(env[processenv.NextAdapterPathEnvVar]); statErr != nil {
 			t.Errorf("the adapter next is pointed at does not exist: %v", statErr)
@@ -619,7 +617,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if env[processenv.AppFolderEnvVar] != "/web" {
 			t.Errorf("%s = %q, want the folder the only app binds", processenv.AppFolderEnvVar, env[processenv.AppFolderEnvVar])
 		}
-		if !strings.Contains(stderr.String(), valueLayers{{from: dotfile.FileName, file: true}, {from: dotfile.LocalFileName, file: true}}.advice(false)) {
+		if !strings.Contains(stderr.String(), valueLayers{{from: project.DotenvFileName, file: true}, {from: project.LocalDotenvFileName, file: true}}.advice(false)) {
 			t.Errorf("stderr = %q, want the advice for a run that reads the file once", stderr.String())
 		}
 	})
@@ -644,8 +642,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if err == nil {
 			t.Fatal("runRun = nil, want the same refusal `ocel dev` gives")
 		}
-		if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), dotfile.FileName) {
-			t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), dotfile.FileName)
+		if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), project.DotenvFileName) {
+			t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), project.DotenvFileName)
 		}
 		if strings.Contains(err.Error(), "ocel env set") {
 			t.Errorf("err = %q, want no `ocel env set`: it needs the cloud account this path does without", err.Error())
@@ -760,17 +758,12 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 }
 
 func TestACommandThatRunsNoNextAppIsHandedNoAdapter(t *testing.T) {
-	root := t.TempDir()
-
-	got, err := nextEnvOf(root, nil)
+	got, err := nextEnvOf(nil)
 	if err != nil {
 		t.Fatalf("nextEnvOf: %v", err)
 	}
 	if len(got) != 0 {
 		t.Errorf("nextEnvOf = %v, want nothing written where no next app declared a public key", got)
-	}
-	if _, statErr := os.Stat(node.NextAdapterPath(root)); statErr == nil {
-		t.Error("the adapter was unpacked for a command that runs no next app")
 	}
 }
 

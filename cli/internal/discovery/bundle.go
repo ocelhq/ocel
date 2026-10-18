@@ -3,14 +3,11 @@ package discovery
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const protocolBanner = `
@@ -46,27 +43,18 @@ func importsOf(files []string) string {
 	return body.String()
 }
 
-func Bundle(configDir string, files []string) (string, error) {
+func Bundle(configDir string, files []string, outfile string) ([]byte, error) {
 	var entry strings.Builder
 	entry.WriteString(protocolBanner)
 	entry.WriteString(importsOf(files))
-	outfile, err := bundleEntry(configDir, configDir, "entry.mjs", "ocel-discovery-entry.ts", entry.String())
+	bundle, err := bundleTo(configDir, outfile, "ocel-discovery-entry.ts", entry.String())
 	if err != nil {
-		return "", fmt.Errorf("bundle discovery entry failed:\n%w", err)
+		return nil, fmt.Errorf("bundle discovery entry failed:\n%w", err)
 	}
-	return outfile, nil
+	return bundle, nil
 }
 
-func bundleEntry(configDir, resolveDir, name, sourcefile, source string) (string, error) {
-	outDir := filepath.Join(configDir, buildoutput.StateDir)
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return "", fmt.Errorf("create %s: %w", buildoutput.StateDir, err)
-	}
-	outfile := filepath.Join(outDir, name)
-	return outfile, bundleTo(resolveDir, outfile, sourcefile, source)
-}
-
-func bundleTo(resolveDir, outfile, sourcefile, source string) error {
+func bundleTo(resolveDir, outfile, sourcefile, source string) ([]byte, error) {
 	result := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{
 			Contents:   source,
@@ -79,14 +67,17 @@ func bundleTo(resolveDir, outfile, sourcefile, source string) error {
 		Sourcemap: api.SourceMapInline,
 		Format:    api.FormatESModule,
 		Outfile:   outfile,
-		Write:     true,
+		Write:     false,
 		Banner: map[string]string{
 			"js": `import { createRequire as __ocelCreateRequire } from "node:module"; const require = __ocelCreateRequire(import.meta.url);`,
 		},
 	})
 	if len(result.Errors) > 0 {
 		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
-		return errors.New(strings.Join(msgs, "\n"))
+		return nil, errors.New(strings.Join(msgs, "\n"))
 	}
-	return nil
+	if len(result.OutputFiles) != 1 {
+		return nil, fmt.Errorf("esbuild produced %d files for %s, want one", len(result.OutputFiles), outfile)
+	}
+	return result.OutputFiles[0].Contents, nil
 }

@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -33,7 +34,18 @@ type infraProvisioning struct {
 	attempted bool
 	shipped   bool
 	renewing  *leaseRenewal
+	loseLease context.CancelCauseFunc
 }
+
+type leaseLostError struct {
+	refusal error
+}
+
+func (e *leaseLostError) Error() string {
+	return "the provider refused to renew this deploy's lease on the environment, so the build stopped: " + e.refusal.Error()
+}
+
+func (e *leaseLostError) Unwrap() error { return e.refusal }
 
 type leaseRenewal struct {
 	cancel context.CancelFunc
@@ -121,9 +133,29 @@ func (i *infraProvisioning) renew(renewing context.Context, done chan<- struct{}
 		})
 		cancel()
 		if _, refused := provider.RefusedCode(err); refused {
+			if i.loseLease != nil {
+				i.loseLease(&leaseLostError{refusal: err})
+			}
 			return
 		}
 	}
+}
+
+func (i *infraProvisioning) holdLease(ctx context.Context) (context.Context, context.CancelFunc) {
+	if i == nil {
+		return ctx, func() {}
+	}
+	held, cancel := context.WithCancelCause(ctx)
+	i.loseLease = cancel
+	return held, func() { cancel(nil) }
+}
+
+func (i *infraProvisioning) lostLease(held context.Context, err error) error {
+	var lost *leaseLostError
+	if err != nil && errors.As(context.Cause(held), &lost) {
+		return lost
+	}
+	return err
 }
 
 func (i *infraProvisioning) stopRenewing() {

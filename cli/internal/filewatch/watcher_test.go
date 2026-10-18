@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -136,13 +137,123 @@ func TestWatch(t *testing.T) {
 			t.Fatalf("debounce armed %d times after cancel, want 0", got)
 		}
 	})
+
+	t.Run("a tree moved in is watched down to its deepest directory", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		clock := newFakeClock()
+		w := start(t, clock, Paths{Dirs: []string{dir}})
+
+		outside := filepath.Join(t.TempDir(), "pkg")
+		if err := os.MkdirAll(filepath.Join(outside, "nested", "deeper"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(outside, filepath.Join(dir, "pkg")); err != nil {
+			t.Fatal(err)
+		}
+		clock.waitArmed(t, 1)
+		clock.elapse(t)
+
+		deeper := filepath.Join(dir, "pkg", "nested", "deeper")
+		if paths := w.WatchList(); !slices.Contains(paths, deeper) {
+			t.Fatalf("watching %v, want %s among them", paths, deeper)
+		}
+		writeFile(t, filepath.Join(deeper, "a.ts"), "export {};")
+		clock.waitArmed(t, 2)
+	})
+
+	t.Run("a skipped directory is never watched and never a change", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		clock := newFakeClock()
+		w := startWith(t, Config{
+			Paths:    Paths{Dirs: []string{dir}},
+			SkipDir:  func(name string) bool { return name == "node_modules" },
+			OnChange: clock.onChange,
+			newTimer: clock.newTimer,
+		})
+
+		modules := filepath.Join(dir, "node_modules")
+		if err := os.MkdirAll(filepath.Join(modules, "dep"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(modules, "dep", "index.js"), "")
+		time.Sleep(200 * time.Millisecond)
+
+		if got := clock.arms(); got != 0 {
+			t.Errorf("debounce armed %d times by a skipped directory, want 0", got)
+		}
+		if paths := w.WatchList(); slices.ContainsFunc(paths, func(p string) bool { return strings.HasPrefix(p, modules) }) {
+			t.Errorf("watching %v, want nothing under %s", paths, modules)
+		}
+
+		writeFile(t, filepath.Join(dir, "a.ts"), "export {};")
+		clock.waitArmed(t, 1)
+	})
+
+	t.Run("changes keep being seen while a change is being handled", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		clock := newFakeClock()
+		handling, release := make(chan struct{}), make(chan struct{})
+		var once sync.Once
+		startWith(t, Config{
+			Paths: Paths{Dirs: []string{dir}},
+			OnChange: func() {
+				once.Do(func() { close(handling) })
+				<-release
+			},
+			newTimer: clock.newTimer,
+		})
+		defer close(release)
+
+		writeFile(t, filepath.Join(dir, "a.ts"), "export {};")
+		clock.waitArmed(t, 1)
+		time.Sleep(100 * time.Millisecond)
+		armed := clock.arms()
+		clock.tick <- time.Now()
+		<-handling
+
+		writeFile(t, filepath.Join(dir, "b.ts"), "export {};")
+		clock.waitArmed(t, armed+1)
+	})
+
+	t.Run("a directory moved away stops being watched", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		sub := filepath.Join(dir, "sub")
+		if err := os.MkdirAll(filepath.Join(sub, "nested"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		clock := newFakeClock()
+		w := start(t, clock, Paths{Dirs: []string{dir, sub, filepath.Join(sub, "nested")}})
+
+		if err := os.Rename(sub, filepath.Join(t.TempDir(), "gone")); err != nil {
+			t.Fatal(err)
+		}
+		clock.waitArmed(t, 1)
+		clock.elapse(t)
+
+		if paths := w.WatchList(); slices.ContainsFunc(paths, func(p string) bool { return strings.HasPrefix(p, sub) }) {
+			t.Errorf("watching %v, want nothing under %s once it moved away", paths, sub)
+		}
+	})
 }
 
 func start(t *testing.T, clock *fakeClock, paths Paths) *Watcher {
 	t.Helper()
+	return startWith(t, Config{Paths: paths, OnChange: clock.onChange, newTimer: clock.newTimer})
+}
+
+func startWith(t *testing.T, cfg Config) *Watcher {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	w, err := Start(ctx, Config{Paths: paths, OnChange: clock.onChange, newTimer: clock.newTimer})
+	w, err := Start(ctx, cfg)
 	if err != nil {
 		cancel()
 		t.Fatalf("Start: %v", err)

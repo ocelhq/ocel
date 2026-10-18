@@ -280,7 +280,7 @@ func appsText(cfg *project.Project) string {
 	for _, app := range cfg.Apps {
 		names = append(names, app.Name)
 	}
-	return fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))
+	return fmt.Sprintf("config loads — %s (%s)", english.Count(len(names), "app"), strings.Join(names, ", "))
 }
 
 func providerText(descriptor *project.Provider) string {
@@ -594,7 +594,7 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 		s.warn(listText(gap.Missing, "missing"), "run `"+gap.RepairCommand(tier)+"`")
 	}
 	if len(stale) > 0 {
-		s.warn(listText(stale, "stale"), "run `"+readiness.BootstrapCommand(tier)+"` to refresh "+them(len(stale)))
+		s.warn(listText(stale, "stale"), "run `"+readiness.BootstrapCommand(tier)+"` to refresh "+english.Number(len(stale), "it", "them"))
 	}
 	if len(unreadable) > 0 {
 		s.warn(listText(unreadable, "unreadable"), "run `ocel doctor` again once the cause is cleared")
@@ -647,20 +647,6 @@ func listText(names []string, state string) string {
 		verb = " are "
 	}
 	return strings.Join(names, ", ") + verb + state
-}
-
-func them(n int) string {
-	if n > 1 {
-		return "them"
-	}
-	return "it"
-}
-
-func plural(n int, word string) string {
-	if n == 1 {
-		return fmt.Sprintf("%d %s", n, word)
-	}
-	return fmt.Sprintf("%d %ss", n, word)
 }
 
 func join(parts ...string) string {
@@ -786,10 +772,10 @@ func (r report) summary(p terminal.Palette) string {
 	}
 	var parts []string
 	if failures > 0 {
-		parts = append(parts, p.FailureBold(plural(failures, "problem")))
+		parts = append(parts, p.FailureBold(english.Count(failures, "problem")))
 	}
 	if warnings > 0 {
-		parts = append(parts, p.Warning(plural(warnings, "warning")))
+		parts = append(parts, p.Warning(english.Count(warnings, "warning")))
 	}
 	return strings.Join(parts, ", ") + "."
 }

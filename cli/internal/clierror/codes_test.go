@@ -16,7 +16,6 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
-	"github.com/ocelhq/ocel/cli/internal/docsurl"
 )
 
 const (
@@ -28,10 +27,16 @@ const (
 	codeConstantStart = "Code"
 )
 
+func TestAnErrorPageIsServedFromTheOcelDocsSite(t *testing.T) {
+	if got := clierror.FormatErrorPage("project.no_config"); got != "https://ocel.dev/docs/errors/project.no_config" {
+		t.Errorf("error page = %q, want the code's page under /docs/errors", got)
+	}
+}
+
 func TestEveryPublishedCodeHasADocsPageItsDocsURLPointsAt(t *testing.T) {
 	for _, code := range clierror.Codes() {
 		t.Run(code, func(t *testing.T) {
-			page, err := url.Parse(docsurl.FormatErrorPage(code))
+			page, err := url.Parse(clierror.FormatErrorPage(code))
 			if err != nil {
 				t.Fatal(err)
 			}

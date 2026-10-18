@@ -12,6 +12,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ocelhq/ocel/cli/internal/workdir"
+
+	"github.com/ocelhq/ocel/cli/internal/english"
+
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
@@ -173,7 +177,7 @@ func assembleManifest(dependencies Dependencies, a assembly, resources []declara
 		if len(resources) == 0 {
 			return nil, nil
 		}
-		a.phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", countOf(len(resources), "resource"), cfg.Slug))
+		a.phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", english.Count(len(resources), "resource"), cfg.Slug))
 	}
 
 	if err := manifest.RefuseUnnamedApps(cfg, built); err != nil {
@@ -374,9 +378,8 @@ func checkAppPaths(cfg *project.Project, configName string) error {
 	return nil
 }
 
-func countOf(n int, noun string) string {
-	if n == 1 {
-		return "1 " + noun
-	}
-	return fmt.Sprintf("%d %ss", n, noun)
+func holdBuildOutput(ctx context.Context, cfg *project.Project, span *run.Span) (func(), error) {
+	return workdir.LockBuildOutput(ctx, cfg.Dir, func() {
+		span.Say("Waiting for another ocel run in " + cfg.Dir + " to finish with " + buildoutput.Dir)
+	})
 }

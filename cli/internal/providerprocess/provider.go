@@ -35,7 +35,7 @@ func start(ctx context.Context, span *run.Span, questions Questions, spec Launch
 	spec.Stdout = processLines{span: span, subject: spec.ProviderName, stream: progressv1.Stream_STREAM_STDOUT}
 	spec.Stderr = processLines{span: span, subject: spec.ProviderName, stream: progressv1.Stream_STREAM_STDERR}
 	questions.run = span.Run()
-	process, err := Spawn(ctx, spec)
+	process, err := Spawn(spec)
 	if err != nil {
 		return nil, fmt.Errorf("spawn provider: %w", err)
 	}

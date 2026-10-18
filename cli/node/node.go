@@ -1,15 +1,14 @@
 package node
 
 import (
-	"bytes"
 	"embed"
 	"fmt"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
-
-	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"strings"
+	"time"
 )
 
 //go:generate pnpm --dir ../.. exec turbo run build --filter=@cli/node
@@ -17,43 +16,87 @@ import (
 //go:embed dist
 var embedded embed.FS
 
-func DistDir(projectDir string) string {
-	return filepath.Join(projectDir, buildoutput.StateDir, "dist")
+const (
+	cacheDirName      = "node"
+	variableEditorDir = "variable-editor"
+	stagingSuffix     = ".staging-"
+	unusedFor         = 30 * 24 * time.Hour
+)
+
+type Bundle struct {
+	dir string
 }
 
-func BuildScriptPath(projectDir string) string {
-	return filepath.Join(DistDir(projectDir), "build", "main.cjs")
+func (b Bundle) BuildScriptPath() string {
+	return filepath.Join(b.dir, "build", "main.cjs")
 }
 
-func NextAdapterPath(projectDir string) string {
-	return filepath.Join(DistDir(projectDir), "next-adapter", "next-adapter.mjs")
+func (b Bundle) NextAdapterPath() string {
+	return filepath.Join(b.dir, "next-adapter", "next-adapter.mjs")
 }
-
-const variableEditorDir = "variable-editor"
 
 func VariableEditor() (fs.FS, error) {
 	return fs.Sub(embedded, path.Join("dist", variableEditorDir))
 }
 
-func Ensure(projectDir string) error {
-	want, err := embedded.ReadFile("dist/STAMP")
+func Ensure() (Bundle, error) {
+	base, err := os.UserCacheDir()
 	if err != nil {
-		return fmt.Errorf("read embedded node bundle stamp: %w", err)
+		return Bundle{}, fmt.Errorf("resolve the user cache directory for the node bundle: %w", err)
+	}
+	return ensureIn(filepath.Join(base, "ocel", cacheDirName), time.Now())
+}
+
+func ensureIn(cache string, now time.Time) (Bundle, error) {
+	stamp, err := embedded.ReadFile("dist/STAMP")
+	if err != nil {
+		return Bundle{}, fmt.Errorf("read embedded node bundle stamp: %w", err)
+	}
+	name := strings.TrimSpace(string(stamp))
+	if name == "" || strings.ContainsAny(name, `/\.`) {
+		return Bundle{}, fmt.Errorf("the embedded node bundle stamp %q cannot name a directory", name)
+	}
+	dir := filepath.Join(cache, name)
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		_ = os.Chtimes(dir, now, now)
+		return Bundle{dir: dir}, nil
 	}
 
-	dir := DistDir(projectDir)
-	stampPath := filepath.Join(dir, "STAMP")
-	if got, err := os.ReadFile(stampPath); err == nil && bytes.Equal(got, want) {
-		return nil
+	if err := os.MkdirAll(cache, 0o755); err != nil {
+		return Bundle{}, fmt.Errorf("create %s: %w", cache, err)
 	}
+	staging, err := os.MkdirTemp(cache, name+stagingSuffix)
+	if err != nil {
+		return Bundle{}, fmt.Errorf("stage the node bundle in %s: %w", cache, err)
+	}
+	defer os.RemoveAll(staging)
+	if err := writeTree(staging); err != nil {
+		return Bundle{}, err
+	}
+	if err := os.Rename(staging, dir); err != nil {
+		if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+			return Bundle{}, fmt.Errorf("install the node bundle at %s: %w", dir, err)
+		}
+	}
+	removeUnused(cache, name, now)
+	return Bundle{dir: dir}, nil
+}
 
-	if err := os.RemoveAll(dir); err != nil {
-		return fmt.Errorf("clear %s: %w", dir, err)
+func removeUnused(cache, current string, now time.Time) {
+	entries, err := os.ReadDir(cache)
+	if err != nil {
+		return
 	}
-	if err := writeTree(dir); err != nil {
-		return err
+	for _, entry := range entries {
+		if entry.Name() == current || !entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || now.Sub(info.ModTime()) < unusedFor {
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join(cache, entry.Name()))
 	}
-	return os.WriteFile(stampPath, want, 0o644)
 }
 
 func writeTree(dir string) error {
@@ -71,9 +114,6 @@ func writeTree(dir string) error {
 		out := filepath.Join(dir, filepath.FromSlash(name))
 		if entry.IsDir() {
 			return os.MkdirAll(out, 0o755)
-		}
-		if name == "STAMP" {
-			return nil
 		}
 		content, err := fs.ReadFile(tree, name)
 		if err != nil {

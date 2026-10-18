@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/userconfig"
 )
 
 const bannerShownKey = "telemetry_banner_shown"
+
+const telemetryPage = "https://ocel.dev/docs/telemetry"
 
 func PrintBannerOnce(w io.Writer, resolution Resolution) {
 	if !resolution.IsCollecting() || isBannerShown(userconfig.Read()) {
@@ -26,7 +27,7 @@ func PrintBannerOnce(w io.Writer, resolution Resolution) {
 	if shownElsewhere {
 		return
 	}
-	fmt.Fprintf(w, "Ocel collects anonymous usage data: which commands run, and whether they succeed. Never your code, paths or names.\nLearn more: %s\nTurn it off: %s=0\n\n", docsurl.FormatTelemetryPage(), EnvVar)
+	fmt.Fprintf(w, "Ocel collects anonymous usage data: which commands run, and whether they succeed. Never your code, paths or names.\nLearn more: %s\nTurn it off: %s=0\n\n", telemetryPage, EnvVar)
 }
 
 func isBannerShown(s userconfig.Settings) bool {

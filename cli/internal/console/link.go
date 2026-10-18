@@ -46,6 +46,17 @@ func ReadLink(projectDir, apiURL string) (*Link, error) {
 	return &link, nil
 }
 
+func IsLinked(projectDir string) (bool, error) {
+	_, err := os.Stat(linkPath(projectDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read %s: %w", linkPath(projectDir), err)
+	}
+	return true, nil
+}
+
 func WriteLink(projectDir string, link Link) error {
 	link.APIURL = normalizeAPIURL(link.APIURL)
 

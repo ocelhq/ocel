@@ -6,7 +6,6 @@ import (
 	"maps"
 	"os"
 
-	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/envsource"
 )
@@ -47,23 +46,23 @@ func readValueSource(ctx context.Context, cfg *project.Project) (valueSource, er
 
 func (s valueSource) files() []string {
 	if s.ownStore {
-		return []string{dotfile.FileName, dotfile.LocalFileName}
+		return []string{project.DotenvFileName, project.LocalDotenvFileName}
 	}
-	return []string{dotfile.LocalFileName}
+	return []string{project.LocalDotenvFileName}
 }
 
 func (s valueSource) where() string {
 	if s.ownStore {
-		return dotfile.FileName
+		return project.DotenvFileName
 	}
-	return s.id + " and " + dotfile.LocalFileName
+	return s.id + " and " + project.LocalDotenvFileName
 }
 
 func (s valueSource) remedy(key string) string {
 	if s.ownStore {
-		return fmt.Sprintf("add %s=<VALUE> to %s", key, dotfile.FileName)
+		return fmt.Sprintf("add %s=<VALUE> to %s", key, project.DotenvFileName)
 	}
-	return fmt.Sprintf("set %s in %s, or add %s=<VALUE> to %s", key, s.id, key, dotfile.LocalFileName)
+	return fmt.Sprintf("set %s in %s, or add %s=<VALUE> to %s", key, s.id, key, project.LocalDotenvFileName)
 }
 
 type valueLayer struct {
@@ -78,19 +77,19 @@ type valueLayers []valueLayer
 func (s valueSource) read(dir string) (valueLayers, error) {
 	var layers valueLayers
 	if s.ownStore {
-		shared, err := dotfile.Load(dir)
+		shared, err := project.ReadDotenv(dir)
 		if err != nil {
 			return nil, err
 		}
-		layers = append(layers, valueLayer{from: dotfile.FileName, file: true, values: shared.Values, unreadable: shared.Unreadable})
+		layers = append(layers, valueLayer{from: project.DotenvFileName, file: true, values: shared.Values, unreadable: shared.Unreadable})
 	} else {
 		layers = append(layers, valueLayer{from: s.id, values: s.values})
 	}
-	local, err := dotfile.LoadLocal(dir)
+	local, err := project.ReadLocalDotenv(dir)
 	if err != nil {
 		return nil, err
 	}
-	return append(layers, valueLayer{from: dotfile.LocalFileName, file: true, values: local.Values, unreadable: local.Unreadable}), nil
+	return append(layers, valueLayer{from: project.LocalDotenvFileName, file: true, values: local.Values, unreadable: local.Unreadable}), nil
 }
 
 func (v valueLayers) merged() map[string]string {

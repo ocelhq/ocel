@@ -52,6 +52,14 @@ func (c Console) ReportEnvironmentEvent(ctx context.Context, projectDir string, 
 func (c Console) send(ctx context.Context, projectDir, subject string, stderr io.Writer, call func(ctx context.Context, client *console.Client, accessToken, projectID string) error) {
 	credentials, err := c.loadCredentials()
 	if errors.Is(err, console.ErrNotLoggedIn) {
+		linked, err := console.IsLinked(projectDir)
+		if err != nil {
+			fmt.Fprintf(stderr, "Couldn't report %s to the console: %v\n", subject, err)
+			return
+		}
+		if !linked {
+			return
+		}
 		fmt.Fprintf(stderr, "Couldn't report %s to the console: you're not logged in. Run `ocel login`.\n", subject)
 		return
 	}

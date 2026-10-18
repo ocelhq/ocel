@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
+
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/containerimage"
@@ -94,7 +96,7 @@ func (c Compilation) installRequirements(ctx context.Context, platform string) e
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said
-	if err := cmd.Run(); err != nil {
+	if err := childprocess.Run(ctx, cmd); err != nil {
 		return fmt.Errorf("vendor app %q's %s for %s (%w):\n%s", c.App, pythonRequirementsFile, platform, err, said.String())
 	}
 	c.report("vendoring", said.String())

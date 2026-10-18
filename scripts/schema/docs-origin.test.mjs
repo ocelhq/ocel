@@ -10,25 +10,27 @@ describe("readDocsOrigin", () => {
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "ocel-docs-origin-"));
-    mkdirSync(join(root, "cli", "internal", "docsurl"), { recursive: true });
+    mkdirSync(join(root, "cli", "internal", "commands", "projectinit"), { recursive: true });
   });
 
   afterEach(() => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  const writeDocsURL = (source) =>
-    writeFileSync(join(root, "cli", "internal", "docsurl", "docsurl.go"), source);
+  const writeInit = (source) =>
+    writeFileSync(join(root, "cli", "internal", "commands", "projectinit", "init.go"), source);
 
-  it("reads the origin the CLI's docsurl.Origin declares", () => {
-    writeDocsURL(
-      'package docsurl\n\nconst Origin = "https://docs.example.test"\n\nconst Schema = Origin + "/schema/ocel.schema.json"\n',
+  it("reads the origin of the schema URL ocel init writes into a project", () => {
+    writeInit(
+      'package projectinit\n\nconst configSchema = "https://docs.example.test/schema/ocel.schema.json"\n',
     );
     assert.equal(readDocsOrigin(root), "https://docs.example.test");
   });
 
-  it("refuses a docsurl.go that declares no Origin constant", () => {
-    writeDocsURL('package docsurl\n\nconst Schema = "https://docs.example.test/schema.json"\n');
-    assert.throws(() => readDocsOrigin(root), /docsurl\.go declares no Origin constant/);
+  it("refuses an init.go whose configSchema is not the published config schema", () => {
+    writeInit(
+      'package projectinit\n\nconst configSchema = "https://docs.example.test/schema.json"\n',
+    );
+    assert.throws(() => readDocsOrigin(root), /declares no configSchema constant/);
   });
 });

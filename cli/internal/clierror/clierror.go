@@ -7,7 +7,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
@@ -50,9 +49,13 @@ func NewRunError(err error) *streamv1.RunError {
 	}
 	if isPublishedCode(coded.Code) {
 		runError.Code = coded.Code
-		runError.DocsUrl = proto.String(docsurl.FormatErrorPage(coded.Code))
+		runError.DocsUrl = proto.String(FormatErrorPage(coded.Code))
 	}
 	return runError
+}
+
+func FormatErrorPage(code string) string {
+	return "https://ocel.dev/docs/errors/" + code
 }
 
 func NewConfirmationRequired(cause error, typedInput string) *Error {

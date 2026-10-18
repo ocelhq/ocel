@@ -54,16 +54,16 @@ func TestSignallingAGroupThatIsAlreadyGone(t *testing.T) {
 	}
 }
 
-func TestKillAllKillsEveryProcessOfAGroupStillRunning(t *testing.T) {
+func TestKillAllKillsEveryProcessOfAChildStillRunning(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "sleep.pid")
-	group, err := StartGroup(exec.CommandContext(context.Background(), "sh", "-c", `sleep 60 & echo $! > "$0"; wait`, pidFile))
+	child, err := Start(context.Background(), exec.Command("sh", "-c", `sleep 60 & echo $! > "$0"; wait`, pidFile), Options{})
 	if err != nil {
-		t.Fatalf("StartGroup: %v", err)
+		t.Fatalf("Start: %v", err)
 	}
 	var pid int
 	for deadline := time.Now().Add(5 * time.Second); pid == 0; time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			t.Fatal("the group never started its sleep")
+			t.Fatal("the child never started its sleep")
 		}
 		if said, err := os.ReadFile(pidFile); err == nil {
 			pid, _ = strconv.Atoi(strings.TrimSpace(string(said)))
@@ -73,15 +73,15 @@ func TestKillAllKillsEveryProcessOfAGroupStillRunning(t *testing.T) {
 	KillAll()
 
 	waited := make(chan error, 1)
-	go func() { waited <- group.Wait() }()
+	go func() { waited <- child.Wait() }()
 	select {
 	case <-waited:
 	case <-time.After(5 * time.Second):
-		t.Fatal("the group still runs 5s after KillAll")
+		t.Fatal("the child still runs 5s after KillAll")
 	}
 	for deadline := time.Now().Add(2 * time.Second); childprocesstest.IsAlive(pid); time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			t.Fatalf("the group's sleep %d still runs after KillAll", pid)
+			t.Fatalf("the child's sleep %d still runs after KillAll", pid)
 		}
 	}
 }

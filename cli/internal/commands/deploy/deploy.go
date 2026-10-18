@@ -153,6 +153,12 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			enabled:        !opts.dry && browser,
 		}
 		build := run.Phase(progressv1.Phase_PHASE_BUILD)
+		releaseOutput, err := holdBuildOutput(ctx, cfg, build)
+		if err != nil {
+			build.End(err)
+			return err
+		}
+		defer releaseOutput()
 		manifest, inline, err := recovery.buildManifest(ctx, build, opts.prebuilt)
 		build.End(err)
 		if err != nil {

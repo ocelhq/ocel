@@ -6,7 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestEnsure(t *testing.T) {
@@ -15,13 +17,12 @@ func TestEnsure(t *testing.T) {
 	t.Run("writes the whole bundled tree", func(t *testing.T) {
 		t.Parallel()
 
-		dir := ensured(t)
+		bundle := ensured(t, t.TempDir())
 		for _, path := range []string{
-			BuildScriptPath(dir),
-			NextAdapterPath(dir),
-			filepath.Join(DistDir(dir), "next-adapter", "edge-node-entry.cjs"),
-			filepath.Join(DistDir(dir), "next-adapter", "next-dispatch.cjs"),
-			stampPath(dir),
+			bundle.BuildScriptPath(),
+			bundle.NextAdapterPath(),
+			filepath.Join(bundle.dir, "next-adapter", "edge-node-entry.cjs"),
+			filepath.Join(bundle.dir, "next-adapter", "next-dispatch.cjs"),
 		} {
 			info, err := os.Stat(path)
 			if err != nil {
@@ -34,58 +35,81 @@ func TestEnsure(t *testing.T) {
 		}
 	})
 
-	t.Run("a matching stamp leaves the tree untouched", func(t *testing.T) {
+	t.Run("lives in the cache under its stamp, never in a project", func(t *testing.T) {
 		t.Parallel()
 
-		dir := ensured(t)
-		writeFile(t, BuildScriptPath(dir), "touched")
-
-		if err := Ensure(dir); err != nil {
-			t.Fatalf("Ensure: %v", err)
-		}
-		if got := readFile(t, BuildScriptPath(dir)); got != "touched" {
-			t.Error("Ensure rewrote the tree despite a matching STAMP")
-		}
-	})
-
-	t.Run("a mismatched stamp rewrites the tree and clears what it does not own", func(t *testing.T) {
-		t.Parallel()
-
-		dir := ensured(t)
-		want := readFile(t, stampPath(dir))
-		writeFile(t, stampPath(dir), "stale")
-
-		stale := filepath.Join(DistDir(dir), "leftover.txt")
-		writeFile(t, stale, "x")
-
-		if err := Ensure(dir); err != nil {
-			t.Fatalf("Ensure: %v", err)
-		}
-		if got := readFile(t, stampPath(dir)); got != want {
-			t.Error("STAMP not restored")
-		}
-		if _, err := os.Stat(stale); !errors.Is(err, fs.ErrNotExist) {
-			t.Error("stale file survived the rewrite")
-		}
-	})
-
-	t.Run("a run interrupted before the stamp was written is redone", func(t *testing.T) {
-		t.Parallel()
-
-		dir := ensured(t)
-		if err := os.Remove(stampPath(dir)); err != nil {
+		cache := t.TempDir()
+		bundle := ensured(t, cache)
+		stamp, err := embedded.ReadFile("dist/STAMP")
+		if err != nil {
 			t.Fatal(err)
 		}
-		writeFile(t, BuildScriptPath(dir), "partial")
+		if want := filepath.Join(cache, string(bytes.TrimSpace(stamp))); bundle.dir != want {
+			t.Errorf("bundle at %s, want %s", bundle.dir, want)
+		}
+	})
 
-		if err := Ensure(dir); err != nil {
-			t.Fatalf("Ensure: %v", err)
+	t.Run("a bundle already installed is reused untouched", func(t *testing.T) {
+		t.Parallel()
+
+		cache := t.TempDir()
+		bundle := ensured(t, cache)
+		writeFile(t, bundle.BuildScriptPath(), "touched")
+
+		again := ensured(t, cache)
+		if got := readFile(t, again.BuildScriptPath()); got != "touched" {
+			t.Error("Ensure rewrote a bundle already installed under its stamp")
 		}
-		if got := readFile(t, BuildScriptPath(dir)); got == "partial" {
-			t.Error("Ensure left the partial builder in place")
+	})
+
+	t.Run("runs installing at once all end with one whole tree", func(t *testing.T) {
+		t.Parallel()
+
+		cache := t.TempDir()
+		var wg sync.WaitGroup
+		errs := make([]error, 8)
+		for i := range errs {
+			wg.Go(func() { _, errs[i] = ensureIn(cache, time.Now()) })
 		}
-		if _, err := os.Stat(stampPath(dir)); err != nil {
-			t.Errorf("STAMP not written: %v", err)
+		wg.Wait()
+		if err := errors.Join(errs...); err != nil {
+			t.Fatalf("ensureIn: %v", err)
+		}
+		entries, err := os.ReadDir(cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Errorf("the cache holds %d entries, want the one bundle and no staging left behind", len(entries))
+		}
+		if info, err := os.Stat(ensured(t, cache).BuildScriptPath()); err != nil || info.Size() == 0 {
+			t.Errorf("stat the build script = %v, want it whole", err)
+		}
+	})
+
+	t.Run("a bundle unused for a month is removed when another is installed, and a recent one is kept", func(t *testing.T) {
+		t.Parallel()
+
+		cache := t.TempDir()
+		now := time.Now()
+		old, recent := filepath.Join(cache, "old-stamp"), filepath.Join(cache, "recent-stamp")
+		for _, dir := range []string{old, recent} {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Chtimes(old, now.Add(-31*24*time.Hour), now.Add(-31*24*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := ensureIn(cache, now); err != nil {
+			t.Fatalf("ensureIn: %v", err)
+		}
+		if _, err := os.Stat(old); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("stat the month-old bundle = %v, want it removed", err)
+		}
+		if _, err := os.Stat(recent); err != nil {
+			t.Errorf("stat the recent bundle = %v, want it kept: another CLI may still run from it", err)
 		}
 	})
 }
@@ -112,24 +136,22 @@ func TestTheVariableEditorPageIsEmbedded(t *testing.T) {
 	t.Run("the UI is served from the binary and never materialized on disk", func(t *testing.T) {
 		t.Parallel()
 
-		dir := ensured(t)
-		materialized := filepath.Join(DistDir(dir), variableEditorDir)
+		bundle := ensured(t, t.TempDir())
+		materialized := filepath.Join(bundle.dir, variableEditorDir)
 		if _, err := os.Stat(materialized); !errors.Is(err, fs.ErrNotExist) {
 			t.Errorf("stat %s = %v, want it absent", materialized, err)
 		}
 	})
 }
 
-func ensured(t *testing.T) string {
+func ensured(t *testing.T, cache string) Bundle {
 	t.Helper()
-	dir := t.TempDir()
-	if err := Ensure(dir); err != nil {
-		t.Fatalf("Ensure: %v", err)
+	bundle, err := ensureIn(cache, time.Now())
+	if err != nil {
+		t.Fatalf("ensureIn: %v", err)
 	}
-	return dir
+	return bundle
 }
-
-func stampPath(dir string) string { return filepath.Join(DistDir(dir), "STAMP") }
 
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()

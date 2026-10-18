@@ -21,12 +21,7 @@ func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *proj
 	if err != nil {
 		return nil, nil, err
 	}
-	var fingerprint string
-	if prepared.Entry() != "" {
-		if fingerprint, err = hashBundledEntry(prepared.Entry()); err != nil {
-			return nil, nil, err
-		}
-	}
+	fingerprint := prepared.Fingerprint()
 
 	cache, cacheErr := openVariableCache()
 	if cacheErr == nil {

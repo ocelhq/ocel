@@ -138,7 +138,7 @@ type Process struct {
 	closeOnce sync.Once
 }
 
-func Spawn(ctx context.Context, spec LaunchSpec) (*Process, error) {
+func Spawn(spec LaunchSpec) (*Process, error) {
 	if spec.BinaryPath == "" {
 		return nil, errors.New("provider: BinaryPath is required")
 	}
@@ -206,14 +206,6 @@ func Spawn(ctx context.Context, spec LaunchSpec) (*Process, error) {
 		_ = childprocess.KillGroup(cmd)
 		deregisterLive(r)
 		close(r.done)
-	}()
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			r.Close()
-		case <-r.done:
-		}
 	}()
 
 	return r, nil

@@ -147,13 +147,13 @@ export default { slug: "test-app" };
 		go httpServer.Serve(listener)
 		defer httpServer.Close()
 
-		if err := leader.Claim(root, leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
-			t.Fatalf("leader.Claim: %v", err)
-		}
-
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
+
+		if err := leader.Claim(leaderOf(root), leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
+			t.Fatalf("leader.Claim: %v", err)
+		}
 
 		appArgs, startedPath, pidPath := childprocesstest.WorkerTree(t, root, "follower")
 

@@ -61,7 +61,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said
-	if err := childprocess.RunGroup(cmd); err != nil {
+	if err := childprocess.Run(ctx, cmd); err != nil {
 		return fmt.Errorf("compile app %q in %s for %s (%w):\n%s", c.App, source, target, err, said.String())
 	}
 	c.report("compiling", said.String())

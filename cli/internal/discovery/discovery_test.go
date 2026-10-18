@@ -97,6 +97,26 @@ func TestDiscover(t *testing.T) {
 			want:  []string{"packages/a/ocel/one.ts", "packages/b/ocel/two.ts"},
 		},
 		{
+			name: "finds every extension a js discovery folder holds",
+			files: map[string]string{
+				"declarations/a.mts": "export {};",
+				"declarations/b.cts": "export {};",
+			},
+			paths: []string{"declarations"},
+			want:  []string{"declarations/a.mts", "declarations/b.cts"},
+		},
+		{
+			name: "skips test files and test folders",
+			files: map[string]string{
+				"declarations/main.ts":            "export {};",
+				"declarations/main.test.ts":       "export {};",
+				"declarations/main.spec.tsx":      "export {};",
+				"declarations/__tests__/setup.ts": "export {};",
+			},
+			paths: []string{"declarations"},
+			want:  []string{"declarations/main.ts"},
+		},
+		{
 			name:  "a missing path yields no files and no error",
 			paths: []string{"declarations"},
 		},

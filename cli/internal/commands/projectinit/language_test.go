@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
@@ -89,8 +88,8 @@ func TestInitWritesTheSchemaEveryVersionNames(t *testing.T) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if doc.Schema != docsurl.Schema {
-		t.Fatalf("$schema = %q, want the one schema %q", doc.Schema, docsurl.Schema)
+	if doc.Schema != "https://ocel.dev/schema/ocel.schema.json" {
+		t.Fatalf("$schema = %q, want the one schema %q", doc.Schema, configSchema)
 	}
 }
 
@@ -196,7 +195,7 @@ func TestInitWritesYAMLOnRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !strings.Contains(string(written), "# yaml-language-server: $schema="+docsurl.Schema+"\n") {
+	if !strings.Contains(string(written), "# yaml-language-server: $schema="+configSchema+"\n") {
 		t.Fatalf("config names no schema:\n%s", written)
 	}
 }
