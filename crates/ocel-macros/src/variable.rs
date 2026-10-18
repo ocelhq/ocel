@@ -73,7 +73,10 @@ pub(crate) fn variable(field: &Field) -> syn::Result<Variable> {
             "sensitive" if matches!(shape, Shape::Live) => {
                 return Err(refused(entry.span(), &key, "is an ocel::Secret tagged 'sensitive'. A Secret field is always the secret class; drop the attribute."))
             }
-            "sensitive" => class = Class::Sensitive,
+            "sensitive" => {
+                entry.expect_flag()?;
+                class = Class::Sensitive;
+            }
             _ => {
                 return Err(refused(
                     entry.span(),

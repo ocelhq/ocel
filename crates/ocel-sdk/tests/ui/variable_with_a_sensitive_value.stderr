@@ -1,0 +1,5 @@
+error: 'sensitive' takes no value.
+ --> tests/ui/variable_with_a_sensitive_value.rs:3:12
+  |
+3 |     #[ocel(sensitive = false)]
+  |            ^^^^^^^^^

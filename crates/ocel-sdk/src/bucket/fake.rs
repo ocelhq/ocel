@@ -6,9 +6,11 @@ use crate::proto::app::bucket::v1::{
     SignPartsResponse, SignRequest, SignResponse, SignedOperation, SignedPart,
 };
 use buffa::Message;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -148,16 +150,70 @@ pub(super) fn start() -> Fake {
     let store = Arc::new(Store::default());
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
     let address = format!("http://{}", listener.local_addr().expect("addr"));
-    let served = store.clone();
-    let base = address.clone();
+    accept(listener, store.clone(), address.clone(), None);
+    Fake { address, store }
+}
+
+pub(super) fn start_with_https_objects() -> Fake {
+    let store = Arc::new(Store::default());
+    let rpc = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let objects = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let address = format!("http://{}", rpc.local_addr().expect("addr"));
+    let base = format!("https://{}", objects.local_addr().expect("addr"));
+    accept(rpc, store.clone(), base.clone(), None);
+    accept(objects, store.clone(), base, Some(read_tls_config()));
+    Fake { address, store }
+}
+
+pub(super) fn read_trusted_roots() -> rustls::RootCertStore {
+    let mut roots = rustls::RootCertStore::empty();
+    for certificate in CertificateDer::pem_slice_iter(include_bytes!("testdata/ca.pem")) {
+        roots
+            .add(certificate.expect("the test CA"))
+            .expect("the test CA");
+    }
+    roots
+}
+
+fn read_tls_config() -> Arc<rustls::ServerConfig> {
+    let chain = CertificateDer::pem_slice_iter(include_bytes!("testdata/store.pem"))
+        .collect::<Result<Vec<_>, _>>()
+        .expect("the test store certificate");
+    let key = PrivateKeyDer::from_pem_slice(include_bytes!("testdata/store.key"))
+        .expect("the test store key");
+    Arc::new(
+        rustls::ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .expect("the protocol versions")
+        .with_no_client_auth()
+        .with_single_cert(chain, key)
+        .expect("the test store config"),
+    )
+}
+
+fn accept(
+    listener: TcpListener,
+    store: Arc<Store>,
+    base: String,
+    tls: Option<Arc<rustls::ServerConfig>>,
+) {
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(stream) = stream else { return };
-            let (store, base) = (served.clone(), base.clone());
-            std::thread::spawn(move || serve(stream, &store, &base));
+            let (store, base, tls) = (store.clone(), base.clone(), tls.clone());
+            std::thread::spawn(move || match tls {
+                Some(tls) => {
+                    let Ok(connection) = rustls::ServerConnection::new(tls) else {
+                        return;
+                    };
+                    serve(rustls::StreamOwned::new(connection, stream), &store, &base)
+                }
+                None => serve(stream, &store, &base),
+            });
         }
     });
-    Fake { address, store }
 }
 
 struct Received {
@@ -168,19 +224,21 @@ struct Received {
     body: Vec<u8>,
 }
 
-fn serve(mut stream: TcpStream, store: &Store, base: &str) {
-    let Some(received) = read(&stream) else {
+fn serve(stream: impl Read + Write, store: &Store, base: &str) {
+    let mut reader = BufReader::new(stream);
+    let Some(received) = read(&mut reader) else {
         return;
     };
+    let stream = reader.get_mut();
     if received.headers.get("authorization").map(String::as_str) != Some(&format!("Bearer {TOKEN}"))
         && received.path.starts_with("/app.bucket.v1.")
     {
-        answer(&mut stream, 403, "text/plain", Vec::new(), &[]);
+        answer(stream, 403, "text/plain", Vec::new(), &[]);
         return;
     }
     if let Some(key) = received.path.strip_prefix("/o/") {
         let key = key.to_string();
-        object(&mut stream, store, &key, &received);
+        object(stream, store, &key, &received);
         return;
     }
     let json = received
@@ -189,7 +247,7 @@ fn serve(mut stream: TcpStream, store: &Store, base: &str) {
         .is_some_and(|value| value.ends_with("json"));
     match rpc(store, base, &received, json) {
         Some(body) => answer(
-            &mut stream,
+            stream,
             200,
             received
                 .headers
@@ -199,12 +257,11 @@ fn serve(mut stream: TcpStream, store: &Store, base: &str) {
             body,
             &[],
         ),
-        None => answer(&mut stream, 404, "text/plain", Vec::new(), &[]),
+        None => answer(stream, 404, "text/plain", Vec::new(), &[]),
     }
 }
 
-fn read(stream: &TcpStream) -> Option<Received> {
-    let mut reader = BufReader::new(stream.try_clone().ok()?);
+fn read(reader: &mut impl BufRead) -> Option<Received> {
     let mut line = String::new();
     reader.read_line(&mut line).ok()?;
     let mut words = line.split_whitespace();
@@ -247,7 +304,7 @@ fn read(stream: &TcpStream) -> Option<Received> {
 }
 
 fn answer(
-    stream: &mut TcpStream,
+    stream: &mut impl Write,
     status: u16,
     content_type: &str,
     body: Vec<u8>,
@@ -266,7 +323,7 @@ fn answer(
     let _ = stream.flush();
 }
 
-fn object(stream: &mut TcpStream, store: &Store, key: &str, received: &Received) {
+fn object(stream: &mut impl Write, store: &Store, key: &str, received: &Received) {
     let query: BTreeMap<&str, &str> = received
         .query
         .split('&')

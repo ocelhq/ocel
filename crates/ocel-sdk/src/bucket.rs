@@ -14,9 +14,10 @@ use crate::proto::app::bucket::v1::{
 use crate::runtime::read_client_config;
 use crate::{Code, Error};
 use bytes::Bytes;
-use connectrpc::client::{ClientTransport, HttpClient};
+use connectrpc::client::{ClientBody, HttpClient};
 use futures_core::Stream;
 use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::HttpConnector;
 use std::collections::BTreeMap;
 use std::future::{Future, IntoFuture};
 use std::ops::{Bound, RangeBounds};
@@ -31,8 +32,10 @@ const PART_SIZE: usize = 8 << 20;
 const PARTS_IN_FLIGHT: usize = 4;
 const READ_ATTEMPTS: usize = 3;
 
-type Body = <HttpClient as ClientTransport>::ResponseBody;
+type Body = hyper::body::Incoming;
 type Client = BucketServiceClient<HttpClient>;
+type StoreClient =
+    hyper_util::client::legacy::Client<hyper_rustls::HttpsConnector<HttpConnector>, ClientBody>;
 type ResultFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 type BodyStream = futures_util::stream::MapErr<
     http_body_util::BodyDataStream<Body>,
@@ -116,7 +119,7 @@ impl From<&str> for Payload {
 #[derive(Clone)]
 struct Connection {
     client: Client,
-    http: HttpClient,
+    store: StoreClient,
     bucket: String,
     public_base_url: String,
 }
@@ -134,6 +137,7 @@ pub struct Bucket {
     name: String,
     connection: Arc<OnceLock<Connection>>,
     thresholds: Thresholds,
+    roots: Option<Arc<rustls::RootCertStore>>,
 }
 
 impl Bucket {
@@ -148,6 +152,7 @@ impl Bucket {
                 single_ceiling: SINGLE_REQUEST_CEILING,
                 part_size: PART_SIZE,
             },
+            roots: None,
         }
     }
 
@@ -287,7 +292,7 @@ impl Bucket {
     /// Open the object under `key` for writing. Nothing reaches the bucket until the writer
     /// is shut down, and a writer dropped before that throws away what it had sent.
     pub async fn writer(&self, key: &str) -> Result<Writer, Error> {
-        Writer::open(self, key, WriteOptions::default()).await
+        Writer::open(self, key, WriteOptions::default())
     }
 
     /// A url that reads the object under `key` without a credential, for as long as it
@@ -334,6 +339,12 @@ impl Bucket {
     }
 
     #[cfg(test)]
+    pub(crate) fn trusting(mut self, roots: rustls::RootCertStore) -> Self {
+        self.roots = Some(Arc::new(roots));
+        self
+    }
+
+    #[cfg(test)]
     pub(crate) fn with_thresholds(mut self, single_ceiling: usize, part_size: usize) -> Self {
         self.thresholds = Thresholds {
             single_ceiling,
@@ -354,10 +365,9 @@ impl Bucket {
         }
         let properties = read_bucket(&self.name)?;
         let config = read_client_config()?;
-        let http = HttpClient::plaintext();
         let connection = Connection {
-            client: Client::new(http.clone(), config),
-            http,
+            client: Client::new(HttpClient::plaintext(), config),
+            store: new_store_client(self.roots.clone()),
             bucket: properties.bucket,
             public_base_url: properties.public_base_url,
         };
@@ -476,9 +486,7 @@ impl<'a> IntoFuture for Put<'a> {
                 body,
                 options,
             } = self;
-            let mut writer = Writer::open(bucket, &key, options).await?;
-            writer.put(body).await?;
-            writer.finish().await
+            writer::put_object(bucket, &key, options, body).await
         })
     }
 }
@@ -540,8 +548,13 @@ impl<'a> IntoFuture for Get<'a> {
                 if let Some(range) = &range {
                     request = request.header("range", range);
                 }
-                let response =
-                    send_request(bucket.ensure_connection("get")?, request, Bytes::new()).await?;
+                let response = send_request(
+                    bucket.ensure_connection("get")?,
+                    &key,
+                    request,
+                    Bytes::new(),
+                )
+                .await?;
                 check_status(&key, response.status().as_u16())?;
                 if answered_etag(&response, &target.etag_header).as_ref() != Some(&info.etag) {
                     continue;
@@ -801,32 +814,62 @@ fn build_signed_request(target: &PresignedTarget, method: &str) -> http::request
     request
 }
 
+fn new_store_client(roots: Option<Arc<rustls::RootCertStore>>) -> StoreClient {
+    let roots = roots.unwrap_or_else(|| {
+        Arc::new(rustls::RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+        })
+    });
+    let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("ring supports every safe default TLS version")
+    .with_root_certificates(roots)
+    .with_no_client_auth();
+    let connector = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_tls_config(tls)
+        .https_or_http()
+        .enable_http1()
+        .build();
+    hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+        .build(connector)
+}
+
 async fn send_request(
     connection: &Connection,
+    key: &str,
     request: http::request::Builder,
     body: Bytes,
 ) -> Result<http::Response<Body>, Error> {
-    let key = request
-        .uri_ref()
-        .map(ToString::to_string)
-        .unwrap_or_default();
     let request = request
         .header("content-length", body.len())
         .body(connectrpc::client::full_body(body))
         .map_err(|err| Error::Refused {
-            key: key.clone(),
+            key: key.to_string(),
             code: Code::Internal,
             said: err.to_string(),
         })?;
     connection
-        .http
-        .send(request)
+        .store
+        .request(request)
         .await
         .map_err(|err| Error::Refused {
-            key,
+            key: key.to_string(),
             code: Code::Unavailable,
-            said: err.to_string(),
+            said: describe_transport_failure(&err),
         })
+}
+
+fn describe_transport_failure(err: &hyper_util::client::legacy::Error) -> String {
+    let mut said = err.to_string();
+    let mut source = std::error::Error::source(err);
+    while let Some(cause) = source {
+        said.push_str(": ");
+        said.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    said
 }
 
 fn answered_etag(response: &http::Response<Body>, header: &str) -> Option<String> {

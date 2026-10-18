@@ -7,7 +7,7 @@ use crate::proto::app::bucket::v1::{
     SignConstraints, SignPartsRequest, SignRequest, SignedAudience, SignedOperation,
 };
 use crate::{Code, Error};
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -44,7 +44,8 @@ enum WriterState {
     Ready(Box<Upload>),
     Draining(UploadFuture),
     Finishing(UploadFuture),
-    Spent,
+    Finished,
+    Failed,
 }
 
 const UNTYPED: &str = "application/octet-stream";
@@ -56,7 +57,7 @@ struct Upload {
     key: String,
     options: WriteOptions,
     thresholds: Thresholds,
-    buffered: Vec<u8>,
+    buffered: BytesMut,
     sent: u64,
     multipart: Arc<MultipartUpload>,
     next_part: i32,
@@ -64,19 +65,36 @@ struct Upload {
     completed: Vec<CompletedPart>,
 }
 
-fn refuse_finished_writer() -> Error {
-    Error::Refused {
-        key: String::new(),
-        code: Code::FailedPrecondition,
-        said: "this writer has already finished".to_string(),
+impl Writer {
+    pub(super) fn open(bucket: &Bucket, key: &str, options: WriteOptions) -> Result<Self, Error> {
+        let upload = Upload::open(bucket, key, options, BytesMut::new())?;
+        Ok(Self {
+            multipart: upload.multipart.clone(),
+            state: WriterState::Ready(Box::new(upload)),
+        })
     }
 }
 
-impl Writer {
-    pub(super) async fn open(
+pub(super) async fn put_object(
+    bucket: &Bucket,
+    key: &str,
+    options: WriteOptions,
+    body: Bytes,
+) -> Result<Object, Error> {
+    let mut upload = Upload::open(bucket, key, options, BytesMut::from(body))?;
+    let finished = upload.finish().await;
+    if finished.is_err() {
+        upload.abort().await;
+    }
+    finished
+}
+
+impl Upload {
+    fn open(
         bucket: &Bucket,
         key: &str,
         mut options: WriteOptions,
+        buffered: BytesMut,
     ) -> Result<Self, Error> {
         if options.content_type.is_empty() {
             options.content_type = UNTYPED.to_string();
@@ -88,64 +106,28 @@ impl Writer {
             upload_id: Mutex::new(String::new()),
         });
         Ok(Self {
-            state: WriterState::Ready(Box::new(Upload {
-                connection,
-                key: key.to_string(),
-                options,
-                thresholds: bucket.thresholds,
-                buffered: Vec::new(),
-                sent: 0,
-                multipart: multipart.clone(),
-                next_part: 1,
-                pending: Vec::new(),
-                completed: Vec::new(),
-            })),
+            connection,
+            key: key.to_string(),
+            options,
+            thresholds: bucket.thresholds,
+            buffered,
+            sent: 0,
             multipart,
+            next_part: 1,
+            pending: Vec::new(),
+            completed: Vec::new(),
         })
     }
 
-    pub(super) async fn put(&mut self, body: Bytes) -> Result<(), Error> {
-        let outcome = {
-            let WriterState::Ready(core) = &mut self.state else {
-                return Err(refuse_finished_writer());
-            };
-            core.buffered.extend_from_slice(&body);
-            core.drain(false).await
-        };
-        let Err(err) = outcome else {
-            return Ok(());
-        };
-        if let WriterState::Ready(core) = &mut self.state {
-            core.abort().await;
-        }
-        self.state = WriterState::Spent;
-        Err(err)
-    }
-
-    pub(super) async fn finish(mut self) -> Result<Object, Error> {
-        let WriterState::Ready(mut core) = std::mem::replace(&mut self.state, WriterState::Spent)
-        else {
-            return Err(refuse_finished_writer());
-        };
-        let finished = core.finish().await;
-        if finished.is_err() {
-            core.abort().await;
-        }
-        finished
-    }
-}
-
-impl Upload {
     async fn drain(&mut self, last: bool) -> Result<(), Error> {
         if self.multipart.upload_id().is_empty() {
-            if last || self.buffered.len() <= self.thresholds.single_ceiling {
+            if self.buffered.len() <= self.thresholds.single_ceiling {
                 return Ok(());
             }
             self.begin().await?;
         }
         while self.buffered.len() >= self.thresholds.part_size {
-            let part = Bytes::copy_from_slice(&self.buffered[..self.thresholds.part_size]);
-            self.buffered.drain(..self.thresholds.part_size);
+            let part = self.buffered.split_to(self.thresholds.part_size).freeze();
             self.stage(part);
             if self.pending.len() == PARTS_IN_FLIGHT {
                 self.flush().await?;
@@ -155,7 +137,7 @@ impl Upload {
             return Ok(());
         }
         if !self.buffered.is_empty() {
-            let rest = Bytes::from(std::mem::take(&mut self.buffered));
+            let rest = self.buffered.split().freeze();
             self.stage(rest);
         }
         self.flush().await
@@ -257,7 +239,7 @@ impl Upload {
                 for (name, value) in &target.headers {
                     request = request.header(name, value);
                 }
-                let response = send_request(connection, request, part).await?;
+                let response = send_request(connection, key, request, part).await?;
                 check_status(key, response.status().as_u16())?;
                 Ok::<_, Error>(CompletedPart {
                     part_number: number,
@@ -338,9 +320,9 @@ impl Upload {
                 said: "the runtime signed nothing".to_string(),
             })?;
         let request = build_signed_request(&target, "PUT");
-        let body = Bytes::from(std::mem::take(&mut self.buffered));
+        let body = self.buffered.split().freeze();
         self.sent += body.len() as u64;
-        let response = send_request(&self.connection, request, body).await?;
+        let response = send_request(&self.connection, &self.key, request, body).await?;
         check_status(&self.key, response.status().as_u16())?;
         answered_etag(&response, &target.etag_header).ok_or_else(|| self.refuse_missing_etag())
     }
@@ -372,6 +354,14 @@ fn poll_upload(
 }
 
 impl Writer {
+    fn refuse_write(&self) -> std::io::Error {
+        let key = &self.multipart.key;
+        std::io::Error::other(match self.state {
+            WriterState::Finished => format!("the writer of '{key}' has already finished"),
+            _ => format!("the writer of '{key}' failed, and nothing was stored"),
+        })
+    }
+
     fn poll_drain(&mut self, context: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let WriterState::Draining(working) = &mut self.state else {
             return Poll::Ready(Ok(()));
@@ -383,7 +373,7 @@ impl Writer {
                 Poll::Ready(Ok(()))
             }
             Some(err) => {
-                self.state = WriterState::Spent;
+                self.state = WriterState::Failed;
                 Poll::Ready(Err(std::io::Error::other(err.to_string())))
             }
         }
@@ -398,14 +388,12 @@ impl tokio::io::AsyncWrite for Writer {
     ) -> Poll<std::io::Result<usize>> {
         std::task::ready!(self.poll_drain(context))?;
         let WriterState::Ready(core) = &mut self.state else {
-            return Poll::Ready(Err(std::io::Error::other(
-                "this writer has already finished",
-            )));
+            return Poll::Ready(Err(self.refuse_write()));
         };
         core.buffered.extend_from_slice(buffer);
         if core.buffered.len() > core.thresholds.single_ceiling {
             let WriterState::Ready(mut core) =
-                std::mem::replace(&mut self.state, WriterState::Spent)
+                std::mem::replace(&mut self.state, WriterState::Failed)
             else {
                 unreachable!("the state was just read as ready")
             };
@@ -431,17 +419,17 @@ impl tokio::io::AsyncWrite for Writer {
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        if matches!(self.state, WriterState::Spent) {
-            return Poll::Ready(Ok(()));
+        match self.state {
+            WriterState::Finished => return Poll::Ready(Ok(())),
+            WriterState::Failed => return Poll::Ready(Err(self.refuse_write())),
+            _ => {}
         }
         if !matches!(self.state, WriterState::Finishing(_)) {
             std::task::ready!(self.poll_drain(context))?;
             let WriterState::Ready(mut core) =
-                std::mem::replace(&mut self.state, WriterState::Spent)
+                std::mem::replace(&mut self.state, WriterState::Failed)
             else {
-                return Poll::Ready(Err(std::io::Error::other(
-                    "this writer has already finished",
-                )));
+                return Poll::Ready(Err(self.refuse_write()));
             };
             self.state = WriterState::Finishing(Box::pin(async move {
                 let outcome = core.finish().await.map(drop);
@@ -455,10 +443,15 @@ impl tokio::io::AsyncWrite for Writer {
             unreachable!("the state was just set to finishing")
         };
         let (_, failure) = std::task::ready!(poll_upload(working, context));
-        self.state = WriterState::Spent;
         match failure {
-            None => Poll::Ready(Ok(())),
-            Some(err) => Poll::Ready(Err(std::io::Error::other(err.to_string()))),
+            None => {
+                self.state = WriterState::Finished;
+                Poll::Ready(Ok(()))
+            }
+            Some(err) => {
+                self.state = WriterState::Failed;
+                Poll::Ready(Err(std::io::Error::other(err.to_string())))
+            }
         }
     }
 }

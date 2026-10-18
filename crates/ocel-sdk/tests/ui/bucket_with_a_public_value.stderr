@@ -1,0 +1,5 @@
+error: field uploads: 'public' takes no value.
+ --> tests/ui/bucket_with_a_public_value.rs:3:12
+  |
+3 |     #[ocel(public = false)]
+  |            ^^^^^^

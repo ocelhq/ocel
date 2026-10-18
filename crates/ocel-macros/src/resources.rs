@@ -269,7 +269,7 @@ fn quote_worker_handler(
             #(#hooks)*
 
             #krate::inventory::submit! {
-                #krate::Handler::Worker {
+                #krate::WorkerRegistration {
                     name: #name,
                     concurrency: #concurrency,
                     on_start: #on_start,
@@ -376,7 +376,10 @@ fn read_entry(
     match (config, entry.name.to_string().as_str()) {
         (_, "name") => *name = entry.read_literal()?.to_string(),
         (Config::Postgres { version }, "version") => *version = entry.read_literal()?.to_string(),
-        (Config::Bucket { public, .. }, "public") => *public = true,
+        (Config::Bucket { public, .. }, "public") => {
+            entry.expect_flag()?;
+            *public = true;
+        }
         (
             Config::Bucket {
                 allowed_origins, ..

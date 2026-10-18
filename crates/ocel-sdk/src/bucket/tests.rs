@@ -1,4 +1,4 @@
-use super::fake::{start, Fake, TOKEN, UPLOADED_AT};
+use super::fake::{read_trusted_roots, start, start_with_https_objects, Fake, TOKEN, UPLOADED_AT};
 use super::Bucket;
 use crate::Error;
 use futures_util::StreamExt;
@@ -16,8 +16,11 @@ struct Harness {
 }
 
 fn harness(public_base_url: &str) -> Harness {
+    harness_of(start(), public_base_url)
+}
+
+fn harness_of(fake: Fake, public_base_url: &str) -> Harness {
     let env = ENV.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let fake = start();
     std::env::set_var(
         "OCEL_RESOURCE_BUCKET_uploads",
         format!(
@@ -665,4 +668,70 @@ async fn a_bucket_with_no_public_address_says_so_rather_than_guess_one() {
         .expect_err("no public address");
     assert!(matches!(err, Error::NotPublic { .. }), "error = {err}");
     assert!(err.to_string().contains("#[ocel(public)]"), "error = {err}");
+}
+
+#[tokio::test]
+async fn an_object_is_written_and_read_through_an_https_store() {
+    let harness = harness_of(start_with_https_objects(), "");
+    let bucket = harness.bucket.clone().trusting(read_trusted_roots());
+
+    bucket
+        .put("avatars/one.png", "the bytes")
+        .await
+        .expect("the write");
+    let read = bucket.get("avatars/one.png").await.expect("the read");
+    assert_eq!(&read.bytes().await.expect("the bytes")[..], b"the bytes");
+
+    let parts = bucket.clone().with_thresholds(8, 4);
+    let body: Vec<u8> = (0..26u8).map(|index| b'a' + index).collect();
+    parts
+        .put("big.bin", body.clone())
+        .await
+        .expect("the multipart write");
+    assert_eq!(
+        harness
+            .fake
+            .store
+            .object("big.bin")
+            .expect("the stored object")
+            .body,
+        body
+    );
+}
+
+#[tokio::test]
+async fn a_store_that_cannot_be_reached_is_named_by_the_key_and_never_by_its_signed_url() {
+    let harness = harness_of(start_with_https_objects(), "");
+
+    let err = harness
+        .bucket
+        .put("avatars/one.png", "the bytes")
+        .await
+        .expect_err("the store's certificate is not trusted");
+    let Error::Refused { key, .. } = &err else {
+        panic!("error = {err}");
+    };
+    assert_eq!(key, "avatars/one.png");
+    assert!(!err.to_string().contains("signature"), "error = {err}");
+}
+
+#[tokio::test]
+async fn a_writer_whose_part_failed_fails_its_shutdown() {
+    let harness = harness("");
+    let bucket = harness.bucket.clone().with_thresholds(8, 4);
+    harness
+        .fake
+        .store
+        .refuse_parts
+        .store(true, Ordering::SeqCst);
+
+    let mut writer = bucket.writer("doomed.bin").await.expect("a writer");
+    for _ in 0..4 {
+        let _ = writer.write_all(b"abcdefg").await;
+    }
+    writer
+        .shutdown()
+        .await
+        .expect_err("the shutdown of a writer whose part failed");
+    assert!(harness.fake.store.object("doomed.bin").is_none());
 }
