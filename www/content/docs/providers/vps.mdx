@@ -53,7 +53,7 @@ ocel deploy
 
 | Need | Why |
 | --- | --- |
-| SSH as root or a login with passwordless sudo | Bootstrap writes under `/etc`, `/var/lib` and `/usr/local`. |
+| SSH as root or a login with passwordless sudo, for bootstrap only | Bootstrap writes under `/etc`, `/var/lib` and `/usr/local`. Deploys then run as [`ocel-deploy`](#the-deploy-login). |
 | systemd | Ocel's host services are systemd units. |
 | `install`, `stat`, `sha256sum`, `flock`, `timeout`, `getent`, `groupadd`, `useradd`, `usermod`, `userdel` | Bootstrap runs them as root. |
 | No Docker, or Docker 28.0+ under `docker.service` | Bootstrap installs it if missing. Snap and rootless Docker are refused. |
@@ -68,21 +68,49 @@ An unknown host key is shown and you are asked to record it; check it against th
 it again changes only what drifted. `ocel destroy` removes it all, except Docker and its
 containers.
 
-Deploys act as the `ocel-deploy` login bootstrap creates, with the bootstrapping login's keys
-or `deployKey`. Set `ssh.user` to `ocel-deploy` and deploys need no sudo.
-
 What lands on the box:
 
 | What | For |
 | --- | --- |
 | Docker | When missing; pinned by sha256. Upgrading it is yours. |
+| `"live-restore": true` in `/etc/docker/daemon.json` | A daemon restart or upgrade stops no container. See [Upgrades](#upgrades). |
+| `ocel-deploy` | The deploy login. See [the deploy login](#the-deploy-login). |
+| `/etc/sudoers.d/ocel-docker`, `/etc/sudoers.d/ocel-seal-<tier>` | The two commands `ocel-deploy` runs as root. |
+| `/usr/local/lib/ocel/live` | The box agent: serves app containers their secret values over `ocel-live.socket`, runs topics and tasks, checks the deploy login's `docker` commands, seals values and keeps the tier's records. |
 | `ocel-proxy` (Caddy) | Ports 80 and 443; gets each certificate on first connection. Not behind your own proxy. |
 | `ocel-switchboard`, `ocel` network | Routes each hostname to its app. Recreated by the next deploy if pruned. |
 | `/etc/ocel/<tier>/seal.key` | Seals secret values on the box. Lose it and they can't be opened. |
-| `ocel-live.socket` | Serves app containers their secret values. |
 | `ocel-envsourcesync@<tier>.service` | Syncs [env sources](/docs/env-sources) into the tier's values each minute. |
-| `ocel-backups.timer` | Backs up every resource daily. |
+| `/usr/local/lib/ocel/backups`, `ocel-backups.timer` | Backs up every resource daily. See [Backups](#backups). |
 | `/var/lib/ocel/`, `/etc/ocel/certs` | Deploy state, routing, certificates, and the certificates you pin. |
+
+### The deploy login
+
+Bootstrap needs root or passwordless sudo once. It creates the `ocel-deploy` login, which
+accepts the keys in the bootstrapping login's `~/.ssh/authorized_keys`, or the key `deployKey`
+names. Set `ssh.user` to `ocel-deploy` and deploys need no sudo beyond two root-owned lines:
+
+| Line | Lets `ocel-deploy` run, as root |
+| --- | --- |
+| `/etc/sudoers.d/ocel-docker` | `/usr/local/lib/ocel/live docker`. Every `docker` command goes through this check; `ocel-deploy` is in no group that reaches the docker socket. |
+| `/etc/sudoers.d/ocel-seal-<tier>` | `/usr/local/lib/ocel/live seal <tier> seal` and `… open`, which seal and open values under `/etc/ocel/<tier>/seal.key`. The login cannot read the key. |
+
+The docker check refuses:
+
+- privileged mode, devices and host namespaces;
+- capabilities past the ones Ocel's containers use, and loosened seccomp;
+- a port published beyond loopback;
+- the default bridge, and a network that is neither Ocel's nor your proxy's `network`;
+- `exec` and `rename` on a container Ocel does not run;
+- a named volume that binds a host path, and a bind mount outside the directories
+  `/etc/ocel/docker.json` lists.
+
+One deploy login serves both tiers, so a deploy key reaches production and preview alike. When
+previews must not reach production, give each tier its own box.
+
+An adopted proxy whose container mounts the docker socket (Coolify's and Dokploy's do) reads the
+config `ocel-deploy` writes for it, so on such a box the deploy login can reach the socket
+through it.
 
 ## Domains and certificates
 
@@ -330,22 +358,55 @@ changes the image, arguments, memory or volume.
 | Realtime | The Ocel gateway in a container | See [Realtime](/docs/sdk/realtime). |
 | `bucket` | A store the box keeps for the project, or one you bind | See [Bucket](/docs/sdk/bucket#on-a-vps). |
 
+A resource whose settings change is stopped gracefully (60 s) and renamed aside, then its
+successor is started and checked. If the successor fails, the old one is put back.
+
 Bootstrap warns when `vm.overcommit_memory` isn't `1` or transparent huge pages are `always`:
 Valkey's background save can fail without overcommit.
 
-**Backups.** Each postgres, kv store and bucket store the box keeps is copied once a day while
-it runs, under `/var/lib/ocel/<tier>/backups/<container>/`: a postgres as a `pg_dump`, a kv
-store as its snapshot, each keeping the newest seven, and a bucket store as one mirror in
-`current/` plus, for the last seven copies, the objects each one overwrote or deleted. They sit
-on the same disk, so copy them off the box if losing it must not lose the data. On the box
-(`docker ps --filter label=ocel.backup` names the containers):
+### Container limits
+
+Every container Ocel runs has a memory limit. An app, worker or resource container's is drawn
+from the box's size, as `docker info` reports it (`MemTotal`, `NCPU`):
+
+| Container | Memory | CPUs |
+| --- | --- | --- |
+| Production app, worker or resource | Half the box's | No cap |
+| Preview app, worker or resource | A quarter of the box's | Half the box's |
+| `kv` store | Twice its `maxmemory`, plus 64 MiB | |
+| Realtime gateway | 256 MiB; refuses sockets past 4096 | |
+| `ocel-switchboard` | 256 MiB | |
+| `ocel-proxy` (Caddy) | 512 MiB | |
+| `ocel-tunnel` | 256 MiB | |
+
+No limit is below 256 MiB. A [transform](/docs/transforms#on-a-vps)'s `memory` or `cpus` on a
+resource container replaces the default. Apps and workers have no setting of their own yet.
+
+### Backups
+
+Each postgres, kv store and bucket store the box keeps is copied once a day while it runs
+(`ocel-backups.timer`, delayed at random by up to an hour), under
+`/var/lib/ocel/<tier>/backups/<container>/`:
+
+| Kind | Copied with | Kept |
+| --- | --- | --- |
+| `postgres` | `pg_dump` | The newest seven dumps |
+| `kv` | Valkey's own `dump.rdb` | The newest seven dumps |
+| Bucket store | `rclone sync --backup-dir`, object by object; the rclone image is pinned by digest | One mirror in `current/`, plus, for the last seven copies, the objects each one overwrote or deleted |
+
+Before a run, the sweep checks there is room for twice the last dump. One copy that fails does
+not skip the others. Backups sit on the box's own disk: copy them off the box if losing it must
+not lose the data.
+
+On the box (`docker ps --filter label=ocel.backup` names the containers):
 
 ```bash
-sudo /usr/local/lib/ocel/backups production dump <container>
-sudo /usr/local/lib/ocel/backups production restore <container> [<backup>]
+sudo /usr/local/lib/ocel/backups <tier> dump <container>
+sudo /usr/local/lib/ocel/backups <tier> restore <container> [<backup>]
 ```
 
-`restore` takes the newest backup when it names none, and works the same for every kind.
+`restore` takes the newest backup when it names none, and works for every kind. A kv store is
+restored as the base of a fresh AOF; a bucket store from a read-only mount.
 
 `ocel destroy` removes each resource with its volume, password and backups.
 
@@ -362,6 +423,11 @@ over from what the build prerendered.
 
 After upgrading ocel, a deploy that needs a newer box agent tells you to run `ocel bootstrap
 <tier>`. Docker upgrades are yours.
+
+Bootstrap sets `"live-restore": true` in `/etc/docker/daemon.json`, checked with
+`dockerd --validate` and applied with `systemctl reload docker`, so a daemon restart or upgrade
+stops no container. It leaves the setting alone when the file already sets `live-restore`, or
+the box is in a swarm.
 
 ## Errors
 

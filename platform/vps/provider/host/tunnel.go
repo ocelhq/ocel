@@ -33,6 +33,7 @@ type Tunnel = boxapi.Tunnel
 
 func tunnelBox(tunnel Tunnel, connector edge.TunnelConnector) boxContainer {
 	return boxContainer{
+		memory:  tunnelMemoryBytes,
 		name:    TunnelContainer,
 		image:   connector.Image,
 		network: TunnelNetwork,

@@ -85,10 +85,6 @@ export default defineTransform({
         args: ["-c", "max_connections=200"],
         memory: "2g",
       },
-      volume: { driverOpts: { type: "none", o: "bind", device: "/mnt/pg" } },
-    },
-    bucket: {
-      volume: { driverOpts: { type: "none", o: "bind", device: "/mnt/objects" } },
     },
   },
 });
@@ -100,6 +96,9 @@ export default defineTransform({
 | `volume` | `driver`, `driverOpts` |
 
 - `image` must be pinned by digest.
+- A `volume` whose `driverOpts` bind a path on the box (`o: "bind"`, or a `device` path) is
+  refused: the [deploy login](/docs/providers/vps#the-deploy-login) mounts only the
+  directories bootstrap lists.
 - The container's name, network, labels, published ports and mounts stay ocel's, and so do the
   variables a binding depends on:
 

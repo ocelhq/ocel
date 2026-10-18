@@ -110,9 +110,7 @@ func (r Reading) observed(kind, path string) bool {
 
 func (r Reading) unfinished() bool { return r.Present && r.Stamp.State != StateComplete }
 
-func (r Reading) Items() []Item {
-	return append(Items(r.Tier, r.Keys, r.Arch, r.Front), r.recorded...)
-}
+func (r Reading) Items() []Item { return partItems(new(Host).parts(), r) }
 
 func (r Reading) upToDate() bool {
 	items := r.Items()

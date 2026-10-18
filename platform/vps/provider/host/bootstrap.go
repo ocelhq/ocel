@@ -224,75 +224,14 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		Writer:  req.WrittenBy.String(),
 		Digests: digests(items),
 	}
-	if err := b.write(ctx, current, TierItems(req.Tier), progress); err != nil {
-		return err
-	}
-	if err := b.host.Stamp(ctx, req.Tier, stamp); err != nil {
-		return err
-	}
-	if err := b.write(ctx, current, StorageItems(req.Tier, current.Keys, current.Arch), progress); err != nil {
-		return err
-	}
-
-	minted, err := b.host.Read(ctx, req.Tier)
-	if err != nil {
-		return err
-	}
-	if minted.Seal.Fingerprint == "" {
-		return refusal.Refuse(refusal.CodeDenied,
-			"%s has no seal key",
-			req.Tier)
-	}
-	sealed := Reading{Tier: req.Tier, Present: true, Seal: minted.Seal, Stamp: current.Stamp}
-	if err := sealed.adopting(); err != nil {
-		return err
-	}
-	if err := b.write(ctx, current, EngineItems(), progress); err != nil {
-		return err
-	}
-	served, err := b.host.Read(ctx, req.Tier)
-	if err != nil {
-		return err
-	}
-	if err := b.write(ctx, served, LiveItems(current.Arch), progress); err != nil {
-		return err
-	}
-	if err := b.write(ctx, served, EnvSourceSyncItems(req.Tier, current.Arch), progress); err != nil {
-		return err
-	}
-	if err := b.host.refuseDirectoryMissing(ctx, current.Front); err != nil {
-		return err
-	}
-	if err := b.write(ctx, served, current.move.recordUnfinished(), progress); err != nil {
-		return err
-	}
-	if err := current.move.removeOldFront(ctx, progress); err != nil {
-		return err
-	}
-	if err := b.write(ctx, served, ProxyItems(current.Arch, current.Front), progress); err != nil {
-		return err
-	}
-	placeRoutes := b.host.rerender
-	if current.move != nil {
-		placeRoutes = current.move.placeRoutes
-	}
-	if err := placeRoutes(ctx); err != nil {
-		return err
-	}
-	if err := current.move.awaitFront(ctx, req.Tier, progress); err != nil {
-		return err
-	}
-	if err := b.write(ctx, served, current.recorded, progress); err != nil {
-		return err
-	}
-	if err := b.write(ctx, served, RealtimeItems(current.Arch), progress); err != nil {
-		return err
-	}
-	if err := b.write(ctx, served, BackupItems(), progress); err != nil {
-		return err
+	step := &Step{bootstrap: b, Read: current, Recorded: current.Stamp, Applying: stamp, progress: progress}
+	for _, part := range b.host.parts() {
+		if err := part.Apply(ctx, step); err != nil {
+			return err
+		}
 	}
 	b.host.warnOfKernelSettings(ctx, progress)
-	stamp.State, stamp.Seal = StateComplete, minted.Seal
+	stamp.State, stamp.Seal = StateComplete, step.Read.Seal
 	return b.host.Stamp(ctx, req.Tier, stamp)
 }
 
@@ -347,13 +286,7 @@ func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progre
 			progress.Debug(capitalized(item.phrase()) + " is " + reasonCurrent)
 			continue
 		}
-		var err error
-		if item.Kind == KindEngine {
-			err = b.host.installEngine(ctx, progress)
-		} else {
-			err = b.host.Install(ctx, item)
-		}
-		if err != nil {
+		if err := b.host.Install(ctx, item); err != nil {
 			return err
 		}
 		progress.Say("Installed " + item.phrase())

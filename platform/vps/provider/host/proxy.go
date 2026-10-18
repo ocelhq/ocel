@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
@@ -78,6 +79,7 @@ network={{if index .NetworkSettings.Networks "` + ProxyNetwork + `"}}` + network
 {{range .HostConfig.Binds}}bind={{.}}
 {{end}}ports={{json .HostConfig.PortBindings}}
 config={{index .Config.Labels "` + configLabel + `"}}
+memory={{.HostConfig.Memory}}
 state={{.State.Status}}`
 
 func embedded(name, arch string) []byte {
@@ -142,10 +144,10 @@ func proxyConfigItem() Item {
 		script:    func(config Item) string { return seedingRouting(routingTable(&config), &config) },
 		survey:    seededProbe,
 		rewritten: true,
-		Mode:    0o640,
-		Owner:   stateOwner,
-		Content: seededRendering,
-		Note:    "rendered from the routing table",
+		Mode:      0o640,
+		Owner:     stateOwner,
+		Content:   seededRendering,
+		Note:      "rendered from the routing table",
 	}
 }
 
@@ -261,14 +263,22 @@ type boxContainer struct {
 	joins    bool
 	migrates bool
 	restored bool
+	memory   int64
 	network  string
 	networks []userNetwork
 
 	user string
 }
 
+const (
+	proxyMemoryBytes       = 512 << 20
+	switchboardMemoryBytes = 256 << 20
+	tunnelMemoryBytes      = 256 << 20
+)
+
 func frontProxy() boxContainer {
 	return boxContainer{
+		memory:  proxyMemoryBytes,
 		name:    caddy.Container,
 		image:   caddy.Image(),
 		command: caddy.Command(),
@@ -314,6 +324,7 @@ func (s boxContainer) factsOver(binds []string) []byte {
 		"network=" + networkJoined,
 		"ports=" + marshalled(published(s.ports)),
 		"config=" + s.config,
+		"memory=" + strconv.FormatInt(s.memory, 10),
 		"state=running",
 		mountsFact + mountsIntact,
 	}
@@ -393,6 +404,9 @@ func (s boxContainer) composeArgv(leading, sysctls []string) []string {
 	}
 	argv = append(argv, logging()...)
 	argv = append(argv, confined(s.caps, s.fileCaps)...)
+	if s.memory > 0 {
+		argv = append(argv, "--memory", strconv.FormatInt(s.memory, 10))
+	}
 	for _, port := range s.ports {
 		argv = append(argv, "--publish", port.String()+":"+port.target)
 	}
