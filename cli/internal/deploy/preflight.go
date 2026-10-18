@@ -8,9 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
-	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -32,23 +30,9 @@ type preflightFacts struct {
 	builtAlias     string
 }
 
-func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.OpenOptions {
-	return commands.OpenOptions{
-		Pinning:         executables.ChoosePinning(policy.DryRun),
-		Tier:            environmentv1.Tier_TIER_PREVIEW,
-		Require:         readiness.Parts,
-		Slug:            cfg.Slug,
-		ClaimsDomains:   true,
-		ProjectRegistry: true,
-		RecordWants:     true,
-		Policy:          policy,
-
-		CheckPreviewRoute: true,
-	}
-}
-
-func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, process *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, env *environmentv1.Environment) (preflightFacts, error) {
+func runPreflight(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, process *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, env *environmentv1.Environment) (preflightFacts, error) {
 	resp := read.Response
+	preview := env.GetTier() == environmentv1.Tier_TIER_PREVIEW
 	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
 	if err != nil {
 		return preflightFacts{}, err
@@ -56,11 +40,13 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := refuseStaleBootstrap(policy, check, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW); err != nil {
+	if err := refuseStaleBootstrap(policy, check, resp.GetBootstrap(), env.GetTier()); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := refuseMissingPreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), resp.GetHostnameRequired(), check); err != nil {
-		return preflightFacts{}, err
+	if preview {
+		if err := refuseMissingPreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), resp.GetHostnameRequired(), check); err != nil {
+			return preflightFacts{}, err
+		}
 	}
 	proceed, err := guardNewProject(ctx, policy, check, cfg, resp.GetKnownSlugs())
 	if err != nil {
@@ -69,17 +55,21 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	if !proceed {
 		return preflightFacts{declined: true}, nil
 	}
-	token, err := edge.NewPreviewToken()
-	if err != nil {
-		return preflightFacts{}, err
-	}
 	facts := preflightFacts{
 		project:        resolved,
 		containerArchs: archs,
 		workerCeilings: provider.WorkerCeilingsOf(process.Facts().GetWorkerCeilings()),
 	}
+	if !preview {
+		facts.urls = appurl.FormatProductionURLs(resolved)
+		return facts, nil
+	}
 	if !assignsPreviewAlias(cfg, resp.GetPreviewWildcard(), resp.GetHostnameRequired()) {
 		return facts, nil
+	}
+	token, err := edge.NewPreviewToken()
+	if err != nil {
+		return preflightFacts{}, err
 	}
 	ensured, err := ensurePreviewAlias(ctx, process, resolved, env, token, policy.DryRun)
 	if err != nil {
@@ -120,45 +110,6 @@ func forgetUnclaimedPreviewAlias(ctx context.Context, provider *providerprocess.
 		_, err := client.ForgetPreviewAlias(context.WithoutCancel(ctx), &contractv1.ForgetPreviewAliasRequest{Slug: slug, Environment: env, Token: token})
 		return err
 	})
-}
-
-func productionOpenOptions(policy consent.Policy, cfg *project.Project) commands.OpenOptions {
-	return commands.OpenOptions{
-		Pinning:         executables.ChoosePinning(policy.DryRun),
-		Tier:            environmentv1.Tier_TIER_PRODUCTION,
-		Require:         readiness.Parts,
-		Slug:            cfg.Slug,
-		ClaimsDomains:   true,
-		RequireHostname: true,
-		ProjectRegistry: true,
-		RecordWants:     true,
-		Policy:          policy,
-	}
-}
-
-func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, process *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool) (preflightFacts, error) {
-	resp := read.Response
-	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
-	if err != nil {
-		return preflightFacts{}, err
-	}
-	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
-		return preflightFacts{}, err
-	}
-	if err := refuseStaleBootstrap(policy, check, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION); err != nil {
-		return preflightFacts{}, err
-	}
-	proceed, err := guardNewProject(ctx, policy, check, cfg, resp.GetKnownSlugs())
-	if err != nil {
-		return preflightFacts{}, err
-	}
-	return preflightFacts{
-		declined:       !proceed,
-		project:        resolved,
-		containerArchs: archs,
-		workerCeilings: provider.WorkerCeilingsOf(process.Facts().GetWorkerCeilings()),
-		urls:           appurl.FormatProductionURLs(resolved),
-	}, nil
 }
 
 func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, read readiness.Preflight, prebuilt bool) (*project.Project, map[string]string, error) {

@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
-	"github.com/ocelhq/ocel/cli/internal/readiness"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -29,7 +28,7 @@ func runDomainUse(ctx context.Context, invocation commands.Invocation, cwd, wild
 	if err != nil {
 		return err
 	}
-	return invocation.WithProvider(ctx, cfg, "ocel domain use", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Parts}, func(ctx context.Context, p commands.ProviderRun) error {
+	return invocation.WithProvider(ctx, cfg, "ocel domain use", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		run, provider := p.Run, p.Provider
 		req := &contractv1.UsePreviewWildcardRequest{

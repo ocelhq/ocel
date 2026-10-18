@@ -11,8 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-const dryFlagUsage = "Build, then print every change this would make to your account and stop without applying any of it"
-
 func showDeployPlan(ctx context.Context, run *run.Run, provider *providerprocess.Provider, req *contractv1.DeployRequest, headline, slug, place, preBuildNote string) error {
 	plan, err := providerprocess.Plan(ctx, provider, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
 	if err != nil {

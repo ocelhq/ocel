@@ -21,7 +21,7 @@ import (
 	buildcommand "github.com/ocelhq/ocel/cli/internal/commands/build"
 	"github.com/ocelhq/ocel/cli/internal/commands/connector"
 	"github.com/ocelhq/ocel/cli/internal/commands/cost"
-	"github.com/ocelhq/ocel/cli/internal/commands/deploy"
+	deploycommand "github.com/ocelhq/ocel/cli/internal/commands/deploy"
 	"github.com/ocelhq/ocel/cli/internal/commands/destroy"
 	"github.com/ocelhq/ocel/cli/internal/commands/dev"
 	"github.com/ocelhq/ocel/cli/internal/commands/doctor"
@@ -41,10 +41,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands/telemetryflush"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/deploy"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
+	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -158,8 +160,8 @@ func newCommand() *command {
 		Invocation:          invocation,
 		OpenDocker:          docker.Open,
 		CollectDeclarations: declaration.Collect,
-		ReadGitBranch:       deploy.ReadGitBranch,
-		DiscoverPRNumber:    deploy.DiscoverPRNumber,
+		ReadGitBranch:       previewid.ReadGitBranch,
+		DiscoverPRNumber:    previewid.DiscoverPRNumber,
 	}
 	devCmd, runCmd := dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
@@ -203,16 +205,16 @@ func newCommand() *command {
 		CollectDeclarations:     declaration.Collect,
 		OpenBrowser:             browser.OpenURL,
 		ServeVariableEditor:     env.ServeVariableEditor,
-		ReadGitBranch:           deploy.ReadGitBranch,
-		DiscoverPRNumber:        deploy.DiscoverPRNumber,
+		ReadGitBranch:           previewid.ReadGitBranch,
+		DiscoverPRNumber:        previewid.DiscoverPRNumber,
 	}
-	rootCmd.AddCommand(deploy.NewCommand(deployDependencies))
-	rootCmd.AddCommand(deploy.NewPreviewCommand(deployDependencies))
+	rootCmd.AddCommand(deploycommand.NewCommand(deployDependencies))
+	rootCmd.AddCommand(deploycommand.NewPreviewCommand(deployDependencies))
 	rootCmd.AddCommand(protection.NewCommand(invocation))
 	rootCmd.AddCommand(env.NewCommand(env.Dependencies{Invocation: invocation, OpenBrowser: browser.OpenURL, ServeVariableEditor: env.ServeVariableEditor}))
 	rootCmd.AddCommand(promotions.NewRollbackCommand(invocation))
 	rootCmd.AddCommand(promotions.NewPromotionsCommand(invocation))
-	rootCmd.AddCommand(logs.NewCommand(logs.Dependencies{Invocation: invocation, ReadGitBranch: deploy.ReadGitBranch, DiscoverPRNumber: deploy.DiscoverPRNumber, Now: time.Now}))
+	rootCmd.AddCommand(logs.NewCommand(logs.Dependencies{Invocation: invocation, ReadGitBranch: previewid.ReadGitBranch, DiscoverPRNumber: previewid.DiscoverPRNumber, Now: time.Now}))
 	rootCmd.AddCommand(domain.NewCommand(invocation))
 	rootCmd.AddCommand(bindings.NewCommand(invocation))
 	rootCmd.AddCommand(destroy.NewCommand(invocation))

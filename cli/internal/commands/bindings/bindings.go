@@ -23,7 +23,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
-	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
@@ -168,7 +167,7 @@ func withBindingProvider(ctx context.Context, invocation commands.Invocation, cw
 	if err != nil {
 		return err
 	}
-	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure}, func(ctx context.Context, p commands.ProviderRun) error {
+	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: opts.tier()}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		run, provider := p.Run, p.Provider
 		headline, err := drive(ctx, provider, cfg)

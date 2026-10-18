@@ -16,14 +16,14 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func resolveOnce(ctx context.Context, server *devserver.Server, cfg *project.Project, invoked invocation, span *run.Span) (map[string]string, error) {
-	values, err := invoked.source.read(cfg.Dir)
+func resolveOnce(ctx context.Context, server *devserver.Server, cfg *project.Project, local localCommand, span *run.Span) (map[string]string, error) {
+	values, err := local.source.read(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
 	reportUnreadableLines(span, values)
 	server.UseValues(values.merged(), variablescope.ForDev(cfg))
-	return discoverAndSync(ctx, server, cfg, values, variablescope.ForDev(cfg), invoked, span)
+	return discoverAndSync(ctx, server, cfg, values, variablescope.ForDev(cfg), local, span)
 }
 
 func targetScope(cfg *project.Project, cwd string) variables.Scope {
@@ -44,17 +44,17 @@ func targetScope(cfg *project.Project, cwd string) variables.Scope {
 	return scope
 }
 
-func discoverAndSync(ctx context.Context, server *devserver.Server, cfg *project.Project, values valueLayers, scope variables.Scope, invoked invocation, span *run.Span) (map[string]string, error) {
+func discoverAndSync(ctx context.Context, server *devserver.Server, cfg *project.Project, values valueLayers, scope variables.Scope, local localCommand, span *run.Span) (map[string]string, error) {
 	if err := discover(ctx, server, cfg, span); err != nil {
 		return nil, refusedSync(server, err)
 	}
 
 	if err := server.RefuseIncompleteEnv(ctx); err != nil {
-		return nil, describeRefusal(err, values.keys(), invoked)
+		return nil, describeRefusal(err, values.keys(), local)
 	}
 
 	appFolder := project.SharedFolder(cfg.Apps)
-	if err := refuseUnstatableBinding(invoked.source, cfg.Apps, appFolder, filepath.Base(cfg.Path), server.ScopedFolders()); err != nil {
+	if err := refuseUnstatableBinding(local.source, cfg.Apps, appFolder, filepath.Base(cfg.Path), server.ScopedFolders()); err != nil {
 		return nil, err
 	}
 

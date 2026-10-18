@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -67,7 +66,7 @@ func globalPreviewBaseDomain(wildcard string) (string, error) {
 }
 
 func readDomain(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) error {
-	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Tier: tier, Require: readiness.Parts}, func(ctx context.Context, p commands.ProviderRun) error {
+	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Intent: commands.UseParts, Tier: tier}, func(ctx context.Context, p commands.ProviderRun) error {
 		span := p.Check.Child(cfg.Slug, reading)
 		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error { return read(ctx, client) })
 		span.End(err)

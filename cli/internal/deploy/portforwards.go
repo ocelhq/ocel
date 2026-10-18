@@ -33,11 +33,12 @@ func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariabl
 	}
 }
 
-func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps, cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage, runsPreBuild bool) (*portforward.Forwards, error) {
-	if i == nil || !i.providerProcess.Facts().GetForwardsPorts() {
+func (d deployRun) forwardPorts(ctx context.Context, steps *buildSteps, c collected, runsPreBuild bool) (*portforward.Forwards, error) {
+	if !d.forwardsPorts {
 		return nil, nil
 	}
-	buildUses, preBuildUses, err := i.findBoundUses(cfg, resources, usages, runsPreBuild)
+	cfg := d.cfg
+	buildUses, preBuildUses, err := d.infra.findBoundUses(cfg, c.resources, c.usages, runsPreBuild)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +51,7 @@ func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps,
 	var forwards *portforward.Forwards
 	var notReady error
 	err = steps.run(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)), func() (err error) {
-		forwards, err = portforward.Open(ctx, i.providerProcess, cfg.Slug, i.env, uses, steps.phase)
+		forwards, err = portforward.Open(ctx, d.provider, cfg.Slug, d.infra.env, uses, steps.phase)
 		if err != nil && len(preBuildUses) > 0 {
 			return portforward.RefuseUnforwarded(preBuildName, declared, err)
 		}

@@ -59,9 +59,9 @@ func previewUp(t *testing.T, fixture clitest.FakeProject, dependencies Dependenc
 
 func coverEphemeralPreview(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewUpOptions) {
 	t.Helper()
-	env, err := resolveUpEnvironment(dependencies, fixture.Root, opts)
+	env, err := opts.target().environment(dependencies, fixture.Root)
 	if err != nil {
-		t.Fatalf("resolveUpEnvironment: %v", err)
+		t.Fatalf("resolve the preview environment: %v", err)
 	}
 	if env.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
 		return
@@ -191,9 +191,9 @@ func TestPreviewUpSendsThePreviewEnvironmentItsNameAndFlagsDescribe(t *testing.T
 		dependencies := newTestDependencies()
 		dependencies.ReadGitBranch = func(string) (string, error) { return "", errNotARepo }
 
-		env, err := resolveUpEnvironment(dependencies, "", previewUpOptions{name: "some-fixture"})
+		env, err := Preview("some-fixture", false).environment(dependencies, "")
 		if err != nil {
-			t.Fatalf("resolveUpEnvironment(some-fixture) err = %v, want it to resolve without git", err)
+			t.Fatalf("the environment of preview some-fixture err = %v, want it to resolve without git", err)
 		}
 		assertEnvironment(t, env, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, "some-fixture")
 	})
@@ -431,7 +431,7 @@ func TestPreviewRemoveTearsDownThePreviewItsNameNames(t *testing.T) {
 		dependencies := previewDependencies("some-other-branch", "")
 		previewUp(t, fixture, dependencies, previewUpOptions{name: "release-v2"})
 
-		out, err := runPreviewCommand(t, fixture, dependencies, "", "rm", "release-v2")
+		out, err := removePreviewNamed(t, fixture, dependencies, "", "release-v2")
 		if err != nil {
 			t.Fatalf("ocel preview rm release-v2 err = %v; out=%s", err, out)
 		}
@@ -448,7 +448,7 @@ func TestPreviewRemoveTearsDownThePreviewItsNameNames(t *testing.T) {
 		previewUp(t, fixture, dependencies, previewUpOptions{})
 		terminalStdin(&dependencies)
 
-		out, err := runPreviewCommand(t, fixture, dependencies, "", "rm", "never-deployed")
+		out, err := removePreviewNamed(t, fixture, dependencies, "", "never-deployed")
 		if err == nil || !strings.Contains(err.Error(), "no preview named never-deployed") || !strings.Contains(err.Error(), "nothing was torn down") {
 			t.Fatalf("ocel preview rm never-deployed err = %v, want a refusal naming never-deployed: a teardown that removed nothing exits 0 only to have every caller believe it; out=%s", err, out)
 		}
@@ -466,7 +466,7 @@ func TestPreviewRemoveTearsDownThePreviewItsNameNames(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		out, err := runPreviewCommand(t, fixture, dependencies, "", "rm", "staging")
+		out, err := removePreviewNamed(t, fixture, dependencies, "", "staging")
 		if err != nil {
 			t.Fatalf("ocel preview rm staging err = %v; out=%s", err, out)
 		}
@@ -508,7 +508,7 @@ func TestAPersistentPreviewIsNotTornDownUnasked(t *testing.T) {
 			dependencies := previewDependencies("feature/login", "")
 			terminalStdin(&dependencies)
 
-			out, err := runPreviewCommand(t, fixture, dependencies, "n\n", "rm", "staging")
+			out, err := removePreviewNamed(t, fixture, dependencies, "n\n", "staging")
 			if err != nil {
 				t.Fatalf("ocel preview rm staging err = %v; out=%s", err, out)
 			}
@@ -527,7 +527,7 @@ func TestAPersistentPreviewIsNotTornDownUnasked(t *testing.T) {
 			var stream bytes.Buffer
 			dependencies.Events.Attach(terminal.NewJSONLines(&stream))
 
-			out, err := runPreviewCommand(t, fixture, dependencies, "", "rm", "staging")
+			out, err := removePreviewNamed(t, fixture, dependencies, "", "staging")
 			if err == nil || !strings.Contains(out, "to run it unattended, pass --yes") {
 				t.Errorf("ocel preview rm staging err = %v, want a refusal naming --yes; out=%s", err, out)
 			}
@@ -615,12 +615,14 @@ func TestTearingDownAPersistentPreviewAsksThroughConsentWhileTheRunIsHeld(t *tes
 	}
 }
 
+const prunedKeep = 3
+
 func prunedEnvironments(t *testing.T, fixture clitest.FakeProject) []*environmentv1.Environment {
 	t.Helper()
 	var pruned []*environmentv1.Environment
 	for _, req := range clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure) {
-		if req.GetSlug() != clitest.FixtureSlug || req.GetKeepN() != defaultPreviewPruneKeepN {
-			t.Errorf("pruned %q down to %d, want %s's down to %d", req.GetSlug(), req.GetKeepN(), clitest.FixtureSlug, defaultPreviewPruneKeepN)
+		if req.GetSlug() != clitest.FixtureSlug || req.GetKeepN() != prunedKeep {
+			t.Errorf("pruned %q down to %d, want %s's down to %d", req.GetSlug(), req.GetKeepN(), clitest.FixtureSlug, prunedKeep)
 		}
 		pruned = append(pruned, req.GetEnvironment())
 	}
@@ -629,10 +631,10 @@ func prunedEnvironments(t *testing.T, fixture clitest.FakeProject) []*environmen
 
 func previewPrune(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewPruneOptions) {
 	t.Helper()
-	opts.keep = defaultPreviewPruneKeepN
+	opts.keep = prunedKeep
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runPreviewPrune(context.Background(), dependencies, fixture.Root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runPreviewPrune(context.Background(), dependencies, fixture.Root, opts); err != nil {
 		t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 }
@@ -678,21 +680,6 @@ func TestPreviewPruneReclaimsThePreviewItsNameNames(t *testing.T) {
 	}
 }
 
-func TestPreviewPruneTakesItsNameOnTheCommandLine(t *testing.T) {
-	fixture := setUpPreviewProject(t)
-	dependencies := previewDependencies("feature/login", "")
-	previewUp(t, fixture, dependencies, previewUpOptions{name: "staging"})
-
-	out, err := runPreviewCommand(t, fixture, dependencies, "", "prune", "staging", "--keep", "5")
-	if err != nil {
-		t.Fatalf("ocel preview prune staging err = %v; out=%s", err, out)
-	}
-	requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
-	if len(requests) != 1 || requests[0].GetEnvironment().GetIdentity() != "staging" || requests[0].GetKeepN() != 5 {
-		t.Errorf("the CLI pruned %d environments, want staging pruned down to 5", len(requests))
-	}
-}
-
 func previewAppDependencies(branch, pr string) Dependencies {
 	dependencies := previewDependencies(branch, pr)
 	stubBuild(&dependencies, apiFunction())
@@ -709,7 +696,7 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
-	if err := runPreviewList(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
+	if err := ListPreviews(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
 		t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -738,7 +725,7 @@ func TestPreviewListAsJSONCarriesEachPreviewsLifecycleLabelAndAliases(t *testing
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
-	if err := runPreviewList(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
+	if err := ListPreviews(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
 		t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -770,7 +757,7 @@ func TestPreviewListAsJSONPrintsAnEmptyListWhenThereAreNoPreviews(t *testing.T) 
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
-	if err := runPreviewList(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
+	if err := ListPreviews(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
 		t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -787,7 +774,7 @@ func TestPreviewListRendersEveryEnvironment(t *testing.T) {
 	previewUp(t, fixture, previewAppDependencies("feature/login", ""), previewUpOptions{name: "staging", persistent: true})
 
 	var stdout, stderr bytes.Buffer
-	if err := runPreviewList(context.Background(), newTestDependencies(), fixture.Root, &stdout); err != nil {
+	if err := ListPreviews(context.Background(), newTestDependencies(), fixture.Root, &stdout); err != nil {
 		t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -838,7 +825,7 @@ func TestAPreviewNameFitsASubdomainLabel(t *testing.T) {
 			resolve func(string) error
 		}{
 			{"up", func(n string) error {
-				_, err := resolveUpEnvironment(newTestDependencies(), "", previewUpOptions{name: n})
+				_, err := Preview(n, false).environment(newTestDependencies(), "")
 				return err
 			}},
 			{"rm and prune", func(n string) error {
@@ -936,7 +923,7 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 		fixture := setUpPreviewProject(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewList(context.Background(), newTestDependencies(), fixture.Root, &stdout); err != nil {
+		if err := ListPreviews(context.Background(), newTestDependencies(), fixture.Root, &stdout); err != nil {
 			t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if got := sentPreflights(t, fixture); len(got) != 0 {
@@ -1080,52 +1067,12 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 
 }
 
-func runPreviewCommand(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, stdin string, args ...string) (string, error) {
+func removePreviewNamed(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, stdin, name string) (string, error) {
 	t.Helper()
-	t.Chdir(fixture.Root)
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	cmd := NewPreviewCommand(dependencies)
-	cmd.SetArgs(args)
-	cmd.SetOut(&stdout)
-	cmd.SetErr(&stderr)
-	cmd.SetIn(strings.NewReader(stdin))
-	err := cmd.ExecuteContext(context.Background())
+	err := runPreviewRemove(context.Background(), dependencies, fixture.Root, previewRemoveOptions{name: name}, &stdout, &stderr, strings.NewReader(stdin))
 	return stdout.String() + stderr.String(), err
-}
-
-func TestAPreviewNamedOnTheCommandLineIsEphemeralUnlessPersistent(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		args      []string
-		lifecycle environmentv1.Lifecycle
-	}{
-		{"preview up <name> deploys an ephemeral preview of that name", []string{"up", "staging"}, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL},
-		{"preview up <name> --persistent deploys a persistent preview of that name", []string{"up", "staging", "--persistent"}, environmentv1.Lifecycle_LIFECYCLE_PERSISTENT},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			fixture := setUpPreviewProject(t)
-			coverPreview(t, fixture, "staging")
-
-			out, err := runPreviewCommand(t, fixture, previewDependencies("feature/login", ""), "", tc.args...)
-			if err != nil {
-				t.Fatalf("ocel preview %v err = %v; out=%s", tc.args, err, out)
-			}
-			assertEnvironment(t, sentDeploy(t, fixture).GetEnvironment(), tc.lifecycle, "staging")
-		})
-	}
-}
-
-func TestPreviewWithoutASubcommandTakesNoName(t *testing.T) {
-	fixture := setUpPreviewProject(t)
-
-	out, err := runPreviewCommand(t, fixture, previewDependencies("feature/login", ""), "", "staging")
-	if err == nil {
-		t.Fatalf("ocel preview staging err = nil, want it refused: a name goes to ocel preview up, so no name can read as a subcommand; out=%s", out)
-	}
-	if !strings.Contains(err.Error(), "ocel preview up staging") {
-		t.Errorf("err = %v, want it to point at ocel preview up staging", err)
-	}
 }
 
 func TestPreviewListShowsADashForAPreviewWithNoLifecycle(t *testing.T) {

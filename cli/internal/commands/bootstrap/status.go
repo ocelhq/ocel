@@ -93,7 +93,7 @@ func RunStatus(ctx context.Context, invocation commands.Invocation, cwd string, 
 		return err
 	}
 	var read []tierStatus
-	opened := commands.OpenOptions{Tier: tiers[0], Require: readiness.Credentials, Slug: cfg.Slug}
+	opened := commands.OpenOptions{Intent: commands.ManageBootstrap, Tier: tiers[0]}
 	err = invocation.WithProvider(ctx, cfg, statusCommand, opened, func(ctx context.Context, p commands.ProviderRun) error {
 		for _, tier := range tiers {
 			span := p.Check.Child(readiness.TierName(tier), progress.Reading.Title("the "+readiness.TierName(tier)+" bootstrap"))

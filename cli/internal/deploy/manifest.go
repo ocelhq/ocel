@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
-	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -37,32 +36,51 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-type assembly struct {
-	cfg            *project.Project
-	declarations   *variables.Declarations
-	prebuilt       bool
-	dry            bool
-	phase          *run.Span
-	span           *run.Span
-	containerArchs map[string]string
-	workerCeilings []provider.WorkerCeiling
-	host           build.Host
-	urls           map[string]string
-	infra          *infraProvisioning
-	preBuild       *project.LifecycleCommand
+type collected struct {
+	resources []declaration.Resource
+	inline    []*bindingsv1.Binding
+	values    map[string][]variables.Variable
+	clients   []clientenv.App
+	workers   build.HostedWorkers
+	usages    []attribution.Usage
 }
 
-func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a assembly) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
-	cfg, declarations, span := a.cfg, a.declarations, a.span
+func (d deployRun) collectBuildAndAssemble(ctx context.Context) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
+	c, err := d.collect(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	steps := newBuildSteps(d.phase)
+	var built build.Output
+	if d.prebuilt {
+		built, err = d.readPrebuilt(ctx, c)
+	} else {
+		built, err = d.provisionAndBuild(ctx, steps, c)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	var assembled *contractv1.Manifest
+	if err := steps.run(d.cfg.Slug, progress.Assembling.Title("the deploy manifest of "+d.cfg.Slug), func() (err error) {
+		assembled, err = d.assemble(c, built)
+		return err
+	}); err != nil || assembled == nil {
+		return nil, nil, err
+	}
+	return assembled, c.inline, nil
+}
+
+func (d deployRun) collect(ctx context.Context) (collected, error) {
+	cfg, declarations, span := d.cfg, d.declarations, d.span
 	captured := &boundedCapture{}
 	tee := io.MultiWriter(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), captured)
-	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, tee, tee)
+	resources, err := d.dependencies.CollectDeclarations(ctx, cfg, declarations, tee, tee)
 	if err != nil {
-		return nil, nil, captured.annotate(err)
+		return collected{}, captured.annotate(err)
 	}
 	warnings, err := variables.LintFolders(declarations.Definitions(), variablescope.Apps(cfg), cfg.Path)
 	if err != nil {
-		return nil, nil, err
+		return collected{}, err
 	}
 	for _, warning := range warnings {
 		span.Warn(warning)
@@ -71,113 +89,119 @@ func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a a
 		span.Warn(warning)
 	}
 	if err := declarations.RefuseIncomplete(); err != nil {
-		return nil, nil, err
+		return collected{}, err
 	}
 	inline, err := inlineBindings(ctx, cfg, declarations)
 	if err != nil {
-		return nil, nil, err
+		return collected{}, err
 	}
 
 	values, err := resolveVariables(ctx, declarations, cfg)
 	if err != nil {
-		return nil, nil, err
+		return collected{}, err
 	}
-	appurl.Prepend(cfg, values, a.urls)
+	appurl.Prepend(cfg, values, d.urls)
 
 	if err := checkAppPaths(cfg, filepath.Base(cfg.Path)); err != nil {
-		return nil, nil, err
+		return collected{}, err
 	}
 	placement, err := manifest.PlaceConsumers(cfg, resources)
 	if err != nil {
-		return nil, nil, err
+		return collected{}, err
 	}
 	usages, err := manifest.FindUsages(ctx, cfg, resources)
 	if err != nil {
-		return nil, nil, err
+		return collected{}, err
 	}
-	steps := newBuildSteps(a.phase)
-	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, declarations.Definitions(), values), placement.HostedWorkers(), resources, inline, usages)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var assembled *contractv1.Manifest
-	if err := steps.run(cfg.Slug, progress.Assembling.Title("the deploy manifest of "+cfg.Slug), func() (err error) {
-		assembled, err = assembleManifest(dependencies, a, resources, values, built, usages)
-		return err
-	}); err != nil || assembled == nil {
-		return nil, nil, err
-	}
-	return assembled, inline, nil
+	return collected{
+		resources: resources,
+		inline:    inline,
+		values:    values,
+		clients:   clientenv.AppsOf(cfg, declarations.Definitions(), values),
+		workers:   placement.HostedWorkers(),
+		usages:    usages,
+	}, nil
 }
 
-func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps *buildSteps, clients []clientenv.App, workers build.HostedWorkers, resources []declaration.Resource, inline []*bindingsv1.Binding, usages []attribution.Usage) (build.Output, error) {
-	cfg, span := a.cfg, a.span
-	if a.prebuilt {
-		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
-			return build.Output{}, err
-		}
-		built, err := dependencies.ReadPrebuilt(ctx, cfg, a.containerArchs)
-		if err != nil {
-			return build.Output{}, err
-		}
-		span.Say("Using the prebuilt output in " + buildoutput.Dir + " instead of building")
-		span.End(nil)
-		return built, nil
+func (d deployRun) readPrebuilt(ctx context.Context, c collected) (build.Output, error) {
+	if err := clientenv.CheckFresh(d.cfg.Dir, c.clients); err != nil {
+		return build.Output{}, err
 	}
-	for _, warning := range findImageAppsBuiltWithoutValues(cfg, clients) {
-		span.Warn(warning)
-	}
-	secrets, err := revealSecrets(ctx, a.declarations, cfg, a.preBuild)
+	built, err := d.dependencies.ReadPrebuilt(ctx, d.cfg, d.containerArchs)
 	if err != nil {
 		return build.Output{}, err
 	}
-	span.End(nil)
-	if err := a.infra.provision(ctx, resources, inline); err != nil {
-		return build.Output{}, err
+	d.span.Say("Using the prebuilt output in " + buildoutput.Dir + " instead of building")
+	d.span.End(nil)
+	return built, nil
+}
+
+func (d deployRun) provisionAndBuild(ctx context.Context, steps *buildSteps, c collected) (build.Output, error) {
+	for _, warning := range findImageAppsBuiltWithoutValues(d.cfg, c.clients) {
+		d.span.Warn(warning)
 	}
-	runsPreBuild := a.preBuild != nil && !a.dry
-	forwards, err := a.infra.forwardPorts(ctx, steps, cfg, resources, usages, runsPreBuild)
+	secrets, err := revealSecrets(ctx, d.declarations, d.cfg, d.preBuild)
 	if err != nil {
 		return build.Output{}, err
 	}
-	values := build.SplitVariablesByClass(clients, secrets)
+	d.span.End(nil)
+	if err := d.provision(ctx, c); err != nil {
+		return build.Output{}, err
+	}
+	return d.build(ctx, steps, c, secrets)
+}
+
+func (d deployRun) provision(ctx context.Context, c collected) error {
+	if d.dry {
+		return nil
+	}
+	return d.infra.provision(ctx, c.resources, c.inline)
+}
+
+func (d deployRun) build(ctx context.Context, steps *buildSteps, c collected, secrets map[string]map[string]string) (build.Output, error) {
+	cfg := d.cfg
+	runsPreBuild := d.preBuild != nil && !d.dry
+	forwards, err := d.forwardPorts(ctx, steps, c, runsPreBuild)
+	if err != nil {
+		return build.Output{}, err
+	}
+	values := build.SplitVariablesByClass(c.clients, secrets)
 	deliverForwards(forwards, values)
 	if runsPreBuild {
-		if err := runPreBuild(ctx, a, *a.preBuild, forwards, values, len(resources)); err != nil {
+		if err := d.runPreBuild(ctx, *d.preBuild, forwards, values, len(c.resources)); err != nil {
 			return build.Output{}, errors.Join(err, forwards.Close())
 		}
 	}
 	var built build.Output
 	err = steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
-		built, err = dependencies.BuildApps(ctx, cfg, values, a.containerArchs, workers, a.host, steps.log())
+		built, err = d.dependencies.BuildApps(ctx, cfg, values, d.containerArchs, c.workers, d.host, steps.log())
 		if err != nil {
 			return err
 		}
-		return clientenv.Record(cfg.Dir, clients)
+		return clientenv.Record(cfg.Dir, c.clients)
 	})
 	return built, errors.Join(err, forwards.Close())
 }
 
-func assembleManifest(dependencies Dependencies, a assembly, resources []declaration.Resource, values map[string][]variables.Variable, built build.Output, usages []attribution.Usage) (*contractv1.Manifest, error) {
-	cfg := a.cfg
+func (d deployRun) assemble(c collected, built build.Output) (*contractv1.Manifest, error) {
+	cfg := d.cfg
 	onEdge, err := build.EdgeApps(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
-	edgeWarnings, err := variables.LintEdgeSecrets(a.declarations.Definitions(), variablescope.Apps(cfg), onEdge)
+	edgeWarnings, err := variables.LintEdgeSecrets(d.declarations.Definitions(), variablescope.Apps(cfg), onEdge)
 	if err != nil {
 		return nil, err
 	}
 	for _, warning := range edgeWarnings {
-		a.phase.Warn(warning)
+		d.phase.Warn(warning)
 	}
 
 	if len(built.Functions) == 0 && len(built.Images) == 0 {
-		if len(resources) == 0 {
+		if len(c.resources) == 0 {
 			return nil, nil
 		}
-		a.phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", english.Count(len(resources), "resource"), cfg.Slug))
+		d.phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", english.Count(len(c.resources), "resource"), cfg.Slug))
 	}
 
 	if err := manifest.RefuseUnnamedApps(cfg, built); err != nil {
@@ -185,14 +209,14 @@ func assembleManifest(dependencies Dependencies, a assembly, resources []declara
 	}
 	return manifest.Assemble(manifest.Input{
 		Project:   cfg,
-		Tier:      a.declarations.Scope().Tier,
-		Resources: resources,
-		Variables: values,
+		Tier:      d.declarations.Scope().Tier,
+		Resources: c.resources,
+		Variables: c.values,
 		Built:     built,
-		Usages:    usages,
-		BuildID:   dependencies.BuildID,
+		Usages:    c.usages,
+		BuildID:   d.dependencies.BuildID,
 
-		WorkerCeilings: a.workerCeilings,
+		WorkerCeilings: d.workerCeilings,
 	})
 }
 
@@ -259,14 +283,6 @@ func (b *buildSteps) run(subject string, title progress.Title, step func() error
 	_, _ = child.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED).Write(loose)
 	child.End(err)
 	return err
-}
-
-func inlineBindings(ctx context.Context, cfg *project.Project, declarations *variables.Declarations) ([]*bindingsv1.Binding, error) {
-	values, err := declarations.ResolveBindingVariables(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return inlinebinding.Build(cfg.BindingsFor(declarations.Scope().Tier), values, filepath.Base(cfg.Path))
 }
 
 const maxCapturedDiscoveryOutput = 4096

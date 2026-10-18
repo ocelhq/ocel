@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ocelhq/ocel/cli/internal/invocation"
+	"github.com/ocelhq/ocel/cli/internal/agentenv"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
@@ -36,7 +36,7 @@ type Identity struct {
 }
 
 func NewIdentity(installID, projectKey string) Identity {
-	agent, ci := invocation.Detect(os.Getenv)
+	agent, ci := agentenv.Detect(os.Getenv)
 	return Identity{InstallID: installID, CLIVersion: version.Version, OS: runtime.GOOS, Arch: runtime.GOARCH, Agent: agent, CI: ci, InstallMethod: detectInstallMethod(), ProjectKey: projectKey}
 }
 

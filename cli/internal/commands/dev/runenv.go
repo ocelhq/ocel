@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/portforward"
+	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -47,7 +48,7 @@ func runDeployed(cmd *cobra.Command, dependencies Dependencies, args []string, n
 		StdinIsTerminal: dependencies.StdinIsTerminal(cmd.InOrStdin()),
 		RecordEvent:     dependencies.RecordEvent,
 	}
-	return dependencies.WithProvider(cmd.Context(), cfg, "ocel run", commands.OpenOptions{Tier: env.GetTier()}, func(ctx context.Context, p commands.ProviderRun) error {
+	return dependencies.WithProvider(cmd.Context(), cfg, "ocel run", commands.OpenOptions{}, func(ctx context.Context, p commands.ProviderRun) error {
 		opts.Run = p.Run
 		opts.Project = p.Project
 		forwards, err := forwardDeployed(ctx, dependencies, p, env)
@@ -72,7 +73,7 @@ func resolveDeployedEnvironment(dependencies Dependencies, cwd, name string) (*e
 	case string(environment.TierProduction):
 		return &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION, Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED}, nil
 	case string(environment.TierPreview):
-		return commands.ResolvePreviewEnvironment(cwd, "", environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
+		return previewid.ResolveEnvironment(cwd, "", environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
 	default:
 		return nil, fmt.Errorf("--env is %q, want %s or %s", name, environment.TierProduction, environment.TierPreview)
 	}

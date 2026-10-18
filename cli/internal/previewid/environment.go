@@ -1,11 +1,10 @@
-package commands
+package previewid
 
 import (
-	"github.com/ocelhq/ocel/cli/internal/previewid"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func ResolvePreviewEnvironment(cwd, name string, lifecycle environmentv1.Lifecycle, readGitBranch func(dir string) (string, error), discoverPRNumber func() string) (*environmentv1.Environment, error) {
+func ResolveEnvironment(cwd, name string, lifecycle environmentv1.Lifecycle, readGitBranch func(dir string) (string, error), discoverPRNumber func() string) (*environmentv1.Environment, error) {
 	if name != "" {
 		return &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: lifecycle, Identity: name}, nil
 	}
@@ -13,7 +12,7 @@ func ResolvePreviewEnvironment(cwd, name string, lifecycle environmentv1.Lifecyc
 	if err != nil {
 		return nil, err
 	}
-	id, err := previewid.Resolve(branch, discoverPRNumber())
+	id, err := Resolve(branch, discoverPRNumber())
 	if err != nil {
 		return nil, err
 	}
