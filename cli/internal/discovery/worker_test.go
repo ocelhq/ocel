@@ -187,6 +187,27 @@ func TestAWorkerIsServedFromTheRootItsTasksAndConsumersAreDeclaredIn(t *testing.
 	}
 }
 
+func TestAGoWorkerRunsTheRootsOfItsOwnModuleAndNoOther(t *testing.T) {
+	configDir := t.TempDir()
+	for _, module := range []string{"a", "b"} {
+		write(t, filepath.Join(configDir, module, "go.mod"), "module example.com/"+module+"\n\ngo 1.27.0\n")
+		write(t, filepath.Join(configDir, module, "declarations", "declarations.go"), "package declarations\n")
+		write(t, filepath.Join(configDir, module, "jobs", "jobs.go"), "package jobs\n")
+	}
+	root := func(module, dir string) Root {
+		return Root{Dir: filepath.Join(configDir, module, dir), Language: language.Go}
+	}
+	roots := []Root{root("a", "declarations"), root("a", "jobs"), root("b", "declarations"), root("b", "jobs"), {Dir: filepath.Join(configDir, "web"), Language: language.JS}}
+
+	got, err := WorkerRoots(configDir, roots, root("a", "jobs"))
+	if err != nil {
+		t.Fatalf("WorkerRoots: %v", err)
+	}
+	if want := []Root{root("a", "declarations"), root("a", "jobs")}; !slices.Equal(got, want) {
+		t.Errorf("WorkerRoots = %v, want %v: a go worker imports every root of its module, and only those", got, want)
+	}
+}
+
 func TestAWorkerDeclaredOutsideEveryRootIsNamedByItsPathInTheProjectEvenUnderAFolderStartingWithTwoDots(t *testing.T) {
 	t.Parallel()
 	configDir := t.TempDir()

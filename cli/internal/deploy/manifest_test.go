@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -23,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -424,7 +422,7 @@ func functionsOnDisk(cfg *project.Project) (build.Output, error) {
 func declarationsWithClientValue(t *testing.T, cfg *project.Project, value string) *variables.Declarations {
 	t.Helper()
 	cell := variables.Cell{Key: "NEXT_PUBLIC_SITE_URL"}
-	declarations := variables.NewDeclarations(oneValue{cell: cell, value: value}, variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, ""))
+	declarations := variables.NewDeclarations(oneValue{cell: cell, value: value}, variables.ScopeOf(cfg, environmentv1.Tier_TIER_PRODUCTION, ""))
 	if err := declarations.Prefetch(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -468,7 +466,7 @@ func prebuiltConfig(root string) *project.Project {
 }
 
 func emptyDeclarations(cfg *project.Project) *variables.Declarations {
-	return variables.NewDeclarations(emptyValues{}, variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, ""))
+	return variables.NewDeclarations(emptyValues{}, variables.ScopeOf(cfg, environmentv1.Tier_TIER_PRODUCTION, ""))
 }
 
 type emptyValues struct{}
@@ -479,8 +477,8 @@ func (emptyValues) Reveal(context.Context, []variables.Coordinate) (map[variable
 	return nil, nil
 }
 
-func recordedClientValue() clientenv.App {
-	return clientenv.App{
+func recordedClientValue() variables.ClientApp {
+	return variables.ClientApp{
 		App:      variables.App{Name: "api", Framework: buildoutput.FrameworkNext},
 		Declared: []*resourcesv1.VariableDefinition{{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN}},
 		Variables: []variables.Variable{{
@@ -628,7 +626,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		recordBuildApp(&dependencies)
 		cfg := prebuiltNextConfig(root)
 
-		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
+		if err := variables.RecordClientValues(root, []variables.ClientApp{recordedClientValue()}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -652,7 +650,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		dependencies := newTestDependencies()
 		recordBuildApp(&dependencies)
 		cfg := prebuiltNextConfig(root)
-		if err := clientenv.Record(root, []clientenv.App{{App: variables.App{Name: "api", Framework: buildoutput.FrameworkNext}}}); err != nil {
+		if err := variables.RecordClientValues(root, []variables.ClientApp{{App: variables.App{Name: "api", Framework: buildoutput.FrameworkNext}}}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -678,7 +676,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		recordBuildApp(&dependencies)
 		cfg := prebuiltNextConfig(root)
 
-		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
+		if err := variables.RecordClientValues(root, []variables.ClientApp{recordedClientValue()}); err != nil {
 			t.Fatal(err)
 		}
 

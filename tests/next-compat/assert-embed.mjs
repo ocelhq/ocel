@@ -31,6 +31,7 @@ import {
   embeddedArtifactPairs,
   embeddedBytecodePath,
   logWindowVerdict,
+  OCEL_CONFIG_FILE,
   storageCoordinate,
   summarizeOutcomes,
   TAG_PROBE_ROUTE,
@@ -48,12 +49,13 @@ const BURST_LOG_FILTER = `?"embedded compile cache" ?"${BYTECODE_S3_REHYDRATE_MA
 
 const MAX_PACKAGE_BYTES = 250 * 1024 * 1024;
 
-if (!bytecodeEmbedEnabled(process.env)) {
+const configPath = join(process.cwd(), OCEL_CONFIG_FILE);
+if (!bytecodeEmbedEnabled(existsSync(configPath) ? readFileSync(configPath, "utf8") : "")) {
   log(
-    `SKIPPED, nothing asserted: $${BYTECODE_EMBED_ENV} is ${JSON.stringify(process.env[BYTECODE_EMBED_ENV] ?? null)}, ` +
-      `not "1", so the deploy ran no embed pass and this deployment is expected to fetch its compile cache from S3. ` +
-      `assert-bytecode.mjs is what proves that path. Re-deploy with ${BYTECODE_EMBED_ENV}=1 to make this assertion ` +
-      `mean anything.`,
+    `SKIPPED, nothing asserted: ${configPath} sets no bytecode: { embed: true }, so the deploy ran no embed pass ` +
+      `and this deployment is expected to fetch its compile cache from S3. assert-bytecode.mjs is what proves that ` +
+      `path. Re-deploy with ${BYTECODE_EMBED_ENV}=1, which renders the option into the config, to make this ` +
+      `assertion mean anything.`,
   );
   process.exit(0);
 }

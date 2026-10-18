@@ -7,16 +7,18 @@ import (
 	"maps"
 	"net"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/workdir"
-
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/devresources/queue"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/workdir"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -26,53 +28,124 @@ const (
 	workerDialInterval  = 100 * time.Millisecond
 )
 
+type workerQueue interface {
+	Workers() []queue.Worker
+	DeliverTo(ctx context.Context, urls map[string]string) error
+}
+
 type workerProcess struct {
 	name    string
+	served  string
+	roots   []string
+	env     map[string]string
 	child   *childprocess.Child
 	exited  chan struct{}
 	stopped atomic.Bool
+
+	stopWaiting context.CancelFunc
+	waited      chan struct{}
+}
+
+func (p *workerProcess) hasExited() bool {
+	select {
+	case <-p.exited:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *workerProcess) runs(served discovery.Root, roots []string, env map[string]string, changed []string) bool {
+	if p.hasExited() || p.served != served.Dir || !slices.Equal(p.roots, roots) || !maps.Equal(p.env, env) {
+		return false
+	}
+	return !slices.ContainsFunc(changed, func(path string) bool {
+		return slices.ContainsFunc(roots, func(root string) bool { return isWithin(root, path) })
+	})
+}
+
+func isWithin(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 type workerProcesses struct {
-	opts  Options
-	run   *workdir.Run
-	queue *queue.Backend
-	ports map[string]int
-
-	running     []*workerProcess
-	stopWaiting context.CancelFunc
-	waiting     sync.WaitGroup
+	opts    Options
+	run     *workdir.Run
+	queue   workerQueue
+	command func(ctx context.Context, configDir string, roots []discovery.Root, served discovery.Root, run *workdir.Run) (*exec.Cmd, error)
+	ports   map[string]int
+	running map[string]*workerProcess
 
 	mu     sync.Mutex
 	served map[string]string
 }
 
-func newWorkerProcesses(opts Options, backend *queue.Backend) *workerProcesses {
-	return &workerProcesses{opts: opts, run: workdir.NewRun(), queue: backend, ports: map[string]int{}}
+func newWorkerProcesses(opts Options, backend workerQueue) *workerProcesses {
+	return &workerProcesses{
+		opts:    opts,
+		run:     workdir.NewRun(),
+		queue:   backend,
+		command: discovery.WorkerCommand,
+		ports:   map[string]int{},
+		running: map[string]*workerProcess{},
+		served:  map[string]string{},
+	}
 }
 
-func (w *workerProcesses) restart(ctx context.Context, env map[string]string) {
-	w.stop(ctx)
+func (w *workerProcesses) restart(ctx context.Context, env map[string]string, changed []string) {
 	workers := w.queue.Workers()
 	if len(workers) == 0 {
+		w.stop(ctx, slices.Collect(maps.Keys(w.running)))
 		return
 	}
 	cfg := w.opts.Project
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
+		w.stop(ctx, slices.Collect(maps.Keys(w.running)))
 		w.warnAll(err)
 		return
 	}
 
-	waiting, stopWaiting := context.WithCancel(ctx)
-	w.stopWaiting = stopWaiting
+	type plan struct {
+		served discovery.Root
+		roots  []string
+	}
+	plans := map[string]plan{}
 	for _, worker := range workers {
-		root, err := discovery.WorkerRoot(cfg.Dir, roots, worker.Name, worker.Sources)
+		served, err := discovery.WorkerRoot(cfg.Dir, roots, worker.Name, worker.Sources)
 		if err != nil {
 			w.warn(worker.Name, err)
 			continue
 		}
-		cmd, err := discovery.WorkerCommand(ctx, cfg.Dir, roots, root, w.run)
+		program, err := discovery.WorkerRoots(cfg.Dir, roots, served)
+		if err != nil {
+			w.warn(worker.Name, err)
+			continue
+		}
+		dirs := []string{served.Dir}
+		for _, root := range program {
+			if !slices.Contains(dirs, root.Dir) {
+				dirs = append(dirs, root.Dir)
+			}
+		}
+		plans[worker.Name] = plan{served: served, roots: dirs}
+	}
+
+	var stopping []string
+	for name, process := range w.running {
+		if p, wanted := plans[name]; !wanted || !process.runs(p.served, p.roots, env, changed) {
+			stopping = append(stopping, name)
+		}
+	}
+	w.stop(ctx, stopping)
+
+	for _, worker := range workers {
+		p, planned := plans[worker.Name]
+		if _, running := w.running[worker.Name]; !planned || running {
+			continue
+		}
+		cmd, err := w.command(ctx, cfg.Dir, roots, p.served, w.run)
 		if err != nil {
 			w.warn(worker.Name, err)
 			continue
@@ -87,8 +160,14 @@ func (w *workerProcesses) restart(ctx context.Context, env map[string]string) {
 			w.warn(worker.Name, err)
 			continue
 		}
-		w.running = append(w.running, process)
-		w.waiting.Go(func() { w.serveOnceListening(waiting, process, port) })
+		process.served, process.roots = p.served.Dir, p.roots
+		w.running[worker.Name] = process
+		waiting, stopWaiting := context.WithCancel(ctx)
+		process.stopWaiting, process.waited = stopWaiting, make(chan struct{})
+		go func() {
+			defer close(process.waited)
+			w.serveOnceListening(waiting, process, port)
+		}()
 	}
 }
 
@@ -103,7 +182,7 @@ func (w *workerProcesses) start(ctx context.Context, cmd *exec.Cmd, name string,
 	if err != nil {
 		return nil, err
 	}
-	process := &workerProcess{name: name, child: child, exited: make(chan struct{})}
+	process := &workerProcess{name: name, env: env, child: child, exited: make(chan struct{})}
 	go func() {
 		err := child.Wait()
 		if !process.stopped.Load() && ctx.Err() == nil {
@@ -161,29 +240,37 @@ func (w *workerProcesses) portOf(name string) (int, error) {
 	return port, nil
 }
 
-func (w *workerProcesses) stop(ctx context.Context) {
-	if w.stopWaiting != nil {
-		w.stopWaiting()
-		w.stopWaiting = nil
+func (w *workerProcesses) stop(ctx context.Context, names []string) {
+	if len(names) == 0 {
+		return
 	}
-	w.waiting.Wait()
-	w.mu.Lock()
-	w.served = map[string]string{}
-	w.mu.Unlock()
-	if len(w.running) > 0 {
-		if err := w.queue.DeliverTo(context.WithoutCancel(ctx), nil); err != nil {
-			w.warnAll(err)
+	stopping := make([]*workerProcess, 0, len(names))
+	for _, name := range names {
+		process := w.running[name]
+		delete(w.running, name)
+		if process.stopWaiting != nil {
+			process.stopWaiting()
+			<-process.waited
 		}
+		stopping = append(stopping, process)
 	}
-	for _, process := range w.running {
+	w.mu.Lock()
+	for _, process := range stopping {
+		delete(w.served, process.name)
+	}
+	served := maps.Clone(w.served)
+	w.mu.Unlock()
+	if err := w.queue.DeliverTo(context.WithoutCancel(ctx), served); err != nil {
+		w.warnAll(err)
+	}
+	for _, process := range stopping {
 		process.stopped.Store(true)
 		process.child.Stop()
 	}
-	w.running = nil
 }
 
 func (w *workerProcesses) close(ctx context.Context) {
-	w.stop(ctx)
+	w.stop(ctx, slices.Collect(maps.Keys(w.running)))
 	if err := w.run.Remove(); err != nil {
 		w.warnAll(err)
 	}

@@ -157,12 +157,15 @@ the comparison and not the Lambda.
 
 | script                          | how to run                                                    |
 | ------------------------------- | ------------------------------------------------------------- |
-| `assert-bytecode.mjs`           | from the deployed app's directory; deploy with `OCEL_BYTECODE_CACHE=1` first, or it has nothing to find |
-| `assert-embed.mjs`              | same, and additionally `OCEL_BYTECODE_EMBED=1`                 |
+| `assert-bytecode.mjs`           | from the deployed app's directory, after a deploy: every serverless node app warms its compile cache |
+| `assert-embed.mjs`              | same, after a deploy run with `OCEL_E2E_BYTECODE_EMBED=1`      |
 
-Under `OCEL_BYTECODE_EMBED=1` the last two are complementary and **both must
-run**: embedding makes the S3 rehydrate line `assert-bytecode.mjs` looks for
-false, so it drops that leg and warns, and `assert-embed.mjs` covers it instead.
+`OCEL_E2E_BYTECODE_EMBED=1` makes `deploy.mjs` render `bytecode: { embed: true }`
+into the app's `ocel.config.ts`, the AWS provider option that embeds the cache,
+and both assertions read that file to know which leg the deploy took. With it the
+two are complementary and **both must run**: embedding makes the S3 rehydrate
+line `assert-bytecode.mjs` looks for false, so it drops that leg and warns, and
+`assert-embed.mjs` covers it instead.
 Both read slug, environment, app, build id and deploy time from
 `.ocel/deploy-report.json` in the deployed app's directory.
 

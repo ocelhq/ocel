@@ -758,16 +758,32 @@ describe("bytecodeRehydrateOutcome", () => {
 });
 
 describe("bytecodeEmbedEnabled", () => {
-  it("is on for exactly the literal 1, mirroring the deploy's own gate", () => {
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "1" })).toBe(true);
+  it("is on for a config rendered to embed, which is the option the deploy reads", () => {
+    const config = renderOcelConfig({ slug: "e2e-42", variablesKey: "", bytecodeEmbed: true });
+    expect(config).toContain(
+      "provider: awsProvider({ edge: cloudflare(), dns: cloudflareDns(), bytecode: { embed: true } }),",
+    );
+    expect(bytecodeEmbedEnabled(config)).toBe(true);
   });
 
-  it("is off when unset or set to anything else", () => {
-    expect(bytecodeEmbedEnabled({})).toBe(false);
+  it("is off for a config rendered without it, or no config at all", () => {
+    expect(
+      bytecodeEmbedEnabled(
+        renderOcelConfig({ slug: "e2e-42", variablesKey: "", bytecodeEmbed: false }),
+      ),
+    ).toBe(false);
+    expect(bytecodeEmbedEnabled("")).toBe(false);
     expect(bytecodeEmbedEnabled(undefined)).toBe(false);
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "0" })).toBe(false);
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "true" })).toBe(false);
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "" })).toBe(false);
+  });
+
+  it("renders the option when the run sets the harness's own variable to 1", () => {
+    vi.stubEnv(BYTECODE_EMBED_ENV, "1");
+    expect(bytecodeEmbedEnabled(renderOcelConfig({ slug: "e2e-42", variablesKey: "" }))).toBe(true);
+    vi.stubEnv(BYTECODE_EMBED_ENV, "true");
+    expect(bytecodeEmbedEnabled(renderOcelConfig({ slug: "e2e-42", variablesKey: "" }))).toBe(
+      false,
+    );
+    vi.unstubAllEnvs();
   });
 });
 

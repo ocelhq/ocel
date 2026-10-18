@@ -44,7 +44,7 @@ type Config struct {
 	Paths    Paths
 	Debounce time.Duration
 	SkipDir  func(name string) bool
-	OnChange func()
+	OnChange func(changed []string)
 	OnError  func(error)
 
 	newTimer func(time.Duration) timer
@@ -100,7 +100,7 @@ func Start(ctx context.Context, cfg Config) (*Watcher, error) {
 	}
 
 	w := &Watcher{fsw: fsw, done: make(chan struct{})}
-	changed := make(chan struct{}, 1)
+	changed := &changes{signal: make(chan struct{}, 1)}
 	var handlers sync.WaitGroup
 	handlers.Go(func() { handle(ctx, changed, cfg.OnChange) })
 	go func() {
@@ -111,18 +111,46 @@ func Start(ctx context.Context, cfg Config) (*Watcher, error) {
 	return w, nil
 }
 
-func handle(ctx context.Context, changed <-chan struct{}, onChange func()) {
+type changes struct {
+	mu     sync.Mutex
+	paths  []string
+	signal chan struct{}
+}
+
+func (c *changes) add(paths []string) {
+	c.mu.Lock()
+	for _, path := range paths {
+		if !slices.Contains(c.paths, path) {
+			c.paths = append(c.paths, path)
+		}
+	}
+	c.mu.Unlock()
+	select {
+	case c.signal <- struct{}{}:
+	default:
+	}
+}
+
+func (c *changes) take() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	taken := c.paths
+	c.paths = nil
+	return taken
+}
+
+func handle(ctx context.Context, changed *changes, onChange func([]string)) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-changed:
-			onChange()
+		case <-changed.signal:
+			onChange(changed.take())
 		}
 	}
 }
 
-func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config, changed chan<- struct{}) {
+func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config, changed *changes) {
 	defer fsw.Close()
 
 	t := cfg.newTimer(cfg.Debounce)
@@ -130,6 +158,7 @@ func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config, changed chan<- 
 		<-t.C()
 	}
 	armed := false
+	var batch []string
 
 	for {
 		select {
@@ -152,6 +181,7 @@ func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config, changed chan<- 
 			if !cfg.Paths.covers(event.Name) {
 				continue
 			}
+			batch = append(batch, event.Name)
 			if armed && !t.Stop() {
 				<-t.C()
 			}
@@ -159,10 +189,8 @@ func run(ctx context.Context, fsw *fsnotify.Watcher, cfg Config, changed chan<- 
 			armed = true
 		case <-t.C():
 			armed = false
-			select {
-			case changed <- struct{}{}:
-			default:
-			}
+			changed.add(batch)
+			batch = nil
 		case err, ok := <-fsw.Errors:
 			if !ok {
 				return

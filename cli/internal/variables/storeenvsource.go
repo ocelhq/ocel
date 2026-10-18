@@ -1,4 +1,4 @@
-package valuestore
+package variables
 
 import (
 	"context"
@@ -10,42 +10,40 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
-func (s Store) DescribeEnvSource(ctx context.Context) (variables.EnvSource, error) {
+func (s Store) DescribeEnvSource(ctx context.Context) (EnvSource, error) {
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
-		return variables.EnvSource{}, err
+		return EnvSource{}, err
 	}
 	resp, err := variableStore.DescribeEnvSource(ctx, &variablestorev1.DescribeEnvSourceRequest{Tier: s.Tier, Slug: s.Project.Slug})
 	if err != nil {
-		return variables.EnvSource{}, err
+		return EnvSource{}, err
 	}
 	return EnvSourceOfStatus(resp.GetStatus()), nil
 }
 
-func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
-	descriptor := variablescope.EnvSourceDescriptor(s.Project, s.Tier)
+func (s Store) SyncEnvSource(ctx context.Context) (EnvSource, error) {
+	descriptor := EnvSourceDescriptor(s.Project, s.Tier)
 	folders := syncedFolders(s.Project)
 	var read map[variablestore.Cell]envsource.Value
 	if descriptor.Reading() == envsource.ReadingWhereOcelRuns {
 		source, err := descriptor.Open(s.Project.Dir, os.LookupEnv)
 		if err != nil {
-			return variables.EnvSource{}, err
+			return EnvSource{}, err
 		}
 		if read, err = source.Read(ctx, folders); err != nil {
-			return variables.EnvSource{}, err
+			return EnvSource{}, err
 		}
 	}
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
-		return variables.EnvSource{}, err
+		return EnvSource{}, err
 	}
 	resp, err := variableStore.SyncEnvSource(ctx, &variablestorev1.SyncEnvSourceRequest{
 		Tier:    s.Tier,
@@ -54,7 +52,7 @@ func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
 		Folders: folders,
 	})
 	if err != nil {
-		return variables.EnvSource{}, err
+		return EnvSource{}, err
 	}
 	return envSourceOf(resp), nil
 }
@@ -93,7 +91,7 @@ func (s Store) SyncRegisteredEnvSource(ctx context.Context) (*variablestorev1.Sy
 	})
 }
 
-func (s Store) SetInEnvSource(ctx context.Context, at variables.Cell, value, description string) (bool, error) {
+func (s Store) SetInEnvSource(ctx context.Context, at Cell, value, description string) (bool, error) {
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return false, err
@@ -134,16 +132,16 @@ func CredentialProblems(err error) []*resourcesv1.VariableProblem {
 	return out
 }
 
-func envSourceOf(resp *variablestorev1.SyncEnvSourceResponse) variables.EnvSource {
+func envSourceOf(resp *variablestorev1.SyncEnvSourceResponse) EnvSource {
 	out := EnvSourceOfStatus(resp.GetStatus())
 	for _, cell := range resp.GetPresent() {
-		out.Present = append(out.Present, variables.Cell{Key: cell.GetKey(), Folder: cell.GetFolder()})
+		out.Present = append(out.Present, Cell{Key: cell.GetKey(), Folder: cell.GetFolder()})
 	}
 	return out
 }
 
-func EnvSourceOfStatus(status *variablestorev1.EnvSourceStatus) variables.EnvSource {
-	out := variables.EnvSource{ID: status.GetEnvSource(), CanCreate: status.GetCanCreate(), CanUpdate: status.GetCanUpdate(), Credentials: status.GetCredentials()}
+func EnvSourceOfStatus(status *variablestorev1.EnvSourceStatus) EnvSource {
+	out := EnvSource{ID: status.GetEnvSource(), CanCreate: status.GetCanCreate(), CanUpdate: status.GetCanUpdate(), Credentials: status.GetCredentials()}
 	for _, link := range status.GetLinks() {
 		if out.URLs == nil {
 			out.URLs = map[string]string{}

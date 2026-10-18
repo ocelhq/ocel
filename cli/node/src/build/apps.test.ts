@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PROTOCOL_PREFIX } from "../protocol.js";
 import { type Adapters, type AppBuild, buildApps } from "./apps.js";
-import { PROTOCOL_PREFIX } from "./protocol.js";
 
 interface SeenRecord {
   type: string;

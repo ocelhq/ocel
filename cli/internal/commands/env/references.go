@@ -21,7 +21,7 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 		if folder == "" {
 			continue
 		}
-		if err := variables.ValidateFolder(folder); err != nil {
+		if err := project.ValidateFolder(folder); err != nil {
 			return err
 		}
 	}

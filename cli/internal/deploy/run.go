@@ -12,10 +12,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -49,7 +47,7 @@ type deployRun struct {
 }
 
 func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project, process *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, infra *infraProvisioning, opts Options, browser bool) deployRun {
-	scope := variablescope.Of(cfg, env.GetTier(), previewIdentity(env))
+	scope := variables.ScopeOf(cfg, env.GetTier(), env.GetIdentity())
 	scope.Browser = browser
 	return deployRun{
 		dependencies:   dependencies,
@@ -68,13 +66,6 @@ func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project
 		dry:            opts.Dry,
 		canFill:        !opts.Dry && browser,
 	}
-}
-
-func previewIdentity(env *environmentv1.Environment) string {
-	if env.GetTier() != environmentv1.Tier_TIER_PREVIEW {
-		return ""
-	}
-	return env.GetIdentity()
 }
 
 func (d deployRun) tier() environmentv1.Tier {
@@ -161,14 +152,14 @@ func (d deployRun) newDeclarations(synced variables.EnvSource) *variables.Declar
 	return variables.NewDeclarations(d.valueStore(), scope)
 }
 
-func (d deployRun) valueStore() valuestore.Store {
-	return valuestore.Store{Provider: d.provider, Project: d.cfg, Tier: d.tier()}
+func (d deployRun) valueStore() variables.Store {
+	return variables.Store{Provider: d.provider, Project: d.cfg, Tier: d.tier()}
 }
 
 func (d deployRun) readDeclarations(ctx context.Context) (*variables.Declarations, error) {
 	synced, err := d.valueStore().SyncEnvSource(ctx)
-	if problems := valuestore.CredentialProblems(err); len(problems) > 0 {
-		declarations := d.newDeclarations(variablescope.ConfiguredEnvSource(d.cfg, d.tier()))
+	if problems := variables.CredentialProblems(err); len(problems) > 0 {
+		declarations := d.newDeclarations(variables.ConfiguredEnvSource(d.cfg, d.tier()))
 		return declarations, declarations.RefuseCredentials(problems)
 	}
 	if err != nil {

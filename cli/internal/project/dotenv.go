@@ -16,14 +16,6 @@ const (
 	LocalDotenvFileName = ".env.local"
 )
 
-func ReadDotenv(dir string) (dotenv.File, error) {
-	return readDotenvFile(dir, DotenvFileName)
-}
-
-func ReadLocalDotenv(dir string) (dotenv.File, error) {
-	return readDotenvFile(dir, LocalDotenvFileName)
-}
-
 func readDotenvFile(dir, name string) (dotenv.File, error) {
 	file, err := os.Open(filepath.Join(dir, name))
 	if err != nil {
@@ -46,7 +38,7 @@ type environment struct {
 }
 
 func readEnvironment(dir string) (environment, error) {
-	file, err := ReadDotenv(dir)
+	file, err := readDotenvFile(dir, DotenvFileName)
 	if err != nil {
 		return environment{}, err
 	}

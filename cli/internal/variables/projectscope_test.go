@@ -1,4 +1,4 @@
-package variablescope_test
+package variables_test
 
 import (
 	"reflect"
@@ -6,7 +6,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -29,19 +28,19 @@ func TestAScopeNamesTheVariablesATiersInlineBindingsRead(t *testing.T) {
 	}}
 
 	want := []variables.BindingVariables{{Group: "postgres.orders", Site: "bindings.postgres.orders", Keys: []string{"ORDERS_PASSWORD", "ORDERS_USER"}}}
-	if got := variablescope.Of(cfg, production, "").Bindings; !reflect.DeepEqual(got, want) {
+	if got := variables.ScopeOf(cfg, production, "").Bindings; !reflect.DeepEqual(got, want) {
 		t.Errorf("production Bindings = %+v, want %+v", got, want)
 	}
-	if got := variablescope.Of(cfg, preview, "pr-12").Bindings; len(got) != 0 {
+	if got := variables.ScopeOf(cfg, preview, "pr-12").Bindings; len(got) != 0 {
 		t.Errorf("preview Bindings = %+v, want none: orders binds production alone", got)
 	}
-	if got := variablescope.Of(cfg, preview, "pr-12").OtherTiers; !reflect.DeepEqual(got, want) {
+	if got := variables.ScopeOf(cfg, preview, "pr-12").OtherTiers; !reflect.DeepEqual(got, want) {
 		t.Errorf("preview OtherTiers = %+v, want %+v: the app may not declare what production's binding reads", got, want)
 	}
-	if got := variablescope.Of(cfg, production, "").OtherTiers; len(got) != 0 {
+	if got := variables.ScopeOf(cfg, production, "").OtherTiers; len(got) != 0 {
 		t.Errorf("production OtherTiers = %+v, want none: production takes every binding it reads", got)
 	}
-	if got := variablescope.ForDev(cfg).Bindings; len(got) != 0 {
+	if got := variables.DevScope(cfg).Bindings; len(got) != 0 {
 		t.Errorf("dev Bindings = %+v, want none: ocel dev provisions its own resources", got)
 	}
 }
@@ -60,13 +59,13 @@ func TestAScopeNamesTheEnvSourceATierReadsAndTheCredentialsItLogsInWith(t *testi
 	cfg := infisicalConfig()
 
 	want := variables.EnvSource{ID: "infisical:p-1/prod", Credentials: []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"}}
-	if got := variablescope.Of(cfg, production, "").EnvSource; !reflect.DeepEqual(got, want) {
+	if got := variables.ScopeOf(cfg, production, "").EnvSource; !reflect.DeepEqual(got, want) {
 		t.Errorf("production EnvSource = %+v, want %+v", got, want)
 	}
-	if got := variablescope.Of(cfg, preview, "pr-12").EnvSource; !reflect.DeepEqual(got, variables.EnvSource{ID: "builtin"}) {
+	if got := variables.ScopeOf(cfg, preview, "pr-12").EnvSource; !reflect.DeepEqual(got, variables.EnvSource{ID: "builtin"}) {
 		t.Errorf("preview EnvSource = %+v, want builtin with no credentials", got)
 	}
-	if got := variablescope.ForDev(cfg).EnvSource; !reflect.DeepEqual(got, variables.EnvSource{}) {
+	if got := variables.DevScope(cfg).EnvSource; !reflect.DeepEqual(got, variables.EnvSource{}) {
 		t.Errorf("dev EnvSource = %+v, want none: ocel dev reads on this machine", got)
 	}
 }

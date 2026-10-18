@@ -3,8 +3,8 @@ import path from "node:path";
 import { buildNext } from "@framework/next-build";
 import { traceFunction } from "@framework/node-build/trace";
 import { buildSvelteKit } from "@framework/sveltekit-build";
+import { reportFailure } from "../protocol.js";
 import { type AppBuild, buildApps } from "./apps.js";
-import { reportFailure } from "./protocol.js";
 
 const MAX_CONCURRENT_BUILDS = 4;
 

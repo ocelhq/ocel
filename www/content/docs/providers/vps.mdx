@@ -333,15 +333,19 @@ changes the image, arguments, memory or volume.
 Bootstrap warns when `vm.overcommit_memory` isn't `1` or transparent huge pages are `always`:
 Valkey's background save can fail without overcommit.
 
-**Backups.** Each resource is backed up once a day, keeping the newest seven under
-`/var/lib/ocel/<tier>/backups/<container>/`. They sit on the same disk, so copy them off the box
-if losing it must not lose the data. For a postgres, on the box (`docker ps --filter
-label=ocel.resource` names the container):
+**Backups.** Each postgres, kv store and bucket store the box keeps is copied once a day while
+it runs, under `/var/lib/ocel/<tier>/backups/<container>/`: a postgres as a `pg_dump`, a kv
+store as its snapshot, each keeping the newest seven, and a bucket store as one mirror in
+`current/` plus, for the last seven copies, the objects each one overwrote or deleted. They sit
+on the same disk, so copy them off the box if losing it must not lose the data. On the box
+(`docker ps --filter label=ocel.backup` names the containers):
 
 ```bash
-sudo /usr/local/lib/ocel/backups production dump <container> main
-sudo /usr/local/lib/ocel/backups production restore <container> main <file>
+sudo /usr/local/lib/ocel/backups production dump <container>
+sudo /usr/local/lib/ocel/backups production restore <container> [<backup>]
 ```
+
+`restore` takes the newest backup when it names none, and works the same for every kind.
 
 `ocel destroy` removes each resource with its volume, password and backups.
 

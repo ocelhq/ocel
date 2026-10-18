@@ -8,9 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -55,7 +53,7 @@ func collecting(run *run.Run, cfg *project.Project, collect func(output io.Write
 }
 
 func withImpliedDeclarations(cfg *project.Project, opts envOptions, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
-	implied, impliedGroups := variables.ImpliedDeclarations(variablescope.Of(cfg, opts.tier(), ""))
+	implied, impliedGroups := variables.ImpliedDeclarations(variables.ScopeOf(cfg, opts.tier(), ""))
 	return append(definitions, implied...), append(groups, impliedGroups...), nil
 }
 
@@ -72,9 +70,9 @@ func discoverVariables(ctx context.Context, cfg *project.Project, provider *prov
 }
 
 func projectDeclarations(cfg *project.Project, provider *providerprocess.Provider, opts envOptions) *variables.Declarations {
-	return variables.NewDeclarations(valuestore.Store{
+	return variables.NewDeclarations(variables.Store{
 		Provider: provider,
 		Project:  cfg,
 		Tier:     opts.tier(),
-	}, variablescope.Of(cfg, opts.tier(), ""))
+	}, variables.ScopeOf(cfg, opts.tier(), ""))
 }

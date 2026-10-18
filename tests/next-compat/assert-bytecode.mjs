@@ -24,6 +24,7 @@ import {
   bytecodeEmbedEnabled,
   bytecodeRehydrateOutcome,
   DEPLOY_REPORT_FILE,
+  OCEL_CONFIG_FILE,
   storageCoordinate,
   strongestCoverage,
   summarizeOutcomes,
@@ -223,9 +224,10 @@ log(
     : "bytecode cache published before the first request, covering part of the bundle",
 );
 
-if (bytecodeEmbedEnabled(process.env)) {
+const configPath = join(process.cwd(), OCEL_CONFIG_FILE);
+if (bytecodeEmbedEnabled(existsSync(configPath) ? readFileSync(configPath, "utf8") : "")) {
   warn(
-    `read leg SKIPPED and UNPROVEN: $OCEL_BYTECODE_EMBED=1, so cold starts load the compile cache from the function's ` +
+    `read leg SKIPPED and UNPROVEN: ${configPath} sets bytecode: { embed: true }, so cold starts load the compile cache from the function's ` +
       `own artifact and no instance will ever report rehydrating ${key} from S3. Run assert-embed.mjs against this ` +
       `deployment — it asserts the embedded read leg, and nothing here does.`,
   );

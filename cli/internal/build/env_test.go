@@ -4,7 +4,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -12,7 +11,7 @@ import (
 )
 
 func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingElse(t *testing.T) {
-	built := SplitVariablesByClass([]clientenv.App{{App: variables.App{Name: "storefront"}, Variables: []variables.Variable{
+	built := SplitVariablesByClass([]variables.ClientApp{{App: variables.App{Name: "storefront"}, Variables: []variables.Variable{
 		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com"},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
@@ -30,7 +29,7 @@ func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingEls
 }
 
 func TestANextAppIsBuiltWithTheKeysOfThePublicVariablesItDeclaresWhetherOrNotOcelResolvedAValue(t *testing.T) {
-	built := SplitVariablesByClass([]clientenv.App{{
+	built := SplitVariablesByClass([]variables.ClientApp{{
 		App: variables.App{Name: "storefront", Framework: buildoutput.FrameworkNext},
 		Declared: []*resourcesv1.VariableDefinition{
 			{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
@@ -44,7 +43,7 @@ func TestANextAppIsBuiltWithTheKeysOfThePublicVariablesItDeclaresWhetherOrNotOce
 }
 
 func TestABuildReadsASensitiveValueFromItsLiveDir(t *testing.T) {
-	built := SplitVariablesByClass([]clientenv.App{{App: variables.App{Name: "storefront"}, Variables: []variables.Variable{
+	built := SplitVariablesByClass([]variables.ClientApp{{App: variables.App{Name: "storefront"}, Variables: []variables.Variable{
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 	}}}, nil)["storefront"]
@@ -58,7 +57,7 @@ func TestABuildReadsASensitiveValueFromItsLiveDir(t *testing.T) {
 }
 
 func TestEachAppIsBuiltWithItsOwnValueForADivergedKey(t *testing.T) {
-	built := SplitVariablesByClass([]clientenv.App{
+	built := SplitVariablesByClass([]variables.ClientApp{
 		{App: variables.App{Name: "storefront"}, Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
 		{App: variables.App{Name: "admin"}, Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
 	}, nil)

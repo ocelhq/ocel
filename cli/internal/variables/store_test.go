@@ -1,4 +1,4 @@
-package valuestore
+package variables
 
 import (
 	"errors"
@@ -7,7 +7,6 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -15,8 +14,8 @@ import (
 func TestAWriteThatLostAVersionRaceIsAStaleValue(t *testing.T) {
 	t.Run("a version conflict is a stale value", func(t *testing.T) {
 		conflict := connect.NewError(connect.CodeAborted, errors.New("variablestore: stale version"))
-		if err := staleValueError(conflict); !errors.Is(err, variables.ErrStaleValue) {
-			t.Errorf("staleValueError = %v, want variables.ErrStaleValue", err)
+		if err := staleValueError(conflict); !errors.Is(err, ErrStaleValue) {
+			t.Errorf("staleValueError = %v, want ErrStaleValue", err)
 		}
 	})
 
@@ -25,7 +24,7 @@ func TestAWriteThatLostAVersionRaceIsAStaleValue(t *testing.T) {
 			"the production bootstrap has no key to seal a value under"))
 
 		err := staleValueError(refused)
-		if errors.Is(err, variables.ErrStaleValue) {
+		if errors.Is(err, ErrStaleValue) {
 			t.Fatalf("staleValueError = %v, want the refusal itself: nothing about it is a version conflict", err)
 		}
 		if !strings.Contains(err.Error(), "no key to seal a value under") {

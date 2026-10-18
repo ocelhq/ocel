@@ -9,6 +9,8 @@ export const BUILD_LOG_FILE = ".adapter-build.log";
 
 export const DEPLOY_REPORT_FILE = join(".ocel", "deploy-report.json");
 
+export const OCEL_CONFIG_FILE = "ocel.config.ts";
+
 const LOCAL_RUN_ID = "local";
 
 export const SLUG_PREFIX = "e2e-";
@@ -262,6 +264,7 @@ export function renderOcelConfig({
   slug,
   target = { name: DEFAULT_COMPAT_TARGET },
   variablesKey = process.env.OCEL_AWS_VARIABLES_KEY?.trim(),
+  bytecodeEmbed = process.env[BYTECODE_EMBED_ENV] === "1",
 }) {
   const app = `  apps: [{ name: ${JSON.stringify(APP_NAME)}, path: ".", compute: { serverless: { framework: "next" } } }],`;
   if (target.name === DEFAULT_COMPAT_TARGET) {
@@ -278,6 +281,7 @@ export function renderOcelConfig({
         "edge: cloudflare()",
         "dns: cloudflareDns()",
         ...(variablesKey ? [`variablesKey: ${JSON.stringify(variablesKey)}`] : []),
+        ...(bytecodeEmbed ? [BYTECODE_EMBED_OPTION] : []),
       ].join(", ")} }),`,
       app,
       `});`,
@@ -505,10 +509,12 @@ export const BYTECODE_S3_REHYDRATE_MARKER = "rehydrated compile cache from ";
 
 export const BYTECODE_EMBEDDED_MARKER = "loaded embedded compile cache from ";
 
-export const BYTECODE_EMBED_ENV = "OCEL_BYTECODE_EMBED";
+export const BYTECODE_EMBED_ENV = "OCEL_E2E_BYTECODE_EMBED";
 
-export function bytecodeEmbedEnabled(env) {
-  return env?.[BYTECODE_EMBED_ENV] === "1";
+const BYTECODE_EMBED_OPTION = "bytecode: { embed: true }";
+
+export function bytecodeEmbedEnabled(config) {
+  return typeof config === "string" && config.includes(BYTECODE_EMBED_OPTION);
 }
 
 export function embeddedBytecodePath(key) {

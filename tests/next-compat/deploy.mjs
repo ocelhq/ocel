@@ -19,6 +19,7 @@ import {
   deployPlanProblems,
   deployURL,
   isProductionTarget,
+  OCEL_CONFIG_FILE,
   ocelBinary,
   planProblems,
   previewNameForApp,
@@ -87,7 +88,7 @@ function deploy() {
     console.error(`[ocel-e2e] preview ${name} of project ${slug} in ${appDir}`);
   }
 
-  writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug, target }));
+  writeFileSync(join(appDir, OCEL_CONFIG_FILE), renderOcelConfig({ slug, target }));
   dropHarnessTests();
   patchPackageJson();
   ensureDeps();

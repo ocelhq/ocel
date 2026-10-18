@@ -19,13 +19,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -40,7 +38,7 @@ type collected struct {
 	resources []declaration.Resource
 	inline    []*bindingsv1.Binding
 	values    map[string][]variables.Variable
-	clients   []clientenv.App
+	clients   []variables.ClientApp
 	workers   build.HostedWorkers
 	usages    []attribution.Usage
 }
@@ -78,7 +76,7 @@ func (d deployRun) collect(ctx context.Context) (collected, error) {
 	if err != nil {
 		return collected{}, captured.annotate(err)
 	}
-	warnings, err := variables.LintFolders(declarations.Definitions(), variablescope.Apps(cfg), cfg.Path)
+	warnings, err := variables.LintFolders(declarations.Definitions(), variables.AppsOf(cfg), cfg.Path)
 	if err != nil {
 		return collected{}, err
 	}
@@ -117,14 +115,14 @@ func (d deployRun) collect(ctx context.Context) (collected, error) {
 		resources: resources,
 		inline:    inline,
 		values:    values,
-		clients:   clientenv.AppsOf(cfg, declarations.Definitions(), values),
+		clients:   variables.ClientAppsOf(cfg, declarations.Definitions(), values),
 		workers:   placement.HostedWorkers(),
 		usages:    usages,
 	}, nil
 }
 
 func (d deployRun) readPrebuilt(ctx context.Context, c collected) (build.Output, error) {
-	if err := clientenv.CheckFresh(d.cfg.Dir, c.clients); err != nil {
+	if err := variables.CheckClientValuesFresh(d.cfg.Dir, c.clients); err != nil {
 		return build.Output{}, err
 	}
 	built, err := d.dependencies.ReadPrebuilt(ctx, d.cfg, d.containerArchs)
@@ -178,7 +176,7 @@ func (d deployRun) build(ctx context.Context, steps *buildSteps, c collected, se
 		if err != nil {
 			return err
 		}
-		return clientenv.Record(cfg.Dir, c.clients)
+		return variables.RecordClientValues(cfg.Dir, c.clients)
 	})
 	return built, errors.Join(err, forwards.Close())
 }
@@ -189,7 +187,7 @@ func (d deployRun) assemble(c collected, built build.Output) (*contractv1.Manife
 	if err != nil {
 		return nil, err
 	}
-	edgeWarnings, err := variables.LintEdgeSecrets(d.declarations.Definitions(), variablescope.Apps(cfg), onEdge)
+	edgeWarnings, err := variables.LintEdgeSecrets(d.declarations.Definitions(), variables.AppsOf(cfg), onEdge)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +315,7 @@ func (c *boundedCapture) annotate(err error) error {
 func resolveVariables(ctx context.Context, declarations *variables.Declarations, cfg *project.Project) (map[string][]variables.Variable, error) {
 	definitions := declarations.Definitions()
 	values := make(map[string][]variables.Variable, len(cfg.Apps))
-	for _, app := range variablescope.Apps(cfg) {
+	for _, app := range variables.AppsOf(cfg) {
 		resolved, err := declarations.Resolve(ctx, app.Name)
 		if err != nil {
 			return nil, err
@@ -327,7 +325,7 @@ func resolveVariables(ctx context.Context, declarations *variables.Declarations,
 	return values, nil
 }
 
-func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []clientenv.App) []string {
+func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []variables.ClientApp) []string {
 	variablesOf := make(map[string][]variables.Variable, len(clients))
 	for _, client := range clients {
 		variablesOf[client.Name] = client.Variables

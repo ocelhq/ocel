@@ -2,7 +2,7 @@ import type { NextBuild } from "@framework/next-build";
 import type { BuildLog } from "@framework/node-build/script";
 import type { TraceRequest } from "@framework/node-build/trace";
 import type { SvelteKitBuild } from "@framework/sveltekit-build";
-import { printOutput, withSpan } from "./protocol.js";
+import { printOutput, withSpan } from "../protocol.js";
 
 export type AppBuild =
   | ({ framework: "next" } & NextBuild)

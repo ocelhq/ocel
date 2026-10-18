@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -27,10 +26,10 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
-func withProviderValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error) {
+func withProviderValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, provider *providerprocess.Provider, values variables.Store) error) {
 	t.Helper()
 	err := withEnvProvider(context.Background(), newTestDependencies(), root, opts, "ocel env", io.Discard, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		return drive(ctx, cfg.Slug, provider, valuestore.Store{
+		return drive(ctx, cfg.Slug, provider, variables.Store{
 			Provider: provider,
 			Project:  cfg,
 			Tier:     opts.tier(),
@@ -56,7 +55,7 @@ func storeValue(t *testing.T, ctx context.Context, provider *providerprocess.Pro
 	}
 }
 
-func revealOne(ctx context.Context, values valuestore.Store, cell variables.Cell) (string, bool, error) {
+func revealOne(ctx context.Context, values variables.Store, cell variables.Cell) (string, bool, error) {
 	found, err := values.Reveal(ctx, []variables.Coordinate{{Cell: cell}})
 	if err != nil {
 		return "", false, err
@@ -84,7 +83,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 		seedEnvironment(t, project, "staging")
 		preview := envOptions{preview: true}
 
-		withProviderValues(t, root, preview, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
+		withProviderValues(t, root, preview, func(ctx context.Context, slug string, provider *providerprocess.Provider, values variables.Store) error {
 			storeValue(t, ctx, provider, preview.tier(), &variablestorev1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
 			storeValue(t, ctx, provider, preview.tier(), &variablestorev1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
 
@@ -111,7 +110,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 	t.Run("a refused reveal hands back the provider's own typed error", func(t *testing.T) {
 		root := setUpEnvFixture(t).Root
 
-		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
+		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values variables.Store) error {
 			variableStore, err := provider.VariableStore()
 			if err != nil {
 				t.Fatalf("reach the provider's variable store: %v", err)
@@ -145,7 +144,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 	t.Run("Set against a stale version is refused as a stale value", func(t *testing.T) {
 		root := setUpEnvFixture(t).Root
 
-		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
+		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values variables.Store) error {
 			storeValue(t, ctx, provider, envOptions{}.tier(), &variablestorev1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
 			at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}}
 
@@ -171,7 +170,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 	t.Run("Delete against a stale version is refused as a stale value", func(t *testing.T) {
 		root := setUpEnvFixture(t).Root
 
-		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values valuestore.Store) error {
+		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, provider *providerprocess.Provider, values variables.Store) error {
 			coordinate := &variablestorev1.Coordinate{Slug: slug, Key: "API_URL"}
 			storeValue(t, ctx, provider, envOptions{}.tier(), coordinate, "https://first.example")
 			storeValue(t, ctx, provider, envOptions{}.tier(), coordinate, "https://someone-elses.example")

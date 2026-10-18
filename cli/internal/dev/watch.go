@@ -18,7 +18,7 @@ var (
 	startWatching = watchAndResolve
 )
 
-func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project.Project, local localCommand, session *run.Span, onResolved func(map[string]string), onFailed func(error)) (*filewatch.Watcher, error) {
+func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project.Project, local localCommand, session *run.Span, onResolved func(env map[string]string, changed []string), onFailed func(error)) (*filewatch.Watcher, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
@@ -34,7 +34,7 @@ func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project
 		paths.Files = append(paths.Files, filepath.Join(cfg.Dir, name))
 	}
 
-	return filewatch.Start(ctx, filewatch.Config{Paths: paths, SkipDir: discovery.IsSkippedDir, Debounce: watchDebounce, OnChange: func() {
+	return filewatch.Start(ctx, filewatch.Config{Paths: paths, SkipDir: discovery.IsSkippedDir, Debounce: watchDebounce, OnChange: func(changed []string) {
 		server.ResetDeclarations()
 		change := session.Child("", changeTitle)
 		resolved, err := resolveOnce(ctx, server, cfg, local, change)
@@ -44,7 +44,7 @@ func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project
 			return
 		}
 		server.PushEnv(resolved)
-		onResolved(resolved)
+		onResolved(resolved, changed)
 	}, OnError: func(err error) {
 		session.Warn(fmt.Sprintf("Watching for changes failed: %v", err))
 	}})

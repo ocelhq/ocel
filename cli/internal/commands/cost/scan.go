@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
@@ -207,7 +206,7 @@ func (unread) Reveal(context.Context, []variables.Coordinate) (map[variables.Coo
 const unbuiltDigest = "0000000000000000000000000000000000000000000000000000000000000000"
 
 func scanManifest(ctx context.Context, dependencies Dependencies, cfg *project.Project, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, []string, error) {
-	declarations := variables.NewDeclarations(unread{}, variablescope.Of(cfg, env.GetTier(), ""))
+	declarations := variables.NewDeclarations(unread{}, variables.ScopeOf(cfg, env.GetTier(), ""))
 	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, out, out)
 	if err != nil {
 		return nil, nil, err

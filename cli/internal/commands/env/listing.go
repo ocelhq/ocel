@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -41,7 +40,7 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 		}
 		var environments []string
 		if opts.preview && overridden(resp.GetValues()) {
-			if environments, err = valuestore.ListEnvironmentNames(ctx, provider, cfg.Slug); err != nil {
+			if environments, err = variables.ListEnvironmentNames(ctx, provider, cfg.Slug); err != nil {
 				return err
 			}
 		}

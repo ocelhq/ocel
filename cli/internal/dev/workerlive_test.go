@@ -225,12 +225,12 @@ func TestDockerAWorkerStoppedForTheNextPassNeverReportsThatItExited(t *testing.T
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	workers.running = append(workers.running, process)
+	workers.running["worker"] = process
 	for !strings.Contains(stdout.String(), "detached") {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	workers.restart(ctx, map[string]string{})
+	workers.restart(ctx, map[string]string{}, nil)
 	<-process.exited
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {

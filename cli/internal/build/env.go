@@ -3,7 +3,7 @@ package build
 import (
 	"maps"
 
-	"github.com/ocelhq/ocel/cli/internal/clientenv"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -23,10 +23,10 @@ func (v AppVariables) SecretValues() []string {
 	return secrets
 }
 
-func SplitVariablesByClass(apps []clientenv.App, secrets map[string]map[string]string) map[string]AppVariables {
+func SplitVariablesByClass(apps []variables.ClientApp, secrets map[string]map[string]string) map[string]AppVariables {
 	byApp := make(map[string]AppVariables, len(apps))
 	for _, app := range apps {
-		values := AppVariables{Env: map[string]string{}, Live: map[string]string{}, PublicKeys: clientenv.PublicKeys(app.App, app.Declared)}
+		values := AppVariables{Env: map[string]string{}, Live: map[string]string{}, PublicKeys: variables.PublicKeys(app.App, app.Declared)}
 		for _, v := range app.Variables {
 			switch v.Class {
 			case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:

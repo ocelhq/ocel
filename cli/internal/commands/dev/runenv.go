@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -121,7 +120,7 @@ func forwardDeployed(ctx context.Context, dependencies Dependencies, p commands.
 func collectResources(ctx context.Context, dependencies Dependencies, p commands.ProviderRun, cfg *project.Project) ([]declaration.Resource, error) {
 	collecting := p.Run.Phase(progressv1.Phase_PHASE_BUILD).Child(cfg.Slug, progress.Collecting.Title("the resources "+cfg.Slug+" declares"))
 	said := collecting.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
-	declarations := variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
+	declarations := variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variables.AppsOf(cfg)})
 	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, said, said)
 	collecting.End(err)
 	return resources, err

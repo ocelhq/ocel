@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -599,7 +600,7 @@ func addressable(folder string) error {
 	if folder == "" {
 		return nil
 	}
-	return variables.ValidateFolder(folder)
+	return project.ValidateFolder(folder)
 }
 
 func queryCoordinate(r *http.Request) variables.Coordinate {

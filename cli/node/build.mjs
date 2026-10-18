@@ -33,6 +33,11 @@ await bundle(join(platformDir, "src/build/main.ts"), join(dist, "build/main.cjs"
   loader: { ".html": "text", ".node": "file" },
 });
 
+await bundle(join(platformDir, "src/discovery/runtime.ts"), join(dist, "discovery/runtime.mjs"), {
+  target: "node",
+  format: "esm",
+});
+
 await bundle(
   join(root, "frameworks/next/adapter/src/next-adapter.mts"),
   join(dist, "next-adapter/next-adapter.mjs"),

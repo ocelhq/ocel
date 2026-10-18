@@ -11,7 +11,6 @@ import (
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
 
-	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -228,7 +227,7 @@ func (s *Server) PublicKeys(apps []variables.App) []string {
 	}
 	var keys []string
 	for _, app := range apps {
-		keys = append(keys, clientenv.PublicKeys(app, declarations.Definitions())...)
+		keys = append(keys, variables.PublicKeys(app, declarations.Definitions())...)
 	}
 	slices.Sort(keys)
 	return slices.Compact(keys)

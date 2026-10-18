@@ -1,11 +1,10 @@
-package valuestore
+package variables
 
 import (
 	"reflect"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -23,12 +22,12 @@ func TestASyncedEnvSourceIsWhatTheProviderSaysItRead(t *testing.T) {
 		Present: []*variablestorev1.Cell{{Key: "STRIPE_KEY"}, {Folder: "/web", Key: "API_URL"}},
 	})
 
-	want := variables.EnvSource{
+	want := EnvSource{
 		ID:          "infisical:p-1/prod",
 		CanCreate:   true,
 		CanUpdate:   true,
 		URLs:        map[string]string{"": "https://infisical.example/root"},
-		Present:     []variables.Cell{{Key: "STRIPE_KEY"}, {Folder: "/web", Key: "API_URL"}},
+		Present:     []Cell{{Key: "STRIPE_KEY"}, {Folder: "/web", Key: "API_URL"}},
 		Credentials: []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"},
 	}
 	if !reflect.DeepEqual(synced, want) {

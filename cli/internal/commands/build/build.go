@@ -17,7 +17,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
@@ -25,7 +24,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -87,7 +85,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 	if err != nil {
 		return err
 	}
-	clients := clientenv.AppsOf(cfg, declarations.Definitions(), builtInValues(cfg, appurl.FormatProductionURLs(cfg)))
+	clients := variables.ClientAppsOf(cfg, declarations.Definitions(), builtInValues(cfg, appurl.FormatProductionURLs(cfg)))
 	releaseOutput, err := workdir.LockBuildOutput(ctx, cfg.Dir, func() {
 		phase.Say("Waiting for another ocel run in " + cfg.Dir + " to finish with " + buildoutput.Dir)
 	})
@@ -99,7 +97,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 	if err != nil {
 		return err
 	}
-	if err := clientenv.Record(cfg.Dir, clients); err != nil {
+	if err := variables.RecordClientValues(cfg.Dir, clients); err != nil {
 		return err
 	}
 	phase.End(nil)
@@ -112,7 +110,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 
 func collectDeclarations(ctx context.Context, dependencies Dependencies, cfg *project.Project, phase *run.Span) (*variables.Declarations, build.HostedWorkers, error) {
 	said := phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
-	declarations := variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
+	declarations := variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variables.AppsOf(cfg)})
 	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, said, said)
 	if err != nil {
 		return nil, nil, err
