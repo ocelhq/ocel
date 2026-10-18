@@ -22,7 +22,7 @@ func TestRetiringTakesDownTheWorkersOfAnAppNoLongerDeployed(t *testing.T) {
 
 	machine := &box{}
 	p, store := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	worker, _ := recordedWorker(t, store, "worker")
@@ -64,7 +64,7 @@ func TestRetiringKeepsTheWorkersOfALiveApp(t *testing.T) {
 
 	machine := &box{}
 	p, store := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.LiveApp{{App: "web", Workers: []string{"worker", "ledger"}}}}
@@ -90,7 +90,7 @@ func TestRetiringTakesDownTheWorkersALiveAppNoLongerHosts(t *testing.T) {
 
 	machine := &box{}
 	p, store := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	dropped, _ := recordedWorker(t, store, "ledger")

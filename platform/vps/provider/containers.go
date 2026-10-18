@@ -53,9 +53,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 				"app %s sets %s, which ocel's runtime reserves: rename it", app.App, owned)
 		}
 	}
-	if progress != nil {
-		progress.Say("Starting " + app.App + "'s container " + physical)
-	}
+	progress.Say("Starting " + app.App + "'s container " + physical)
 	healthPath, discovered := app.HealthCheckPath, ""
 	if healthPath == "" {
 		healthPath, discovered = app.DiscoveredHealthCheckPath, app.DiscoveredHealthCheckPath
@@ -72,7 +70,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		if discovered, err = p.host.FindHealthPath(ctx, host.HealthPathSearch{App: app.App, Target: target, Window: host.DeployWindow}, progress); err != nil {
 			return nil, err
 		}
-	case discovered != "" && progress != nil:
+	case discovered != "":
 		progress.Say(app.App + " answers its health check on " + discovered + ", found by probing on an earlier release")
 	}
 	if err := p.host.Promote(ctx, spec.Ref.Tier, spec.Ref.Project, app.App, app.Image); err != nil {
@@ -98,9 +96,7 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, 
 		if container.Physical == "" {
 			continue
 		}
-		if progress != nil {
-			progress.Say("Removing " + container.Name + "'s container " + container.Physical)
-		}
+		progress.Say("Removing " + container.Name + "'s container " + container.Physical)
 		if err := p.host.TakeDown(ctx, ref.Tier, container.Physical); err != nil {
 			return err
 		}

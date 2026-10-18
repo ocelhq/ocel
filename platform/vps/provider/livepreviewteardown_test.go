@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -141,7 +142,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 			HealthCheckPath: healthPath,
 		},
 	}
-	provisioned, err := p.Stacks().Provision(ctx, spec, nil)
+	provisioned, err := p.Stacks().Provision(ctx, spec, progress.Discard())
 	if err != nil {
 		t.Fatalf("Provision(%s) = %v", pointer, err)
 	}

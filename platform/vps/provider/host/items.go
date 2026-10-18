@@ -116,6 +116,7 @@ var kindNouns = map[string]string{
 	KindUser:            "user",
 	KindSealKey:         "seal key",
 	KindUnit:            "systemd unit",
+	KindLiveRestore:     "Docker's live-restore setting in",
 	KindNetwork:         "Docker network",
 	KindContainer:       "container",
 	KindProxyConfig:     "proxy config",
@@ -170,6 +171,8 @@ func (i Item) command() string {
 		return i.mint()
 	case KindEngine:
 		return engineCommand()
+	case KindLiveRestore:
+		return liveRestoreCommand(daemonConfig)
 	case KindUnit:
 		return unitCommand(i)
 	case KindNetwork:
@@ -195,6 +198,8 @@ func (i Item) probe() string {
 		return sealSurvey(i)
 	case KindEngine:
 		return engineProbe()
+	case KindLiveRestore:
+		return liveRestoreProbe(daemonConfig)
 	case KindUnit:
 		return unitProbe(i)
 	case KindNetwork:

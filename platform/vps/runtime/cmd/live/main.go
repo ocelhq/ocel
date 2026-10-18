@@ -62,6 +62,7 @@ func run(argv []string, errs *os.File) int {
 		Tiers:     []environment.Tier{environment.TierProduction, environment.TierPreview},
 		Cipher:    live.Cipher{Root: *tierRoot},
 		Addresses: inspect,
+		Mounts:    inspect,
 		Open:      queues.OpenPgmq,
 	}
 	go engines.Run(ctx)

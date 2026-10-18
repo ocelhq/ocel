@@ -63,7 +63,7 @@ func (l loaded) load(ctx context.Context, push provider.ImagePush, progress prog
 		return err
 	}
 	echo(progress, said)
-	if progress != nil && (took >= slowTransfer || sent.bytes >= largeTransfer) {
+	if took >= slowTransfer || sent.bytes >= largeTransfer {
 		progress.Warn(fmt.Sprintf(
 			"Sending %s's image to %s took %s for %d MB. With no registry every deploy sends the whole image over SSH: name a `registry` and the box pulls only the layers that changed. %s",
 			push.App, l.at, took.Round(time.Second), sent.bytes/1_000_000, registryDocs))

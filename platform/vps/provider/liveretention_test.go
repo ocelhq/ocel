@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -64,7 +65,7 @@ func sweepSpec(t *testing.T, tag string) provider.StackSpec {
 
 func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 	t.Helper()
-	if _, err := p.ProvisionContainers(context.Background(), sweepSpec(t, tag), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), sweepSpec(t, tag), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers(%s) = %v", tag, err)
 	}
 }
@@ -87,7 +88,7 @@ func sweepImages(t *testing.T, vm machine) string {
 
 func sweeping(t *testing.T, p *vps.Provider, tag string) {
 	t.Helper()
-	if err := p.ReconcileImages(context.Background(), sweepSpec(t, tag).Ref, sweepApp, sweepAt(tag), nil, nil); err != nil {
+	if err := p.ReconcileImages(context.Background(), sweepSpec(t, tag).Ref, sweepApp, sweepAt(tag), nil, progress.Discard()); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 }
@@ -157,7 +158,7 @@ func TestLiveAFailedReleaseSweepsItsOwnImage(t *testing.T) {
 	spec := sweepSpec(t, "leak")
 	spec.App.Values.ContainerEnv = map[string]string{originguard.HealthPathVar: "/"}
 	stacks := p.Stacks()
-	_, err := stacks.Provision(context.Background(), spec, nil)
+	_, err := stacks.Provision(context.Background(), spec, progress.Discard())
 	if err == nil {
 		t.Fatal("Provision() of an app setting a variable the runtime reserves succeeded, and this test needs the failure path")
 	}

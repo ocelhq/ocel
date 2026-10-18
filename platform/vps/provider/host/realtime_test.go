@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -27,7 +28,7 @@ func TestABootstrapPlacesTheRealtimeGatewayRootOwnedForItsContainersToMountReadO
 	box := bootstrappedOn(t, tier)
 	box.installed[tier] = slices.DeleteFunc(box.installed[tier], func(item Item) bool { return item.Name == RealtimeBinary })
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	if box.at(RealtimeBinary) < 0 {

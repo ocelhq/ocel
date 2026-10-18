@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
@@ -115,7 +116,7 @@ func TestTheLastDestroyBehindYourTraefikTakesOcelYmlOutOfItsDirectoryBeforeTheSw
 	}) {
 		t.Errorf("the removal plan %+v leaves %s behind in your Traefik's directory", plan.Groups[0].Changes, coolifyFile)
 	}
-	if err := bootstrap.Remove(context.Background(), tier, nil); err != nil {
+	if err := bootstrap.Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := box.commands()

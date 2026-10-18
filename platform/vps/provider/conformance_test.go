@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -176,10 +177,10 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 	}
 
 	var refused refusal.Refusal
-	if _, err := release.Plan(ctx, spec, nil); !errors.As(err, &refused) {
+	if _, err := release.Plan(ctx, spec, progress.Discard()); !errors.As(err, &refused) {
 		t.Errorf("Plan() of a resource this provider serves none of = %v, want a refusal", err)
 	}
-	if _, err := release.Provision(ctx, spec, nil); !errors.As(err, &refused) {
+	if _, err := release.Provision(ctx, spec, progress.Discard()); !errors.As(err, &refused) {
 		t.Errorf("Provision() of a resource this provider serves none of = %v, want a refusal rather than a release that reads as done", err)
 	}
 }

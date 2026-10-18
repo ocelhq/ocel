@@ -90,7 +90,7 @@ func storeContainer(in resources.ProvisionRequest) host.ResourceContainer {
 		Volume:     host.Volume{Path: storeData},
 		Credential: host.Credential{Env: storeSecretEnv},
 		Ready:      []string{"curl", "-fsS", "http://127.0.0.1:" + storePort + storeHealthPath},
-		Backup:     host.BackupVolume,
+		Backup:     host.BackupStore,
 	}
 }
 
@@ -256,9 +256,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	if progress != nil {
-		progress.Say("Provisioning bucket " + in.Resource.Name + " in object store " + spec.Name)
-	}
+	progress.Say("Provisioning bucket " + in.Resource.Name + " in object store " + spec.Name)
 
 	var sessions host.BucketState
 	started := false
@@ -527,18 +525,14 @@ func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, bindin
 		return err
 	}
 	if root.secret == "" {
-		if progress != nil {
-			progress.Say("Skipped removing bucket " + binding.Name + ": the box keeps no credential for object store " + store)
-		}
+		progress.Say("Skipped removing bucket " + binding.Name + ": the box keeps no credential for object store " + store)
 		return nil
 	}
 	bucket := binding.Properties[provider.PropertyBucket]
 	if bucket == "" {
 		bucket = storeBucketName(ref, binding.Name)
 	}
-	if progress != nil {
-		progress.Say("Removing bucket " + binding.Name + " and its objects from object store " + store)
-	}
+	progress.Say("Removing bucket " + binding.Name + " and its objects from object store " + store)
 	return p.host.RemoveBucket(ctx, host.BucketRef{
 		Tier:        ref.Tier,
 		Project:     ref.Project,
@@ -580,9 +574,7 @@ func (p *Provider) lastBucket(ctx context.Context, ref provider.StackRef) (bool,
 
 func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	store := storeName(ref)
-	if progress != nil {
-		progress.Say("Removing object store " + store + ": no bucket in this environment uses it any more")
-	}
+	progress.Say("Removing object store " + store + ": no bucket in this environment uses it any more")
 	if err := p.host.UnrouteApp(ctx, storeRoute(ref, store).RouteKey); err != nil {
 		return err
 	}

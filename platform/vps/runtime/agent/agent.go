@@ -322,6 +322,37 @@ func (d *Docker) Address(ctx context.Context, network, container string) (string
 	return "", fmt.Errorf("%s holds no address on %s", container, network)
 }
 
+func (d *Docker) MountSource(ctx context.Context, container, destination string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(container)+"/json", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := (&http.Client{Transport: d.transport}).Do(req)
+	if err != nil {
+		return "", fmt.Errorf("ask the daemon at %s about %s: %w", d.host.Address, container, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("the daemon at %s answered %q about %s: %s", d.host.Address, resp.Status, container, strings.TrimSpace(string(said)))
+	}
+	var inspected struct {
+		Mounts []struct {
+			Source      string `json:"Source"`
+			Destination string `json:"Destination"`
+		} `json:"Mounts"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, inspectLimit)).Decode(&inspected); err != nil {
+		return "", fmt.Errorf("read what the daemon says about %s: %w", container, err)
+	}
+	for _, mount := range inspected.Mounts {
+		if mount.Destination == destination && mount.Source != "" {
+			return mount.Source, nil
+		}
+	}
+	return "", fmt.Errorf("%s mounts nothing at %s", container, destination)
+}
+
 func (d *Docker) Space(ctx context.Context, volume string) (uint64, uint64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/volumes/"+url.PathEscape(volume), nil)
 	if err != nil {

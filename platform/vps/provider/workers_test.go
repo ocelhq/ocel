@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -53,7 +54,7 @@ func TestEachWorkerJoiningAnAppRunsAsASecondContainerFromItsImage(t *testing.T) 
 
 	machine := &box{}
 	p, store := recording(machine)
-	started, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil)
+	started, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -89,7 +90,7 @@ func TestAWorkerIsHandedItsNameAndTheAppsValuesButNeverTheEdgesSecret(t *testing
 
 	machine := &box{}
 	p, store := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
@@ -114,7 +115,7 @@ func TestAWorkerNeverReachesTheRoutingTable(t *testing.T) {
 
 	machine := &box{}
 	p, store := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
 		t.Fatal(err)
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
@@ -130,7 +131,7 @@ func TestANewReleaseTakesDownTheWorkersItReplacesAndLeavesTheOnesNoLongerDeclare
 
 	machine := &box{}
 	p, store := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
 		t.Fatal(err)
 	}
 	old, _ := recordedWorker(t, store, "worker")
@@ -140,7 +141,7 @@ func TestANewReleaseTakesDownTheWorkersItReplacesAndLeavesTheOnesNoLongerDeclare
 	next.BuildID = "fedcba9876543210fedcba9876543210"
 	next.Workers = next.Workers[:1]
 	before := len(machine.commands())
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, next), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, next), progress.Discard()); err != nil {
 		t.Fatal(err)
 	}
 	current, _ := recordedWorker(t, store, "worker")
@@ -165,19 +166,19 @@ func TestRemovingARetiredReleaseLeavesTheWorkersANewerOneRuns(t *testing.T) {
 	machine := &box{}
 	p, store := recording(machine)
 	first := aStack(t, aWorkerApp())
-	if _, err := p.ProvisionContainers(context.Background(), first, nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), first, progress.Discard()); err != nil {
 		t.Fatal(err)
 	}
 	next := aWorkerApp()
 	next.BuildID = "fedcba9876543210fedcba9876543210"
 	second := aStack(t, next)
 	second.Ref.Name.Release = naming.NewReleaseToken(next.BuildID, "")
-	if _, err := p.ProvisionContainers(context.Background(), second, nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), second, progress.Discard()); err != nil {
 		t.Fatal(err)
 	}
 	current, _ := recordedWorker(t, store, "worker")
 
-	if err := p.RemoveContainers(context.Background(), first.Ref, nil, nil, nil); err != nil {
+	if err := p.RemoveContainers(context.Background(), first.Ref, nil, nil, progress.Discard()); err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
 	if after, found := recordedWorker(t, store, "worker"); !found || after != current {
@@ -185,7 +186,7 @@ func TestRemovingARetiredReleaseLeavesTheWorkersANewerOneRuns(t *testing.T) {
 	}
 
 	before := len(machine.commands())
-	if err := p.RemoveContainers(context.Background(), second.Ref, nil, nil, nil); err != nil {
+	if err := p.RemoveContainers(context.Background(), second.Ref, nil, nil, progress.Discard()); err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
 	if !slices.ContainsFunc(machine.commands()[before:], func(command string) bool {
@@ -203,7 +204,7 @@ func TestAnAppNoWorkerJoinsStartsNoWorker(t *testing.T) {
 
 	machine := &box{}
 	p, _ := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, anApp()), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, anApp()), progress.Discard()); err != nil {
 		t.Fatal(err)
 	}
 	runs := 0
@@ -222,7 +223,7 @@ func TestAWorkerAdmitsOnlyDeliveriesSignedWithItsEnvironmentsDeliverySecret(t *t
 
 	machine := &box{}
 	p, store := recording(machine)
-	if _, err := p.ProvisionTopic(context.Background(), aTask(t, "receipt"), nil); err != nil {
+	if _, err := p.ProvisionTopic(context.Background(), aTask(t, "receipt"), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
 	entry, err := store.Read(context.Background(), live.QueueDatabaseKey(environment.TierProduction, "shop", "prod"))
@@ -242,7 +243,7 @@ func TestAWorkerAdmitsOnlyDeliveriesSignedWithItsEnvironmentsDeliverySecret(t *t
 		t.Fatalf("the sealed delivery secret %q opens to nothing", sealed)
 	}
 
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")

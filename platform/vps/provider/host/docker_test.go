@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -46,8 +47,13 @@ func daemon(t *testing.T, fake engine) string {
 		if fake.server != "" {
 			answer = "printf '%s\\n' " + quoted(fake.server)
 		}
+		restoring := "exit 1"
+		if fake.server != "" {
+			restoring = "printf 'true inactive\\n'"
+		}
 		write(dockerEngine, `case "$1" in
 version) `+answer+` ;;
+info) `+restoring+` ;;
 esac
 exit 0`)
 		write(dockerDaemon, "printf 'Docker version %s, build 38b7060\\n' "+quoted(fake.dockerd))
@@ -79,7 +85,7 @@ esac`
 		manager = "exit 126"
 	}
 	write("systemctl", manager)
-	for _, tool := range []string{"sha256sum", "cut", "timeout"} {
+	for _, tool := range []string{"sha256sum", "cut", "timeout", "grep"} {
 		found, err := exec.LookPath(tool)
 		if err != nil {
 			t.Fatal(err)
@@ -109,7 +115,7 @@ func engineProbed(t *testing.T, fake engine) (map[string]string, error) {
 func engineRendered(t *testing.T, fake engine) string {
 	t.Helper()
 	dir := daemon(t, fake)
-	cmd := exec.Command("/bin/sh", "-c", engineProbe()+"\n"+unitProbe(unitItem()))
+	cmd := exec.Command("/bin/sh", "-c", engineProbe()+"\n"+unitProbe(unitItem())+"\n"+liveRestoreProbe(daemonConfig))
 	cmd.Env = []string{"PATH=" + dir}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -453,7 +459,7 @@ func TestAnApplyOverAnAdoptedEngineNeverInstallsDockerAndStillStartsItsUnit(t *t
 		}
 	}
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	if at := box.at(dockerSource); at >= 0 {
@@ -542,7 +548,7 @@ func TestABootstrapOverAnEngineOcelCannotRunOnStopsBeforeItsFirstWrite(t *testin
 
 	boot := NewBootstrap(box.host(), testVendor, "shop")
 	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
-	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil)
+	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard())
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
 		if refused := refusalOf(t, err, refusal.CodeNotReady); !strings.Contains(refused.Message, "docker 26.1.4") {
 			t.Errorf("%s refused with %q, want it to name the docker it will not run on", step, refused.Message)

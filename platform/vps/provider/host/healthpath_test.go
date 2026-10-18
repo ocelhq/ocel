@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -44,7 +45,7 @@ func TestTheBoxIsAskedForTheHealthPathCandidatesInOrderAtTheAppsTarget(t *testin
 	t.Parallel()
 
 	box := searchedOn(session.Result{Stdout: answeredLines("/up 404", "/health 200")})
-	if _, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), nil); err != nil {
+	if _, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard()); err != nil {
 		t.Fatalf("FindHealthPath() = %v", err)
 	}
 	asked := box.at(quoted("find-health-path"))
@@ -81,7 +82,7 @@ func TestAnAppAnsweringEveryCandidateAsAbsentIsRefusedWithWhatEachAnsweredAndHow
 	t.Parallel()
 
 	box := searchedOn(session.Result{Code: 6, Stdout: answeredLines("/up 404", "/health 404", "/healthz 405", "/ 404")})
-	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), nil)
+	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("FindHealthPath() = %v, want an invalid refusal", err)
@@ -97,7 +98,7 @@ func TestAnAppThatNeverAnswersIsRefusedWithItsStateAndLogs(t *testing.T) {
 	t.Parallel()
 
 	box := searchedOn(session.Result{Code: 4, Stderr: nextTarget + " never answered /up within 1m0s"})
-	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), nil)
+	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("FindHealthPath() = %v, want a not-ready refusal", err)
@@ -131,7 +132,7 @@ func TestASearchThatFindsNoHealthPathRemovesTheContainerItProbedWhenNothingRoute
 	t.Parallel()
 
 	box := searchedOnIdling(session.Result{Stdout: answeredLines("/up 404", "/health 404", "/healthz 404", "/ 405"), Code: 6}, true)
-	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), nil)
+	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
 	if err == nil {
 		t.Fatal("FindHealthPath() = nil, want every path absent refused")
 	}
@@ -148,7 +149,7 @@ func TestASearchThatNeverHearsTheAppRemovesTheContainerItProbedWhenNothingRoutes
 	t.Parallel()
 
 	box := searchedOnIdling(session.Result{Stderr: "never answered", Code: 4}, true)
-	if _, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), nil); err == nil {
+	if _, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard()); err == nil {
 		t.Fatal("FindHealthPath() = nil, want an app that never answered refused")
 	}
 	if box.at(removes(containerOf(nextTarget))) < 0 {
@@ -160,7 +161,7 @@ func TestASearchThatFindsNoHealthPathLeavesAContainerTheProxyStillUses(t *testin
 	t.Parallel()
 
 	box := searchedOnIdling(session.Result{Stdout: answeredLines("/up 404", "/health 404", "/healthz 404", "/ 404"), Code: 6}, false)
-	if _, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), nil); err == nil {
+	if _, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard()); err == nil {
 		t.Fatal("FindHealthPath() = nil, want every path absent refused")
 	}
 	if box.at(removes(containerOf(nextTarget))) >= 0 {

@@ -20,17 +20,40 @@ type backupBench struct {
 	bin  string
 }
 
+const benchStoreSecret = "s3cr3t-of-the-store"
+
 func backupsOn(t *testing.T, labelled ...string) backupBench {
 	t.Helper()
 	bench := backupBench{root: t.TempDir(), bin: t.TempDir()}
+	labels := filepath.Join(bench.bin, "labels")
 	docker := "#!/bin/sh\n" +
 		"printf '%s\\n' \"$*\" >>" + filepath.Join(bench.bin, "log") + "\n" +
+		"for name; do :; done\n" +
+		"tab=$(printf '\\t')\n" +
 		"case \"$1\" in\n" +
-		"ps) cat " + filepath.Join(bench.bin, "labelled") + " ;;\n" +
-		"inspect) printf '%s\\n' \"$(cat " + filepath.Join(bench.bin, "mounted") + ")\" ;;\n" +
+		"ps) cut -f1,2 " + filepath.Join(bench.bin, "labelled") + " ;;\n" +
+		"inspect)\n" +
+		"  line=$(grep -m1 \"^$name$tab\" " + labels + ") || { echo \"Error: No such container: $name\" >&2; exit 1; }\n" +
+		"  case \"$*\" in\n" +
+		"  *ocel.backup*) printf '%s\\n' \"$line\" | cut -f4 ;;\n" +
+		"  *ocel.resource*) printf '%s\\n' \"$line\" | cut -f3 ;;\n" +
+		"  *ocel.database-owner*) printf '%s\\n' \"$line\" | cut -s -f5 ;;\n" +
+		"  *.Mounts*) cat " + filepath.Join(bench.bin, "mounted") + "; echo ;;\n" +
+		"  *.Config.Env*) printf '%s\\n' RUSTFS_ACCESS_KEY=ocel RUSTFS_SECRET_KEY=" + benchStoreSecret + " RUSTFS_ADDRESS=:9000 ;;\n" +
+		"  *Networks*) echo ocel-shop-production ;;\n" +
+		"  esac ;;\n" +
+		"run)\n" +
+		"  prev=''\n" +
+		"  for arg; do\n" +
+		"    case \"$prev\" in --env-file) cp \"$arg\" " + filepath.Join(bench.bin, "copier-env") + " ;; esac\n" +
+		"    case \"$arg\" in type=bind,src=*,dst=/backup) src=${arg#type=bind,src=}; src=${src%,dst=/backup}; mkdir -p \"$src/current/uploads\"; printf object >\"$src/current/uploads/object\" ;; esac\n" +
+		"    prev=$arg\n" +
+		"  done\n" +
+		"  [ ! -f " + filepath.Join(bench.bin, "copier-fails") + " ] || exit 1 ;;\n" +
+		"start) [ ! -f " + filepath.Join(bench.bin, "start-fails") + " ] || { rm -f " + filepath.Join(bench.bin, "start-fails") + "; exit 1; } ;;\n" +
 		"exec)\n" +
 		"  for arg in \"$@\"; do case $arg in\n" +
-		"    pg_dump) if [ -f " + filepath.Join(bench.bin, "broken") + " ]; then printf 'half a du'; echo 'pg_dump: connection refused' >&2; exit 1; fi\n" +
+		"    pg_dump) if [ -f " + filepath.Join(bench.bin, "broken") + " ] || [ -f " + filepath.Join(bench.bin, "broken-") + "\"$2\" ]; then printf 'half a du'; echo 'pg_dump: connection refused' >&2; exit 1; fi\n" +
 		"             printf 'dump of %s' \"$2\"; exit 0 ;;\n" +
 		"    pg_dumpall) printf 'roles of %s' \"$2\"; exit 0 ;;\n" +
 		"    pg_restore) cat >" + filepath.Join(bench.bin, "restored") + "; exit 0 ;;\n" +
@@ -42,13 +65,16 @@ func backupsOn(t *testing.T, labelled ...string) backupBench {
 		executable(t, filepath.Join(bench.bin, name), body)
 	}
 	bench.stubs(t, "labelled", strings.Join(labelled, "\n")+"\n")
+	bench.stubs(t, "labels", strings.Join(append([]string{"shop-main-pg\tproduction\tmain\tpg", "shop-cache-kv\tproduction\tcache\tkv", "shop-store-s3\tproduction\tstore\ts3"}, labelled...), "\n")+"\n")
 	bench.stubs(t, "free", "1000000000")
 	mounted := filepath.Join(bench.root, "volume")
-	if err := os.MkdirAll(mounted, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(mounted, "appendonlydir"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(mounted, "object"), []byte("bytes"), 0o600); err != nil {
-		t.Fatal(err)
+	for name, body := range map[string]string{"dump.rdb": "snapshot valkey saved", "appendonlydir/appendonly.aof.3.incr.aof": "writes since"} {
+		if err := os.WriteFile(filepath.Join(mounted, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	bench.stubs(t, "mounted", mounted)
 	return bench
@@ -100,7 +126,7 @@ func TestADumpLandsWholeUnderTheContainerItCameFromAndSaysWhere(t *testing.T) {
 	t.Parallel()
 
 	bench := backupsOn(t)
-	said, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg", "main")
+	said, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg")
 	if code != 0 {
 		t.Fatalf("dump exited %d: %s", code, stderr)
 	}
@@ -127,12 +153,12 @@ func TestADumpThatFailsLeavesNothingBehindAndKeepsWhatWasThere(t *testing.T) {
 	t.Parallel()
 
 	bench := backupsOn(t)
-	if _, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg", "main"); code != 0 {
+	if _, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg"); code != 0 {
 		t.Fatalf("the first dump exited %d: %s", code, stderr)
 	}
 	before := bench.kept(t, "production", "shop-main-pg")
 	bench.stubs(t, "broken", "")
-	_, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg", "main")
+	_, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg")
 	if code == 0 {
 		t.Fatal("a pg_dump that failed was reported as a backup taken")
 	}
@@ -158,7 +184,7 @@ func TestOnlyTheNewestDumpsAreKept(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg", "main"); code != 0 {
+	if _, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg"); code != 0 {
 		t.Fatalf("dump exited %d: %s", code, stderr)
 	}
 	kept := slices.DeleteFunc(bench.kept(t, "production", "shop-main-pg"), func(name string) bool { return !strings.HasSuffix(name, ".dump") })
@@ -185,7 +211,7 @@ func TestADumpIsRefusedWhenTheDiskHasNoRoomForAnotherOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	bench.stubs(t, "free", "4096")
-	_, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg", "main")
+	_, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg")
 	if code == 0 {
 		t.Fatal("a dump was taken onto a disk with room for less than two of the last one, and a full disk takes the database down with it")
 	}
@@ -194,14 +220,14 @@ func TestADumpIsRefusedWhenTheDiskHasNoRoomForAnotherOne(t *testing.T) {
 	}
 }
 
-func TestASweepDumpsEveryResourceThatAsksAndOneFailureStopsNoOther(t *testing.T) {
+func TestASweepBacksUpEveryResourceThatAsksEachTheWayItsStoreCopiesOnline(t *testing.T) {
 	t.Parallel()
 
 	bench := backupsOn(t,
 		"shop-main-pg\tproduction\tmain\tpg",
 		"blog-posts-pg\tpreview\tposts\tpg",
-		"shop-store-s3\tproduction\tstore\tvol",
-		"shop-web-app\tproduction\tweb\t",
+		"shop-cache-kv\tproduction\tcache\tkv",
+		"shop-store-s3\tproduction\tstore\ts3",
 	)
 	if _, stderr, code := bench.runs(t, "sweep"); code != 0 {
 		t.Fatalf("sweep exited %d: %s", code, stderr)
@@ -212,12 +238,38 @@ func TestASweepDumpsEveryResourceThatAsksAndOneFailureStopsNoOther(t *testing.T)
 	if got := bench.kept(t, "preview", "blog-posts-pg"); len(got) != 2 {
 		t.Errorf("blog's postgres has %v", got)
 	}
-	store := bench.kept(t, "production", "shop-store-s3")
-	if len(store) != 1 || !strings.HasSuffix(store[0], ".tar") {
-		t.Errorf("shop's store has %v, want a tar of the volume it mounts", store)
+	if got := bench.kept(t, "production", "shop-cache-kv"); len(got) != 1 || !strings.HasSuffix(got[0], ".rdb") {
+		t.Errorf("shop's kv has %v, want the one snapshot Valkey saved", got)
 	}
-	if got := bench.kept(t, "production", "shop-web-app"); len(got) != 0 {
-		t.Errorf("a container that asks for no dump has %v", got)
+	if got := bench.kept(t, "production", "shop-store-s3"); !slices.Contains(got, "current") {
+		t.Errorf("shop's store has %v, want the copy of its objects", got)
+	}
+	for _, line := range bench.drove(t) {
+		if strings.HasPrefix(line, "pause ") || strings.HasPrefix(line, "stop ") {
+			t.Errorf("a backup ran `docker %s`, and the resource stopped answering for as long as its copy took", line)
+		}
+	}
+}
+
+func TestASweepWhoseFirstTwoBackupsFailStillBacksUpEveryOtherResource(t *testing.T) {
+	t.Parallel()
+
+	bench := backupsOn(t,
+		"shop-a-pg\tproduction\ta\tpg",
+		"shop-b-pg\tproduction\tb\tpg",
+		"shop-c-pg\tproduction\tc\tpg",
+		"shop-d-pg\tproduction\td\tpg",
+	)
+	bench.stubs(t, "broken-shop-a-pg", "")
+	bench.stubs(t, "broken-shop-b-pg", "")
+	_, stderr, code := bench.runs(t, "sweep")
+	if code == 0 {
+		t.Errorf("a sweep in which two backups failed exited 0, so the timer reports a night with no backup of them as a success: %s", stderr)
+	}
+	for _, container := range []string{"shop-c-pg", "shop-d-pg"} {
+		if got := bench.kept(t, "production", container); len(got) != 2 {
+			t.Errorf("%s has %v after a sweep in which two other backups failed, so one night's failures cost every backup after them", container, got)
+		}
 	}
 }
 
@@ -230,36 +282,143 @@ func (b backupBench) drove(t *testing.T) []string {
 	return strings.Split(strings.TrimSpace(string(raw)), "\n")
 }
 
-func TestAVolumeIsCopiedWhileNothingIsWritingToIt(t *testing.T) {
+func TestAStoreIsCopiedObjectByObjectOverItsOwnNetworkWithItsCredentialOffTheCommandLine(t *testing.T) {
 	t.Parallel()
 
-	bench := backupsOn(t, "shop-store-s3\tproduction\tstore\tvol")
-	if _, stderr, code := bench.runs(t, "sweep"); code != 0 {
-		t.Fatalf("sweep exited %d: %s", code, stderr)
+	bench := backupsOn(t)
+	said, stderr, code := bench.runs(t, "production", "dump", "shop-store-s3")
+	if code != 0 {
+		t.Fatalf("dump exited %d: %s", code, stderr)
 	}
-	drove := bench.drove(t)
-	paused := slices.Index(drove, "pause shop-store-s3")
-	unpaused := slices.Index(drove, "unpause shop-store-s3")
-	if paused < 0 || unpaused < 0 {
-		t.Fatalf("the store kept serving while its volume was copied, so the tar contains a half-written object:\n%s",
-			strings.Join(drove, "\n"))
+	dir := filepath.Join(bench.root, "production", "backups", "shop-store-s3")
+	if said != filepath.Join(dir, "current") {
+		t.Errorf("dump said %q, want the copy it keeps current", said)
 	}
-	if unpaused < paused {
-		t.Errorf("the store was unpaused before it was paused:\n%s", strings.Join(drove, "\n"))
+	var copied string
+	for _, line := range bench.drove(t) {
+		if strings.HasPrefix(line, "run ") {
+			copied = line
+		}
+	}
+	for _, want := range []string{"--network ocel-shop-production", StoreCopierImage, "sync store: /backup/current --backup-dir /backup/2", "--cap-drop ALL"} {
+		if !strings.Contains(copied, want) {
+			t.Errorf("the copy ran `docker %s`, want it to hold %q", copied, want)
+		}
+	}
+	if strings.Contains(copied, benchStoreSecret) {
+		t.Errorf("the store's secret is on the copy's command line, where every process on the box reads it: %s", copied)
+	}
+	env, err := os.ReadFile(filepath.Join(bench.bin, "copier-env"))
+	if err != nil || !strings.Contains(string(env), "RCLONE_CONFIG_STORE_SECRET_ACCESS_KEY="+benchStoreSecret) {
+		t.Errorf("the copy was handed %q, and without the store's secret it signs nothing it reads", env)
+	}
+	if body, _ := os.ReadFile(filepath.Join(said, "uploads", "object")); string(body) != "object" {
+		t.Errorf("the copy holds %q", body)
 	}
 }
 
-func TestAVolumeCopyThatFailsStillStartsTheStoreAgain(t *testing.T) {
+func TestAStoreCopyThatFailsIsNotReportedAsABackup(t *testing.T) {
 	t.Parallel()
 
-	bench := backupsOn(t, "shop-store-s3\tproduction\tstore\tvol")
-	bench.stubs(t, "mounted", filepath.Join(bench.root, "nothing-mounted-here"))
-	if _, _, code := bench.runs(t, "sweep"); code == 0 {
-		t.Fatal("a tar of a directory that is not there was reported as a backup")
+	bench := backupsOn(t)
+	bench.stubs(t, "copier-fails", "")
+	if _, _, code := bench.runs(t, "production", "dump", "shop-store-s3"); code == 0 {
+		t.Fatal("a copy that failed was reported as a backup")
 	}
-	if !slices.Contains(bench.drove(t), "unpause shop-store-s3") {
-		t.Fatalf("a failed copy left the store paused, and a paused store answers nothing:\n%s",
-			strings.Join(bench.drove(t), "\n"))
+}
+
+func TestAKVBackupIsTheSnapshotValkeySavedTakenWithoutStoppingIt(t *testing.T) {
+	t.Parallel()
+
+	bench := backupsOn(t)
+	said, stderr, code := bench.runs(t, "production", "dump", "shop-cache-kv")
+	if code != 0 {
+		t.Fatalf("dump exited %d: %s", code, stderr)
+	}
+	if body, _ := os.ReadFile(said); string(body) != "snapshot valkey saved" {
+		t.Errorf("the backup holds %q, want the snapshot Valkey saved", body)
+	}
+	if err := os.Remove(filepath.Join(bench.root, "volume", "dump.rdb")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, code := bench.runs(t, "production", "dump", "shop-cache-kv"); code == 0 {
+		t.Error("a store that has saved no snapshot was reported as backed up")
+	}
+}
+
+func TestAKVRestoreLoadsTheSnapshotAsTheBaseOfTheAppendOnlyFileValkeyReadsFirst(t *testing.T) {
+	t.Parallel()
+
+	bench := backupsOn(t)
+	snapshot := filepath.Join(bench.root, "kept.rdb")
+	if err := os.WriteFile(snapshot, []byte("restored snapshot"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	said, stderr, code := bench.runs(t, "production", "restore", "shop-cache-kv", snapshot)
+	if code != 0 {
+		t.Fatalf("restore exited %d: %s", code, stderr)
+	}
+	volume := filepath.Join(bench.root, "volume")
+	if base, _ := os.ReadFile(filepath.Join(volume, "appendonlydir", "appendonly.aof.1.base.rdb")); string(base) != "restored snapshot" {
+		t.Errorf("the append-only base holds %q, and Valkey with appendonly on loads that, never dump.rdb", base)
+	}
+	if manifest, _ := os.ReadFile(filepath.Join(volume, "appendonlydir", "appendonly.aof.manifest")); string(manifest) != "file appendonly.aof.1.base.rdb seq 1 type b\n" {
+		t.Errorf("the manifest reads %q", manifest)
+	}
+	if _, err := os.Stat(filepath.Join(volume, "appendonlydir", "appendonly.aof.3.incr.aof")); err == nil {
+		t.Error("the writes since the old base stayed beside the restored one, and Valkey would replay them over it")
+	}
+	aside := strings.TrimPrefix(said, "what shop-cache-kv held before the restore is at ")
+	if kept, _ := os.ReadFile(filepath.Join(aside, "appendonlydir", "appendonly.aof.3.incr.aof")); string(kept) != "writes since" {
+		t.Errorf("what the store held before the restore is gone: %q says it is at %s", said, aside)
+	}
+	drove := bench.drove(t)
+	stopped, started := slices.IndexFunc(drove, func(line string) bool { return strings.HasPrefix(line, "stop ") }), slices.Index(drove, "start shop-cache-kv")
+	if stopped < 0 || started < stopped {
+		t.Errorf("the restore swapped Valkey's files without stopping it first and starting it after:\n%s", strings.Join(drove, "\n"))
+	}
+}
+
+func TestAKVRestoreThatCannotStartTheStorePutsBackWhatItHeld(t *testing.T) {
+	t.Parallel()
+
+	bench := backupsOn(t)
+	snapshot := filepath.Join(bench.root, "kept.rdb")
+	if err := os.WriteFile(snapshot, []byte("restored snapshot"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bench.stubs(t, "start-fails", "")
+	if _, _, code := bench.runs(t, "production", "restore", "shop-cache-kv", snapshot); code == 0 {
+		t.Fatal("a restore whose store never started was reported as done")
+	}
+	volume := filepath.Join(bench.root, "volume")
+	if kept, _ := os.ReadFile(filepath.Join(volume, "appendonlydir", "appendonly.aof.3.incr.aof")); string(kept) != "writes since" {
+		t.Error("a restore that failed left the store on neither its own data nor the snapshot")
+	}
+	if body, _ := os.ReadFile(filepath.Join(volume, "dump.rdb")); string(body) != "snapshot valkey saved" {
+		t.Errorf("a restore that failed left dump.rdb holding %q", body)
+	}
+	if starts := slices.DeleteFunc(bench.drove(t), func(line string) bool { return line != "start shop-cache-kv" }); len(starts) != 2 {
+		t.Errorf("the store was started %d times, want the failed start and the one on the data it had", len(starts))
+	}
+}
+
+func TestAStoreRestoreCopiesTheKeptObjectsBackFromAReadOnlyMount(t *testing.T) {
+	t.Parallel()
+
+	bench := backupsOn(t)
+	if _, stderr, code := bench.runs(t, "production", "dump", "shop-store-s3"); code != 0 {
+		t.Fatalf("dump exited %d: %s", code, stderr)
+	}
+	if _, stderr, code := bench.runs(t, "production", "restore", "shop-store-s3"); code != 0 {
+		t.Fatalf("restore exited %d: %s", code, stderr)
+	}
+	drove := bench.drove(t)
+	restored := drove[len(drove)-1]
+	for _, want := range []string{"dst=/backup,readonly", "sync /backup store:"} {
+		if !strings.Contains(restored, want) {
+			t.Errorf("the restore ran `docker %s`, want it to hold %q", restored, want)
+		}
 	}
 }
 
@@ -267,11 +426,11 @@ func TestARestoreFeedsTheDumpBackThroughTheContainer(t *testing.T) {
 	t.Parallel()
 
 	bench := backupsOn(t)
-	path, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg", "main")
+	path, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg")
 	if code != 0 {
 		t.Fatalf("dump exited %d: %s", code, stderr)
 	}
-	if _, stderr, code := bench.runs(t, "production", "restore", "shop-main-pg", "main", path); code != 0 {
+	if _, stderr, code := bench.runs(t, "production", "restore", "shop-main-pg", path); code != 0 {
 		t.Fatalf("restore exited %d: %s", code, stderr)
 	}
 	restored, err := os.ReadFile(filepath.Join(bench.bin, "restored"))
@@ -284,8 +443,32 @@ func TestARestoreFeedsTheDumpBackThroughTheContainer(t *testing.T) {
 	if roles, _ := os.ReadFile(filepath.Join(bench.bin, "restored-roles")); string(roles) != "roles of shop-main-pg" {
 		t.Errorf("psql was fed %q before the restore, want the roles the dump was taken with", roles)
 	}
-	if _, _, code := bench.runs(t, "production", "restore", "shop-main-pg", "main", filepath.Join(bench.root, "nothing.dump")); code == 0 {
+	if _, _, code := bench.runs(t, "production", "restore", "shop-main-pg", filepath.Join(bench.root, "nothing.dump")); code == 0 {
 		t.Error("a restore from a dump that is not there was reported as done")
+	}
+}
+
+func TestADatabaseARoleOwnsIsRestoredAsThatRoleSoItStillOwnsWhatItRestores(t *testing.T) {
+	t.Parallel()
+
+	bench := backupsOn(t, "shop-queue-pg\tproduction\tocel\tpg\tocel_queues")
+	path, stderr, code := bench.runs(t, "production", "dump", "shop-queue-pg")
+	if code != 0 {
+		t.Fatalf("dump exited %d: %s", code, stderr)
+	}
+	if _, stderr, code := bench.runs(t, "production", "restore", "shop-queue-pg", path); code != 0 {
+		t.Fatalf("restore exited %d: %s", code, stderr)
+	}
+	restored := slices.IndexFunc(bench.drove(t), func(line string) bool { return strings.Contains(line, "pg_restore") })
+	if restored < 0 || !strings.Contains(bench.drove(t)[restored], "--role=ocel_queues") {
+		t.Errorf("the restore ran %v, and tables pg_restore makes as the superuser are ones the role that owns the database cannot use", bench.drove(t))
+	}
+	if _, _, code := bench.runs(t, "production", "restore", "shop-main-pg", path); code != 0 {
+		t.Fatal("a database no role owns could not be restored")
+	}
+	last := bench.drove(t)
+	if strings.Contains(last[len(last)-1], "--role") {
+		t.Errorf("a database no role owns was restored as one: %s", last[len(last)-1])
 	}
 }
 

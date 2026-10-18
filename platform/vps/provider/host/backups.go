@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	_ "embed"
 	"strings"
 
@@ -9,7 +10,11 @@ import (
 )
 
 //go:embed backups.sh
-var backupsScript []byte
+var backupsTemplate []byte
+
+const StoreCopierImage = "rclone/rclone:1.74.4@sha256:c61954aaa32328a5486715dd063a81c7879f5195ad3505cd362deddd509dc4a1"
+
+var backupsScript = bytes.ReplaceAll(backupsTemplate, []byte("@STORE_COPIER@"), []byte(StoreCopierImage))
 
 const (
 	BackupsHelper = boxstore.Dir + "/backups"
@@ -24,7 +29,8 @@ const (
 	LabelBackup = "ocel.backup"
 
 	BackupPostgres = "pg"
-	BackupVolume   = "vol"
+	BackupKV       = "kv"
+	BackupStore    = "s3"
 )
 
 func BackupsDir(tier environment.Tier, container string) string {
@@ -86,10 +92,10 @@ func backupRemovals() []removal {
 	}
 }
 
-func dumpCommand(tier environment.Tier, container, database string) string {
-	return words([]string{BackupsHelper, string(tier), "dump", container, database})
+func dumpCommand(tier environment.Tier, container string) string {
+	return words([]string{BackupsHelper, string(tier), "dump", container})
 }
 
-func restoreCommand(tier environment.Tier, container, database, file string) string {
-	return words([]string{BackupsHelper, string(tier), "restore", container, database, file})
+func restoreCommand(tier environment.Tier, container, file string) string {
+	return words([]string{BackupsHelper, string(tier), "restore", container, file})
 }

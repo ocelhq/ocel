@@ -5,10 +5,35 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestABucketThatIsNoLongerPublicHasItsAnonymousReadPolicyDeleted(t *testing.T) {
+	t.Parallel()
+
+	calls, err := aStore().calls()
+	if err != nil {
+		t.Fatalf("calls() = %v", err)
+	}
+	for _, call := range calls {
+		if call.query != "policy" {
+			continue
+		}
+		if call.method != http.MethodDelete {
+			t.Fatalf("a private bucket's policy is driven with %s, so an anonymous-read policy a public deploy wrote keeps serving", call.method)
+		}
+		for _, absent := range []string{"204", "404"} {
+			if !slices.Contains(call.allow, absent) {
+				t.Errorf("deleting the policy refuses answer %s, so a bucket that never had one fails its deploy", absent)
+			}
+		}
+		return
+	}
+	t.Fatal("a private bucket is described to the store with no policy call, so an anonymous-read policy a public deploy wrote keeps serving")
+}
 
 func aStore() BucketSpec {
 	return BucketSpec{

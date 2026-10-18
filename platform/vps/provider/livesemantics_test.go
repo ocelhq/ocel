@@ -117,7 +117,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -200,11 +200,11 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -213,7 +213,7 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 	vm.ssh(t, "sudo rm -f /etc/sudoers.d/ocel-seal-*")
 	vm.forgetsTheDeployLogin(t)
 	refusing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", RefuseReplacements: true}
-	if err := bootstrap.Apply(ctx, refusing, nil); err != nil {
+	if err := bootstrap.Apply(ctx, refusing, progress.Discard()); err != nil {
 		t.Fatalf("an apply that refuses replacements over a machine with none of ocel's own state = %v, want absent-to-present to proceed", err)
 	}
 
@@ -223,7 +223,7 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 		t.Fatal(err)
 	}
 	refusing.VendorState = converging.VendorState
-	if err := bootstrap.Apply(ctx, refusing, nil); err != nil {
+	if err := bootstrap.Apply(ctx, refusing, progress.Discard()); err != nil {
 		t.Fatalf("an apply that refuses replacements over a host whose %s has moved mode = %v, want a converge that destroys nothing to proceed", helperDir, err)
 	}
 	if got := mode(t, vm, helperDir); got != "755" {
@@ -236,7 +236,7 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 		t.Fatal(err)
 	}
 	refusing.VendorState = moved.VendorState
-	got := refused(t, bootstrap.Apply(ctx, refusing, nil), refusal.CodeNotReady)
+	got := refused(t, bootstrap.Apply(ctx, refusing, progress.Discard()), refusal.CodeNotReady)
 	if !strings.Contains(got.Message, keyValuesHelper) {
 		t.Errorf("the refusal says %q, want it to name %s as what it would write over", got.Message, keyValuesHelper)
 	}
@@ -244,7 +244,7 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 		t.Errorf("%s is %q after the apply that refused it, want the refusal to have written nothing", keyValuesHelper, got)
 	}
 
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: moved.VendorState}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: moved.VendorState}, progress.Discard()); err != nil {
 		t.Fatalf("the same apply accepting replacements = %v", err)
 	}
 	if got := mode(t, vm, keyValuesHelper); got != "755" {

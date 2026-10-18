@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -174,7 +175,7 @@ func TestARegistryTurnsTheTransferIntoAPullTheMachineMakes(t *testing.T) {
 	target := aTarget(server)
 	push := aPull(target)
 
-	if err := pulling(t, machine, target).Push(context.Background(), push, nil); err != nil {
+	if err := pulling(t, machine, target).Push(context.Background(), push, progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 
@@ -207,7 +208,7 @@ func TestAnImageServedUnderTheTagIsNotWhatTheMachineEndsUpWith(t *testing.T) {
 		pinnedAt(push.ImageRef, pullDigest): "the image this deploy built",
 	}}
 
-	if err := pulling(t, machine, target).Push(context.Background(), push, nil); err != nil {
+	if err := pulling(t, machine, target).Push(context.Background(), push, progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 	if tagged := machine.under(push.ImageRef); tagged != "the image this deploy built" {
@@ -222,7 +223,7 @@ func TestTheLoginTakesThePasswordOnStdinAndLogsOutInTheSameSession(t *testing.T)
 	machine := &box{}
 	target := aTarget(server)
 
-	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err != nil {
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 
@@ -247,7 +248,7 @@ func TestNoCredentialFileIsLeftBehindOnTheMachine(t *testing.T) {
 	machine := &box{}
 	target := aTarget(server)
 
-	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err != nil {
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 
@@ -267,7 +268,7 @@ func TestTheCredentialDirectoryGoesEvenWhereTheSessionRefuses(t *testing.T) {
 	machine, asked := refusingPulls("Error response from daemon: manifest unknown", 100)
 	target := aTarget(server)
 
-	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err == nil {
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), progress.Discard()); err == nil {
 		t.Fatal("Push() = nil over a machine whose pull refused, so a release would promote an image the box was never given")
 	}
 	if got := asked.Load(); got != 1 {
@@ -321,7 +322,7 @@ func TestAPulledImageAnswersToTheCoordinateTheCliOwns(t *testing.T) {
 	push := aPull(target)
 	store := pulling(t, machine, target)
 
-	if err := store.Push(context.Background(), push, nil); err != nil {
+	if err := store.Push(context.Background(), push, progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 	present, err := store.Has(context.Background(), push)
@@ -347,7 +348,7 @@ func TestADigestTheMachineAndTheRegistryAlreadyHaveIsNeitherPushedNorPulledAgain
 		Pushes: []provider.ImagePush{aPull(target)},
 	}
 
-	if err := plan.PushMissing(context.Background(), nil); err != nil {
+	if err := plan.PushMissing(context.Background(), progress.Discard()); err != nil {
 		t.Fatalf("Ship() = %v", err)
 	}
 	if pushed := daemon.pushes(); len(pushed) != 0 {
@@ -368,7 +369,7 @@ func TestADigestTheMachineHasAndTheRegistryLostIsPushedAgain(t *testing.T) {
 		Pushes: []provider.ImagePush{aPull(target)},
 	}
 
-	if err := plan.PushMissing(context.Background(), nil); err != nil {
+	if err := plan.PushMissing(context.Background(), progress.Discard()); err != nil {
 		t.Fatalf("PushMissing() = %v", err)
 	}
 	if pushed := daemon.pushes(); len(pushed) != 1 {
@@ -384,7 +385,7 @@ func TestAMachineMissingADigestTheRegistryHasPullsWithoutASecondPush(t *testing.
 	target := aTarget(server)
 	push := aPull(target)
 
-	if err := pulling(t, machine, target).Push(context.Background(), push, nil); err != nil {
+	if err := pulling(t, machine, target).Push(context.Background(), push, progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 	if pushed := daemon.pushes(); len(pushed) != 0 {
@@ -408,7 +409,7 @@ func TestAPasswordWithNoLoginNameIsRefusedBeforeTheImageIsPublished(t *testing.T
 	ctx := context.Background()
 	store, err := provisioning(t, machine).OpenRegistryImages(ctx, target)
 	if err == nil {
-		err = store.Push(ctx, aPull(target), nil)
+		err = store.Push(ctx, aPull(target), progress.Discard())
 	}
 	if err == nil {
 		t.Fatal("the deploy took a registry password no login name goes with, so the machine pulled anonymously from a private registry")
@@ -443,7 +444,7 @@ func TestAThrottledPullIsAskedAgainRatherThanFailingTheDeploy(t *testing.T) {
 	machine, asked := refusingPulls("toomanyrequests: You have reached your pull rate limit", 2)
 	target := aTarget(server)
 
-	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err != nil {
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v over a registry that throttled the first pulls and then served the image", err)
 	}
 	if got := asked.Load(); got != 3 {
@@ -459,7 +460,7 @@ func TestAPullTheRegistryDeniesIsNotAskedAgain(t *testing.T) {
 	machine, asked := refusingPulls("unauthorized: authentication required", 100)
 	target := aTarget(server)
 
-	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err == nil {
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), progress.Discard()); err == nil {
 		t.Fatal("Push() = nil over a registry that refused the machine's login")
 	}
 	if got := asked.Load(); got != 1 {

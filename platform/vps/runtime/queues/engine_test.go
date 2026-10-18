@@ -2,26 +2,36 @@ package queues_test
 
 import (
 	"context"
-	"encoding/base64"
+	"errors"
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/enginetest"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/images"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/runtime/agent"
 	"github.com/ocelhq/ocel/platform/vps/runtime/queues"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
 
-type onDefaultBridge struct{ docker *agent.Docker }
+type boundSockets struct {
+	container string
+	dir       string
+}
 
-func (b onDefaultBridge) Address(ctx context.Context, _, container string) (string, error) {
-	return b.docker.Address(ctx, "bridge", container)
+func (b boundSockets) MountSource(_ context.Context, container, destination string) (string, error) {
+	if container != b.container || destination != live.QueueSocketsPath {
+		return "", errors.New(container + " mounts nothing at " + destination)
+	}
+	return b.dir, nil
 }
 
 type probeSecret struct{}
@@ -30,25 +40,58 @@ func (probeSecret) Open(context.Context, environment.Tier, seal.AssociatedData, 
 	return []byte("probe-secret"), nil
 }
 
-func TestARecordedTaskIsTriggeredAndReadBackThroughTheEngineOnItsQueueDatabase(t *testing.T) {
-	server := enginetest.SharedQueueDatabase(t)
-	server.Claim(t, live.QueueDatabaseName)
-	docker, err := agent.NewDocker()
-	if err != nil {
+func socketOnlyQueueDatabase(t *testing.T) boundSockets {
+	t.Helper()
+	sockets := boundSockets{container: "ocel-queue-sockets-" + strconv.Itoa(os.Getpid()), dir: enginetest.BindSource(t)}
+	if err := os.Chmod(sockets.dir, 0o777); err != nil {
 		t.Fatal(err)
 	}
+	argv := append([]string{"run", "--detach", "--name", sockets.container}, enginetest.RunLabelArgs(t)...)
+	argv = append(argv,
+		"--env", "POSTGRES_PASSWORD=probe-secret", "--env", "POSTGRES_DB="+live.QueueDatabaseName,
+		"--mount", "type=bind,src="+sockets.dir+",dst="+live.QueueSocketsPath,
+		images.QueueDatabase(), "postgres", "-c", "listen_addresses=")
+	if said, err := exec.Command("docker", argv...).CombinedOutput(); err != nil {
+		t.Fatalf("start the queue database: %v\n%s", err, said)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "stop", sockets.container).Run()
+		_ = exec.Command("docker", "rm", "--force", sockets.container).Run()
+	})
+	deadline := time.Now().Add(90 * time.Second)
+	for answered := 0; answered < 2; {
+		said, err := exec.Command("docker", "exec", sockets.container, "pg_isready", "--username", "postgres").CombinedOutput()
+		switch {
+		case err == nil:
+			answered++
+		case time.Now().After(deadline):
+			logged, _ := exec.Command("docker", "logs", "--tail", "20", sockets.container).CombinedOutput()
+			t.Fatalf("the queue database never took a connection over its socket: %v\n%s\n%s", err, said, logged)
+		default:
+			answered = 0
+		}
+		time.Sleep(time.Second)
+	}
+	granting := exec.Command("docker", "exec", "--interactive", sockets.container, "psql", "--username", "postgres", "-v", "ON_ERROR_STOP=1")
+	granting.Stdin = strings.NewReader(live.QueueRoleSQL())
+	if said, err := granting.CombinedOutput(); err != nil {
+		t.Fatalf("grant the queue role: %v\n%s", err, said)
+	}
+	return sockets
+}
+
+func TestARecordedTaskIsTriggeredAndReadBackThroughTheEngineAsTheQueueRoleOverTheSocket(t *testing.T) {
+	sockets := socketOnlyQueueDatabase(t)
 
 	store := fake.NewKeyValues()
-	record(t, store, live.QueueDatabaseKey(tier, "shop", "prod"), live.QueueDatabase{
-		Container: server.Name, Stack: "prod--infra", Sealed: base64.StdEncoding.EncodeToString([]byte("sealed")),
-	})
+	record(t, store, live.QueueDatabaseKey(tier, "shop", "prod"), live.QueueDatabase{Container: sockets.container, Stack: "prod--infra"})
 	record(t, store, live.QueueTopicKey(tier, "shop", "prod", "send-email"),
 		[]byte(`{"consumers":[{"name":"send-email","worker":"worker","exclusive":true}]}`))
 	engines := &queues.Engines{
 		Records:     store,
 		Tiers:       []environment.Tier{tier},
 		Cipher:      probeSecret{},
-		Addresses:   onDefaultBridge{docker},
+		Mounts:      sockets,
 		Open:        queues.OpenPgmq,
 		IsAnswering: queues.IsWorkerAnswering,
 	}

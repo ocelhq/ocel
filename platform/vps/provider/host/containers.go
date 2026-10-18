@@ -28,6 +28,7 @@ const (
 
 	LabelResource   = "ocel.resource"
 	LabelGeneration = "ocel.generation"
+	LabelOwner      = "ocel.database-owner"
 )
 
 const (
@@ -155,6 +156,8 @@ type Container struct {
 	Manifest   []byte
 	Resolved   bool
 	Declared   []string
+
+	Limits Limits
 }
 
 func (c Container) delivered() map[string]string {
@@ -199,6 +202,7 @@ func containerRun(spec Container, env handoff) []string {
 	}
 	argv = append(argv, logging()...)
 	argv = append(argv, confined(appCapabilities, false)...)
+	argv = append(argv, spec.Limits.argv()...)
 	if env.path != "" {
 		argv = append(argv, "--env-file", env.path)
 	}
@@ -244,9 +248,10 @@ func restartCommand(said, name string) string {
 }
 
 func servingCommand(name string) string {
-	return "docker inspect --type container --format " +
-		quoted(servingSelectors()) + " " +
-		quoted(name) + " 2>/dev/null || true"
+	return "if said=$(docker inspect --type container --format " + quoted(servingSelectors()) + " " + quoted(name) + " 2>&1); then printf '%s\\n' \"$said\"\n" +
+		"elif printf '%s' \"$said\" | grep -qi 'no such'; then :\n" +
+		"else printf '%s\\n' \"$said\" >&2; exit 1\n" +
+		"fi"
 }
 
 type Run uint8
@@ -262,10 +267,16 @@ func (h *Host) RunContainer(ctx context.Context, spec Container) (ran Run, err e
 	if err != nil {
 		return RunKept, err
 	}
+	if spec.Limits, err = h.tierLimits(ctx, spec.Tier); err != nil {
+		return RunKept, err
+	}
 	if err := h.join(ctx, spec, elevation); err != nil {
 		return RunKept, err
 	}
-	said := h.said(ctx, servingCommand(spec.Name), elevation)
+	said, err := h.readServing(ctx, spec.Name, elevation)
+	if err != nil {
+		return RunKept, err
+	}
 	if spec.Resolved {
 		env, err := handing(spec)
 		if err != nil {
@@ -463,10 +474,23 @@ func parseLogLine(raw string, stderr bool) (Line, bool) {
 	return Line{Time: at.UTC(), Stderr: stderr, Text: text}, true
 }
 
-func (h *Host) said(ctx context.Context, command string, elevation string) string {
+func (h *Host) said(ctx context.Context, command string, elevation string) (string, error) {
 	result, err := h.stream(ctx, command, nil, elevation)
 	if err != nil {
-		return err.Error()
+		return "", err
 	}
-	return strings.TrimSpace(result.Stdout + result.Stderr)
+	return strings.TrimSpace(result.Stdout + result.Stderr), nil
+}
+
+func (h *Host) readEvidence(ctx context.Context, command string, elevation string) string {
+	said, err := h.said(ctx, command, elevation)
+	if err != nil {
+		return "(could not be read: " + err.Error() + ")"
+	}
+	return said
+}
+
+func (h *Host) readServing(ctx context.Context, name, elevation string) (string, error) {
+	said, err := h.ran(ctx, "read whether "+name+" is serving", servingCommand(name), nil, elevation)
+	return strings.TrimSpace(said), err
 }

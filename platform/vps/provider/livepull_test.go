@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -159,7 +160,7 @@ func liveDigest(t *testing.T, target provider.RegistryTarget, coordinate string)
 		ImageRef: coordinate,
 		Digest:   transferDigest,
 	}
-	if err := images.RegistryStore(target).Push(context.Background(), seed, nil); err != nil {
+	if err := images.RegistryStore(target).Push(context.Background(), seed, progress.Discard()); err != nil {
 		t.Fatalf("push %s into the registry the machine pulls from = %v", coordinate, err)
 	}
 	req, err := http.NewRequest(http.MethodHead,
@@ -218,7 +219,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftWithNoCredential(t *testing.T) {
 	if len(rows) != 1 || rows[0].Action != provider.ActionCreate {
 		t.Fatalf("the plan shows %v before anything moved the image, want one %q row", rows, provider.ActionCreate)
 	}
-	if err := plan.PushMissing(ctx, nil); err != nil {
+	if err := plan.PushMissing(ctx, progress.Discard()); err != nil {
 		t.Fatalf("PushMissing() through a registry the machine can reach = %v", err)
 	}
 
@@ -247,7 +248,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftWithNoCredential(t *testing.T) {
 	if len(after) != 1 || after[0].Action != provider.ActionKeep {
 		t.Errorf("the plan shows %v for an image the machine already pulled, want one %q row", after, provider.ActionKeep)
 	}
-	if err := plan.PushMissing(ctx, nil); err != nil {
+	if err := plan.PushMissing(ctx, progress.Discard()); err != nil {
 		t.Fatalf("a second Ship over a machine that already has the digest = %v", err)
 	}
 }

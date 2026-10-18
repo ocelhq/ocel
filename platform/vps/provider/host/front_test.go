@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -211,7 +212,7 @@ func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
 	box := bootstrappedOn(t, tier)
 	box.installed[tier] = unrecorded(box, tier)
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	at := box.at("/dev/stdin " + quoted(FrontRecordPath))
@@ -233,7 +234,7 @@ func TestABootstrapLeavesARecordThatAgreesUnchanged(t *testing.T) {
 	box := bootstrappedOn(t, tier)
 	recordOn(t, box, tier, Front{}, "blog")
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	if at := box.at("/dev/stdin " + quoted(FrontRecordPath)); at >= 0 {

@@ -13,6 +13,11 @@ import (
 
 var ProviderOver = newProvider
 
+const (
+	RealtimeGatewayMemoryBytes = realtimeGatewayMemoryBytes
+	RealtimeSocketBytes        = realtimeSocketBytes
+)
+
 func (p *Provider) Timing(now func() time.Time) { p.now = now }
 
 func (p *Provider) Clock() func() time.Time { return p.now }

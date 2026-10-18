@@ -258,5 +258,5 @@ func (b frontBox) Said(ctx context.Context, argv []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return b.h.said(ctx, words(argv), elevation), nil
+	return b.h.said(ctx, words(argv), elevation)
 }

@@ -57,7 +57,7 @@ func TestTheValuesAnAppIsHandedReachItThroughAFileAndNoOtherWay(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, valuedApp()), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, valuedApp()), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -78,7 +78,7 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 	t.Parallel()
 
 	machine := &box{}
-	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, valuedApp()), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, valuedApp()), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 	machine := &box{}
 	spec := aStack(t, valuedApp())
 	spec.Ref.Tier = environment.TierPreview
-	started, err := over(machine).ProvisionContainers(context.Background(), spec, nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), spec, progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -156,7 +156,7 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 	t.Parallel()
 
 	machine := &box{}
-	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -175,7 +175,7 @@ func TestAValueDeliveredUnderANameTheRuntimeReadsItsOwnFromIsRefused(t *testing.
 	for _, owned := range []string{originguard.HealthPathVar, variables.EnvVar} {
 		app := anApp()
 		app.Values = provider.AppValues{ContainerEnv: map[string]string{owned: "x"}}
-		_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), nil)
+		_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), progress.Discard())
 		var rejection refusal.Refusal
 		if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid || !strings.Contains(err.Error(), owned) {
 			t.Errorf("a value delivered as %s was started: %v", owned, err)

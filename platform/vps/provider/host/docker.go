@@ -67,7 +67,7 @@ const (
 )
 
 func EngineItems() []Item {
-	return []Item{engineItem(), unitItem()}
+	return []Item{engineItem(), unitItem(), liveRestoreItem()}
 }
 
 func engineItem() Item {
@@ -151,12 +151,10 @@ func (h *Host) installEngine(ctx context.Context, progress progress.Log) error {
 		if try == engineInstallTries || (elevation != "" && sudoRefused(result)) {
 			return h.refuse("install docker, "+attempt+",", result, elevation)
 		}
-		if progress != nil {
-			progress.Warn(fmt.Sprintf("Docker's install on %s failed on try %d of %d and runs again",
-				h.named(), try, engineInstallTries))
-			for _, line := range strings.Split(spoken(result), "\n") {
-				progress.Detail(line)
-			}
+		progress.Warn(fmt.Sprintf("Docker's install on %s failed on try %d of %d and runs again",
+			h.named(), try, engineInstallTries))
+		for _, line := range strings.Split(spoken(result), "\n") {
+			progress.Detail(line)
 		}
 		if err := h.pause(ctx, engineInstallBackoff.after(try)); err != nil {
 			return err

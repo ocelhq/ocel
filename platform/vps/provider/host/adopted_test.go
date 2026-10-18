@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -485,7 +486,7 @@ func TestADeployThatFindsThePlacedFileGoneOrRewrittenPlacesItsRenderingAgain(t *
 
 			adopted := adoptedBox(t, serving)
 			drift(adopted)
-			if err := adopted.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+			if err := adopted.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 				t.Fatalf("Release() = %v", err)
 			}
 			state, err := ReadRoutingTable([]byte(adopted.recorded))
@@ -563,7 +564,7 @@ func TestAPlacedFileThatMatchesWhatTheTableRendersIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
 	adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
-	if err := adopted.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+	if err := adopted.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 	if adopted.count(writesProxy) == 0 {
@@ -754,12 +755,12 @@ func TestEveryRoutingFailureNamesTheFilesTheProxyActuallyKeeps(t *testing.T) {
 		"a release whose write fails beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
 			failing(adopted, session.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{live.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).RollOut(context.Background(), aRollout(), nil)
+			return []string{live.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).RollOut(context.Background(), aRollout(), progress.Discard())
 		},
 		"a release whose write fails beside a proxy that keeps its file elsewhere": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
 			failing(adopted, session.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, adopted.host().RollOut(context.Background(), aRollout(), nil)
+			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, adopted.host().RollOut(context.Background(), aRollout(), progress.Discard())
 		},
 		"a placement whose revert fails too": func(t *testing.T) ([]string, []string, error) {
 			adopted := adoptedBox(t, routed())

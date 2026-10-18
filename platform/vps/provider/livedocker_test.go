@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -125,11 +126,11 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		}
 	}
 
-	if err := bootstrap.Apply(ctx, req, nil); err != nil {
+	if err := bootstrap.Apply(ctx, req, progress.Discard()); err != nil {
 		t.Fatalf("Apply() over a machine with no engine = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -198,7 +199,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		}
 	}
 
-	if err := bootstrap.Apply(ctx, stopped, nil); err != nil {
+	if err := bootstrap.Apply(ctx, stopped, progress.Discard()); err != nil {
 		t.Fatalf("Apply() over an idle daemon = %v", err)
 	}
 	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active "+unitName)); active != "active" {
@@ -241,7 +242,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
 	}
 	got := refused(t, bootstrap.Apply(ctx,
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shimmed.VendorState, RefuseReplacements: true}, nil),
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shimmed.VendorState, RefuseReplacements: true}, progress.Discard()),
 		refusal.CodeNotReady)
 	if !strings.Contains(got.Message, engineName) {
 		t.Errorf("an apply that refuses replacements over a docker binary with no unit says %q, want it refused by name: running %s as root over an install that already exists replaces it, and this apply refuses replacements",

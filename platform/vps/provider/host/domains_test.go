@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -363,7 +364,7 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
 	}
-	if err := box.host().RollOut(context.Background(), rollout, nil); err != nil {
+	if err := box.host().RollOut(context.Background(), rollout, progress.Discard()); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 
@@ -416,7 +417,7 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 		Apps:          []AppRollout{{RouteKey: blog, Target: "blog-web-4444:" + containerimage.PortText, HealthPath: "/healthz"}},
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
-	}, nil); err != nil {
+	}, progress.Discard()); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 

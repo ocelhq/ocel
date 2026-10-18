@@ -343,7 +343,7 @@ func (r Reading) adopting() error {
 func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progress progress.Log) error {
 	for _, item := range items {
 		if read.current(item) {
-			debug(progress, capitalized(item.phrase())+" is "+reasonCurrent)
+			progress.Debug(capitalized(item.phrase()) + " is " + reasonCurrent)
 			continue
 		}
 		var err error
@@ -355,21 +355,9 @@ func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progre
 		if err != nil {
 			return err
 		}
-		say(progress, "Installed "+item.phrase())
+		progress.Say("Installed " + item.phrase())
 	}
 	return nil
-}
-
-func say(progress progress.Log, message string) {
-	if progress != nil {
-		progress.Say(message)
-	}
-}
-
-func debug(progress progress.Log, line string) {
-	if progress != nil {
-		progress.Debug(line)
-	}
 }
 
 func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
@@ -411,7 +399,7 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 	}
 	for _, removal := range removals {
 		if removal.action != provider.ActionDelete {
-			say(progress, removal.kept())
+			progress.Say(removal.kept())
 			continue
 		}
 		taken, err := b.host.remove(ctx, removal)
@@ -419,12 +407,12 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 			return err
 		}
 		if !taken {
-			say(progress, "Kept "+removal.phrase()+": something else on this box still uses it")
+			progress.Say("Kept " + removal.phrase() + ": something else on this box still uses it")
 			continue
 		}
-		say(progress, "Removed "+removal.phrase())
+		progress.Say("Removed " + removal.phrase())
 	}
-	say(progress, leavingKnownHosts(forget))
+	progress.Say(leavingKnownHosts(forget))
 	return nil
 }
 

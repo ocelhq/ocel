@@ -204,7 +204,7 @@ func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (s
 		elevation, _ := h.reachDocker(ctx)
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s loaded the image but has no %s: %s\nengine state:\n%s",
-			h.named(), imageRef, strings.TrimSpace(said), h.said(ctx, loadEvidenceCommand(), elevation))
+			h.named(), imageRef, strings.TrimSpace(said), h.readEvidence(ctx, loadEvidenceCommand(), elevation))
 	}
 	return strings.TrimSpace(said), nil
 }

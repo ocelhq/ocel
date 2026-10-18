@@ -13,6 +13,8 @@ import (
 const (
 	QueueDatabaseName = "ocel"
 	QueueSecretName   = "queue-password"
+	QueueRole         = "ocel_queues"
+	QueueSocketsPath  = "/var/run/postgresql"
 
 	QueueDeliverySecretName = "delivery-secret"
 
@@ -24,7 +26,6 @@ const (
 type QueueDatabase struct {
 	Container      string `json:"container"`
 	Stack          string `json:"stack"`
-	Sealed         string `json:"sealed"`
 	DeliverySealed string `json:"deliverySealed"`
 }
 
@@ -74,6 +75,12 @@ func NewQueueSecretAssociatedData(project string, tier environment.Tier, stack s
 
 func NewQueueDeliverySecretAssociatedData(project string, tier environment.Tier, stack string) (seal.AssociatedData, error) {
 	return NewSecretAssociatedData(project, tier, stack, StoreSecretFolder, QueueDatabaseName, QueueDeliverySecretName)
+}
+
+func QueueRoleSQL() string {
+	return "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '" + QueueRole + "') THEN CREATE ROLE " + QueueRole + " LOGIN; END IF; END $$;\n" +
+		"ALTER ROLE " + QueueRole + " WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD NULL;\n" +
+		"ALTER DATABASE " + QueueDatabaseName + " OWNER TO " + QueueRole + ";\n"
 }
 
 type queueKey struct{ project, env string }

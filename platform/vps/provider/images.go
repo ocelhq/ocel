@@ -85,9 +85,7 @@ func (p pulled) pushRemovedImage(ctx context.Context, push provider.ImagePush, d
 	if err != nil || present {
 		return "", pulling
 	}
-	if progress != nil {
-		progress.Warn(fmt.Sprintf("%s left %s between this deploy finding it there and %s pulling it, so it is pushed again", push.ImageRef, p.target.Server, p.at))
-	}
+	progress.Warn(fmt.Sprintf("%s left %s between this deploy finding it there and %s pulling it, so it is pushed again", push.ImageRef, p.target.Server, p.at))
 	if err := p.from.Push(ctx, push, progress); err != nil {
 		return "", err
 	}
@@ -95,9 +93,6 @@ func (p pulled) pushRemovedImage(ctx context.Context, push provider.ImagePush, d
 }
 
 func echo(progress progress.Log, said string) {
-	if progress == nil {
-		return
-	}
 	for line := range strings.Lines(said) {
 		if line = strings.TrimRight(line, "\r\n"); line != "" {
 			progress.Detail(line)

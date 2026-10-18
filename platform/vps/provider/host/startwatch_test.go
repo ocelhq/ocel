@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -42,7 +43,7 @@ func TestAnAppWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStartAndNeve
 		"the probe ran out its window":  {Code: 4, Stderr: nextTarget + " never answered /up within 1m0s"},
 	} {
 		box := searchedOnCrashing(found, crashLooping)
-		_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), nil)
+		_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 			t.Fatalf("%s: FindHealthPath() = %v, want a not-ready refusal", what, err)
@@ -66,7 +67,7 @@ func TestAnAppStillRunningWhenTheProbeGivesUpIsRefusedAsNeverAnswering(t *testin
 
 	box := searchedOnCrashing(session.Result{Code: 4, Stderr: nextTarget + " never answered /up within 1m0s"},
 		"Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0")
-	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), nil)
+	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "never answered /up") || strings.Contains(err.Error(), "failing to start") {
 		t.Errorf("FindHealthPath() = %v, want a running app that never answered refused as never answering", err)
 	}
@@ -91,7 +92,7 @@ func TestAGateWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStart(t *tes
 func TestTheGateWatchesEveryContainerItReleases(t *testing.T) {
 	t.Parallel()
 
-	box, err := rolledOut(t, bothApps(), session.Result{}, session.Result{}, nil)
+	box, err := rolledOut(t, bothApps(), session.Result{}, session.Result{}, progress.Discard())
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}

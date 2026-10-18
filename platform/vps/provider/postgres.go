@@ -61,9 +61,8 @@ func newPostgresContainer(ref provider.StackRef, database, kind, image string, v
 					"ALTER USER " + postgresSuperuser + " PASSWORD '" + secret + "';\n"
 			},
 		},
-		Ready:    []string{"pg_isready", "-h", "127.0.0.1", "-U", postgresSuperuser},
-		Backup:   host.BackupPostgres,
-		Database: database,
+		Ready:  []string{"pg_isready", "-h", "127.0.0.1", "-U", postgresSuperuser},
+		Backup: host.BackupPostgres,
 	}
 }
 
@@ -75,9 +74,7 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Provision
 	if spec, err = p.reshaped(ctx, in, transformTypePostgres, spec); err != nil {
 		return provider.Binding{}, err
 	}
-	if progress != nil {
-		progress.Say("Provisioning postgres " + in.Resource.Name + " in container " + spec.Name)
-	}
+	progress.Say("Provisioning postgres " + in.Resource.Name + " in container " + spec.Name)
 	secret, err := p.postgresSecret(ctx, in, spec.Name)
 	if err != nil {
 		return provider.Binding{}, err

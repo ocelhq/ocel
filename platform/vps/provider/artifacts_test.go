@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -72,7 +73,7 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	}
 
 	var rejection refusal.Refusal
-	err = resources.ShipUploads(ctx, store, spec.Uploads, nil)
+	err = resources.ShipUploads(ctx, store, spec.Uploads, progress.Discard())
 	if !errors.As(err, &rejection) {
 		t.Fatalf("ShipUploads() after the plan showed the row = %v, want a loud refusal rather than a write that vanishes", err)
 	}

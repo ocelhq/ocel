@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -40,7 +41,7 @@ func TestLiveADeclaredKVStoreAnswersOnlyItsUserOnItsProjectAndLeavesNothingBehin
 		vm.ssh(t, "sudo docker volume ls -q --filter label="+host.LabelResource+" | xargs -r sudo docker volume rm >/dev/null 2>&1 || true")
 	})
 
-	binding, err := p.ProvisionKV(ctx, in, nil)
+	binding, err := p.ProvisionKV(ctx, in, progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionKV() = %v", err)
 	}
@@ -63,7 +64,7 @@ func TestLiveADeclaredKVStoreAnswersOnlyItsUserOnItsProjectAndLeavesNothingBehin
 	}
 
 	started := vm.ssh(t, "sudo docker inspect -f '{{.Id}} {{.State.StartedAt}}' "+quote(name))
-	again, err := p.ProvisionKV(ctx, in, nil)
+	again, err := p.ProvisionKV(ctx, in, progress.Discard())
 	if err != nil {
 		t.Fatalf("a second ProvisionKV() = %v", err)
 	}
@@ -79,7 +80,7 @@ func TestLiveADeclaredKVStoreAnswersOnlyItsUserOnItsProjectAndLeavesNothingBehin
 		t.Errorf("after a restart the store answers %q, want the value written before it", said)
 	}
 
-	upgraded, err := p.ProvisionKV(ctx, aKVStore(t, "9"), nil)
+	upgraded, err := p.ProvisionKV(ctx, aKVStore(t, "9"), progress.Discard())
 	if err != nil {
 		t.Fatalf("moving %s from 8 to 9 = %v", name, err)
 	}
@@ -90,7 +91,7 @@ func TestLiveADeclaredKVStoreAnswersOnlyItsUserOnItsProjectAndLeavesNothingBehin
 		t.Errorf("version 8's volume %q outlives the move", left)
 	}
 
-	if err := p.RemoveResource(ctx, in.Ref, upgraded, nil); err != nil {
+	if err := p.RemoveResource(ctx, in.Ref, upgraded, progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
 	if vm.running(t, name) {

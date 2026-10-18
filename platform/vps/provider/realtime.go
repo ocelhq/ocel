@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -30,6 +31,9 @@ const (
 	realtimeGatewayRuns     = 3
 	realtimeSigningKind     = "signing-key"
 	realtimeSigningName     = "signing-key"
+
+	realtimeGatewayMemoryBytes = 256 << 20
+	realtimeSocketBytes        = 64 << 10
 )
 
 func realtimeGatewayName(ref provider.StackRef) string {
@@ -63,11 +67,13 @@ func newRealtimeGateway(ref provider.StackRef, keys map[string]string) (host.Res
 		Args:     []string{host.RealtimeMounted},
 		User:     realtimeGatewayUser,
 		ReadOnly: true,
+		Memory:   strconv.Itoa(realtimeGatewayMemoryBytes),
 		Mounts:   []host.Mount{{Source: host.RealtimeDir, Target: host.RealtimeMount}},
 		Labels:   map[string]string{host.LabelBinary: host.RealtimeBinarySum()},
 		Env: map[string]string{
-			gatewayenv.HostVar: realtimeGatewayAddress(ref),
-			gatewayenv.KeysVar: string(encoded),
+			gatewayenv.HostVar:       realtimeGatewayAddress(ref),
+			gatewayenv.KeysVar:       string(encoded),
+			gatewayenv.MaxSocketsVar: strconv.Itoa(realtimeGatewayMemoryBytes / realtimeSocketBytes),
 		},
 		Ready: []string{host.RealtimeMounted, "ready"},
 	}, nil
@@ -185,21 +191,15 @@ func (p *Provider) runRealtimeGateway(ctx context.Context, ref provider.StackRef
 
 func (p *Provider) placeRealtimeGateway(ctx context.Context, ref provider.StackRef, keys map[string]string, progress progress.Log) error {
 	if len(keys) == 0 {
-		say(progress, "Removing the realtime gateway "+realtimeGatewayName(ref)+": "+ref.Name.Env+" declares no realtime any more")
+		progress.Say("Removing the realtime gateway " + realtimeGatewayName(ref) + ": " + ref.Name.Env + " declares no realtime any more")
 		return p.host.RemoveResource(ctx, host.ResourceRef{Tier: ref.Tier, Project: ref.Project, Resource: realtimeGatewayResource, Name: realtimeGatewayName(ref)})
 	}
 	gateway, err := newRealtimeGateway(ref, keys)
 	if err != nil {
 		return err
 	}
-	say(progress, "Serving realtime "+strings.Join(slices.Sorted(maps.Keys(keys)), ", ")+" from the gateway in container "+gateway.Name)
+	progress.Say("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", ") + " from the gateway in container " + gateway.Name)
 	return p.host.RunResource(ctx, gateway, "")
-}
-
-func say(progress progress.Log, line string) {
-	if progress != nil {
-		progress.Say(line)
-	}
 }
 
 func (p *Provider) removeRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {

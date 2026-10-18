@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -105,6 +106,9 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		if result, refused := b.refuses(command); refused {
 			return result, nil
 		}
+	}
+	if strings.Contains(command, "{{.MemTotal}} {{.NCPU}}") {
+		return session.Result{Stdout: "8589934592 4\n"}, nil
 	}
 	if b.unsocket && strings.HasPrefix(command, "docker version") {
 		return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, nil
@@ -363,7 +367,7 @@ func TestAnImageNothingWrappedIsRefusedRatherThanReadOutOfTheLocalDaemon(t *test
 
 	push := aPush(t)
 	push.Built = nil
-	err := store.Push(context.Background(), push, nil)
+	err := store.Push(context.Background(), push, progress.Discard())
 	var rejection refusal.Refusal
 	if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
 		t.Fatalf("Push() of an unwrapped image = %v, want a refusal: what the local daemon has runs nothing in front of the app", err)
@@ -378,7 +382,7 @@ func TestNothingIsInstalledOnTheMachineToReceiveAnImage(t *testing.T) {
 	machine := &box{}
 	store := directImagesOn(t, machine)
 
-	if err := store.Push(context.Background(), aPush(t), nil); err != nil {
+	if err := store.Push(context.Background(), aPush(t), progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 	for _, command := range machine.commands() {
@@ -432,7 +436,7 @@ func TestAWrappedImageIsWrittenAsATarballAndLoadedIntoTheMachinesDaemonWithoutRe
 	machine := &box{}
 	store := directImagesOn(t, machine)
 
-	if err := store.Push(context.Background(), aPush(t), nil); err != nil {
+	if err := store.Push(context.Background(), aPush(t), progress.Discard()); err != nil {
 		t.Fatalf("Push() of a wrapped image = %v", err)
 	}
 	if *reads != 0 {
@@ -482,7 +486,7 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 		t.Fatal(err)
 	}
 	push := provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: built}
-	if err := store.Push(context.Background(), push, nil); err != nil {
+	if err := store.Push(context.Background(), push, progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker pull "+quote(server+"/shop/web@"+digest.String())) {
@@ -506,7 +510,7 @@ func TestAnImagePulledOntoTheMachineIsRemovedFromTheRegistryItWasPushedTo(t *tes
 		t.Fatal(err)
 	}
 	push := provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: wrapped(t)}
-	if err := store.Push(context.Background(), push, nil); err != nil {
+	if err := store.Push(context.Background(), push, progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 
@@ -575,7 +579,7 @@ func TestAnImageAnotherBoxRemovedFromTheRegistryBeforeThisOnePulledItIsPushedAga
 		t.Fatal(err)
 	}
 
-	if err := store.Push(context.Background(), provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: ref, Built: built}, nil); err != nil {
+	if err := store.Push(context.Background(), provider.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: ref, Built: built}, progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v, want the image pushed again: a box's reconcile removes from the shared registry what that box dropped, and another box of the project may be about to pull it", err)
 	}
 	if _, err := remote.Head(tag); err != nil {

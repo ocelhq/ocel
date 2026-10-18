@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -29,7 +30,7 @@ func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 	}
 	machine.routingDoc = string(written)
 
-	if _, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	if _, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard()); err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
 
@@ -52,7 +53,7 @@ func grantedBucket() provider.Binding {
 func manifestFor(t *testing.T, machine *box, options vps.Options, app provider.AppSpec) variables.Manifest {
 	t.Helper()
 	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	return manifestIn(t, machine)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -19,13 +20,13 @@ import (
 func manifestAfterBucket(t *testing.T, machine *box) variables.Manifest {
 	t.Helper()
 	p := over(machine)
-	binding, err := p.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil)
+	binding, err := p.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard())
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
 	app := anApp()
 	app.Values = provider.AppValues{Bindings: []provider.Binding{binding}}
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	return manifestIn(t, machine)
@@ -63,7 +64,7 @@ func TestAStoreThatRefusedToExpireItsUploadsIsSweptByADeployThatOnlyBuildsTheApp
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey(), refuses: lifecycleAnswering("lifecycle=501\n")}
-	binding, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil)
+	binding, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard())
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
@@ -71,7 +72,7 @@ func TestAStoreThatRefusedToExpireItsUploadsIsSweptByADeployThatOnlyBuildsTheApp
 
 	app := anApp()
 	app.Values = provider.AppValues{Bindings: []provider.Binding{binding}}
-	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	manifest := manifestIn(t, machine)
@@ -112,7 +113,7 @@ func withBuckets(t *testing.T, p *vps.Provider, stack naming.StackName, named ..
 
 func provisionedBucket(t *testing.T, machine *box, p *vps.Provider, name string) provider.Binding {
 	t.Helper()
-	binding, err := p.ProvisionBucket(context.Background(), aBucket(t, name, false), nil)
+	binding, err := p.ProvisionBucket(context.Background(), aBucket(t, name, false), progress.Discard())
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
@@ -130,7 +131,7 @@ func TestTheStoreGoesDownWithTheLastBucketTheProjectKeepsInIt(t *testing.T) {
 	withBuckets(t, p, stack, "uploads")
 
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
-	if err := p.RemoveResource(context.Background(), ref, binding, nil); err != nil {
+	if err := p.RemoveResource(context.Background(), ref, binding, progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
 
@@ -160,7 +161,7 @@ func TestAStoreStillContainingABucketIsLeftRunning(t *testing.T) {
 	withBuckets(t, p, stack, "uploads", "assets")
 
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
-	if err := p.RemoveResource(context.Background(), ref, binding, nil); err != nil {
+	if err := p.RemoveResource(context.Background(), ref, binding, progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
 
@@ -181,7 +182,7 @@ func TestATeardownThatStoppedHalfwayIsRunAgainWithoutComplaint(t *testing.T) {
 
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
 	for again := range 2 {
-		if err := p.RemoveResource(context.Background(), ref, binding, nil); err != nil {
+		if err := p.RemoveResource(context.Background(), ref, binding, progress.Discard()); err != nil {
 			t.Fatalf("RemoveResource(bucket) run %d = %v", again+1, err)
 		}
 	}
@@ -204,7 +205,7 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 		}
 		return session.Result{Code: 1, Stderr: "the box went away"}, true
 	}
-	if err := stopped.RemoveResource(context.Background(), ref, binding, nil); err == nil {
+	if err := stopped.RemoveResource(context.Background(), ref, binding, progress.Discard()); err == nil {
 		t.Fatal("RemoveResource(bucket) = nil, want the failure that stops the teardown halfway")
 	}
 
@@ -213,7 +214,7 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 	machine.forget()
 	again := over(machine)
 	withBuckets(t, again, stack, "uploads")
-	if err := again.RemoveResource(context.Background(), ref, binding, nil); err != nil {
+	if err := again.RemoveResource(context.Background(), ref, binding, progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource(bucket) run 2 = %v", err)
 	}
 
@@ -240,7 +241,7 @@ func TestAnAppThatGoesTakesItsOwnStoreAccountWithIt(t *testing.T) {
 
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
 	err := p.RemoveContainers(context.Background(), ref,
-		[]provider.AppContainer{{Name: "web", Physical: "prod-web-r0a1b2c3d-web"}}, nil, nil)
+		[]provider.AppContainer{{Name: "web", Physical: "prod-web-r0a1b2c3d-web"}}, nil, progress.Discard())
 	if err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}

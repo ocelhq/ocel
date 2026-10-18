@@ -223,10 +223,10 @@ func (h *Host) removeAll(ctx context.Context, removals []removal, progress progr
 			return err
 		}
 		if !removed {
-			say(progress, taken.kept())
+			progress.Say(taken.kept())
 			continue
 		}
-		say(progress, "Removed "+taken.phrase())
+		progress.Say("Removed " + taken.phrase())
 	}
 	return nil
 }
@@ -244,9 +244,9 @@ func (m *frontMove) awaitFront(ctx context.Context, tier environment.Tier, progr
 	}
 	switch {
 	case !m.isSameProcess():
-		say(progress, "Start your proxy on 80 and 443 now")
+		progress.Say("Start your proxy on 80 and 443 now")
 	case m.to.Manual != nil:
-		say(progress, "Forward your proxy "+m.to.describeForwarding()+" now")
+		progress.Say("Forward your proxy " + m.to.describeForwarding() + " now")
 	case m.to.Traefik != nil && m.isPlacedFileMoved():
 		if err := m.awaitPlacement(ctx, tier); err != nil {
 			return err

@@ -62,7 +62,7 @@ func (p *Provider) Retire(ctx context.Context, apps provider.LiveApps, progress 
 	ref := provider.StackRef{Project: apps.Slug, Tier: apps.Tier, Name: naming.StackName{Env: apps.Env}}
 	return p.retireWorkers(ctx, ref, func(name string, worker live.QueueWorker) bool {
 		reason, retired := retiredReason(apps, name, worker)
-		if retired && progress != nil {
+		if retired {
 			progress.Say(fmt.Sprintf("Taking down worker %s's container %s: %s", name, worker.Container, reason))
 		}
 		return retired

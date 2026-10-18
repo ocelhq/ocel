@@ -76,7 +76,7 @@ func liveSpec(t *testing.T, tag string) provider.StackSpec {
 
 func provisioned(t *testing.T, p *vps.Provider, tag string) release {
 	t.Helper()
-	started, err := p.ProvisionContainers(context.Background(), liveSpec(t, tag), nil)
+	started, err := p.ProvisionContainers(context.Background(), liveSpec(t, tag), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers(%s) = %v", tag, err)
 	}
@@ -131,7 +131,7 @@ func TestLiveAReleaseServesThroughTheProxyAndNothingElseOnTheBoxCanReachIt(t *te
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, progress.Discard()); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 
@@ -169,7 +169,7 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheSlowRequest
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, progress.Discard()); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 	two := provisioned(t, p, "two")
@@ -277,7 +277,7 @@ func TestLiveARequestOutstandingPastTheDrainWindowGetsFiveOhTwo(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, progress.Discard()); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 	two := provisioned(t, p, "two")
@@ -318,7 +318,7 @@ func TestLiveAReleaseThatCannotPassItsGateLeavesThePreviousOneServing(t *testing
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, progress.Discard()); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 	routed := vm.drives(t, "config apps/http/servers/ocel/routes")
@@ -326,7 +326,7 @@ func TestLiveAReleaseThatCannotPassItsGateLeavesThePreviousOneServing(t *testing
 	refusals := map[string]string{}
 	for _, tag := range []string{"sick", "hung", "crasher"} {
 		broken := provisioned(t, p, tag)
-		err := rollingOut(p, broken, 5*time.Second, nil)
+		err := rollingOut(p, broken, 5*time.Second, progress.Discard())
 		if err == nil {
 			t.Fatalf("a release of the %s fixture passed its gate", tag)
 		}
@@ -376,7 +376,7 @@ func TestLiveAHijackedConnectionDrainsWithItsRetireeRatherThanBeingCutAtCutover(
 	vm, p := onABoxServingContainers(t)
 
 	one := provisioned(t, p, "one")
-	if err := rollingOut(p, one, 30*time.Second, nil); err != nil {
+	if err := rollingOut(p, one, 30*time.Second, progress.Discard()); err != nil {
 		t.Fatalf("Release() of a first deploy = %v", err)
 	}
 	two := provisioned(t, p, "two")

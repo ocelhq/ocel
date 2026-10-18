@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -1257,7 +1258,7 @@ func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusing
 	if rendering := planFor(plan.Groups[0].Changes, proxyConfigItem().ID()); rendering.Action != provider.ActionUpdate || !strings.Contains(rendering.Reason, live.RoutingTable) {
 		t.Errorf("the plan over a box an older ocel rendered shows %s as %q (%q), want the update the apply makes: rendering it again from %s", ProxyConfig, rendering.Action, rendering.Reason, live.RoutingTable)
 	}
-	if err := boot.Apply(context.Background(), request, nil); err != nil {
+	if err := boot.Apply(context.Background(), request, progress.Discard()); err != nil {
 		t.Fatalf("Apply() over a box an older ocel rendered = %v", err)
 	}
 	rig.mu.Lock()

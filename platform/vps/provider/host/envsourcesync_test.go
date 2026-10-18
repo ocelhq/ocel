@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -144,7 +145,7 @@ func TestDestroyingATierStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesTheT
 	}
 
 	box := machine(map[environment.Tier][]Item{production: bootstrapped(t, production)})
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), production, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), production, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := strings.Join(box.commands(), "\n")

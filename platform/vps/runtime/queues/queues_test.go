@@ -45,6 +45,15 @@ func (cipher) Open(_ context.Context, _ environment.Tier, bound seal.AssociatedD
 
 type located map[string]string
 
+type mounted map[string]string
+
+func (m mounted) MountSource(_ context.Context, container, destination string) (string, error) {
+	if source, found := m[container]; found && destination == live.QueueSocketsPath {
+		return source, nil
+	}
+	return "", errors.New(container + " mounts nothing at " + destination)
+}
+
 func (l located) Address(_ context.Context, network, container string) (string, error) {
 	if network != live.AppNetwork(tier, "shop") && network != live.AppNetwork(tier, "blog") {
 		return "", errors.New("not on " + network)
@@ -117,10 +126,12 @@ func record(t *testing.T, store keyvalue.Store, key keyvalue.Key, value any) {
 	}
 }
 
+const queueSockets = "/var/lib/docker/volumes/shop-prod-infra-ocel-queue-sockets/_data"
+
 func aQueue(t *testing.T, store keyvalue.Store) {
 	t.Helper()
 	record(t, store, live.QueueDatabaseKey(tier, "shop", "prod"), live.QueueDatabase{
-		Container: "shop-prod-infra-ocel-queue", Stack: "prod--infra", Sealed: base64.StdEncoding.EncodeToString([]byte("pw")),
+		Container: "shop-prod-infra-ocel-queue", Stack: "prod--infra",
 		DeliverySealed: base64.StdEncoding.EncodeToString([]byte("ds")),
 	})
 	record(t, store, live.QueueTopicKey(tier, "shop", "prod", "send-email"),
@@ -135,7 +146,8 @@ func aHost(store keyvalue.Store, opened *engines) *queues.Engines {
 		Records:     store,
 		Tiers:       []environment.Tier{tier},
 		Cipher:      cipher{},
-		Addresses:   located{"shop-prod-infra-ocel-queue": "10.0.0.2", "shop-worker": "10.0.0.3"},
+		Addresses:   located{"shop-worker": "10.0.0.3"},
+		Mounts:      mounted{"shop-prod-infra-ocel-queue": queueSockets},
 		Open:        opened.open,
 	}
 }
@@ -161,8 +173,12 @@ func TestARecordedQueueIsServedByAnEngineOnItsDatabaseDeliveringToTheWorkersThat
 	if err != nil {
 		t.Fatal(err)
 	}
-	if password, _ := server.User.Password(); server.Host != "10.0.0.2:5432" || server.User.Username() != "postgres" || password != "opened:pw" {
-		t.Errorf("the engine opened %s, want the queue database's address with its opened password", served.config.ServerURL)
+	asked := server.Query()
+	if server.Host != "" || asked.Get("host") != queueSockets || asked.Get("user") != live.QueueRole {
+		t.Errorf("the engine opened %s, want the queue database's own socket as %s", served.config.ServerURL, live.QueueRole)
+	}
+	if asked.Get("user") == "postgres" || server.User.Username() == "postgres" {
+		t.Errorf("the engine opened %s as the database's superuser, which holds every database on the server", served.config.ServerURL)
 	}
 	if served.config.Database != live.QueueDatabaseName {
 		t.Errorf("the engine uses database %q, want %q", served.config.Database, live.QueueDatabaseName)

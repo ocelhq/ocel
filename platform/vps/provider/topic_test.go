@@ -2,7 +2,6 @@ package vps_test
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -80,7 +80,7 @@ func TestADeclaredTaskRunsTheEnvironmentsQueueDatabaseAsAConfinedContainerOnlyIt
 
 	machine := &box{}
 	p, _ := recording(machine)
-	binding, err := p.ProvisionTopic(context.Background(), aTask(t, "send-email"), nil)
+	binding, err := p.ProvisionTopic(context.Background(), aTask(t, "send-email"), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
@@ -100,6 +100,9 @@ func TestADeclaredTaskRunsTheEnvironmentsQueueDatabaseAsAConfinedContainerOnlyIt
 		"'ocel.backup=pg'",
 		"'--cap-drop' 'ALL'",
 		images.QueueDatabase(),
+		"'listen_addresses='",
+		"dst=" + live.QueueSocketsPath,
+		"'" + host.LabelOwner + "=" + live.QueueRole + "'",
 	} {
 		if !strings.Contains(runCommand, want) {
 			t.Errorf("the queue database was started without %q:\n%s", want, runCommand)
@@ -112,35 +115,42 @@ func TestADeclaredTaskRunsTheEnvironmentsQueueDatabaseAsAConfinedContainerOnlyIt
 	}
 }
 
-func TestTheQueuePasswordIsKeptSealedAndRecordedOnlySealed(t *testing.T) {
+func TestTheAgentReachesTheQueueAsARoleThatOwnsOnlyItsDatabaseAndHoldsNoPassword(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
 	p, store := recording(machine)
-	if _, err := p.ProvisionTopic(context.Background(), aTask(t, "send-email"), nil); err != nil {
+	if _, err := p.ProvisionTopic(context.Background(), aTask(t, "send-email"), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
 	if machine.at(host.KeptPath(environment.TierProduction, queueContainer)) < 0 {
-		t.Errorf("the queue's password is not kept on the box:\n%s", strings.Join(machine.commands(), "\n"))
+		t.Errorf("the queue's superuser password is not kept on the box:\n%s", strings.Join(machine.commands(), "\n"))
 	}
-	if !strings.Contains(strings.Join(machine.commands(), "\n"), "'--binding' 'ocel'") {
-		t.Error("the password is not sealed to the queue it belongs to")
+	granted := ""
+	for at, command := range machine.commands() {
+		if strings.Contains(command, "'psql'") {
+			granted = machine.fed[at]
+		}
+	}
+	for _, want := range []string{"CREATE ROLE " + live.QueueRole + " LOGIN", "NOSUPERUSER", "ALTER DATABASE " + live.QueueDatabaseName + " OWNER TO " + live.QueueRole} {
+		if !strings.Contains(granted, want) {
+			t.Errorf("the queue database was handed %q, want it to hold %q", granted, want)
+		}
 	}
 
 	entry, err := store.Read(context.Background(), live.QueueDatabaseKey(environment.TierProduction, "shop", "prod"))
 	if err != nil {
 		t.Fatalf("no queue database is recorded: %v", err)
 	}
-	var recorded live.QueueDatabase
+	var recorded map[string]any
 	if err := json.Unmarshal(entry.Value, &recorded); err != nil {
 		t.Fatal(err)
 	}
-	if recorded.Container != queueContainer || recorded.Stack != "prod--infra" {
-		t.Errorf("the record names %+v, want the container and the stack the password is sealed to", recorded)
+	if recorded["container"] != queueContainer || recorded["stack"] != "prod--infra" {
+		t.Errorf("the record names %+v, want the container and the stack", recorded)
 	}
-	sealed, err := base64.StdEncoding.DecodeString(recorded.Sealed)
-	if err != nil || !strings.HasPrefix(string(sealed), fakeSeal) {
-		t.Errorf("the record holds %q, want the password sealed", recorded.Sealed)
+	if _, holds := recorded["sealed"]; holds {
+		t.Errorf("the record holds the superuser's password for the agent, which reaches the queue as %s and needs none: %+v", live.QueueRole, recorded)
 	}
 }
 
@@ -149,7 +159,7 @@ func TestADeclaredTaskIsRecordedUnderItsDeclaredNameWithItsWholeTopic(t *testing
 
 	p, store := recording(&box{})
 	in := aTask(t, "send-email")
-	if _, err := p.ProvisionTopic(context.Background(), in, nil); err != nil {
+	if _, err := p.ProvisionTopic(context.Background(), in, progress.Discard()); err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
 	entry, err := store.Read(context.Background(), live.QueueTopicKey(environment.TierProduction, "shop", "prod", "send-email"))
@@ -180,7 +190,7 @@ func TestEveryTopicOfAnEnvironmentSharesOneQueueDatabase(t *testing.T) {
 	machine := &box{}
 	p, _ := recording(machine)
 	for _, name := range []string{"send-email", "resize"} {
-		if _, err := p.ProvisionTopic(context.Background(), aTask(t, name), nil); err != nil {
+		if _, err := p.ProvisionTopic(context.Background(), aTask(t, name), progress.Discard()); err != nil {
 			t.Fatalf("ProvisionTopic(%s) = %v", name, err)
 		}
 	}
@@ -203,7 +213,7 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 	first, second := aTask(t, "send-email"), aTask(t, "resize")
 	var bindings []provider.Binding
 	for _, in := range []resources.ProvisionRequest{first, second} {
-		binding, err := p.ProvisionTopic(context.Background(), in, nil)
+		binding, err := p.ProvisionTopic(context.Background(), in, progress.Discard())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -211,7 +221,7 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 	}
 
 	before := len(machine.commands())
-	if err := p.RemoveResource(context.Background(), first.Ref, bindings[0], nil); err != nil {
+	if err := p.RemoveResource(context.Background(), first.Ref, bindings[0], progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
 	if _, err := store.Read(context.Background(), live.QueueTopicKey(environment.TierProduction, "shop", "prod", "send-email")); err == nil {
@@ -221,7 +231,7 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 		t.Fatal("the queue database was taken down while another task still runs on it")
 	}
 
-	if err := p.RemoveResource(context.Background(), first.Ref, bindings[1], nil); err != nil {
+	if err := p.RemoveResource(context.Background(), first.Ref, bindings[1], progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
 	joined := strings.Join(machine.commands()[before:], "\n")

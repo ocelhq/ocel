@@ -143,18 +143,24 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 		method: http.MethodPut,
 		query:  "lifecycle", body: lifecycle, typed: "application/xml", md5: true, allow: []string{"200", "204", "400", "404", "501"},
 	})
-	if s.Public {
-		policy, err := anonymousReadPolicy(s.Bucket)
-		if err != nil {
-			return nil, err
-		}
-		calls = append(calls, storeCall{
-			name: "policy", what: "open bucket " + s.Bucket + " to anonymous reads",
-			method: http.MethodPut,
-			query:  "policy", body: policy, typed: "application/json", allow: []string{"200", "204"},
-		})
+	switch {
+	case s.Internal:
+		return calls, nil
+	case !s.Public:
+		return append(calls, storeCall{
+			name: "policy", what: "close bucket " + s.Bucket + " to anonymous reads",
+			method: http.MethodDelete, query: "policy", allow: []string{"200", "204", "404"},
+		}), nil
 	}
-	return calls, nil
+	policy, err := anonymousReadPolicy(s.Bucket)
+	if err != nil {
+		return nil, err
+	}
+	return append(calls, storeCall{
+		name: "policy", what: "open bucket " + s.Bucket + " to anonymous reads",
+		method: http.MethodPut,
+		query:  "policy", body: policy, typed: "application/json", allow: []string{"200", "204"},
+	}), nil
 }
 
 func (s BucketSpec) corsCall() (storeCall, error) {
