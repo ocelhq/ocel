@@ -21,9 +21,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/bucket"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/pkg/enginetest"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }

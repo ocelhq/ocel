@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
-	"github.com/ocelhq/ocel/pkg/provider/enginetest"
+	"github.com/ocelhq/ocel/pkg/enginetest"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }

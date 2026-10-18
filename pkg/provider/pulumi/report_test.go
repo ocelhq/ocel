@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
@@ -312,16 +311,12 @@ func TestAFailedResourcesErrorDiagnosticIsReportedAsAnErrorNamingTheResource(t *
 	}
 }
 
-func TestAFailedResourcesDiagnosticNeverCarriesASecretTheStackIsConfiguredWith(t *testing.T) {
+func TestAFailedResourcesDiagnosticNeverCarriesASecretTheRunKnows(t *testing.T) {
 	t.Parallel()
 
 	db := urnOf("aws:rds/instance:Instance", "main")
 	secret := "hunter2-p4ssw0rd"
-	recorded := reported(secretValues(auto.ConfigMap{
-		"aws:region":      {Value: "us-east-1"},
-		"app:dbPassword":  {Value: secret, Secret: true},
-		"app:emptySecret": {Value: "", Secret: true},
-	}),
+	recorded := reported([]string{secret},
 		preEvent(db, "aws:rds/instance:Instance"),
 		diagnostic(db, "error", "creating RDS DB Instance: InvalidParameterValue: MasterUserPassword "+secret+" is not valid in us-east-1"),
 		failedEvent(db, "aws:rds/instance:Instance", apitype.OpCreate),

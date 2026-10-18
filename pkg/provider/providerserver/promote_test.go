@@ -168,6 +168,52 @@ func TestAPromoteARouterLeavesUnservedIsTakenBackAndTheRoutersThatMovedServeWhat
 	}
 }
 
+func TestAPromoteWhoseRouterFailsAfterItsMoveLandedIsTakenBackAndEveryRouterServesWhatItDisplaced(t *testing.T) {
+	w := newPromoteWorld(t)
+	if err := w.promotes(t, "p1"); err != nil {
+		t.Fatalf("promote(p1) = %v", err)
+	}
+
+	failed := errors.New("the data plane timed out answering the write")
+	w.routers.DataPlane(fake.RouterDirect).FailNextPointerMoveAfterItLands(failed)
+	err := w.promotes(t, "p2")
+
+	if !errors.Is(err, failed) {
+		t.Fatalf("promote(p2) with a router that failed after moving = %v, want that failure reported", err)
+	}
+	if active := w.active(t); active != "p1" {
+		t.Errorf("the ledger names %q after the promote failed, want p1: a promote no router is known to serve is taken back", active)
+	}
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
+		t.Errorf("the relay router serves web %q after the promote was taken back, want web-p1 again", served)
+	}
+	if served := w.serves(fake.RouterDirect, "api"); served != "api-p1" {
+		t.Errorf("the direct router serves api %q after its move failed, want api-p1, what the ledger names", served)
+	}
+}
+
+func TestAPromoteWhoseFirstRouterFailsAfterItsMoveLandedLeavesTheOtherRouterUntouched(t *testing.T) {
+	w := newPromoteWorld(t)
+	if err := w.promotes(t, "p1"); err != nil {
+		t.Fatalf("promote(p1) = %v", err)
+	}
+
+	w.routers.DataPlane(fake.RouterRelay).FailNextPointerMoveAfterItLands(errors.New("the data plane timed out answering the write"))
+	if err := w.promotes(t, "p2"); err == nil {
+		t.Fatal("promote(p2) with a router that failed after moving = nil, want it taken back")
+	}
+
+	if active := w.active(t); active != "p1" {
+		t.Errorf("the ledger names %q, want p1", active)
+	}
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
+		t.Errorf("the relay router serves web %q, want web-p1 again", served)
+	}
+	if served := w.serves(fake.RouterDirect, "api"); served != "api-p1" {
+		t.Errorf("the direct router serves api %q, want api-p1: the promote stopped before moving it", served)
+	}
+}
+
 func TestAFirstPromoteARouterLeavesUnservedLeavesNothingServedOnItsPointer(t *testing.T) {
 	w := newPromoteWorld(t)
 

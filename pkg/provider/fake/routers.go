@@ -71,6 +71,7 @@ func (r *Routers) DataPlane(kind router.Kind) *DataPlane {
 type DataPlane struct {
 	mu         sync.Mutex
 	failure    error
+	moveFailed error
 	unremoved  error
 	before     func()
 	beforeGone func()
@@ -118,6 +119,12 @@ func (d *DataPlane) FailNextPointerMove(err error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.failure = err
+}
+
+func (d *DataPlane) FailNextPointerMoveAfterItLands(err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.moveFailed = err
 }
 
 func (d *DataPlane) FailNextPointerRemoval(err error) {
@@ -172,6 +179,14 @@ func (d *DataPlane) refusePointerMove() error {
 		return nil
 	}
 	return router.Unserved{Err: failure}
+}
+
+func (d *DataPlane) readFailureAfterMove() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	failure := d.moveFailed
+	d.moveFailed = nil
+	return failure
 }
 
 func (d *DataPlane) written(at projectPointer) int {
@@ -362,7 +377,7 @@ func (s *RouterStack) MovePointer(ctx context.Context, move router.PointerMove, 
 			return err
 		}
 		if s.plane.serveOver(at, releases, move, read) {
-			return nil
+			return s.plane.readFailureAfterMove()
 		}
 	}
 	return router.Unserved{Err: fmt.Errorf("move %s onto %s: another promotion moved the pointer on every one of %d attempts", move.Promotion.PromotionID, at.pointer, moveAttempts)}

@@ -10,8 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"github.com/ocelhq/ocel/pkg/enginetest"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
-	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }

@@ -94,3 +94,42 @@ func TestAnAdoptionWritesNothingAndSoNeverGrowsThePlan(t *testing.T) {
 		t.Error("RefuseUnconsentedChanges() let an install through where the plan showed the engine adopted, and nobody consented to one")
 	}
 }
+
+func TestAConsentedChangeThatBecameADeleteOrReplaceIsWorkNobodyConsentedTo(t *testing.T) {
+	t.Parallel()
+
+	plan := func(action provider.ChangeAction) provider.Plan {
+		return provider.Plan{Groups: []provider.ChangeGroup{{
+			Kind:    provider.StackGroupKind,
+			Name:    "core",
+			Changes: []provider.Change{{Kind: "bucket", Name: "state", Action: action}},
+		}}}
+	}
+	for _, moved := range [][2]provider.ChangeAction{
+		{provider.ActionUpdate, provider.ActionDelete},
+		{provider.ActionUpdate, provider.ActionReplace},
+		{provider.ActionCreate, provider.ActionReplace},
+		{provider.ActionReplace, provider.ActionDelete},
+		{provider.ActionDisableThenDelete, provider.ActionDelete},
+	} {
+		err := bootstrapplan.RefuseUnconsentedChanges(plan(moved[0]), plan(moved[1]))
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+			t.Errorf("RefuseUnconsentedChanges() from %s to %s = %v, want an invalid refusal: nobody consented to the %s", moved[0], moved[1], err, moved[1])
+			continue
+		}
+		if !strings.Contains(refused.Message, "state") || !strings.Contains(refused.Message, string(moved[1])) {
+			t.Errorf("the refusal reads %q, want it to name the row and what it became", refused.Message)
+		}
+	}
+	for _, kept := range [][2]provider.ChangeAction{
+		{provider.ActionDelete, provider.ActionDelete},
+		{provider.ActionReplace, provider.ActionReplace},
+		{provider.ActionReplace, provider.ActionUpdate},
+		{provider.ActionDelete, provider.ActionKeep},
+	} {
+		if err := bootstrapplan.RefuseUnconsentedChanges(plan(kept[0]), plan(kept[1])); err != nil {
+			t.Errorf("RefuseUnconsentedChanges() from %s to %s = %v, want the apply to run: it does no more than the plan showed", kept[0], kept[1], err)
+		}
+	}
+}

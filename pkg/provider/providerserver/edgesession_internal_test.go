@@ -203,3 +203,27 @@ func readProjectParts(t *testing.T, store keyvalue.Store, name keyvalue.Key) []s
 	}
 	return project.Parts
 }
+
+func TestAnEdgeCheckpointRemovesAHostItsCallerDeletedInPlaceFromTheStateItRead(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	recordEdgeState(t, store, stackrecords.EdgeState{Edge: edge.StackState{Slug: "shop"}, Hosts: map[string]stackrecords.HostnameState{
+		"a.preview.test": previewHost("pr-1"),
+		"b.preview.test": previewHost("pr-2"),
+	}})
+
+	mine := &edgeStateStore{keyValues: store, name: shopPreviewEdge}
+	state, err := mine.read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(state.Hosts, "a.preview.test")
+	if err := mine.write(ctx, state); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := readEdgeHosts(t, store), []string{"b.preview.test"}; !slices.Equal(got, want) {
+		t.Errorf("recorded hosts %v, want %v: the state a read hands out is the caller's, and the record it merges against stays as it was read", got, want)
+	}
+}

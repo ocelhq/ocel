@@ -434,6 +434,30 @@ func TestDecodeReadsAStacksOutputsIntoTheVendorsOwnType(t *testing.T) {
 	}
 }
 
+func TestARunConfiguredWithASecretValueIsRefusedBeforeTheEngineRuns(t *testing.T) {
+	t.Parallel()
+
+	engine := &recordingEngine{}
+	_, err := pulumi.New(pulumi.Config{
+		Backend: backend(),
+		Program: program{}.Run,
+		Configure: configuring{program{config: auto.ConfigMap{
+			"app:dbPassword": {Value: "config-s3cret", Secret: true},
+		}}}.Configure,
+		Engine: engine,
+	}).Run(context.Background(), spec(), nil)
+
+	if err == nil {
+		t.Fatal("Run() configured with a secret value = nil, want it refused: stack config is written as plaintext")
+	}
+	if strings.Contains(err.Error(), "config-s3cret") {
+		t.Errorf("Run() reads %q, want the secret value left out of the refusal", err)
+	}
+	if engine.up.Stack != "" {
+		t.Errorf("the engine ran Up on %q, want no run once a secret config value is refused", engine.up.Stack)
+	}
+}
+
 func TestRunHandsTheEngineEverySecretValueItKnowsSoDiagnosticsCanMaskThem(t *testing.T) {
 	t.Parallel()
 
@@ -447,10 +471,9 @@ func TestRunHandsTheEngineEverySecretValueItKnowsSoDiagnosticsCanMaskThem(t *tes
 		Backend: backend(),
 		Program: program{}.Run,
 		Configure: configuring{program{config: auto.ConfigMap{
-			"app:dbPassword": {Value: "config-s3cret", Secret: true},
-			"app:region":     {Value: "us-east-1"},
+			"app:region": {Value: "us-east-1"},
 		}}}.Configure,
-		Secrets: func(provider.StackSpec) []string { return []string{"origin-s3cret"} },
+		Secrets: func(provider.StackSpec) []string { return []string{"origin-s3cret", "config-s3cret"} },
 		Engine:  engine,
 	}).Run(context.Background(), app, nil); err != nil {
 		t.Fatalf("Run() = %v", err)
@@ -474,10 +497,8 @@ func TestAnEngineErrorNeverCarriesASecretTheRunKnowsYetStillUnwrapsToTheEngines(
 	automation := pulumi.New(pulumi.Config{
 		Backend: backend(),
 		Program: program{}.Run,
-		Configure: configuring{program{config: auto.ConfigMap{
-			"app:dbPassword": {Value: "config-s3cret", Secret: true},
-		}}}.Configure,
-		Engine: engine,
+		Secrets: func(provider.StackSpec) []string { return []string{"config-s3cret"} },
+		Engine:  engine,
 	})
 
 	_, previewErr := automation.Preview(context.Background(), spec(), nil)
@@ -518,10 +539,8 @@ func TestASecretInsideALongerSecretLeavesNoPartOfTheLongerOneBehind(t *testing.T
 	_, err := pulumi.New(pulumi.Config{
 		Backend: backend(),
 		Program: program{}.Run,
-		Configure: configuring{program{config: auto.ConfigMap{
-			"app:prefix": {Value: "a-pass", Secret: true},
-		}}}.Configure,
-		Engine: engine,
+		Secrets: func(provider.StackSpec) []string { return []string{"a-pass"} },
+		Engine:  engine,
 	}).Run(context.Background(), spec(), nil)
 	if got, want := err.Error(), "stderr: passphrase [secret] rejected"; got != want {
 		t.Errorf("Run() reads %q, want %q", got, want)

@@ -958,6 +958,52 @@ func TestADeployWhoseDroppedRecordCannotBeRemovedStillServesItsPromotion(t *test
 	}
 }
 
+func TestADeployReclaimsTheBuildItsPromoteDroppedUnderItsEnvironmentLease(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	seedKept(t, vendor)
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	destroyed, leased := destroyedStacks(vendor), vendor.FakeStacks().ListDestroysUnderLease()
+	if len(destroyed) == 0 {
+		t.Fatal("the deploy destroyed nothing, so the lease it destroyed under proves nothing")
+	}
+	if !slices.Equal(leased, destroyed) {
+		t.Errorf("the deploy destroyed %v under its lease, want every stack it destroyed, %v: losing the lease must stop a reclaim", leased, destroyed)
+	}
+}
+
+func TestADeployRetiresWhatItNoLongerDeploysUnderItsEnvironmentLease(t *testing.T) {
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	var mu sync.Mutex
+	var leased []bool
+	vendor.WithHooks(func(hooks *provider.Hooks) {
+		retire := hooks.Retirement.Retire
+		hooks.Retirement = &provider.RetirementHooks{Plan: hooks.Retirement.Plan, Retire: func(ctx context.Context, live provider.LiveApps, progress progress.Log) error {
+			mu.Lock()
+			leased = append(leased, provider.HasLease(ctx, provider.StackRef{Project: live.Slug, Tier: live.Tier, Name: naming.StackName{Env: live.Env}}))
+			mu.Unlock()
+			return retire(ctx, live, progress)
+		}}
+	})
+	client := servedProvider(t, "1.0.0", vendor)
+	bootstrappedOverRPC(t, client)
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(leased, []bool{true}) {
+		t.Errorf("the deploy retired under its lease %v, want once and leased: losing the lease must stop a retire", leased)
+	}
+}
+
 func TestADeployARouterLeftUnservedStillReclaimsTheBuildItsPromoteDropped(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
@@ -974,6 +1020,25 @@ func TestADeployARouterLeftUnservedStillReclaimsTheBuildItsPromoteDropped(t *tes
 	}
 	if !slices.ContainsFunc(vendor.Journal(), func(entry string) bool { return strings.HasPrefix(entry, "destroy ") }) {
 		t.Errorf("the journal reads %v, want the stack of p00's build destroyed", vendor.Journal())
+	}
+}
+
+func TestARollbackReclaimsTheBuildItDroppedUnderItsEnvironmentLease(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedKept(t, vendor)
+
+	if _, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+		t.Fatalf("Rollback() = %v", err)
+	}
+
+	destroyed, leased := destroyedStacks(vendor), vendor.FakeStacks().ListDestroysUnderLease()
+	if len(destroyed) == 0 {
+		t.Fatal("the rollback destroyed nothing, so the lease it destroyed under proves nothing")
+	}
+	if !slices.Equal(leased, destroyed) {
+		t.Errorf("the rollback destroyed %v under its lease, want every stack it destroyed, %v", leased, destroyed)
 	}
 }
 

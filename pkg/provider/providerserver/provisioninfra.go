@@ -221,7 +221,7 @@ func (r *deployRun) recordInfraStack(ctx context.Context, holds []byte) error {
 		return err
 	}
 	if !found {
-		recorded = stackrecords.Stack{Kind: provider.StackInfra, WrittenBy: provider.WrittenByVersion("")}
+		recorded = stackrecords.Stack{Kind: provider.StackInfra, WrittenBy: r.readiness.WrittenBy}
 	}
 	recorded.Resources, recorded.ResourceDigest = holds, ""
 	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, recorded)
