@@ -193,9 +193,33 @@ message SetBindingRequest {
     }
   ];
 
-  common.bindings.v1.Binding binding = 4 [(buf.validate.field).required = true];
+  PublishedBinding published = 4 [(buf.validate.field).required = true];
 
   string owner = 5;
+}
+
+message PublishedBinding {
+  common.bindings.v1.Binding binding = 1 [(buf.validate.field).required = true];
+
+  repeated Grant grants = 2;
+}
+
+message Grant {
+  repeated string actions = 1;
+
+  repeated string resources = 2;
+
+  string label = 3;
+
+  repeated GrantCondition conditions = 4;
+}
+
+message GrantCondition {
+  string operator = 1;
+
+  string key = 2;
+
+  repeated string values = 3;
 }
 
 message SetBindingResponse {

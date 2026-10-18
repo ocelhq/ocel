@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
@@ -115,7 +115,7 @@ func TestResolveLiveValues(t *testing.T) {
 			}
 		}
 
-		resolved := merged(nil, manifest.Bindings, []variablestore.StoredBinding{
+		resolved := live.MergeBindings(nil, manifest.Bindings, []variablestore.StoredBinding{
 			publishedRecord(t, &bindingsv1.Binding{Name: "db--main", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}}}, 1),
 			publishedRecord(t, &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-uploads"}}}, 1),
 		})
@@ -287,35 +287,9 @@ func TestResolveLiveValues(t *testing.T) {
 	})
 }
 
-func TestMerged(t *testing.T) {
-	bindings := []live.Binding{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}}
-	published := &bindingsv1.Binding{
-		Name:       "db--main",
-		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "ocel", Port: 5432}},
-	}
-	records := []variablestore.StoredBinding{publishedRecord(t, published, 1)}
-
-	t.Run("a binding is never shadowed by a secret that shares its name", func(t *testing.T) {
-		got := merged(map[string]string{"OCEL_RESOURCE_POSTGRES_main": "postgres://mine"}, bindings, records)
-		if handed := decodeBinding(t, got["OCEL_RESOURCE_POSTGRES_main"]); !proto.Equal(handed, published) {
-			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the record ocel published for the binding; a secret the user named the same way must not substitute for a resource's own credential", got["OCEL_RESOURCE_POSTGRES_main"])
-		}
-	})
-
-	t.Run("keeps both when they name different keys", func(t *testing.T) {
-		got := merged(map[string]string{"STRIPE_API_KEY": "sk_live"}, bindings, records)
-		if got["STRIPE_API_KEY"] != "sk_live" || len(got) != 2 {
-			t.Errorf("merged = %v, want the secret beside the binding and nothing else", got)
-		}
-		if handed := decodeBinding(t, got["OCEL_RESOURCE_POSTGRES_main"]); !proto.Equal(handed, published) {
-			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the published binding", got["OCEL_RESOURCE_POSTGRES_main"])
-		}
-	})
-}
-
 func publishedRecord(t *testing.T, binding *bindingsv1.Binding, version int64) variablestore.StoredBinding {
 	t.Helper()
-	encoded, err := protojson.Marshal(binding)
+	encoded, err := protojson.Marshal(&variablestorev1.PublishedBinding{Binding: binding})
 	if err != nil {
 		t.Fatalf("render the binding: %v", err)
 	}

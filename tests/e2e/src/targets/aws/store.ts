@@ -300,16 +300,18 @@ export function awsBindingStore(
           continue;
         }
         const envelope = JSON.parse(item.body) as { record: string; owner?: string };
-        const binding = JSON.parse(
-          Buffer.from(envelope.record, "base64").toString("utf8"),
-        ) as Record<string, unknown> & { name: string; source?: string; grants?: BindingGrant[] };
+        const published = JSON.parse(Buffer.from(envelope.record, "base64").toString("utf8")) as {
+          binding: Record<string, unknown> & { name: string; source?: string };
+          grants?: BindingGrant[];
+        };
+        const binding = published.binding;
         const type = bindingTypeOf(binding);
         records.push({
           name: binding.name,
           type,
           source: binding.source ?? "",
           owner: envelope.owner || "OCEL",
-          grants: binding.grants ?? [],
+          grants: published.grants ?? [],
           redactedProperties: (binding[type] as Record<string, unknown> | undefined) ?? {},
         });
       }

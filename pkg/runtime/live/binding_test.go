@@ -5,7 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func postgresBinding() Binding {
@@ -109,4 +112,42 @@ func TestConform(t *testing.T) {
 			t.Errorf("values = %v, want everything left as published", values)
 		}
 	})
+}
+
+func TestAPublishedRecordReachesTheAppAsItsBindingAlone(t *testing.T) {
+	t.Parallel()
+
+	binding := postgresBinding()
+	published := `{"binding":` + postgresRecord + `,"grants":[{"label":"password secret","actions":["secretsmanager:GetSecretValue"],"resources":["arn:aws:secretsmanager:us-east-1:1:secret:db"]}]}`
+	resolved := map[string]string{"KEY": "value", binding.Key: "postgres://mine"}
+	values := MergeBindings(resolved, []Binding{binding}, []variablestore.StoredBinding{{Name: binding.Name, Value: []byte(published)}})
+
+	if values["KEY"] != "value" || len(values) != 2 {
+		t.Errorf("values = %v, want the resolved value kept beside the binding and nothing else", values)
+	}
+	if values[binding.Key] == "postgres://mine" {
+		t.Errorf("%s = %q, want the record published for the binding: a secret the user named the same way must not substitute for a resource's own credential", binding.Key, values[binding.Key])
+	}
+	delivered := &bindingsv1.Binding{}
+	if err := protojson.Unmarshal([]byte(values[binding.Key]), delivered); err != nil {
+		t.Fatalf("%s = %s, which is not the binding an app reads: %v", binding.Key, values[binding.Key], err)
+	}
+	if strings.Contains(values[binding.Key], "grants") || delivered.GetPostgres().GetHost() != "h" {
+		t.Errorf("%s = %s, want the published binding without the grants a deploy renders permissions from", binding.Key, values[binding.Key])
+	}
+	if err := Conform([]Binding{binding}, values); err != nil {
+		t.Errorf("Conform = %v, want the delivered record read as the postgres it is", err)
+	}
+}
+
+func TestARecordThatIsNotPublishedIsHandedOnForConformToRefuse(t *testing.T) {
+	t.Parallel()
+
+	binding := postgresBinding()
+	for _, stored := range []string{"not json", postgresRecord} {
+		values := MergeBindings(nil, []Binding{binding}, []variablestore.StoredBinding{{Name: binding.Name, Value: []byte(stored)}})
+		if err := Conform([]Binding{binding}, values); !errors.Is(err, ErrDrift) {
+			t.Errorf("Conform(%s) = %v, want a value that is no published record refused as drift", stored, err)
+		}
+	}
 }

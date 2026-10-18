@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
@@ -310,7 +311,7 @@ func (r *release) decodeInfra(ctx context.Context, spec provider.StackSpec, outp
 			if err != nil {
 				return provider.StackResult{}, err
 			}
-			collected := bindingOf(resource.Type, binding)
+			collected := bindingOf(resource.Type, &variablestorev1.PublishedBinding{Binding: binding})
 			collected.Resource = resource.Declared
 			result.Bindings = append(result.Bindings, collected)
 			continue
@@ -319,28 +320,31 @@ func (r *release) decodeInfra(ctx context.Context, spec provider.StackSpec, outp
 		if err != nil {
 			return provider.StackResult{}, err
 		}
-		var binding *bindingsv1.Binding
+		var published *variablestorev1.PublishedBinding
 		switch resource.Type {
 		case provider.BindingPostgres:
-			binding, err = collectPostgresBinding(r.cfg.Region, resource.Name, fields)
+			published, err = collectPostgresBinding(r.cfg.Region, resource.Name, fields)
 		case provider.BindingBucket:
-			binding, err = collectBucketBinding(resource.Name, sessions, fields)
+			published, err = collectBucketBinding(resource.Name, sessions, fields)
 		case provider.BindingKV:
-			binding, err = collectKVBinding(ctx, r.cfg.Parameters, resource.Name, fields)
+			var kv *bindingsv1.Binding
+			kv, err = collectKVBinding(ctx, r.cfg.Parameters, resource.Name, fields)
+			published = &variablestorev1.PublishedBinding{Binding: kv}
 		case provider.BindingRealtime:
-			binding, err = collectRealtimeBinding(ctx, r.cfg.SigningKeys, resource.Name, fields)
+			published, err = collectRealtimeBinding(ctx, r.cfg.SigningKeys, resource.Name, fields)
 		}
 		if err != nil {
 			return provider.StackResult{}, err
 		}
-		collected := bindingOf(resource.Type, binding)
+		collected := bindingOf(resource.Type, published)
 		collected.Resource = resource.Declared
 		result.Bindings = append(result.Bindings, collected)
 	}
 	return result, nil
 }
 
-func bindingOf(kind provider.BindingType, binding *bindingsv1.Binding) provider.Binding {
+func bindingOf(kind provider.BindingType, published *variablestorev1.PublishedBinding) provider.Binding {
+	binding := published.GetBinding()
 	properties := map[string]string{}
 	switch kind {
 	case provider.BindingPostgres:
@@ -371,7 +375,7 @@ func bindingOf(kind provider.BindingType, binding *bindingsv1.Binding) provider.
 		Type:       kind,
 		Name:       binding.GetName(),
 		Properties: properties,
-		Grants:     provider.GrantsOf(binding),
+		Grants:     provider.GrantsOf(published.GetGrants()),
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -48,13 +49,13 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 	if _, err := store.Set(ctx, liveScope(), variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, liveSecretValue, nil); err != nil {
 		t.Fatalf("sealing a secret through the box's own helper = %v", err)
 	}
-	pair, err := variablestoreserver.BindingPair("terraform", &bindingsv1.Binding{
+	pair, err := variablestoreserver.BindingPair("terraform", &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{
 		Name:   "main",
 		Source: "terraform",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host: "db.internal", Port: 5432, Database: "orders", Username: "app", Password: liveBindingPassword,
 		}},
-	})
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +78,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 			"REGION":       livePlainValue,
 			"API_TOKEN":    liveSensitiveValue,
 			"DATABASE_URL": liveSecretValue,
-			provider.ResourceEnvName(provider.BindingPostgres, "main"): string(records[0].Value),
+			provider.ResourceEnvName(provider.BindingPostgres, "main"): live.MergeBindings(nil, []live.Binding{{Name: "main", Key: "main"}}, records)["main"],
 		},
 	}
 }

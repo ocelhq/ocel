@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
@@ -41,7 +42,7 @@ func (s stores) set(t *testing.T, scope variablestore.Scope, at variablestore.Co
 
 func (s stores) publish(t *testing.T, scope variablestore.Scope, environment, name string, binding *bindingsv1.Binding) {
 	t.Helper()
-	encoded, err := protojson.Marshal(binding)
+	encoded, err := protojson.Marshal(&variablestorev1.PublishedBinding{Binding: binding})
 	if err != nil {
 		t.Fatal(err)
 	}

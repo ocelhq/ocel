@@ -1,5 +1,6 @@
 import { source } from "./cli.js";
 import { type Grant, grantsFor, type SSTInclude, scoped } from "./grants.js";
+import type { PublishedBinding } from "./published.js";
 
 /** The typed properties a postgres binding contains, as `common.bindings.v1.PostgresProperties`. */
 export interface PostgresProperties {
@@ -14,7 +15,6 @@ export interface PostgresProperties {
 export interface PostgresBinding {
   name: string;
   postgres: PostgresProperties;
-  grants?: Grant[];
   source: string;
 }
 
@@ -24,22 +24,23 @@ export interface DescribedPostgres {
   grants?: Grant[];
 }
 
-export function postgresBinding(name: string, described: DescribedPostgres): PostgresBinding {
+export function publishedPostgres(
+  name: string,
+  described: DescribedPostgres,
+): PublishedBinding<PostgresBinding> {
   if (!name) {
     throw new Error(
       "a binding is published under no name; the name is what a consuming app binds to",
     );
   }
-  const binding: PostgresBinding = {
-    name,
-    postgres: propertiesFor(name, described.properties),
-    source,
+  const published: PublishedBinding<PostgresBinding> = {
+    binding: { name, postgres: propertiesFor(name, described.properties), source },
   };
   const grants = scoped(name, described.grants ?? grantsFor(name, described.include));
   if (grants) {
-    binding.grants = grants;
+    published.grants = grants;
   }
-  return binding;
+  return published;
 }
 
 const textFields = ["host", "database", "username", "password"] as const;

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -23,7 +24,7 @@ func postgresOutputs() map[string]any {
 	}
 }
 
-func collectTestPostgres(t *testing.T, region string) (*bindingsv1.Binding, error) {
+func collectTestPostgres(t *testing.T, region string) (*variablestorev1.PublishedBinding, error) {
 	t.Helper()
 	return collectPostgresBinding(region, "db--main", postgresOutputs())
 }
@@ -54,10 +55,10 @@ func TestThePostgresBindingNamesTheSecretItsPasswordRotatesIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collectPostgresBinding: %v", err)
 	}
-	if got := provider.BindingOf(binding).PasswordSecret(); got != testSecretARN {
+	if got := provider.PublishedBindingOf(binding).PasswordSecret(); got != testSecretARN {
 		t.Errorf("the binding names %q as its password's secret, want %s: RDS rotates the password there every 7 days, and the runtime reads it from there", got, testSecretARN)
 	}
-	at := slices.IndexFunc(binding.GetGrants(), func(g *bindingsv1.Grant) bool { return g.GetLabel() == provider.GrantPasswordSecret })
+	at := slices.IndexFunc(binding.GetGrants(), func(g *variablestorev1.Grant) bool { return g.GetLabel() == provider.GrantPasswordSecret })
 	if at < 0 {
 		t.Fatalf("grants = %v, want one that lets the app read the master secret", binding.GetGrants())
 	}
@@ -74,10 +75,10 @@ func TestThePostgresBindingCarriesNoPasswordARotationCouldLeaveStale(t *testing.
 	if err != nil {
 		t.Fatalf("collectPostgresBinding: %v", err)
 	}
-	if got := binding.GetPostgres().GetPassword(); got != "" {
+	if got := binding.GetBinding().GetPostgres().GetPassword(); got != "" {
 		t.Errorf("the binding carries a password of %d bytes, want none: RDS rotates it every 7 days, and every reader resolves it from the secret the binding names", len(got))
 	}
-	if err := provider.VerifyProperties(provider.BindingOf(binding)); err != nil {
+	if err := provider.VerifyProperties(provider.PublishedBindingOf(binding)); err != nil {
 		t.Errorf("VerifyProperties() = %v, want the binding providerserver records", err)
 	}
 }
@@ -89,7 +90,7 @@ func TestThePostgresBindingVerifiesTheServerAgainstItsRegionsRDSRoots(t *testing
 	if err != nil {
 		t.Fatalf("collectPostgresBinding: %v", err)
 	}
-	properties := binding.GetPostgres()
+	properties := binding.GetBinding().GetPostgres()
 	if properties.GetTlsMode() != bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL {
 		t.Errorf("tls mode = %s, want VERIFY_FULL so an SDK refuses a server that is not the cluster", properties.GetTlsMode())
 	}

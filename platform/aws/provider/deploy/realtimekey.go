@@ -14,6 +14,7 @@ import (
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
 const (
@@ -141,7 +142,7 @@ func deleteSigningKeys(ctx context.Context, keys SigningKeysAPI, names []string)
 	return nil
 }
 
-func collectRealtimeBinding(ctx context.Context, keys SigningKeysAPI, name string, fields map[string]any) (*bindingsv1.Binding, error) {
+func collectRealtimeBinding(ctx context.Context, keys SigningKeysAPI, name string, fields map[string]any) (*variablestorev1.PublishedBinding, error) {
 	values := map[string]string{}
 	for _, key := range []string{outputKeyHost, outputKeyRealtimeHost, outputKeyAPIARN, outputKeyNamespace, outputKeySigningKey} {
 		value, err := requireStringField(fields, name, key)
@@ -158,20 +159,22 @@ func collectRealtimeBinding(ctx context.Context, keys SigningKeysAPI, name strin
 	if !found {
 		return nil, fmt.Errorf("realtime %s signs its tokens with the key in %s, and that secret is gone; re-deploy to mint a new one", name, secret)
 	}
-	return &bindingsv1.Binding{
-		Name: name,
-		Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
-			Url:        "wss://" + values[outputKeyRealtimeHost] + realtimeSocketPath,
-			Host:       values[outputKeyHost],
-			SigningKey: seed,
-			VerifyKey:  ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey),
-		}},
+	return &variablestorev1.PublishedBinding{
+		Binding: &bindingsv1.Binding{
+			Name: name,
+			Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
+				Url:        "wss://" + values[outputKeyRealtimeHost] + realtimeSocketPath,
+				Host:       values[outputKeyHost],
+				SigningKey: seed,
+				VerifyKey:  ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey),
+			}},
+		},
 		Grants: realtimeGrants(values[outputKeyAPIARN], values[outputKeyNamespace]),
 	}, nil
 }
 
-func realtimeGrants(apiARN, namespace string) []*bindingsv1.Grant {
-	return []*bindingsv1.Grant{
+func realtimeGrants(apiARN, namespace string) []*variablestorev1.Grant {
+	return []*variablestorev1.Grant{
 		{Label: "connect", Actions: []string{"appsync:EventConnect"}, Resources: []string{apiARN}},
 		{Label: "publish", Actions: []string{"appsync:EventPublish"}, Resources: []string{apiARN + "/channelNamespace/" + namespace}},
 	}

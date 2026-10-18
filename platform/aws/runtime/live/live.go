@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -44,8 +43,8 @@ func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 	for _, lag := range f.unreportedGrantLag(records) {
 		fmt.Fprintln(os.Stderr, "ocel: "+lag)
 	}
-	values := merged(resolved, f.bindings, records)
-	if err := currentPasswords(ctx, f.secrets, f.bindings, values); err != nil {
+	values := live.MergeBindings(resolved, f.bindings, records)
+	if err := currentPasswords(ctx, f.secrets, f.bindings, records, values); err != nil {
 		return nil, err
 	}
 	return values, nil
@@ -104,15 +103,6 @@ func bindingNames(bindings []live.Binding) []string {
 		names = append(names, l.Name)
 	}
 	return names
-}
-
-func merged(resolved map[string]string, bindings []live.Binding, records []variablestore.StoredBinding) map[string]string {
-	out := make(map[string]string, len(resolved)+len(records))
-	maps.Copy(out, resolved)
-	for i, record := range records {
-		out[bindings[i].Key] = string(record.Value)
-	}
-	return out
 }
 
 func Resolve(ctx context.Context, taskRoot string) (*live.Values, error) {

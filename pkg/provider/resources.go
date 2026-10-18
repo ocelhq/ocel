@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -180,7 +181,7 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 	if err := VerifyProperties(binding); err != nil {
 		return nil, err
 	}
-	message := &bindingsv1.Binding{Name: binding.Name, Grants: grantMessages(binding.Grants)}
+	message := &bindingsv1.Binding{Name: binding.Name}
 	switch binding.Type {
 	case BindingPostgres:
 		port, _ := strconv.Atoi(binding.Properties[PropertyPort])
@@ -235,15 +236,23 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 	return message, nil
 }
 
-func grantMessages(grants []Grant) []*bindingsv1.Grant {
+func PublishedBindingMessage(binding Binding) (*variablestorev1.PublishedBinding, error) {
+	message, err := BindingMessage(binding)
+	if err != nil {
+		return nil, err
+	}
+	return &variablestorev1.PublishedBinding{Binding: message, Grants: GrantMessages(binding.Grants)}, nil
+}
+
+func GrantMessages(grants []Grant) []*variablestorev1.Grant {
 	if len(grants) == 0 {
 		return nil
 	}
-	out := make([]*bindingsv1.Grant, 0, len(grants))
+	out := make([]*variablestorev1.Grant, 0, len(grants))
 	for _, grant := range grants {
-		message := &bindingsv1.Grant{Label: grant.Label, Actions: grant.Actions, Resources: grant.Resources}
+		message := &variablestorev1.Grant{Label: grant.Label, Actions: grant.Actions, Resources: grant.Resources}
 		for _, condition := range grant.Conditions {
-			message.Conditions = append(message.Conditions, &bindingsv1.GrantCondition{
+			message.Conditions = append(message.Conditions, &variablestorev1.GrantCondition{
 				Operator: condition.Operator,
 				Key:      condition.Key,
 				Values:   condition.Values,
@@ -260,7 +269,6 @@ func BindingOf(message *bindingsv1.Binding) Binding {
 		Name:       message.GetName(),
 		Source:     message.GetSource(),
 		Properties: map[string]string{},
-		Grants:     GrantsOf(message),
 	}
 	if kind, known := BindingTypeFromProto(naming.BindingTypeOf(message)); known {
 		binding.Type = kind
@@ -273,8 +281,13 @@ func BindingOf(message *bindingsv1.Binding) Binding {
 	return binding
 }
 
-func GrantsOf(message *bindingsv1.Binding) []Grant {
-	grants := message.GetGrants()
+func PublishedBindingOf(message *variablestorev1.PublishedBinding) Binding {
+	binding := BindingOf(message.GetBinding())
+	binding.Grants = GrantsOf(message.GetGrants())
+	return binding
+}
+
+func GrantsOf(grants []*variablestorev1.Grant) []Grant {
 	if len(grants) == 0 {
 		return nil
 	}

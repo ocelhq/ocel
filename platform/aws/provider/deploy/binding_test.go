@@ -5,9 +5,13 @@ import (
 	"slices"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
@@ -41,8 +45,8 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 		t.Fatalf("what this deploy publishes drifts from what it tells the app to expect: %v", err)
 	}
 	for _, l := range bindings {
-		binding, err := variablestoreserver.DecodeBinding([]byte(published[l.Key]))
-		if err != nil {
+		binding := &bindingsv1.Binding{}
+		if err := protojson.Unmarshal([]byte(published[l.Key]), binding); err != nil {
 			t.Fatalf("binding %s conformed to %q, which no app can parse: %v", l.Name, published[l.Key], err)
 		}
 		if got := naming.BindingTypeOf(binding); got != l.Type {
@@ -53,20 +57,17 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 
 func publishedRecords(t *testing.T, bindings []live.Binding) (map[string]string, error) {
 	t.Helper()
-	records := provisionedBindings()
-	keys := make(map[string]string, len(bindings))
+	provisioned := provisionedBindings()
+	records := make([]variablestore.StoredBinding, 0, len(bindings))
 	for _, l := range bindings {
-		keys[l.Name] = l.Key
-	}
-	out := make(map[string]string, len(records))
-	for _, r := range records {
-		encoded, err := variablestoreserver.EncodeBinding(r)
+		at := slices.IndexFunc(provisioned, func(r *bindingsv1.Binding) bool { return r.GetName() == l.Name })
+		pair, err := variablestoreserver.BindingPair(variablestore.OwnerOcel, &variablestorev1.PublishedBinding{Binding: provisioned[at]})
 		if err != nil {
 			return nil, err
 		}
-		out[keys[r.GetName()]] = string(encoded)
+		records = append(records, variablestore.StoredBinding{Name: l.Name, Value: pair.Value})
 	}
-	return out, nil
+	return live.MergeBindings(nil, bindings, records), nil
 }
 
 func TestVariablesReadPolicyReachesOneValuePartitionPerProject(t *testing.T) {

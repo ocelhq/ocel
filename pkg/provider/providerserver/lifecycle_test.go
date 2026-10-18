@@ -13,6 +13,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -102,7 +103,7 @@ func TestADeployOfTheOtherLifecycleToAPreviewIsRefusedBeforeItProvisionsAnything
 
 func publishPreviewRecord(t *testing.T, vendor *fake.Provider, preview string, binding *bindingsv1.Binding) {
 	t.Helper()
-	pair, err := variablestoreserver.BindingPair("terraform", binding)
+	pair, err := variablestoreserver.BindingPair("terraform", &variablestorev1.PublishedBinding{Binding: binding})
 	if err != nil {
 		t.Fatal(err)
 	}

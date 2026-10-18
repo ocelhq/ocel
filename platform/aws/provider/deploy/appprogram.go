@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -392,7 +391,7 @@ func planBindingPolicies(grants []provider.Binding) ([]bindingPolicy, error) {
 		if slices.ContainsFunc(out, func(planned bindingPolicy) bool { return planned.Binding == binding.Name }) {
 			continue
 		}
-		policy, err := bindingPolicyDocument(binding.Name, grantMessages(binding.Grants))
+		policy, err := bindingPolicyDocument(binding.Name, provider.GrantMessages(binding.Grants))
 		if err != nil {
 			return nil, err
 		}
@@ -402,25 +401,6 @@ func planBindingPolicies(grants []provider.Binding) ([]bindingPolicy, error) {
 		out = append(out, bindingPolicy{Binding: binding.Name, Policy: policy})
 	}
 	return out, nil
-}
-
-func grantMessages(grants []provider.Grant) []*bindingsv1.Grant {
-	if len(grants) == 0 {
-		return nil
-	}
-	out := make([]*bindingsv1.Grant, 0, len(grants))
-	for _, grant := range grants {
-		message := &bindingsv1.Grant{Label: grant.Label, Actions: grant.Actions, Resources: grant.Resources}
-		for _, condition := range grant.Conditions {
-			message.Conditions = append(message.Conditions, &bindingsv1.GrantCondition{
-				Operator: condition.Operator,
-				Key:      condition.Key,
-				Values:   condition.Values,
-			})
-		}
-		out = append(out, message)
-	}
-	return out
 }
 
 func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.StackResult, error) {

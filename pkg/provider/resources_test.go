@@ -10,6 +10,45 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+func TestABindingsGrantsArePublishedBesideTheRecordAnAppReads(t *testing.T) {
+	t.Parallel()
+
+	binding := provider.Binding{
+		Type: provider.BindingPostgres,
+		Name: "db--main",
+		Properties: map[string]string{
+			provider.PropertyHost:     "db.example",
+			provider.PropertyPort:     "5432",
+			provider.PropertyDatabase: "shop",
+			provider.PropertyUsername: "shop",
+		},
+		Grants: []provider.Grant{{
+			Label:      provider.GrantPasswordSecret,
+			Actions:    []string{"secretsmanager:GetSecretValue"},
+			Resources:  []string{"arn:aws:secretsmanager:us-east-1:1:secret:db"},
+			Conditions: []provider.GrantCondition{{Operator: "StringEquals", Key: "aws:ResourceTag/ocel", Values: []string{"shop"}}},
+		}},
+	}
+	published, err := provider.PublishedBindingMessage(binding)
+	if err != nil {
+		t.Fatalf("PublishedBindingMessage: %v", err)
+	}
+	app, err := provider.BindingMessage(binding)
+	if err != nil {
+		t.Fatalf("BindingMessage: %v", err)
+	}
+	if !proto.Equal(published.GetBinding(), app) {
+		t.Errorf("published binding = %v, want the record an app reads, %v", published.GetBinding(), app)
+	}
+	read := provider.PublishedBindingOf(published)
+	if read.PasswordSecret() != "arn:aws:secretsmanager:us-east-1:1:secret:db" || len(read.Grants) != 1 || len(read.Grants[0].Conditions) != 1 {
+		t.Errorf("read back %+v, want the grants it was published with", read.Grants)
+	}
+	if grants := provider.BindingOf(app).Grants; grants != nil {
+		t.Errorf("the app's record reads back grants %+v, want none: a deploy renders them, an app never sees them", grants)
+	}
+}
+
 func TestABucketBindingIncludesThePublicAddressItWasPublishedUnder(t *testing.T) {
 	t.Parallel()
 

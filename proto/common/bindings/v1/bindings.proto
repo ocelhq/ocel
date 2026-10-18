@@ -35,8 +35,6 @@ message Binding {
     RealtimeProperties realtime = 10;
   }
 
-  repeated Grant grants = 4;
-
   string source = 5;
 }
 
@@ -86,22 +84,4 @@ message RealtimeProperties {
   string host = 3;
   bytes signing_key = 4 [debug_redact = true];
   bytes verify_key = 5;
-}
-
-message Grant {
-  repeated string actions = 1;
-
-  repeated string resources = 2;
-
-  string label = 3;
-
-  repeated GrantCondition conditions = 4;
-}
-
-message GrantCondition {
-  string operator = 1;
-
-  string key = 2;
-
-  repeated string values = 3;
 }

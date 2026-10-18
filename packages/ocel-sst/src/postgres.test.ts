@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { source } from "./cli.js";
-import { postgresBinding } from "./postgres.js";
+import { publishedPostgres } from "./postgres.js";
 
 function repoRoot() {
   let dir = new URL("./", import.meta.url);
@@ -16,8 +16,12 @@ function repoRoot() {
 }
 
 const fixture = JSON.parse(
-  readFileSync(new URL("proto/common/bindings/v1/fixtures/postgres.json", repoRoot()), "utf8"),
+  readFileSync(
+    new URL("proto/provider/variablestore/v1/fixtures/postgres.json", repoRoot()),
+    "utf8",
+  ),
 );
+const record = fixture.binding;
 
 function sstPostgres(properties: Record<string, unknown>) {
   return { getSSTBinding: () => ({ properties }) };
@@ -26,22 +30,22 @@ function sstPostgres(properties: Record<string, unknown>) {
 describe("the record a postgres binding publishes as", () => {
   it("is the conformance fixture less its tls settings, sourced to sst", () => {
     const resource = sstPostgres({
-      database: fixture.postgres.database,
-      username: fixture.postgres.username,
-      password: fixture.postgres.password,
-      port: fixture.postgres.port,
-      host: fixture.postgres.host,
+      database: record.postgres.database,
+      username: record.postgres.username,
+      password: record.postgres.password,
+      port: record.postgres.port,
+      host: record.postgres.host,
     });
-    const { tlsMode, tlsCa, ...published } = fixture.postgres;
+    const { tlsMode, tlsCa, ...published } = record.postgres;
 
     expect(
-      postgresBinding(fixture.name, { ...resource.getSSTBinding(), grants: fixture.grants }),
-    ).toEqual({ ...fixture, postgres: published, source });
+      publishedPostgres(record.name, { ...resource.getSSTBinding(), grants: fixture.grants }),
+    ).toEqual({ binding: { ...record, postgres: published, source }, grants: fixture.grants });
   });
 
   it("turns an sst include into grants", () => {
-    const binding = postgresBinding("orders", {
-      properties: fixture.postgres,
+    const binding = publishedPostgres("orders", {
+      properties: record.postgres,
       include: [
         {
           type: "aws.permission",
@@ -61,31 +65,31 @@ describe("the record a postgres binding publishes as", () => {
 
   it("refuses a grant reaching past the resource the binding names", () => {
     expect(() =>
-      postgresBinding("orders", {
-        properties: fixture.postgres,
+      publishedPostgres("orders", {
+        properties: record.postgres,
         grants: [{ actions: ["rds-db:connect"], resources: ["*"] }],
       }),
     ).toThrow(/reaches past|nothing else/);
   });
 
   it("refuses a resource missing a field an app resolving it reads", () => {
-    const { password, ...rest } = fixture.postgres;
-    expect(() => postgresBinding("orders", { properties: rest })).toThrow(/has no password/);
+    const { password, ...rest } = record.postgres;
+    expect(() => publishedPostgres("orders", { properties: rest })).toThrow(/has no password/);
   });
 
   it("refuses a port that is not a whole number", () => {
     expect(() =>
-      postgresBinding("orders", {
-        properties: { ...fixture.postgres, port: "not-a-port" },
+      publishedPostgres("orders", {
+        properties: { ...record.postgres, port: "not-a-port" },
       }),
     ).toThrow(/port/);
   });
 
   it("reads a port SST handed over as a string", () => {
-    const binding = postgresBinding("orders", {
-      properties: { ...fixture.postgres, port: "5433" },
+    const binding = publishedPostgres("orders", {
+      properties: { ...record.postgres, port: "5433" },
     });
 
-    expect(binding.postgres.port).toBe(5433);
+    expect(binding.binding.postgres.port).toBe(5433);
   });
 });

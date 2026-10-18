@@ -1,4 +1,5 @@
 import { source } from "./cli.js";
+import type { PublishedBinding } from "./published.js";
 
 /** One `common.bindings.v1.Binding` containing a custom record's open properties, ready for protobuf JSON. */
 export interface CustomBinding {
@@ -7,7 +8,10 @@ export interface CustomBinding {
   source: string;
 }
 
-export function customBinding(name: string, properties: Record<string, unknown>): CustomBinding {
+export function publishedCustom(
+  name: string,
+  properties: Record<string, unknown>,
+): PublishedBinding<CustomBinding> {
   if (!name) {
     throw new Error(
       "a binding is published under no name; the name is what a transform reads it by",
@@ -25,5 +29,5 @@ export function customBinding(name: string, properties: Record<string, unknown>)
       );
     }
   }
-  return { name, custom: properties, source };
+  return { binding: { name, custom: properties, source } };
 }

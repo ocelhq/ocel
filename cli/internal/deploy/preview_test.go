@@ -31,6 +31,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -73,7 +74,7 @@ func coverPreview(t *testing.T, fixture clitest.FakeProject, identity string) {
 	t.Helper()
 	const owner = variablestore.OwnerOcel
 	binding := publishedPostgres("db--main")
-	pair, err := variablestoreserver.BindingPair(owner, binding)
+	pair, err := variablestoreserver.BindingPair(owner, &variablestorev1.PublishedBinding{Binding: binding})
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}

@@ -9,28 +9,27 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type SecretsAPI interface {
 	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 }
 
-func currentPasswords(ctx context.Context, secrets SecretsAPI, bindings []live.Binding, values map[string]string) error {
-	for _, l := range bindings {
+func currentPasswords(ctx context.Context, secrets SecretsAPI, bindings []live.Binding, records []variablestore.StoredBinding, values map[string]string) error {
+	for i, record := range records {
+		l := bindings[i]
 		if l.Type != bindingsv1.BindingType_BINDING_TYPE_POSTGRES {
 			continue
 		}
-		raw, ok := values[l.Key]
-		if !ok {
+		published := &variablestorev1.PublishedBinding{}
+		if err := protojson.Unmarshal(record.Value, published); err != nil || published.GetBinding().GetPostgres() == nil {
 			continue
 		}
-		binding := &bindingsv1.Binding{}
-		if err := protojson.Unmarshal([]byte(raw), binding); err != nil {
-			continue
-		}
-		secretARN := provider.BindingOf(binding).PasswordSecret()
+		secretARN := provider.PublishedBindingOf(published).PasswordSecret()
 		if secretARN == "" {
 			continue
 		}
@@ -38,6 +37,7 @@ func currentPasswords(ctx context.Context, secrets SecretsAPI, bindings []live.B
 		if err != nil {
 			return fmt.Errorf("read the current password of %s: %w", l.Name, err)
 		}
+		binding := published.GetBinding()
 		binding.GetPostgres().Password = password
 		encoded, err := protojson.Marshal(binding)
 		if err != nil {

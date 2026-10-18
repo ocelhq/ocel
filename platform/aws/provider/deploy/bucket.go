@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -329,7 +330,7 @@ func joinArn(arn pulumi.StringOutput, suffix string) pulumi.StringInput {
 	return arn.ApplyT(func(a string) string { return a + suffix }).(pulumi.StringOutput)
 }
 
-func collectBucketBinding(name string, sessions sessionScope, fields map[string]any) (*bindingsv1.Binding, error) {
+func collectBucketBinding(name string, sessions sessionScope, fields map[string]any) (*variablestorev1.PublishedBinding, error) {
 	bucket, err := requireStringField(fields, name, outputKeyBucket)
 	if err != nil {
 		return nil, err
@@ -337,10 +338,9 @@ func collectBucketBinding(name string, sessions sessionScope, fields map[string]
 	if sessions.TableARN == "" {
 		return nil, fmt.Errorf("bucket %s keeps its upload sessions in this account's state table, and this deploy resolved no ARN for it", name)
 	}
-	return &bindingsv1.Binding{
-		Name:       name,
-		Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: bucket}},
-		Grants:     bucketGrants(bucket, sessions),
+	return &variablestorev1.PublishedBinding{
+		Binding: &bindingsv1.Binding{Name: name, Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: bucket}}},
+		Grants:  bucketGrants(bucket, sessions),
 	}, nil
 }
 

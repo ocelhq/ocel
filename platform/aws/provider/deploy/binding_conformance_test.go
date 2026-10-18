@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
@@ -47,6 +48,25 @@ func bindingFixture(t *testing.T, typ bindingsv1.BindingType) *bindingsv1.Bindin
 		t.Fatalf("binding fixture %s is not a common.bindings.v1.Binding: %v", fixtureFile(typ), err)
 	}
 	return binding
+}
+
+func publishedFixtureBytes(t *testing.T, typ bindingsv1.BindingType) []byte {
+	t.Helper()
+	path := filepath.Join(repoRoot(t), "proto", "provider", "variablestore", "v1", "fixtures", fixtureFile(typ))
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read published fixture for %s: %v", typ, err)
+	}
+	return body
+}
+
+func publishedFixture(t *testing.T, typ bindingsv1.BindingType) *variablestorev1.PublishedBinding {
+	t.Helper()
+	published := &variablestorev1.PublishedBinding{}
+	if err := protojson.Unmarshal(publishedFixtureBytes(t, typ), published); err != nil {
+		t.Fatalf("published fixture %s is not a provider.variablestore.v1.PublishedBinding: %v", fixtureFile(typ), err)
+	}
+	return published
 }
 
 func canonicalJSON(t *testing.T, raw []byte) []byte {
@@ -89,16 +109,23 @@ func TestBindingFixtureExistsPerBindingType(t *testing.T) {
 	}
 }
 
-func assertMatchesFixture(t *testing.T, got *bindingsv1.Binding, typ bindingsv1.BindingType) {
+func assertMatchesFixture(t *testing.T, got *variablestorev1.PublishedBinding, typ bindingsv1.BindingType) {
 	t.Helper()
-	want := bindingFixture(t, typ)
+	want := publishedFixture(t, typ)
 	if !proto.Equal(got, want) {
-		t.Errorf("producer emitted a %s binding that differs from the checked-in record %s at %s — the consumer suite parses that fixture, so a divergence here is cross-language drift", typ, fixtureFile(typ), strings.Join(differingFields(got.ProtoReflect(), want.ProtoReflect(), ""), "; "))
+		t.Errorf("producer published a %s binding that differs from the checked-in record %s at %s — the consumer suite parses that fixture, so a divergence here is cross-language drift", typ, fixtureFile(typ), strings.Join(differingFields(got.ProtoReflect(), want.ProtoReflect(), ""), "; "))
 	}
 
-	payload, err := variablestoreserver.EncodeBinding(got)
+	stored, err := variablestoreserver.EncodePublishedBinding(got)
 	if err != nil {
-		t.Fatalf("encode the produced binding as the store and the app payload do: %v", err)
+		t.Fatalf("encode the produced binding as the store does: %v", err)
+	}
+	if wantBytes := canonicalJSON(t, publishedFixtureBytes(t, typ)); !bytes.Equal(canonicalJSON(t, stored), wantBytes) {
+		t.Errorf("published record = %s, want the checked-in published fixture byte for byte %s", stored, wantBytes)
+	}
+	payload, err := protojson.Marshal(got.GetBinding())
+	if err != nil {
+		t.Fatalf("encode the produced binding as the app payload: %v", err)
 	}
 	if wantBytes := canonicalJSON(t, fixtureBytes(t, typ)); !bytes.Equal(canonicalJSON(t, payload), wantBytes) {
 		t.Errorf("app payload = %s, want the checked-in fixture byte for byte %s", payload, wantBytes)
@@ -130,9 +157,8 @@ func differingFields(got, want protoreflect.Message, prefix string) []string {
 func TestPostgresProducerEmitsTheFixture(t *testing.T) {
 	t.Parallel()
 
-	fixture := bindingFixture(t, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
-	want := fixture.GetPostgres()
-	secretARN := provider.BindingOf(fixture).PasswordSecret()
+	want := bindingFixture(t, bindingsv1.BindingType_BINDING_TYPE_POSTGRES).GetPostgres()
+	secretARN := provider.PublishedBindingOf(publishedFixture(t, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)).PasswordSecret()
 	if secretARN == "" {
 		t.Fatalf("fixture %s names no %q grant, and the AWS record names its password by one", fixtureFile(bindingsv1.BindingType_BINDING_TYPE_POSTGRES), provider.GrantPasswordSecret)
 	}
@@ -149,13 +175,13 @@ func TestPostgresProducerEmitsTheFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collectPostgresBinding: %v", err)
 	}
-	if password := got.GetPostgres().GetPassword(); password != "" {
+	if password := got.GetBinding().GetPostgres().GetPassword(); password != "" {
 		t.Errorf("AWS emitted a password of %d bytes, want none: the runtime reads it from the secret the record names", len(password))
 	}
-	if named := provider.BindingOf(got).PasswordSecret(); named != secretARN {
+	if named := provider.PublishedBindingOf(got).PasswordSecret(); named != secretARN {
 		t.Errorf("AWS named %q as the password secret, want %s", named, secretARN)
 	}
-	got.GetPostgres().Password = want.GetPassword()
+	got.GetBinding().GetPostgres().Password = want.GetPassword()
 	assertMatchesFixture(t, got, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
 }
 

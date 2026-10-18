@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -153,9 +154,9 @@ func (b *box) set(t *testing.T, scope variablestore.Scope, at variablestore.Coor
 	}
 }
 
-func (b *box) bind(t *testing.T, scope variablestore.Scope, environment, name string, binding *bindingsv1.Binding) {
+func (b *box) bind(t *testing.T, scope variablestore.Scope, environment, name string, binding *bindingsv1.Binding, grants ...*variablestorev1.Grant) {
 	t.Helper()
-	pair, err := variablestoreserver.BindingPair("terraform", binding)
+	pair, err := variablestoreserver.BindingPair("terraform", &variablestorev1.PublishedBinding{Binding: binding, Grants: grants})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +286,7 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host: "db.internal", Port: 5432, Database: "orders", Username: "app", Password: "hunter2",
 		}},
-	})
+	}, &variablestorev1.Grant{Label: "connect", Actions: []string{"rds-db:connect"}, Resources: []string{"arn:aws:rds-db:us-east-1:1:dbuser:cluster/app"}})
 	b.dump(t)
 
 	bindings := []live.Binding{{Name: "main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
@@ -296,6 +297,9 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 	entry := resolved["OCEL_RESOURCE_POSTGRES_main"]
 	if !strings.Contains(entry, "hunter2") || !strings.Contains(entry, "db.internal") {
 		t.Errorf("Resolve() handed %q under the binding's key, want the full entry the app connects with", entry)
+	}
+	if strings.Contains(entry, "rds-db:connect") {
+		t.Errorf("Resolve() handed %q under the binding's key, want the binding without the grants it was published with", entry)
 	}
 	if err := live.Conform(bindings, resolved); err != nil {
 		t.Errorf("what the store resolved does not conform to what the runtime was built to read: %v", err)

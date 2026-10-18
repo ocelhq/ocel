@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -99,17 +100,18 @@ const stateTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-state"
 
 var testSessions = newSessionScope("shop", "prod", stateTableARN)
 
-func grantsBindings() []*bindingsv1.Binding {
-	return []*bindingsv1.Binding{
-		{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-prod-uploads-abc"}}, Grants: bucketGrants("shop-prod-uploads-abc", testSessions)},
-		{Name: "database--main", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.host", Port: 5432}}},
+func grantsBindings() []*variablestorev1.PublishedBinding {
+	return []*variablestorev1.PublishedBinding{
+		{Binding: &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-prod-uploads-abc"}}}, Grants: bucketGrants("shop-prod-uploads-abc", testSessions)},
+		{Binding: &bindingsv1.Binding{Name: "database--main", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.host", Port: 5432}}}},
 	}
 }
 
-func plannedBindings(bindings []*bindingsv1.Binding) []provider.Binding {
-	out := make([]provider.Binding, 0, len(bindings))
-	for _, binding := range bindings {
-		planned := provider.Binding{Type: provider.BindingCustom, Name: binding.GetName(), Grants: provider.GrantsOf(binding)}
+func plannedBindings(published []*variablestorev1.PublishedBinding) []provider.Binding {
+	out := make([]provider.Binding, 0, len(published))
+	for _, record := range published {
+		binding := record.GetBinding()
+		planned := provider.Binding{Type: provider.BindingCustom, Name: binding.GetName(), Grants: provider.GrantsOf(record.GetGrants())}
 		switch naming.BindingTypeOf(binding) {
 		case bindingsv1.BindingType_BINDING_TYPE_BUCKET:
 			planned.Type = provider.BindingBucket
@@ -212,16 +214,16 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 
 	for _, tc := range []struct {
 		name  string
-		grant *bindingsv1.Grant
+		grant *variablestorev1.Grant
 	}{
-		{"a wildcard resource", &bindingsv1.Grant{Label: "objects", Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
-		{"a wildcard action", &bindingsv1.Grant{Label: "objects", Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::b/*"}}},
-		{"no resource at all", &bindingsv1.Grant{Label: "objects", Actions: []string{"s3:GetObject"}}},
+		{"a wildcard resource", &variablestorev1.Grant{Label: "objects", Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
+		{"a wildcard action", &variablestorev1.Grant{Label: "objects", Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::b/*"}}},
+		{"no resource at all", &variablestorev1.Grant{Label: "objects", Actions: []string{"s3:GetObject"}}},
 	} {
 		t.Run(tc.name+" is rejected", func(t *testing.T) {
 			t.Parallel()
 
-			bindings := []*bindingsv1.Binding{{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "b"}}, Grants: []*bindingsv1.Grant{tc.grant}}}
+			bindings := []*variablestorev1.PublishedBinding{{Binding: &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "b"}}}, Grants: []*variablestorev1.Grant{tc.grant}}}
 
 			var unscoped *UnscopedGrantError
 			if err := VerifyGrants(plannedBindings(bindings)[0]); !errors.As(err, &unscoped) {
@@ -250,11 +252,11 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 func TestGrantConditionMergesConditionsOnOneKey(t *testing.T) {
 	t.Parallel()
 
-	grant := &bindingsv1.Grant{
+	grant := &variablestorev1.Grant{
 		Label:     "sessions",
 		Actions:   []string{"dynamodb:GetItem"},
 		Resources: []string{stateTableARN},
-		Conditions: []*bindingsv1.GrantCondition{
+		Conditions: []*variablestorev1.GrantCondition{
 			{Operator: "ForAllValues:StringLike", Key: "dynamodb:LeadingKeys", Values: []string{"SESSION#a*"}},
 			{Operator: "ForAllValues:StringLike", Key: "dynamodb:LeadingKeys", Values: []string{"SESSION#b*", "SESSION#a*"}},
 			{Operator: "StringEquals", Key: "dynamodb:Select", Values: []string{"SPECIFIC_ATTRIBUTES"}},
@@ -271,7 +273,7 @@ func TestGrantConditionMergesConditionsOnOneKey(t *testing.T) {
 		t.Errorf("dynamodb:Select = %v, want the condition under its own operator", got)
 	}
 
-	policy, err := bindingPolicyDocument("bucket--uploads", []*bindingsv1.Grant{grant})
+	policy, err := bindingPolicyDocument("bucket--uploads", []*variablestorev1.Grant{grant})
 	if err != nil {
 		t.Fatalf("bindingPolicyDocument: %v", err)
 	}

@@ -141,9 +141,7 @@ describe("publishing a postgres binding", () => {
     ]);
     expect(options).toMatchObject({ cwd: root });
     expect(JSON.parse(String(options?.input))).toEqual({
-      name: "orders",
-      postgres: properties,
-      source: "sst",
+      binding: { name: "orders", postgres: properties, source: "sst" },
     });
     expect(created.id).toBe("production/orders");
   });
@@ -279,9 +277,7 @@ describe("declaring a custom binding", () => {
       "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-network",
     ]);
     expect(JSON.parse(String(options?.input))).toEqual({
-      name: "network",
-      custom: network,
-      source: "sst",
+      binding: { name: "network", custom: network, source: "sst" },
     });
     expect(created.id).toBe("production/network");
   });

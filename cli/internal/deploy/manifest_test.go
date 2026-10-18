@@ -31,6 +31,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -1159,7 +1160,7 @@ func TestAFailureAssemblingTheManifestAfterTheBuildsEndsASpanOfItsOwn(t *testing
 func publishBinding(t *testing.T, fixture clitest.FakeProject, binding *bindingsv1.Binding) {
 	t.Helper()
 	const owner = "infra-repo"
-	pair, err := variablestoreserver.BindingPair(owner, binding)
+	pair, err := variablestoreserver.BindingPair(owner, &variablestorev1.PublishedBinding{Binding: binding})
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}

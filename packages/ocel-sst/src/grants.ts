@@ -1,4 +1,4 @@
-/** A provider-native permission an app receives along with the binding's properties. */
+/** A provider-native permission a deploy gives the apps bound to a binding, published beside its properties. */
 export interface Grant {
   actions: string[];
   resources: string[];

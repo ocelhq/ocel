@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -29,9 +29,9 @@ type bindingPolicy struct {
 	Policy  string
 }
 
-func bucketGrants(bucket string, sessions sessionScope) []*bindingsv1.Grant {
+func bucketGrants(bucket string, sessions sessionScope) []*variablestorev1.Grant {
 	arn := s3ARNPrefix + bucket
-	return []*bindingsv1.Grant{
+	return []*variablestorev1.Grant{
 		{
 			Label: "objects",
 			Actions: []string{
@@ -53,7 +53,7 @@ func bucketGrants(bucket string, sessions sessionScope) []*bindingsv1.Grant {
 			Label:     "sessions",
 			Actions:   []string{"dynamodb:GetItem", "dynamodb:PutItem"},
 			Resources: []string{sessions.TableARN},
-			Conditions: []*bindingsv1.GrantCondition{{
+			Conditions: []*variablestorev1.GrantCondition{{
 				Operator: "ForAllValues:StringLike",
 				Key:      "dynamodb:LeadingKeys",
 				Values:   []string{sessions.KeyPrefix + "*"},
@@ -87,7 +87,7 @@ func VerifyGrants(binding provider.Binding) error {
 	return nil
 }
 
-func checkGrant(binding string, grant *bindingsv1.Grant) error {
+func checkGrant(binding string, grant *variablestorev1.Grant) error {
 	return scoped(binding, grant.GetLabel(), grant.GetActions(), grant.GetResources())
 }
 
@@ -116,7 +116,7 @@ func unscopedAction(action string) bool {
 
 func unscopedResource(resource string) bool { return resource == grantWildcard }
 
-func bindingPolicyDocument(name string, grants []*bindingsv1.Grant) (string, error) {
+func bindingPolicyDocument(name string, grants []*variablestorev1.Grant) (string, error) {
 	if len(grants) == 0 {
 		return "", nil
 	}
@@ -142,7 +142,7 @@ func bindingPolicyDocument(name string, grants []*bindingsv1.Grant) (string, err
 	return string(out), nil
 }
 
-func grantCondition(grant *bindingsv1.Grant) map[string]any {
+func grantCondition(grant *variablestorev1.Grant) map[string]any {
 	if len(grant.GetConditions()) == 0 {
 		return nil
 	}
@@ -229,7 +229,7 @@ func checkInlinePolicyBudget(apps []provider.AppUsage, sessions sessionScope) er
 func billedPolicies(resources []provider.Resource, grants []provider.Binding, sessions sessionScope) ([]PolicyBillItem, error) {
 	billed := map[string]PolicyBillItem{}
 	for _, binding := range grants {
-		policy, err := bindingPolicyDocument(binding.Name, grantMessages(binding.Grants))
+		policy, err := bindingPolicyDocument(binding.Name, provider.GrantMessages(binding.Grants))
 		if err != nil {
 			return nil, err
 		}
@@ -242,7 +242,7 @@ func billedPolicies(resources []provider.Resource, grants []provider.Binding, se
 		if resource.Binding != "" {
 			continue
 		}
-		var grants []*bindingsv1.Grant
+		var grants []*variablestorev1.Grant
 		switch resource.Type {
 		case provider.BindingBucket:
 			grants = bucketGrants(strings.Repeat("b", maxS3BucketNameLen), sessions)

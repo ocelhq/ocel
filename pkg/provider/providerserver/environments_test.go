@@ -20,6 +20,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -378,7 +379,7 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierPreview}
 	publish := func(environment, owner string, binding *bindingsv1.Binding) {
-		pair, err := variablestoreserver.BindingPair(owner, binding)
+		pair, err := variablestoreserver.BindingPair(owner, &variablestorev1.PublishedBinding{Binding: binding})
 		if err != nil {
 			t.Fatal(err)
 		}

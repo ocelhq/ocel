@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
 import { checkTarget, runBindings, type Target } from "./cli.js";
-import { customBinding } from "./custom.js";
+import { publishedCustom } from "./custom.js";
 import type { GrantInput } from "./grants.js";
-import { type DescribedPostgres, postgresBinding } from "./postgres.js";
+import { type DescribedPostgres, publishedPostgres } from "./postgres.js";
 
 /**
  * A postgres resource described from what a Pulumi resource exposes.
@@ -110,7 +110,7 @@ function bindingProvider<I extends BindingInputs>(
 
 export const postgresProvider = bindingProvider<PostgresInputs>(
   (inputs) =>
-    postgresBinding(inputs.name, {
+    publishedPostgres(inputs.name, {
       properties: inputs.properties,
       grants: inputs.grants,
     }),
@@ -118,7 +118,7 @@ export const postgresProvider = bindingProvider<PostgresInputs>(
 );
 
 export const customProvider = bindingProvider<CustomInputs>(
-  (inputs) => customBinding(inputs.name, inputs.properties),
+  (inputs) => publishedCustom(inputs.name, inputs.properties),
   (inputs) => Object.values(inputs.properties).every((value) => value !== undefined),
 );
 

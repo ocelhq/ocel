@@ -11,7 +11,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file common/bindings/v1/bindings.proto.
  */
 export const file_common_bindings_v1_bindings: GenFile = /*@__PURE__*/
-  fileDesc("CiFjb21tb24vYmluZGluZ3MvdjEvYmluZGluZ3MucHJvdG8SEmNvbW1vbi5iaW5kaW5ncy52MSLVAwoHQmluZGluZxIMCgRuYW1lGAEgASgJEjoKCHBvc3RncmVzGAIgASgLMiYuY29tbW9uLmJpbmRpbmdzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEjYKBmJ1Y2tldBgDIAEoCzIkLmNvbW1vbi5iaW5kaW5ncy52MS5CdWNrZXRQcm9wZXJ0aWVzSAASKQoGY3VzdG9tGAYgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEgAEjQKBXRvcGljGAcgASgLMiMuY29tbW9uLmJpbmRpbmdzLnYxLlRvcGljUHJvcGVydGllc0gAEjIKBHRhc2sYCCABKAsyIi5jb21tb24uYmluZGluZ3MudjEuVGFza1Byb3BlcnRpZXNIABIuCgJrdhgJIAEoCzIgLmNvbW1vbi5iaW5kaW5ncy52MS5LdlByb3BlcnRpZXNIABI6CghyZWFsdGltZRgKIAEoCzImLmNvbW1vbi5iaW5kaW5ncy52MS5SZWFsdGltZVByb3BlcnRpZXNIABIpCgZncmFudHMYBCADKAsyGS5jb21tb24uYmluZGluZ3MudjEuR3JhbnQSDgoGc291cmNlGAUgASgJQgwKCnByb3BlcnRpZXMi3QEKElBvc3RncmVzUHJvcGVydGllcxIMCgRob3N0GAEgASgJEgwKBHBvcnQYAiABKAUSEAoIZGF0YWJhc2UYAyABKAkSEAoIdXNlcm5hbWUYBCABKAkSFQoIcGFzc3dvcmQYBSABKAlCA4ABARIQCgN1cmwYBiABKAlCA4ABARI1Cgh0bHNfbW9kZRgHIAEoDjIjLmNvbW1vbi5iaW5kaW5ncy52MS5Qb3N0Z3Jlc1Rsc01vZGUSDgoGdGxzX2NhGAggASgJEhcKD3Rsc19zZXJ2ZXJfbmFtZRgJIAEoCSLIAQoQQnVja2V0UHJvcGVydGllcxIOCgZidWNrZXQYASABKAkSFwoPcHVibGljX2Jhc2VfdXJsGAIgASgJEg4KBnB1YmxpYxgDIAEoCBIQCghlbmRwb2ludBgEIAEoCRIOCgZyZWdpb24YBSABKAkSEgoKcGF0aF9zdHlsZRgGIAEoCBIOCgZwcmVmaXgYByABKAkSFQoNYWNjZXNzX2tleV9pZBgIIAEoCRIeChFzZWNyZXRfYWNjZXNzX2tleRgJIAEoCUIDgAEBIhEKD1RvcGljUHJvcGVydGllcyIQCg5UYXNrUHJvcGVydGllcyKJAQoMS3ZQcm9wZXJ0aWVzEgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCgh1c2VybmFtZRgDIAEoCRIVCghwYXNzd29yZBgEIAEoCUIDgAEBEgsKA3RscxgFIAEoCBIOCgZjYV9wZW0YBiABKAkSFwoPdGxzX3NlcnZlcl9uYW1lGAcgASgJIl0KElJlYWx0aW1lUHJvcGVydGllcxILCgN1cmwYAiABKAkSDAoEaG9zdBgDIAEoCRIYCgtzaWduaW5nX2tleRgEIAEoDEIDgAEBEhIKCnZlcmlmeV9rZXkYBSABKAwicgoFR3JhbnQSDwoHYWN0aW9ucxgBIAMoCRIRCglyZXNvdXJjZXMYAiADKAkSDQoFbGFiZWwYAyABKAkSNgoKY29uZGl0aW9ucxgEIAMoCzIiLmNvbW1vbi5iaW5kaW5ncy52MS5HcmFudENvbmRpdGlvbiI/Cg5HcmFudENvbmRpdGlvbhIQCghvcGVyYXRvchgBIAEoCRILCgNrZXkYAiABKAkSDgoGdmFsdWVzGAMgAygJKtcBCgtCaW5kaW5nVHlwZRIcChhCSU5ESU5HX1RZUEVfVU5TUEVDSUZJRUQQABIZChVCSU5ESU5HX1RZUEVfUE9TVEdSRVMQARIXChNCSU5ESU5HX1RZUEVfQlVDS0VUEAISFwoTQklORElOR19UWVBFX0NVU1RPTRADEhYKEkJJTkRJTkdfVFlQRV9UT1BJQxAEEhUKEUJJTkRJTkdfVFlQRV9UQVNLEAUSEwoPQklORElOR19UWVBFX0tWEAYSGQoVQklORElOR19UWVBFX1JFQUxUSU1FEAcqdgoPUG9zdGdyZXNUbHNNb2RlEiEKHVBPU1RHUkVTX1RMU19NT0RFX1VOU1BFQ0lGSUVEEAASHQoZUE9TVEdSRVNfVExTX01PREVfUkVRVUlSRRABEiEKHVBPU1RHUkVTX1RMU19NT0RFX1ZFUklGWV9GVUxMEAJCQFo+Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vY29tbW9uL2JpbmRpbmdzL3YxO2JpbmRpbmdzdjFiBnByb3RvMw", [file_google_protobuf_struct]);
+  fileDesc("CiFjb21tb24vYmluZGluZ3MvdjEvYmluZGluZ3MucHJvdG8SEmNvbW1vbi5iaW5kaW5ncy52MSKqAwoHQmluZGluZxIMCgRuYW1lGAEgASgJEjoKCHBvc3RncmVzGAIgASgLMiYuY29tbW9uLmJpbmRpbmdzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEjYKBmJ1Y2tldBgDIAEoCzIkLmNvbW1vbi5iaW5kaW5ncy52MS5CdWNrZXRQcm9wZXJ0aWVzSAASKQoGY3VzdG9tGAYgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEgAEjQKBXRvcGljGAcgASgLMiMuY29tbW9uLmJpbmRpbmdzLnYxLlRvcGljUHJvcGVydGllc0gAEjIKBHRhc2sYCCABKAsyIi5jb21tb24uYmluZGluZ3MudjEuVGFza1Byb3BlcnRpZXNIABIuCgJrdhgJIAEoCzIgLmNvbW1vbi5iaW5kaW5ncy52MS5LdlByb3BlcnRpZXNIABI6CghyZWFsdGltZRgKIAEoCzImLmNvbW1vbi5iaW5kaW5ncy52MS5SZWFsdGltZVByb3BlcnRpZXNIABIOCgZzb3VyY2UYBSABKAlCDAoKcHJvcGVydGllcyLdAQoSUG9zdGdyZXNQcm9wZXJ0aWVzEgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBEhAKA3VybBgGIAEoCUIDgAEBEjUKCHRsc19tb2RlGAcgASgOMiMuY29tbW9uLmJpbmRpbmdzLnYxLlBvc3RncmVzVGxzTW9kZRIOCgZ0bHNfY2EYCCABKAkSFwoPdGxzX3NlcnZlcl9uYW1lGAkgASgJIsgBChBCdWNrZXRQcm9wZXJ0aWVzEg4KBmJ1Y2tldBgBIAEoCRIXCg9wdWJsaWNfYmFzZV91cmwYAiABKAkSDgoGcHVibGljGAMgASgIEhAKCGVuZHBvaW50GAQgASgJEg4KBnJlZ2lvbhgFIAEoCRISCgpwYXRoX3N0eWxlGAYgASgIEg4KBnByZWZpeBgHIAEoCRIVCg1hY2Nlc3Nfa2V5X2lkGAggASgJEh4KEXNlY3JldF9hY2Nlc3Nfa2V5GAkgASgJQgOAAQEiEQoPVG9waWNQcm9wZXJ0aWVzIhAKDlRhc2tQcm9wZXJ0aWVzIokBCgxLdlByb3BlcnRpZXMSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgFEhAKCHVzZXJuYW1lGAMgASgJEhUKCHBhc3N3b3JkGAQgASgJQgOAAQESCwoDdGxzGAUgASgIEg4KBmNhX3BlbRgGIAEoCRIXCg90bHNfc2VydmVyX25hbWUYByABKAkiXQoSUmVhbHRpbWVQcm9wZXJ0aWVzEgsKA3VybBgCIAEoCRIMCgRob3N0GAMgASgJEhgKC3NpZ25pbmdfa2V5GAQgASgMQgOAAQESEgoKdmVyaWZ5X2tleRgFIAEoDCrXAQoLQmluZGluZ1R5cGUSHAoYQklORElOR19UWVBFX1VOU1BFQ0lGSUVEEAASGQoVQklORElOR19UWVBFX1BPU1RHUkVTEAESFwoTQklORElOR19UWVBFX0JVQ0tFVBACEhcKE0JJTkRJTkdfVFlQRV9DVVNUT00QAxIWChJCSU5ESU5HX1RZUEVfVE9QSUMQBBIVChFCSU5ESU5HX1RZUEVfVEFTSxAFEhMKD0JJTkRJTkdfVFlQRV9LVhAGEhkKFUJJTkRJTkdfVFlQRV9SRUFMVElNRRAHKnYKD1Bvc3RncmVzVGxzTW9kZRIhCh1QT1NUR1JFU19UTFNfTU9ERV9VTlNQRUNJRklFRBAAEh0KGVBPU1RHUkVTX1RMU19NT0RFX1JFUVVJUkUQARIhCh1QT1NUR1JFU19UTFNfTU9ERV9WRVJJRllfRlVMTBACQkBaPmdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2NvbW1vbi9iaW5kaW5ncy92MTtiaW5kaW5nc3YxYgZwcm90bzM", [file_google_protobuf_struct]);
 
 /**
  * @generated from message common.bindings.v1.Binding
@@ -68,11 +68,6 @@ export type Binding = Message<"common.bindings.v1.Binding"> & {
     value: RealtimeProperties;
     case: "realtime";
   } | { case: undefined; value?: undefined };
-
-  /**
-   * @generated from field: repeated common.bindings.v1.Grant grants = 4;
-   */
-  grants: Grant[];
 
   /**
    * @generated from field: string source = 5;
@@ -305,65 +300,6 @@ export type RealtimeProperties = Message<"common.bindings.v1.RealtimeProperties"
  */
 export const RealtimePropertiesSchema: GenMessage<RealtimeProperties> = /*@__PURE__*/
   messageDesc(file_common_bindings_v1_bindings, 6);
-
-/**
- * @generated from message common.bindings.v1.Grant
- */
-export type Grant = Message<"common.bindings.v1.Grant"> & {
-  /**
-   * @generated from field: repeated string actions = 1;
-   */
-  actions: string[];
-
-  /**
-   * @generated from field: repeated string resources = 2;
-   */
-  resources: string[];
-
-  /**
-   * @generated from field: string label = 3;
-   */
-  label: string;
-
-  /**
-   * @generated from field: repeated common.bindings.v1.GrantCondition conditions = 4;
-   */
-  conditions: GrantCondition[];
-};
-
-/**
- * Describes the message common.bindings.v1.Grant.
- * Use `create(GrantSchema)` to create a new message.
- */
-export const GrantSchema: GenMessage<Grant> = /*@__PURE__*/
-  messageDesc(file_common_bindings_v1_bindings, 7);
-
-/**
- * @generated from message common.bindings.v1.GrantCondition
- */
-export type GrantCondition = Message<"common.bindings.v1.GrantCondition"> & {
-  /**
-   * @generated from field: string operator = 1;
-   */
-  operator: string;
-
-  /**
-   * @generated from field: string key = 2;
-   */
-  key: string;
-
-  /**
-   * @generated from field: repeated string values = 3;
-   */
-  values: string[];
-};
-
-/**
- * Describes the message common.bindings.v1.GrantCondition.
- * Use `create(GrantConditionSchema)` to create a new message.
- */
-export const GrantConditionSchema: GenMessage<GrantCondition> = /*@__PURE__*/
-  messageDesc(file_common_bindings_v1_bindings, 8);
 
 /**
  * @generated from enum common.bindings.v1.BindingType

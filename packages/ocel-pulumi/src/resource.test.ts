@@ -158,9 +158,7 @@ describe("publishing a postgres binding", () => {
     expect(args).toEqual([entry, "bindings", "set", "--owner", ownerUrn]);
     expect(options).toMatchObject({ cwd: root });
     expect(JSON.parse(String(options?.input))).toEqual({
-      name: "orders",
-      postgres: properties,
-      source: "pulumi",
+      binding: { name: "orders", postgres: properties, source: "pulumi" },
     });
     expect(created.id).toBe("production/orders");
   });
@@ -303,9 +301,7 @@ describe("declaring a custom binding", () => {
     const { args, options } = argv();
     expect(args).toEqual([entry, "bindings", "set", "--owner", customOwner]);
     expect(JSON.parse(String(options?.input))).toEqual({
-      name: "network",
-      custom: network,
-      source: "pulumi",
+      binding: { name: "network", custom: network, source: "pulumi" },
     });
     expect(created.id).toBe("production/network");
   });

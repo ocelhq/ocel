@@ -40,9 +40,11 @@ export default {
 
 func postgresBindingJSON(name, host string) string {
 	return fmt.Sprintf(`{
-  "name": %q,
-  "source": "fake:postgres:%s",
-  "postgres": {"host": %q, "port": 5432, "database": "app", "username": "app", "password": %q}
+  "binding": {
+    "name": %q,
+    "source": "fake:postgres:%s",
+    "postgres": {"host": %q, "port": 5432, "database": "app", "username": "app", "password": %q}
+  }
 }`, name, name, host, fakeBindingPassword)
 }
 
@@ -76,23 +78,25 @@ func TestABindingOnStdinThatCannotBeReadIsRefusedNamingWhereWithoutItsValue(t *t
 		input string
 		want  string
 	}{
-		{"malformed JSON", `{"name": "main", "postgres": {"password": hunter2}}`, "line 1"},
-		{"a value of the wrong type", `{"name": "main", "postgres": {"port": "hunter2"}}`, "postgres.port"},
-		{"a number where a string field wants one", `{"name": "main", "postgres": {"password": 20250101}}`, "postgres.password"},
-		{"a field the binding does not have", `{"name": "main", "postgres": {"hunter2": "x"}}`, "postgres"},
+		{"malformed JSON", `{"binding": {"name": "main", "postgres": {"password": hunter2}}}`, "line 1"},
+		{"a value of the wrong type", `{"binding": {"name": "main", "postgres": {"port": "hunter2"}}}`, "binding.postgres.port"},
+		{"a number where a string field wants one", `{"binding": {"name": "main", "postgres": {"password": 20250101}}}`, "binding.postgres.password"},
+		{"a field the binding does not have", `{"binding": {"name": "main", "postgres": {"hunter2": "x"}}}`, "binding.postgres"},
+		{"a binding not under binding", `{"name": "main", "postgres": {"password": "hunter2"}}`, "name is not a field of PublishedBinding"},
+		{"a grant that is no list", `{"binding": {"name": "main", "postgres": {"password": "hunter2"}}, "grants": {"actions": ["rds-db:connect"]}}`, "grants is not a list"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := decodeBinding(strings.NewReader(tc.input))
+			_, err := decodePublishedBinding(strings.NewReader(tc.input))
 			if err == nil {
-				t.Fatal("decodeBinding = nil, want a refusal")
+				t.Fatal("decodePublishedBinding = nil, want a refusal")
 			}
 			for _, value := range []string{"hunter2", "20250101"} {
 				if tc.name != "a field the binding does not have" && strings.Contains(err.Error(), value) {
-					t.Errorf("decodeBinding = %q, want it to quote no value", err)
+					t.Errorf("decodePublishedBinding = %q, want it to quote no value", err)
 				}
 			}
 			if !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("decodeBinding = %q, want it to name %q", err, tc.want)
+				t.Errorf("decodePublishedBinding = %q, want it to name %q", err, tc.want)
 			}
 		})
 	}
@@ -230,11 +234,13 @@ func TestBindingsSetPublishesOneRecordUnderItsPublishersName(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		for name, body := range map[string]string{
-			"not JSON at all":            "postgres://db.internal/app",
-			"a field no binding has":     `{"name":"main","postgres":{"host":"db.internal"},"nonsense":true}`,
-			"nothing at all on stdin":    "",
-			"JSON that is not a binding": `["main"]`,
-			"a binding with no name":     `{"postgres":{"host":"db.internal"}}`,
+			"not JSON at all":             "postgres://db.internal/app",
+			"a field no binding has":      `{"binding":{"name":"main","postgres":{"host":"db.internal"},"nonsense":true}}`,
+			"nothing at all on stdin":     "",
+			"JSON that is not a binding":  `["main"]`,
+			"a binding with no name":      `{"binding":{"postgres":{"host":"db.internal"}}}`,
+			"no binding at all":           `{"grants":[{"actions":["rds-db:connect"],"resources":["arn:aws:rds-db:us-east-1:1:dbuser:cluster/main"]}]}`,
+			"a grant over every resource": `{"binding":{"name":"main","source":"fake","postgres":{"host":"db.internal","port":5432,"database":"app","username":"app","password":"pw"}},"grants":[{"actions":["rds-db:connect"],"resources":["*"]}]}`,
 		} {
 			t.Run(name, func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
@@ -283,9 +289,11 @@ func TestBindingsListNamesEachRecordWithoutItsValues(t *testing.T) {
 
 func customBindingJSON(name string) string {
 	return fmt.Sprintf(`{
-  "name": %q,
-  "source": "terraform:module.network",
-  "custom": {"zones": ["zone-a", "zone-b"], "peers": ["peer-1"], "port": 5432}
+  "binding": {
+    "name": %q,
+    "source": "terraform:module.network",
+    "custom": {"zones": ["zone-a", "zone-b"], "peers": ["peer-1"], "port": 5432}
+  }
 }`, name)
 }
 

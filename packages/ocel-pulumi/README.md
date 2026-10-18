@@ -80,6 +80,9 @@ bind.postgres("orders", {
 });
 ```
 
+The grants are published beside the binding, never inside it: a deploy gives them to
+the apps bound to `orders`, and an app is handed the postgres fields alone.
+
 `opts` says where the binding lands:
 
 | Option        | Default                     | Meaning                                                                                    |
