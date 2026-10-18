@@ -11,8 +11,14 @@ export class ImageError extends Error {
   }
 }
 
-export function upstreamFailure(detail: unknown): ImageError {
-  return new ImageError(400, UPSTREAM_INVALID_MESSAGE, detail);
+const UPSTREAM_TIMED_OUT_MESSAGE = '"url" parameter is valid but upstream response timed out';
+
+export function upstreamFailure(detail: unknown, status = 400): ImageError {
+  return new ImageError(status, UPSTREAM_INVALID_MESSAGE, detail);
+}
+
+export function upstreamTimeout(detail: unknown): ImageError {
+  return new ImageError(504, UPSTREAM_TIMED_OUT_MESSAGE, detail);
 }
 
 export class BootstrapError extends Error {

@@ -1,25 +1,28 @@
 import type {
   DispatchTarget,
-  MiddlewareMatcher,
   NextRouteTable,
-  RouteHas,
+  RoutingTable,
 } from "@framework/next-protocol/route-table";
 import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
-import { edgeCacheHeader } from "@platform/edge-contract/edge-cache";
-import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
-import { type PurgeGroup, purgeHeader, readPurge } from "@platform/edge-contract/purge";
+import type { PurgeGroup } from "@platform/edge-contract/purge";
+
 import {
-  encodeForwardedSearch,
-  isAbsoluteUrl,
   needsSlashNormalization,
   normalizeRepeatedSlashes,
   readPathAndQuery,
   readRawPath,
 } from "@platform/edge-contract/request-path";
-
-import { type AssetStoreDeps, isImmutablePathname, serveStaticAsset } from "./assets.mjs";
-import { withStatus } from "./http-cache.mjs";
-import { localeOf, resolveLocale } from "./i18n.mjs";
+import type { AssetStoreDeps } from "./assets.mjs";
+import { withoutClientControl, withoutControlHeaders } from "./control-headers.mjs";
+import {
+  applyResolvedHeaders,
+  dispatch,
+  forwardRequestQuery,
+  invokeMiddleware,
+  isRoutingRedirect,
+} from "./dispatch.mjs";
+import { isOnDemandRevalidate, shouldBypass } from "./has.mjs";
+import { resolveLocale } from "./i18n.mjs";
 import {
   type ImageCache,
   type ImageOrigin,
@@ -27,109 +30,31 @@ import {
   serveImage,
   unprovisionedImageOrigin,
 } from "./image.mjs";
-import { retainOwner } from "./origin-response.mjs";
-import { encodeRequestTarget } from "./request-target.mjs";
-import { type OriginThrottle, retryTransientOrigin } from "./retry.mjs";
-import { asSegmentPayload, isSegmentPrefetch } from "./segment.mjs";
+import { middlewareMatches, stripMiddlewareHeaders } from "./middleware.mjs";
+import { bufferBody, streamOf } from "./origin-request.mjs";
+import type { OriginThrottle } from "./retry.mjs";
+import {
+  dropShadowedDynamicParams,
+  type MiddlewareOutcome,
+  preferExactPathname,
+  type RouteResult,
+  repairPrefixCollidedQuery,
+  withSourceInvocationTarget,
+} from "./route-result.mjs";
 import {
   canonicalPathname,
   isNextDataPathname,
   middlewareMatchPathname,
   middlewarePathname,
   routingPathname,
-  withoutBasePath,
 } from "./trailing-slash.mjs";
 
+export { ENTRY_HEADER } from "./control-headers.mjs";
+export { forward } from "./origin-request.mjs";
+export type { MiddlewareOutcome, RouteResult };
+export { isOnDemandRevalidate, shouldBypass };
+
 type HeadersInit = NonNullable<ConstructorParameters<typeof Headers>[0]>;
-
-type BodyInit = NonNullable<RequestInit["body"]>;
-
-type RequestInfo = Parameters<typeof fetch>[0];
-
-type RedirectStatus = Parameters<typeof Response.redirect>[1];
-
-const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-
-function redirectStatus(status: number): RedirectStatus | undefined {
-  return REDIRECT_STATUSES.has(status) ? (status as RedirectStatus) : undefined;
-}
-
-const FLIGHT_VARY_HEADERS = [
-  "rsc",
-  "next-router-state-tree",
-  "next-router-prefetch",
-  "next-router-segment-prefetch",
-  "next-url",
-];
-
-function isFlightRequest(headers: Headers): boolean {
-  return FLIGHT_VARY_HEADERS.some((name) => headers.has(name));
-}
-
-export function isRscRequest(headers: Headers): boolean {
-  return headers.get("RSC") === "1";
-}
-
-function withFlightVary(response: Response): Response {
-  const tagged = new Response(response.body, response);
-  tagged.headers.set("vary", FLIGHT_VARY_HEADERS.join(", "));
-  return tagged;
-}
-
-export const ENTRY_HEADER = "x-ocel-entry";
-
-export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume", edgeCacheHeader];
-
-function withoutControlHeaders(headers: Headers): Headers {
-  const kept = new Headers(headers);
-  for (const name of [...headers.keys()]) {
-    if (CONTROL_HEADERS.includes(name.toLowerCase())) kept.delete(name);
-  }
-  return kept;
-}
-
-const NEXT_INTERNAL_HEADERS = [
-  "x-middleware-rewrite",
-  "x-middleware-redirect",
-  "x-middleware-set-cookie",
-  "x-middleware-skip",
-  "x-middleware-override-headers",
-  "x-middleware-next",
-  "x-now-route-matches",
-  "x-matched-path",
-  "x-nextjs-data",
-  "x-next-resume-state-length",
-  "next-resume",
-];
-
-function withoutNextInternalHeaders(headers: Headers): Headers {
-  const kept = new Headers(headers);
-  for (const name of NEXT_INTERNAL_HEADERS) kept.delete(name);
-  return kept;
-}
-
-export interface MiddlewareOutcome {
-  response: Response;
-  headers: Headers;
-}
-
-export interface RouteResult {
-  middlewareResponded?: boolean;
-  status?: number;
-  redirect?: { url: URL | string; status: number };
-  externalRewrite?: string | URL;
-  resolvedPathname?: string | null;
-  routePath?: string | null;
-  invocationTarget?: {
-    pathname: string;
-    query?: Record<string, string | string[]>;
-  } | null;
-  resolvedQuery?: Record<string, string | string[]>;
-  routeMatches?: Record<string, string | string[]>;
-  resolvedHeaders?: Headers;
-  middleware?: MiddlewareOutcome;
-  middlewareLocation?: string;
-}
 
 export type EdgeEntryKind = "page" | "middleware";
 
@@ -212,11 +137,7 @@ function imageResponse(request: Request, deps: RouteDeps): Promise<Response> | u
   });
 }
 
-type RoutingTable = Parameters<typeof resolveRoutes>[0]["routes"];
-
-type BeforeMiddlewareRule = RoutingTable["beforeMiddleware"][number] & {
-  priority?: boolean;
-};
+type BeforeMiddlewareRule = RoutingTable["beforeMiddleware"][number];
 
 function isUnconditionalRedirect(route: BeforeMiddlewareRule): boolean {
   return (
@@ -237,16 +158,15 @@ function nextDataMatchPathname(pathname: string, basePath: string, buildId: stri
 }
 
 function withoutInternalRedirects(
-  routes: unknown,
+  table: RoutingTable,
   pathname: string,
   basePath: string,
   buildId: string,
 ): RoutingTable {
-  const table = routes as RoutingTable;
   const tested = table.shouldNormalizeNextData
     ? nextDataMatchPathname(pathname, basePath, buildId)
     : pathname;
-  const beforeMiddleware = (table.beforeMiddleware ?? []) as BeforeMiddlewareRule[];
+  const beforeMiddleware = table.beforeMiddleware ?? [];
   const kept: BeforeMiddlewareRule[] = [];
   for (const route of beforeMiddleware) {
     if (route.priority && route.status !== undefined) continue;
@@ -264,7 +184,7 @@ async function trailingSlashRedirect(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
-  const table = deps.manifest.routes as RoutingTable;
+  const table = deps.manifest.routes;
   const { resolvedHeaders } = await resolveRoutes({
     url,
     buildId: deps.manifest.buildId,
@@ -319,7 +239,7 @@ export async function serve(request: Request, deps: RouteDeps): Promise<Response
   request = new Request(url, {
     ...deps.hostRequestInit?.(request),
     method: request.method,
-    headers: withoutNextInternalHeaders(request.headers),
+    headers: withoutClientControl(request.headers),
     body,
     redirect: "manual",
     signal: request.signal,
@@ -446,149 +366,6 @@ export async function serve(request: Request, deps: RouteDeps): Promise<Response
   );
 }
 
-function repairPrefixCollidedQuery(result: RouteResult): void {
-  const routeMatches = result.routeMatches;
-  if (!routeMatches) return;
-  const query = result.invocationTarget?.query;
-  const resolvedQuery = result.resolvedQuery;
-  for (const [key, value] of Object.entries(routeMatches)) {
-    if (value === undefined) continue;
-    if (/^\d+$/.test(key)) continue;
-    if (query && key in query) query[key] = value;
-    if (resolvedQuery && key in resolvedQuery) resolvedQuery[key] = value;
-  }
-}
-
-function decodedPathname(pathname: string): string | undefined {
-  try {
-    return decodeURIComponent(pathname);
-  } catch {
-    return undefined;
-  }
-}
-
-function preferExactPathname(result: RouteResult, manifest: NextRouteTable): RouteResult {
-  const target = result.invocationTarget?.pathname;
-  if (!result.resolvedPathname || target === undefined) return result;
-  for (const candidate of [target, decodedPathname(target)]) {
-    if (
-      candidate !== undefined &&
-      candidate !== result.resolvedPathname &&
-      manifest.pathnames.includes(candidate)
-    ) {
-      return { ...result, resolvedPathname: candidate };
-    }
-  }
-  return result;
-}
-
-function dropShadowedDynamicParams(result: RouteResult, manifest: NextRouteTable): RouteResult {
-  const target = result.invocationTarget;
-  if (
-    !target ||
-    !result.routeMatches ||
-    !result.resolvedPathname ||
-    target.pathname !== result.resolvedPathname ||
-    manifest.dispatch[result.resolvedPathname]?.kind === "prerender"
-  ) {
-    return result;
-  }
-  const query = { ...target.query };
-  for (const key of Object.keys(result.routeMatches)) delete query[key];
-  const { routeMatches: _routeMatches, ...rest } = result;
-  return { ...rest, invocationTarget: { ...target, query } };
-}
-
-function queryFromUrl(url: URL): Record<string, string | string[]> {
-  const query: Record<string, string | string[]> = {};
-  for (const [key, value] of url.searchParams.entries()) {
-    const existing = query[key];
-    if (existing === undefined) query[key] = value;
-    else query[key] = Array.isArray(existing) ? [...existing, value] : [existing, value];
-  }
-  return query;
-}
-
-export function ruleDestinationPathname(
-  sourceRegex: string,
-  destination: string,
-  pathname: string,
-): string | undefined {
-  let match: RegExpMatchArray | null;
-  try {
-    match = pathname.match(new RegExp(sourceRegex));
-  } catch {
-    return undefined;
-  }
-  if (!match) return undefined;
-  let out = destination.split("?")[0] ?? "";
-  for (let i = match.length - 1; i >= 1; i--) {
-    const group = match[i];
-    if (group !== undefined) out = out.replace(new RegExp(`\\$${i}`, "g"), group);
-  }
-  if (match.groups) {
-    const groups = Object.entries(match.groups).sort(([a], [b]) => b.length - a.length);
-    for (const [key, value] of groups) {
-      if (value !== undefined) out = out.replace(new RegExp(`\\$${key}`, "g"), value);
-    }
-  }
-  return out;
-}
-
-function matchesConfigRewrite(
-  pathname: string,
-  resolvedPathname: string,
-  routes: RoutingTable,
-): boolean {
-  const rules = [
-    ...(routes.beforeFiles ?? []),
-    ...(routes.afterFiles ?? []),
-    ...(routes.fallback ?? []),
-  ];
-  const dynamicRoutes = routes.dynamicRoutes ?? [];
-  for (const rule of rules) {
-    if (!rule.destination) continue;
-    const destination = ruleDestinationPathname(rule.sourceRegex, rule.destination, pathname);
-    if (destination === undefined) continue;
-    if (destination === resolvedPathname) return true;
-    for (const dynamic of dynamicRoutes) {
-      if (dynamic.destination?.split("?")[0] !== resolvedPathname) continue;
-      try {
-        if (new RegExp(dynamic.sourceRegex).test(destination)) return true;
-      } catch {}
-    }
-  }
-  return false;
-}
-
-function withSourceInvocationTarget(
-  result: RouteResult,
-  routingUrl: URL,
-  manifest: NextRouteTable,
-): RouteResult {
-  const target = result.invocationTarget;
-  const routePath = target?.pathname ?? result.resolvedPathname;
-  if (!target || !result.resolvedPathname) return { ...result, routePath };
-  if (target.pathname === routingUrl.pathname) return { ...result, routePath };
-  if (
-    !matchesConfigRewrite(
-      routingUrl.pathname,
-      result.resolvedPathname,
-      manifest.routes as RoutingTable,
-    )
-  ) {
-    return { ...result, routePath };
-  }
-  return {
-    ...result,
-    routePath,
-    invocationTarget: {
-      pathname: routingUrl.pathname,
-      query: queryFromUrl(routingUrl),
-    },
-  };
-}
-
 export async function dispatchResult(
   result: RouteResult,
   request: Request,
@@ -613,675 +390,4 @@ export async function dispatchResult(
     tagged.headers.set("x-matched-path", result.resolvedPathname);
   }
   return tagged;
-}
-
-function forwardRequestQuery(headers: Headers, requestUrl: string): void {
-  const location = headers.get("location");
-  if (!location) return;
-  if (!location.startsWith("/") && !isAbsoluteUrl(location)) return;
-
-  const requestQueryIndex = requestUrl.indexOf("?");
-  if (requestQueryIndex === -1) return;
-  const requestQuery = requestUrl.slice(requestQueryIndex + 1);
-  if (!requestQuery) return;
-
-  const hashIndex = location.indexOf("#");
-  const addressed = hashIndex === -1 ? location : location.slice(0, hashIndex);
-  const hash = hashIndex === -1 ? "" : location.slice(hashIndex);
-  const queryIndex = addressed.indexOf("?");
-  const path = queryIndex === -1 ? addressed : addressed.slice(0, queryIndex);
-  const query = queryIndex === -1 ? "" : addressed.slice(queryIndex + 1);
-
-  const declared = new Set(new URLSearchParams(query).keys());
-  const forwarded = requestQuery
-    .split("&")
-    .filter((pair) => pair !== "" && !declared.has(queryKey(pair)));
-  if (forwarded.length === 0) return;
-
-  const merged = query ? [query, ...forwarded] : forwarded;
-  headers.set("location", `${path}?${merged.join("&")}${hash}`);
-}
-
-function queryKey(pair: string): string {
-  const raw = pair.split("=", 1)[0]!.replaceAll("+", " ");
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    return raw;
-  }
-}
-
-function applyResolvedHeaders(target: Headers, resolved: Headers | undefined): void {
-  if (!resolved) return;
-  resolved.forEach((value, name) => {
-    if (name.toLowerCase() !== "set-cookie") target.set(name, value);
-  });
-  for (const cookie of resolved.getSetCookie()) {
-    target.append("set-cookie", cookie);
-  }
-}
-
-const NEXT_ACTION_REVALIDATED = "x-action-revalidated";
-
-const MIDDLEWARE_PREFETCH_HEADER = "x-middleware-prefetch";
-
-function middlewarePrefetchProbe(
-  request: Request,
-  pathname: string,
-  manifest: NextRouteTable,
-): Response | undefined {
-  if (!request.headers.has(MIDDLEWARE_PREFETCH_HEADER)) return undefined;
-  if (!isNextDataPathname(pathname, manifest, manifest.buildId)) return undefined;
-
-  return new Response("{}", {
-    status: 200,
-    headers: {
-      "content-type": "application/json",
-      "x-matched-path": middlewareMatchPathname(pathname, manifest, manifest.buildId),
-      "x-middleware-skip": "1",
-      "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
-    },
-  });
-}
-
-function withoutAssetPrefix(url: URL, manifest: NextRouteTable): URL {
-  const prefix = manifest.assetPrefixPathname;
-  if (!prefix || !url.pathname.startsWith(`${prefix}/_next/`)) return url;
-  const unprefixed = new URL(url);
-  unprefixed.pathname = `${manifest.basePath}${url.pathname.slice(prefix.length)}`;
-  return unprefixed;
-}
-
-async function dispatch(result: RouteResult, request: Request, deps: RouteDeps): Promise<Response> {
-  const { manifest } = deps;
-  const doFetch = deps.fetch ?? fetch;
-  const url = new URL(request.url);
-  const headers = withoutControlHeaders(result.middleware?.headers ?? request.headers);
-
-  const assetUrl =
-    manifest.i18n && result.invocationTarget
-      ? new URL(result.invocationTarget.pathname + url.search, url)
-      : url;
-  const staticAsset = (at: URL = assetUrl) =>
-    serveStaticAsset(
-      request,
-      at,
-      deps.assetStore,
-      manifest.i18n && localeOf(manifest.i18n, manifest.basePath, url),
-    );
-
-  if (result.middlewareResponded) {
-    return middlewareResponse(result.middleware, result.status);
-  }
-  if (result.redirect) {
-    const status = redirectStatus(result.redirect.status);
-    if (status === undefined) return new Response(null, { status: 500 });
-    return Response.redirect(result.redirect.url.toString(), status);
-  }
-  if (isRoutingRedirect(result)) {
-    return new Response(null, { status: result.status });
-  }
-  if (result.externalRewrite) {
-    return retainOwner(await doFetch(new Request(result.externalRewrite, request)));
-  }
-  if (!result.resolvedPathname) {
-    const probe = middlewarePrefetchProbe(request, url.pathname, manifest);
-    if (probe) return probe;
-    const unprefixedAssetUrl = withoutAssetPrefix(assetUrl, manifest);
-    const asset = await staticAsset(unprefixedAssetUrl);
-    if (asset.status !== 404) return asset;
-    if (isNextDataPathname(url.pathname, manifest, manifest.buildId)) return asset;
-    if (isImmutablePathname(deps.assetStore, unprefixedAssetUrl.pathname)) return asset;
-    return notFoundResponse(request, url, result, headers, deps, () => asset, staticAsset);
-  }
-
-  if (hasUndecodableRouteMatch(result.routeMatches)) {
-    return new Response("Bad Request", { status: 400 });
-  }
-
-  const target = manifest.dispatch[result.resolvedPathname];
-  if (!target) {
-    return notFoundResponse(request, url, result, headers, deps, staticAsset, staticAsset);
-  }
-
-  if (target.kind === "function") {
-    const probe = middlewarePrefetchProbe(request, url.pathname, manifest);
-    if (probe) return probe;
-  }
-
-  const disallowed = documentMethodNotAllowed(request, target);
-  if (disallowed) return disallowed;
-
-  const response = await renderDispatchTarget(
-    target,
-    request,
-    url,
-    result,
-    headers,
-    deps,
-    staticAsset,
-  );
-  return target.kind === "function" && target.page
-    ? substituteErrorPage(response, request, url, headers, manifest, deps)
-    : response;
-}
-
-const SERVER_ACTION_CONTENT_TYPES = ["application/x-www-form-urlencoded", "multipart/form-data"];
-
-function isServerAction(request: Request): boolean {
-  if (request.method !== "POST") return false;
-  if (request.headers.has("next-action")) return true;
-  const contentType = request.headers.get("content-type") ?? "";
-  const media = (contentType.split(";")[0] ?? "").trim().toLowerCase();
-  return SERVER_ACTION_CONTENT_TYPES.includes(media);
-}
-
-function documentMethodNotAllowed(request: Request, target: DispatchTarget): Response | undefined {
-  if (target.kind !== "static" && target.kind !== "prerender") return undefined;
-  if (request.method === "GET" || request.method === "HEAD") return undefined;
-  if (isServerAction(request)) return undefined;
-  return new Response("Method Not Allowed", {
-    status: 405,
-    headers: { allow: "GET, HEAD" },
-  });
-}
-
-async function renderDispatchTarget(
-  target: DispatchTarget,
-  request: Request,
-  url: URL,
-  result: RouteResult,
-  headers: Headers,
-  deps: RouteDeps,
-  staticAsset: (at?: URL) => Promise<Response>,
-): Promise<Response> {
-  const { manifest, functionUrls } = deps;
-  const doOrigin = originFetch(deps);
-
-  switch (target.kind) {
-    case "static": {
-      const response = await staticAsset(new URL(result.resolvedPathname!, url));
-      return isFlightRequest(request.headers) ? withFlightVary(response) : response;
-    }
-
-    case "function": {
-      const fnUrl = functionUrls[target.id];
-      if (!fnUrl) return noFunctionUrl(target.id);
-      return withStatus(
-        await doOrigin(
-          withEntry(
-            forward(originUrl(fnUrl, url, result, manifest), request, headers),
-            target.entryKey,
-          ),
-        ),
-        "MISS",
-      );
-    }
-
-    case "prerender":
-      return prerenderResponse(request, url, result, target, headers, deps);
-
-    case "edge": {
-      if (!target.entryKey) return noEdgeEntry(result.resolvedPathname);
-      return withStatus(
-        await edgeResponse(
-          deps,
-          target.entryKey,
-          forward(originUrl(url.origin, url, result, manifest), request, headers),
-        ),
-        "MISS",
-      );
-    }
-
-    default: {
-      const unknown: never = target;
-      throw new Error(
-        `ocel: the route table dispatches "${result.resolvedPathname}" to target kind "${(unknown as { kind: unknown }).kind}", which this router does not serve`,
-      );
-    }
-  }
-}
-
-async function notFoundResponse(
-  request: Request,
-  url: URL,
-  result: RouteResult,
-  headers: Headers,
-  deps: RouteDeps,
-  fallback: () => Response | Promise<Response>,
-  staticAsset: (at?: URL) => Promise<Response>,
-): Promise<Response> {
-  const notFoundPathname = deps.manifest.errorRoutes?.notFound;
-  const notFoundTarget = notFoundPathname ? deps.manifest.dispatch[notFoundPathname] : undefined;
-  if (!notFoundPathname || !notFoundTarget) return fallback();
-  if (notFoundTarget.kind === "function" && !deps.functionUrls[notFoundTarget.id]) {
-    return fallback();
-  }
-
-  const notFoundResult: RouteResult = {
-    ...result,
-    resolvedPathname: notFoundPathname,
-    invocationTarget: { pathname: notFoundPathname },
-  };
-  const rendered = await renderDispatchTarget(
-    notFoundTarget,
-    request,
-    url,
-    notFoundResult,
-    headers,
-    deps,
-    staticAsset,
-  );
-  return new Response(rendered.body, {
-    status: 404,
-    statusText: rendered.statusText,
-    headers: rendered.headers,
-  });
-}
-
-function errorRouteKind(status: number): "notFound" | "serverError" | undefined {
-  if (status === 404) return "notFound";
-  if (status >= 500 && status < 600) return "serverError";
-  return undefined;
-}
-
-function isRenderedDocument(response: Response): boolean {
-  const contentType = response.headers.get("content-type");
-  if (!contentType?.startsWith("text/html")) return false;
-  const contentLength = response.headers.get("content-length");
-  return contentLength === null || Number(contentLength) > 0;
-}
-
-async function substituteErrorPage(
-  response: Response,
-  request: Request,
-  url: URL,
-  headers: Headers,
-  manifest: NextRouteTable,
-  deps: RouteDeps,
-): Promise<Response> {
-  const kind = errorRouteKind(response.status);
-  if (!kind) return response;
-  if (isFlightRequest(request.headers)) return response;
-  if (isNextDataPathname(url.pathname, manifest, manifest.buildId)) return response;
-  if (isRenderedDocument(response)) return response;
-
-  const errorPathname = manifest.errorRoutes?.[kind];
-  if (!errorPathname) return response;
-  const errorTarget = manifest.dispatch[errorPathname];
-  if (!errorTarget) return response;
-  if (errorTarget.kind === "function" && !deps.functionUrls[errorTarget.id]) {
-    return response;
-  }
-
-  await response.body?.cancel();
-  const errorResult: RouteResult = {
-    resolvedPathname: errorPathname,
-    invocationTarget: { pathname: errorPathname },
-  };
-  const errorStaticAsset = (at: URL = new URL(errorPathname, url)) =>
-    serveStaticAsset(
-      request,
-      at,
-      deps.assetStore,
-      manifest.i18n && localeOf(manifest.i18n, manifest.basePath, url),
-    );
-  const rendered = await renderDispatchTarget(
-    errorTarget,
-    request,
-    url,
-    errorResult,
-    headers,
-    deps,
-    errorStaticAsset,
-  );
-  return new Response(rendered.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: rendered.headers,
-  });
-}
-
-function hasUndecodableRouteMatch(
-  routeMatches: Record<string, string | string[]> | undefined,
-): boolean {
-  if (!routeMatches) return false;
-  for (const value of Object.values(routeMatches)) {
-    for (const v of Array.isArray(value) ? value : [value]) {
-      try {
-        decodeURIComponent(v);
-      } catch {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-async function prerenderResponse(
-  request: Request,
-  url: URL,
-  result: RouteResult,
-  target: PrerenderTarget,
-  headers: Headers,
-  deps: RouteDeps,
-): Promise<Response> {
-  const edgeEntryKey = target.edgeEntryKey;
-  const fnUrl = edgeEntryKey || target.id === undefined ? undefined : deps.functionUrls[target.id];
-  if (!fnUrl && !edgeEntryKey) return noRenderer(target.id);
-
-  const doFetch = originFetch(deps);
-  const forwardUrl = originUrl(fnUrl ?? url.origin, url, result, deps.manifest);
-  const render = (rendered: Request) => {
-    const entried = withEntry(rendered, target.entryKey);
-    return edgeEntryKey ? edgeResponse(deps, edgeEntryKey, entried) : doFetch(entried);
-  };
-
-  if (deps.prerender) {
-    return deps.prerender({
-      request,
-      url,
-      target,
-      headers,
-      overriddenHeaders: middlewareOverrides(result.middleware),
-      routePath: result.routePath ?? result.resolvedPathname ?? url.pathname,
-      resolvedPathname: result.resolvedPathname ?? undefined,
-      forwardUrl,
-      forward: (rendered, rendering) => forward(forwardUrl, rendered, rendering),
-      render,
-    });
-  }
-
-  const answer = isSegmentPrefetch(request.headers)
-    ? async (rendered: Request) => asSegmentPayload(await render(rendered))
-    : render;
-  return answer(forward(forwardUrl, request, headers));
-}
-
-function dataPathname(pathname: string, url: URL, manifest: NextRouteTable): string {
-  const base = manifest.basePath ?? "";
-  const prefix = `${base}/_next/data/${manifest.buildId}`;
-  if (!url.pathname.startsWith(`${prefix}/`) || !url.pathname.endsWith(".json")) {
-    return pathname;
-  }
-  if (pathname.startsWith(`${prefix}/`)) return pathname;
-  const route = (withoutBasePath(pathname, base) ?? pathname).replace(/\/$/, "");
-  return `${prefix}${route || "/index"}.json`;
-}
-
-function searchFromQuery(query: Record<string, string | string[]>): string {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(query)) {
-    for (const v of Array.isArray(value) ? value : [value]) {
-      if (v === `$${key}`) continue;
-      params.append(key, v);
-    }
-  }
-  const search = params.toString();
-  return search ? `?${search}` : "";
-}
-
-function originUrl(fnUrl: string, url: URL, result: RouteResult, manifest: NextRouteTable): URL {
-  const pathname = result.invocationTarget?.pathname ?? url.pathname;
-  const query = result.invocationTarget?.query;
-  const search = query ? searchFromQuery(query) : url.search;
-  const target = canonicalPathname(dataPathname(pathname, url, manifest), manifest);
-  return new URL(encodeRequestTarget(target) + encodeForwardedSearch(search), fnUrl);
-}
-
-async function bufferBody(request: Request): Promise<ArrayBuffer | null> {
-  if (!request.body || request.method === "GET" || request.method === "HEAD") {
-    return null;
-  }
-  return request.arrayBuffer();
-}
-
-function streamOf(body: ArrayBuffer | null): ReadableStream | null {
-  return body === null ? null : new Blob([body]).stream();
-}
-
-const NEXT_CACHE_TAGS_HEADER = "x-next-cache-tags";
-const CACHE_TAG_HEADER = "cache-tag";
-
-function originFetch(deps: RouteDeps): typeof fetch {
-  const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
-  return (async (input, init) => {
-    const response = dropEmptyBodySentinel(retainOwner(await doFetch(input as RequestInfo, init)));
-    const keepCacheTags = deps.keepCacheTags === true;
-    const hasCacheTags =
-      response.headers.has(NEXT_CACHE_TAGS_HEADER) ||
-      (!keepCacheTags && response.headers.has(CACHE_TAG_HEADER));
-    const announced = response.headers.get(purgeHeader);
-    if (!hasCacheTags && announced === null) return response;
-
-    if (announced !== null) {
-      await deps.onPurge?.(readPurge(announced), response.headers.has(NEXT_ACTION_REVALIDATED));
-    }
-    const rebuilt = new Response(response.body, response);
-    rebuilt.headers.delete(NEXT_CACHE_TAGS_HEADER);
-    if (!keepCacheTags) rebuilt.headers.delete(CACHE_TAG_HEADER);
-    rebuilt.headers.delete(purgeHeader);
-    return rebuilt;
-  }) as typeof fetch;
-}
-
-const ORIGIN_DATA_PATH = /\/_next\/data\/[^/]+\/.*\.json$/;
-
-export function forward(
-  url: URL,
-  request: Request,
-  headers: HeadersInit,
-  body: BodyInit | null = request.body,
-): Request {
-  const publicUrl = new URL(request.url);
-  const forwarded = new Headers(headers);
-  forwarded.set("x-forwarded-host", publicUrl.host);
-  forwarded.set("x-forwarded-proto", publicUrl.protocol.replace(/:$/, ""));
-  if (ORIGIN_DATA_PATH.test(url.pathname)) forwarded.set("x-nextjs-data", "1");
-  const init: RequestInit & { duplex?: "half" } = {
-    method: request.method,
-    headers: forwarded,
-    body,
-    redirect: "manual",
-    ...(body === null ? {} : { duplex: "half" as const }),
-  };
-  return new Request(url, init);
-}
-
-function withEntry(request: Request, entryKey: string | undefined): Request {
-  const headers = new Headers(request.headers);
-  if (entryKey !== undefined) headers.set(ENTRY_HEADER, entryKey);
-  else headers.delete(ENTRY_HEADER);
-  return new Request(request, { headers });
-}
-
-const MIDDLEWARE_HEADERS_HEADER = "x-ocel-middleware-headers";
-
-function originAuthoredResponse(response: Response): Response {
-  const declared = response.headers.get(MIDDLEWARE_HEADERS_HEADER);
-  const allow = new Set(
-    (declared ?? "")
-      .split(",")
-      .map((name) => name.trim().toLowerCase())
-      .filter(Boolean),
-  );
-  const headers = new Headers();
-  response.headers.forEach((value, name) => {
-    const lower = name.toLowerCase();
-    if (lower === "set-cookie" || lower === MIDDLEWARE_HEADERS_HEADER) return;
-    if (lower.startsWith("x-middleware-") || allow.has(lower)) headers.set(name, value);
-  });
-  if (allow.has("set-cookie")) {
-    for (const cookie of response.headers.getSetCookie()) headers.append("set-cookie", cookie);
-  }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
-function invokeMiddleware(
-  middleware: NonNullable<NextRouteTable["middleware"]>,
-  deps: RouteDeps,
-  makeRequest: () => Request,
-): Promise<Response> {
-  if (middleware.runtime === "nodejs") {
-    const fnUrl = deps.functionUrls[middleware.id];
-    if (!fnUrl) {
-      throw new Error(`no function URL for middleware bundle ${middleware.id}`);
-    }
-    const doOrigin = originFetch(deps);
-    return retryTransientOrigin(() => {
-      const request = makeRequest();
-      const url = new URL(request.url);
-      const forwardUrl = new URL(url.pathname + encodeForwardedSearch(url.search), fnUrl);
-      return doOrigin(
-        withEntry(
-          forward(forwardUrl, request, withoutControlHeaders(request.headers)),
-          middleware.entryKey,
-        ),
-      );
-    }, deps.isOriginThrottle).then(originAuthoredResponse);
-  }
-
-  if (!deps.edge) {
-    throw new Error("no edge runtime is bound to this deployment");
-  }
-  return deps.edge(middleware.entryKey, makeRequest(), "middleware");
-}
-
-function noFunctionUrl(id: string): Response {
-  return new Response(`No function URL for ${id}`, { status: 502 });
-}
-
-function noRenderer(id: string | undefined): Response {
-  return id === undefined
-    ? new Response("No renderer for prerender", { status: 502 })
-    : noFunctionUrl(id);
-}
-
-function noEdgeEntry(pathname: string | null | undefined): Response {
-  return new Response(`No edge entry for ${pathname}`, { status: 502 });
-}
-
-async function edgeResponse(
-  deps: RouteDeps,
-  entryKey: string,
-  request: Request,
-): Promise<Response> {
-  const edge = deps.edge;
-  try {
-    if (!edge) throw new Error("no edge runtime is bound to this deployment");
-    return await edge(entryKey, request);
-  } catch (error) {
-    console.error(`ocel: edge entry ${entryKey} failed`, error);
-    return new Response("Edge invocation failed", { status: 500 });
-  }
-}
-
-function isRoutingRedirect(result: RouteResult): result is RouteResult & { status: number } {
-  return (
-    result.status !== undefined &&
-    result.status >= 300 &&
-    result.status < 400 &&
-    (result.resolvedHeaders?.has("location") === true ||
-      result.resolvedHeaders?.has("refresh") === true)
-  );
-}
-
-const NULL_BODY_STATUSES = new Set([204, 205, 304]);
-
-function middlewareResponse(outcome: MiddlewareOutcome | undefined, status?: number): Response {
-  if (!outcome) return new Response(null, { status: status ?? 200 });
-  const body = NULL_BODY_STATUSES.has(outcome.response.status) ? null : outcome.response.body;
-  const response = new Response(body, outcome.response);
-  stripMiddlewareHeaders(response.headers);
-  return response;
-}
-
-function stripMiddlewareHeaders(headers: Headers): void {
-  for (const name of [...headers.keys()]) {
-    if (name.startsWith("x-middleware-")) headers.delete(name);
-  }
-}
-
-function middlewareMatches(
-  matchers: MiddlewareMatcher[] | undefined,
-  url: URL,
-  headers: Headers,
-): boolean {
-  if (!matchers || matchers.length === 0) return true;
-  return matchers.some(
-    (matcher) =>
-      new RegExp(matcher.sourceRegex).test(url.pathname) &&
-      (matcher.has ?? []).every((has) => matchesHas(has, headers, url)) &&
-      !(matcher.missing ?? []).some((has) => matchesHas(has, headers, url)),
-  );
-}
-
-function middlewareOverrides(outcome: MiddlewareOutcome | undefined): Set<string> {
-  const named = outcome?.response.headers.get("x-middleware-override-headers");
-  return new Set(
-    named
-      ?.split(",")
-      .map((name) => name.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
-export function isOnDemandRevalidate(request: Request, config: { bypassToken?: string }): boolean {
-  return (
-    config.bypassToken !== undefined &&
-    config.bypassToken !== "" &&
-    request.headers.get("x-prerender-revalidate") === config.bypassToken
-  );
-}
-
-export function shouldBypass(
-  request: Request,
-  url: URL,
-  config: { bypassFor?: RouteHas[]; bypassToken?: string },
-): boolean {
-  if (isOnDemandRevalidate(request, config)) return true;
-  return (config.bypassFor ?? []).some((has) => matchesHas(has, request.headers, url));
-}
-
-function matchesHas(has: RouteHas, headers: Headers, url: URL): boolean {
-  const value = hasValue(has, headers, url);
-  if (!value) return false;
-  if (!has.value) return true;
-
-  const candidate = (Array.isArray(value) ? value[value.length - 1] : value) ?? "";
-  try {
-    return new RegExp(`^${has.value}$`).test(candidate);
-  } catch {
-    return false;
-  }
-}
-
-function hasValue(has: RouteHas, headers: Headers, url: URL): string | string[] | undefined {
-  switch (has.type) {
-    case "header":
-      return headers.get(has.key) ?? undefined;
-    case "cookie":
-      return cookieValue(headers.get("cookie"), has.key);
-    case "query": {
-      const values = url.searchParams.getAll(has.key);
-      if (values.length === 0) return undefined;
-      return values.length === 1 ? values[0] : values;
-    }
-    case "host":
-      return (url.host.split(":", 1)[0] ?? "").toLowerCase();
-  }
-}
-
-function cookieValue(header: string | null, key: string): string | undefined {
-  for (const part of header?.split(";") ?? []) {
-    const eq = part.indexOf("=");
-    if (eq > 0 && part.slice(0, eq).trim() === key) {
-      return part.slice(eq + 1).trim();
-    }
-  }
-  return undefined;
 }

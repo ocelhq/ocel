@@ -1,17 +1,11 @@
-import type { I18nConfig } from "@next/routing";
+import type { I18nConfig, ResolveRoutesParams, Route, RouteHas } from "@next/routing";
 import type { ImageConfig } from "./image.mjs";
 
-export type RouteHas =
-  | {
-      type: "header" | "cookie" | "query";
-      key: string;
-      value?: string;
-    }
-  | {
-      type: "host";
-      key?: undefined;
-      value: string;
-    };
+export type { RouteHas };
+
+export type RoutingTable = Omit<ResolveRoutesParams["routes"], "beforeMiddleware"> & {
+  beforeMiddleware: Array<Route & { priority?: boolean }>;
+};
 
 export type DispatchTarget =
   | { kind: "static" }
@@ -71,7 +65,7 @@ export interface NextRouteTable {
   skipTrailingSlashRedirect?: boolean;
   skipMiddlewareUrlNormalize?: boolean;
   pathnames: string[];
-  routes: unknown;
+  routes: RoutingTable;
   dispatch: Record<string, DispatchTarget>;
   errorRoutes?: {
     notFound?: string;

@@ -25,6 +25,7 @@ import {
   runWithRequestCache,
   watchRequestCache,
 } from "./origin-cache.mjs";
+import { beforeWriteHead } from "./write-head.mjs";
 
 interface Origin {
   routes: CompiledRouteTable | undefined;
@@ -133,23 +134,6 @@ function dropCookie(req: http.IncomingMessage): void {
   req.rawHeaders = kept;
 }
 
-function declareHeaders(res: http.ServerResponse, declared: unknown): void {
-  if (Array.isArray(declared)) {
-    const pairs = Array.isArray(declared[0]) ? declared : pairFlatHeaders(declared);
-    for (const [name, value] of pairs) res.setHeader(name, value);
-  } else if (declared !== null && typeof declared === "object") {
-    for (const [name, value] of Object.entries(declared)) {
-      if (value !== undefined) res.setHeader(name, value as string | string[]);
-    }
-  }
-}
-
-function pairFlatHeaders(flat: unknown[]): [string, string][] {
-  const pairs: [string, string][] = [];
-  for (let i = 0; i + 1 < flat.length; i += 2) pairs.push([String(flat[i]), String(flat[i + 1])]);
-  return pairs;
-}
-
 function runInRequest<T>(
   origin: Origin,
   req: http.IncomingMessage,
@@ -167,17 +151,10 @@ function runInRequest<T>(
     dropCookie(req);
   }
   const store = origin.cache ? openRequestCache(res, ocel) : undefined;
-  const writeHead = res.writeHead;
-  res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
-    if (this.headersSent) return (writeHead as any).apply(this, args);
-    const [status, ...rest] = args;
-    if (typeof status === "number") this.statusCode = status;
-    const message = typeof rest[0] === "string" ? [rest.shift()] : [];
-    declareHeaders(this, rest[0]);
-    applyHeaderRules(this, routed);
-    if (origin.cache && store) prepareCachedResponse(origin.cache, req, this, store, routed);
-    return (writeHead as any).apply(this, [status, ...message]);
-  } as typeof res.writeHead;
+  beforeWriteHead(res, (res) => {
+    applyHeaderRules(res, routed);
+    if (origin.cache && store) prepareCachedResponse(origin.cache, req, res, store, routed);
+  });
   if (!origin.cache || !store) return run();
   if (routed.bypass === "revalidate") raisePathPurge(origin.cache, store, pathname);
   watchRequestCache(origin.cache, res, store);

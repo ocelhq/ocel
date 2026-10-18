@@ -11,6 +11,7 @@ import {
   ROBOTS_TAG,
   SET_BYPASS_COOKIE_HEADER,
 } from "@platform/edge-contract/gate";
+import { beforeWriteHead } from "./write-head.mjs";
 
 export const GATE_CACHE_MS = 5000;
 
@@ -152,31 +153,7 @@ function writeUpgradeAnswer(socket: Duplex, answer: GateResponse): void {
 }
 
 function markResponseNoindex(res: http.ServerResponse): void {
-  const writeHead = res.writeHead;
-  res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
-    if (!this.headersSent) {
-      const last = args.at(-1);
-      if (typeof last === "object" && last !== null) {
-        setHeaders(this, last);
-        args.pop();
-      }
-      this.setHeader("x-robots-tag", ROBOTS_TAG);
-    }
-    return (writeHead as any).apply(this, args);
-  } as typeof res.writeHead;
-}
-
-function setHeaders(res: http.ServerResponse, headers: object): void {
-  if (!Array.isArray(headers)) {
-    for (const [name, value] of Object.entries(headers)) res.setHeader(name, value);
-    return;
-  }
-  if (Array.isArray(headers[0])) {
-    for (const [name, value] of headers as [string, string][]) res.appendHeader(name, value);
-    return;
-  }
-  for (let i = 0; i + 1 < headers.length; i += 2) res.removeHeader(headers[i]);
-  for (let i = 0; i + 1 < headers.length; i += 2) res.appendHeader(headers[i], headers[i + 1]);
+  beforeWriteHead(res, (res) => res.setHeader("x-robots-tag", ROBOTS_TAG));
 }
 
 function newFetchHeaders(req: http.IncomingMessage): Headers {

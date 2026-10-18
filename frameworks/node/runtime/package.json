@@ -16,7 +16,8 @@
     "./gate": "./src/gate.mts",
     "./serve": "./src/serve.mts",
     "./tag-records": "./src/tag-records.mts",
-    "./user-app": "./src/user-app.mts"
+    "./user-app": "./src/user-app.mts",
+    "./write-head": "./src/write-head.mts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

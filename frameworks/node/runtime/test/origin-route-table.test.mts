@@ -49,6 +49,18 @@ describe("an origin handed a route table", () => {
     expect(other.headers.get("x-section")).toBe("site");
   });
 
+  test("sends every duplicate a flat header array passes to writeHead, as node does", async () => {
+    const get = await serve(newRouteTable({}), (req, res) => {
+      res.setHeader("set-cookie", "stale=1");
+      res.writeHead(200, ["set-cookie", "a=1", "set-cookie", "b=2"]);
+      res.end();
+    });
+
+    const res = await get("/about");
+
+    expect(res.headers.getSetCookie()).toEqual(["a=1", "b=2"]);
+  });
+
   test("sets a header over the one its handler set, and on a response that is not a 200", async () => {
     const get = await serve(
       newRouteTable({ headers: [{ src: "/(.*)", headers: { "x-frame-options": "DENY" } }] }),

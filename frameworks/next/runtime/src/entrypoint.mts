@@ -16,6 +16,7 @@ import {
   servesOnlyFresh,
 } from "@framework/node-runtime/host";
 import { awaitLiveValues } from "@framework/node-runtime/live-values";
+import { beforeWriteHead } from "@framework/node-runtime/write-head";
 import {
   cachesOnlyMarked,
   edgeCacheHeader,
@@ -44,14 +45,10 @@ function isPprResume(req: http.IncomingMessage): boolean {
 
 function announcePurges(res: http.ServerResponse, release: string): void {
   const before = purgeMark();
-  const writeHead = res.writeHead;
-  res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
-    if (!this.headersSent) {
-      const announced = purgeHeaderFor(release, purgedSince(before));
-      if (announced !== undefined) this.setHeader(purgeHeader, announced);
-    }
-    return (writeHead as any).apply(this, args);
-  } as typeof res.writeHead;
+  beforeWriteHead(res, (res) => {
+    const announced = purgeHeaderFor(release, purgedSince(before));
+    if (announced !== undefined) res.setHeader(purgeHeader, announced);
+  });
 }
 
 async function boot(): Promise<void> {

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { LookupAddress } from "node:dns";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { IMAGE_PASSTHROUGH } from "@framework/next-protocol/image";
+import { IMAGE_ERROR, IMAGE_PASSTHROUGH } from "@framework/next-protocol/image";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { isReachableAddress } from "../src/addresses.mjs";
 import { resetConfigMemo } from "../src/config.mjs";
@@ -49,7 +49,7 @@ describe("the config the edge validated against", () => {
     store.put(ASSET, { bytes: await solid("png") });
     const response = await optimize(payload(declared), { store });
     expect(response.status).toBe(502);
-    expect(response.headers).toEqual({});
+    expect(response.headers).toEqual({ [IMAGE_ERROR]: "1" });
     expect(store.reads).toEqual(["prod/proj1/web/r3f8a1c9d/image-config.json"]);
   });
 
@@ -90,7 +90,7 @@ describe("re-validation", () => {
     const response = await optimize(payload(config, { w: 641 }), { store });
     expect(response.status).toBe(400);
     expect(text(response.body)).toBe('"w" parameter (width) of 641 is not allowed');
-    expect(response.headers).toEqual({});
+    expect(response.headers).toEqual({ [IMAGE_ERROR]: "1" });
   });
 
   test("rejects a host the loaded config does not allow", async () => {
@@ -122,7 +122,7 @@ describe("re-validation", () => {
       store.put(ASSET, { bytes: await solid("png") });
       const response = await optimize(payload(config, { mimeType: "text/html" }), { store });
       expect(response.status).toBe(502);
-      expect(response.headers).toEqual({});
+      expect(response.headers).toEqual({ [IMAGE_ERROR]: "1" });
       expect(text(response.body)).toBe("The image optimizer could not serve this request.");
     });
 
@@ -313,6 +313,27 @@ describe("a remote image", () => {
     expect(response.headers["content-type"]).toBe("image/webp");
     expect(response.headers["cache-control"]).toBe("public, s-maxage=600");
     expect(response.headers["content-disposition"]).toBe('attachment; filename="photo.webp"');
+    expect(response.headers[IMAGE_ERROR]).toBeUndefined();
+  });
+
+  test("an upstream 404 is answered as a 404 marked as the optimizer's own", async () => {
+    const config = imageConfig({
+      remotePatterns: [
+        { protocol: "http", hostname: "^cdn\\.example\\.com$", pathname: "^\\/.*$" },
+      ],
+    });
+    const store = storeWithConfig(config);
+    const port = await serve((_req, res) => {
+      res.writeHead(404);
+      res.end("upstream detail");
+    });
+    const response = await optimize(
+      payload(config, { url: `http://cdn.example.com:${port}/photo.jpg` }),
+      { store, upstream: loopback },
+    );
+    expect(response.status).toBe(404);
+    expect(response.headers[IMAGE_ERROR]).toBe("1");
+    expect(text(response.body)).toBe('"url" parameter is valid but upstream response is invalid');
   });
 });
 
@@ -357,7 +378,7 @@ describe("failure behavior", () => {
     const response = await optimize(payload(config), { store });
     expect(response.status).toBe(400);
     expect(text(response.body)).toBe("The requested resource isn't a valid image.");
-    expect(response.headers).toEqual({});
+    expect(response.headers).toEqual({ [IMAGE_ERROR]: "1" });
   });
 
   test("an SVG without the flag is a 400 even though it is a real image", async () => {

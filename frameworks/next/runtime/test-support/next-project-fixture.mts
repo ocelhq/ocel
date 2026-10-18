@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import type { LauncherCache, LauncherConfig } from "@framework/next-protocol/launcher";
 
 export const previewModeId = "test-preview-id";
@@ -62,6 +63,9 @@ export async function writeNextProjectFixture(
   cache: Partial<LauncherCache> = {},
 ): Promise<NextProjectFixture> {
   await mkdir(join(projectDir, ".next"), { recursive: true });
+  await mkdir(join(projectDir, "node_modules"), { recursive: true });
+  const nextDir = dirname(createRequire(import.meta.url).resolve("next/package.json"));
+  await symlink(nextDir, join(projectDir, "node_modules", "next"), "dir");
 
   const cacheHandlerPath = join(projectDir, "stub-cache-handler.cjs");
   await writeFile(cacheHandlerPath, cacheHandlerModule);
