@@ -32,10 +32,11 @@ type Wiring struct {
 }
 
 type harness struct {
-	t      *testing.T
-	wiring Wiring
-	topics map[string]*provider.TopicSpec
-	worker *worker
+	t       *testing.T
+	wiring  Wiring
+	records *gatedRecords
+	topics  map[string]*provider.TopicSpec
+	worker  *worker
 
 	mu       sync.Mutex
 	attempts []runs.Attempt
@@ -59,7 +60,45 @@ func aTopic(name string, ordered bool, consumers ...provider.ConsumerSpec) map[s
 
 func newHarness(t *testing.T, open func(t *testing.T, topics map[string]*provider.TopicSpec) Wiring, topics map[string]*provider.TopicSpec, answering func(*http.Request, *topicv1.Envelope, int) answer) *harness {
 	t.Helper()
-	return &harness{t: t, wiring: open(t, topics), topics: topics, worker: newWorker(t, answering)}
+	wiring := open(t, topics)
+	return &harness{t: t, wiring: wiring, records: &gatedRecords{Store: wiring.Store}, topics: topics, worker: newWorker(t, answering)}
+}
+
+type gatedRecords struct {
+	runs.Store
+
+	mu      sync.Mutex
+	waiting int
+	open    chan struct{}
+}
+
+func (g *gatedRecords) holdEnsuredUntil(callers int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.waiting, g.open = callers, make(chan struct{})
+}
+
+func (g *gatedRecords) EnsureRecord(ctx context.Context, record provider.ExpiringRecord) (provider.ExpiringRecord, bool, error) {
+	held, created, err := g.Store.EnsureRecord(ctx, record)
+	g.mu.Lock()
+	open := g.open
+	if g.waiting > 0 {
+		g.waiting--
+		if g.waiting == 0 {
+			close(g.open)
+			g.open = nil
+		}
+	} else {
+		open = nil
+	}
+	g.mu.Unlock()
+	if open != nil {
+		select {
+		case <-open:
+		case <-ctx.Done():
+		}
+	}
+	return held, created, err
 }
 
 func (h *harness) engine(grace time.Duration) *runs.Engine {
@@ -68,7 +107,7 @@ func (h *harness) engine(grace time.Duration) *runs.Engine {
 
 func (h *harness) engineLeasing(grace, leased time.Duration) *runs.Engine {
 	return runs.New(runs.Config{
-		Store:         h.wiring.Store,
+		Store:         h.records,
 		Queue:         h.wiring.Queue,
 		Deployment:    runs.Deployment{Topics: h.topics, Workers: map[string]runs.Worker{workerName: {URL: h.worker.url}}},
 		Lease:         leased,
@@ -400,6 +439,79 @@ func Engine(t *testing.T, open func(t *testing.T, topics map[string]*provider.To
 		if after := h.trigger(engine, "digest", `{"n":3}`, debounce); after == first {
 			t.Error("a trigger after the debounced run started joined it, want a new run")
 		}
+	})
+
+	t.Run("concurrent triggers under one debounce key fold into one run, before and after the key's run started", func(t *testing.T) {
+		release := make(chan struct{})
+		h := newHarness(t, open, aTask("digest", provider.ConsumerSpec{Retry: retrying(3)}), func(r *http.Request, _ *topicv1.Envelope, _ int) answer {
+			select {
+			case <-release:
+				return answeredOK
+			case <-r.Context().Done():
+				return answer{status: http.StatusServiceUnavailable}
+			}
+		})
+		engine := h.engine(time.Second)
+		h.serve(engine, "digest")
+		debounce := &taskv1.TriggerOptions{Debounce: &taskv1.Debounce{Key: "user-9", Delay: durationpb.New(500 * time.Millisecond)}}
+		const triggers = 8
+		triggerAtOnce := func() []string {
+			ids := make([]string, triggers)
+			errs := make([]error, triggers)
+			var ready, done sync.WaitGroup
+			ready.Add(triggers)
+			start := make(chan struct{})
+			for i := range triggers {
+				done.Go(func() {
+					ready.Done()
+					<-start
+					resp, err := engine.Tasks().Trigger(context.Background(), &taskv1.TriggerRequest{Task: "digest", Payload: []byte(`{}`), Options: debounce})
+					ids[i], errs[i] = resp.GetId(), err
+				})
+			}
+			ready.Wait()
+			close(start)
+			done.Wait()
+			for i, err := range errs {
+				if err != nil {
+					t.Fatalf("Trigger %d: %v", i, err)
+				}
+			}
+			return ids
+		}
+		countRuns := func() int64 {
+			count, err := h.wiring.Store.CountRuns(context.Background(), runs.RunFilter{Topics: []string{"digest"}})
+			if err != nil {
+				t.Fatalf("CountRuns: %v", err)
+			}
+			return count
+		}
+
+		h.records.holdEnsuredUntil(triggers)
+		first := triggerAtOnce()
+		for _, id := range first {
+			if id != first[0] {
+				t.Fatalf("concurrent triggers on a fresh debounce key answered %v, want one run", first)
+			}
+		}
+		if count := countRuns(); count != 1 {
+			t.Fatalf("concurrent triggers on a fresh debounce key recorded %d runs, want 1", count)
+		}
+
+		h.eventually("the debounced run to start", func() bool { return h.worker.calls() == 1 })
+		h.records.holdEnsuredUntil(triggers)
+		second := triggerAtOnce()
+		for _, id := range second {
+			if id != second[0] || id == first[0] {
+				t.Fatalf("concurrent triggers after the debounced run %s started answered %v, want one new run", first[0], second)
+			}
+		}
+		if count := countRuns(); count != 2 {
+			t.Fatalf("concurrent triggers after the debounced run started left %d runs, want 2", count)
+		}
+		close(release)
+		h.settlesAs("digest", second[0], provider.RunCompleted)
+		h.stillAfter(time.Second, "two calls to the worker", func() bool { return h.worker.calls() == 2 })
 	})
 
 	t.Run("a replay runs the same payload again as a new run", func(t *testing.T) {

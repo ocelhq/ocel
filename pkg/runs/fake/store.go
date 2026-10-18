@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"slices"
 	"sync"
 	"time"
@@ -164,10 +165,14 @@ func (s *Store) EnsureRecord(_ context.Context, record provider.ExpiringRecord) 
 	return record, true, nil
 }
 
-func (s *Store) WriteRecord(_ context.Context, record provider.ExpiringRecord) error {
+func (s *Store) ReplaceRecord(_ context.Context, record provider.ExpiringRecord, held json.RawMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.records[recordKey{record.Purpose, record.Topic, record.Key}] = record
+	key := recordKey{record.Purpose, record.Topic, record.Key}
+	if current, found := s.records[key]; !found || !bytes.Equal(current.Value, held) {
+		return keyvalue.ErrStale
+	}
+	s.records[key] = record
 	return nil
 }
 

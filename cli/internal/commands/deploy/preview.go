@@ -114,7 +114,7 @@ func NewPreviewCommand(dependencies deploy.Dependencies) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return deploy.PrunePreview(cmd.Context(), dependencies, cwd, readPreviewNameArgument(args), pruneKeep)
+			return deploy.PrunePreview(cmd.Context(), dependencies, cwd, readPreviewNameArgument(args), pruneKeep, pruneYes, cmd.OutOrStdout(), cmd.InOrStdin())
 		},
 	}
 	prune.Flags().IntVar(&pruneKeep, "keep", defaultPreviewPruneKeepN, "How many recent deployments to keep (the live one always stays)")

@@ -158,9 +158,13 @@ func (s *stack) withdrawGate(ctx context.Context) error {
 
 func (s *stack) signGateSession(ctx context.Context, hostname string) (string, error) {
 	if !s.isGated() {
-		inForce, err := stackrecords.ReadGate(ctx, s.e.deps.KeyValues, s.e.deps.Cipher, s.state.Tier, s.state.Slug)
-		if err != nil || inForce == nil {
+		records, err := stackrecords.ReadGates(ctx, s.e.deps.KeyValues, s.e.deps.Cipher, s.state.Tier)
+		if err != nil {
 			return "", err
+		}
+		inForce := records[s.state.Slug].GateInForce()
+		if inForce == nil {
+			return "", nil
 		}
 		return gate.CookieName + "=" + inForce.SignSession(hostname, time.Now()), nil
 	}

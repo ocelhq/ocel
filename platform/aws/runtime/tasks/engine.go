@@ -19,6 +19,7 @@ import (
 const (
 	cancelPoll       = 500 * time.Millisecond
 	inFlightPerQueue = 10
+	maxOrderedDelay  = queues.MessageRetention - 24*time.Hour
 )
 
 type Config struct {
@@ -60,13 +61,14 @@ func newEngine(cfg Config, store runs.Store, slots runs.Slots) *Engine {
 	queue := NewQueue(cfg.Topology, cfg.Queues, cfg.Topics, cfg.Services)
 	return &Engine{
 		runs: runs.New(runs.Config{
-			Store:       store,
-			Queue:       queue,
-			Slots:       slots,
-			Deployment:  deploymentOf(cfg),
-			CancelPoll:  cancelPoll,
-			InFlight:    inFlightPerQueue,
-			MaxReceives: queues.MaxReceiveCount,
+			Store:           store,
+			Queue:           queue,
+			Slots:           slots,
+			Deployment:      deploymentOf(cfg),
+			CancelPoll:      cancelPoll,
+			InFlight:        inFlightPerQueue,
+			MaxReceives:     queues.MaxReceiveCount,
+			MaxOrderedDelay: maxOrderedDelay,
 		}),
 		queue:  queue,
 		worker: cfg.Worker,

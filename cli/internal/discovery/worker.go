@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/workdir"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -100,33 +101,6 @@ class Delivery(BaseHTTPRequestHandler):
 ThreadingHTTPServer((os.environ.get("HOST") or "127.0.0.1", int(os.environ["PORT"])), Delivery).serve_forever()
 `
 
-const nodeWorkerServer = `
-import { createServer as __ocelCreateServer } from "node:http";
-import { deliver as __ocelDeliver } from "ocel/worker";
-
-const __ocelWorker = process.env.` + processenv.WorkerEnvVar + `;
-if (!__ocelWorker) {
-  console.error("ocel: ` + processenv.WorkerEnvVar + ` names no worker, so this worker entry has nothing to serve");
-  process.exit(1);
-}
-%s
-__ocelCreateServer(async (req, res) => {
-  if (req.method !== "POST") {
-    res.writeHead(405, { allow: "POST" }).end();
-    return;
-  }
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const canceled = new AbortController();
-  res.on("close", () => {
-    if (!res.writableFinished) canceled.abort();
-  });
-  const answer = await __ocelDeliver(__ocelWorker, Buffer.concat(chunks).toString("utf8"), canceled.signal);
-  const contentType = answer.status === 200 || answer.status === 422 ? "application/json" : "text/plain; charset=utf-8";
-  res.writeHead(answer.status, { "content-type": contentType }).end(answer.body);
-}).listen(Number(process.env.PORT), process.env.HOST || "127.0.0.1");
-`
-
 type workerCommand func(ctx context.Context, configDir string, roots []Root, served Root, run *workdir.Run) (*exec.Cmd, error)
 
 var workerCommands = map[language.Language]workerCommand{
@@ -175,7 +149,9 @@ func bundleNodeWorker(configDir string, roots []Root, outfile string) ([]byte, e
 		return nil, err
 	}
 	if source == "" {
-		source = fmt.Sprintf(nodeWorkerServer, "")
+		if source, err = renderNodeWorkerEntry(nil); err != nil {
+			return nil, err
+		}
 	}
 	if resolveDir == "" {
 		resolveDir = configDir
@@ -205,11 +181,27 @@ func RenderNodeWorkerEntry(roots []Root) (source, resolveDir string, err error) 
 	if len(files) == 0 {
 		return "", "", nil
 	}
-	var imports strings.Builder
-	for _, file := range files {
-		fmt.Fprintf(&imports, "await import(%q);\n", file)
+	source, err = renderNodeWorkerEntry(files)
+	if err != nil {
+		return "", "", err
 	}
-	return fmt.Sprintf(nodeWorkerServer, imports.String()), resolveDir, nil
+	return source, resolveDir, nil
+}
+
+func renderNodeWorkerEntry(files []string) (string, error) {
+	installed, err := node.Ensure()
+	if err != nil {
+		return "", err
+	}
+	var entry strings.Builder
+	fmt.Fprintf(&entry, "import { serve } from %q;\n", installed.WorkerServerPath())
+	entry.WriteString("import { deliver } from \"ocel/worker\";\n")
+	fmt.Fprintf(&entry, "await serve(deliver, %q, [\n", processenv.WorkerEnvVar)
+	for _, file := range files {
+		fmt.Fprintf(&entry, "  () => import(%q),\n", file)
+	}
+	entry.WriteString("]);\n")
+	return entry.String(), nil
 }
 
 func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, _ *workdir.Run) (*exec.Cmd, error) {

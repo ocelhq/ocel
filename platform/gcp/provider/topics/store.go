@@ -148,13 +148,37 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 	return kept, created, nil
 }
 
-func (s Store) WriteRecord(ctx context.Context, record provider.ExpiringRecord) error {
+func (s Store) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord, held json.RawMessage) error {
 	doc, err := s.recordDocument(record)
 	if err != nil {
 		return err
 	}
-	if _, err := doc.Set(ctx, recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt}); err != nil {
-		return fmt.Errorf("write the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
+	client, err := s.client()
+	if err != nil {
+		return err
+	}
+	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snapshot, found, err := readInTransaction(tx, doc)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return keyvalue.ErrStale
+		}
+		var current recordDocument
+		if err := snapshot.DataTo(&current); err != nil {
+			return err
+		}
+		if current.Value != string(held) {
+			return keyvalue.ErrStale
+		}
+		return tx.Set(doc, recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt})
+	})
+	if errors.Is(err, keyvalue.ErrStale) {
+		return fmt.Errorf("the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, keyvalue.ErrStale)
+	}
+	if err != nil {
+		return fmt.Errorf("replace the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
 	}
 	return nil
 }

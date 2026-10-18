@@ -190,6 +190,36 @@ func TestAnAppThatNamesNoHealthPathIsHandedThePathItsLiveReleaseDiscovered(t *te
 	}
 }
 
+func TestADryRunPlansAnAppThatNamesNoHealthPathWithThePathItsLiveReleaseDiscovered(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	if result, _ := deploy(t, client, namingARegistry(containerDeployRequest(""))); result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	next := namingARegistry(containerDeployRequest(""))
+	next.Manifest.Apps[0].BuildId = "fedcba9876543210fedcba9876543210"
+	next.Dry = true
+	if result, _ := deploy(t, client, next); result == nil || !result.GetSuccess() {
+		t.Fatalf("the dry deploy = %q, want the plan drawn", result.GetError())
+	}
+
+	planned := vendor.FakeStacks().Planned()
+	var app *provider.AppSpec
+	for _, spec := range planned {
+		if spec.App != nil {
+			app = spec.App
+		}
+	}
+	if app == nil {
+		t.Fatal("the dry run planned no app")
+	}
+	if app.HealthCheckPath != "" || app.DiscoveredHealthCheckPath != fake.DiscoveredHealthPath {
+		t.Errorf("the dry run planned health path %q and discovered path %q, want none and %q: the plan must draw the release the apply would provision", app.HealthCheckPath, app.DiscoveredHealthCheckPath, fake.DiscoveredHealthPath)
+	}
+}
+
 func TestAnAppThatNamesAHealthPathIsHandedNoDiscoveredOne(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)

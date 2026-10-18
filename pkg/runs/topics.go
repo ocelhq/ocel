@@ -50,6 +50,9 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 	if req.GetDueAt() != nil {
 		msg.DueAt = req.GetDueAt().AsTime()
 	}
+	if err := t.engine.refuseDelay(req.GetTopic(), topic, msg.DueAt, now); err != nil {
+		return nil, err
+	}
 	var idempotency provider.ExpiringRecord
 	if key := req.GetIdempotencyKey(); key != "" {
 		value, err := json.Marshal(recordedMessage{Message: msg.ID})

@@ -324,6 +324,55 @@ async def test_an_object_opened_for_writing_asynchronously_lands_nothing_when_th
     assert uploads.store.uploads == {}
 
 
+@pytest.mark.parametrize("single_request_limit_bytes", [16, 8])
+def test_an_object_opened_for_writing_describes_what_it_landed_once_closed(
+    uploads, single_request_limit_bytes
+):
+    store = bucket("uploads")
+    store._single_request_limit_bytes = single_request_limit_bytes
+    store._part_size_bytes = 4
+
+    with store.open("a.txt", "wb", content_type="text/plain", metadata={"by": "me"}) as handle:
+        handle.write(b"0123456789abcde")
+        assert handle.info is None
+
+    assert handle.info is not None
+    assert handle.info.key == "a.txt"
+    assert handle.info.size == 15
+    assert handle.info.etag == uploads.store.objects["a.txt"].etag
+    assert handle.info.content_type == "text/plain"
+    assert handle.info.metadata == {"by": "me"}
+    assert uploads.store.heads == []
+
+
+def test_an_object_opened_for_writing_describes_nothing_when_the_body_raises(uploads):
+    with pytest.raises(RuntimeError, match="the caller gave up"):
+        with bucket("uploads").open("a.txt", "wb") as handle:
+            handle.write(b"hello")
+            raise RuntimeError("the caller gave up")
+
+    assert handle.info is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("single_request_limit_bytes", [16, 8])
+async def test_an_object_opened_for_writing_asynchronously_describes_what_it_landed_once_closed(
+    uploads, single_request_limit_bytes
+):
+    store = bucket("uploads")
+    store._single_request_limit_bytes = single_request_limit_bytes
+    store._part_size_bytes = 4
+
+    async with store.open_async("a.txt", "wb") as handle:
+        await handle.write(b"0123456789abcde")
+        assert handle.info is None
+
+    assert handle.info is not None
+    assert handle.info.size == 15
+    assert handle.info.etag == uploads.store.objects["a.txt"].etag
+    assert handle.info.content_type == "application/octet-stream"
+
+
 def test_a_body_too_big_for_one_request_goes_up_in_parts(uploads):
     store = bucket("uploads")
     store._single_request_limit_bytes = 8

@@ -184,7 +184,11 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 	if err != nil {
 		return nil, err
 	}
-	run, err := t.engine.reschedule(ctx, deployed, req.GetId(), req.GetDueAt().AsTime(), false)
+	due := req.GetDueAt().AsTime()
+	if err := t.engine.refuseDelay(deployed.topicName, deployed.topic, due, time.Now()); err != nil {
+		return nil, err
+	}
+	run, err := t.engine.reschedule(ctx, deployed, req.GetId(), due, false)
 	if err != nil {
 		return nil, err
 	}

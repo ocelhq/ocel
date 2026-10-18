@@ -35,6 +35,10 @@ func (b Bundle) DiscoveryRuntimePath() string {
 	return filepath.Join(b.dir, "discovery", "runtime.mjs")
 }
 
+func (b Bundle) WorkerServerPath() string {
+	return filepath.Join(b.dir, "worker", "server.mjs")
+}
+
 func (b Bundle) NextAdapterPath() string {
 	return filepath.Join(b.dir, "next-adapter", "next-adapter.mjs")
 }

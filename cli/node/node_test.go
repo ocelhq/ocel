@@ -20,6 +20,7 @@ func TestEnsure(t *testing.T) {
 		bundle := ensured(t, t.TempDir())
 		for _, path := range []string{
 			bundle.BuildScriptPath(),
+			bundle.WorkerServerPath(),
 			bundle.NextAdapterPath(),
 			filepath.Join(bundle.dir, "next-adapter", "edge-node-entry.cjs"),
 			filepath.Join(bundle.dir, "next-adapter", "next-dispatch.cjs"),

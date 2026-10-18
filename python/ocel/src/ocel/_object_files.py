@@ -8,7 +8,7 @@ from ocel._runtime import run_to_completion
 if TYPE_CHECKING:
     from _typeshed import ReadableBuffer, WriteableBuffer
 
-    from ocel.bucket import AsyncObjectBody, Bucket, ObjectBody, Writer
+    from ocel.bucket import AsyncObjectBody, Bucket, ObjectBody, ObjectInfo, Writer
 
 
 class ReadStream(io.RawIOBase):
@@ -38,18 +38,34 @@ class ReadStream(io.RawIOBase):
 
 
 class WriteStream(io.RawIOBase):
+    """A bucket object opened for writing with :meth:`Bucket.open` in ``"wb"`` mode. The
+    object lands when the handle closes, and not at all when the block it is used in
+    raises."""
+
     def __init__(self, writer: "Writer"):
+        """Write through ``writer``. :meth:`Bucket.open` hands one back."""
         self._writer = writer
 
+    @property
+    def info(self) -> "ObjectInfo | None":
+        """What the bucket knows about the object this handle wrote, once it has closed and
+        the object has landed: its etag is this write's own. ``None`` while the handle is
+        open, and after a write that raised."""
+        return self._writer.info
+
     def writable(self) -> bool:
+        """A write handle is always writable."""
         return True
 
     def write(self, buffer: "ReadableBuffer", /) -> int:
+        """Buffer ``buffer``, sending a part on its way whenever enough bytes have come in
+        to fill one."""
         data = bytes(buffer)
         run_to_completion(self._writer.write(data))
         return len(data)
 
     def close(self) -> None:
+        """Finish the write and land the object."""
         if not self.closed:
             run_to_completion(self._writer.close())
         super().close()
@@ -60,6 +76,7 @@ class WriteStream(io.RawIOBase):
         error: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
+        """Land the object when the block ends, or discard what was sent when it raised."""
         if kind is None:
             self.close()
             return
@@ -108,8 +125,20 @@ class AsyncReadStream:
 
 
 class AsyncWriteStream:
+    """A bucket object opened for writing with :meth:`Bucket.open_async` in ``"wb"`` mode,
+    used as an async context manager. The object lands when the block ends, and not at all
+    when it raises."""
+
     def __init__(self, writer: "Writer"):
+        """Write through ``writer``. :meth:`Bucket.open_async` hands one back."""
         self._writer = writer
+
+    @property
+    def info(self) -> "ObjectInfo | None":
+        """What the bucket knows about the object this handle wrote, once it has closed and
+        the object has landed: its etag is this write's own. ``None`` while the handle is
+        open, and after a write that raised."""
+        return self._writer.info
 
     async def write(self, data: bytes) -> int:
         """Buffer ``data``, sending a part on its way whenever enough bytes have come in to
@@ -122,9 +151,11 @@ class AsyncWriteStream:
         await self._writer.close()
 
     async def __aenter__(self) -> "AsyncWriteStream":
+        """Hand back the handle, which lands the object when the block ends."""
         return self
 
     async def __aexit__(self, kind: type[BaseException] | None, *_exception: object) -> None:
+        """Land the object when the block ends, or discard what was sent when it raised."""
         if kind is None:
             await self.aclose()
         else:

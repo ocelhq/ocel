@@ -57,6 +57,13 @@ func (e *Engine) trigger(ctx context.Context, deployed deployedConsumer, payload
 	if options.GetTtl() != nil {
 		req.ttl = options.GetTtl().AsDuration()
 	}
+	debounce := options.GetDebounce()
+	if debounce != nil {
+		req.dueAt = now.Add(debounce.GetDelay().AsDuration())
+	}
+	if err := e.refuseDelay(deployed.topicName, deployed.topic, req.dueAt, now); err != nil {
+		return "", err
+	}
 	messageID := NewMessageID(now)
 	execution := ExecutionOf(messageID, deployed.consumer.Name)
 	var idempotency provider.ExpiringRecord
@@ -80,26 +87,41 @@ func (e *Engine) trigger(ctx context.Context, deployed deployedConsumer, payload
 		}
 		return errors.Join(cause, e.cfg.Store.DeleteRecord(context.WithoutCancel(ctx), idempotency))
 	}
-	if debounce := options.GetDebounce(); debounce != nil {
-		req.dueAt = now.Add(debounce.GetDelay().AsDuration())
-		pending, err := e.debounce(ctx, deployed, debounce.GetKey(), execution, req.dueAt)
-		if err != nil {
-			return "", forget(err)
-		}
-		if pending != "" {
-			if idempotency.Key != "" {
-				pointed := NewRecordNamingRun(idempotency.Purpose, idempotency.Topic, idempotency.Key, pending, idempotency.ExpiresAt)
-				if err := e.cfg.Store.WriteRecord(ctx, pointed); err != nil {
-					return "", err
-				}
-			}
-			return pending, nil
-		}
+	run := newTaskRun(deployed, messageID, now, req)
+	if debounce != nil {
+		return e.triggerDebounced(ctx, deployed, debounce.GetKey(), run, idempotency, forget)
 	}
-	if err := e.start(ctx, newTaskRun(deployed, messageID, now, req)); err != nil {
+	if err := e.start(ctx, run); err != nil {
 		return "", forget(err)
 	}
 	return execution, nil
+}
+
+func (e *Engine) triggerDebounced(ctx context.Context, deployed deployedConsumer, key string, run Run, idempotency provider.ExpiringRecord, forget func(error) error) (string, error) {
+	run, err := e.create(ctx, run)
+	if err != nil {
+		return "", forget(err)
+	}
+	pending, err := e.debounce(ctx, deployed, key, run.Execution, run.DueAt)
+	if err == nil && pending == "" {
+		if err := e.send(ctx, run); err != nil {
+			return "", forget(err)
+		}
+		return run.Execution, nil
+	}
+	if dropErr := e.cfg.Store.DeleteRun(context.WithoutCancel(ctx), run); dropErr != nil {
+		slog.Warn("delete the run a debounced trigger folded into another", "execution", run.Execution, "error", dropErr)
+	}
+	if err != nil {
+		return "", forget(err)
+	}
+	if idempotency.Key != "" {
+		pointed := NewRecordNamingRun(idempotency.Purpose, idempotency.Topic, idempotency.Key, pending, idempotency.ExpiresAt)
+		if err := e.cfg.Store.ReplaceRecord(ctx, pointed, idempotency.Value); err != nil && !errors.Is(err, keyvalue.ErrStale) {
+			return "", err
+		}
+	}
+	return pending, nil
 }
 
 func newTaskRun(deployed deployedConsumer, messageID string, now time.Time, req runRequest) Run {
@@ -144,12 +166,24 @@ func messageOf(run Run) Message {
 }
 
 func (e *Engine) start(ctx context.Context, run Run) error {
+	run, err := e.create(ctx, run)
+	if err != nil {
+		return err
+	}
+	return e.send(ctx, run)
+}
+
+func (e *Engine) create(ctx context.Context, run Run) (Run, error) {
 	run = run.truncated()
 	revision, err := e.cfg.Store.CreateRun(ctx, run)
 	if err != nil {
-		return fmt.Errorf("record run %s: %w", run.Execution, err)
+		return Run{}, fmt.Errorf("record run %s: %w", run.Execution, err)
 	}
 	run.Revision = revision
+	return run, nil
+}
+
+func (e *Engine) send(ctx context.Context, run Run) error {
 	if err := e.cfg.Queue.Send(ctx, messageOf(run)); err != nil {
 		return errors.Join(err, e.cfg.Store.DeleteRun(context.WithoutCancel(ctx), run))
 	}
@@ -158,23 +192,32 @@ func (e *Engine) start(ctx context.Context, run Run) error {
 
 func (e *Engine) debounce(ctx context.Context, deployed deployedConsumer, key, execution string, due time.Time) (string, error) {
 	record := NewRecordNamingRun(provider.RecordDebounce, deployed.topicName, key, execution, due)
-	held, created, err := e.cfg.Store.EnsureRecord(ctx, record)
-	if err != nil || created {
-		return "", err
+	for range maxRaces {
+		held, created, err := e.cfg.Store.EnsureRecord(ctx, record)
+		if err != nil || created {
+			return "", err
+		}
+		pending, err := ReadRecordedRun(held)
+		if err != nil {
+			return "", err
+		}
+		_, err = e.reschedule(ctx, deployed, pending, due, true)
+		switch code := connect.CodeOf(err); {
+		case err == nil:
+			refreshed := NewRecordNamingRun(record.Purpose, record.Topic, record.Key, pending, due)
+			if err := e.cfg.Store.ReplaceRecord(ctx, refreshed, held.Value); err != nil && !errors.Is(err, keyvalue.ErrStale) {
+				return "", err
+			}
+			return pending, nil
+		case code == connect.CodeFailedPrecondition || code == connect.CodeNotFound:
+			if err := e.cfg.Store.ReplaceRecord(ctx, record, held.Value); !errors.Is(err, keyvalue.ErrStale) {
+				return "", err
+			}
+		default:
+			return "", err
+		}
 	}
-	pending, err := ReadRecordedRun(held)
-	if err != nil {
-		return "", err
-	}
-	_, err = e.reschedule(ctx, deployed, pending, due, true)
-	switch code := connect.CodeOf(err); {
-	case err == nil:
-		return pending, e.cfg.Store.WriteRecord(ctx, NewRecordNamingRun(record.Purpose, record.Topic, record.Key, pending, due))
-	case code == connect.CodeFailedPrecondition || code == connect.CodeNotFound:
-		return "", e.cfg.Store.WriteRecord(ctx, record)
-	default:
-		return "", err
-	}
+	return "", connect.NewError(connect.CodeAborted, fmt.Errorf("the debounce key %q of %s changed under each of %d tries to take it", key, deployed.topicName, maxRaces))
 }
 
 func refuseMissingRun(id string) error {

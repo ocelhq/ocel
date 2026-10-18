@@ -44,8 +44,9 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 type previewPruneOptions struct {
 	name string
 	keep int
+	yes  bool
 }
 
-func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string, opts previewPruneOptions) error {
-	return PrunePreview(ctx, dependencies, cwd, opts.name, opts.keep)
+func runPreviewPrune(ctx context.Context, dependencies Dependencies, cwd string, opts previewPruneOptions, stdout io.Writer, stdin io.Reader) error {
+	return PrunePreview(ctx, dependencies, cwd, opts.name, opts.keep, opts.yes, stdout, stdin)
 }

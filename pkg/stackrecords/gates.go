@@ -38,14 +38,6 @@ func ReadGates(ctx context.Context, store keyvalue.Store, cipher seal.Cipher, ti
 	return openGates(ctx, cipher, tier, recorded)
 }
 
-func ReadGate(ctx context.Context, store keyvalue.Store, cipher seal.Cipher, tier environment.Tier, slug string) (*gate.Gate, error) {
-	records, err := ReadGates(ctx, store, cipher, tier)
-	if err != nil {
-		return nil, err
-	}
-	return records[slug].GateInForce(), nil
-}
-
 func ChangeGates(ctx context.Context, store keyvalue.Store, cipher seal.Cipher, tier environment.Tier, apply func(records map[string]GateRecord) error) error {
 	return keyvalue.Change(ctx, store, NewGatesRecordKey(tier), func(recorded keyvalue.Entry) ([]byte, bool, error) {
 		records, err := openGates(ctx, cipher, tier, recorded)

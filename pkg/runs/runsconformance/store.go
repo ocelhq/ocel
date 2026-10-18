@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -79,7 +81,7 @@ func Store(t *testing.T, open func(t *testing.T) runs.Store) {
 		}
 	})
 
-	t.Run("a written record replaces the live one, and a delete takes only the record still holding its value", func(t *testing.T) {
+	t.Run("a record is replaced only while it holds the value it was read with, and deleted only while it holds the value deleted", func(t *testing.T) {
 		store := open(t)
 		record := provider.ExpiringRecord{Purpose: provider.RecordDebounce, Topic: "digest", Key: "user-8", Value: json.RawMessage(`"a"`), ExpiresAt: time.Now().Add(time.Hour)}
 		if _, _, err := store.EnsureRecord(ctx, record); err != nil {
@@ -87,21 +89,68 @@ func Store(t *testing.T, open func(t *testing.T) runs.Store) {
 		}
 		rewritten := record
 		rewritten.Value = json.RawMessage(`"b"`)
-		if err := store.WriteRecord(ctx, rewritten); err != nil {
-			t.Fatalf("WriteRecord: %v", err)
+		if err := store.ReplaceRecord(ctx, rewritten, record.Value); err != nil {
+			t.Fatalf("ReplaceRecord over the value the record holds: %v", err)
+		}
+		stale := record
+		stale.Value = json.RawMessage(`"c"`)
+		if err := store.ReplaceRecord(ctx, stale, record.Value); !errors.Is(err, keyvalue.ErrStale) {
+			t.Fatalf("ReplaceRecord over a value the record no longer holds = %v, want ErrStale", err)
+		}
+		missing := record
+		missing.Key = "user-never"
+		if err := store.ReplaceRecord(ctx, missing, record.Value); !errors.Is(err, keyvalue.ErrStale) {
+			t.Fatalf("ReplaceRecord of a key no record holds = %v, want ErrStale", err)
 		}
 		if err := store.DeleteRecord(ctx, record); err != nil {
 			t.Fatalf("DeleteRecord of a value the record no longer holds: %v", err)
 		}
 		held, created, err := store.EnsureRecord(ctx, record)
 		if err != nil || created || string(held.Value) != `"b"` {
-			t.Fatalf("EnsureRecord after deleting a value the record no longer held = %s, %v, %v, want the rewritten record kept", held.Value, created, err)
+			t.Fatalf("EnsureRecord after a stale replace and delete = %s, %v, %v, want the replaced record kept", held.Value, created, err)
 		}
 		if err := store.DeleteRecord(ctx, rewritten); err != nil {
 			t.Fatalf("DeleteRecord: %v", err)
 		}
 		if _, created, err := store.EnsureRecord(ctx, record); err != nil || !created {
 			t.Errorf("EnsureRecord after deleting the record = %v, %v, want it created again", created, err)
+		}
+	})
+
+	t.Run("of concurrent replaces over the value a record holds, exactly one takes it", func(t *testing.T) {
+		store := open(t)
+		record := provider.ExpiringRecord{Purpose: provider.RecordDebounce, Topic: "digest", Key: "user-10", Value: json.RawMessage(`{"run":"started"}`), ExpiresAt: time.Now().Add(time.Hour)}
+		if _, _, err := store.EnsureRecord(ctx, record); err != nil {
+			t.Fatal(err)
+		}
+		const takers = 8
+		errs := make([]error, takers)
+		var taking sync.WaitGroup
+		for i := range takers {
+			taking.Go(func() {
+				taken := record
+				taken.Value = json.RawMessage(fmt.Sprintf(`{"run":"taker-%d"}`, i))
+				errs[i] = store.ReplaceRecord(ctx, taken, record.Value)
+			})
+		}
+		taking.Wait()
+		winner := -1
+		for i, err := range errs {
+			switch {
+			case err == nil && winner < 0:
+				winner = i
+			case err == nil:
+				t.Fatalf("takers %d and %d both replaced the record", winner, i)
+			case !errors.Is(err, keyvalue.ErrStale):
+				t.Fatalf("ReplaceRecord by taker %d: %v", i, err)
+			}
+		}
+		if winner < 0 {
+			t.Fatal("no taker replaced the record")
+		}
+		held, _, err := store.EnsureRecord(ctx, record)
+		if err != nil || string(held.Value) != fmt.Sprintf(`{"run":"taker-%d"}`, winner) {
+			t.Errorf("the record holds %s, %v, want the winning taker %d", held.Value, err, winner)
 		}
 	})
 

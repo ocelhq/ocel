@@ -23,7 +23,7 @@ subcommand.
 
 ```yaml title=".github/workflows/preview.yml"
 - run: ocel preview up pr-${{ github.event.number }}
-- run: ocel preview prune pr-${{ github.event.number }}
+- run: ocel preview prune pr-${{ github.event.number }} --yes
 ```
 
 ## Hostnames

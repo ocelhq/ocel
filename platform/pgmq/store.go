@@ -223,12 +223,16 @@ func (s store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 	return record, created, nil
 }
 
-func (s store) WriteRecord(ctx context.Context, record provider.ExpiringRecord) error {
-	if _, err := s.db.Exec(ctx, `
-		INSERT INTO ocel.records (purpose, topic, key, value, expires_at) VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (purpose, topic, key) DO UPDATE SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at`,
-		string(record.Purpose), record.Topic, record.Key, jsonOrNull(record.Value), record.ExpiresAt); err != nil {
-		return fmt.Errorf("write the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
+func (s store) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord, held json.RawMessage) error {
+	tag, err := s.db.Exec(ctx, `
+		UPDATE ocel.records SET value = $4, expires_at = $5
+		WHERE purpose = $1 AND topic = $2 AND key = $3 AND value::text = $6`,
+		string(record.Purpose), record.Topic, record.Key, jsonOrNull(record.Value), record.ExpiresAt, string(held))
+	if err != nil {
+		return fmt.Errorf("replace the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, keyvalue.ErrStale)
 	}
 	return nil
 }

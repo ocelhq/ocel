@@ -211,7 +211,7 @@ func (r *deployRun) appStackOf(ctx context.Context, entry provider.AppEntry) (ap
 	if err != nil {
 		return appStack{}, err
 	}
-	discovered, err := r.mode.discoveredHealthPath(ctx, r, entry)
+	discovered, err := r.readDiscoveredHealthPath(ctx, entry)
 	if err != nil {
 		return appStack{}, err
 	}

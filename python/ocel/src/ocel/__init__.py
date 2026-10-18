@@ -1,5 +1,6 @@
 from ocel._binding import UnprovisionedResourceError
 from ocel._error import OcelError, RuntimeRefusedError
+from ocel._object_files import AsyncWriteStream, WriteStream
 from ocel._payload import JsonValue
 from ocel.bucket import (
     AsyncObjectBody,
@@ -53,6 +54,7 @@ from ocel.worker import Worker, worker
 __all__ = [
     "AbortTaskRunError",
     "AsyncObjectBody",
+    "AsyncWriteStream",
     "Batch",
     "Bucket",
     "CatchErrorResult",
@@ -99,6 +101,7 @@ __all__ = [
     "Trigger",
     "UnprovisionedResourceError",
     "Worker",
+    "WriteStream",
     "bucket",
     "deployment_url",
     "group",
