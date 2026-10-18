@@ -143,7 +143,7 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 		}
 	}
 	cfg, appSpec := appStackSpec(t)
-	appWork, err := releasing(t, cfg).appWork(appSpec, nil, nil)
+	appWork, err := releasing(t, cfg).appWork(appSpec, nil, nil, appBundle{}, stagedOf(appSpec))
 	if err != nil {
 		t.Fatal(err)
 	}

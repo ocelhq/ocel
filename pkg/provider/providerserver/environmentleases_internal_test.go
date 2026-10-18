@@ -522,7 +522,7 @@ func TestAHeldLeaseCoversTheStacksOfItsScopeForTheWorkRunUnderIt(t *testing.T) {
 	}
 	defer func() { _ = project.release(ctx) }()
 	inPreview := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.InfraStack("pr-7")}
-	if !provider.HasLease(project.context(ctx), inPreview) {
+	if !project.lease().Covers(inPreview) {
 		t.Error("work under a project lease is not covered on one of the project's stacks")
 	}
 
@@ -532,17 +532,17 @@ func TestAHeldLeaseCoversTheStacksOfItsScopeForTheWorkRunUnderIt(t *testing.T) {
 	}
 	inProduction := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack(stackrecords.ProductionEnv)}
 	leased := production.context(ctx)
-	if !provider.HasLease(leased, inProduction) {
+	if !production.lease().Covers(inProduction) {
 		t.Error("work under an environment lease is not covered on that environment's stack")
 	}
-	if provider.HasLease(leased, inPreview) {
+	if production.lease().Covers(inPreview) {
 		t.Error("work under the production lease is covered on a preview stack")
 	}
 	if err := production.release(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if provider.HasLease(leased, inProduction) {
-		t.Error("work is still covered by a lease its holder released")
+	if leased.Err() == nil {
+		t.Error("work under a lease its holder released runs on, so it could still break a lock it no longer owns")
 	}
 }
 
@@ -561,19 +561,21 @@ func TestTheWorkOfARemovalOverSeveralEnvironmentLeasesIsCoveredOnAnAppStackInEac
 		t.Fatal(err)
 	}
 	removing := holds.context()
-	for _, env := range envs {
+	for i, env := range envs {
 		app := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack(env, "web", naming.NewReleaseToken("b1", ""))}
-		if !provider.HasLease(removing, app) {
+		if !holds.held[i].lease().Covers(app) {
 			t.Errorf("the removal's work is not covered on app stack %s, which one of its leases holds", app.Name)
 		}
 	}
-	if provider.HasLease(removing, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.InfraStack("pr-10")}) {
-		t.Error("the removal's work is covered on an environment none of its leases holds")
+	for _, hold := range holds.held {
+		if hold.lease().Covers(provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.InfraStack("pr-10")}) {
+			t.Error("the removal's work is covered on an environment none of its leases holds")
+		}
 	}
 	if err := holds.release(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if provider.HasLease(removing, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.InfraStack("pr-7")}) {
-		t.Error("the removal's work is still covered after its leases were released")
+	if removing.Err() == nil {
+		t.Error("the removal's work runs on after its leases were released")
 	}
 }

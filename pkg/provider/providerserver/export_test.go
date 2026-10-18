@@ -10,10 +10,4 @@ var RevisionsOf = revisionsOf
 
 var EnvName = envName
 
-var DigestArtifact = digestArtifact
-
-var PackArtifact = packArtifact
-
-var FunctionRepository = functionRepository
-
 var ServeOn = serve

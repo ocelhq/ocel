@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
@@ -30,27 +29,3 @@ const (
 	StoreAssets    = "assets"
 	StoreCache     = "cache"
 )
-
-type Upload struct {
-	Name   string
-	Ref    ArtifactRef
-	Path   string
-	Digest string
-}
-
-const UploadKind = "artifact"
-
-type PackAppRequest struct {
-	Ref     StackRef
-	Edge    edge.Kind
-	App     string
-	Values  AppValues
-	Topics  []Resource
-	Workers []WorkerSpec
-}
-
-type PackAppResult struct {
-	Overlay map[string][]byte
-
-	VendorState any
-}

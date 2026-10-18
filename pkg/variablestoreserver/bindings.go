@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -48,9 +49,6 @@ func (h *Service) SetBinding(ctx context.Context, req *variablestorev1.SetBindin
 		return nil, bindingsError(err)
 	}
 	if err := VerifyBinding(binding); err != nil {
-		return nil, bindingsError(err)
-	}
-	if err := h.verifyGrants(ctx, binding); err != nil {
 		return nil, bindingsError(err)
 	}
 	pair, err := BindingPair(req.GetOwner(), binding)
@@ -128,20 +126,6 @@ func bindingTarget(tier environmentv1.Tier, env string) error {
 			env, environment.TierProduction, environment.TierPreview))
 	}
 	return nil
-}
-
-func (h *Service) verifyGrants(ctx context.Context, binding *bindingsv1.Binding) error {
-	if len(binding.GetGrants()) == 0 {
-		return nil
-	}
-	backend, err := h.Source.Read()
-	if err != nil {
-		return err
-	}
-	if backend.VerifyGrants == nil {
-		return nil
-	}
-	return backend.VerifyGrants(ctx, provider.BindingOf(binding))
 }
 
 func bindingsError(err error) error {
@@ -273,6 +257,11 @@ func VerifyBinding(binding *bindingsv1.Binding) error {
 
 const grantWildcard = "*"
 
+func wildcardsAService(action string) bool {
+	service, verb, scoped := strings.Cut(action, ":")
+	return scoped && (service == grantWildcard || verb == grantWildcard)
+}
+
 func VerifyGrantScope(binding *bindingsv1.Binding) error {
 	for _, g := range binding.GetGrants() {
 		if len(g.GetActions()) == 0 {
@@ -286,6 +275,10 @@ func VerifyGrantScope(binding *bindingsv1.Binding) error {
 		if slices.Contains(g.GetActions(), grantWildcard) {
 			return fmt.Errorf("binding %s grants %q over %v: %q is every action any vendor has, which reaches past the resource it binds: %w",
 				binding.GetName(), grantWildcard, g.GetResources(), grantWildcard, provider.ErrUnscopedGrant)
+		}
+		if at := slices.IndexFunc(g.GetActions(), wildcardsAService); at >= 0 {
+			return fmt.Errorf("binding %s grants %q over %v: a wildcard on either side of a service's action is every action of that service, or that action on every service: %w",
+				binding.GetName(), g.GetActions()[at], g.GetResources(), provider.ErrUnscopedGrant)
 		}
 		if slices.Contains(g.GetResources(), grantWildcard) {
 			return fmt.Errorf("binding %s grants %v over %q: %q is every resource in the account, and an app receives permissions for the resource it binds and nothing else: %w",

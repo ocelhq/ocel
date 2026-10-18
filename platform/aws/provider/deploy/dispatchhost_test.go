@@ -79,9 +79,10 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 		t.Fatalf("ServingFactsFor: %v", err)
 	}
 	return provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
-		Kind: provider.StackApp,
-		Edge: cfg.Edge,
+		Ref:      provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
+		Kind:     provider.StackApp,
+		Recorded: true,
+		Edge:     cfg.Edge,
 		App: &provider.AppSpec{
 			App:         app,
 			Framework:   runtime,
@@ -296,10 +297,11 @@ func TestAnOriginBehindACachingEdgeIsToldItsRelease(t *testing.T) {
 	token := naming.NewReleaseToken("b1", "f1")
 	for _, kind := range []edge.Kind{cloudfront.Kind, cloudflare.Kind} {
 		env := releasing(t, routedConfig(t, kind)).appEnv(provider.StackSpec{
-			Kind: provider.StackApp,
-			Ref:  provider.StackRef{Name: naming.AppStack("production", "web", token)},
-			Edge: fakeEdgeOf(kind),
-			App:  &provider.AppSpec{App: "web"},
+			Kind:     provider.StackApp,
+			Recorded: true,
+			Ref:      provider.StackRef{Name: naming.AppStack("production", "web", token)},
+			Edge:     fakeEdgeOf(kind),
+			App:      &provider.AppSpec{App: "web"},
 		}, appBundle{}, sessionScope{})
 
 		if env[edge.ReleaseTokenVar] != token.String() {
@@ -312,10 +314,11 @@ func TestAContainerAppCloudflareForwardsToTheLoadBalancerIsToldNoEdgeCachesItsRe
 	t.Parallel()
 
 	env := releasing(t, routedConfig(t, cloudflare.Kind)).appEnv(provider.StackSpec{
-		Kind: provider.StackApp,
-		Ref:  provider.StackRef{Name: naming.AppStack("production", "web", naming.NewReleaseToken("b1", "f1"))},
-		Edge: fakeEdgeOf(cloudflare.Kind),
-		App:  &provider.AppSpec{App: "web", Compute: provider.ComputeContainer, Router: alb.Kind},
+		Kind:     provider.StackApp,
+		Recorded: true,
+		Ref:      provider.StackRef{Name: naming.AppStack("production", "web", naming.NewReleaseToken("b1", "f1"))},
+		Edge:     fakeEdgeOf(cloudflare.Kind),
+		App:      &provider.AppSpec{App: "web", Compute: provider.ComputeContainer, Router: alb.Kind},
 	}, appBundle{}, sessionScope{})
 
 	for _, name := range []string{edge.EdgeCacheVar, edge.ReleaseTokenVar, edge.CacheTagPurgeVar} {
@@ -330,9 +333,10 @@ func TestAnAppWithAnOcelRouteTableIsToldWhereItsFunctionsFindIt(t *testing.T) {
 
 	release := releasing(t, routedConfig(t, cloudfront.Kind))
 	env := release.appEnv(provider.StackSpec{
-		Kind: provider.StackApp,
-		Edge: fakeEdgeOf(cloudfront.Kind),
-		App:  &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
+		Kind:     provider.StackApp,
+		Recorded: true,
+		Edge:     fakeEdgeOf(cloudfront.Kind),
+		App:      &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
 	}, appBundle{}, sessionScope{})
 
 	if want := "/var/task/" + edge.OcelRouteTableFile; env[edge.OcelRouteTableVar] != want {
@@ -348,8 +352,9 @@ func TestADispatchHostIsMadeOfANextRouteTableAlone(t *testing.T) {
 	t.Parallel()
 
 	spec := provider.StackSpec{
-		Kind: provider.StackApp,
-		App:  &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
+		Kind:     provider.StackApp,
+		Recorded: true,
+		App:      &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
 	}
 	host, err := releasing(t, routedConfig(t, cloudfront.Kind)).newDispatchHost(spec)
 	if err != nil || host != nil {
@@ -363,9 +368,10 @@ func TestAppEnvNamesTheRouterItsAppPromotesThroughAndNotItsEdge(t *testing.T) {
 	release := releasing(t, routedConfig(t, cloudfront.Kind))
 	routed := func(kind router.Kind) map[string]string {
 		return release.appEnv(provider.StackSpec{
-			Kind: provider.StackApp,
-			Edge: fakeEdgeOf(cloudfront.Kind),
-			App:  &provider.AppSpec{App: "web", Router: kind},
+			Kind:     provider.StackApp,
+			Recorded: true,
+			Edge:     fakeEdgeOf(cloudfront.Kind),
+			App:      &provider.AppSpec{App: "web", Router: kind},
 		}, appBundle{}, sessionScope{})
 	}
 

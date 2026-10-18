@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -34,9 +35,10 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	coord := routedCoordinate(t)
 	stack := coord.Stack()
 	spec := provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
-		Kind: provider.StackApp,
-		Edge: fakeEdgeOf(cloudfront.Kind),
+		Ref:      provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
+		Kind:     provider.StackApp,
+		Recorded: true,
+		Edge:     fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{
 			App:          "web",
 			Framework:    buildoutput.FrameworkNext,
@@ -44,8 +46,8 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 			RootFunction: "fn--web--entry",
 			BuildID:      "d1",
 			Functions: []provider.FunctionSpec{
-				{Name: "fn--web--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "entry.zip"}},
-				{Name: "fn--web--admin", Route: "/admin", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "admin.zip"}},
+				{Name: "fn--web--entry", ArtifactDir: writeTree(t, map[string]string{"index.js": "the entry"})},
+				{Name: "fn--web--admin", Route: "/admin", ArtifactDir: writeTree(t, map[string]string{"index.js": "the admin"})},
 			},
 			Routing:     &provider.RoutingSpec{RootFunction: "fn--web--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
 			ISR:         &provider.ISRSpec{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
@@ -62,7 +64,7 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 
 	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil, nil)
+	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -104,7 +106,7 @@ func TestThePlannedAppBootsThroughTheRuntimeItWasHandedAndNoOther(t *testing.T) 
 
 	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil, nil)
+	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -122,7 +124,7 @@ func TestAnAppIsRefusedRatherThanDeployedAgainstARuntimeTheAccountDoesNotHave(t 
 	cfg, spec := appStackSpec(t)
 	cfg.RuntimeLayers = nil
 	release := releasing(t, cfg)
-	_, err := release.appWork(spec, nil, nil)
+	_, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("appWork() = %v, want a %s refusal naming the bootstrap to re-run", err, refusal.CodeNotReady)
@@ -138,7 +140,7 @@ func TestAPlannedAppWithNoISRAsksForNoRevalidationLedger(t *testing.T) {
 	cfg, spec := appStackSpec(t)
 	spec.App.ISR = nil
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil, nil)
+	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -154,12 +156,12 @@ func TestAPlannedAppGuardsItsOriginOnlyWithASecretToDemand(t *testing.T) {
 	spec.App.Guard = &provider.OriginGuard{RootFunction: "fn--web--entry"}
 	release := releasing(t, cfg)
 
-	if _, err := release.appWork(spec, nil, nil); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
+	if _, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec)); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
 		t.Fatalf("appWork() = %v, want it to say the bootstrap has no origin secret", err)
 	}
 
 	cfg.OriginSecret = "s3cret"
-	work, err := releasing(t, cfg).appWork(spec, nil, nil)
+	work, err := releasing(t, cfg).appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() with a secret = %v", err)
 	}
@@ -181,7 +183,7 @@ func TestAPlannedAppTakesItsGrantsFromTheBindingsItWasGranted(t *testing.T) {
 			Resources: []string{"arn:aws:s3:::uploads/*"},
 		}},
 	}}
-	work, err := releasing(t, cfg).appWork(spec, nil, nil)
+	work, err := releasing(t, cfg).appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -198,8 +200,9 @@ func TestAnAppStackWhoseSpecHasNoAppIsRefusedRatherThanProvisionedEmpty(t *testi
 
 	release := releasing(t, Config{})
 	spec := provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewReleaseToken("d1", ""))},
-		Kind: provider.StackApp,
+		Ref:      provider.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewReleaseToken("d1", ""))},
+		Kind:     provider.StackApp,
+		Recorded: true,
 	}
 	if _, err := release.prepare(context.Background(), spec, runProvision, nil); err == nil || !strings.Contains(err.Error(), "names none") {
 		t.Fatalf("prepare() = %v, want it refused: an app stack with no app provisions nothing", err)
@@ -211,7 +214,7 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackDeployed(t *testing.T) 
 
 	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	if _, err := release.appWork(spec, nil, nil); err != nil {
+	if _, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec)); err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
 	release.served.realized("fn--web--entry", "shop-prod-web-entry")
@@ -240,7 +243,7 @@ func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
 		cfg, spec := appStackSpec(t)
 		spec.App.Values.Plain = map[string]string{"AWS_REGION": "us-west-2"}
 
-		_, err := releasing(t, cfg).appWork(spec, nil, nil)
+		_, err := releasing(t, cfg).appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 		if err == nil || !strings.Contains(err.Error(), "AWS_REGION") {
 			t.Fatalf("appWork() = %v, want the deploy refused before the role is built", err)
 		}
@@ -255,4 +258,15 @@ func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
 	if got, set := env[processenv.PhaseEnvVar]; set {
 		t.Errorf("%s = %q, want a release that provisions to name no phase at all", processenv.PhaseEnvVar, got)
 	}
+}
+
+func stagedOf(spec provider.StackSpec) []functioncode.Upload {
+	var staged []functioncode.Upload
+	for _, function := range spec.App.Functions {
+		staged = append(staged, functioncode.Upload{
+			Name: function.Name,
+			Ref:  provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: function.Name + ".zip"},
+		})
+	}
+	return staged
 }

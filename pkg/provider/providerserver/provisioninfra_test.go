@@ -314,7 +314,7 @@ func TestProvisionInfraRefusesAManifestDeclaringApps(t *testing.T) {
 
 func TestProvisionInfraProvisionsTheTopicsOfWorkersWhoseAppsAreNotBuiltYet(t *testing.T) {
 	builtProject(t)
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)).WithFacts(runningWorkers)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithFacts(runningWorkers)
 	client := servedBy(t, vendor)
 
 	req := deployRequest()
@@ -330,7 +330,7 @@ func TestProvisionInfraProvisionsTheTopicsOfWorkersWhoseAppsAreNotBuiltYet(t *te
 
 func TestProvisionInfraRefusesAConsumerOnAWorkerTheManifestDoesNotDeclare(t *testing.T) {
 	builtProject(t)
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)).WithFacts(runningWorkers)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithFacts(runningWorkers)
 	client := servedBy(t, vendor)
 
 	req := deployRequest()
@@ -586,7 +586,6 @@ func TestADeployOverInfraWhoseLastProvisioningFailedIsRefused(t *testing.T) {
 func TestProvisionInfraAfterAFirstProvisioningFailedPartwayProvisionsTheStackItLeft(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	base.WithHooks(func(hooks *provider.Hooks) { hooks.InspectStack = base.InspectStack })
 	stacks := &failingInfraStacks{Stacks: base.Stacks()}
 	client := servedBy(t, refusingStacks{Provider: base, stacks: stacks})
 

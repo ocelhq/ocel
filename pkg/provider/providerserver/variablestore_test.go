@@ -3,7 +3,6 @@ package providerserver_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,20 +45,8 @@ func cell(key string) *variablestorev1.Coordinate {
 	return &variablestorev1.Coordinate{Slug: slug, Key: key}
 }
 
-type refusingGrants struct{ *fake.Provider }
-
-func (r refusingGrants) Hooks() provider.Hooks {
-	hooks := r.Provider.Hooks()
-	hooks.VerifyGrants = r.VerifyGrants
-	return hooks
-}
-
-func (refusingGrants) VerifyGrants(context.Context, provider.Binding) error {
-	return fmt.Errorf("s3:* names a whole service: %w", provider.ErrUnscopedGrant)
-}
-
-func TestSetBindingAsksTheProviderWhetherItWouldGrantThat(t *testing.T) {
-	variables := variablesServedBy(t, refusingGrants{fake.NewProvider(fake.Options{})})
+func TestSetBindingRefusesAGrantOfAWholeService(t *testing.T) {
+	variables := variablesServedBy(t, fake.NewProvider(fake.Options{}))
 
 	_, err := variables.SetBinding(context.Background(), &variablestorev1.SetBindingRequest{
 		Slug:  slug,
@@ -73,7 +60,7 @@ func TestSetBindingAsksTheProviderWhetherItWouldGrantThat(t *testing.T) {
 		},
 	})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-		t.Fatalf("SetBinding(): code = %v, want %v: the provider refused the grant", got, connect.CodeInvalidArgument)
+		t.Fatalf("SetBinding(): code = %v, want %v: s3:* grants every action of a service", got, connect.CodeInvalidArgument)
 	}
 }
 

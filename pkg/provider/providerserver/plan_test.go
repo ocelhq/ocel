@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -20,7 +21,7 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 	readiness, p := newReadiness(t, "1.2.3")
 	bootstrapped(t, p, environment.TierProduction, fake.PartImages)
 
-	req := providerserver.ApplyRequest{}
+	req := bootstrapplan.ApplyRequest{}
 	shown, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
@@ -47,7 +48,7 @@ func TestApplyRunsThePlanItWasShown(t *testing.T) {
 	ctx := context.Background()
 	readiness, vendor := newReadiness(t, "1.2.3")
 
-	req := providerserver.ApplyRequest{}
+	req := bootstrapplan.ApplyRequest{}
 	shown, err := readiness.Plan(ctx, environment.TierProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
@@ -76,7 +77,7 @@ func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryPart(t *testing.T) {
 	t.Parallel()
 
 	readiness, _ := newReadiness(t, "1.2.3")
-	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{})
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, bootstrapplan.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -103,7 +104,7 @@ func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 	bootstrapped(t, p, environment.TierProduction, fake.PartImages)
 	p.FakeBootstrap().MarkStale(fake.PartImages)
 
-	plan, err := readiness.Plan(context.Background(), environment.TierProduction, providerserver.ApplyRequest{})
+	plan, err := readiness.Plan(context.Background(), environment.TierProduction, bootstrapplan.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -128,7 +129,7 @@ func TestPlanRefusesARemovalAProjectUsesAndShowsItWhenForced(t *testing.T) {
 	bootstrapped(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
 	recordProject(t, p, "shop", fake.PartImages)
 
-	req := providerserver.ApplyRequest{Remove: []string{fake.PartImages}}
+	req := bootstrapplan.ApplyRequest{Remove: []string{fake.PartImages}}
 	if _, err := readiness.Plan(ctx, environment.TierProduction, req); err == nil || !strings.Contains(err.Error(), "--force") {
 		t.Fatalf("Plan() error = %v, want the removal refused before any plan is drawn, naming --force", err)
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -69,7 +70,8 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if err := runsX8664(fn.Framework.Arch, "function "+fn.Name); err != nil {
 			return nil, err
 		}
-		if strings.TrimSpace(fn.Image) == "" {
+		image := functioncode.FunctionImageRef(spec.Images, fn.Name)
+		if strings.TrimSpace(image) == "" {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"function %s names no image, and a function on Cloud Run is the container a registry coordinate names", fn.Name)
 		}
@@ -92,7 +94,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 		served := serving{
 			service:          service,
-			image:            fn.Image,
+			image:            image,
 			account:          account,
 			compute:          provider.ComputeServerless,
 			public:           true,
@@ -149,7 +151,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
-	image, err := workerImageOf(app)
+	image, err := workerImageOf(app, spec.Images)
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +162,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	return append(deployed, workerFunctions(workers)...), nil
 }
 
-func workerImageOf(app *provider.AppSpec) (string, error) {
+func workerImageOf(app *provider.AppSpec, images provider.ImagePushes) (string, error) {
 	if at := slices.IndexFunc(app.Functions, func(fn provider.FunctionSpec) bool { return fn.HasWorkerEntry || fn.Name == app.App }); at >= 0 {
-		return app.Functions[at].Image, nil
+		return functioncode.FunctionImageRef(images, app.Functions[at].Name), nil
 	}
 	if app.Image == "" {
 		return "", refusal.Refuse(refusal.CodeInvalid, "app %s hosts workers and ships neither an image nor a function carrying a worker entry to start them from", app.App)

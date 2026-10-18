@@ -424,7 +424,7 @@ func (r *release) previewContainerWorkers(ctx context.Context, spec provider.Sta
 		return nil, err
 	}
 	ref := containerWorkersRef(spec.Ref)
-	planned, err := r.automation.Preview(ctx, ref, stackProgram{run: hosted.run, tags: spec.Tags}, progress)
+	planned, err := r.automation.Preview(ctx, ref, stackProgram{run: hosted.run, tags: spec.Tags}, spec.Lease, progress)
 	return planned.Groups, err
 }
 
@@ -445,7 +445,7 @@ func (r *release) provisionContainerWorkers(ctx context.Context, spec provider.S
 			return nil, err
 		}
 	}
-	outputs, err := r.automation.Run(ctx, ref, stackProgram{run: hosted.run, tags: spec.Tags}, progress)
+	outputs, err := r.automation.Run(ctx, ref, stackProgram{run: hosted.run, tags: spec.Tags}, spec.Lease, progress)
 	if err != nil {
 		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
 	}

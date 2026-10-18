@@ -1,6 +1,9 @@
 package gcp
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestCloudRunDeclaresNoFunctionSizeBudget(t *testing.T) {
 	if got := pushing(t, "").Facts().MaxFunctionBytes; got != 0 {
@@ -9,7 +12,7 @@ func TestCloudRunDeclaresNoFunctionSizeBudget(t *testing.T) {
 }
 
 func TestCloudRunSaysItShipsANextServerRuntime(t *testing.T) {
-	if pushing(t, "").Hooks().ReadNextServerRuntime == nil {
-		t.Error("Hooks().ReadNextServerRuntime = nil, want the Next server runtime a Cloud Run Next container loads its cache handlers from")
+	if files, err := pushing(t, "").Runtime().NextServer(context.Background()); err != nil || len(files) == 0 {
+		t.Errorf("Runtime().NextServer() = %d files, %v, want the Next server runtime a Cloud Run Next container loads its cache handlers from", len(files), err)
 	}
 }

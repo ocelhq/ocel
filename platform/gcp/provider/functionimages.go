@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
@@ -126,4 +128,20 @@ func (p *Provider) ReadFunctionRuntime(_ context.Context, framework buildoutput.
 	default:
 		return nil, nil
 	}
+}
+
+func (p *Provider) withFunctionImages(ctx context.Context, spec provider.StackSpec) (provider.StackSpec, error) {
+	if spec.App == nil || spec.App.Compute != provider.ComputeServerless {
+		return spec, nil
+	}
+	pushes, err := functioncode.FunctionImages(ctx, spec, functioncode.ImageSource{
+		Base:    p.ResolveFunctionBase,
+		Runtime: p.ReadFunctionRuntime,
+		Binary:  containerRuntime{p}.Binary,
+	})
+	if err != nil {
+		return provider.StackSpec{}, err
+	}
+	spec.Images.Pushes = append(slices.Clone(spec.Images.Pushes), pushes...)
+	return spec, nil
 }

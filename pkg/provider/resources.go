@@ -70,14 +70,37 @@ const (
 	PropertyVerifyKey     = "verifyKey"
 )
 
+const GrantPasswordSecret = "password secret"
+
 func (b Binding) Endpointed() bool {
 	return b.Type == BindingBucket && b.Properties[PropertyEndpoint] != ""
+}
+
+func (b Binding) PasswordSecret() string {
+	if b.Type != BindingPostgres {
+		return ""
+	}
+	labelled := passwordSecretGrants(b.Grants)
+	if len(labelled) != 1 || len(labelled[0].Resources) != 1 {
+		return ""
+	}
+	return labelled[0].Resources[0]
+}
+
+func passwordSecretGrants(grants []Grant) []Grant {
+	var labelled []Grant
+	for _, grant := range grants {
+		if grant.Label == GrantPasswordSecret {
+			labelled = append(labelled, grant)
+		}
+	}
+	return labelled
 }
 
 func RequiredProperties(t BindingType) []string {
 	switch t {
 	case BindingPostgres:
-		return []string{PropertyHost, PropertyPort, PropertyDatabase, PropertyUsername, PropertyPassword}
+		return []string{PropertyHost, PropertyPort, PropertyDatabase, PropertyUsername}
 	case BindingBucket:
 		return []string{PropertyBucket}
 	case BindingKV:
@@ -109,11 +132,37 @@ func VerifyProperties(binding Binding) error {
 		return verifyRealtimeProperties(binding)
 	}
 	if binding.Type == BindingPostgres {
+		if err := verifyPostgresPassword(binding); err != nil {
+			return err
+		}
 		if _, err := postgresTLSMode(binding); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func verifyPostgresPassword(binding Binding) error {
+	labelled := passwordSecretGrants(binding.Grants)
+	if len(labelled) > 1 || (len(labelled) == 1 && len(labelled[0].Resources) != 1) {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"binding %s came back naming its password secret by %d %q grants over %v: a password is read from exactly one secret, named by one grant",
+			binding.Name, len(labelled), GrantPasswordSecret, listGrantResources(labelled))
+	}
+	if binding.Properties[PropertyPassword] == "" && len(labelled) == 0 {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"binding %s came back with neither a %q nor a %q grant: every postgres binding includes its password or names the one secret it is read from",
+			binding.Name, PropertyPassword, GrantPasswordSecret)
+	}
+	return nil
+}
+
+func listGrantResources(grants []Grant) []string {
+	var resources []string
+	for _, grant := range grants {
+		resources = append(resources, grant.Resources...)
+	}
+	return resources
 }
 
 func postgresTLSMode(binding Binding) (bindingsv1.PostgresTlsMode, error) {

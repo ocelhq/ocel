@@ -28,7 +28,7 @@ import (
 func contractServed(t *testing.T, version string) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
 
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	return servedProvider(t, version, vendor), vendor
 }
 
@@ -873,7 +873,7 @@ func TestBootstrapDescribesAndCreatesATierWhoseStoreTheBootstrapCreates(t *testi
 	t.Parallel()
 
 	ctx := context.Background()
-	vendor := vendorWithAStoreTheBootstrapCreates{fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))}
+	vendor := vendorWithAStoreTheBootstrapCreates{fake.NewProvider(fake.Options{Region: "nowhere"})}
 	client := servedProvider(t, "1.2.3", vendor)
 
 	described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{

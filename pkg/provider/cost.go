@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
@@ -15,6 +16,7 @@ type ShapeRequest struct {
 	Functions  map[string][]FunctionSpec
 	Usages     []AppUsage
 	Transforms []string
+	Uses       []buildoutput.Uses
 }
 
 func ProductionHostnames(app AppEntry) []string {

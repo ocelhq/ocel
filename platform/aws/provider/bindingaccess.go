@@ -2,10 +2,14 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -28,6 +32,10 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err := p.requireBootstrapped(deployed, req.Tier); err != nil {
 		return nil, err
 	}
+	resolved, err := readForwardedPasswords(ctx, secretsmanager.NewFromConfig(p.aws), req.Bindings)
+	if err != nil {
+		return nil, err
+	}
 	clients := bastion.NewClients(p.aws)
 	reconciled, err := bastion.Reconcile(ctx, clients, bastion.Spec{
 		Tier:     req.Tier,
@@ -37,7 +45,51 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err != nil {
 		return nil, err
 	}
-	return reconciled.Forward(ctx, clients, bastion.OpenSession(p.aws), req.ReportFailure, req.Bindings)
+	forwards, err := reconciled.Forward(ctx, clients, bastion.OpenSession(p.aws), req.ReportFailure, req.Bindings)
+	if err != nil {
+		return nil, err
+	}
+	for at := range forwards {
+		forwards[at].Properties = resolved[forwards[at].Binding]
+	}
+	return forwards, nil
+}
+
+type secretValues interface {
+	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
+}
+
+func readForwardedPasswords(ctx context.Context, secrets secretValues, bindings []provider.Binding) (map[string]map[string]string, error) {
+	resolved := map[string]map[string]string{}
+	for _, binding := range bindings {
+		secretARN := binding.PasswordSecret()
+		if secretARN == "" || binding.Properties[provider.PropertyPassword] != "" {
+			continue
+		}
+		password, err := readSecretPassword(ctx, secrets, secretARN)
+		if err != nil {
+			return nil, fmt.Errorf("read the password of %s from %s: %w", binding.Name, secretARN, err)
+		}
+		resolved[binding.Name] = map[string]string{provider.PropertyPassword: password}
+	}
+	return resolved, nil
+}
+
+func readSecretPassword(ctx context.Context, secrets secretValues, secretARN string) (string, error) {
+	out, err := secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: &secretARN})
+	if err != nil {
+		return "", err
+	}
+	if out.SecretString == nil {
+		return "", errors.New("the secret has no string value")
+	}
+	var parsed struct {
+		Password string `json:"password"`
+	}
+	if err := json.Unmarshal([]byte(*out.SecretString), &parsed); err != nil || parsed.Password == "" {
+		return "", errors.New("the secret holds no password")
+	}
+	return parsed.Password, nil
 }
 
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {

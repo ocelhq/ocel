@@ -19,6 +19,10 @@ func usesOf(root string, manifest *contractv1.Manifest) ([]buildoutput.Uses, err
 		if app.GetContainer() != nil {
 			continue
 		}
+		if root == "" {
+			apps = append(apps, buildoutput.PresumeUses(app.GetFramework().GetName()))
+			continue
+		}
 		hosting, present, err := buildoutput.ReadHosting(root, app.GetName())
 		if err != nil {
 			return nil, err

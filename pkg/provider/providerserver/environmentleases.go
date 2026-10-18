@@ -160,7 +160,7 @@ func (l *environmentLeases) keep(ctx context.Context, store keyvalue.Store, scop
 }
 
 func (l *environmentLeases) startHold(ctx context.Context, store keyvalue.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder, held bool) *environmentHold {
-	leased, cancel := context.WithCancelCause(provider.WithLease(ctx, scope.lease()))
+	leased, cancel := context.WithCancelCause(ctx)
 	h := &environmentHold{
 		leases: l, store: store, scope: scope, token: token, holder: holder, held: held,
 		leased: leased, cancel: cancel,
@@ -229,6 +229,13 @@ func (h *environmentHold) context(ctx context.Context) context.Context {
 		return ctx
 	}
 	return h.leased
+}
+
+func (h *environmentHold) lease() provider.Lease {
+	if h == nil {
+		return provider.Lease{}
+	}
+	return h.scope.lease()
 }
 
 func (h *environmentHold) explain(err error) error {
@@ -323,9 +330,6 @@ func (l *environmentLeases) takeEach(ctx context.Context, store keyvalue.Store, 
 		err := context.Cause(leased)
 		_ = holds.release(ctx)
 		return environmentHolds{}, err
-	}
-	for _, hold := range holds.held {
-		holds.leased = provider.WithLease(holds.leased, hold.scope.lease())
 	}
 	return holds, nil
 }

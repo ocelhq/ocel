@@ -141,23 +141,11 @@ func TestTheProviderNamesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
 	}
 
 	hooks := p.Hooks()
-	for name, set := range map[string]bool{
-		"WarmFunctions": hooks.WarmFunctions != nil,
-		"EmbedCode":     hooks.EmbedCode != nil,
-		"InspectStack":  hooks.InspectStack != nil,
-		"VerifyGrants":  hooks.VerifyGrants != nil,
-		"PackApp":       hooks.PackApp != nil,
-		"EnvSource":     hooks.EnvSource != nil,
-	} {
-		if set {
-			t.Errorf("the box's hooks set %s, a step no box takes", name)
-		}
+	if hooks.EnvSource != nil {
+		t.Error("the box's hooks set EnvSource, a step no box takes")
 	}
 	if hooks.PreflightDeploy == nil {
 		t.Error("the box's hooks leave PreflightDeploy nil, and a box then learns its engine, its disk, its proxy or its ports are not ready halfway through an image transfer")
-	}
-	if hooks.CheckHost == nil {
-		t.Error("the box's hooks leave CheckHost nil, and `doctor` calls Preflight and DescribeBootstrap and nothing else: with no permanent port there is nowhere for a verdict about the life of the box to arrive")
 	}
 }
 

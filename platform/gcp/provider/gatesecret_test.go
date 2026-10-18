@@ -733,8 +733,10 @@ func pythonFunctionsSpec(p *Provider, names ...string) provider.StackSpec {
 	for _, name := range names {
 		spec.App.Functions = append(spec.App.Functions, provider.FunctionSpec{
 			Name:      name,
-			Image:     "europe-west1-docker.pkg.dev/acme/ocel/" + name + "@sha256:abc",
 			Framework: buildoutput.Framework{Name: buildoutput.FrameworkPython, Arch: "x86_64"},
+		})
+		spec.Images.Pushes = append(spec.Images.Pushes, provider.ImagePush{
+			App: name, ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/" + name + "@sha256:abc", Function: true,
 		})
 	}
 	return spec
@@ -769,10 +771,10 @@ func TestAPreviewWhoseProvisioningFailsAfterItsGateIgnoringServiceIsLiveKeepsItR
 	server := &runServer{}
 	p := server.open(t)
 	spec := pythonFunctionsSpec(p, "fn--web--api", "fn--web--jobs")
-	spec.App.Functions[1].Image = ""
+	server.onCreate = func() { server.refuseReads = true }
 
 	if _, err := p.Stacks().Provision(context.Background(), spec, &fake.Log{}); err == nil {
-		t.Fatal("Provision() succeeded, want the function that names no image refused")
+		t.Fatal("Provision() succeeded, want it failed by the service reads refused once the first service is created")
 	}
 
 	if server.service == nil {

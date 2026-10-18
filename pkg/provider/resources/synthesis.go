@@ -18,26 +18,22 @@ const (
 
 type resourcePlan func(ctx context.Context, spec provider.StackSpec, resource provider.Resource, recorded *provider.Binding) (provider.ChangeAction, string, error)
 
-func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec provider.StackSpec, deployed provider.StackResult) (provider.Plan, error) {
-	return synthesizedPlan(ctx, store, spec, deployed, false, planFromRecord)
+func SynthesizedPlan(ctx context.Context, spec provider.StackSpec, deployed provider.StackResult, shipped ...provider.Change) (provider.Plan, error) {
+	return synthesizedPlan(ctx, spec, deployed, false, planFromRecord, shipped)
 }
 
 func planFromRecord(_ context.Context, _ provider.StackSpec, _ provider.Resource, recorded *provider.Binding) (provider.ChangeAction, string, error) {
 	return provider.KeepOrCreate(recorded != nil), "", nil
 }
 
-func synthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec provider.StackSpec, deployed provider.StackResult, recordsWorkers bool, plan resourcePlan) (provider.Plan, error) {
+func synthesizedPlan(ctx context.Context, spec provider.StackSpec, deployed provider.StackResult, recordsWorkers bool, plan resourcePlan, shipped []provider.Change) (provider.Plan, error) {
 	images, err := spec.Images.Rows(ctx)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	uploads, err := UploadRows(ctx, store, spec.Uploads)
-	if err != nil {
-		return provider.Plan{}, err
-	}
-	changes := make([]provider.Change, 0, len(spec.Resources)+len(deployed.Bindings)+len(uploads)+len(images))
+	changes := make([]provider.Change, 0, len(spec.Resources)+len(deployed.Bindings)+len(shipped)+len(images))
 	changes = append(changes, images...)
-	changes = append(changes, uploads...)
+	changes = append(changes, shipped...)
 	for _, resource := range spec.Resources {
 		if resource.Binding != "" {
 			continue

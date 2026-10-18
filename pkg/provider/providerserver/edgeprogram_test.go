@@ -204,7 +204,7 @@ func previewRefused(t *testing.T, req *contractv1.DeployRequest) string {
 	previewBootstrapped(t, client)
 	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
 
-	stream, err := client.Deploy(t.Context(), req)
+	stream, err := client.Deploy(t.Context(), rooted(req))
 	if err != nil {
 		t.Fatalf("Deploy() error = %v", err)
 	}

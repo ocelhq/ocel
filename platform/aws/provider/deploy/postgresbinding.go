@@ -1,19 +1,15 @@
 package deploy
 
 import (
-	"context"
 	"crypto/x509"
 	_ "embed"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"strings"
 	"sync"
 
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 // TODO(rds-ca): refresh from https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem when AWS opens a region or issues a root.
@@ -61,7 +57,7 @@ func rdsRootCAs(region string) (string, error) {
 	return out.String(), nil
 }
 
-func collectPostgresBinding(ctx context.Context, secrets SecretsAPI, region, name string, fields map[string]any) (*bindingsv1.Binding, error) {
+func collectPostgresBinding(region, name string, fields map[string]any) (*bindingsv1.Binding, error) {
 	host, err := requireStringField(fields, name, outputKeyHost)
 	if err != nil {
 		return nil, err
@@ -89,11 +85,6 @@ func collectPostgresBinding(ctx context.Context, secrets SecretsAPI, region, nam
 		return nil, fmt.Errorf("postgres %s: %w", name, err)
 	}
 
-	password, err := readMasterPassword(ctx, secrets, secretARN)
-	if err != nil {
-		return nil, fmt.Errorf("read the master password of %s: %w", name, err)
-	}
-
 	return &bindingsv1.Binding{
 		Name: name,
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
@@ -101,7 +92,6 @@ func collectPostgresBinding(ctx context.Context, secrets SecretsAPI, region, nam
 			Port:     int32(port),
 			Database: database,
 			Username: username,
-			Password: password,
 			TlsMode:  bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
 			TlsCa:    roots,
 		}},
@@ -111,28 +101,8 @@ func collectPostgresBinding(ctx context.Context, secrets SecretsAPI, region, nam
 
 func postgresGrants(secretARN string) []*bindingsv1.Grant {
 	return []*bindingsv1.Grant{{
-		Label:     variables.PostgresPasswordGrant,
+		Label:     provider.GrantPasswordSecret,
 		Actions:   []string{"secretsmanager:GetSecretValue"},
 		Resources: []string{secretARN},
 	}}
-}
-
-func readMasterPassword(ctx context.Context, secrets SecretsAPI, secretARN string) (string, error) {
-	if secrets == nil {
-		return "", fmt.Errorf("no Secrets Manager client configured")
-	}
-	out, err := secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: &secretARN})
-	if err != nil {
-		return "", err
-	}
-	if out.SecretString == nil {
-		return "", fmt.Errorf("secret %s has no string value", secretARN)
-	}
-	var parsed struct {
-		Password string `json:"password"`
-	}
-	if err := json.Unmarshal([]byte(*out.SecretString), &parsed); err != nil {
-		return "", fmt.Errorf("parse managed secret: %w", err)
-	}
-	return parsed.Password, nil
 }

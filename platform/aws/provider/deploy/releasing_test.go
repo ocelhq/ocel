@@ -41,9 +41,10 @@ func plannedValues(app *contractv1.ManifestApp) provider.AppValues {
 func plannedEnv(t *testing.T, cfg Config, app *contractv1.ManifestApp, front edge.Edge) map[string]string {
 	t.Helper()
 	spec := provider.StackSpec{
-		Kind: provider.StackApp,
-		Edge: front,
-		App:  &provider.AppSpec{App: app.GetName(), Values: plannedValues(app)},
+		Kind:     provider.StackApp,
+		Recorded: true,
+		Edge:     front,
+		App:      &provider.AppSpec{App: app.GetName(), Values: plannedValues(app)},
 	}
 	return releasing(t, cfg).appEnv(spec, appBundle{}, sessionScope{})
 }

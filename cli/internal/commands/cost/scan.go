@@ -116,12 +116,17 @@ func price(ctx context.Context, dependencies Dependencies, provider *providerpro
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	outputRoot, err := buildoutput.Root(cfg.Dir)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	var set *costv1.ResourceSet
 	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		set, err = client.Shape(ctx, &contractv1.ShapeRequest{
 			Manifest:    manifest,
 			Environment: env,
 			Edge:        cfg.EdgeSelection(),
+			OutputRoot:  outputRoot,
 		})
 		return err
 	})

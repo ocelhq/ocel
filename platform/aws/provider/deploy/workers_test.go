@@ -44,7 +44,7 @@ func newReleaseHostingWorkers(t *testing.T, workers ...string) (*release, provid
 	spec.App.Functions[0].HasWorkerEntry = true
 	engine := &mockedEngine{}
 	release := releasingOn(t, cfg, engine)
-	work, err := release.appWork(spec, nil, nil)
+	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -227,7 +227,7 @@ func TestADeployWhoseReleaseDropsItsWorkersAndFailsBeforePromoteLeavesTheLiveRel
 		t.Fatalf("provision() of the release that drops its workers = %v", err)
 	}
 	recordRelease(t, release.cfg.KeyValues, failed.Ref)
-	if err := release.Destroy(ctx, failed.Ref, nil, nil); err != nil {
+	if err := release.Destroy(ctx, provider.StackDestroy{Ref: failed.Ref}, nil); err != nil {
 		t.Fatalf("Destroy(the failed deploy's release) = %v", err)
 	}
 
@@ -357,7 +357,7 @@ func TestThePlanToDestroyAReleaseShowsTheStacksDestroyTakesDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanDestroy() = %v", err)
 	}
-	if err := release.Destroy(ctx, spec.Ref, nil, nil); err != nil {
+	if err := release.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 
@@ -409,7 +409,7 @@ func TestReclaimingAFailedDeploysReleaseLeavesTheWorkersTheLiveReleaseRuns(t *te
 		t.Fatalf("provisionWorkers() of the failing deploy's release = %v", err)
 	}
 
-	if err := release.Destroy(ctx, failed.Ref, nil, nil); err != nil {
+	if err := release.Destroy(ctx, provider.StackDestroy{Ref: failed.Ref}, nil); err != nil {
 		t.Fatalf("Destroy(the failed deploy's release) = %v", err)
 	}
 
@@ -436,7 +436,7 @@ func TestReclaimingTheOnlyReleaseOfAnAppTakesDownItsWorkersStack(t *testing.T) {
 	}
 	recordRelease(t, release.cfg.KeyValues, spec.Ref)
 
-	if err := release.Destroy(ctx, spec.Ref, nil, nil); err != nil {
+	if err := release.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 
@@ -505,7 +505,7 @@ func TestAppWorkersRunFromTheFunctionWhoseArtifactCarriesTheWorkerEntry(t *testi
 	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
 	spec.App.Functions[1].HasWorkerEntry = true
 	release := releasingOn(t, cfg, &mockedEngine{})
-	work, err := release.appWork(spec, nil, nil)
+	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -514,7 +514,7 @@ func TestAppWorkersRunFromTheFunctionWhoseArtifactCarriesTheWorkerEntry(t *testi
 	if err != nil {
 		t.Fatalf("workersWork() = %v", err)
 	}
-	if want := spec.App.Functions[1].Artifact.Key; hosted.artifact.Key != want {
+	if want := stagedOf(spec)[1].Ref.Key; hosted.artifact.Key != want {
 		t.Errorf("the workers run from %s, want %s, the one artifact that carries the worker entry", hosted.artifact.Key, want)
 	}
 }
@@ -526,7 +526,7 @@ func TestAppWorkersAreRefusedWhenNoFunctionCarriesTheWorkerEntry(t *testing.T) {
 	cfg.Region = "us-east-1"
 	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
 	release := releasingOn(t, cfg, &mockedEngine{})
-	work, err := release.appWork(spec, nil, nil)
+	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}

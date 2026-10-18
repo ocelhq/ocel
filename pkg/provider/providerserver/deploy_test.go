@@ -77,7 +77,7 @@ func builtAppsUnder(t *testing.T, root string, apps ...string) {
 	}
 }
 
-func TestDeployReadsTheBuildUnderTheConfiguredProjectWhateverDirectoryItRunsIn(t *testing.T) {
+func TestDeployReadsTheBuildUnderTheOutputRootTheRequestNamesWhateverDirectoryItRunsIn(t *testing.T) {
 	project := t.TempDir()
 	builtAppsUnder(t, project, "web", "admin")
 	t.Chdir(t.TempDir())
@@ -96,9 +96,28 @@ func TestDeployReadsTheBuildUnderTheConfiguredProjectWhateverDirectoryItRunsIn(t
 	}
 	bootstrappedOverRPC(t, client)
 
-	result, _ := deploy(t, client, deployRequest())
+	req := deployRequest()
+	root, err := buildoutput.Root(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.OutputRoot = root
+	result, _ := deploy(t, client, req)
 	if !result.GetSuccess() {
-		t.Fatalf("Deploy() from outside the project = %q, want it to ship the build under the project the CLI configured", result.GetError())
+		t.Fatalf("Deploy() from outside the project = %q, want it to ship the build under the output root the CLI named", result.GetError())
+	}
+}
+
+func TestADeployShippingAppsThatNamesNoOutputRootIsRefusedBeforeItReadsAnyBuild(t *testing.T) {
+	builtProject(t)
+	client := servedProvider(t, "1.0.0", fake.NewProvider(fake.Options{Region: "nowhere"}))
+	bootstrappedOverRPC(t, client)
+
+	req := deployRequest()
+	req.OutputRoot = filepath.Join("relative", "build")
+	_, _, err := deployStream(t, client, req)
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid || !strings.Contains(err.Error(), "build output root") {
+		t.Fatalf("Deploy() naming a relative output root = %v, want it refused as invalid: the CLI names the absolute directory the build it ships lives in", err)
 	}
 }
 
@@ -134,6 +153,20 @@ func deployRequest() *contractv1.DeployRequest {
 	}
 }
 
+func rooted(req *contractv1.DeployRequest) *contractv1.DeployRequest {
+	if req.GetOutputRoot() != "" {
+		return req
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return req
+	}
+	if root, err := buildoutput.Root(dir); err == nil {
+		req.OutputRoot = root
+	}
+	return req
+}
+
 func serverless(functions ...*contractv1.ManifestFunction) *contractv1.ManifestApp_Serverless {
 	return &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: functions}}
 }
@@ -157,7 +190,7 @@ func deployStream(
 	req *contractv1.DeployRequest,
 ) (*progressv1.OperationResult, []*progressv1.OperationEvent, error) {
 	t.Helper()
-	stream, err := client.Deploy(context.Background(), req)
+	stream, err := client.Deploy(context.Background(), rooted(req))
 	if err != nil {
 		t.Fatalf("Deploy() error = %v", err)
 	}
@@ -204,8 +237,8 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 	if !slices.ContainsFunc(specs[1].App.Grants, func(binding provider.Binding) bool { return binding.Name == "orders" }) {
 		t.Errorf("the app spec grants %v, want the infra binding the app binds a client to", specs[1].App.Grants)
 	}
-	if specs[1].App.Functions[0].Artifact.Key == "" {
-		t.Error("the app spec has a function with no artifact, so the upload never reached the release")
+	if specs[1].App.Functions[0].ArtifactDir == "" {
+		t.Error("the app spec has a function naming no build artifact, so its provider has nothing to ship")
 	}
 	if specs[1].App.BuildID != webBuildID {
 		t.Errorf("the app spec names build %q, want %q: dispatch serves the build the CLI built under this id", specs[1].App.BuildID, webBuildID)
@@ -224,7 +257,7 @@ func TestADeployReportsTheStoragePrefixItWroteEachAppUnder(t *testing.T) {
 	if !regexp.MustCompile(`^prod/shop/web/r[0-9a-f]{8}/$`).MatchString(prefix) {
 		t.Fatalf("the result reports storage prefix %q for web, want prod/shop/web/<release token>/", prefix)
 	}
-	if key := p.FakeStacks().Provisioned()[1].App.Functions[0].Artifact.Key; !strings.HasPrefix(key, prefix) {
+	if key := p.FakeStacks().Shipped(p.FakeStacks().Provisioned()[1].Ref)[0].Ref.Key; !strings.HasPrefix(key, prefix) {
 		t.Errorf("web's function artifact is %q, want it under the reported prefix %q", key, prefix)
 	}
 }
@@ -273,7 +306,7 @@ func TestDeployRefusesToPublishABlanketGrantWithoutAskingTheProvider(t *testing.
 		Resources: []string{"*"},
 	}}
 
-	stream, err := client.Deploy(context.Background(), deployRequest())
+	stream, err := client.Deploy(context.Background(), rooted(deployRequest()))
 	if err != nil {
 		t.Fatalf("Deploy() error = %v", err)
 	}
@@ -424,7 +457,7 @@ func TestDeployUploadsEveryFunctionArtifact(t *testing.T) {
 	}
 
 	specs := vendor.FakeStacks().Provisioned()
-	ref := specs[1].App.Functions[0].Artifact
+	ref := vendor.FakeStacks().Shipped(specs[1].Ref)[0].Ref
 	opened, err := vendor.Artifacts().Open(context.Background(), ref)
 	if err != nil {
 		t.Fatalf("Open(%+v) after the deploy = %v, want the artifact stored where the plan named it", ref, err)
@@ -465,7 +498,7 @@ func (r refusingStacks) Stacks() provider.Stacks { return r.stacks }
 type halfBindingStacks struct{}
 
 func (halfBindingStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Log) (provider.Plan, error) {
-	return resources.SynthesizedPlan(ctx, fake.NewArtifacts(), spec, provider.StackResult{})
+	return resources.SynthesizedPlan(ctx, spec, provider.StackResult{})
 }
 
 func (halfBindingStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Log) (provider.Plan, error) {
@@ -484,7 +517,7 @@ func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _
 	return result, nil
 }
 
-func (halfBindingStacks) Destroy(context.Context, provider.StackRef, provider.ImageStore, progress.Log) error {
+func (halfBindingStacks) Destroy(context.Context, provider.StackDestroy, progress.Log) error {
 	return nil
 }
 
@@ -493,7 +526,7 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsItsBindings(t *test
 	base := fake.NewProvider(fake.Options{})
 	client := servedBy(t, refusingStacks{Provider: base, stacks: halfBindingStacks{}})
 
-	stream, err := client.Deploy(context.Background(), deployRequest())
+	stream, err := client.Deploy(context.Background(), rooted(deployRequest()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -615,8 +648,8 @@ func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec
 	return result, nil
 }
 
-func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
-	return r.inner.Destroy(ctx, ref, images, progress)
+func (r *resolvingStacks) Destroy(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
+	return r.inner.Destroy(ctx, req, progress)
 }
 
 func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(t *testing.T) {
@@ -792,7 +825,7 @@ func TestDeployRefusesANeedTheProjectDoesNotWaive(t *testing.T) {
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
 
-	stream, err := client.Deploy(context.Background(), req)
+	stream, err := client.Deploy(context.Background(), rooted(req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1989,7 +2022,7 @@ func TestDeployRefusesAProductionProjectThatDeclaresNoHostname(t *testing.T) {
 	req := deployRequest()
 	req.Manifest.Domains = nil
 
-	stream, err := client.Deploy(context.Background(), req)
+	stream, err := client.Deploy(context.Background(), rooted(req))
 	if err != nil {
 		t.Fatal(err)
 	}

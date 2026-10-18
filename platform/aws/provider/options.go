@@ -9,7 +9,8 @@ type Options struct {
 }
 
 type BytecodeOptions struct {
-	Embed bool `json:"embed,omitempty" doc:"Fold each function's warmed compile cache into its own code package, so a cold start loads it with the code rather than fetching it from S3. Off, a cold start fetches it."`
+	Cache bool `json:"cache,omitempty" doc:"Warm a V8 compile cache for each node function at deploy and keep it in S3, so a cold start compiles less. Off, functions start with no cache and a deploy warms nothing."`
+	Embed bool `json:"embed,omitempty" doc:"Fold each function's warmed compile cache into its own code package, so a cold start loads it with the code rather than fetching it from S3. Off, a cold start fetches it. Needs cache."`
 }
 
 type LogOptions struct {

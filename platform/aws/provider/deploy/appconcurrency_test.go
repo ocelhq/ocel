@@ -70,16 +70,17 @@ func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 	t.Helper()
 	coord := storageCoordinate("prod", "shop", app, fixedRelease(t))
 	return provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: coord.Stack()},
-		Kind: provider.StackApp,
-		Edge: fakeEdgeOf(cloudfront.Kind),
+		Ref:      provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: coord.Stack()},
+		Kind:     provider.StackApp,
+		Recorded: true,
+		Edge:     fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{
 			App:          app,
 			Framework:    buildoutput.FrameworkNext,
 			RootFunction: "fn--" + app + "--entry",
 			BuildID:      "d1",
 			Functions: []provider.FunctionSpec{
-				{Name: "fn--" + app + "--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: app + "-entry.zip"}},
+				{Name: "fn--" + app + "--entry", ArtifactDir: writeTree(t, map[string]string{"index.js": "the " + app + " entry"})},
 			},
 			Routing:     &provider.RoutingSpec{RootFunction: "fn--" + app + "--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
 			ISR:         &provider.ISRSpec{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
@@ -88,6 +89,24 @@ func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 			Static:      nextStatic,
 		},
 	}
+}
+
+func siblingAppConfig(t *testing.T, apps ...string) Config {
+	t.Helper()
+	cfg := routedConfig(t, cloudfront.Kind)
+	cfg.ArtifactRoot = siblingAppRoot(t, apps...)
+	cfg.Env = "prod"
+	cfg.ArtifactBucket = "artifacts-bucket"
+	cfg.StateTable = "ocel-state"
+	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
+	cfg.BackendURL = "s3://ocel-state/shop"
+	cfg.Passphrase = "a-passphrase"
+	cfg.PulumiProject = "ocel-shop"
+	cfg.Region = "us-east-1"
+	cfg.ImageOptimizerURL = ""
+	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
+	cfg.EdgeAccessKeyID, cfg.EdgeSecretKey = "AKIAEDGE", "edge-secret"
+	return cfg
 }
 
 func siblingAppOutputs(apps ...string) auto.OutputMap {
@@ -105,22 +124,8 @@ func TestOneStacksPortProvisionsSiblingAppStacksAtOnce(t *testing.T) {
 	t.Parallel()
 
 	apps := []string{"web", "admin", "docs"}
-	cfg := routedConfig(t, cloudfront.Kind)
-	cfg.ArtifactRoot = siblingAppRoot(t, apps...)
-	cfg.Env = "prod"
-	cfg.ArtifactBucket = "artifacts-bucket"
-	cfg.StateTable = "ocel-state"
-	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
-	cfg.BackendURL = "s3://ocel-state/shop"
-	cfg.Passphrase = "a-passphrase"
-	cfg.PulumiProject = "ocel-shop"
-	cfg.Region = "us-east-1"
-	cfg.ImageOptimizerURL = ""
-	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
-	cfg.EdgeAccessKeyID, cfg.EdgeSecretKey = "AKIAEDGE", "edge-secret"
-
 	engine := &mockedEngine{outputs: siblingAppOutputs(apps...)}
-	stacks := stacksWith(cfg, engine)
+	stacks := stacksWith(siblingAppConfig(t, apps...), engine)
 
 	var wg sync.WaitGroup
 	failures := make([]error, len(apps))

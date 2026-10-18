@@ -21,7 +21,7 @@ func runsFromImage(p provider.Provider, compute provider.Compute) bool {
 	case provider.ComputeContainer:
 		return true
 	case provider.ComputeServerless:
-		return p.Hooks().FunctionImages != nil
+		return p.Facts().RunsFunctionsAsImages
 	}
 	return false
 }

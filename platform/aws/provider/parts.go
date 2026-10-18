@@ -126,9 +126,11 @@ func (p *Provider) planDeployParts(ctx context.Context, spec provider.StackSpec)
 	}
 	var names []string
 	if spec.App.Compute != provider.ComputeContainer {
-		if names, err = p.partsBuiltFor([]builtApp{{name: spec.App.App, framework: spec.App.Framework}}); err != nil {
+		uses, err := usesOf(spec.App.OutputRoot, spec.App.App, spec.App.Framework)
+		if err != nil {
 			return nil, err
 		}
+		names = partsNeededBy([]buildoutput.Uses{uses})
 	}
 	if spec.Edge != nil && spec.Edge.Kind() == cloudfront.Kind {
 		names = append(names, cloudfrontpart.Part)
@@ -150,16 +152,13 @@ func (p *Provider) planDeployParts(ctx context.Context, spec provider.StackSpec)
 	return groups, nil
 }
 
-func (p *Provider) partsUsedBy(apps []provider.AppEntry, front edge.Kind) ([]string, error) {
-	used, err := p.partsBuiltFor(servedApps(apps))
-	if err != nil {
-		return nil, err
-	}
+func partsUsedBy(uses []buildoutput.Uses, front edge.Kind) []string {
+	used := partsNeededBy(uses)
 	if front == cloudfront.Kind {
 		used = append(used, cloudfrontpart.Part)
 		slices.Sort(used)
 	}
-	return used, nil
+	return used
 }
 
 func (p *Provider) partShape(name string, tier environment.Tier) []pricing.Shaped {
@@ -287,61 +286,31 @@ func (p *Provider) planPart(ctx context.Context, tier environment.Tier, work par
 	return group, nil
 }
 
-type builtApp struct {
-	name      string
-	framework string
-}
-
-func servedApps(apps []provider.AppEntry) []builtApp {
-	var served []builtApp
-	for _, app := range apps {
-		if app.Compute() != provider.ComputeContainer {
-			served = append(served, builtApp{name: app.App, framework: app.Manifest.GetFramework().GetName()})
-		}
-	}
-	return served
-}
-
-func (p *Provider) partsBuiltFor(apps []builtApp) ([]string, error) {
-	root := ""
-	if p.projectDir != "" {
-		var err error
-		if root, err = buildoutput.Root(p.projectDir); err != nil {
-			return nil, err
-		}
-	}
-	return partsNeededBy(root, apps)
-}
-
-func partsNeededBy(root string, apps []builtApp) ([]string, error) {
+func partsNeededBy(uses []buildoutput.Uses) []string {
 	needed := map[string]bool{}
-	for _, app := range apps {
-		uses, err := usesOf(root, app)
-		if err != nil {
-			return nil, err
-		}
-		if uses.Revalidation {
+	for _, each := range uses {
+		if each.Revalidation {
 			needed[taginvalidator.Part] = true
 		}
-		if uses.ImageOptimization {
+		if each.ImageOptimization {
 			needed[imageoptimizer.Part] = true
 		}
 	}
-	return slices.Sorted(maps.Keys(needed)), nil
+	return slices.Sorted(maps.Keys(needed))
 }
 
-func usesOf(root string, app builtApp) (buildoutput.Uses, error) {
+func usesOf(root, app, framework string) (buildoutput.Uses, error) {
 	if root == "" {
-		return buildoutput.PresumeUses(app.framework), nil
+		return buildoutput.PresumeUses(framework), nil
 	}
-	hosting, present, err := buildoutput.ReadHosting(root, app.name)
+	hosting, present, err := buildoutput.ReadHosting(root, app)
 	if err != nil || !present {
-		return buildoutput.PresumeUses(app.framework), err
+		return buildoutput.PresumeUses(framework), err
 	}
 	_, revalidates := hosting.Needs[edge.NeedRevalidation]
-	_, err = os.Stat(filepath.Join(buildoutput.AppRoot(root, app.name), naming.ImageConfigFile))
+	_, err = os.Stat(filepath.Join(buildoutput.AppRoot(root, app), naming.ImageConfigFile))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return buildoutput.Uses{}, fmt.Errorf("read the image config of %s: %w", app.name, err)
+		return buildoutput.Uses{}, fmt.Errorf("read the image config of %s: %w", app, err)
 	}
 	return buildoutput.Uses{Revalidation: revalidates, ImageOptimization: err == nil}, nil
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -18,16 +17,11 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
-type SecretsAPI interface {
-	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
-}
-
 type Config struct {
 	Region        string
 	BackendURL    string
 	Passphrase    string
 	PulumiProject string
-	Secrets       SecretsAPI
 	Parameters    ParametersAPI
 	KVTokenRoot   string
 	Clusters      ClustersAPI

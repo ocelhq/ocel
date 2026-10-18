@@ -36,10 +36,7 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	}
 	tree.AddShaped(shared, string(Vendor), p.aws.Region, bootstrapShape)
 	tree.AddShaped(shared, string(Vendor), p.aws.Region, envsourcesync.Shape(string(p.namespace), req.Deploy.Tier))
-	parts, err := p.partsUsedBy(req.Deploy.Apps, req.Edge)
-	if err != nil {
-		return nil, err
-	}
+	parts := partsUsedBy(req.Uses, req.Edge)
 	for _, name := range parts {
 		tree.AddShaped(shared, string(Vendor), p.aws.Region, p.partShape(name, req.Deploy.Tier))
 	}

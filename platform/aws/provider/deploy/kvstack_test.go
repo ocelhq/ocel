@@ -46,6 +46,7 @@ func TestProvisioningAStoreMintsItsTokenAndBindsTheStoreToIt(t *testing.T) {
 	result, err := kvStacks(engine, params).Provision(context.Background(), provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
+		Recorded:  true,
 		Resources: []provider.Resource{{Name: "c-kv", Type: provider.BindingKV, KV: &provider.KVSpec{}}},
 	}, nil)
 	if err != nil {
@@ -77,8 +78,9 @@ func TestAStoreRemovedFromTheStackHasItsTokenDeletedOnceTheDeployLands(t *testin
 		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "conformance-uploads"}},
 	}}
 	if _, err := kvStacks(engine, params).Provision(context.Background(), provider.StackSpec{
-		Ref:  conformanceInfra,
-		Kind: provider.StackInfra,
+		Ref:      conformanceInfra,
+		Kind:     provider.StackInfra,
+		Recorded: true,
 		Resources: []provider.Resource{
 			{Name: "c-kept", Type: provider.BindingKV, KV: &provider.KVSpec{}},
 			{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
@@ -104,6 +106,7 @@ func TestAStoreWhoseDeployFailsKeepsEveryToken(t *testing.T) {
 	if _, err := kvStacks(engine, params).Provision(context.Background(), provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
+		Recorded:  true,
 		Resources: []provider.Resource{{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}}},
 	}, nil); err == nil {
 		t.Fatal("Provision() succeeded, want the engine's failure")
@@ -122,7 +125,7 @@ func TestDestroyingAStackDeletesTheTokensOfItsStores(t *testing.T) {
 		"c-kv":     kvOutput("c-kv"),
 		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "conformance-uploads"}},
 	}}
-	if err := kvStacks(engine, params).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
+	if err := kvStacks(engine, params).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if !slices.Equal(params.deleted, []string{conformanceKVToken("c-kv")}) {
@@ -143,8 +146,9 @@ func TestATokenLeftByAFailedFirstDeployIsDeletedByTheNextDeployThatDropsTheStore
 		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "conformance-uploads"}},
 	}}
 	if _, err := kvStacks(engine, params).Provision(context.Background(), provider.StackSpec{
-		Ref:  conformanceInfra,
-		Kind: provider.StackInfra,
+		Ref:      conformanceInfra,
+		Kind:     provider.StackInfra,
+		Recorded: true,
 		Resources: []provider.Resource{
 			{Name: "c-kept", Type: provider.BindingKV, KV: &provider.KVSpec{}},
 			{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
@@ -172,7 +176,7 @@ func TestDestroyingAStackDeletesEveryTokenUnderItsEnvironmentAndNoOther(t *testi
 	otherEnv := kvTokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
 	params.values[otherEnv] = "another-environments-token"
 	engine := &mockedEngine{outputs: auto.OutputMap{}}
-	if err := kvStacks(engine, params).Destroy(context.Background(), conformanceInfra, nil, nil); err != nil {
+	if err := kvStacks(engine, params).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	deleted := slices.Sorted(slices.Values(params.deleted))
@@ -193,6 +197,7 @@ func provisionPatchedKV(t *testing.T, patch map[string]any) error {
 	_, err := stacksWith(cfg, &mockedEngine{outputs: auto.OutputMap{"c-kv": kvOutput("c-kv")}}).Provision(context.Background(), provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
+		Recorded:  true,
 		Resources: []provider.Resource{{Name: "c-kv", Type: provider.BindingKV, KV: &provider.KVSpec{}}},
 	}, nil)
 	return err
@@ -211,6 +216,7 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 	transformed, err := transformStackSpec(context.Background(), pass, provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
+		Recorded:  true,
 		Resources: []provider.Resource{{Name: "c-kv", Type: provider.BindingKV, KV: &provider.KVSpec{}}},
 	})
 	if err != nil {
@@ -270,6 +276,7 @@ func TestPreviewingAStoreWritesNoToken(t *testing.T) {
 	if _, err := kvStacks(engine, params).Plan(context.Background(), provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
+		Recorded:  true,
 		Resources: []provider.Resource{{Name: "c-kv", Type: provider.BindingKV, KV: &provider.KVSpec{}}},
 	}, nil); err != nil {
 		t.Fatalf("Plan() = %v", err)

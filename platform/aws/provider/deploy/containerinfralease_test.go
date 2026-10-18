@@ -78,7 +78,7 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 		}
 	}
 
-	if err := stacks.Destroy(ctx, shop.Ref, nil, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: shop.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(shop) = %v", err)
 	}
 	if !claimed {
@@ -156,7 +156,7 @@ func TestAContainerDeployAfterAFailedTakedownRaisesTheContainerInfraAgain(t *tes
 	}
 	infra := containerInfraRef(environment.TierProduction).Name.String()
 	engine.downErr = failingOnce(infra)
-	if err := stacks.Destroy(ctx, shop.Ref, nil, progress.Discard()); err == nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: shop.Ref}, progress.Discard()); err == nil {
 		t.Fatal("Destroy(shop) = nil, want the failed takedown reported")
 	}
 
@@ -184,7 +184,7 @@ func TestAFailedTakedownLeavesTheContainersPartForItsRemovalToTakeDown(t *testin
 	infra := containerInfraRef(environment.TierProduction).Name.String()
 	engine.downErr = failingOnce(infra)
 
-	err := stacks.Destroy(ctx, shop.Ref, nil, progress.Discard())
+	err := stacks.Destroy(ctx, provider.StackDestroy{Ref: shop.Ref}, progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap production --remove containers") {
 		t.Fatalf("Destroy(shop) = %v, want the failed takedown to name the command that takes it down again", err)
 	}

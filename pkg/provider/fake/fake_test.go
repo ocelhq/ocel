@@ -59,19 +59,15 @@ func TestNewRefusesOptionsTheReferenceProviderDoesNotAccept(t *testing.T) {
 func TestAFakeProviderForAProjectShipsANextServerRuntimeWithItsPreload(t *testing.T) {
 	t.Parallel()
 
-	read := fake.NewForProject(fake.Options{}, "").Hooks().ReadNextServerRuntime
-	if read == nil {
-		t.Fatal("a fake provider for a project has no Next server runtime")
-	}
-	files, err := read(context.Background())
+	files, err := fake.NewForProject(fake.Options{}).Runtime().NextServer(context.Background())
 	if err != nil {
-		t.Fatalf("ReadNextServerRuntime() error = %v", err)
+		t.Fatalf("Runtime().NextServer() error = %v", err)
 	}
 	if got := string(files[containerimage.NextServerPreloadFile]); got != fake.NextServerPreload {
 		t.Errorf("ReadNextServerRuntime()[%s] = %q, want %q", containerimage.NextServerPreloadFile, got, fake.NextServerPreload)
 	}
-	if fake.NewProvider(fake.Options{}).Hooks().ReadNextServerRuntime != nil {
-		t.Error("a bare fake provider ships a Next server runtime")
+	if bare, err := fake.NewProvider(fake.Options{}).Runtime().NextServer(context.Background()); err != nil || len(bare) != 0 {
+		t.Errorf("a bare fake provider ships the Next server runtime %v, %v, want none", bare, err)
 	}
 }
 
@@ -155,7 +151,7 @@ func TestTheReferenceProviderSaysWhatItDidAndToWhichStackTierOrPrefix(t *testing
 	if _, err := stacks.Provision(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, progress); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	if err := stacks.Destroy(ctx, ref, nil, progress); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, progress); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: environment.TierProduction}, progress); err != nil {

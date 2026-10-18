@@ -103,6 +103,59 @@ func TestForwardPortsHandsBackThePublishedBindingPointedAtItsForwardAndHoldsItUn
 	}
 }
 
+func forwardingOrdersWith(vendor *fake.Provider, resolved map[string]string) {
+	vendor.WithHooks(func(h *provider.Hooks) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
+			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Properties: resolved}}, nil
+		}
+	})
+}
+
+func TestForwardPortsHandsBackThePasswordTheProviderResolvedForAPostgresBindingNamingItsSecret(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.FakeStacks().PasswordSecret = "fake-secret"
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	forwardingOrdersWith(vendor, map[string]string{provider.PropertyPassword: "resolved-password"})
+
+	ctx, leave := context.WithCancel(context.Background())
+	defer leave()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("orders"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
+	}
+	bindings := stream.Msg().GetResponse().GetBindings()
+	if len(bindings) != 1 {
+		t.Fatalf("ForwardPorts() handed back %d bindings, want orders alone", len(bindings))
+	}
+	if got := bindings[0].GetPostgres(); got.GetPassword() != "resolved-password" || got.GetHost() != "127.0.0.1" {
+		t.Errorf("ForwardPorts() handed back orders on %s with a password of %d bytes, want 127.0.0.1 with the password the provider read from its secret",
+			got.GetHost(), len(got.GetPassword()))
+	}
+}
+
+func TestForwardPortsRefusesAPostgresBindingWhosePasswordTheProviderLeftUnresolved(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.FakeStacks().PasswordSecret = "fake-secret"
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	forwardingOrdersWith(vendor, nil)
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsRequest("orders"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	for stream.Receive() {
+		t.Errorf("ForwardPorts() handed back %d bindings, want a refusal: a build connecting with no password fails far from the cause", len(stream.Msg().GetResponse().GetBindings()))
+	}
+	if err := stream.Err(); err == nil || !strings.Contains(err.Error(), "fake-secret") {
+		t.Errorf("ForwardPorts() error = %v, want a refusal naming the secret the password was left unread from", err)
+	}
+}
+
 func TestForwardPortsEndsTheStreamWithTheFailureTheProviderReportsAndClosesTheForwards(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
@@ -175,7 +228,7 @@ func TestForwardPortsEndsTheStreamWithAFailureBeforeItsForwardsFinishClosingAndH
 	deployed := make(chan struct{})
 	go func() {
 		defer close(deployed)
-		deploying, err := client.Deploy(context.Background(), deployRequest())
+		deploying, err := client.Deploy(context.Background(), rooted(deployRequest()))
 		if err != nil {
 			return
 		}
@@ -299,7 +352,7 @@ func TestADeployAfterForwardsBeginsOnlyOnceTheProviderHasClosedThem(t *testing.T
 	deployed := make(chan struct{})
 	go func() {
 		defer close(deployed)
-		deploying, err := client.Deploy(context.Background(), deployRequest())
+		deploying, err := client.Deploy(context.Background(), rooted(deployRequest()))
 		if err != nil {
 			return
 		}
@@ -363,7 +416,7 @@ func TestWhatTheProviderSaysWhileOpeningForwardsAndWhileTheyAreHeldReachesTheCal
 
 func TestWhatTheProviderSaysOnceItsForwardsAreClosedGoesNowhere(t *testing.T) {
 	builtProject(t)
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	served := &lateWrites{returned: make(chan struct{})}
 	server := httptest.NewServer(served.watching(providerserver.ConformanceMux(providerserver.Config{
 		Version: "1.0.0",

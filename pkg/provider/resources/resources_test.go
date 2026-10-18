@@ -314,7 +314,7 @@ func TestDestroyOfAStackNothingRecordedIsANoOp(t *testing.T) {
 	own := &buckets{}
 	stacks := resources.NewHookStacks(fake.NewKeyValues(), fake.NewArtifacts(), own.hooks())
 
-	if err := stacks.Destroy(context.Background(), infraRef(), nil, nil); err != nil {
+	if err := stacks.Destroy(context.Background(), provider.StackDestroy{Ref: infraRef()}, nil); err != nil {
 		t.Fatalf("Destroy() of a stack nothing recorded = %v, want nil", err)
 	}
 	if len(own.removed) != 0 {
@@ -336,7 +336,7 @@ func TestDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, ref, nil, nil); err != nil {
+	if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.removed) != 1 {
@@ -954,7 +954,7 @@ func TestDestroyTakesDownEveryContainerTheStackRecorded(t *testing.T) {
 	if rows := rowsOf(shown); rows["web"] != provider.ActionDelete {
 		t.Errorf("web reads %q, want the recorded container shown as going", rows["web"])
 	}
-	if err := stacks.Destroy(ctx, ref, nil, nil); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "web" {
@@ -975,7 +975,7 @@ func TestDestroyingAStackWhoseReleaseFailedForgetsTheImageItsRecordNames(t *test
 	own := &retaining{buckets: &buckets{}, forgetting: func() error { forgot++; return nil }}
 	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
 
-	if err := stacks.Destroy(ctx, ref, nil, nil); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 
@@ -1014,7 +1014,7 @@ func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testi
 	ref := appRef()
 	recordContainers(t, store, ref, "web")
 
-	err := resources.NewHookStacks(store, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks()).Destroy(ctx, ref, nil, nil)
+	err := resources.NewHookStacks(store, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks()).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "Containers hooks") {
 		t.Fatalf("Destroy() of a recorded container nothing provisions = %v, want a refusal naming %s", err, "Containers hooks")
@@ -1389,7 +1389,7 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasRetaining(t *testing.T)
 	own := &retaining{buckets: &buckets{}}
 	own.promote("web", testImage)
 	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
-	if err := stacks.Destroy(ctx, ref, nil, nil); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.swept) != 1 || own.swept[0] != "web "+testImage {
@@ -1425,7 +1425,7 @@ func TestATeardownThatStoppedReconcilingSaysSoWithNoProgressListening(t *testing
 			breaking(own)
 			stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
 
-			err := stacks.Destroy(ctx, ref, nil, nil)
+			err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil)
 			if !errors.Is(err, refused) {
 				t.Errorf("Destroy() = %v, want %v: a destroy run with no reporter attached is where the only trace of a box that stopped reconciling would be lost", err, refused)
 			}
@@ -1475,7 +1475,7 @@ func TestATeardownThatStoppedReconcilingWarnsWhatItLeftInPlace(t *testing.T) {
 			stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
 			progress := &fake.Log{}
 
-			if err := stacks.Destroy(ctx, ref, nil, progress); !errors.Is(err, refused) {
+			if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, progress); !errors.Is(err, refused) {
 				t.Fatalf("Destroy() = %v, want %v", err, refused)
 			}
 			if lines := progress.Lines(); !slices.Contains(lines, tc.want) {
@@ -1518,7 +1518,7 @@ func TestATeardownHandsTheStoreItWasGivenToTheReconcile(t *testing.T) {
 	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
 	given := fake.NewImages()
 
-	if err := stacks.Destroy(ctx, ref, given, nil); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref, Images: given}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.sweptWith) != 1 || own.sweptWith[0] != provider.ImageStore(given) {
@@ -1541,7 +1541,7 @@ func TestATeardownGivenNoStoreReconcilesWithNone(t *testing.T) {
 	own := &retaining{buckets: &buckets{}}
 	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
 
-	if err := stacks.Destroy(ctx, ref, nil, nil); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.sweptWith) != 1 || own.sweptWith[0] != nil {
@@ -1565,7 +1565,7 @@ func TestATeardownReconcilesWithAProviderThatKeepsNoReleaseWindow(t *testing.T) 
 	hooks := own.hooks()
 	hooks.Retention.Forget = nil
 
-	if err := resources.NewHookStacks(store, fake.NewArtifacts(), hooks).Destroy(ctx, ref, nil, nil); err != nil {
+	if err := resources.NewHookStacks(store, fake.NewArtifacts(), hooks).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.swept) != 1 {
@@ -1647,7 +1647,7 @@ func TestTwoPreviewsSharingAnImageTornDownTogetherLeaveNoImageBehind(t *testing.
 		}
 	}
 	destroy := func(store keyvalue.Store, ref provider.StackRef, own *claimedImages) {
-		if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, ref, nil, nil); err != nil {
+		if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 			t.Errorf("Destroy(%s) = %v", ref.Name, err)
 		}
 		if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {

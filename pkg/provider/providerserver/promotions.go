@@ -92,9 +92,9 @@ func (h *handlers) rollBack(ctx context.Context, hold *environmentHold, req *con
 			Propagation: &propagation,
 		}
 		dropped, err := session.promoteApps(leased, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted, confirm: hold.confirm}, session.readAppRouter, log)
-		images := removalImages(leased, session.provider, req.GetProjectRegistry(), log)
+		teardown := provider.StackDestroy{Images: removalImages(leased, session.provider, req.GetProjectRegistry(), log), Lease: hold.lease()}
 		if err != nil {
-			return errors.Join(err, session.reclaimDropped(leased, images, "", dropped, log))
+			return errors.Join(err, session.reclaimDropped(leased, teardown, "", dropped, log))
 		}
 		recording, stop := newRecordContext(leased)
 		err = session.checkpoint(recording)
@@ -102,7 +102,7 @@ func (h *handlers) rollBack(ctx context.Context, hold *environmentHold, req *con
 		if err != nil {
 			return err
 		}
-		if err := session.reclaimDropped(leased, images, "", dropped, log); err != nil {
+		if err := session.reclaimDropped(leased, teardown, "", dropped, log); err != nil {
 			log.Warn(unreclaimedWarning(promoted.PromotionID, err))
 		}
 		return nil
@@ -193,8 +193,8 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}
-		images := removalImages(ctx, session.provider, req.GetProjectRegistry(), progress)
-		if err := reclaimUnnamed(ctx, session.provider, images, session.ledger, pointer, pruned, progress); err != nil {
+		teardown := provider.StackDestroy{Images: removalImages(ctx, session.provider, req.GetProjectRegistry(), progress)}
+		if err := reclaimUnnamed(ctx, session.provider, teardown, session.ledger, pointer, pruned, progress); err != nil {
 			return err
 		}
 		if err := session.forgetRemovedDeployments(ctx, pointer, pruned.DeploymentRemovals); err != nil {

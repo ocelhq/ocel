@@ -107,7 +107,7 @@ func TestADeployDeclaringATaskIsRefusedAtPreflightBeforeAnythingUploads(t *testi
 	req := deployRequest()
 	req.Manifest.Resources = append(req.Manifest.Resources, topicResource(resourcesv1.ResourceType_RESOURCE_TYPE_TASK, "resize-image"))
 	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "worker", App: "web", Compute: string(provider.ComputeServerless)}}
-	stream, err := client.Deploy(context.Background(), req)
+	stream, err := client.Deploy(context.Background(), rooted(req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestADeployDeclaringATaskIsRefusedAtPreflightBeforeAnythingUploads(t *testi
 
 func TestADeployHandsEachAppStackTheWorkersThatJoinIt(t *testing.T) {
 	builtProject(t)
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)).WithFacts(func(facts *provider.Facts) {
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithFacts(func(facts *provider.Facts) {
 		facts.WorkerCeilings = []provider.WorkerCeiling{{Compute: provider.ComputeServerless, MaxDuration: 15 * time.Minute}}
 	})
 	client := servedBy(t, vendor)
@@ -184,7 +184,7 @@ func TestConfigureNamesTheLongestAWorkerRunsOnEachCompute(t *testing.T) {
 func TestConfigureNamesNoWorkerCeilingForAProviderThatRunsNoWorkers(t *testing.T) {
 	t.Parallel()
 
-	_, facts := configuredProvider(t, "1.0.0", fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)))
+	_, facts := configuredProvider(t, "1.0.0", fake.NewProvider(fake.Options{Region: "nowhere"}))
 	if ceilings := facts.GetWorkerCeilings(); len(ceilings) != 0 {
 		t.Errorf("Configure() worker ceilings = %v, want none from a provider that runs no workers", ceilings)
 	}

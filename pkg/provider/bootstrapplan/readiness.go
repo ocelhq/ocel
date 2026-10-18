@@ -1,4 +1,4 @@
-package providerserver
+package bootstrapplan
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -24,10 +23,10 @@ type Readiness struct {
 	KeyValues keyvalue.Store
 	WrittenBy provider.WrittenBy
 	Edge      edge.Kind
-	Statuses  *BootstrapStatuses
+	Statuses  *Statuses
 }
 
-type BootstrapStatus struct {
+type Status struct {
 	Tier       environment.Tier
 	Present    bool
 	Stacks     []provider.BootstrapStack
@@ -36,12 +35,12 @@ type BootstrapStatus struct {
 	Unfinished bool
 }
 
-func (r Readiness) Status(ctx context.Context, tier environment.Tier) (BootstrapStatus, error) {
+func (r Readiness) Status(ctx context.Context, tier environment.Tier) (Status, error) {
 	described, err := r.Bootstrap.Describe(ctx, tier)
 	if err != nil {
-		return BootstrapStatus{}, err
+		return Status{}, err
 	}
-	status := BootstrapStatus{Tier: tier, Present: described.Present, Stacks: described.Stacks,
+	status := Status{Tier: tier, Present: described.Present, Stacks: described.Stacks,
 		Unfinished: described.Unfinished}
 	var present []string
 	for _, stack := range described.Stacks {
@@ -53,11 +52,11 @@ func (r Readiness) Status(ctx context.Context, tier environment.Tier) (Bootstrap
 			present = append(present, stack.Part)
 		}
 	}
-	status.Parts = bootstrapplan.InOfferedOrder(r.Bootstrap.Parts(), present)
+	status.Parts = InOfferedOrder(r.Bootstrap.Parts(), present)
 	return status, nil
 }
 
-func (s BootstrapStatus) Stale(required []string) []string {
+func (s Status) Stale(required []string) []string {
 	var out []string
 	for _, stack := range s.Stacks {
 		if !stack.Present || stack.DigestCurrent || stack.ReadError != "" {
@@ -71,7 +70,7 @@ func (s BootstrapStatus) Stale(required []string) []string {
 	return out
 }
 
-func (s BootstrapStatus) Unreadable(required []string) []string {
+func (s Status) Unreadable(required []string) []string {
 	var out []string
 	for _, stack := range s.Stacks {
 		if stack.ReadError == "" {
@@ -85,7 +84,7 @@ func (s BootstrapStatus) Unreadable(required []string) []string {
 	return out
 }
 
-func (s BootstrapStatus) Downgrade(writing provider.WrittenBy) bool {
+func (s Status) Downgrade(writing provider.WrittenBy) bool {
 	return s.WrittenBy.Newer(writing)
 }
 
@@ -98,20 +97,20 @@ type ApplyRequest struct {
 }
 
 type partChange struct {
-	status    BootstrapStatus
+	status    Status
 	requested []string
 	removing  []string
 	users     map[string][]string
 	wants     map[string][]string
 }
 
-func (r Readiness) resolvePartChange(ctx context.Context, status BootstrapStatus, req ApplyRequest) (partChange, error) {
+func (r Readiness) resolvePartChange(ctx context.Context, status Status, req ApplyRequest) (partChange, error) {
 	offered := r.Bootstrap.Parts()
 	installed, described, err := r.installedParts(ctx, status, req.Remove)
 	if err != nil {
 		return partChange{}, err
 	}
-	removing, err := bootstrapplan.PartsToRemove(offered, installed, req.Remove)
+	removing, err := PartsToRemove(offered, installed, req.Remove)
 	if err != nil {
 		return partChange{}, err
 	}
@@ -125,12 +124,12 @@ func (r Readiness) resolvePartChange(ctx context.Context, status BootstrapStatus
 	if err := refuseRemovingUsedParts(removing, users, req.Force); err != nil {
 		return partChange{}, err
 	}
-	wants, err := r.wantedParts(ctx, status.Tier, offered, removing)
+	wants, err := r.WantedParts(ctx, status.Tier, offered, removing)
 	if err != nil {
 		return partChange{}, err
 	}
 	var requested []string
-	if edgePart := bootstrapplan.PartFrontingEdge(offered, r.Edge); edgePart != "" {
+	if edgePart := PartFrontingEdge(offered, r.Edge); edgePart != "" {
 		requested = append(requested, edgePart)
 	}
 	for _, part := range append(slices.Clone(status.Parts), slices.Sorted(maps.Keys(wants))...) {
@@ -138,15 +137,15 @@ func (r Readiness) resolvePartChange(ctx context.Context, status BootstrapStatus
 			requested = append(requested, part)
 		}
 	}
-	requested = bootstrapplan.InOfferedOrder(offered, requested)
+	requested = InOfferedOrder(offered, requested)
 	return partChange{status: status, requested: requested, removing: removing, users: users, wants: wants}, nil
 }
 
-func (r Readiness) installedParts(ctx context.Context, status BootstrapStatus, named []string) ([]string, []provider.BootstrapPart, error) {
+func (r Readiness) installedParts(ctx context.Context, status Status, named []string) ([]string, []provider.BootstrapPart, error) {
 	if len(named) == 0 {
 		return status.Parts, nil, nil
 	}
-	described, err := r.Bootstrap.DescribeParts(ctx, status.description())
+	described, err := r.Bootstrap.DescribeParts(ctx, status.Description())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -173,7 +172,7 @@ func (r Readiness) partUsers(ctx context.Context, tier environment.Tier, describ
 		if at := slices.IndexFunc(described, func(each provider.BootstrapPart) bool { return each.Name == name }); at >= 0 {
 			part = described[at]
 		}
-		if using := usersOf(part, recorded, true); len(using) > 0 {
+		if using := UsersOf(part, recorded, true); len(using) > 0 {
 			users[name] = using
 		}
 	}
@@ -202,7 +201,7 @@ func refuseRemovingUsedParts(removing []string, users map[string][]string, force
 		strings.Join(used, ", "), strings.Join(using, ", "))
 }
 
-func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, offered []provider.Part, removing []string) (map[string][]string, error) {
+func (r Readiness) WantedParts(ctx context.Context, tier environment.Tier, offered []provider.Part, removing []string) (map[string][]string, error) {
 	recorded, err := stackrecords.ListBootstrapWants(ctx, r.KeyValues, tier)
 	if storeAbsent(err) {
 		return nil, nil
@@ -211,7 +210,7 @@ func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, offer
 		return nil, err
 	}
 	wants := map[string][]string{}
-	for _, part := range bootstrapplan.InOfferedOrder(offered, slices.Collect(maps.Keys(recorded))) {
+	for _, part := range InOfferedOrder(offered, slices.Collect(maps.Keys(recorded))) {
 		if !slices.Contains(removing, part) {
 			wants[part] = recorded[part]
 		}
@@ -220,7 +219,7 @@ func (r Readiness) wantedParts(ctx context.Context, tier environment.Tier, offer
 }
 
 func (r Readiness) refuseRemovingEdgePart(offered []provider.Part, removing []string) error {
-	edgePart := bootstrapplan.PartFrontingEdge(offered, r.Edge)
+	edgePart := PartFrontingEdge(offered, r.Edge)
 	if edgePart == "" || !slices.Contains(removing, edgePart) {
 		return nil
 	}
@@ -248,7 +247,7 @@ func (r Readiness) Plan(ctx context.Context, tier environment.Tier, req ApplyReq
 	return r.PlanFrom(ctx, status, req)
 }
 
-func (r Readiness) PlanFrom(ctx context.Context, status BootstrapStatus, req ApplyRequest) (provider.Plan, error) {
+func (r Readiness) PlanFrom(ctx context.Context, status Status, req ApplyRequest) (provider.Plan, error) {
 	change, err := r.resolvePartChange(ctx, status, req)
 	if err != nil {
 		return provider.Plan{}, err
@@ -283,7 +282,7 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 	if err != nil {
 		return err
 	}
-	if err := bootstrapplan.RefuseUnconsentedChanges(shown, drawn); err != nil {
+	if err := provider.RefuseUnconsentedChanges(shown, drawn); err != nil {
 		return err
 	}
 
@@ -292,7 +291,7 @@ func (r Readiness) Apply(ctx context.Context, shown provider.Plan, tier environm
 		return errors.Join(err, r.releaseParts(ctx, tier, claimed))
 	}
 	err = r.Bootstrap.Apply(ctx, change.request(tier, req, r.WrittenBy), progress)
-	r.Statuses.forget()
+	r.Statuses.Forget()
 	if err != nil {
 		return errors.Join(err, r.releaseParts(ctx, tier, claimed))
 	}
@@ -311,12 +310,12 @@ func (r Readiness) Remove(ctx context.Context, shown provider.Plan, tier environ
 		if err != nil {
 			return err
 		}
-		if err := bootstrapplan.RefuseUnconsentedChanges(shown, current); err != nil {
+		if err := provider.RefuseUnconsentedChanges(shown, current); err != nil {
 			return err
 		}
 	}
 	err := r.Bootstrap.Remove(ctx, tier, progress)
-	r.Statuses.forget()
+	r.Statuses.Forget()
 	if err != nil {
 		return err
 	}
@@ -330,7 +329,7 @@ func (r Readiness) Remove(ctx context.Context, shown provider.Plan, tier environ
 }
 
 func (r Readiness) RefuseIfInUse(ctx context.Context, tier environment.Tier) error {
-	users, err := r.BootstrapUsers(ctx, tier)
+	users, err := r.Users(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -371,16 +370,16 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, wantedBy string, required []string, progress progress.Log) (BootstrapStatus, error) {
+func (r Readiness) EnsureReady(ctx context.Context, tier environment.Tier, wantedBy string, required []string, progress progress.Log) (Status, error) {
 	status, err := r.SessionStatus(ctx, tier)
 	if err != nil {
-		return BootstrapStatus{}, err
+		return Status{}, err
 	}
 	command := provider.BootstrapCommand(tier)
 	if !status.Present {
 		return status, refusal.Refuse(refusal.CodeNotReady, "this account has no Ocel bootstrap.\nRun `%s` to create it, then try again", command)
 	}
-	if missing := bootstrapplan.MissingParts(status.Parts, required); len(missing) > 0 {
+	if missing := MissingParts(status.Parts, required); len(missing) > 0 {
 		return status, errors.Join(refuseLacking(missing, command, wantedBy != ""), r.RecordWants(ctx, tier, wantedBy, missing))
 	}
 	if stale := status.Stale(required); len(stale) > 0 {
@@ -426,18 +425,18 @@ func storeAbsent(err error) bool {
 	return errors.As(err, &refused) && refused.Code == refusal.CodeNotReady
 }
 
-type BootstrapUsers struct {
+type Users struct {
 	Projects []string
 	Wildcard string
 }
 
-func (r Readiness) BootstrapUsers(ctx context.Context, tier environment.Tier) (BootstrapUsers, error) {
+func (r Readiness) Users(ctx context.Context, tier environment.Tier) (Users, error) {
 	recorded, err := r.KeyValues.List(ctx, stackrecords.ProjectsPartition(tier))
 	if storeAbsent(err) {
-		return BootstrapUsers{}, nil
+		return Users{}, nil
 	}
 	if err != nil {
-		return BootstrapUsers{}, fmt.Errorf("read the projects deployed here: %w", err)
+		return Users{}, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	var projects []string
 	for _, entry := range recorded {
@@ -448,23 +447,23 @@ func (r Readiness) BootstrapUsers(ctx context.Context, tier environment.Tier) (B
 		projects = append(projects, rest[0])
 	}
 	slices.Sort(projects)
-	users := BootstrapUsers{Projects: slices.Compact(projects)}
+	users := Users{Projects: slices.Compact(projects)}
 
 	wildcard, err := keyvalue.ReadOrEmpty(ctx, r.KeyValues, stackrecords.WildcardKey(tier))
 	if err != nil {
-		return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", tier, err)
+		return Users{}, fmt.Errorf("read the %s preview wildcard: %w", tier, err)
 	}
 	if len(wildcard.Value) > 0 {
 		var recorded stackrecords.Wildcard
 		if err := json.Unmarshal(wildcard.Value, &recorded); err != nil {
-			return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", tier, err)
+			return Users{}, fmt.Errorf("read the %s preview wildcard: %w", tier, err)
 		}
 		users.Wildcard = recorded.BaseDomain
 	}
 	return users, nil
 }
 
-func (u BootstrapUsers) Refuse(tier environment.Tier) error {
+func (u Users) Refuse(tier environment.Tier) error {
 	if len(u.Projects) == 0 && u.Wildcard == "" {
 		return nil
 	}

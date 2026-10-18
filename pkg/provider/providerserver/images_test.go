@@ -111,7 +111,7 @@ func (muteStacks) Provision(_ context.Context, spec provider.StackSpec, _ progre
 	return provider.StackResult{Containers: fake.ProvisionedContainers(spec)}, nil
 }
 
-func (muteStacks) Destroy(context.Context, provider.StackRef, provider.ImageStore, progress.Log) error {
+func (muteStacks) Destroy(context.Context, provider.StackDestroy, progress.Log) error {
 	return nil
 }
 
@@ -179,7 +179,8 @@ type recordReadingStacks struct {
 	named []string
 }
 
-func (s *recordReadingStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+func (s *recordReadingStacks) Destroy(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
+	ref := req.Ref
 	recorded, _, err := stackrecords.Read(ctx, s.store, ref.Tier, ref.Project, ref.Name)
 	if err != nil {
 		return err
@@ -187,13 +188,13 @@ func (s *recordReadingStacks) Destroy(ctx context.Context, ref provider.StackRef
 	s.mu.Lock()
 	s.named = append(s.named, recorded.Image)
 	s.mu.Unlock()
-	return s.Stacks.Destroy(ctx, ref, images, progress)
+	return s.Stacks.Destroy(ctx, req, progress)
 }
 
 func TestAFailedDeployDestroysItsAppStackWithARecordNamingTheImageItPushed(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
 		if spec.Kind == provider.StackApp {
 			return errors.New("the app stack failed")
@@ -1132,11 +1133,7 @@ func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
 	builtProject(t)
 	daemonWithTheBuiltImage(t, "amd64")
 	client, vendor := wrappingServed(t)
-	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ReadNextServerRuntime = func(context.Context) (map[string][]byte, error) {
-			return map[string][]byte{containerimage.NextServerPreloadFile: []byte("a preload")}, nil
-		}
-	})
+	vendor.ServingNextServer()
 
 	result, _ := deploy(t, client, nextContainerRequest())
 	if result == nil || !result.GetSuccess() {
@@ -1152,7 +1149,7 @@ func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
 	}) {
 		t.Errorf("the pushed image has env %v, want the Next adapter path and node options left to the app and the container runtime", env)
 	}
-	next := &images.NextServerRuntime{Files: map[string][]byte{containerimage.NextServerPreloadFile: []byte("a preload")}}
+	next := &images.NextServerRuntime{Files: map[string][]byte{containerimage.NextServerPreloadFile: []byte(fake.NextServerPreload)}}
 	if tag := "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, containerRuntimeBytes, next); pushed[0].ImageRef != tag {
 		t.Errorf("the image is pushed as %q, want %q: the tag names the Next runtime it carries", pushed[0].ImageRef, tag)
 	}
@@ -1278,123 +1275,5 @@ func TestADeployThatReclaimsADroppedBuildHandsTheDestroyTheStoreItPushedTo(t *te
 		if store != provider.ImageStore(vendor.ImageStore()) {
 			t.Errorf("a dropped build was destroyed with %v, want the store the deploy pushed to: it is where that build's image lives", store)
 		}
-	}
-}
-
-type imageRemovingStacks struct {
-	provider.Stacks
-	images *fake.Images
-	image  string
-}
-
-func (s imageRemovingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
-	result, err := s.Stacks.Provision(ctx, spec, progress)
-	if err == nil && spec.Kind == provider.StackApp {
-		err = s.images.Remove(ctx, s.image)
-	}
-	return result, err
-}
-
-func TestAnImageRemovedWhileItsReleaseProvisionedIsPushedAgainAndSaidSo(t *testing.T) {
-	daemonWithTheBuiltImage(t, "amd64")
-	builtProject(t)
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
-	stacks := imageRemovingStacks{Stacks: vendor.Stacks(), images: vendor.ImageStore(), image: pushedCoordinate}
-	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: stacks})
-	bootstrappedOverRPC(t, client)
-
-	result, events := deploy(t, client, registryDeployRequest())
-
-	if !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want the release to land with its image pushed again", result.GetError())
-	}
-	if !vendor.ImageStore().Stored(pushedCoordinate) {
-		t.Errorf("the registry no longer holds %s after the deploy: the release's next task start or cold pull fails with nothing said", pushedCoordinate)
-	}
-	said := false
-	for _, event := range events {
-		if encodingContains(t, event, "left") && encodingContains(t, event, pushedCoordinate) {
-			said = true
-		}
-	}
-	if !said {
-		t.Errorf("the deploy said nothing about %s leaving the registry while it provisioned", pushedCoordinate)
-	}
-}
-
-type pullingStacks struct {
-	provider.Stacks
-	images      *fake.Images
-	image       string
-	removeFirst bool
-	provisions  *int
-}
-
-func (s pullingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
-	result, err := s.Stacks.Provision(ctx, spec, progress)
-	if err != nil || spec.Kind != provider.StackApp {
-		return result, err
-	}
-	*s.provisions++
-	if *s.provisions == 1 {
-		if s.removeFirst {
-			if err := s.images.Remove(ctx, s.image); err != nil {
-				return result, err
-			}
-		}
-		if s.images.Stored(s.image) {
-			return provider.StackResult{}, errors.New("the service never became stable")
-		}
-	}
-	if !s.images.Stored(s.image) {
-		return provider.StackResult{}, errors.New("CannotPullContainerError: " + s.image + " not found")
-	}
-	return result, nil
-}
-
-func TestARemovalThatTakesTheImageBeforeItsReleasePullsItIsPushedAgainAndTheReleaseRetried(t *testing.T) {
-	daemonWithTheBuiltImage(t, "amd64")
-	builtProject(t)
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
-	provisions := 0
-	stacks := pullingStacks{Stacks: vendor.Stacks(), images: vendor.ImageStore(), image: pushedCoordinate, removeFirst: true, provisions: &provisions}
-	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: stacks})
-	bootstrappedOverRPC(t, client)
-
-	result, events := deploy(t, client, registryDeployRequest())
-
-	if !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want the release retried once with its image pushed again: a removal that read the records before this deploy wrote its own took the image between the push check and the pull", result.GetError())
-	}
-	if !vendor.ImageStore().Stored(pushedCoordinate) {
-		t.Errorf("the registry no longer holds %s after the deploy", pushedCoordinate)
-	}
-	said := false
-	for _, event := range events {
-		if encodingContains(t, event, "left") && encodingContains(t, event, pushedCoordinate) {
-			said = true
-		}
-	}
-	if !said {
-		t.Errorf("the deploy said nothing about %s leaving the registry before its release pulled it", pushedCoordinate)
-	}
-}
-
-func TestAReleaseThatFailsWithItsImageInPlaceIsNotRetried(t *testing.T) {
-	daemonWithTheBuiltImage(t, "amd64")
-	builtProject(t)
-	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))
-	provisions := 0
-	stacks := pullingStacks{Stacks: vendor.Stacks(), images: vendor.ImageStore(), image: pushedCoordinate, provisions: &provisions}
-	client := servedProvider(t, "1.0.0", refusingStacks{Provider: vendor, stacks: stacks})
-	bootstrappedOverRPC(t, client)
-
-	result, _ := deploy(t, client, registryDeployRequest())
-
-	if result.GetSuccess() || !strings.Contains(result.GetError(), "never became stable") {
-		t.Errorf("Deploy() = %t, %q, want the release's own failure: only an image that left the registry earns a second attempt", result.GetSuccess(), result.GetError())
-	}
-	if provisions != 1 {
-		t.Errorf("the app stack provisioned %d times, want once", provisions)
 	}
 }

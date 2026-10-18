@@ -15,219 +15,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
-
-func builtTree(t *testing.T, files map[string]string) string {
-	t.Helper()
-	dir := t.TempDir()
-	for rel, body := range files {
-		full := filepath.Join(dir, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return dir
-}
-
-func walked(t *testing.T, dir string) []string {
-	t.Helper()
-	rels, err := images.ArtifactFiles(dir)
-	if err != nil {
-		t.Fatalf("artifactFiles: %v", err)
-	}
-	return rels
-}
-
-func digested(t *testing.T, dir string, overlay map[string][]byte) string {
-	t.Helper()
-	sum, err := providerserver.DigestArtifact(dir, walked(t, dir), overlay)
-	if err != nil {
-		t.Fatalf("digestArtifact: %v", err)
-	}
-	return sum
-}
-
-func TestAnArtifactDigestNamesOneTreeAndOneOverlay(t *testing.T) {
-	files := map[string]string{"src/server.js": "handler", "package.json": `{"name":"app"}`}
-	sealed := map[string][]byte{buildoutput.StateDir + "/variables.sealed": []byte("one")}
-
-	t.Run("one tree built twice digests the same", func(t *testing.T) {
-		if a, b := digested(t, builtTree(t, files), nil), digested(t, builtTree(t, files), nil); a != b {
-			t.Errorf("two identical trees digest to %q and %q, want one key so an unchanged build is not re-uploaded", a, b)
-		}
-	})
-
-	t.Run("changed contents digest apart", func(t *testing.T) {
-		base := digested(t, builtTree(t, map[string]string{"a.js": "one"}), nil)
-		if changed := digested(t, builtTree(t, map[string]string{"a.js": "two"}), nil); base == changed {
-			t.Error("the digest ignored a file's contents, so a function would keep serving the code it replaced")
-		}
-	})
-
-	t.Run("renamed files digest apart", func(t *testing.T) {
-		base := digested(t, builtTree(t, map[string]string{"a.js": "one"}), nil)
-		if changed := digested(t, builtTree(t, map[string]string{"b.js": "one"}), nil); base == changed {
-			t.Error("the digest ignored a rename")
-		}
-	})
-
-	t.Run("a symlink's target digests apart", func(t *testing.T) {
-		linked := func(target string) string {
-			dir := builtTree(t, map[string]string{"a.js": "x", "b.js": "x"})
-			if err := os.Symlink(target, filepath.Join(dir, "link.js")); err != nil {
-				t.Fatal(err)
-			}
-			return digested(t, dir, nil)
-		}
-		if linked("a.js") == linked("b.js") {
-			t.Error("the digest ignored the symlink target")
-		}
-	})
-
-	t.Run("the overlay digests with the tree", func(t *testing.T) {
-		dir := builtTree(t, files)
-		bare, with := digested(t, dir, nil), digested(t, dir, sealed)
-		if bare == with {
-			t.Error("the digest ignored the overlay, so a resealed package would land on the key the old one is stored under")
-		}
-		if again := digested(t, dir, sealed); again != with {
-			t.Errorf("one tree and one overlay digest to %q then %q, want one key", with, again)
-		}
-		other := digested(t, dir, map[string][]byte{buildoutput.StateDir + "/variables.sealed": []byte("two")})
-		if other == with {
-			t.Error("the digest ignored the overlay's contents")
-		}
-	})
-}
-
-func packed(t *testing.T, dir string, overlay map[string][]byte) *zip.Reader {
-	t.Helper()
-	path, err := providerserver.PackArtifact(dir, walked(t, dir), overlay)
-	if err != nil {
-		t.Fatalf("packArtifact: %v", err)
-	}
-	t.Cleanup(func() { os.Remove(path) })
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { file.Close() })
-	size, err := file.Seek(0, io.SeekEnd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	archive, err := zip.NewReader(file, size)
-	if err != nil {
-		t.Fatalf("the packed artifact is not a zip: %v", err)
-	}
-	return archive
-}
-
-func TestAPackedArtifactContainsTheTreeTheOverlayAndItsSymlinks(t *testing.T) {
-	t.Run("the tree and the overlay round trip", func(t *testing.T) {
-		dir := builtTree(t, map[string]string{"src/server.js": "handler", "package.json": "{}"})
-		files := map[string]string{}
-		for _, entry := range packed(t, dir, map[string][]byte{buildoutput.StateDir + "/variables.sealed": []byte("sealed")}).File {
-			body, err := entry.Open()
-			if err != nil {
-				t.Fatal(err)
-			}
-			content, err := io.ReadAll(body)
-			body.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			files[entry.Name] = string(content)
-		}
-		want := map[string]string{
-			"src/server.js": "handler",
-			"package.json":  "{}",
-			buildoutput.StateDir + "/variables.sealed": "sealed",
-		}
-		for name, body := range want {
-			if files[name] != body {
-				t.Errorf("the package contains %s = %q, want %q", name, files[name], body)
-			}
-		}
-		if len(files) != len(want) {
-			t.Errorf("the package contains %v, want exactly %v", files, want)
-		}
-	})
-
-	t.Run("a symlink stays a symlink", func(t *testing.T) {
-		dir := builtTree(t, map[string]string{"real.js": "module.exports={}"})
-		if err := os.Symlink("real.js", filepath.Join(dir, "link.js")); err != nil {
-			t.Fatal(err)
-		}
-		entries := map[string]*zip.File{}
-		for _, entry := range packed(t, dir, nil).File {
-			entries[entry.Name] = entry
-		}
-		link, ok := entries["link.js"]
-		if !ok {
-			t.Fatal("the package dropped the symlink")
-		}
-		if link.Mode()&os.ModeSymlink == 0 {
-			t.Errorf("link.js packed as %v, want a symlink: a resolved copy doubles the package a function boots from", link.Mode())
-		}
-		body, err := link.Open()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer body.Close()
-		target, err := io.ReadAll(body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(target) != "real.js" {
-			t.Errorf("the symlink points at %q, want %q", target, "real.js")
-		}
-		if entries["real.js"].Mode()&os.ModeSymlink != 0 {
-			t.Error("real.js packed as a symlink, want the regular file it is")
-		}
-	})
-}
-
-const sealedFile = buildoutput.StateDir + "/variables.sealed"
-
-type packingProvider struct {
-	*fake.Provider
-
-	mu       sync.Mutex
-	requests []provider.PackAppRequest
-}
-
-func (p *packingProvider) Hooks() provider.Hooks {
-	hooks := p.Provider.Hooks()
-	hooks.PackApp = p.PackApp
-	return hooks
-}
-
-func (p *packingProvider) PackApp(_ context.Context, req provider.PackAppRequest, _ progress.Log) (provider.PackAppResult, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.requests = append(p.requests, req)
-	return provider.PackAppResult{
-		Overlay:     map[string][]byte{sealedFile: []byte("sealed for " + req.App)},
-		VendorState: "bundle for " + req.App,
-	}, nil
-}
-
-func (p *packingProvider) packings() []provider.PackAppRequest {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]provider.PackAppRequest(nil), p.requests...)
-}
 
 func packagedFiles(t *testing.T, p provider.Provider, ref provider.ArtifactRef) map[string]string {
 	t.Helper()
@@ -260,40 +52,12 @@ func packagedFiles(t *testing.T, p provider.Provider, ref provider.ArtifactRef) 
 	return files
 }
 
-func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
-	builtProject(t)
-	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
-	client := servedBy(t, vendor)
-	bootstrappedOverRPC(t, client)
-
-	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q", result.GetError())
-	}
-
-	spec := vendor.FakeStacks().Provisioned()[1]
-	files := packagedFiles(t, vendor, spec.App.Functions[0].Artifact)
-	if _, ok := files[builtEntrypoint]; !ok {
-		t.Errorf("the package contains %v, want the built artifact's own files", files)
-	}
-	if got := files[sealedFile]; got != "sealed for web" {
-		t.Errorf("the package contains %s = %q, want the sealed values the vendor packed; without them the function boots with no variables", sealedFile, got)
-	}
-	if spec.App.VendorState != "bundle for web" {
-		t.Errorf("the app spec has %v, want what the pack handed back: the stack's env must pair with the package it sealed", spec.App.VendorState)
-	}
-
-	requests := vendor.packings()
-	if len(requests) != 1 || requests[0].App != "web" || requests[0].Values.Folder != spec.App.Values.Folder {
-		t.Errorf("the vendor was asked to pack %+v, want the app's own values, once", requests)
-	}
-}
-
 func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1"}, routing)
 
-	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
+	vendor := fake.NewProvider(fake.Options{})
 	client := servedBy(t, vendor)
 	bootstrappedOverRPC(t, client)
 
@@ -315,8 +79,8 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 
 	spec := vendor.FakeStacks().Provisioned()[1]
 	packages := map[string]map[string]string{}
-	for _, fn := range spec.App.Functions {
-		packages[fn.Name] = packagedFiles(t, vendor, fn.Artifact)
+	for _, shipped := range vendor.FakeStacks().Shipped(spec.Ref) {
+		packages[shipped.Name] = packagedFiles(t, vendor, shipped.Ref)
 	}
 	if got := packages["server"][edge.NextRouteTableFile]; got != string(routing) {
 		t.Errorf("the root function's package contains %s = %q, want the route table it routes the app with", edge.NextRouteTableFile, got)
@@ -324,16 +88,13 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 	if _, ok := packages["feed"][edge.NextRouteTableFile]; ok {
 		t.Errorf("a function that routes nothing contains %s", edge.NextRouteTableFile)
 	}
-	if packages["server"][sealedFile] == "" || packages["feed"][sealedFile] == "" {
-		t.Error("the sealed values reach only some of the app's functions, want every one of them")
-	}
 }
 
 func TestDeployPacksTheOcelRouteTableIntoEveryFunctionOfTheApp(t *testing.T) {
 	builtProject(t)
 	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableOcel, RootFunction: "index", FrameworkBuildID: "b1", Needs: revalidating}, []byte(cachedRoutes))
 
-	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
+	vendor := fake.NewProvider(fake.Options{})
 	client := servedBy(t, vendor)
 	bootstrappedOverRPC(t, client)
 
@@ -354,9 +115,9 @@ func TestDeployPacksTheOcelRouteTableIntoEveryFunctionOfTheApp(t *testing.T) {
 	}
 
 	spec := vendor.FakeStacks().Provisioned()[1]
-	for _, fn := range spec.App.Functions {
-		if got := packagedFiles(t, vendor, fn.Artifact)[edge.OcelRouteTableFile]; got != cachedRoutes {
-			t.Errorf("%s's package contains %s = %q, want the table every function of the app reads", fn.Name, edge.OcelRouteTableFile, got)
+	for _, shipped := range vendor.FakeStacks().Shipped(spec.Ref) {
+		if got := packagedFiles(t, vendor, shipped.Ref)[edge.OcelRouteTableFile]; got != cachedRoutes {
+			t.Errorf("%s's package contains %s = %q, want the table every function of the app reads", shipped.Name, edge.OcelRouteTableFile, got)
 		}
 	}
 }

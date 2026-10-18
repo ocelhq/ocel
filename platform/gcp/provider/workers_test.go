@@ -94,19 +94,24 @@ func TestAServerlessAppsWorkersRunFromTheImageOfTheFunctionThatCarriesTheWorkerE
 	t.Parallel()
 
 	app := &provider.AppSpec{App: "web", Functions: []provider.FunctionSpec{
-		{Name: "fn--web--a", Image: "europe-west1-docker.pkg.dev/acme/ocel/web-a@sha256:aaa"},
-		{Name: "fn--web--b", Image: "europe-west1-docker.pkg.dev/acme/ocel/web-b@sha256:bbb", HasWorkerEntry: true},
+		{Name: "fn--web--a"},
+		{Name: "fn--web--b", HasWorkerEntry: true},
 	}}
-	if got, err := workerImageOf(app); err != nil || got != app.Functions[1].Image {
-		t.Errorf("workerImageOf = %s, %v, want %s, the image of the function that carries the worker entry", got, err, app.Functions[1].Image)
+	images := provider.ImagePushes{Pushes: []provider.ImagePush{
+		{App: "fn--web--a", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/web-a@sha256:aaa", Function: true},
+		{App: "fn--web--b", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/web-b@sha256:bbb", Function: true},
+	}}
+	if got, err := workerImageOf(app, images); err != nil || got != images.Pushes[1].ImageRef {
+		t.Errorf("workerImageOf = %s, %v, want %s, the image of the function that carries the worker entry", got, err, images.Pushes[1].ImageRef)
 	}
 }
 
 func TestAServerlessAppsWorkersAreRefusedWhenNoFunctionCarriesTheWorkerEntry(t *testing.T) {
 	t.Parallel()
 
-	app := &provider.AppSpec{App: "web", Functions: []provider.FunctionSpec{{Name: "fn--web--a", Image: "europe-west1-docker.pkg.dev/acme/ocel/web-a@sha256:aaa"}}}
-	if got, err := workerImageOf(app); err == nil || !strings.Contains(err.Error(), "web") {
+	app := &provider.AppSpec{App: "web", Functions: []provider.FunctionSpec{{Name: "fn--web--a"}}}
+	images := provider.ImagePushes{Store: alreadyPushed{}, Pushes: []provider.ImagePush{{App: "fn--web--a", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/web-a@sha256:aaa", Function: true}}}
+	if got, err := workerImageOf(app, images); err == nil || !strings.Contains(err.Error(), "web") {
 		t.Errorf("workerImageOf = %s, %v, want a refusal naming the app", got, err)
 	}
 }

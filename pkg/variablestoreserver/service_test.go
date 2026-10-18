@@ -29,7 +29,7 @@ func served(t *testing.T) (variablestorev1connect.VariableStoreServiceClient, *f
 	t.Helper()
 
 	provider := fake.NewProvider(fake.Options{})
-	backend := variablestoreserver.FixedBackend{KeyValues: provider.KeyValues(), Cipher: provider.Cipher(), VerifyGrants: provider.Hooks().VerifyGrants}
+	backend := variablestoreserver.FixedBackend{KeyValues: provider.KeyValues(), Cipher: provider.Cipher()}
 	return serve(t, &variablestoreserver.Service{Source: backend}), provider
 }
 

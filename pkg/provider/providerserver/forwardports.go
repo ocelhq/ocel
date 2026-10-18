@@ -312,7 +312,7 @@ func forwardedResponse(bindings []provider.Binding, forwards []provider.PortForw
 			resp.Unforwarded = append(resp.Unforwarded, binding.Name)
 			continue
 		}
-		forwarded, err := forwardedBinding(binding, forwards[at].LocalAddress)
+		forwarded, err := forwardedBinding(binding, forwards[at])
 		if err != nil {
 			return nil, err
 		}
@@ -325,14 +325,19 @@ func forwardedResponse(bindings []provider.Binding, forwards []provider.PortForw
 	return resp, nil
 }
 
-func forwardedBinding(binding provider.Binding, localAddress string) (provider.Binding, error) {
-	host, port, err := net.SplitHostPort(localAddress)
+func forwardedBinding(binding provider.Binding, forward provider.PortForward) (provider.Binding, error) {
+	host, port, err := net.SplitHostPort(forward.LocalAddress)
 	if err != nil {
-		return provider.Binding{}, fmt.Errorf("the forward of %s listens on %q, which is no host and port: %w", binding.Name, localAddress, err)
+		return provider.Binding{}, fmt.Errorf("the forward of %s listens on %q, which is no host and port: %w", binding.Name, forward.LocalAddress, err)
 	}
 	properties := maps.Clone(binding.Properties)
+	maps.Copy(properties, forward.Properties)
 	properties[provider.PropertyTLSServerName] = cmp.Or(properties[provider.PropertyTLSServerName], properties[provider.PropertyHost])
 	properties[provider.PropertyHost], properties[provider.PropertyPort] = host, port
 	binding.Properties = properties
+	if binding.Type == provider.BindingPostgres && properties[provider.PropertyPassword] == "" {
+		return provider.Binding{}, fmt.Errorf("the forward of %s came back without the password it names by secret %q, and a client connecting through it has no password to give",
+			binding.Name, binding.PasswordSecret())
+	}
 	return binding, nil
 }

@@ -1,16 +1,14 @@
 package deploy
 
 import (
-	"context"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/pem"
 	"slices"
 	"strings"
 	"testing"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const testSecretARN = "arn:aws:secretsmanager:us-east-1:111122223333:secret:rds!cluster-0a1b2c3d-AbCdEf"
@@ -27,11 +25,7 @@ func postgresOutputs() map[string]any {
 
 func collectTestPostgres(t *testing.T, region string) (*bindingsv1.Binding, error) {
 	t.Helper()
-	secret, err := json.Marshal(map[string]string{"username": postgresMasterUsername, "password": "at-deploy"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return collectPostgresBinding(context.Background(), stubSecrets{secretString: string(secret)}, region, "db--main", postgresOutputs())
+	return collectPostgresBinding(region, "db--main", postgresOutputs())
 }
 
 func certificateNames(t *testing.T, bundle string) []string {
@@ -60,16 +54,31 @@ func TestThePostgresBindingNamesTheSecretItsPasswordRotatesIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collectPostgresBinding: %v", err)
 	}
-	if got := variables.PostgresPasswordSecret(binding); got != testSecretARN {
+	if got := provider.BindingOf(binding).PasswordSecret(); got != testSecretARN {
 		t.Errorf("the binding names %q as its password's secret, want %s: RDS rotates the password there every 7 days, and the runtime reads it from there", got, testSecretARN)
 	}
-	at := slices.IndexFunc(binding.GetGrants(), func(g *bindingsv1.Grant) bool { return g.GetLabel() == variables.PostgresPasswordGrant })
+	at := slices.IndexFunc(binding.GetGrants(), func(g *bindingsv1.Grant) bool { return g.GetLabel() == provider.GrantPasswordSecret })
 	if at < 0 {
 		t.Fatalf("grants = %v, want one that lets the app read the master secret", binding.GetGrants())
 	}
 	grant := binding.GetGrants()[at]
 	if !slices.Equal(grant.GetActions(), []string{"secretsmanager:GetSecretValue"}) || !slices.Equal(grant.GetResources(), []string{testSecretARN}) {
 		t.Errorf("grant = %v, want GetSecretValue on the cluster's secret alone", grant)
+	}
+}
+
+func TestThePostgresBindingCarriesNoPasswordARotationCouldLeaveStale(t *testing.T) {
+	t.Parallel()
+
+	binding, err := collectTestPostgres(t, "us-east-1")
+	if err != nil {
+		t.Fatalf("collectPostgresBinding: %v", err)
+	}
+	if got := binding.GetPostgres().GetPassword(); got != "" {
+		t.Errorf("the binding carries a password of %d bytes, want none: RDS rotates it every 7 days, and every reader resolves it from the secret the binding names", len(got))
+	}
+	if err := provider.VerifyProperties(provider.BindingOf(binding)); err != nil {
+		t.Errorf("VerifyProperties() = %v, want the binding providerserver records", err)
 	}
 }
 

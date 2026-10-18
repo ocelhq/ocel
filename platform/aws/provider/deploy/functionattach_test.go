@@ -56,7 +56,7 @@ func TestAnAppAttachedToTheFunctionNetworkPlacesEveryFunctionInItsPrivateSubnets
 
 	cfg, spec := appStackSpec(t)
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingPostgres, Name: "db--main"}}
-	work, err := releasing(t, cfg).appWork(spec, nil, attachedNetwork())
+	work, err := releasing(t, cfg).appWork(spec, nil, attachedNetwork(), appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -86,7 +86,7 @@ func TestAnAppThatReachesNoVPCOnlyResourceStaysOutsideTheVPC(t *testing.T) {
 
 	cfg, spec := appStackSpec(t)
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingBucket, Name: "bucket--uploads"}}
-	work, err := releasing(t, cfg).appWork(spec, nil, nil)
+	work, err := releasing(t, cfg).appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestATransformThatPlacesAFunctionInAVPCKeepsItOutOfTheFunctionNetwork(t *te
 	cfg, spec := appStackSpec(t)
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingPostgres, Name: "db--main"}}
 	transformed := &transformPatches{vpcBound: map[string]bool{"fn--web--admin": true}}
-	work, err := releasing(t, cfg).appWork(spec, transformed, attachedNetwork())
+	work, err := releasing(t, cfg).appWork(spec, transformed, attachedNetwork(), appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -132,7 +132,7 @@ func TestTheWorkersOfAnAttachedAppRunInThePrivateSubnetsToo(t *testing.T) {
 
 	release, spec, _, _ := newReleaseHostingWorkers(t, "media")
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingKV, Name: "kv--cache"}}
-	work, err := release.appWork(spec, nil, attachedNetwork())
+	work, err := release.appWork(spec, nil, attachedNetwork(), appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}

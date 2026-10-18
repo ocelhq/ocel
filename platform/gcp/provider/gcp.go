@@ -35,8 +35,7 @@ type Provider struct {
 	namespace   provider.Namespace
 	warmRoots   *x509.CertPool
 
-	projectDir string
-	writtenBy  provider.WrittenBy
+	writtenBy provider.WrittenBy
 
 	records keyvalue.Store
 
@@ -63,7 +62,6 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 	if err != nil {
 		return nil, err
 	}
-	p.projectDir = settings.ProjectDir
 	p.writtenBy = settings.WrittenBy
 	return p, nil
 }
@@ -119,24 +117,22 @@ func (p *Provider) Facts() provider.Facts {
 		StoresArtifacts: true,
 		WorkerCeilings:  slices.Clone(workerCeilings),
 
-		RunsGates: true,
+		RunsGates:             true,
+		RunsFunctionsAsImages: true,
 	}
 }
 
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
-		PreflightDeploy:       p.PreflightDeploy,
-		ProgramEdge:           p.ProgramEdge,
-		EnsureImageRegistry:   p.EnsureImageRegistry,
-		OpenDirectImages:      p.OpenDirectImages,
-		CheckBucket:           s3store.Check,
-		EnvSource:             &provider.EnvSourceHooks{ProveIdentity: ports.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
-		RemovePartUser:        p.RemovePartUser,
-		BindingAccess:         &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
-		Cost:                  &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
-		FunctionImages:        &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
-		Retirement:            &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
-		ReadNextServerRuntime: p.ReadNextServerRuntime,
+		PreflightDeploy:     p.PreflightDeploy,
+		ProgramEdge:         p.ProgramEdge,
+		EnsureImageRegistry: p.EnsureImageRegistry,
+		OpenDirectImages:    p.OpenDirectImages,
+		CheckBucket:         s3store.Check,
+		EnvSource:           &provider.EnvSourceHooks{ProveIdentity: ports.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
+		BindingAccess:       &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
+		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		Retirement:          &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
 	}
 }
 

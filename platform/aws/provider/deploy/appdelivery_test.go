@@ -27,11 +27,11 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if err := os.WriteFile(bundlePath, []byte(`{"version":1}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	spec.App.VendorState = appBundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
+	bundle := appBundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
 	spec.App.EdgeRouteTable = edgeRouteTable(appCoordinate(spec).RouteTableKey("ab"))
 
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil, nil)
+	work, err := release.appWork(spec, nil, nil, bundle, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -69,7 +69,7 @@ func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 
 	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil, nil)
+	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}

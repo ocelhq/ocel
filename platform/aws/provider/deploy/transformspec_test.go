@@ -57,7 +57,8 @@ func specUnderTransform() provider.StackSpec {
 			Tier:    environment.TierProduction,
 			Name:    naming.AppStack("production", "api", naming.NewReleaseToken("dep1", "fp1")),
 		},
-		Kind: provider.StackApp,
+		Kind:     provider.StackApp,
+		Recorded: true,
 		Resources: []provider.Resource{
 			{Name: "db", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
 			{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},

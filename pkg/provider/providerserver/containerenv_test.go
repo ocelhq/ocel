@@ -278,7 +278,7 @@ func refusedPlanOn(
 	t.Helper()
 	req.Dry = true
 	var events []*progressv1.OperationEvent
-	stream, err := client.Deploy(context.Background(), req)
+	stream, err := client.Deploy(context.Background(), rooted(req))
 	if err != nil {
 		t.Fatalf("Deploy() error = %v", err)
 	}

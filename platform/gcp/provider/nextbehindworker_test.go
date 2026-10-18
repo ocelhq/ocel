@@ -128,9 +128,9 @@ func TestANextAppBehindTheWorkerIsGrantedItsCachePrefixAndItsTagDatabase(t *test
 
 func TestPrerenderSeedsBehindTheWorkerAllGoToCloudStorage(t *testing.T) {
 	w := behindTheWorkerWithItsSeed(t)
-	plantPrerenders(t, w.p, map[string]string{"cache/blog/post.cache.json": "{}", "fetch-cache/abc": "x"})
+	root := plantPrerenders(t, map[string]string{"cache/blog/post.cache.json": "{}", "fetch-cache/abc": "x"})
 
-	if _, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil); err != nil {
+	if _, err := w.p.ProvisionFunctions(context.Background(), builtAt(w.spec, root), nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -144,12 +144,12 @@ func TestPrerenderSeedsBehindTheWorkerAllGoToCloudStorage(t *testing.T) {
 
 func TestANextServiceBehindTheWorkerOnATierWithNoOriginWildcardSeedsNoPrerenders(t *testing.T) {
 	w := behindTheWorkerWithItsSeed(t)
-	plantPrerenders(t, w.p, map[string]string{"cache/blog/post.cache.json": "{}"})
+	root := plantPrerenders(t, map[string]string{"cache/blog/post.cache.json": "{}"})
 	if err := keyvalue.Forget(context.Background(), w.p.records, originWildcardKey(environment.TierProduction)); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil)
+	_, err := w.p.ProvisionFunctions(context.Background(), builtAt(w.spec, root), nil)
 
 	if refusalCode(err) != refusal.CodeInvalid {
 		t.Errorf("ProvisionFunctions = %v, want the refusal for a tier with no origin domain", err)

@@ -94,7 +94,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 	}
 	spec := provider.StackSpec{Ref: ref, Kind: provider.StackInfra}
 
-	planned, err := automation.Preview(ctx, spec.Ref, spec, nil)
+	planned, err := automation.Preview(ctx, spec.Ref, spec, provider.Lease{}, nil)
 	if err != nil {
 		t.Fatalf("Preview() over an attached plugin = %v", err)
 	}
@@ -105,14 +105,14 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 		t.Fatalf("Preview() pushed %d times, want none: a plan writes nothing", pushed)
 	}
 
-	if _, err := automation.Run(ctx, spec.Ref, spec, nil); err != nil {
+	if _, err := automation.Run(ctx, spec.Ref, spec, provider.Lease{}, nil); err != nil {
 		t.Fatalf("Run() over an attached plugin = %v", err)
 	}
 	if pushed := counter.created.Load(); pushed != 1 {
 		t.Fatalf("Run() pushed %d times, want the one the plan showed", pushed)
 	}
 
-	if err := automation.Destroy(ctx, ref, nil); err != nil {
+	if err := automation.Destroy(ctx, ref, provider.Lease{}, nil); err != nil {
 		t.Fatalf("Destroy() of the stack the plugin wrote into = %v", err)
 	}
 }
@@ -129,7 +129,7 @@ func TestPreviewDestroyOfAProvisionedStackShowsEachResourceGoingOnThePinnedRunti
 		Plugins: []pulumi.Plugin{probePlugin(t, &pushCounter{})},
 	})
 	ref := provider.StackRef{Project: "probe", Tier: environment.TierProduction, Name: naming.InfraStack("prod")}
-	if _, err := automation.Run(ctx, ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
+	if _, err := automation.Run(ctx, ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, provider.Lease{}, nil); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 
@@ -151,7 +151,7 @@ func TestPreviewDestroyOfAProvisionedStackShowsEachResourceGoingOnThePinnedRunti
 		}
 	}
 
-	if err := automation.Destroy(ctx, ref, nil); err != nil {
+	if err := automation.Destroy(ctx, ref, provider.Lease{}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 }
@@ -198,11 +198,11 @@ func refreshingProbe(t *testing.T, counter *pushCounter) (*pulumi.Automation[pro
 		Refresh: func(provider.StackRef, pulumi.Operation) bool { return true },
 	})
 	ref := provider.StackRef{Project: "probe", Tier: environment.TierProduction, Name: naming.InfraStack("prod")}
-	if _, err := automation.Run(context.Background(), ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
+	if _, err := automation.Run(context.Background(), ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, provider.Lease{}, nil); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := automation.Destroy(context.Background(), ref, nil); err != nil {
+		if err := automation.Destroy(context.Background(), ref, provider.Lease{}, nil); err != nil {
 			t.Errorf("Destroy() = %v", err)
 		}
 	})
@@ -217,7 +217,7 @@ func TestARefreshingPreviewOfAStackWhoseResourceVanishedPlansItCreatedAgain(t *t
 	automation, ref := refreshingProbe(t, counter)
 	counter.vanished.Store(true)
 
-	planned, err := automation.Preview(context.Background(), ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil)
+	planned, err := automation.Preview(context.Background(), ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, provider.Lease{}, nil)
 	if err != nil {
 		t.Fatalf("Preview() = %v", err)
 	}

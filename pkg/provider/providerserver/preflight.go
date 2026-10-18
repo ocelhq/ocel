@@ -44,7 +44,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	return stream.Send(&contractv1.PreflightEvent{Body: &contractv1.PreflightEvent_Response{Response: resp}})
 }
 
-func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provider.Provider, readiness Readiness, tier environment.Tier, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
+func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provider.Provider, readiness bootstrapplan.Readiness, tier environment.Tier, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
 	resp := &contractv1.PreflightResponse{Identity: &contractv1.Identity{}}
 	vendor := p.Facts().Vendor
 
@@ -133,7 +133,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	}
 	if req.GetCheckHosts() {
 		_ = steps.run(string(vendor), progress.Checking.Title("the hosts"), func() error {
-			resp.HostChecks = h.hostChecks(ctx, p, provider.HostCheckRequest{Tier: tier, Edge: readiness.Edge, Hostnames: req.GetHostCheckDomains()})
+			resp.HostChecks = h.hostChecks(ctx, readiness.Bootstrap, provider.HostCheckRequest{Tier: tier, Edge: readiness.Edge, Hostnames: req.GetHostCheckDomains()})
 			return nil
 		})
 	}
@@ -162,13 +162,13 @@ func bootstrapName(tier environmentv1.Tier) string {
 }
 
 type bootstrapStatus struct {
-	own             BootstrapStatus
+	own             bootstrapplan.Status
 	siblingPresent  bool
 	knownSlugs      []string
 	previewWildcard *contractv1.PreviewWildcard
 }
 
-func readBootstrap(ctx context.Context, p provider.Provider, readiness Readiness, tier environment.Tier, req *contractv1.PreflightRequest, skipChecks bool) (status bootstrapStatus, err error) {
+func readBootstrap(ctx context.Context, p provider.Provider, readiness bootstrapplan.Readiness, tier environment.Tier, req *contractv1.PreflightRequest, skipChecks bool) (status bootstrapStatus, err error) {
 	if status.own, err = readiness.SessionStatus(ctx, tier); err != nil {
 		return status, err
 	}
@@ -380,7 +380,7 @@ func boundHere(ctx context.Context, store keyvalue.Store, tier environment.Tier,
 	return state.Edge.Bound, nil
 }
 
-func listOtherSlugsIfUnrecorded(ctx context.Context, readiness Readiness, tier environment.Tier, slug string) ([]string, error) {
+func listOtherSlugsIfUnrecorded(ctx context.Context, readiness bootstrapplan.Readiness, tier environment.Tier, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}

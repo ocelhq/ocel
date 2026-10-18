@@ -31,7 +31,7 @@ func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) FakeProje
 }
 `)
 
-	p := fake.NewForProject(fake.Options{}, root)
+	p := fake.NewForProject(fake.Options{})
 	p.FakeConnector().Runs(provider.ConnectorTarget{Fingerprint: fingerprint, Hostname: hostname, OS: "linux", Arch: "amd64"})
 	requests := ServeFake(t, p)
 	InstallConnector(t, string(fake.Vendor), executables.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(FakeConnectorBinary))

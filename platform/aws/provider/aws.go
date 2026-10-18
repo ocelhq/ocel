@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
@@ -53,6 +54,10 @@ func New(ctx context.Context, settings provider.Settings) (provider.Provider, er
 	if err != nil {
 		return nil, err
 	}
+	if decoded.Bytecode.Embed && !decoded.Bytecode.Cache {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"option %q embeds the compile cache and %q warms none: set %q too, or drop embed", "bytecode.embed", "bytecode.cache", "bytecode.cache")
+	}
 	ns, err := provider.NamespaceFromEnv()
 	if err != nil {
 		return nil, err
@@ -87,6 +92,7 @@ func (p *Provider) Facts() provider.Facts {
 		RendersTransforms: true,
 		StoresArtifacts:   true,
 		WorkerCeilings:    deploy.WorkerCeilings,
+		CachesBytecode:    p.options.Bytecode.Cache,
 
 		MaxFunctionBytes: deploy.MaxFunctionBytes,
 	}
@@ -95,12 +101,7 @@ func (p *Provider) Facts() provider.Facts {
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
 		PreflightDeploy:     p.PreflightDeploy,
-		VerifyGrants:        p.VerifyGrants,
 		CheckBucket:         s3store.Check,
-		InspectStack:        p.InspectStack,
-		PackApp:             p.PackApp,
-		EmbedCode:           p.EmbedCode,
-		WarmFunctions:       p.WarmFunctions,
 		ProgramEdge:         p.ProgramEdge,
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenRegistryImages:  p.OpenRegistryImages,

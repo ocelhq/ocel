@@ -2,19 +2,15 @@ package deploy
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 )
 
 const bucketObjectType = "aws:s3/bucketObjectv2:BucketObjectv2"
@@ -43,40 +39,16 @@ func (d *declaring) names() []string {
 	return slices.Clone(d.declared)
 }
 
-func shipping(t *testing.T) provider.Upload {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "entry.zip")
-	if err := os.WriteFile(path, []byte("a built function"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return provider.Upload{
-		Name:   "server",
-		Ref:    provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "functions/shop/web/server-abc123.zip"},
-		Path:   path,
-		Digest: "abc123",
-	}
-}
-
-func shippingSpec(upload provider.Upload) provider.StackSpec {
-	return provider.StackSpec{
-		Ref:     provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
-		Kind:    provider.StackInfra,
-		Uploads: []provider.Upload{upload},
-	}
-}
-
-func TestAnArtifactTheReleaseShipsIsAnEngineResourceInThePlan(t *testing.T) {
+func TestAFunctionTheReleaseShipsIsAnEngineResourceInThePlan(t *testing.T) {
 	t.Parallel()
 
-	upload := shipping(t)
-	engine := &mockedEngine{outputs: auto.OutputMap{}}
-	planned, err := conformingStacks(engine).Plan(context.Background(), shippingSpec(upload), nil)
+	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
+	planned, err := stacksWith(siblingAppConfig(t, "web"), engine).Plan(context.Background(), siblingAppSpec(t, "web"), nil)
 	if err != nil {
-		t.Fatalf("Plan() of a release shipping an artifact = %v", err)
+		t.Fatalf("Plan() of a release shipping a function = %v", err)
 	}
 
-	want := naming.ResourceID(provider.UploadKind, upload.Name)
+	want := naming.ResourceID(functioncode.Kind, "fn--web--entry")
 	for _, group := range planned.Groups {
 		for _, change := range group.Changes {
 			if change.Kind == bucketObjectType && change.Name == want {
@@ -84,21 +56,20 @@ func TestAnArtifactTheReleaseShipsIsAnEngineResourceInThePlan(t *testing.T) {
 			}
 		}
 	}
-	t.Errorf("the plan reads %+v, want the artifact the release ships among the engine's own rows", planned.Groups)
+	t.Errorf("the plan reads %+v, want the function package the release ships among the engine's own rows", planned.Groups)
 }
 
-func TestAnArtifactTheReleaseShipsIsAnEngineResourceInTheApply(t *testing.T) {
+func TestAFunctionTheReleaseShipsIsAnEngineResourceInTheApply(t *testing.T) {
 	t.Parallel()
 
-	upload := shipping(t)
 	watcher := &declaring{inner: standInCloud{}}
-	engine := &mockedEngine{outputs: auto.OutputMap{}, mocks: watcher}
-	if _, err := conformingStacks(engine).Provision(context.Background(), shippingSpec(upload), nil); err != nil {
-		t.Fatalf("Provision() of a release shipping an artifact = %v", err)
+	engine := &mockedEngine{outputs: siblingAppOutputs("web"), mocks: watcher}
+	if _, err := stacksWith(siblingAppConfig(t, "web"), engine).Provision(context.Background(), siblingAppSpec(t, "web"), nil); err != nil {
+		t.Fatalf("Provision() of a release shipping a function = %v", err)
 	}
 
-	want := bucketObjectType + "::" + naming.ResourceID(provider.UploadKind, upload.Name)
+	want := bucketObjectType + "::" + naming.ResourceID(functioncode.Kind, "fn--web--entry")
 	if !slices.Contains(watcher.names(), want) {
-		t.Errorf("the apply declared %v, want %q: the engine ships the artifact, never the deploy behind its back", watcher.names(), want)
+		t.Errorf("the apply declared %v, want %q: the engine ships the function package, never the deploy behind its back", watcher.names(), want)
 	}
 }

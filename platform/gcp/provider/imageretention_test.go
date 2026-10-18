@@ -342,7 +342,7 @@ func TestDestroyingTheLastReleaseOfAFunctionRemovesItsImageFromTheProjectsRegist
 	released.provision(t, only)
 	pushed := fake.NewImages()
 
-	if err := released.stacks.Destroy(context.Background(), only.Ref, pushed, nil); err != nil {
+	if err := released.stacks.Destroy(context.Background(), provider.StackDestroy{Ref: only.Ref, Images: pushed}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 

@@ -126,7 +126,7 @@ func TestProvisionAndDestroyReportEveryResourceTheyTookDown(t *testing.T) {
 	}
 
 	destroyed := newChangeLog()
-	if err := stacks.Destroy(ctx, ref, nil, destroyed); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, destroyed); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if want := []string{"delete bucket uploads", "delete bucket exports"}; !slices.Equal(destroyed.changes, want) {
@@ -152,7 +152,7 @@ func TestProvisionAndDestroyReportEveryAppContainerTheyCreatedAndTookDown(t *tes
 	}
 
 	destroyed := newChangeLog()
-	if err := stacks.Destroy(ctx, ref, nil, destroyed); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: ref}, destroyed); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if want := []string{"delete app container legacy"}; !slices.Equal(destroyed.changes, want) {

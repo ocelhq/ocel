@@ -11,17 +11,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/provider/prerender"
-	"github.com/ocelhq/ocel/pkg/provider/resources"
 )
 
 func (p *Provider) seedPrerenders(ctx context.Context, spec provider.StackSpec, runProgress progress.Log) error {
-	root, err := buildoutput.Root(p.projectDir)
-	if err != nil {
-		return err
-	}
 	isr := spec.App.ISR
-	seeds, err := prerender.Seeds(buildoutput.AppRoot(root, spec.App.App), isr.Prefix)
+	seeds, err := prerender.Seeds(buildoutput.AppRoot(spec.App.OutputRoot, spec.App.App), isr.Prefix)
 	if err != nil {
 		return err
 	}
@@ -32,10 +28,10 @@ func (p *Provider) seedPrerenders(ctx context.Context, spec provider.StackSpec, 
 
 	ensureProgress(runProgress).Say("Uploading " + spec.App.App + "'s " + prerenderCount(len(seeds)))
 	group, ctx := errgroup.WithContext(ctx)
-	group.SetLimit(resources.UploadConcurrency)
+	group.SetLimit(functioncode.UploadConcurrency)
 	for _, seed := range seeds {
 		group.Go(func() error {
-			defer resources.TakeUploadSlot()()
+			defer functioncode.TakeUploadSlot()()
 			body, err := os.ReadFile(seed.Path)
 			if err != nil {
 				return fmt.Errorf("seed %s: %w", seed.Key, err)

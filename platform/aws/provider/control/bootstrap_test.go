@@ -26,8 +26,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -625,7 +625,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 		}
 		return read, err
 	}
-	readiness := providerserver.Readiness{Bootstrap: b, KeyValues: fake.NewKeyValues(), Edge: cloudflareKind}
+	readiness := bootstrapplan.Readiness{Bootstrap: b, KeyValues: fake.NewKeyValues(), Edge: cloudflareKind}
 
 	status, err := readiness.Status(context.Background(), environment.TierProduction)
 	if err != nil {
@@ -636,7 +636,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 		t.Fatal("Status described no stack at all")
 	}
 
-	if _, err := readiness.PlanFrom(context.Background(), status, providerserver.ApplyRequest{}); err != nil {
+	if _, err := readiness.PlanFrom(context.Background(), status, bootstrapplan.ApplyRequest{}); err != nil {
 		t.Fatalf("PlanFrom: %v", err)
 	}
 	if cfn.describes != read {

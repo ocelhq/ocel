@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -16,13 +17,13 @@ import (
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
@@ -158,9 +159,8 @@ func (s sessionBackend) Read() (variablestoreserver.Backend, error) {
 	}
 	hooks := vendor.Hooks()
 	backend := variablestoreserver.Backend{
-		KeyValues:    vendor.KeyValues(),
-		Cipher:       vendor.Cipher(),
-		VerifyGrants: hooks.VerifyGrants,
+		KeyValues: vendor.KeyValues(),
+		Cipher:    vendor.Cipher(),
 	}
 	if hooks.EnvSource != nil {
 		backend.ProveIdentity, backend.EnsureEnvSourceSync = hooks.EnvSource.ProveIdentity, hooks.EnvSource.EnsureSync
@@ -172,12 +172,11 @@ type session struct {
 	config Config
 	writer provider.WrittenBy
 
-	mu         sync.Mutex
-	provider   provider.Provider
-	settings   provider.Settings
-	outputRoot string
+	mu       sync.Mutex
+	provider provider.Provider
+	settings provider.Settings
 
-	bootstrapStatuses BootstrapStatuses
+	bootstrapStatuses bootstrapplan.Statuses
 	previewKeys       openedPreviewKeys
 }
 
@@ -187,22 +186,15 @@ func (s *session) transforms() []string {
 	return s.settings.Transforms
 }
 
-func (s *session) artifactRoot() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.outputRoot
-}
-
 func (s *session) configure(ctx context.Context, settings provider.Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.provider != nil {
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("the provider session is already configured"))
 	}
-	outputRoot, err := buildoutput.Root(settings.ProjectDir)
-	if err != nil {
+	if !filepath.IsAbs(settings.ProjectDir) {
 		return provider.RefusalError(refusal.Refuse(refusal.CodeInvalid,
-			"the provider was configured with the project directory %q, and it reads the build under that directory: configure it with the project's absolute path", settings.ProjectDir))
+			"the provider was configured with the project directory %q, which is not absolute: configure it with the project's absolute path", settings.ProjectDir))
 	}
 	p, err := s.config.New(ctx, settings)
 	if err != nil {
@@ -213,7 +205,6 @@ func (s *session) configure(ctx context.Context, settings provider.Settings) err
 	}
 	s.provider = p
 	s.settings = settings
-	s.outputRoot = outputRoot
 	return nil
 }
 

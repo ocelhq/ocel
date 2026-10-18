@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -31,6 +32,7 @@ type appWork struct {
 	delivery    edgeDelivery
 	stack       string
 	network     *functionNetwork
+	uploads     []functioncode.Upload
 
 	networkPending  bool
 	functionsAttach bool
@@ -53,15 +55,12 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	return stack.register(pctx)
 }
 
-func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches, network *functionNetwork) (*appWork, error) {
+func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches, network *functionNetwork, bundle appBundle, uploads []functioncode.Upload) (*appWork, error) {
 	app := spec.App
 	project, stack := naming.Sanitize(spec.Ref.Project), spec.Ref.Name
 	sessions := newSessionScope(project, stack.Env, r.cfg.StateTableARN)
+	staged := functioncode.Refs(uploads)
 
-	bundle, err := r.appBundle(spec)
-	if err != nil {
-		return nil, err
-	}
 	dispatch, err := r.newDispatchHost(spec)
 	if err != nil {
 		return nil, err
@@ -100,7 +99,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		args[spec.Name] = declared
 		vpcAccess = vpcAccess || transformed.placesInVPC(spec.Name) || declared.Network != nil
 		functions = append(functions, appFunction{Logical: spec.Name, RouteID: spec.Route, HasWorkerEntry: spec.HasWorkerEntry})
-		artifact, err := r.artifactAt(spec.Artifact)
+		artifact, err := r.artifactAt(staged[spec.Name])
 		if err != nil {
 			return nil, fmt.Errorf("place %s's code: %w", spec.Name, err)
 		}
@@ -159,6 +158,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	}
 
 	return &appWork{
+		uploads:     uploads,
 		transformed: transformed,
 		logical:     logical,
 		bundle:      bundle,
@@ -319,13 +319,6 @@ func (r *release) bytecodeCache(spec provider.StackSpec) *bytecodeConfig {
 		return nil
 	}
 	return &bytecodeConfig{Bucket: r.cfg.AssetBucket, Prefix: bytecode.Prefix}
-}
-
-func (r *release) appBundle(spec provider.StackSpec) (appBundle, error) {
-	if sealed, ok := spec.App.VendorState.(appBundle); ok {
-		return sealed, nil
-	}
-	return r.sealApp(spec.Ref.Project, spec.App.App, spec.App.Values)
 }
 
 func (r *release) sealApp(project, app string, values provider.AppValues) (appBundle, error) {

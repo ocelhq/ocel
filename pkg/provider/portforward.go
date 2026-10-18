@@ -11,6 +11,7 @@ type PortForwardRequest struct {
 type PortForward struct {
 	Binding      string
 	LocalAddress string
+	Properties   map[string]string
 	Close        func()
 }
 

@@ -19,15 +19,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func ReclaimPreview(ctx context.Context, p provider.Provider, images provider.ImageStore, slug, pointer string, removed router.PruneResult, progress progress.Log) error {
-	if err := reclaimUnnamed(ctx, p, images, openProjectLedger(p, environment.TierPreview, slug), pointer, removed, progress); err != nil {
+func ReclaimPreview(ctx context.Context, p provider.Provider, teardown provider.StackDestroy, slug, pointer string, removed router.PruneResult, progress progress.Log) error {
+	if err := reclaimUnnamed(ctx, p, teardown, openProjectLedger(p, environment.TierPreview, slug), pointer, removed, progress); err != nil {
 		return err
 	}
-	return destroyPointerStacks(ctx, p, images, slug, pointer,
+	return destroyPointerStacks(ctx, p, teardown, slug, pointer,
 		removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys, progress)
 }
 
-func destroyPointerStacks(ctx context.Context, p provider.Provider, images provider.ImageStore, slug, pointer string, surviving, servingHere []string, progress progress.Log) error {
+func destroyPointerStacks(ctx context.Context, p provider.Provider, teardown provider.StackDestroy, slug, pointer string, surviving, servingHere []string, progress progress.Log) error {
 	entries, err := stackrecords.List(ctx, p.KeyValues(), environment.TierPreview, slug)
 	if err != nil {
 		return err
@@ -62,8 +62,9 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, images provi
 
 	return errors.Join(destroyAppsThenInfra(apps, infra, func(stack naming.StackName) error {
 		progress.Say(fmt.Sprintf("Destroying stack %s (%d of %d)", stack, position[stack], len(provisioned)))
-		ref := provider.StackRef{Project: slug, Tier: environment.TierPreview, Name: stack}
-		if err := p.Stacks().Destroy(ctx, ref, images, progress); err != nil {
+		destroy := teardown
+		destroy.Ref = provider.StackRef{Project: slug, Tier: environment.TierPreview, Name: stack}
+		if err := p.Stacks().Destroy(ctx, destroy, progress); err != nil {
 			return fmt.Errorf("destroy %s: %w", stack, err)
 		}
 		errs := []error{stackrecords.Forget(ctx, p.KeyValues(), environment.TierPreview, slug, stack)}
@@ -154,7 +155,7 @@ func releasesOf(keys []string) map[appRelease]bool {
 	return served
 }
 
-func (s *edgeSession) reclaimDropped(ctx context.Context, images provider.ImageStore, pointer string, dropped []ledger.RecordedPromotion, progress progress.Log) error {
+func (s *edgeSession) reclaimDropped(ctx context.Context, teardown provider.StackDestroy, pointer string, dropped []ledger.RecordedPromotion, progress progress.Log) error {
 	if len(dropped) == 0 {
 		return nil
 	}
@@ -165,7 +166,7 @@ func (s *edgeSession) reclaimDropped(ctx context.Context, images provider.ImageS
 	if err := s.removeDeployments(ctx, unnamed.DeploymentRemovals, progress); err != nil {
 		return err
 	}
-	if err := reclaimUnnamed(ctx, s.provider, images, s.ledger, pointer, unnamed, progress); err != nil {
+	if err := reclaimUnnamed(ctx, s.provider, teardown, s.ledger, pointer, unnamed, progress); err != nil {
 		return err
 	}
 	return s.forgetRemovedDeployments(ctx, pointer, unnamed.DeploymentRemovals)
@@ -176,7 +177,7 @@ func unreclaimedWarning(promotionID string, err error) string {
 		promotionID, ledger.KeptPromotions, err)
 }
 
-func reclaimUnnamed(ctx context.Context, p provider.Provider, images provider.ImageStore, l projectLedger, pointer string, unnamed router.PruneResult, progress progress.Log) error {
+func reclaimUnnamed(ctx context.Context, p provider.Provider, teardown provider.StackDestroy, l projectLedger, pointer string, unnamed router.PruneResult, progress progress.Log) error {
 	removed, err := l.ReadRecords(ctx, unnamed.UnnamedRecordKeys)
 	if err != nil {
 		return err
@@ -194,7 +195,7 @@ func reclaimUnnamed(ctx context.Context, p provider.Provider, images provider.Im
 	failures := destroyAppsThenInfra(positions, nil, func(i int) error {
 		target := targets[i]
 		progress.Say(fmt.Sprintf("Destroying the stack of %s release %s (%d of %d)", target.App, target.Release, i+1, len(targets)))
-		return destroyReclaimTarget(ctx, p, images, l.slug, l.tier, target, progress)
+		return destroyReclaimTarget(ctx, p, teardown, l.slug, l.tier, target, progress)
 	})
 	for i, err := range failures {
 		if err != nil {
@@ -206,9 +207,9 @@ func reclaimUnnamed(ctx context.Context, p provider.Provider, images provider.Im
 	return errors.Join(append(errs, l.ForgetUnnamedRecords(ctx, reclaimed))...)
 }
 
-func destroyReclaimTarget(ctx context.Context, p provider.Provider, images provider.ImageStore, slug string, tier environment.Tier, target ReclaimTarget, progress progress.Log) error {
-	ref := provider.StackRef{Project: slug, Tier: tier, Name: target.Stack}
-	if err := p.Stacks().Destroy(ctx, ref, images, progress); err != nil {
+func destroyReclaimTarget(ctx context.Context, p provider.Provider, teardown provider.StackDestroy, slug string, tier environment.Tier, target ReclaimTarget, progress progress.Log) error {
+	teardown.Ref = provider.StackRef{Project: slug, Tier: tier, Name: target.Stack}
+	if err := p.Stacks().Destroy(ctx, teardown, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", target.Stack, err)
 	}
 	var errs []error
@@ -233,9 +234,6 @@ func envFor(tier environment.Tier, pointer string) string {
 const ownReclaimWindow = 15 * time.Minute
 
 func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
-	if r.dry {
-		return
-	}
 	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), ownReclaimWindow)
 	defer stop()
 	span := RootSpan("reclaim/"+r.spec.PromotionID, environmentSubject(r.spec.Tier, r.spec.Env),
@@ -253,8 +251,8 @@ func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
 func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Log) error {
 	retained := r.provider.Facts().RetainsContainerReleases
 	var provisioned []provider.AppEntry
-	for _, entry := range r.spec.Apps {
-		if r.isProvisioning(entry.App) && !isRetainedContainer(retained, entry.Image) {
+	for slot, entry := range r.spec.Apps {
+		if r.provisioned[slot].provisioning && !isRetainedContainer(retained, entry.Image) {
 			provisioned = append(provisioned, entry)
 		}
 	}
@@ -281,7 +279,7 @@ func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Lo
 	reclaimed := make([]string, 0, len(targets))
 	for i, target := range targets {
 		progress.Say(fmt.Sprintf("Destroying the stack of %s release %s (%d of %d)", target.App, target.Release, i+1, len(targets)))
-		if err := destroyReclaimTarget(ctx, r.provider, r.images, r.spec.Slug, r.spec.Tier, target, progress); err != nil {
+		if err := destroyReclaimTarget(ctx, r.provider, r.teardown(), r.spec.Slug, r.spec.Tier, target, progress); err != nil {
 			errs = append(errs, err)
 			continue
 		}

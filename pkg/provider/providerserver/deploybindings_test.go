@@ -82,7 +82,7 @@ func refusedDeploy(t *testing.T, req *contractv1.DeployRequest, publish func(*fa
 	if publish != nil {
 		publish(vendor)
 	}
-	stream, err := client.Deploy(context.Background(), req)
+	stream, err := client.Deploy(context.Background(), rooted(req))
 	if err != nil {
 		t.Fatalf("Deploy() error = %v", err)
 	}

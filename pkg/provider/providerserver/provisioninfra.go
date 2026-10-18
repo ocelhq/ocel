@@ -54,7 +54,7 @@ func (h *handlers) executeInfraRun(ctx context.Context, req *contractv1.Provisio
 		Edge:           req.GetEdge(),
 		InlineBindings: req.GetInlineBindings(),
 		AliasToken:     req.GetAliasToken(),
-	}, spec, sender)
+	}, spec, applied{}, sender)
 	if err != nil {
 		return nil, err
 	}

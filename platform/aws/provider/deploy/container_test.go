@@ -69,10 +69,11 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	}
 	stack := naming.AppStack("prod", "web", fixedRelease(t))
 	spec := provider.StackSpec{
-		Ref:    provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
-		Kind:   provider.StackApp,
-		Tags:   map[string]string{"ocel:managed-by": "ocel"},
-		Images: provider.ImagePushes{Store: fake.NewImages(), Pushes: []provider.ImagePush{{App: "web", ImageRef: containerImage}}},
+		Ref:      provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
+		Kind:     provider.StackApp,
+		Recorded: true,
+		Tags:     map[string]string{"ocel:managed-by": "ocel"},
+		Images:   provider.ImagePushes{Store: fake.NewImages(), Pushes: []provider.ImagePush{{App: "web", ImageRef: containerImage}}},
 		App: &provider.AppSpec{
 			App:             "web",
 			BuildID:         "d1",
@@ -781,7 +782,7 @@ func TestDestroyingAContainerStackForgetsItsAppThroughTheStoreItWasHanded(t *tes
 	}
 	pushed := fake.NewImages()
 
-	if err := stacks.Destroy(ctx, spec.Ref, pushed, progress.Discard()); err != nil {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref, Images: pushed}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 
@@ -803,7 +804,7 @@ func TestDestroyingAStackThatCannotForgetItsImagesFailsSoARetryReclaimsThem(t *t
 	}
 	retained.refusal = errors.New("ecr:BatchDeleteImage is not granted")
 
-	if err := stacks.Destroy(ctx, spec.Ref, nil, progress.Discard()); !errors.Is(err, retained.refusal) {
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref}, progress.Discard()); !errors.Is(err, retained.refusal) {
 		t.Errorf("Destroy() = %v, want the refusal: the record of the stack stays, and the next destroy reclaims what this one could not", err)
 	}
 }

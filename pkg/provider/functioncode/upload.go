@@ -1,4 +1,4 @@
-package resources
+package functioncode
 
 import (
 	"context"
@@ -11,14 +11,23 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func UploadRows(ctx context.Context, store provider.ArtifactStore, uploads []provider.Upload) ([]provider.Change, error) {
+type Upload struct {
+	Name   string
+	Ref    provider.ArtifactRef
+	Path   string
+	Digest string
+}
+
+const Kind = "artifact"
+
+func Rows(ctx context.Context, store provider.ArtifactStore, uploads []Upload) ([]provider.Change, error) {
 	rows := make([]provider.Change, 0, len(uploads))
 	for _, upload := range uploads {
 		present, err := store.Has(ctx, upload.Ref)
 		if err != nil {
 			return nil, fmt.Errorf("look for %s's artifact: %w", upload.Name, err)
 		}
-		rows = append(rows, provider.Change{Kind: provider.UploadKind, Name: upload.Name, Action: provider.KeepOrCreate(present)})
+		rows = append(rows, provider.Change{Kind: Kind, Name: upload.Name, Action: provider.KeepOrCreate(present)})
 	}
 	return rows, nil
 }
@@ -32,7 +41,7 @@ func TakeUploadSlot() func() {
 	return func() { <-uploadSlots }
 }
 
-func ShipUploads(ctx context.Context, store provider.ArtifactStore, uploads []provider.Upload, progress progress.Log) error {
+func Ship(ctx context.Context, store provider.ArtifactStore, uploads []Upload, progress progress.Log) error {
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(UploadConcurrency)
 	for _, upload := range uploads {
@@ -44,7 +53,7 @@ func ShipUploads(ctx context.Context, store provider.ArtifactStore, uploads []pr
 	return group.Wait()
 }
 
-func ship(ctx context.Context, store provider.ArtifactStore, upload provider.Upload, progress progress.Log) error {
+func ship(ctx context.Context, store provider.ArtifactStore, upload Upload, progress progress.Log) error {
 	present, err := store.Has(ctx, upload.Ref)
 	if err != nil {
 		return fmt.Errorf("look for %s's artifact: %w", upload.Name, err)

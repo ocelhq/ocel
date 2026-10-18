@@ -19,22 +19,24 @@ const (
 )
 
 type Bootstrap struct {
-	mu          sync.Mutex
-	applied     map[environment.Tier][]string
-	stale       map[string]bool
-	unreadable  map[string]string
-	writer      string
-	refusal     error
-	requests    []provider.BootstrapRequest
-	front       edge.Kind
-	raised      []edge.Kind
-	unfinished  bool
-	offered     []provider.Part
-	planned     *provider.Plan
-	planRefusal error
-	removal     *provider.Plan
-	described   int
-	parts       map[environment.Tier][]provider.BootstrapPart
+	mu             sync.Mutex
+	checkHost      func(ctx context.Context, req provider.HostCheckRequest) ([]provider.HostCheck, error)
+	removePartUser func(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error
+	applied        map[environment.Tier][]string
+	stale          map[string]bool
+	unreadable     map[string]string
+	writer         string
+	refusal        error
+	requests       []provider.BootstrapRequest
+	front          edge.Kind
+	raised         []edge.Kind
+	unfinished     bool
+	offered        []provider.Part
+	planned        *provider.Plan
+	planRefusal    error
+	removal        *provider.Plan
+	described      int
+	parts          map[environment.Tier][]provider.BootstrapPart
 }
 
 func NewBootstrap() *Bootstrap {
@@ -195,6 +197,38 @@ func (b *Bootstrap) AddPart(tier environment.Tier, part provider.BootstrapPart) 
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.parts[tier] = append(b.parts[tier], part)
+}
+
+func (b *Bootstrap) CheckingHost(check func(ctx context.Context, req provider.HostCheckRequest) ([]provider.HostCheck, error)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.checkHost = check
+}
+
+func (b *Bootstrap) RemovingPartUser(remove func(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.removePartUser = remove
+}
+
+func (b *Bootstrap) CheckHost(ctx context.Context, req provider.HostCheckRequest) ([]provider.HostCheck, error) {
+	b.mu.Lock()
+	check := b.checkHost
+	b.mu.Unlock()
+	if check == nil {
+		return nil, nil
+	}
+	return check(ctx, req)
+}
+
+func (b *Bootstrap) RemovePartUser(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error {
+	b.mu.Lock()
+	remove := b.removePartUser
+	b.mu.Unlock()
+	if remove == nil {
+		return nil
+	}
+	return remove(ctx, tier, project, progress)
 }
 
 func (b *Bootstrap) DescribeParts(_ context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
