@@ -238,7 +238,7 @@ func TestAnEngineThatRefusesThisLoginIsRefusedBeforeAnythingIsStreamed(t *testin
 	if err == nil {
 		t.Fatal("PreflightDeploy() let a deploy past an engine that refuses this login, and it would surface as a failed image load halfway through the transfer")
 	}
-	for _, wanted := range []string{"docker", "group", host.DeployUser()} {
+	for _, wanted := range []string{"docker", "sudo", host.DeployUser()} {
 		if !strings.Contains(err.Error(), wanted) {
 			t.Errorf("PreflightDeploy() = %q, want %q named as the remedy", err, wanted)
 		}

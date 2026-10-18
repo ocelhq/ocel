@@ -28,17 +28,17 @@ func accountAsDecided(t *testing.T, vm machine) {
 	if len(fields) < 7 {
 		t.Fatalf("getent passwd %s reads %q, and no account exists there", deployLogin, entry)
 	}
-	if fields[5] != "/var/lib/ocel" || fields[6] != "/bin/sh" {
-		t.Errorf("%s has home %q and shell %q, want /var/lib/ocel and /bin/sh", deployLogin, fields[5], fields[6])
+	if fields[5] != "/var/lib/ocel" || fields[6] != host.LoginShell {
+		t.Errorf("%s has home %q and shell %q, want /var/lib/ocel and %s", deployLogin, fields[5], fields[6], host.LoginShell)
 	}
 	if password := strings.TrimSpace(vm.ssh(t, "sudo getent shadow "+deployLogin+" | cut -d: -f2")); password != "*" {
 		t.Errorf("%s has the password field %q, want `*`: a hash is a password and a `!` is a login sshd refuses before it reads a key", deployLogin, password)
 	}
-	if groups := vm.ssh(t, "id -nG "+deployLogin); !strings.Contains(groups, "docker") {
-		t.Errorf("%s is in %q, and a deploy that cannot reach the docker socket deploys nothing", deployLogin, strings.TrimSpace(groups))
+	if groups := strings.Fields(vm.ssh(t, "id -nG "+deployLogin)); len(groups) != 1 || groups[0] != deployLogin {
+		t.Errorf("%s is in %v, and a login in the docker group is root by docker's own account", deployLogin, groups)
 	}
-	if mode := strings.TrimSpace(vm.ssh(t, "sudo stat -c %a /var/lib/ocel")); mode != "750" {
-		t.Errorf("/var/lib/ocel is %q, want 750", mode)
+	if owned := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%U %a' /var/lib/ocel")); owned != "root 711" {
+		t.Errorf("/var/lib/ocel is %q, want root's at 711, so %s can rename nothing a container mounts", owned, deployLogin)
 	}
 
 	rendered, err := vm.authenticates(deployLogin, "id -un")

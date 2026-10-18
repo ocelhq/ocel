@@ -21,7 +21,7 @@ func storeExec(store string) []string {
 		"docker", "exec", "--interactive", store}, storeCurl...)
 }
 
-func (h *Host) calledStore(ctx context.Context, what, script string, body []byte, elevation string) error {
+func (h *Host) calledStore(ctx context.Context, what, script string, body []byte, elevation acting) error {
 	for try := 1; ; try++ {
 		result, err := h.stream(ctx, script, fedBody(body), elevation)
 		if err != nil {

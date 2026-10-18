@@ -138,8 +138,11 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active "+unitName)); active != "active" {
 		t.Errorf("%s is %q after an apply that installed it, want a daemon that serves", unitName, active)
 	}
-	if groups := vm.ssh(t, "id -nG "+deployLogin); !strings.Contains(groups, engineName) {
-		t.Errorf("%s is in %q, and a deploy that cannot reach the engine socket deploys nothing", deployLogin, strings.TrimSpace(groups))
+	if groups := vm.ssh(t, "id -nG "+deployLogin); strings.Contains(groups, engineName) {
+		t.Errorf("%s is in %q, and the docker group is root by docker's own account", deployLogin, strings.TrimSpace(groups))
+	}
+	if _, err := vm.attempt(deployLogin, "docker run --rm --privileged --network none "+host.StaticImage+" /ocel"); err == nil {
+		t.Errorf("%s ran a privileged container, and the checked docker exists to refuse it", deployLogin)
 	}
 	if _, err := vm.attempt(deployLogin, "docker version --format '{{.Server.Version}}'"); err != nil {
 		t.Errorf("%s cannot reach the daemon this bootstrap installed: %v", deployLogin, err)

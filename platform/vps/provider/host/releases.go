@@ -96,7 +96,7 @@ func (h *Host) EnsureImage(ctx context.Context, project, app, imageRef string) (
 		return false, err
 	}
 	said, err := h.ran(ctx, "load "+imageRef+" from its archive if the engine lacks it",
-		acting+"flock -x "+quoted(imagesLock)+" "+releasesCommand(Scope(project, app), "restore", imageRef), nil, "")
+		acting.prefixed("flock -x "+quoted(imagesLock)+" "+releasesCommand(Scope(project, app), "restore", imageRef)), nil, asLogin)
 	if err != nil {
 		return false, err
 	}
@@ -150,7 +150,7 @@ func (h *Host) releases(ctx context.Context, what, scope string, args ...string)
 	if err != nil {
 		return "", err
 	}
-	return h.ran(ctx, what, acting+releasesCommand(scope, args...), nil, "")
+	return h.ran(ctx, what, acting.prefixed(releasesCommand(scope, args...)), nil, asLogin)
 }
 
 func releasesCommand(scope string, args ...string) string {

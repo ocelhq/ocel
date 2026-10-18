@@ -165,7 +165,7 @@ func (b frontBox) RanWithStdin(ctx context.Context, what string, argv []string, 
 	return b.h.ran(ctx, what, words(argv), fed, elevation)
 }
 
-func (b frontBox) elevation(ctx context.Context, argv []string) (string, error) {
+func (b frontBox) elevation(ctx context.Context, argv []string) (acting, error) {
 	if len(argv) == 0 || argv[0] != "docker" && argv[0] != "sh" {
 		return "", nil
 	}

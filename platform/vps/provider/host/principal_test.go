@@ -19,7 +19,7 @@ type account struct {
 }
 
 func decidedAccount() account {
-	return account{shell: "/bin/sh", home: "/var/lib/ocel", groups: "ocel-deploy docker", password: "*"}
+	return account{shell: LoginShell, home: "/var/lib/ocel", groups: "ocel-deploy", password: "*"}
 }
 
 func stubs(t *testing.T, existing *account) string {
@@ -87,8 +87,7 @@ func TestThePrincipalIsWrittenWithALockedPasswordAndNeverThroughPasswd(t *testin
 	log := ran(t, dir)
 
 	for _, want := range []string{
-		"groupadd -r docker",
-		"useradd -r -M -g " + deployUser + " -G docker -d /var/lib/ocel -s /bin/sh " + deployUser,
+		"useradd -r -M -g " + deployUser + " -d /var/lib/ocel -s " + LoginShell + " " + deployUser,
 		"usermod -p * " + deployUser,
 	} {
 		if !strings.Contains(log, want) {
@@ -111,8 +110,11 @@ func TestAPrincipalThatAlreadyExistsIsMovedRatherThanRemade(t *testing.T) {
 	if strings.Contains(log, "useradd") {
 		t.Errorf("writing a principal that already exists ran\n%s\nwant the account it found brought to what ocel writes", log)
 	}
-	if !strings.Contains(log, "usermod -g "+deployUser+" -aG docker -d /var/lib/ocel -s /bin/sh "+deployUser) {
-		t.Errorf("writing a principal that already exists ran\n%s\nwant every field ocel names set on it, and the supplementary list appended to rather than replaced", log)
+	if !strings.Contains(log, "usermod -g "+deployUser+" -G  -d /var/lib/ocel -s "+LoginShell+" "+deployUser) {
+		t.Errorf("writing a principal that already exists ran\n%s\nwant every field ocel names set on it, and its supplementary groups emptied", log)
+	}
+	if strings.Contains(log, "groupadd -r docker") {
+		t.Errorf("writing the principal made the docker group:\n%s", log)
 	}
 }
 
@@ -135,7 +137,8 @@ func TestAPrincipalThatDriftedFromWhatOcelWroteIsNotCurrent(t *testing.T) {
 	for name, drift := range map[string]func(*account){
 		"a shell that refuses a login": func(a *account) { a.shell = "/usr/sbin/nologin" },
 		"a home somewhere else":        func(a *account) { a.home = "/home/ocel-deploy" },
-		"no docker group":              func(a *account) { a.groups = deployUser },
+		"still in the docker group":    func(a *account) { a.groups = deployUser + " docker" },
+		"the shell it had before":      func(a *account) { a.shell = "/bin/sh" },
 		"a password that locks out":    func(a *account) { a.password = "!" },
 		"a password of its own":        func(a *account) { a.password = "$6$salt$hash" },
 	} {

@@ -253,7 +253,7 @@ func TestPlacedSumsOnlyARegularFileAndCallsAnythingElseAtThePathAbsent(t *testin
 			select {
 			case got := <-said:
 				if got[0] != 0 || got[1] != "" {
-					t.Errorf("placed of %s = %v, %q, %q, want nothing said: the switchboard reads with DAC_READ_SEARCH, and a sum of whatever the path leads to is a sum of a file ocel never placed", what, got[0], got[1], got[2])
+					t.Errorf("placed of %s = %v, %q, %q, want nothing said: the switchboard reads with DAC_OVERRIDE, and a sum of whatever the path leads to is a sum of a file ocel never placed", what, got[0], got[1], got[2])
 				}
 			case <-time.After(5 * time.Second):
 				t.Fatalf("placed of %s never returned", what)

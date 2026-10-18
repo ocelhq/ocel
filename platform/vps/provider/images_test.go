@@ -141,8 +141,8 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 			b.hasImage = true
 			b.name(loadedImageRef, loadedImageRef)
 			said = "Loaded image: " + loadedImageRef + "\n"
-		case fields[1] == "pull" && len(fields) > 2:
-			ref := unquoted(fields[2])
+		case fields[1] == "pull" && len(fields) > 2 || fields[1] == "pull-as" && len(fields) > 4:
+			ref := unquoted(fields[len(fields)-1])
 			b.hasImage = true
 			b.name(ref, b.served(ref))
 			said = "sha256-abc: Pulling from shop/web\nDigest: sha256:abc\nStatus: Downloaded newer image for " + ref + "\n"

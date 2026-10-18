@@ -329,18 +329,18 @@ func TestTheEngineCanOnlyEverBePresentOrAbsent(t *testing.T) {
 	}
 }
 
-func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
+func TestTheDocumentSaysWhereTheDaemonTheDeployLoginDrivesCameFrom(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
 	var claim Grant
 	for _, grant := range Grants(tier, Front{}) {
-		if grant.Name == "membership of the "+dockerGroup+" group" {
+		if strings.HasPrefix(grant.Name, "runs docker only through ") {
 			claim = grant
 		}
 	}
 	if claim.Name == "" {
-		t.Fatal("the deploy login is written into the docker group and the document claims no membership of it")
+		t.Fatal("the deploy login drives docker and the document claims no grant for it")
 	}
 	if written(Items(tier, nil, ArchAMD64, Front{}), KindEngine, dockerEngine).Name == "" {
 		t.Fatal("the document names the daemon bootstrap installs and bootstrap installs no engine at all")
@@ -351,8 +351,11 @@ func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 	if !strings.Contains(claim.Detail, "docker "+engineFloor+" or later it finds") {
 		t.Errorf("bootstrap adopts a docker it finds and the membership claim says every daemon came from %s:\n%s", dockerSource, claim.Detail)
 	}
-	if !strings.Contains(claim.Detail, "become root") {
-		t.Errorf("the membership claim stopped saying the group is root under another name:\n%s", claim.Detail)
+	if !strings.Contains(claim.Detail, "in no group that reaches the docker socket") {
+		t.Errorf("the claim stopped saying the deploy login is kept off the socket docker documents as root:\n%s", claim.Detail)
+	}
+	if !strings.Contains(claim.Detail, "mounts the docker socket") {
+		t.Errorf("the claim stopped saying what an adopted proxy holding the socket reaches:\n%s", claim.Detail)
 	}
 }
 

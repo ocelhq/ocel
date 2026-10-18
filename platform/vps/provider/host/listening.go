@@ -20,7 +20,7 @@ const ownersCommand = listenerCommand + "\n" +
 	"echo '" + listeners.NamesMark + "'\n" +
 	`grep -H '' /proc/[0-9]*/comm 2>/dev/null || true`
 
-func (h *Host) portOwners(ctx context.Context, elevation string) ([]listeners.Listener, error) {
+func (h *Host) portOwners(ctx context.Context, elevation acting) ([]listeners.Listener, error) {
 	said, err := h.ran(ctx, "read what listens on this host and which process owns it", ownersCommand, nil, elevation)
 	if err != nil {
 		return nil, err

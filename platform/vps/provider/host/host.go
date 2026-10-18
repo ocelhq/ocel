@@ -34,22 +34,18 @@ type Host struct {
 	proxyOption Front
 	front       proxy.Proxy
 
-	elevating      sync.Mutex
-	elevationKnown bool
-	floored        bool
-	refusal        error
-	elevation      string
+	elevating   sync.Mutex
+	preflighted bool
+	floored     bool
+	refusal     error
+	login       identity
 
 	knowing  sync.Mutex
 	reported string
 
-	rooting sync.Mutex
-	knows   bool
-	prefix  string
-
 	engining sync.Mutex
 	engined  bool
-	engine   string
+	engine   acting
 
 	keying sync.Mutex
 	keyed  []byte
@@ -158,29 +154,78 @@ func (h *Host) forgetting(ctx context.Context) (string, error) {
 	return live.Destination().Forget(), nil
 }
 
-func (h *Host) elevate(ctx context.Context) (string, error) {
+type acting string
+
+const (
+	asLogin acting = ""
+	viaSudo acting = "sudo -n "
+)
+
+func (a acting) wrapping(command string) string {
+	if a == asLogin {
+		return command
+	}
+	return string(a) + "sh -c " + quoted(command)
+}
+
+func (a acting) invoking(argv []string) string { return a.prefixed(words(argv)) }
+
+func (a acting) prefixed(command string) string { return string(a) + command }
+
+type identity struct {
+	mu    sync.Mutex
+	known bool
+	root  bool
+}
+
+func (i *identity) remember(root bool) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.known, i.root = true, root
+}
+
+func (i *identity) recalled() (known, root bool) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.known, i.root
+}
+
+func (h *Host) rootElevation(ctx context.Context, live Conn) (acting, error) {
+	known, root := h.login.recalled()
+	if !known {
+		rendered, err := live.Run(ctx, "id -u")
+		if err != nil {
+			return asLogin, err
+		}
+		root = strings.TrimSpace(rendered) == "0"
+		h.login.remember(root)
+	}
+	if root {
+		return asLogin, nil
+	}
+	return viaSudo, nil
+}
+
+func (h *Host) elevate(ctx context.Context) (acting, error) {
 	h.elevating.Lock()
 	defer h.elevating.Unlock()
-	if h.elevationKnown {
-		return h.elevation, nil
-	}
 	if h.floored {
-		return "", h.refusal
+		return asLogin, h.refusal
 	}
 	live, err := h.dial(ctx)
 	if err != nil {
-		return "", err
+		return asLogin, err
 	}
-	facts, err := live.Preflight(ctx)
-	if err != nil {
-		h.floored, h.refusal = true, err
-		return "", err
+	if !h.preflighted {
+		facts, err := live.Preflight(ctx)
+		if err != nil {
+			h.floored, h.refusal = true, err
+			return asLogin, err
+		}
+		h.preflighted = true
+		h.login.remember(facts.Root)
 	}
-	if !facts.Root {
-		h.elevation = "sudo -n "
-	}
-	h.elevationKnown = true
-	return h.elevation, nil
+	return h.rootElevation(ctx, live)
 }
 
 func (h *Host) Arch(ctx context.Context) (string, error) { return h.arch(ctx) }
@@ -198,53 +243,30 @@ func (h *Host) arch(ctx context.Context) (string, error) {
 	return Architecture(h.reported)
 }
 
-func (h *Host) reaching(ctx context.Context) string {
+func (h *Host) reaching(ctx context.Context) acting {
 	elevation, err := h.elevate(ctx)
 	if err != nil {
-		return ""
+		return asLogin
 	}
 	return elevation
 }
 
-func (h *Host) rootOrSudo(ctx context.Context, live Conn) (string, error) {
-	h.rooting.Lock()
-	defer h.rooting.Unlock()
-	if h.knows {
-		return h.prefix, nil
-	}
-	rendered, err := live.Run(ctx, "id -u")
-	if err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(rendered) != "0" {
-		h.prefix = "sudo -n "
-	}
-	h.knows = true
-	return h.prefix, nil
-}
-
-func (h *Host) stream(ctx context.Context, command string, stdin io.Reader, elevation string) (session.Result, error) {
+func (h *Host) stream(ctx context.Context, command string, stdin io.Reader, elevation acting) (session.Result, error) {
 	live, err := h.dial(ctx)
 	if err != nil {
 		return session.Result{}, err
 	}
 	h.remember(live.Destination().Principal())
-	if elevation != "" {
-		command = elevation + "sh -c " + quoted(command)
-	}
-	return live.Stream(ctx, command, stdin)
+	return live.Stream(ctx, elevation.wrapping(command), stdin)
 }
 
-func (h *Host) streamLines(ctx context.Context, command string, elevation string, each func(session.Line) error) error {
+func (h *Host) streamLines(ctx context.Context, command string, elevation acting, each func(session.Line) error) error {
 	live, err := h.dial(ctx)
 	if err != nil {
 		return err
 	}
 	h.remember(live.Destination().Principal())
-	if elevation != "" {
-		command = elevation + "sh -c " + quoted(command)
-	}
-	return live.RunLines(ctx, command, each)
+	return live.RunLines(ctx, elevation.wrapping(command), each)
 }
 
 func (h *Host) granted(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
@@ -253,11 +275,11 @@ func (h *Host) granted(ctx context.Context, what string, argv []string, stdin io
 		return "", err
 	}
 	h.remember(live.Destination().Principal())
-	elevation, err := h.rootOrSudo(ctx, live)
+	elevation, err := h.rootElevation(ctx, live)
 	if err != nil {
 		return "", err
 	}
-	result, err := live.Stream(ctx, elevation+words(argv), stdin)
+	result, err := live.Stream(ctx, elevation.invoking(argv), stdin)
 	if err != nil {
 		return "", err
 	}
@@ -293,12 +315,12 @@ func (h *Host) reach(ctx context.Context, what, command string, stdin io.Reader)
 	return h.ran(ctx, what, command, stdin, h.reaching(ctx))
 }
 
-func (h *Host) ran(ctx context.Context, what, command string, stdin io.Reader, elevation string) (string, error) {
+func (h *Host) ran(ctx context.Context, what, command string, stdin io.Reader, elevation acting) (string, error) {
 	said, _, err := h.spoke(ctx, what, command, stdin, elevation)
 	return said, err
 }
 
-func (h *Host) spoke(ctx context.Context, what, command string, stdin io.Reader, elevation string) (string, string, error) {
+func (h *Host) spoke(ctx context.Context, what, command string, stdin io.Reader, elevation acting) (string, string, error) {
 	result, err := h.stream(ctx, command, stdin, elevation)
 	if err != nil {
 		return "", "", err
@@ -313,7 +335,7 @@ const saidLines = 4
 
 func unstarted(code int) bool { return code == 126 || code == 127 }
 
-func (h *Host) refuse(what string, result session.Result, elevation string) error {
+func (h *Host) refuse(what string, result session.Result, elevation acting) error {
 	failed := refusal.CodeNotReady
 	if elevation != "" && sudoRefused(result) {
 		failed = refusal.CodeDenied

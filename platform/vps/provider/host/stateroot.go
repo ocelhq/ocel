@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func (h *Host) actAsStateOwner(ctx context.Context) (string, bool) {
+func (h *Host) actAsStateOwner(ctx context.Context) (acting, bool) {
 	live, err := h.dial(ctx)
 	if err != nil || live.Destination().User == stateOwner {
 		return "", false
@@ -23,7 +23,7 @@ func (h *Host) actAsStateOwner(ctx context.Context) (string, bool) {
 	return acting, true
 }
 
-func (h *Host) reachStateRoot(ctx context.Context) (string, error) {
+func (h *Host) reachStateRoot(ctx context.Context) (acting, error) {
 	live, err := h.dial(ctx)
 	if err != nil {
 		return "", err
@@ -43,7 +43,7 @@ func (h *Host) reachStateRoot(ctx context.Context) (string, error) {
 			stateRoot, stateOwner, login, refused.Message, stateOwner)
 	}
 	if elevation == "" {
-		return "runuser -u " + stateOwner + " -- ", nil
+		return acting("runuser -u " + stateOwner + " -- env PATH=" + deployPath + " "), nil
 	}
-	return elevation + "-u " + stateOwner + " ", nil
+	return elevation + acting("-u "+stateOwner+" env PATH="+deployPath+" "), nil
 }

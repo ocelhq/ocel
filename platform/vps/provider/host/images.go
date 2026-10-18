@@ -10,13 +10,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const dockerReach = "docker version"
 
 const StaticImage = "gcr.io/distroless/static-debian12@sha256:d75cdd72874d4790092fcb1b058493ecf6bb5bf2b2b897045b00ff01d91843f2"
 
-func (h *Host) reachDocker(ctx context.Context) (string, error) {
+func (h *Host) reachDocker(ctx context.Context) (acting, error) {
 	h.engining.Lock()
 	defer h.engining.Unlock()
 	if h.engined {
@@ -105,7 +106,7 @@ const (
 	pullCeiling  = 8 * time.Second
 )
 
-func (h *Host) pulling(ctx context.Context, target provider.RegistryTarget, imageRef, command, elevation string) (string, error) {
+func (h *Host) pulling(ctx context.Context, target provider.RegistryTarget, imageRef, command string, elevation acting) (string, error) {
 	what := "pull " + imageRef + " from " + target.Server
 	var said, stderr string
 	var err error
@@ -159,17 +160,11 @@ func pull(target provider.RegistryTarget, imageRef, digest string) (string, erro
 		if err := CheckLogin(target); err != nil {
 			return "", err
 		}
-		steps = append(steps,
-			`config=$(mktemp -d `+quoted(stateRoot+"/"+registryPrefix+"XXXXXX")+`)`,
-			`trap 'rm -rf "$config"; docker logout `+quoted(target.Server)+` >/dev/null 2>&1 || true' EXIT`,
-			`export DOCKER_CONFIG="$config"`,
-			"docker login --username "+quoted(target.Username)+" --password-stdin "+quoted(target.Server),
-		)
+		steps = append(steps, "docker "+live.DockerPullAs+" "+words([]string{target.Server, target.Username, pinned}))
+	} else {
+		steps = append(steps, "docker pull "+quoted(pinned))
 	}
-	steps = append(steps,
-		"docker pull "+quoted(pinned),
-		"docker tag "+quoted(pinned)+" "+quoted(imageRef),
-	)
+	steps = append(steps, "docker tag "+quoted(pinned)+" "+quoted(imageRef))
 	return strings.Join(steps, "\n"), nil
 }
 
@@ -192,7 +187,7 @@ func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (s
 	if err != nil {
 		return "", err
 	}
-	said, err := h.ran(ctx, "load "+imageRef, acting+"flock -x "+quoted(imagesLock)+" docker load", tar, "")
+	said, err := h.ran(ctx, "load "+imageRef, acting.prefixed("flock -x "+quoted(imagesLock)+" docker load"), tar, asLogin)
 	if err != nil {
 		return "", err
 	}
@@ -209,7 +204,7 @@ func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (s
 	return strings.TrimSpace(said), nil
 }
 
-const imagesLock = stateRoot + "/images.lock"
+const imagesLock = releasesRoot + "/images.lock"
 
 func loadEvidenceCommand() string {
 	return strings.Join([]string{
