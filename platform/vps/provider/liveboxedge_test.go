@@ -28,20 +28,20 @@ const (
 	claimHostname = "claimed.example.invalid"
 )
 
-func (vm machine) state(t *testing.T, container string) string {
+func (vm liveBox) state(t *testing.T, container string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.ssh(t,
 		"sudo docker inspect -f '{{.State.Status}}' "+quote(container)+" 2>/dev/null || echo gone"))
 }
 
-type front struct {
+type frontedEdge struct {
 	edge     edge.Edge
 	stack    edge.EdgeStack
 	routes   router.Stack
 	hostname string
 }
 
-func fronting(t *testing.T, p *vps.Provider, slug string) front {
+func fronting(t *testing.T, p *vps.Provider, slug string) frontedEdge {
 	t.Helper()
 
 	opened, err := p.Edges().Open(edge.None, nil)
@@ -58,16 +58,16 @@ func fronting(t *testing.T, p *vps.Provider, slug string) front {
 	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: hostname}); err != nil {
 		t.Fatalf("BindDomain(%s): %v", hostname, err)
 	}
-	return front{edge: opened, stack: stack, routes: routed(t, p, stack), hostname: hostname}
+	return frontedEdge{edge: opened, stack: stack, routes: routed(t, p, stack), hostname: hostname}
 }
 
-func (f front) serves(t *testing.T, vm machine, path string) string {
+func (f frontedEdge) serves(t *testing.T, vm liveBox, path string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 -H "+quote("Host: "+f.hostname)+
 		" http://"+caddy.Container+path))
 }
 
-func liveRecord(tag string, staged release) router.ReleaseRecord {
+func liveRecord(tag string, staged liveRelease) router.ReleaseRecord {
 	return router.ReleaseRecord{
 		App:          liveApp,
 		Release:      tag,
@@ -78,7 +78,7 @@ func liveRecord(tag string, staged release) router.ReleaseRecord {
 	}
 }
 
-func promotes(t *testing.T, p *vps.Provider, stack edge.EdgeStack, id, tag string, staged release, at int64) {
+func promotes(t *testing.T, p *vps.Provider, stack edge.EdgeStack, id, tag string, staged liveRelease, at int64) {
 	t.Helper()
 	promotion := router.Promotion{PromotionID: id, Ts: at, Releases: map[string]string{liveApp: tag}}
 	promoteRecord(t, p, stack, "", promotion, liveRecord(tag, staged))

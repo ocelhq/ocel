@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -132,7 +134,7 @@ func TestFollowContainerLogsOnABoxFollowsEveryContainerAndStopsThemWhenTheCaller
 		t.Fatal(err)
 	}
 	box := localShell{t: t, path: bin}
-	h := New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return box, nil }, nil), Keys{}, nil, Front{})
+	h := New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return box, nil }, nil), Keys{}, nil, front.Proxy{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -143,7 +145,7 @@ func TestFollowContainerLogsOnABoxFollowsEveryContainerAndStopsThemWhenTheCaller
 	)
 	returned := make(chan error, 1)
 	go func() {
-		returned <- h.FollowContainerLogs(ctx, []string{"web", "restarting", "gone"}, followSince, func(container int, line Line) error {
+		returned <- h.containers.FollowLogs(ctx, []string{"web", "restarting", "gone"}, followSince, func(container int, line release.Line) error {
 			mu.Lock()
 			defer mu.Unlock()
 			text := line.Text

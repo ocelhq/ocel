@@ -19,7 +19,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 )
 
 const (
@@ -90,7 +91,7 @@ func liveValueSpec(t *testing.T, tag string, declared provider.AppValues) provid
 	return spec
 }
 
-func (vm machine) proves(t *testing.T, path string) {
+func (vm liveBox) proves(t *testing.T, path string) {
 	t.Helper()
 	vm.ssh(t, "sudo install -m 600 /dev/null "+quote(path))
 	if !vm.exists(t, path) {
@@ -107,7 +108,7 @@ func aPort(said string) bool {
 	return err == nil && port > 0 && port < 65536
 }
 
-func (vm machine) reads(t *testing.T, container, name string) string {
+func (vm liveBox) reads(t *testing.T, container, name string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.beside(t, container, "curl -sS -m 10 'http://127.0.0.1:"+containerimage.PortText+"/env?name="+name+"'"))
 }
@@ -136,7 +137,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 		t.Errorf("the app reads PORT as %q: the runtime answers on %s and fronts the app on a loopback port of its own choosing, which outranks anything an env file names", got, containerimage.PortText)
 	}
 
-	path := host.EnvFile(environment.TierProduction, physical)
+	path := envfile.Path(environment.TierProduction, physical)
 	vm.proves(t, path)
 	if vm.exists(t, path) {
 		t.Errorf("%s survived the deploy that wrote it, and it stores every value the deploy resolved in plaintext", path)
@@ -182,8 +183,8 @@ func TestLiveTheEnvFileIsSixHundredForTheDeployLoginForAsLongAsItExists(t *testi
 	vm, p := onABoxServingContainers(t)
 
 	spec := liveValueSpec(t, "two", resolving(t, p).declared)
-	physical := host.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.BuildID, spec.App.Image)
-	path := host.EnvFile(environment.TierProduction, physical)
+	physical := release.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.BuildID, spec.App.Image)
+	path := envfile.Path(environment.TierProduction, physical)
 
 	watching := "until=$(( $(date +%s) + 180 ))\n" +
 		"while [ \"$(date +%s)\" -lt \"$until\" ]; do\n" +
@@ -225,7 +226,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 	}
 	physical := broken[0].Physical
 
-	refusal := rollingOut(p, release{physical: physical, address: physical + ":" + containerimage.PortText}, 5*time.Second, progress.Discard())
+	refusal := rollingOut(p, liveRelease{physical: physical, address: physical + ":" + containerimage.PortText}, 5*time.Second, progress.Discard())
 	if refusal == nil {
 		t.Fatal("a release of the crash-looping fixture passed its gate")
 	}
@@ -245,7 +246,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 		t.Errorf("the evidence a failed release captured names the container's environment:\n%s", said)
 	}
 
-	path := host.EnvFile(environment.TierProduction, physical)
+	path := envfile.Path(environment.TierProduction, physical)
 	vm.proves(t, path)
 	if vm.exists(t, path) {
 		t.Errorf("%s survived a deploy that fell over", path)
@@ -258,14 +259,14 @@ func TestLiveAContainerThatCannotBeStartedTakesItsEnvFileWithIt(t *testing.T) {
 	resolved := resolving(t, p)
 	spec := liveValueSpec(t, "one", resolved.declared)
 	spec.App.Image = fixtureRepo + ":no-such-tag"
-	physical := host.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.BuildID, spec.App.Image)
+	physical := release.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.BuildID, spec.App.Image)
 
 	_, err := p.ProvisionContainers(context.Background(), spec, progress.Discard())
 	if err == nil {
 		t.Fatal("ProvisionContainers() over an image this box does not have succeeded")
 	}
 
-	path := host.EnvFile(environment.TierProduction, physical)
+	path := envfile.Path(environment.TierProduction, physical)
 	vm.proves(t, path)
 	if vm.exists(t, path) {
 		t.Errorf("%s survived a container start that never happened, and nothing after this deploy takes it back", path)

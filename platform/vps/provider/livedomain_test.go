@@ -102,7 +102,7 @@ func drained(t *testing.T, stream *connect.ServerStreamForClient[progressv1.Oper
 	return asked, said, result
 }
 
-func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.ProviderServiceClient, string) {
+func servingTheBox(t *testing.T) (liveBox, *vps.Provider, contractv1connect.ProviderServiceClient, string) {
 	t.Helper()
 
 	vm, p := onABoxServingContainers(t)
@@ -125,13 +125,13 @@ func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.Prov
 	return vm, p, overTheContract(t, p), liveHostname
 }
 
-func (vm machine) asks(t *testing.T, hostname, path string) string {
+func (vm liveBox) asks(t *testing.T, hostname, path string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 -H "+quote("Host: "+hostname)+
 		" http://"+caddy.Container+path))
 }
 
-func (vm machine) heads(t *testing.T, hostname string) string {
+func (vm liveBox) heads(t *testing.T, hostname string) string {
 	t.Helper()
 	return vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: "+hostname)+
 		" http://"+caddy.Container+"/")

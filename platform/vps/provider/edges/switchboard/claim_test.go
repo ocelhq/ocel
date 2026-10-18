@@ -24,7 +24,7 @@ import (
 
 const pulled = "-----BEGIN CERTIFICATE-----\nthe zone's client certificate\n-----END CERTIFICATE-----\n"
 
-func routedOn(t *testing.T) (*machine, router.Stack) {
+func routedOn(t *testing.T) (*fakeBox, router.Stack) {
 	t.Helper()
 	m, front, stack := reconciled(t)
 	routed, err := switchboard.NewRouter(front.Edge).Open(router.NewStackState(stack.State()))

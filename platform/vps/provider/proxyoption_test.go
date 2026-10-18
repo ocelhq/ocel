@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 )
 
 func proxied(proxy any) provider.Options {
@@ -19,18 +20,18 @@ func TestTheProxyOptionReadsEveryFormItTakes(t *testing.T) {
 
 	for name, tc := range map[string]struct {
 		options provider.Options
-		want    *vps.Proxy
+		want    *front.Proxy
 	}{
 		"left out, ocel runs its own":          {options: provider.Options{"ssh": "prod"}, want: nil},
-		"manual as a shorthand":                {options: proxied("manual"), want: &vps.Proxy{Manual: &vps.Manual{}}},
-		"manual as an object with no port":     {options: proxied(map[string]any{"manual": map[string]any{}}), want: &vps.Proxy{Manual: &vps.Manual{}}},
-		"manual as an object naming a port":    {options: proxied(map[string]any{"manual": map[string]any{"port": 9000}}), want: &vps.Proxy{Manual: &vps.Manual{Port: 9000}}},
-		"manual set to null inside its object": {options: proxied(map[string]any{"manual": nil}), want: &vps.Proxy{Manual: &vps.Manual{}}},
-		"Coolify's Traefik":                    {options: proxied(map[string]any{"traefik": map[string]any{"preset": "coolify"}}), want: &vps.Proxy{Traefik: &vps.Traefik{Preset: "coolify"}}},
-		"Dokploy's Traefik on a port":          {options: proxied(map[string]any{"traefik": map[string]any{"preset": "dokploy", "port": 9000}}), want: &vps.Proxy{Traefik: &vps.Traefik{Preset: "dokploy", Port: 9000}}},
+		"manual as a shorthand":                {options: proxied("manual"), want: &front.Proxy{Manual: &front.Manual{}}},
+		"manual as an object with no port":     {options: proxied(map[string]any{"manual": map[string]any{}}), want: &front.Proxy{Manual: &front.Manual{}}},
+		"manual as an object naming a port":    {options: proxied(map[string]any{"manual": map[string]any{"port": 9000}}), want: &front.Proxy{Manual: &front.Manual{Port: 9000}}},
+		"manual set to null inside its object": {options: proxied(map[string]any{"manual": nil}), want: &front.Proxy{Manual: &front.Manual{}}},
+		"Coolify's Traefik":                    {options: proxied(map[string]any{"traefik": map[string]any{"preset": "coolify"}}), want: &front.Proxy{Traefik: &front.Traefik{Preset: "coolify"}}},
+		"Dokploy's Traefik on a port":          {options: proxied(map[string]any{"traefik": map[string]any{"preset": "dokploy", "port": 9000}}), want: &front.Proxy{Traefik: &front.Traefik{Preset: "dokploy", Port: 9000}}},
 		"a Traefik spelled out": {
 			options: proxied(map[string]any{"traefik": map[string]any{"directory": "/etc/traefik/dynamic", "resolver": "le", "previewResolver": "dns"}}),
-			want:    &vps.Proxy{Traefik: &vps.Traefik{Directory: "/etc/traefik/dynamic", Resolver: "le", PreviewResolver: "dns"}},
+			want:    &front.Proxy{Traefik: &front.Traefik{Directory: "/etc/traefik/dynamic", Resolver: "le", PreviewResolver: "dns"}},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

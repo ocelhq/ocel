@@ -1,12 +1,12 @@
 package host
 
 import (
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 )
 
 const headroomSaid = `root=/var/lib/docker
@@ -20,11 +20,7 @@ size=200B
 func TestTheKeepWindowIsTheOneTheHelperOnTheBoxEnforces(t *testing.T) {
 	t.Parallel()
 
-	read, err := os.ReadFile("releases.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(read), "\nkeep=3\n") {
+	if !strings.Contains(string(release.HelperScript), "\nkeep=3\n") {
 		t.Fatalf("releases.sh does not set keep=3, so %d is arithmetic against a window nothing on the box enforces", KeepWindow)
 	}
 	if KeepWindow != 3 {

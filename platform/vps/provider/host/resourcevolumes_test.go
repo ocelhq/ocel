@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -19,10 +20,10 @@ func TestATierDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
 
 	containers, volumes := -1, -1
 	for at, removal := range taken {
-		switch removal.kind {
-		case KindApps:
+		switch removal.Kind {
+		case machine.KindApps:
 			containers = at
-		case KindResourceVolumes:
+		case machine.KindResourceVolumes:
 			volumes = at
 		}
 	}
@@ -32,7 +33,7 @@ func TestATierDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
 	if containers < 0 || volumes < containers {
 		t.Errorf("the volumes are taken at %d and the containers at %d, and the engine refuses a volume a container still mounts", volumes, containers)
 	}
-	command := taken[volumes].command()
+	command := taken[volumes].Command()
 	if !strings.Contains(command, "docker volume rm") || !strings.Contains(command, "label=ocel.tier=production") {
 		t.Errorf("the volumes are taken by %q, which is bounded by no tier", command)
 	}
@@ -51,7 +52,7 @@ func TestATierDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThem
 	t.Parallel()
 
 	tier := environment.TierProduction
-	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+	box := newBench(map[environment.Tier][]machine.Item{tier: bootstrapped(t, tier)})
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "echo volumes") {
 			return ssh.Result{Stdout: "containers\nvolumes\n"}, true

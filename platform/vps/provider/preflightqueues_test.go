@@ -12,13 +12,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func agentSurveyed(t *testing.T, content []byte) answer {
 	t.Helper()
 	sum := sha256.Sum256(content)
-	return answer{stdout: host.KindFile + "\t" + host.LiveBinary + "\t755\troot\t" + hex.EncodeToString(sum[:]) + "\n"}
+	return answer{stdout: machine.KindFile + "\t" + host.LiveBinary + "\t755\troot\t" + hex.EncodeToString(sum[:]) + "\n"}
 }
 
 func currentAgent(t *testing.T) []byte {

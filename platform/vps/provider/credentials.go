@@ -75,7 +75,7 @@ func (c credentials) Permissions(purpose edge.CredentialPurpose, _ environment.T
 	case edge.PurposeBootstrap:
 		return edge.CredentialDocument{Document: bootstrapDocument(c.login())}, nil
 	case edge.PurposeDeploy:
-		return edge.CredentialDocument{Document: deployDocument(c.provider.options.Proxy.front())}, nil
+		return edge.CredentialDocument{Document: deployDocument(c.provider.options.Proxy.Filled())}, nil
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
 			"unknown credential purpose: want bootstrap or deploy")

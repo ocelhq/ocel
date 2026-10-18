@@ -60,7 +60,7 @@ func (h *Host) probe(ctx context.Context, what, hostname string, flags ...string
 	case 0:
 		return Answer{Router: router.Kind(strings.TrimSpace(result.Stdout))}, nil
 	case proxyNotServingYet:
-		return Answer{Failure: ssh.Spoken(result)}, nil
+		return Answer{Failure: ssh.Reason(result)}, nil
 	default:
 		return Answer{}, h.Refuse(what, result)
 	}

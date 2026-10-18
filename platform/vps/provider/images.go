@@ -8,22 +8,22 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 )
 
 type pulled struct {
-	host   *host.Host
+	images *release.Images
 	at     string
 	from   provider.ImageStore
 	target provider.RegistryTarget
 }
 
 func (p *Provider) OpenRegistryImages(_ context.Context, target provider.RegistryTarget) (provider.ImageStore, error) {
-	if err := host.CheckLogin(target); err != nil {
+	if err := release.CheckLogin(target); err != nil {
 		return nil, err
 	}
 	return pulled{
-		host:   p.host,
+		images: p.images,
 		at:     p.options.SSH.session().Destination(),
 		from:   images.RegistryStore(target),
 		target: target,
@@ -48,7 +48,7 @@ func (p pulled) Has(ctx context.Context, push provider.ImagePush) (bool, error) 
 	if registered, err := p.from.Has(ctx, push); err != nil || !registered {
 		return false, err
 	}
-	return p.host.HasImage(ctx, push.ImageRef)
+	return p.images.Has(ctx, push.ImageRef)
 }
 
 func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress progress.Log) error {
@@ -69,7 +69,7 @@ func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress prog
 		}
 		digest = built.String()
 	}
-	said, err := p.host.PullImage(ctx, p.target, push.ImageRef, digest)
+	said, err := p.images.Pull(ctx, p.target, push.ImageRef, digest)
 	if err != nil && present {
 		said, err = p.pushRemovedImage(ctx, push, digest, err, progress)
 	}
@@ -89,7 +89,7 @@ func (p pulled) pushRemovedImage(ctx context.Context, push provider.ImagePush, d
 	if err := p.from.Push(ctx, push, progress); err != nil {
 		return "", err
 	}
-	return p.host.PullImage(ctx, p.target, push.ImageRef, digest)
+	return p.images.Pull(ctx, p.target, push.ImageRef, digest)
 }
 
 func echo(progress progress.Log, said string) {

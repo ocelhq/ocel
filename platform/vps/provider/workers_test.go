@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
 )
 
 func aWorkerApp() provider.AppSpec {
@@ -94,7 +94,7 @@ func TestAWorkerIsHandedItsNameAndTheAppsValuesButNeverTheEdgesSecret(t *testing
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
-	handed := machine.fedTo("install -m 0600 /dev/stdin '" + host.EnvFile(environment.TierProduction, ledger.Container) + "'")
+	handed := machine.fedTo("install -m 0600 /dev/stdin '" + envfile.Path(environment.TierProduction, ledger.Container) + "'")
 	for _, want := range []string{"OCEL_WORKER=ledger", "GREETING=hello", boxapi.EnvVar + "="} {
 		if !strings.Contains(handed, want) {
 			t.Errorf("ledger is handed %q, want %s in it", handed, want)
@@ -247,7 +247,7 @@ func TestAWorkerAdmitsOnlyDeliveriesSignedWithItsEnvironmentsDeliverySecret(t *t
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
-	handed := machine.fedTo("install -m 0600 /dev/stdin '" + host.EnvFile(environment.TierProduction, ledger.Container) + "'")
+	handed := machine.fedTo("install -m 0600 /dev/stdin '" + envfile.Path(environment.TierProduction, ledger.Container) + "'")
 	if !strings.Contains(handed, edge.OriginSecretVar+"="+string(secret)) {
 		t.Errorf("ledger is handed %q, want %s set to the queue's delivery secret, so its front refuses a POST the engine did not send", handed, edge.OriginSecretVar)
 	}

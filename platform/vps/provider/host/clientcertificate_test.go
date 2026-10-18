@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -145,7 +146,7 @@ func TestMergingAShieldAgainKeepsTheOriginCertificateItAlreadyHolds(t *testing.T
 func TestABoxBehindYourProxyRefusesToShieldAHostnameYourProxyAnswersWithoutACertificate(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	probed := 0
 	answers := "switchboard\n"
 	box.answer = func(command string) (ssh.Result, bool) {
@@ -155,7 +156,7 @@ func TestABoxBehindYourProxyRefusesToShieldAHostnameYourProxyAnswersWithoutACert
 		}
 		return ssh.Result{}, false
 	}
-	yours := box.fronted(Front{Manual: &ManualFront{Port: 8480}})
+	yours := box.fronted(front.Proxy{Manual: &front.Manual{Port: 8480}})
 
 	err := yours.RefuseUnshielded(context.Background(), "shop.example.com")
 	var refused refusal.Refusal

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -33,7 +34,7 @@ func claimingBox(t *testing.T, state boxapi.RoutingTable) *claimBench {
 	t.Helper()
 
 	mustRender(t, state)
-	box := &claimBench{bench: machine(nil), recorded: string(mustWrite(t, state))}
+	box := &claimBench{bench: newBench(nil), recorded: string(mustWrite(t, state))}
 	box.answer = servesProxy(box.bench, &box.recorded)
 	return box
 }
@@ -361,12 +362,12 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	box := claimingBox(t, state)
 
-	rollout := Rollout{
-		Apps:          []AppRollout{{RouteKey: keyed("web"), Target: "shop-web-3333:" + containerimage.PortText, HealthPath: "/healthz"}},
+	rollout := release.Rollout{
+		Apps:          []release.AppRollout{{RouteKey: keyed("web"), Target: "shop-web-3333:" + containerimage.PortText, HealthPath: "/healthz"}},
 		DeployTimeout: routing.DeployWindow,
 		DrainTimeout:  routing.DrainWindow,
 	}
-	if err := box.host().RollOut(context.Background(), rollout, progress.Discard()); err != nil {
+	if err := box.host().containers.RollOut(context.Background(), rollout, progress.Discard()); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 
@@ -415,8 +416,8 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 
 	box := claimingBox(t, twoProjects())
 	blog := boxapi.RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}
-	if err := box.host().RollOut(context.Background(), Rollout{
-		Apps:          []AppRollout{{RouteKey: blog, Target: "blog-web-4444:" + containerimage.PortText, HealthPath: "/healthz"}},
+	if err := box.host().containers.RollOut(context.Background(), release.Rollout{
+		Apps:          []release.AppRollout{{RouteKey: blog, Target: "blog-web-4444:" + containerimage.PortText, HealthPath: "/healthz"}},
 		DeployTimeout: routing.DeployWindow,
 		DrainTimeout:  routing.DrainWindow,
 	}, progress.Discard()); err != nil {

@@ -19,7 +19,8 @@ import (
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -170,7 +171,7 @@ func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, host.KeptPath(environment.TierProduction, "shop-prod-infra-store-s3")) {
+	if !strings.Contains(joined, container.KeptPath(environment.TierProduction, "shop-prod-infra-store-s3")) {
 		t.Fatalf("nothing about the store's credential was kept on the box:\n%s", joined)
 	}
 	for _, fed := range machine.feeds() {
@@ -178,7 +179,7 @@ func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 			t.Fatalf("the store's root credential was sent to the box outside the env file it is handed in:\n%s", fed)
 		}
 	}
-	handed := host.EnvFile(environment.TierProduction, "shop-prod-infra-store-s3")
+	handed := envfile.Path(environment.TierProduction, "shop-prod-infra-store-s3")
 	if !strings.Contains(joined, "rm -f "+quotedPath(handed)) {
 		t.Fatalf("the file the store's credential was handed over in is left on the box:\n%s", joined)
 	}
@@ -222,7 +223,7 @@ func TestTheSecretAStoreAccountIsMintedWithIsOneTheStoreWillTake(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MintStoreSecret() = %v", err)
 	}
-	if err := host.CheckStoreSecret(secret); err != nil {
+	if err := vps.CheckStoreSecret(secret); err != nil {
 		t.Errorf("a minted store secret is %d characters: %v", len(secret), err)
 	}
 }

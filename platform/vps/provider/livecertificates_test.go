@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
-func placedOnTheBox(t *testing.T, vm machine, at string, names []string, until time.Duration) {
+func placedOnTheBox(t *testing.T, vm liveBox, at string, names []string, until time.Duration) {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -58,7 +58,7 @@ func placedOnTheBox(t *testing.T, vm machine, at string, names []string, until t
 	vm.ssh(t, "sudo chmod 0600 "+quote(boxapi.PinKey(at)))
 }
 
-func (vm machine) proxyLogBytes(t *testing.T) int {
+func (vm liveBox) proxyLogBytes(t *testing.T) int {
 	t.Helper()
 
 	counted, err := strconv.Atoi(strings.TrimSpace(
@@ -69,7 +69,7 @@ func (vm machine) proxyLogBytes(t *testing.T) int {
 	return counted
 }
 
-func (vm machine) proxyLogSince(t *testing.T, written int) string {
+func (vm liveBox) proxyLogSince(t *testing.T, written int) string {
 	t.Helper()
 
 	return vm.ssh(t, "sudo docker logs "+caddy.Container+" 2>&1 | tail -c +"+strconv.Itoa(written+1))

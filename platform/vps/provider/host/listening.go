@@ -84,7 +84,7 @@ func (h *Host) CheckSwitchboard(ctx context.Context, tier environment.Tier) prov
 	case "":
 		check.Finding = fmt.Sprintf("no %s container on this box, so nothing routes what the front proxy forwards: %s", board.Name, state)
 	case "running":
-		check.Finding = fmt.Sprintf("%s %s: %s", board.Name, board.Unready, ssh.Spoken(result))
+		check.Finding = fmt.Sprintf("%s %s: %s", board.Name, board.Unready, ssh.Reason(result))
 	default:
 		check.Finding = fmt.Sprintf("%s is %s, so nothing routes what the front proxy forwards: %s", board.Name, status, state)
 		check.Fix = "check `docker logs " + board.Name + "`, then " + check.Fix

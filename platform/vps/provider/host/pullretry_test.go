@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -17,8 +20,8 @@ func TestEveryContainerThisHostStartsPullsItsImageAheadOfRunningIt(t *testing.T)
 		image   string
 		command string
 	}{
-		"an app container":     {app.Image, runContainerScript(app, handedTo(app))},
-		"a resource container": {resource.Image, runResourceScript(resource, "0123456789ab", EnvFile(resource.Tier, resource.Name))},
+		"an app container":     {app.Image, release.RunContainerScript(app, handedTo(app))},
+		"a resource container": {resource.Image, container.RunScript(resource, "0123456789ab", envfile.Path(resource.Tier, resource.Name))},
 	} {
 		pull := strings.Index(container.command, "docker pull "+shell.Quote(container.image))
 		run := strings.Index(container.command, shell.Quote("--name"))
@@ -27,7 +30,7 @@ func TestEveryContainerThisHostStartsPullsItsImageAheadOfRunningIt(t *testing.T)
 		}
 		for _, want := range []string{
 			"docker image inspect " + shell.Quote(container.image),
-			fmt.Sprintf("-ge %d", appPulls),
+			fmt.Sprintf("-ge %d", release.ContainerPullAttempts),
 		} {
 			if !strings.Contains(container.command, want) {
 				t.Errorf("%s contains no %q, so its pull is either unbounded or repeated on a box that already has the image:\n%s", what, want, container.command)

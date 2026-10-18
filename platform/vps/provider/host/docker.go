@@ -9,13 +9,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
-)
-
-const (
-	KindEngine = "docker:engine"
-	KindUnit   = "systemd:unit"
 )
 
 const (
@@ -35,23 +31,18 @@ const engineInstallTries = 3
 
 var engineInstallBackoff = shell.Backoff{Base: 15, Ceiling: 60, Spread: 15}
 
-const (
-	engineFact = "engine=present\n"
-	unitFacts  = "active=active\nenabled=enabled\n"
-)
-
-func EngineItems() []Item {
-	return []Item{engineItem(), unitItem(), liveRestoreItem()}
+func EngineItems() []machine.Item {
+	return []machine.Item{engineItem(), unitItem(), liveRestoreItem()}
 }
 
-func engineItem() Item {
-	return Item{
-		Kind:    KindEngine,
+func engineItem() machine.Item {
+	return machine.Item{
+		Kind:    machine.KindEngine,
 		Name:    dockerEngine,
-		script:  func(Item) string { return engineCommand() },
-		survey:  func(Item) string { return engineProbe() },
-		Owner:   rootOwner,
-		Content: []byte(engineFact),
+		Script:  func(machine.Item) string { return engineCommand() },
+		Survey:  func(machine.Item) string { return engineProbe() },
+		Owner:   machine.RootOwner,
+		Content: []byte(machine.EngineFact),
 		Slow:    true,
 		Note:    "docker " + dockerVersion + ", installed once; upgrading it is yours from then on",
 	}
@@ -61,21 +52,21 @@ func adoptedEngine(version string) string {
 	return "docker " + version + ", not managed by ocel: upgrading it is yours"
 }
 
-func unitItem() Item {
-	return systemdUnit(Item{
+func unitItem() machine.Item {
+	return machine.SystemdUnit(machine.Item{
 		Name:    dockerUnit,
-		Owner:   rootOwner,
-		Content: []byte(unitFacts),
+		Owner:   machine.RootOwner,
+		Content: []byte(machine.UnitFacts),
 		Slow:    true,
 	})
 }
 
-func keptEngine() removal {
-	return removal{
-		kind:   KindEngine,
-		path:   dockerEngine,
-		action: provider.ActionKeep,
-		reason: "docker and its containers stay",
+func keptEngine() machine.Removal {
+	return machine.Removal{
+		Kind:   machine.KindEngine,
+		Path:   dockerEngine,
+		Action: provider.ActionKeep,
+		Reason: "docker and its containers stay",
 	}
 }
 
@@ -128,7 +119,7 @@ func (h *Host) installEngine(ctx context.Context, progress progress.Log) error {
 		}
 		progress.Warn(fmt.Sprintf("Docker's install on %s failed on try %d of %d and runs again",
 			h.Named(), try, engineInstallTries))
-		for _, line := range strings.Split(ssh.Spoken(result), "\n") {
+		for _, line := range strings.Split(ssh.Reason(result), "\n") {
 			progress.Detail(line)
 		}
 		if err := h.Wait(ctx, engineInstallBackoff.After(try)); err != nil {
@@ -136,16 +127,6 @@ func (h *Host) installEngine(ctx context.Context, progress progress.Log) error {
 		}
 	}
 }
-
-func unitCommand(i Item) string {
-	name := shell.Quote(i.Name)
-	if len(i.Watch) == 0 {
-		return "systemctl enable --now " + name
-	}
-	return "set -e\nsystemctl daemon-reload\nsystemctl enable " + name + "\nsystemctl restart " + name
-}
-
-const engineFactsRow = "probe:engine"
 
 type engineKind string
 
@@ -168,12 +149,12 @@ case "$(systemctl is-enabled ` + shell.Quote(dockerUnit) + ` 2>/dev/null)" in ma
 version=''
 if command -v ` + shell.Quote(dockerEngine) + ` >/dev/null 2>&1; then
 if systemctl cat ` + shell.Quote(dockerUnit) + ` >/dev/null 2>&1; then engine=present
-elif ` + systemdAnswers + `; then engine=` + shell.Quote(string(engineUnserved)) + `
+elif ` + machine.SystemdAnswers + `; then engine=` + shell.Quote(string(engineUnserved)) + `
 else engine=''
-` + unreadable(KindEngine, shell.Quote(dockerEngine), `'systemctl did not answer: check systemctl status (ocel needs systemd)'`) + `
+` + machine.Unreadable(machine.KindEngine, shell.Quote(dockerEngine), `'systemctl did not answer: check systemctl status (ocel needs systemd)'`) + `
 fi
 if [ -n "$engine" ]; then
-` + reports(shell.Quote(KindEngine), shell.Quote(dockerEngine), "0", shell.Quote(rootOwner),
+` + machine.Reports(shell.Quote(machine.KindEngine), shell.Quote(dockerEngine), "0", shell.Quote(machine.RootOwner),
 		`"$(printf 'engine=%s\n' "$engine" | sha256sum | cut -d' ' -f1)"`) + `
 if [ -n "$kind" ]; then :
 elif [ "$engine" = present ]; then kind=` + string(engineStandard) + `
@@ -186,7 +167,7 @@ version=$(timeout 10 ` + shell.Quote(dockerEngine) + ` version --format '{{.Serv
 fi
 fi
 if [ -n "$kind" ]; then
-` + reports(shell.Quote(engineFactsRow), shell.Quote(dockerEngine), "0", `"$kind"`, `"$version"`) + `
+` + machine.Reports(shell.Quote(machine.EngineFactsRow), shell.Quote(dockerEngine), "0", `"$kind"`, `"$version"`) + `
 fi`
 }
 
@@ -249,7 +230,7 @@ func (e InstalledEngine) release() (int, int, bool) {
 func readEngine(rendered string) InstalledEngine {
 	for line := range strings.Lines(rendered) {
 		columns := strings.Split(strings.TrimRight(line, "\r\n"), "\t")
-		if len(columns) == 5 && columns[0] == engineFactsRow {
+		if len(columns) == 5 && columns[0] == machine.EngineFactsRow {
 			return InstalledEngine{Kind: engineKind(columns[3]), Version: engineVersion(columns[4])}
 		}
 	}
@@ -262,31 +243,4 @@ func engineVersion(said string) string {
 		said, _, _ = strings.Cut(rest, ",")
 	}
 	return said
-}
-
-const systemdAnswers = "systemctl list-unit-files >/dev/null 2>&1"
-
-func unitProbe(i Item) string {
-	name := shell.Quote(i.Name)
-	watching := ""
-	for _, path := range i.Watch {
-		watching += "printf 'watch=%s\\n' \"$(sha256sum " + shell.Quote(path) + " 2>/dev/null | cut -d' ' -f1)\"\n"
-	}
-	return `if systemctl cat ` + name + ` >/dev/null 2>&1; then
-active=$(systemctl is-active ` + name + ` 2>/dev/null || true)
-enabled=$(systemctl is-enabled ` + name + ` 2>/dev/null || true)
-facts=$( printf 'active=%s\nenabled=%s\n' "$active" "$enabled"
-` + watching + `)
-` + reports(shell.Quote(KindUnit), name, "0", shell.Quote(rootOwner), `"$(printf '%s\n' "$facts" | sha256sum | cut -d' ' -f1)"`) + `
-elif ! ` + systemdAnswers + `; then
-` + unreadable(KindUnit, name, `'systemctl did not answer'`) + `
-fi`
-}
-
-func unitWatchFacts(watched ...[]byte) []byte {
-	facts := unitFacts
-	for _, content := range watched {
-		facts += "watch=" + contentSum(content) + "\n"
-	}
-	return []byte(facts)
 }

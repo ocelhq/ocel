@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -67,7 +68,7 @@ var plain = map[string]bool{
 
 var plainImages = map[string]bool{"ls": true, "inspect": true, "rm": true, "tag": true, "pull": true}
 
-var plainNetworks = map[string]bool{"inspect": true, "ls": true, "rm": true, "disconnect": true}
+var plainNetworks = map[string]bool{"inspect": true, "ls": true, "rm": true}
 
 var plainVolumes = map[string]bool{"inspect": true, "ls": true, "rm": true}
 
@@ -82,7 +83,7 @@ func (p Policy) Open(ctx context.Context, argv []string) (Invocation, error) {
 	case plain[verb]:
 		return Invocation{Argv: argv}, nil
 	case verb == "run" || verb == "create":
-		return p.opened(verb, rest, func() flagSet { return p.runFlags(ctx) })
+		return p.run(ctx, verb, rest)
 	case verb == "exec":
 		return p.exec(ctx, rest)
 	case verb == "rename":
@@ -102,7 +103,9 @@ func (p Policy) Open(ctx context.Context, argv []string) (Invocation, error) {
 	case verb == "network" && len(rest) > 0 && rest[0] == "create":
 		return p.opened("network create", rest[1:], p.networkCreateFlags)
 	case verb == "network" && len(rest) > 0 && rest[0] == "connect":
-		return p.connect(rest[1:])
+		return p.joined(ctx, "connect", rest[1:], setOf("--alias"), nil)
+	case verb == "network" && len(rest) > 0 && rest[0] == "disconnect":
+		return p.joined(ctx, "disconnect", rest[1:], nil, setOf("--force", "-f"))
 	case verb == "volume" && len(rest) > 0 && plainVolumes[rest[0]]:
 		return Invocation{Argv: argv}, nil
 	case verb == "volume" && len(rest) > 0 && rest[0] == "create":
@@ -122,21 +125,35 @@ type flagSet struct {
 }
 
 func (p Policy) opened(verb string, args []string, set func() flagSet) (Invocation, error) {
-	inv, operands, err := p.parse(strings.Fields(verb), args, set())
+	inv, _, err := p.parse(strings.Fields(verb), args, set())
 	if err != nil {
 		inv.Close()
 		return Invocation{}, err
 	}
-	switch verb {
-	case "run", "create":
-		if !slices.Contains(inv.Argv, "--network") && !slices.ContainsFunc(inv.Argv, func(arg string) bool { return strings.HasPrefix(arg, "--network=") }) {
-			inv.Close()
-			return Invocation{}, refuse("docker %s names no --network, and the default bridge reaches containers no deploy owns", verb)
+	return inv, nil
+}
+
+func (p Policy) run(ctx context.Context, verb string, args []string) (Invocation, error) {
+	set := p.runFlags(ctx)
+	networked := false
+	check := set.check
+	set.check = func(inv *Invocation, flag, value string) error {
+		if flag == "--network" {
+			networked = true
 		}
-		if len(operands) == 0 {
-			inv.Close()
-			return Invocation{}, refuse("docker %s names no image", verb)
-		}
+		return check(inv, flag, value)
+	}
+	inv, operands, err := p.parse([]string{verb}, args, set)
+	switch {
+	case err != nil:
+	case !networked:
+		err = refuse("docker %s names no --network before its image, and the default bridge reaches containers no deploy owns", verb)
+	case len(operands) == 0 || operands[0] == "--" && len(operands) == 1:
+		err = refuse("docker %s names no image", verb)
+	}
+	if err != nil {
+		inv.Close()
+		return Invocation{}, err
 	}
 	return inv, nil
 }
@@ -248,6 +265,9 @@ func (p Policy) refuseMount(ctx context.Context, spec string) error {
 	case "bind":
 		return p.refuseBind(source, !readonly)
 	case "volume":
+		if source != "" && !volumeName.MatchString(source) {
+			return refuse("--mount source %s is not a volume name, and a deploy binds a path only as type=bind", source)
+		}
 		return p.refuseBoundVolume(ctx, source)
 	case "tmpfs":
 		return nil
@@ -255,13 +275,42 @@ func (p Policy) refuseMount(ctx context.Context, spec string) error {
 	return refuse("--mount type %s is not one a deploy mounts", kind)
 }
 
+var volumeName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
+
+var volumeOptions = setOf("ro", "rw", "z", "Z", "nocopy", "shared", "rshared", "slave", "rslave", "private", "rprivate",
+	"delegated", "cached", "consistent")
+
 func (p Policy) refuseVolume(ctx context.Context, spec string) error {
-	source, rest, _ := strings.Cut(spec, ":")
-	if !strings.HasPrefix(source, "/") {
+	parts := strings.Split(spec, ":")
+	if len(parts) == 1 {
+		return refuseTarget(spec, parts[0])
+	}
+	if len(parts) > 3 {
+		return refuse("--volume %s is not source:target[:options]", spec)
+	}
+	source, options := parts[0], []string{}
+	if err := refuseTarget(spec, parts[1]); err != nil {
+		return err
+	}
+	if len(parts) == 3 {
+		options = strings.Split(parts[2], ",")
+	}
+	for _, option := range options {
+		if !volumeOptions[option] {
+			return refuse("--volume %s names the option %q, which is not one a deploy sets", spec, option)
+		}
+	}
+	if volumeName.MatchString(source) {
 		return p.refuseBoundVolume(ctx, source)
 	}
-	_, options, _ := strings.Cut(rest, ":")
-	return p.refuseBind(source, !slices.Contains(strings.Split(options, ","), "ro"))
+	return p.refuseBind(source, !slices.Contains(options, "ro"))
+}
+
+func refuseTarget(spec, target string) error {
+	if !filepath.IsAbs(target) || filepath.Clean(target) != target {
+		return refuse("--volume %s mounts at %q, which is not a clean absolute path in the container", spec, target)
+	}
+	return nil
 }
 
 func (p Policy) refuseBoundVolume(ctx context.Context, volume string) error {
@@ -367,18 +416,32 @@ func (p Policy) rename(ctx context.Context, argv []string) (Invocation, error) {
 	return Invocation{Argv: argv}, nil
 }
 
-func (p Policy) connect(args []string) (Invocation, error) {
-	inv, operands, err := p.parse([]string{"network", "connect"}, args, flagSet{
-		valued: setOf("--alias"),
+func (p Policy) joined(ctx context.Context, verb string, args []string, valued, plain map[string]bool) (Invocation, error) {
+	inv, operands, err := p.parse([]string{"network", verb}, args, flagSet{
+		valued: valued,
+		plain:  plain,
 		check:  func(*Invocation, string, string) error { return nil },
 	})
 	if err != nil {
 		return Invocation{}, err
 	}
-	if len(operands) != 2 {
-		return Invocation{}, refuse("docker network connect names a network and a container")
+	if len(operands) != 2 || strings.HasPrefix(operands[1], "-") {
+		return Invocation{}, refuse("docker network %s names a network and a container", verb)
 	}
-	return inv, p.refuseNetwork(operands[0])
+	if err := p.refuseNetwork(operands[0]); err != nil {
+		return Invocation{}, err
+	}
+	if operands[1] == boxapi.Switchboard {
+		return inv, nil
+	}
+	ours, err := p.Inspect.IsOcels(ctx, operands[1])
+	if err != nil {
+		return Invocation{}, err
+	}
+	if !ours {
+		return Invocation{}, refuse("%s is not a container ocel runs, so a deploy changes none of its networks", operands[1])
+	}
+	return inv, nil
 }
 
 func (p Policy) networkCreateFlags() flagSet {

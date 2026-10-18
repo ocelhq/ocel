@@ -16,7 +16,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -32,8 +35,8 @@ func TestEveryAppContainerJoinsANetworkNamedForItsTierAndProjectAndNeverTheProxy
 	other.Project = "blog"
 
 	networks := map[string]string{}
-	for what, spec := range map[string]Container{"production shop": production, "preview shop": preview, "production blog": other} {
-		argv := containerRun(spec, handedTo(spec))
+	for what, spec := range map[string]release.Container{"production shop": production, "preview shop": preview, "production blog": other} {
+		argv := release.ContainerRun(spec, handedTo(spec))
 		at := slices.Index(argv, "--network")
 		if at < 0 || at+1 >= len(argv) {
 			t.Fatalf("%s is run on no network at all: %v", what, argv)
@@ -91,7 +94,7 @@ func TestAnEngineOutOfSubnetsIsRefusedWithTheDaemonSettingThatGivesItMore(t *tes
 	t.Parallel()
 
 	spec := valued()
-	box := machine(nil)
+	box := newBench(nil)
 	imaging(box, "false ")
 	proxied := box.answer
 	box.answer = func(command string) (ssh.Result, bool) {
@@ -100,7 +103,7 @@ func TestAnEngineOutOfSubnetsIsRefusedWithTheDaemonSettingThatGivesItMore(t *tes
 		}
 		return proxied(command)
 	}
-	_, err := box.host().RunContainer(context.Background(), spec)
+	_, err := box.host().containers.Run(context.Background(), spec)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("RunContainer() on an engine with no subnet left = %v, want a not-ready refusal", err)
@@ -162,7 +165,7 @@ func TestATierDestroyTakesTheContainersAndNetworksItLabelledAndTheProxyOffThemFi
 	t.Parallel()
 
 	tier := environment.TierProduction
-	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+	box := newBench(map[environment.Tier][]machine.Item{tier: bootstrapped(t, tier)})
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, shell.Quote("label="+tierSelector(tier))) && strings.Contains(command, "echo containers") {
 			return ssh.Result{Stdout: "containers\nnetworks\n"}, true
@@ -183,7 +186,7 @@ func TestATierDestroyTakesTheContainersAndNetworksItLabelledAndTheProxyOffThemFi
 	}
 	containers := box.at("xargs -r docker rm --force")
 	networks := box.at("docker network disconnect --force")
-	state := box.at("rm -rf " + shell.Quote(StateDir(tier)))
+	state := box.at("rm -rf " + shell.Quote(boxapi.StateDir(tier)))
 	if containers < 0 || networks < 0 || containers > networks || networks > state {
 		t.Errorf("the containers went at %d, the networks at %d and the state at %d: a network goes after every container on it, the proxy is detached before the rm, and the values a container was handed go before the records that sealed them", containers, networks, state)
 	}
@@ -202,14 +205,14 @@ func TestATierRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+	box := newBench(map[environment.Tier][]machine.Item{tier: bootstrapped(t, tier)})
 	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), tier)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {
-			if change.Kind == KindApps || change.Kind == KindAppNetworks {
+			if change.Kind == machine.KindApps || change.Kind == machine.KindAppNetworks {
 				t.Errorf("a tier the engine reports nothing labelled for plans %s %s, and a plan naming what does not exist is one the user cannot read", change.Kind, change.Name)
 			}
 		}
@@ -219,7 +222,7 @@ func TestATierRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 func TestTheSwitchboardJoinsEveryLabelledNetworkBeforeItStartsServing(t *testing.T) {
 	t.Parallel()
 
-	board := switchboardBox(nil, Front{})
+	board := switchboardBox(nil, front.Proxy{})
 	for name, command := range map[string]string{
 		"written again": board.Writing(docker.ContainerRising),
 		"restored":      board.Restoring(docker.ContainerRising, routing.Locked("-x")),
@@ -241,7 +244,7 @@ func TestTheSwitchboardJoinsEveryLabelledNetworkBeforeItStartsServing(t *testing
 func TestASwitchboardWrittenAgainIsStoppedToFinishWhatItServesBeforeItIsRemoved(t *testing.T) {
 	t.Parallel()
 
-	command := switchboardBox(nil, Front{}).Writing(docker.ContainerRising)
+	command := switchboardBox(nil, front.Proxy{}).Writing(docker.ContainerRising)
 	stopped := strings.Index(command, "docker stop "+shell.Quote(boxapi.Switchboard))
 	removed := strings.Index(command, "docker rm --force "+shell.Quote(boxapi.Switchboard))
 	if stopped < 0 || removed < stopped {
@@ -264,8 +267,8 @@ func TestRunningAResourcePutsTheProxyOnItsNetworkBeforeTheRun(t *testing.T) {
 	t.Parallel()
 
 	spec := resourced()
-	box := machine(nil)
-	if err := box.host().RunResource(context.Background(), spec, "secret"); err != nil {
+	box := newBench(nil)
+	if err := box.host().resources.Run(context.Background(), spec, "secret"); err != nil {
 		t.Fatalf("RunResource() = %v", err)
 	}
 	joined := box.at("docker network connect " + shell.Quote(boxapi.AppNetwork(spec.Tier, spec.Project)) + " " + shell.Quote(boxapi.Switchboard))
@@ -281,13 +284,13 @@ func TestAResourceAlreadyRunningStillPutsTheSwitchboardBackOnItsNetwork(t *testi
 
 	spec := resourced()
 	spec.Memory = strconv.Itoa(benchMemoryBytes / 2)
-	digest, err := spec.digest()
+	digest, err := spec.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
-	box := machine(nil)
+	box := newBench(nil)
 	imaging(box, "running "+spec.Image+" "+digest)
-	if err := box.host().RunResource(context.Background(), spec, "secret"); err != nil {
+	if err := box.host().resources.Run(context.Background(), spec, "secret"); err != nil {
 		t.Fatalf("RunResource() = %v", err)
 	}
 	if box.at(shell.Quote("run")+" "+shell.Quote("--detach")) >= 0 {
@@ -302,14 +305,14 @@ func TestAResourceAlreadyRunningStillPutsTheSwitchboardBackOnItsNetwork(t *testi
 func TestAnAppAlreadyServingStillPutsTheSwitchboardBackOnItsNetwork(t *testing.T) {
 	t.Parallel()
 
-	serving := "running " + appImage + " " + handedTo(aContainer()).digest
-	for what, spec := range map[string]Container{
+	serving := "running " + appImage + " " + handedTo(aContainer()).Digest
+	for what, spec := range map[string]release.Container{
 		"a deploy":    aContainer(),
 		"a promotion": {Name: physical, Project: "shop", App: "web", Image: appImage},
 	} {
-		box := machine(nil)
+		box := newBench(nil)
 		imaging(box, serving)
-		if _, err := box.host().RunContainer(context.Background(), spec); err != nil {
+		if _, err := box.host().containers.Run(context.Background(), spec); err != nil {
 			t.Fatalf("%s: RunContainer() = %v", what, err)
 		}
 		if box.at(shell.Quote("run")+" "+shell.Quote("--detach")) >= 0 {

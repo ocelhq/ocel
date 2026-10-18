@@ -7,15 +7,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/buildproxy"
-	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	s3store "github.com/ocelhq/ocel/platform/s3"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/bucket"
 )
 
 func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 	forwards := make([]provider.PortForward, 0, len(req.Bindings))
 	for _, binding := range req.Bindings {
-		local, stop, err := p.host.ForwardToContainer(ctx, binding.Properties[provider.PropertyHost], binding.Properties[provider.PropertyPort])
+		local, stop, err := p.containers.Forward(ctx, binding.Properties[provider.PropertyHost], binding.Properties[provider.PropertyPort])
 		if err != nil {
 			for _, opened := range forwards {
 				opened.Close()
@@ -32,27 +32,9 @@ const buildSessions = "build"
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
 	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, grants []provider.BindingGrant) (provider.BindingProxy, error) {
 		ref := provider.StackRef{Project: req.Slug, Tier: req.Tier, Name: naming.InfraStack(req.Env)}
-		container := p.stores.shape()
-		if container == nil {
-			shaped := storeContainer(resources.ProvisionRequest{Ref: storeRef(ref)})
-			container = &shaped
-		}
-		root, err := p.stores.once(container.Name, func() (storeCredential, error) {
-			return p.storeCredential(ctx, ref, container.Name)
-		})
+		store, stopForward, err := p.buckets().OpenRoot(ctx, ref)
 		if err != nil {
 			return provider.BindingProxy{}, err
-		}
-		local, stopForward, err := p.host.ForwardToContainer(ctx, container.Name, storePort)
-		if err != nil {
-			return provider.BindingProxy{}, err
-		}
-		store := s3store.Store{
-			Endpoint:        "http://" + local,
-			Region:          storeRegion,
-			AccessKeyID:     storeAccessKey,
-			SecretAccessKey: root.secret,
-			PathStyle:       true,
 		}
 		served := make([]bindingproxy.Grant, 0, len(grants))
 		for _, grant := range grants {
@@ -62,7 +44,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 				External:     func(context.Context) (s3store.PresignAPI, string) { return store.Presigner(), store.Endpoint },
 				Callbacks:    s3store.HTTPPoster{},
 				PostPolicies: true,
-				Sessions:     s3store.SessionsBucket() + "/" + storeRef(ref).Name.String() + "/" + buildSessions,
+				Sessions:     bucket.SessionsPrefix(ref, buildSessions),
 				Granted:      buildproxy.ListBucketNames(grant),
 			})}})
 		}

@@ -15,13 +15,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const deployLogin = "ocel-deploy"
 
-func accountAsDecided(t *testing.T, vm machine) {
+func accountAsDecided(t *testing.T, vm liveBox) {
 	t.Helper()
 
 	entry := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin))
@@ -131,7 +132,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
-	for _, item := range host.Items(tier, nil, ssh.AMD64, host.Front{}) {
+	for _, item := range host.Items(tier, nil, ssh.AMD64, front.Proxy{}) {
 		if item.Owner != deployLogin || item.Kind == "linux:user" {
 			continue
 		}

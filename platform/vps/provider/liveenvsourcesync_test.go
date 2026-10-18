@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -66,7 +67,7 @@ class Handler(BaseHTTPRequestHandler):
 HTTPServer(("127.0.0.1", 18080), Handler).serve_forever()
 `
 
-func (vm machine) startsFakeInfisical(t *testing.T) {
+func (vm liveBox) startsFakeInfisical(t *testing.T) {
 	t.Helper()
 	vm.feeds(t, "sudo tee "+fakeInfisicalScript+" >/dev/null", []byte(fakeInfisical))
 	vm.setsInInfisical(t, "postgres://first", 1)
@@ -78,7 +79,7 @@ func (vm machine) startsFakeInfisical(t *testing.T) {
 	})
 }
 
-func (vm machine) setsInInfisical(t *testing.T, value string, version int) {
+func (vm liveBox) setsInInfisical(t *testing.T, value string, version int) {
 	t.Helper()
 	vm.feeds(t, "sudo tee "+fakeInfisicalSecret+" >/dev/null", []byte(value+"\n"+strings.Repeat("1", version)+"\n"))
 }
@@ -164,7 +165,7 @@ func TestLiveTheEnvSourceSyncKeepsATiersValuesInStepWithItsEnvSourceAndGoesWithT
 	if said := strings.TrimSpace(vm.ssh(t, "systemctl cat "+service+" >/dev/null 2>&1 && echo present || echo gone")); said != "gone" {
 		t.Errorf("%s is %s after the last tier went", service, said)
 	}
-	for _, gone := range []string{"/etc/systemd/system/ocel-envsourcesync@.service", host.LiveBinary, host.StateDir(tier)} {
+	for _, gone := range []string{"/etc/systemd/system/ocel-envsourcesync@.service", host.LiveBinary, boxapi.StateDir(tier)} {
 		if vm.exists(t, gone) {
 			t.Errorf("%s is present after the last tier went", gone)
 		}

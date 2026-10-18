@@ -3,17 +3,16 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -21,22 +20,15 @@ import (
 const FrontRecordPath = boxapi.StateRoot + "/proxy.json"
 
 type frontRecord struct {
-	Proxy      *Front           `json:"proxy"`
+	Proxy      *front.Proxy     `json:"proxy"`
 	Project    string           `json:"project,omitempty"`
 	Tier       environment.Tier `json:"tier"`
 	MovingFrom *frontRecord     `json:"movingFrom,omitempty"`
 }
 
-func (f Front) recorded() *Front {
-	if !f.adopted() {
-		return nil
-	}
-	return &f
-}
-
-func (r frontRecord) front() Front {
+func (r frontRecord) front() front.Proxy {
 	if r.Proxy == nil {
-		return Front{}
+		return front.Proxy{}
 	}
 	return *r.Proxy
 }
@@ -48,134 +40,33 @@ func (r frontRecord) setter() string {
 	return r.Project + "/" + string(r.Tier)
 }
 
-func (r frontRecord) item() (Item, error) {
+func (r frontRecord) item() (machine.Item, error) {
 	written, err := json.Marshal(r)
 	if err != nil {
-		return Item{}, err
+		return machine.Item{}, err
 	}
-	return Item{
-		Kind:    KindFile,
+	return machine.Item{
+		Kind:    machine.KindFile,
 		Name:    FrontRecordPath,
 		Mode:    0o644,
-		Owner:   rootOwner,
+		Owner:   machine.RootOwner,
 		Content: append(written, '\n'),
 		Note:    "which proxy fronts this box, and who set it",
 	}, nil
 }
 
-func (f Front) named() string {
-	switch {
-	case f.Traefik != nil:
-		return runBy(f.Traefik.Preset, "Traefik")
-	case f.Caddy != nil:
-		return runBy(f.Caddy.Preset, "Caddy")
-	case f.Manual != nil:
-		return "a proxy you route yourself"
-	default:
-		return "ocel's own proxy"
-	}
-}
-
-func runBy(preset, proxy string) string {
-	if tool, ok := hostTools[preset]; ok {
-		return tool.name + "'s " + proxy
-	}
-	return "your " + proxy
-}
-
-func (f Front) spelled() string {
-	switch {
-	case f.Traefik != nil:
-		return `{ "traefik": ` + f.Traefik.spelled().object() + ` }`
-	case f.Caddy != nil:
-		return `{ "caddy": ` + f.Caddy.spelled().object() + ` }`
-	case f.Manual == nil:
-		return ""
-	}
-	var fields spelling
-	fields.number("port", f.Manual.Port, manual.DefaultPort)
-	fields.text("network", f.Manual.Network, "")
-	if len(fields) == 0 {
-		return `"manual"`
-	}
-	return `{ "manual": ` + fields.object() + ` }`
-}
-
-func (t TraefikFront) spelled() spelling {
-	base := TraefikFront{Preset: t.Preset}.Filled()
-	var fields, entrypoints spelling
-	fields.text("preset", t.Preset, "")
-	fields.text("directory", t.Directory, base.Directory)
-	fields.text("containerDirectory", t.ContainerDirectory, base.ContainerDirectory)
-	fields.text("resolver", t.Resolver, base.Resolver)
-	fields.text("previewResolver", t.PreviewResolver, base.PreviewResolver)
-	entrypoints.text("http", t.Entrypoints.HTTP, base.Entrypoints.HTTP)
-	entrypoints.text("https", t.Entrypoints.HTTPS, base.Entrypoints.HTTPS)
-	if len(entrypoints) > 0 {
-		fields = append(fields, strconv.Quote("entrypoints")+": "+entrypoints.object())
-	}
-	fields.text("network", t.Network, base.Network)
-	fields.number("port", t.Port, base.Port)
-	return fields
-}
-
-func (c CaddyFront) spelled() spelling {
-	base := CaddyFront{Preset: c.Preset}.Filled()
-	var fields spelling
-	fields.text("preset", c.Preset, "")
-	fields.text("directory", c.Directory, base.Directory)
-	fields.text("containerDirectory", c.ContainerDirectory, base.ContainerDirectory)
-	fields.text("container", c.Container, base.Container)
-	fields.text("config", c.Config, base.Config)
-	fields.text("network", c.Network, base.Network)
-	fields.number("port", c.Port, base.Port)
-	return fields
-}
-
-type spelling []string
-
-func (s *spelling) text(key, value, base string) {
-	if value != "" && value != base {
-		*s = append(*s, strconv.Quote(key)+": "+strconv.Quote(value))
-	}
-}
-
-func (s *spelling) number(key string, value, base int) {
-	if value != 0 && value != base {
-		*s = append(*s, strconv.Quote(key)+": "+strconv.Itoa(value))
-	}
-}
-
-func (s spelling) object() string { return "{ " + strings.Join(s, ", ") + " }" }
-
-func (f Front) same(other Front) bool { return reflect.DeepEqual(f.unlabelled(), other.unlabelled()) }
-
-func (f Front) unlabelled() Front {
-	if f.Traefik != nil {
-		unset := *f.Traefik
-		unset.Preset = ""
-		f.Traefik = &unset
-	}
-	if f.Caddy != nil {
-		unset := *f.Caddy
-		unset.Preset = ""
-		f.Caddy = &unset
-	}
-	return f
-}
-
-func (f Front) refuseDisagreeing(record frontRecord, tier environment.Tier) error {
+func refuseDisagreeing(f front.Proxy, record frontRecord, tier environment.Tier) error {
 	recorded := record.front()
-	if f.same(recorded) {
+	if f.Same(recorded) {
 		return nil
 	}
 	remedy := "remove `\"proxy\"` from this project's vps options"
-	if recorded.adopted() {
-		remedy = "add `\"proxy\": " + recorded.spelled() + "`"
+	if recorded.Adopted() {
+		remedy = "add `\"proxy\": " + recorded.Front().Spelled() + "`"
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"this box routes through %s (set by %s); %s\nOne proxy fronts a box: to move it to another, write the new `proxy` and `%s` moves the box",
-		recorded.named(), record.setter(), remedy, provider.BootstrapCommand(tier))
+		recorded.Front().Named(), record.setter(), remedy, provider.BootstrapCommand(tier))
 }
 
 func frontReading() string {
@@ -183,12 +74,12 @@ func frontReading() string {
 	return "if [ -f " + at + " ]; then cat " + at + "; fi"
 }
 
-func (r frontRecord) listStranded(to Front) []removal {
-	stranded := to.listOwned()
+func (r frontRecord) listStranded(to front.Proxy) []machine.Removal {
+	stranded := listOwned(to)
 	kept := len(stranded)
 	for moved := r; moved.MovingFrom != nil; moved = *moved.MovingFrom {
 		for _, taken := range (frontMove{from: moved.MovingFrom.front(), to: moved.front()}).listRemovals() {
-			if !slices.ContainsFunc(stranded, func(listed removal) bool { return listed.kind == taken.kind && listed.path == taken.path }) {
+			if !slices.ContainsFunc(stranded, func(listed machine.Removal) bool { return listed.Kind == taken.Kind && listed.Path == taken.Path }) {
 				stranded = append(stranded, taken)
 			}
 		}
@@ -196,9 +87,9 @@ func (r frontRecord) listStranded(to Front) []removal {
 	return stranded[kept:]
 }
 
-func (f Front) listOwned() []removal {
-	if f.adopted() {
-		return f.placedRemovals()
+func listOwned(f front.Proxy) []machine.Removal {
+	if f.Adopted() {
+		return placedRemovals(f)
 	}
 	return frontMove{from: f}.listRemovals()
 }
@@ -233,9 +124,9 @@ func (h *Host) RefuseDisagreeingFront(ctx context.Context, tier environment.Tier
 	if record.MovingFrom != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this box is moving from %s to %s (set by %s), and no deploy lands until the move is finished\nRun `%s` to finish it",
-			record.MovingFrom.front().named(), record.front().named(), record.setter(), provider.BootstrapCommand(tier))
+			record.MovingFrom.front().Front().Named(), record.front().Front().Named(), record.setter(), provider.BootstrapCommand(tier))
 	}
-	return h.proxyOption.refuseDisagreeing(*record, tier)
+	return refuseDisagreeing(h.proxyOption, *record, tier)
 }
 
 func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) {
@@ -244,19 +135,19 @@ func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) 
 		return Reading{}, err
 	}
 	option := b.host.proxyOption
-	record := frontRecord{Proxy: option.recorded(), Project: b.project, Tier: read.Tier}
+	record := frontRecord{Proxy: option.Recorded(), Project: b.project, Tier: read.Tier}
 	moving := record
 	switch {
-	case existing != nil && existing.MovingFrom != nil && option.same(existing.front()):
+	case existing != nil && existing.MovingFrom != nil && option.Same(existing.front()):
 		record, moving = *existing, *existing
 		record.MovingFrom = nil
 		read.move = &frontMove{host: b.host, from: existing.MovingFrom.front(), to: option, resumed: true, stranded: existing.MovingFrom.listStranded(option)}
-	case existing != nil && option.same(existing.front()):
+	case existing != nil && option.Same(existing.front()):
 		record = *existing
 	case existing != nil:
 		moving.MovingFrom = existing
 		read.move = &frontMove{host: b.host, from: existing.front(), to: option, stranded: existing.listStranded(option)}
-	case read.observed(KindContainer, caddy.Container) && option.adopted():
+	case read.observed(machine.KindContainer, caddy.Container) && option.Adopted():
 		moving.MovingFrom = &frontRecord{Tier: read.Tier}
 		read.move = &frontMove{host: b.host, to: option}
 	}
@@ -272,6 +163,6 @@ func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) 
 	if err != nil {
 		return Reading{}, err
 	}
-	read.recorded = []Item{item}
+	read.recorded = []machine.Item{item}
 	return read, nil
 }

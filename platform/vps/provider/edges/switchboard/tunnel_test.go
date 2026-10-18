@@ -137,7 +137,7 @@ func edgeConnector() edge.TunnelConnector {
 	}
 }
 
-func (m *machine) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
+func (m *fakeBox) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	if kind != tunnelEdge {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "the %s edge opens no tunnel", kind)
 	}
@@ -179,7 +179,9 @@ func (m *machine) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	}, nil
 }
 
-func (m *machine) Reserve(_ context.Context, front edge.Kind, connector edge.TunnelConnector) (boxapi.Tunnel, error) {
+type machineTunnel struct{ *fakeBox }
+
+func (m machineTunnel) Reserve(_ context.Context, front edge.Kind, connector edge.TunnelConnector) (boxapi.Tunnel, error) {
 	if err := m.refuse("ReserveTunnel"); err != nil {
 		return boxapi.Tunnel{}, err
 	}
@@ -193,7 +195,7 @@ func (m *machine) Reserve(_ context.Context, front edge.Kind, connector edge.Tun
 	return *m.tunnel, nil
 }
 
-func (m *machine) Run(ctx context.Context, tunnel boxapi.Tunnel, connector edge.TunnelConnector, token func(context.Context) (string, error)) error {
+func (m machineTunnel) Run(ctx context.Context, tunnel boxapi.Tunnel, connector edge.TunnelConnector, token func(context.Context) (string, error)) error {
 	if err := m.refuse("RunTunnel"); err != nil {
 		return err
 	}
@@ -216,7 +218,7 @@ func (m *machine) Run(ctx context.Context, tunnel boxapi.Tunnel, connector edge.
 	return nil
 }
 
-func (m *machine) Stop(_ context.Context, tunnel boxapi.Tunnel) error {
+func (m machineTunnel) Stop(_ context.Context, tunnel boxapi.Tunnel) error {
 	if m.tunnelRunning == tunnel.ID {
 		m.calls = append(m.calls, "stop tunnel "+tunnel.ID)
 		m.tunnelRunning = ""
@@ -224,7 +226,7 @@ func (m *machine) Stop(_ context.Context, tunnel boxapi.Tunnel) error {
 	return nil
 }
 
-func (m *machine) ClaimThrough(_ context.Context, tunnelName string, claims []boxapi.Claim) error {
+func (m *fakeBox) ClaimThrough(_ context.Context, tunnelName string, claims []boxapi.Claim) error {
 	if m.tunnel == nil || m.tunnel.Name != tunnelName {
 		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName), routing.ErrTunnelReleased)
 	}
@@ -240,7 +242,7 @@ func (m *machine) ClaimThrough(_ context.Context, tunnelName string, claims []bo
 	return nil
 }
 
-func (m *machine) InstallPreviewEntryThrough(ctx context.Context, base, tunnelName string) error {
+func (m *fakeBox) InstallPreviewEntryThrough(ctx context.Context, base, tunnelName string) error {
 	if m.tunnel == nil || m.tunnel.Name != tunnelName {
 		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName), routing.ErrTunnelReleased)
 	}
@@ -251,7 +253,7 @@ func (m *machine) InstallPreviewEntryThrough(ctx context.Context, base, tunnelNa
 	return nil
 }
 
-func (m *machine) tunneledNames() []string {
+func (m *fakeBox) tunneledNames() []string {
 	var named []string
 	for _, claim := range m.claims {
 		if claim.Tunneled {
@@ -264,7 +266,7 @@ func (m *machine) tunneledNames() []string {
 	return named
 }
 
-func (m *machine) Release(context.Context) ([]boxapi.Tunnel, error) {
+func (m machineTunnel) Release(context.Context) ([]boxapi.Tunnel, error) {
 	if m.tunnel != nil && len(m.tunneledNames()) == 0 {
 		m.retired = append(m.retired, *m.tunnel)
 		m.calls = append(m.calls, "stop tunnel "+m.tunnel.ID)
@@ -273,7 +275,7 @@ func (m *machine) Release(context.Context) ([]boxapi.Tunnel, error) {
 	return slices.Clone(m.retired), nil
 }
 
-func (m *machine) Forget(_ context.Context, name string) error {
+func (m machineTunnel) Forget(_ context.Context, name string) error {
 	m.retired = slices.DeleteFunc(m.retired, func(held boxapi.Tunnel) bool { return held.Name == name })
 	return nil
 }

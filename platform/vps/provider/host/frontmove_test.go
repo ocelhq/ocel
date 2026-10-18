@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
@@ -30,7 +32,7 @@ func claimedThrice(t *testing.T) string {
 	return string(mustWrite(t, state))
 }
 
-func boxRecordedFor(t *testing.T, tier environment.Tier, recorded Front) *bench {
+func boxRecordedFor(t *testing.T, tier environment.Tier, recorded front.Proxy) *bench {
 	t.Helper()
 	table := claimedThrice(t)
 	box := bootstrappedBehind(t, tier, recorded, &table, nil)
@@ -38,24 +40,24 @@ func boxRecordedFor(t *testing.T, tier environment.Tier, recorded Front) *bench 
 	return box
 }
 
-func traefikIn(directory string) Front {
+func traefikIn(directory string) front.Proxy {
 	moved := *traefikOnTheHost().Traefik
 	moved.Directory = directory
-	return Front{Traefik: &moved}
+	return front.Proxy{Traefik: &moved}
 }
 
-func movePlanned(t *testing.T, box *bench, tier environment.Tier, to Front) provider.ChangeGroup {
+func movePlanned(t *testing.T, box *bench, tier environment.Tier, to front.Proxy) provider.ChangeGroup {
 	t.Helper()
 	plan, err := NewBootstrap(box.fronted(to), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
 	if err != nil {
 		t.Fatalf("Plan() = %v, want the move planned", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Kind == MoveGroupKind {
+		if group.Kind == machine.MoveGroupKind {
 			return group
 		}
 	}
-	t.Fatalf("the plan %+v has no %s group, want the move shown as one change group", plan.Groups, MoveGroupKind)
+	t.Fatalf("the plan %+v has no %s group, want the move shown as one change group", plan.Groups, machine.MoveGroupKind)
 	return provider.ChangeGroup{}
 }
 
@@ -85,7 +87,7 @@ func TestMovingABoxFromOcelsOwnProxyToYourProxyPlansTakingOcelsProxyAwayAndTheOu
 	t.Parallel()
 
 	tier := environment.TierProduction
-	move := movePlanned(t, boxRecordedFor(t, tier, Front{}), tier, traefikOnTheHost())
+	move := movePlanned(t, boxRecordedFor(t, tier, front.Proxy{}), tier, traefikOnTheHost())
 	if want := string(testVendor) + "/ocel's own proxy → your Traefik"; move.Name != want {
 		t.Errorf("the move is named %q, want %q", move.Name, want)
 	}
@@ -109,7 +111,7 @@ func TestMovingABoxFromYourProxyToOcelsOwnPlansTakingOcelsFileOutAndTheOutageUnt
 	t.Parallel()
 
 	tier := environment.TierProduction
-	move := movePlanned(t, boxRecordedFor(t, tier, traefikOnTheHost()), tier, Front{})
+	move := movePlanned(t, boxRecordedFor(t, tier, traefikOnTheHost()), tier, front.Proxy{})
 	if want := string(testVendor) + "/your Traefik → ocel's own proxy"; move.Name != want {
 		t.Errorf("the move is named %q, want %q", move.Name, want)
 	}
@@ -137,7 +139,7 @@ func TestMovingABoxWithinYourOwnProxyPlansTheNewFileBeforeTheOldAndNoOutage(t *t
 		if change.Name == boxapi.Switchboard && change.Action.Writes() {
 			t.Errorf("the move would %s %s, want it left running: a switchboard started again drops the requests it was serving", change.Action, change.Name)
 		}
-		if change.Kind == KindCertificates {
+		if change.Kind == machine.KindCertificates {
 			t.Errorf("the move lists %q, want no certificate ordered again: the same Traefik keeps the ones its resolver holds", change.Name)
 		}
 	}
@@ -150,15 +152,15 @@ func TestMovingABoxWithinYourOwnProxyToWhereItForwardsElsewherePlansTheOutageUnt
 	ported := *traefikOnTheHost().Traefik
 	ported.Port = 9001
 	for name, tc := range map[string]struct {
-		from, to Front
+		from, to front.Proxy
 		want     string
 	}{
 		"your Traefik onto another port": {
-			from: traefikOnTheHost(), to: Front{Traefik: &ported},
+			from: traefikOnTheHost(), to: front.Proxy{Traefik: &ported},
 			want: "outage from ocel's switchboard restarting until your Traefik forwards to 127.0.0.1:9001",
 		},
 		"a proxy you route yourself onto another port": {
-			from: routedByHand(), to: Front{Manual: &ManualFront{Port: 8481}},
+			from: routedByHand(), to: front.Proxy{Manual: &front.Manual{Port: 8481}},
 			want: "outage from ocel's switchboard restarting until a proxy you route yourself forwards to 127.0.0.1:8481",
 		},
 	} {
@@ -181,7 +183,7 @@ func TestMovingABoxWithinYourOwnTraefikToAnotherResolverCountsEveryHostnameAgain
 	to := traefikOnTheHost()
 	resolved := *to.Traefik
 	resolved.Resolver = "le-dns"
-	move := movePlanned(t, boxRecordedFor(t, tier, to), tier, Front{Traefik: &resolved})
+	move := movePlanned(t, boxRecordedFor(t, tier, to), tier, front.Proxy{Traefik: &resolved})
 	wantChange(t, move, "3 hostnames get new certificates from your Traefik", provider.ActionCreate)
 }
 
@@ -194,7 +196,7 @@ func TestMovingABoxBetweenTwoOfYourProxiesPlansTheOutageFromTheOldStoppingUntilT
 		t.Errorf("the move gives its outage as %q, want %q", move.Reason, want)
 	}
 	wantChange(t, move, "/etc/caddy/ocel.d/ocel.caddy", provider.ActionDelete)
-	wantChange(t, move, sudoersCaddyReload, provider.ActionDelete)
+	wantChange(t, move, machine.SudoersCaddyReload, provider.ActionDelete)
 	wantChange(t, move, "/data/coolify/proxy/dynamic/ocel.yml", provider.ActionCreate)
 	wantChange(t, move, "3 hostnames get new certificates from Coolify's Traefik", provider.ActionCreate)
 }
@@ -216,12 +218,12 @@ func TestMovingABoxOntoOneHostnameCountsItAsOneCertificate(t *testing.T) {
 	state := routed()
 	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	table := string(mustWrite(t, state))
-	box := bootstrappedBehind(t, tier, Front{}, &table, nil)
-	recordOn(t, box, tier, Front{}, "blog")
+	box := bootstrappedBehind(t, tier, front.Proxy{}, &table, nil)
+	recordOn(t, box, tier, front.Proxy{}, "blog")
 	wantChange(t, movePlanned(t, box, tier, routedByHand()), "1 hostname gets a new certificate from a proxy you route yourself", provider.ActionCreate)
 }
 
-func boxRecordedWithCertificatesFor(t *testing.T, tier environment.Tier, recorded Front) *bench {
+func boxRecordedWithCertificatesFor(t *testing.T, tier environment.Tier, recorded front.Proxy) *bench {
 	t.Helper()
 	certificate, _ := pulledCertificate(t)
 	state := routed()
@@ -252,19 +254,19 @@ func TestAMoveCountsOnlyTheHostnamesTheNewProxyOrdersCertificatesFor(t *testing.
 	perHost := *traefikOnTheHost().Traefik
 	perHost.PreviewResolver = ""
 	for name, tc := range map[string]struct {
-		from, to Front
+		from, to front.Proxy
 		want     string
 	}{
 		"onto ocel's own proxy, which serves the pinned certificate and the origin certificate": {
-			from: traefikOnTheHost(), to: Front{},
+			from: traefikOnTheHost(), to: front.Proxy{},
 			want: "5 hostnames get new certificates from ocel's own proxy",
 		},
 		"onto your Traefik with a preview resolver, which orders one wildcard for every preview hostname": {
-			from: Front{}, to: traefikOnTheHost(),
+			from: front.Proxy{}, to: traefikOnTheHost(),
 			want: "4 hostnames get new certificates from your Traefik",
 		},
 		"onto your Traefik without a preview resolver, which orders each preview hostname its own": {
-			from: Front{}, to: Front{Traefik: &perHost},
+			from: front.Proxy{}, to: front.Proxy{Traefik: &perHost},
 			want: "6 hostnames get new certificates from your Traefik",
 		},
 	} {
@@ -281,12 +283,12 @@ func TestMovingABoxToAnotherProxyIsRefusedWhileAnythingButOcelsOwnProxyHoldsTheS
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		from, to Front
+		from, to front.Proxy
 		held     func(*bench)
 		want     string
 	}{
 		"your Traefik to ocel's own proxy": {
-			from: traefikOnTheHost(), to: Front{},
+			from: traefikOnTheHost(), to: front.Proxy{},
 			held: func(box *bench) {
 				portsOwnedOn(box, map[string]string{caddy.HTTPPort: "traefik\n", caddy.HTTPSPort: "traefik\n"})
 			},
@@ -300,10 +302,10 @@ func TestMovingABoxToAnotherProxyIsRefusedWhileAnythingButOcelsOwnProxyHoldsTheS
 				"Ocel never stops a proxy it does not run: stop nginx, then run `ocel bootstrap production` again",
 		},
 		"ocel's own proxy, stopped, to your Traefik": {
-			from: Front{}, to: traefikOnTheHost(),
+			from: front.Proxy{}, to: traefikOnTheHost(),
 			held: func(box *bench) {
-				box.installed[environment.TierProduction] = slices.DeleteFunc(box.installed[environment.TierProduction], func(item Item) bool {
-					return item.Kind == KindContainer && item.Name == caddy.Container
+				box.installed[environment.TierProduction] = slices.DeleteFunc(box.installed[environment.TierProduction], func(item machine.Item) bool {
+					return item.Kind == machine.KindContainer && item.Name == caddy.Container
 				})
 				portsOwnedOn(box, nil, socketOwner{80, "apache2"}, socketOwner{443, "apache2"})
 			},
@@ -347,7 +349,7 @@ func throughTheSwitchboard(string) ssh.Result {
 	return ssh.Result{Stdout: string(boxapi.SwitchboardRouter) + "\n"}
 }
 
-func movedTo(t *testing.T, box *bench, tier environment.Tier, to Front) ([]string, error) {
+func movedTo(t *testing.T, box *bench, tier environment.Tier, to front.Proxy) ([]string, error) {
 	t.Helper()
 	var said []string
 	err := NewBootstrap(box.fronted(to), testVendor, "shop").Apply(context.Background(),
@@ -374,7 +376,7 @@ func TestMovingABoxFromOcelsOwnProxyToYourProxyTakesOcelsProxyAwayStartsTheSwitc
 	t.Parallel()
 
 	tier := environment.TierProduction
-	box := boxRecordedFor(t, tier, Front{})
+	box := boxRecordedFor(t, tier, front.Proxy{})
 	servedFrom(box, throughTheSwitchboard)
 	said, err := movedTo(t, box, tier, traefikOnTheHost())
 	if err != nil {
@@ -406,7 +408,7 @@ func TestMovingABoxFromYourProxyToOcelsOwnTakesOcelsFileOutUnreloadedBeforeTheSw
 	servedFrom(box, func(string) ssh.Result {
 		return ssh.Result{Code: proxyNotServingYet, Stderr: "nothing is started yet"}
 	})
-	said, err := movedTo(t, box, tier, Front{})
+	said, err := movedTo(t, box, tier, front.Proxy{})
 	if err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
@@ -523,7 +525,7 @@ func TestMovingABoxWithinAProxyYouRouteYourselfToAnotherPortAsksYouToForwardTher
 	tier := environment.TierProduction
 	box := boxRecordedFor(t, tier, routedByHand())
 	servedFrom(box, throughTheSwitchboard)
-	said, err := movedTo(t, box, tier, Front{Manual: &ManualFront{Port: 8481}})
+	said, err := movedTo(t, box, tier, front.Proxy{Manual: &front.Manual{Port: 8481}})
 	if err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
@@ -548,7 +550,7 @@ func TestMovingABoxBetweenTwoOfYourProxiesTakesTheOldFileOutBeforeStartingTheSwi
 	if command := box.commands()[box.at(unplaced)]; strings.Contains(command, "systemctl") {
 		t.Errorf("the old file was taken out as\n%s\nwant no reload of a Caddy you have stopped", command)
 	}
-	wantBefore(t, box, "rm -rf "+shell.Quote(sudoersCaddyReload), switchboardRun)
+	wantBefore(t, box, "rm -rf "+shell.Quote(machine.SudoersCaddyReload), switchboardRun)
 	wantBefore(t, box, switchboardRun, shell.Quote("place")+" "+shell.Quote("/data/coolify/proxy/dynamic/ocel.yml"))
 	if !slices.Contains(said, "Start your proxy on 80 and 443 now") {
 		t.Errorf("the move said %q, want it to tell you to start your proxy", said)
@@ -560,7 +562,7 @@ func TestMovingABoxOntoYourProxyThatNeverServesIsRefusedNamingWhatItDidNotServeA
 	t.Parallel()
 
 	tier := environment.TierProduction
-	box := boxRecordedFor(t, tier, Front{})
+	box := boxRecordedFor(t, tier, front.Proxy{})
 	servedFrom(box, func(hostname string) ssh.Result {
 		if hostname == claimed {
 			return ssh.Result{Code: proxyNotServingYet, Stderr: "connection refused on 127.0.0.1:443"}
@@ -585,7 +587,7 @@ func TestMovingABoxOntoYourProxyThatNeverServesIsRefusedNamingWhatItDidNotServeA
 		t.Errorf("the move gave up after %s, want it to wait %s for you to start your proxy", waited, moveWait)
 	}
 	for at, command := range box.commands() {
-		if strings.Contains(command, "/dev/stdin "+shell.Quote(StampPath(tier))) && strings.Contains(box.fed[at], string(StateComplete)) {
+		if strings.Contains(command, "/dev/stdin "+shell.Quote(machine.StampPath(tier))) && strings.Contains(box.fed[at], string(machine.StateComplete)) {
 			t.Errorf("the move stamped the tier complete though your proxy never served: %s", command)
 		}
 	}
@@ -596,7 +598,7 @@ func TestADeployOntoABoxAnotherProxyFrontsIsStillRefusedAndToldThatBootstrapMove
 
 	tier := environment.TierPreview
 	box := boxRecordedFor(t, tier, coolifysTraefik())
-	refused := refusalOf(t, box.fronted(Front{}).RefuseDisagreeingFront(context.Background(), environment.TierPreview), refusal.CodeInvalid)
+	refused := refusalOf(t, box.fronted(front.Proxy{}).RefuseDisagreeingFront(context.Background(), environment.TierPreview), refusal.CodeInvalid)
 	for _, wanted := range []string{"add `\"proxy\": { \"traefik\": { \"preset\": \"coolify\" } }`", "`ocel bootstrap preview` moves the box"} {
 		if !strings.Contains(refused.Message, wanted) {
 			t.Errorf("the refusal says %q, want %q in it", refused.Message, wanted)
@@ -611,7 +613,7 @@ func TestADeployRefusedOntoABoxAnotherTierMovedNamesTheBootstrapOfTheDeploysOwnT
 	t.Parallel()
 
 	box := boxRecordedFor(t, environment.TierPreview, coolifysTraefik())
-	refused := refusalOf(t, box.fronted(Front{}).RefuseDisagreeingFront(context.Background(), environment.TierProduction), refusal.CodeInvalid)
+	refused := refusalOf(t, box.fronted(front.Proxy{}).RefuseDisagreeingFront(context.Background(), environment.TierProduction), refusal.CodeInvalid)
 	if !strings.Contains(refused.Message, "`ocel bootstrap production` moves the box") {
 		t.Errorf("the refusal says %q, want the production deploy sent to `ocel bootstrap production`, not the bootstrap of the tier that set the record", refused.Message)
 	}
@@ -621,7 +623,7 @@ func TestMovingABoxFromOcelsOwnProxyIsNotRefusedForThePortsOcelsOwnProxyHoldsOrF
 	t.Parallel()
 
 	tier := environment.TierProduction
-	for name, to := range map[string]Front{
+	for name, to := range map[string]front.Proxy{
 		"your Traefik on the host": traefikOnTheHost(),
 		"Coolify's Caddy":          coolifysCaddy(),
 		"your Caddy service":       caddyService(),
@@ -629,7 +631,7 @@ func TestMovingABoxFromOcelsOwnProxyIsNotRefusedForThePortsOcelsOwnProxyHoldsOrF
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			box := boxRecordedFor(t, tier, Front{})
+			box := boxRecordedFor(t, tier, front.Proxy{})
 			portsOwnedOn(box, map[string]string{caddy.HTTPPort: caddy.Container + "\n", caddy.HTTPSPort: caddy.Container + "\n"})
 			box.broke = func(command string) error {
 				if strings.Contains(command, "2019") || strings.Contains(command, "'curl'") {
@@ -642,7 +644,7 @@ func TestMovingABoxFromOcelsOwnProxyIsNotRefusedForThePortsOcelsOwnProxyHoldsOrF
 	}
 }
 
-func resumedAfter(t *testing.T, failed *bench, tier environment.Tier, from Front) *bench {
+func resumedAfter(t *testing.T, failed *bench, tier environment.Tier, from front.Proxy) *bench {
 	t.Helper()
 	written := lastRecord(failed)
 	if written == "" {
@@ -669,7 +671,7 @@ func lastRecord(box *bench) string {
 
 func stampedComplete(box *bench, tier environment.Tier) bool {
 	for at, command := range box.commands() {
-		if strings.Contains(command, "/dev/stdin "+shell.Quote(StampPath(tier))) && strings.Contains(box.fed[at], string(StateComplete)) {
+		if strings.Contains(command, "/dev/stdin "+shell.Quote(machine.StampPath(tier))) && strings.Contains(box.fed[at], string(machine.StateComplete)) {
 			return true
 		}
 	}
@@ -741,13 +743,13 @@ func TestAnInterruptedMoveRetargetedToAnotherProxyTakesAwayWhatTheFirstMoveLeftO
 	tier := environment.TierProduction
 	placement := traefik.DerivePlacementHostname("/etc/traefik/dynamic/ocel/ocel.yml")
 	for name, tc := range map[string]struct {
-		from, halfway Front
+		from, halfway front.Proxy
 		interrupt     func(*bench)
 		left          string
 		holding       func(*bench)
 	}{
 		"ocel's own proxy, interrupted before it was taken away": {
-			from: Front{}, halfway: traefikOnTheHost(),
+			from: front.Proxy{}, halfway: traefikOnTheHost(),
 			interrupt: func(box *bench) {
 				breaksOnceRan(box, "/dev/stdin "+shell.Quote(FrontRecordPath), "docker rm --force "+shell.Quote(caddy.Container))
 			},
@@ -776,7 +778,7 @@ func TestAnInterruptedMoveRetargetedToAnotherProxyTakesAwayWhatTheFirstMoveLeftO
 			failed := boxRecordedFor(t, tier, tc.from)
 			tc.interrupt(failed)
 			if _, err := movedTo(t, failed, tier, tc.halfway); err == nil {
-				t.Fatalf("Apply() = nil, want the move to %s interrupted", tc.halfway.named())
+				t.Fatalf("Apply() = nil, want the move to %s interrupted", tc.halfway.Front().Named())
 			}
 			written := recordLeftBy(failed)
 			if !strings.Contains(written, `"movingFrom"`) {
@@ -793,13 +795,13 @@ func TestAnInterruptedMoveRetargetedToAnotherProxyTakesAwayWhatTheFirstMoveLeftO
 			servedFrom(box, throughTheSwitchboard)
 			group := movePlanned(t, box, tier, caddyService())
 			if _, planned := changeIn(group, strings.Trim(strings.TrimPrefix(strings.TrimPrefix(tc.left, "docker rm --force "), shell.Quote("unplace")+" "), "'")); !planned {
-				t.Errorf("the plan %+v does not take away what the interrupted move left of %s", group.Changes, tc.from.named())
+				t.Errorf("the plan %+v does not take away what the interrupted move left of %s", group.Changes, tc.from.Front().Named())
 			}
 			if _, err := movedTo(t, box, tier, caddyService()); err != nil {
 				t.Fatalf("bootstrap onto your Caddy = %v, want it to finish the move", err)
 			}
 			if box.at(tc.left) < 0 {
-				t.Errorf("the move to your Caddy never ran %s, leaving what the interrupted move left of %s:\n%s", tc.left, tc.from.named(), strings.Join(box.commands(), "\n"))
+				t.Errorf("the move to your Caddy never ran %s, leaving what the interrupted move left of %s:\n%s", tc.left, tc.from.Front().Named(), strings.Join(box.commands(), "\n"))
 			}
 			if record := lastRecord(box); strings.Contains(record, `"movingFrom"`) || !strings.Contains(record, `"caddy"`) {
 				t.Errorf("%s was last written as %s, want your Caddy recorded with no move left to finish", FrontRecordPath, record)
@@ -847,8 +849,8 @@ func TestAnInterruptedMoveRetargetedBackToTheDirectoryItStartedFromKeepsTheFileT
 func TestADeployOntoABoxWhoseMoveIsUnfinishedIsRefusedAndToldThatBootstrapFinishesIt(t *testing.T) {
 	t.Parallel()
 
-	for name, tc := range map[string]struct{ from, to Front }{
-		"from ocel's own proxy to your Traefik":    {from: Front{}, to: traefikOnTheHost()},
+	for name, tc := range map[string]struct{ from, to front.Proxy }{
+		"from ocel's own proxy to your Traefik":    {from: front.Proxy{}, to: traefikOnTheHost()},
 		"within your Traefik to another directory": {from: traefikOnTheHost(), to: traefikIn("/etc/traefik/dynamic/ocel")},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -856,17 +858,17 @@ func TestADeployOntoABoxWhoseMoveIsUnfinishedIsRefusedAndToldThatBootstrapFinish
 
 			tier := environment.TierProduction
 			box := boxRecordedFor(t, tier, tc.from)
-			unfinished, err := frontRecord{Proxy: tc.to.recorded(), Project: "shop", Tier: tier,
-				MovingFrom: &frontRecord{Proxy: tc.from.recorded(), Project: "blog", Tier: tier}}.item()
+			unfinished, err := frontRecord{Proxy: tc.to.Recorded(), Project: "shop", Tier: tier,
+				MovingFrom: &frontRecord{Proxy: tc.from.Recorded(), Project: "blog", Tier: tier}}.item()
 			if err != nil {
 				t.Fatal(err)
 			}
 			box.installed[tier] = append(unrecorded(box, tier), unfinished)
-			for _, option := range []Front{tc.to, tc.from} {
+			for _, option := range []front.Proxy{tc.to, tc.from} {
 				refused := refusalOf(t, box.fronted(option).RefuseDisagreeingFront(context.Background(), tier), refusal.CodeNotReady)
-				for _, wanted := range []string{"moving from " + tc.from.named() + " to " + tc.to.named(), "`ocel bootstrap production`"} {
+				for _, wanted := range []string{"moving from " + tc.from.Front().Named() + " to " + tc.to.Front().Named(), "`ocel bootstrap production`"} {
 					if !strings.Contains(refused.Message, wanted) {
-						t.Errorf("a deploy behind %s was refused with %q, want %q in it", option.named(), refused.Message, wanted)
+						t.Errorf("a deploy behind %s was refused with %q, want %q in it", option.Front().Named(), refused.Message, wanted)
 					}
 				}
 			}
@@ -936,13 +938,13 @@ func TestAMoveOffOcelsOwnProxyInterruptedAnywhereIsFinishedByTheNextBootstrap(t 
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			failed := boxRecordedFor(t, tier, Front{})
+			failed := boxRecordedFor(t, tier, front.Proxy{})
 			tc.interrupt(failed)
 			if _, err := movedTo(t, failed, tier, traefikOnTheHost()); err == nil {
 				t.Fatalf("Apply() = nil, want the move interrupted %s", name)
 			}
 
-			box := boxRecordedFor(t, tier, Front{})
+			box := boxRecordedFor(t, tier, front.Proxy{})
 			if written := recordLeftBy(failed); written != "" {
 				for at, item := range box.installed[tier] {
 					if item.Name == FrontRecordPath {
@@ -951,8 +953,8 @@ func TestAMoveOffOcelsOwnProxyInterruptedAnywhereIsFinishedByTheNextBootstrap(t 
 				}
 			}
 			if tc.removed {
-				box.installed[tier] = slices.DeleteFunc(box.installed[tier], func(item Item) bool {
-					return item.Kind == KindContainer && item.Name == caddy.Container
+				box.installed[tier] = slices.DeleteFunc(box.installed[tier], func(item machine.Item) bool {
+					return item.Kind == machine.KindContainer && item.Name == caddy.Container
 				})
 				portsOwnedOn(box, nil, socketOwner{80, "traefik"}, socketOwner{443, "traefik"})
 			} else {

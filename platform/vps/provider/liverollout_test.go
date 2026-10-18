@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 )
 
 const (
@@ -33,12 +34,12 @@ const (
 	livePointer = "@production"
 )
 
-type release struct {
+type liveRelease struct {
 	physical string
 	address  string
 }
 
-func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
+func onABoxServingContainers(t *testing.T) (liveBox, *vps.Provider) {
 	t.Helper()
 	vm := liveMachine(t)
 	bootstrapped(t, vm, environment.TierProduction)
@@ -76,7 +77,7 @@ func liveSpec(t *testing.T, tag string) provider.StackSpec {
 	}
 }
 
-func provisioned(t *testing.T, p *vps.Provider, tag string) release {
+func provisioned(t *testing.T, p *vps.Provider, tag string) liveRelease {
 	t.Helper()
 	started, err := p.ProvisionContainers(context.Background(), liveSpec(t, tag), progress.Discard())
 	if err != nil {
@@ -85,12 +86,12 @@ func provisioned(t *testing.T, p *vps.Provider, tag string) release {
 	if len(started) != 1 {
 		t.Fatalf("ProvisionContainers(%s) started %v", tag, started)
 	}
-	return release{physical: started[0].Physical, address: started[0].Physical + ":" + containerimage.PortText}
+	return liveRelease{physical: started[0].Physical, address: started[0].Physical + ":" + containerimage.PortText}
 }
 
-func rollingOut(p *vps.Provider, next release, drain time.Duration, progress progress.Log) error {
-	return p.Host().RollOut(context.Background(), host.Rollout{
-		Apps: []host.AppRollout{{
+func rollingOut(p *vps.Provider, next liveRelease, drain time.Duration, progress progress.Log) error {
+	return p.Host().Containers().RollOut(context.Background(), release.Rollout{
+		Apps: []release.AppRollout{{
 			RouteKey:   boxapi.RouteKey{Owner: liveOwner, Pointer: livePointer, App: liveApp},
 			Target:     next.address,
 			HealthPath: healthPath,
@@ -100,7 +101,7 @@ func rollingOut(p *vps.Provider, next release, drain time.Duration, progress pro
 	}, progress)
 }
 
-func inflightOn(t *testing.T, vm machine, serving release) int {
+func inflightOn(t *testing.T, vm liveBox, serving liveRelease) int {
 	t.Helper()
 	read := strings.TrimSpace(vm.beside(t, serving.physical, "curl -sS -m 5 http://127.0.0.1:"+containerimage.PortText+"/inflight"))
 	count, err := strconv.Atoi(read)
@@ -110,7 +111,7 @@ func inflightOn(t *testing.T, vm machine, serving release) int {
 	return count
 }
 
-func inFlightAgainst(t *testing.T, vm machine, serving release, want int) {
+func inFlightAgainst(t *testing.T, vm liveBox, serving liveRelease, want int) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for {
@@ -124,7 +125,7 @@ func inFlightAgainst(t *testing.T, vm machine, serving release, want int) {
 	}
 }
 
-func servedBy(t *testing.T, vm machine, path string) string {
+func servedBy(t *testing.T, vm liveBox, path string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 http://"+caddy.Container+path))
 }

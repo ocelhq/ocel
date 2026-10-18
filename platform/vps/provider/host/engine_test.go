@@ -21,6 +21,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
@@ -114,7 +116,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 	taken(t, board)
 	taken(t, name)
 	for what, script := range map[string]string{
-		"the switchboard": switchboardBox(switchboardBinary(arch), Front{}).Writing(docker.ContainerRising),
+		"the switchboard": switchboardBox(switchboardBinary(arch), front.Proxy{}).Writing(docker.ContainerRising),
 		"the proxy":       frontProxy().Writing(docker.ContainerRising),
 	} {
 		if out, err := exec.Command("/bin/sh", "-c", proxy.here(script)).CombinedOutput(); err != nil {
@@ -167,7 +169,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front") + ":ro",
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 		}},
-		{proxy.board, switchboardBox(switchboardBinary(arch), Front{}), []string{
+		{proxy.board, switchboardBox(switchboardBinary(arch), front.Proxy{}), []string{
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
 			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
@@ -179,7 +181,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 		if err != nil {
 			t.Fatalf("probe %s on this machine: %v", target.name, err)
 		}
-		observed, _, err := readSurvey(string(rendered))
+		observed, _, err := machine.ReadSurvey(string(rendered))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -212,14 +214,14 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front") + ":ro",
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 		}},
-		{proxy.board, switchboardBox(switchboardBinary(arch), Front{}), filepath.Join(proxy.dir, "connector"), false, []string{
+		{proxy.board, switchboardBox(switchboardBinary(arch), front.Proxy{}), filepath.Join(proxy.dir, "connector"), false, []string{
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
 			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
 			filepath.Join(proxy.dir, "control") + ":" + filepath.Join(proxy.dir, "control"),
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front"),
 		}},
-		{proxy.board, switchboardBox(switchboardBinary(arch), Front{}), filepath.Dir(proxy.binary), true, []string{
+		{proxy.board, switchboardBox(switchboardBinary(arch), front.Proxy{}), filepath.Dir(proxy.binary), true, []string{
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
 			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
@@ -243,7 +245,7 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 		if err != nil {
 			t.Fatalf("probe %s on this machine: %v", target.name, err)
 		}
-		observed, _, err := readSurvey(string(rendered))
+		observed, _, err := machine.ReadSurvey(string(rendered))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -444,7 +446,7 @@ func (p liveProxy) stages(t *testing.T, current []byte, state boxapi.RoutingTabl
 	t.Helper()
 
 	written := mustWrite(t, state)
-	write := exec.Command("/bin/sh", "-c", p.here(routing.StagedWrite(routing.Digest(contentSum(current)), ProxyConfig, nil)))
+	write := exec.Command("/bin/sh", "-c", p.here(routing.StagedWrite(routing.Digest(machine.ContentSum(current)), ProxyConfig, nil)))
 	write.Stdin = strings.NewReader(routing.PairFed(routing.Pair{Table: written, Config: []byte(p.here(string(config)))}))
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)

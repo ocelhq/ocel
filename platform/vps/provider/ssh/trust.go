@@ -12,7 +12,7 @@ import (
 var preference = []string{"ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"}
 
 func offered(ctx context.Context, dest Destination) ([]HostKey, error) {
-	rendered, err := output(ctx, "ssh-keyscan", "-T", strconv.Itoa(int(reach.Seconds())), "-p", strconv.Itoa(dest.Port), dest.Address)
+	rendered, err := output(ctx, "ssh-keyscan", "-T", strconv.Itoa(int(connectTimeout.Seconds())), "-p", strconv.Itoa(dest.Port), dest.Address)
 	if err != nil {
 		return nil, err
 	}

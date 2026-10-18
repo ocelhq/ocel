@@ -9,15 +9,15 @@ import (
 func (p *Provider) Session(ctx context.Context) (*ssh.Session, error) {
 	p.dial.Lock()
 	defer p.dial.Unlock()
-	if p.live != nil {
-		return p.live, nil
+	if p.sshSession != nil {
+		return p.sshSession, nil
 	}
 	live, err := ssh.Open(ctx, p.options.SSH.session())
 	if err != nil {
 		return nil, err
 	}
-	p.live = live
-	return p.live, nil
+	p.sshSession = live
+	return p.sshSession, nil
 }
 
 func (p *Provider) conn(ctx context.Context) (ssh.Conn, error) {
@@ -31,8 +31,8 @@ func (p *Provider) conn(ctx context.Context) (ssh.Conn, error) {
 func (p *Provider) Close() error {
 	p.dial.Lock()
 	defer p.dial.Unlock()
-	live := p.live
-	p.live = nil
+	live := p.sshSession
+	p.sshSession = nil
 	if live == nil {
 		return nil
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
@@ -16,7 +17,7 @@ func TestEveryContainerOcelRunsForTheBoxItselfRunsUnderAMemoryLimit(t *testing.T
 	t.Parallel()
 
 	for name, box := range map[string]docker.Service{
-		"the switchboard": switchboardBox(switchboardBinary(ssh.AMD64), Front{}),
+		"the switchboard": switchboardBox(switchboardBinary(ssh.AMD64), front.Proxy{}),
 		"the proxy":       frontProxy(),
 		"the tunnel":      tunnel.Service(boxapi.Tunnel{Name: "ocel-box", ID: "5a6b7c8d-1"}, edge.TunnelConnector{Image: "example/connector@sha256:abc", TokenFileEnv: "TOKEN_FILE"}),
 	} {

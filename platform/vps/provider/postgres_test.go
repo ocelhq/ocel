@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/officialimages"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -143,7 +144,7 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 		fed := machine.feeds()[at]
 		raw, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(fed))
 		if strings.Contains(fed, password) || strings.Contains(string(raw), password) {
-			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", host.KeptPath(environment.TierProduction, "shop-prod-web-r0a1b2c3d-main-pg"))
+			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", container.KeptPath(environment.TierProduction, "shop-prod-web-r0a1b2c3d-main-pg"))
 		}
 	}
 	sealing := machine.at(shell.Words([]string{boxapi.LiveBinary, boxapi.SealCommand}))
@@ -234,13 +235,13 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 	if !strings.Contains(joined, "docker volume rm") {
 		t.Errorf("a teardown ran %q and left the data on the box, where no later deploy reclaims it", joined)
 	}
-	if !strings.Contains(joined, host.BackupsDir(environment.TierProduction, name)) {
+	if !strings.Contains(joined, boxapi.BackupsDir(environment.TierProduction, name)) {
 		t.Errorf("a teardown ran %q and left the dumps taken of it on the box", joined)
 	}
 	if !strings.Contains(joined, name+"-retired") {
 		t.Errorf("a teardown ran %q and would leave the server an interrupted upgrade retired", joined)
 	}
-	if !strings.Contains(joined, host.KeptPath(environment.TierProduction, name)) {
+	if !strings.Contains(joined, container.KeptPath(environment.TierProduction, name)) {
 		t.Errorf("a teardown ran %q and left the sealed password behind", joined)
 	}
 }
@@ -276,7 +277,7 @@ func volumeOfAnotherMajor(machine *box, state string) {
 			return ssh.Result{Stdout: "16\n"}, true
 		case strings.Contains(command, ".State.Status"):
 			return ssh.Result{Stdout: state + " postgres:16 0123456789ab\n"}, true
-		case strings.Contains(command, host.BackupsHelper) && strings.Contains(command, "'dump'"):
+		case strings.Contains(command, boxapi.BackupsHelper) && strings.Contains(command, "'dump'"):
 			return ssh.Result{Stdout: takenDump + "\n"}, true
 		}
 		return ssh.Result{}, false

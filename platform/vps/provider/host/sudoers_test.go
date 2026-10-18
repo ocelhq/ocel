@@ -6,6 +6,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -13,7 +15,7 @@ func TestEachTierIsWhitelistedOnItsOwnSudoersLineNamingItsTierAlone(t *testing.T
 	t.Parallel()
 
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		fragment := written(Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{}), KindFile, sudoersSeal(tier))
+		fragment := written(Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), machine.KindFile, sudoersSeal(tier))
 		if fragment.Name == "" {
 			t.Fatalf("bootstrapping %s writes no sudoers line of its own", tier)
 		}

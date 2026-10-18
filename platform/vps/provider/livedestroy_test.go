@@ -31,17 +31,17 @@ func (s *said) removed(what string) int {
 	return slices.Index(s.lines, "Removed "+what)
 }
 
-func (vm machine) exists(t *testing.T, path string) bool {
+func (vm liveBox) exists(t *testing.T, path string) bool {
 	t.Helper()
 	return strings.TrimSpace(vm.ssh(t, "sudo test -e "+path+" && echo present || echo gone")) == "present"
 }
 
-func (vm machine) running(t *testing.T, container string) bool {
+func (vm liveBox) running(t *testing.T, container string) bool {
 	t.Helper()
 	return strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.State.Running}}' "+container+" 2>/dev/null || echo gone")) == "true"
 }
 
-func (vm machine) runs(t *testing.T, container string) {
+func (vm liveBox) runs(t *testing.T, container string) {
 	t.Helper()
 	vm.ssh(t, "sudo docker rm -f "+container+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo docker run -d --name "+container+" "+decoyImage+" sleep 5400")
@@ -50,7 +50,7 @@ func (vm machine) runs(t *testing.T, container string) {
 	}
 }
 
-func (vm machine) imageID(t *testing.T, image string) string {
+func (vm liveBox) imageID(t *testing.T, image string) string {
 	t.Helper()
 	id := vm.inspects(t, "image", image, "{{.Id}}")
 	if id == "" {
@@ -86,7 +86,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	if want := "vps/" + vm.user + "@" + vm.addr; leaving.Name != want {
 		t.Errorf("PlanRemove() named the group %q, want %q", leaving.Name, want)
 	}
-	for _, bearing := range []string{host.StateDir(tier), host.SealKeyPath(tier)} {
+	for _, bearing := range []string{boxapi.StateDir(tier), host.SealKeyPath(tier)} {
 		if reason := planFor(leaving, bearing).Reason; reason == "" {
 			t.Errorf("PlanRemove() takes %s with no reason, and the typed confirmation must name what is unrecoverable before a user types", bearing)
 		}
@@ -105,12 +105,12 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	stamped := progress.removed("directory " + host.TierDir(tier))
+	stamped := progress.removed("directory " + boxapi.TierDir(tier))
 	if stamped < 0 {
-		t.Fatalf("Remove() never says it took %s, and the stamp goes with it:\n%s", host.TierDir(tier), strings.Join(progress.lines, "\n"))
+		t.Fatalf("Remove() never says it took %s, and the stamp goes with it:\n%s", boxapi.TierDir(tier), strings.Join(progress.lines, "\n"))
 	}
 	for _, earlier := range []string{
-		"directory " + host.StateDir(tier),
+		"directory " + boxapi.StateDir(tier),
 		"seal key " + host.SealKeyPath(tier),
 		"file " + boxapi.LiveBinary,
 		"user " + deployLogin,
@@ -199,7 +199,7 @@ func TestLiveTheSingletonsRemainWhileASiblingTierDoesAndGoWithTheLast(t *testing
 	if entry := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); entry == "" {
 		t.Errorf("%s went with the %s tier, and the %s sibling deploys as it", deployLogin, production, preview)
 	}
-	for _, gone := range []string{host.TierDir(production), host.StateDir(production)} {
+	for _, gone := range []string{boxapi.TierDir(production), boxapi.StateDir(production)} {
 		if vm.exists(t, gone) {
 			t.Errorf("%s still exists after the tier that owns it was destroyed", gone)
 		}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -57,7 +58,7 @@ func TestTheFrontProxyHandsItsListenersOnWhereverTheKernelCan(t *testing.T) {
 	if run := ranWith(t, kernelMigrating(t, false), frontProxy()); strings.Contains(run, "--sysctl") {
 		t.Errorf("the front proxy on a kernel with no %s ran as %q: the engine refuses a sysctl the kernel lacks, and the box would serve nothing", docker.MigrateSysctl, run)
 	}
-	if run := ranWith(t, kernelMigrating(t, true), switchboardBox(nil, Front{})); strings.Contains(run, "--sysctl") {
+	if run := ranWith(t, kernelMigrating(t, true), switchboardBox(nil, front.Proxy{})); strings.Contains(run, "--sysctl") {
 		t.Errorf("the switchboard ran as %q; it never reloads, so it has no listener to hand on", run)
 	}
 }

@@ -14,7 +14,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -59,7 +61,7 @@ func portsOwnedOn(rig *bench, published map[string]string, owners ...socketOwner
 }
 
 func freshBox() *bench {
-	fresh := machine(nil)
+	fresh := newBench(nil)
 	fresh.answer = func(command string) (ssh.Result, bool) {
 		return ssh.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
@@ -67,7 +69,7 @@ func freshBox() *bench {
 }
 
 func withDocker() *bench {
-	rig := machine(map[environment.Tier][]Item{environment.TierProduction: EngineItems()})
+	rig := newBench(map[environment.Tier][]machine.Item{environment.TierProduction: EngineItems()})
 	rig.answer = func(command string) (ssh.Result, bool) {
 		return ssh.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
@@ -76,11 +78,11 @@ func withDocker() *bench {
 
 const behindYourOwnProxy = "See https://ocel.dev/docs/providers/vps#behind-your-own-proxy"
 
-func refusedBeforeWriting(t *testing.T, rig *bench, front Front, want string) {
+func refusedBeforeWriting(t *testing.T, rig *bench, fronting front.Proxy, want string) {
 	t.Helper()
 
 	tier := environment.TierProduction
-	boot := NewBootstrap(rig.fronted(front), testVendor, "shop")
+	boot := NewBootstrap(rig.fronted(fronting), testVendor, "shop")
 	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
 	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard())
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
@@ -100,7 +102,7 @@ func TestABootstrapOverAProcessListeningOnTheServingPortsNamesItAndStopsBeforeIt
 
 	rig := freshBox()
 	portsOwnedOn(rig, nil, socketOwner{80, "nginx"}, socketOwner{443, "nginx"})
-	refusedBeforeWriting(t, rig, Front{},
+	refusedBeforeWriting(t, rig, front.Proxy{},
 		"nginx listens on :80 and :443, where ocel's own proxy serves\n"+
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from nginx, or stop nginx and run `ocel bootstrap production`\n"+
 			behindYourOwnProxy)
@@ -111,7 +113,7 @@ func TestABootstrapOverAContainerPublishingAServingPortNamesTheContainer(t *test
 
 	rig := withDocker()
 	portsOwnedOn(rig, map[string]string{caddy.HTTPPort: "\n", "443": "web\n"}, socketOwner{443, "docker-proxy"})
-	refusedBeforeWriting(t, rig, Front{},
+	refusedBeforeWriting(t, rig, front.Proxy{},
 		"container web publishes :443, where ocel's own proxy serves\n"+
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from web, or run `docker rm -f web` and run `ocel bootstrap production`\n"+
 			behindYourOwnProxy)
@@ -122,7 +124,7 @@ func TestABootstrapNamesEveryOwnerOfTheServingPortsInOneRefusal(t *testing.T) {
 
 	rig := freshBox()
 	portsOwnedOn(rig, nil, socketOwner{80, "nginx"}, socketOwner{443, "apache2"})
-	refusedBeforeWriting(t, rig, Front{},
+	refusedBeforeWriting(t, rig, front.Proxy{},
 		"nginx listens on :80 and apache2 listens on :443, where ocel's own proxy serves\n"+
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from nginx and apache2, or stop nginx and apache2 and run `ocel bootstrap production`\n"+
 			behindYourOwnProxy)
@@ -133,7 +135,7 @@ func TestABootstrapOverASocketNoProcessCanBeNamedForSaysWhereItIsBound(t *testin
 
 	rig := freshBox()
 	portsOwnedOn(rig, nil, socketOwner{80, ""})
-	refusedBeforeWriting(t, rig, Front{},
+	refusedBeforeWriting(t, rig, front.Proxy{},
 		"the process at 0.0.0.0:80 listens on :80, where ocel's own proxy serves\n"+
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from the process at 0.0.0.0:80, or stop the process at 0.0.0.0:80 and run `ocel bootstrap production`\n"+
 			behindYourOwnProxy)

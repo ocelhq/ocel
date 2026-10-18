@@ -11,7 +11,7 @@ import (
 func TestAnEngineThatCannotBeReachedIsReportedRatherThanReadAsNoTrouble(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, ssh.DockerReach) {
 			return ssh.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true

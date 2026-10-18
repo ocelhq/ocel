@@ -9,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
-	deployUser  = "ocel-deploy"
+	deployUser  = boxapi.DeployUser
 	deployShell = LoginShell
 
 	lockedPassword = "*"
@@ -24,7 +26,7 @@ const (
 )
 
 const (
-	sshDir         = stateRoot + "/.ssh"
+	sshDir         = boxapi.StateRoot + "/.ssh"
 	authorizedKeys = sshDir + "/authorized_keys"
 )
 
@@ -38,17 +40,17 @@ type login struct {
 }
 
 func deployLogin() login {
-	return login{name: deployUser, shell: deployShell, home: stateRoot, password: lockedFact}
+	return login{name: deployUser, shell: deployShell, home: boxapi.StateRoot, password: lockedFact}
 }
 
 func (l login) described() []byte {
 	return fmt.Appendf(nil, "shell=%s\nhome=%s\ngroups=\npassword=%s\n", l.shell, l.home, l.password)
 }
 
-func principal() Item {
+func principal() machine.Item {
 	deploy := deployLogin()
-	return Item{Kind: KindUser, Name: deploy.name, Owner: deploy.name, Content: deploy.described(), Note: "deploy login",
-		script: func(Item) string { return deploy.command() }, survey: func(Item) string { return deploy.survey() }}
+	return machine.Item{Kind: machine.KindUser, Name: deploy.name, Owner: deploy.name, Content: deploy.described(), Note: "deploy login",
+		Script: func(machine.Item) string { return deploy.command() }, Survey: func(machine.Item) string { return deploy.survey() }}
 }
 
 func (l login) command() string {
@@ -67,7 +69,7 @@ func (l login) command() string {
 func (l login) survey() string {
 	return `if entry=$(getent passwd ` + shell.Quote(l.name) + ` 2>/dev/null); then found=0; else found=$?; fi
 if [ "$found" -ne 0 ] && [ "$found" -ne ` + strconv.Itoa(getentNoSuchKey) + ` ]; then
-` + unreadable(KindUser, shell.Quote(l.name), `"getent passwd exited $found"`) + `
+` + machine.Unreadable(machine.KindUser, shell.Quote(l.name), `"getent passwd exited $found"`) + `
 elif [ "$found" -eq 0 ]; then
 groups=$(id -nG ` + shell.Quote(l.name) + ` 2>/dev/null | tr ' ' '\n' | grep -vx ` + shell.Quote(l.name) + ` | LC_ALL=C sort | tr '\n' ',' | sed 's/,$//')
 line=$(getent shadow ` + shell.Quote(l.name) + ` 2>/dev/null || true)
@@ -78,7 +80,7 @@ elif [ -n "$line" ]; then password=unlocked
 fi
 if [ -n "$password" ]; then
 sum=$(printf 'shell=%s\nhome=%s\ngroups=%s\npassword=%s\n' "$(printf '%s' "$entry" | cut -d: -f7)" "$(printf '%s' "$entry" | cut -d: -f6)" "$groups" "$password" | sha256sum | cut -d' ' -f1)
-` + reports(shell.Quote(KindUser), shell.Quote(l.name), "0", shell.Quote(l.name), `"$sum"`) + `
+` + machine.Reports(shell.Quote(machine.KindUser), shell.Quote(l.name), "0", shell.Quote(l.name), `"$sum"`) + `
 fi
 fi`
 }
@@ -136,16 +138,16 @@ func authorized(raw []byte) []byte {
 }
 
 func (h *Host) keys(ctx context.Context) ([]byte, error) {
-	h.keying.Lock()
-	defer h.keying.Unlock()
-	if h.keyed != nil {
-		return h.keyed, nil
+	h.keysRead.Lock()
+	defer h.keysRead.Unlock()
+	if h.cachedKeys != nil {
+		return h.cachedKeys, nil
 	}
 	keys, err := h.resolve(ctx)
 	if err != nil {
 		return nil, err
 	}
-	h.keyed = keys
+	h.cachedKeys = keys
 	return keys, nil
 }
 

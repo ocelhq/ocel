@@ -177,13 +177,14 @@ func (t RoutingTable) Validate() error {
 }
 
 func (t RoutingTable) Hostnames() []string {
+	tunneled := t.tunneled()
 	named := make([]string, 0, len(t.Claims)+2)
 	for _, claim := range t.Claims {
-		if !claim.Tunneled {
+		if !tunneled.has(claim.Hostname) {
 			named = append(named, claim.Hostname)
 		}
 	}
-	if t.Connector != "" {
+	if t.Connector != "" && !tunneled.has(t.Connector) {
 		named = append(named, t.Connector)
 	}
 	if t.PreviewBase != "" && !t.PreviewTunneled {

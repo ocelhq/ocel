@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -17,9 +17,7 @@ const (
 	LiveService    = "ocel-live.service"
 	liveSocketFile = "/etc/systemd/system/" + LiveSocketUnit
 	liveUnitFile   = "/etc/systemd/system/" + LiveService
-	LiveSocketDir  = boxapi.SocketDir
 	LiveSocket     = boxapi.SocketPath
-	liveDirTmpfs   = "rw,noexec,nosuid,size=8m"
 )
 
 const (
@@ -93,56 +91,51 @@ func ContainerRuntime(architecture string) ([]byte, error) {
 }
 
 func (h *Host) IsAgentCurrent(ctx context.Context) (bool, error) {
-	return h.isCurrent(ctx, "survey the box agent", func(arch string) Item { return newAgentItem(liveAgent(arch)) })
+	return h.isCurrent(ctx, "survey the box agent", func(arch string) machine.Item { return newAgentItem(liveAgent(arch)) })
 }
 
-func (h *Host) isCurrent(ctx context.Context, what string, newItem func(arch string) Item) (bool, error) {
+func (h *Host) isCurrent(ctx context.Context, what string, newItem func(arch string) machine.Item) (bool, error) {
 	arch, err := h.Arch(ctx)
 	if err != nil {
 		return false, err
 	}
 	item := newItem(arch)
-	rendered, err := h.Run(ctx, ssh.RootWhenAble, what, survey([]Item{item}), nil)
+	rendered, err := h.Run(ctx, ssh.RootWhenAble, what, machine.SurveyScript([]machine.Item{item}), nil)
 	if err != nil {
 		return false, err
 	}
-	observed, _, err := readSurvey(rendered)
+	observed, _, err := machine.ReadSurvey(rendered)
 	if err != nil {
 		return false, err
 	}
 	return observed[item.ID()] == item.Digest(), nil
 }
 
-func newAgentItem(agent []byte) Item {
-	return Item{Kind: KindFile, Name: LiveBinary, Mode: 0o755, Owner: rootOwner, Content: agent,
+func newAgentItem(agent []byte) machine.Item {
+	return machine.Item{Kind: machine.KindFile, Name: LiveBinary, Mode: 0o755, Owner: machine.RootOwner, Content: agent,
 		Note: "serves apps their secret values and runs their topics and tasks"}
 }
 
-func LiveItems(architecture string) []Item {
+func LiveItems(architecture string) []machine.Item {
 	socket, service, agent := liveSocketUnit(), liveServiceUnit(), liveAgent(architecture)
-	return []Item{
-		{Kind: KindFile, Name: liveSocketFile, Mode: 0o644, Owner: rootOwner, Content: socket},
-		{Kind: KindFile, Name: liveUnitFile, Mode: 0o644, Owner: rootOwner, Content: service},
-		systemdUnit(Item{Name: LiveSocketUnit, Owner: rootOwner, Content: unitWatchFacts(socket),
+	return []machine.Item{
+		{Kind: machine.KindFile, Name: liveSocketFile, Mode: 0o644, Owner: machine.RootOwner, Content: socket},
+		{Kind: machine.KindFile, Name: liveUnitFile, Mode: 0o644, Owner: machine.RootOwner, Content: service},
+		machine.SystemdUnit(machine.Item{Name: LiveSocketUnit, Owner: machine.RootOwner, Content: machine.UnitWatchFacts(socket),
 			Watch: []string{liveSocketFile},
 			Slow:  true}),
-		systemdUnit(Item{Name: LiveService, Owner: rootOwner, Content: unitWatchFacts(service, agent),
+		machine.SystemdUnit(machine.Item{Name: LiveService, Owner: machine.RootOwner, Content: machine.UnitWatchFacts(service, agent),
 			Watch: []string{liveUnitFile, LiveBinary},
 			Slow:  true}),
 	}
 }
 
-func liveRemovals() []removal {
-	return []removal{
-		taking(KindUnit, LiveService, ""),
-		taking(KindUnit, LiveSocketUnit, ""),
-		taking(KindFile, liveUnitFile, ""),
-		taking(KindFile, liveSocketFile, ""),
-		taking(KindFile, LiveBinary, ""),
+func liveRemovals() []machine.Removal {
+	return []machine.Removal{
+		machine.Taking(machine.KindUnit, LiveService, ""),
+		machine.Taking(machine.KindUnit, LiveSocketUnit, ""),
+		machine.Taking(machine.KindFile, liveUnitFile, ""),
+		machine.Taking(machine.KindFile, liveSocketFile, ""),
+		machine.Taking(machine.KindFile, LiveBinary, ""),
 	}
-}
-
-func unitRemoval(name string) string {
-	unit := shell.Quote(name)
-	return "if systemctl cat " + unit + " >/dev/null 2>&1; then systemctl disable --now " + unit + " >/dev/null 2>&1 || true; fi"
 }

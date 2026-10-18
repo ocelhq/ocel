@@ -6,22 +6,23 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 )
 
 type Part interface {
-	Items(read Reading) []Item
+	Items(read Reading) []machine.Item
 	Apply(ctx context.Context, step *Step) error
 }
 
 type Step struct {
 	bootstrap Bootstrap
 	Read      Reading
-	Recorded  Stamp
-	Applying  Stamp
+	Recorded  machine.Stamp
+	Applying  machine.Stamp
 	progress  progress.Log
 }
 
-func (s *Step) Write(ctx context.Context, items []Item) error {
+func (s *Step) Write(ctx context.Context, items []machine.Item) error {
 	return s.bootstrap.write(ctx, s.Read, items, s.progress)
 }
 
@@ -35,9 +36,9 @@ func (s *Step) Reread(ctx context.Context) error {
 	return nil
 }
 
-type itemsPart func(read Reading) []Item
+type itemsPart func(read Reading) []machine.Item
 
-func (p itemsPart) Items(read Reading) []Item { return p(read) }
+func (p itemsPart) Items(read Reading) []machine.Item { return p(read) }
 
 func (p itemsPart) Apply(ctx context.Context, step *Step) error { return step.Write(ctx, p(step.Read)) }
 
@@ -46,17 +47,17 @@ func (h *Host) parts() []Part {
 		tierPart{host: h},
 		storagePart{},
 		enginePart{host: h},
-		itemsPart(func(read Reading) []Item { return LiveItems(read.Arch) }),
-		itemsPart(func(read Reading) []Item { return DockerAccessItems(read.Front) }),
-		itemsPart(func(read Reading) []Item { return EnvSourceSyncItems(read.Tier, read.Arch) }),
+		itemsPart(func(read Reading) []machine.Item { return LiveItems(read.Arch) }),
+		itemsPart(func(read Reading) []machine.Item { return DockerAccessItems(read.Front) }),
+		itemsPart(func(read Reading) []machine.Item { return EnvSourceSyncItems(read.Tier, read.Arch) }),
 		proxyPart{host: h},
-		itemsPart(func(read Reading) []Item { return RealtimeItems(read.Arch) }),
-		itemsPart(func(Reading) []Item { return BackupItems() }),
+		itemsPart(func(read Reading) []machine.Item { return RealtimeItems(read.Arch) }),
+		itemsPart(func(Reading) []machine.Item { return BackupItems() }),
 	}
 }
 
-func partItems(parts []Part, read Reading) []Item {
-	var items []Item
+func partItems(parts []Part, read Reading) []machine.Item {
+	var items []machine.Item
 	for _, part := range parts {
 		items = slices.Concat(items, part.Items(read))
 	}
@@ -65,7 +66,7 @@ func partItems(parts []Part, read Reading) []Item {
 
 type tierPart struct{ host *Host }
 
-func (tierPart) Items(read Reading) []Item { return TierItems(read.Tier) }
+func (tierPart) Items(read Reading) []machine.Item { return TierItems(read.Tier) }
 
 func (p tierPart) Apply(ctx context.Context, step *Step) error {
 	if err := step.Write(ctx, p.Items(step.Read)); err != nil {
@@ -76,7 +77,9 @@ func (p tierPart) Apply(ctx context.Context, step *Step) error {
 
 type storagePart struct{}
 
-func (storagePart) Items(read Reading) []Item { return StorageItems(read.Tier, read.Keys, read.Arch) }
+func (storagePart) Items(read Reading) []machine.Item {
+	return StorageItems(read.Tier, read.Keys, read.Arch)
+}
 
 func (p storagePart) Apply(ctx context.Context, step *Step) error {
 	if err := step.Write(ctx, p.Items(step.Read)); err != nil {
@@ -94,29 +97,29 @@ func (p storagePart) Apply(ctx context.Context, step *Step) error {
 
 type enginePart struct{ host *Host }
 
-func (enginePart) Items(Reading) []Item { return EngineItems() }
+func (enginePart) Items(Reading) []machine.Item { return EngineItems() }
 
 func (p enginePart) Apply(ctx context.Context, step *Step) error {
 	for _, item := range p.Items(step.Read) {
 		if step.Read.current(item) {
-			step.progress.Debug(capitalized(item.phrase()) + " is " + reasonCurrent)
+			step.progress.Debug(machine.Capitalized(item.Phrase()) + " is " + machine.ReasonCurrent)
 			continue
 		}
 		install := func() error { return p.host.Install(ctx, item) }
-		if item.Kind == KindEngine {
+		if item.Kind == machine.KindEngine {
 			install = func() error { return p.host.installEngine(ctx, step.progress) }
 		}
 		if err := install(); err != nil {
 			return err
 		}
-		step.progress.Say("Installed " + item.phrase())
+		step.progress.Say("Installed " + item.Phrase())
 	}
 	return step.Reread(ctx)
 }
 
 type proxyPart struct{ host *Host }
 
-func (proxyPart) Items(read Reading) []Item {
+func (proxyPart) Items(read Reading) []machine.Item {
 	return append(ProxyItems(read.Arch, read.Front), read.recorded...)
 }
 

@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const (
@@ -20,6 +22,18 @@ const (
 )
 
 const LiveBinary = LibDir + "/live"
+
+const DeployUser = "ocel-deploy"
+
+const (
+	ReleasesDir    = StateRoot + "/releases"
+	ReleasesHelper = LibDir + "/releases"
+	ImagesLock     = ReleasesDir + "/images.lock"
+)
+
+func TierDir(tier environment.Tier) string { return TierRoot + "/" + string(tier) }
+
+func StateDir(tier environment.Tier) string { return StateRoot + "/" + string(tier) }
 
 func Sum(content []byte) string {
 	sum := sha256.Sum256(content)

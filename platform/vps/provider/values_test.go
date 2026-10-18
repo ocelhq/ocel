@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -42,7 +42,7 @@ func everyValue() []string {
 
 func envFileWritten(t *testing.T, machine *box, tier environment.Tier, physical string) string {
 	t.Helper()
-	path := host.EnvFile(tier, physical)
+	path := envfile.Path(tier, physical)
 	machine.mu.Lock()
 	defer machine.mu.Unlock()
 	for at, command := range machine.ran {

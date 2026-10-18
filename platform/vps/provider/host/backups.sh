@@ -225,7 +225,10 @@ restore_kv() {
 }
 
 restore_store() {
-  container=$1 file=$2
+  tier=$1 container=$2 file=$3
+  kept="$(dir_of "$tier" "$container")/$mirror"
+  [ "${file%/}" = "$kept" ] ||
+    abort "only $kept restores into $container; $file holds at most the objects one backup replaced or deleted, and syncing it over the store deletes every other"
   [ -d "$file" ] || abort "$file is not a copy of a store this host keeps"
   copy_store "$container" "$file" ",readonly" sync /backup store: ||
     abort "copying $file back into $container failed"
@@ -248,7 +251,7 @@ restore() {
   case "$kind" in
   pg) restore_pg "$container" "$file" ;;
   kv) restore_kv "$container" "$file" ;;
-  s3) restore_store "$container" "$file" ;;
+  s3) restore_store "$tier" "$container" "$file" ;;
   *) abort "$container asks for no backup, so none restores into it" ;;
   esac
 }

@@ -19,8 +19,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -31,7 +34,7 @@ type bench struct {
 	mu        sync.Mutex
 	dest      ssh.Destination
 	facts     ssh.Facts
-	installed map[environment.Tier][]Item
+	installed map[environment.Tier][]machine.Item
 	ran       []string
 	fed       []string
 	dials     int
@@ -44,7 +47,7 @@ type bench struct {
 	followed  func(command string, each func(ssh.Line) error) error
 }
 
-func machine(installed map[environment.Tier][]Item) *bench {
+func newBench(installed map[environment.Tier][]machine.Item) *bench {
 	return &bench{
 		dest: ssh.Destination{
 			Written:    "ocelbox",
@@ -58,16 +61,17 @@ func machine(installed map[environment.Tier][]Item) *bench {
 	}
 }
 
-func (b *bench) host() *Host { return b.fronted(Front{}) }
+func (b *bench) host() *Host { return b.fronted(front.Proxy{}) }
 
-func (b *bench) fronted(front Front) *Host {
-	return New(ssh.NewBox(b.dial, b.pause), Keys{}, nil, front)
+func (b *bench) fronted(fronting front.Proxy) *Host {
+	return New(ssh.NewBox(b.dial, b.pause), Keys{}, nil, fronting)
 }
 
 func (h *Host) useFront(front proxy.Proxy) {
 	h.front = front
 	h.routing = routing.NewTable(h.Box, front, h.pins.Verified)
 	h.tunnel = tunnel.New(h.Box, h.routing)
+	h.containers = release.NewContainers(h.Box, h.engine, h.routing, front, h.images)
 }
 
 func (b *bench) pause(ctx context.Context, wait time.Duration) error {
@@ -232,7 +236,7 @@ func (b *bench) rendered(command string) ssh.Result {
 		return ssh.Result{Stdout: pairSaid(string(routingTableItem().Content), string(proxyConfigItem().Content))}
 	case strings.Contains(command, "for p in"):
 		for tier, items := range b.installed {
-			if strings.Contains(command, shell.Quote(StampPath(tier))) {
+			if strings.Contains(command, shell.Quote(machine.StampPath(tier))) {
 				return ssh.Result{Stdout: surveyed(items)}
 			}
 		}
@@ -248,14 +252,16 @@ func (b *bench) rendered(command string) ssh.Result {
 		return ssh.Result{}
 	case strings.Contains(command, "'--filter' 'publish="):
 		for _, items := range b.installed {
-			if slices.ContainsFunc(items, func(item Item) bool { return item.Kind == KindContainer && item.Name == caddy.Container }) {
+			if slices.ContainsFunc(items, func(item machine.Item) bool {
+				return item.Kind == machine.KindContainer && item.Name == caddy.Container
+			}) {
 				return ssh.Result{Stdout: caddy.Container + "\n"}
 			}
 		}
 		return ssh.Result{}
 	case strings.HasPrefix(command, ownersCommand):
 		return ssh.Result{}
-	case strings.Contains(command, shell.Quote(releaseSelectors())):
+	case strings.Contains(command, shell.Quote(release.ReleaseSelectors())):
 		return ssh.Result{Stdout: "shop web " + appImage + "\n"}
 	case strings.HasPrefix(command, "cat ") && !strings.HasPrefix(command, "cat | "):
 		for _, items := range b.installed {
@@ -271,36 +277,36 @@ func (b *bench) rendered(command string) ssh.Result {
 	}
 }
 
-func surveyed(items []Item) string {
+func surveyed(items []machine.Item) string {
 	var rendered strings.Builder
 	for _, item := range items {
-		fmt.Fprintf(&rendered, "%s\t%s\t%o\t%s\t%s", item.Kind, item.Name, item.Mode, item.Owner, item.sum())
-		if item.Kind == KindSealKey {
+		fmt.Fprintf(&rendered, "%s\t%s\t%o\t%s\t%s", item.Kind, item.Name, item.Mode, item.Owner, item.Sum())
+		if item.Kind == machine.KindSealKey {
 			rendered.WriteString("\t2026-01-01T00:00:00Z")
 		}
 		rendered.WriteString("\n")
 		if item.ID() == engineItem().ID() {
-			fmt.Fprintf(&rendered, "%s\t%s\t0\t%s\t%s\n", engineFactsRow, dockerEngine, engineStandard, "28.3.1")
+			fmt.Fprintf(&rendered, "%s\t%s\t0\t%s\t%s\n", machine.EngineFactsRow, dockerEngine, engineStandard, "28.3.1")
 		}
 	}
 	return rendered.String()
 }
 
-func bootstrapped(t *testing.T, tier environment.Tier) []Item {
+func bootstrapped(t *testing.T, tier environment.Tier) []machine.Item {
 	t.Helper()
-	stamp, err := Stamp{State: StateComplete}.item(tier)
+	stamp, err := machine.Stamp{State: machine.StateComplete}.Item(tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return append(Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{}), stamp)
+	return append(Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), stamp)
 }
 
 func TestASurveyedHostReadsBackAsTheItemsThatAreInstalledOnIt(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})
-	box := machine(map[environment.Tier][]Item{tier: items})
+	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	box := newBench(map[environment.Tier][]machine.Item{tier: items})
 
 	read, err := box.host().Survey(context.Background(), tier)
 	if err != nil {
@@ -321,36 +327,36 @@ func bootstrappedOn(t *testing.T, tier environment.Tier) *bench {
 
 func bootstrappedWith(t *testing.T, tier environment.Tier, table, config *string) *bench {
 	t.Helper()
-	return bootstrappedBehind(t, tier, Front{}, table, config)
+	return bootstrappedBehind(t, tier, front.Proxy{}, table, config)
 }
 
-func bootstrappedBehind(t *testing.T, tier environment.Tier, front Front, table, config *string) *bench {
+func bootstrappedBehind(t *testing.T, tier environment.Tier, fronting front.Proxy, table, config *string) *bench {
 	t.Helper()
 
 	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ssh.AMD64, front)
+	items := Items(tier, keys, ssh.AMD64, fronting)
 	minted := []byte("the key this box minted for itself")
-	present := make([]Item, 0, len(items)+1)
+	present := make([]machine.Item, 0, len(items)+1)
 	for _, item := range items {
-		if item.Kind == KindSealKey {
+		if item.Kind == machine.KindSealKey {
 			item.Content = minted
 		}
 		present = append(present, item)
 	}
-	record, err := frontRecordItem(front, "shop", tier)
+	record, err := frontRecordItem(fronting, "shop", tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stamp, err := Stamp{
-		State:   StateComplete,
+	stamp, err := machine.Stamp{
+		State:   machine.StateComplete,
 		Writer:  "the-suite",
-		Seal:    Seal{Fingerprint: contentSum(minted), Algorithm: SealAlgorithm, CreatedAt: "2026-01-01T00:00:00Z"},
-		Digests: digests(append(items, record)),
-	}.item(tier)
+		Seal:    machine.Seal{Fingerprint: machine.ContentSum(minted), Algorithm: machine.SealAlgorithm, CreatedAt: "2026-01-01T00:00:00Z"},
+		Digests: machine.DigestsOf(append(items, record)),
+	}.Item(tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	box := machine(map[environment.Tier][]Item{tier: append(present, stamp, record)})
+	box := newBench(map[environment.Tier][]machine.Item{tier: append(present, stamp, record)})
 	proxied := servesPair(box, table, config)
 	box.answer = func(command string) (ssh.Result, bool) {
 		if command == "cat ~/.ssh/authorized_keys 2>/dev/null" {
@@ -388,7 +394,7 @@ func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(
 	answered := box.answer
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "for p in") {
-			return ssh.Result{Stdout: strings.Join([]string{kindUnreadable, deployUser, "0", KindUser, "getent passwd exited 126"}, "\t") + "\n"}, true
+			return ssh.Result{Stdout: strings.Join([]string{machine.KindUnreadable, deployUser, "0", machine.KindUser, "getent passwd exited 126"}, "\t") + "\n"}, true
 		}
 		return answered(command)
 	}
@@ -418,10 +424,10 @@ func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() = %v", err)
 	}
-	if read.current(proxyItem(KindFile)) {
+	if read.current(proxyItem(machine.KindFile)) {
 		t.Fatal("the reading calls a helper it read no bytes of current, so this test proves nothing about what drift is")
 	}
-	if !read.observed(KindFile, boxapi.SwitchboardBinary) {
+	if !read.observed(machine.KindFile, boxapi.SwitchboardBinary) {
 		t.Errorf("%s is absent from a reading every write is planned against, and absence is a lie there: a file this reading could not hash is drift it must name",
 			boxapi.SwitchboardBinary)
 	}

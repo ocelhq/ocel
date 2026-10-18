@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/topic"
 )
 
 const (
@@ -60,7 +61,7 @@ func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _
 
 func (p *Provider) Retire(ctx context.Context, apps provider.LiveApps, progress progress.Log) error {
 	ref := provider.StackRef{Project: apps.Slug, Tier: apps.Tier, Name: naming.StackName{Env: apps.Env}}
-	return p.retireWorkers(ctx, ref, func(name string, worker boxapi.QueueWorker) bool {
+	return topic.NewWorkers(p.components()).Retire(ctx, ref, func(name string, worker boxapi.QueueWorker) bool {
 		reason, retired := retiredReason(apps, name, worker)
 		if retired {
 			progress.Say(fmt.Sprintf("Taking down worker %s's container %s: %s", name, worker.Container, reason))

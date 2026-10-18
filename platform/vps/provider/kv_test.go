@@ -13,8 +13,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -189,8 +190,8 @@ func TestARemovedKVStoreTakesItsContainerDataPasswordAndBackups(t *testing.T) {
 	for _, want := range []string{
 		"docker rm --force '" + storeContainer + "'",
 		"docker volume rm",
-		host.KeptPath(environment.TierProduction, storeContainer),
-		host.BackupsDir(environment.TierProduction, storeContainer),
+		container.KeptPath(environment.TierProduction, storeContainer),
+		boxapi.BackupsDir(environment.TierProduction, storeContainer),
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("a teardown ran %q and never reached %s", joined, want)

@@ -11,7 +11,7 @@ import (
 func sites(t *testing.T, marker string) []string {
 	t.Helper()
 	var entries []string
-	for _, dir := range []string{".", "../docker", "../routing", "../tunnel"} {
+	for _, dir := range []string{".", "../docker", "../routing", "../tunnel", "../release", "../envfile", "../resources/container", "../front", "../machine"} {
 		matched, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil {
 			t.Fatal(err)

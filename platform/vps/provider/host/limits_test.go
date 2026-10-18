@@ -41,8 +41,8 @@ func runOnBench(t *testing.T, box *bench) string {
 func TestAProductionAppMayUseHalfTheBoxsMemoryAndEveryCPU(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
-	if _, err := box.host().RunContainer(context.Background(), valued()); err != nil {
+	box := newBench(nil)
+	if _, err := box.host().containers.Run(context.Background(), valued()); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	run := runOnBench(t, box)
@@ -59,8 +59,8 @@ func TestAPreviewAppMayUseAQuarterOfTheBoxsMemoryAndHalfItsCPUs(t *testing.T) {
 
 	spec := valued()
 	spec.Tier = environment.TierPreview
-	box := machine(nil)
-	if _, err := box.host().RunContainer(context.Background(), spec); err != nil {
+	box := newBench(nil)
+	if _, err := box.host().containers.Run(context.Background(), spec); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	run := runOnBench(t, box)
@@ -75,8 +75,8 @@ func TestAPreviewAppMayUseAQuarterOfTheBoxsMemoryAndHalfItsCPUs(t *testing.T) {
 func TestAResourceWithNoMemoryOfItsOwnIsLimitedByItsTiersShareOfTheBox(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
-	if err := box.host().RunResource(context.Background(), resourced(), "secret"); err != nil {
+	box := newBench(nil)
+	if err := box.host().resources.Run(context.Background(), resourced(), "secret"); err != nil {
 		t.Fatalf("RunResource() = %v", err)
 	}
 	if memory, _ := flagOf(runOnBench(t, box), "--memory"); memory != strconv.Itoa(benchMemoryBytes/2) {
@@ -85,8 +85,8 @@ func TestAResourceWithNoMemoryOfItsOwnIsLimitedByItsTiersShareOfTheBox(t *testin
 
 	spec := resourced()
 	spec.Memory = "512m"
-	box = machine(nil)
-	if err := box.host().RunResource(context.Background(), spec, "secret"); err != nil {
+	box = newBench(nil)
+	if err := box.host().resources.Run(context.Background(), spec, "secret"); err != nil {
 		t.Fatalf("RunResource() = %v", err)
 	}
 	if memory, _ := flagOf(runOnBench(t, box), "--memory"); memory != "512m" {
@@ -97,14 +97,14 @@ func TestAResourceWithNoMemoryOfItsOwnIsLimitedByItsTiersShareOfTheBox(t *testin
 func TestABoxWhoseSizeCannotBeReadRunsNothingUnlimited(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, docker.SizeFields) {
 			return ssh.Result{Stderr: "Cannot connect to the Docker daemon", Code: 1}, true
 		}
 		return ssh.Result{}, false
 	}
-	if _, err := box.host().RunContainer(context.Background(), valued()); err == nil {
+	if _, err := box.host().containers.Run(context.Background(), valued()); err == nil {
 		t.Fatal("RunContainer() = nil on a box whose size could not be read, so the app ran with no memory limit")
 	}
 }

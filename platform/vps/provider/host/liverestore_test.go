@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -62,7 +63,7 @@ func (b daemonBench) settings(t *testing.T) map[string]any {
 func TestEveryBootstrappedEngineKeepsItsContainersRunningWhileTheDaemonRestarts(t *testing.T) {
 	t.Parallel()
 
-	if !slices.ContainsFunc(EngineItems(), func(item Item) bool { return item.Kind == KindLiveRestore }) {
+	if !slices.ContainsFunc(EngineItems(), func(item machine.Item) bool { return item.Kind == machine.KindLiveRestore }) {
 		t.Fatal("bootstrap leaves live-restore off, so every daemon upgrade or restart stops every app and resource on the box")
 	}
 }

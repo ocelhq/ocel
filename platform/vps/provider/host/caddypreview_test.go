@@ -312,7 +312,7 @@ func TestDescribingABoxBeforeItHasARoutingTableStillRefusesUnguardedOnDemandTls(
 		"a proxy an older ocel wrote":                      {config: olderRendering(t, routed())},
 		"a proxy somebody added an unguarded on-demand to": {config: onDemandOn(t, routed()), refused: true},
 	} {
-		rig := machine(nil)
+		rig := newBench(nil)
 		absent := ""
 		config := box.config
 		rig.answer = servesPair(rig, &absent, &config)

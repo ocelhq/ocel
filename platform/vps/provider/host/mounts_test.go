@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -67,7 +69,7 @@ func probedAs(t *testing.T, k kernel, container docker.Service, engine engineRep
 	if err != nil {
 		t.Fatalf("probe %s: %v", container.Name, err)
 	}
-	observed, _, err := readSurvey(string(rendered))
+	observed, _, err := machine.ReadSurvey(string(rendered))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +107,7 @@ func mountedAs(container docker.Service, moved int) (inside, stats map[string]st
 func TestAContainerWithAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 	t.Parallel()
 
-	for _, container := range []docker.Service{frontProxy(), switchboardBox(nil, Front{})} {
+	for _, container := range []docker.Service{frontProxy(), switchboardBox(nil, front.Proxy{})} {
 		stated := containerItem(container, "").Digest()
 		facts := engineSays(container, docker.MigrateSet)
 		current, _ := mountedAs(container, -1)
@@ -136,21 +138,21 @@ func TestAContainerWithAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ssh.AMD64, Front{})
+	items := Items(tier, keys, ssh.AMD64, front.Proxy{})
 	minted := []byte("the key this box minted for itself")
-	for _, item := range []Item{frontItem(), boardItem()} {
+	for _, item := range []machine.Item{frontItem(), boardItem()} {
 		moved := bytes.Replace(item.Content, []byte(docker.MountsFact+docker.MountsIntact), []byte(docker.MountsFact+docker.MountsMoved), 1)
 		if bytes.Equal(moved, item.Content) {
 			t.Fatalf("%s is surveyed without its mounts, so what a moved one proves here is nothing", item.Name)
 		}
-		observed := digests(items)
-		observed[item.ID()] = digest(KindContainer, item.Name, 0, rootOwner, contentSum(moved))
+		observed := machine.DigestsOf(items)
+		observed[item.ID()] = machine.DigestOf(machine.KindContainer, item.Name, 0, machine.RootOwner, machine.ContentSum(moved))
 		read := Reading{
 			Tier: tier, Present: true, Keys: keys, Arch: ssh.AMD64, Observed: observed,
-			Seal: Seal{Fingerprint: contentSum(minted)},
-			Stamp: Stamp{
-				State: StateComplete,
-				Seal:  Seal{Fingerprint: contentSum(minted)}, Digests: digests(items),
+			Seal: machine.Seal{Fingerprint: machine.ContentSum(minted)},
+			Stamp: machine.Stamp{
+				State: machine.StateComplete,
+				Seal:  machine.Seal{Fingerprint: machine.ContentSum(minted)}, Digests: machine.DigestsOf(items),
 			},
 		}
 		if back := planFor(planned(read), item.ID()); back.Action != provider.ActionUpdate {

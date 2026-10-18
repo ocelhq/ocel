@@ -23,8 +23,9 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
@@ -34,25 +35,25 @@ const (
 	slug     = "shop"
 )
 
-type machine struct {
+type fakeBox struct {
 	pins        []boxapi.Pin
 	claims      []boxapi.Claim
 	shields     []boxapi.Shield
 	upstream    map[boxapi.RouteKey]string
 	swept       map[string]bool
 	present     map[string]bool
-	runs        map[string]host.Run
+	runs        map[string]release.Run
 	archived    map[string]bool
 	calls       []string
-	rollouts    []host.Rollout
-	started     []host.Container
+	rollouts    []release.Rollout
+	started     []release.Container
 	headed      []string
 	previewBase string
 	refusals    map[string]error
 	visited     []string
-	rollingOut  func(host.Rollout) error
+	rollingOut  func(release.Rollout) error
 	discarded   []string
-	discards    []host.Rollout
+	discards    []release.Rollout
 	leftRunning string
 	byHand      int
 	tables      int
@@ -69,12 +70,12 @@ type machine struct {
 	gateReads     []environment.Tier
 }
 
-func aMachine() *machine {
-	return &machine{
+func aMachine() *fakeBox {
+	return &fakeBox{
 		upstream: map[boxapi.RouteKey]string{},
 		swept:    map[string]bool{},
 		present:  map[string]bool{},
-		runs:     map[string]host.Run{},
+		runs:     map[string]release.Run{},
 		archived: map[string]bool{},
 		refusals: map[string]error{},
 
@@ -83,43 +84,43 @@ func aMachine() *machine {
 	}
 }
 
-func (m *machine) refuseOn(call string, err error) { m.refusals[call] = err }
+func (m *fakeBox) refuseOn(call string, err error) { m.refusals[call] = err }
 
-func (m *machine) refuse(call string) error {
+func (m *fakeBox) refuse(call string) error {
 	m.visited = append(m.visited, call)
 	return m.refusals[call]
 }
 
-func (m *machine) reached() []string {
+func (m *fakeBox) reached() []string {
 	return slices.Compact(slices.Sorted(slices.Values(m.visited)))
 }
 
-func (m *machine) Address(context.Context) (string, error) {
+func (m *fakeBox) Address(context.Context) (string, error) {
 	return address, m.refuse("Address")
 }
 
-func (m *machine) Pins() *certs.Pins { return certs.NewPins(nil, m.pins) }
+func (m *fakeBox) Pins() *certs.Pins { return certs.NewPins(nil, m.pins) }
 
-func (m *machine) RouteBy(hostname string) string {
+func (m *fakeBox) RouteBy(hostname string) string {
 	if m.byHand == 0 {
 		return ""
 	}
 	return manual.Route(hostname, m.byHand)
 }
 
-func (m *machine) EnsureImage(_ context.Context, project, app, coordinate string) (bool, error) {
+func (m *fakeBox) Ensure(_ context.Context, project, app, coordinate string) (bool, error) {
 	if err := m.refuse("EnsureImage"); err != nil {
 		return false, err
 	}
 	return !m.swept[coordinate] || m.archived[project+"/"+app+" "+coordinate], nil
 }
 
-func (m *machine) RunContainer(_ context.Context, spec host.Container) (host.Run, error) {
+func (m *fakeBox) Run(_ context.Context, spec release.Container) (release.Run, error) {
 	m.calls = append(m.calls, "run "+spec.Name)
 	m.started = append(m.started, spec)
 	ran, told := m.runs[spec.Name]
 	if !told && !m.present[spec.Name] {
-		ran = host.RunCreated
+		ran = release.RunCreated
 	}
 	if err := errors.Join(m.refuse("RunContainer"), m.refuse("RunContainer "+spec.Name)); err != nil {
 		return ran, err
@@ -128,18 +129,18 @@ func (m *machine) RunContainer(_ context.Context, spec host.Container) (host.Run
 	return ran, nil
 }
 
-func (m *machine) ForgetNetwork(_ context.Context, tier environment.Tier, project string) error {
+func (m *fakeBox) ForgetNetwork(_ context.Context, tier environment.Tier, project string) error {
 	m.calls = append(m.calls, "forget network "+string(tier)+"/"+project)
 	return m.refuse("ForgetNetwork")
 }
 
-func (m *machine) Promote(_ context.Context, _ environment.Tier, project, app, coordinate string) error {
+func (m *fakeBox) Promote(_ context.Context, _ environment.Tier, project, app, coordinate string) error {
 	m.calls = append(m.calls, "head "+project+"/"+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
 	return m.refuse("Promote")
 }
 
-func (m *machine) Serving(_ context.Context, key boxapi.RouteKey) (string, error) {
+func (m *fakeBox) Serving(_ context.Context, key boxapi.RouteKey) (string, error) {
 	m.calls = append(m.calls, "serving "+key.App)
 	if err := m.refuse("Serving"); err != nil {
 		return "", err
@@ -147,7 +148,7 @@ func (m *machine) Serving(_ context.Context, key boxapi.RouteKey) (string, error
 	return m.upstream[key], nil
 }
 
-func (m *machine) RollOut(_ context.Context, rollout host.Rollout, _ progress.Log) error {
+func (m *fakeBox) RollOut(_ context.Context, rollout release.Rollout, _ progress.Log) error {
 	if len(rollout.Apps) == 0 {
 		return nil
 	}
@@ -183,7 +184,7 @@ func (m *machine) RollOut(_ context.Context, rollout host.Rollout, _ progress.Lo
 	}
 }
 
-func (m *machine) Discard(_ context.Context, rollout host.Rollout) string {
+func (m *fakeBox) Discard(_ context.Context, rollout release.Rollout) string {
 	targets := make([]string, 0, len(rollout.Apps))
 	for _, app := range rollout.Apps {
 		targets = append(targets, app.Target)
@@ -194,7 +195,7 @@ func (m *machine) Discard(_ context.Context, rollout host.Rollout) string {
 	return m.leftRunning
 }
 
-func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error {
+func (m *fakeBox) UnroutePointer(_ context.Context, owner, pointer string) error {
 	m.calls = append(m.calls, "unroute "+owner+"/"+pointer)
 	if err := m.refuse("UnroutePointer"); err != nil {
 		return err
@@ -206,7 +207,7 @@ func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error
 	return nil
 }
 
-func (m *machine) UnrouteSurface(_ context.Context, owner string) error {
+func (m *fakeBox) UnrouteSurface(_ context.Context, owner string) error {
 	m.calls = append(m.calls, "unroute "+owner)
 	if err := m.refuse("UnrouteSurface"); err != nil {
 		return err
@@ -216,14 +217,14 @@ func (m *machine) UnrouteSurface(_ context.Context, owner string) error {
 	return nil
 }
 
-func (m *machine) Claims(context.Context) ([]boxapi.Claim, error) {
+func (m *fakeBox) Claims(context.Context) ([]boxapi.Claim, error) {
 	if err := m.refuse("Claims"); err != nil {
 		return nil, err
 	}
 	return slices.Clone(m.claims), nil
 }
 
-func (m *machine) ClaimHosts(_ context.Context, claims []boxapi.Claim) error {
+func (m *fakeBox) ClaimHosts(_ context.Context, claims []boxapi.Claim) error {
 	if err := m.refuse("ClaimHosts"); err != nil {
 		return err
 	}
@@ -238,7 +239,7 @@ func (m *machine) ClaimHosts(_ context.Context, claims []boxapi.Claim) error {
 	return nil
 }
 
-func (m *machine) DisclaimPointer(_ context.Context, owner, pointer string) error {
+func (m *fakeBox) DisclaimPointer(_ context.Context, owner, pointer string) error {
 	m.calls = append(m.calls, "disclaim "+owner+"/"+pointer)
 	if err := m.refuse("DisclaimPointer"); err != nil {
 		return err
@@ -249,7 +250,7 @@ func (m *machine) DisclaimPointer(_ context.Context, owner, pointer string) erro
 	return nil
 }
 
-func (m *machine) DisclaimHost(_ context.Context, hostname, owner string) error {
+func (m *fakeBox) DisclaimHost(_ context.Context, hostname, owner string) error {
 	m.calls = append(m.calls, "disclaim "+hostname)
 	if err := m.refuse("DisclaimHost"); err != nil {
 		return err
@@ -260,7 +261,7 @@ func (m *machine) DisclaimHost(_ context.Context, hostname, owner string) error 
 	return nil
 }
 
-func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
+func (m *fakeBox) DisclaimSurface(_ context.Context, owner string) error {
 	m.calls = append(m.calls, "disclaim "+owner)
 	if err := m.refuse("DisclaimSurface"); err != nil {
 		return err
@@ -271,7 +272,7 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	return nil
 }
 
-func (m *machine) PutShield(_ context.Context, shield boxapi.Shield) (boxapi.Shield, error) {
+func (m *fakeBox) PutShield(_ context.Context, shield boxapi.Shield) (boxapi.Shield, error) {
 	m.calls = append(m.calls, "shield "+shield.Hostname)
 	if err := m.refuse("PutShield"); err != nil {
 		return boxapi.Shield{}, err
@@ -280,7 +281,7 @@ func (m *machine) PutShield(_ context.Context, shield boxapi.Shield) (boxapi.Shi
 	return m.shields[len(m.shields)-1], nil
 }
 
-func (m *machine) PutGate(_ context.Context, owner string, held *gate.Gate) error {
+func (m *fakeBox) PutGate(_ context.Context, owner string, held *gate.Gate) error {
 	m.calls = append(m.calls, "gate "+owner)
 	if err := m.refuse("PutGate"); err != nil {
 		return err
@@ -292,11 +293,11 @@ func (m *machine) PutGate(_ context.Context, owner string, held *gate.Gate) erro
 	return nil
 }
 
-func (m *machine) record(tier environment.Tier, project string, held gate.Gate) {
+func (m *fakeBox) record(tier environment.Tier, project string, held gate.Gate) {
 	m.recordedGates[switchboard.Surface(project, tier)] = held
 }
 
-func (m *machine) readGate(_ context.Context, tier environment.Tier, project string) (*gate.Gate, error) {
+func (m *fakeBox) readGate(_ context.Context, tier environment.Tier, project string) (*gate.Gate, error) {
 	m.gateReads = append(m.gateReads, tier)
 	if err := m.refuse("ReadGate"); err != nil {
 		return nil, err
@@ -308,11 +309,11 @@ func (m *machine) readGate(_ context.Context, tier environment.Tier, project str
 	return &held, nil
 }
 
-func (m *machine) RefuseUnshielded(context.Context, string) error {
+func (m *fakeBox) RefuseUnshielded(context.Context, string) error {
 	return m.refuse("RefuseUnshielded")
 }
 
-func (m *machine) RemoveShield(_ context.Context, hostname, owner string) error {
+func (m *fakeBox) RemoveShield(_ context.Context, hostname, owner string) error {
 	m.calls = append(m.calls, "unshield "+hostname)
 	if err := m.refuse("RemoveShield"); err != nil {
 		return err
@@ -326,8 +327,8 @@ type boxEdge struct {
 	keyValues records.Store
 }
 
-func edgeOver(m *machine, store records.Store) boxEdge {
-	return boxEdge{Edge: switchboard.New(m, m, m, m.ApplyOrigins, sshScope, m.findTunnelHooks, m.readGate), keyValues: store}
+func edgeOver(m *fakeBox, store records.Store) boxEdge {
+	return boxEdge{Edge: switchboard.New(switchboard.Box{Machine: m, Containers: m, Images: m, Routes: m, Tunnel: machineTunnel{m}, Origins: m.ApplyOrigins, Scope: sshScope, Tunnels: m.findTunnelHooks, ReadGate: m.readGate}), keyValues: store}
 }
 
 type boxStack struct {
@@ -359,16 +360,16 @@ func removePointer(ctx context.Context, stack boxStack, pointer string, progress
 	return stack.Ledger().RemovePointer(ctx, pointer)
 }
 
-func (m *machine) ApplyOrigins(_ context.Context, project string, tier environment.Tier) error {
+func (m *fakeBox) ApplyOrigins(_ context.Context, project string, tier environment.Tier) error {
 	m.calls = append(m.calls, "apply origins "+project+"/"+string(tier))
 	return m.refuse("ApplyOrigins")
 }
 
-func (m *machine) PreviewEntry(context.Context) (string, error) {
+func (m *fakeBox) PreviewEntry(context.Context) (string, error) {
 	return m.previewBase, m.refuse("PreviewEntry")
 }
 
-func (m *machine) InstallPreviewEntry(_ context.Context, base string) error {
+func (m *fakeBox) InstallPreviewEntry(_ context.Context, base string) error {
 	m.calls = append(m.calls, "install preview entry "+base)
 	if err := m.refuse("InstallPreviewEntry"); err != nil {
 		return err
@@ -381,7 +382,7 @@ func (m *machine) InstallPreviewEntry(_ context.Context, base string) error {
 	return nil
 }
 
-func (m *machine) RemovePreviewEntry(_ context.Context, base string) error {
+func (m *fakeBox) RemovePreviewEntry(_ context.Context, base string) error {
 	m.calls = append(m.calls, "remove preview entry "+base)
 	if err := m.refuse("RemovePreviewEntry"); err != nil {
 		return err
@@ -430,7 +431,7 @@ func TestTheBoxRouterBehavesAsEveryRouterMust(t *testing.T) {
 	})
 }
 
-func boxFixture(m *machine, front boxEdge, stack boxStack) routerconformance.Fixture {
+func boxFixture(m *fakeBox, front boxEdge, stack boxStack) routerconformance.Fixture {
 	state := stack.State()
 	return routerconformance.Fixture{
 		Router: switchboard.NewRouter(front.Edge),
@@ -448,7 +449,7 @@ func boxFixture(m *machine, front boxEdge, stack boxStack) routerconformance.Fix
 	}
 }
 
-func reconciled(t *testing.T) (*machine, boxEdge, boxStack) {
+func reconciled(t *testing.T) (*fakeBox, boxEdge, boxStack) {
 	t.Helper()
 
 	m := aMachine()
@@ -602,11 +603,11 @@ func TestAPromotionOfSeveralAppsCutsOverThemAllInOneRelease(t *testing.T) {
 func TestAPromotionTheBoxNeverServedLeavesThePointerOnTheOneItServes(t *testing.T) {
 	t.Parallel()
 
-	for what, refuse := range map[string]func(*machine){
-		"a container that would not run": func(m *machine) {
+	for what, refuse := range map[string]func(*fakeBox){
+		"a container that would not run": func(m *fakeBox) {
 			m.refuseOn("RunContainer", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
 		},
-		"a release the box kept off": func(m *machine) {
+		"a release the box kept off": func(m *fakeBox) {
 			m.refuseOn("Release", router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate exited 4; the previous release is still live")})
 		},
 	} {
@@ -677,17 +678,17 @@ func TestAPromotionRefusedBeforeItsRollOutRemovesOnlyTheContainersItCreated(t *t
 	t.Parallel()
 
 	for what, refused := range map[string]struct {
-		refuse func(*machine)
+		refuse func(*fakeBox)
 		want   []string
 	}{
 		"a container that would not run": {
-			refuse: func(m *machine) {
+			refuse: func(m *fakeBox) {
 				m.refuseOn("RunContainer", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
 			},
 			want: []string{"shop-api-1111:" + containerimage.PortText},
 		},
 		"a gate the box would not take": {
-			refuse: func(m *machine) {
+			refuse: func(m *fakeBox) {
 				m.refuseOn("PutGate", refusal.Refuse(refusal.CodeNotReady, "the routing table could not be written"))
 			},
 		},
@@ -720,11 +721,11 @@ func TestAPromotionRefusedBeforeItsRollOutRemovesOnlyTheContainersItCreated(t *t
 func TestARollbackRefusedBeforeItsRollOutKeepsTheContainersItRollsBackTo(t *testing.T) {
 	t.Parallel()
 
-	for what, refuse := range map[string]func(*machine){
-		"a gate the box would not take": func(m *machine) {
+	for what, refuse := range map[string]func(*fakeBox){
+		"a gate the box would not take": func(m *fakeBox) {
 			m.refuseOn("PutGate", refusal.Refuse(refusal.CodeNotReady, "the routing table could not be written"))
 		},
-		"a container that would not run again": func(m *machine) {
+		"a container that would not run again": func(m *fakeBox) {
 			m.refuseOn("RunContainer shop-web-1111", refusal.Refuse(refusal.CodeNotReady, "docker start failed"))
 		},
 	} {
@@ -775,7 +776,7 @@ func TestARollbackRefusedBeforeItsRollOutStopsTheContainersItStartedAgain(t *tes
 			t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
 		}
 	}
-	m.runs["shop-api-1111"] = host.RunRestarted
+	m.runs["shop-api-1111"] = release.RunRestarted
 	m.refuseOn("RunContainer shop-web-1111", refusal.Refuse(refusal.CodeNotReady, "docker start failed"))
 
 	err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
@@ -785,7 +786,7 @@ func TestARollbackRefusedBeforeItsRollOutStopsTheContainersItStartedAgain(t *tes
 		t.Fatal("a rollback whose second container would not start again succeeded")
 	}
 	if len(m.discards) != 1 || len(m.discards[0].Apps) != 1 ||
-		m.discards[0].Apps[0].Target != "shop-api-1111:"+containerimage.PortText || m.discards[0].Apps[0].Run != host.RunRestarted {
+		m.discards[0].Apps[0].Target != "shop-api-1111:"+containerimage.PortText || m.discards[0].Apps[0].Run != release.RunRestarted {
 		t.Errorf("the refused rollback discarded %+v, want only shop-api-1111, as a container it started again: the box found it stopped, so it stops it again and keeps the values a later rollback needs", m.discards)
 	}
 }
@@ -804,13 +805,13 @@ func TestARollbackTellsItsRollOutWhichContainersItStartedAgain(t *testing.T) {
 			t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
 		}
 	}
-	m.runs["shop-web-1111"] = host.RunRestarted
+	m.runs["shop-web-1111"] = release.RunRestarted
 
 	if err := promoted(t, stack, "p3", "web", "b1"); err != nil {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 	last := m.rollouts[len(m.rollouts)-1]
-	if len(last.Apps) != 1 || last.Apps[0].Run != host.RunRestarted {
+	if len(last.Apps) != 1 || last.Apps[0].Run != release.RunRestarted {
 		t.Errorf("the rollback handed its roll-out %+v, which does not say shop-web-1111 was started again: a roll-out refused at its gate then removes the container a rollback exists to keep", last.Apps)
 	}
 }
@@ -818,11 +819,11 @@ func TestARollbackTellsItsRollOutWhichContainersItStartedAgain(t *testing.T) {
 func TestARefusedPromotionLeavesTheBoxsWindowHeadedWhereItWas(t *testing.T) {
 	t.Parallel()
 
-	for what, refuse := range map[string]func(*machine){
-		"a container that would not run": func(m *machine) {
+	for what, refuse := range map[string]func(*fakeBox){
+		"a container that would not run": func(m *fakeBox) {
 			m.refuseOn("RunContainer", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
 		},
-		"a release the box kept off": func(m *machine) {
+		"a release the box kept off": func(m *fakeBox) {
 			m.refuseOn("Release", router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate exited 4; the previous release is still live")})
 		},
 	} {
@@ -900,7 +901,7 @@ func TestAPromotionOvertakenWhileItGatedNeverCutsOverTheBoxAwayFromTheOneThatOve
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	m.rollingOut = func(rollout host.Rollout) error {
+	m.rollingOut = func(rollout release.Rollout) error {
 		m.rollingOut = nil
 		overtaking := ledger.New(store, environment.TierProduction, slug)
 		if _, err := overtaking.Promote(context.Background(), router.Promotion{PromotionID: "p3", Releases: map[string]string{"web": "b3"}}, "", "p2"); err != nil {
@@ -1168,7 +1169,7 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 		t.Fatalf("PlanProjectRemoval = %d groups, want one", len(groups))
 	}
 	for _, change := range groups[0].Changes {
-		if change.Kind == host.KindContainer {
+		if change.Kind == machine.KindContainer {
 			t.Errorf("the edge's removal plan names the container %q, which the release surface already names: a teardown plan that names it twice offers to remove it twice", change.Name)
 		}
 	}
@@ -1266,7 +1267,7 @@ func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
 	}
 }
 
-func reconciledOn(t *testing.T, m *machine, named string) boxStack {
+func reconciledOn(t *testing.T, m *fakeBox, named string) boxStack {
 	t.Helper()
 
 	front := edgeOver(m, fake.NewKeyValues())

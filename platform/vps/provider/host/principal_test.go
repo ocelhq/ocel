@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -85,7 +87,7 @@ func TestThePrincipalIsWrittenWithALockedPasswordAndNeverThroughPasswd(t *testin
 	t.Parallel()
 
 	dir := stubs(t, nil)
-	sh(t, dir, principal().command())
+	sh(t, dir, principal().Command())
 	log := ran(t, dir)
 
 	for _, want := range []string{
@@ -106,7 +108,7 @@ func TestAPrincipalThatAlreadyExistsIsMovedRatherThanRemade(t *testing.T) {
 
 	existing := decidedAccount()
 	dir := stubs(t, &existing)
-	sh(t, dir, principal().command())
+	sh(t, dir, principal().Command())
 	log := ran(t, dir)
 
 	if strings.Contains(log, "useradd") {
@@ -124,7 +126,7 @@ func TestTheProbeAndTheWriteAgreeOnWhatACurrentPrincipalIs(t *testing.T) {
 	t.Parallel()
 
 	existing := decidedAccount()
-	observed, _, err := readSurvey(sh(t, stubs(t, &existing), deployLogin().survey()))
+	observed, _, err := machine.ReadSurvey(sh(t, stubs(t, &existing), deployLogin().survey()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +151,7 @@ func TestAPrincipalThatDriftedFromWhatOcelWroteIsNotCurrent(t *testing.T) {
 
 			existing := decidedAccount()
 			drift(&existing)
-			observed, _, err := readSurvey(sh(t, stubs(t, &existing), deployLogin().survey()))
+			observed, _, err := machine.ReadSurvey(sh(t, stubs(t, &existing), deployLogin().survey()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -170,7 +172,7 @@ func TestAGetentThatWillNotRunIsNotAHostWithNoAccount(t *testing.T) {
 	executable(t, filepath.Join(dir, "getent"), "#!/bin/sh\nexit 126\n")
 	executable(t, filepath.Join(dir, "id"), "#!/bin/sh\nexit 1\n")
 
-	observed, _, err := readSurvey(sh(t, dir, deployLogin().survey()))
+	observed, _, err := machine.ReadSurvey(sh(t, dir, deployLogin().survey()))
 	if err == nil {
 		t.Fatalf("a survey whose getent could not be run read %v, and an account read as absent is one apply writes over: the deploy principal is recreated and its password reset under whatever is already logging in as it", observed)
 	}
@@ -182,7 +184,7 @@ func TestAGetentThatWillNotRunIsNotAHostWithNoAccount(t *testing.T) {
 func TestAGetentThatFindsNoSuchAccountIsAnAbsenceAndNotARefusal(t *testing.T) {
 	t.Parallel()
 
-	observed, _, err := readSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
+	observed, _, err := machine.ReadSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
 	if err != nil {
 		t.Fatalf("a survey of a host that has no such account = %v, want the absence a first bootstrap reads", err)
 	}
@@ -196,8 +198,8 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 
 	existing := decidedAccount()
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})
-	observed, _, err := readSurvey(sh(t, stubs(t, &existing), survey(items, StampPath(tier))))
+	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	observed, _, err := machine.ReadSurvey(sh(t, stubs(t, &existing), machine.SurveyScript(items, machine.StampPath(tier))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +211,7 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 func TestAPrincipalNothingCreatedIsNotPresent(t *testing.T) {
 	t.Parallel()
 
-	observed, _, err := readSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
+	observed, _, err := machine.ReadSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +275,7 @@ func TestAPasswordFieldTheHostWillNotShowSurveysTheLoginNotAtAll(t *testing.T) {
 		t.Helper()
 		existing := decidedAccount()
 		existing.password = password
-		observed, _, err := readSurvey(sh(t, stubs(t, &existing), deployLogin().survey()))
+		observed, _, err := machine.ReadSurvey(sh(t, stubs(t, &existing), deployLogin().survey()))
 		if err != nil {
 			t.Fatal(err)
 		}

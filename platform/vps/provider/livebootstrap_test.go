@@ -17,17 +17,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func (vm machine) ssh(t *testing.T, command string) string {
+func (vm liveBox) ssh(t *testing.T, command string) string {
 	t.Helper()
 	return vm.sshAs(t, vm.user, command)
 }
 
-func (vm machine) sshAs(t *testing.T, login, command string) string {
+func (vm liveBox) sshAs(t *testing.T, login, command string) string {
 	t.Helper()
 	rendered, err := vm.attempt(login, command)
 	if err != nil {
@@ -40,19 +42,19 @@ func (vm machine) sshAs(t *testing.T, login, command string) string {
 	return rendered
 }
 
-func (vm machine) attempt(login, command string) (string, error) {
+func (vm liveBox) attempt(login, command string) (string, error) {
 	return vm.feeding(login, "", command)
 }
 
-func (vm machine) authenticates(login, command string) (string, error) {
+func (vm liveBox) authenticates(login, command string) (string, error) {
 	return vm.dialling(login, "", command, "-o", "ControlPath=none")
 }
 
-func (vm machine) feeding(login, fed, command string) (string, error) {
+func (vm liveBox) feeding(login, fed, command string) (string, error) {
 	return vm.dialling(login, fed, command)
 }
 
-func (vm machine) dialling(login, fed, command string, extra ...string) (string, error) {
+func (vm liveBox) dialling(login, fed, command string, extra ...string) (string, error) {
 	args := append([]string{
 		"-F", vm.config, "-i", vm.key,
 		"-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
@@ -119,13 +121,13 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	}
 
 	stamp := stampOn(t, vm)
-	if stamp.State != host.StateComplete {
-		t.Errorf("the stamp reads state %q after an apply that finished, want %q", stamp.State, host.StateComplete)
+	if stamp.State != machine.StateComplete {
+		t.Errorf("the stamp reads state %q after an apply that finished, want %q", stamp.State, machine.StateComplete)
 	}
 	if stamp.Writer != "live-suite" {
 		t.Errorf("the stamp reads writer %q, want the writer that applied it", stamp.Writer)
 	}
-	for _, item := range host.Items(tier, nil, ssh.AMD64, host.Front{}) {
+	for _, item := range host.Items(tier, nil, ssh.AMD64, front.Proxy{}) {
 		if stamp.Digests[item.ID()] == "" {
 			t.Errorf("the stamp records no digest for %s, and nothing can say whether it drifted", item.ID())
 		}
@@ -289,7 +291,7 @@ func onlyGroup(t *testing.T, plan provider.Plan) provider.ChangeGroup {
 	return plan.Groups[0]
 }
 
-func (vm machine) proxySaid(t *testing.T) string {
+func (vm liveBox) proxySaid(t *testing.T) string {
 	t.Helper()
 
 	state := vm.inspects(t, "container", caddy.Container,
@@ -310,9 +312,9 @@ func planFor(group provider.ChangeGroup, name string) provider.Change {
 	return provider.Change{}
 }
 
-func stampOn(t *testing.T, vm machine) host.Stamp {
+func stampOn(t *testing.T, vm liveBox) machine.Stamp {
 	t.Helper()
-	var stamp host.Stamp
+	var stamp machine.Stamp
 	if err := json.Unmarshal([]byte(vm.ssh(t, "sudo cat /etc/ocel/production/stamp.json")), &stamp); err != nil {
 		t.Fatalf("the stamp this host has is not one ocel can read: %v", err)
 	}

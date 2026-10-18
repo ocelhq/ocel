@@ -54,7 +54,7 @@ func shellQuoted(arg string) string {
 	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
 }
 
-func (vm machine) pull(t *testing.T, image string) {
+func (vm liveBox) pull(t *testing.T, image string) {
 	t.Helper()
 	var pulled error
 	for attempt := range 3 {
@@ -66,7 +66,7 @@ func (vm machine) pull(t *testing.T, image string) {
 	t.Fatalf("pull %s onto the machine, three tries: %v", image, pulled)
 }
 
-func (vm machine) hashed(t *testing.T, password string) string {
+func (vm liveBox) hashed(t *testing.T, password string) string {
 	t.Helper()
 	vm.pull(t, liveHtpasswdImage)
 	rendered, err := vm.feeding(vm.user, password+"\n",
@@ -81,7 +81,7 @@ func (vm machine) hashed(t *testing.T, password string) string {
 	return line
 }
 
-func (vm machine) registry(t *testing.T) provider.RegistryTarget {
+func (vm liveBox) registry(t *testing.T) provider.RegistryTarget {
 	t.Helper()
 	port := freePort(t)
 	password := secretOf(t)
@@ -114,7 +114,7 @@ func (vm machine) registry(t *testing.T) provider.RegistryTarget {
 	}
 }
 
-func (vm machine) forwarding(t *testing.T, port int) {
+func (vm liveBox) forwarding(t *testing.T, port int) {
 	t.Helper()
 	forward := fmt.Sprintf("127.0.0.1:%d:127.0.0.1:%d", port, port)
 	tunnel := exec.Command("ssh",

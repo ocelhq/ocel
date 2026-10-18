@@ -1,0 +1,162 @@
+package bucket
+
+import (
+	"context"
+	"net/http"
+	"os/exec"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh/sshtest"
+)
+
+func TestAStoreThatIsBusyOrSilentExitsSoTheCallIsTriedAgainAndARefusalDoesNot(t *testing.T) {
+	t.Parallel()
+
+	spec := aStore()
+	calls, err := spec.calls()
+	if err != nil {
+		t.Fatalf("calls() = %v", err)
+	}
+	req, err := spec.signed(calls[0], time.Unix(0, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, driven, _ := strings.Cut(curlCommand(spec.Store, req, calls[0]), "answered=$(")
+	_, tail, _ := strings.Cut(driven, "\n")
+	for answered, want := range map[string]int{"503": storeBusyExit, "429": storeBusyExit, "000": storeBusyExit, "403": 1} {
+		run := exec.Command("sh", "-c", before+"answered="+answered+"\n"+tail)
+		out, _ := run.CombinedOutput()
+		if got := run.ProcessState.ExitCode(); got != want {
+			t.Errorf("the store answering %s exited %d, want %d: %s", answered, got, want, strings.TrimSpace(string(out)))
+		}
+	}
+}
+
+func TestEveryStoreCallBoundsTheDockerExecItRunsCurlIn(t *testing.T) {
+	t.Parallel()
+
+	spec := aStore()
+	calls, err := spec.calls()
+	if err != nil {
+		t.Fatalf("calls() = %v", err)
+	}
+	req, err := spec.signed(calls[0], time.Unix(0, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for what, script := range map[string]string{
+		"a bucket call":   curlCommand(spec.Store, req, calls[0]),
+		"a store listing": storeScript(spec.Store, []*http.Request{req}, calls[:1]),
+	} {
+		at := strings.Index(script, shell.Quote("docker")+" "+shell.Quote("exec"))
+		if at < 0 || !strings.Contains(script[:at], shell.Quote("timeout")) {
+			t.Errorf("%s runs docker exec with no time bound of its own, so a docker that stops answering stalls the deploy:\n%s", what, script)
+		}
+	}
+}
+
+type scriptedStore struct {
+	box *sshtest.Box
+
+	mu     sync.Mutex
+	paused []time.Duration
+}
+
+func storeAnswering(codes ...int) *scriptedStore {
+	var mu sync.Mutex
+	return &scriptedStore{box: sshtest.New(func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, "id -u "+shell.Quote(boxapi.DeployLogin)) {
+			return ssh.Result{Code: 1}, true
+		}
+		if !strings.Contains(command, shell.Quote("docker")+" "+shell.Quote("exec")) {
+			return ssh.Result{}, false
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		code := codes[0]
+		if len(codes) > 1 {
+			codes = codes[1:]
+		}
+		return ssh.Result{Code: code, Stderr: "the store answered 503"}, true
+	})}
+}
+
+func (s *scriptedStore) objects() objectStore {
+	return objectStore{ssh.NewBox(s.box.Dial, func(ctx context.Context, wait time.Duration) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.paused = append(s.paused, wait)
+		return ctx.Err()
+	})}
+}
+
+func (s *scriptedStore) waits() []time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]time.Duration(nil), s.paused...)
+}
+
+func storeCalls(store *scriptedStore) int {
+	called := 0
+	for _, command := range store.box.Commands() {
+		if strings.Contains(command, shell.Quote("docker")+" "+shell.Quote("exec")) {
+			called++
+		}
+	}
+	return called
+}
+
+func TestAStoreThatIsBusyIsAskedAgainAfterABackoff(t *testing.T) {
+	t.Parallel()
+
+	box := storeAnswering(storeBusyExit, storeBusyExit, 0)
+	if err := box.objects().applyOrigins(context.Background(), aStore()); err != nil {
+		t.Fatalf("applyOrigins() = %v, want a store busy twice and then answering to pass", err)
+	}
+	if called := storeCalls(box); called != 3 {
+		t.Errorf("the store was asked %d times, want 3", called)
+	}
+	waits := box.waits()
+	if len(waits) != 2 {
+		t.Fatalf("the call waited %v between tries, want two waits", waits)
+	}
+	for _, wait := range waits {
+		if wait <= 0 || wait > time.Duration(storeCallBackoff.Ceiling+storeCallBackoff.Spread)*time.Second {
+			t.Errorf("a wait of %s is outside the backoff's ceiling of %ds", wait, storeCallBackoff.Ceiling)
+		}
+	}
+}
+
+func TestAStoreThatStaysBusyIsRefusedAfterItsTries(t *testing.T) {
+	t.Parallel()
+
+	box := storeAnswering(storeBusyExit)
+	err := box.objects().applyOrigins(context.Background(), aStore())
+	if err == nil {
+		t.Fatal("applyOrigins() passed against a store that never stopped being busy")
+	}
+	if called := storeCalls(box); called != storeCallTries {
+		t.Errorf("the store was asked %d times, want %d", called, storeCallTries)
+	}
+	if !strings.Contains(err.Error(), "503") {
+		t.Errorf("applyOrigins() = %v, want it to say what the store last answered", err)
+	}
+}
+
+func TestAStoreThatRefusesACallIsNotAskedAgain(t *testing.T) {
+	t.Parallel()
+
+	box := storeAnswering(1)
+	if err := box.objects().applyOrigins(context.Background(), aStore()); err == nil {
+		t.Fatal("applyOrigins() passed against a store that refused the call")
+	}
+	if called := storeCalls(box); called != 1 {
+		t.Errorf("a refused call was made %d times, and a refusal does not change on a retry", called)
+	}
+}

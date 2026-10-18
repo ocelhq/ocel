@@ -80,7 +80,7 @@ func TestLiveARunningBoxIsLetThroughAndAnEngineThatDoesNotAnswerIsNot(t *testing
 	}
 }
 
-func (vm machine) waitsFor(t *testing.T, container string) {
+func (vm liveBox) waitsFor(t *testing.T, container string) {
 	t.Helper()
 	for range 60 {
 		if vm.running(t, container) {
@@ -93,7 +93,7 @@ func (vm machine) waitsFor(t *testing.T, container string) {
 
 const ballast = "/var/lib/ocel-preflight-ballast"
 
-func (vm machine) dockerRoot(t *testing.T) string {
+func (vm liveBox) dockerRoot(t *testing.T) string {
 	t.Helper()
 	root := strings.TrimSpace(vm.ssh(t, "sudo docker info --format '{{.DockerRootDir}}'"))
 	if root == "" {
@@ -102,7 +102,7 @@ func (vm machine) dockerRoot(t *testing.T) string {
 	return root
 }
 
-func (vm machine) freeOn(t *testing.T, root string) int64 {
+func (vm liveBox) freeOn(t *testing.T, root string) int64 {
 	t.Helper()
 	free, err := strconv.ParseInt(strings.TrimSpace(vm.ssh(t, "df -Pk "+quote(root)+" | tail -n 1 | awk '{print $4}'")), 10, 64)
 	if err != nil {
@@ -111,7 +111,7 @@ func (vm machine) freeOn(t *testing.T, root string) int64 {
 	return free * 1024
 }
 
-func (vm machine) fillsDownTo(t *testing.T, root string, keep int64) {
+func (vm liveBox) fillsDownTo(t *testing.T, root string, keep int64) {
 	t.Helper()
 	free := vm.freeOn(t, root)
 	if free <= keep {
@@ -269,7 +269,7 @@ const deafPid = "/run/ocel-live-deafened.pid"
 
 const deafScript = "import socket,time; s=socket.socket(socket.AF_UNIX); s.bind(%q); time.sleep(300)"
 
-func (vm machine) insideFrontProxy(t *testing.T, path string) string {
+func (vm liveBox) insideFrontProxy(t *testing.T, path string) string {
 	t.Helper()
 	pid := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.State.Pid}}' "+caddy.Container))
 	if pid == "" || pid == "0" {
@@ -278,7 +278,7 @@ func (vm machine) insideFrontProxy(t *testing.T, path string) string {
 	return "/proc/" + pid + "/root" + path
 }
 
-func (vm machine) deafens(t *testing.T, socket string) {
+func (vm liveBox) deafens(t *testing.T, socket string) {
 	t.Helper()
 	if strings.TrimSpace(vm.ssh(t, "command -v python3 >/dev/null && echo present || echo gone")) != "present" {
 		t.Skip("this box has no python3, and a socket that is bound and not listening is what an endpoint that refuses looks like")
@@ -297,7 +297,7 @@ func (vm machine) deafens(t *testing.T, socket string) {
 	t.Fatalf("a socket bound and not listening never appeared at %s, and this induction proves nothing without one: a run that reports green having induced nothing is the shape this tier exists to rule out", socket)
 }
 
-func (vm machine) hears(t *testing.T, socket string) {
+func (vm liveBox) hears(t *testing.T, socket string) {
 	t.Helper()
 	vm.ssh(t, "sudo sh -c "+quote("kill $(cat "+deafPid+") || true; rm -f "+deafPid+" "+socket+"; mv "+socket+".listening "+socket))
 }

@@ -16,6 +16,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -26,8 +28,8 @@ const (
 	fixtureRef = "registry.example.com/web@sha256:0000"
 )
 
-func aContainer() Container {
-	return Container{Name: physical, Project: "shop", App: "web", Image: appImage, Resolved: true}
+func aContainer() release.Container {
+	return release.Container{Name: physical, Project: "shop", App: "web", Image: appImage, Resolved: true}
 }
 
 func imaging(b *bench, served string) {
@@ -41,9 +43,9 @@ func imaging(b *bench, served string) {
 
 func runningContainer(t *testing.T, served string) *bench {
 	t.Helper()
-	box := machine(nil)
+	box := newBench(nil)
 	imaging(box, served)
-	if _, err := box.host().RunContainer(context.Background(), aContainer()); err != nil {
+	if _, err := box.host().containers.Run(context.Background(), aContainer()); err != nil {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	return box
@@ -66,7 +68,7 @@ func TestAReleaseRunsOneLabelledContainerOnTheOneNetworkTargetsResolveAcross(t *
 	command := ranContainer(t, runningContainer(t, "false "))
 	for what, wanted := range map[string]string{
 		"the name the drain attributes its in-flight count to": shell.Quote("--name") + " " + shell.Quote(physical),
-		"a reboot that does not take the app down":             shell.Quote("--restart") + " " + shell.Quote(appRestart),
+		"a reboot that does not take the app down":             shell.Quote("--restart") + " " + shell.Quote(release.RestartPolicy),
 		"the network the proxy reaches it over":                shell.Quote("--network") + " " + shell.Quote(boxapi.AppNetwork(aContainer().Tier, "shop")),
 		"the app label retention reads":                        shell.Quote("--label") + " " + shell.Quote(docker.LabelApp+"=web"),
 		"the project label retention reads":                    shell.Quote("--label") + " " + shell.Quote(docker.LabelProject+"=shop"),
@@ -104,7 +106,7 @@ func TestNoPortIsPublishedForAnAppContainerAndNoListenerIsAddedAnywhere(t *testi
 func TestAContainerAlreadyServingTheReleasesImageIsKeptRatherThanRecreated(t *testing.T) {
 	t.Parallel()
 
-	box := runningContainer(t, "running "+appImage+" "+handedTo(aContainer()).digest)
+	box := runningContainer(t, "running "+appImage+" "+handedTo(aContainer()).Digest)
 	for _, command := range box.commands() {
 		if strings.Contains(command, shell.Quote("run")+" "+shell.Quote("--detach")) {
 			t.Errorf("a redeploy of a release already running ran %q, and the container serving live traffic is torn down for one that is the same", command)
@@ -116,22 +118,22 @@ func TestRunningAContainerSaysWhetherItCreatedItStartedItAgainOrKeptIt(t *testin
 	t.Parallel()
 
 	for what, run := range map[string]struct {
-		spec   Container
+		spec   release.Container
 		served string
-		want   Run
+		want   release.Run
 	}{
-		"a release already running":    {spec: aContainer(), served: "running " + appImage + " " + handedTo(aContainer()).digest, want: RunKept},
-		"a stopped container":          {spec: promoted(), served: "exited " + appImage + " 7f3a9c1e2b4d", want: RunRestarted},
-		"a paused container":           {spec: promoted(), served: "paused " + appImage + " 7f3a9c1e2b4d", want: RunRestarted},
-		"a release with no container":  {spec: aContainer(), served: "", want: RunCreated},
-		"a container of another image": {spec: aContainer(), served: "running ocel/shop/web:sha256-older", want: RunCreated},
+		"a release already running":    {spec: aContainer(), served: "running " + appImage + " " + handedTo(aContainer()).Digest, want: release.RunKept},
+		"a stopped container":          {spec: promoted(), served: "exited " + appImage + " 7f3a9c1e2b4d", want: release.RunRestarted},
+		"a paused container":           {spec: promoted(), served: "paused " + appImage + " 7f3a9c1e2b4d", want: release.RunRestarted},
+		"a release with no container":  {spec: aContainer(), served: "", want: release.RunCreated},
+		"a container of another image": {spec: aContainer(), served: "running ocel/shop/web:sha256-older", want: release.RunCreated},
 	} {
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
-			box := machine(nil)
+			box := newBench(nil)
 			imaging(box, run.served)
-			ran, err := box.host().RunContainer(context.Background(), run.spec)
+			ran, err := box.host().containers.Run(context.Background(), run.spec)
 			if err != nil {
 				t.Fatalf("RunContainer() of %s = %v", what, err)
 			}
@@ -155,8 +157,8 @@ func TestAContainerOfAnotherImageIsReplacedRatherThanLeftServing(t *testing.T) {
 func TestTakingAContainerDownStopsItBeforeItIsRemoved(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
-	if err := box.host().TakeDown(context.Background(), environment.TierProduction, physical); err != nil {
+	box := newBench(nil)
+	if err := box.host().containers.TakeDown(context.Background(), environment.TierProduction, physical); err != nil {
 		t.Fatalf("TakeDown() = %v", err)
 	}
 	joined := strings.Join(box.commands(), "\n")
@@ -268,14 +270,14 @@ func TestTheLabelsRetentionReadsRenderAgainstWhatADaemonAnswersRatherThanFailing
 func TestAContainerNameIsDerivableAndDiffersBetweenReleases(t *testing.T) {
 	t.Parallel()
 
-	first := ContainerName("shop-prod", "web", "0123456789abcdef0123456789abcdef", appImage)
-	if ContainerName("shop-prod", "web", "0123456789abcdef0123456789abcdef", appImage) != first {
+	first := release.ContainerName("shop-prod", "web", "0123456789abcdef0123456789abcdef", appImage)
+	if release.ContainerName("shop-prod", "web", "0123456789abcdef0123456789abcdef", appImage) != first {
 		t.Error("two renders of one release name two containers, and nothing could then find the one it just started")
 	}
-	if second := ContainerName("shop-prod", "web", "fedcba9876543210fedcba9876543210", appImage); second == first {
+	if second := release.ContainerName("shop-prod", "web", "fedcba9876543210fedcba9876543210", appImage); second == first {
 		t.Errorf("two releases share the container name %q, and the drain's per-address count then attributes one release's requests to the other", second)
 	}
-	if unbuilt := ContainerName("shop-prod", "web", "", appImage); unbuilt == first || unbuilt == "" {
+	if unbuilt := release.ContainerName("shop-prod", "web", "", appImage); unbuilt == first || unbuilt == "" {
 		t.Errorf("a release with no build id names its container %q", unbuilt)
 	}
 }
@@ -286,7 +288,7 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	spec := valued()
 	box := runningWith(t, spec)
 	command := ranContainer(t, box)
-	mount := shell.Quote("--mount") + " " + shell.Quote("type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly")
+	mount := shell.Quote("--mount") + " " + shell.Quote("type=bind,src="+boxapi.SocketDir+",dst="+boxapi.SocketDir+",readonly")
 	if !strings.Contains(command, mount) {
 		t.Errorf("starting a live container runs %q, which hands it no socket to read its values through (%s)", command, mount)
 	}
@@ -297,7 +299,7 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	if strings.Contains(command, aManifest) {
 		t.Errorf("the command line contains the manifest, which every login reads out of `ps`; it travels in the env file")
 	}
-	file := wrote(t, box, EnvFile(spec.Tier, spec.Name))
+	file := wrote(t, box, envfile.Path(spec.Tier, spec.Name))
 	for _, want := range []string{"OCEL_LIVE_MANIFEST=" + aManifest, "OCEL_HEALTH_PATH=/healthz", "API_TOKEN=" + sensitiveValue, "REGION=eu-west-1"} {
 		if !strings.Contains(file, want) {
 			t.Errorf("the env file reads %q and never binds %s", file, want)
@@ -313,7 +315,7 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	if command := ranContainer(t, bakedBox); strings.Contains(command, shell.Quote("--mount")) || strings.Contains(command, shell.Quote("--tmpfs")) {
 		t.Errorf("a container reading nothing live runs %q and is handed the socket or the projection anyway", command)
 	}
-	if file := wrote(t, bakedBox, EnvFile(baked.Tier, baked.Name)); strings.Contains(file, "OCEL_LIVE_MANIFEST") {
+	if file := wrote(t, bakedBox, envfile.Path(baked.Tier, baked.Name)); strings.Contains(file, "OCEL_LIVE_MANIFEST") {
 		t.Errorf("a container reading nothing live is handed %q, which names a manifest", file)
 	}
 }
@@ -322,24 +324,24 @@ func TestAChangedManifestReplacesTheContainerLikeAChangedValue(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	current, err := handing(spec)
+	current, err := release.Handing(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	moved := spec
 	moved.Manifest = []byte(`{"slug":"shop","tier":"production","keys":[{"key":"DATABASE_URL"},{"key":"SESSION"}]}`)
-	other, err := handing(moved)
+	other, err := release.Handing(moved)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if other.digest == current.digest {
+	if other.Digest == current.Digest {
 		t.Error("a deploy that declares one more live key is labelled the same as the one before it, and the container running under the old manifest would never read the new key")
 	}
 }
 
-func readingLogs(t *testing.T, answer ssh.Result) (*bench, []Line, error) {
+func readingLogs(t *testing.T, answer ssh.Result) (*bench, []release.Line, error) {
 	t.Helper()
-	box := machine(nil)
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker logs") {
 			return answer, true
@@ -347,7 +349,7 @@ func readingLogs(t *testing.T, answer ssh.Result) (*bench, []Line, error) {
 		return ssh.Result{}, false
 	}
 	since := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
-	lines, err := box.host().ReadContainerLogs(context.Background(), physical, since, time.Time{}, 50, "")
+	lines, err := box.host().containers.ReadLogs(context.Background(), physical, since, time.Time{}, 50, "")
 	return box, lines, err
 }
 
@@ -361,7 +363,7 @@ func TestReadContainerLogsKeepsStdoutAndStderrApartAndOrdersThemByTime(t *testin
 	if err != nil {
 		t.Fatalf("ReadContainerLogs() error = %v", err)
 	}
-	want := []Line{
+	want := []release.Line{
 		{Time: time.Date(2026, 3, 1, 10, 0, 1, 2, time.UTC), Text: "listening on 3000"},
 		{Time: time.Date(2026, 3, 1, 10, 0, 2, 500_000_000, time.UTC), Stderr: true, Text: "warn: slow query"},
 		{Time: time.Date(2026, 3, 1, 10, 0, 3, 0, time.UTC), Text: "served /"},
@@ -386,9 +388,9 @@ func TestReadContainerLogsKeepsStdoutAndStderrApartAndOrdersThemByTime(t *testin
 func TestReadContainerLogsBoundsTheReadByUntilWhenGiven(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	until := time.Date(2026, 3, 1, 11, 0, 0, 0, time.UTC)
-	if _, err := box.host().ReadContainerLogs(context.Background(), physical, until.Add(-time.Hour), until, 5, ""); err != nil {
+	if _, err := box.host().containers.ReadLogs(context.Background(), physical, until.Add(-time.Hour), until, 5, ""); err != nil {
 		t.Fatalf("ReadContainerLogs() error = %v", err)
 	}
 	if command := box.commands()[box.at("docker logs")]; !strings.Contains(command, "--until "+shell.Quote("2026-03-01T11:00:00Z")) {
@@ -399,10 +401,10 @@ func TestReadContainerLogsBoundsTheReadByUntilWhenGiven(t *testing.T) {
 func TestReadContainerLogsPassesSinceAndUntilToTheNanosecond(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	since := time.Date(2026, 3, 1, 10, 0, 0, 500_000_001, time.UTC)
 	until := time.Date(2026, 3, 1, 11, 0, 0, 999_999_999, time.UTC)
-	if _, err := box.host().ReadContainerLogs(context.Background(), physical, since, until, 5, ""); err != nil {
+	if _, err := box.host().containers.ReadLogs(context.Background(), physical, since, until, 5, ""); err != nil {
 		t.Fatalf("ReadContainerLogs() error = %v", err)
 	}
 	command := box.commands()[box.at("docker logs")]
@@ -415,14 +417,14 @@ func TestReadContainerLogsPassesSinceAndUntilToTheNanosecond(t *testing.T) {
 
 func readingLogsBetween(t *testing.T, stdout string, since, until time.Time, limit int, contains string) (string, []string) {
 	t.Helper()
-	box := machine(nil)
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker logs") {
 			return ssh.Result{Stdout: stdout}, true
 		}
 		return ssh.Result{}, false
 	}
-	lines, err := box.host().ReadContainerLogs(context.Background(), physical, since, until, limit, contains)
+	lines, err := box.host().containers.ReadLogs(context.Background(), physical, since, until, limit, contains)
 	if err != nil {
 		t.Fatalf("ReadContainerLogs() error = %v", err)
 	}
@@ -481,7 +483,7 @@ func TestReadContainerLogsNamesAContainerThatNoLongerExists(t *testing.T) {
 	t.Parallel()
 
 	_, lines, err := readingLogs(t, ssh.Result{Code: 1, Stderr: "Error response from daemon: No such container: " + physical})
-	if !errors.Is(err, ErrContainerMissing) {
+	if !errors.Is(err, release.ErrContainerMissing) {
 		t.Errorf("ReadContainerLogs() error = %v, want ErrContainerMissing", err)
 	}
 	if len(lines) != 0 {
@@ -493,19 +495,19 @@ func TestReadContainerLogsRefusesAnyOtherDockerFailure(t *testing.T) {
 	t.Parallel()
 
 	_, _, err := readingLogs(t, ssh.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"})
-	if err == nil || errors.Is(err, ErrContainerMissing) {
+	if err == nil || errors.Is(err, release.ErrContainerMissing) {
 		t.Errorf("ReadContainerLogs() error = %v, want a failure that is not ErrContainerMissing", err)
 	}
 }
 
 func TestARetiredContainersImageIsArchivedBeforeTheContainerStops(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 
-	if err := rig.host().RetireContainer(context.Background(), physical); err != nil {
+	if err := rig.host().containers.Retire(context.Background(), physical); err != nil {
 		t.Fatalf("RetireContainer() = %v", err)
 	}
 
-	archived := rig.at(shell.Quote(releasesHelper) + " " + shell.Quote("shop/web") + " " + shell.Quote("archive") + " " + shell.Quote(appImage))
+	archived := rig.at(shell.Quote(boxapi.ReleasesHelper) + " " + shell.Quote("shop/web") + " " + shell.Quote("archive") + " " + shell.Quote(appImage))
 	stopped := rig.at("docker stop ")
 	if archived < 0 {
 		t.Fatalf("the retiree's image was never archived, so a nightly prune of stopped containers and unused images leaves `ocel rollback` nothing to start:\n%s", strings.Join(rig.commands(), "\n"))
@@ -516,15 +518,15 @@ func TestARetiredContainersImageIsArchivedBeforeTheContainerStops(t *testing.T) 
 }
 
 func TestARetiredContainerWhoseImageCouldNotBeArchivedIsLeftRunning(t *testing.T) {
-	rig := machine(nil)
+	rig := newBench(nil)
 	rig.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, shell.Quote(releasesHelper)) {
+		if strings.Contains(command, shell.Quote(boxapi.ReleasesHelper)) {
 			return ssh.Result{Code: 1, Stderr: "write /var/lib/ocel/releases/.staging.7.tar: no space left on device"}, true
 		}
 		return ssh.Result{}, false
 	}
 
-	err := rig.host().RetireContainer(context.Background(), physical)
+	err := rig.host().containers.Retire(context.Background(), physical)
 
 	if err == nil || !strings.Contains(err.Error(), "no space left on device") {
 		t.Errorf("RetireContainer() = %v, want the reason the archive failed", err)

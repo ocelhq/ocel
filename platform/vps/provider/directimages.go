@@ -12,17 +12,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 )
 
 type loaded struct {
-	host *host.Host
-	at   string
-	now  func() time.Time
+	images *release.Images
+	at     string
+	now    func() time.Time
 }
 
 func (p *Provider) OpenDirectImages(context.Context) (provider.ImageStore, error) {
-	return loaded{host: p.host, at: p.options.SSH.session().Destination(), now: p.now}, nil
+	return loaded{images: p.images, at: p.options.SSH.session().Destination(), now: p.now}, nil
 }
 
 func (l loaded) String() string { return "images loaded onto " + l.at }
@@ -36,7 +36,7 @@ func (loaded) ProbePush(context.Context, string) error { return nil }
 func (loaded) Remove(context.Context, string) error { return nil }
 
 func (l loaded) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
-	return l.host.HasImage(ctx, push.ImageRef)
+	return l.images.Has(ctx, push.ImageRef)
 }
 
 func (l loaded) Push(ctx context.Context, push provider.ImagePush, progress progress.Log) error {
@@ -56,7 +56,7 @@ func (l loaded) load(ctx context.Context, push provider.ImagePush, progress prog
 	go func() { writer.CloseWithError(tarball.Write(ref, push.Built, writer)) }()
 	sent := &counted{from: stream}
 	began := l.now()
-	said, err := l.host.LoadImage(ctx, push.ImageRef, sent)
+	said, err := l.images.Load(ctx, push.ImageRef, sent)
 	took := l.now().Sub(began)
 	_ = stream.Close()
 	if err != nil {

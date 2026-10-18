@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/enginetest"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -89,7 +91,7 @@ func onYourNetwork(t *testing.T) yourNetwork {
 
 func (y yourNetwork) switchboardOn(t *testing.T, port int) docker.Service {
 	t.Helper()
-	board := switchboardBox(y.binary, Front{Manual: &ManualFront{Port: port, Network: y.yours}})
+	board := switchboardBox(y.binary, front.Proxy{Manual: &front.Manual{Port: port, Network: y.yours}})
 	if said, err := y.shell(board.Writing(docker.ContainerRising)); err != nil {
 		t.Fatalf("the write that starts the switchboard on %s = %v, want it serving: it resolves every network it relays from as it starts\n%s\n%s", y.yours, err, said, logsOf(y.board))
 	}
@@ -109,7 +111,7 @@ func (y yourNetwork) stated(t *testing.T, board docker.Service) bool {
 	if err != nil {
 		t.Fatalf("probe the switchboard: %v\n%s", err, rendered)
 	}
-	surveyed, _, err := readSurvey(rendered)
+	surveyed, _, err := machine.ReadSurvey(rendered)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +128,7 @@ func TestASwitchboardOnYourProxysNetworkJoinsItAndIsReadAsStatedUntilItLeaves(t 
 	y := onYourNetwork(t)
 	yours := y.yours
 	port := freePort(t)
-	missing := switchboardBox(y.binary, Front{Manual: &ManualFront{Port: port, Network: yours + "-gone"}})
+	missing := switchboardBox(y.binary, front.Proxy{Manual: &front.Manual{Port: port, Network: yours + "-gone"}})
 	if said, err := y.shell(missing.Writing(docker.ContainerRising)); err == nil || !strings.Contains(said, "proxy.manual.network") {
 		t.Errorf("the write onto a network this box does not have = %v, %q, want it refused naming the option that set it", err, said)
 	}

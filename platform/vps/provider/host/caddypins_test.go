@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
@@ -34,7 +35,7 @@ func pinnedBox(t *testing.T, pins []boxapi.Pin, files map[string][]byte) *Host {
 		}
 		return serves(command)
 	}
-	return New(ssh.NewBox(rig.dial, nil), Keys{}, pins, Front{})
+	return New(ssh.NewBox(rig.dial, nil), Keys{}, pins, front.Proxy{})
 }
 
 func pinning(t *testing.T) (*claimBench, *Host) {
@@ -50,7 +51,7 @@ func pinning(t *testing.T) (*claimBench, *Host) {
 		}
 		return serves(command)
 	}
-	return rig, New(ssh.NewBox(rig.dial, nil), Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, Front{})
+	return rig, New(ssh.NewBox(rig.dial, nil), Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
 }
 
 func claiming(t *testing.T, pins []boxapi.Pin, files map[string][]byte) error {
@@ -148,7 +149,7 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 		}
 		return serves(command)
 	}
-	h := New(ssh.NewBox(rig.dial, nil), Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, Front{})
+	h := New(ssh.NewBox(rig.dial, nil), Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
 
 	ctx := context.Background()
 	for _, hostname := range []string{claimed, "blog.example.com", "www.example.com"} {

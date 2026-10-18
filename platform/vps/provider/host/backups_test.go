@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 )
 
 type backupBench struct {
@@ -422,6 +423,32 @@ func TestAStoreRestoreCopiesTheKeptObjectsBackFromAReadOnlyMount(t *testing.T) {
 	}
 }
 
+func TestAStoreRestoreFromAStampedDeltaIsRefusedBeforeItSyncsOverTheLiveStore(t *testing.T) {
+	t.Parallel()
+
+	bench := backupsOn(t)
+	if _, stderr, code := bench.runs(t, "production", "dump", "shop-store-s3"); code != 0 {
+		t.Fatalf("dump exited %d: %s", code, stderr)
+	}
+	dir := filepath.Join(bench.root, "production", "backups", "shop-store-s3")
+	delta := filepath.Join(dir, "20260101T000000Z")
+	if err := os.MkdirAll(filepath.Join(delta, "uploads"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(delta, "uploads", "overwritten"), []byte("older object"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, code := bench.runs(t, "production", "restore", "shop-store-s3", delta); code == 0 {
+		t.Error("a restore from a stamped delta was reported as done, and syncing it over the store deletes every object the delta does not hold")
+	}
+	if synced := slices.IndexFunc(bench.drove(t), func(line string) bool { return strings.Contains(line, "sync /backup store:") }); synced >= 0 {
+		t.Errorf("the refused restore still ran `docker %s`", bench.drove(t)[synced])
+	}
+	if _, stderr, code := bench.runs(t, "production", "restore", "shop-store-s3", filepath.Join(dir, "current")); code != 0 {
+		t.Errorf("a restore naming the mirror itself exited %d: %s", code, stderr)
+	}
+}
+
 func TestARestoreFeedsTheDumpBackThroughTheContainer(t *testing.T) {
 	t.Parallel()
 
@@ -481,14 +508,14 @@ func TestAnApplyOverAHostBootstrappedBeforeBackupsWritesThem(t *testing.T) {
 		missing = append(missing, item.ID())
 	}
 	older := bootstrappedOn(t, tier)
-	older.installed[tier] = slices.DeleteFunc(older.installed[tier], func(item Item) bool { return slices.Contains(missing, item.ID()) })
+	older.installed[tier] = slices.DeleteFunc(older.installed[tier], func(item machine.Item) bool { return slices.Contains(missing, item.ID()) })
 	progress := &said{}
 	if err := NewBootstrap(older.host(), testVendor, "shop").Apply(context.Background(),
 		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	for _, item := range BackupItems() {
-		if progress.at("Installed "+item.phrase()) < 0 {
+		if progress.at("Installed "+item.Phrase()) < 0 {
 			t.Errorf("bootstrap says a host has %s and an apply never wrote it, so every status after it reads drifted and every re-plan moves it:\n%s",
 				item.ID(), strings.Join(progress.lines, "\n"))
 		}

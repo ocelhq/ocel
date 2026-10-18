@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -28,10 +29,10 @@ func TestABootstrapRemovalSaysWhatItRemovedAndWhatItKeptAndWhy(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+	box := newBench(map[environment.Tier][]machine.Item{tier: bootstrapped(t, tier)})
 	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.HasPrefix(command, "rmdir "+shell.Quote("/usr/local/lib/ocel")+" ") {
-			return ssh.Result{Stdout: dirNonEmpty + "\n"}, true
+			return ssh.Result{Stdout: machine.DirNonEmpty + "\n"}, true
 		}
 		return ssh.Result{}, false
 	}
@@ -59,8 +60,8 @@ func TestAnApplySaysWhatItInstalledAndLeavesWhatWasCurrentToDebug(t *testing.T) 
 
 	tier := environment.TierProduction
 	box := bootstrappedOn(t, tier)
-	box.installed[tier] = slices.DeleteFunc(box.installed[tier], func(item Item) bool {
-		return item.Kind == KindUnit && item.Name == BackupsTimer
+	box.installed[tier] = slices.DeleteFunc(box.installed[tier], func(item machine.Item) bool {
+		return item.Kind == machine.KindUnit && item.Name == BackupsTimer
 	})
 	progress := &fake.Log{}
 
@@ -77,7 +78,7 @@ func TestAnApplySaysWhatItInstalledAndLeavesWhatWasCurrentToDebug(t *testing.T) 
 func TestAConnectorInstallSaysWhatItWroteAndWhereTheConsoleReachesIt(t *testing.T) {
 	t.Parallel()
 
-	box := &claimBench{bench: machine(nil), recorded: string(mustWrite(t, routed()))}
+	box := &claimBench{bench: newBench(nil), recorded: string(mustWrite(t, routed()))}
 	absent := ""
 	box.answer = servesPair(box.bench, &box.recorded, &absent)
 	progress := &fake.Log{}
@@ -95,7 +96,7 @@ func TestAConnectorInstallSaysWhatItWroteAndWhereTheConsoleReachesIt(t *testing.
 func TestAConnectorRemovalSaysWhatItUnroutedAndRemoved(t *testing.T) {
 	t.Parallel()
 
-	box := &claimBench{bench: machine(nil), recorded: string(mustWrite(t, routed()))}
+	box := &claimBench{bench: newBench(nil), recorded: string(mustWrite(t, routed()))}
 	absent := ""
 	box.answer = servesPair(box.bench, &box.recorded, &absent)
 	progress := &fake.Log{}
@@ -112,14 +113,14 @@ func TestAConnectorRemovalSaysWhatItUnroutedAndRemoved(t *testing.T) {
 func TestReconcilingAnAppsImagesReturnsWhatItRemovedAndWhatTheRegistryStillHolds(t *testing.T) {
 	t.Parallel()
 
-	box := machine(nil)
+	box := newBench(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
-		if !strings.HasPrefix(command, shell.Quote(releasesHelper)) || !strings.Contains(command, shell.Quote("reconcile")) {
+		if !strings.HasPrefix(command, shell.Quote(boxapi.ReleasesHelper)) || !strings.Contains(command, shell.Quote("reconcile")) {
 			return ssh.Result{}, false
 		}
 		return ssh.Result{Stdout: "removed ocel/shop-web:1111\nunused ocel/shop-web:1111\nunused ocel/shop-web:2222\n"}, true
 	}
-	swept, err := box.host().Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333")
+	swept, err := box.host().images.Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333")
 	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}

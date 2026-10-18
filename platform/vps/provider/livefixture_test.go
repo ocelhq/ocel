@@ -19,7 +19,7 @@ const (
 	fixtureRepo = "ocel-live-app"
 )
 
-func (vm machine) feeds(t *testing.T, command string, stdin []byte) string {
+func (vm liveBox) feeds(t *testing.T, command string, stdin []byte) string {
 	t.Helper()
 	run := exec.Command("ssh",
 		"-F", vm.config, "-i", vm.key,
@@ -35,7 +35,7 @@ func (vm machine) feeds(t *testing.T, command string, stdin []byte) string {
 	return string(said)
 }
 
-func (vm machine) arch(t *testing.T) string {
+func (vm liveBox) arch(t *testing.T) string {
 	t.Helper()
 	switch reported := strings.TrimSpace(vm.ssh(t, "uname -m")); reported {
 	case "x86_64":
@@ -74,7 +74,7 @@ func fixtureBinary(t *testing.T, arch string) []byte {
 	return raw.Bytes()
 }
 
-func fixtures(t *testing.T, vm machine) {
+func fixtures(t *testing.T, vm liveBox) {
 	t.Helper()
 	present := map[string]bool{}
 	for _, tagged := range lines(vm.ssh(t, "sudo docker image ls --format '{{.Repository}}:{{.Tag}}' "+fixtureRepo)) {

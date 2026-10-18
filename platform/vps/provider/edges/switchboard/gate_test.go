@@ -30,7 +30,7 @@ func indexOf(calls []string, prefix string) int {
 	return slices.IndexFunc(calls, func(call string) bool { return strings.HasPrefix(call, prefix) })
 }
 
-func stackOfTier(t *testing.T, m *machine, tier environment.Tier) boxStack {
+func stackOfTier(t *testing.T, m *fakeBox, tier environment.Tier) boxStack {
 	t.Helper()
 	if tier == environment.TierPreview {
 		return previewStack(t, m)
@@ -314,7 +314,7 @@ func TestReconcilingAStackHandsTheSwitchboardTheGateTheDeployRecordedBeforeAnyMo
 }
 
 type purges struct {
-	m      *machine
+	m      *fakeBox
 	purged [][]string
 	err    error
 }

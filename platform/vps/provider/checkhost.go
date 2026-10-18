@@ -75,7 +75,7 @@ func (p *Provider) CheckHost(ctx context.Context, req provider.HostCheckRequest)
 		return nil, err
 	}
 	checks = append(checks, front...)
-	return append(checks, p.host.CheckSwitchboard(ctx, req.Tier), p.host.CheckReleases(ctx, req.Tier)), nil
+	return append(checks, p.host.CheckSwitchboard(ctx, req.Tier), p.images.CheckReleases(ctx, req.Tier)), nil
 }
 
 func (p *Provider) hostnameVerdicts(ctx context.Context, req provider.HostCheckRequest, address string) ([]provider.HostCheck, error) {

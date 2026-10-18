@@ -13,13 +13,14 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func byHand(machine ssh.Conn) *vps.Provider {
 	return vps.ProviderOver(
-		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Manual: &vps.Manual{}}},
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &front.Proxy{Manual: &front.Manual{}}},
 		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 }
@@ -50,7 +51,7 @@ func TestACertificateYourCaddyServesSaysYourCaddyRenewsIt(t *testing.T) {
 
 	served := selfSigned(t, []string{"shop.example.com"}, 60*24*time.Hour)
 	p := vps.ProviderOver(
-		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Caddy: &vps.Caddy{Directory: "/etc/caddy/ocel.d"}}},
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &front.Proxy{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d"}}},
 		func(context.Context) (ssh.Conn, error) { return &box{leaf: string(served)}, nil },
 	)
 	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "shop.example.com", certificateFor(t, p, "shop.example.com"))
@@ -68,7 +69,7 @@ func TestACertificateYourTraefikServesIsRenewedThroughTheResolverThatOrderedIt(t
 	served := selfSigned(t, []string{"shop.example.com"}, 60*24*time.Hour)
 	machine := &box{leaf: string(served)}
 	p := vps.ProviderOver(
-		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Traefik: &vps.Traefik{Directory: "/etc/traefik/dynamic", Resolver: "le"}}},
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &front.Proxy{Traefik: &front.Traefik{Directory: "/etc/traefik/dynamic", Resolver: "le"}}},
 		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	cert := certificateFor(t, p, "shop.example.com")

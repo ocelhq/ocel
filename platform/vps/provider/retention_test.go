@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -116,7 +116,7 @@ func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) 
 	if len(called) != 1 {
 		t.Fatalf("the failed release ran %d reconciles, want the one that sweeps the image it left: no timer, no cron and no unit sweeps this box between deploys", len(called))
 	}
-	repository, _ := host.Repository(loadedImageRef)
+	repository, _ := release.Repository(loadedImageRef)
 	if !strings.Contains(called[0], "'"+repository+"'") {
 		t.Errorf("the sweep ran as %q and never names %q, the repository the release it could not finish left an image under", called[0], repository)
 	}
@@ -153,7 +153,7 @@ func TestASweepListsOneRepositoryAndNeverForces(t *testing.T) {
 	if len(called) != 1 {
 		t.Fatalf("the sweep ran %d reconciles, want one", len(called))
 	}
-	repository, _ := host.Repository(loadedImageRef)
+	repository, _ := release.Repository(loadedImageRef)
 	if !strings.Contains(called[0], "'"+repository+"'") {
 		t.Errorf("the reconcile ran as %q, want it scoped to %q: the filter and the desired set are computed over one scope", called[0], repository)
 	}
@@ -214,7 +214,7 @@ func TestADigestCoordinateNamesNoRepositoryToSweep(t *testing.T) {
 	t.Parallel()
 
 	pinned := "ocel/shop/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	if repository, named := host.Repository(pinned); named {
+	if repository, named := release.Repository(pinned); named {
 		t.Errorf("Repository(%s) = %q, and a digest is not a tag: everything left of the last colon is the repository plus half a digest algorithm, which lists nothing and names nothing the desired set contains", pinned, repository)
 	}
 }

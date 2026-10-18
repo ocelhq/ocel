@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/release"
 )
 
 func TestAReconcileWaitsForTheLockAPromoteOfTheSameAppHoldsAndForNoOtherApps(t *testing.T) {
 	root := releasesDir(t)
 	script := filepath.Join(t.TempDir(), "releases")
-	if err := os.WriteFile(script, releasesScript, 0o755); err != nil {
+	if err := os.WriteFile(script, release.HelperScript, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	slow := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "ocel/shop/web:one")
@@ -113,7 +115,7 @@ func TestAReconcileWaitingOnAScopeAForgetRemovedWaitsForThePromoteThatMadeItAgai
 	}
 
 	script := filepath.Join(t.TempDir(), "releases")
-	if err := os.WriteFile(script, releasesScript, 0o755); err != nil {
+	if err := os.WriteFile(script, release.HelperScript, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	slow := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "ocel/shop/web:one")

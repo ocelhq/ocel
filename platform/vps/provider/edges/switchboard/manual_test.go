@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 )
 
-func routedByHand() *machine {
+func routedByHand() *fakeBox {
 	m := aMachine()
 	m.byHand = manual.DefaultPort
 	return m

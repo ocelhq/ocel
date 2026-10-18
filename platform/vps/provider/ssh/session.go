@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	reach         = 10 * time.Second
-	aliveInterval = 15 * time.Second
-	aliveProbes   = 4
-	masterIdle    = "60s"
+	connectTimeout = 10 * time.Second
+	aliveInterval  = 15 * time.Second
+	aliveProbes    = 4
+	masterIdle     = "60s"
 
 	concurrentCommandLimit = 8
 )
@@ -51,7 +51,7 @@ func Open(ctx context.Context, target Target) (*Session, error) {
 	started := time.Now()
 	keys, err := offered(ctx, dest)
 	if err != nil {
-		return nil, refuseUnanswered(ctx, dest, err, started.Add(reach))
+		return nil, refuseUnanswered(ctx, dest, err, started.Add(connectTimeout))
 	}
 	if len(keys) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
@@ -89,7 +89,7 @@ func refuseUnanswered(ctx context.Context, dest Destination, scanned error, by t
 			"%s port %d refused the connection: nothing accepts ssh there", dest.Address, dest.Port)
 	case errors.Is(err, context.DeadlineExceeded):
 		return refusal.Refuse(refusal.CodeNotReady,
-			"%s port %d did not answer within %s", dest.Address, dest.Port, reach)
+			"%s port %d did not answer within %s", dest.Address, dest.Port, connectTimeout)
 	default:
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s port %d is unreachable: %s", dest.Address, dest.Port, terse(err))
@@ -346,7 +346,7 @@ func (s *Session) args() []string {
 	args := append(s.target.options(),
 		"-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=yes",
-		"-o", "ConnectTimeout="+strconv.Itoa(int(reach.Seconds())),
+		"-o", "ConnectTimeout="+strconv.Itoa(int(connectTimeout.Seconds())),
 		"-o", "ServerAliveInterval="+strconv.Itoa(int(aliveInterval.Seconds())),
 		"-o", "ServerAliveCountMax="+strconv.Itoa(aliveProbes),
 	)
