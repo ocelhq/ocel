@@ -20,7 +20,7 @@ func (b bootstrap) bastionRemovals(ctx context.Context, tier environment.Tier) (
 	if service != nil {
 		changes = append(changes, provider.Change{Kind: string(KindService), Name: b.clients.Bastion(tier), Action: provider.ActionDelete, Reason: reasonBastionOnDemand})
 	}
-	account, err := b.clients.accountExists(ctx, b.clients.BastionAccount(tier))
+	account, err := b.clients.AccountExists(ctx, b.clients.BastionAccount(tier))
 	if err != nil {
 		return nil, err
 	}

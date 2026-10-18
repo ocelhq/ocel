@@ -9,13 +9,15 @@ import (
 	"fmt"
 	"strings"
 
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 	"google.golang.org/api/secretmanager/v1"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const (
@@ -27,8 +29,8 @@ const (
 	connectorPublicKeyEnv = "OCEL_CONNECTOR_PUBLIC_KEY"
 )
 
-func connectorKeyMount(secret string) secretMount {
-	return secretMount{name: connectorKeyVolume, secret: secret, dir: connectorKeyDir, file: connectorKeyFile}
+func connectorKeyMount(secret string) run.SecretMount {
+	return run.SecretMount{Name: connectorKeyVolume, Secret: secret, Dir: connectorKeyDir, File: connectorKeyFile}
 }
 
 func keyPathed(config []byte, path string) ([]byte, error) {
@@ -61,7 +63,7 @@ func publicKeyOf(payload []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(public), nil
 }
 
-func connectorPublicKeyOf(service *run.GoogleCloudRunV2Service) string {
+func connectorPublicKeyOf(service *runv2.GoogleCloudRunV2Service) string {
 	if service.Template == nil {
 		return ""
 	}
@@ -85,11 +87,11 @@ func (p *Provider) connectorKey(ctx context.Context, progress progress.Log) (str
 		return "", err
 	}
 	name := clients.ConnectorKeySecret()
-	path := secretPath(clients.project, name)
-	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.Create("projects/"+clients.project, &secretmanager.Secret{
+	path := gcloud.SecretPath(clients.Project(), name)
+	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.Create("projects/"+clients.Project(), &secretmanager.Secret{
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
 	}).SecretId(name).Context(ctx).Do)
-	if err != nil && !taken(err) {
+	if err != nil && !gcloud.Taken(err) {
 		return "", fmt.Errorf("create the %s secret the connector's key is kept in: %w", name, err)
 	}
 
@@ -104,9 +106,9 @@ func (p *Provider) connectorKey(ctx context.Context, progress progress.Log) (str
 		if err != nil {
 			return "", fmt.Errorf("read the connector key %s stores: %w", name, err)
 		}
-		ensureProgress(progress).Debug("Reused the connector's key stored in secret " + name)
+		gcloud.EnsureProgress(progress).Debug("Reused the connector's key stored in secret " + name)
 		return public, nil
-	case err != nil && !absent(err):
+	case err != nil && !gcloud.Absent(err):
 		return "", fmt.Errorf("read whether %s stores a connector key: %w", name, err)
 	}
 
@@ -120,7 +122,7 @@ func (p *Provider) connectorKey(ctx context.Context, progress progress.Log) (str
 	}).Context(ctx).Do); err != nil {
 		return "", fmt.Errorf("write the connector's key into %s: %w", name, err)
 	}
-	ensureProgress(progress).Say("Minted the connector's key into secret " + name)
+	gcloud.EnsureProgress(progress).Say("Minted the connector's key into secret " + name)
 	return publicKeyOf(payload)
 }
 
@@ -130,8 +132,8 @@ func (p *Provider) bindConnectorKeySecret(ctx context.Context, granting bool) er
 		return err
 	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
-	_, err = iampolicy.Edit(ctx, clients.secretPolicy(clients.ConnectorKeySecret()), grantedOrRevoked(connectorKeyRole, member, nil, granting))
-	if iampolicy.IsAbsent(err) && !granting {
+	_, err = policy.Edit(ctx, gcloud.SecretPolicy(clients, clients.ConnectorKeySecret()), gcloud.GrantedOrRevoked(connectorKeyRole, member, nil, granting))
+	if policy.IsAbsent(err) && !granting {
 		return nil
 	}
 	if err != nil {
@@ -150,9 +152,9 @@ func (p *Provider) takeConnectorKey(ctx context.Context, progress progress.Log) 
 		return err
 	}
 	name := clients.ConnectorKeySecret()
-	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(secretPath(clients.project, name)).Context(ctx).Do); err != nil && !absent(err) {
+	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(gcloud.SecretPath(clients.Project(), name)).Context(ctx).Do); err != nil && !gcloud.Absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
-	ensureProgress(progress).Say("Deleted secret " + name + ", the connector's key")
+	gcloud.EnsureProgress(progress).Say("Deleted secret " + name + ", the connector's key")
 	return nil
 }

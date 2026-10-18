@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 func TestAnImageTagIsNamedInTheRepositoryItWasPushedTo(t *testing.T) {
@@ -21,7 +22,7 @@ func TestAnImageTagIsNamedInTheRepositoryItWasPushedTo(t *testing.T) {
 		"ghcr.io/acme/web:latest":                                      "",
 		"europe-west1-docker.pkg.dev/acme/web:latest":                  "",
 	} {
-		got, tagged := artifactTag(image)
+		got, tagged := run.ArtifactTag(image)
 		if got != want || tagged != (want != "") {
 			t.Errorf("artifactTag(%s) = %q, %v, want %q", image, got, tagged, want)
 		}
@@ -34,11 +35,11 @@ func TestAReleaseWhoseImageAPruneUntaggedMidwayTagsItAgainAndReleasesAgain(t *te
 		t.Run(name, func(t *testing.T) {
 			server := &runServer{}
 			app := serves("ocel-shop-prod-app")
-			app.image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-one"
+			app.Image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-one"
 			var before string
 			if deployed {
 				prior := app
-				prior.image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-zero"
+				prior.Image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-zero"
 				_, before = released(t, server, prior)
 			}
 			server.untagAtRelease = tag
@@ -49,7 +50,7 @@ func TestAReleaseWhoseImageAPruneUntaggedMidwayTagsItAgainAndReleasesAgain(t *te
 				t.Errorf("the release tagged %v, want %s tagged again once Cloud Run said the image was gone", got, tag)
 			}
 			if revision == "" || revision == before {
-				t.Errorf("the release reports revision %q, want a new one running %s: the retry must create a revision rather than report the one served before", revision, app.image)
+				t.Errorf("the release reports revision %q, want a new one running %s: the retry must create a revision rather than report the one served before", revision, app.Image)
 			}
 		})
 	}
@@ -58,9 +59,9 @@ func TestAReleaseWhoseImageAPruneUntaggedMidwayTagsItAgainAndReleasesAgain(t *te
 func TestAReleaseWhoseImageIsStillMissingAfterTaggingAgainFails(t *testing.T) {
 	server := &runServer{untagAtRelease: "projects/acme/locations/europe-west1/repositories/ocel/packages/app/tags/sha256-one", untagEveryRelease: true}
 	app := serves("ocel-shop-prod-app")
-	app.image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-one"
+	app.Image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-one"
 
-	_, err := server.open(t).deployService(t.Context(), app, nil)
+	_, err := server.open(t).services().DeployService(t.Context(), app, nil)
 
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("deployService() = %v, want Cloud Run's answer that the image is gone: the release retries once, never in a loop", err)
@@ -76,7 +77,7 @@ func TestAWrappedImageAPruneUntaggedMidwayIsTaggedAgainAtTheVersionItsTagNamed(t
 	pushed := wrappedPackage + "/versions/sha256:" + strings.Repeat("d", 64)
 	server := &runServer{untagAtRelease: tag, versions: map[string]string{tag: pushed}}
 	app := serves("ocel-shop-prod-app")
-	app.image = "europe-west1-docker.pkg.dev/acme/ocel/app:" + wrappedTag
+	app.Image = "europe-west1-docker.pkg.dev/acme/ocel/app:" + wrappedTag
 
 	released(t, server, app)
 
@@ -88,12 +89,12 @@ func TestAWrappedImageAPruneUntaggedMidwayIsTaggedAgainAtTheVersionItsTagNamed(t
 func TestAWrappedImageWhoseTagIsGoneBeforeTheReleaseIsRefusedRatherThanTaggedAtAVersionItNeverHad(t *testing.T) {
 	server := &runServer{missing: []string{wrappedPackage + "/tags/" + wrappedTag}}
 	app := serves("ocel-shop-prod-app")
-	app.image = "europe-west1-docker.pkg.dev/acme/ocel/app:" + wrappedTag
+	app.Image = "europe-west1-docker.pkg.dev/acme/ocel/app:" + wrappedTag
 
-	_, err := server.open(t).deployService(t.Context(), app, nil)
+	_, err := server.open(t).services().DeployService(t.Context(), app, nil)
 
-	if err == nil || !strings.Contains(err.Error(), app.image) {
-		t.Errorf("deployService() = %v, want a refusal naming %s", err, app.image)
+	if err == nil || !strings.Contains(err.Error(), app.Image) {
+		t.Errorf("deployService() = %v, want a refusal naming %s", err, app.Image)
 	}
 	if got := server.retags(); len(got) != 0 {
 		t.Errorf("the release tagged %v, want nothing: the tag names no version the registry holds", got)
@@ -116,10 +117,10 @@ func aContainerStack() provider.StackRef {
 func TestAReconcileLeavesATagAnotherDeployPushedBeforeItsRevisionExists(t *testing.T) {
 	server := &runServer{tagged: map[string][]string{shopWebPackage: {"sha256-just-pushed", "sha256-new"}}}
 	app := serves("ocel-shop-prod-web")
-	app.image = shopWebImage + "new"
+	app.Image = shopWebImage + "new"
 	released(t, server, app)
 
-	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", app.image, nil, nil); err != nil {
+	if err := server.open(t).services().ReconcileImages(context.Background(), aContainerStack(), "web", app.Image, nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -131,7 +132,7 @@ func TestAReconcileLeavesATagAnotherDeployPushedBeforeItsRevisionExists(t *testi
 func TestAReconcileOfAReleaseThatNeverStartedUntagsTheImageItPushed(t *testing.T) {
 	server := &runServer{}
 
-	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
+	if err := server.open(t).services().ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -145,7 +146,7 @@ func TestAReconcileKeepsATagAServiceElsewhereInTheRegionRuns(t *testing.T) {
 		elsewhere: map[string]string{"ocel-shop-preview-web-00001": shopWebImage + "old"},
 	}
 
-	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"old", nil, nil); err != nil {
+	if err := server.open(t).services().ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"old", nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -157,7 +158,7 @@ func TestAReconcileKeepsATagAServiceElsewhereInTheRegionRuns(t *testing.T) {
 func TestAReconcileOfAnImageOutsideArtifactRegistryTouchesNothing(t *testing.T) {
 	server := &runServer{}
 
-	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", "ghcr.io/acme/shop.web:sha256-new", nil, nil); err != nil {
+	if err := server.open(t).services().ReconcileImages(context.Background(), aContainerStack(), "web", "ghcr.io/acme/shop.web:sha256-new", nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -172,7 +173,7 @@ func TestAReconcileRemovesAnImageFromTheProjectsRegistryThatNoRevisionRuns(t *te
 	server := &runServer{}
 	pushed := fake.NewImages()
 
-	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
+	if err := server.open(t).services().ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -185,7 +186,7 @@ func TestAReconcileKeepsAnImageInTheProjectsRegistryARevisionRuns(t *testing.T) 
 	server := &runServer{elsewhere: map[string]string{"ocel-shop-preview-web-00001": projectRegistryImage}}
 	pushed := fake.NewImages()
 
-	if err := server.open(t).ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
+	if err := server.open(t).services().ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -199,12 +200,12 @@ func TestDestroyingAContainerUntagsTheImageItRan(t *testing.T) {
 	p := server.open(t)
 	released := newReleasedStacks(p)
 	app := serves("ocel-shop-prod-web")
-	app.image = shopWebImage + "new"
+	app.Image = shopWebImage + "new"
 	ref := aContainerStack()
 	releasedOn(t, p, app)
 	if err := stackrecords.Write(context.Background(), released.store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
-		Containers: []provider.AppContainer{{Name: "web", Physical: app.service, Image: app.image}},
+		Containers: []provider.AppContainer{{Name: "web", Physical: app.Service, Image: app.Image}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -218,10 +219,10 @@ func TestDestroyingAContainerUntagsTheImageItRan(t *testing.T) {
 	}
 }
 
-func releasedOn(t *testing.T, p *Provider, s serving) {
+func releasedOn(t *testing.T, p *Provider, s run.Serving) {
 	t.Helper()
-	if _, err := p.deployService(context.Background(), s, nil); err != nil {
-		t.Fatalf("deployService(%s) = %v", s.service, err)
+	if _, err := p.services().DeployService(context.Background(), s, nil); err != nil {
+		t.Fatalf("deployService(%s) = %v", s.Service, err)
 	}
 }
 
@@ -247,7 +248,7 @@ func TestAReconcileKeepsAnImageInTheProjectsRegistryADeployInFlightRecords(t *te
 	recordStartingImage(t, p, aPreviewOfTheSameApp(), projectRegistryImage)
 	pushed := fake.NewImages()
 
-	if err := p.ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
+	if err := p.services().ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -261,7 +262,7 @@ func TestAReconcileLeavesTaggedAnImageADeployInFlightRecords(t *testing.T) {
 	p := server.open(t)
 	recordStartingImage(t, p, aPreviewOfTheSameApp(), shopWebImage+"new")
 
-	if err := p.ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
+	if err := p.services().ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -276,7 +277,7 @@ func TestAReconcileOfAFailedReleaseRemovesTheImageItsOwnRecordNames(t *testing.T
 	recordStartingImage(t, p, aContainerStack(), projectRegistryImage)
 	pushed := fake.NewImages()
 
-	if err := p.ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
+	if err := p.services().ReconcileImages(context.Background(), aContainerStack(), "web", projectRegistryImage, pushed, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -290,7 +291,7 @@ func TestARemovalReadsTheRecordsAgainBeforeEachImageItTakes(t *testing.T) {
 	p := server.open(t)
 	server.onUntag = func(string) { recordStartingImage(t, p, aPreviewOfTheSameApp(), shopWebImage+"two") }
 
-	p.removeUnusedImages(context.Background(), aContainerStack(), []string{shopWebImage + "one", shopWebImage + "two"}, nil, nil)
+	p.services().RemoveUnusedImages(context.Background(), aContainerStack(), []string{shopWebImage + "one", shopWebImage + "two"}, nil, nil)
 
 	if got, want := server.untags(), []string{shopWebPackage + "/tags/sha256-one"}; !slices.Equal(got, want) {
 		t.Errorf("the removal untagged %v, want %v: a deploy that recorded sha256-two while the removal ran found it tagged and will release it", got, want)
@@ -302,7 +303,7 @@ func TestARemovalUntagsAnImageOnlyItsOwnStackRecordsHoweverRecentlyItWasPushed(t
 	p := server.open(t)
 	recordStartingImage(t, p, aContainerStack(), shopWebImage+"new")
 
-	if err := p.ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
+	if err := p.services().ReconcileImages(context.Background(), aContainerStack(), "web", shopWebImage+"new", nil, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -319,7 +320,7 @@ func TestPruningASupersededRevisionRemovesTheImageItRanFromTheProjectsRegistry(t
 	first := functionRelease("d1", image)
 	one := released.provision(t, first)
 	active := released.provision(t, functionRelease("d2", fake.RegistryServer+"/acme/shop.web-checkout:sha256-two"))
-	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 	pushed := fake.NewImages()

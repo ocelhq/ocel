@@ -15,7 +15,7 @@ import (
 	pubsub "google.golang.org/api/pubsub/v1"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -214,13 +214,13 @@ func membersOf(policy *pubsub.Policy, role string) []string {
 	return nil
 }
 
-func editTopic(t *testing.T, clients *ports.Clients, names topics.Names, topic string, change iampolicy.Change) (bool, error) {
+func editTopic(t *testing.T, clients *ports.Clients, names topics.Names, topic string, change policy.Change) (bool, error) {
 	t.Helper()
 	service, err := clients.PubSub()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return iampolicy.Edit(context.Background(), topics.TopicPolicy(service, topics.TopicPath("acme-prod", names.Topic(topic))), change)
+	return policy.Edit(context.Background(), topics.TopicPolicy(service, topics.TopicPath("acme-prod", names.Topic(topic))), change)
 }
 
 func TestRevokingAPublisherTakesOnlyThatMemberOffTheTopic(t *testing.T) {
@@ -233,7 +233,7 @@ func TestRevokingAPublisherTakesOnlyThatMemberOffTheTopic(t *testing.T) {
 	})
 
 	for _, topic := range []string{"orders", "resize"} {
-		if _, err := editTopic(t, clients, names, topic, iampolicy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
+		if _, err := editTopic(t, clients, names, topic, policy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
 			t.Fatalf("revoking the publisher of %s = %v", topic, err)
 		}
 	}
@@ -255,7 +255,7 @@ func TestRevokingTheLastPublisherOfATopicDropsItsBinding(t *testing.T) {
 		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{revoked}}}},
 	})
 
-	if _, err := editTopic(t, clients, names, "orders", iampolicy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
+	if _, err := editTopic(t, clients, names, "orders", policy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
 		t.Fatalf("revoking the publisher = %v", err)
 	}
 
@@ -270,8 +270,8 @@ func TestRevokingAPublisherFromATopicThatIsGoneIsToldApartAsAbsent(t *testing.T)
 	})
 	state.gone[state.path(names, "resize")] = true
 
-	_, err := editTopic(t, clients, names, "resize", iampolicy.Revoke(topics.PublisherRole, revoked, nil))
-	if !iampolicy.IsAbsent(err) {
+	_, err := editTopic(t, clients, names, "resize", policy.Revoke(topics.PublisherRole, revoked, nil))
+	if !policy.IsAbsent(err) {
 		t.Errorf("revoking the publisher of a deleted topic = %v, want it told apart as absent", err)
 	}
 }
@@ -282,7 +282,7 @@ func TestRevokingAPublisherRetriesAPolicyChangedUnderIt(t *testing.T) {
 	})
 	state.conflict = 1
 
-	if _, err := editTopic(t, clients, names, "orders", iampolicy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
+	if _, err := editTopic(t, clients, names, "orders", policy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
 		t.Fatalf("revoking the publisher = %v", err)
 	}
 
@@ -297,7 +297,7 @@ func TestRevokingAPublisherRetriesAPolicyAnsweredFailedPrecondition(t *testing.T
 	})
 	state.changed = 1
 
-	if _, err := editTopic(t, clients, names, "orders", iampolicy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
+	if _, err := editTopic(t, clients, names, "orders", policy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
 		t.Fatalf("revoking the publisher = %v", err)
 	}
 
@@ -312,7 +312,7 @@ func TestGrantingAPublisherRetriesAPolicyAnsweredFailedPrecondition(t *testing.T
 	})
 	state.changed = 1
 
-	if _, err := editTopic(t, clients, names, "orders", iampolicy.Grant(topics.PublisherRole, revoked, nil)); err != nil {
+	if _, err := editTopic(t, clients, names, "orders", policy.Grant(topics.PublisherRole, revoked, nil)); err != nil {
 		t.Fatalf("granting the publisher = %v", err)
 	}
 

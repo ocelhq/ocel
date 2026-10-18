@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
 const cdnPurgeRolePath = "projects/acme-prod/roles/ocel_cdn_purge"
@@ -167,8 +168,8 @@ func TestAnAppNoEnvironmentRunsLosesItsCachePurgeGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	member := "serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
-	if _, err := c.unbindProjectMember(context.Background(), member); err != nil {
+	account := c.AppAccount(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
+	if _, err := grants.RevokeAll(context.Background(), c, p.KeyValues(), environment.TierProduction, account); err != nil {
 		t.Fatal(err)
 	}
 	if got := purgeBindingsOf(server.identities()); len(got) != 0 {

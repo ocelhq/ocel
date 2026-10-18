@@ -57,7 +57,7 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 		if err != nil {
 			return err
 		}
-		return logentries.Tail(ctx, stream, resolved.project, query, emitEvents, func(suppressed logentries.Notice) error {
+		return logentries.Tail(ctx, stream, resolved.Project(), query, emitEvents, func(suppressed logentries.Notice) error {
 			return notice(noticeOf(suppressed))
 		})
 	}
@@ -65,7 +65,7 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 	if err != nil {
 		return err
 	}
-	events, err := logentries.Read(ctx, service, resolved.project, query)
+	events, err := logentries.Read(ctx, service, resolved.Project(), query)
 	if err != nil {
 		return err
 	}

@@ -9,13 +9,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
 type assetStoreHarness struct {
 	iam     *iamServer
 	secrets *secretServer
 	hmac    *hmacServer
-	clients *clients
+	clients *gcloud.Clients
 }
 
 func newAssetStoreHarness(t *testing.T) *assetStoreHarness {
@@ -37,7 +39,7 @@ func newAssetStoreHarness(t *testing.T) *assetStoreHarness {
 
 func (h *assetStoreHarness) raise(t *testing.T) {
 	t.Helper()
-	if err := h.clients.raiseAssetStore(t.Context(), environment.TierProduction, cloudflareKind); err != nil {
+	if err := raiseAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err != nil {
 		t.Fatalf("raiseAssetStore() = %v", err)
 	}
 }
@@ -54,7 +56,7 @@ func (h *assetStoreHarness) stored(t *testing.T) edgeCredentials {
 func (h *assetStoreHarness) assetBindings() []string {
 	var bound []string
 	for _, binding := range projectBindingsOf(h.iam) {
-		if strings.HasPrefix(binding, appAssetsRole+" ") {
+		if strings.HasPrefix(binding, grants.AssetsRole+" ") {
 			bound = append(bound, binding)
 		}
 	}
@@ -71,7 +73,7 @@ func TestBootstrappingAnEdgeThatRunsCodeMintsAnAccountThatReadsTheAssetsStoreAnd
 	if len(h.iam.created) != 1 || h.iam.created[0].AccountId != account {
 		t.Fatalf("the bootstrap created %v, want the one account %s", h.iam.created, account)
 	}
-	want := appAssetsRole + " serviceAccount:" + h.clients.AssetReaderAccountEmail(environment.TierProduction) +
+	want := grants.AssetsRole + " serviceAccount:" + h.clients.AssetReaderAccountEmail(environment.TierProduction) +
 		` resource.name.startsWith("projects/_/buckets/` + h.clients.Bucket(environment.TierProduction) + `/objects/assets/")`
 	if got := h.assetBindings(); !slices.Equal(got, []string{want}) {
 		t.Errorf("the project's asset bindings = %q, want exactly %q", got, want)
@@ -162,7 +164,7 @@ func TestABootstrapThatCannotMintAKeyKeepsTheOneTheWorkerSignsWith(t *testing.T)
 	}
 	h.hmac.refusesCreate = true
 
-	if err := h.clients.raiseAssetStore(t.Context(), environment.TierProduction, cloudflareKind); err == nil {
+	if err := raiseAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err == nil {
 		t.Fatal("raiseAssetStore() = nil, want the refused key creation")
 	}
 
@@ -182,7 +184,7 @@ func TestABootstrapThatCannotDeleteTheStaleKeyHasRecordedTheNewOne(t *testing.T)
 	}
 	h.hmac.refusesDelete = true
 
-	if err := h.clients.raiseAssetStore(t.Context(), environment.TierProduction, cloudflareKind); err == nil {
+	if err := raiseAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err == nil {
 		t.Fatal("raiseAssetStore() = nil, want the refused deletion")
 	}
 
@@ -231,7 +233,7 @@ func TestTakingTheAssetStoreDownDeletesItsKeyItsGrantAndItsAccount(t *testing.T)
 	h.raise(t)
 	minted := h.hmac.active()[0]
 
-	if err := h.clients.takeAssetStore(t.Context(), environment.TierProduction); err != nil {
+	if err := takeAssetStore(t.Context(), h.clients, environment.TierProduction); err != nil {
 		t.Fatalf("takeAssetStore() = %v", err)
 	}
 
@@ -250,7 +252,7 @@ func TestTakingTheAssetStoreDownWhereNothingWasRaisedIsNotAnError(t *testing.T) 
 	t.Parallel()
 	h := newAssetStoreHarness(t)
 
-	if err := h.clients.takeAssetStore(t.Context(), environment.TierProduction); err != nil {
+	if err := takeAssetStore(t.Context(), h.clients, environment.TierProduction); err != nil {
 		t.Errorf("takeAssetStore() = %v, want nothing to take down", err)
 	}
 }
@@ -259,7 +261,7 @@ func TestAnEdgeThatRunsCodePlansTheAccountAndKeyItsBootstrapRaises(t *testing.T)
 	t.Parallel()
 	h := newAssetStoreHarness(t)
 
-	changes, err := h.clients.plannedAssetStore(t.Context(), environment.TierProduction, cloudflareKind)
+	changes, err := plannedAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
 	if err != nil {
 		t.Fatalf("plannedAssetStore() = %v", err)
 	}
@@ -273,7 +275,7 @@ func TestAnEdgeThatRunsCodePlansTheAccountAndKeyItsBootstrapRaises(t *testing.T)
 	}
 
 	h.raise(t)
-	changes, err = h.clients.plannedAssetStore(t.Context(), environment.TierProduction, cloudflareKind)
+	changes, err = plannedAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
 	if err != nil {
 		t.Fatalf("plannedAssetStore() = %v", err)
 	}

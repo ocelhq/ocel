@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/valkey"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const (
@@ -149,7 +151,7 @@ type kvInstance struct {
 	service   memorystore
 }
 
-func (p *Provider) openKVInstance(ctx context.Context, ref provider.StackRef, store string) (*clients, kvInstance, error) {
+func (p *Provider) openKVInstance(ctx context.Context, ref provider.StackRef, store string) (*gcloud.Clients, kvInstance, error) {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return nil, kvInstance{}, err
@@ -158,7 +160,7 @@ func (p *Provider) openKVInstance(ctx context.Context, ref provider.StackRef, st
 	if err != nil {
 		return nil, kvInstance{}, err
 	}
-	return clients, kvInstance{id: id, path: clients.location() + "/instances/" + id, storeName: store, service: p.memorystore()}, nil
+	return clients, kvInstance{id: id, path: clients.Location() + "/instances/" + id, storeName: store, service: p.memorystore()}, nil
 }
 
 func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
@@ -172,19 +174,19 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 	}
 	current, err := instance.service.readInstance(ctx, instance.path)
 	switch {
-	case absent(err):
-		desired := store.instance(clients.project, clients.NetworkPath(in.Ref.Tier), labelsFor(clients.Names, in.Ref, kvLabel, in.Resource.Name))
+	case gcloud.Absent(err):
+		desired := store.instance(clients.Project(), clients.NetworkPath(in.Ref.Tier), names.LabelsFor(clients.Names, in.Ref, names.KVLabel, in.Resource.Name))
 		current, err = instance.create(ctx, clients, desired, progress)
 	case err != nil:
 		return provider.Binding{}, fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
 	case isSettling(current.State):
 		if current, err = instance.service.readSettledInstance(ctx, instance.path, in.Resource.Name); err == nil {
-			if err = instance.refuseInactive(current, clients.region); err == nil {
+			if err = instance.refuseInactive(current, clients.Region); err == nil {
 				current, err = instance.update(ctx, store, current, progress)
 			}
 		}
 	case current.State != instanceActive:
-		err = instance.refuseInactive(current, clients.region)
+		err = instance.refuseInactive(current, clients.Region)
 	default:
 		current, err = instance.update(ctx, store, current, progress)
 	}
@@ -205,7 +207,7 @@ func (p *Provider) PlanKV(ctx context.Context, in resources.ProvisionRequest, _ 
 	}
 	current, err := instance.service.readInstance(ctx, instance.path)
 	switch {
-	case absent(err):
+	case gcloud.Absent(err):
 		return provider.ActionCreate, "", nil
 	case err != nil:
 		return "", "", fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
@@ -215,7 +217,7 @@ func (p *Provider) PlanKV(ctx context.Context, in resources.ProvisionRequest, _ 
 			", so the deploy waits for it to settle and then applies any change to its node type, engine version or engine configs"
 		return provider.ActionUpdate, strings.Join(append([]string{settling}, differences...), "; "), nil
 	case current.State != instanceActive:
-		return "", "", instance.refuseInactive(current, clients.region)
+		return "", "", instance.refuseInactive(current, clients.Region)
 	}
 	if _, differences := store.changes(current); len(differences) > 0 {
 		return provider.ActionUpdate, strings.Join(differences, "; "), nil
@@ -223,10 +225,10 @@ func (p *Provider) PlanKV(ctx context.Context, in resources.ProvisionRequest, _ 
 	return provider.ActionKeep, provider.ReasonCurrent, nil
 }
 
-func (i kvInstance) create(ctx context.Context, clients *clients, desired *memorystoreInstance, progress progress.Log) (*memorystoreInstance, error) {
-	ensureProgress(progress).Say("Creating kv " + i.storeName + " as Memorystore instance " + i.id + " in " + clients.region +
+func (i kvInstance) create(ctx context.Context, clients *gcloud.Clients, desired *memorystoreInstance, progress progress.Log) (*memorystoreInstance, error) {
+	gcloud.EnsureProgress(progress).Say("Creating kv " + i.storeName + " as Memorystore instance " + i.id + " in " + clients.Region +
 		": a new instance takes several minutes")
-	started, err := i.service.createInstance(ctx, clients.location(), i.id, desired)
+	started, err := i.service.createInstance(ctx, clients.Location(), i.id, desired)
 	if err != nil {
 		return nil, fmt.Errorf("create the Memorystore instance kv %s runs on: %w", i.storeName, err)
 	}
@@ -235,7 +237,7 @@ func (i kvInstance) create(ctx context.Context, clients *clients, desired *memor
 		return nil, err
 	}
 	if timed := finished.Metadata; timed != nil {
-		ensureProgress(progress).Say("Created kv " + i.storeName + ": its create operation " + finished.Name +
+		gcloud.EnsureProgress(progress).Say("Created kv " + i.storeName + ": its create operation " + finished.Name +
 			" created " + timed.CreateTime + " and ended " + timed.EndTime)
 	}
 	return i.service.readInstance(ctx, i.path)
@@ -246,7 +248,7 @@ func (i kvInstance) update(ctx context.Context, store kvStore, current *memoryst
 	if len(mask) == 0 {
 		return current, nil
 	}
-	ensureProgress(progress).Say("Updating kv " + i.storeName + " on Memorystore instance " + i.id + ": " + strings.Join(differences, "; "))
+	gcloud.EnsureProgress(progress).Say("Updating kv " + i.storeName + " on Memorystore instance " + i.id + ": " + strings.Join(differences, "; "))
 	started, err := i.service.updateInstance(ctx, i.path, mask, &memorystoreInstance{
 		NodeType:      store.node.nodeType,
 		EngineVersion: store.version,
@@ -361,9 +363,9 @@ func (p *Provider) RemoveKV(ctx context.Context, ref provider.StackRef, binding 
 	if err != nil {
 		return err
 	}
-	ensureProgress(progress).Say("Removing kv " + binding.Name + ", its Memorystore instance " + instance.id + " and its data")
+	gcloud.EnsureProgress(progress).Say("Removing kv " + binding.Name + ", its Memorystore instance " + instance.id + " and its data")
 	started, err := instance.service.deleteInstance(ctx, instance.path)
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return nil
 	}
 	if err != nil {

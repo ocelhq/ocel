@@ -18,7 +18,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -50,8 +52,8 @@ func unindexedTagFields() []string {
 	return []string{tagWrittenAtField, tagField, tagStaleField, tagExpiredField}
 }
 
-func tagDatabaseCondition(c *clients, tier environment.Tier) *iampolicy.Condition {
-	return &iampolicy.Condition{
+func tagDatabaseCondition(c *gcloud.Clients, tier environment.Tier) *policy.Condition {
+	return &policy.Condition{
 		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " tag records",
 		Expression: fmt.Sprintf("resource.name == %q", databasePath(c, c.TagDatabase(tier))),
 	}
@@ -59,14 +61,14 @@ func tagDatabaseCondition(c *clients, tier environment.Tier) *iampolicy.Conditio
 
 func (b bootstrap) tagDatabasePart(tier environment.Tier) part {
 	var resources []provider.PartResource
-	if !b.clients.emulated() {
+	if !b.clients.Emulated() {
 		resources = append(resources, provider.PartResource{Kind: string(KindDatabase), ID: b.clients.TagDatabase(tier)})
 	}
 	return part{
 		name:      tagDatabasePart,
 		summary:   tagDatabaseSummary,
 		resources: resources,
-		shape:     tagDatabaseShape(b.clients.Names, tier, b.clients.region),
+		shape:     tagDatabaseShape(b.clients.Names, tier, b.clients.Region),
 		make:      func(ctx context.Context) error { return b.makeTagDatabase(ctx, tier) },
 		users:     func(ctx context.Context) ([]string, error) { return b.listTagDatabaseUsers(ctx, tier) },
 		remove:    func(ctx context.Context) error { return b.removeTagDatabase(ctx, tier) },
@@ -81,22 +83,22 @@ func (b bootstrap) listTagDatabaseUsers(ctx context.Context, tier environment.Ti
 	return append([]string{}, users[tagDatabasePart]...), nil
 }
 
-func tagDatabaseShape(names Names, tier environment.Tier, region string) []pricing.Shaped {
+func tagDatabaseShape(names names.Names, tier environment.Tier, region string) []pricing.Shaped {
 	return []pricing.Shaped{{Name: names.TagDatabase(tier), Type: tfFirestoreDatabase, Properties: map[string]any{"location_id": region, "type": nativeFirestore}}}
 }
 
 func (b bootstrap) makeTagDatabase(ctx context.Context, tier environment.Tier) error {
-	if b.clients.emulated() {
+	if b.clients.Emulated() {
 		return nil
 	}
-	if err := b.makeDatabase(ctx, survey{Project: b.clients.project, Region: b.clients.region}, b.clients.TagDatabase(tier)); err != nil {
+	if err := b.makeDatabase(ctx, survey{Project: b.clients.Project(), Region: b.clients.Region}, b.clients.TagDatabase(tier)); err != nil {
 		return err
 	}
 	return b.ensureTagIndexes(ctx, tier)
 }
 
 func (b bootstrap) removeTagDatabase(ctx context.Context, tier environment.Tier) error {
-	if b.clients.emulated() {
+	if b.clients.Emulated() {
 		return nil
 	}
 	return b.takeDatabase(ctx, b.clients.TagDatabase(tier))
@@ -125,7 +127,7 @@ func (b bootstrap) ensureTagIndexes(ctx context.Context, tier environment.Tier) 
 	parent := database + "/collectionGroups/" + tagCollection
 	for _, index := range tagIndexes() {
 		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(parent, index).Context(ctx).Do)
-		if taken(err) {
+		if gcloud.Taken(err) {
 			continue
 		}
 		if err != nil {
@@ -190,7 +192,7 @@ func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, 
 		return err
 	}
 	if removed > 0 {
-		ensureProgress(log).Say(fmt.Sprintf("Removed %d tag records under %s from Firestore database %s",
+		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Removed %d tag records under %s from Firestore database %s",
 			removed, prefix, ports.TagDatabase(resolved.Namespace(), tier)))
 	}
 	return nil

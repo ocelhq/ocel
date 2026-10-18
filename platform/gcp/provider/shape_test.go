@@ -5,17 +5,20 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 	t.Parallel()
 
 	for compute, instances := range map[provider.Compute]provider.Instances{provider.ComputeServerless: {}, provider.ComputeContainer: {Min: 2, Max: 2}} {
-		sent, err := serviceOf(serving{service: "svc", image: "img", compute: compute, health: "/healthz", ingress: ingressLoadBalancer, instances: instances})
+		sent, err := run.ServiceOf(run.Serving{Service: "svc", Image: "img", Compute: compute, Health: "/healthz", Ingress: run.IngressLoadBalancer, Instances: instances})
 		if err != nil {
 			t.Fatal(err)
 		}
-		properties := serviceProperties(compute == provider.ComputeServerless, instances.Min, revisionMemory, ingressLoadBalancer)
+		properties := serviceProperties(compute == provider.ComputeServerless, instances.Min, run.RevisionMemory, run.IngressLoadBalancer)
 		if properties["ingress"] != sent.Ingress {
 			t.Errorf("%s: shaped ingress %v, serviceOf sends %v", compute, properties["ingress"], sent.Ingress)
 		}
@@ -38,12 +41,12 @@ func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 func TestTheEnvSourceSyncShapeMatchesWhatTheBootstrapDeploys(t *testing.T) {
 	t.Parallel()
 
-	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}}
-	sent, err := serviceOf(b.syncServing(environment.TierProduction))
+	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
+	sent, err := run.ServiceOf(b.syncServing(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	properties := itemProperties(item{Kind: KindService, Name: b.clients.EnvSourceSync(environment.TierProduction)}, "europe-west1")
+	properties := syncServiceProperties("europe-west1")
 	if properties["ingress"] != sent.Ingress {
 		t.Errorf("shaped ingress %v, the bootstrap sends %v", properties["ingress"], sent.Ingress)
 	}
@@ -66,10 +69,10 @@ func TestTheEnvSourceSyncShapeMatchesWhatTheBootstrapDeploys(t *testing.T) {
 func TestEveryBootstrapItemHasAShape(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		for _, item := range bootstrapItems(names, tier, false) {
-			if _, shaped := itemTypes[item.Kind]; !shaped {
+			if _, shaped := item.shape("europe-west1"); !shaped {
 				t.Errorf("%s provisions a %s the shape has no name for", tier, item.ID())
 			}
 		}

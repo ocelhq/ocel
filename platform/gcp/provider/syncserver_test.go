@@ -11,18 +11,19 @@ import (
 	"testing"
 
 	"google.golang.org/api/cloudscheduler/v1"
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 type syncServer struct {
 	*iamServer
 
 	mu        sync.Mutex
-	services  map[string]*run.GoogleCloudRunV2Service
+	services  map[string]*runv2.GoogleCloudRunV2Service
 	revisions map[string]int
-	policies  map[string]*run.GoogleIamV1Policy
+	policies  map[string]*runv2.GoogleIamV1Policy
 	schedules map[string]*cloudscheduler.Job
 	patched   []string
 	deleted   []string
@@ -34,9 +35,9 @@ type syncServer struct {
 func newSyncServer() *syncServer {
 	return &syncServer{
 		iamServer: grantedIAM(),
-		services:  map[string]*run.GoogleCloudRunV2Service{},
+		services:  map[string]*runv2.GoogleCloudRunV2Service{},
 		revisions: map[string]int{},
-		policies:  map[string]*run.GoogleIamV1Policy{},
+		policies:  map[string]*runv2.GoogleIamV1Policy{},
 		schedules: map[string]*cloudscheduler.Job{},
 	}
 }
@@ -52,19 +53,19 @@ func (s *syncServer) open(t *testing.T) bootstrap {
 		case strings.HasPrefix(path, "/v2/") && strings.Contains(path, "/services"):
 			s.serveRun(w, r, strings.TrimPrefix(path, "/v2/"))
 		case strings.HasPrefix(path, "/v2/") && strings.Contains(path, "/operations/"):
-			writeBody(w, &run.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
+			writeBody(w, &runv2.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
 		case strings.HasPrefix(path, "/v1/") && strings.Contains(path, "/jobs"):
 			s.serveScheduler(w, r, strings.TrimPrefix(path, "/v1/"))
 		default:
 			iamRest(w, r)
 		}
 	})
-	p := pushing(t, c.endpoint)
+	p := pushing(t, c.Endpoint)
 	p.resolved = c
 	return bootstrap{
 		clients:        c,
-		deployAndRoute: p.deployAndRoute,
-		tearDown:       p.tearDown,
+		deployAndRoute: p.services().DeployAndRoute,
+		tearDown:       p.services().TearDown,
 		pushBinary: func(_ context.Context, _ environment.Tier, _, ref string, _ []byte, _ string) error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
@@ -84,16 +85,16 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 	defer s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	name, verb, _ := strings.Cut(path, ":")
-	done := &run.GoogleLongrunningOperation{Name: "projects/acme-prod/locations/europe-west1/operations/op", Done: true}
+	done := &runv2.GoogleLongrunningOperation{Name: "projects/acme-prod/locations/europe-west1/operations/op", Done: true}
 	switch {
 	case verb == "getIamPolicy":
 		if policy := s.policies[name]; policy != nil {
 			writeBody(w, policy)
 			return
 		}
-		writeBody(w, &run.GoogleIamV1Policy{Etag: "BwXhoLA="})
+		writeBody(w, &runv2.GoogleIamV1Policy{Etag: "BwXhoLA="})
 	case verb == "setIamPolicy":
-		asked := readBody[run.GoogleIamV1SetIamPolicyRequest](w, r)
+		asked := readBody[runv2.GoogleIamV1SetIamPolicyRequest](w, r)
 		if asked == nil {
 			return
 		}
@@ -106,7 +107,7 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 		s.policies[name] = asked.Policy
 		writeBody(w, asked.Policy)
 	case r.Method == http.MethodPost:
-		desired := readBody[run.GoogleCloudRunV2Service](w, r)
+		desired := readBody[runv2.GoogleCloudRunV2Service](w, r)
 		if desired == nil {
 			return
 		}
@@ -118,7 +119,7 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 		s.services[desired.Name] = desired
 		writeBody(w, done)
 	case r.Method == http.MethodPatch:
-		desired := readBody[run.GoogleCloudRunV2Service](w, r)
+		desired := readBody[runv2.GoogleCloudRunV2Service](w, r)
 		current := s.services[name]
 		if desired == nil || current == nil {
 			notFound(w)
@@ -134,7 +135,7 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 		}
 		if !sameTemplate(current.Template, desired.Template) {
 			s.revisions[name]++
-			current.LatestReadyRevision = name + "/revisions/" + revisionName(name) + "-0000" + strconv.Itoa(s.revisions[name])
+			current.LatestReadyRevision = name + "/revisions/" + run.RevisionName(name) + "-0000" + strconv.Itoa(s.revisions[name])
 		}
 		current.Template, current.Traffic = desired.Template, desired.Traffic
 		current.Ingress, current.InvokerIamDisabled = desired.Ingress, desired.InvokerIamDisabled
@@ -215,13 +216,13 @@ func (s *syncServer) serveScheduler(w http.ResponseWriter, r *http.Request, name
 	}
 }
 
-func (s *syncServer) service(name string) *run.GoogleCloudRunV2Service {
+func (s *syncServer) service(name string) *runv2.GoogleCloudRunV2Service {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.services[name]
 }
 
-func (s *syncServer) policy(name string) *run.GoogleIamV1Policy {
+func (s *syncServer) policy(name string) *runv2.GoogleIamV1Policy {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.policies[name]

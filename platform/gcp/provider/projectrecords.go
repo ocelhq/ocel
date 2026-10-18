@@ -19,12 +19,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
-	projectRecordsSuffix   = "project_records"
 	databaseQuotaMessage   = "maximum number of databases"
 	projectDatabasesFilter = "databases/"
 )
@@ -38,95 +39,81 @@ var projectRecordsPermissions = []string{
 	"cloudkms.cryptoKeys.get",
 }
 
-func (n Names) ProjectDatabase(tier environment.Tier, project string) string {
-	return ports.ProjectDatabase(n.namespace, tier, project)
-}
-
-func (n Names) ProjectDatabasePrefix(tier environment.Tier) string {
-	return ports.ProjectDatabasePrefix(n.namespace, tier)
-}
-
-func (n Names) ProjectRecordsRole() string { return customRoleID(n.namespace, projectRecordsSuffix) }
-
-func (n Names) ProjectRecordsRolePath() string {
-	return "projects/" + n.project + "/roles/" + n.ProjectRecordsRole()
-}
-
-func newProjectRecordsRole(names Names) customRole {
+func newProjectRecordsRole(names names.Names) customRole {
 	return customRole{
 		id:          names.ProjectRecordsRole(),
-		title:       "ocel project records (" + string(names.namespace) + ")",
+		title:       "ocel project records (" + string(names.Namespace()) + ")",
 		description: "lets a deploy make the Firestore database and the key a project's values are kept and sealed in, granted on the condition it names them, and nothing else",
 		permissions: projectRecordsPermissions,
 		driftReason: "it holds other permissions than a deploy needs to make a project's records database and key",
 	}
 }
 
-func projectRecordsCondition(names Names, region string) string {
-	ring := "projects/" + names.project + "/locations/" + region + "/keyRings/" + names.KeyRing()
+func projectRecordsCondition(names names.Names, region string) string {
+	ring := "projects/" + names.Project() + "/locations/" + region + "/keyRings/" + names.KeyRing()
 	clauses := []string{fmt.Sprintf("resource.name == %q", ring)}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		clauses = append(clauses,
-			fmt.Sprintf("resource.name.startsWith(%q)", "projects/"+names.project+"/databases/"+names.ProjectDatabasePrefix(tier)),
+			fmt.Sprintf("resource.name.startsWith(%q)", "projects/"+names.Project()+"/databases/"+names.ProjectDatabasePrefix(tier)),
 			fmt.Sprintf("resource.name.startsWith(%q)", ring+"/cryptoKeys/"+ports.ProjectKeyPrefix(tier)))
 	}
 	return strings.Join(clauses, " || ")
 }
 
-func projectRecordsGrant(names Names, region string) string {
+func projectRecordsGrant(names names.Names, region string) string {
 	return names.ProjectRecordsRolePath() + ", on the condition " + projectRecordsCondition(names, region)
 }
 
-func projectDatabaseCondition(c *clients, tier environment.Tier, project string) *iampolicy.Condition {
-	return &iampolicy.Condition{
+func projectDatabaseCondition(c *gcloud.Clients, tier environment.Tier, project string) *policy.Condition {
+	return &policy.Condition{
 		Title:      "ocel " + project + " " + string(tier) + " records",
 		Expression: fmt.Sprintf("resource.name == %q", databasePath(c, c.ProjectDatabase(tier, project))),
 	}
 }
 
-func projectKeyCondition(c *clients, tier environment.Tier, project string) *iampolicy.Condition {
-	return &iampolicy.Condition{
+func projectKeyCondition(c *gcloud.Clients, tier environment.Tier, project string) *policy.Condition {
+	return &policy.Condition{
 		Title:      "ocel " + project + " " + string(tier) + " key",
 		Expression: fmt.Sprintf("resource.name == %q", c.Workload().ProjectKeyPath(tier, project)),
 	}
 }
 
-func tierRecordsCondition(c *clients, tier environment.Tier) *iampolicy.Condition {
-	return &iampolicy.Condition{
+func tierRecordsCondition(c *gcloud.Clients, tier environment.Tier) *policy.Condition {
+	return &policy.Condition{
 		Title: "ocel " + string(c.Namespace()) + " " + string(tier) + " records",
 		Expression: fmt.Sprintf("resource.name == %q || resource.name.startsWith(%q)",
 			databasePath(c, c.Database()), databasePath(c, c.ProjectDatabasePrefix(tier))),
 	}
 }
 
-func projectKeysCondition(c *clients, tier environment.Tier) *iampolicy.Condition {
-	return &iampolicy.Condition{
+func projectKeysCondition(c *gcloud.Clients, tier environment.Tier) *policy.Condition {
+	return &policy.Condition{
 		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " project keys",
-		Expression: fmt.Sprintf("resource.name.startsWith(%q)", keyRingPath(c)+"/cryptoKeys/"+ports.ProjectKeyPrefix(tier)),
+		Expression: fmt.Sprintf("resource.name.startsWith(%q)", gcloud.KeyRingPath(c)+"/cryptoKeys/"+ports.ProjectKeyPrefix(tier)),
 	}
 }
 
-func (c *clients) ensureProjectDatabase(ctx context.Context, tier environment.Tier, project string) error {
-	if c.emulated() {
+func ensureProjectDatabase(ctx context.Context, c *gcloud.Clients, tier environment.Tier, project string) error {
+	if c.Emulated() {
 		return nil
 	}
-	err := bootstrap{clients: c}.makeDatabase(ctx, survey{Project: c.project, Region: c.region}, c.ProjectDatabase(tier, project))
+	err := bootstrap{clients: c}.makeDatabase(ctx, survey{Project: c.Project(), Region: c.Region}, c.ProjectDatabase(tier, project))
 	if googleretry.AnsweredCode(err) == http.StatusTooManyRequests || err != nil && strings.Contains(strings.ToLower(err.Error()), databaseQuotaMessage) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"project %s has as many Firestore databases as Firestore allows, and every Ocel project keeps its values in one of its own per tier.\n"+
-				"Ask Google support to raise the limit of databases per project, or remove projects this tier no longer runs, then try again", c.project)
+				"Ask Google support to raise the limit of databases per project, or remove projects this tier no longer runs, then try again", c.Project())
 	}
-	return explainMissingGrant(err, projectRecordsGrant(c.Names, c.region))
+	return gcloud.ExplainMissingGrant(err, projectRecordsGrant(c.Names, c.Region))
 }
 
-func (c *clients) ensureProjectKey(ctx context.Context, tier environment.Tier, project string) error {
+func ensureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.Tier, project string) error {
 	client, err := c.KMS()
 	if err != nil {
 		return err
 	}
 	_, err = googleretry.Called(ctx, func() (*kmspb.CryptoKey, error) {
 		return client.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
-			Parent:      keyRingPath(c),
+			Parent:      gcloud.KeyRingPath(c),
 			CryptoKeyId: ports.ProjectKey(tier, project),
 			CryptoKey:   &kmspb.CryptoKey{Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
 		})
@@ -134,60 +121,60 @@ func (c *clients) ensureProjectKey(ctx context.Context, tier environment.Tier, p
 	if err == nil || status.Code(err) == codes.AlreadyExists {
 		return nil
 	}
-	return explainMissingGrant(fmt.Errorf("create the key project %s seals its %s values under: %w", project, tier, err), projectRecordsGrant(c.Names, c.region))
+	return gcloud.ExplainMissingGrant(fmt.Errorf("create the key project %s seals its %s values under: %w", project, tier, err), projectRecordsGrant(c.Names, c.Region))
 }
 
-func (c *clients) keyRingPolicy() iampolicy.Resource {
-	ring := keyRingPath(c)
-	return iampolicy.Resource{Name: "the " + c.KeyRing() + " key ring", Read: func(ctx context.Context) ([]iampolicy.Binding, iampolicy.Write, error) {
+func keyRingPolicy(c *gcloud.Clients) policy.Resource {
+	ring := gcloud.KeyRingPath(c)
+	return policy.Resource{Name: "the " + c.KeyRing() + " key ring", Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
 		client, err := c.KMS()
 		if err != nil {
 			return nil, nil, err
 		}
-		policy, err := googleretry.Called(ctx, func() (*iampb.Policy, error) {
+		held, err := googleretry.Called(ctx, func() (*iampb.Policy, error) {
 			return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{
 				Resource: ring,
-				Options:  &iampb.GetPolicyOptions{RequestedPolicyVersion: iampolicy.ConditionalVersion},
+				Options:  &iampb.GetPolicyOptions{RequestedPolicyVersion: policy.ConditionalVersion},
 			})
 		})
 		if err != nil {
-			return nil, nil, absentWhenNotFound(err)
+			return nil, nil, gcloud.AbsentWhenNotFound(err)
 		}
-		write := func(ctx context.Context, bindings []iampolicy.Binding) error {
-			policy.Bindings = toProtoBindings(bindings)
-			policy.Version = iampolicy.ConditionalVersion
+		write := func(ctx context.Context, bindings []policy.Binding) error {
+			held.Bindings = gcloud.ToProtoBindings(bindings)
+			held.Version = policy.ConditionalVersion
 			_, err := googleretry.Called(ctx, func() (*iampb.Policy, error) {
-				return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: ring, Policy: policy})
+				return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: ring, Policy: held})
 			})
 			return err
 		}
-		return fromProtoBindings(policy.GetBindings()), write, nil
+		return gcloud.FromProtoBindings(held.GetBindings()), write, nil
 	}}
 }
 
-func (c *clients) bindProjectKeyRoles(ctx context.Context, tier environment.Tier, member string, roles, wanted []string) (bool, error) {
+func bindProjectKeyRoles(ctx context.Context, c *gcloud.Clients, tier environment.Tier, member string, roles, wanted []string) (bool, error) {
 	condition := projectKeysCondition(c, tier)
-	changes := make([]iampolicy.Change, 0, len(roles))
+	changes := make([]policy.Change, 0, len(roles))
 	for _, role := range roles {
-		changes = append(changes, grantedOrRevoked(role, member, condition, slices.Contains(wanted, role)))
+		changes = append(changes, gcloud.GrantedOrRevoked(role, member, condition, slices.Contains(wanted, role)))
 	}
-	changed, err := iampolicy.Edit(ctx, c.keyRingPolicy(), iampolicy.Each(changes...))
-	if iampolicy.IsAbsent(err) {
+	changed, err := policy.Edit(ctx, keyRingPolicy(c), policy.Each(changes...))
+	if policy.IsAbsent(err) {
 		return false, nil
 	}
 	return changed, err
 }
 
-func (c *clients) projectKeyRolesGranted(ctx context.Context, tier environment.Tier, member string, roles []string) (bool, error) {
-	bindings, err := iampolicy.Read(ctx, c.keyRingPolicy())
-	if iampolicy.IsAbsent(err) {
+func projectKeyRolesGranted(ctx context.Context, c *gcloud.Clients, tier environment.Tier, member string, roles []string) (bool, error) {
+	bindings, err := policy.Read(ctx, keyRingPolicy(c))
+	if policy.IsAbsent(err) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
 	for _, role := range roles {
-		if !iampolicy.Holds(bindings, role, member, projectKeysCondition(c, tier)) {
+		if !policy.Holds(bindings, role, member, projectKeysCondition(c, tier)) {
 			return false, nil
 		}
 	}
@@ -195,16 +182,16 @@ func (c *clients) projectKeyRolesGranted(ctx context.Context, tier environment.T
 }
 
 func (b bootstrap) takeProjectRecords(ctx context.Context, tier environment.Tier) error {
-	if b.clients.emulated() {
+	if b.clients.Emulated() {
 		return nil
 	}
 	service, err := b.clients.Databases()
 	if err != nil {
 		return err
 	}
-	listed, err := googleretry.Attempted(ctx, service.Projects.Databases.List("projects/"+b.clients.project).Context(ctx).Do)
+	listed, err := googleretry.Attempted(ctx, service.Projects.Databases.List("projects/"+b.clients.Project()).Context(ctx).Do)
 	if err != nil {
-		return fmt.Errorf("list the Firestore databases of project %s: %w", b.clients.project, err)
+		return fmt.Errorf("list the Firestore databases of project %s: %w", b.clients.Project(), err)
 	}
 	prefix := b.clients.ProjectDatabasePrefix(tier)
 	for _, database := range listed.Databases {
@@ -224,8 +211,8 @@ func (b bootstrap) takeProjectKeys(ctx context.Context, tier environment.Tier) e
 	if err != nil {
 		return err
 	}
-	keys := client.ListCryptoKeys(ctx, &kmspb.ListCryptoKeysRequest{Parent: keyRingPath(b.clients)})
-	prefix := keyRingPath(b.clients) + "/cryptoKeys/" + ports.ProjectKeyPrefix(tier)
+	keys := client.ListCryptoKeys(ctx, &kmspb.ListCryptoKeysRequest{Parent: gcloud.KeyRingPath(b.clients)})
+	prefix := gcloud.KeyRingPath(b.clients) + "/cryptoKeys/" + ports.ProjectKeyPrefix(tier)
 	var named []string
 	for {
 		key, err := keys.Next()
@@ -236,7 +223,7 @@ func (b bootstrap) takeProjectKeys(ctx context.Context, tier environment.Tier) e
 			return fmt.Errorf("list the keys of the %s ring: %w", b.clients.KeyRing(), err)
 		}
 		if strings.HasPrefix(key.GetName(), prefix) {
-			named = append(named, strings.TrimPrefix(key.GetName(), keyRingPath(b.clients)+"/cryptoKeys/"))
+			named = append(named, strings.TrimPrefix(key.GetName(), gcloud.KeyRingPath(b.clients)+"/cryptoKeys/"))
 		}
 	}
 	for _, name := range named {

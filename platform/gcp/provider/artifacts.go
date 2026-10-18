@@ -5,17 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 
 	"cloud.google.com/go/storage"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -180,7 +179,7 @@ func (a artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, pref
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
-	ensureProgress(progress).Say("Removed the " + string(tier) + " artifacts under " + prefix + " from bucket " + bucket.BucketName())
+	gcloud.EnsureProgress(progress).Say("Removed the " + string(tier) + " artifacts under " + prefix + " from bucket " + bucket.BucketName())
 	return nil
 }
 
@@ -192,7 +191,7 @@ func sweep(ctx context.Context, bucket *storage.BucketHandle, prefix string, kee
 			return nil
 		}
 		if err != nil {
-			if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
+			if errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err) {
 				return nil
 			}
 			return fmt.Errorf("list %s: %w", prefix, err)
@@ -207,14 +206,9 @@ func sweep(ctx context.Context, bucket *storage.BucketHandle, prefix string, kee
 	}
 }
 
-func absent(err error) bool {
-	var answered *googleapi.Error
-	return errors.As(err, &answered) && answered.Code == http.StatusNotFound
-}
-
 func (a artifacts) storeless(ctx context.Context, tier environment.Tier, err error) error {
 	names, named := a.p.Names(ctx)
-	if named == nil && (errors.Is(err, storage.ErrBucketNotExist) || absent(err)) {
+	if named == nil && (errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err)) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this project has no %s bucket, so it has no %s artifact store yet.\nRun `%s` to create it, then try again",
 			names.Bucket(tier), tier, provider.BootstrapCommand(tier))

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const cloudflareOriginPart = "cloudflare-origin"
@@ -92,7 +93,7 @@ func (b bootstrap) summaryOf(name string) string {
 
 func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	return b.eachFront(req.Parts, func(part provider.Part, front edge.Edge) error {
-		ensureProgress(progress).Say("Adding the " + part.Name + " part of the " + string(req.Tier) + " bootstrap: " + part.Summary)
+		gcloud.EnsureProgress(progress).Say("Adding the " + part.Name + " part of the " + string(req.Tier) + " bootstrap: " + part.Summary)
 		out, err := front.Bootstrap(ctx, req.Tier)
 		if err != nil {
 			return err
@@ -103,9 +104,9 @@ func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapReques
 		if !front.Facts().RunsCode {
 			return nil
 		}
-		ensureProgress(progress).Say("Keeping the " + string(front.Kind()) + " edge's asset reader (service account and HMAC key) for " + string(req.Tier) +
+		gcloud.EnsureProgress(progress).Say("Keeping the " + string(front.Kind()) + " edge's asset reader (service account and HMAC key) for " + string(req.Tier) +
 			": the edge reads this tier's static files from its bucket as that account")
-		return b.clients.raiseAssetStore(ctx, req.Tier, front.Kind())
+		return raiseAssetStore(ctx, b.clients, req.Tier, front.Kind())
 	})
 }
 
@@ -130,7 +131,7 @@ func (b bootstrap) dropFronts(
 		return err
 	}
 	return b.eachFront(dropping, func(part provider.Part, front edge.Edge) error {
-		ensureProgress(progress).Say("Taking down the " + string(front.Kind()) + " edge's front for " + string(req.Tier) +
+		gcloud.EnsureProgress(progress).Say("Taking down the " + string(front.Kind()) + " edge's front for " + string(req.Tier) +
 			": the " + part.Name + " part is being removed")
 		return b.retireFront(ctx, req.Tier, front)
 	})
@@ -159,7 +160,7 @@ func (b bootstrap) retireFront(ctx context.Context, tier environment.Tier, front
 		return err
 	}
 	if front.Facts().RunsCode {
-		if err := b.clients.takeAssetStore(ctx, tier); err != nil {
+		if err := takeAssetStore(ctx, b.clients, tier); err != nil {
 			return err
 		}
 	}
@@ -234,7 +235,7 @@ func (b bootstrap) plannedFronts(ctx context.Context, tier environment.Tier, par
 		var assets []provider.Change
 		if front.Facts().RunsCode {
 			var err error
-			if assets, err = b.clients.plannedAssetStore(ctx, tier, front.Kind()); err != nil {
+			if assets, err = plannedAssetStore(ctx, b.clients, tier, front.Kind()); err != nil {
 				return fmt.Errorf("plan the %s edge's asset reader: %w", front.Kind(), err)
 			}
 		}
@@ -262,7 +263,7 @@ func (b bootstrap) removedFronts(ctx context.Context, tier environment.Tier, par
 			}
 		}
 		if front.Facts().RunsCode {
-			assets, err := b.clients.plannedAssetStoreRemoval(ctx, tier, front.Kind())
+			assets, err := plannedAssetStoreRemoval(ctx, b.clients, tier, front.Kind())
 			if err != nil {
 				return fmt.Errorf("plan what removing the %s edge's asset reader takes: %w", front.Kind(), err)
 			}

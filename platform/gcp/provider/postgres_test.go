@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 type postgresHarness struct {
@@ -460,13 +461,13 @@ func TestADatabaseAskingForAnotherMajorVersionThanItRunsIsRefusedAtPlan(t *testi
 func TestNoDatabaseOfAnotherNamespaceIsNamedUnderThisNamespacesPrefix(t *testing.T) {
 	t.Parallel()
 
-	prefix := Names{namespace: "ocel", project: "acme-prod"}.PostgresInstancePrefix()
+	prefix := names.New("ocel", "acme-prod").PostgresInstancePrefix()
 	for _, namespace := range []provider.Namespace{"ocel-dev", "ocel-shop", "ocelot"} {
-		if other := (Names{namespace: namespace, project: "acme-prod"}).PostgresInstance("shop", "prod", "orders"); strings.HasPrefix(other, prefix) {
+		if other := (names.New(namespace, "acme-prod")).PostgresInstance("shop", "prod", "orders"); strings.HasPrefix(other, prefix) {
 			t.Errorf("namespace %s names its instance %q, under namespace ocel's prefix %q, so ocel's deploy credential administers it", namespace, other, prefix)
 		}
 	}
-	if own := (Names{namespace: "ocel", project: "acme-prod"}).PostgresInstance("dev", "prod", "orders"); !strings.HasPrefix(own, prefix) {
+	if own := (names.New("ocel", "acme-prod")).PostgresInstance("dev", "prod", "orders"); !strings.HasPrefix(own, prefix) {
 		t.Errorf("PostgresInstance() = %q, want it under the namespace's prefix %q", own, prefix)
 	}
 }

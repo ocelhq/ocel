@@ -8,11 +8,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const connectorBeatSchedule = "* * * * *"
 
-func (c *clients) buildConnectorSchedule(url string) *cloudscheduler.Job {
+func buildConnectorSchedule(c *gcloud.Clients, url string) *cloudscheduler.Job {
 	return &cloudscheduler.Job{
 		Name:        schedulePath(c, c.Connector()),
 		Description: "wakes the ocel connector once a minute to send the console a heartbeat",
@@ -30,14 +31,14 @@ func (c *clients) buildConnectorSchedule(url string) *cloudscheduler.Job {
 	}
 }
 
-func (c *clients) scheduleConnectorHeartbeat(ctx context.Context, url string) error {
-	return c.putSchedule(ctx, c.Connector(), c.buildConnectorSchedule(url))
+func scheduleConnectorHeartbeat(ctx context.Context, c *gcloud.Clients, url string) error {
+	return putSchedule(ctx, c, c.Connector(), buildConnectorSchedule(c, url))
 }
 
-func (c *clients) takeConnectorSchedule(ctx context.Context, progress progress.Log) error {
-	if err := c.takeSchedule(ctx, c.Connector()); err != nil {
+func takeConnectorSchedule(ctx context.Context, c *gcloud.Clients, progress progress.Log) error {
+	if err := takeSchedule(ctx, c, c.Connector()); err != nil {
 		return err
 	}
-	ensureProgress(progress).Say("Deleted Cloud Scheduler job " + c.Connector() + ", which woke the connector for its heartbeat")
+	gcloud.EnsureProgress(progress).Say("Deleted Cloud Scheduler job " + c.Connector() + ", which woke the connector for its heartbeat")
 	return nil
 }

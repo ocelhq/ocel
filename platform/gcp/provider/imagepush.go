@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 func (p *Provider) pushImage(ctx context.Context, tier environment.Tier, app, ref string, built v1.Image, progress progress.Log) error {
@@ -26,7 +27,7 @@ func (p *Provider) pushImage(ctx context.Context, tier environment.Tier, app, re
 	if err != nil || present {
 		return err
 	}
-	progress = ensureProgress(progress)
+	progress = gcloud.EnsureProgress(progress)
 	progress.Say("Pushing " + app + "'s image to " + ref)
 	return store.Push(ctx, push, progress)
 }

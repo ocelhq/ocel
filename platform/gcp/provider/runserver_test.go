@@ -15,23 +15,24 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	runv1 "google.golang.org/api/run/v1"
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 )
 
 type runServer struct {
 	mu        sync.Mutex
-	service   *run.GoogleCloudRunV2Service
+	service   *runv2.GoogleCloudRunV2Service
 	revision  int
 	revisions []string
 	writes    int
 
-	created  []*run.GoogleCloudRunV2Service
-	patched  []*run.GoogleCloudRunV2Service
-	policies []*run.GoogleIamV1Policy
+	created  []*runv2.GoogleCloudRunV2Service
+	patched  []*runv2.GoogleCloudRunV2Service
+	policies []*runv2.GoogleIamV1Policy
 
 	patchConflicts int
-	onConflict     func(*run.GoogleCloudRunV2Service)
+	onConflict     func(*runv2.GoogleCloudRunV2Service)
 	patchTries     int
 
 	uriEachRevision bool
@@ -72,7 +73,7 @@ type upload struct {
 
 func (s *runServer) open(t *testing.T) *Provider {
 	t.Helper()
-	return pushing(t, s.identities().serve(t, s.serve(t)).endpoint)
+	return pushing(t, s.identities().serve(t, s.serve(t)).Endpoint)
 }
 
 func (s *runServer) identities() *iamServer {
@@ -107,7 +108,7 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 		case r.Method == http.MethodPost && strings.HasSuffix(path, ":setIamPolicy"):
 			s.setPolicy(w, r)
 		case r.Method == http.MethodGet && strings.HasSuffix(path, ":getIamPolicy"):
-			writeBody(w, &run.GoogleIamV1Policy{Etag: "BwXhoLA="})
+			writeBody(w, &runv2.GoogleIamV1Policy{Etag: "BwXhoLA="})
 		case r.Method == http.MethodPost && strings.HasSuffix(path, "/services"):
 			s.create(w, r)
 		case r.Method == http.MethodPatch:
@@ -119,7 +120,7 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			}
 			writeBody(w, map[string]any{})
 		case r.Method == http.MethodDelete && strings.Contains(path, "/revisions/"):
-			s.deleteRevision(w, revisionName(path))
+			s.deleteRevision(w, run.RevisionName(path))
 		case r.Method == http.MethodGet && strings.HasSuffix(path, "/services/-/revisions"):
 			s.listRegionRevisions(w)
 		case r.Method == http.MethodGet && strings.HasPrefix(path, "/apis/serving.knative.dev/v1/namespaces/") && strings.HasSuffix(path, "/revisions"):
@@ -133,13 +134,13 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 		case r.Method == http.MethodGet && strings.HasSuffix(path, "/revisions"):
 			s.listRevisions(w)
 		case r.Method == http.MethodGet && strings.Contains(path, "/revisions/"):
-			s.getRevision(w, revisionName(path))
+			s.getRevision(w, run.RevisionName(path))
 		case r.Method == http.MethodDelete:
 			s.service = nil
 			s.revisions = nil
-			writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/delete", Done: true})
+			writeBody(w, &runv2.GoogleLongrunningOperation{Name: "operations/delete", Done: true})
 		case r.Method == http.MethodGet && strings.Contains(path, "/operations/"):
-			writeBody(w, &run.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
+			writeBody(w, &runv2.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
 		case r.Method == http.MethodGet && strings.HasPrefix(path, "/storage/v1/b/") && strings.Contains(path, "/o/"):
 			s.objectAttrs(w, path)
 		case r.Method == http.MethodGet:
@@ -152,7 +153,7 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 }
 
 func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
-	desired := readBody[run.GoogleCloudRunV2Service](w, r)
+	desired := readBody[runv2.GoogleCloudRunV2Service](w, r)
 	if desired == nil {
 		return
 	}
@@ -162,7 +163,7 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 	s.created = append(s.created, desired)
 	s.events = append(s.events, "create")
 	name := r.URL.Query().Get("serviceId")
-	s.service = &run.GoogleCloudRunV2Service{
+	s.service = &runv2.GoogleCloudRunV2Service{
 		Name:               strings.TrimPrefix(r.URL.Path, "/v2/") + "/" + name,
 		Template:           desired.Template,
 		Traffic:            allocated(desired.Traffic),
@@ -177,11 +178,11 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.revised()
-	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/create", Done: true})
+	writeBody(w, &runv2.GoogleLongrunningOperation{Name: "operations/create", Done: true})
 }
 
 func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
-	desired := readBody[run.GoogleCloudRunV2Service](w, r)
+	desired := readBody[runv2.GoogleCloudRunV2Service](w, r)
 	if desired == nil {
 		return
 	}
@@ -214,10 +215,10 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 		s.writes++
 		s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 		if s.failRouting {
-			writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/release", Done: true, Error: &run.GoogleRpcStatus{Message: "the operation failed"}})
+			writeBody(w, &runv2.GoogleLongrunningOperation{Name: "operations/release", Done: true, Error: &runv2.GoogleRpcStatus{Message: "the operation failed"}})
 			return
 		}
-		writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/release", Done: true})
+		writeBody(w, &runv2.GoogleLongrunningOperation{Name: "operations/release", Done: true})
 		return
 	}
 	replaced := !sameTemplate(s.service.Template, desired.Template)
@@ -237,10 +238,10 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	if replaced {
 		s.revised()
 	}
-	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/release", Done: true})
+	writeBody(w, &runv2.GoogleLongrunningOperation{Name: "operations/release", Done: true})
 }
 
-func (s *runServer) untagUnderRelease(template *run.GoogleCloudRunV2RevisionTemplate) *run.GoogleLongrunningOperation {
+func (s *runServer) untagUnderRelease(template *runv2.GoogleCloudRunV2RevisionTemplate) *runv2.GoogleLongrunningOperation {
 	if s.untagAtRelease == "" {
 		return nil
 	}
@@ -248,32 +249,32 @@ func (s *runServer) untagUnderRelease(template *run.GoogleCloudRunV2RevisionTemp
 	if !s.untagEveryRelease {
 		s.untagAtRelease = ""
 	}
-	return &run.GoogleLongrunningOperation{Name: "operations/release", Done: true, Error: &run.GoogleRpcStatus{
+	return &runv2.GoogleLongrunningOperation{Name: "operations/release", Done: true, Error: &runv2.GoogleRpcStatus{
 		Code:    9,
-		Message: "Revision '" + revisionName(s.service.Name) + "-failed' is not ready and cannot serve traffic. Image '" + template.Containers[0].Image + "' not found.",
+		Message: "Revision '" + run.RevisionName(s.service.Name) + "-failed' is not ready and cannot serve traffic. Image '" + template.Containers[0].Image + "' not found.",
 	}}
 }
 
 func (s *runServer) revised() {
 	s.revision++
 	s.writes++
-	s.service.LatestReadyRevision = s.service.Name + "/revisions/" + revisionName(s.service.Name) + "-0000" + strconv.Itoa(s.revision)
+	s.service.LatestReadyRevision = s.service.Name + "/revisions/" + run.RevisionName(s.service.Name) + "-0000" + strconv.Itoa(s.revision)
 	if s.uriEachRevision {
-		s.service.Uri = "https://" + revisionName(s.service.Name) + "-" + strconv.Itoa(s.revision) + ".run.app"
+		s.service.Uri = "https://" + run.RevisionName(s.service.Name) + "-" + strconv.Itoa(s.revision) + ".run.app"
 	}
 	s.service.Etag = "etag-" + strconv.Itoa(s.writes)
-	s.revisions = append(s.revisions, revisionName(s.service.LatestReadyRevision))
+	s.revisions = append(s.revisions, run.RevisionName(s.service.LatestReadyRevision))
 	if s.images == nil {
 		s.images = map[string]string{}
 	}
 	if s.service.Template != nil && len(s.service.Template.Containers) > 0 {
-		s.images[revisionName(s.service.LatestReadyRevision)] = s.service.Template.Containers[0].Image
+		s.images[run.RevisionName(s.service.LatestReadyRevision)] = s.service.Template.Containers[0].Image
 	}
 	if s.labels == nil {
 		s.labels = map[string]map[string]string{}
 	}
 	if s.service.Template != nil {
-		s.labels[revisionName(s.service.LatestReadyRevision)] = s.service.Template.Labels
+		s.labels[run.RevisionName(s.service.LatestReadyRevision)] = s.service.Template.Labels
 	}
 }
 
@@ -289,7 +290,7 @@ func (s *runServer) listLabelled(w http.ResponseWriter, selector string) {
 		}
 	}
 	for name, image := range s.elsewhere {
-		if imageLabelValue(image) == value {
+		if run.ImageLabelValue(image) == value {
 			listed.Items = append(listed.Items, &runv1.Revision{Metadata: &runv1.ObjectMeta{Name: name}})
 		}
 	}
@@ -348,10 +349,10 @@ func (s *runServer) retags() []string {
 	return slices.Clone(s.retagged)
 }
 
-func (s *runServer) revisionOf(name string) *run.GoogleCloudRunV2Revision {
-	return &run.GoogleCloudRunV2Revision{
+func (s *runServer) revisionOf(name string) *runv2.GoogleCloudRunV2Revision {
+	return &runv2.GoogleCloudRunV2Revision{
 		Name:       s.service.Name + "/revisions/" + name,
-		Containers: []*run.GoogleCloudRunV2Container{{Image: s.images[name]}},
+		Containers: []*runv2.GoogleCloudRunV2Container{{Image: s.images[name]}},
 	}
 }
 
@@ -365,7 +366,7 @@ func (s *runServer) getRevision(w http.ResponseWriter, name string) {
 }
 
 func (s *runServer) listRevisions(w http.ResponseWriter) {
-	listed := &run.GoogleCloudRunV2ListRevisionsResponse{}
+	listed := &runv2.GoogleCloudRunV2ListRevisionsResponse{}
 	for _, name := range s.revisions {
 		listed.Revisions = append(listed.Revisions, s.revisionOf(name))
 	}
@@ -374,16 +375,16 @@ func (s *runServer) listRevisions(w http.ResponseWriter) {
 
 func (s *runServer) listRegionRevisions(w http.ResponseWriter) {
 	s.regional++
-	listed := &run.GoogleCloudRunV2ListRevisionsResponse{}
+	listed := &runv2.GoogleCloudRunV2ListRevisionsResponse{}
 	if s.service != nil {
 		for _, name := range s.revisions {
 			listed.Revisions = append(listed.Revisions, s.revisionOf(name))
 		}
 	}
 	for name, image := range s.elsewhere {
-		listed.Revisions = append(listed.Revisions, &run.GoogleCloudRunV2Revision{
+		listed.Revisions = append(listed.Revisions, &runv2.GoogleCloudRunV2Revision{
 			Name:       "projects/acme/locations/europe-west1/services/elsewhere/revisions/" + name,
-			Containers: []*run.GoogleCloudRunV2Container{{Image: image}},
+			Containers: []*runv2.GoogleCloudRunV2Container{{Image: image}},
 		})
 	}
 	writeBody(w, listed)
@@ -407,26 +408,26 @@ func (s *runServer) deleteRevision(w http.ResponseWriter, revision string) {
 		w.Write([]byte(`{"error":{"code":404,"message":"revision not found"}}`))
 		return
 	}
-	routed := slices.ContainsFunc(s.service.Traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
-		return revisionName(target.Revision) == revision ||
-			target.Type == trafficByLatest && revisionName(s.service.LatestReadyRevision) == revision
+	routed := slices.ContainsFunc(s.service.Traffic, func(target *runv2.GoogleCloudRunV2TrafficTarget) bool {
+		return run.RevisionName(target.Revision) == revision ||
+			target.Type == run.TrafficByLatest && run.RevisionName(s.service.LatestReadyRevision) == revision
 	})
-	if routed || revisionName(s.service.LatestReadyRevision) == revision {
+	if routed || run.RevisionName(s.service.LatestReadyRevision) == revision {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"error":{"code":400,"status":"FAILED_PRECONDITION","message":"revision ` + revision + ` is the latest or can receive traffic"}}`))
 		return
 	}
 	s.revisions = slices.DeleteFunc(s.revisions, func(name string) bool { return name == revision })
-	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/delete-revision", Done: true})
+	writeBody(w, &runv2.GoogleLongrunningOperation{Name: "operations/delete-revision", Done: true})
 }
 
-func taggedStatuses(service *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2TrafficTargetStatus {
-	var statuses []*run.GoogleCloudRunV2TrafficTargetStatus
+func taggedStatuses(service *runv2.GoogleCloudRunV2Service) []*runv2.GoogleCloudRunV2TrafficTargetStatus {
+	var statuses []*runv2.GoogleCloudRunV2TrafficTargetStatus
 	for _, target := range service.Traffic {
 		if target.Tag == "" {
 			continue
 		}
-		statuses = append(statuses, &run.GoogleCloudRunV2TrafficTargetStatus{
+		statuses = append(statuses, &runv2.GoogleCloudRunV2TrafficTargetStatus{
 			Type: target.Type, Revision: target.Revision, Percent: target.Percent, Tag: target.Tag,
 			Uri: "https://" + target.Tag + "---" + strings.TrimPrefix(service.Uri, "https://"),
 		})
@@ -434,14 +435,14 @@ func taggedStatuses(service *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV
 	return statuses
 }
 
-func allocated(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {
+func allocated(traffic []*runv2.GoogleCloudRunV2TrafficTarget) []*runv2.GoogleCloudRunV2TrafficTarget {
 	if len(traffic) > 0 {
 		return traffic
 	}
-	return []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByLatest, Percent: 100}}
+	return []*runv2.GoogleCloudRunV2TrafficTarget{{Type: run.TrafficByLatest, Percent: 100}}
 }
 
-func sameTemplate(current, desired *run.GoogleCloudRunV2RevisionTemplate) bool {
+func sameTemplate(current, desired *runv2.GoogleCloudRunV2RevisionTemplate) bool {
 	was, _ := json.Marshal(current)
 	is, _ := json.Marshal(desired)
 	return string(was) == string(is)
@@ -462,7 +463,7 @@ func (s *runServer) get(w http.ResponseWriter) {
 }
 
 func (s *runServer) setPolicy(w http.ResponseWriter, r *http.Request) {
-	asked := readBody[run.GoogleIamV1SetIamPolicyRequest](w, r)
+	asked := readBody[runv2.GoogleIamV1SetIamPolicyRequest](w, r)
 	if asked == nil {
 		return
 	}
@@ -490,28 +491,28 @@ func writeBody(w http.ResponseWriter, body any) {
 	}
 }
 
-func (s *runServer) bound() []*run.GoogleIamV1Policy {
+func (s *runServer) bound() []*runv2.GoogleIamV1Policy {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.policies)
 }
 
-func (s *runServer) current() *run.GoogleCloudRunV2Service {
+func (s *runServer) current() *runv2.GoogleCloudRunV2Service {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.created) == 0 {
-		return &run.GoogleCloudRunV2Service{}
+		return &runv2.GoogleCloudRunV2Service{}
 	}
 	return s.created[len(s.created)-1]
 }
 
-func (s *runServer) serving() *run.GoogleCloudRunV2Service {
+func (s *runServer) serving() *runv2.GoogleCloudRunV2Service {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.service
 }
 
-func (s *runServer) releases() []*run.GoogleCloudRunV2Service {
+func (s *runServer) releases() []*runv2.GoogleCloudRunV2Service {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.patched)

@@ -16,6 +16,7 @@ import (
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const memorystoreHost = "https://memorystore.googleapis.com"
@@ -107,7 +108,7 @@ type authToken struct {
 
 type memorystore struct {
 	base   string
-	tokens TokenSource
+	tokens gcloud.TokenSource
 	client *http.Client
 }
 
@@ -116,7 +117,7 @@ func (p *Provider) memorystore() memorystore {
 	if p.emulated() {
 		base = strings.TrimRight(p.endpoint, "/")
 	}
-	var tokens TokenSource
+	var tokens gcloud.TokenSource
 	if !p.emulated() {
 		tokens = p.tokens
 	}
@@ -151,7 +152,7 @@ func (m memorystore) deleteInstance(ctx context.Context, name string) (*memoryst
 }
 
 func (m memorystore) readSettledInstance(ctx context.Context, name, store string) (*memorystoreInstance, error) {
-	return waiting(ctx, memorystorePatience, "kv "+store+" to finish what Memorystore is doing to it", func() (*memorystoreInstance, error) {
+	return gcloud.Waiting(ctx, memorystorePatience, "kv "+store+" to finish what Memorystore is doing to it", func() (*memorystoreInstance, error) {
 		return m.readInstance(ctx, name)
 	}, func(instance *memorystoreInstance) bool { return !isSettling(instance.State) })
 }
@@ -228,7 +229,7 @@ func (m memorystore) send(ctx context.Context, method, target string, body []byt
 	if m.tokens != nil {
 		token, err := m.tokens.Token(ctx)
 		if err != nil {
-			return nil, 0, unauthenticated()
+			return nil, 0, gcloud.Unauthenticated()
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -261,16 +262,16 @@ func newMemorystoreError(code int, answer []byte) error {
 }
 
 func (m memorystore) awaited(ctx context.Context, doing string, started *memorystoreOperation) (*memorystoreOperation, error) {
-	return awaitOperation(ctx, memorystorePatience, "Memorystore", doing, started, (*memorystoreOperation).outcome,
+	return gcloud.AwaitOperation(ctx, memorystorePatience, "Memorystore", doing, started, (*memorystoreOperation).outcome,
 		func(name string) (*memorystoreOperation, error) { return m.readOperation(ctx, name) })
 }
 
-func (o *memorystoreOperation) outcome() operationOutcome {
-	outcome := operationOutcome{name: o.Name, done: o.Done}
+func (o *memorystoreOperation) outcome() gcloud.OperationOutcome {
+	outcome := gcloud.OperationOutcome{Name: o.Name, Done: o.Done}
 	if o.Error != nil {
-		outcome.failure = failureOf(int64(o.Error.Code), o.Error.Message)
+		outcome.Failure = gcloud.FailureOf(int64(o.Error.Code), o.Error.Message)
 	}
 	return outcome
 }
 
-var memorystorePatience = patience{attempts: 180, ceiling: 15 * time.Second}
+var memorystorePatience = gcloud.Patience{Attempts: 180, Ceiling: 15 * time.Second}

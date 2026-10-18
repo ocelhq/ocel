@@ -7,6 +7,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const rootHealthPath = "/"
@@ -18,7 +20,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if strings.TrimSpace(app.Image) == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s names no image, and a Cloud Run service runs what a registry coordinate names and nothing else", app.App)
+			"app %s named no image, and a Cloud Run service runs what a registry coordinate named and nothing else", app.App)
 	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
 		probed := *app
@@ -35,8 +37,8 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	names := c.Names
-	service, err := serviceFor(names, spec, app, app.App)
+	named := c.Names
+	service, err := serviceFor(named, spec, app, app.App)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +54,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	own, err := p.runtimeEnv(names, spec, tasks)
+	own, err := p.runtimeEnv(named, spec, tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -60,38 +62,38 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	served := serving{
-		service:   service,
-		image:     app.Image,
-		env:       values,
-		account:   account,
-		compute:   provider.ComputeContainer,
-		health:    app.HealthCheckPath,
-		instances: instances,
-		public:    true,
-		ingress:   ingressFor(factsOf(spec.Edge)),
-		egress:    p.egressFor(names, spec),
-		tag:       p.revisionTag(spec),
-		labels:    labelsFor(names, spec.Ref, appLabel, app.App),
+	served := run.Serving{
+		Service:   service,
+		Image:     app.Image,
+		Env:       values,
+		Account:   account,
+		Compute:   provider.ComputeContainer,
+		Health:    app.HealthCheckPath,
+		Instances: instances,
+		Public:    true,
+		Ingress:   run.IngressFor(run.FactsOf(spec.Edge)),
+		Egress:    p.egressFor(named, spec),
+		Tag:       p.revisionTag(spec),
+		Labels:    names.LabelsFor(named, spec.Ref, names.AppLabel, app.App),
 
-		opensOnPromotion: true,
+		OpensOnPromotion: true,
 	}
 	if servesNext(app) {
 		served = fillNextContainerDefaults(served)
-		if served.env, err = mergeValues(app.App, nextValues, values, newNextContainerEnv(spec, served.memory, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), ""))); err != nil {
+		if served.Env, err = mergeValues(app.App, nextValues, values, newNextContainerEnv(spec, served.Memory, newNextCache(named, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), ""))); err != nil {
 			return nil, err
 		}
 	}
-	if err := c.applyGate(ctx, gated, app.App, &served); err != nil {
+	if err := applyGate(ctx, c, gated, app.App, &served); err != nil {
 		return nil, err
 	}
-	ran, err := p.deployService(ctx, served, progress)
+	ran, err := p.services().DeployService(ctx, served, progress)
 	if err != nil {
 		return nil, err
 	}
 	warnPreviewOpen(spec, service, progress)
 	deployed := []provider.AppContainer{{
-		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
+		Name: app.App, Physical: service, URL: ran.Url, Image: app.Image, Revision: ran.Revision,
 	}}
 	workers, err := p.provisionWorkers(ctx, c, spec, app.Image, account, values, declared, provider.Instances{Max: budget.ceiling()}, progress)
 	if err != nil {

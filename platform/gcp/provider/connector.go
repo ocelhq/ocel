@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -21,7 +21,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -50,10 +53,10 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
-	if err := names.connectorFits(); err != nil {
+	if err := names.ConnectorFits(); err != nil {
 		return provider.ConnectorTarget{}, err
 	}
-	fingerprint, err := target.Fingerprint("gcp", names.project, p.options.Region, string(names.Namespace()))
+	fingerprint, err := target.Fingerprint("gcp", names.Project(), p.options.Region, string(names.Namespace()))
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
@@ -85,7 +88,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	if err := names.connectorFits(); err != nil {
+	if err := names.ConnectorFits(); err != nil {
 		return provider.ConnectorAddress{}, err
 	}
 	if len(install.Config) == 0 {
@@ -121,12 +124,12 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 		return provider.ConnectorAddress{}, err
 	}
 
-	released, err := p.deployAndRoute(ctx,
+	released, err := p.services().DeployAndRoute(ctx,
 		buildConnectorServing(names, p.options.Region, image, install.Version, publicKey, config), progress)
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	if released.url == "" {
+	if released.Url == "" {
 		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s is deployed and published no url, so the console has nothing to dial", names.Connector())
 	}
@@ -134,28 +137,28 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	if err := clients.scheduleConnectorHeartbeat(ctx, released.url); err != nil {
+	if err := scheduleConnectorHeartbeat(ctx, clients, released.Url); err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	ensureProgress(progress).Say("Scheduled Cloud Scheduler job " + names.Connector() + " to wake the connector for a heartbeat every minute")
-	return provider.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
+	gcloud.EnsureProgress(progress).Say("Scheduled Cloud Scheduler job " + names.Connector() + " to wake the connector for a heartbeat every minute")
+	return provider.ConnectorAddress{URL: released.Url, PublicKey: publicKey, Compute: compute}, nil
 }
 
-func buildConnectorServing(names Names, region, image, version, publicKey string, config []byte) serving {
-	return serving{
-		service:   names.Connector(),
-		image:     image,
-		account:   names.ConnectorAccountEmail(),
-		compute:   provider.ComputeServerless,
-		public:    true,
-		memory:    connectorMemory,
-		timeout:   connectorTimeout,
-		ingress:   ingressEverywhere,
-		instances: provider.Instances{Max: connectorInstances},
-		mounts:    []secretMount{connectorKeyMount(names.ConnectorKeySecret())},
-		env: map[string]string{
+func buildConnectorServing(names names.Names, region, image, version, publicKey string, config []byte) run.Serving {
+	return run.Serving{
+		Service:   names.Connector(),
+		Image:     image,
+		Account:   names.ConnectorAccountEmail(),
+		Compute:   provider.ComputeServerless,
+		Public:    true,
+		Memory:    connectorMemory,
+		Timeout:   connectorTimeout,
+		Ingress:   run.IngressEverywhere,
+		Instances: provider.Instances{Max: connectorInstances},
+		Mounts:    []run.SecretMount{connectorKeyMount(names.ConnectorKeySecret())},
+		Env: map[string]string{
 			provider.NamespaceEnvVar:       string(names.Namespace()),
-			ports.ProjectEnvVar:            names.project,
+			ports.ProjectEnvVar:            names.Project(),
 			ports.RegionEnvVar:             region,
 			ports.ConnectorAccountEnvVar:   names.ConnectorAccountEmail(),
 			connectorVersionEnv:            version,
@@ -171,8 +174,8 @@ func (p connector) Remove(ctx context.Context, progress progress.Log) error {
 		return err
 	}
 	return everyStep(
-		func() error { return clients.takeConnectorSchedule(ctx, progress) },
-		func() error { return p.tearDown(ctx, clients.Connector(), progress) },
+		func() error { return takeConnectorSchedule(ctx, clients, progress) },
+		func() error { return p.services().TearDown(ctx, clients.Connector(), progress) },
 		func() error { return p.forgetConnectorGrants(ctx, progress) },
 		func() error { return p.takeConnectorKey(ctx, progress) },
 		func() error { return p.takeConnectorAccount(ctx, progress) },
@@ -188,7 +191,7 @@ func everyStep(steps ...func() error) error {
 	return errors.Join(errs...)
 }
 
-func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2Service, error) {
+func (p *Provider) connectorService(ctx context.Context) (*runv2.GoogleCloudRunV2Service, error) {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return nil, err
@@ -197,11 +200,11 @@ func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2S
 	if err != nil {
 		return nil, err
 	}
-	path := clients.servicePath(clients.Connector())
-	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	path := clients.ServicePath(clients.Connector())
+	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*runv2.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
 	})
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return nil, nil
 	}
 	if err != nil {
@@ -210,7 +213,7 @@ func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2S
 	return found, nil
 }
 
-func connectorVersionOf(service *run.GoogleCloudRunV2Service) string {
+func connectorVersionOf(service *runv2.GoogleCloudRunV2Service) string {
 	if service.Template == nil {
 		return ""
 	}
@@ -262,7 +265,7 @@ func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, 
 	if err != nil {
 		return err
 	}
-	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+names.project,
+	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+names.Project(),
 		&iam.CreateServiceAccountRequest{
 			AccountId: names.Connector(),
 			ServiceAccount: &iam.ServiceAccount{
@@ -272,9 +275,9 @@ func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, 
 		}).Context(ctx).Do)
 	switch {
 	case err == nil:
-		ensureProgress(progress).Say("Created service account " + names.ConnectorAccountEmail() + " for the connector to run as")
-	case taken(err):
-		ensureProgress(progress).Debug("The connector runs as service account " + names.ConnectorAccountEmail() + ", which already exists")
+		gcloud.EnsureProgress(progress).Say("Created service account " + names.ConnectorAccountEmail() + " for the connector to run as")
+	case gcloud.Taken(err):
+		gcloud.EnsureProgress(progress).Debug("The connector runs as service account " + names.ConnectorAccountEmail() + ", which already exists")
 	default:
 		return fmt.Errorf("create the %s service account: %w", names.Connector(), err)
 	}
@@ -308,18 +311,18 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 		return err
 	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
-	if err := clients.bindProjectRole(ctx, member, connectorRecordsRole, connectorRecordsCondition(clients), granting); err != nil {
+	if err := gcloud.BindProjectRole(ctx, clients, member, connectorRecordsRole, connectorRecordsCondition(clients), granting); err != nil {
 		return fmt.Errorf("let %s read and write the %s database's records and every project's: %w", member, ports.Database(clients.Namespace()), err)
 	}
 	return nil
 }
 
-func connectorRecordsCondition(c *clients) *iampolicy.Condition {
+func connectorRecordsCondition(c *gcloud.Clients) *policy.Condition {
 	clauses := []string{fmt.Sprintf("resource.name == %q", databasePath(c, c.Database()))}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		clauses = append(clauses, fmt.Sprintf("resource.name.startsWith(%q)", databasePath(c, c.ProjectDatabasePrefix(tier))))
 	}
-	return &iampolicy.Condition{Title: "ocel " + string(c.Namespace()) + " records", Expression: strings.Join(clauses, " || ")}
+	return &policy.Condition{Title: "ocel " + string(c.Namespace()) + " records", Expression: strings.Join(clauses, " || ")}
 }
 
 func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progress progress.Log) error {
@@ -330,18 +333,18 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progr
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
 	var errs []error
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		changed, err := clients.bindKeyRoles(ctx, tier, member, connectorKeyRoles, wanted)
+		changed, err := gcloud.BindKeyRoles(ctx, clients, tier, member, connectorKeyRoles, wanted)
 		if err != nil && len(wanted) > 0 {
 			return err
 		}
-		projectChanged, projectErr := clients.bindProjectKeyRoles(ctx, tier, member, connectorKeyRoles, wanted)
+		projectChanged, projectErr := bindProjectKeyRoles(ctx, clients, tier, member, connectorKeyRoles, wanted)
 		if projectErr != nil && len(wanted) > 0 {
 			return projectErr
 		}
 		changed = changed || projectChanged
 		err = errors.Join(err, projectErr)
 		if changed && len(wanted) > 0 {
-			ensureProgress(progress).Say("Granted the connector " + strings.Join(wanted, " and ") + " on the " + string(tier) + " KMS key")
+			gcloud.EnsureProgress(progress).Say("Granted the connector " + strings.Join(wanted, " and ") + " on the " + string(tier) + " KMS key")
 		}
 		errs = append(errs, err)
 	}
@@ -361,10 +364,10 @@ func (p *Provider) takeConnectorAccount(ctx context.Context, progress progress.L
 	}
 	name := clients.Connector()
 	if _, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Delete(
-		accountPath(clients, name)).Context(ctx).Do); err != nil && !absent(err) {
+		gcloud.AccountPath(clients, name)).Context(ctx).Do); err != nil && !gcloud.Absent(err) {
 		return fmt.Errorf("delete the %s service account: %w", name, err)
 	}
-	ensureProgress(progress).Say("Deleted service account " + clients.ConnectorAccountEmail() + ", which the connector ran as")
+	gcloud.EnsureProgress(progress).Say("Deleted service account " + clients.ConnectorAccountEmail() + ", which the connector ran as")
 	return nil
 }
 
@@ -377,13 +380,13 @@ func (p *Provider) takeConnectorImages(ctx context.Context, progress progress.Lo
 	if err != nil {
 		return err
 	}
-	packagePath := repositoryPath(clients, clients.Repository(environment.TierProduction)) +
+	packagePath := gcloud.RepositoryPath(clients, clients.Repository(environment.TierProduction)) +
 		"/packages/" + connectorImageName
 	if _, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Packages.Delete(
-		packagePath).Context(ctx).Do); err != nil && !absent(err) {
+		packagePath).Context(ctx).Do); err != nil && !gcloud.Absent(err) {
 		return fmt.Errorf("delete the connector images at %s: %w", packagePath, err)
 	}
-	ensureProgress(progress).Say("Deleted the connector's images from repository " + clients.Repository(environment.TierProduction))
+	gcloud.EnsureProgress(progress).Say("Deleted the connector's images from repository " + clients.Repository(environment.TierProduction))
 	return nil
 }
 

@@ -202,10 +202,10 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 	tier := environment.TierProduction
 	here := bootstrapped(t, p, tier)
 
-	t.Setenv(provider.NamespaceEnvVar, names(t, p).Namespace().String()+"-beside")
+	t.Setenv(provider.NamespaceEnvVar, namesOf(t, p).Namespace().String()+"-beside")
 	beside := newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
-	if names(t, beside).Bucket(tier) == names(t, p).Bucket(tier) {
-		t.Fatalf("both namespaces name the bucket %s, and this test turns on them naming different ones", names(t, beside).Bucket(tier))
+	if namesOf(t, beside).Bucket(tier) == namesOf(t, p).Bucket(tier) {
+		t.Fatalf("both namespaces name the bucket %s, and this test turns on them naming different ones", namesOf(t, beside).Bucket(tier))
 	}
 
 	ctx := context.Background()
@@ -215,7 +215,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 		t.Fatalf("Describe() under a second namespace = %v", err)
 	}
 	if described.Present {
-		t.Errorf("Describe() under namespace %s reads the bootstrap installed under %s as its own", names(t, beside).Namespace(), names(t, p).Namespace())
+		t.Errorf("Describe() under namespace %s reads the bootstrap installed under %s as its own", namesOf(t, beside).Namespace(), namesOf(t, p).Namespace())
 	}
 
 	plan, err := elsewhere.Plan(ctx, provider.BootstrapRequest{Tier: tier})
@@ -231,7 +231,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 			}
 			if change.Action != provider.ActionCreate {
 				t.Errorf("Plan() under namespace %s shows %s %s as %q, want a create: nothing of it exists yet",
-					names(t, beside).Namespace(), change.Kind, change.Name, change.Action)
+					namesOf(t, beside).Namespace(), change.Kind, change.Name, change.Action)
 			}
 		}
 	}
@@ -241,8 +241,8 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 
 	bootstrapped(t, beside, tier)
 	for what, bootstrap := range map[string]provider.Bootstrap{
-		names(t, p).Namespace().String():      here,
-		names(t, beside).Namespace().String(): elsewhere,
+		namesOf(t, p).Namespace().String():      here,
+		namesOf(t, beside).Namespace().String(): elsewhere,
 	} {
 		installed, err := bootstrap.Describe(ctx, tier)
 		if err != nil {

@@ -17,6 +17,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -34,7 +35,7 @@ func newProvider(t *testing.T, options gcp.Options) *gcp.Provider {
 	return p
 }
 
-func names(t *testing.T, p *gcp.Provider) gcp.Names {
+func namesOf(t *testing.T, p *gcp.Provider) names.Names {
 	t.Helper()
 	derived, err := p.Names(context.Background())
 	if err != nil {

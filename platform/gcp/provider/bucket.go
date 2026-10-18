@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -37,7 +39,7 @@ type appBucket struct {
 	attrs storage.BucketAttrs
 }
 
-func (p *Provider) declaredBucket(clients *clients, in resources.ProvisionRequest) appBucket {
+func (p *Provider) declaredBucket(clients *gcloud.Clients, in resources.ProvisionRequest) appBucket {
 	spec := provider.BucketSpec{}
 	if in.Resource.Bucket != nil {
 		spec = *in.Resource.Bucket
@@ -45,8 +47,8 @@ func (p *Provider) declaredBucket(clients *clients, in resources.ProvisionReques
 	return appBucket{
 		name: clients.AppBucket(in.Ref.Project, in.Ref.Name.Env, in.Resource.Name),
 		attrs: storage.BucketAttrs{
-			Location:                 clients.region,
-			Labels:                   labelsFor(clients.Names, in.Ref, bucketLabel, in.Resource.Name),
+			Location:                 clients.Region,
+			Labels:                   names.LabelsFor(clients.Names, in.Ref, names.BucketLabel, in.Resource.Name),
 			UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
 			PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
 			CORS:                     uploadCORS(spec.AllowedOrigins),
@@ -158,7 +160,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 		return provider.Binding{}, err
 	}
 	declared := p.declaredBucket(clients, in)
-	if err := declared.ensure(ctx, client, clients.project, in.Resource.Name, progress); err != nil {
+	if err := declared.ensure(ctx, client, clients.Project(), in.Resource.Name, progress); err != nil {
 		return provider.Binding{}, err
 	}
 	return declared.binding(in.Resource), nil
@@ -192,7 +194,7 @@ func (b appBucket) plan(ctx context.Context, client *storage.Client, declared st
 
 func (b appBucket) read(ctx context.Context, client *storage.Client, declared string) (*storage.BucketAttrs, error) {
 	current, err := client.Bucket(b.name).Attrs(ctx)
-	if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
+	if errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err) {
 		return nil, nil
 	}
 	if err != nil {
@@ -213,7 +215,7 @@ func (b appBucket) ensure(ctx context.Context, client *storage.Client, project, 
 	if len(differences) == 0 {
 		return nil
 	}
-	ensureProgress(progress).Say("Updating bucket " + declared + " on Cloud Storage bucket " + b.name + ": " + strings.Join(differences, "; "))
+	gcloud.EnsureProgress(progress).Say("Updating bucket " + declared + " on Cloud Storage bucket " + b.name + ": " + strings.Join(differences, "; "))
 	if _, err := client.Bucket(b.name).Update(ctx, update); err != nil {
 		return fmt.Errorf("update the Cloud Storage bucket %s that bucket %s stores into: %w", b.name, declared, err)
 	}
@@ -221,13 +223,13 @@ func (b appBucket) ensure(ctx context.Context, client *storage.Client, project, 
 }
 
 func (b appBucket) create(ctx context.Context, client *storage.Client, project, declared string, progress progress.Log) error {
-	ensureProgress(progress).Say("Creating bucket " + declared + " as Cloud Storage bucket " + b.name + " in " + b.attrs.Location)
+	gcloud.EnsureProgress(progress).Say("Creating bucket " + declared + " as Cloud Storage bucket " + b.name + " in " + b.attrs.Location)
 	attrs := b.attrs
 	err := client.Bucket(b.name).Create(ctx, project, &attrs)
 	if err == nil {
 		return nil
 	}
-	if !taken(err) {
+	if !gcloud.Taken(err) {
 		return fmt.Errorf("create the Cloud Storage bucket %s that bucket %s stores into: %w", b.name, declared, err)
 	}
 	if _, read := client.Bucket(b.name).Attrs(ctx); read == nil {
@@ -257,13 +259,13 @@ func (p *Provider) RemoveBucket(ctx context.Context, _ provider.StackRef, bindin
 		return err
 	}
 	name := binding.Properties[provider.PropertyBucket]
-	ensureProgress(progress).Say("Removing bucket " + binding.Name + ", its Cloud Storage bucket " + name + " and every object in it")
+	gcloud.EnsureProgress(progress).Say("Removing bucket " + binding.Name + ", its Cloud Storage bucket " + name + " and every object in it")
 	handle := client.Bucket(name)
 	if err := emptyBucket(ctx, handle); err != nil {
 		return fmt.Errorf("empty the Cloud Storage bucket %s that bucket %s stores into: %w", name, binding.Name, err)
 	}
 	err = handle.Delete(ctx)
-	if err == nil || errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
+	if err == nil || errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err) {
 		return nil
 	}
 	return fmt.Errorf("delete the Cloud Storage bucket %s that bucket %s stores into: %w", name, binding.Name, err)
@@ -278,7 +280,7 @@ func emptyBucket(ctx context.Context, handle *storage.BucketHandle) error {
 		if errors.Is(err, iterator.Done) {
 			break
 		}
-		if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
+		if errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err) {
 			return deleting.Wait()
 		}
 		if err != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 func matcherFor(hostname string) string { return "host-" + naming.Sanitize(hostname) }
@@ -22,8 +23,8 @@ func (p *Provider) Route(ctx context.Context, urlMap, hostname, backend string, 
 		return refusal.Refuse(refusal.CodeInvalid,
 			"route %q through url map %q onto backend %q: a host rule names all three", hostname, urlMap, backend)
 	}
-	return p.rewrite(ctx, urlMap, "route "+hostname+" through the load balancer", func(clients *clients, current *compute.UrlMap) bool {
-		return routed(current, hostname, clients.backendLink(backend), routeRulesOf(clients, clients.backendLink(backend), routes))
+	return p.rewrite(ctx, urlMap, "route "+hostname+" through the load balancer", func(clients *gcloud.Clients, current *compute.UrlMap) bool {
+		return routed(current, hostname, clients.BackendLink(backend), routeRulesOf(clients, clients.BackendLink(backend), routes))
 	})
 }
 
@@ -32,7 +33,7 @@ func (p *Provider) ServeNotFound(ctx context.Context, urlMap, hostname string) e
 		return refusal.Refuse(refusal.CodeInvalid,
 			"serve a 404 for %q on url map %q until its app releases: a host rule names both", hostname, urlMap)
 	}
-	return p.rewrite(ctx, urlMap, "answer "+hostname+" with a 404 until its app has released", func(_ *clients, current *compute.UrlMap) bool {
+	return p.rewrite(ctx, urlMap, "answer "+hostname+" with a 404 until its app has released", func(_ *gcloud.Clients, current *compute.UrlMap) bool {
 		return unclaimed(current, hostname)
 	})
 }
@@ -47,7 +48,7 @@ func (p *Provider) CountHostRules(ctx context.Context, urlMap string) (int, erro
 		return 0, err
 	}
 	current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.UrlMap, error) {
-		return engine.UrlMaps.Get(clients.project, urlMap).Context(ctx).Do(call...)
+		return engine.UrlMaps.Get(clients.Project(), urlMap).Context(ctx).Do(call...)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("read the url map %s: %w", urlMap, err)
@@ -59,12 +60,12 @@ func (p *Provider) Unroute(ctx context.Context, urlMap, hostname string) error {
 	if urlMap == "" || hostname == "" {
 		return nil
 	}
-	return p.rewrite(ctx, urlMap, "stop routing "+hostname+" through the load balancer", func(_ *clients, current *compute.UrlMap) bool {
+	return p.rewrite(ctx, urlMap, "stop routing "+hostname+" through the load balancer", func(_ *gcloud.Clients, current *compute.UrlMap) bool {
 		return unrouted(current, hostname)
 	})
 }
 
-func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change func(*clients, *compute.UrlMap) bool) error {
+func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change func(*gcloud.Clients, *compute.UrlMap) bool) error {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
@@ -73,9 +74,9 @@ func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change fun
 	if err != nil {
 		return err
 	}
-	return p.retryWrite(ctx, doing, func() error {
+	return p.services().RetryWrite(ctx, doing, func() error {
 		current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.UrlMap, error) {
-			return engine.UrlMaps.Get(clients.project, urlMap).Context(ctx).Do(call...)
+			return engine.UrlMaps.Get(clients.Project(), urlMap).Context(ctx).Do(call...)
 		})
 		if err != nil {
 			return fmt.Errorf("read the url map %s: %w", urlMap, err)
@@ -85,7 +86,7 @@ func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change fun
 			return nil
 		}
 		return p.runOperation(ctx, clients, engine, doing, func(call ...googleapi.CallOption) (*compute.Operation, error) {
-			return engine.UrlMaps.Patch(clients.project, urlMap, &compute.UrlMap{
+			return engine.UrlMaps.Patch(clients.Project(), urlMap, &compute.UrlMap{
 				Fingerprint:     current.Fingerprint,
 				HostRules:       current.HostRules,
 				PathMatchers:    current.PathMatchers,
@@ -179,7 +180,7 @@ func unrouted(current *compute.UrlMap, hostname string) bool {
 
 func (p *Provider) runOperation(
 	ctx context.Context,
-	clients *clients,
+	clients *gcloud.Clients,
 	engine *compute.Service,
 	doing string,
 	call func(...googleapi.CallOption) (*compute.Operation, error),
@@ -188,12 +189,12 @@ func (p *Provider) runOperation(
 	if err != nil {
 		return fmt.Errorf("ask Compute Engine to %s: %w", doing, err)
 	}
-	finished, err := until(ctx, "Compute Engine to "+doing, func() (*compute.Operation, error) {
+	finished, err := gcloud.Until(ctx, "Compute Engine to "+doing, func() (*compute.Operation, error) {
 		if started.Status == operationDone {
 			return started, nil
 		}
 		return googleretry.Attempted(ctx, func(opt ...googleapi.CallOption) (*compute.Operation, error) {
-			return engine.GlobalOperations.Get(clients.project, started.Name).Context(ctx).Do(opt...)
+			return engine.GlobalOperations.Get(clients.Project(), started.Name).Context(ctx).Do(opt...)
 		})
 	}, func(op *compute.Operation) bool { return op != nil && op.Status == operationDone })
 	if err != nil {
@@ -220,10 +221,10 @@ func (p *Provider) ReadBackendServiceQuota(ctx context.Context) (alb.BackendServ
 		return alb.BackendServiceQuota{}, false, err
 	}
 	project, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.Project, error) {
-		return engine.Projects.Get(clients.project).Fields("quotas").Context(ctx).Do(call...)
+		return engine.Projects.Get(clients.Project()).Fields("quotas").Context(ctx).Do(call...)
 	})
 	if err != nil {
-		return alb.BackendServiceQuota{}, false, fmt.Errorf("read the quotas of project %s: %w", clients.project, err)
+		return alb.BackendServiceQuota{}, false, fmt.Errorf("read the quotas of project %s: %w", clients.Project(), err)
 	}
 	for _, quota := range project.Quotas {
 		if quota.Metric == globalExternalManagedBackendServices {

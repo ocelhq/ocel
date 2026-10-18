@@ -1,4 +1,4 @@
-package gcp
+package run
 
 import (
 	"context"
@@ -16,39 +16,40 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
-func (p *Provider) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
+func (p *Services) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
 	return p.pin(ctx, service, revision, stillActive, true)
 }
 
-func (p *Provider) Restore(ctx context.Context, service, revision string, stillActive router.StillActive) error {
+func (p *Services) Restore(ctx context.Context, service, revision string, stillActive router.StillActive) error {
 	_, err := p.pin(ctx, service, revision, stillActive, false)
 	return err
 }
 
-func (p *Provider) pin(ctx context.Context, service, revision string, stillActive router.StillActive, open bool) (bool, error) {
+func (p *Services) pin(ctx context.Context, service, revision string, stillActive router.StillActive, open bool) (bool, error) {
 	if revision == "" {
 		return false, refusal.Refuse(refusal.CodeInvalid,
 			"%s is asked to serve a revision nothing named, and traffic is pinned to one revision by name", service)
 	}
-	clients, services, err := p.openRun(ctx)
+	clients, services, err := p.OpenRun(ctx)
 	if err != nil {
 		return false, err
 	}
-	return p.route(ctx, services, clients.servicePath(service), service,
+	return p.route(ctx, services, clients.ServicePath(service), service,
 		"pin the traffic of "+service+" to "+revision, activeNamed(ctx, revision, stillActive), open)
 }
 
-func (p *Provider) Close(ctx context.Context, service string, stillActive router.StillActive) error {
-	clients, services, err := p.openRun(ctx)
+func (p *Services) Close(ctx context.Context, service string, stillActive router.StillActive) error {
+	clients, services, err := p.OpenRun(ctx)
 	if err != nil {
 		return err
 	}
-	path := clients.servicePath(service)
-	err = p.retryWrite(ctx, "close "+service+" to everyone but its invokers", func() error {
-		current, err := p.read(ctx, services, path, service)
+	path := clients.ServicePath(service)
+	err = p.RetryWrite(ctx, "close "+service+" to everyone but its invokers", func() error {
+		current, err := p.Read(ctx, services, path, service)
 		if err != nil {
 			return err
 		}
@@ -65,25 +66,25 @@ func (p *Provider) Close(ctx context.Context, service string, stillActive router
 			return services.Projects.Locations.Services.Patch(path, closed).UpdateMask(invokerCheckField).Context(ctx).Do(call...)
 		})
 	})
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return nil
 	}
 	return err
 }
 
 const (
-	rollbacksAnnotation = "ocel.dev/rollbacks"
+	RollbacksAnnotation = "ocel.dev/rollbacks"
 	annotationsField    = "annotations"
 	maxRollbacks        = 32
 )
 
-func (p *Provider) ReadRollback(ctx context.Context, service, revision string) (pin.Rollback, bool, error) {
-	clients, services, err := p.openRun(ctx)
+func (p *Services) ReadRollback(ctx context.Context, service, revision string) (pin.Rollback, bool, error) {
+	clients, services, err := p.OpenRun(ctx)
 	if err != nil {
 		return pin.Rollback{}, false, err
 	}
-	current, err := p.read(ctx, services, clients.servicePath(service), service)
-	if absent(err) {
+	current, err := p.Read(ctx, services, clients.ServicePath(service), service)
+	if gcloud.Absent(err) {
 		return pin.Rollback{}, false, nil
 	}
 	if err != nil {
@@ -97,18 +98,18 @@ func (p *Provider) ReadRollback(ctx context.Context, service, revision string) (
 	return rollback, found, nil
 }
 
-func (p *Provider) RecordRollback(ctx context.Context, service, revision string, rollback pin.Rollback) error {
-	clients, services, err := p.openRun(ctx)
+func (p *Services) RecordRollback(ctx context.Context, service, revision string, rollback pin.Rollback) error {
+	clients, services, err := p.OpenRun(ctx)
 	if err != nil {
 		return err
 	}
-	path := clients.servicePath(service)
-	err = p.retryWrite(ctx, "record on "+service+" that the pin of "+revision+" was rolled back", func() error {
-		current, err := p.read(ctx, services, path, service)
+	path := clients.ServicePath(service)
+	err = p.RetryWrite(ctx, "record on "+service+" that the pin of "+revision+" was rolled back", func() error {
+		current, err := p.Read(ctx, services, path, service)
 		if err != nil {
 			return err
 		}
-		if servedRevision(current) == revision {
+		if ServedRevision(current) == revision {
 			return pin.ErrRevisionServed
 		}
 		rollbacks, err := rollbacksOf(current)
@@ -125,7 +126,7 @@ func (p *Provider) RecordRollback(ctx context.Context, service, revision string,
 			return services.Projects.Locations.Services.Patch(path, recorded).UpdateMask(annotationsField).Context(ctx).Do(call...)
 		})
 	})
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return nil
 	}
 	return err
@@ -133,7 +134,7 @@ func (p *Provider) RecordRollback(ctx context.Context, service, revision string,
 
 func rollbacksOf(current *run.GoogleCloudRunV2Service) (map[string]pin.Rollback, error) {
 	rollbacks := map[string]pin.Rollback{}
-	if recorded := current.Annotations[rollbacksAnnotation]; recorded != "" {
+	if recorded := current.Annotations[RollbacksAnnotation]; recorded != "" {
 		if err := json.Unmarshal([]byte(recorded), &rollbacks); err != nil {
 			return nil, fmt.Errorf("decode the rollbacks recorded on %s: %w", current.Name, err)
 		}
@@ -147,7 +148,7 @@ func withRollbacks(annotations map[string]string, rollbacks map[string]pin.Rollb
 		kept = map[string]string{}
 	}
 	if len(rollbacks) == 0 {
-		delete(kept, rollbacksAnnotation)
+		delete(kept, RollbacksAnnotation)
 		return kept, nil
 	}
 	for _, revision := range slices.Sorted(maps.Keys(rollbacks)) {
@@ -160,7 +161,7 @@ func withRollbacks(annotations map[string]string, rollbacks map[string]pin.Rollb
 	if err != nil {
 		return nil, err
 	}
-	kept[rollbacksAnnotation] = string(encoded)
+	kept[RollbacksAnnotation] = string(encoded)
 	return kept, nil
 }
 
@@ -178,16 +179,16 @@ func withoutRollback(current *run.GoogleCloudRunV2Service, revision string) (map
 	return annotations, true, err
 }
 
-const warmTimeout = 20 * time.Second
+const WarmTimeout = 20 * time.Second
 
-var warmClient = &http.Client{Timeout: warmTimeout}
+var warmClient = &http.Client{Timeout: WarmTimeout}
 
-func (p *Provider) Warm(ctx context.Context, service, revision, path string) error {
-	clients, services, err := p.openRun(ctx)
+func (p *Services) Warm(ctx context.Context, service, revision, path string) error {
+	clients, services, err := p.OpenRun(ctx)
 	if err != nil {
 		return err
 	}
-	current, err := p.read(ctx, services, clients.servicePath(service), service)
+	current, err := p.Read(ctx, services, clients.ServicePath(service), service)
 	if err != nil {
 		return err
 	}
@@ -221,44 +222,44 @@ func answeredByGate(answered *http.Response) bool {
 }
 
 func warmAddress(current *run.GoogleCloudRunV2Service, revision string) string {
-	if current.Ingress != ingressEverywhere || !isOpen(current) {
+	if current.Ingress != IngressEverywhere || !isOpen(current) {
 		return ""
 	}
 	for _, status := range current.TrafficStatuses {
-		if status.Tag != "" && status.Uri != "" && revisionName(status.Revision) == revision {
+		if status.Tag != "" && status.Uri != "" && RevisionName(status.Revision) == revision {
 			return status.Uri
 		}
 	}
-	if servedBy(current.Traffic, revision) {
+	if ServedBy(current.Traffic, revision) {
 		return current.Uri
 	}
 	return ""
 }
 
-func (p *Provider) ReadServing(ctx context.Context, service string) (string, error) {
-	clients, services, err := p.openRun(ctx)
+func (p *Services) ReadServing(ctx context.Context, service string) (string, error) {
+	clients, services, err := p.OpenRun(ctx)
 	if err != nil {
 		return "", err
 	}
-	current, err := p.read(ctx, services, clients.servicePath(service), service)
-	if absent(err) {
+	current, err := p.Read(ctx, services, clients.ServicePath(service), service)
+	if gcloud.Absent(err) {
 		return "", nil
 	}
 	if err != nil {
 		return "", err
 	}
-	return servedRevision(current), nil
+	return ServedRevision(current), nil
 }
 
-func servedRevision(current *run.GoogleCloudRunV2Service) string {
+func ServedRevision(current *run.GoogleCloudRunV2Service) string {
 	var serving string
 	for _, target := range allocatedTraffic(current) {
 		if target.Percent == 0 {
 			continue
 		}
-		revision := revisionName(target.Revision)
-		if target.Type == trafficByLatest {
-			revision = revisionName(current.LatestReadyRevision)
+		revision := RevisionName(target.Revision)
+		if target.Type == TrafficByLatest {
+			revision = RevisionName(current.LatestReadyRevision)
 		}
 		if serving != "" && serving != revision {
 			return ""
@@ -268,17 +269,17 @@ func servedRevision(current *run.GoogleCloudRunV2Service) string {
 	return serving
 }
 
-func (p *Provider) ReadTag(ctx context.Context, service, revision string) (string, error) {
-	clients, services, err := p.openRun(ctx)
+func (p *Services) ReadTag(ctx context.Context, service, revision string) (string, error) {
+	clients, services, err := p.OpenRun(ctx)
 	if err != nil {
 		return "", err
 	}
-	current, err := p.read(ctx, services, clients.servicePath(service), service)
+	current, err := p.Read(ctx, services, clients.ServicePath(service), service)
 	if err != nil {
 		return "", err
 	}
 	for _, target := range current.Traffic {
-		if target.Tag != "" && target.Type == trafficByRevision && revisionName(target.Revision) == revision {
+		if target.Tag != "" && target.Type == TrafficByRevision && RevisionName(target.Revision) == revision {
 			return target.Tag, nil
 		}
 	}
@@ -287,16 +288,16 @@ func (p *Provider) ReadTag(ctx context.Context, service, revision string) (strin
 			"re-deploy so the release tags the revision it creates", revision, service)
 }
 
-func (p *Provider) Untag(ctx context.Context, service, tag string) error {
-	clients, services, err := p.openRun(ctx)
+func (p *Services) Untag(ctx context.Context, service, tag string) error {
+	clients, services, err := p.OpenRun(ctx)
 	if err != nil {
 		return err
 	}
-	err = p.rewriteTraffic(ctx, services, clients.servicePath(service), service, "take tag "+tag+" off "+service,
+	err = p.rewriteTraffic(ctx, services, clients.ServicePath(service), service, "take tag "+tag+" off "+service,
 		func(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {
 			return withoutTag(traffic, tag)
 		})
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return nil
 	}
 	return err

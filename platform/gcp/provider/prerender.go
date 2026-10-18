@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/provider/prerender"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 func (p *Provider) seedPrerenders(ctx context.Context, spec provider.StackSpec, runProgress progress.Log) error {
@@ -26,7 +27,7 @@ func (p *Provider) seedPrerenders(ctx context.Context, spec provider.StackSpec, 
 		return nil
 	}
 
-	ensureProgress(runProgress).Say("Uploading " + spec.App.App + "'s " + prerenderCount(len(seeds)))
+	gcloud.EnsureProgress(runProgress).Say("Uploading " + spec.App.App + "'s " + prerenderCount(len(seeds)))
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(functioncode.UploadConcurrency)
 	for _, seed := range seeds {

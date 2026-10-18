@@ -321,7 +321,7 @@ func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 
 func runningAs(t *testing.T, p *gcp.Provider, spec provider.StackSpec) []provider.Function {
 	t.Helper()
-	service, err := names(t, p).Service(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App, spec.App.App)
+	service, err := namesOf(t, p).Service(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App, spec.App.App)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -115,7 +115,7 @@ func (b bootstrap) describePart(ctx context.Context, tier environment.Tier, want
 		Digest:              recorded.Digest,
 		Resources:           want.resources,
 		RetiresWithLastUser: want.retires,
-		Shape:               &provider.PartShape{Vendor: string(Vendor), Region: b.clients.region, Resources: want.shape},
+		Shape:               &provider.PartShape{Vendor: string(Vendor), Region: b.clients.Region, Resources: want.shape},
 	}
 	if want.users != nil {
 		if described.UsedBy, err = want.users(ctx); err != nil {
@@ -182,7 +182,7 @@ func (b bootstrap) listPartRemovals(ctx context.Context, tier environment.Tier) 
 }
 
 func (b bootstrap) partGroupName(tier environment.Tier, name string) string {
-	return string(Vendor) + "/" + b.clients.project + "/" + string(tier) + "/" + name
+	return string(Vendor) + "/" + b.clients.Project() + "/" + string(tier) + "/" + name
 }
 
 func (b bootstrap) removalGroup(tier environment.Tier, each part) provider.ChangeGroup {

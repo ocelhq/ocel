@@ -10,14 +10,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
-func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, function string) (string, error) {
+func serviceFor(names names.Names, spec provider.StackSpec, app *provider.AppSpec, function string) (string, error) {
 	return names.Service(spec.Ref.Project, spec.Ref.Name.Env, app.App, function)
 }
 
 func (p *Provider) revisionTag(spec provider.StackSpec) string {
-	if !factsOf(spec.Edge).ShieldsOrigin {
+	if !run.FactsOf(spec.Edge).ShieldsOrigin {
 		return ""
 	}
 	return spec.Ref.Name.Release.String()
@@ -27,13 +31,13 @@ const previewOpenWarning = "is a preview and answers anyone who knows its Cloud 
 	"Turn protection.preview on, front previews with an edge that shields the origin, or keep their urls to yourselves"
 
 func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.Log) {
-	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin || isGated(spec) {
+	if spec.Ref.Tier != environment.TierPreview || run.FactsOf(spec.Edge).ShieldsOrigin || isGated(spec) {
 		return
 	}
-	ensureProgress(progress).Warn("Cloud Run service " + service + " " + previewOpenWarning)
+	gcloud.EnsureProgress(progress).Warn("Cloud Run service " + service + " " + previewOpenWarning)
 }
 
-func (p *Provider) revokeAfterRemoval(ctx context.Context, c *clients, ref provider.StackRef, goingFunctions, goingContainers []string, progress progress.Log) error {
+func (p *Provider) revokeAfterRemoval(ctx context.Context, c *gcloud.Clients, ref provider.StackRef, goingFunctions, goingContainers []string, progress progress.Log) error {
 	keeps, err := stackKeepsRunning(ctx, p.KeyValues(), ref, goingFunctions, goingContainers)
 	if err != nil || keeps {
 		return err
@@ -49,12 +53,12 @@ func (p *Provider) revokeAfterRemoval(ctx context.Context, c *clients, ref provi
 		return nil
 	}
 	account := c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, ref.Name.App)
-	revoked, err := revokeAppGrants(ctx, c, p.KeyValues(), ref.Tier, account)
+	revoked, err := grants.RevokeAll(ctx, c, p.KeyValues(), ref.Tier, account)
 	if err != nil {
 		return err
 	}
 	if revoked {
-		ensureProgress(progress).Say(fmt.Sprintf("Revoked what app %s of %s was granted in environment %s: nothing runs as the %s service account any more", ref.Name.App, ref.Project, ref.Name.Env, account))
+		gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Revoked what app %s of %s was granted in environment %s: nothing runs as the %s service account any more", ref.Name.App, ref.Project, ref.Name.Env, account))
 	}
 	return nil
 }
@@ -84,12 +88,12 @@ type serviceRevision struct {
 
 func (p *Provider) tearDownAll(ctx context.Context, ref provider.StackRef, going []serviceRevision, images provider.ImageStore, progress progress.Log) error {
 	var ran []string
-	defer func() { p.removeUnusedImages(ctx, ref, ran, images, progress) }()
+	defer func() { p.services().RemoveUnusedImages(ctx, ref, ran, images, progress) }()
 	for _, each := range going {
 		if each.service == "" {
 			continue
 		}
-		images, err := p.deleteService(ctx, each.service, progress)
+		images, err := p.services().DeleteService(ctx, each.service, progress)
 		if err != nil {
 			return err
 		}
@@ -103,9 +107,9 @@ func (p *Provider) removeRevisions(ctx context.Context, ref provider.StackRef, g
 		kept []int
 		ran  []string
 	)
-	defer func() { p.removeUnusedImages(ctx, ref, ran, images, progress) }()
+	defer func() { p.services().RemoveUnusedImages(ctx, ref, ran, images, progress) }()
 	for at, each := range going {
-		stays, images, err := p.removeRevision(ctx, each.service, each.revision, progress)
+		stays, images, err := p.services().RemoveRevision(ctx, each.service, each.revision, progress)
 		if err != nil {
 			return nil, err
 		}
@@ -117,11 +121,11 @@ func (p *Provider) removeRevisions(ctx context.Context, ref provider.StackRef, g
 	return kept, nil
 }
 
-func (p *Provider) egressFor(names Names, spec provider.StackSpec) *privateEgress {
+func (p *Provider) egressFor(names names.Names, spec provider.StackSpec) *run.PrivateEgress {
 	if !slices.ContainsFunc(spec.App.Values.Bindings, func(binding provider.Binding) bool {
 		return binding.Type == provider.BindingKV || binding.Type == provider.BindingPostgres
 	}) {
 		return nil
 	}
-	return &privateEgress{network: names.NetworkPath(spec.Ref.Tier), subnetwork: names.SubnetworkPath(p.options.Region, spec.Ref.Tier)}
+	return &run.PrivateEgress{Network: names.NetworkPath(spec.Ref.Tier), Subnetwork: names.SubnetworkPath(p.options.Region, spec.Ref.Tier)}
 }

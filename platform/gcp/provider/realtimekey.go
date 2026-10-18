@@ -13,6 +13,7 @@ import (
 	"google.golang.org/api/secretmanager/v1"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 func (r realtimeEnvironment) secrets() (*secretmanager.Service, error) { return r.clients.Secrets() }
@@ -23,7 +24,7 @@ func (r realtimeEnvironment) signingSecret(resource string) string {
 
 func (r realtimeEnvironment) readSigningSeed(ctx context.Context, service *secretmanager.Service, resource string) ([]byte, bool, error) {
 	name := r.signingSecret(resource)
-	seed, found, err := r.clients.readSecretVersion(ctx, service, name, firstSecretVersion)
+	seed, found, err := r.clients.ReadSecretVersion(ctx, service, name, gcloud.FirstSecretVersion)
 	if err != nil || !found {
 		return nil, false, err
 	}
@@ -50,14 +51,14 @@ func (r realtimeEnvironment) ensureSigningSeed(ctx context.Context, resource str
 		return seed, err
 	}
 	name := r.signingSecret(resource)
-	if err := r.clients.ensureSecret(ctx, service, name); err != nil {
+	if err := r.clients.EnsureSecret(ctx, service, name); err != nil {
 		return nil, err
 	}
 	minted := make([]byte, ed25519.SeedSize)
 	if _, err := rand.Read(minted); err != nil {
 		return nil, fmt.Errorf("mint a signing key for realtime %s: %w", resource, err)
 	}
-	if _, err := r.clients.addSecretVersion(ctx, service, name, minted); err != nil {
+	if _, err := r.clients.AddSecretVersion(ctx, service, name, minted); err != nil {
 		return nil, err
 	}
 	seed, found, err = r.readSigningSeed(ctx, service, resource)
@@ -75,7 +76,7 @@ func (r realtimeEnvironment) removeSigningKey(ctx context.Context, resource stri
 	if err != nil {
 		return err
 	}
-	return r.clients.deleteSecret(ctx, service, r.signingSecret(resource))
+	return r.clients.DeleteSecret(ctx, service, r.signingSecret(resource))
 }
 
 type keysSecret struct {
@@ -92,7 +93,7 @@ func (r realtimeEnvironment) readKeysSecret(ctx context.Context, service *secret
 		return keysSecret{}, err
 	}
 	secret.written = written
-	current, found, err := r.clients.readSecretVersion(ctx, service, secret.name, "latest")
+	current, found, err := r.clients.ReadSecretVersion(ctx, service, secret.name, "latest")
 	if err != nil {
 		return keysSecret{}, err
 	}
@@ -120,15 +121,15 @@ func (r realtimeEnvironment) writeKeys(ctx context.Context, keys map[string]stri
 		return err
 	}
 	if !secret.found {
-		if err := r.clients.ensureSecret(ctx, service, secret.name); err != nil {
+		if err := r.clients.EnsureSecret(ctx, service, secret.name); err != nil {
 			return err
 		}
 	}
-	added, err := r.clients.addSecretVersion(ctx, service, secret.name, secret.written)
+	added, err := r.clients.AddSecretVersion(ctx, service, secret.name, secret.written)
 	if err != nil {
 		return err
 	}
-	return r.clients.destroyVersionsBefore(ctx, service, secret.name, added)
+	return r.clients.DestroyVersionsBefore(ctx, service, secret.name, added)
 }
 
 func (r realtimeEnvironment) removeKeys(ctx context.Context) error {
@@ -136,5 +137,5 @@ func (r realtimeEnvironment) removeKeys(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.clients.deleteSecret(ctx, service, r.clients.RealtimeKeysSecret(r.ref.Tier, r.ref.Project, r.ref.Name.Env))
+	return r.clients.DeleteSecret(ctx, service, r.clients.RealtimeKeysSecret(r.ref.Tier, r.ref.Project, r.ref.Name.Env))
 }

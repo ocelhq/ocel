@@ -29,7 +29,7 @@ func (p *Provider) InvalidateTags(ctx context.Context, urlMap string, tags []str
 	}
 	for chunk := range slices.Chunk(tags, invalidateTagsPerRequest) {
 		_, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.Operation, error) {
-			return engine.UrlMaps.InvalidateCache(clients.project, urlMap, &compute.CacheInvalidationRule{CacheTags: chunk}).Context(ctx).Do(call...)
+			return engine.UrlMaps.InvalidateCache(clients.Project(), urlMap, &compute.CacheInvalidationRule{CacheTags: chunk}).Context(ctx).Do(call...)
 		})
 		if err != nil {
 			return fmt.Errorf("invalidate cache tags %s on url map %s: %w", strings.Join(chunk, ","), urlMap, err)
@@ -53,7 +53,7 @@ func (p *Provider) InvalidateHostnames(ctx context.Context, urlMap string, hostn
 	var failed []error
 	for _, hostname := range hostnames {
 		_, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*compute.Operation, error) {
-			return engine.UrlMaps.InvalidateCache(clients.project, urlMap, &compute.CacheInvalidationRule{Host: hostname, Path: "/*"}).Context(ctx).Do(call...)
+			return engine.UrlMaps.InvalidateCache(clients.Project(), urlMap, &compute.CacheInvalidationRule{Host: hostname, Path: "/*"}).Context(ctx).Do(call...)
 		})
 		if err != nil {
 			failed = append(failed, fmt.Errorf("invalidate every path of %s on url map %s: %w", hostname, urlMap, err))

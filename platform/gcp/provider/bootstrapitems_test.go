@@ -5,14 +5,15 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestTheItemDigestTellsTwoNamespacesApart(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	here := Names{namespace: "ocel", project: "acme-prod"}
-	beside := Names{namespace: "beside", project: "acme-prod"}
+	here := names.New("ocel", "acme-prod")
+	beside := names.New("beside", "acme-prod")
 
 	if digestOf(here.Namespace(), bootstrapItems(here, tier, false)) == digestOf(beside.Namespace(), bootstrapItems(beside, tier, false)) {
 		t.Error("two namespaces digest the same, so a bootstrap under one would read as current under the other")
@@ -34,7 +35,7 @@ func TestTheEmulatorLeavesOutTheRepositoryItDoesNotServe(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 
 	onGoogle := kindsOf(bootstrapItems(names, tier, false))
 	if onGoogle[KindRepository] != names.Repository(tier) {
@@ -49,7 +50,7 @@ func TestTheEmulatorLeavesOutTheRepositoryItDoesNotServe(t *testing.T) {
 func TestABootstrapNamesNoAccountEveryAppMayActAs(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		for _, emulated := range []bool{false, true} {
 			for _, each := range bootstrapItems(names, tier, emulated) {
@@ -65,7 +66,7 @@ func TestEachTierHasAnAccountItsRealtimeGatewaysRunAs(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	account := item{Kind: KindServiceAccount, Name: names.RealtimeAccount(tier)}
 	for _, emulated := range []bool{false, true} {
 		if ids := idsOf(bootstrapItems(names, tier, emulated)); !slices.Contains(ids, account.ID()) {
@@ -77,7 +78,7 @@ func TestEachTierHasAnAccountItsRealtimeGatewaysRunAs(t *testing.T) {
 func TestTheBaseGrantsCloudRunTheNetworkEveryTierSubnetworkIsUsedThrough(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	grant := item{Kind: KindGrant, Name: networkUserRole}
 	for _, tier := range bothTiers {
 		items := bootstrapItems(names, tier, false)

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
@@ -96,7 +97,7 @@ func TestAProductionReleaseIsNamedForItsNamespaceProjectEnvironmentAndApp(t *tes
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	want, err := names(t, p).Service("shop", stackrecords.ProductionEnv, "web", "web")
+	want, err := namesOf(t, p).Service("shop", stackrecords.ProductionEnv, "web", "web")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +215,7 @@ func TestReclaimingADroppedFunctionReleaseLeavesTheServiceServingTheActiveReleas
 	if gone.Physical != active.Physical {
 		t.Fatalf("the releases deployed %q and %q, want one Cloud Run service per function that every release revises", gone.Physical, active.Physical)
 	}
-	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 
@@ -224,7 +225,7 @@ func TestReclaimingADroppedFunctionReleaseLeavesTheServiceServingTheActiveReleas
 	if service == nil {
 		t.Fatalf("reclaiming the dropped release deleted Cloud Run service %s, which the active release serves from", active.Physical)
 	}
-	if !servedBy(service.Traffic, active.Revision) {
+	if !run.ServedBy(service.Traffic, active.Revision) {
 		t.Errorf("the service serves %+v after the reclaim, want all of it still on the active release's %s", service.Traffic, active.Revision)
 	}
 	if revisions := server.remaining(); !slices.Equal(revisions, []string{active.Revision}) {
@@ -242,7 +243,7 @@ func TestDestroyingEveryReleaseOfAFunctionDeletesItsServiceWhicheverGoesFirst(t 
 			later := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two")
 			released.provision(t, earlier)
 			active := released.provision(t, later)
-			if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+			if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 				t.Fatalf("Pin(%s) = %v", active.Revision, err)
 			}
 
@@ -304,7 +305,7 @@ func TestAnAppBoundToADatabaseReachesPrivateRangesOverTheTiersSubnetwork(t *test
 	}
 }
 
-func egressOf(service *run.GoogleCloudRunV2Service) string {
+func egressOf(service *runv2.GoogleCloudRunV2Service) string {
 	access := service.Template.VpcAccess
 	if access == nil || len(access.NetworkInterfaces) != 1 {
 		return ""
@@ -399,7 +400,7 @@ func TestEachReleaseBehindTheLoadBalancerTagsTheRevisionItCreatedWithItsReleaseT
 	released := newReleasedStacks(p)
 	first := behindTheLoadBalancer(t, p, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"))
 	one := released.provision(t, first)
-	if _, err := p.Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
+	if _, err := p.services().Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one.Revision, err)
 	}
 	second := behindTheLoadBalancer(t, p, functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two"))
@@ -407,13 +408,13 @@ func TestEachReleaseBehindTheLoadBalancerTagsTheRevisionItCreatedWithItsReleaseT
 
 	traffic := server.serving().Traffic
 	for tag, revision := range map[string]string{first.Ref.Name.Release.String(): one.Revision, second.Ref.Name.Release.String(): two.Revision} {
-		if !slices.ContainsFunc(traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
-			return target.Tag == tag && revisionName(target.Revision) == revision
+		if !slices.ContainsFunc(traffic, func(target *runv2.GoogleCloudRunV2TrafficTarget) bool {
+			return target.Tag == tag && run.RevisionName(target.Revision) == revision
 		}) {
 			t.Errorf("the service carries %+v, want revision %s tagged %s: a deployment reaches the revision it released by that tag", traffic, revision, tag)
 		}
 	}
-	if !servedBy(traffic, one.Revision) {
+	if !run.ServedBy(traffic, one.Revision) {
 		t.Errorf("the service serves %+v after the second release tagged its revision, want all of it still on %s: a tag takes no traffic", traffic, one.Revision)
 	}
 }
@@ -423,7 +424,7 @@ func TestAReleaseWithNoEdgeInFrontTagsNoRevision(t *testing.T) {
 	p := server.open(t)
 	released := newReleasedStacks(p)
 	one := released.provision(t, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"))
-	if _, err := p.Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
+	if _, err := p.services().Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one.Revision, err)
 	}
 	released.provision(t, functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two"))
@@ -445,7 +446,7 @@ func TestPruningAReleaseUntagsTheImageNoRemainingRevisionRuns(t *testing.T) {
 	unchanged := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
 	released.provision(t, unchanged)
 	active := released.provision(t, functionRelease("d3", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-two"))
-	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 
@@ -503,7 +504,7 @@ func TestPruningAsksAfterEachImageByItsLabelAndListsNothingOfTheRegion(t *testin
 	second := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-two")
 	two := released.provision(t, second)
 	active := released.provision(t, functionRelease("d3", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-three"))
-	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 
@@ -558,7 +559,7 @@ func TestPruningLeavesTaggedAnImageARemainingReleaseOfTheServiceRuns(t *testing.
 	second.App.Functions[0].Env = map[string]string{"GREETING": "hello"}
 	released.provision(t, second)
 	active := released.provision(t, functionRelease("d3", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-three"))
-	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 

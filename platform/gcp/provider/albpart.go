@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const (
@@ -65,7 +66,7 @@ func (b bootstrap) albPart(tier environment.Tier) part {
 	}
 	resources = append(resources, provider.PartResource{Kind: string(KindRepository), ID: b.clients.Repository(tier) + pluginRepository})
 	var shape []pricing.Shaped
-	if shaped, err := alb.Shape(pricing.EdgeSite{Tier: tier, Region: b.clients.region}); err == nil {
+	if shaped, err := alb.Shape(pricing.EdgeSite{Tier: tier, Region: b.clients.Region}); err == nil {
 		shape = shaped.Shared
 	}
 	return part{
@@ -256,7 +257,7 @@ func (b bootstrap) releaseALB(ctx context.Context, tier environment.Tier, user s
 	if err != nil {
 		return fmt.Errorf("mark the %s load balancer of tier %s as going down: %w", alb.Kind, tier, err)
 	}
-	ensureProgress(progress).Say("Taking down the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": " + user + " was the last user it served")
+	gcloud.EnsureProgress(progress).Say("Taking down the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": " + user + " was the last user it served")
 	if err := b.retireALB(ctx, tier, revision, nil); err != nil {
 		settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), albSettleTimeout)
 		defer cancel()
@@ -276,7 +277,7 @@ func (b bootstrap) restoreALBUser(ctx context.Context, tier environment.Tier, us
 }
 
 func sayALBKept(progress progress.Log, tier environment.Tier, bound []string) {
-	ensureProgress(progress).Say("Kept the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": it still serves " + strings.Join(bound, ", ") +
+	gcloud.EnsureProgress(progress).Say("Kept the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": it still serves " + strings.Join(bound, ", ") +
 		", and it is taken down once nothing is bound to it")
 }
 

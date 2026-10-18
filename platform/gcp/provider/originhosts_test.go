@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 type routedHosts struct {
@@ -193,7 +194,7 @@ func prunable(t *testing.T) (*Provider, *routedHosts, []provider.Function) {
 		deployed = append(deployed, released.provision(t, behindTheWorker(functionRelease(id, image))))
 	}
 	active := deployed[2]
-	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 	return p, routing, deployed
@@ -252,9 +253,9 @@ func TestAFunctionBehindTheWorkerOpensAtCreation(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := server.created[0]
-	if !service.InvokerIamDisabled || service.Labels[opensOnPromotionLabel] != "" {
+	if !service.InvokerIamDisabled || service.Labels[run.OpensOnPromotionLabel] != "" {
 		t.Errorf("service opens %v with label %q, want open at creation: the worker reaches it on its origin host before any promotion, and ingress with mTLS keeps clients out",
-			service.InvokerIamDisabled, service.Labels[opensOnPromotionLabel])
+			service.InvokerIamDisabled, service.Labels[run.OpensOnPromotionLabel])
 	}
 
 	plain := &runServer{}
@@ -263,7 +264,7 @@ func TestAFunctionBehindTheWorkerOpensAtCreation(t *testing.T) {
 	if _, err := plain.open(t).ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := plain.created[0]; got.InvokerIamDisabled || got.Labels[opensOnPromotionLabel] == "" {
-		t.Errorf("a service behind the load balancer opens %v with label %q, want it shut until its promotion", got.InvokerIamDisabled, got.Labels[opensOnPromotionLabel])
+	if got := plain.created[0]; got.InvokerIamDisabled || got.Labels[run.OpensOnPromotionLabel] == "" {
+		t.Errorf("a service behind the load balancer opens %v with label %q, want it shut until its promotion", got.InvokerIamDisabled, got.Labels[run.OpensOnPromotionLabel])
 	}
 }

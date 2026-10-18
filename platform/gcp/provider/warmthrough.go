@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const httpsPort = "443"
@@ -29,7 +31,7 @@ func (p *Provider) warmThrough(ctx context.Context, url, address, cookie string)
 		}
 	}
 	defer transport.CloseIdleConnections()
-	answered, err := (&http.Client{Timeout: warmTimeout, Transport: transport}).Do(asked)
+	answered, err := (&http.Client{Timeout: run.WarmTimeout, Transport: transport}).Do(asked)
 	if err != nil {
 		return fmt.Errorf("warm %s: %w", url, err)
 	}

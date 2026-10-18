@@ -13,6 +13,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const serviceAccountListPage = 100
@@ -25,16 +28,8 @@ type appAccount struct {
 	app     string
 }
 
-func retiredWorkloadDescription(tier environment.Tier) string {
-	return "the identity every app ocel deploys in the " + string(tier) + " tier runs as"
-}
-
-func (n Names) accountID(account *iam.ServiceAccount) (string, bool) {
-	return strings.CutSuffix(account.Email, "@"+n.project+accountDomain)
-}
-
-func (n Names) readAppAccount(account *iam.ServiceAccount) (appAccount, bool) {
-	id, here := n.accountID(account)
+func readAppAccount(n names.Names, account *iam.ServiceAccount) (appAccount, bool) {
+	id, here := n.AccountID(account)
 	if !here {
 		return appAccount{}, false
 	}
@@ -70,11 +65,6 @@ func (n Names) readAppAccount(account *iam.ServiceAccount) (appAccount, bool) {
 	return appAccount{id: id, tier: tier, project: project, env: env, app: app}, true
 }
 
-func (n Names) isRetiredWorkloadAccount(account *iam.ServiceAccount, tier environment.Tier) bool {
-	id, here := n.accountID(account)
-	return here && id == string(n.namespace)+"-"+string(tier) && account.Description == retiredWorkloadDescription(tier)
-}
-
 func isAppRecorded(stacks []stackrecords.NamedStack, env, app string) bool {
 	for _, stack := range stacks {
 		if !stack.Name.IsInfra() && stack.Name.Env == env && stack.Name.App == app {
@@ -85,24 +75,20 @@ func isAppRecorded(stacks []stackrecords.NamedStack, env, app string) bool {
 }
 
 func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	progress = ensureProgress(progress)
+	progress = gcloud.EnsureProgress(progress)
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return err
 	}
 	var candidates []appAccount
-	var retired []string
 	for token := ""; ; {
-		page, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.List("projects/"+b.clients.project).
+		page, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.List("projects/"+b.clients.Project()).
 			PageSize(serviceAccountListPage).PageToken(token).Context(ctx).Do)
 		if err != nil {
-			return fmt.Errorf("list the service accounts of project %s: %w", b.clients.project, err)
+			return fmt.Errorf("list the service accounts of project %s: %w", b.clients.Project(), err)
 		}
 		for _, account := range page.Accounts {
-			if b.clients.isRetiredWorkloadAccount(account, req.Tier) {
-				id, _ := b.clients.accountID(account)
-				retired = append(retired, id)
-			} else if found, ok := b.clients.readAppAccount(account); ok && found.tier == req.Tier {
+			if found, ok := readAppAccount(b.clients.Names, account); ok && found.tier == req.Tier {
 				candidates = append(candidates, found)
 			}
 		}
@@ -112,14 +98,6 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 	}
 
 	var failures []error
-	for _, id := range retired {
-		deleted, err := b.retireWorkloadAccount(ctx, req.Tier, id)
-		if err != nil {
-			failures = append(failures, err)
-		} else if deleted {
-			progress.Say(retiredWorkloadDeleted(id, req.Tier))
-		}
-	}
 	deleted := 0
 	readProjects := map[string][]stackrecords.NamedStack{}
 	for _, candidate := range candidates {
@@ -141,11 +119,11 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 		} else if isAppRecorded(stacks, candidate.env, candidate.app) {
 			continue
 		}
-		if _, err := revokeAppGrants(ctx, b.clients, b.records, candidate.tier, candidate.id); err != nil {
+		if _, err := grants.RevokeAll(ctx, b.clients, b.records, candidate.tier, candidate.id); err != nil {
 			failures = append(failures, err)
 			continue
 		}
-		removed, err := b.clients.deleteAccount(ctx, candidate.id)
+		removed, err := b.clients.DeleteAccount(ctx, candidate.id)
 		if err != nil {
 			failures = append(failures, err)
 			continue
@@ -161,45 +139,4 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 		progress.Debug("No app service account of the " + string(req.Tier) + " tier is unused")
 	}
 	return errors.Join(failures...)
-}
-
-func retiredWorkloadDeleted(id string, tier environment.Tier) string {
-	return "Deleted the " + id + " service account: every app of the " + string(tier) + " tier runs as an account of its own"
-}
-
-func (b bootstrap) retireWorkloadAccount(ctx context.Context, tier environment.Tier, id string) (bool, error) {
-	member := "serviceAccount:" + id + "@" + b.clients.project + accountDomain
-	if _, err := b.clients.unbindProjectMember(ctx, member); err != nil {
-		return false, err
-	}
-	if _, err := b.clients.bindKeyRoles(ctx, tier, member, []string{appOpeningRole}, nil); err != nil {
-		return false, fmt.Errorf("take back what the %s service account may do with the %s key: %w", id, tier, err)
-	}
-	if err := ignoreAbsentPolicy(b.clients.bindQueueRoles(ctx, tier, member, retiredTierQueueRoles, nil)); err != nil {
-		return false, fmt.Errorf("take back what the %s service account may do on the %s delay queue: %w", id, tier, err)
-	}
-	return b.clients.deleteAccount(ctx, id)
-}
-
-func (b bootstrap) deleteRetiredWorkloadAccount(ctx context.Context, tier environment.Tier, progress progress.Log) error {
-	service, err := b.clients.Accounts()
-	if err != nil {
-		return err
-	}
-	id := string(b.clients.namespace) + "-" + string(tier)
-	account, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(b.clients, id)).Context(ctx).Do)
-	if absent(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read the %s service account: %w", id, err)
-	}
-	if !b.clients.isRetiredWorkloadAccount(account, tier) {
-		return nil
-	}
-	deleted, err := b.retireWorkloadAccount(ctx, tier, id)
-	if deleted {
-		ensureProgress(progress).Say(retiredWorkloadDeleted(id, tier))
-	}
-	return err
 }

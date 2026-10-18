@@ -14,12 +14,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestTheFilterForDatabasesOnANetworkMatchesTheNamespaceLabelAStackWrites(t *testing.T) {
 	t.Parallel()
 	namespace := provider.Namespace(strings.Repeat("ocel-", 20) + "end")
-	written := stackLabels(Names{namespace: namespace}, provider.StackRef{Tier: environment.TierProduction})[namespaceLabel]
+	written := names.StackLabels(names.New(namespace, ""), provider.StackRef{Tier: environment.TierProduction})[names.NamespaceLabel]
 
 	got := databasesFilter(namespace, environment.TierProduction)
 
@@ -31,11 +32,11 @@ func TestTheFilterForDatabasesOnANetworkMatchesTheNamespaceLabelAStackWrites(t *
 func TestTheFilterForStoresOnANetworkMatchesTheLabelsAStackWrites(t *testing.T) {
 	t.Parallel()
 	namespace := provider.Namespace(strings.Repeat("ocel-", 20) + "end")
-	written := stackLabels(Names{namespace: namespace}, provider.StackRef{Tier: environment.TierProduction})
+	written := names.StackLabels(names.New(namespace, ""), provider.StackRef{Tier: environment.TierProduction})
 
 	got := storesFilter(namespace, environment.TierProduction)
 
-	want := "labels.ocel-namespace=" + strconv.Quote(written[namespaceLabel]) + " AND labels.ocel-tier=" + strconv.Quote(written[tierLabel])
+	want := "labels.ocel-namespace=" + strconv.Quote(written[names.NamespaceLabel]) + " AND labels.ocel-tier=" + strconv.Quote(written[names.TierLabel])
 	if got != want {
 		t.Errorf("storesFilter() = %q, want %q: the filter reads the labels stackLabels writes", got, want)
 	}

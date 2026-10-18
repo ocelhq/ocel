@@ -7,10 +7,11 @@ import (
 	"fmt"
 
 	"google.golang.org/api/googleapi"
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const probeTokenBytes = 32
@@ -23,16 +24,16 @@ func newProbeToken() (string, error) {
 	return hex.EncodeToString(token), nil
 }
 
-func (c *clients) readProbeToken(ctx context.Context, service string) (string, error) {
+func readProbeToken(ctx context.Context, c *gcloud.Clients, service string) (string, error) {
 	services, err := c.Run()
 	if err != nil {
 		return "", err
 	}
-	current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
-		return services.Projects.Locations.Services.Get(c.servicePath(service)).Context(ctx).Do(call...)
+	current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*runv2.GoogleCloudRunV2Service, error) {
+		return services.Projects.Locations.Services.Get(c.ServicePath(service)).Context(ctx).Do(call...)
 	})
 	switch {
-	case absent(err):
+	case gcloud.Absent(err):
 		return "", nil
 	case err != nil:
 		return "", fmt.Errorf("read the startup probe token of Cloud Run service %s: %w", service, err)

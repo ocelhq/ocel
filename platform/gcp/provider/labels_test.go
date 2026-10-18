@@ -9,6 +9,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 func TestEveryCloudRunServiceAProjectReleasesIsLabelledWithItsProject(t *testing.T) {
@@ -26,10 +28,10 @@ func TestEveryCloudRunServiceAProjectReleasesIsLabelledWithItsProject(t *testing
 		t.Fatalf("released %d services, want the container and the function", len(released))
 	}
 	want := map[string]string{
-		namespaceLabel:   string(names(t, p).Namespace()),
-		projectLabel:     "shop",
-		tierLabel:        "preview",
-		environmentLabel: "pr-7",
+		names.NamespaceLabel:   string(namesOf(t, p).Namespace()),
+		names.ProjectLabel:     "shop",
+		names.TierLabel:        "preview",
+		names.EnvironmentLabel: "pr-7",
 	}
 	for _, service := range released {
 		for key, value := range want {
@@ -37,7 +39,7 @@ func TestEveryCloudRunServiceAProjectReleasesIsLabelledWithItsProject(t *testing
 				t.Errorf("a service of project shop is labelled %s=%q, want %q: what sweeps a project's services finds them by its labels", key, got, value)
 			}
 		}
-		if service.Labels[opensOnPromotionLabel] == "" {
+		if service.Labels[run.OpensOnPromotionLabel] == "" {
 			t.Errorf("the service is labelled %v, want it still to say how a promotion opens it", service.Labels)
 		}
 	}
@@ -58,8 +60,8 @@ func TestEveryCloudRunServiceThatServesAnAppIsLabelledWithItsApp(t *testing.T) {
 		t.Fatalf("released %d services, want the container and the function", len(released))
 	}
 	for _, service := range released {
-		if got := service.Labels[appLabel]; got != "web" {
-			t.Errorf("a service serving app web is labelled %s=%q, want web: the e2e harness finds where an app is served by this label", appLabel, got)
+		if got := service.Labels[names.AppLabel]; got != "web" {
+			t.Errorf("a service serving app web is labelled %s=%q, want web: the e2e harness finds where an app is served by this label", names.AppLabel, got)
 		}
 	}
 }
@@ -82,11 +84,11 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 		t.Fatal("provisionWorkers() created no service")
 	}
 	for _, service := range server.created {
-		if got, labelled := service.Labels[appLabel]; labelled {
-			t.Errorf("a worker service is labelled %s=%q, want no app label: only a service that serves the app carries it", appLabel, got)
+		if got, labelled := service.Labels[names.AppLabel]; labelled {
+			t.Errorf("a worker service is labelled %s=%q, want no app label: only a service that serves the app carries it", names.AppLabel, got)
 		}
-		if got := service.Labels[projectLabel]; got != "shop" {
-			t.Errorf("a worker service is labelled %s=%q, want shop", projectLabel, got)
+		if got := service.Labels[names.ProjectLabel]; got != "shop" {
+			t.Errorf("a worker service is labelled %s=%q, want shop", names.ProjectLabel, got)
 		}
 	}
 }
@@ -94,16 +96,16 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 func TestARealtimeGatewayIsLabelledWithNoApp(t *testing.T) {
 	service := gatewayService(t, "gateway.run.app")
 
-	if got, labelled := service.Labels[appLabel]; labelled {
-		t.Errorf("the gateway is labelled %s=%q, want no app label", appLabel, got)
+	if got, labelled := service.Labels[names.AppLabel]; labelled {
+		t.Errorf("the gateway is labelled %s=%q, want no app label", names.AppLabel, got)
 	}
 }
 
 func TestARealtimeGatewayIsLabelledWithTheProjectItServes(t *testing.T) {
 	service := gatewayService(t, "gateway.run.app")
 
-	if got := service.Labels[projectLabel]; got != "shop" {
-		t.Errorf("the gateway of project shop is labelled %s=%q, want shop", projectLabel, got)
+	if got := service.Labels[names.ProjectLabel]; got != "shop" {
+		t.Errorf("the gateway of project shop is labelled %s=%q, want shop", names.ProjectLabel, got)
 	}
 }
 
@@ -112,14 +114,14 @@ func TestALabelValueIsOneGoogleCloudTakes(t *testing.T) {
 	ref := provider.StackRef{Project: "Shop " + strings.Repeat("a", 80), Tier: "production"}
 	ref.Name.Env = "prod"
 
-	labels := stackLabels(Names{namespace: provider.Namespace("ocel")}, ref)
+	labels := names.StackLabels(names.New(provider.Namespace("ocel"), ""), ref)
 
 	for key, value := range labels {
 		if !valid.MatchString(value) {
 			t.Errorf("label %s=%q is not lowercase letters, digits, underscores and dashes of at most 63 characters", key, value)
 		}
 	}
-	if other := stackLabels(Names{namespace: provider.Namespace("ocel")}, provider.StackRef{Project: "Shop " + strings.Repeat("a", 81)}); other[projectLabel] == labels[projectLabel] {
-		t.Errorf("two projects cut to one label %q", other[projectLabel])
+	if other := names.StackLabels(names.New(provider.Namespace("ocel"), ""), provider.StackRef{Project: "Shop " + strings.Repeat("a", 81)}); other[names.ProjectLabel] == labels[names.ProjectLabel] {
+		t.Errorf("two projects cut to one label %q", other[names.ProjectLabel])
 	}
 }

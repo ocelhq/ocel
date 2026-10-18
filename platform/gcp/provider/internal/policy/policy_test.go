@@ -1,4 +1,4 @@
-package iampolicy_test
+package policy_test
 
 import (
 	"context"
@@ -13,11 +13,11 @@ import (
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
-func policyBindings(members ...string) []iampolicy.Binding {
-	return []iampolicy.Binding{
+func policyBindings(members ...string) []policy.Binding {
+	return []policy.Binding{
 		{Role: "roles/viewer", Members: slices.Clone(members)},
 		{Role: "roles/editor", Members: []string{"user:kept@acme.example", "user:other@acme.example"}},
 	}
@@ -37,7 +37,7 @@ func TestGrantingAMemberARoleLeavesTheBindingsItWasGivenUnchanged(t *testing.T) 
 	bindings := policyBindings("user:kept@acme.example")
 	before := snapshotOf(t, bindings)
 
-	got, changed := iampolicy.Grant("roles/viewer", "user:new@acme.example", nil)(bindings)
+	got, changed := policy.Grant("roles/viewer", "user:new@acme.example", nil)(bindings)
 
 	if !changed || !slices.Contains(got[0].Members, "user:new@acme.example") {
 		t.Fatalf("Grant() = %s, %v, want the member granted", snapshotOf(t, got), changed)
@@ -52,7 +52,7 @@ func TestTakingAMemberOffARoleLeavesTheBindingsItWasGivenUnchanged(t *testing.T)
 	bindings := policyBindings("user:kept@acme.example", "user:gone@acme.example")
 	before := snapshotOf(t, bindings)
 
-	got, changed := iampolicy.Revoke("roles/viewer", "user:gone@acme.example", nil)(bindings)
+	got, changed := policy.Revoke("roles/viewer", "user:gone@acme.example", nil)(bindings)
 
 	if !changed || slices.Contains(got[0].Members, "user:gone@acme.example") {
 		t.Fatalf("Revoke() = %s, %v, want the member taken off", snapshotOf(t, got), changed)
@@ -65,20 +65,20 @@ func TestTakingAMemberOffARoleLeavesTheBindingsItWasGivenUnchanged(t *testing.T)
 func TestAGrantIsAddedOnceAndTakenAwayOnce(t *testing.T) {
 	t.Parallel()
 	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
-	only := &iampolicy.Condition{Expression: `resource.name == "projects/example-project/databases/ocel"`}
+	only := &policy.Condition{Expression: `resource.name == "projects/example-project/databases/ocel"`}
 
-	bindings, changed := iampolicy.Grant("roles/datastore.user", member, only)(nil)
+	bindings, changed := policy.Grant("roles/datastore.user", member, only)(nil)
 	if !changed || len(bindings) != 1 || !slices.Contains(bindings[0].Members, member) || bindings[0].Condition != only {
 		t.Fatalf("granting on an empty policy = %+v, %v, want one binding on the condition", bindings, changed)
 	}
-	if _, again := iampolicy.Grant("roles/datastore.user", member, only)(bindings); again {
+	if _, again := policy.Grant("roles/datastore.user", member, only)(bindings); again {
 		t.Error("granting twice rewrote the policy, so every deploy would churn IAM")
 	}
-	bindings, changed = iampolicy.Revoke("roles/datastore.user", member, only)(bindings)
+	bindings, changed = policy.Revoke("roles/datastore.user", member, only)(bindings)
 	if !changed || len(bindings) != 0 {
 		t.Errorf("revoking left %+v, want the binding it emptied dropped", bindings)
 	}
-	if _, again := iampolicy.Revoke("roles/datastore.user", member, only)(bindings); again {
+	if _, again := policy.Revoke("roles/datastore.user", member, only)(bindings); again {
 		t.Error("revoking twice rewrote the policy")
 	}
 }
@@ -86,18 +86,18 @@ func TestAGrantIsAddedOnceAndTakenAwayOnce(t *testing.T) {
 func TestAGrantUnderAnotherConditionIsADifferentBinding(t *testing.T) {
 	t.Parallel()
 	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
-	shop := &iampolicy.Condition{Expression: "shop"}
-	ocel := &iampolicy.Condition{Expression: "ocel"}
-	existing := []iampolicy.Binding{
+	shop := &policy.Condition{Expression: "shop"}
+	ocel := &policy.Condition{Expression: "ocel"}
+	existing := []policy.Binding{
 		{Role: "roles/datastore.user", Members: []string{member}, Condition: shop},
 		{Role: "roles/datastore.user", Members: []string{member}},
 	}
 
-	bindings, changed := iampolicy.Grant("roles/datastore.user", member, ocel)(existing)
+	bindings, changed := policy.Grant("roles/datastore.user", member, ocel)(existing)
 	if !changed || len(bindings) != 3 {
 		t.Fatalf("granting under another condition = %+v, %v, want a third binding of its own", bindings, changed)
 	}
-	bindings, changed = iampolicy.Revoke("roles/datastore.user", member, ocel)(bindings)
+	bindings, changed = policy.Revoke("roles/datastore.user", member, ocel)(bindings)
 	if !changed || len(bindings) != 2 || bindings[0].Condition != shop || bindings[1].Condition != nil {
 		t.Errorf("revoking left %+v, and taking one condition's grant away may not touch another's or the unconditional one", bindings)
 	}
@@ -106,9 +106,9 @@ func TestAGrantUnderAnotherConditionIsADifferentBinding(t *testing.T) {
 func TestAnotherMembersGrantSurvivesARevoke(t *testing.T) {
 	t.Parallel()
 	const member = "serviceAccount:app@project.iam.gserviceaccount.com"
-	existing := []iampolicy.Binding{{Role: "roles/viewer", Members: []string{"user:someone@example.com", member}}}
+	existing := []policy.Binding{{Role: "roles/viewer", Members: []string{"user:someone@example.com", member}}}
 
-	bindings, changed := iampolicy.Revoke("roles/viewer", member, nil)(existing)
+	bindings, changed := policy.Revoke("roles/viewer", member, nil)(existing)
 
 	if !changed || !slices.Equal(bindings[0].Members, []string{"user:someone@example.com"}) {
 		t.Errorf("revoking left %v, and taking one member off may not take anybody else's access with it", bindings)
@@ -118,8 +118,8 @@ func TestAnotherMembersGrantSurvivesARevoke(t *testing.T) {
 func TestTakingAMemberOffRolesLeavesEveryOtherRoleAndMember(t *testing.T) {
 	t.Parallel()
 	member, other := "serviceAccount:app@x.iam.gserviceaccount.com", "serviceAccount:other@x.iam.gserviceaccount.com"
-	first, second := &iampolicy.Condition{Expression: "a"}, &iampolicy.Condition{Expression: "b"}
-	bindings := []iampolicy.Binding{
+	first, second := &policy.Condition{Expression: "a"}, &policy.Condition{Expression: "b"}
+	bindings := []policy.Binding{
 		{Role: "roles/one", Condition: first, Members: []string{member}},
 		{Role: "roles/two", Condition: second, Members: []string{member, other}},
 		{Role: "roles/three", Members: []string{member}},
@@ -128,7 +128,7 @@ func TestTakingAMemberOffRolesLeavesEveryOtherRoleAndMember(t *testing.T) {
 	}
 	before := snapshotOf(t, bindings)
 
-	kept, changed := iampolicy.RevokeRoles(member, []string{"roles/one", "roles/two", "roles/three"})(bindings)
+	kept, changed := policy.RevokeRoles(member, []string{"roles/one", "roles/two", "roles/three"})(bindings)
 
 	if !changed || len(kept) != 3 || kept[0].Role != "roles/two" || !slices.Equal(kept[0].Members, []string{other}) ||
 		kept[1].Role != "roles/four" || kept[2].Role != "roles/five" || !slices.Equal(kept[2].Members, []string{member}) {
@@ -142,31 +142,31 @@ func TestTakingAMemberOffRolesLeavesEveryOtherRoleAndMember(t *testing.T) {
 func TestOnlyMemberLeavesARoleHeldByThatMemberAlone(t *testing.T) {
 	t.Parallel()
 	const member = "serviceAccount:sync@x.iam.gserviceaccount.com"
-	bindings := []iampolicy.Binding{
+	bindings := []policy.Binding{
 		{Role: "roles/run.invoker", Members: []string{"allUsers", member}},
 		{Role: "roles/viewer", Members: []string{"user:kept@x.example"}},
 	}
 
-	got, changed := iampolicy.OnlyMember("roles/run.invoker", member)(bindings)
+	got, changed := policy.OnlyMember("roles/run.invoker", member)(bindings)
 	if !changed || len(got) != 2 || got[1].Role != "roles/run.invoker" || !slices.Equal(got[1].Members, []string{member}) {
 		t.Fatalf("OnlyMember() = %+v, %v, want the invoker held by the member alone", got, changed)
 	}
-	if _, again := iampolicy.OnlyMember("roles/run.invoker", member)(got); again {
+	if _, again := policy.OnlyMember("roles/run.invoker", member)(got); again {
 		t.Error("OnlyMember() changed a role the member already held alone")
 	}
 }
 
 type policyServer struct {
-	bindings []iampolicy.Binding
+	bindings []policy.Binding
 	stale    int
 	reads    int
 	writes   int
 }
 
-func (s *policyServer) resource() iampolicy.Resource {
-	return iampolicy.Resource{Name: "the test resource", Read: func(context.Context) ([]iampolicy.Binding, iampolicy.Write, error) {
+func (s *policyServer) resource() policy.Resource {
+	return policy.Resource{Name: "the test resource", Read: func(context.Context) ([]policy.Binding, policy.Write, error) {
 		s.reads++
-		return slices.Clone(s.bindings), func(_ context.Context, bindings []iampolicy.Binding) error {
+		return slices.Clone(s.bindings), func(_ context.Context, bindings []policy.Binding) error {
 			s.writes++
 			if s.stale > 0 {
 				s.stale--
@@ -182,7 +182,7 @@ func TestAnEditReadsThePolicyAgainWhenTheWriteFoundItStale(t *testing.T) {
 	t.Parallel()
 	server := &policyServer{stale: 1}
 
-	changed, err := iampolicy.Edit(context.Background(), server.resource(), iampolicy.Grant("roles/viewer", "user:new@x.example", nil))
+	changed, err := policy.Edit(context.Background(), server.resource(), policy.Grant("roles/viewer", "user:new@x.example", nil))
 
 	if err != nil || !changed {
 		t.Fatalf("Edit() = %v, %v, want the grant to land after the 412", changed, err)
@@ -194,23 +194,23 @@ func TestAnEditReadsThePolicyAgainWhenTheWriteFoundItStale(t *testing.T) {
 
 func TestAnEditOfAPolicyThatKeepsChangingIsRefusedRatherThanRetriedForever(t *testing.T) {
 	t.Parallel()
-	server := &policyServer{stale: iampolicy.EditAttempts + 1}
+	server := &policyServer{stale: policy.EditAttempts + 1}
 
-	_, err := iampolicy.Edit(context.Background(), server.resource(), iampolicy.Grant("roles/viewer", "user:new@x.example", nil))
+	_, err := policy.Edit(context.Background(), server.resource(), policy.Grant("roles/viewer", "user:new@x.example", nil))
 
 	if err == nil {
 		t.Fatal("Edit() over a policy that never stops changing = nil, want a refusal")
 	}
-	if server.writes != iampolicy.EditAttempts {
-		t.Errorf("Edit() wrote %d times, want %d", server.writes, iampolicy.EditAttempts)
+	if server.writes != policy.EditAttempts {
+		t.Errorf("Edit() wrote %d times, want %d", server.writes, policy.EditAttempts)
 	}
 }
 
 func TestAnEditThatChangesNothingWritesNothing(t *testing.T) {
 	t.Parallel()
-	server := &policyServer{bindings: []iampolicy.Binding{{Role: "roles/viewer", Members: []string{"user:held@x.example"}}}}
+	server := &policyServer{bindings: []policy.Binding{{Role: "roles/viewer", Members: []string{"user:held@x.example"}}}}
 
-	changed, err := iampolicy.Edit(context.Background(), server.resource(), iampolicy.Grant("roles/viewer", "user:held@x.example", nil))
+	changed, err := policy.Edit(context.Background(), server.resource(), policy.Grant("roles/viewer", "user:held@x.example", nil))
 
 	if err != nil || changed || server.writes != 0 {
 		t.Errorf("Edit() = %v, %v after %d writes, want nothing written", changed, err, server.writes)
@@ -220,31 +220,31 @@ func TestAnEditThatChangesNothingWritesNothing(t *testing.T) {
 func TestAnAbsentResourceIsToldApartThroughWrapping(t *testing.T) {
 	t.Parallel()
 	answered := &googleapi.Error{Code: http.StatusNotFound}
-	missing := iampolicy.Resource{Name: "gone", Read: func(context.Context) ([]iampolicy.Binding, iampolicy.Write, error) {
-		return nil, nil, iampolicy.Absent(answered)
+	missing := policy.Resource{Name: "gone", Read: func(context.Context) ([]policy.Binding, policy.Write, error) {
+		return nil, nil, policy.Absent(answered)
 	}}
 
-	_, err := iampolicy.Edit(context.Background(), missing, iampolicy.Grant("roles/viewer", "user:x@x.example", nil))
+	_, err := policy.Edit(context.Background(), missing, policy.Grant("roles/viewer", "user:x@x.example", nil))
 
 	var kept *googleapi.Error
-	if !iampolicy.IsAbsent(err) || !errors.As(err, &kept) {
+	if !policy.IsAbsent(err) || !errors.As(err, &kept) {
 		t.Errorf("Edit() = %v, want it absent and still carrying Google's answer", err)
 	}
 }
 
-func crowded(members int) []iampolicy.Binding {
+func crowded(members int) []policy.Binding {
 	held := make([]string, members)
 	for i := range held {
 		held[i] = "serviceAccount:app-" + strconv.Itoa(i) + "@x.iam.gserviceaccount.com"
 	}
-	return []iampolicy.Binding{{Role: "roles/viewer", Members: held}}
+	return []policy.Binding{{Role: "roles/viewer", Members: held}}
 }
 
 func TestAGrantThatWouldTakeAPolicyPastGooglesPrincipalLimitIsRefusedBeforeItIsWritten(t *testing.T) {
 	t.Parallel()
-	server := &policyServer{bindings: crowded(iampolicy.MaxMembers)}
+	server := &policyServer{bindings: crowded(policy.MaxMembers)}
 
-	_, err := iampolicy.Edit(context.Background(), server.resource(), iampolicy.Grant("roles/editor", "user:one-more@x.example", nil))
+	_, err := policy.Edit(context.Background(), server.resource(), policy.Grant("roles/editor", "user:one-more@x.example", nil))
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(err.Error(), "1,500") {
@@ -257,9 +257,9 @@ func TestAGrantThatWouldTakeAPolicyPastGooglesPrincipalLimitIsRefusedBeforeItIsW
 
 func TestARevokeFromAPolicyPastThePrincipalLimitIsWritten(t *testing.T) {
 	t.Parallel()
-	server := &policyServer{bindings: crowded(iampolicy.MaxMembers + 1)}
+	server := &policyServer{bindings: crowded(policy.MaxMembers + 1)}
 
-	changed, err := iampolicy.Edit(context.Background(), server.resource(), iampolicy.Revoke("roles/viewer", "serviceAccount:app-0@x.iam.gserviceaccount.com", nil))
+	changed, err := policy.Edit(context.Background(), server.resource(), policy.Revoke("roles/viewer", "serviceAccount:app-0@x.iam.gserviceaccount.com", nil))
 
 	if err != nil || !changed {
 		t.Errorf("Edit() = %v, %v, want the revoke written: it only makes room", changed, err)

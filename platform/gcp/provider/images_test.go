@@ -8,6 +8,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 type handedToken string
@@ -16,18 +18,18 @@ func (t handedToken) Token(context.Context) (string, error) { return string(t), 
 
 func pushing(t *testing.T, endpoint string) *Provider {
 	t.Helper()
-	names := Names{namespace: provider.Namespace("ocel"), project: "acme-prod"}
+	names := names.New(provider.Namespace("ocel"), "acme-prod")
 	return &Provider{
-		options:   Options{Project: names.project, Region: "europe-west1"},
+		options:   Options{Project: names.Project(), Region: "europe-west1"},
 		tokens:    handedToken("ya29.stub"),
 		endpoint:  endpoint,
-		namespace: names.namespace,
-		resolved:  &clients{Names: names, region: "europe-west1", endpoint: endpoint},
+		namespace: names.Namespace(),
+		resolved:  &gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: endpoint},
 		records:   fake.NewKeyValues(),
 	}
 }
 
-func names(t *testing.T, p *Provider) Names {
+func namesOf(t *testing.T, p *Provider) names.Names {
 	t.Helper()
 	named, err := p.Names(context.Background())
 	if err != nil {

@@ -1,4 +1,4 @@
-package gcp
+package gcloud
 
 import (
 	"context"
@@ -18,25 +18,25 @@ import (
 )
 
 const (
-	firstSecretVersion = "1"
+	FirstSecretVersion = "1"
 	enabledVersions    = "state:ENABLED"
 	failedPrecondition = "FAILED_PRECONDITION"
 )
 
-func (c *clients) ensureSecret(ctx context.Context, service *secretmanager.Service, name string) error {
-	_, err := googleretry.Attempted(ctx, service.Projects.Secrets.Create("projects/"+c.project, &secretmanager.Secret{
+func (c *Clients) EnsureSecret(ctx context.Context, service *secretmanager.Service, name string) error {
+	_, err := googleretry.Attempted(ctx, service.Projects.Secrets.Create("projects/"+c.Project(), &secretmanager.Secret{
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
 	}).SecretId(name).Context(ctx).Do)
-	if err != nil && !taken(err) {
+	if err != nil && !Taken(err) {
 		return fmt.Errorf("create the %s secret: %w", name, err)
 	}
 	return nil
 }
 
-func (c *clients) readSecretVersion(ctx context.Context, service *secretmanager.Service, name, version string) ([]byte, bool, error) {
-	read, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.Access(secretPath(c.project, name)+"/versions/"+version).Context(ctx).Do)
+func (c *Clients) ReadSecretVersion(ctx context.Context, service *secretmanager.Service, name, version string) ([]byte, bool, error) {
+	read, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.Access(SecretPath(c.Project(), name)+"/versions/"+version).Context(ctx).Do)
 	switch {
-	case absent(err):
+	case Absent(err):
 		return nil, false, nil
 	case unreadableVersion(err):
 		return nil, true, nil
@@ -65,8 +65,8 @@ func unreadableVersion(err error) bool {
 	return json.Unmarshal([]byte(answered.Body), &said) == nil && said.Error.Status == failedPrecondition
 }
 
-func (c *clients) addSecretVersion(ctx context.Context, service *secretmanager.Service, name string, payload []byte) (*secretmanager.SecretVersion, error) {
-	added, err := googleretry.Attempted(ctx, service.Projects.Secrets.AddVersion(secretPath(c.project, name), &secretmanager.AddSecretVersionRequest{
+func (c *Clients) AddSecretVersion(ctx context.Context, service *secretmanager.Service, name string, payload []byte) (*secretmanager.SecretVersion, error) {
+	added, err := googleretry.Attempted(ctx, service.Projects.Secrets.AddVersion(SecretPath(c.Project(), name), &secretmanager.AddSecretVersionRequest{
 		Payload: &secretmanager.SecretPayload{Data: base64.StdEncoding.EncodeToString(payload)},
 	}).Context(ctx).Do)
 	if err != nil {
@@ -75,15 +75,15 @@ func (c *clients) addSecretVersion(ctx context.Context, service *secretmanager.S
 	return added, nil
 }
 
-func (c *clients) destroyVersionsBefore(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion) error {
+func (c *Clients) DestroyVersionsBefore(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion) error {
 	return c.destroyVersionsSparing(ctx, service, name, kept, 0)
 }
 
-func (c *clients) destroyVersionsBeforePrevious(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion) error {
+func (c *Clients) DestroyVersionsBeforePrevious(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion) error {
 	return c.destroyVersionsSparing(ctx, service, name, kept, 1)
 }
 
-func (c *clients) destroyVersionsSparing(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion, spared int) error {
+func (c *Clients) destroyVersionsSparing(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion, spared int) error {
 	newest, err := versionNumber(kept.Name)
 	if err != nil {
 		return fmt.Errorf("read the version of the %s secret just written: %w", name, err)
@@ -94,14 +94,14 @@ func (c *clients) destroyVersionsSparing(ctx context.Context, service *secretman
 	}
 	var older []numbered
 	for token := ""; ; {
-		page, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.List(secretPath(c.project, name)).
+		page, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.List(SecretPath(c.Project(), name)).
 			Filter(enabledVersions).PageToken(token).Context(ctx).Do)
 		if err != nil {
 			return fmt.Errorf("list the versions of the %s secret: %w", name, err)
 		}
 		for _, version := range page.Versions {
 			number, err := versionNumber(version.Name)
-			if err == nil && version.State == enabledVersion && number < newest {
+			if err == nil && version.State == EnabledVersion && number < newest {
 				older = append(older, numbered{name: version.Name, number: number})
 			}
 		}
@@ -111,7 +111,7 @@ func (c *clients) destroyVersionsSparing(ctx context.Context, service *secretman
 	}
 	slices.SortFunc(older, func(a, b numbered) int { return b.number - a.number })
 	for _, version := range older[min(spared, len(older)):] {
-		if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.Destroy(version.name, &secretmanager.DestroySecretVersionRequest{}).Context(ctx).Do); err != nil && !absent(err) && !unreadableVersion(err) {
+		if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.Destroy(version.name, &secretmanager.DestroySecretVersionRequest{}).Context(ctx).Do); err != nil && !Absent(err) && !unreadableVersion(err) {
 			return fmt.Errorf("destroy %s, which a newer version of the %s secret replaces: %w", version.name, name, err)
 		}
 	}
@@ -126,8 +126,8 @@ func versionNumber(name string) (int, error) {
 	return strconv.Atoi(number)
 }
 
-func (c *clients) deleteSecret(ctx context.Context, service *secretmanager.Service, name string) error {
-	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(secretPath(c.project, name)).Context(ctx).Do); err != nil && !absent(err) {
+func (c *Clients) DeleteSecret(ctx context.Context, service *secretmanager.Service, name string) error {
+	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(SecretPath(c.Project(), name)).Context(ctx).Do); err != nil && !Absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
 	return nil

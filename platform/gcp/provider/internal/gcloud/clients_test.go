@@ -1,4 +1,4 @@
-package gcp
+package gcloud
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestAFailedProjectNumberReadIsAskedAgainByTheNextCaller(t *testing.T) {
@@ -22,7 +24,7 @@ func TestAFailedProjectNumberReadIsAskedAgainByTheNextCaller(t *testing.T) {
 		w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
 	}))
 	t.Cleanup(server.Close)
-	c := &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1", endpoint: server.URL}
+	c := &Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
 	const domain = "@gcp-sa-pubsub.iam.gserviceaccount.com"
 
 	if _, err := c.ReadServiceAgent(context.Background(), domain); err == nil {
@@ -46,7 +48,7 @@ func TestAFailedProjectNumberReadIsAskedAgainByTheNextCaller(t *testing.T) {
 func TestLoggingOpensOneSharedClientAgainstTheEmulator(t *testing.T) {
 	t.Parallel()
 
-	c := &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1", endpoint: "http://127.0.0.1:1"}
+	c := &Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: "http://127.0.0.1:1"}
 
 	first, err := c.Logging()
 	if err != nil {

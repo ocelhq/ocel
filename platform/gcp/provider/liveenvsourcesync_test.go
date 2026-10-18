@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"google.golang.org/api/cloudscheduler/v1"
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -26,9 +26,9 @@ func schedules(t *testing.T) *cloudscheduler.Service {
 	return service
 }
 
-func cloudRun(t *testing.T) *run.Service {
+func cloudRun(t *testing.T) *runv2.Service {
 	t.Helper()
-	service, err := run.NewService(context.Background(), ports.EmulatorREST(endpoint())...)
+	service, err := runv2.NewService(context.Background(), ports.EmulatorREST(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the Cloud Run API: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestLiveTheFirstScheduledEnvSourceRunsItsTiersSyncAndRemovingTheTierTakesIt
 		t.Fatalf("GetIamPolicy(%s) = %v", servicePath, err)
 	}
 	member := "serviceAccount:" + names.EnvSourceSyncAccountEmail(tier)
-	if !slices.ContainsFunc(policy.Bindings, func(binding *run.GoogleIamV1Binding) bool {
+	if !slices.ContainsFunc(policy.Bindings, func(binding *runv2.GoogleIamV1Binding) bool {
 		return binding.Role == "roles/run.invoker" && slices.Equal(binding.Members, []string{member})
 	}) {
 		t.Errorf("the sync's policy binds %+v, want %s alone with roles/run.invoker", policy.Bindings, member)

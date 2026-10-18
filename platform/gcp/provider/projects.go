@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -24,7 +25,7 @@ type resourceManager struct {
 func (r resourceManager) Reaches(ctx context.Context, project string) error {
 	service, err := cloudresourcemanager.NewService(ctx, ports.EmulatorREST(r.endpoint)...)
 	if err != nil {
-		return unauthenticated()
+		return gcloud.Unauthenticated()
 	}
 	_, _, err = googleretry.Asked(ctx, func() (*cloudresourcemanager.Project, int, error) {
 		found, err := service.Projects.Get(project).Context(ctx).Do()

@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 func requested(t *testing.T, server *certServer, hostname string) (provider.Certificate, []edge.Record) {
@@ -138,7 +139,7 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 
 func TestACertificateStillProvisioningWhenThePatienceRunsOutIsLeftPending(t *testing.T) {
 	previous := issuance
-	issuance = patience{attempts: 2, ceiling: time.Millisecond}
+	issuance = gcloud.Patience{Attempts: 2, Ceiling: time.Millisecond}
 	t.Cleanup(func() { issuance = previous })
 
 	server := newCertServer()

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 type removablePart struct {
@@ -141,7 +142,7 @@ func (b bootstrap) removeUnrecordedPart(ctx context.Context, tier environment.Ti
 	if err := each.remove(b, ctx, tier, progress); err != nil {
 		return fmt.Errorf("remove the %s part of the %s bootstrap: %w", each.Name, tier, err)
 	}
-	ensureProgress(progress).Say("Removed the " + each.Name + " part of the " + string(tier) + " bootstrap")
+	gcloud.EnsureProgress(progress).Say("Removed the " + each.Name + " part of the " + string(tier) + " bootstrap")
 	return nil
 }
 
@@ -159,6 +160,6 @@ func (b bootstrap) removePart(ctx context.Context, tier environment.Tier, each p
 	if err := stackrecords.ForgetBootstrapPart(ctx, b.records, tier, each.name); err != nil {
 		return err
 	}
-	ensureProgress(progress).Say("Removed the " + each.name + " part of the " + string(tier) + " bootstrap")
+	gcloud.EnsureProgress(progress).Say("Removed the " + each.name + " part of the " + string(tier) + " bootstrap")
 	return nil
 }

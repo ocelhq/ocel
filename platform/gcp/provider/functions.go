@@ -10,6 +10,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.Function, error) {
@@ -38,7 +40,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
-	names := c.Names
+	named := c.Names
 	tasks, declared, err := p.tasksFor(ctx, c, spec)
 	if err != nil {
 		return nil, err
@@ -53,7 +55,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
-	own, err := p.runtimeEnv(names, spec, tasks)
+	own, err := p.runtimeEnv(named, spec, tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -73,9 +75,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		image := functioncode.FunctionImageRef(spec.Images, fn.Name)
 		if strings.TrimSpace(image) == "" {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"function %s names no image, and a function on Cloud Run is the container a registry coordinate names", fn.Name)
+				"function %s named no image, and a function on Cloud Run is the container a registry coordinate named", fn.Name)
 		}
-		service, err := serviceFor(names, spec, app, fn.Name)
+		service, err := serviceFor(named, spec, app, fn.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -92,56 +94,56 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if values, err = mergeValues(fn.Name, ocelRouteTableValues, values, newOcelRouteTableEnv(spec)); err != nil {
 			return nil, err
 		}
-		served := serving{
-			service:          service,
-			image:            image,
-			account:          account,
-			compute:          provider.ComputeServerless,
-			public:           true,
-			instanceBilled:   servesNext(app),
-			ingress:          ingressFor(factsOf(spec.Edge)),
-			memory:           fn.Memory,
-			instances:        instances,
-			egress:           p.egressFor(names, spec),
-			tag:              p.revisionTag(spec),
-			labels:           labelsFor(names, spec.Ref, appLabel, app.App),
-			opensOnPromotion: !factsOf(spec.Edge).RunsCode,
+		served := run.Serving{
+			Service:          service,
+			Image:            image,
+			Account:          account,
+			Compute:          provider.ComputeServerless,
+			Public:           true,
+			InstanceBilled:   servesNext(app),
+			Ingress:          run.IngressFor(run.FactsOf(spec.Edge)),
+			Memory:           fn.Memory,
+			Instances:        instances,
+			Egress:           p.egressFor(named, spec),
+			Tag:              p.revisionTag(spec),
+			Labels:           names.LabelsFor(named, spec.Ref, names.AppLabel, app.App),
+			OpensOnPromotion: !run.FactsOf(spec.Edge).RunsCode,
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
-			if values, err = mergeValues(fn.Name, nextValues, values, newNextEnv(spec, fn, served, newNextCache(names, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), facts.purgeSecret))); err != nil {
+			if values, err = mergeValues(fn.Name, nextValues, values, newNextEnv(spec, fn, served, newNextCache(named, spec.Ref.Tier, p.containerEndpoint(), p.containerTagEndpoint(), facts.purgeSecret))); err != nil {
 				return nil, err
 			}
 		}
-		if values, err = mergeValues(fn.Name, cdnPurgeValues, values, newCDNPurgeEnv(names, spec)); err != nil {
+		if values, err = mergeValues(fn.Name, cdnPurgeValues, values, newCDNPurgeEnv(named, spec)); err != nil {
 			return nil, err
 		}
 		if values, err = mergeValues(fn.Name, nodePurgeValues, values, newNodePurgeEnv(spec, facts.purgeSecret)); err != nil {
 			return nil, err
 		}
-		served.env = values
+		served.Env = values
 		gateIgnored := ignoresGate(spec, fn)
 		if !gateIgnored {
-			if err := c.applyGate(ctx, gated, fn.Name, &served); err != nil {
+			if err := applyGate(ctx, c, gated, fn.Name, &served); err != nil {
 				return nil, err
 			}
 		}
-		ran, err := p.deployService(ctx, served, progress)
+		ran, err := p.services().DeployService(ctx, served, progress)
 		if err != nil {
 			return nil, err
 		}
 		warnPreviewOpen(spec, service, progress)
-		address := ran.url
+		address := ran.Url
 		if facts.originBase != "" {
-			if served.tag == "" {
+			if served.Tag == "" {
 				return nil, fmt.Errorf("function %s is served behind the Cloudflare worker, which reaches the revision this release tags, and this release tagged none", fn.Name)
 			}
-			if address, err = p.routeOriginHost(ctx, spec, facts.originBase, service, served.tag, ran.revision, progress); err != nil {
+			if address, err = p.routeOriginHost(ctx, spec, facts.originBase, service, served.Tag, ran.Revision, progress); err != nil {
 				return nil, err
 			}
 		}
 		deployed = append(deployed, provider.Function{
-			Name: fn.Name, Physical: service, URL: address, Revision: ran.revision, IgnoresGate: gateIgnored,
+			Name: fn.Name, Physical: service, URL: address, Revision: ran.Revision, IgnoresGate: gateIgnored,
 		})
 	}
 	if !hostsWorkers(app) {

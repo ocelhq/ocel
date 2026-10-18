@@ -20,6 +20,8 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
@@ -28,7 +30,7 @@ const Vendor provider.Vendor = "gcp"
 
 type Provider struct {
 	options     Options
-	tokens      TokenSource
+	tokens      gcloud.TokenSource
 	endpoint    string
 	gateInEnv   bool
 	tagEndpoint string
@@ -42,7 +44,7 @@ type Provider struct {
 	originRoutes originRouting
 
 	mu            sync.Mutex
-	resolved      *clients
+	resolved      *gcloud.Clients
 	regionChecked bool
 	surveyed      surveys
 
@@ -85,13 +87,13 @@ func NewProvider(options Options) (*Provider, error) {
 	}
 	options.Project = namedProject(options.Project)
 	if options.Project != "" {
-		if err := (Names{namespace: namespace, project: options.Project}).fit(); err != nil {
+		if err := (names.New(namespace, options.Project)).Fit(); err != nil {
 			return nil, err
 		}
 	}
 	return &Provider{
 		options:     options,
-		tokens:      ApplicationDefault{},
+		tokens:      gcloud.ApplicationDefault{},
 		endpoint:    endpoint,
 		gateInEnv:   endpoint != "",
 		tagEndpoint: tagEndpoint,
@@ -154,7 +156,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 			Remove:    p.RemoveContainers,
 			Shared:    &resources.SharedHooks[provider.AppContainer]{Name: p.NameContainers, RemoveRevisions: p.RemoveContainerRevisions},
 		},
-		Retention: &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages},
+		Retention: &resources.ImageRetentionHooks{Reconcile: p.services().ReconcileImages},
 	}
 }
 

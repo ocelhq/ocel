@@ -14,7 +14,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -24,27 +26,27 @@ func stackOf(env, app, release string) naming.StackName {
 	return naming.AppStack(env, app, releaseOf(release))
 }
 
-func appMember(c *clients, ref provider.StackRef, app string) string {
+func appMember(c *gcloud.Clients, ref provider.StackRef, app string) string {
 	return "serviceAccount:" + c.AppAccountEmail(ref.Tier, ref.Project, ref.Name.Env, app)
 }
 
-func applyAppGrants(t *testing.T, c *clients, spec provider.StackSpec) error {
+func applyAppGrants(t *testing.T, c *gcloud.Clients, spec provider.StackSpec) error {
 	t.Helper()
 	ref := spec.Ref
 	account := c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, spec.App.App)
-	want, err := c.appGrants(context.Background(), spec, account, appMember(c, ref, spec.App.App), nil, nil)
+	want, err := appGrants(context.Background(), c, spec, account, appMember(c, ref, spec.App.App), nil, nil)
 	if err != nil {
 		return err
 	}
-	return c.applyGrants(context.Background(), ref.Tier, want, nil)
+	return grants.Apply(context.Background(), c, ref.Tier, want, nil)
 }
 
-func grantedAppAccount(t *testing.T, server *iamServer) (*Provider, *clients, provider.StackSpec, string) {
+func grantedAppAccount(t *testing.T, server *iamServer) (*Provider, *gcloud.Clients, provider.StackSpec, string) {
 	t.Helper()
 	return grantedAccountOf(t, server, reachingTopics(routedNextSpec()), map[string]*provider.TopicSpec{"resize": {}})
 }
 
-func grantedAccountOf(t *testing.T, server *iamServer, spec provider.StackSpec, declared map[string]*provider.TopicSpec) (*Provider, *clients, provider.StackSpec, string) {
+func grantedAccountOf(t *testing.T, server *iamServer, spec provider.StackSpec, declared map[string]*provider.TopicSpec) (*Provider, *gcloud.Clients, provider.StackSpec, string) {
 	t.Helper()
 	server.accountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
@@ -64,14 +66,14 @@ func recordApp(t *testing.T, p *Provider, ref provider.StackRef, name naming.Sta
 	}
 }
 
-func removeStack(t *testing.T, p *Provider, c *clients, ref provider.StackRef) {
+func removeStack(t *testing.T, p *Provider, c *gcloud.Clients, ref provider.StackRef) {
 	t.Helper()
 	if err := p.revokeAfterRemoval(context.Background(), c, ref, nil, nil, nil); err != nil {
 		t.Fatalf("revokeAfterRemoval(%s) = %v", ref.Name, err)
 	}
 }
 
-func holdings(server *iamServer, c *clients, member string) []string {
+func holdings(server *iamServer, c *gcloud.Clients, member string) []string {
 	var held []string
 	for _, bound := range projectBindingsOf(server) {
 		if strings.Contains(bound, member) {
@@ -93,7 +95,7 @@ func holdings(server *iamServer, c *clients, member string) []string {
 	return held
 }
 
-func resizePath(c *clients, spec provider.StackSpec) string {
+func resizePath(c *gcloud.Clients, spec provider.StackSpec) string {
 	return "/v1/projects/acme-prod/topics/" + taskNames(c.Names, spec.Ref).Topic("resize")
 }
 
@@ -192,12 +194,12 @@ func TestADeployRecordsWhatItGrantsBeforeItGrantsIt(t *testing.T) {
 		t.Fatal("ensureAppAccount() over a denied account policy = nil, want the refusal")
 	}
 
-	recorded, err := readAppGrants(context.Background(), p.KeyValues(), spec.Ref.Tier, c.AppAccount(spec.Ref.Tier, "shop", "production", "api"))
+	recorded, err := grants.Read(context.Background(), p.KeyValues(), spec.Ref.Tier, c.AppAccount(spec.Ref.Tier, "shop", "production", "api"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	member := appMember(c, spec.Ref, "api")
-	if !slices.ContainsFunc(recorded, func(grant appGrant) bool { return grant.Member == member && grant.Role == appRecordsRole }) {
+	if !slices.ContainsFunc(recorded, func(grant grants.Grant) bool { return grant.Member == member && grant.Role == grants.RecordsRole }) {
 		t.Errorf("the deploy granted the records role and recorded %+v, want every grant on record before it lands so a removal can take it back", recorded)
 	}
 }
@@ -222,7 +224,7 @@ func TestRemovingTheLastReleaseOfAnEnvironmentRevokesEveryGrantItsAccountHeld(t 
 		t.Errorf("resize still has publishers %q, want the account gone", got)
 	}
 	account := c.AppAccount(spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name.Env, "web")
-	if recorded, err := readAppGrants(context.Background(), p.KeyValues(), spec.Ref.Tier, account); err != nil || recorded != nil {
+	if recorded, err := grants.Read(context.Background(), p.KeyValues(), spec.Ref.Tier, account); err != nil || recorded != nil {
 		t.Errorf("readAppGrants() after the removal = %+v, %v, want nothing on record", recorded, err)
 	}
 }
@@ -269,7 +271,7 @@ func TestRevokingAnAppsGrantsTouchesNoOtherMembersBindings(t *testing.T) {
 	p, c, spec, member := grantedAppAccount(t, server)
 	other := "serviceAccount:other@acme-prod.iam.gserviceaccount.com"
 	for _, binding := range server.project.Bindings {
-		if binding.Role == appRecordsRole {
+		if binding.Role == grants.RecordsRole {
 			binding.Members = append(binding.Members, other)
 		}
 	}
@@ -283,14 +285,14 @@ func TestRevokingAnAppsGrantsTouchesNoOtherMembersBindings(t *testing.T) {
 
 	want := []string{
 		"roles/bigquery.dataEditor " + member + " " + conditioned.Expression,
-		appRecordsRole + " " + other + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectDatabase("ocel", environment.TierProduction, "shop") + `"`,
+		grants.RecordsRole + " " + other + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectDatabase("ocel", environment.TierProduction, "shop") + `"`,
 		"roles/viewer " + other + " ",
 	}
 	if got := projectBindingsOf(server); !slices.Equal(got, want) {
 		t.Errorf("the project binds %q, want exactly %q: only what ocel granted the account is taken back and every binding left empty is dropped", got, want)
 	}
-	if server.project.Version != iampolicy.ConditionalVersion {
-		t.Errorf("the policy was written at version %d, want %d: its bindings are conditional", server.project.Version, iampolicy.ConditionalVersion)
+	if server.project.Version != policy.ConditionalVersion {
+		t.Errorf("the policy was written at version %d, want %d: its bindings are conditional", server.project.Version, policy.ConditionalVersion)
 	}
 }
 

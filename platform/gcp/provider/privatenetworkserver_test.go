@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/networkconnectivity/v1"
 )
@@ -47,15 +49,15 @@ func servingNetworks(t *testing.T) (bootstrap, *networkServer) {
 	}
 	served := httptest.NewServer(server.serve(t))
 	t.Cleanup(served.Close)
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	registry := &frontRegistry{front: &countingFront{}}
-	return bootstrap{clients: &clients{Names: names, region: "europe-west1", endpoint: served.URL}, fronts: registry}, server
+	return bootstrap{clients: &gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: served.URL}, fronts: registry}, server
 }
 
 func deployingNetworks(t *testing.T) (*Provider, *networkServer) {
 	t.Helper()
 	b, server := servingNetworks(t)
-	return pushing(t, b.clients.endpoint), server
+	return pushing(t, b.clients.Endpoint), server
 }
 
 func (s *networkServer) serve(t *testing.T) http.HandlerFunc {

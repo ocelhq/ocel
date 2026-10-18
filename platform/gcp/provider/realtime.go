@@ -16,6 +16,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
@@ -28,12 +30,12 @@ type realtimeNamespace struct {
 }
 
 type realtimeEnvironment struct {
-	clients        *clients
+	clients        *gcloud.Clients
 	records        records.Store
 	ref            provider.StackRef
 	keysInEnv      bool
 	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
-	deployAndRoute func(ctx context.Context, s serving, progress progress.Log) (release, error)
+	deployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
 	tearDown       func(ctx context.Context, service string, progress progress.Log) error
 }
 
@@ -49,8 +51,8 @@ func (p *Provider) openRealtime(ctx context.Context, ref provider.StackRef) (rea
 		// HACK: floci-gcp runs no secret volume, so an emulated gateway takes its keys from its environment and a change of keys rolls a revision; drop keysInEnv once floci-gcp mounts secret volumes (#1605).
 		keysInEnv:      p.emulated(),
 		pushBinary:     p.pushBinary,
-		deployAndRoute: p.deployAndRoute,
-		tearDown:       p.tearDown,
+		deployAndRoute: p.services().DeployAndRoute,
+		tearDown:       p.services().TearDown,
 	}, nil
 }
 
@@ -260,7 +262,7 @@ func (r realtimeEnvironment) serve(ctx context.Context, progress progress.Log) (
 func (r realtimeEnvironment) place(ctx context.Context, keys map[string]string, progress progress.Log) (string, error) {
 	gateway := r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
 	if len(keys) == 0 {
-		ensureProgress(progress).Say("Removing the realtime gateway " + gateway + ": " + r.ref.Name.Env + " declares no realtime any more")
+		gcloud.EnsureProgress(progress).Say("Removing the realtime gateway " + gateway + ": " + r.ref.Name.Env + " declares no realtime any more")
 		if err := r.removeGateway(ctx, progress); err != nil {
 			return "", err
 		}
@@ -269,6 +271,6 @@ func (r realtimeEnvironment) place(ctx context.Context, keys map[string]string, 
 	if err := r.writeKeys(ctx, keys); err != nil {
 		return "", err
 	}
-	ensureProgress(progress).Debug("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", ") + " from the gateway " + gateway)
+	gcloud.EnsureProgress(progress).Debug("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", ") + " from the gateway " + gateway)
 	return r.serveGateway(ctx, keys, progress)
 }

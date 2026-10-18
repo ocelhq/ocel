@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
 const cacheGrantPrefix = "prod/shop/web/r1a2b3c4d/isr"
@@ -22,7 +23,7 @@ func cachedAt(prefix string) provider.StackSpec {
 func cacheBindingsOf(server *iamServer) []string {
 	var bound []string
 	for _, binding := range projectBindingsOf(server) {
-		if strings.HasPrefix(binding, appObjectsRole+" ") {
+		if strings.HasPrefix(binding, grants.ObjectsRole+" ") {
 			bound = append(bound, binding)
 		}
 	}
@@ -39,12 +40,12 @@ func TestAnAppsAccountMayUseObjectsUnderItsOwnCachePrefixAndNoOther(t *testing.T
 		t.Fatalf("applyAppGrants() = %v", err)
 	}
 
-	want := appObjectsRole + " " + member + ` resource.name.startsWith("projects/_/buckets/ocel-acme-prod-production/objects/cache/shop/web/")`
+	want := grants.ObjectsRole + " " + member + ` resource.name.startsWith("projects/_/buckets/ocel-acme-prod-production/objects/cache/shop/web/")`
 	if got := cacheBindingsOf(server); !slices.Equal(got, []string{want}) {
 		t.Errorf("the project's storage bindings = %q, want exactly %q", got, want)
 	}
 	for _, binding := range server.project.Bindings {
-		if binding.Role == appObjectsRole && (binding.Condition == nil || binding.Condition.Title != "ocel cache of shop/web") {
+		if binding.Role == grants.ObjectsRole && (binding.Condition == nil || binding.Condition.Title != "ocel cache of shop/web") {
 			t.Errorf("the cache binding's condition = %+v, want the title %q", binding.Condition, "ocel cache of shop/web")
 		}
 	}
@@ -61,7 +62,7 @@ func TestTheCacheGrantPrefixIsTheOneTheRuntimeWritesUnder(t *testing.T) {
 
 	var expressions []string
 	for _, binding := range server.identities().project.Bindings {
-		if binding.Role == appObjectsRole {
+		if binding.Role == grants.ObjectsRole {
 			expressions = append(expressions, binding.Condition.Expression)
 		}
 	}
@@ -195,7 +196,7 @@ func TestANextContainersAccountMayUseItsOwnCachePrefixAndTagRecords(t *testing.T
 
 	var expressions []string
 	for _, binding := range server.identities().project.Bindings {
-		if binding.Role == appObjectsRole && slices.Contains(binding.Members, account) {
+		if binding.Role == grants.ObjectsRole && slices.Contains(binding.Members, account) {
 			expressions = append(expressions, binding.Condition.Expression)
 		}
 	}
