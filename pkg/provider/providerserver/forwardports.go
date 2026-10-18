@@ -373,8 +373,11 @@ func forwardedBinding(binding provider.Binding, forward provider.PortForward) (p
 	properties[provider.PropertyHost], properties[provider.PropertyPort] = host, port
 	binding.Properties = properties
 	if binding.Type == provider.BindingPostgres && properties[provider.PropertyPassword] == "" {
-		return provider.Binding{}, fmt.Errorf("the forward of %s came back without the password it names by secret %q, and a client connecting through it has no password to give",
-			binding.Name, binding.PasswordSecret())
+		if secret := binding.PasswordSecret(); secret != "" {
+			return provider.Binding{}, fmt.Errorf("the forward of %s came back without the password it names by secret %q, and a client connecting through it has no password to give",
+				binding.Name, secret)
+		}
+		return provider.Binding{}, fmt.Errorf("the forward of %s came back without a password, and a client connecting through it has none to give", binding.Name)
 	}
 	return binding, nil
 }

@@ -4,8 +4,6 @@ import (
 	"slices"
 	"testing"
 
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
@@ -63,8 +61,4 @@ func TestAppExecutionRoleLiveValues(t *testing.T) {
 			t.Errorf("VariablesKeyARN = %q, want the decrypt grant every app keeps", withoutLive.Variables.KeyARN)
 		}
 	})
-}
-
-func variable(key, value string, class resourcesv1.VariableClass) *contractv1.ManifestVariable {
-	return &contractv1.ManifestVariable{Key: key, Class: class, Value: value}
 }

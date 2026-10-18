@@ -66,7 +66,7 @@ func TestAForwardOfAPostgresBindingThatNamesItsPasswordBySecretHandsBackThePassw
 	secret := &clusterSecret{password: "rotated-yesterday"}
 	binding := forwardedPostgres("", provider.Grant{Label: provider.GrantPasswordSecret, Actions: []string{"secretsmanager:GetSecretValue"}, Resources: []string{forwardedSecretARN}})
 
-	resolved, err := readForwardedPasswords(context.Background(), secret, []provider.Binding{binding})
+	resolved, err := readForwardedPasswords(context.Background(), passwordSources{secrets: secret}, []provider.Binding{binding})
 	if err != nil {
 		t.Fatalf("readForwardedPasswords() = %v", err)
 	}
@@ -83,12 +83,38 @@ func TestAForwardOfAPostgresBindingCarryingItsPasswordPassesItThroughAndReadsNoS
 
 	secret := &clusterSecret{password: "never-read"}
 
-	resolved, err := readForwardedPasswords(context.Background(), secret, []provider.Binding{forwardedPostgres("published-password")})
+	resolved, err := readForwardedPasswords(context.Background(), passwordSources{secrets: secret}, []provider.Binding{forwardedPostgres("published-password")})
 	if err != nil {
 		t.Fatalf("readForwardedPasswords() = %v", err)
 	}
 	if len(resolved) != 0 || len(secret.reads) != 0 {
 		t.Errorf("resolved %d bindings reading %v, want the binding passed through untouched and no secret read", len(resolved), secret.reads)
+	}
+}
+
+func TestAForwardOfAnIAMAuthenticatedDatabaseHandsBackATokenTheOperatorMintsAndReadsNoSecret(t *testing.T) {
+	t.Parallel()
+
+	secret := &clusterSecret{password: "never-read"}
+	var minted []string
+	mint := func(_ context.Context, endpoint, username string) (string, error) {
+		minted = append(minted, endpoint+" as "+username)
+		return "operator-token", nil
+	}
+	binding := forwardedPostgres("", provider.Grant{Label: provider.GrantIAMAuthentication, Actions: []string{"rds-db:connect"}, Resources: []string{"arn:aws:rds-db:eu-west-2:111122223333:dbuser:cluster-ABC/ocel"}})
+
+	resolved, err := readForwardedPasswords(context.Background(), passwordSources{secrets: secret, mintToken: mint}, []provider.Binding{binding})
+	if err != nil {
+		t.Fatalf("readForwardedPasswords() = %v", err)
+	}
+	if got := resolved[binding.Name][provider.PropertyPassword]; got != "operator-token" {
+		t.Errorf("the forward carries password %q, want the token minted for it", got)
+	}
+	if want := "shop-prod-main.cluster-cxyz.eu-west-2.rds.amazonaws.com:5432 as ocel"; len(minted) != 1 || minted[0] != want {
+		t.Errorf("minted %v, want one token for %s: RDS checks it against the cluster's endpoint, not the forward's", minted, want)
+	}
+	if len(secret.reads) != 0 {
+		t.Errorf("read secrets %v, want none", secret.reads)
 	}
 }
 

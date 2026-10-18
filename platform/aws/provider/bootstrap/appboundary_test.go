@@ -1,40 +1,40 @@
 package bootstrap
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	"gopkg.in/yaml.v3"
 )
 
 type boundaryStatement struct {
-	Effect    string         `yaml:"Effect"`
-	Action    any            `yaml:"Action"`
-	Resource  string         `yaml:"Resource"`
-	Condition map[string]any `yaml:"Condition"`
+	Effect    string         `json:"Effect"`
+	Action    any            `json:"Action"`
+	Resource  templateText   `json:"Resource"`
+	Condition map[string]any `json:"Condition"`
 }
 
 type boundaryTemplate struct {
 	Resources map[string]struct {
-		Type       string `yaml:"Type"`
+		Type       string `json:"Type"`
 		Properties struct {
-			ManagedPolicyName string `yaml:"ManagedPolicyName"`
-			Description       string `yaml:"Description"`
+			ManagedPolicyName string `json:"ManagedPolicyName"`
+			Description       string `json:"Description"`
 			PolicyDocument    struct {
-				Statement []boundaryStatement `yaml:"Statement"`
-			} `yaml:"PolicyDocument"`
-		} `yaml:"Properties"`
-	} `yaml:"Resources"`
+				Statement []boundaryStatement `json:"Statement"`
+			} `json:"PolicyDocument"`
+		} `json:"Properties"`
+	} `json:"Resources"`
 }
 
 func boundaryStatements(t *testing.T, tier environment.Tier, broughtKey string) []boundaryStatement {
 	t.Helper()
 	var tmpl boundaryTemplate
-	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, tier, broughtKey)), &tmpl); err != nil {
-		t.Fatalf("template is not valid YAML: %v", err)
+	if err := json.Unmarshal([]byte(coreBody(defaultNamespace, tier, broughtKey)), &tmpl); err != nil {
+		t.Fatalf("template is not valid JSON: %v", err)
 	}
 	boundary, ok := tmpl.Resources["AppBoundary"]
 	if !ok {
@@ -51,8 +51,8 @@ func boundaryStatements(t *testing.T, tier environment.Tier, broughtKey string) 
 
 func TestTheAppBoundaryKeepsTheDescriptionItWasCreatedWith(t *testing.T) {
 	var tmpl boundaryTemplate
-	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, environment.TierPreview, "")), &tmpl); err != nil {
-		t.Fatalf("template is not valid YAML: %v", err)
+	if err := json.Unmarshal([]byte(coreBody(defaultNamespace, environment.TierPreview, "")), &tmpl); err != nil {
+		t.Fatalf("template is not valid JSON: %v", err)
 	}
 	want := "Permissions boundary for the roles Ocel creates for apps in the preview class."
 	if got := tmpl.Resources["AppBoundary"].Properties.Description; got != want {
@@ -67,7 +67,7 @@ func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsTierOwns(t 
 				if st.Effect != "Allow" {
 					t.Errorf("statement Effect = %q, want Allow", st.Effect)
 				}
-				for _, action := range yamlStrings(st.Action) {
+				for _, action := range templateStrings(st.Action) {
 					service, _, _ := strings.Cut(action, ":")
 					switch service {
 					case "ssm":
@@ -81,13 +81,7 @@ func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsTierOwns(t 
 							t.Errorf("%s is admitted on %q; the alias Ocel put on the key it made is the fence, and no key ARN is known before that stack is provisioned", action, st.Resource)
 						}
 					case "secretsmanager":
-						if st.Resource != appSecretARN {
-							t.Errorf("%s is admitted on %q, want the RDS-managed master secrets alone", action, st.Resource)
-						}
-						like, _ := st.Condition["StringLike"].(map[string]any)
-						if got := like["aws:ResourceTag/"+managedSecretClusterTagKey]; got != appClusterARN {
-							t.Errorf("%s is admitted under %v, want it pinned to a cluster in the app scope through the tag RDS stamps on the secret", action, st.Condition)
-						}
+						t.Errorf("the boundary admits %s on %q; an app signs in to its database with an IAM token, and no role made under the boundary may read a cluster's master secret", action, st.Resource)
 					}
 				}
 			}
@@ -100,7 +94,7 @@ func TestTheAppBoundaryAdmitsABroughtKeyByItsARNAndPutsNoAliasOnIt(t *testing.T)
 		t.Run(string(tier), func(t *testing.T) {
 			var keyed []boundaryStatement
 			for _, st := range boundaryStatements(t, tier, broughtKeyARN) {
-				if slices.ContainsFunc(yamlStrings(st.Action), func(action string) bool { return strings.HasPrefix(action, "kms:") }) {
+				if slices.ContainsFunc(templateStrings(st.Action), func(action string) bool { return strings.HasPrefix(action, "kms:") }) {
 					keyed = append(keyed, st)
 				}
 			}
@@ -122,7 +116,7 @@ func TestTheAppBoundaryStillAdmitsWhatADeployGrantsARole(t *testing.T) {
 		t.Run(string(tier), func(t *testing.T) {
 			var admitted []string
 			for _, st := range boundaryStatements(t, tier, "") {
-				admitted = append(admitted, yamlStrings(st.Action)...)
+				admitted = append(admitted, templateStrings(st.Action)...)
 			}
 			for _, action := range []string{
 				"kms:Decrypt",
@@ -130,7 +124,7 @@ func TestTheAppBoundaryStillAdmitsWhatADeployGrantsARole(t *testing.T) {
 				"s3:GetObject",
 				"s3:PutObject",
 				"lambda:InvokeFunctionUrl",
-				"secretsmanager:GetSecretValue",
+				"rds-db:connect",
 				"ecr:BatchGetImage",
 				"appsync:EventConnect",
 				"appsync:EventPublish",
@@ -149,7 +143,7 @@ func TestTheAppBoundaryAdmitsTheChannelsABastionTaskOpensToSSM(t *testing.T) {
 		t.Run(string(tier), func(t *testing.T) {
 			var admitted []string
 			for _, st := range boundaryStatements(t, tier, "") {
-				admitted = append(admitted, yamlStrings(st.Action)...)
+				admitted = append(admitted, templateStrings(st.Action)...)
 			}
 			for _, action := range []string{
 				"ssmmessages:CreateControlChannel",
@@ -170,7 +164,7 @@ func TestTheAppBoundaryLetsAnAppRoleStartOnlyTheWorkerServicesOfItsTiersClusterT
 		t.Run(string(tier), func(t *testing.T) {
 			var waking []boundaryStatement
 			for _, st := range boundaryStatements(t, tier, "") {
-				for _, action := range yamlStrings(st.Action) {
+				for _, action := range templateStrings(st.Action) {
 					if service, _, _ := strings.Cut(action, ":"); service == "ecs" {
 						waking = append(waking, st)
 						break
@@ -181,10 +175,10 @@ func TestTheAppBoundaryLetsAnAppRoleStartOnlyTheWorkerServicesOfItsTiersClusterT
 				t.Fatalf("the boundary admits ecs in %d statements, want exactly one scoped to worker services", len(waking))
 			}
 			st := waking[0]
-			if got := yamlStrings(st.Action); !slices.Equal(got, []string{"ecs:DescribeServices", "ecs:UpdateService"}) {
+			if got := templateStrings(st.Action); !slices.Equal(got, []string{"ecs:DescribeServices", "ecs:UpdateService"}) {
 				t.Errorf("ecs actions %v, want reading a service and setting its task count and nothing else", got)
 			}
-			if want := "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(tier) + "/" + appScopePrefix + "*"; st.Resource != want {
+			if want := "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(tier) + "/" + appScopePrefix + "*"; string(st.Resource) != want {
 				t.Errorf("ecs is admitted on %q, want %q: this tier's cluster and the app scope alone", st.Resource, want)
 			}
 			equals, _ := st.Condition["StringEquals"].(map[string]any)

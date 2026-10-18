@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
+
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -22,10 +24,10 @@ import (
 )
 
 type storeSource struct {
-	reader   variablestore.EnvironmentReader
-	secrets  SecretsAPI
-	cells    []variablestore.Cell
-	bindings []live.Binding
+	reader    variablestore.EnvironmentReader
+	passwords passwordSources
+	cells     []variablestore.Cell
+	bindings  []live.Binding
 
 	mu       sync.Mutex
 	reported map[string]int64
@@ -44,7 +46,7 @@ func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 		fmt.Fprintln(os.Stderr, "ocel: "+lag)
 	}
 	values := live.MergeBindings(resolved, f.bindings, records)
-	if err := currentPasswords(ctx, f.secrets, f.bindings, records, values); err != nil {
+	if err := currentPasswords(ctx, f.passwords, f.bindings, records, values); err != nil {
 		return nil, err
 	}
 	return values, nil
@@ -136,7 +138,12 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 			Scope:       variablestore.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,
 		},
-		secrets:  secretsmanager.NewFromConfig(cfg),
+		passwords: passwordSources{
+			secrets: secretsmanager.NewFromConfig(cfg),
+			mintToken: func(ctx context.Context, endpoint, username string) (string, error) {
+				return auth.BuildAuthToken(ctx, endpoint, cfg.Region, username, cfg.Credentials)
+			},
+		},
 		cells:    manifestCells(manifest),
 		bindings: manifest.Bindings,
 	}, live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil), nil

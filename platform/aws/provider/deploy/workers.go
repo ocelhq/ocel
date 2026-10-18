@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
 const (
@@ -46,7 +47,7 @@ type workersWork struct {
 	artifact artifactRef
 	env      map[string]string
 	role     executionRole
-	network  *functionNetwork
+	network  *functionnetwork.Network
 	layer    string
 	kms      string
 	region   string
@@ -115,7 +116,7 @@ func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec,
 	}
 	ref := workersRef(spec.Ref)
 	if work.network != nil {
-		if err := r.recordFunctionNetworkConsumer(ctx, ref); err != nil {
+		if err := r.functionNetwork.RecordConsumer(ctx, ref); err != nil {
 			return nil, err
 		}
 	}
@@ -131,7 +132,7 @@ func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec,
 		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
 	}
 	if work.network == nil {
-		if err := r.releaseFunctionNetwork(ctx, r.cfg.KeyValues, ref, progress); err != nil {
+		if err := r.functionNetwork.Release(ctx, r.cfg.KeyValues, ref, progress); err != nil {
 			return nil, err
 		}
 	}
@@ -183,14 +184,14 @@ func (r *release) destroyWorkersStack(ctx context.Context, ref provider.StackRef
 		return fmt.Errorf("take down the workers of %s: %w", ref.Name.App, err)
 	}
 	if ref.Name.HoldsContainerWorkers() {
-		if err := r.releaseContainerInfra(ctx, r.cfg.KeyValues, ref, progress); err != nil {
+		if err := r.containers.Release(ctx, r.cfg.KeyValues, ref, progress); err != nil {
 			return err
 		}
 	}
 	if err := records.Forget(ctx, r.cfg.KeyValues, workersAt(ref)); err != nil {
 		return err
 	}
-	return r.releaseFunctionNetwork(ctx, r.cfg.KeyValues, ref, progress)
+	return r.functionNetwork.Release(ctx, r.cfg.KeyValues, ref, progress)
 }
 
 func (r *release) previewWorkers(ctx context.Context, spec provider.StackSpec, work *appWork, progress progress.Log) ([]provider.ChangeGroup, error) {
@@ -484,7 +485,7 @@ func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerS
 		Tags:          component.Tags(at.Kind, "", args.Tags),
 		Architectures: pulumi.StringArray{pulumi.String(args.Arch)},
 		Layers:        runtimeLayerInput(w.layer),
-		VpcConfig:     args.Network.vpcConfig(),
+		VpcConfig:     args.Network.VPCConfig(),
 	})
 	if err != nil {
 		return nil, err
@@ -527,4 +528,10 @@ func eventConcurrency(consumer, worker int) int {
 		return 0
 	}
 	return min(max(limit, minEventConcurrency), maxEventConcurrency)
+}
+
+func say(progress progress.Log, line string) {
+	if progress != nil {
+		progress.Say(line)
+	}
 }

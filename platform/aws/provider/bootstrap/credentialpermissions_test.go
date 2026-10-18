@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -73,6 +75,7 @@ var actionsAWSGivesNoScopingKey = []string{
 	"cloudfront:UpdateOriginAccessControl",
 	"cloudfront:UpdateResponseHeadersPolicy",
 	"ecs:DeregisterTaskDefinition",
+	"rds-db:connect",
 }
 
 var bootstrapOnlyActions = []string{
@@ -1437,7 +1440,7 @@ func TestEveryCredentialReachesOnlyTheStateAndVariablesOfItsOwnTier(t *testing.T
 
 func TestEveryBucketAndTableABootstrapStackMakesIsOneTheCredentialsName(t *testing.T) {
 	for _, tier := range bothTiers {
-		templates := map[string]string{"core": coreStackTemplate(defaultNamespace, tier, "")}
+		templates := map[string]string{"core": coreBody(defaultNamespace, tier, "")}
 		for _, f := range partRegistry {
 			templates[f.name] = partTemplate(f.name, tier)
 		}
@@ -1462,7 +1465,7 @@ func TestEveryRoleABootstrapStackGeneratesIsOneOnlyItsOwnTiersCredentialMayPass(
 		sibling := tier.Sibling()
 		ownDoc, _ := renderedCredentialsOf(t, tier)
 		siblingDoc, _ := renderedCredentialsOf(t, sibling)
-		templates := map[string]string{"core": coreStackTemplate(defaultNamespace, tier, "")}
+		templates := map[string]string{"core": coreBody(defaultNamespace, tier, "")}
 		for _, f := range partRegistry {
 			templates[f.stackName(defaultNamespace, tier)] = partTemplate(f.name, tier)
 		}
@@ -2199,6 +2202,29 @@ func TestTheDeployCredentialRaisesAndRemovesBacklogAlarmsOnlyUnderTheAppScope(t 
 	for g := range grants {
 		if g.action == "cloudwatch:PutMetricAlarm" && g.resource != appAlarmARN && g.resource != scalingAlarmARN {
 			t.Errorf("the deploy credential grants cloudwatch:PutMetricAlarm on %s, want only the alarms Ocel names and the ones target tracking makes", g.resource)
+		}
+	}
+}
+
+func TestTheDeployCredentialCreatesTheAppRoleThroughTheDataAPIAndAnOperatorSignsInAsIt(t *testing.T) {
+	t.Parallel()
+
+	for name, document := range bothCredentials(t) {
+		grants := grantsOf(t, document)
+		var execute, connect []string
+		for g := range grants {
+			switch g.action {
+			case "rds-data:ExecuteStatement":
+				execute = append(execute, g.resource)
+			case "rds-db:connect":
+				connect = append(connect, g.resource)
+			}
+		}
+		if !slices.Equal(execute, []string{appClusterARN}) {
+			t.Errorf("%s grants rds-data:ExecuteStatement on %v, want the clusters in the app scope alone: the deploy creates each cluster's app role through the Data API", name, execute)
+		}
+		if want := "arn:aws:rds-db:*:*:dbuser:*/" + postgres.AppRole; !slices.Equal(connect, []string{want}) {
+			t.Errorf("%s grants rds-db:connect on %v, want %s alone: a port forward signs in as the app role, never as the master user", name, connect, want)
 		}
 	}
 }

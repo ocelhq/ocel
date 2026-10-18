@@ -401,7 +401,11 @@ func TestTheCodeTemplateOpensNothingButTheBucket(t *testing.T) {
 	var read struct {
 		Resources map[string]json.RawMessage `json:"Resources"`
 	}
-	if err := json.Unmarshal([]byte(codeTemplate()), &read); err != nil {
+	body, err := codeTemplate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(body), &read); err != nil {
 		t.Fatalf("the connector code template is not a template CloudFormation could read: %v", err)
 	}
 	if len(read.Resources) != 1 || read.Resources["CodeBucket"] == nil {

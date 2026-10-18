@@ -12,11 +12,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
-	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
 type removablePart struct {
@@ -48,14 +49,18 @@ func (p *Provider) removableParts() []removablePart {
 	}
 	return append(removable,
 		removablePart{
-			Part:   provider.Part{Name: deploy.ContainersPart, Summary: deploy.ContainersSummary},
-			plan:   p.planContainersRemoval,
-			remove: p.stacks.RemoveContainerInfrastructure,
+			Part: provider.Part{Name: containers.Part, Summary: containers.Summary},
+			plan: p.planContainersRemoval,
+			remove: func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+				return p.stacks.Containers().Remove(ctx, tier, progress)
+			},
 		},
 		removablePart{
-			Part:   provider.Part{Name: deploy.FunctionNetworkPart, Summary: deploy.FunctionNetworkSummary},
-			plan:   p.planFunctionNetworkRemoval,
-			remove: p.stacks.RemoveFunctionNetwork,
+			Part: provider.Part{Name: functionnetwork.Part, Summary: functionnetwork.Summary},
+			plan: p.planFunctionNetworkRemoval,
+			remove: func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+				return p.stacks.FunctionNetwork().Remove(ctx, tier, progress)
+			},
 		},
 		removablePart{
 			Part:   provider.Part{Name: bastion.Part, Summary: bastion.Summary},
@@ -144,23 +149,23 @@ func addedPartDeletion(name, why string, recorded stackrecords.BootstrapPart) *p
 }
 
 func (p *Provider) planContainersRemoval(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
-	part, present, err := deploy.ReadContainerInfrastructurePart(ctx, p.KeyValues(), p.aws.Region, tier)
+	part, present, err := containers.ReadPart(ctx, p.KeyValues(), p.aws.Region, tier)
 	if err != nil || !present {
 		return nil, err
 	}
 	if len(part.UsedBy) > 0 {
-		return nil, deploy.RefuseContainerInfrastructureInUse(tier, part.UsedBy)
+		return nil, containers.RefuseInUse(tier, part.UsedBy)
 	}
 	return partDeletion(part.Name, "this run removes it; the next container deploy adds it again", part.Resources), nil
 }
 
 func (p *Provider) planFunctionNetworkRemoval(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
-	part, present, err := deploy.ReadFunctionNetworkPart(ctx, p.KeyValues(), p.aws.Region, tier)
+	part, present, err := functionnetwork.ReadPart(ctx, p.KeyValues(), p.aws.Region, tier)
 	if err != nil || !present {
 		return nil, err
 	}
 	if len(part.UsedBy) > 0 {
-		return nil, deploy.RefuseFunctionNetworkInUse(tier, part.UsedBy)
+		return nil, functionnetwork.RefuseInUse(tier, part.UsedBy)
 	}
 	return partDeletion(part.Name, "this run removes it; the next deploy of a serverless app that reaches a postgres or kv Ocel provisions adds it again", part.Resources), nil
 }

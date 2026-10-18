@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -19,7 +21,12 @@ type SecretsAPI interface {
 	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 }
 
-func currentPasswords(ctx context.Context, secrets SecretsAPI, bindings []live.Binding, records []variablestore.StoredBinding, values map[string]string) error {
+type passwordSources struct {
+	secrets   SecretsAPI
+	mintToken func(ctx context.Context, endpoint, username string) (string, error)
+}
+
+func currentPasswords(ctx context.Context, sources passwordSources, bindings []live.Binding, records []variablestore.StoredBinding, values map[string]string) error {
 	for i, record := range records {
 		l := bindings[i]
 		if l.Type != bindingsv1.BindingType_BINDING_TYPE_POSTGRES {
@@ -29,13 +36,12 @@ func currentPasswords(ctx context.Context, secrets SecretsAPI, bindings []live.B
 		if err := protojson.Unmarshal(record.Value, published); err != nil || published.GetBinding().GetPostgres() == nil {
 			continue
 		}
-		secretARN := provider.PublishedBindingOf(published).PasswordSecret()
-		if secretARN == "" {
-			continue
-		}
-		password, err := readPassword(ctx, secrets, secretARN)
+		password, err := currentPassword(ctx, sources, published)
 		if err != nil {
 			return fmt.Errorf("read the current password of %s: %w", l.Name, err)
+		}
+		if password == "" {
+			continue
 		}
 		binding := published.GetBinding()
 		binding.GetPostgres().Password = password
@@ -46,6 +52,21 @@ func currentPasswords(ctx context.Context, secrets SecretsAPI, bindings []live.B
 		values[l.Key] = string(encoded)
 	}
 	return nil
+}
+
+func currentPassword(ctx context.Context, sources passwordSources, published *variablestorev1.PublishedBinding) (string, error) {
+	binding := provider.PublishedBindingOf(published)
+	if binding.HasIAMAuthentication() {
+		postgres := published.GetBinding().GetPostgres()
+		if sources.mintToken == nil {
+			return "", fmt.Errorf("this runtime mints no IAM authentication token")
+		}
+		return sources.mintToken(ctx, net.JoinHostPort(postgres.GetHost(), strconv.Itoa(int(postgres.GetPort()))), postgres.GetUsername())
+	}
+	if secretARN := binding.PasswordSecret(); secretARN != "" {
+		return readPassword(ctx, sources.secrets, secretARN)
+	}
+	return "", nil
 }
 
 func readPassword(ctx context.Context, secrets SecretsAPI, secretARN string) (string, error) {

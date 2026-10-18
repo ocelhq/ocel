@@ -1,6 +1,9 @@
 package bootstrap
 
 import (
+	"bytes"
+	"encoding/json"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 )
@@ -31,6 +34,42 @@ func everyPart() PartSet {
 		set[name] = true
 	}
 	return set
+}
+
+func declaredResources(body string) []templateResource {
+	var tmpl struct {
+		Resources json.RawMessage `json:"Resources"`
+	}
+	if err := json.Unmarshal([]byte(body), &tmpl); err != nil || len(tmpl.Resources) == 0 {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(tmpl.Resources))
+	if _, err := decoder.Token(); err != nil {
+		return nil
+	}
+	var out []templateResource
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return out
+		}
+		var resource struct {
+			Type string `json:"Type"`
+		}
+		if err := decoder.Decode(&resource); err != nil {
+			return out
+		}
+		out = append(out, templateResource{id: key.(string), kind: resource.Type})
+	}
+	return out
+}
+
+func coreBody(ns Namespace, tier environment.Tier, broughtKey string) string {
+	body, err := coreStackTemplate(ns, tier, broughtKey).Body()
+	if err != nil {
+		panic(err)
+	}
+	return body
 }
 
 func partTemplate(name string, tier environment.Tier) string {

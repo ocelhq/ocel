@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
 func functionNetworkStacks(t *testing.T, apps ...string) (*Stacks, *mockedEngine, records.Store) {
@@ -59,7 +61,7 @@ func usingPostgres(t *testing.T, app string) provider.StackSpec {
 }
 
 func networkStackName() string {
-	return functionNetworkRef(environment.TierProduction).Name.String()
+	return functionnetwork.StackRef(environment.TierProduction).Name.String()
 }
 
 func TestTheFirstAppThatReachesAPostgresProvisionsTheFunctionNetworkAndTheLastTakesItDown(t *testing.T) {
@@ -86,7 +88,7 @@ func TestTheFirstAppThatReachesAPostgresProvisionsTheFunctionNetworkAndTheLastTa
 	if ran := engine.stacks(); len(ran) != 3 {
 		t.Fatalf("the second deploy ran %v, want the network reused rather than provisioned again", ran)
 	}
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, FunctionNetworkPart)
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, functionnetwork.Part)
 	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != web.Ref.Project || len(recorded.Resources) == 0 {
 		t.Errorf("function-network record = %+v, %v, %v, want it ready, added by %s, with its resources", recorded, present, err, web.Ref.Project)
 	}
@@ -104,10 +106,10 @@ func TestTheFirstAppThatReachesAPostgresProvisionsTheFunctionNetworkAndTheLastTa
 	if len(torn) != 3 || torn[2] != networkStackName() {
 		t.Fatalf("destroying the last app tore down %v, want the network to go after the app whose functions held its interfaces", torn)
 	}
-	if _, present, err := stackrecords.Read(ctx, store, environment.TierProduction, FunctionNetworkSlug, functionNetworkRef(environment.TierProduction).Name); err != nil || present {
+	if _, present, err := stackrecords.Read(ctx, store, environment.TierProduction, functionnetwork.Slug, functionnetwork.StackRef(environment.TierProduction).Name); err != nil || present {
 		t.Errorf("the function network is still recorded (present %v, err %v) after its last consumer left", present, err)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, FunctionNetworkPart); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, functionnetwork.Part); err != nil || present {
 		t.Errorf("function-network record present %v (%v) after its last consumer left, want it forgotten", present, err)
 	}
 }
@@ -183,11 +185,11 @@ func TestAnAppIsRefusedWhileTheFunctionNetworkIsGoingDown(t *testing.T) {
 
 	ctx := context.Background()
 	stacks, _, store := functionNetworkStacks(t, "web")
-	leased, err := records.ReadOrEmpty(ctx, store, functionNetworkShare.leaseAt(environment.TierProduction))
+	leased, err := records.ReadOrEmpty(ctx, store, functionnetwork.Shared.LeaseAt(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := functionNetworkShare.writeLease(ctx, store, leased, lease{Destroying: true, DestroyingSince: time.Now().UTC()}); err != nil {
+	if err := functionnetwork.Shared.WriteLease(ctx, store, leased, sharedstack.Lease{Destroying: true, DestroyingSince: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -197,7 +199,7 @@ func TestAnAppIsRefusedWhileTheFunctionNetworkIsGoingDown(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Provision(web) = %v, want the busy refusal a network on its way down earns", err)
 	}
-	consumers := functionNetworkShare.consumersPrefix(environment.TierProduction)
+	consumers := functionnetwork.Shared.ConsumersPrefix(environment.TierProduction)
 	remaining, err := store.List(ctx, consumers.Partition, consumers.Path...)
 	if err != nil {
 		t.Fatal(err)
@@ -373,21 +375,21 @@ func TestAFailedTakedownOfTheFunctionNetworkLeavesItsPartForTheRemovalItNames(t 
 	engine.downErr = failingOnce(networkStackName())
 	web.App.Grants = nil
 	_, err := stacks.Provision(ctx, web, progress.Discard())
-	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap production --remove "+FunctionNetworkPart) {
+	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap production --remove "+functionnetwork.Part) {
 		t.Fatalf("Provision(web) = %v, want the failed takedown reported with the command that takes it down again", err)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, FunctionNetworkPart); err != nil || !present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, functionnetwork.Part); err != nil || !present {
 		t.Fatalf("function-network record present %v (%v) after a failed takedown, want it kept: its NAT gateway still bills", present, err)
 	}
 
-	if err := stacks.RemoveFunctionNetwork(ctx, environment.TierProduction, progress.Discard()); err != nil {
-		t.Fatalf("RemoveFunctionNetwork() after the failed takedown = %v", err)
+	if err := stacks.functionNetwork.Remove(ctx, environment.TierProduction, progress.Discard()); err != nil {
+		t.Fatalf("functionnetwork.Remove() after the failed takedown = %v", err)
 	}
 
 	if torn := engine.torn(); !slices.Equal(torn, []string{networkStackName()}) {
 		t.Errorf("torn down = %v, want the function network", torn)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, FunctionNetworkPart); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, functionnetwork.Part); err != nil || present {
 		t.Errorf("function-network record present %v (%v) after its removal, want it forgotten", present, err)
 	}
 }
@@ -402,11 +404,11 @@ func TestRemovingTheFunctionNetworkIsRefusedWhileAnAppRunsInIt(t *testing.T) {
 		t.Fatalf("Provision(web) = %v", err)
 	}
 
-	err := stacks.RemoveFunctionNetwork(ctx, environment.TierProduction, progress.Discard())
+	err := stacks.functionNetwork.Remove(ctx, environment.TierProduction, progress.Discard())
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, web.Ref.Project) {
-		t.Fatalf("RemoveFunctionNetwork() while %s runs in it = %v, want a refusal naming it", web.Ref.Project, err)
+		t.Fatalf("functionnetwork.Remove() while %s runs in it = %v, want a refusal naming it", web.Ref.Project, err)
 	}
 	if torn := engine.torn(); len(torn) != 0 {
 		t.Errorf("a refused removal tore down %v, want nothing", torn)
@@ -429,7 +431,7 @@ func TestAnAppWhoseFunctionNetworkFailsLeavesNoFunctionNetworkPartCreating(t *te
 		t.Fatal("Provision(web) succeeded, want the failed function network to fail it")
 	}
 
-	if recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, FunctionNetworkPart); err != nil || present {
+	if recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, functionnetwork.Part); err != nil || present {
 		t.Errorf("function-network record = %+v, %v, %v, want no claim left creating", recorded, present, err)
 	}
 }
@@ -466,20 +468,20 @@ func TestTheFunctionNetworkIsDescribedAsAPartWithTheProjectsInItAndTheIdleCostOf
 	ctx := context.Background()
 	stacks, _, store := functionNetworkStacks(t, "web")
 	tier := environment.TierProduction
-	if _, present, err := ReadFunctionNetworkPart(ctx, store, "us-east-1", tier); err != nil || present {
-		t.Fatalf("ReadFunctionNetworkPart() before any app reached a postgres = %v, %v, want none", present, err)
+	if _, present, err := functionnetwork.ReadPart(ctx, store, "us-east-1", tier); err != nil || present {
+		t.Fatalf("functionnetwork.ReadPart() before any app reached a postgres = %v, %v, want none", present, err)
 	}
 	web := usingPostgresWithWorkers(t)
 	if _, err := stacks.Provision(ctx, web, progress.Discard()); err != nil {
 		t.Fatalf("Provision(web) = %v", err)
 	}
 
-	part, present, err := ReadFunctionNetworkPart(ctx, store, "us-east-1", tier)
+	part, present, err := functionnetwork.ReadPart(ctx, store, "us-east-1", tier)
 	if err != nil || !present {
-		t.Fatalf("ReadFunctionNetworkPart() = %v, %v, want the function network", present, err)
+		t.Fatalf("functionnetwork.ReadPart() = %v, %v, want the function network", present, err)
 	}
-	if part.Name != FunctionNetworkPart || !slices.Equal(part.UsedBy, []string{web.Ref.Project}) || !part.RetiresWithLastUser {
-		t.Errorf("function network = %+v, want it named %s, used by %s once for its app and workers, and retiring with its last user", part, FunctionNetworkPart, web.Ref.Project)
+	if part.Name != functionnetwork.Part || !slices.Equal(part.UsedBy, []string{web.Ref.Project}) || !part.RetiresWithLastUser {
+		t.Errorf("function network = %+v, want it named %s, used by %s once for its app and workers, and retiring with its last user", part, functionnetwork.Part, web.Ref.Project)
 	}
 	if !slices.ContainsFunc(part.Resources, func(resource provider.PartResource) bool { return resource.Kind == "AWS::EC2::NatGateway" }) {
 		t.Errorf("function network resources = %v, want its NAT gateway", part.Resources)

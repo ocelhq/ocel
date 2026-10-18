@@ -11,7 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
 func (p *Provider) forget() {
@@ -80,14 +81,14 @@ func (s forgetting) DescribeParts(ctx context.Context, described provider.Bootst
 	if err != nil || !described.Present {
 		return parts, err
 	}
-	containers, present, err := deploy.ReadContainerInfrastructurePart(ctx, s.keyValues, s.region, described.Tier)
+	infra, present, err := containers.ReadPart(ctx, s.keyValues, s.region, described.Tier)
 	if err != nil {
 		return nil, err
 	}
 	if present {
-		parts = append(parts, containers)
+		parts = append(parts, infra)
 	}
-	network, present, err := deploy.ReadFunctionNetworkPart(ctx, s.keyValues, s.region, described.Tier)
+	network, present, err := functionnetwork.ReadPart(ctx, s.keyValues, s.region, described.Tier)
 	if err != nil {
 		return nil, err
 	}

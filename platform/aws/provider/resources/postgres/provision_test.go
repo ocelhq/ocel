@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -21,7 +22,7 @@ func TestPostgresRefusesAClusterWithNoManagedSecret(t *testing.T) {
 	}
 
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		return register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}), testNetwork)
+		return register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
 	}, pulumi.WithMocks("shop", "prod--infra", componenttest.NewRecorder(noSecret)))
 
 	if err == nil {
@@ -34,7 +35,7 @@ func TestPostgresRefusesAClusterWithNoManagedSecret(t *testing.T) {
 
 func TestPostgresComponentTags(t *testing.T) {
 	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
-		err := register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}), testNetwork)
+		err := register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
 		return err
 	}, masterUserSecret)
 
@@ -57,7 +58,7 @@ func TestPostgresComponentTags(t *testing.T) {
 func TestPostgresDescriptionsFitAWSLimits(t *testing.T) {
 	long := strings.Repeat("storefront-", 40)
 	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
-		return register(ctx, long, "prod", "db--main", translate(&provider.PostgresSpec{}), testNetwork)
+		return register(ctx, long, "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
 	}, masterUserSecret)
 
 	sg := rec.InputsOf(t, "aws:ec2/securityGroup:SecurityGroup", "db-main-security-group")
@@ -178,19 +179,13 @@ func TestTranslatePostgres(t *testing.T) {
 	t.Run("fixed serverless v2 defaults", func(t *testing.T) {
 		t.Parallel()
 
-		got := translate(&provider.PostgresSpec{Version: "15"})
+		got := translate(&provider.PostgresSpec{Version: "15"}, environment.TierPreview)
 
 		if got.Engine != "aurora-postgresql" {
 			t.Errorf("Engine = %q, want aurora-postgresql", got.Engine)
 		}
 		if got.EngineMode != "provisioned" {
 			t.Errorf("EngineMode = %q, want provisioned (serverless v2 runs provisioned + scaling config)", got.EngineMode)
-		}
-		if got.MinCapacity != 0 {
-			t.Errorf("MinCapacity = %v, want 0 (scale to zero)", got.MinCapacity)
-		}
-		if got.MaxCapacity != 2 {
-			t.Errorf("MaxCapacity = %v, want 2", got.MaxCapacity)
 		}
 		if got.InstanceClass != "db.serverless" {
 			t.Errorf("InstanceClass = %q, want db.serverless", got.InstanceClass)
@@ -218,10 +213,46 @@ func TestTranslatePostgres(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := translate(&provider.PostgresSpec{Version: tc.version})
+			got := translate(&provider.PostgresSpec{Version: tc.version}, environment.TierProduction)
 			if got.EngineVersion != tc.want {
 				t.Errorf("EngineVersion = %q, want %q", got.EngineVersion, tc.want)
 			}
 		})
+	}
+}
+
+func TestAProductionDatabaseStaysAwakeAndScalesFurtherWhileAPreviewPausesWhenIdle(t *testing.T) {
+	t.Parallel()
+
+	production := translate(&provider.PostgresSpec{}, environment.TierProduction)
+	if production.MinCapacity != 0.5 || production.MaxCapacity != 8 {
+		t.Errorf("production capacity = %v-%v ACU, want 0.5-8: a production database never pauses, so its first query after a quiet spell is not a resume, and it grows past what a preview needs", production.MinCapacity, production.MaxCapacity)
+	}
+	preview := translate(&provider.PostgresSpec{}, environment.TierPreview)
+	if preview.MinCapacity != 0 || preview.MaxCapacity != 2 {
+		t.Errorf("preview capacity = %v-%v ACU, want 0-2: a preview pauses when idle and stays small", preview.MinCapacity, preview.MaxCapacity)
+	}
+}
+
+func TestAClusterLetsItsAppRoleSignInByIAMAndTheDeployCreateItThroughTheDataAPI(t *testing.T) {
+	t.Parallel()
+
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		return register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
+	}, masterUserSecret)
+
+	cluster := rec.InputsOf(t, component.TokenRDSCluster, "db-main")
+	if !cluster["iamDatabaseAuthenticationEnabled"].BoolValue() {
+		t.Error("iamDatabaseAuthenticationEnabled = false, want true: the app connects with a token its role mints, never a password")
+	}
+	if !cluster["enableHttpEndpoint"].BoolValue() {
+		t.Error("enableHttpEndpoint = false, want true: the deploy creates the app role through the Data API, from outside the VPC")
+	}
+	role := rec.InputsOf(t, RoleToken, "db-main-app-role")
+	if role["role"].StringValue() != AppRole || role["database"].StringValue() != postgresDatabaseName {
+		t.Errorf("app role inputs = %v, want %s on the %s database", role, AppRole, postgresDatabaseName)
+	}
+	if got := role["secret"].StringValue(); got != "arn:aws:secretsmanager:eu-west-1:111122223333:secret:db-main" {
+		t.Errorf("app role secret = %q, want the cluster's managed master secret: only the deploy signs in as master", got)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
 func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedByEveryOneAfter(t *testing.T) {
@@ -27,8 +28,8 @@ func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedB
 	ctx := context.Background()
 	tier := environment.TierProduction
 
-	if _, present, err := ReadContainerInfrastructurePart(ctx, cfg.KeyValues, "us-east-1", tier); err != nil || present {
-		t.Fatalf("ReadContainerInfrastructurePart() before any container deploy = %v, %v, want none", present, err)
+	if _, present, err := containers.ReadPart(ctx, cfg.KeyValues, "us-east-1", tier); err != nil || present {
+		t.Fatalf("containers.ReadPart() before any container deploy = %v, %v, want none", present, err)
 	}
 	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
@@ -39,9 +40,9 @@ func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedB
 		t.Fatalf("Provision(blog) = %v", err)
 	}
 
-	part, present, err := ReadContainerInfrastructurePart(ctx, cfg.KeyValues, "us-east-1", tier)
+	part, present, err := containers.ReadPart(ctx, cfg.KeyValues, "us-east-1", tier)
 	if err != nil || !present {
-		t.Fatalf("ReadContainerInfrastructurePart() = %v, %v, want the container infrastructure", present, err)
+		t.Fatalf("containers.ReadPart() = %v, %v, want the container infrastructure", present, err)
 	}
 	if !slices.Equal(part.UsedBy, []string{"blog", spec.Ref.Project}) {
 		t.Errorf("containers used by %v, want both container projects", part.UsedBy)
@@ -49,7 +50,7 @@ func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedB
 	if len(part.Resources) == 0 || part.Shape == nil || len(part.Shape.Resources) == 0 || !part.RetiresWithLastUser {
 		t.Errorf("containers = %+v, want its resources, the shape that prices them, and it retiring with its last user", part)
 	}
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, ContainersPart)
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, containers.Part)
 	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != spec.Ref.Project {
 		t.Errorf("containers record = %+v, %v, %v, want it ready and added by %s", recorded, present, err, spec.Ref.Project)
 	}
@@ -59,7 +60,7 @@ func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedB
 			t.Fatalf("Destroy(%s) = %v", ref.Project, err)
 		}
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, ContainersPart); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, containers.Part); err != nil || present {
 		t.Errorf("containers record present %v (%v) after its last user left, want it forgotten with the infrastructure", present, err)
 	}
 }
@@ -71,10 +72,10 @@ func TestAnOlderReleasesContainerDeployLeavesTheContainersPartANewerReleaseRecor
 	ctx := context.Background()
 	tier := environment.TierProduction
 	newer := stackrecords.BootstrapPart{WrittenBy: "v2.0.0", AddedBy: "blog"}
-	if _, _, err := stackrecords.ClaimBootstrapPart(ctx, cfg.KeyValues, tier, ContainersPart, newer); err != nil {
+	if _, _, err := stackrecords.ClaimBootstrapPart(ctx, cfg.KeyValues, tier, containers.Part, newer); err != nil {
 		t.Fatal(err)
 	}
-	if err := stackrecords.MarkBootstrapPartReady(ctx, cfg.KeyValues, tier, ContainersPart, newer); err != nil {
+	if err := stackrecords.MarkBootstrapPartReady(ctx, cfg.KeyValues, tier, containers.Part, newer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,7 +83,7 @@ func TestAnOlderReleasesContainerDeployLeavesTheContainersPartANewerReleaseRecor
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 
-	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, ContainersPart)
+	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, containers.Part)
 	if err != nil || recorded.WrittenBy != "v2.0.0" {
 		t.Errorf("containers record written by %q (%v), want the newer release's v2.0.0 kept", recorded.WrittenBy, err)
 	}
@@ -98,7 +99,7 @@ func TestAContainerDeployRecordsTheContainersPartAsWrittenByItsOwnRelease(t *tes
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 
-	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, ContainersPart)
+	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, containers.Part)
 	if err != nil || recorded.WrittenBy != "v1.0.0" {
 		t.Errorf("containers record written by %q (%v), want the deploying release v1.0.0", recorded.WrittenBy, err)
 	}
@@ -109,7 +110,7 @@ func TestAContainerDeployWhoseInfrastructureFailsLeavesNoContainersPartCreating(
 
 	cfg, spec := containerPartSpec(t, "v1.0.0")
 	ctx := context.Background()
-	infra := containerInfraRef(environment.TierProduction).Name.String()
+	infra := containers.StackRef(environment.TierProduction).Name.String()
 	engine := &mockedEngine{outputs: containerPartOutputs(), upErr: func(stack string) error {
 		if stack == infra {
 			return errors.New("the load balancer quota is spent")
@@ -121,7 +122,7 @@ func TestAContainerDeployWhoseInfrastructureFailsLeavesNoContainersPartCreating(
 		t.Fatal("Provision(shop) succeeded, want the failed container infrastructure to fail it")
 	}
 
-	if recorded, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, ContainersPart); err != nil || present {
+	if recorded, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, containers.Part); err != nil || present {
 		t.Errorf("containers record = %+v, %v, %v after its infrastructure failed, want no claim left creating", recorded, present, err)
 	}
 }
@@ -138,25 +139,25 @@ func TestRemovingTheContainersPartIsRefusedWhileAContainerAppRunsInItAndTakesItD
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 
-	err := stacks.RemoveContainerInfrastructure(ctx, tier, progress.Discard())
+	err := stacks.containers.Remove(ctx, tier, progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, spec.Ref.Project) {
-		t.Fatalf("RemoveContainerInfrastructure() while %s runs in it = %v, want a refusal naming it: its service holds the cluster", spec.Ref.Project, err)
+		t.Fatalf("containers.Remove() while %s runs in it = %v, want a refusal naming it: its service holds the cluster", spec.Ref.Project, err)
 	}
 	if torn := engine.torn(); len(torn) != 0 {
 		t.Fatalf("a refused removal tore down %v, want nothing", torn)
 	}
 
-	if err := records.Forget(ctx, cfg.KeyValues, containerShare.consumerAt(spec.Ref)); err != nil {
+	if err := records.Forget(ctx, cfg.KeyValues, containers.Shared.ConsumerAt(spec.Ref)); err != nil {
 		t.Fatal(err)
 	}
-	if err := stacks.RemoveContainerInfrastructure(ctx, tier, progress.Discard()); err != nil {
-		t.Fatalf("RemoveContainerInfrastructure() with no container app left = %v", err)
+	if err := stacks.containers.Remove(ctx, tier, progress.Discard()); err != nil {
+		t.Fatalf("containers.Remove() with no container app left = %v", err)
 	}
-	if torn := engine.torn(); len(torn) != 1 || torn[0] != containerInfraRef(tier).Name.String() {
+	if torn := engine.torn(); len(torn) != 1 || torn[0] != containers.StackRef(tier).Name.String() {
 		t.Errorf("the removal tore down %v, want the container infrastructure stack", torn)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, ContainersPart); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, containers.Part); err != nil || present {
 		t.Errorf("containers record present %v (%v) after its removal, want it forgotten", present, err)
 	}
 }

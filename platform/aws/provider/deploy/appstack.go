@@ -10,6 +10,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
 )
 
 type appFunction struct {
@@ -41,7 +42,7 @@ type appStackFunctions struct {
 	Args      func(appFunction) functionArgs
 	Artifacts map[string]artifactRef
 	Env       map[string]string
-	ISR       *isrConfig
+	ISR       *site.ISR
 	Bytecode  *bytecodeConfig
 	Dispatch  *dispatchHost
 	Guard     *originGuard

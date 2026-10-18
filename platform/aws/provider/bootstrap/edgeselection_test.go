@@ -21,7 +21,7 @@ var everyEdgeKind = []edge.Kind{KindCloudflare, kindCloudFront, kindAPIGateway}
 func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		t.Run(string(tier), func(t *testing.T) {
-			want := cfn.TemplateDigest(coreStackTemplate(defaultNamespace, tier, ""))
+			want := cfn.TemplateDigest(coreBody(defaultNamespace, tier, ""))
 			core, err := defaultNamespace.StackNameFor(tier)
 			if err != nil {
 				t.Fatalf("StackNameFor: %v", err)

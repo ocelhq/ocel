@@ -8,7 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
-	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -71,10 +70,10 @@ func PlanChanges(ctx context.Context, stacks cfn.API, layers LayerAPI, read Read
 		case !ok:
 			planned[i] = group
 		case group.Action == provider.ActionCreate:
-			group.Changes = templateChanges(stack.body, group.Action)
+			group.Changes = templateChanges(stack.template, group.Action)
 			planned[i] = group
 		case group.Action == provider.ActionDelete:
-			plan(func() { planned[i] = planDelete(ctx, stacks, group, stack.body) })
+			plan(func() { planned[i] = planDelete(ctx, stacks, group, stack.template) })
 		case group.Action == provider.ActionUpdate:
 			plan(func() { planned[i] = planUpdate(ctx, stacks, read.ns, read.tier, group, stack, req.Writer) })
 		default:
@@ -132,7 +131,7 @@ func PlanRemove(ctx context.Context, stacks cfn.API, layers LayerTeardownAPI, re
 			return nil, err
 		}
 		if ok {
-			group = noteStranded(planDelete(ctx, stacks, group, stack.body))
+			group = noteStranded(planDelete(ctx, stacks, group, stack.template))
 		}
 		groups = append(groups, group)
 	}
@@ -207,7 +206,8 @@ func noteStranded(group provider.ChangeGroup) provider.ChangeGroup {
 
 func renderGroup(target spec, part string, in partInputs) (partStack, bool, error) {
 	if part == "" {
-		return partStack{body: target.core(coreVariablesKey(in.alongside, in.variablesKey))}, true, nil
+		core, err := target.core(coreVariablesKey(in.alongside, in.variablesKey))
+		return core, true, err
 	}
 	f, ok := partNamed(part)
 	if !ok {
@@ -236,10 +236,10 @@ func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, tier environm
 	return group
 }
 
-func planDelete(ctx context.Context, stacks cfn.API, group provider.ChangeGroup, body string) provider.ChangeGroup {
+func planDelete(ctx context.Context, stacks cfn.API, group provider.ChangeGroup, template cfn.Template) provider.ChangeGroup {
 	provisioned, err := stackResources(ctx, stacks, group.Name)
 	if err != nil {
-		group.Changes = templateChanges(body, provider.ActionDelete)
+		group.Changes = templateChanges(template, provider.ActionDelete)
 		group.Reason = provider.WithDetailUnavailable(group.Reason)
 		return group
 	}
@@ -329,11 +329,10 @@ func replacementReason(change cfntypes.ResourceChange) string {
 	return "this change is not one AWS makes in place"
 }
 
-func templateChanges(body string, action provider.ChangeAction) []provider.Change {
-	resources := templateResources(body)
-	changes := make([]provider.Change, 0, len(resources))
-	for _, resource := range resources {
-		changes = append(changes, provider.Change{Kind: resource.kind, Name: resource.id, Action: action})
+func templateChanges(template cfn.Template, action provider.ChangeAction) []provider.Change {
+	changes := make([]provider.Change, 0, len(template.Resources))
+	for _, resource := range template.Resources {
+		changes = append(changes, provider.Change{Kind: resource.Type, Name: resource.ID, Action: action})
 	}
 	return changes
 }
@@ -341,40 +340,4 @@ func templateChanges(body string, action provider.ChangeAction) []provider.Chang
 type templateResource struct {
 	id   string
 	kind string
-}
-
-func templateResources(body string) []templateResource {
-	resources := templateSection(body, "Resources")
-	if resources == nil {
-		return nil
-	}
-	var out []templateResource
-	for i := 0; i+1 < len(resources.Content); i += 2 {
-		resource := templateResource{id: resources.Content[i].Value}
-		if kind := mappingValue(resources.Content[i+1], "Type"); kind != nil {
-			resource.kind = kind.Value
-		}
-		out = append(out, resource)
-	}
-	return out
-}
-
-func templateSection(body, name string) *yaml.Node {
-	var doc yaml.Node
-	if err := yaml.Unmarshal([]byte(body), &doc); err != nil || len(doc.Content) == 0 {
-		return nil
-	}
-	return mappingValue(doc.Content[0], name)
-}
-
-func mappingValue(node *yaml.Node, key string) *yaml.Node {
-	if node == nil || node.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		if node.Content[i].Value == key {
-			return node.Content[i+1]
-		}
-	}
-	return nil
 }

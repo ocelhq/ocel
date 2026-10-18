@@ -16,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	smithy "github.com/aws/smithy-go"
-	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -168,7 +167,7 @@ func (f *fakeCFN) ListStackResources(_ context.Context, in *cloudformation.ListS
 		return nil, validationError{msg: "Stack with id " + name + " does not exist"}
 	}
 	out := &cloudformation.ListStackResourcesOutput{}
-	for _, resource := range templateResources(body) {
+	for _, resource := range declaredResources(body) {
 		out.StackResourceSummaries = append(out.StackResourceSummaries, cfntypes.StackResourceSummary{
 			LogicalResourceId: aws.String(resource.id),
 			ResourceType:      aws.String(resource.kind),
@@ -192,7 +191,7 @@ func (f *fakeCFN) plan(stackName string, changes ...cfntypes.ResourceChange) {
 	f.planned[stackName] = changes
 }
 
-const behindTemplate = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n"
+const behindTemplate = `{"AWSTemplateFormatVersion": "2010-09-09", "Resources": {}}`
 
 func (f *fakeCFN) fallBehind(stackName string) {
 	f.mu.Lock()
@@ -318,13 +317,13 @@ func (f *fakeCFN) stamped(stackName string, tags []cfntypes.Tag) {
 func declaredUser(template string) (string, bool) {
 	var tmpl struct {
 		Resources map[string]struct {
-			Type       string `yaml:"Type"`
+			Type       string `json:"Type"`
 			Properties struct {
-				UserName string `yaml:"UserName"`
-			} `yaml:"Properties"`
-		} `yaml:"Resources"`
+				UserName string `json:"UserName"`
+			} `json:"Properties"`
+		} `json:"Resources"`
 	}
-	if yaml.Unmarshal([]byte(template), &tmpl) != nil {
+	if json.Unmarshal([]byte(template), &tmpl) != nil {
 		return "", false
 	}
 	for _, r := range tmpl.Resources {
@@ -344,10 +343,10 @@ func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter, ta
 
 	var tmpl struct {
 		Outputs map[string]struct {
-			Value string `yaml:"Value"`
-		} `yaml:"Outputs"`
+			Value templateText `json:"Value"`
+		} `json:"Outputs"`
 	}
-	if err := yaml.Unmarshal([]byte(body), &tmpl); err != nil {
+	if err := json.Unmarshal([]byte(body), &tmpl); err != nil {
 		panic("fake CloudFormation was handed a template it cannot parse: " + err.Error())
 	}
 	out := f.outputs[stackName]
@@ -356,7 +355,7 @@ func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter, ta
 		f.outputs[stackName] = out
 	}
 	for key, o := range tmpl.Outputs {
-		out[key] = syntheticOutput(stackName, key, o.Value)
+		out[key] = syntheticOutput(stackName, key, string(o.Value))
 	}
 }
 
@@ -547,11 +546,11 @@ func hasEdgeUser(t *testing.T, template string) bool {
 	t.Helper()
 	var tmpl struct {
 		Resources map[string]struct {
-			Type string `yaml:"Type"`
-		} `yaml:"Resources"`
+			Type string `json:"Type"`
+		} `json:"Resources"`
 	}
-	if err := yaml.Unmarshal([]byte(template), &tmpl); err != nil {
-		t.Fatalf("provisioned template is not valid YAML: %v", err)
+	if err := json.Unmarshal([]byte(template), &tmpl); err != nil {
+		t.Fatalf("provisioned template is not valid JSON: %v", err)
 	}
 	for _, r := range tmpl.Resources {
 		if r.Type == "AWS::IAM::User" {
@@ -681,7 +680,7 @@ func TestRun(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 		for _, name := range stacks.stacks() {
-			if body := stacks.template(name); strings.Contains(body, "ImportValue") || strings.Contains(body, "Export:") {
+			if body := stacks.template(name); strings.Contains(body, "ImportValue") || strings.Contains(body, `"Export"`) {
 				t.Errorf("%s reaches across stacks with a CloudFormation export", name)
 			}
 		}

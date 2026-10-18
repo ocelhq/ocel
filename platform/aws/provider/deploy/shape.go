@@ -12,7 +12,6 @@ import (
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -20,13 +19,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
-)
-
-const (
-	vendor = "aws"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
 type ShapeScopes struct {
@@ -73,10 +69,10 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 		}
 	}
 	if hasContainers {
-		shape.containerInfra(scopes.Shared, req.Deploy.Tier)
+		tree.AddShaped(scopes.Shared, component.Vendor, region, containers.Shape(req.Deploy.Tier))
 	}
 	if reachesVPCFromFunctions(req) {
-		shape.functionNetwork(scopes.Shared, req.Deploy.Tier)
+		tree.AddShaped(scopes.Shared, component.Vendor, region, functionnetwork.Shape(req.Deploy.Tier))
 	}
 	return nil
 }
@@ -97,11 +93,11 @@ func (s costShape) Add(scope, typ, name string, properties map[string]any, ref c
 		}
 		properties[field] = snakeValue(value)
 	}
-	s.tree.Add(scope, vendor, typ, name, s.region, properties, unknown...)
+	s.tree.Add(scope, component.Vendor, typ, name, s.region, properties, unknown...)
 }
 
 func (s costShape) AddPlain(scope, typ, name string, properties map[string]any) {
-	s.tree.Add(scope, vendor, typ, name, s.region, properties)
+	s.tree.Add(scope, component.Vendor, typ, name, s.region, properties)
 }
 
 func (s costShape) functions(scope, project string, app provider.AppEntry, specs []provider.FunctionSpec) error {
@@ -256,18 +252,6 @@ func (s costShape) container(scope string, app provider.AppEntry) {
 	s.AddPlain(scope, component.TerraformECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }
 
-func (s costShape) containerInfra(scope string, tier environment.Tier) {
-	s.tree.AddShaped(scope, vendor, s.region, ShapeContainerInfrastructure(tier))
-}
-
-func ShapeContainerInfrastructure(tier environment.Tier) []pricing.Shaped {
-	return []pricing.Shaped{
-		{Name: ContainersSlug, Type: component.TerraformECSCluster, Properties: map[string]any{}},
-		{Name: ContainersSlug, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}},
-		{Name: ContainersSlug, Type: component.TerraformLogGroup, Properties: map[string]any{"retention_in_days": containerLogRetentionDays, "name": logevents.NameContainerGroup(tier)}},
-	}
-}
-
 func reachesVPCFromFunctions(req provider.ShapeRequest) bool {
 	serverless := map[string]bool{}
 	for _, app := range req.Deploy.Apps {
@@ -278,28 +262,13 @@ func reachesVPCFromFunctions(req provider.ShapeRequest) bool {
 			continue
 		}
 		provisioned := slices.ContainsFunc(usage.Resources, func(resource provider.Resource) bool {
-			return joinsFunctionNetwork(resource.Type, resource.Binding)
+			return functionnetwork.IsNeededFor(resource.Type, resource.Binding)
 		})
 		if provisioned {
 			return true
 		}
 	}
 	return false
-}
-
-func (s costShape) functionNetwork(scope string, tier environment.Tier) {
-	s.tree.AddShaped(scope, vendor, s.region, ShapeFunctionNetwork(tier))
-}
-
-func ShapeFunctionNetwork(tier environment.Tier) []pricing.Shaped {
-	var shaped []pricing.Shaped
-	for n := range natGateways(tier) {
-		name := FunctionNetworkSlug + "-" + strconv.Itoa(n+1)
-		shaped = append(shaped,
-			pricing.Shaped{Name: name, Type: component.TerraformNATGateway, Properties: map[string]any{}},
-			pricing.Shaped{Name: name, Type: component.TerraformElasticIP, Properties: map[string]any{}})
-	}
-	return shaped
 }
 
 func shapeTransforms(ctx context.Context, pass transform.Pass, registry component.Registry, project string, req provider.ShapeRequest) (shapedPatches, error) {

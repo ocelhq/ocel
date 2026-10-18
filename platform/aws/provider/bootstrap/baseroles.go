@@ -1,10 +1,10 @@
 package bootstrap
 
 import (
-	"fmt"
-
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
 )
 
@@ -17,105 +17,98 @@ func (n Namespace) TagInvalidatorRoleARN(account string, tier environment.Tier) 
 	return "arn:aws:iam::" + account + ":role" + n.bootstrapRolePathFor(tier) + taginvalidator.NamesFor(string(n), tier).Role
 }
 
-func tagInvalidatorRoleResource(ns Namespace, tier environment.Tier) string {
+func tagInvalidatorRoleResource(ns Namespace, tier environment.Tier) cfn.Resource {
 	names := taginvalidator.NamesFor(string(ns), tier)
 	seedParam, _ := PurgeSeedParamFor(ns, tier, KindCloudflare)
-	return fmt.Sprintf(`  TagInvalidatorRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      Description: "The role the %[1]s tag invalidator runs as. It reaches past the app boundary, to CloudFront invalidation and the Cloudflare purge seed; the first deploy that revalidates makes its function."
-    Properties:
-      RoleName: %[2]s
-      Path: %[3]s
-      Description: "Execution role for this bootstrap's tag invalidator: the state table's stream, the items naming which fronts it reaches, invalidation on the CloudFront distributions Ocel tagged for this tier, and the seed that signs a purge sent to a Cloudflare front."
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: %[4]s
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - dynamodb:DescribeStream
-                  - dynamodb:GetRecords
-                  - dynamodb:GetShardIterator
-                Resource: !GetAtt StateTable.StreamArn
-              - Effect: Allow
-                Action: dynamodb:ListStreams
-                Resource: '*'
-              - Effect: Allow
-                Action: dynamodb:GetItem
-                Resource: !GetAtt StateTable.Arn
-              - Effect: Allow
-                Action: cloudfront:CreateInvalidation
-                Resource: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/*'
-                Condition:
-                  StringEquals:
-                    'aws:ResourceTag/%[7]s': '%[8]s'
-                    'aws:ResourceTag/%[9]s': '%[1]s'
-              - Effect: Allow
-                Action: sqs:SendMessage
-                Resource: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:%[5]s'
-              - Effect: Allow
-                Action: ssm:GetParameter
-                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter%[6]s'
-              - Effect: Allow
-                Action: kms:Decrypt
-                Resource: '*'
-                Condition:
-                  StringEquals:
-                    kms:EncryptionContext:PARAMETER_ARN: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter%[6]s'
-                    kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
-`, tier, names.Role, ns.bootstrapRolePathFor(tier), ns.PolicyName("tag-invalidator"), names.Queue, seedParam, managedByTagKey, managedByTagValue, naming.EnvTierTagKey)
+	seedARN := cfn.Sub("arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter" + seedParam)
+	return cfn.Resource{
+		ID:   "TagInvalidatorRole",
+		Type: "AWS::IAM::Role",
+		Metadata: cfn.Metadata{
+			Description: "The role the " + string(tier) + " tag invalidator runs as. It reaches past the app boundary, to CloudFront invalidation and the Cloudflare purge seed; the first deploy that revalidates makes its function.",
+		},
+		Properties: map[string]any{
+			"RoleName":                 names.Role,
+			"Path":                     ns.bootstrapRolePathFor(tier),
+			"Description":              "Execution role for this bootstrap's tag invalidator: the state table's stream, the items naming which fronts it reaches, invalidation on the CloudFront distributions Ocel tagged for this tier, and the seed that signs a purge sent to a Cloudflare front.",
+			"AssumeRolePolicyDocument": iam.AssumeRoleDocument(iam.LambdaPrincipal),
+			"ManagedPolicyArns":        []string{iam.LambdaBasicExecutionPolicyARN},
+			"Policies": []any{map[string]any{
+				"PolicyName": ns.PolicyName("tag-invalidator"),
+				"PolicyDocument": iam.Document([]iam.Statement{
+					{
+						Actions:        []string{"dynamodb:DescribeStream", "dynamodb:GetRecords", "dynamodb:GetShardIterator"},
+						ResourceValues: []any{cfn.GetAtt("StateTable", "StreamArn")},
+					},
+					{Actions: []string{"dynamodb:ListStreams"}, Resources: []string{iam.AnyResource}},
+					{Actions: []string{"dynamodb:GetItem"}, ResourceValues: []any{cfn.GetAtt("StateTable", "Arn")}},
+					{
+						Actions:        []string{"cloudfront:CreateInvalidation"},
+						ResourceValues: []any{cfn.Sub("arn:aws:cloudfront::${AWS::AccountId}:distribution/*")},
+						Condition: map[string]any{"StringEquals": map[string]any{
+							"aws:ResourceTag/" + managedByTagKey:      managedByTagValue,
+							"aws:ResourceTag/" + naming.EnvTierTagKey: string(tier),
+						}},
+					},
+					{
+						Actions:        []string{"sqs:SendMessage"},
+						ResourceValues: []any{cfn.Sub("arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:" + names.Queue)},
+					},
+					{Actions: []string{"ssm:GetParameter"}, ResourceValues: []any{seedARN}},
+					{
+						Actions:   []string{"kms:Decrypt"},
+						Resources: []string{iam.AnyResource},
+						Condition: map[string]any{"StringEquals": map[string]any{
+							"kms:EncryptionContext:PARAMETER_ARN": seedARN,
+							"kms:ViaService":                      cfn.Sub("ssm.${AWS::Region}.amazonaws.com"),
+						}},
+					},
+				}),
+			}},
+		},
+	}
 }
 
-func edgeInvokeRoleResource(ns Namespace, tier environment.Tier) string {
-	return fmt.Sprintf(`  EdgeInvokeRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      Description: "The role API Gateway assumes to invoke this account's root functions and to read a release's static assets out of the asset bucket. Every REST API Ocel raises in the %s tier names it, so deleting it blanks every deployment API Gateway fronts."
-    Properties:
-      RoleName: %s
-      Description: "API Gateway assumes this role to invoke Ocel's root functions and read a release's static assets."
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: apigateway.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: %s
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: lambda:InvokeFunction
-                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*'
-                Condition:
-                  StringEquals:
-                    'aws:ResourceTag/ocel:component': 'function'
-                    'aws:ResourceTag/%s': '%s'
-              - Effect: Allow
-                Action: s3:GetObject
-                Resource: !Sub '${AssetBucket.Arn}/*'
-`, tier, ns.EdgeInvokeRoleName(tier), ns.PolicyName("edge-invoke"), naming.EnvTierTagKey, tier)
+func edgeInvokeRoleResource(ns Namespace, tier environment.Tier) cfn.Resource {
+	return cfn.Resource{
+		ID:   "EdgeInvokeRole",
+		Type: "AWS::IAM::Role",
+		Metadata: cfn.Metadata{
+			Description: "The role API Gateway assumes to invoke this account's root functions and to read a release's static assets out of the asset bucket. Every REST API Ocel raises in the " + string(tier) + " tier names it, so deleting it blanks every deployment API Gateway fronts.",
+		},
+		Properties: map[string]any{
+			"RoleName":                 ns.EdgeInvokeRoleName(tier),
+			"Description":              "API Gateway assumes this role to invoke Ocel's root functions and read a release's static assets.",
+			"AssumeRolePolicyDocument": iam.AssumeRoleDocument(iam.APIGatewayPrincipal),
+			"Policies": []any{map[string]any{
+				"PolicyName": ns.PolicyName("edge-invoke"),
+				"PolicyDocument": iam.Document([]iam.Statement{
+					{
+						Actions:        []string{"lambda:InvokeFunction"},
+						ResourceValues: []any{cfn.Sub("arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*")},
+						Condition: map[string]any{"StringEquals": map[string]any{
+							"aws:ResourceTag/ocel:component":          "function",
+							"aws:ResourceTag/" + naming.EnvTierTagKey: string(tier),
+						}},
+					},
+					{Actions: []string{"s3:GetObject"}, ResourceValues: []any{cfn.Sub("${AssetBucket.Arn}/*")}},
+				}),
+			}},
+		},
+	}
 }
 
-func baseRoleOutputs() string {
-	return fmt.Sprintf(`  %s:
-    Description: "ARN of the role the tag invalidator runs as; the first deploy that revalidates makes the function under it."
-    Value: !GetAtt TagInvalidatorRole.Arn
-  %s:
-    Description: "ARN of the role API Gateway assumes to invoke this account's root functions and read a release's static assets. Every deploy an API Gateway fronts names it on the integrations it raises."
-    Value: !GetAtt EdgeInvokeRole.Arn
-`, outputTagInvalidatorRoleARN, OutputEdgeInvokeRoleARN)
+func baseRoleOutputs() []cfn.Output {
+	return []cfn.Output{
+		{
+			Name:        outputTagInvalidatorRoleARN,
+			Description: "ARN of the role the tag invalidator runs as; the first deploy that revalidates makes the function under it.",
+			Value:       cfn.GetAtt("TagInvalidatorRole", "Arn"),
+		},
+		{
+			Name:        OutputEdgeInvokeRoleARN,
+			Description: "ARN of the role API Gateway assumes to invoke this account's root functions and read a release's static assets. Every deploy an API Gateway fronts names it on the integrations it raises.",
+			Value:       cfn.GetAtt("EdgeInvokeRole", "Arn"),
+		},
+	}
 }

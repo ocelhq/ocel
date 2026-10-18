@@ -2,11 +2,11 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -21,22 +21,22 @@ const (
 )
 
 type describedTemplate struct {
-	Description string `yaml:"Description"`
+	Description string `json:"Description"`
 	Parameters  map[string]struct {
-		Description string `yaml:"Description"`
-	} `yaml:"Parameters"`
+		Description string `json:"Description"`
+	} `json:"Parameters"`
 	Resources map[string]struct {
-		Type     string `yaml:"Type"`
+		Type     string `json:"Type"`
 		Metadata struct {
-			Description string `yaml:"Description"`
-		} `yaml:"Metadata"`
+			Description string `json:"Description"`
+		} `json:"Metadata"`
 		Properties struct {
-			Description string `yaml:"Description"`
-		} `yaml:"Properties"`
-	} `yaml:"Resources"`
+			Description string `json:"Description"`
+		} `json:"Properties"`
+	} `json:"Resources"`
 	Outputs map[string]struct {
-		Description string `yaml:"Description"`
-	} `yaml:"Outputs"`
+		Description string `json:"Description"`
+	} `json:"Outputs"`
 }
 
 func propertyDescriptionLimit(resourceType string) int {
@@ -55,8 +55,8 @@ func propertyDescriptionLimit(resourceType string) int {
 
 func everyRenderedTemplate() map[string]string {
 	rendered := map[string]string{
-		"core/" + string(environment.TierProduction): coreStackTemplate(defaultNamespace, environment.TierProduction, ""),
-		"core/" + string(environment.TierPreview):    coreStackTemplate(defaultNamespace, environment.TierPreview, ""),
+		"core/" + string(environment.TierProduction): coreBody(defaultNamespace, environment.TierProduction, ""),
+		"core/" + string(environment.TierPreview):    coreBody(defaultNamespace, environment.TierPreview, ""),
 	}
 	for _, name := range partNames() {
 		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
@@ -70,8 +70,8 @@ func TestRenderedDescriptionsFitTheirLimits(t *testing.T) {
 	for name, body := range everyRenderedTemplate() {
 		t.Run(name, func(t *testing.T) {
 			var tmpl describedTemplate
-			if err := yaml.Unmarshal([]byte(body), &tmpl); err != nil {
-				t.Fatalf("template is not valid YAML: %v", err)
+			if err := json.Unmarshal([]byte(body), &tmpl); err != nil {
+				t.Fatalf("template is not valid JSON: %v", err)
 			}
 
 			within := func(where, description string, limit int) {

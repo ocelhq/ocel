@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 func shapedOf(shaped []pricing.Shaped, typ string) []pricing.Shaped {
@@ -65,17 +66,20 @@ func TestEveryPartTogetherShapesTheVariablesKeyAndNoFunctionOrQueue(t *testing.T
 func TestATemplateFunctionIsShapedAsTheTemplateSizesIt(t *testing.T) {
 	t.Parallel()
 
-	body := `Resources:
-  Worker:
-    Type: AWS::Lambda::Function
-    Properties:
-      Runtime: nodejs22.x
-      MemorySize: 1769
-      Timeout: 30
-      Architectures:
-        - arm64
-`
-	functions := shapedOf(shapeTemplate(body), "aws_lambda_function")
+	shaped, err := shapeTemplate(cfn.Template{Resources: []cfn.Resource{{
+		ID:   "Worker",
+		Type: "AWS::Lambda::Function",
+		Properties: map[string]any{
+			"Runtime":       "nodejs22.x",
+			"MemorySize":    1769,
+			"Timeout":       30,
+			"Architectures": []string{"arm64"},
+		},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	functions := shapedOf(shaped, "aws_lambda_function")
 	if len(functions) != 1 || functions[0].Name != "Worker" {
 		t.Fatalf("functions = %v, want Worker alone", functions)
 	}

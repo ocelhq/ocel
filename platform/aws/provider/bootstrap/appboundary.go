@@ -1,10 +1,9 @@
 package bootstrap
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
@@ -102,90 +101,57 @@ func appBoundaryKeyActions() []string {
 	}
 }
 
-func appBoundarySecretActions() []string {
-	return []string{
-		"secretsmanager:DescribeSecret",
-		"secretsmanager:GetSecretValue",
-	}
-}
-
-func yamlActions(actions []string) string {
-	var out strings.Builder
-	for _, action := range actions {
-		fmt.Fprintf(&out, "              - %s\n", action)
-	}
-	return out.String()
-}
-
-func appBoundaryKeyStatement(ns Namespace, tier environment.Tier, broughtKey string) string {
+func appBoundaryKeyStatement(ns Namespace, tier environment.Tier, broughtKey string) iam.Statement {
 	if broughtKey != "" {
-		return fmt.Sprintf(`          - Effect: Allow
-            Action:
-%s            Resource: %q
-`, yamlActions(appBoundaryKeyActions()), broughtKey)
+		return iam.Statement{Actions: appBoundaryKeyActions(), Resources: []string{broughtKey}}
 	}
-	return fmt.Sprintf(`          - Effect: Allow
-            Action:
-%s            Resource: '*'
-            Condition:
-              ForAnyValue:StringEquals:
-                kms:ResourceAliases: %s
-`, yamlActions(appBoundaryKeyActions()), ns.variablesKeyAliasFor(tier))
+	return iam.Statement{
+		Actions:   appBoundaryKeyActions(),
+		Resources: []string{iam.AnyResource},
+		Condition: map[string]any{
+			"ForAnyValue:StringEquals": map[string]any{"kms:ResourceAliases": ns.variablesKeyAliasFor(tier)},
+		},
+	}
 }
 
-func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string) string {
-	return fmt.Sprintf(`  AppBoundary:
-    Type: AWS::IAM::ManagedPolicy
-    Metadata:
-      Description: "The ceiling every app role of this tier is made under: a deploy may only mint roles bounded by it, so the widest such role reaches these actions, this tier's variable key, the master secrets of clusters deploys create, and no IAM, STS or parameter call."
-    Properties:
-      ManagedPolicyName: %s
-      Description: "Permissions boundary for the roles Ocel creates for apps in the %s class."
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action:
-%s            Resource: '*'
-%s          - Effect: Allow
-            Action:
-%s            Resource: '%s'
-            Condition:
-              StringLike:
-                'aws:ResourceTag/%s': '%s'
-          - Effect: Allow
-            Action:
-              - ecs:DescribeServices
-              - ecs:UpdateService
-            Resource: '%s'
-            Condition:
-              StringEquals:
-                'aws:ResourceTag/%s': '%s'
-          - Effect: Allow
-            Action:
-              - ecr:GetAuthorizationToken
-            Resource: '*'
-          - Effect: Allow
-            Action:
-              - ecr:BatchCheckLayerAvailability
-              - ecr:BatchGetImage
-              - ecr:GetDownloadUrlForLayer
-            Resource: 'arn:aws:ecr:*:*:repository/%s/*'
-`, ns.AppBoundaryNameFor(tier), tier,
-		yamlActions(appBoundaryActions()),
-		appBoundaryKeyStatement(ns, tier, broughtKey),
-		yamlActions(appBoundarySecretActions()), appSecretARN, managedSecretClusterTagKey, appClusterARN,
-		appWorkerServiceARN(tier), managedByTagKey, managedByTagValue,
-		registry.Namespace)
+func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string) cfn.Resource {
+	return cfn.Resource{
+		ID:   "AppBoundary",
+		Type: "AWS::IAM::ManagedPolicy",
+		Metadata: cfn.Metadata{
+			Description: "The ceiling every app role of this tier is made under: a deploy may only mint roles bounded by it, so the widest such role reaches these actions, this tier's variable key, and no IAM, STS, parameter or secret call.",
+		},
+		Properties: map[string]any{
+			"ManagedPolicyName": ns.AppBoundaryNameFor(tier),
+			"Description":       "Permissions boundary for the roles Ocel creates for apps in the " + string(tier) + " class.",
+			"PolicyDocument": iam.Document([]iam.Statement{
+				{Actions: appBoundaryActions(), Resources: []string{iam.AnyResource}},
+				appBoundaryKeyStatement(ns, tier, broughtKey),
+				{
+					Actions:   []string{"ecs:DescribeServices", "ecs:UpdateService"},
+					Resources: []string{appWorkerServiceARN(tier)},
+					Condition: map[string]any{
+						"StringEquals": map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagValue},
+					},
+				},
+				{Actions: []string{"ecr:GetAuthorizationToken"}, Resources: []string{iam.AnyResource}},
+				{
+					Actions:   []string{"ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"},
+					Resources: []string{"arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"},
+				},
+			}),
+		},
+	}
 }
 
 func appWorkerServiceARN(tier environment.Tier) string {
 	return "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(tier) + "/" + appScopePrefix + "*"
 }
 
-func appBoundaryOutput() string {
-	return fmt.Sprintf(`  %s:
-    Description: "Permissions boundary every role a deploy creates for an app must name, and the only one the deploy credentials may name."
-    Value: !Ref AppBoundary
-`, outputAppBoundaryARN)
+func appBoundaryOutput() cfn.Output {
+	return cfn.Output{
+		Name:        outputAppBoundaryARN,
+		Description: "Permissions boundary every role a deploy creates for an app must name, and the only one the deploy credentials may name.",
+		Value:       cfn.Ref("AppBoundary"),
+	}
 }

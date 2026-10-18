@@ -447,7 +447,7 @@ func (r *release) provisionContainerWorkers(ctx context.Context, spec provider.S
 		return nil, fmt.Errorf("record the workers of %s: %w", spec.App.App, err)
 	}
 	if r.cfg.KeyValues != nil {
-		if err := r.recordContainerInfraConsumer(ctx, ref); err != nil {
+		if err := r.containers.RecordConsumer(ctx, ref); err != nil {
 			return nil, err
 		}
 	}

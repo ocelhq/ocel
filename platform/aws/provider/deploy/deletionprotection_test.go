@@ -91,7 +91,8 @@ func postgresOutputOf(cluster string) auto.OutputValue {
 		component.OutputKeyPort:             float64(5432),
 		postgres.OutputKeyDatabase:          "ocel",
 		postgres.OutputKeyUsername:          "ocel",
-		postgres.OutputKeySecretARN:         "arn:aws:secretsmanager:eu-west-1:111122223333:secret:" + cluster,
+		postgres.OutputKeyClusterARN:        "arn:aws:rds:eu-west-1:111122223333:cluster:" + cluster,
+		postgres.OutputKeyResourceID:        "cluster-" + cluster,
 		postgres.OutputKeyClusterIdentifier: cluster,
 	}}
 }

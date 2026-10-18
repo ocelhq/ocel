@@ -1,14 +1,14 @@
 package bootstrap
 
 import (
+	"encoding/json"
+	"fmt"
 	"slices"
-	"strconv"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 type ShapeOption func(*partInputs)
@@ -49,57 +49,36 @@ func Shape(ns Namespace, tier environment.Tier, parts []string, options ...Shape
 	return shaped, nil
 }
 
-func shapeTemplate(body string) []pricing.Shaped {
-	resources := templateSection(body, "Resources")
-	if resources == nil {
-		return nil
-	}
+func shapeTemplate(template cfn.Template) ([]pricing.Shaped, error) {
 	var out []pricing.Shaped
-	for i := 0; i+1 < len(resources.Content); i += 2 {
-		kind := mappingValue(resources.Content[i+1], "Type")
-		if kind == nil {
-			continue
-		}
-		typ, priced := shapedTypes[kind.Value]
+	for _, resource := range template.Resources {
+		typ, priced := shapedTypes[resource.Type]
 		if !priced {
 			continue
 		}
 		properties := map[string]any{}
-		if raw, ok := generic(mappingValue(resources.Content[i+1], "Properties")).(map[string]any); ok && typ.properties != nil {
+		if typ.properties != nil && len(resource.Properties) > 0 {
+			raw, err := decodedProperties(resource)
+			if err != nil {
+				return nil, err
+			}
 			properties = typ.properties(raw)
 		}
-		out = append(out, pricing.Shaped{Name: resources.Content[i].Value, Type: typ.token, Properties: properties})
+		out = append(out, pricing.Shaped{Name: resource.ID, Type: typ.token, Properties: properties})
 	}
-	return out
+	return out, nil
 }
 
-func generic(node *yaml.Node) any {
-	if node == nil {
-		return nil
+func decodedProperties(resource cfn.Resource) (map[string]any, error) {
+	encoded, err := json.Marshal(resource.Properties)
+	if err != nil {
+		return nil, fmt.Errorf("shape %s: %w", resource.ID, err)
 	}
-	switch node.Kind {
-	case yaml.MappingNode:
-		out := make(map[string]any, len(node.Content)/2)
-		for i := 0; i+1 < len(node.Content); i += 2 {
-			out[node.Content[i].Value] = generic(node.Content[i+1])
-		}
-		return out
-	case yaml.SequenceNode:
-		out := make([]any, 0, len(node.Content))
-		for _, item := range node.Content {
-			out = append(out, generic(item))
-		}
-		return out
-	case yaml.ScalarNode:
-		if number, err := strconv.ParseFloat(node.Value, 64); err == nil && node.Tag != "!!str" {
-			return number
-		}
-		if node.Value == "true" || node.Value == "false" {
-			return node.Value == "true"
-		}
-		return node.Value
+	decoded := map[string]any{}
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		return nil, fmt.Errorf("shape %s: %w", resource.ID, err)
 	}
-	return nil
+	return decoded, nil
 }
 
 func lambdaProperties(raw map[string]any) map[string]any {

@@ -18,6 +18,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
 type interceptedRecords struct {
@@ -34,7 +36,7 @@ func (r *interceptedRecords) List(ctx context.Context, in records.Partition, und
 }
 
 func listConsumers(ctx context.Context, store records.Store) ([]records.Entry, error) {
-	consumers := containerShare.consumersPrefix(environment.TierProduction)
+	consumers := containers.Shared.ConsumersPrefix(environment.TierProduction)
 	return store.List(ctx, consumers.Partition, consumers.Path...)
 }
 
@@ -69,7 +71,7 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 	blog.Ref = provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	claimed := false
 	store.afterList = func(under records.Key) {
-		if claimed || under.String() != containerShare.consumersPrefix(environment.TierProduction).String() {
+		if claimed || under.String() != containers.Shared.ConsumersPrefix(environment.TierProduction).String() {
 			return
 		}
 		claimed = true
@@ -85,7 +87,7 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 		t.Fatal("the concurrent claim never ran, so this test proved nothing")
 	}
 	for _, torn := range engine.torn() {
-		if torn == containerInfraRef(environment.TierProduction).Name.String() {
+		if torn == containers.StackRef(environment.TierProduction).Name.String() {
 			t.Fatal("the shared container infrastructure was torn down under blog, which claimed it between shop's listing and its lease")
 		}
 	}
@@ -107,11 +109,11 @@ func TestAContainerDeployIsRefusedWhileTheContainerInfraIsGoingDown(t *testing.T
 	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	leased, err := records.ReadOrEmpty(ctx, shared, containerShare.leaseAt(environment.TierProduction))
+	leased, err := records.ReadOrEmpty(ctx, shared, containers.Shared.LeaseAt(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := containerShare.writeLease(ctx, shared, leased, lease{Destroying: true, DestroyingSince: time.Now().UTC()}); err != nil {
+	if err := containers.Shared.WriteLease(ctx, shared, leased, sharedstack.Lease{Destroying: true, DestroyingSince: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -154,7 +156,7 @@ func TestAContainerDeployAfterAFailedTakedownRaisesTheContainerInfraAgain(t *tes
 	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	infra := containerInfraRef(environment.TierProduction).Name.String()
+	infra := containers.StackRef(environment.TierProduction).Name.String()
 	engine.downErr = failingOnce(infra)
 	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: shop.Ref}, progress.Discard()); err == nil {
 		t.Fatal("Destroy(shop) = nil, want the failed takedown reported")
@@ -181,25 +183,25 @@ func TestAFailedTakedownLeavesTheContainersPartForItsRemovalToTakeDown(t *testin
 	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	infra := containerInfraRef(environment.TierProduction).Name.String()
+	infra := containers.StackRef(environment.TierProduction).Name.String()
 	engine.downErr = failingOnce(infra)
 
 	err := stacks.Destroy(ctx, provider.StackDestroy{Ref: shop.Ref}, progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap production --remove containers") {
 		t.Fatalf("Destroy(shop) = %v, want the failed takedown to name the command that takes it down again", err)
 	}
-	part, present, err := ReadContainerInfrastructurePart(ctx, shared, "us-east-1", environment.TierProduction)
+	part, present, err := containers.ReadPart(ctx, shared, "us-east-1", environment.TierProduction)
 	if err != nil || !present || len(part.UsedBy) != 0 {
 		t.Fatalf("containers part = %+v, %v, %v, want it still recorded and used by nobody", part, present, err)
 	}
 
-	if err := stacks.RemoveContainerInfrastructure(ctx, environment.TierProduction, progress.Discard()); err != nil {
-		t.Fatalf("RemoveContainerInfrastructure() after the failed takedown = %v", err)
+	if err := stacks.containers.Remove(ctx, environment.TierProduction, progress.Discard()); err != nil {
+		t.Fatalf("containers.Remove() after the failed takedown = %v", err)
 	}
 	if torn := engine.torn(); !slices.Equal(torn, []string{shop.Ref.Name.String(), infra}) {
 		t.Errorf("torn down = %v, want the removal to take the container infrastructure down", torn)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, shared, environment.TierProduction, ContainersPart); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, shared, environment.TierProduction, containers.Part); err != nil || present {
 		t.Errorf("containers record present %v (%v) after its removal, want it forgotten", present, err)
 	}
 }
@@ -213,19 +215,19 @@ func TestAContainerDeployTakesOverATakedownLeaseACrashedRunLeftBehind(t *testing
 	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	leased, err := records.ReadOrEmpty(ctx, shared, containerShare.leaseAt(environment.TierProduction))
+	leased, err := records.ReadOrEmpty(ctx, shared, containers.Shared.LeaseAt(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	crashed := lease{Destroying: true, DestroyingSince: time.Now().UTC().Add(-2 * sharedTakedownLimit)}
-	if err := containerShare.writeLease(ctx, shared, leased, crashed); err != nil {
+	crashed := sharedstack.Lease{Destroying: true, DestroyingSince: time.Now().UTC().Add(-2 * sharedstack.TakedownLimit)}
+	if err := containers.Shared.WriteLease(ctx, shared, leased, crashed); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
-		t.Fatalf("Provision(shop) under a takedown lease no run has held for %s = %v, want it taken over", 2*sharedTakedownLimit, err)
+		t.Fatalf("Provision(shop) under a takedown lease no run has held for %s = %v, want it taken over", 2*sharedstack.TakedownLimit, err)
 	}
-	infra := containerInfraRef(environment.TierProduction).Name.String()
+	infra := containers.StackRef(environment.TierProduction).Name.String()
 	if ran := engine.stacks(); len(ran) != 4 || ran[2] != infra {
 		t.Errorf("ran %v, want the container infrastructure run again: the crashed takedown may have removed part of it", ran)
 	}

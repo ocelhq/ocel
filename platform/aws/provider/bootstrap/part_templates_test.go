@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"encoding/json"
 	"regexp"
 	"slices"
 	"strings"
@@ -8,24 +9,50 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"gopkg.in/yaml.v3"
 )
 
 type declaredTemplate struct {
 	Parameters map[string]struct {
-		Type        string `yaml:"Type"`
-		Description string `yaml:"Description"`
-	} `yaml:"Parameters"`
-	Resources map[string]yaml.Node `yaml:"Resources"`
+		Type        string `json:"Type"`
+		Description string `json:"Description"`
+	} `json:"Parameters"`
+	Resources map[string]json.RawMessage `json:"Resources"`
 }
 
-var (
-	refRE    = regexp.MustCompile(`!Ref\s+([A-Za-z0-9:]+)`)
-	getAttRE = regexp.MustCompile(`!GetAtt\s+([A-Za-z0-9]+)\.`)
-	subRE    = regexp.MustCompile(`\$\{([A-Za-z0-9:.]+)\}`)
-)
+var substitutedName = regexp.MustCompile(`\$\{([A-Za-z0-9:.]+)\}`)
 
 var pseudoParameters = []string{"AWS::AccountId", "AWS::Region", "AWS::Partition", "AWS::URLSuffix", "AWS::StackName", "AWS::NoValue"}
+
+func referencedNames(value any) []string {
+	var out []string
+	switch v := value.(type) {
+	case string:
+		for _, m := range substitutedName.FindAllStringSubmatch(v, -1) {
+			out = append(out, strings.Split(m[1], ".")[0])
+		}
+	case []any:
+		for _, item := range v {
+			out = append(out, referencedNames(item)...)
+		}
+	case map[string]any:
+		for key, item := range v {
+			switch key {
+			case "Ref":
+				if name, ok := item.(string); ok {
+					out = append(out, name)
+				}
+			case "Fn::GetAtt":
+				if attribute, ok := item.([]any); ok && len(attribute) > 0 {
+					if name, ok := attribute[0].(string); ok {
+						out = append(out, name)
+					}
+				}
+			}
+			out = append(out, referencedNames(item)...)
+		}
+	}
+	return out
+}
 
 func TestEveryPartTemplateTakesItsUpstreamFromParametersAndResolvesEveryName(t *testing.T) {
 	for _, name := range partNames() {
@@ -34,8 +61,8 @@ func TestEveryPartTemplateTakesItsUpstreamFromParametersAndResolvesEveryName(t *
 				stack := partStackFor(name, tier, everyPart())
 
 				var tmpl declaredTemplate
-				if err := yaml.Unmarshal([]byte(stack.body), &tmpl); err != nil {
-					t.Fatalf("template is not valid YAML: %v", err)
+				if err := json.Unmarshal([]byte(stack.body), &tmpl); err != nil {
+					t.Fatalf("template is not valid JSON: %v", err)
 				}
 
 				t.Run("every declared parameter is handed a value", func(t *testing.T) {
@@ -61,7 +88,7 @@ func TestEveryPartTemplateTakesItsUpstreamFromParametersAndResolvesEveryName(t *
 				})
 
 				t.Run("reaches across stacks by parameter alone", func(t *testing.T) {
-					for _, forbidden := range []string{"ImportValue", "Fn::ImportValue", "Export:"} {
+					for _, forbidden := range []string{"ImportValue", "Fn::ImportValue", `"Export"`} {
 						if strings.Contains(stack.body, forbidden) {
 							t.Errorf("template uses %s; a part reads its upstream from a parameter, never from a CloudFormation export", forbidden)
 						}
@@ -76,17 +103,11 @@ func TestEveryPartTemplateTakesItsUpstreamFromParametersAndResolvesEveryName(t *
 					for key := range tmpl.Resources {
 						known = append(known, key)
 					}
-					var referenced []string
-					for _, m := range refRE.FindAllStringSubmatch(stack.body, -1) {
-						referenced = append(referenced, m[1])
+					var document any
+					if err := json.Unmarshal([]byte(stack.body), &document); err != nil {
+						t.Fatal(err)
 					}
-					for _, m := range getAttRE.FindAllStringSubmatch(stack.body, -1) {
-						referenced = append(referenced, m[1])
-					}
-					for _, m := range subRE.FindAllStringSubmatch(stack.body, -1) {
-						referenced = append(referenced, strings.Split(m[1], ".")[0])
-					}
-					for _, ref := range referenced {
+					for _, ref := range referencedNames(document) {
 						if !slices.Contains(known, ref) {
 							t.Errorf("template references %q, which is neither a parameter it declares nor a resource it defines", ref)
 						}
@@ -94,14 +115,14 @@ func TestEveryPartTemplateTakesItsUpstreamFromParametersAndResolvesEveryName(t *
 				})
 
 				t.Run("every node function runs nodejs24.x, the runtime app functions run", func(t *testing.T) {
-					for key, node := range tmpl.Resources {
+					for key, raw := range tmpl.Resources {
 						var declared struct {
-							Type       string `yaml:"Type"`
+							Type       string `json:"Type"`
 							Properties struct {
-								Runtime string `yaml:"Runtime"`
-							} `yaml:"Properties"`
+								Runtime string `json:"Runtime"`
+							} `json:"Properties"`
 						}
-						if err := node.Decode(&declared); err != nil {
+						if err := json.Unmarshal(raw, &declared); err != nil {
 							t.Fatalf("resource %s does not decode: %v", key, err)
 						}
 						if declared.Type != "AWS::Lambda::Function" || !strings.HasPrefix(declared.Properties.Runtime, "nodejs") {

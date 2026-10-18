@@ -8,6 +8,7 @@ import (
 	rds "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/rds"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -21,8 +22,6 @@ const (
 	postgresEngine               = "aurora-postgresql"
 	postgresEngineMode           = "provisioned"
 	defaultPostgresEngineVersion = "16.4"
-	postgresMinCapacity          = 0.0
-	postgresMaxCapacity          = 2.0
 	postgresInstanceClass        = "db.serverless"
 	Port                         = 5432
 	postgresMasterUsername       = "ocel"
@@ -48,7 +47,18 @@ type clusterArgs struct {
 	Tags map[string]string
 }
 
-func translate(spec *provider.PostgresSpec) clusterArgs {
+type capacity struct {
+	min, max float64
+}
+
+func capacityOf(tier environment.Tier) capacity {
+	if tier == environment.TierProduction {
+		return capacity{min: 0.5, max: 8}
+	}
+	return capacity{min: 0, max: 2}
+}
+
+func translate(spec *provider.PostgresSpec, tier environment.Tier) clusterArgs {
 	version := defaultPostgresEngineVersion
 	if spec != nil && spec.Version != "" {
 		version = spec.Version
@@ -57,8 +67,8 @@ func translate(spec *provider.PostgresSpec) clusterArgs {
 		Engine:               postgresEngine,
 		EngineMode:           postgresEngineMode,
 		EngineVersion:        version,
-		MinCapacity:          postgresMinCapacity,
-		MaxCapacity:          postgresMaxCapacity,
+		MinCapacity:          capacityOf(tier).min,
+		MaxCapacity:          capacityOf(tier).max,
 		InstanceClass:        postgresInstanceClass,
 		Port:                 Port,
 		MasterUsername:       postgresMasterUsername,
@@ -117,18 +127,20 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 	}
 
 	cluster, err := rds.NewCluster(ctx, naming.ResourceID(at.Kind, at.Name), &rds.ClusterArgs{
-		ClusterIdentifierPrefix:  pulumi.String(rdsIdentifierPrefix(at, "")),
-		Engine:                   pulumi.String(args.Engine),
-		EngineMode:               pulumi.String(args.EngineMode),
-		EngineVersion:            pulumi.String(args.EngineVersion),
-		DatabaseName:             pulumi.String(args.DatabaseName),
-		MasterUsername:           pulumi.String(args.MasterUsername),
-		ManageMasterUserPassword: pulumi.Bool(args.ManageMasterPassword),
-		DbSubnetGroupName:        subnetGroup.Name,
-		VpcSecurityGroupIds:      pulumi.StringArray{securityGroup.ID()},
-		DeletionProtection:       pulumi.Bool(args.Protected),
-		SkipFinalSnapshot:        pulumi.Bool(!args.Protected),
-		FinalSnapshotIdentifier:  finalSnapshotIdentifier(at, args.Protected, time.Now()),
+		ClusterIdentifierPrefix:          pulumi.String(rdsIdentifierPrefix(at, "")),
+		Engine:                           pulumi.String(args.Engine),
+		EngineMode:                       pulumi.String(args.EngineMode),
+		EngineVersion:                    pulumi.String(args.EngineVersion),
+		DatabaseName:                     pulumi.String(args.DatabaseName),
+		MasterUsername:                   pulumi.String(args.MasterUsername),
+		ManageMasterUserPassword:         pulumi.Bool(args.ManageMasterPassword),
+		IamDatabaseAuthenticationEnabled: pulumi.Bool(true),
+		EnableHttpEndpoint:               pulumi.Bool(true),
+		DbSubnetGroupName:                subnetGroup.Name,
+		VpcSecurityGroupIds:              pulumi.StringArray{securityGroup.ID()},
+		DeletionProtection:               pulumi.Bool(args.Protected),
+		SkipFinalSnapshot:                pulumi.Bool(!args.Protected),
+		FinalSnapshotIdentifier:          finalSnapshotIdentifier(at, args.Protected, time.Now()),
 		Serverlessv2ScalingConfiguration: &rds.ClusterServerlessv2ScalingConfigurationArgs{
 			MinCapacity: pulumi.Float64(args.MinCapacity),
 			MaxCapacity: pulumi.Float64(args.MaxCapacity),
@@ -139,7 +151,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 		return err
 	}
 
-	_, err = rds.NewClusterInstance(ctx, naming.ResourceID(at.Kind, at.Name, "instance"), &rds.ClusterInstanceArgs{
+	instance, err := rds.NewClusterInstance(ctx, naming.ResourceID(at.Kind, at.Name, "instance"), &rds.ClusterInstanceArgs{
 		IdentifierPrefix:   pulumi.String(rdsIdentifierPrefix(at, "instance")),
 		ClusterIdentifier:  cluster.ID(),
 		Engine:             rds.EngineType(args.Engine),
@@ -158,12 +170,22 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 		}
 		return *secrets[0].SecretArn, nil
 	}).(pulumi.StringOutput)
+	if err := ctx.RegisterResource(RoleToken, naming.ResourceID(at.Kind, at.Name, "app-role"), pulumi.Map{
+		"cluster":  cluster.Arn,
+		"secret":   secretARN,
+		"database": pulumi.String(args.DatabaseName),
+		"master":   cluster.MasterUsername,
+		"role":     pulumi.String(AppRole),
+	}, &appRoleState{}, pulumi.DependsOn([]pulumi.Resource{instance})); err != nil {
+		return err
+	}
 	ctx.Export(logicalName, pulumi.Map{
 		component.OutputKeyHost: cluster.Endpoint,
 		component.OutputKeyPort: cluster.Port,
 		OutputKeyDatabase:       pulumi.String(args.DatabaseName),
-		OutputKeyUsername:       cluster.MasterUsername,
-		OutputKeySecretARN:      secretARN,
+		OutputKeyUsername:       pulumi.String(AppRole),
+		OutputKeyClusterARN:     cluster.Arn,
+		OutputKeyResourceID:     cluster.ClusterResourceId,
 
 		OutputKeyClusterIdentifier: cluster.ID(),
 	})
@@ -172,9 +194,10 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 }
 
 const (
-	OutputKeyDatabase  = "database"
-	OutputKeyUsername  = "username"
-	OutputKeySecretARN = "secretArn"
+	OutputKeyDatabase   = "database"
+	OutputKeyUsername   = "username"
+	OutputKeyClusterARN = "clusterArn"
+	OutputKeyResourceID = "resourceId"
 
 	OutputKeyClusterIdentifier = "clusterIdentifier"
 )

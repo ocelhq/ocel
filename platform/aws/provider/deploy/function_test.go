@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
 )
 
 func fixedRelease(t *testing.T) naming.ReleaseToken {
@@ -305,7 +306,7 @@ func TestFunctionEnv(t *testing.T) {
 	t.Run("leaves base untouched", func(t *testing.T) {
 		base := map[string]string{"OCEL_RESOURCE_BUCKET_uploads": "{}"}
 
-		functionEnv(base, functionArgs{Handler: "src/server.js"}, &isrConfig{Prefix: "prod/proj/web/B1"}, nil)
+		functionEnv(base, functionArgs{Handler: "src/server.js"}, &site.ISR{Prefix: "prod/proj/web/B1"}, nil)
 
 		if got := slices.Sorted(maps.Keys(base)); !slices.Equal(got, []string{"OCEL_RESOURCE_BUCKET_uploads"}) {
 			t.Errorf("base keys = %v, want only OCEL_RESOURCE_BUCKET_uploads", got)
@@ -319,7 +320,7 @@ func TestAppExecutionRole(t *testing.T) {
 	t.Run("is granted the bootstrap's variables key", func(t *testing.T) {
 		t.Parallel()
 
-		caches := map[string]*isrConfig{"web": {Prefix: "prod/proj/web/WEB1"}}
+		caches := map[string]*site.ISR{"web": {Prefix: "prod/proj/web/WEB1"}}
 
 		role := appExecutionRole(Config{VariablesKeyARN: productionVariablesKeyARN}, "web", caches, nil, variables.Bundle{}, nil, nil, false, nil)
 		if role.Variables.KeyARN != productionVariablesKeyARN {
@@ -346,7 +347,7 @@ func TestAFunctionsEnvCountsResourcesVariablesAndTheRuntimeTogether(t *testing.T
 			"POSTHOG_ID":                  "ph-123",
 		}
 
-		env := functionEnv(base, functionArgs{Handler: "src/server.js"}, &isrConfig{Prefix: "prod/proj/web/B1"}, nil)
+		env := functionEnv(base, functionArgs{Handler: "src/server.js"}, &site.ISR{Prefix: "prod/proj/web/B1"}, nil)
 
 		for _, key := range []string{"OCEL_RESOURCE_POSTGRES_main", "POSTHOG_ID", "OCEL_HANDLER", "AWS_LAMBDA_EXEC_WRAPPER", "OCEL_ISR_PREFIX"} {
 			if _, ok := env[key]; !ok {
