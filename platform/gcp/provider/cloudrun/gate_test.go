@@ -44,7 +44,7 @@ func (g *gateRecorder) Remove(_ context.Context, tier environment.Tier, slug str
 var (
 	previewShop    = tiered(environment.TierPreview, "shop")
 	productionShop = tiered(environment.TierProduction, "shop")
-	held           = gate.Gate{Key: "k", PasswordMAC: "m", BypassSecrets: []string{}, AllowOptions: []string{}}
+	held           = gate.Gate{Key: "k", PasswordHash: "m", BypassSecrets: []string{}, AllowOptions: []string{}}
 )
 
 func TestCloudRunWithNothingInFrontGatesAtTheOrigin(t *testing.T) {
@@ -125,7 +125,7 @@ func TestADeployReconcilesTheGateOfItsProject(t *testing.T) {
 
 func TestAProtectedProductionDeployWritesTheProductionGateAndLeavesThePreviewGateAlone(t *testing.T) {
 	t.Parallel()
-	preview := gate.Gate{Key: "preview-key", PasswordMAC: "preview-mac"}
+	preview := gate.Gate{Key: "preview-key", PasswordHash: "preview-hash"}
 	gates := &gateRecorder{published: map[string]*gate.Gate{previewShop: &preview}}
 	front := cloudrun.New(&pinRecorder{}, gates)
 

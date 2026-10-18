@@ -50,6 +50,7 @@ const raise = {
 
 let raised: { scope: ReleaseScope; mode: PurgeMode; tags: RaisedTag[] }[];
 let served: Record<string, { edge: { purgeSecret?: string } }>;
+let kept: string[];
 let storeDown: boolean;
 let warnings: string[];
 
@@ -60,7 +61,8 @@ function deps(): PurgeGatewayPorts {
     async readServed(isrPrefix) {
       if (storeDown) throw new Error("releases store is down");
       const record = served[isrPrefix];
-      return record ? { kind: "record", record } : { kind: "not-served" };
+      if (record) return { kind: "record", record };
+      return kept.includes(isrPrefix) ? { kind: "not-served" } : { kind: "forgotten" };
     },
     queue: {
       async raise(scope, mode, tags) {
@@ -74,6 +76,7 @@ function deps(): PurgeGatewayPorts {
 beforeEach(() => {
   raised = [];
   served = { [PREFIX]: { edge: { purgeSecret: SECRET } } };
+  kept = [];
   storeDown = false;
   warnings = [];
 });
@@ -255,6 +258,17 @@ describe("answering a signed purge request", () => {
 
 describe("refusing a purge request", () => {
   it("answers 204 for a release that is not served, since nothing caches under it", async () => {
+    kept = ["production/p1/web/r0000000a/isr"];
+    const response = await answerPurge(
+      await signed({ ...raise, isrPrefix: "production/p1/web/r0000000a/isr" }),
+      deps(),
+    );
+
+    expect(response.status).toBe(204);
+    expect(raised).toEqual([]);
+  });
+
+  it("answers 204 for a release no pointer serves or keeps, since nothing ever caches under it again", async () => {
     const response = await answerPurge(
       await signed({ ...raise, isrPrefix: "production/p1/web/r0000000a/isr" }),
       deps(),

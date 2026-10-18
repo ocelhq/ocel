@@ -33,7 +33,7 @@ const (
 )
 
 func gateOf(key, password, bypass string) gate.Gate {
-	return gate.Gate{Key: key, PasswordMAC: gate.HashPassword(key, password), BypassSecrets: []string{bypass}}
+	return gate.Gate{Key: key, PasswordHash: gate.HashPassword(password), BypassSecrets: []string{bypass}}
 }
 
 var (
@@ -462,7 +462,7 @@ func TestAGateWithNoKeyIsNotLoadedBecauseItsSignaturesWouldBeForgeable(t *testin
 	t.Parallel()
 
 	for _, owner := range []string{shopPreview, shopProduction} {
-		if _, err := switchboard.Read(gatedRouting(t, map[string]gate.Gate{owner: {PasswordMAC: "x"}}, upstreams{"a:1", "b:1", "c:1"})); err == nil {
+		if _, err := switchboard.Read(gatedRouting(t, map[string]gate.Gate{owner: {PasswordHash: "x"}}, upstreams{"a:1", "b:1", "c:1"})); err == nil {
 			t.Errorf("Read() accepted a gate with no key for %s, want it refused", owner)
 		}
 	}
@@ -472,7 +472,7 @@ func TestAGateLandsBeforeTheFirstRouteOfItsOwner(t *testing.T) {
 	t.Parallel()
 
 	for _, owner := range []string{"ocel--ghost--preview", "ocel--ghost--production"} {
-		document := `{"grace":"30s","gates":[{"owner":"` + owner + `","gate":{"key":"k","passwordMac":"","bypassSecrets":[],"allowOptions":[]}}]}`
+		document := `{"grace":"30s","gates":[{"owner":"` + owner + `","gate":{"key":"k","passwordHash":"","bypassSecrets":[],"allowOptions":[]}}]}`
 		if _, err := switchboard.Read([]byte(document)); err != nil {
 			t.Errorf("Read() = %v, want a gate for %s, which has no routes yet, accepted", err, owner)
 		}

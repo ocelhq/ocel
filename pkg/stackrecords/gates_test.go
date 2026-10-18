@@ -38,7 +38,7 @@ func TestReadGatesOpensTheSealedRecordIntoAMapByProjectSlug(t *testing.T) {
 	t.Parallel()
 	store, cipher := fake.NewKeyValues(), fake.NewCipher()
 	want := map[string]stackrecords.GateRecord{
-		"shop": {Gate: gate.Gate{Key: "k", PasswordMAC: "mac", BypassSecrets: []string{"s"}, AllowOptions: []string{"/api"}}, Password: "correct horse battery"},
+		"shop": {Gate: gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string{"s"}, AllowOptions: []string{"/api"}}, Password: "correct horse battery"},
 		"blog": {Gate: gate.Gate{Key: "j", BypassSecrets: []string{}, AllowOptions: []string{}}, Pending: true},
 	}
 	recordGates(t, store, cipher, want)
@@ -82,7 +82,7 @@ func TestChangeGatesRecordsWhatReadGatesOpens(t *testing.T) {
 	store, cipher := fake.NewKeyValues(), fake.NewCipher()
 	blog := stackrecords.GateRecord{Gate: gate.Gate{Key: "j", BypassSecrets: []string{}, AllowOptions: []string{}}}
 	recordGates(t, store, cipher, map[string]stackrecords.GateRecord{"blog": blog})
-	shop := stackrecords.GateRecord{Gate: gate.Gate{Key: "k", PasswordMAC: "mac", BypassSecrets: []string{"s"}, AllowOptions: []string{}}, Password: "pw"}
+	shop := stackrecords.GateRecord{Gate: gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string{"s"}, AllowOptions: []string{}}, Password: "pw"}
 
 	err := stackrecords.ChangeGates(context.Background(), store, cipher, environment.TierPreview, func(records map[string]stackrecords.GateRecord) error {
 		records["shop"] = shop
@@ -143,7 +143,7 @@ func TestChangeGatesWithNoRecordThatChangesNothingWritesNothing(t *testing.T) {
 func TestReadGateIsTheGateOfAnEnabledRecordAndNoneOfADisabledOrMissingOne(t *testing.T) {
 	t.Parallel()
 	store, cipher := fake.NewKeyValues(), fake.NewCipher()
-	shop := gate.Gate{Key: "k", PasswordMAC: "mac", BypassSecrets: []string{}, AllowOptions: []string{}}
+	shop := gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string{}, AllowOptions: []string{}}
 	recordGates(t, store, cipher, map[string]stackrecords.GateRecord{
 		"shop": {Gate: shop, Password: "pw", Enabled: true},
 		"blog": {Gate: gate.Gate{Key: "j"}, Password: "pw"},
@@ -179,7 +179,7 @@ func TestTheRecordSealsThePasswordAndKeyAndNeverStoresThemInThePlain(t *testing.
 
 func TestAGateRecordNeverLetsItsPasswordReachAnEdgeCopy(t *testing.T) {
 	t.Parallel()
-	record := stackrecords.GateRecord{Gate: gate.Gate{Key: "k", PasswordMAC: "mac"}, Password: "the-plain-password"}
+	record := stackrecords.GateRecord{Gate: gate.Gate{Key: "k", PasswordHash: "hash"}, Password: "the-plain-password"}
 
 	copied, err := json.Marshal(record.Gate)
 
@@ -191,7 +191,7 @@ func TestAGateRecordNeverLetsItsPasswordReachAnEdgeCopy(t *testing.T) {
 func TestAGateRecordedForOneTierIsNeverReadForTheOther(t *testing.T) {
 	t.Parallel()
 	store, cipher := fake.NewKeyValues(), fake.NewCipher()
-	preview := stackrecords.GateRecord{Gate: gate.Gate{Key: "preview-key", PasswordMAC: "preview-mac", BypassSecrets: []string{}, AllowOptions: []string{}}, Password: "preview-pw", Enabled: true}
+	preview := stackrecords.GateRecord{Gate: gate.Gate{Key: "preview-key", PasswordHash: "preview-hash", BypassSecrets: []string{}, AllowOptions: []string{}}, Password: "preview-pw", Enabled: true}
 	err := stackrecords.ChangeGates(context.Background(), store, cipher, environment.TierPreview, func(records map[string]stackrecords.GateRecord) error {
 		records["shop"] = preview
 		return nil

@@ -80,6 +80,7 @@ func (e *Edge) Facts() edge.Facts {
 		CachesResponses:       true,
 		CacheControlHeader:    "cdn-cache-control",
 		Gates:                 true,
+		ChecksSignedPasswords: true,
 		ShieldsOrigin:         true,
 		CredentialScope:       e.deps.Project,
 	}

@@ -910,3 +910,11 @@ func TestCloudFrontCachesResponses(t *testing.T) {
 		t.Error("Facts().CachesResponses = false, but CloudFront caches an origin's responses and revalidates them itself")
 	}
 }
+
+func TestCloudFrontChecksSignedPasswordsSinceItsFunctionCannotDeriveScrypt(t *testing.T) {
+	t.Parallel()
+
+	if !newWorld().edge().Facts().ChecksSignedPasswords {
+		t.Error("Facts().ChecksSignedPasswords = false, but a CloudFront Function has 2 MB of memory and a crypto module of hashes and HMACs, so it cannot derive an scrypt hash")
+	}
+}

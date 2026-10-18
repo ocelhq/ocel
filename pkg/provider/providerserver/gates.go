@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -89,15 +90,26 @@ func (r *deployRun) enforceGate(ctx context.Context) error {
 	return nil
 }
 
-func (r *deployRun) readGateInForce(ctx context.Context) (*gate.Gate, error) {
-	held, err := stackrecords.ReadGate(ctx, r.provider.KeyValues(), r.provider.Cipher(), r.spec.Tier, r.spec.Slug)
+func (r *deployRun) readGateInForce(ctx context.Context) (*gate.Gate, string, error) {
+	records, err := stackrecords.ReadGates(ctx, r.provider.KeyValues(), r.provider.Cipher(), r.spec.Tier)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	record := records[r.spec.Slug]
+	held := record.GateInForce()
 	if r.protect {
 		r.protection = held
 	}
-	return held, nil
+	return held, record.Password, nil
+}
+
+func gateForEdge(front edge.Edge, held *gate.Gate, password string) *gate.Gate {
+	if held == nil || held.PasswordHash == "" || !front.Facts().ChecksSignedPasswords {
+		return held
+	}
+	signed := *held
+	signed.PasswordHash = gate.SignPassword(held.Key, password)
+	return &signed
 }
 
 func (r *deployRun) settleGate(ctx context.Context, written *gate.Gate, progress progress.Log) error {

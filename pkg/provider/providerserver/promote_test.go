@@ -3,6 +3,7 @@ package providerserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -116,6 +117,27 @@ func TestAPromoteMovesEveryRouterOntoTheRecordsItsAppsStaged(t *testing.T) {
 	}
 	if served := w.serves(fake.RouterDirect, "api"); served != "api-p1" {
 		t.Errorf("the direct router serves api %q, want api-p1", served)
+	}
+}
+
+func TestAPromoteTellsEveryRouterThePromotionsTheLedgerStillKeepsSoAPrunedOneCanBeForgotten(t *testing.T) {
+	w := newPromoteWorld(t)
+
+	for i := range ledger.KeptPromotions + 1 {
+		if err := w.promotes(t, fmt.Sprintf("p%02d", i)); err != nil {
+			t.Fatalf("promote(p%02d) = %v", i, err)
+		}
+	}
+
+	for _, kind := range []router.Kind{fake.RouterRelay, fake.RouterDirect} {
+		kept := w.routers.DataPlane(kind).Kept(promotedSlug, environment.TierProduction, router.DefaultPointer)
+		ids := make([]string, 0, len(kept))
+		for _, promotion := range kept {
+			ids = append(ids, promotion.PromotionID)
+		}
+		if len(ids) != ledger.KeptPromotions || slices.Contains(ids, "p00") || !slices.Contains(ids, fmt.Sprintf("p%02d", ledger.KeptPromotions)) {
+			t.Errorf("the %s router was told the ledger keeps %v, want the newest %d and not the pruned p00: an edge holds what it keeps for a release only while a rollback could still reach it", kind, ids, ledger.KeptPromotions)
+		}
 	}
 }
 

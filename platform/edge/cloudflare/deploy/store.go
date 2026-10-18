@@ -15,6 +15,7 @@ import (
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -88,6 +89,31 @@ type pointerMoveBody struct {
 	PromotionID string         `json:"promotionId"`
 	Records     []servedRecord `json:"records"`
 	Labels      []pointerLabel `json:"labels,omitempty"`
+	Kept        []keptRelease  `json:"kept"`
+}
+
+type keptRelease struct {
+	App          string `json:"app"`
+	ReleaseToken string `json:"releaseToken"`
+}
+
+func listKeptReleases(kept []router.Promotion) ([]keptRelease, error) {
+	seen := map[keptRelease]bool{}
+	releases := []keptRelease{}
+	for _, promotion := range kept {
+		for _, app := range slices.Sorted(maps.Keys(promotion.Releases)) {
+			parsed, err := provider.ParseRelease(promotion.Releases[app])
+			if err != nil {
+				return nil, fmt.Errorf("promotion %s, which the ledger keeps, names no release of %s the releases store can know: %w", promotion.PromotionID, app, err)
+			}
+			release := keptRelease{App: app, ReleaseToken: parsed.Token().String()}
+			if !seen[release] {
+				seen[release] = true
+				releases = append(releases, release)
+			}
+		}
+	}
+	return releases, nil
 }
 
 type pointerLabel struct {

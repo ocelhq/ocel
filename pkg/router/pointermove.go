@@ -16,6 +16,7 @@ type PointerMove struct {
 	Records     map[string]ReleaseRecord
 	Hosts       []edge.PreviewHost
 	Superseded  []edge.PreviewHost
+	Kept        []Promotion
 	StillActive StillActive
 }
 

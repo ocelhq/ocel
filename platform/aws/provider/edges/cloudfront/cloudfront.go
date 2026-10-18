@@ -126,6 +126,7 @@ func (p *cloudFront) Facts() edge.Facts {
 		InvalidatesByCacheTag: true,
 		CachesResponses:       true,
 		Gates:                 true,
+		ChecksSignedPasswords: true,
 	}
 }
 

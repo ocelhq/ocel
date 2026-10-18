@@ -29,7 +29,7 @@ func EncodeConfig(hosts map[string]string, gates map[string]gate.Gate) string {
 	for _, slug := range slices.Sorted(maps.Keys(gates)) {
 		held := gates[slug]
 		text.WriteString(strings.Join([]string{
-			gateLine, escapeField(slug), escapeField(held.Key), escapeField(held.PasswordMAC),
+			gateLine, escapeField(slug), escapeField(held.Key), escapeField(held.PasswordHash),
 			escapeList(held.BypassSecrets), escapeList(held.AllowOptions),
 		}, " ") + "\n")
 	}
@@ -117,9 +117,12 @@ func parseGate(fields []string) (gate.Gate, string, error) {
 	if err != nil {
 		return gate.Gate{}, "", err
 	}
-	mac, err := unescapeField(fields[2], "password MAC")
+	hash, err := unescapeField(fields[2], "password hash")
 	if err != nil {
 		return gate.Gate{}, "", err
+	}
+	if hash != "" && !gate.IsSignedPassword(hash) {
+		return gate.Gate{}, "", errors.New("its password hash is no HMAC-SHA256 signature, and the plugin has no CPU to derive a key from a password")
 	}
 	bypass, err := unescapeList(fields[3], "bypass secrets")
 	if err != nil {
@@ -129,7 +132,7 @@ func parseGate(fields []string) (gate.Gate, string, error) {
 	if err != nil {
 		return gate.Gate{}, "", err
 	}
-	return gate.Gate{Key: key, PasswordMAC: mac, BypassSecrets: bypass, AllowOptions: options}, slug, nil
+	return gate.Gate{Key: key, PasswordHash: hash, BypassSecrets: bypass, AllowOptions: options}, slug, nil
 }
 
 func escapeList(values []string) string {

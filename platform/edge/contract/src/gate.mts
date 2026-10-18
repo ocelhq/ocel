@@ -1,3 +1,5 @@
+import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+
 export const COOKIE_NAME = "__Host-ocel-session";
 export const LOGIN_PATH = "/.ocel/login";
 export const BYPASS_HEADER = "x-ocel-bypass";
@@ -13,25 +15,33 @@ const LOGIN_SCRIPT =
   '",{method:"POST",headers:{Authorization:"Basic "+btoa(String.fromCharCode(...new TextEncoder().encode(":"+p.value)))}});r.ok?location.assign(document.querySelector("main").dataset.next):document.getElementById("incorrect").hidden=!1}';
 const SIGNATURE_HEX_LENGTH = 64;
 const COOKIE_PURPOSE = "cookie";
-const PASSWORD_PURPOSE = "password";
+const SCRYPT_ALGORITHM = "scrypt";
+const SCRYPT_LOG_N = 14;
+const SCRYPT_BLOCK_SIZE = 8;
+const SCRYPT_LANES = 5;
+const SCRYPT_SALT_BYTES = 16;
+const SCRYPT_KEY_BYTES = 32;
+const SCRYPT_MAX_MEMORY_BYTES = 32 * 1024 * 1024;
+const MAX_REMEMBERED_VERDICTS = 1024;
+const verdicts = new Map<string, boolean>();
 const BYPASS_PURPOSE = "bypass";
 const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 export interface Gate {
   key: string;
-  passwordMac: string;
+  passwordHash: string;
   bypassSecrets: string[];
   allowOptions: string[];
 }
 
 export function parseGate(value: unknown): Gate | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  const { key, passwordMac, bypassSecrets, allowOptions } = value as Record<string, unknown>;
-  if (typeof key !== "string" || key === "" || typeof passwordMac !== "string") return undefined;
+  const { key, passwordHash, bypassSecrets, allowOptions } = value as Record<string, unknown>;
+  if (typeof key !== "string" || key === "" || typeof passwordHash !== "string") return undefined;
   const bypass = bypassSecrets ?? [];
   const options = allowOptions ?? [];
   if (!isStrings(bypass) || !isStrings(options)) return undefined;
-  return { key, passwordMac, bypassSecrets: bypass, allowOptions: options };
+  return { key, passwordHash, bypassSecrets: bypass, allowOptions: options };
 }
 
 function isStrings(value: unknown): value is string[] {
@@ -72,8 +82,82 @@ export type GateVerdict =
   | { kind: "forward"; headers: Headers; responseHeaders: Headers }
   | { kind: "respond"; response: GateResponse };
 
-export async function hashPassword(key: string, password: string): Promise<string> {
-  return (await signer(key))(PASSWORD_PURPOSE, password);
+interface ScryptCost {
+  logN: number;
+  blockSize: number;
+  lanes: number;
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(SCRYPT_SALT_BYTES);
+  const cost = { logN: SCRYPT_LOG_N, blockSize: SCRYPT_BLOCK_SIZE, lanes: SCRYPT_LANES };
+  const derived = await deriveScrypt(password, salt, cost);
+  return [
+    SCRYPT_ALGORITHM,
+    cost.logN,
+    cost.blockSize,
+    cost.lanes,
+    encodeUnpadded(salt),
+    encodeUnpadded(derived),
+  ].join("$");
+}
+
+export async function hasPassword(gate: Gate, password: string): Promise<boolean> {
+  const fields = gate.passwordHash.split("$");
+  if (fields.length !== 6 || fields[0] !== SCRYPT_ALGORITHM) return false;
+  const [logN, blockSize, lanes] = fields.slice(1, 4).map(parseCanonicalInt);
+  if (logN === undefined || blockSize === undefined || lanes === undefined) return false;
+  const cost = { logN, blockSize, lanes };
+  if (!isWithinBounds(cost)) return false;
+  const salt = decodeUnpadded(fields[4] ?? "", SCRYPT_SALT_BYTES);
+  const want = decodeUnpadded(fields[5] ?? "", SCRYPT_KEY_BYTES);
+  if (salt === undefined || want === undefined) return false;
+  const remembered = createHash("sha256").update(`${gate.passwordHash}\0${password}`).digest("hex");
+  const known = verdicts.get(remembered);
+  if (known !== undefined) return known;
+  const matched = timingSafeEqual(await deriveScrypt(password, salt, cost), want);
+  if (verdicts.size >= MAX_REMEMBERED_VERDICTS) verdicts.clear();
+  verdicts.set(remembered, matched);
+  return matched;
+}
+
+function isWithinBounds({ logN, blockSize, lanes }: ScryptCost): boolean {
+  return (
+    logN >= 1 &&
+    logN <= SCRYPT_LOG_N &&
+    blockSize >= 1 &&
+    blockSize <= SCRYPT_BLOCK_SIZE &&
+    lanes >= 1 &&
+    lanes <= SCRYPT_LANES
+  );
+}
+
+function deriveScrypt(password: string, salt: Uint8Array, cost: ScryptCost): Promise<Buffer> {
+  const options = {
+    N: 2 ** cost.logN,
+    r: cost.blockSize,
+    p: cost.lanes,
+    maxmem: SCRYPT_MAX_MEMORY_BYTES,
+  };
+  return new Promise((resolve, reject) => {
+    scrypt(password, salt, SCRYPT_KEY_BYTES, options, (err, derived) =>
+      err ? reject(err) : resolve(derived),
+    );
+  });
+}
+
+function parseCanonicalInt(field: string): number | undefined {
+  return /^(0|[1-9][0-9]{0,8})$/.test(field) ? Number(field) : undefined;
+}
+
+function encodeUnpadded(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64").replace(/=+$/, "");
+}
+
+function decodeUnpadded(field: string, length: number): Buffer | undefined {
+  if (!/^[A-Za-z0-9+/]+$/.test(field)) return undefined;
+  const bytes = Buffer.from(field, "base64");
+  return bytes.length === length && encodeUnpadded(bytes) === field ? bytes : undefined;
 }
 
 export async function checkGate(
@@ -88,7 +172,7 @@ export async function checkGate(
     return checkLogin(gate, sign, request, nowSeconds);
   }
 
-  const hasPassword = await isBasicPassword(gate, sign, request.headers.get("authorization"));
+  const hasBasicPassword = await isBasicPassword(gate, request.headers.get("authorization"));
   const hasBypass = await isBypassSecret(gate, sign, request.headers.get(BYPASS_HEADER));
   const hasSession = await isSession(sign, request, nowSeconds);
 
@@ -100,14 +184,14 @@ export async function checkGate(
     return redirect(sign, sanitizeNext(request.target), request.host, nowSeconds);
   }
 
-  if (!(hasPassword || hasBypass || hasSession || allowsOptions(gate, request.method, path))) {
+  if (!(hasBasicPassword || hasBypass || hasSession || allowsOptions(gate, request.method, path))) {
     return answerLoginPage(sanitizeNext(request.target), false);
   }
 
   const headers = new Headers(request.headers);
   headers.delete(BYPASS_HEADER);
   headers.delete(SET_BYPASS_COOKIE_HEADER);
-  if (hasPassword) headers.delete("authorization");
+  if (hasBasicPassword) headers.delete("authorization");
   dropSessionCookie(headers);
   return {
     kind: "forward",
@@ -156,7 +240,7 @@ async function checkLogin(
   request: GateRequest,
   nowSeconds: number,
 ): Promise<GateVerdict> {
-  if (await isBasicPassword(gate, sign, request.headers.get("authorization"))) {
+  if (await isBasicPassword(gate, request.headers.get("authorization"))) {
     if (request.method === "POST") return sessionStarted(sign, request.host, nowSeconds);
     return redirect(sign, "/", request.host, nowSeconds);
   }
@@ -164,19 +248,7 @@ async function checkLogin(
   return answerLoginPage("/", true);
 }
 
-async function isPassword(gate: Gate, sign: Sign, password: string | null): Promise<boolean> {
-  return (
-    gate.passwordMac !== "" &&
-    password !== null &&
-    equalHex(await sign(PASSWORD_PURPOSE, password), gate.passwordMac)
-  );
-}
-
-async function isBasicPassword(
-  gate: Gate,
-  sign: Sign,
-  authorization: string | null,
-): Promise<boolean> {
+async function isBasicPassword(gate: Gate, authorization: string | null): Promise<boolean> {
   if (authorization === null) return false;
   const space = authorization.indexOf(" ");
   if (space < 0 || toLowerAscii(authorization.slice(0, space)) !== "basic") return false;
@@ -185,7 +257,7 @@ async function isBasicPassword(
   const decoded = decodeUtf8(Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0)));
   if (decoded === null) return false;
   const colon = decoded.indexOf(":");
-  return colon >= 0 && (await isPassword(gate, sign, decoded.slice(colon + 1)));
+  return colon >= 0 && (await hasPassword(gate, decoded.slice(colon + 1)));
 }
 
 async function isBypassSecret(gate: Gate, sign: Sign, value: string | null): Promise<boolean> {

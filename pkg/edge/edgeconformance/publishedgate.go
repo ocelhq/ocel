@@ -12,6 +12,7 @@ import (
 type PublishedGate struct {
 	Publish func(ctx context.Context, published *gate.Gate) error
 	Read    func(ctx context.Context) (*gate.Gate, error)
+	Signed  bool
 }
 
 func RunPublishedGate(t *testing.T, published PublishedGate) {
@@ -23,7 +24,11 @@ func RunPublishedGate(t *testing.T, published PublishedGate) {
 	)
 	now := time.Unix(1700000000, 0)
 	gateWithKey := func(key string) gate.Gate {
-		return gate.Gate{Key: key, PasswordMAC: gate.HashPassword(key, password), BypassSecrets: []string{}, AllowOptions: []string{}}
+		hash := gate.HashPassword(password)
+		if published.Signed {
+			hash = gate.SignPassword(key, password)
+		}
+		return gate.Gate{Key: key, PasswordHash: hash, BypassSecrets: []string{}, AllowOptions: []string{}}
 	}
 	publish := func(t *testing.T, toPublish *gate.Gate) {
 		t.Helper()

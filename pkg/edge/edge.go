@@ -59,6 +59,7 @@ type Facts struct {
 	PurgeBudget           PurgeBudget
 	Gates                 bool
 	GatesAtOrigin         bool
+	ChecksSignedPasswords bool
 	CredentialScope       string
 }
 

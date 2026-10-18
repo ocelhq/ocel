@@ -100,7 +100,7 @@ beforeEach(() => {
 });
 
 describe("the gateway answering a purge on its workers.dev host", () => {
-  it("accepts a signed raise for a served release and hands it to the one queue", async () => {
+  it("accepts a signed raise for a served release and hands it to its project's queue", async () => {
     const response = await worker.fetch(
       await purgeRequest(WORKERS_DEV),
       envWith(),
@@ -111,7 +111,7 @@ describe("the gateway answering a purge on its workers.dev host", () => {
     expect(servedReads).toEqual([{ slug: "p1", isrPrefix: ISR_PREFIX }]);
     expect(raised).toEqual([
       {
-        name: "purge",
+        name: "p1",
         mode: "purge",
         tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 5_000 }],
       },
@@ -131,7 +131,7 @@ describe("the gateway answering a purge on its workers.dev host", () => {
 
     expect(raised).toEqual([
       {
-        name: "purge",
+        name: "p1",
         mode: "invalidate",
         tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 5_000 }],
       },
@@ -179,18 +179,18 @@ describe("the shared preview entry answering a purge on its workers.dev host", (
   const sharedEnv = () =>
     envWith({ OCEL_SLUG: undefined, OCEL_PREVIEW: "1", OCEL_PREVIEW_GLOBAL: "1" });
 
-  it("looks the release up under the project its purge URL names, and queues the raise", async () => {
+  it("looks the release up under the project its purge URL names, and queues the raise on that project's queue", async () => {
     const response = await worker.fetch(
-      await purgeRequestTo(`${SHARED}${purgePath}?project=p1`),
+      await purgeRequestTo(`${SHARED}${purgePath}?project=p2`),
       sharedEnv(),
       contextWithQueue(),
     );
 
     expect(response.status).toBe(202);
-    expect(servedReads).toEqual([{ slug: "p1", isrPrefix: ISR_PREFIX }]);
+    expect(servedReads).toEqual([{ slug: "p2", isrPrefix: ISR_PREFIX }]);
     expect(raised).toEqual([
       {
-        name: "purge",
+        name: "p2",
         mode: "purge",
         tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 5_000 }],
       },
@@ -245,7 +245,7 @@ describe("the gateway keeping app traffic off its workers.dev host", () => {
   it("answers a purge there on a worker whose project is protected", async () => {
     heldGate = JSON.stringify({
       key: "gate-key",
-      passwordMac: "password-mac",
+      passwordHash: "password-hash",
       bypassSecrets: [],
       allowOptions: [],
     });

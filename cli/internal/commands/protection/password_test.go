@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/pkg/edge/gate"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
 
@@ -56,8 +55,8 @@ func TestRotatePrintsOnlyTheNewPasswordAndEndsEverySession(t *testing.T) {
 	if password == "" || strings.ContainsAny(password, " \n") || password == before.Password || after.Password != password {
 		t.Fatalf("stdout = %q, want only the new generated password, the one recorded", stdout)
 	}
-	if after.Gate.Key == before.Gate.Key || after.Gate.PasswordMAC != gate.HashPassword(after.Gate.Key, password) {
-		t.Errorf("gate = %+v, want a new key and the new password's MAC", after.Gate)
+	if after.Gate.Key == before.Gate.Key || !after.Gate.HasPassword(password) {
+		t.Errorf("gate = %+v, want a new key and the new password's hash", after.Gate)
 	}
 	if got := lastPublished(t, project); got.Key != after.Gate.Key {
 		t.Error("the edge was not handed the rotated gate")
@@ -115,11 +114,11 @@ func TestSetTakesThePasswordFromStandardInputAndPrintsNothing(t *testing.T) {
 		t.Errorf("stdout = %q, want nothing", stdout)
 	}
 	record := recorded(t, project)
-	if record.Password != "correct horse battery" || record.Gate.PasswordMAC != gate.HashPassword(record.Gate.Key, "correct horse battery") {
+	if record.Password != "correct horse battery" || !record.Gate.HasPassword("correct horse battery") {
 		t.Errorf("record = %+v, want the piped password without its newline", record)
 	}
-	if got := lastPublished(t, project); got.PasswordMAC != record.Gate.PasswordMAC {
-		t.Error("the edge was not handed the new password's MAC")
+	if got := lastPublished(t, project); got.PasswordHash != record.Gate.PasswordHash {
+		t.Error("the edge was not handed the new password's hash")
 	}
 }
 

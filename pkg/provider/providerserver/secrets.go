@@ -34,7 +34,7 @@ func newGateRecord() (stackrecords.GateRecord, error) {
 	return stackrecords.GateRecord{
 		Gate: gate.Gate{
 			Key:           key,
-			PasswordMAC:   gate.HashPassword(key, password),
+			PasswordHash:  gate.HashPassword(password),
 			BypassSecrets: []string{},
 			AllowOptions:  []string{},
 		},

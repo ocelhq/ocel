@@ -71,7 +71,12 @@ func promote(ctx context.Context, l projectLedger, req promoteRequest, routers [
 	if err := l.RewriteRecords(ctx, promoted); err != nil {
 		return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, nil))
 	}
+	kept, err := readKeptPromotions(ctx, l, pointer)
+	if err != nil {
+		return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, nil))
+	}
 	for i, routed := range routers {
+		moves[i].Kept = kept
 		err := routed.stack.MovePointer(ctx, moves[i], progress)
 		if err == nil {
 			continue
@@ -128,12 +133,17 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 		if err != nil {
 			return err
 		}
+		kept, err := readKeptPromotions(ctx, l, pointer)
+		if err != nil {
+			return err
+		}
 		err = routed.stack.MovePointer(ctx, router.PointerMove{
 			Pointer:     pointer,
 			Promotion:   active,
 			Records:     records,
 			Hosts:       routed.previous,
 			Superseded:  routed.hosts,
+			Kept:        kept,
 			StillActive: newStillActive(l, pointer, active.PromotionID),
 		}, progress.Discard())
 		var inactive inactivePromotion
@@ -179,4 +189,16 @@ func describeActive(active string) string {
 		return "nothing"
 	}
 	return active
+}
+
+func readKeptPromotions(ctx context.Context, l projectLedger, pointer string) ([]router.Promotion, error) {
+	read, err := l.Read(ctx, pointer)
+	if err != nil {
+		return nil, err
+	}
+	kept := make([]router.Promotion, 0, len(read.Promotions))
+	for _, recorded := range read.Promotions {
+		kept = append(kept, recorded.Promotion)
+	}
+	return kept, nil
 }

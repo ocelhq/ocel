@@ -10,7 +10,7 @@ import (
 func TestAMountedGateDecodesToTheGateItEncodedFrom(t *testing.T) {
 	t.Parallel()
 
-	held := gate.Gate{Key: "k", PasswordMAC: "mac", BypassSecrets: []string{"one"}, AllowOptions: []string{"/api"}}
+	held := gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string{"one"}, AllowOptions: []string{"/api"}}
 	encoded, err := gate.EncodeMounted(&held)
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestAMountedGateThatCannotBeReadIsAnErrorRatherThanAnOpenHost(t *testing.T)
 	for name, contents := range map[string]string{
 		"empty":        "",
 		"not json":     "{",
-		"no key":       `{"key":"","passwordMac":"m"}`,
+		"no key":       `{"key":"","passwordHash":"h"}`,
 		"wrong shape":  `[]`,
 		"a bare value": `true`,
 	} {

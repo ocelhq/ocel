@@ -121,8 +121,8 @@ const signedIn = { authorization: `Basic ${Buffer.from("anyone:pw").toString("ba
 describe.each(Object.keys(doors))("%s", (door) => {
   test("a request with no credentials never reaches the app", async () => {
     const key = "k";
-    const mac = await hashPassword(key, "pw");
-    process.env[GATE_FILE_VAR] = await mountGate(JSON.stringify({ key, passwordMac: mac }));
+    const hash = await hashPassword("pw");
+    process.env[GATE_FILE_VAR] = await mountGate(JSON.stringify({ key, passwordHash: hash }));
     const port = await start(door, echo);
 
     expect(await reach(port, {})).toBe(401);
@@ -130,8 +130,8 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a request with the password is served, and the app never sees it", async () => {
-    const mac = await hashPassword("k", "pw");
-    process.env[GATE_FILE_VAR] = await mountGate(JSON.stringify({ key: "k", passwordMac: mac }));
+    const hash = await hashPassword("pw");
+    process.env[GATE_FILE_VAR] = await mountGate(JSON.stringify({ key: "k", passwordHash: hash }));
     const port = await start(door, echo);
 
     expect(await reach(port, signedIn)).toBe(200);
@@ -139,8 +139,8 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("an admitted request still has the control headers a visitor sent stripped", async () => {
-    const mac = await hashPassword("k", "pw");
-    process.env[GATE_FILE_VAR] = await mountGate(JSON.stringify({ key: "k", passwordMac: mac }));
+    const hash = await hashPassword("pw");
+    process.env[GATE_FILE_VAR] = await mountGate(JSON.stringify({ key: "k", passwordHash: hash }));
     const port = await start(door, echo);
 
     expect(
@@ -157,8 +157,8 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("an admitted request keeps the host the runtime settled on", async () => {
-    const mac = await hashPassword("k", "pw");
-    process.env[GATE_FILE_VAR] = await mountGate(JSON.stringify({ key: "k", passwordMac: mac }));
+    const hash = await hashPassword("pw");
+    process.env[GATE_FILE_VAR] = await mountGate(JSON.stringify({ key: "k", passwordHash: hash }));
     const port = await start(door, echo);
 
     expect(

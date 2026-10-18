@@ -79,7 +79,7 @@ function signSession(gate, host, expiry) {
 }
 
 function isPassword(gate, password) {
-  return gate.passwordMac !== '' && sameHex(sign(gate, 'password', password), gate.passwordMac);
+  return sameHex(gate.passwordHash, 'hmac-sha256$' + sign(gate, 'password', password));
 }
 
 function hasBasicPassword(gate, authorization) {
@@ -205,7 +205,7 @@ function isStrings(value) {
 
 function isGate(value) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  if (typeof value.key !== 'string' || value.key === '' || typeof value.passwordMac !== 'string')
+  if (typeof value.key !== 'string' || value.key === '' || typeof value.passwordHash !== 'string')
     return false;
   return isStrings(value.bypassSecrets) && isStrings(value.allowOptions);
 }

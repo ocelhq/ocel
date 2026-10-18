@@ -274,7 +274,7 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("the front gates every request against the gate its service mounts and never hands the app the gate", func(t *testing.T) {
-		held := `{"key":"k","passwordMac":"` + gate.HashPassword("k", "pw") + `"}`
+		held := `{"key":"k","passwordHash":"` + gate.HashPassword("pw") + `"}`
 		mounted := filepath.Join(t.TempDir(), "gate")
 		if err := os.WriteFile(mounted, []byte(held), 0o600); err != nil {
 			t.Fatal(err)

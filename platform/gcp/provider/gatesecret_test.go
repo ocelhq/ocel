@@ -21,7 +21,7 @@ import (
 
 var shopGate = gate.Gate{
 	Key:           "shop-key",
-	PasswordMAC:   gate.HashPassword("shop-key", "correct horse battery"),
+	PasswordHash:  gate.HashPassword("correct horse battery"),
 	BypassSecrets: []string{"shop-bypass"},
 	AllowOptions:  []string{"/api/"},
 }
@@ -273,7 +273,7 @@ func TestProvisioningAGatedPreviewLeavesTheGateTheEdgeLastPublishedInItsSecret(t
 	p := server.open(t)
 	rotated := shopGate
 	rotated.Key = "rotated-key"
-	rotated.PasswordMAC = gate.HashPassword("rotated-key", "a password set after the deploy read the gate")
+	rotated.PasswordHash = gate.HashPassword("a password set after the deploy read the gate")
 	publishGate(t, p, &rotated)
 
 	if _, err := p.ProvisionContainers(context.Background(), gatedPreviewSpec(p, &shopGate), &fake.Log{}); err != nil {

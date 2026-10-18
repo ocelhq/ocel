@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -58,6 +59,11 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		return deploy.Config{}, err
 	}
 
+	front, err := p.openEdge(scope.Edge)
+	if err != nil {
+		return deploy.Config{}, err
+	}
+
 	cfg := deploy.Config{
 		Region:         p.aws.Region,
 		BackendURL:     stateBackendURL(deployed.StateBucket, scope.Slug),
@@ -77,6 +83,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		Tier:                scope.Tier,
 		Slug:                scope.Slug,
+		Edge:                front,
 		Env:                 scope.Env,
 		StateTable:          deployed.StateTable,
 		StateTableARN:       tableARN(p.aws.Region, account, deployed.StateTable),
@@ -174,4 +181,11 @@ func stateBackendURL(bucket, slug string) string {
 		query.Set("disableSSL", "true")
 	}
 	return backend + "?" + query.Encode()
+}
+
+func (p *Provider) openEdge(kind edge.Kind) (edge.Edge, error) {
+	if kind == edge.None {
+		return nil, nil
+	}
+	return p.Edges().Open(kind, nil)
 }

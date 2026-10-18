@@ -72,11 +72,11 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 	if err != nil {
 		return err
 	}
-	written, err := r.readGateInForce(ctx)
+	written, password, err := r.readGateInForce(ctx)
 	if err != nil {
 		return err
 	}
-	spec.Gate = written
+	spec.Gate = gateForEdge(r.front, written, password)
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {
 		if disabled {

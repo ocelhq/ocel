@@ -15,7 +15,7 @@ import {
   ownBundleKey,
 } from "./edge";
 import type { Env } from "./env";
-import { openPurgeQueue } from "./exports";
+import { newPurgeQueuePort } from "./exports";
 import {
   gateRequest,
   gateUnreadableResponse,
@@ -330,9 +330,7 @@ export default {
       },
       serving: {
         serve,
-        queue: {
-          raise: (scope, mode, tags) => openPurgeQueue(ctx.exports).raise(scope, mode, tags),
-        },
+        queue: newPurgeQueuePort(ctx.exports),
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
       edgeRuntime: { loader: env.LOADER, envelopeKey: env.OCEL_ENVELOPE_KEY },

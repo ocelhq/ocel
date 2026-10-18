@@ -17,7 +17,7 @@ import (
 func TestThePluginAnswersEveryConformanceVector(t *testing.T) {
 	t.Parallel()
 
-	edgeconformance.RunGateWith(t, func(t *testing.T, held gate.Gate, req gate.Request, now time.Time) gate.Verdict {
+	edgeconformance.RunSignedGateWith(t, func(t *testing.T, held gate.Gate, req gate.Request, now time.Time) gate.Verdict {
 		config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 			map[string]string{req.Host: "shop"},
 			map[string]gate.Gate{"shop": held},
@@ -66,7 +66,7 @@ func TestAnUncredentialedRequestForAProtectedHostIsAnsweredByThePluginBeforeAnyC
 
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"shop.example.com": "shop", "pr-7-shop.preview.example.com": "shop"},
-		map[string]gate.Gate{"shop": {Key: "k", PasswordMAC: "m"}},
+		map[string]gate.Gate{"shop": {Key: "k", PasswordHash: gate.SignPassword("k", "pw")}},
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestTheLoginPostIsAnsweredByThePluginWithTheSessionCookie(t *testing.T) {
 	t.Parallel()
 
 	held := gate.Gate{Key: "k"}
-	held.PasswordMAC = gate.HashPassword(held.Key, "pw")
+	held.PasswordHash = gate.SignPassword(held.Key, "pw")
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"gated.example.dev": "shop"},
 		map[string]gate.Gate{"shop": held},
@@ -118,7 +118,7 @@ func TestTheLoginPostIsAnsweredByThePluginWithTheSessionCookie(t *testing.T) {
 func TestASessionCookieOnASecondCookieLineIsAdmittedAndRemovedBeforeForwarding(t *testing.T) {
 	t.Parallel()
 
-	held := gate.Gate{Key: "k", PasswordMAC: "m"}
+	held := gate.Gate{Key: "k", PasswordHash: gate.SignPassword("k", "pw")}
 	now := time.Unix(1700000000, 0)
 	session := sessionCookie(held, "gated.example.dev", now)
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
@@ -147,7 +147,7 @@ func TestASessionCookieOnASecondCookieLineIsAdmittedAndRemovedBeforeForwarding(t
 func TestACookieTheGateDoesNotReadIsForwardedByteForByte(t *testing.T) {
 	t.Parallel()
 
-	held := gate.Gate{Key: "k", PasswordMAC: "m", BypassSecrets: []string{"s"}}
+	held := gate.Gate{Key: "k", PasswordHash: gate.SignPassword("k", "pw"), BypassSecrets: []string{"s"}}
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"gated.example.dev": "shop"},
 		map[string]gate.Gate{"shop": held},
@@ -176,7 +176,7 @@ func sessionCookie(held gate.Gate, host string, now time.Time) string {
 		Method: "POST", Host: host, Target: gate.LoginPath,
 		Header: gate.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte(":pw"))}},
 	}
-	held.PasswordMAC = gate.HashPassword(held.Key, "pw")
+	held.PasswordHash = gate.SignPassword(held.Key, "pw")
 	cookie := held.Check(login, now).Response.Header.Get("Set-Cookie")
 	pair, _, _ := strings.Cut(cookie, ";")
 	return pair
@@ -186,7 +186,7 @@ func TestEveryResponseThePluginAnswersItselfNamesTheLoadBalancerAsTheRouter(t *t
 	t.Parallel()
 
 	held := gate.Gate{Key: "k", BypassSecrets: []string{"bypass"}}
-	held.PasswordMAC = gate.HashPassword(held.Key, "pw")
+	held.PasswordHash = gate.SignPassword(held.Key, "pw")
 	config, err := gateplugin.ParseConfig(gateplugin.EncodeConfig(
 		map[string]string{"gated.example.dev": "shop"},
 		map[string]gate.Gate{"shop": held},

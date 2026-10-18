@@ -195,6 +195,7 @@ type edgeAccount struct {
 	addressesItself bool
 	gates           *bool
 	gatesAtOrigin   bool
+	signedPasswords bool
 	publications    []edge.GatePublication
 	publishRefusal  error
 	onReconcile     func(edge.StackSpec)
@@ -610,15 +611,16 @@ func (e *Edge) Facts() edge.Facts {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	facts := edge.Facts{
-		Supported:       edge.AllNeeds(),
-		RunsCode:        e.kind == KindRelay,
-		ProxiesRecords:  e.proxies,
-		CachesResponses: e.caches,
-		CacheTagLimits:  e.tagLimits,
-		CredentialScope: "fake-account",
-		TunnelsToOrigin: e.options.Tunnel,
-		Gates:           e.gates == nil || *e.gates,
-		GatesAtOrigin:   e.gatesAtOrigin,
+		Supported:             edge.AllNeeds(),
+		RunsCode:              e.kind == KindRelay,
+		ProxiesRecords:        e.proxies,
+		CachesResponses:       e.caches,
+		CacheTagLimits:        e.tagLimits,
+		CredentialScope:       "fake-account",
+		TunnelsToOrigin:       e.options.Tunnel,
+		Gates:                 e.gates == nil || *e.gates,
+		GatesAtOrigin:         e.gatesAtOrigin,
+		ChecksSignedPasswords: e.signedPasswords,
 	}
 	if e.proxies {
 		facts.ProxiedRecordNote = "Turn the fake edge's proxy on for these records."
@@ -639,6 +641,12 @@ func (e *Edge) GatesAtOrigin(gates bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.gatesAtOrigin = gates
+}
+
+func (e *Edge) ChecksSignedPasswords(signed bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.signedPasswords = signed
 }
 
 func (e *Edge) Publications() []edge.GatePublication {

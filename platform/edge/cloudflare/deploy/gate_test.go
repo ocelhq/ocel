@@ -16,14 +16,14 @@ import (
 
 var shopGate = gate.Gate{
 	Key:           "gate-key",
-	PasswordMAC:   "password-mac",
+	PasswordHash:  "password-hash",
 	BypassSecrets: []string{"bypass-one"},
 	AllowOptions:  []string{"/api/"},
 }
 
 var productionGate = gate.Gate{
 	Key:           "production-gate-key",
-	PasswordMAC:   "production-password-mac",
+	PasswordHash:  "production-password-hash",
 	BypassSecrets: []string{"production-bypass"},
 	AllowOptions:  []string{},
 }

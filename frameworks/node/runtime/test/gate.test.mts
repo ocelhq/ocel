@@ -152,7 +152,7 @@ describe("a mounted gate that changes", () => {
   it("is read again once the cache lapses, so a rotated key refuses the old session", async () => {
     const gateWith = async (key: string): Promise<Gate> => ({
       key,
-      passwordMac: await hashPassword(key, "pw"),
+      passwordHash: await hashPassword("pw"),
       bypassSecrets: [],
       allowOptions: [],
     });
@@ -178,7 +178,7 @@ describe("a mounted gate that changes", () => {
 
   it("is read once inside the cache window", async () => {
     let reads = 0;
-    const gate: Gate = { key: "k", passwordMac: "m", bypassSecrets: [], allowOptions: [] };
+    const gate: Gate = { key: "k", passwordHash: "m", bypassSecrets: [], allowOptions: [] };
     const source = gateSource(
       () => {
         reads++;
@@ -263,7 +263,7 @@ describe("a service whose mounted gate cannot be used", () => {
 describe("an admitted response", () => {
   const gate: Gate = {
     key: "k",
-    passwordMac: "m",
+    passwordHash: "m",
     bypassSecrets: ["let-me-in"],
     allowOptions: [],
   };
@@ -304,7 +304,7 @@ describe("opening the gate a service mounts", () => {
   it("reads an inline gate when no file is named", async () => {
     const encoded = JSON.stringify({
       key: "k",
-      passwordMac: await hashPassword("k", "pw"),
+      passwordHash: await hashPassword("pw"),
       bypassSecrets: [],
       allowOptions: [],
     });
@@ -319,7 +319,7 @@ describe("opening the gate a service mounts", () => {
 
 describe("a websocket upgrade", () => {
   it("is refused with the gate's answer when it carries no credentials", async () => {
-    const gate: Gate = { key: "k", passwordMac: "m", bypassSecrets: [], allowOptions: [] };
+    const gate: Gate = { key: "k", passwordHash: "m", bypassSecrets: [], allowOptions: [] };
     const source = sourceOf(gate);
     let reachedApp = false;
     const server = http.createServer();

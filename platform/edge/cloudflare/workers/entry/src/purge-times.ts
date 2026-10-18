@@ -22,7 +22,8 @@ export interface TagTimesStore {
   read(tags: readonly string[]): TagTimes;
   readReleasesCheckedBefore(at: number, limit: number): RecordedRelease[];
   markChecked(release: string, at: number): void;
-  retire(release: string): void;
+  retire(release: string, checkedAt: number): void;
+  forget(release: string): void;
 }
 
 const TAGS_PER_QUERY = 100;
@@ -108,7 +109,7 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
     markChecked(release, at) {
       sql.exec(`UPDATE recorded_releases SET checked_at = ? WHERE release = ?`, at, release);
     },
-    retire(release) {
+    retire(release, checkedAt) {
       const [from, to] = releaseTagRange(release);
       storage.transactionSync(() => {
         const latest = sql
@@ -120,8 +121,24 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
           )
           .toArray()[0]?.at;
         sql.exec(`DELETE FROM tag_times WHERE tag >= ? AND tag < ?`, from, to);
-        sql.exec(`DELETE FROM recorded_releases WHERE release = ?`, release);
+        sql.exec(
+          `UPDATE recorded_releases SET checked_at = ? WHERE release = ?`,
+          checkedAt,
+          release,
+        );
         if (latest) raiseTime("purged_at", release, latest);
+      });
+    },
+    forget(release) {
+      const [from, to] = releaseTagRange(release);
+      storage.transactionSync(() => {
+        sql.exec(
+          `DELETE FROM tag_times WHERE tag = ? OR (tag >= ? AND tag < ?)`,
+          release,
+          from,
+          to,
+        );
+        sql.exec(`DELETE FROM recorded_releases WHERE release = ?`, release);
       });
     },
   };
