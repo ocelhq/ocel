@@ -7,6 +7,13 @@ vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
+const current = vi.hoisted(() => ({ context: undefined as unknown }));
+
+vi.mock("./bucket.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./bucket.js")>()),
+  bucketContextOf: () => current.context,
+}));
+
 const { bucket } = await import("./bucket.js");
 
 import type { BucketServiceClient } from "./bucket-client.js";
@@ -27,6 +34,7 @@ function fakeContext() {
     getUploadStatus: vi.fn(async () => ({ state: UploadState.PENDING, error: "" })),
   } as unknown as BucketServiceClient;
   const ctx: BucketContext = { client, bucket: "store-bucket", publicBaseUrl: "" };
+  current.context = ctx;
   return { ctx, presignUpload };
 }
 
@@ -49,7 +57,7 @@ describe("hono path", () => {
   it("maps a mounted Hono route through the core and returns the presign Response", async () => {
     const { ctx, presignUpload } = fakeContext();
     const app = new Hono();
-    app.on(["GET", "POST"], "/api/upload", honoRouteHandler(storage, { runtime: ctx }));
+    app.on(["GET", "POST"], "/api/upload", honoRouteHandler(storage));
 
     const res = await app.request("/api/upload?op=presign", {
       method: "POST",
@@ -79,7 +87,7 @@ describe("hono path", () => {
       },
     });
     const app = new Hono();
-    app.on(["GET", "POST"], "/api/upload", honoRouteHandler(ctxBucket, { runtime: ctx }));
+    app.on(["GET", "POST"], "/api/upload", honoRouteHandler(ctxBucket));
 
     const res = await app.request("/api/upload?op=presign", {
       method: "POST",
@@ -99,7 +107,7 @@ describe("hono path", () => {
 describe("express path", () => {
   it("adapts Node req/res: reads req.body and writes the core Response back", async () => {
     const { ctx, presignUpload } = fakeContext();
-    const handler = expressRouteHandler(storage, { runtime: ctx });
+    const handler = expressRouteHandler(storage);
 
     const req = {
       method: "POST",

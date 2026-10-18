@@ -1,8 +1,8 @@
-import type { JsonObject } from "@bufbuild/protobuf";
 import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
-import { type Client, createClient } from "@connectrpc/connect";
-import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
+import type { Client } from "@connectrpc/connect";
+import { isDiscovering, unprovisioned } from "../binding/unprovisioned.js";
 import { type Duration, encodeDueAt } from "../delivery/duration.js";
+import type { JsonObject } from "../delivery/json.js";
 import { JsonText } from "../delivery/json-text.js";
 import { decodeJson, decodeJsonText } from "../delivery/payload.js";
 import {
@@ -10,7 +10,7 @@ import {
   RunStatus as ProtoRunStatus,
   TaskService,
 } from "../gen/proto/app/task/v1/task_pb.js";
-import { createRuntimeTransport } from "../runtime/transport.js";
+import { createRuntimeClient } from "../runtime/transport.js";
 import type { RunHandle, Task } from "./task.js";
 
 /** Where a run is in its life. */
@@ -122,10 +122,10 @@ function encodeRunStatus(status: RunStatus): ProtoRunStatus {
 }
 
 function createTaskClient(operation: string): Client<typeof TaskService> {
-  if (unprovisionedPhase()) {
+  if (isDiscovering()) {
     throw unprovisioned("runs", operation);
   }
-  return createClient(TaskService, createRuntimeTransport());
+  return createRuntimeClient(TaskService);
 }
 
 /** Reads and acts on the runs of this app's tasks. */

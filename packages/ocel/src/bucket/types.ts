@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -24,7 +24,9 @@ export interface CompletedFile {
   path: string;
 }
 
-export type ParsedInput<TInput> = TInput extends z.ZodType ? z.infer<TInput> : undefined;
+export type ParsedInput<TInput> = TInput extends StandardSchemaV1
+  ? StandardSchemaV1.InferOutput<TInput>
+  : undefined;
 
 export type LimitValue<TMetadata, T> = T | ((ctx: { metadata: TMetadata }) => T);
 
@@ -43,7 +45,7 @@ export type PathFn<TMetadata> = (ctx: { file: FileInfo; metadata: TMetadata }) =
 
 export type PathConfig<TMetadata> = StructuredPath | PathFn<TMetadata>;
 
-export interface UploaderAuth<TReq, TInput extends z.ZodType | undefined, TMetadata> {
+export interface UploaderAuth<TReq, TInput extends StandardSchemaV1 | undefined, TMetadata> {
   input?: TInput;
   middleware: (ctx: { req: TReq; input: ParsedInput<TInput> }) => MaybePromise<TMetadata>;
 }
@@ -57,7 +59,7 @@ export interface UploaderUpload<TMetadata> {
 }
 
 export interface Uploader<TInputParsed = unknown, TMetadata = unknown, TReq = UploadRequest> {
-  readonly auth: UploaderAuth<TReq, z.ZodType | undefined, TMetadata>;
+  readonly auth: UploaderAuth<TReq, StandardSchemaV1 | undefined, TMetadata>;
   readonly upload: UploaderUpload<TMetadata>;
   readonly __input?: TInputParsed;
 }

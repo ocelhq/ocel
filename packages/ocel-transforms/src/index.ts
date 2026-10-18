@@ -9,11 +9,11 @@ export type {
   TransformInputs,
   TransformRule,
   TransformRules,
-} from "./define";
-export { defineTransform } from "./define";
-export type { Patch } from "./patch";
+} from "./define.js";
+export { defineTransform } from "./define.js";
+export type { Patch } from "./patch.js";
 
-import { type BindingPlaceholdersOf, bindings as openBindings } from "./output";
+import { type BindingPlaceholdersOf, bindings as openBindings } from "./output.js";
 
 /**
  * The records this project's config binds, keyed by resource type and then by
@@ -50,5 +50,5 @@ export type {
   BindingPlaceholdersOf,
   BindingProperties,
   Linked,
-} from "./output";
-export { isBindingOutput } from "./output";
+} from "./output.js";
+export { isBindingOutput } from "./output.js";

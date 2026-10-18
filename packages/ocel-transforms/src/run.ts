@@ -1,6 +1,6 @@
 import { writeSync } from "node:fs";
-import { isTransformDefinition, type TransformDefinition } from "./define";
-import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate";
+import { isTransformDefinition, type TransformDefinition } from "./define.js";
+import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate.js";
 
 /**
  * Pairs a module's authored specifier with its default export, so a deploy

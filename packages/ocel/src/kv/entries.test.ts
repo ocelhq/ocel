@@ -1,16 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
-import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import { readKvFixture } from "../testing/kv-fixture.js";
 
 vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
-vi.mock("ioredis", async () => {
+vi.mock("node:module", async () => {
   const { ValkeyMock } = await import("../testing/valkey-mock.js");
-  return { Redis: ValkeyMock, default: ValkeyMock };
+  return { createRequire: () => () => ({ Redis: ValkeyMock }) };
 });
 
 const { kv, InvalidKVValueError } = await import("./index.js");
@@ -22,7 +21,7 @@ let port = 8000;
 function deliver(name: string) {
   port += 1;
   vi.stubEnv(
-    bindingKey(name, BindingType.KV),
+    bindingKey(name, "kv"),
     JSON.stringify({ name: `kv--${name}`, kv: { host: "127.0.0.1", port, password: "pw" } }),
   );
 }

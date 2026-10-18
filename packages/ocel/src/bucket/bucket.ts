@@ -1,11 +1,6 @@
-import { getConfig } from "../binding/binding.js";
-import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
-import { declarationSite } from "../declaration/callsite.js";
-import { defer } from "../declaration/defer.js";
-import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
-import type { BucketProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { rpc } from "../runtime/rpc.js";
-import { type BucketContext, resolveBucketContext } from "./bucket-context.js";
+import { lazyBinding } from "../binding/binding.js";
+import { declare } from "../declaration/declare.js";
+import { type BucketContext, openBucketContext } from "./bucket-context.js";
 import {
   type BucketObjects,
   createObjects,
@@ -35,53 +30,37 @@ export interface BucketOptions<
   uploaders?: TUploaders;
 }
 
-/** The binding fields a bucket resolves at runtime. */
-export type ResolvedBucketConfig = Pick<BucketProperties, "bucket" | "publicBaseUrl">;
+const contexts = new WeakMap<Bucket, (access: string) => BucketContext>();
+
+export function bucketContextOf(bucket: Bucket, access: string): BucketContext {
+  const context = contexts.get(bucket);
+  if (!context) {
+    throw new Error(`bucket("${bucket.name}") was not declared with bucket()`);
+  }
+  return context(access);
+}
 
 /** A declared bucket, and the handle an app reads and writes its objects through. */
 export class Bucket<
   TUploaders extends Record<string, AnyUploader> = Record<string, AnyUploader>,
   TPublic extends boolean = boolean,
 > {
-  private type = ResourceType.BUCKET;
-  private context: BucketContext | undefined;
   private objects: BucketObjects;
 
   constructor(
     /** The name this bucket was declared under. */
-    public name: string,
+    readonly name: string,
     /** The browser-upload flows this bucket accepts. */
-    public uploaders: TUploaders,
+    readonly uploaders: TUploaders,
     /** The browser origins allowed to upload straight to the store. */
-    public allowedOrigins: string[],
+    readonly allowedOrigins: string[],
     /** Whether every object is served anonymously over HTTP. */
-    public isPublic: boolean,
+    readonly isPublic: boolean,
   ) {
-    this.objects = createObjects({ runtime: () => this.runtime() });
-    if (process.env.OCEL_PHASE === "discovery") {
-      defer(
-        rpc.resource.declare({
-          resource: { name, type: this.type },
-          config: {
-            case: "bucket",
-            value: { allowedOrigins, public: isPublic },
-          },
-          source: declarationSite(),
-        }),
-      );
-    }
-  }
-
-  private runtime(): BucketContext {
-    return (this.context ??= resolveBucketContext(this));
-  }
-
-  /** The binding delivered for this bucket. */
-  __config(): ResolvedBucketConfig {
-    if (unprovisionedPhase()) {
-      throw unprovisioned(`bucket("${this.name}")`, "__config");
-    }
-    return getConfig(this.name, "bucket");
+    const context = lazyBinding(`bucket("${name}")`, name, "bucket", openBucketContext);
+    contexts.set(this, context);
+    this.objects = createObjects({ runtime: context });
+    declare(name, { case: "bucket", value: { allowedOrigins, public: isPublic } });
   }
 
   /** Writes `body` under `key`, in one request or in parts, and returns the stored object. */
@@ -89,13 +68,13 @@ export class Bucket<
     return this.objects.put(key, body, options);
   }
 
-  /** Reads the object under `key`, or `null` when the bucket has none. */
-  get(key: string, options?: GetOptions): Promise<ObjectBody | null> {
+  /** Reads the object under `key`, or `undefined` when the bucket has none. */
+  get(key: string, options?: GetOptions): Promise<ObjectBody | undefined> {
     return this.objects.get(key, options);
   }
 
-  /** What the bucket knows about `key`, or `null` when it has none. */
-  head(key: string): Promise<ObjectInfo | null> {
+  /** What the bucket knows about `key`, or `undefined` when it has none. */
+  head(key: string): Promise<ObjectInfo | undefined> {
     return this.objects.head(key);
   }
 

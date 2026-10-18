@@ -1,16 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bindingKey } from "../binding/binding.js";
-import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 
 vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
-vi.mock("ioredis", () => {
-  throw Object.assign(new Error("Cannot find package 'ioredis' imported from ocel/kv"), {
-    code: "ERR_MODULE_NOT_FOUND",
-  });
-});
+vi.mock("node:module", () => ({
+  createRequire: () => (id: string) => {
+    throw Object.assign(new Error(`Cannot find module '${id}'`), { code: "MODULE_NOT_FOUND" });
+  },
+}));
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -21,7 +20,7 @@ describe("ocel/kv without ioredis installed", () => {
     const { kv } = await import("./index.js");
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(
-      bindingKey("absent", BindingType.KV),
+      bindingKey("absent", "kv"),
       JSON.stringify({ name: "kv--absent", kv: { host: "127.0.0.1", port: 6379 } }),
     );
     const store = kv("absent", { entries: { hits: kv.counter("hits") } });

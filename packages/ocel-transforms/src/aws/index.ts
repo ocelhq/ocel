@@ -1,6 +1,6 @@
 import type { cloudwatch, ec2, elasticache, iam, lambda, rds, s3 } from "@pulumi/aws";
 import type { Unwrap } from "@pulumi/pulumi";
-import type { Patch } from "../patch";
+import type { Patch } from "../patch.js";
 
 /**
  * One key per Pulumi resource the AWS provider constructs for an ocel resource,

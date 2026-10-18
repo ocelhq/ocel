@@ -1,4 +1,4 @@
-import type { Linked } from "./output";
+import type { Linked } from "./output.js";
 
 /**
  * A deep-partial of one underlying resource's args, with every leaf open to a

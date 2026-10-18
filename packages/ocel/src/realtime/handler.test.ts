@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
-import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import {
   appsyncBinding,
   appsyncHost,
@@ -77,7 +76,7 @@ async function answer(response: Response): Promise<Answer> {
 describe("the realtime handler on AppSync Events", () => {
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), appsyncBinding);
+    vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
     subscribeRule.mockClear();
     publishRule.mockClear();
   });
@@ -271,7 +270,7 @@ describe("the realtime handler on AppSync Events", () => {
 describe("the realtime handler's defaults", () => {
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), appsyncBinding);
+    vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
   });
 
   afterEach(() => {
@@ -478,7 +477,7 @@ describe("the realtime handler's defaults", () => {
       }),
     ],
   ])("answers 500 no-store when %s", async (_, binding) => {
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), binding);
+    vi.stubEnv(bindingKey("app", "realtime"), binding);
 
     const res = await POST(post({ connect: true, ops: [{ op: "subscribe", pattern: "status" }] }));
 
@@ -492,7 +491,7 @@ describe("the realtime handler's defaults", () => {
     ["a subscribe token", { ops: [{ op: "subscribe", pattern: "status" }] }],
   ])("answers 500 no-store when %s cannot be minted", async (_, batch) => {
     vi.stubEnv(
-      bindingKey("app", BindingType.REALTIME),
+      bindingKey("app", "realtime"),
       JSON.stringify({
         name: "realtime--app",
         realtime: { ...JSON.parse(appsyncBinding).realtime, signingKey: "AAAA" },
@@ -526,7 +525,7 @@ describe("a publish relayed through the realtime handler", () => {
   beforeEach(async () => {
     gateway = await serveFakeGateway();
     vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), gateway.binding);
+    vi.stubEnv(bindingKey("app", "realtime"), gateway.binding);
     publishRule.mockClear();
   });
 
@@ -615,7 +614,7 @@ describe("a publish relayed through the realtime handler", () => {
   it("denies a publish the runtime refuses", async () => {
     await gateway.close();
     gateway = await serveFakeGateway({ status: 401 });
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), gateway.binding);
+    vi.stubEnv(bindingKey("app", "realtime"), gateway.binding);
 
     const res = await answer(
       await POST(
@@ -705,7 +704,7 @@ describe("a gateway the binding names by a path on the app's own origin", () => 
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(
-      bindingKey("app", BindingType.REALTIME),
+      bindingKey("app", "realtime"),
       JSON.stringify({
         name: "realtime--app",
         realtime: {

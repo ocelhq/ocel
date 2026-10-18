@@ -1,5 +1,14 @@
-import type { Interceptor, Transport } from "@connectrpc/connect";
+import type { DescMethod, DescService } from "@bufbuild/protobuf";
+import {
+  type Client,
+  Code,
+  ConnectError,
+  createClient,
+  type Interceptor,
+  type Transport,
+} from "@connectrpc/connect";
 import { createConnectTransport } from "#connect-transport";
+import { RuntimeCallError } from "./errors.js";
 
 /** The env key the ocel runtime's address is delivered under. */
 export const RUNTIME_ADDRESS = "OCEL_RUNTIME_ADDRESS";
@@ -46,4 +55,43 @@ export function createRuntimeTransport(): Transport {
     baseUrl: getRuntimeAddress(),
     interceptors: [createAuthorizationInterceptor(getSessionToken())],
   });
+}
+
+function wireCode(code: Code): string {
+  return (Code[code] ?? "Unknown").replace(/[A-Z]/g, (letter, at: number) =>
+    at === 0 ? letter.toLowerCase() : `_${letter.toLowerCase()}`,
+  );
+}
+
+function refusal(service: DescService, method: DescMethod, cause: unknown): RuntimeCallError {
+  const error = ConnectError.from(cause);
+  return new RuntimeCallError(
+    `${service.typeName}/${method.name}`,
+    wireCode(error.code),
+    error.rawMessage,
+    error,
+  );
+}
+
+/** A client of the ocel runtime whose every failed call throws a {@link RuntimeCallError}. Throws when the address or token was not delivered. */
+export function createRuntimeClient<TService extends DescService>(
+  service: TService,
+): Client<TService> {
+  const client = createClient(service, createRuntimeTransport()) as Record<
+    string,
+    (...args: unknown[]) => Promise<unknown>
+  >;
+  const refusing: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+  for (const method of service.methods) {
+    const call = client[method.localName];
+    if (!call) continue;
+    refusing[method.localName] = async (...args) => {
+      try {
+        return await call(...args);
+      } catch (cause) {
+        throw refusal(service, method, cause);
+      }
+    };
+  }
+  return refusing as Client<TService>;
 }

@@ -1,9 +1,9 @@
-import { Code, ConnectError } from "@connectrpc/connect";
 import {
   SignedAudience,
   SignedOperation,
   type ObjectInfo as WireObjectInfo,
 } from "../gen/proto/app/bucket/v1/bucket_pb.js";
+import { RuntimeCallError } from "../runtime/errors.js";
 import type { BucketContext } from "./bucket-context.js";
 import { ObjectNotFoundError, PreconditionFailedError } from "./errors.js";
 
@@ -118,10 +118,10 @@ export interface SignedUpload {
 export interface BucketObjects {
   /** Writes `body` under `key`, in one request or in parts, and returns the stored object. */
   put(key: string, body: PutBody, options?: PutOptions): Promise<ObjectInfo>;
-  /** Reads the object under `key`, or `null` when the bucket has none. */
-  get(key: string, options?: GetOptions): Promise<ObjectBody | null>;
-  /** What the bucket knows about `key`, or `null` when it has none. */
-  head(key: string): Promise<ObjectInfo | null>;
+  /** Reads the object under `key`, or `undefined` when the bucket has none. */
+  get(key: string, options?: GetOptions): Promise<ObjectBody | undefined>;
+  /** What the bucket knows about `key`, or `undefined` when it has none. */
+  head(key: string): Promise<ObjectInfo | undefined>;
   /** Removes one key or many; a key that is not there is not an error. */
   delete(key: string | string[]): Promise<void>;
   /** The objects under a prefix. */
@@ -164,16 +164,13 @@ function refused(key: string, status: number): Error | undefined {
 }
 
 function wireRefusal(key: string, error: unknown): Error {
-  if (error instanceof ConnectError) {
-    if (error.code === Code.NotFound) return new ObjectNotFoundError(key);
-    if (error.code === Code.FailedPrecondition) return new PreconditionFailedError(key);
+  if (error instanceof RuntimeCallError) {
+    if (error.code === "not_found") return new ObjectNotFoundError(key, { cause: error });
+    if (error.code === "failed_precondition") {
+      return new PreconditionFailedError(key, { cause: error });
+    }
   }
-  if (typeof error === "object" && error !== null && "code" in error) {
-    const code = (error as { code: unknown }).code;
-    if (code === Code.NotFound) return new ObjectNotFoundError(key);
-    if (code === Code.FailedPrecondition) return new PreconditionFailedError(key);
-  }
-  return error instanceof Error ? error : new Error(String(error));
+  return error instanceof Error ? error : new Error(String(error), { cause: error });
 }
 
 async function sized(
@@ -218,6 +215,18 @@ async function* chunked(
   }
 }
 
+async function* prepended(
+  head: Uint8Array[],
+  rest: AsyncGenerator<Uint8Array>,
+): AsyncGenerator<Uint8Array> {
+  try {
+    yield* head;
+    yield* rest;
+  } finally {
+    await rest.return(undefined);
+  }
+}
+
 function concat(chunks: Uint8Array[], length: number): Uint8Array {
   if (chunks.length === 1) return chunks[0] as Uint8Array;
   const out = new Uint8Array(length);
@@ -231,12 +240,13 @@ function concat(chunks: Uint8Array[], length: number): Uint8Array {
 
 /** Builds the object operations against a resolved runtime context. */
 export function createObjects(deps: {
-  runtime: () => BucketContext;
+  runtime: (access: string) => BucketContext;
   fetch?: FetchLike;
 }): BucketObjects {
   const send: FetchLike = deps.fetch ?? ((...args) => globalThis.fetch(...args));
 
   const sign = async (
+    { client, bucket }: BucketContext,
     key: string,
     operation: SignedOperation,
     audience: SignedAudience,
@@ -251,7 +261,6 @@ export function createObjects(deps: {
       expiresIn?: number;
     },
   ) => {
-    const { client, bucket } = deps.runtime();
     const res = await client.sign({
       bucket,
       key,
@@ -275,8 +284,13 @@ export function createObjects(deps: {
     return target;
   };
 
-  const putSingle = async (key: string, bytes: Uint8Array, options: PutOptions) => {
-    const target = await sign(key, SignedOperation.PUT, SignedAudience.INTERNAL, {
+  const putSingle = async (
+    ctx: BucketContext,
+    key: string,
+    bytes: Uint8Array,
+    options: PutOptions,
+  ) => {
+    const target = await sign(ctx, key, SignedOperation.PUT, SignedAudience.INTERNAL, {
       contentType: options.contentType,
       ifNoneMatch: options.ifNoneMatch,
       ifMatch: options.ifMatch,
@@ -300,11 +314,11 @@ export function createObjects(deps: {
   };
 
   const putMultipart = async (
+    { client, bucket }: BucketContext,
     key: string,
     parts: AsyncGenerator<Uint8Array>,
     options: PutOptions,
   ) => {
-    const { client, bucket } = deps.runtime();
     const { uploadId } = await client.createMultipart({
       bucket,
       key,
@@ -377,17 +391,20 @@ export function createObjects(deps: {
     }
   };
 
-  const head = async (key: string): Promise<ObjectInfo | null> => {
-    const { client, bucket } = deps.runtime();
+  const headIn = async (
+    { client, bucket }: BucketContext,
+    key: string,
+  ): Promise<ObjectInfo | undefined> => {
     const res = await client.head({ bucket, key });
-    return res.object ? info(res.object, key) : null;
+    return res.object ? info(res.object, key) : undefined;
   };
 
   return {
     async put(key, body, options = {}) {
+      const ctx = deps.runtime("put");
       const source = await sized(body);
       if (source.bytes && source.bytes.byteLength <= singleRequestCeiling) {
-        await putSingle(key, source.bytes, options);
+        await putSingle(ctx, key, source.bytes, options);
       } else {
         const stream =
           source.stream ??
@@ -397,24 +414,32 @@ export function createObjects(deps: {
               controller.close();
             },
           });
-        await putMultipart(key, chunked(stream, partSize), options);
+        const parts = chunked(stream, partSize);
+        const first = await parts.next();
+        const second = first.done ? first : await parts.next();
+        if (second.done) {
+          await putSingle(ctx, key, first.done ? new Uint8Array(0) : first.value, options);
+        } else {
+          await putMultipart(ctx, key, prepended([first.value, second.value], parts), options);
+        }
       }
-      const stored = await head(key);
+      const stored = await headIn(ctx, key);
       if (!stored) throw new ObjectNotFoundError(key);
       return stored;
     },
 
     async get(key, options = {}) {
-      const stored = await head(key);
-      if (!stored) return null;
-      const target = await sign(key, SignedOperation.GET, SignedAudience.INTERNAL);
+      const ctx = deps.runtime("get");
+      const stored = await headIn(ctx, key);
+      if (!stored) return undefined;
+      const target = await sign(ctx, key, SignedOperation.GET, SignedAudience.INTERNAL);
       const headers: Record<string, string> = {};
       if (options.range) {
         const { offset, length } = options.range;
         headers.range = `bytes=${offset}-${length === undefined ? "" : offset + length - 1}`;
       }
       const res = await send(target.url, { headers });
-      if (res.status === 404) return null;
+      if (res.status === 404) return undefined;
       if (!res.ok) throw new Error(`reading "${key}" was refused (${res.status})`);
       const body = res.body as ReadableStream<Uint8Array>;
       return {
@@ -426,10 +451,12 @@ export function createObjects(deps: {
       };
     },
 
-    head,
+    async head(key) {
+      return headIn(deps.runtime("head"), key);
+    },
 
     async delete(key) {
-      const { client, bucket } = deps.runtime();
+      const { client, bucket } = deps.runtime("delete");
       const keys = Array.isArray(key) ? key : [key];
       if (keys.length === 0) return;
       await client.delete({ bucket, keys });
@@ -437,7 +464,7 @@ export function createObjects(deps: {
 
     list(options = {}) {
       const page = async ({ cursor }: { cursor?: string } = {}): Promise<ObjectPage> => {
-        const { client, bucket } = deps.runtime();
+        const { client, bucket } = deps.runtime("list");
         const res = await client.list({
           bucket,
           prefix: options.prefix ?? "",
@@ -464,7 +491,7 @@ export function createObjects(deps: {
     },
 
     async copy(source, destination) {
-      const { client, bucket } = deps.runtime();
+      const { client, bucket } = deps.runtime("copy");
       try {
         const res = await client.copy({ bucket, sourceKey: source, destinationKey: destination });
         return info(res.object, destination);
@@ -474,24 +501,36 @@ export function createObjects(deps: {
     },
 
     async signedUrl(key, options = {}) {
-      const target = await sign(key, SignedOperation.GET, SignedAudience.EXTERNAL, {
-        expiresIn: options.expiresIn,
-        downloadFilename:
-          typeof options.download === "string"
-            ? options.download
-            : options.download
-              ? key.split("/").pop()
-              : undefined,
-      });
+      const target = await sign(
+        deps.runtime("signedUrl"),
+        key,
+        SignedOperation.GET,
+        SignedAudience.EXTERNAL,
+        {
+          expiresIn: options.expiresIn,
+          downloadFilename:
+            typeof options.download === "string"
+              ? options.download
+              : options.download
+                ? key.split("/").pop()
+                : undefined,
+        },
+      );
       return target.url;
     },
 
     async signedUpload(key, options = {}) {
-      const target = await sign(key, SignedOperation.POST_UPLOAD, SignedAudience.EXTERNAL, {
-        expiresIn: options.expiresIn,
-        maxSize: options.maxSize,
-        contentType: options.contentType,
-      });
+      const target = await sign(
+        deps.runtime("signedUpload"),
+        key,
+        SignedOperation.POST_UPLOAD,
+        SignedAudience.EXTERNAL,
+        {
+          expiresIn: options.expiresIn,
+          maxSize: options.maxSize,
+          contentType: options.contentType,
+        },
+      );
       return {
         url: target.url,
         method: target.method || "POST",
@@ -501,7 +540,7 @@ export function createObjects(deps: {
     },
 
     publicUrl(key) {
-      const { publicBaseUrl } = deps.runtime();
+      const { publicBaseUrl } = deps.runtime("publicUrl");
       if (!publicBaseUrl) {
         throw new Error(
           `this bucket has no public address, so "${key}" has no public url: declare the bucket with \`public: true\` and give the project a domain to serve it from`,

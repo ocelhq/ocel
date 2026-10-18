@@ -1,7 +1,4 @@
-import { declarationSite } from "../declaration/callsite.js";
-import { defer } from "../declaration/defer.js";
-import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
-import { rpc } from "../runtime/rpc.js";
+import { declare } from "../declaration/declare.js";
 import { registerWorker, type WorkerMiddleware } from "./registry.js";
 
 /** How a worker is declared. */
@@ -26,15 +23,7 @@ export class Worker {
       onStart: options.onStart,
       middleware: options.middleware,
     });
-    if (process.env.OCEL_PHASE === "discovery") {
-      defer(
-        rpc.resource.declare({
-          resource: { name, type: ResourceType.WORKER },
-          config: { case: "worker", value: { concurrency: options.concurrency ?? 0 } },
-          source: declarationSite(),
-        }),
-      );
-    }
+    declare(name, { case: "worker", value: { concurrency: options.concurrency ?? 0 } });
   }
 }
 

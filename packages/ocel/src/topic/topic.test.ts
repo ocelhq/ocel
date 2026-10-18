@@ -184,6 +184,16 @@ describe("a topic at runtime", () => {
     });
   });
 
+  it("reads its binding once, on the first send", async () => {
+    const orders = topic("orders");
+    await orders.send(1);
+    vi.stubEnv("OCEL_RESOURCE_TOPIC_orders", "");
+
+    await orders.send(2);
+
+    expect(sends).toHaveLength(2);
+  });
+
   it("refuses a payload over 256 KiB before sending anything", async () => {
     await expect(topic("orders").send("x".repeat(300_000))).rejects.toThrow("256 KiB");
     expect(sends).toHaveLength(0);

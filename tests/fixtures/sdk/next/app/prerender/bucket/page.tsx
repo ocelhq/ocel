@@ -8,7 +8,7 @@ export default async function PrerenderedFromABucket() {
   return (
     <main>
       <p id="bucket">prerendered from a bucket holding {objects.length} objects</p>
-      <p id="missing">and {missing === null ? "no" : "some"} object at a key nothing wrote</p>
+      <p id="missing">and {missing === undefined ? "no" : "some"} object at a key nothing wrote</p>
       <p id="at">prerendered at {new Date().toISOString()}</p>
     </main>
   );

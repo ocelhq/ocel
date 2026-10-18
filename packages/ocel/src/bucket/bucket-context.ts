@@ -1,6 +1,7 @@
-import { createRuntimeTransport } from "../runtime/transport.js";
-import type { Bucket } from "./bucket.js";
-import { type BucketServiceClient, createBucketClient } from "./bucket-client.js";
+import { BucketService } from "../gen/proto/app/bucket/v1/bucket_pb.js";
+import type { BucketProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
+import { createRuntimeClient } from "../runtime/transport.js";
+import type { BucketServiceClient } from "./bucket-client.js";
 
 export interface BucketContext {
   client: BucketServiceClient;
@@ -8,11 +9,10 @@ export interface BucketContext {
   publicBaseUrl: string;
 }
 
-export function resolveBucketContext(bucket: Bucket): BucketContext {
-  const { bucket: storeBucket, publicBaseUrl } = bucket.__config();
+export function openBucketContext(properties: BucketProperties): BucketContext {
   return {
-    client: createBucketClient(createRuntimeTransport()),
-    bucket: storeBucket,
-    publicBaseUrl,
+    client: createRuntimeClient(BucketService),
+    bucket: properties.bucket,
+    publicBaseUrl: properties.publicBaseUrl,
   };
 }

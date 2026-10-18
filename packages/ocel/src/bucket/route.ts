@@ -1,8 +1,7 @@
 import type { IncomingMessage } from "node:http";
-import { z } from "zod";
 import { UploadState } from "../gen/proto/app/bucket/v1/bucket_pb.js";
-import type { Bucket } from "./bucket.js";
-import { type BucketContext, resolveBucketContext } from "./bucket-context.js";
+import { type Bucket, bucketContextOf } from "./bucket.js";
+import type { BucketContext } from "./bucket-context.js";
 import { generateKey } from "./keys.js";
 import { decodeMetadata, encodeMetadata } from "./metadata.js";
 import type {
@@ -51,36 +50,58 @@ async function requestJson(req: RouteRequest): Promise<unknown> {
   return text ? JSON.parse(text) : {};
 }
 
-export interface RouteOptions {
-  runtime?: BucketContext;
+interface PresignBody {
+  uploader: string;
+  files: FileInfo[];
+  input: unknown;
 }
 
-const presignBody = z.object({
-  uploader: z.string(),
-  files: z.array(
-    z.object({
-      name: z.string(),
-      size: z.number().int().nonnegative(),
-      mimeType: z.string(),
-    }),
-  ),
-  input: z.unknown().optional(),
-});
+interface CallbackBody {
+  sessionId: string;
+  signature: string;
+  file: FileInfo & { key: string };
+}
 
-const completeBody = z.object({
-  sessionId: z.string().min(1),
-});
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-const callbackBody = z.object({
-  sessionId: z.string(),
-  signature: z.string(),
-  file: z.object({
-    key: z.string(),
-    name: z.string(),
-    size: z.number().int().nonnegative(),
-    mimeType: z.string(),
-  }),
-});
+function isSize(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function readFile(value: unknown): FileInfo | undefined {
+  if (!isRecord(value)) return undefined;
+  const { name, size, mimeType } = value;
+  if (typeof name !== "string" || !isSize(size) || typeof mimeType !== "string") return undefined;
+  return { name, size, mimeType };
+}
+
+function readPresignBody(body: unknown): PresignBody | undefined {
+  if (!isRecord(body) || typeof body.uploader !== "string" || !Array.isArray(body.files)) {
+    return undefined;
+  }
+  const files = body.files.map(readFile);
+  if (files.some((file) => file === undefined)) return undefined;
+  return { uploader: body.uploader, files: files as FileInfo[], input: body.input };
+}
+
+function readCallbackBody(body: unknown): CallbackBody | undefined {
+  if (!isRecord(body)) return undefined;
+  const { sessionId, signature } = body;
+  const file = readFile(body.file);
+  const key = isRecord(body.file) ? body.file.key : undefined;
+  if (typeof sessionId !== "string" || typeof signature !== "string") return undefined;
+  if (!file || typeof key !== "string") return undefined;
+  return { sessionId, signature, file: { ...file, key } };
+}
+
+function readCompleteSession(body: unknown): string | undefined {
+  if (!isRecord(body) || typeof body.sessionId !== "string" || body.sessionId === "") {
+    return undefined;
+  }
+  return body.sessionId;
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -157,19 +178,19 @@ async function handlePresign(
   req: RouteRequest,
   middlewareReq: unknown,
 ) {
-  const parsed = presignBody.safeParse(await requestJson(req));
-  if (!parsed.success) return json({ error: "invalid presign request" }, 400);
+  const parsed = readPresignBody(await requestJson(req));
+  if (!parsed) return json({ error: "invalid presign request" }, 400);
 
-  const up = bucket.uploaders[parsed.data.uploader];
+  const up = bucket.uploaders[parsed.uploader];
   if (!up) {
-    return json({ error: `unknown uploader '${parsed.data.uploader}'` }, 404);
+    return json({ error: `unknown uploader '${parsed.uploader}'` }, 404);
   }
 
   let input: unknown;
   if (up.auth.input) {
-    const validated = up.auth.input.safeParse(parsed.data.input);
-    if (!validated.success) return json({ error: "invalid input" }, 400);
-    input = validated.data;
+    const validated = await up.auth.input["~standard"].validate(parsed.input);
+    if (validated.issues) return json({ error: "invalid input" }, 400);
+    input = validated.value;
   }
 
   let metadata: unknown;
@@ -179,7 +200,7 @@ async function handlePresign(
     return json({ error: errorMessage(err, "unauthorized") }, 401);
   }
 
-  const files = parsed.data.files;
+  const files = parsed.files;
   const invalid = validateFiles(up, files, metadata);
   if (invalid) return json({ error: invalid }, 400);
 
@@ -193,7 +214,7 @@ async function handlePresign(
   const res = await ctx.client.presignUpload({
     bucket: ctx.bucket,
     files: presignFiles,
-    metadata: encodeMetadata({ uploader: parsed.data.uploader, metadata }),
+    metadata: encodeMetadata({ uploader: parsed.uploader, metadata }),
     contentDisposition: up.upload.contentDisposition ?? "",
     callbackBaseUrl: deriveCallbackBaseUrl(req),
   });
@@ -213,10 +234,10 @@ async function handlePresign(
 }
 
 async function handleCallback(bucket: Bucket, ctx: BucketContext, req: RouteRequest) {
-  const parsed = callbackBody.safeParse(await requestJson(req));
-  if (!parsed.success) return json({ error: "invalid callback request" }, 400);
+  const parsed = readCallbackBody(await requestJson(req));
+  if (!parsed) return json({ error: "invalid callback request" }, 400);
 
-  const { sessionId, signature, file } = parsed.data;
+  const { sessionId, signature, file } = parsed;
   const verify = await ctx.client.verifyUploadSignature({
     sessionId,
     signature,
@@ -272,10 +293,12 @@ export interface RouteHandlers {
   POST: (req: RouteRequest, middlewareReq?: unknown) => Promise<Response>;
 }
 
-export function createRouteHandler(bucket: Bucket, options: RouteOptions = {}): RouteHandlers {
-  let ctx = options.runtime;
-  const getCtx = () => (ctx ??= resolveBucketContext(bucket));
+/** The GET and POST handlers that serve a bucket's uploaders to the browser client. */
+export function createRouteHandler(bucket: Bucket): RouteHandlers {
+  return routeHandlerOver(bucket, () => bucketContextOf(bucket, "createRouteHandler"));
+}
 
+export function routeHandlerOver(bucket: Bucket, getCtx: () => BucketContext): RouteHandlers {
   async function POST(req: RouteRequest, middlewareReq?: unknown) {
     const op = opOf(req);
     if (op === "presign") {
@@ -283,8 +306,8 @@ export function createRouteHandler(bucket: Bucket, options: RouteOptions = {}): 
     }
     if (op === "callback") return handleCallback(bucket, getCtx(), req);
     if (op === "complete") {
-      const body = completeBody.safeParse(await requestJson(req));
-      return handleComplete(getCtx(), body.success ? body.data.sessionId : sessionOf(req));
+      const session = readCompleteSession(await requestJson(req));
+      return handleComplete(getCtx(), session ?? sessionOf(req));
     }
     return json({ error: `unknown op '${op}'` }, 400);
   }

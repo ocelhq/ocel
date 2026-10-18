@@ -232,15 +232,15 @@ describe("the edge build's surface", () => {
     expect(Object.keys(edge).sort()).toEqual(Object.keys(node).sort());
   });
 
-  it("is wired to the edge conditions ahead of import", async () => {
+  it("is wired to the edge conditions ahead of default", async () => {
     const manifest = JSON.parse(await readFile(join(here, "../../package.json"), "utf8"));
     const entry = manifest.exports["./env"];
     const keys = Object.keys(entry);
     for (const condition of ["edge-light", "workerd", "worker"]) {
       expect(entry[condition]).toBe("./dist/env/edge.js");
-      expect(keys.indexOf(condition)).toBeLessThan(keys.indexOf("import"));
+      expect(keys.indexOf(condition)).toBeLessThan(keys.indexOf("default"));
     }
-    expect(entry.import).toBe("./dist/env/index.js");
+    expect(entry.default).toBe("./dist/env/index.js");
   });
 });
 

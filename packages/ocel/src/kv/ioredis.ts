@@ -1,9 +1,17 @@
+import { createRequire } from "node:module";
 import type { Redis, RedisOptions } from "ioredis";
 
-const ioredis = await import("ioredis").then(
-  (module) => ({ module }),
-  (error: unknown) => ({ error }),
-);
+type Ioredis = typeof import("ioredis");
+
+let ioredis: { module: Ioredis } | { error: unknown } | undefined;
+
+function loadIoredis(): { module: Ioredis } | { error: unknown } {
+  try {
+    return { module: createRequire(import.meta.url)("ioredis") as Ioredis };
+  } catch (error) {
+    return { error };
+  }
+}
 
 function isIoredisMissing(error: unknown): boolean {
   for (let cause = error; cause instanceof Error; cause = cause.cause) {
@@ -19,6 +27,7 @@ function isIoredisMissing(error: unknown): boolean {
 }
 
 export function newRedis(options: RedisOptions): Redis {
+  ioredis ??= loadIoredis();
   if ("error" in ioredis) {
     if (isIoredisMissing(ioredis.error)) {
       throw new Error(

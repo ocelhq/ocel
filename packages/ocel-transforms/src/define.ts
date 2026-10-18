@@ -1,6 +1,6 @@
-import type { AwsSurfaces } from "./aws";
-import type { TransformBindings } from "./index";
-import type { VpsSurfaces } from "./vps";
+import type { AwsSurfaces } from "./aws/index.js";
+import type { TransformBindings } from "./index.js";
+import type { VpsSurfaces } from "./vps/index.js";
 
 /** The environment tiers a deploy can target. */
 export type EnvTier = "development" | "preview" | "production";

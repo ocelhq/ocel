@@ -1,9 +1,7 @@
+export { MissingBindingError } from "../binding/errors.js";
 export { UnprovisionedResourceError } from "../binding/unprovisioned.js";
+export { RuntimeCallError } from "../runtime/errors.js";
 export { Bucket, type BucketOptions, bucket } from "./bucket.js";
-export {
-  type BucketContext,
-  resolveBucketContext,
-} from "./bucket-context.js";
 export { ObjectNotFoundError, PreconditionFailedError } from "./errors.js";
 export type {
   GetOptions,
@@ -21,7 +19,6 @@ export type {
 export {
   createRouteHandler,
   type RouteHandlers,
-  type RouteOptions,
 } from "./route.js";
 export type {
   AnyUploader,

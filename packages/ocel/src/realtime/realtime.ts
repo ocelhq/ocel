@@ -1,22 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { type Client, createClient } from "@connectrpc/connect";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { getConfig, refuseUnbound } from "../binding/binding.js";
-import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
+import { getConfig, lazyBinding } from "../binding/binding.js";
+import { isDiscovering, unprovisioned } from "../binding/unprovisioned.js";
 import { declarationSite } from "../declaration/callsite.js";
-import { defer } from "../declaration/defer.js";
+import { declare } from "../declaration/declare.js";
 import { type Duration, encodeDuration, parseDurationMilliseconds } from "../delivery/duration.js";
 import { encodeJsonSchema, validatePayload } from "../delivery/schema.js";
 import { RealtimeService } from "../gen/proto/app/realtime/v1/realtime_pb.js";
-import {
-  RealtimePublish,
-  RealtimeSubscribe,
-  ResourceType,
-} from "../gen/proto/app/resources/v1/resources_pb.js";
+import { RealtimePublish, RealtimeSubscribe } from "../gen/proto/app/resources/v1/resources_pb.js";
 import type { RealtimeProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import type { PatternParameters } from "../kv/pattern.js";
-import { rpc } from "../runtime/rpc.js";
-import { createRuntimeTransport } from "../runtime/transport.js";
+import { createRuntimeClient } from "../runtime/transport.js";
 import type { TokenIssuer } from "./token.js";
 import {
   type ChannelPattern,
@@ -212,7 +206,7 @@ export class Realtime<
       try {
         pattern = parseChannelPattern(written);
       } catch (cause) {
-        throw new Error(`${what}: ${(cause as Error).message}`);
+        throw new Error(`${what}: ${(cause as Error).message}`, { cause });
       }
       if (!declared.schema?.["~standard"]) {
         throw new Error(
@@ -233,48 +227,43 @@ export class Realtime<
       });
     }
 
-    if (process.env.OCEL_PHASE === "discovery") {
+    if (isDiscovering()) {
       const source = declarationSite();
-      defer(
-        rpc.resource.declare({
-          resource: { name, type: ResourceType.REALTIME },
-          config: {
-            case: "realtime",
-            value: {
-              tokenTtl: encodeDuration(ttl),
-              channels: [...channels].map(([written, channel]) => ({
-                pattern: written,
-                wildcard: channel.wildcard,
-                schema: encodeJsonSchema(channel.schema),
-                subscribe:
-                  channel.subscribe === "public"
-                    ? RealtimeSubscribe.PUBLIC
-                    : RealtimeSubscribe.RULE,
-                publish: channel.publish ? RealtimePublish.RULE : RealtimePublish.SERVER,
-                source,
-              })),
-            },
+      declare(
+        name,
+        {
+          case: "realtime",
+          value: {
+            tokenTtl: encodeDuration(ttl),
+            channels: [...channels].map(([written, channel]) => ({
+              pattern: written,
+              wildcard: channel.wildcard,
+              schema: encodeJsonSchema(channel.schema),
+              subscribe:
+                channel.subscribe === "public" ? RealtimeSubscribe.PUBLIC : RealtimeSubscribe.RULE,
+              publish: channel.publish ? RealtimePublish.RULE : RealtimePublish.SERVER,
+              source,
+            })),
           },
-          source,
-        }),
+        },
+        source,
       );
     }
 
-    let client: Client<typeof RealtimeService> | undefined;
+    const openClient = lazyBinding(what, name, "realtime", () =>
+      createRuntimeClient(RealtimeService),
+    );
     runtimes.set(this, {
       name,
       ttlSeconds,
       channels,
       authorize: options.authorize,
       properties: (access) => {
-        if (unprovisionedPhase()) throw unprovisioned(what, access);
+        if (isDiscovering()) throw unprovisioned(what, access);
         return getConfig(name, "realtime");
       },
       publish: async (access, channel, envelope) => {
-        if (unprovisionedPhase()) throw unprovisioned(what, access);
-        const refusal = refuseUnbound(name, "realtime");
-        if (refusal) throw refusal;
-        client ??= createClient(RealtimeService, createRuntimeTransport());
+        const client = openClient(access);
         try {
           await client.publish({ realtime: name, channel, event: envelope });
         } catch (cause) {

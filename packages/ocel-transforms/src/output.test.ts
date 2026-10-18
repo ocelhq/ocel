@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bindings, isBindingOutput } from "./output";
+import { bindings, isBindingOutput } from "./output.js";
 
 describe("bindings", () => {
   it("names the resource type, the binding and the property a deploy resolves", () => {

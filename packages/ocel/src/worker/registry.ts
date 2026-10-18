@@ -1,4 +1,6 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { isDiscovering } from "../binding/unprovisioned.js";
+import { declarationSite } from "../declaration/callsite.js";
 import type { TaskHooks } from "../task/hooks.js";
 import type { RunContext, RunOptions } from "./context.js";
 
@@ -25,8 +27,8 @@ export interface WorkerRegistration {
 }
 
 interface Registry {
-  runs: Map<string, Registration>;
-  workers: Map<string, WorkerRegistration>;
+  runs: Map<string, Registration & { source: string }>;
+  workers: Map<string, WorkerRegistration & { source: string }>;
 }
 
 const registryKey = Symbol.for("ocel.worker.registry");
@@ -41,8 +43,25 @@ function formatRunKey(topic: string, consumer: string): string {
   return `${topic}\u0000${consumer}`;
 }
 
+function refuseRedeclared(declared: { source: string } | undefined, source: string, what: string) {
+  if (!declared || declared.source === source || isDiscovering()) return;
+  throw new Error(
+    `${what} is declared twice, and a ${what.split(" ")[0]} is declared once: at ${declared.source || "an unknown line"} and at ${source || "an unknown line"}`,
+  );
+}
+
 export function registerRun(registration: Registration): void {
-  ensureRegistry().runs.set(formatRunKey(registration.topic, registration.name), registration);
+  const runs = ensureRegistry().runs;
+  const key = formatRunKey(registration.topic, registration.name);
+  const source = declarationSite();
+  refuseRedeclared(
+    runs.get(key),
+    source,
+    registration.kind === "task"
+      ? `task "${registration.name}"`
+      : `consumer "${registration.name}" of topic "${registration.topic}"`,
+  );
+  runs.set(key, { ...registration, source });
 }
 
 export function findRegistration(topic: string, consumer: string): Registration | undefined {
@@ -50,7 +69,10 @@ export function findRegistration(topic: string, consumer: string): Registration 
 }
 
 export function registerWorker(name: string, worker: WorkerRegistration): void {
-  ensureRegistry().workers.set(name, worker);
+  const workers = ensureRegistry().workers;
+  const source = declarationSite();
+  refuseRedeclared(workers.get(name), source, `worker "${name}"`);
+  workers.set(name, { ...worker, source });
 }
 
 export function findWorker(name: string): WorkerRegistration | undefined {

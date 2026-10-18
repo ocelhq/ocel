@@ -54,8 +54,8 @@ export async function _typeChecks() {
 const assets = bucket("assets", { public: true });
 
 export async function _objectTypeChecks() {
-  expectTypeOf(await storage.head("a.png")).toEqualTypeOf<ObjectInfo | null>();
-  expectTypeOf(await storage.get("a.png")).toEqualTypeOf<ObjectBody | null>();
+  expectTypeOf(await storage.head("a.png")).toEqualTypeOf<ObjectInfo | undefined>();
+  expectTypeOf(await storage.get("a.png")).toEqualTypeOf<ObjectBody | undefined>();
   expectTypeOf(await storage.put("a.png", "x")).toEqualTypeOf<ObjectInfo>();
   await storage.delete(["a.png", "b.png"]);
   for await (const info of storage.list({ prefix: "a/" })) {

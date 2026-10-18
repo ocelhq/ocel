@@ -22,15 +22,14 @@ describe("Bucket record", () => {
     vi.unstubAllEnvs();
   });
 
-  it("refuses its record during discovery with a typed error", () => {
+  it("refuses its objects during discovery with a typed error naming the operation", async () => {
     vi.stubEnv("OCEL_PHASE", "discovery");
+    const storage = bucket("storage", { uploaders: { avatar } });
 
-    expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
-      "'bucket(\"storage\")' cannot be used during discovery",
+    await expect(storage.head("a.txt")).rejects.toThrow(
+      "'bucket(\"storage\")' cannot be used during discovery: tried to access 'head'",
     );
-    expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
-      UnprovisionedResourceError,
-    );
+    await expect(storage.head("a.txt")).rejects.toThrow(UnprovisionedResourceError);
   });
 });
 
