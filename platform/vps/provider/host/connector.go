@@ -187,7 +187,7 @@ func connectorRemoval() string {
 }
 
 func (c *Connector) Route(ctx context.Context, hostname string) error {
-	return c.host.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
+	return c.host.routing.Reshape(ctx, func(state boxapi.RoutingTable) (boxapi.RoutingTable, error) {
 		state.Connector = hostname
 		return state, nil
 	})

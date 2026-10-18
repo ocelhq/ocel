@@ -13,13 +13,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 const previewBase = "preview.example.com"
 
 const internalBase = "preview.ocel.home.arpa"
 
-func previewing() RoutingTable {
+func previewing() boxapi.RoutingTable {
 	state := routed()
 	state.PreviewBase = previewBase
 	return state
@@ -29,12 +30,12 @@ func TestAPreviewBaseTheSwitchboardCouldNotAnswerUnderIsRefused(t *testing.T) {
 	t.Parallel()
 
 	for _, base := range []string{"exam_ple.com", strings.Repeat("a", 64) + ".example.com"} {
-		if _, err := RenderProxyConfig(caddy.Builtin{}, RoutingTable{Grace: DrainWindow, PreviewBase: base}); err == nil {
+		if _, err := routing.RenderProxyConfig(caddy.Builtin{}, boxapi.RoutingTable{Grace: routing.DrainWindow, PreviewBase: base}); err == nil {
 			t.Errorf("a preview entry on base %q renders, and the switchboard admits its probe for a certificate: a name no CA can ever issue for is an order that fails on every handshake for as long as the base is in place",
 				base)
 		}
 	}
-	if err := RefuseInvalidPreviewBase(""); err == nil {
+	if err := routing.RefuseInvalidPreviewBase(""); err == nil {
 		t.Error("an empty base is a usable one, and the route it would install has no host matcher: it receives every hostname pointed at this machine, a mistyped production hostname included")
 	}
 }
@@ -42,7 +43,7 @@ func TestAPreviewBaseTheSwitchboardCouldNotAnswerUnderIsRefused(t *testing.T) {
 func TestThePreviewEntryReadsBackAsTheBaseThatRenderedIt(t *testing.T) {
 	t.Parallel()
 
-	read, err := ReadRoutingTable(mustWrite(t, previewing()))
+	read, err := routing.ReadRoutingTable(mustWrite(t, previewing()))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
@@ -104,10 +105,10 @@ func TestInstallingThePreviewEntryLoadsItOntoTheSwitchboardAndTakingItDownUnload
 
 	ctx := context.Background()
 	rig := claimingBox(t, routed())
-	if err := rig.host().InstallPreviewEntry(ctx, previewBase); err != nil {
+	if err := rig.host().routing.InstallPreviewEntry(ctx, previewBase); err != nil {
 		t.Fatalf("InstallPreviewEntry() = %v", err)
 	}
-	table, err := ReadRoutingTable([]byte(rig.recorded))
+	table, err := routing.ReadRoutingTable([]byte(rig.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,10 +122,10 @@ func TestInstallingThePreviewEntryLoadsItOntoTheSwitchboardAndTakingItDownUnload
 		t.Errorf("the preview entry reloaded %s, and every reload drops requests on every hostname the box serves (#1280): %v", caddy.Container, rig.commands())
 	}
 
-	if err := rig.host().RemovePreviewEntry(ctx, previewBase); err != nil {
+	if err := rig.host().routing.RemovePreviewEntry(ctx, previewBase); err != nil {
 		t.Fatalf("RemovePreviewEntry() = %v", err)
 	}
-	if table, err = ReadRoutingTable([]byte(rig.recorded)); err != nil {
+	if table, err = routing.ReadRoutingTable([]byte(rig.recorded)); err != nil {
 		t.Fatal(err)
 	}
 	if table.PreviewBase != "" {
@@ -136,7 +137,7 @@ func TestInstallingThePreviewEntryTwiceWritesTheProxyOnce(t *testing.T) {
 	t.Parallel()
 
 	rig := claimingBox(t, previewing())
-	if err := rig.host().InstallPreviewEntry(context.Background(), previewBase); err != nil {
+	if err := rig.host().routing.InstallPreviewEntry(context.Background(), previewBase); err != nil {
 		t.Fatalf("InstallPreviewEntry() = %v", err)
 	}
 	for _, command := range rig.commands() {
@@ -154,14 +155,14 @@ func TestReleasingThePreviewBaseIsRefusedWhileHostnamesUnderItAreStillClaimed(t 
 	state.Claims = append(slices.Clone(state.Claims), previewClaim("pr-7", "", claimed))
 	rig := claimingBox(t, state)
 
-	err := rig.host().RemovePreviewEntry(context.Background(), previewBase)
+	err := rig.host().routing.RemovePreviewEntry(context.Background(), previewBase)
 	if err == nil {
 		t.Fatal("the base was released with preview hostnames still claimed under it: the catch-all goes and the claims stay, so their routes keep answering and the proxy keeps renewing a certificate for each of them against a base nothing owns, and the next base raised beside them installs a second catch-all over sites that are still live")
 	}
 	if !strings.Contains(err.Error(), claimed) {
 		t.Errorf("the refusal reads %q and names none of the claimed hostnames in the way", err)
 	}
-	table, err := ReadRoutingTable([]byte(rig.recorded))
+	table, err := routing.ReadRoutingTable([]byte(rig.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +175,7 @@ func TestABoxServingOnePreviewBaseRefusesASecondByName(t *testing.T) {
 	t.Parallel()
 
 	rig := claimingBox(t, previewing())
-	err := rig.host().InstallPreviewEntry(context.Background(), "previews.example.org")
+	err := rig.host().routing.InstallPreviewEntry(context.Background(), "previews.example.org")
 	if err == nil {
 		t.Fatal("a second preview base was installed over the first, and every live preview on this box is a hostname under the base it was raised on")
 	}
@@ -214,7 +215,7 @@ func TestAPreviewBaseNoPublicCaWillIssueForIsManagedInternallyAndReachesNoCaAtAl
 	}
 }
 
-func onDemandOn(t *testing.T, state RoutingTable) string {
+func onDemandOn(t *testing.T, state boxapi.RoutingTable) string {
 	t.Helper()
 
 	var read map[string]any
@@ -231,7 +232,7 @@ func onDemandOn(t *testing.T, state RoutingTable) string {
 	return string(written)
 }
 
-func olderRendering(t *testing.T, state RoutingTable) string {
+func olderRendering(t *testing.T, state boxapi.RoutingTable) string {
 	t.Helper()
 
 	var read map[string]any
@@ -249,7 +250,7 @@ func olderRendering(t *testing.T, state RoutingTable) string {
 	return older
 }
 
-func loadingFrom(t *testing.T, state RoutingTable) string {
+func loadingFrom(t *testing.T, state boxapi.RoutingTable) string {
 	t.Helper()
 
 	var read map[string]any
@@ -266,9 +267,9 @@ func loadingFrom(t *testing.T, state RoutingTable) string {
 	return string(written)
 }
 
-func elsewhere(t *testing.T, state RoutingTable) string {
+func elsewhere(t *testing.T, state boxapi.RoutingTable) string {
 	t.Helper()
-	return strings.ReplaceAll(string(mustRender(t, state)), caddy.PermissionEndpoint(SwitchboardPermission.Path), "http://203.0.113.99/admit")
+	return strings.ReplaceAll(string(mustRender(t, state)), caddy.PermissionEndpoint(routing.SwitchboardPermission.Path), "http://203.0.113.99/admit")
 }
 
 func TestDescribingABoxRefusesOnDemandTlsTheSwitchboardDoesNotGuardAndNothingElseItsConfigContains(t *testing.T) {

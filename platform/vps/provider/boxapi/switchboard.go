@@ -16,6 +16,13 @@ const (
 )
 
 const (
+	SwitchboardDir     = LibDir + "/switchboard"
+	SwitchboardBinary  = SwitchboardDir + "/" + Switchboard
+	SwitchboardMount   = "/ocel/switchboard"
+	SwitchboardMounted = SwitchboardMount + "/" + Switchboard
+)
+
+const (
 	HTTPSListenPort  = "8443"
 	TunnelListenPort = "8444"
 )

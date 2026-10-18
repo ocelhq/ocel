@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -151,9 +152,9 @@ func TestAnUpgradeOverAStoppedServerSaysWhichServerToStartAndWhichVersionToSetBa
 	box := machine(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, shell.Quote(servingSelectors())):
+		case strings.Contains(command, shell.Quote(docker.ServingSelectors())):
 			return ssh.Result{Stdout: "exited " + spec.Image + "\n"}, true
-		case strings.Contains(command, LabelGeneration):
+		case strings.Contains(command, docker.LabelGeneration):
 			return ssh.Result{Stdout: "16\n"}, true
 		}
 		return ssh.Result{}, false
@@ -176,7 +177,7 @@ func TestAResourceWhoseSpecChangedIsReplacedOnlyOnceItsSuccessorAnswers(t *testi
 	spec.Ready = []string{"pg_isready"}
 	box := machine(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, shell.Quote(servingSelectors())) {
+		if strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return ssh.Result{Stdout: "running " + spec.Image + " 000000000000\n"}, true
 		}
 		return ssh.Result{}, false
@@ -249,7 +250,7 @@ func TestAConnectionThatDropsWhileAskingAfterAResourceRemovesNothing(t *testing.
 	box := machine(nil)
 	dropped := errors.New("ssh: connection reset by peer")
 	box.broke = func(command string) error {
-		if strings.Contains(command, shell.Quote(servingSelectors())) {
+		if strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return dropped
 		}
 		return nil
@@ -268,7 +269,7 @@ func TestADaemonThatCannotBeAskedAfterAResourceIsAnErrorAndNotAnAbsence(t *testi
 	spec := resourced()
 	box := machine(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, shell.Quote(servingSelectors())) {
+		if strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return ssh.Result{Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock", Code: 1}, true
 		}
 		return ssh.Result{}, false
@@ -290,7 +291,7 @@ func TestAConnectionThatDropsWhileAskingAfterAnAppRemovesNothing(t *testing.T) {
 	box := machine(nil)
 	dropped := errors.New("ssh: connection reset by peer")
 	box.broke = func(command string) error {
-		if strings.Contains(command, shell.Quote(servingSelectors())) {
+		if strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return dropped
 		}
 		return nil

@@ -85,13 +85,13 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRemoval, progress progress.Log) error {
 	s := r.s
 	pointer := router.ResolvePointer(removal.Pointer)
-	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), pointer); err != nil {
+	if err := s.e.routes.DisclaimPointer(ctx, s.surface(), pointer); err != nil {
 		return err
 	}
 	if err := s.applyOrigins(ctx); err != nil {
 		progress.Warn(s.released("Preview "+pointer, err).Error())
 	}
-	return s.e.machine.UnroutePointer(ctx, s.surface(), pointer)
+	return s.e.routes.UnroutePointer(ctx, s.surface(), pointer)
 }
 
 func (r routerStack) Destroy(ctx context.Context) error { return r.s.Destroy(ctx) }

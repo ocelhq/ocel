@@ -11,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -79,7 +81,7 @@ func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict str
 	ctx, stop := sparing(ctx)
 	defer stop()
 	name := containerOf(search.Target)
-	state := h.Evidence(ctx, elevation, stateCommand(name))
+	state := h.Evidence(ctx, elevation, docker.StateCommand(name))
 	if crashed || isUnstarted(state) {
 		return refusal.Refuse(refusal.CodeNotReady, "start %s on %s: %s%s",
 			search.App, h.Named(), h.describeUnstarted(ctx, search.App, name, state, elevation), h.abandon(ctx, search, elevation))
@@ -116,5 +118,5 @@ func readPathAnswers(said string) []pathAnswer {
 }
 
 func findHealthPathCommand(search HealthPathSearch) []string {
-	return switchboardCommand(append([]string{"find-health-path", "--deploy-timeout", seconds(search.Window), search.Target}, healthPathCandidates...)...)
+	return routing.SwitchboardCommand(append([]string{"find-health-path", "--deploy-timeout", seconds(search.Window), search.Target}, healthPathCandidates...)...)
 }

@@ -45,13 +45,13 @@ const (
 
 const storeHealthPath = "/health/ready"
 
-func storeRoute(ref provider.StackRef, store string) host.AppRoute {
+func storeRoute(ref provider.StackRef, store string) boxapi.Route {
 	pointer := router.DefaultPointer
 	if ref.Tier == environment.TierPreview {
 		pointer = ref.Name.Env
 	}
-	return host.AppRoute{
-		RouteKey: host.RouteKey{
+	return boxapi.Route{
+		RouteKey: boxapi.RouteKey{
 			Owner:   boxapi.Surface(ref.Project, string(ref.Tier)),
 			Pointer: pointer,
 			App:     boxapi.StoreLabel,
@@ -300,7 +300,7 @@ func (p *Provider) PlanBucket(ctx context.Context, in resources.ProvisionRequest
 		return change.report()
 	}
 	route := storeRoute(in.Ref, spec.Name)
-	upstream, err := p.host.Serving(ctx, route.RouteKey)
+	upstream, err := p.routing.Serving(ctx, route.RouteKey)
 	if err != nil {
 		return "", "", err
 	}
@@ -352,7 +352,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 		if err := p.host.RunResource(ctx, spec, credential.secret); err != nil {
 			return storeCredential{}, err
 		}
-		if err := p.host.RouteResource(ctx, storeRoute(in.Ref, spec.Name)); err != nil {
+		if err := p.routing.RouteResource(ctx, storeRoute(in.Ref, spec.Name)); err != nil {
 			return storeCredential{}, err
 		}
 		state, err := p.host.ProvisionBucket(ctx, newSessionsBucketSpec(in.Ref, spec.Name, credential.secret))
@@ -506,14 +506,14 @@ func declaredOrigins(spec *provider.BucketSpec) []string {
 }
 
 func (p *Provider) bucketOrigins(ctx context.Context, ref provider.StackRef, spec *provider.BucketSpec) ([]string, error) {
-	claims, err := p.host.Claims(ctx)
+	claims, err := p.routing.Claims(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return corsOrigins(ref, declaredOrigins(spec), claims), nil
 }
 
-func corsOrigins(ref provider.StackRef, declared []string, claims []host.HostClaim) []string {
+func corsOrigins(ref provider.StackRef, declared []string, claims []boxapi.Claim) []string {
 	origins := slices.Clone(declared)
 	owner := boxapi.Surface(ref.Project, string(ref.Tier))
 	for _, claim := range claims {
@@ -532,7 +532,7 @@ func (p *Provider) applyOrigins(ctx context.Context, project string, tier enviro
 	if err != nil {
 		return err
 	}
-	claims := sync.OnceValues(func() ([]host.HostClaim, error) { return p.host.Claims(ctx) })
+	claims := sync.OnceValues(func() ([]boxapi.Claim, error) { return p.routing.Claims(ctx) })
 	for _, entry := range entries {
 		ref := provider.StackRef{Project: project, Tier: tier, Name: entry.Name}
 		if err := p.applyStackOrigins(ctx, ref, entry, claims); err != nil {
@@ -542,7 +542,7 @@ func (p *Provider) applyOrigins(ctx context.Context, project string, tier enviro
 	return nil
 }
 
-func (p *Provider) applyStackOrigins(ctx context.Context, ref provider.StackRef, entry stackrecords.NamedStack, claims func() ([]host.HostClaim, error)) error {
+func (p *Provider) applyStackOrigins(ctx context.Context, ref provider.StackRef, entry stackrecords.NamedStack, claims func() ([]boxapi.Claim, error)) error {
 	buckets := slices.DeleteFunc(slices.Clone(entry.Bindings), func(binding provider.Binding) bool {
 		return binding.Type != provider.BindingBucket || p.stores.forgotten(entry.Name, binding.Name)
 	})
@@ -641,7 +641,7 @@ func (p *Provider) lastBucket(ctx context.Context, ref provider.StackRef) (bool,
 func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	store := storeName(ref)
 	progress.Say("Removing object store " + store + ": no bucket in this environment uses it any more")
-	if err := p.host.UnrouteApp(ctx, storeRoute(ref, store).RouteKey); err != nil {
+	if err := p.routing.UnrouteApp(ctx, storeRoute(ref, store).RouteKey); err != nil {
 		return err
 	}
 	if err := p.host.RemoveResource(ctx, host.ResourceRef{

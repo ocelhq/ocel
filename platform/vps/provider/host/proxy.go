@@ -1,19 +1,18 @@
 package host
 
 import (
-	"cmp"
 	"embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 const (
@@ -30,57 +29,17 @@ const (
 )
 
 const (
-	containerRestart  = "unless-stopped"
-	configLabel       = "ocel.config"
-	containerCmdLabel = "ocel.command"
-)
-
-const (
 	proxyRoot   = boxapi.ProxyDir
 	ProxyConfig = boxapi.ProxyConfig
 	ProxyData   = proxyRoot + "/data"
 )
 
-const (
-	containerRising = 30
-	containerPulls  = 5
-)
-
-const (
-	migrateSysctl = "net.ipv4.tcp_migrate_req"
-	migrateKnob   = "/proc/sys/net/ipv4/tcp_migrate_req"
-	migrateFact   = "migrate="
-	migrateSet    = "set"
-	migrateUnset  = "unset"
-	mountsFact    = "mounts="
-	mountsIntact  = "intact"
-	mountsMoved   = "moved"
-	execUnstarted = "126|127"
-)
-
 var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE"}
-
-const (
-	networkFact   = "network=present"
-	networkInUse  = "network=in-use"
-	networkJoined = "joined"
-	networkLeft   = "left"
-)
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/vps-host
 
 //go:embed dist
 var helpers embed.FS
-
-const ContainerFactTemplate = `image={{.Config.Image}}
-command={{index .Config.Labels "` + containerCmdLabel + `"}}
-restart={{.HostConfig.RestartPolicy.Name}}
-network={{if index .NetworkSettings.Networks "` + ProxyNetwork + `"}}` + networkJoined + `{{else}}` + networkLeft + `{{end}}
-{{range .HostConfig.Binds}}bind={{.}}
-{{end}}ports={{json .HostConfig.PortBindings}}
-config={{index .Config.Labels "` + configLabel + `"}}
-memory={{.HostConfig.Memory}}
-state={{.State.Status}}`
 
 func embedded(name, arch string) []byte {
 	read, err := helpers.ReadFile("dist/" + name + "-" + arch)
@@ -95,20 +54,20 @@ func ProxyItems(arch string, front Front) []Item {
 	board := switchboardBox(binary, front)
 	if front.adopted() {
 		return append([]Item{
-			dir(SwitchboardDir, 0o755, rootOwner, ""),
-			{Kind: KindFile, Name: SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
+			dir(boxapi.SwitchboardDir, 0o755, rootOwner, ""),
+			{Kind: KindFile, Name: boxapi.SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
 				Note: "routes every hostname and switches releases"},
 			dir(boxapi.RoutingDir, 0o750, stateOwner, ""),
 			routingTable(nil),
 			networkItem(),
 			dir(boxapi.SwitchboardControlDir, 0o755, rootOwner, "the switchboard's control socket"),
 			dir(boxapi.FrontDir, 0o700, rootOwner, ""),
-			board.item(front.switchboardNote()),
+			containerItem(board, front.switchboardNote()),
 		}, front.reloadGrant()...)
 	}
 	return []Item{
-		dir(SwitchboardDir, 0o755, rootOwner, ""),
-		{Kind: KindFile, Name: SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
+		dir(boxapi.SwitchboardDir, 0o755, rootOwner, ""),
+		{Kind: KindFile, Name: boxapi.SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
 			Note: "routes every hostname and switches releases"},
 		dir(proxyRoot, 0o750, stateOwner, ""),
 		dir(boxapi.PinsDir, 0o700, rootOwner, "your pinned certificates"),
@@ -119,18 +78,18 @@ func ProxyItems(arch string, front Front) []Item {
 		networkItem(),
 		dir(boxapi.SwitchboardControlDir, 0o755, rootOwner, "the switchboard's control socket"),
 		dir(boxapi.FrontDir, 0o700, rootOwner, "where the front proxy reaches the switchboard"),
-		board.item("routes :" + switchboardPort + " on the " + ProxyNetwork + " network"),
-		frontProxy().item("serves :" + caddy.HTTPPort + " and :" + caddy.HTTPSPort),
+		containerItem(board, "routes :"+routing.SwitchboardPort+" on the "+ProxyNetwork+" network"),
+		containerItem(frontProxy(), "serves :"+caddy.HTTPPort+" and :"+caddy.HTTPSPort),
 	}
 }
 
-var seededTable = RoutingTable{Grace: DrainWindow}
+var seededTable = boxapi.RoutingTable{Grace: routing.DrainWindow}
 
 var seededRows, seededRendering = seeded(seededTable)
 
-func seeded(table RoutingTable) ([]byte, []byte) {
-	rows, unwritten := WriteRoutingTable(table)
-	rendered, unrendered := RenderProxyConfig(caddy.Builtin{}, table)
+func seeded(table boxapi.RoutingTable) ([]byte, []byte) {
+	rows, unwritten := routing.WriteRoutingTable(table)
+	rendered, unrendered := routing.RenderProxyConfig(caddy.Builtin{}, table)
 	if err := errors.Join(unwritten, unrendered); err != nil {
 		panic(err)
 	}
@@ -179,9 +138,9 @@ func seedingRouting(table Item, config *Item) string {
 	script.WriteString("set -e\n")
 	for _, item := range seeded {
 		at := shell.Quote(item.Name)
-		script.WriteString("if [ -e " + at + " ] && [ ! -f " + at + " ]; then " + notAFile(item.Name) + "; fi\n")
+		script.WriteString("if [ -e " + at + " ] && [ ! -f " + at + " ]; then " + docker.NotAFile(item.Name) + "; fi\n")
 	}
-	script.WriteString(routingLocked("-x") + "staged=''\ntrap 'rm -f \"$staged\"' EXIT\n")
+	script.WriteString(routing.Locked("-x") + "staged=''\ntrap 'rm -f \"$staged\"' EXIT\n")
 	seed := func(item Item) string {
 		at := shell.Quote(item.Name)
 		return "staged=$(mktemp " + shell.Quote(item.Name+".XXXXXX") + ")\n" +
@@ -202,18 +161,6 @@ func seedingRouting(table Item, config *Item) string {
 	return strings.TrimSuffix(script.String(), "\n")
 }
 
-func notAFile(name string) string {
-	return "printf '%s\\n' " + shell.Quote(name+" is not a regular file") + " >&2; exit 1"
-}
-
-func bindsPresent(files []string) string {
-	var written string
-	for _, name := range files {
-		written += "if [ ! -f " + shell.Quote(name) + " ]; then " + notAFile(name) + "; fi\n"
-	}
-	return written
-}
-
 func seededProbe(item Item) string {
 	at := shell.Quote(item.Name)
 	return "if [ -h " + at + " ]; then " +
@@ -229,294 +176,64 @@ func networkItem() Item {
 		script:  func(Item) string { return networkCommand() },
 		survey:  func(Item) string { return networkProbe() },
 		Owner:   rootOwner,
-		Content: []byte(networkFact + "\n"),
+		Content: []byte(docker.NetworkFact + "\n"),
 	}
-}
-
-type publish struct {
-	addr   string
-	port   string
-	target string
-}
-
-func (p publish) String() string {
-	if p.addr == "" {
-		return p.port
-	}
-	return p.addr + ":" + p.port
-}
-
-type boxContainer struct {
-	name     string
-	image    string
-	command  []string
-	config   string
-	binds    []string
-	ports    []publish
-	env      []string
-	caps     []string
-	fileCaps bool
-	files    []string
-	ready    []string
-	unready  string
-	inodes   []string
-	joins    bool
-	migrates bool
-	restored bool
-	memory   int64
-	network  string
-	networks []userNetwork
-
-	user string
 }
 
 const (
 	proxyMemoryBytes       = 512 << 20
 	switchboardMemoryBytes = 256 << 20
-	tunnelMemoryBytes      = 256 << 20
 )
 
-func frontProxy() boxContainer {
-	return boxContainer{
-		memory:  proxyMemoryBytes,
-		name:    caddy.Container,
-		image:   caddy.Image(),
-		command: caddy.Command(),
-		binds: []string{
+func frontProxy() docker.Service {
+	return docker.Service{
+		Memory:  proxyMemoryBytes,
+		Name:    caddy.Container,
+		Image:   caddy.Image(),
+		Command: caddy.Command(),
+		Binds: []string{
 			proxyRoot + ":" + caddy.ConfigDir + ":ro",
 			boxapi.PinsDir + ":" + caddy.PinsMount + ":ro",
 			ProxyData + ":" + caddy.DataMount,
 			boxapi.FrontDir + ":" + boxapi.FrontDir + ":ro",
-			SwitchboardDir + ":" + switchboardMount + ":ro",
+			boxapi.SwitchboardDir + ":" + boxapi.SwitchboardMount + ":ro",
 		},
-		ports:    servingPublished(),
-		env:      []string{proxyDataConfigEnv},
-		caps:     proxyCapabilities,
-		fileCaps: true,
-		files:    []string{ProxyConfig},
-		ready:    caddy.Ready(SwitchboardMounted),
-		inodes:   []string{"stat", "-c", "%n %d:%i"},
-		unready:  "did not answer with its http app loaded over its admin socket " + caddy.AdminSocket,
-		migrates: true,
+		Ports:    servingPublished(),
+		Env:      []string{proxyDataConfigEnv},
+		Caps:     proxyCapabilities,
+		FileCaps: true,
+		Files:    []string{ProxyConfig},
+		Ready:    caddy.Ready(boxapi.SwitchboardMounted),
+		Inodes:   []string{"stat", "-c", "%n %d:%i"},
+		Unready:  "did not answer with its http app loaded over its admin socket " + caddy.AdminSocket,
+		Migrates: true,
 	}
 }
 
-func (s boxContainer) item(note string) Item {
+func containerItem(s docker.Service, note string) Item {
 	return Item{
 		Kind:    KindContainer,
-		Name:    s.name,
+		Name:    s.Name,
 		Owner:   rootOwner,
-		Content: s.facts(),
+		Content: s.Facts(),
 		Slow:    true,
 		Note:    note,
-		script:  func(Item) string { return s.writing(containerRising) },
-		survey:  func(Item) string { return s.probe() },
+		script:  func(Item) string { return s.Writing(docker.ContainerRising) },
+		survey:  func(Item) string { return containerProbe(s) },
 	}
-}
-
-func (s boxContainer) facts() []byte { return s.factsOver(s.binds) }
-
-func (s boxContainer) factsOver(binds []string) []byte {
-	stated := []string{
-		"image=" + s.image,
-		"command=" + strings.Join(s.command, " "),
-		"restart=" + containerRestart,
-		"network=" + networkJoined,
-		"ports=" + marshalled(published(s.ports)),
-		"config=" + s.config,
-		"memory=" + strconv.FormatInt(s.memory, 10),
-		"state=running",
-		mountsFact + mountsIntact,
-	}
-	if s.migrates {
-		stated = append(stated, migrateFact+migrateSet)
-	}
-	for _, joined := range s.networks {
-		stated = append(stated, joinedFact(joined)+networkJoined)
-	}
-	for _, bind := range binds {
-		stated = append(stated, "bind="+bind)
-	}
-	slices.Sort(stated)
-	return []byte(strings.Join(stated, "\n") + "\n")
-}
-
-func published(ports []publish) map[string][]map[string]string {
-	bindings := map[string][]map[string]string{}
-	for _, port := range ports {
-		bindings[port.target+"/tcp"] = []map[string]string{{"HostIp": port.addr, "HostPort": port.port}}
-	}
-	return bindings
 }
 
 func proxyServing() []string { return []string{caddy.HTTPPort, caddy.HTTPSPort} }
 
-func servingPublished() []publish {
-	var publishes []publish
+func servingPublished() []docker.Publish {
+	var publishes []docker.Publish
 	for _, port := range proxyServing() {
-		publishes = append(publishes, publish{port: port, target: port})
+		publishes = append(publishes, docker.Publish{Port: port, Target: port})
 	}
 	return publishes
 }
 
-func marshalled(value any) string {
-	written, err := json.Marshal(value)
-	if err != nil {
-		panic(err)
-	}
-	return string(written)
-}
-
-func networkCommand() string { return networkEnsured(ProxyNetwork) }
-
-func networkEnsured(name string) string {
-	return "docker network inspect " + shell.Quote(name) + " >/dev/null 2>&1 || " +
-		"docker network create " + shell.Quote(name) + " >/dev/null"
-}
-
-func (s boxContainer) run(sysctls ...string) []string {
-	return s.composeArgv([]string{"docker", "run", "--detach"}, sysctls)
-}
-
-func (s boxContainer) create() []string { return s.composeArgv([]string{"docker", "create"}, nil) }
-
-func (s boxContainer) composeArgv(leading, sysctls []string) []string {
-	argv := append(slices.Clone(leading),
-		"--name", s.name,
-		"--restart", containerRestart,
-		"--network", cmp.Or(s.network, ProxyNetwork),
-	)
-	for _, joined := range s.networks {
-		argv = append(argv, "--network", joined.name)
-	}
-	argv = append(argv, "--label", containerCmdLabel+"="+strings.Join(s.command, " "))
-	if s.config != "" {
-		argv = append(argv, "--label", configLabel+"="+s.config)
-	}
-	if s.restored {
-		argv = append(argv, "--label", restoredLabel+"="+restoredBy)
-	}
-	if s.user != "" {
-		argv = append(argv, "--user", s.user)
-	}
-	for _, env := range s.env {
-		argv = append(argv, "--env", env)
-	}
-	argv = append(argv, logging()...)
-	argv = append(argv, confined(s.caps, s.fileCaps)...)
-	if s.memory > 0 {
-		argv = append(argv, "--memory", strconv.FormatInt(s.memory, 10))
-	}
-	for _, port := range s.ports {
-		argv = append(argv, "--publish", port.String()+":"+port.target)
-	}
-	for _, bind := range s.binds {
-		argv = append(argv, "--volume", bind)
-	}
-	for _, sysctl := range sysctls {
-		argv = append(argv, "--sysctl", sysctl)
-	}
-	return append(append(argv, s.image), s.command...)
-}
-
-func (s boxContainer) writing(attempts int) string {
-	return s.prepared() + s.replaced() + s.rising(attempts)
-}
-
-func (s boxContainer) writingUnderLock(attempts int, locked string, guard []string) string {
-	return s.prepared() + locked + strings.Join(guard, "\n") + "\n" + s.replaced() + "flock -u 9\n" + s.rising(attempts)
-}
-
-func (s boxContainer) prepared() string {
-	return "set -e\n" +
-		s.networksPresent() +
-		bindsPresent(s.files) +
-		imagePulled(s.image, containerPulls, shell.PullAttemptSeconds, shell.PullBudgetSeconds)
-}
-
-func (s boxContainer) replaced() string {
-	return "docker stop " + shell.Quote(s.name) + " >/dev/null 2>&1 || true\n" +
-		"docker rm --force " + shell.Quote(s.name) + " >/dev/null 2>&1 || true\n" +
-		s.started()
-}
-
-func (s boxContainer) started() string {
-	if s.joins {
-		return shell.Words(s.create()) + " >/dev/null\n" + rejoining(s.name) + "docker start " + shell.Quote(s.name) + " >/dev/null\n"
-	}
-	run := shell.Words(s.run()) + " >/dev/null\n"
-	if !s.migrates {
-		return run
-	}
-	return "if [ -e " + shell.Quote(migrateKnob) + " ]; then\n" +
-		shell.Words(s.run(migrateSysctl+"=1")) + " >/dev/null\n" +
-		"else\n" + run + "fi\n"
-}
-
-func (s boxContainer) networksPresent() string {
-	var checks string
-	for _, joined := range s.networks {
-		if joined.createdByOcel {
-			checks += networkEnsured(joined.name) + "\n"
-			continue
-		}
-		missing := fmt.Sprintf("option %q names the docker network %s, which this box does not have: start the proxy that creates it, or create it with docker network create %s",
-			joined.option, joined.name, joined.name)
-		checks += "if ! docker network inspect " + shell.Quote(joined.name) + " >/dev/null 2>&1; then\n" +
-			"printf '%s\\n' " + shell.Quote(missing) + " >&2\n" +
-			"exit 1\n" +
-			"fi\n"
-	}
-	return checks
-}
-
-func joinedFact(joined userNetwork) string { return "network:" + joined.name + "=" }
-
-func rejoining(name string) string {
-	return "for net in $(docker network ls --quiet --filter " + shell.Quote("label="+LabelTier) + "); do\n" +
-		"docker network connect \"$net\" " + shell.Quote(name) + " >/dev/null\n" +
-		"done\n"
-}
-
-func imagePulled(imageRef string, attempts, attemptSeconds, budgetSeconds int) string {
-	image := shell.Quote(imageRef)
-	spent := "{ printf '%s\\n' " + shell.Quote(fmt.Sprintf("%s was not pulled within %s", imageRef, shell.Seconds(budgetSeconds))) + " >&2; exit 1; }"
-	return "at=0\n" + scriptPullBackoff.Start() +
-		"pull_deadline=$(($(date +%s) + " + fmt.Sprint(budgetSeconds) + "))\n" +
-		"pull_left() { left=$((pull_deadline - $(date +%s))); [ \"$left\" -gt " + fmt.Sprint(attemptSeconds) + " ] && left=" + fmt.Sprint(attemptSeconds) + "; [ \"$left\" -gt 0 ]; }\n" +
-		"until " + shell.Within(shell.ProbeSeconds, "docker image inspect "+image) + " >/dev/null 2>&1 || " +
-		"{ pull_left || " + spent + "; timeout -k " + fmt.Sprint(shell.KillGraceSeconds) + " \"$left\" docker pull " + image + " >/dev/null; }; do\n" +
-		"at=$((at + 1))\n" +
-		"if [ \"$at\" -ge " + fmt.Sprint(attempts) + " ]; then\n" +
-		"printf '%s\\n' " + shell.Quote(fmt.Sprintf("%s was not pulled in %d attempts of at most %s each", imageRef, attempts, shell.Seconds(attemptSeconds))) + " >&2\n" +
-		"exit 1\n" +
-		"fi\n" +
-		scriptPullBackoff.Again() +
-		"pull_left || " + spent + "\n" +
-		"done\n"
-}
-
-func (s boxContainer) readiness() []string {
-	return append([]string{"docker", "exec", s.name}, s.ready...)
-}
-
-func (s boxContainer) rising(attempts int) string {
-	name := shell.Quote(s.name)
-	inspect := shell.Within(shell.ProbeSeconds, "docker inspect --type container --format ")
-	answering := shell.Within(shell.ProbeSeconds, shell.Words(s.readiness())) + " >/dev/null 2>&1"
-	return "at=0\n" +
-		"while :; do\n" +
-		"if [ \"$(" + inspect + shell.Quote("{{.State.Status}}") + " " + name + " 2>/dev/null)\" = running ] && " + answering + "; then exit 0; fi\n" +
-		"at=$((at + 1))\n" +
-		"[ \"$at\" -lt " + fmt.Sprint(attempts) + " ] || break\n" +
-		"sleep 1\n" +
-		"done\n" +
-		"printf '%s\\n' " + shell.Quote(fmt.Sprintf("%s was created and %s within %ds", s.name, s.unready, attempts)) + " >&2\n" +
-		inspect + shell.Quote("status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}") +
-		" " + name + " >&2 2>&1 || true\n" +
-		shell.Within(shell.ProbeSeconds, "docker logs --tail 2 "+name) + " >&2 2>&1 || true\n" +
-		"exit 1"
-}
+func networkCommand() string { return docker.EnsuringNetwork(ProxyNetwork) }
 
 func presenceProbe(kind, name, ask, fact string) string {
 	return "if command -v " + shell.Quote(dockerEngine) + " >/dev/null 2>&1 && " + ask + "; then\n" +
@@ -526,45 +243,45 @@ func presenceProbe(kind, name, ask, fact string) string {
 
 func networkProbe() string {
 	return presenceProbe(KindNetwork, ProxyNetwork,
-		"docker network inspect "+shell.Quote(ProxyNetwork)+" >/dev/null 2>&1", networkFact)
+		"docker network inspect "+shell.Quote(ProxyNetwork)+" >/dev/null 2>&1", docker.NetworkFact)
 }
 
-func (s boxContainer) probe() string {
-	template, normalized := ContainerFactTemplate, ""
-	for _, joined := range s.networks {
-		template += "\n" + joinedFact(joined) + `{{if index .NetworkSettings.Networks "` + joined.name + `"}}` + networkJoined + `{{else}}` + networkLeft + `{{end}}`
+func containerProbe(s docker.Service) string {
+	template, normalized := docker.ContainerFactTemplate, ""
+	for _, joined := range s.Networks {
+		template += "\n" + docker.JoinedFact(joined) + `{{if index .NetworkSettings.Networks "` + joined.Name + `"}}` + docker.NetworkJoined + `{{else}}` + docker.NetworkLeft + `{{end}}`
 	}
-	if s.migrates {
-		template += "\n" + migrateFact + `{{if eq (index .HostConfig.Sysctls "` + migrateSysctl + `") "1"}}` + migrateSet + `{{else}}` + migrateUnset + `{{end}}`
-		normalized = "if [ ! -e " + shell.Quote(migrateKnob) + " ]; then facts=\"${facts%" + migrateFact + "*}" + migrateFact + migrateSet + "\"; fi\n"
+	if s.Migrates {
+		template += "\n" + docker.MigrateFact + `{{if eq (index .HostConfig.Sysctls "` + docker.MigrateSysctl + `") "1"}}` + docker.MigrateSet + `{{else}}` + docker.MigrateUnset + `{{end}}`
+		normalized = "if [ ! -e " + shell.Quote(docker.MigrateKnob) + " ]; then facts=\"${facts%" + docker.MigrateFact + "*}" + docker.MigrateFact + docker.MigrateSet + "\"; fi\n"
 	}
 	return "if command -v " + shell.Quote(dockerEngine) + " >/dev/null 2>&1 && " +
-		"facts=$(docker inspect --type container --format " + shell.Quote(template) + " " + shell.Quote(s.name) + " 2>/dev/null); then\n" +
+		"facts=$(docker inspect --type container --format " + shell.Quote(template) + " " + shell.Quote(s.Name) + " 2>/dev/null); then\n" +
 		normalized +
-		s.mountsProbe() +
-		reports(shell.Quote(KindContainer), shell.Quote(s.name), "0", shell.Quote(rootOwner),
+		containerMountsProbe(s) +
+		reports(shell.Quote(KindContainer), shell.Quote(s.Name), "0", shell.Quote(rootOwner),
 			`"$(printf '%s\n' "$facts" | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"`) + "\nfi"
 }
 
-func (s boxContainer) mountsProbe() string {
-	asked := append([]string{"docker", "exec", s.name}, s.inodes...)
+func containerMountsProbe(s docker.Service) string {
+	asked := append([]string{"docker", "exec", s.Name}, s.Inodes...)
 	var compared string
-	for _, bind := range s.binds {
+	for _, bind := range s.Binds {
 		source, dest, _ := strings.Cut(bind, ":")
 		dest, _, _ = strings.Cut(dest, ":")
 		asked = append(asked, dest)
 		compared += "if outside=$(stat -c %d:%i " + shell.Quote(source) + " 2>/dev/null) && " +
-			"! printf '%s\\n' \"$inside\" | grep -Fqx -- " + shell.Quote(dest) + "\" $outside\"; then mounts=" + mountsMoved + "; fi\n"
+			"! printf '%s\\n' \"$inside\" | grep -Fqx -- " + shell.Quote(dest) + "\" $outside\"; then mounts=" + docker.MountsMoved + "; fi\n"
 	}
-	return "mounts=" + mountsIntact + "\n" +
+	return "mounts=" + docker.MountsIntact + "\n" +
 		"if inside=$(" + shell.Words(asked) + " 2>/dev/null); then\n" + compared +
-		"else case $? in " + execUnstarted + ") mounts=" + mountsMoved + " ;; esac\n" +
+		"else case $? in " + docker.ExecUnstarted + ") mounts=" + docker.MountsMoved + " ;; esac\n" +
 		"fi\n" +
-		"facts=\"$facts\n" + mountsFact + "$mounts\"\n"
+		"facts=\"$facts\n" + docker.MountsFact + "$mounts\"\n"
 }
 
 func (f Front) placedRemovals() []removal {
-	at := destination(openFront(f, frontBox{}))
+	at := routing.Destination(openFront(f, frontBox{}))
 	if at == "" {
 		return nil
 	}
@@ -583,10 +300,10 @@ func (f Front) placedRemovals() []removal {
 func proxyRemovals() []removal {
 	return []removal{
 		taking(KindContainer, caddy.Container, "ocel's front proxy"),
-		taking(KindContainer, TunnelContainer, "the tunnel to your edge"),
-		taking(KindContainer, SwitchboardContainer, "ocel's switchboard"),
-		taking(KindNetwork, TunnelNetwork, "kept while anything is attached"),
-		taking(KindDir, TunnelDir, ""),
+		taking(KindContainer, tunnel.ContainerName, "the tunnel to your edge"),
+		taking(KindContainer, boxapi.Switchboard, "ocel's switchboard"),
+		taking(KindNetwork, tunnel.Network, "kept while anything is attached"),
+		taking(KindDir, tunnel.Dir, ""),
 		taking(KindDir, boxapi.SwitchboardControlDir, ""),
 		taking(KindDir, boxapi.FrontDir, ""),
 		taking(KindDir, ProxyData, "certificates and acme key"),

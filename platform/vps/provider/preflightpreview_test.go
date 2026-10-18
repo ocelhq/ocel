@@ -11,13 +11,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func newBoxServingPreviews(t *testing.T, base string) *scripted {
 	t.Helper()
-	table, err := host.WriteRoutingTable(host.RoutingTable{Grace: 30 * time.Second, PreviewBase: base})
+	table, err := routing.WriteRoutingTable(boxapi.RoutingTable{Grace: 30 * time.Second, PreviewBase: base})
 	if err != nil {
 		t.Fatal(err)
 	}

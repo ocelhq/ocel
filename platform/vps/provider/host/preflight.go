@@ -11,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -64,7 +66,7 @@ func (r RepoImages) Needs() int64 { return max(FirstDeployFloor, r.Measured()) }
 func (h Headroom) Needs() int64 {
 	var wanted int64
 	for _, repo := range h.Repos {
-		wanted += repo.Needs() + LogCeiling
+		wanted += repo.Needs() + docker.LogCeiling
 	}
 	return wanted
 }
@@ -185,7 +187,7 @@ func arithmetic(room Headroom) string {
 			"%s (image size unknown, guessed %s)",
 			measured(repository, images), sized(FirstDeployFloor)))
 	}
-	return strings.Join(written, "; ") + fmt.Sprintf("; plus %s of logs per container", sized(LogCeiling))
+	return strings.Join(written, "; ") + fmt.Sprintf("; plus %s of logs per container", sized(docker.LogCeiling))
 }
 
 func measured(repository string, images RepoImages) string {
@@ -229,7 +231,7 @@ func (h *Host) CheckProxy(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	asking := []boxContainer{switchboardBox(nil, h.proxyOption)}
+	asking := []docker.Service{switchboardBox(nil, h.proxyOption)}
 	if !h.proxyOption.adopted() {
 		asking = append(asking, frontProxy())
 	}
@@ -241,28 +243,28 @@ func (h *Host) CheckProxy(ctx context.Context) error {
 	return nil
 }
 
-func (h *Host) answers(ctx context.Context, asked boxContainer, elevation ssh.Acting) error {
-	result, err := h.Stream(ctx, elevation, shell.Words(asked.readiness()), nil)
+func (h *Host) answers(ctx context.Context, asked docker.Service, elevation ssh.Acting) error {
+	result, err := h.Stream(ctx, elevation, shell.Words(asked.Readiness()), nil)
 	if err != nil {
 		return err
 	}
 	if result.Code == 0 {
 		return nil
 	}
-	state, err := h.Said(ctx, elevation, stateCommand(asked.name))
+	state, err := h.Said(ctx, elevation, docker.StateCommand(asked.Name))
 	if err != nil {
 		return err
 	}
-	if status := stateField(state, "Status"); asked.name == SwitchboardContainer && (status == "" || status == proxyExited || status == "created") {
+	if status := docker.StateField(state, "Status"); asked.Name == boxapi.Switchboard && (status == "" || status == proxyExited || status == "created") {
 		return h.restoreSwitchboard(ctx, elevation)
 	}
-	if err := h.containerTrouble(asked.name, state); err != nil {
+	if err := h.containerTrouble(asked.Name, state); err != nil {
 		return err
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s on %s %s: %s\n"+
 			"Run `ocel bootstrap %s`",
-		asked.name, h.Named(), asked.unready, ssh.Spoken(result), environment.TierProduction)
+		asked.Name, h.Named(), asked.Unready, ssh.Spoken(result), environment.TierProduction)
 }
 
 const (
@@ -271,7 +273,7 @@ const (
 )
 
 func (h *Host) containerTrouble(name, state string) error {
-	status := stateField(state, "Status")
+	status := docker.StateField(state, "Status")
 	switch {
 	case status == "":
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -295,15 +297,6 @@ func (h *Host) containerTrouble(name, state string) error {
 			name, h.Named(), status, state, name, environment.TierProduction)
 	}
 	return nil
-}
-
-func stateField(state, label string) string {
-	for _, field := range strings.Fields(state) {
-		if name, value, split := strings.Cut(field, "="); split && name == label {
-			return value
-		}
-	}
-	return ""
 }
 
 func (h *Host) ProxyOwnsServingPorts(ctx context.Context) error {

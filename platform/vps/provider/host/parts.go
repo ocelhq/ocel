@@ -134,7 +134,7 @@ func (p proxyPart) Apply(ctx context.Context, step *Step) error {
 	if err := step.Write(ctx, ProxyItems(read.Arch, read.Front)); err != nil {
 		return err
 	}
-	placeRoutes := p.host.rerender
+	placeRoutes := p.host.routing.Rerender
 	if read.move != nil {
 		placeRoutes = read.move.placeRoutes
 	}

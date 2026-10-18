@@ -9,6 +9,7 @@ import (
 func (p *Provider) onHost(dial ssh.Dial) *Provider {
 	box := ssh.NewBox(dial, nil)
 	p.host = host.New(box, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates), p.options.Proxy.front())
+	p.routing = p.host.Routing()
 	p.keyValues = boxstore.NewKeyValues(box)
 	p.cipher = boxstore.NewCipher(box)
 	p.Loopback = p.servedOnTheBox

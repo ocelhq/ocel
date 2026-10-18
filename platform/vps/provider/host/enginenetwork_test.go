@@ -11,8 +11,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/enginetest"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 func freePort(t *testing.T) int {
@@ -53,13 +56,13 @@ func onYourNetwork(t *testing.T) yourNetwork {
 	t.Cleanup(func() { taken(t, board) })
 
 	dir := enginetest.BindSource(t)
-	routing, switching := filepath.Join(dir, "routing"), filepath.Join(dir, "switchboard")
-	for _, made := range []string{routing, switching, filepath.Join(dir, "control"), filepath.Join(dir, "front"), filepath.Join(dir, "connector")} {
+	routedDir, switching := filepath.Join(dir, "routing"), filepath.Join(dir, "switchboard")
+	for _, made := range []string{routedDir, switching, filepath.Join(dir, "control"), filepath.Join(dir, "front"), filepath.Join(dir, "connector")} {
 		if err := os.MkdirAll(made, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(routing, filepath.Base(boxapi.RoutingTablePath)), routingTable(nil).Content, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(routedDir, filepath.Base(boxapi.RoutingTablePath)), routingTable(nil).Content, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	binary := switchboardBinary(arch)
@@ -68,41 +71,41 @@ func onYourNetwork(t *testing.T) yourNetwork {
 		unprivilegedHere(t), "",
 		boxapi.FrontDir, filepath.Join(dir, "front"),
 		boxapi.SwitchboardControlDir, filepath.Join(dir, "control"),
-		SwitchboardDir, switching,
+		boxapi.SwitchboardDir, switching,
 		ConnectorRun, filepath.Join(dir, "connector"),
-		boxapi.RoutingDir, routing,
-		routingLock, dir,
-		shell.Quote(TunnelNetwork+":"+boxapi.TunnelListenPort), shell.Quote("127.0.0.1:"+boxapi.TunnelListenPort),
-		shell.Quote(TunnelNetwork), shell.Quote(tunneling),
-		`"`+TunnelNetwork+`"`, `"`+tunneling+`"`,
+		boxapi.RoutingDir, routedDir,
+		routing.Lock, dir,
+		shell.Quote(tunnel.Network+":"+boxapi.TunnelListenPort), shell.Quote("127.0.0.1:"+boxapi.TunnelListenPort),
+		shell.Quote(tunnel.Network), shell.Quote(tunneling),
+		`"`+tunnel.Network+`"`, `"`+tunneling+`"`,
 		networkFlag+shell.Quote(ProxyNetwork), networkFlag+shell.Quote("name="+boxNetwork+",alias="+boxapi.Switchboard),
 		networkFlag+shell.Quote(yours), networkFlag+shell.Quote("name="+yours+",alias="+boxapi.Switchboard),
 		shell.Quote(ProxyNetwork), shell.Quote(boxNetwork),
-		shell.Quote(SwitchboardContainer), shell.Quote(board),
+		shell.Quote(boxapi.Switchboard), shell.Quote(board),
 		`"`+ProxyNetwork+`"`, `"`+boxNetwork+`"`,
 	).Replace
 	return yourNetwork{binary: binary, yours: yours, box: boxNetwork, board: board, here: here}
 }
 
-func (y yourNetwork) switchboardOn(t *testing.T, port int) boxContainer {
+func (y yourNetwork) switchboardOn(t *testing.T, port int) docker.Service {
 	t.Helper()
 	board := switchboardBox(y.binary, Front{Manual: &ManualFront{Port: port, Network: y.yours}})
-	if said, err := y.shell(board.writing(containerRising)); err != nil {
+	if said, err := y.shell(board.Writing(docker.ContainerRising)); err != nil {
 		t.Fatalf("the write that starts the switchboard on %s = %v, want it serving: it resolves every network it relays from as it starts\n%s\n%s", y.yours, err, said, logsOf(y.board))
 	}
 	return board
 }
 
-func (y yourNetwork) stated(t *testing.T, board boxContainer) bool {
+func (y yourNetwork) stated(t *testing.T, board docker.Service) bool {
 	t.Helper()
-	item := board.item("")
+	item := containerItem(board, "")
 	item.Name = y.board
-	binds := make([]string, 0, len(board.binds))
-	for _, bind := range board.binds {
+	binds := make([]string, 0, len(board.Binds))
+	for _, bind := range board.Binds {
 		binds = append(binds, y.here(bind))
 	}
-	item.Content = []byte(y.here(string(board.factsOver(binds))))
-	rendered, err := y.shell(board.probe())
+	item.Content = []byte(y.here(string(board.FactsOver(binds))))
+	rendered, err := y.shell(containerProbe(board))
 	if err != nil {
 		t.Fatalf("probe the switchboard: %v\n%s", err, rendered)
 	}
@@ -113,7 +116,7 @@ func (y yourNetwork) stated(t *testing.T, board boxContainer) bool {
 	if surveyed[item.ID()] == item.Digest() {
 		return true
 	}
-	box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", y.here(ContainerFactTemplate), y.board).Output()
+	box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", y.here(docker.ContainerFactTemplate), y.board).Output()
 	t.Logf("a real engine reports the switchboard as something other than the item ocel writes it from:\n%s",
 		compared(canonical(string(box)), strings.TrimSpace(string(item.Content))))
 	return false
@@ -124,7 +127,7 @@ func TestASwitchboardOnYourProxysNetworkJoinsItAndIsReadAsStatedUntilItLeaves(t 
 	yours := y.yours
 	port := freePort(t)
 	missing := switchboardBox(y.binary, Front{Manual: &ManualFront{Port: port, Network: yours + "-gone"}})
-	if said, err := y.shell(missing.writing(containerRising)); err == nil || !strings.Contains(said, "proxy.manual.network") {
+	if said, err := y.shell(missing.Writing(docker.ContainerRising)); err == nil || !strings.Contains(said, "proxy.manual.network") {
 		t.Errorf("the write onto a network this box does not have = %v, %q, want it refused naming the option that set it", err, said)
 	}
 
@@ -152,12 +155,12 @@ func TestASwitchboardAPruneTookIsStartedAgainOnYourProxysNetworkAndReadAsStated(
 	}
 
 	gone := board
-	gone.networks = []userNetwork{{name: y.yours + "-gone", option: "proxy.manual.network"}}
-	if said, err := y.shell(gone.restoring(containerRising, routingLocked("-x"))); err == nil || !strings.Contains(said, "proxy.manual.network") {
+	gone.Networks = []docker.Network{{Name: y.yours + "-gone", Option: "proxy.manual.network"}}
+	if said, err := y.shell(gone.Restoring(docker.ContainerRising, routing.Locked("-x"))); err == nil || !strings.Contains(said, "proxy.manual.network") {
 		t.Errorf("starting the switchboard again onto a network this box does not have = %v, %q, want it refused naming the option that set it", err, said)
 	}
 
-	if said, err := y.shell(board.restoring(containerRising, routingLocked("-x"))); err != nil {
+	if said, err := y.shell(board.Restoring(docker.ContainerRising, routing.Locked("-x"))); err != nil {
 		t.Fatalf("starting the switchboard again = %v, want it serving on %s\n%s\n%s", err, y.yours, said, logsOf(y.board))
 	}
 	if !y.stated(t, board) {

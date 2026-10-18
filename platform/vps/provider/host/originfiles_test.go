@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -48,11 +49,11 @@ func (b *loggingShell) fedEach(t *testing.T) []string {
 }
 
 func placementSaid(argv ...string) string {
-	return strings.Join(placementFed(coolifyDynamic, argv...)[1:], " ")
+	return strings.Join(routing.PlacementFed(coolifyDynamic, argv...)[1:], " ")
 }
 
 func placementAsked(argv ...string) string {
-	return strings.Join(placementCommand(coolifyDynamic, argv...)[1:], " ")
+	return strings.Join(routing.Placement(coolifyDynamic, argv...)[1:], " ")
 }
 
 func wantPlacedOrigins(t *testing.T, box *loggingShell, rendering string) {
@@ -62,7 +63,7 @@ func wantPlacedOrigins(t *testing.T, box *loggingShell, rendering string) {
 		"run -i --user 0:" + placedGroup + " " + placementAsked("place-origin", shieldedOrigins[0].Path)[len("run "):],
 		"run -i --user 0:" + placedGroup + " " + placementAsked("place-origin", shieldedOrigins[1].Path)[len("run "):],
 		placementSaid("place", coolifyFile),
-		placementAsked(append([]string{"unplace-origins"}, originPaths(shieldedOrigins)...)...),
+		placementAsked(append([]string{"unplace-origins"}, routing.OriginPaths(shieldedOrigins)...)...),
 	}
 	if got := box.called(t); !slices.Equal(got, want) {
 		t.Errorf("docker was asked\n%q\nwant\n%q\nEach origin certificate is placed, as the group of the directory it is placed in, before the file naming it, and the ones it no longer names are unplaced only once it is placed", got, want)
@@ -79,9 +80,9 @@ func TestTheWritePlacesEachOriginCertificateBeforeTheRenderingThatNamesIt(t *tes
 	box := shellLogging(t)
 	before := fileContents(t, box.table)
 	after := string(mustWrite(t, previewing()))
-	fed := pairFed(routingPair{table: []byte(after), config: []byte("routes shop.example.com\n"), origins: shieldedOrigins})
+	fed := routing.PairFed(routing.Pair{Table: []byte(after), Config: []byte("routes shop.example.com\n"), Origins: shieldedOrigins})
 
-	if code, _, errs := box.run(t, stagedWrite(tableDigest(digested(before)), coolifyFile, originPaths(shieldedOrigins)), fed); code != 0 {
+	if code, _, errs := box.run(t, routing.StagedWrite(routing.Digest(digested(before)), coolifyFile, routing.OriginPaths(shieldedOrigins)), fed); code != 0 {
 		t.Fatalf("the write = %d: %s", code, errs)
 	}
 	wantPlacedOrigins(t, box, "routes shop.example.com\n")
@@ -93,8 +94,8 @@ func TestAPlacementAlonePlacesEachOriginCertificateBeforeTheRenderingThatNamesIt
 	box := shellLogging(t)
 	current := fileContents(t, box.table)
 
-	if code, _, errs := box.run(t, replacement(tableDigest(digested(current)), coolifyFile, originPaths(shieldedOrigins)),
-		originsFed(shieldedOrigins)+"routes shop.example.com\n"); code != 0 {
+	if code, _, errs := box.run(t, routing.Replacement(routing.Digest(digested(current)), coolifyFile, routing.OriginPaths(shieldedOrigins)),
+		routing.OriginsFed(shieldedOrigins)+"routes shop.example.com\n"); code != 0 {
 		t.Fatalf("the placement = %d: %s", code, errs)
 	}
 	wantPlacedOrigins(t, box, "routes shop.example.com\n")
@@ -105,9 +106,9 @@ func TestAWriteWithNoOriginCertificateUnplacesTheOnesAnEarlierRenderingNamed(t *
 
 	box := shellLogging(t)
 	before := fileContents(t, box.table)
-	fed := pairFed(routingPair{table: []byte(before), config: []byte("routes shop.example.com\n")})
+	fed := routing.PairFed(routing.Pair{Table: []byte(before), Config: []byte("routes shop.example.com\n")})
 
-	if code, _, errs := box.run(t, stagedWrite(tableDigest(digested(before)), coolifyFile, nil), fed); code != 0 {
+	if code, _, errs := box.run(t, routing.StagedWrite(routing.Digest(digested(before)), coolifyFile, nil), fed); code != 0 {
 		t.Fatalf("the write = %d: %s", code, errs)
 	}
 	want := []string{placementSaid("place", coolifyFile), placementAsked("unplace-origins")}
@@ -119,7 +120,7 @@ func TestAWriteWithNoOriginCertificateUnplacesTheOnesAnEarlierRenderingNamed(t *
 func TestAWriteToOcelsOwnProxyConfigPlacesNoOriginCertificate(t *testing.T) {
 	t.Parallel()
 
-	if script := stagedWrite("a-digest", ProxyConfig, nil); strings.Contains(script, "origin") {
+	if script := routing.StagedWrite("a-digest", ProxyConfig, nil); strings.Contains(script, "origin") {
 		t.Errorf("the write to %s is\n%s\nwant no origin certificate placed: ocel's own proxy holds them in its config", ProxyConfig, script)
 	}
 }
@@ -129,8 +130,8 @@ func TestADeployPlacesTheOriginCertificatesYourProxyNamesWithTheRenderingThatNam
 
 	adopted := adoptedBox(t, routed())
 	h := adopted.host()
-	h.front = userProxy{file: coolifyFile, origins: shieldedOrigins}
-	if err := h.ClaimHosts(t.Context(), []HostClaim{{Hostname: "shop.example.com", Owner: surface, Pointer: pointed}}); err != nil {
+	h.useFront(userProxy{file: coolifyFile, origins: shieldedOrigins})
+	if err := h.routing.ClaimHosts(t.Context(), []boxapi.Claim{{Hostname: "shop.example.com", Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
 	written := slices.IndexFunc(adopted.commands(), func(command string) bool { return writesProxy(command) && places(command) })
@@ -138,7 +139,7 @@ func TestADeployPlacesTheOriginCertificatesYourProxyNamesWithTheRenderingThatNam
 		t.Fatalf("the claim never placed the rendering: %q", adopted.commands())
 	}
 	command := adopted.commands()[written]
-	for _, path := range originPaths(shieldedOrigins) {
+	for _, path := range routing.OriginPaths(shieldedOrigins) {
 		if !strings.Contains(command, shell.Quote("place-origin")+" "+shell.Quote(path)) {
 			t.Errorf("the write\n%s\nplaces no %s", command, path)
 		}

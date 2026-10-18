@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 )
@@ -125,10 +125,10 @@ func bootstrapsBehindCaddy(t *testing.T, vm machine, cf caddyFront) (*vps.Proxy,
 		t.Errorf("%s is %s on a box your Caddy fronts, want it never started", caddy.Container, state)
 	}
 	if cf.network != "" {
-		if networks := frontNetworks(t, vm, host.SwitchboardContainer); !slices.Contains(networks, cf.network) {
-			t.Errorf("%s sits on %q, want it on %s, where your Caddy reaches it by name", host.SwitchboardContainer, networks, cf.network)
+		if networks := frontNetworks(t, vm, boxapi.Switchboard); !slices.Contains(networks, cf.network) {
+			t.Errorf("%s sits on %q, want it on %s, where your Caddy reaches it by name", boxapi.Switchboard, networks, cf.network)
 		}
-	} else if published := vm.inspects(t, "container", host.SwitchboardContainer, "{{json .HostConfig.PortBindings}}"); !strings.Contains(published, `"HostIp":"127.0.0.1","HostPort":"8480"`) {
+	} else if published := vm.inspects(t, "container", boxapi.Switchboard, "{{json .HostConfig.PortBindings}}"); !strings.Contains(published, `"HostIp":"127.0.0.1","HostPort":"8480"`) {
 		t.Errorf("the switchboard publishes %s, want 127.0.0.1:8480 for a Caddy on the host to reach", published)
 	}
 	return proxy, bootstrap
@@ -173,14 +173,14 @@ func (vm machine) destroysBehindCaddy(t *testing.T, bootstrap provider.Bootstrap
 	if err := stack.Destroy(ctx); err != nil {
 		t.Errorf("Destroy() = %v", err)
 	}
-	vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
+	vm.ssh(t, "sudo docker ps -aq --filter label="+docker.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
 		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Fatalf("Remove(%s) behind %s = %v", tier, cf.front, err)
 		}
 	}
-	if state := vm.state(t, host.SwitchboardContainer); state != "gone" {
-		t.Errorf("%s is %s after the box was destroyed", host.SwitchboardContainer, state)
+	if state := vm.state(t, boxapi.Switchboard); state != "gone" {
+		t.Errorf("%s is %s after the box was destroyed", boxapi.Switchboard, state)
 	}
 	placed := cf.directory + "/" + caddyfile.FileName
 	if left := vm.ssh(t, "sudo test -e "+quote(placed)+" && echo present || echo gone"); strings.TrimSpace(left) != "gone" {

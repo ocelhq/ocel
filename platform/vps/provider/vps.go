@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -29,6 +30,7 @@ type Provider struct {
 	options   Options
 	project   string
 	host      *host.Host
+	routing   *routing.Table
 	keyValues records.Store
 	cipher    *boxstore.Cipher
 

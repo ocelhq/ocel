@@ -6,16 +6,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
-func storing() RoutingTable {
-	return RoutingTable{
-		Grace: DrainWindow,
-		Routes: []AppRoute{
+func storing() boxapi.RoutingTable {
+	return boxapi.RoutingTable{
+		Grace: routing.DrainWindow,
+		Routes: []boxapi.Route{
 			{RouteKey: keyed("web"), Upstream: "shop-web-1:" + containerimage.PortText},
 			{RouteKey: keyed(boxapi.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
 		},
-		Claims: []HostClaim{
+		Claims: []boxapi.Claim{
 			{Hostname: "shop.example.com", Owner: surface, Pointer: pointed},
 			{Hostname: "storage.shop.example.com", Owner: surface, Pointer: pointed, App: boxapi.StoreLabel},
 		},
@@ -39,13 +40,13 @@ func TestAStoreRouteIsNotAnAppTheProjectsOwnHostnameCouldBeAmbiguousBetween(t *t
 	t.Parallel()
 
 	state := storing()
-	state.Routes = append(state.Routes, AppRoute{RouteKey: keyed("api"), Upstream: "shop-api-1:" + containerimage.PortText})
-	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
+	state.Routes = append(state.Routes, boxapi.Route{RouteKey: keyed("api"), Upstream: "shop-api-1:" + containerimage.PortText})
+	if _, err := routing.RenderProxyConfig(caddy.Builtin{}, state); err == nil {
 		t.Fatal("two apps under one wide claim rendered, and whichever sorted first would answer for both")
 	}
 
 	state.Routes = state.Routes[:len(state.Routes)-1]
-	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err != nil {
+	if _, err := routing.RenderProxyConfig(caddy.Builtin{}, state); err != nil {
 		t.Fatalf("one app and a store under a wide claim = %v, want the app to answer it", err)
 	}
 }

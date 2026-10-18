@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -140,7 +141,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if groups := vm.ssh(t, "id -nG "+deployLogin); strings.Contains(groups, engineName) {
 		t.Errorf("%s is in %q, and the docker group is root by docker's own account", deployLogin, strings.TrimSpace(groups))
 	}
-	if _, err := vm.attempt(deployLogin, "docker run --rm --privileged --network none "+host.StaticImage+" /ocel"); err == nil {
+	if _, err := vm.attempt(deployLogin, "docker run --rm --privileged --network none "+docker.StaticImage+" /ocel"); err == nil {
 		t.Errorf("%s ran a privileged container, and the checked docker exists to refuse it", deployLogin)
 	}
 	if _, err := vm.attempt(deployLogin, "docker version --format '{{.Server.Version}}'"); err != nil {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -98,7 +99,7 @@ func TestABoxWhoseSizeCannotBeReadRunsNothingUnlimited(t *testing.T) {
 
 	box := machine(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, sizeFields) {
+		if strings.Contains(command, docker.SizeFields) {
 			return ssh.Result{Stderr: "Cannot connect to the Docker daemon", Code: 1}, true
 		}
 		return ssh.Result{}, false

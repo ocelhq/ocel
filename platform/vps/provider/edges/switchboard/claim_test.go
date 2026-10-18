@@ -18,8 +18,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 const pulled = "-----BEGIN CERTIFICATE-----\nthe zone's client certificate\n-----END CERTIFICATE-----\n"
@@ -45,11 +45,11 @@ func TestAClaimOnTheBoxShieldsTheHostnameBeforeItTakesItAndNamesTheBoxAsItsOrigi
 		t.Errorf("Claim named origin %+v, want the box at %s: the edge in front forwards the hostname there", origin, address)
 	}
 	surface := switchboard.Surface(slug, environment.TierProduction)
-	want := host.Shield{Hostname: "shop.example.com", Owner: surface, ClientCAs: []string{pulled}}
+	want := boxapi.Shield{Hostname: "shop.example.com", Owner: surface, ClientCAs: []string{pulled}}
 	if len(m.shields) != 1 || !reflect.DeepEqual(m.shields[0], want) {
 		t.Errorf("the box shields %+v, want %+v: the proxy answers the hostname only to a client presenting that certificate", m.shields, want)
 	}
-	if !slices.Contains(m.claims, host.HostClaim{Owner: surface, Hostname: "shop.example.com", Pointer: router.DefaultPointer, App: "web"}) {
+	if !slices.Contains(m.claims, boxapi.Claim{Owner: surface, Hostname: "shop.example.com", Pointer: router.DefaultPointer, App: "web"}) {
 		t.Errorf("the box claims %+v, want shop.example.com among them", m.claims)
 	}
 	if shielded, claimed := slices.Index(m.calls, "shield shop.example.com"), slices.Index(m.calls, "claim shop.example.com"); shielded < 0 || shielded > claimed {
@@ -69,7 +69,7 @@ func TestDisclaimingOnTheBoxGivesTheHostnameAndItsShieldBack(t *testing.T) {
 	if err := routed.Disclaim(context.Background(), "shop.example.com"); err != nil {
 		t.Fatalf("Disclaim: %v", err)
 	}
-	if slices.ContainsFunc(m.claims, func(claim host.HostClaim) bool { return claim.Hostname == "shop.example.com" }) {
+	if slices.ContainsFunc(m.claims, func(claim boxapi.Claim) bool { return claim.Hostname == "shop.example.com" }) {
 		t.Errorf("the box still claims %+v, want shop.example.com given back", m.claims)
 	}
 	if len(m.shields) != 0 {

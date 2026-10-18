@@ -58,7 +58,7 @@ func (x boxProxy) Facts() edge.Facts {
 }
 
 func (p *Provider) box() *switchboard.Edge {
-	return switchboard.New(p.host, p.applyOrigins, p.options.SSH.session().Destination(), p.findTunnelHooks, newRecordedGate(p.keyValues, p.cipher))
+	return switchboard.New(p.host, p.routing, p.host.Tunnel(), p.applyOrigins, p.options.SSH.session().Destination(), p.findTunnelHooks, newRecordedGate(p.keyValues, p.cipher))
 }
 
 func (p *Provider) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {

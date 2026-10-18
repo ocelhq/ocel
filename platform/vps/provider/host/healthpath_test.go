@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -53,7 +54,7 @@ func TestTheBoxIsAskedForTheHealthPathCandidatesInOrderAtTheAppsTarget(t *testin
 	if asked < 0 {
 		t.Fatalf("the box was never asked to find a health path: %v", box.commands())
 	}
-	want := renderStartWatch([]string{containerOf(nextTarget)}, switchboardCommand("find-health-path", "--deploy-timeout", "60", nextTarget, "/up", "/health", "/healthz", "/"))
+	want := renderStartWatch([]string{containerOf(nextTarget)}, routing.SwitchboardCommand("find-health-path", "--deploy-timeout", "60", nextTarget, "/up", "/health", "/healthz", "/"))
 	if command := box.commands()[asked]; !strings.Contains(command, want) {
 		t.Errorf("the box was asked\n%s\nwant it to contain\n%s", command, want)
 	}

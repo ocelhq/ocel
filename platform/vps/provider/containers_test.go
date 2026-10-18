@@ -67,7 +67,7 @@ func TestStartingAnAppEndsAtARunningLabelledContainerAndCutsOverNothing(t *testi
 		t.Errorf("the container is reachable at %q, want the name and port the proxy dials it by", container.URL)
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if strings.Contains(joined, host.SwitchboardMounted) || strings.Contains(joined, host.ProxyConfig) {
+	if strings.Contains(joined, boxapi.SwitchboardMounted) || strings.Contains(joined, host.ProxyConfig) {
 		t.Errorf("starting a container reached the proxy:\n%s\nreleases end at a running container, and the cutover is a separate call", joined)
 	}
 }

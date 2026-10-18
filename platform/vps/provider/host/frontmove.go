@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -34,7 +35,7 @@ type frontMove struct {
 	host     *Host
 	from     Front
 	to       Front
-	table    RoutingTable
+	table    boxapi.RoutingTable
 	recorded Item
 	resumed  bool
 	stranded []removal
@@ -67,7 +68,7 @@ func (f Front) identifyResolvers() string {
 	return f.Traefik.Resolver + " " + f.Traefik.PreviewResolver
 }
 
-func (f Front) resolvePlacedFile() string { return destination(openFront(f, frontBox{})) }
+func (f Front) resolvePlacedFile() string { return routing.Destination(openFront(f, frontBox{})) }
 
 func (m frontMove) isSameProcess() bool {
 	return m.from.adopted() && m.to.adopted() && m.from.identifyProcess() == m.to.identifyProcess()
@@ -104,8 +105,8 @@ func (m frontMove) countReissuedHostnames() int {
 	return len(m.to.listCertifiedHostnames(m.table))
 }
 
-func (f Front) listCertifiedHostnames(table RoutingTable) []string {
-	spec := proxySpec(table)
+func (f Front) listCertifiedHostnames(table boxapi.RoutingTable) []string {
+	spec := routing.Spec(table)
 	var wildcard certs.Leaf
 	if f.Traefik != nil && f.Traefik.PreviewResolver != "" && table.PreviewBase != "" {
 		wildcard.Domains = []string{edge.PreviewWildcard(table.PreviewBase)}
@@ -115,7 +116,7 @@ func (f Front) listCertifiedHostnames(table RoutingTable) []string {
 		shield, shielded := spec.ShieldOf(hostname)
 		switch {
 		case shielded && shield.OriginCertificate.Certificate != "":
-		case !f.adopted() && Covering(table.Pins, hostname) != "":
+		case !f.adopted() && certs.Covering(table.Pins, hostname) != "":
 		case wildcard.Covers(hostname):
 			certified = append(certified, wildcard.Domains[0])
 		default:
@@ -166,7 +167,7 @@ func (m frontMove) listRemovals() []removal {
 	return removed
 }
 
-var movedNames = []string{caddy.Container, SwitchboardContainer, proxyRoot, boxapi.PinsDir, ProxyData, ProxyConfig, sudoersCaddyReload, FrontRecordPath}
+var movedNames = []string{caddy.Container, boxapi.Switchboard, proxyRoot, boxapi.PinsDir, ProxyData, ProxyConfig, sudoersCaddyReload, FrontRecordPath}
 
 func (m frontMove) splitOffGroup(core []provider.Change) (provider.ChangeGroup, []provider.Change) {
 	group := provider.ChangeGroup{
@@ -195,14 +196,6 @@ func (m frontMove) splitOffGroup(core []provider.Change) (provider.ChangeGroup, 
 	}
 	group.Changes = append(group.Changes, m.listCertificateChanges()...)
 	return group, kept
-}
-
-func (h *Host) readMovedTable(ctx context.Context) (RoutingTable, error) {
-	pair, err := h.currentPair(ctx)
-	if err != nil || pair.table == nil {
-		return RoutingTable{}, err
-	}
-	return ReadRoutingTable(pair.table)
 }
 
 func (m *frontMove) removeOldFront(ctx context.Context, progress progress.Log) error {
@@ -235,9 +228,9 @@ func (h *Host) removeAll(ctx context.Context, removals []removal, progress progr
 
 func (m *frontMove) placeRoutes(ctx context.Context) error {
 	if m.isSameProcess() || !m.to.adopted() {
-		return m.host.rerender(ctx)
+		return m.host.routing.Rerender(ctx)
 	}
-	return m.host.placeUnserved(ctx)
+	return m.host.routing.PlaceUnserved(ctx)
 }
 
 func (m *frontMove) awaitFront(ctx context.Context, tier environment.Tier, progress progress.Log) error {
@@ -282,30 +275,6 @@ func (m *frontMove) awaitPlacement(ctx context.Context, tier environment.Tier) e
 			"Ocel's file at %s still routes your hostnames. Make %s read %s, then run `%s` to finish the move",
 		m.to.named(), placed, moveWait, hostname, strings.Join(failures, "\n"),
 		old, m.to.named(), filepath.Dir(placed), provider.BootstrapCommand(tier))
-}
-
-func (h *Host) placeUnserved(ctx context.Context) error {
-	at := destination(h.front)
-	if at == "" {
-		return nil
-	}
-	pair, err := h.currentTable(ctx)
-	if err != nil {
-		return err
-	}
-	table, err := ReadRoutingTable(pair.table)
-	if err != nil {
-		return err
-	}
-	rendered, err := RenderProxyConfig(h.front, table)
-	if err != nil {
-		return err
-	}
-	origins, err := RenderOriginFiles(h.front, table)
-	if err != nil {
-		return err
-	}
-	return h.replace(ctx, pair.digest(), at, rendered, origins)
 }
 
 func (h *Host) probeAnyCertificate(ctx context.Context, hostname string) (Answer, error) {

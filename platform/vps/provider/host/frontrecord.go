@@ -261,7 +261,7 @@ func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) 
 		read.move = &frontMove{host: b.host, to: option}
 	}
 	if read.move != nil {
-		if read.move.table, err = b.host.readMovedTable(ctx); err != nil {
+		if read.move.table, err = b.host.routing.ReadMovedTable(ctx); err != nil {
 			return Reading{}, err
 		}
 		if read.move.recorded, err = moving.item(); err != nil {

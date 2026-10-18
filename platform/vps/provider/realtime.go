@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -63,7 +64,7 @@ func newRealtimeGateway(ref provider.StackRef, keys map[string]string) (host.Res
 		Resource: realtimeGatewayResource,
 		Tier:     ref.Tier,
 
-		Image:    host.StaticImage,
+		Image:    docker.StaticImage,
 		Args:     []string{host.RealtimeMounted},
 		User:     realtimeGatewayUser,
 		ReadOnly: true,

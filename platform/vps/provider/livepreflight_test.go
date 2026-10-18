@@ -209,9 +209,9 @@ func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testin
 		},
 		{
 			what:    "the switchboard is not executable at its bootstrap path",
-			induce:  func() { vm.ssh(t, "sudo chmod 000 "+quote(host.SwitchboardBinary)) },
-			restore: func() { vm.ssh(t, "sudo chmod 755 "+quote(host.SwitchboardBinary)) },
-			wants:   []string{host.SwitchboardContainer, "bootstrap"},
+			induce:  func() { vm.ssh(t, "sudo chmod 000 "+quote(boxapi.SwitchboardBinary)) },
+			restore: func() { vm.ssh(t, "sudo chmod 755 "+quote(boxapi.SwitchboardBinary)) },
+			wants:   []string{boxapi.Switchboard, "bootstrap"},
 		},
 		{
 			what: "the admin socket is not there",
@@ -233,7 +233,7 @@ func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testin
 			what:    "the switchboard's control socket is there and nothing is listening on it",
 			induce:  func() { vm.deafens(t, boxapi.SwitchboardControlSocket) },
 			restore: func() { vm.hears(t, boxapi.SwitchboardControlSocket) },
-			wants:   []string{host.SwitchboardContainer, "answered nothing over", "connection refused"},
+			wants:   []string{boxapi.Switchboard, "answered nothing over", "connection refused"},
 		},
 	} {
 		func() {

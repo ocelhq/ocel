@@ -20,6 +20,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -444,11 +445,11 @@ func TestAProvisionedStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T
 	if _, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard()); err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
-	state, err := host.ReadRoutingTable([]byte(machine.routingDoc))
+	state, err := routing.ReadRoutingTable([]byte(machine.routingDoc))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
-	at := slices.IndexFunc(state.Routes, func(route host.AppRoute) bool { return route.App == boxapi.StoreLabel })
+	at := slices.IndexFunc(state.Routes, func(route boxapi.Route) bool { return route.App == boxapi.StoreLabel })
 	if at < 0 {
 		t.Fatalf("provisioning a store left the proxy routing %v, and nothing off the box reaches it", state.Routes)
 	}

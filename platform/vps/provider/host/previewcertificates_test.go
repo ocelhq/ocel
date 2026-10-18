@@ -12,12 +12,12 @@ import (
 
 const publicPreviewBase = "preview.example.com"
 
-func refusePreviewCertificates(t *testing.T, state RoutingTable, front Front, pins []Pin) error {
+func refusePreviewCertificates(t *testing.T, state boxapi.RoutingTable, front Front, pins []boxapi.Pin) error {
 	t.Helper()
 	return refusePreviewCertificatesDeployingTo(t, state, front, pins, "")
 }
 
-func refusePreviewCertificatesDeployingTo(t *testing.T, state RoutingTable, front Front, pins []Pin, destination string) error {
+func refusePreviewCertificatesDeployingTo(t *testing.T, state boxapi.RoutingTable, front Front, pins []boxapi.Pin, destination string) error {
 	t.Helper()
 	state.Grace = 30 * time.Second
 	table := string(mustWrite(t, state))
@@ -39,7 +39,7 @@ func TestAPreviewWhoseHostnamesEachGetAPublicCertificateIsRefusedNamingEveryWayO
 		"a Traefik with no wildcard": newTraefikFront(""),
 		"your Caddy":                 {Caddy: &CaddyFront{Directory: "/etc/caddy/ocel", Config: "/etc/caddy/Caddyfile"}},
 	} {
-		err := refusePreviewCertificates(t, RoutingTable{PreviewBase: publicPreviewBase}, front, nil)
+		err := refusePreviewCertificates(t, boxapi.RoutingTable{PreviewBase: publicPreviewBase}, front, nil)
 		if err == nil {
 			t.Errorf("%s: a preview on %s was let through, and every one of its hostnames lands in Certificate Transparency logs within minutes", name, publicPreviewBase)
 			continue
@@ -55,7 +55,7 @@ func TestAPreviewWhoseHostnamesEachGetAPublicCertificateIsRefusedNamingEveryWayO
 func TestATraefikPreviewIsRefusedNamingThePreviewResolverThatWouldShareOneCertificate(t *testing.T) {
 	t.Parallel()
 
-	err := refusePreviewCertificates(t, RoutingTable{PreviewBase: publicPreviewBase}, newTraefikFront(""), nil)
+	err := refusePreviewCertificates(t, boxapi.RoutingTable{PreviewBase: publicPreviewBase}, newTraefikFront(""), nil)
 	if err == nil || !strings.Contains(err.Error(), "previewResolver") {
 		t.Errorf("the refusal reads %v, want it to name previewResolver", err)
 	}
@@ -66,18 +66,18 @@ func TestAPreviewServedUnderOneWildcardCertificateIsNotRefused(t *testing.T) {
 
 	origin := boxapi.CertificatePair{Certificate: "ORIGIN", Key: "KEY"}
 	for name, bench := range map[string]struct {
-		state RoutingTable
+		state boxapi.RoutingTable
 		front Front
-		pins  []Pin
+		pins  []boxapi.Pin
 	}{
-		"a Traefik with a preview resolver": {state: RoutingTable{PreviewBase: publicPreviewBase}, front: newTraefikFront("dns")},
-		"a proxy you route yourself":        {state: RoutingTable{PreviewBase: publicPreviewBase}, front: Front{Manual: &ManualFront{Port: 8480}}},
-		"a pinned wildcard":                 {state: RoutingTable{PreviewBase: publicPreviewBase}, pins: []Pin{{Hostname: "*." + publicPreviewBase, Path: boxapi.PinsDir + "/preview"}}},
-		"an edge's origin certificate": {state: RoutingTable{PreviewBase: publicPreviewBase, Shields: []Shield{{
+		"a Traefik with a preview resolver": {state: boxapi.RoutingTable{PreviewBase: publicPreviewBase}, front: newTraefikFront("dns")},
+		"a proxy you route yourself":        {state: boxapi.RoutingTable{PreviewBase: publicPreviewBase}, front: Front{Manual: &ManualFront{Port: 8480}}},
+		"a pinned wildcard":                 {state: boxapi.RoutingTable{PreviewBase: publicPreviewBase}, pins: []boxapi.Pin{{Hostname: "*." + publicPreviewBase, Path: boxapi.PinsDir + "/preview"}}},
+		"an edge's origin certificate": {state: boxapi.RoutingTable{PreviewBase: publicPreviewBase, Shields: []boxapi.Shield{{
 			Hostname: "*." + publicPreviewBase, Owner: "ocel-preview-entry", ClientCAs: []string{"zone"}, OriginCertificate: origin,
 		}}}},
-		"a base no public authority issues for": {state: RoutingTable{PreviewBase: "preview.ocel.home.arpa"}},
-		"no preview base on the box":            {state: RoutingTable{}},
+		"a base no public authority issues for": {state: boxapi.RoutingTable{PreviewBase: "preview.ocel.home.arpa"}},
+		"no preview base on the box":            {state: boxapi.RoutingTable{}},
 	} {
 		if err := refusePreviewCertificates(t, bench.state, bench.front, bench.pins); err != nil {
 			t.Errorf("%s: %v, want the preview let through: no preview hostname gets a publicly logged certificate of its own", name, err)
@@ -88,7 +88,7 @@ func TestAPreviewServedUnderOneWildcardCertificateIsNotRefused(t *testing.T) {
 func TestAnEdgeThatShieldsThePreviewsWithoutAnOriginCertificateStillLeavesEachHostnameItsOwn(t *testing.T) {
 	t.Parallel()
 
-	err := refusePreviewCertificates(t, RoutingTable{PreviewBase: publicPreviewBase, Shields: []Shield{{
+	err := refusePreviewCertificates(t, boxapi.RoutingTable{PreviewBase: publicPreviewBase, Shields: []boxapi.Shield{{
 		Hostname: "*." + publicPreviewBase, Owner: "ocel-preview-entry", ClientCAs: []string{"zone"},
 	}}}, Front{}, nil)
 	if err == nil {
@@ -99,7 +99,7 @@ func TestAnEdgeThatShieldsThePreviewsWithoutAnOriginCertificateStillLeavesEachHo
 func TestTheFirstPreviewOnABoxIsRefusedByTheBaseItDeploysTo(t *testing.T) {
 	t.Parallel()
 
-	err := refusePreviewCertificatesDeployingTo(t, RoutingTable{}, Front{}, nil, publicPreviewBase)
+	err := refusePreviewCertificatesDeployingTo(t, boxapi.RoutingTable{}, Front{}, nil, publicPreviewBase)
 	if err == nil || !strings.Contains(err.Error(), publicPreviewBase) {
 		t.Errorf("the first preview on an empty box was let through with %v, want it refused by %s, the base it installs", err, publicPreviewBase)
 	}

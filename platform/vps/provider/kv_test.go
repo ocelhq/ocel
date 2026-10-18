@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -105,7 +106,7 @@ func TestADeclaredKVStoreRunsAsOneConfinedContainerOnlyItsProjectReaches(t *test
 		}
 	}
 	kept := machine.commands()[machine.at("'docker' 'volume' 'create'")]
-	if !strings.Contains(kept, "'"+host.LabelGeneration+"=9'") {
+	if !strings.Contains(kept, "'"+docker.LabelGeneration+"=9'") {
 		t.Errorf("the volume was created as %q, and the next deploy cannot tell which major wrote it", kept)
 	}
 }
@@ -204,7 +205,7 @@ func TestAKVStoreDeclaredUnderANewerMajorCopiesItsDataIntoTheNewGenerationWithAW
 	withRecordedKV(machine)
 	machine.refuses = func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, "docker volume ls") && strings.Contains(command, host.LabelGeneration):
+		case strings.Contains(command, "docker volume ls") && strings.Contains(command, docker.LabelGeneration):
 			return ssh.Result{Stdout: "8\n"}, true
 		case strings.Contains(command, ".State.Status"):
 			return ssh.Result{Stdout: "exited valkey/valkey:8 0123456789ab\n"}, true

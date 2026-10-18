@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -51,7 +53,7 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 		return provider.BootstrapDescription{}, err
 	}
 	if read.observed(KindRoutingTable, boxapi.RoutingTablePath) || read.observed(KindProxyConfig, ProxyConfig) {
-		if read.rerendering, err = b.host.proxyInspected(ctx, read.Tier); err != nil {
+		if read.rerendering, err = b.host.routing.ProxyInspected(ctx, read.Tier); err != nil {
 			return provider.BootstrapDescription{}, err
 		}
 	}
@@ -395,14 +397,14 @@ func (r removal) command() string {
 		return "docker volume ls --quiet --filter " + shell.Quote("label="+r.path) + " | xargs -r docker volume rm >/dev/null"
 	case r.kind == KindAppNetworks:
 		return "for net in $(docker network ls --quiet --filter " + shell.Quote("label="+r.path) + "); do\n" +
-			"docker network disconnect --force \"$net\" " + shell.Quote(SwitchboardContainer) + " >/dev/null 2>&1 || true\n" +
+			"docker network disconnect --force \"$net\" " + shell.Quote(boxapi.Switchboard) + " >/dev/null 2>&1 || true\n" +
 			"docker network rm \"$net\" >/dev/null\n" +
 			"done"
 	case r.kind == KindNetwork:
 		return "if ! docker network rm " + shell.Quote(r.path) + " >/dev/null 2>&1 && " +
-			"docker network inspect " + shell.Quote(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + shell.Quote(networkInUse) + "; fi"
+			"docker network inspect " + shell.Quote(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + shell.Quote(docker.NetworkInUse) + "; fi"
 	case r.kind == KindPlaced:
-		unplaced := shell.Words(placementCommand(filepath.Dir(r.path), "unplace", r.path)) + " 2>/dev/null || rm -f " + shell.Quote(r.path) + "\n"
+		unplaced := shell.Words(routing.Placement(filepath.Dir(r.path), "unplace", r.path)) + " 2>/dev/null || rm -f " + shell.Quote(r.path) + "\n"
 		if r.reload != "" {
 			unplaced += r.reload + "\n"
 		}
@@ -410,9 +412,9 @@ func (r removal) command() string {
 		if r.origins == "" {
 			return placed
 		}
-		return placed + "\n" + shell.Words(placementCommand(r.origins, "unplace-origins")) + " 2>/dev/null || rm -f " + shell.Quote(r.origins) + "/" + boxapi.OriginPrefix + "*.pem"
+		return placed + "\n" + shell.Words(routing.Placement(r.origins, "unplace-origins")) + " 2>/dev/null || rm -f " + shell.Quote(r.origins) + "/" + boxapi.OriginPrefix + "*.pem"
 	case r.kind == KindRoutingTable || r.kind == KindProxyConfig:
-		return routingLocked("-x") + "rm -f " + shell.Quote(r.path)
+		return routing.Locked("-x") + "rm -f " + shell.Quote(r.path)
 	case r.shared:
 		return "rmdir " + shell.Quote(r.path) + " 2>/dev/null || printf '%s\\n' " + shell.Quote(dirNonEmpty)
 	default:
@@ -445,7 +447,7 @@ const (
 
 type appsPresent struct{ containers, networks, volumes bool }
 
-func tierSelector(tier environment.Tier) string { return LabelTier + "=" + string(tier) }
+func tierSelector(tier environment.Tier) string { return docker.LabelTier + "=" + string(tier) }
 
 func appsProbe(tier environment.Tier) string {
 	filter := shell.Quote("label=" + tierSelector(tier))
@@ -512,8 +514,8 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 			sharing(stateRoot, ""),
 			taking(KindUser, deployUser, ""),
 			taking(KindFile, releasesHelper, ""),
-			taking(KindFile, SwitchboardBinary, ""),
-			taking(KindDir, SwitchboardDir, ""),
+			taking(KindFile, boxapi.SwitchboardBinary, ""),
+			taking(KindDir, boxapi.SwitchboardDir, ""),
 			taking(KindFile, RealtimeBinary, ""),
 			taking(KindDir, RealtimeDir, ""),
 			sharing(boxapi.LibDir, ""),

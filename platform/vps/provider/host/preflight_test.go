@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -69,7 +70,7 @@ func TestAMeasurementUnderTheFloorIsStillRaisedToTheFloor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readHeadroom() = %v", err)
 	}
-	if room.Needs() != FirstDeployFloor+LogCeiling {
+	if room.Needs() != FirstDeployFloor+docker.LogCeiling {
 		t.Errorf("Needs() = %d, want the floor %d and the log ceiling: what a box already stores is no bound on the image this deploy has not built yet, and a 300 byte measurement would authorise a deploy onto a disk with nothing on it",
 			room.Needs(), FirstDeployFloor)
 	}
@@ -95,7 +96,7 @@ func TestAFirstDeployIsProtectedByAConstantThatSaysItIsAGuess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readHeadroom() = %v", err)
 	}
-	if room.Needs() != FirstDeployFloor+LogCeiling {
+	if room.Needs() != FirstDeployFloor+docker.LogCeiling {
 		t.Fatalf("Needs() = %d, want the floor %d and the log ceiling: with nothing stored there is no size to extrapolate", room.Needs(), FirstDeployFloor)
 	}
 	said := arithmetic(room)
@@ -121,19 +122,19 @@ func TestATableThisHostCouldNotAnswerIsRefusedRatherThanReadAsRoom(t *testing.T)
 func TestTheStateSelectorsSeparateExitedFromRestarting(t *testing.T) {
 	t.Parallel()
 
-	command := stateCommand(caddy.Container)
+	command := docker.StateCommand(caddy.Container)
 	for _, wanted := range []string{".State.Status", ".State.ExitCode", ".State.Error", ".RestartCount", ".State.OOMKilled"} {
 		if !strings.Contains(command, wanted) {
 			t.Errorf("the proxy's state is read with %q, which names no %s: exited and restarting are different failures with different fixes", command, wanted)
 		}
 	}
-	if got := stateField("Status=restarting ExitCode=1 RestartCount=9", "Status"); got != proxyRestarting {
+	if got := docker.StateField("Status=restarting ExitCode=1 RestartCount=9", "Status"); got != proxyRestarting {
 		t.Errorf("stateField(Status) = %q, want %q", got, proxyRestarting)
 	}
-	if got := stateField("Status=exited ExitCode=1", "Status"); got != proxyExited {
+	if got := docker.StateField("Status=exited ExitCode=1", "Status"); got != proxyExited {
 		t.Errorf("stateField(Status) = %q, want %q", got, proxyExited)
 	}
-	if got := stateField("Error: No such object: ocel-proxy", "Status"); got != "" {
+	if got := docker.StateField("Error: No such object: ocel-proxy", "Status"); got != "" {
 		t.Errorf("stateField over what docker says about a container it does not have = %q, want nothing", got)
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 const (
@@ -34,10 +35,10 @@ const (
 )
 
 type machine struct {
-	pins        []host.Pin
-	claims      []host.HostClaim
-	shields     []host.Shield
-	upstream    map[host.RouteKey]string
+	pins        []boxapi.Pin
+	claims      []boxapi.Claim
+	shields     []boxapi.Shield
+	upstream    map[boxapi.RouteKey]string
 	swept       map[string]bool
 	present     map[string]bool
 	runs        map[string]host.Run
@@ -56,8 +57,8 @@ type machine struct {
 	byHand      int
 	tables      int
 
-	tunnel          *host.Tunnel
-	retired         []host.Tunnel
+	tunnel          *boxapi.Tunnel
+	retired         []boxapi.Tunnel
 	previewTunneled bool
 	tunnelRunning   string
 	tunnelsReserved int
@@ -70,7 +71,7 @@ type machine struct {
 
 func aMachine() *machine {
 	return &machine{
-		upstream: map[host.RouteKey]string{},
+		upstream: map[boxapi.RouteKey]string{},
 		swept:    map[string]bool{},
 		present:  map[string]bool{},
 		runs:     map[string]host.Run{},
@@ -97,7 +98,7 @@ func (m *machine) Address(context.Context) (string, error) {
 	return address, m.refuse("Address")
 }
 
-func (m *machine) Pins() []host.Pin { return m.pins }
+func (m *machine) Pins() *certs.Pins { return certs.NewPins(nil, m.pins) }
 
 func (m *machine) RouteBy(hostname string) string {
 	if m.byHand == 0 {
@@ -138,7 +139,7 @@ func (m *machine) Promote(_ context.Context, _ environment.Tier, project, app, c
 	return m.refuse("Promote")
 }
 
-func (m *machine) Serving(_ context.Context, key host.RouteKey) (string, error) {
+func (m *machine) Serving(_ context.Context, key boxapi.RouteKey) (string, error) {
 	m.calls = append(m.calls, "serving "+key.App)
 	if err := m.refuse("Serving"); err != nil {
 		return "", err
@@ -198,7 +199,7 @@ func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error
 	if err := m.refuse("UnroutePointer"); err != nil {
 		return err
 	}
-	maps.DeleteFunc(m.upstream, func(key host.RouteKey, _ string) bool {
+	maps.DeleteFunc(m.upstream, func(key boxapi.RouteKey, _ string) bool {
 		return key.Owner == owner && key.Pointer == pointer
 	})
 	m.tables++
@@ -210,25 +211,25 @@ func (m *machine) UnrouteSurface(_ context.Context, owner string) error {
 	if err := m.refuse("UnrouteSurface"); err != nil {
 		return err
 	}
-	maps.DeleteFunc(m.upstream, func(key host.RouteKey, _ string) bool { return key.Owner == owner })
+	maps.DeleteFunc(m.upstream, func(key boxapi.RouteKey, _ string) bool { return key.Owner == owner })
 	m.tables++
 	return nil
 }
 
-func (m *machine) Claims(context.Context) ([]host.HostClaim, error) {
+func (m *machine) Claims(context.Context) ([]boxapi.Claim, error) {
 	if err := m.refuse("Claims"); err != nil {
 		return nil, err
 	}
 	return slices.Clone(m.claims), nil
 }
 
-func (m *machine) ClaimHosts(_ context.Context, claims []host.HostClaim) error {
+func (m *machine) ClaimHosts(_ context.Context, claims []boxapi.Claim) error {
 	if err := m.refuse("ClaimHosts"); err != nil {
 		return err
 	}
 	for _, claim := range claims {
 		m.calls = append(m.calls, "claim "+claim.Hostname)
-		taken, err := host.Claiming(m.claims, claim)
+		taken, err := routing.Claim(m.claims, claim)
 		if err != nil {
 			return err
 		}
@@ -242,7 +243,7 @@ func (m *machine) DisclaimPointer(_ context.Context, owner, pointer string) erro
 	if err := m.refuse("DisclaimPointer"); err != nil {
 		return err
 	}
-	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool {
+	m.claims = routing.Disclaim(m.claims, func(claim boxapi.Claim) bool {
 		return claim.Owner == owner && claim.Pointer == pointer
 	})
 	return nil
@@ -253,7 +254,7 @@ func (m *machine) DisclaimHost(_ context.Context, hostname, owner string) error 
 	if err := m.refuse("DisclaimHost"); err != nil {
 		return err
 	}
-	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool {
+	m.claims = routing.Disclaim(m.claims, func(claim boxapi.Claim) bool {
 		return claim.Hostname == hostname && claim.Owner == owner
 	})
 	return nil
@@ -264,18 +265,18 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	if err := m.refuse("DisclaimSurface"); err != nil {
 		return err
 	}
-	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool { return claim.Owner == owner })
-	m.shields = host.DropShields(m.shields, func(shield host.Shield) bool { return shield.Owner == owner })
+	m.claims = routing.Disclaim(m.claims, func(claim boxapi.Claim) bool { return claim.Owner == owner })
+	m.shields = routing.DropShields(m.shields, func(shield boxapi.Shield) bool { return shield.Owner == owner })
 	delete(m.gates, owner)
 	return nil
 }
 
-func (m *machine) PutShield(_ context.Context, shield host.Shield) (host.Shield, error) {
+func (m *machine) PutShield(_ context.Context, shield boxapi.Shield) (boxapi.Shield, error) {
 	m.calls = append(m.calls, "shield "+shield.Hostname)
 	if err := m.refuse("PutShield"); err != nil {
-		return host.Shield{}, err
+		return boxapi.Shield{}, err
 	}
-	m.shields = host.MergeShield(m.shields, shield)
+	m.shields = routing.MergeShield(m.shields, shield)
 	return m.shields[len(m.shields)-1], nil
 }
 
@@ -316,7 +317,7 @@ func (m *machine) RemoveShield(_ context.Context, hostname, owner string) error 
 	if err := m.refuse("RemoveShield"); err != nil {
 		return err
 	}
-	m.shields = host.DropShields(m.shields, func(shield host.Shield) bool { return shield.Hostname == hostname && shield.Owner == owner })
+	m.shields = routing.DropShields(m.shields, func(shield boxapi.Shield) bool { return shield.Hostname == hostname && shield.Owner == owner })
 	return nil
 }
 
@@ -326,7 +327,7 @@ type boxEdge struct {
 }
 
 func edgeOver(m *machine, store records.Store) boxEdge {
-	return boxEdge{Edge: switchboard.New(m, m.ApplyOrigins, sshScope, m.findTunnelHooks, m.readGate), keyValues: store}
+	return boxEdge{Edge: switchboard.New(m, m, m, m.ApplyOrigins, sshScope, m.findTunnelHooks, m.readGate), keyValues: store}
 }
 
 type boxStack struct {
@@ -439,7 +440,7 @@ func boxFixture(m *machine, front boxEdge, stack boxStack) routerconformance.Fix
 			if pointer == "" {
 				pointer = router.DefaultPointer
 			}
-			target := m.upstream[host.RouteKey{Owner: switchboard.Surface(state.Slug, state.Tier), Pointer: pointer, App: routerconformance.App}]
+			target := m.upstream[boxapi.RouteKey{Owner: switchboard.Surface(state.Slug, state.Tier), Pointer: pointer, App: routerconformance.App}]
 			physical, _, _ := strings.Cut(target, ":")
 			return strings.TrimPrefix(physical, routerconformance.App+"-")
 		},
@@ -1052,13 +1053,13 @@ func TestAHostnameBoundAfterAPromotionAnswersFromTheReleasedContainer(t *testing
 		t.Fatalf("BindDomain: %v", err)
 	}
 
-	at := slices.IndexFunc(m.claims, func(claim host.HostClaim) bool { return claim.Hostname == hostname })
+	at := slices.IndexFunc(m.claims, func(claim boxapi.Claim) bool { return claim.Hostname == hostname })
 	if at < 0 {
 		t.Fatalf("the box claims %v, want %s among them", m.claims, hostname)
 	}
 	claim := m.claims[at]
 	want := "shop-web-1111:" + containerimage.PortText
-	if got := m.upstream[host.RouteKey{Owner: claim.Owner, Pointer: claim.Pointer, App: claim.App}]; got != want {
+	if got := m.upstream[boxapi.RouteKey{Owner: claim.Owner, Pointer: claim.Pointer, App: claim.App}]; got != want {
 		t.Errorf("%s is claimed onto a route that answers from %q, want %q: the release was promoted before the bind, and no later promotion comes to route it",
 			hostname, got, want)
 	}
@@ -1197,7 +1198,7 @@ func TestTheKeptCertificateIsNamedByTheHandleThatStoresItAndSaysWhoRenewsIt(t *t
 	const pinned = "pr-7.preview.example.com"
 	at := boxapi.PinsDir + "/wildcard"
 	m := aMachine()
-	m.pins = []host.Pin{{Hostname: "*.preview.example.com", Path: at}}
+	m.pins = []boxapi.Pin{{Hostname: "*.preview.example.com", Path: at}}
 	front := edgeOver(m, fake.NewKeyValues())
 
 	kept := map[string]edge.PlanChange{}
@@ -1517,7 +1518,7 @@ func TestABindNamingAnAppClaimsTheHostnameForThatAppAndTheSurfaceStillOwnsIt(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := host.HostClaim{Hostname: hostname, Owner: switchboard.Surface(slug, environment.TierProduction), Pointer: router.DefaultPointer, App: "api"}
+	want := boxapi.Claim{Hostname: hostname, Owner: switchboard.Surface(slug, environment.TierProduction), Pointer: router.DefaultPointer, App: "api"}
 	if len(claims) != 1 || claims[0] != want {
 		t.Errorf("the box records %v, want %v: a project running two apps binds a hostname to one of them, and a claim that drops the app leaves the render unable to tell which route answers it", claims, want)
 	}

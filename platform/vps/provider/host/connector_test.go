@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -218,11 +219,11 @@ func TestWhatTheConnectorSaysAboutItselfIsReadBack(t *testing.T) {
 func TestTheConnectorPathOnTheBoxHostnameReachesTheConnectorAheadOfEverySurface(t *testing.T) {
 	t.Parallel()
 
-	state := RoutingTable{
-		Grace:     DeployWindow,
+	state := boxapi.RoutingTable{
+		Grace:     routing.DeployWindow,
 		Connector: "box.example.com",
-		Claims:    []HostClaim{{Hostname: "box.example.com", Owner: surface, Pointer: pointed, App: "web"}},
-		Routes:    []AppRoute{{RouteKey: keyed("web"), Upstream: "web:3000"}},
+		Claims:    []boxapi.Claim{{Hostname: "box.example.com", Owner: surface, Pointer: pointed, App: "web"}},
+		Routes:    []boxapi.Route{{RouteKey: keyed("web"), Upstream: "web:3000"}},
 	}
 	answer := routedBy(t, state)
 	if upstream, ok := answer("box.example.com", boxapi.ConnectorPath+"/connector.v1.Box/Describe"); !ok || upstream == "web:3000" {
@@ -231,11 +232,11 @@ func TestTheConnectorPathOnTheBoxHostnameReachesTheConnectorAheadOfEverySurface(
 	if upstream, ok := answer("box.example.com", "/"); !ok || upstream != "web:3000" {
 		t.Errorf("the box hostname off the connector path is answered from %q (%v), want the surface that claims it", upstream, ok)
 	}
-	if table, err := boxapi.ReadTable(mustWrite(t, RoutingTable{Grace: DeployWindow, Connector: "box.example.com"})); err != nil || !table.Admits("box.example.com") {
+	if table, err := boxapi.ReadTable(mustWrite(t, boxapi.RoutingTable{Grace: routing.DeployWindow, Connector: "box.example.com"})); err != nil || !table.Admits("box.example.com") {
 		t.Errorf("the switchboard refuses the front proxy a certificate for the connector hostname nothing else claims (%v), and the console dials the connector over https", err)
 	}
 
-	read, err := ReadRoutingTable(mustWrite(t, state))
+	read, err := routing.ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable: %v", err)
 	}
@@ -247,11 +248,11 @@ func TestTheConnectorPathOnTheBoxHostnameReachesTheConnectorAheadOfEverySurface(
 func TestABoxWithNoConnectorForwardsNothingToOne(t *testing.T) {
 	t.Parallel()
 
-	state := RoutingTable{Grace: DeployWindow, Claims: []HostClaim{{Hostname: "box.example.com", Owner: surface, Pointer: pointed}}}
+	state := boxapi.RoutingTable{Grace: routing.DeployWindow, Claims: []boxapi.Claim{{Hostname: "box.example.com", Owner: surface, Pointer: pointed}}}
 	if upstream, ok := routedBy(t, state)("box.example.com", boxapi.ConnectorPath); ok {
 		t.Errorf("a box nothing was added to still routes %s to %q", boxapi.ConnectorPath, upstream)
 	}
-	read, err := ReadRoutingTable(mustWrite(t, RoutingTable{Grace: DeployWindow}))
+	read, err := routing.ReadRoutingTable(mustWrite(t, boxapi.RoutingTable{Grace: routing.DeployWindow}))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable: %v", err)
 	}
@@ -263,9 +264,9 @@ func TestABoxWithNoConnectorForwardsNothingToOne(t *testing.T) {
 func TestASurfaceThatClaimsNothingStillAnswersNothing(t *testing.T) {
 	t.Parallel()
 
-	answer := routedBy(t, RoutingTable{
-		Grace:  DeployWindow,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "web:3000"}},
+	answer := routedBy(t, boxapi.RoutingTable{
+		Grace:  routing.DeployWindow,
+		Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: "web:3000"}},
 	})
 	for _, hostname := range []string{"anything.example.com", "web", ""} {
 		if upstream, ok := answer(hostname, "/"); ok {

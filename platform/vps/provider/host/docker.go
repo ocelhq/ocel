@@ -33,10 +33,7 @@ const (
 
 const engineInstallTries = 3
 
-var (
-	engineInstallBackoff = shell.Backoff{Base: 15, Ceiling: 60, Spread: 15}
-	scriptPullBackoff    = shell.Backoff{Counter: "at", Base: 2, Ceiling: 30, Spread: 5}
-)
+var engineInstallBackoff = shell.Backoff{Base: 15, Ceiling: 60, Spread: 15}
 
 const (
 	engineFact = "engine=present\n"

@@ -11,7 +11,7 @@ import (
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -19,9 +19,9 @@ func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	written, err := host.WriteRoutingTable(host.RoutingTable{
-		Grace: host.DrainWindow,
-		Claims: []host.HostClaim{{
+	written, err := routing.WriteRoutingTable(boxapi.RoutingTable{
+		Grace: routing.DrainWindow,
+		Claims: []boxapi.Claim{{
 			Hostname: "shop.example.com", Owner: boxapi.Surface("shop", "production"),
 			Pointer: "@production", App: "web",
 		}},

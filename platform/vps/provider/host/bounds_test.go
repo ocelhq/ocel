@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -59,7 +61,7 @@ func runAgainstStalledDocker(t *testing.T, script string, env ...string) scriptR
 func TestAPullThatStallsIsCutOffAndTriedAgainRatherThanWaitedOnForever(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 3, 1, 60), "STALLED_PULLS=1")
+	ran := runAgainstStalledDocker(t, docker.Pulled("rustfs/rustfs:1.0.0", 3, 1, 60), "STALLED_PULLS=1")
 	if ran.failed != nil {
 		t.Fatalf("a pull that stalled once and then answered failed the step: %v\n%s", ran.failed, ran.said)
 	}
@@ -74,7 +76,7 @@ func TestAPullThatStallsIsCutOffAndTriedAgainRatherThanWaitedOnForever(t *testin
 func TestAPullThatStallsOnEveryAttemptFailsNamingTheImageAndTheBound(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 2, 1, 60))
+	ran := runAgainstStalledDocker(t, docker.Pulled("rustfs/rustfs:1.0.0", 2, 1, 60))
 	if ran.failed == nil {
 		t.Fatalf("a pull that never finished passed:\n%s", ran.said)
 	}
@@ -88,7 +90,7 @@ func TestAPullThatStallsOnEveryAttemptFailsNamingTheImageAndTheBound(t *testing.
 func TestEveryPullAttemptTogetherStaysWithinThePullBudgetAndTheFailureNamesIt(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 50, 2, 3))
+	ran := runAgainstStalledDocker(t, docker.Pulled("rustfs/rustfs:1.0.0", 50, 2, 3))
 	if ran.failed == nil {
 		t.Fatalf("a pull that never finished passed:\n%s", ran.said)
 	}
@@ -103,7 +105,7 @@ func TestEveryPullAttemptTogetherStaysWithinThePullBudgetAndTheFailureNamesIt(t 
 func TestAnImageInspectThatStallsIsCutOffAndThePullStillRuns(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 3, 5, 60), "STALLED_INSPECT=1", "STALLED_PULLS=0")
+	ran := runAgainstStalledDocker(t, docker.Pulled("rustfs/rustfs:1.0.0", 3, 5, 60), "STALLED_INSPECT=1", "STALLED_PULLS=0")
 	if ran.failed != nil {
 		t.Fatalf("a stalled image inspect failed the pull it guards: %v\n%s", ran.failed, ran.said)
 	}
@@ -118,7 +120,7 @@ func TestAnImageInspectThatStallsIsCutOffAndThePullStillRuns(t *testing.T) {
 func TestAContainerWhoseInspectStallsIsReportedNotRisenWithinItsAttempts(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, switchboardBox(nil, Front{}).rising(2))
+	ran := runAgainstStalledDocker(t, switchboardBox(nil, Front{}).Rising(2))
 	if ran.failed == nil {
 		t.Fatalf("a container docker never described rose:\n%s", ran.said)
 	}
@@ -264,8 +266,8 @@ func TestAWaitOnTheRoutingLockGivesUpNamingTheLockRatherThanWaitingForever(t *te
 func TestASwitchboardStartedAgainPullsItsImageBeforeItTakesTheRoutingLock(t *testing.T) {
 	t.Parallel()
 
-	script := switchboardBox(nil, Front{}).restoring(containerRising, routingLocked("-x"))
-	pull, locked := strings.Index(script, "docker pull"), strings.Index(script, routingLocked("-x"))
+	script := switchboardBox(nil, Front{}).Restoring(docker.ContainerRising, routing.Locked("-x"))
+	pull, locked := strings.Index(script, "docker pull"), strings.Index(script, routing.Locked("-x"))
 	if pull < 0 || locked < 0 {
 		t.Fatalf("restoring the switchboard neither pulls nor locks:\n%s", script)
 	}

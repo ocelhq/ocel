@@ -11,24 +11,25 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
-func everything() RoutingTable {
+func everything() boxapi.RoutingTable {
 	table := storing()
-	table.Routes = []AppRoute{
+	table.Routes = []boxapi.Route{
 		{RouteKey: keyed(boxapi.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
 		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + containerimage.PortText},
 	}
 	table.Grace = 12 * time.Second
-	table.Pins = []Pin{{Hostname: "shop.example.com", Path: boxapi.PinsDir + "/shop"}}
+	table.Pins = []boxapi.Pin{{Hostname: "shop.example.com", Path: boxapi.PinsDir + "/shop"}}
 	table.PreviewBase = previewBase
 	table.Connector = "box.example.com"
 	return table
 }
 
-func mustWrite(t *testing.T, table RoutingTable) []byte {
+func mustWrite(t *testing.T, table boxapi.RoutingTable) []byte {
 	t.Helper()
-	written, err := WriteRoutingTable(table)
+	written, err := routing.WriteRoutingTable(table)
 	if err != nil {
 		t.Fatalf("WriteRoutingTable() = %v", err)
 	}
@@ -38,11 +39,11 @@ func mustWrite(t *testing.T, table RoutingTable) []byte {
 func TestTheRoutingTableReadsBackAsTheTableThatWroteIt(t *testing.T) {
 	t.Parallel()
 
-	for what, table := range map[string]RoutingTable{
-		"a box serving nothing":        {Grace: DrainWindow},
+	for what, table := range map[string]boxapi.RoutingTable{
+		"a box serving nothing":        {Grace: routing.DrainWindow},
 		"a box with every kind of row": everything(),
 	} {
-		read, err := ReadRoutingTable(mustWrite(t, table))
+		read, err := routing.ReadRoutingTable(mustWrite(t, table))
 		if err != nil {
 			t.Fatalf("ReadRoutingTable() over %s = %v", what, err)
 		}
@@ -73,11 +74,11 @@ func TestATableWrittenFromRowsInAnyOrderIsTheSameBytes(t *testing.T) {
 	t.Parallel()
 
 	table := everything()
-	table.Pins = append(table.Pins, Pin{Hostname: "blog.example.com", Path: boxapi.PinsDir + "/blog"})
+	table.Pins = append(table.Pins, boxapi.Pin{Hostname: "blog.example.com", Path: boxapi.PinsDir + "/blog"})
 	scrambled := table
-	scrambled.Claims = []HostClaim{table.Claims[1], table.Claims[0]}
-	scrambled.Routes = []AppRoute{table.Routes[1], table.Routes[0]}
-	scrambled.Pins = []Pin{table.Pins[1], table.Pins[0]}
+	scrambled.Claims = []boxapi.Claim{table.Claims[1], table.Claims[0]}
+	scrambled.Routes = []boxapi.Route{table.Routes[1], table.Routes[0]}
+	scrambled.Pins = []boxapi.Pin{table.Pins[1], table.Pins[0]}
 	if !bytes.Equal(mustWrite(t, scrambled), mustWrite(t, table)) {
 		t.Error("the same rows handed over in another order write another table, and a deploy that changes nothing then rewrites the box and reloads its proxy")
 	}
@@ -96,7 +97,7 @@ func TestATableOcelCouldNotRenderIsRefusedWhenItIsRead(t *testing.T) {
 		"a preview base of one dns label": `{"grace":"30s","preview":"internal"}`,
 	} {
 		var refused refusal.Refusal
-		if _, err := ReadRoutingTable([]byte(written)); !errors.As(err, &refused) || !strings.Contains(err.Error(), boxapi.RoutingTablePath) {
+		if _, err := routing.ReadRoutingTable([]byte(written)); !errors.As(err, &refused) || !strings.Contains(err.Error(), boxapi.RoutingTablePath) {
 			t.Errorf("ReadRoutingTable() over %s = %v, want a refusal naming %s: a row ocel cannot render takes every later reshape on this box with it",
 				what, err, boxapi.RoutingTablePath)
 		}

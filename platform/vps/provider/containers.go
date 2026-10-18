@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.AppContainer, error) {
@@ -67,7 +68,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	target := physical + ":" + containerimage.PortText
 	switch {
 	case healthPath == "":
-		if discovered, err = p.host.FindHealthPath(ctx, host.HealthPathSearch{App: app.App, Target: target, Window: host.DeployWindow}, progress); err != nil {
+		if discovered, err = p.host.FindHealthPath(ctx, host.HealthPathSearch{App: app.App, Target: target, Window: routing.DeployWindow}, progress); err != nil {
 			return nil, err
 		}
 	case discovered != "":

@@ -19,7 +19,7 @@ import (
 type certificates struct{ *Provider }
 
 func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest) (provider.Certificate, error) {
-	path := p.host.PinFor(req.Hostname)
+	path := p.host.Pins().Covering(req.Hostname)
 	if path == "" {
 		if strings.HasPrefix(req.Hostname, "*.") {
 			return provider.Certificate{}, nil
@@ -79,7 +79,7 @@ func (p certificates) Discard(context.Context, provider.Certificate, progress.Lo
 }
 
 func (p *Provider) pinnedLeaf(ctx context.Context, path string) (certs.Leaf, error) {
-	block, err := p.host.PinnedCertificate(ctx, path)
+	block, err := p.host.Pins().Certificate(ctx, path)
 	if err != nil {
 		return certs.Leaf{}, err
 	}

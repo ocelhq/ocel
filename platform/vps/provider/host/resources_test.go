@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -21,7 +22,7 @@ func servingAs(t *testing.T, box *bench, served ResourceContainer, status string
 		t.Fatal(err)
 	}
 	box.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, shell.Quote(servingSelectors())) {
+		if strings.Contains(command, shell.Quote(docker.ServingSelectors())) {
 			return ssh.Result{Stdout: status + " " + served.Image + " " + digest + "\n"}, true
 		}
 		return ssh.Result{}, false
@@ -129,9 +130,9 @@ func TestAResourceOnDataOfAnotherVersionPlansAReplaceNamingBothVersions(t *testi
 	box := machine(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, shell.Quote(servingSelectors())):
+		case strings.Contains(command, shell.Quote(docker.ServingSelectors())):
 			return ssh.Result{Stdout: "running " + spec.Image + " 000000000000\n"}, true
-		case strings.Contains(command, LabelGeneration):
+		case strings.Contains(command, docker.LabelGeneration):
 			return ssh.Result{Stdout: "16\n"}, true
 		}
 		return ssh.Result{}, false
@@ -154,9 +155,9 @@ func TestPlanningAnUpgradeOverAStoppedServerIsRefusedAsRunningItWouldBe(t *testi
 	box := machine(nil)
 	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, shell.Quote(servingSelectors())):
+		case strings.Contains(command, shell.Quote(docker.ServingSelectors())):
 			return ssh.Result{Stdout: "exited " + spec.Image + "\n"}, true
-		case strings.Contains(command, LabelGeneration):
+		case strings.Contains(command, docker.LabelGeneration):
 			return ssh.Result{Stdout: "16\n"}, true
 		}
 		return ssh.Result{}, false

@@ -269,8 +269,8 @@ const (
 func proxyStates() map[string]map[string]answer {
 	return map[string]map[string]answer{
 		"the switchboard is not there at all": {
-			"'upstreams'":    {code: 1, stderr: "Error: No such container: " + host.SwitchboardContainer},
-			"docker inspect": {code: 1, stdout: "Error: No such object: " + host.SwitchboardContainer},
+			"'upstreams'":    {code: 1, stderr: "Error: No such container: " + boxapi.Switchboard},
+			"docker inspect": {code: 1, stdout: "Error: No such object: " + boxapi.Switchboard},
 			"missing=":       {stdout: "missing=" + boxapi.FrontDir + "\nsum=" + boxBoardSum + "\n"},
 		},
 		"the switchboard is restarting": {
@@ -323,9 +323,9 @@ func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t
 		}
 	}
 	for what, wanted := range map[string][]string{
-		"the switchboard is not there at all":                                     {host.SwitchboardContainer, "bootstrap", boxapi.FrontDir},
-		"the switchboard is restarting":                                           {host.SwitchboardContainer, "restarting"},
-		"the switchboard answers nothing over its control socket":                 {host.SwitchboardContainer, "control socket"},
+		"the switchboard is not there at all":                                     {boxapi.Switchboard, "bootstrap", boxapi.FrontDir},
+		"the switchboard is restarting":                                           {boxapi.Switchboard, "restarting"},
+		"the switchboard answers nothing over its control socket":                 {boxapi.Switchboard, "control socket"},
 		"the front proxy is not there at all":                                     {caddy.Container, "bootstrap"},
 		"the front proxy exited":                                                  {caddy.Container, "exited"},
 		"the front proxy has no admin socket":                                     {caddy.Container, caddy.AdminSocket, "no such file"},
@@ -410,8 +410,8 @@ func pruned(script map[string]answer, restored answer) *scripted {
 
 func prunedBoard() map[string]answer {
 	return map[string]answer{
-		"'upstreams'":    {code: 1, stderr: "Error: No such container: " + host.SwitchboardContainer},
-		"docker inspect": {code: 1, stdout: "Error: No such object: " + host.SwitchboardContainer},
+		"'upstreams'":    {code: 1, stderr: "Error: No such container: " + boxapi.Switchboard},
+		"docker inspect": {code: 1, stdout: "Error: No such object: " + boxapi.Switchboard},
 		"missing=":       {stdout: "sum=" + boxBoardSum + "\n"},
 	}
 }
@@ -463,7 +463,7 @@ func TestASwitchboardAPruneRemovedIsRefusedWhenWhatItMountsIsGoneToo(t *testing.
 
 	for what, said := range map[string]string{
 		"its front socket directory": "missing=" + boxapi.FrontDir + "\nsum=" + boxBoardSum + "\n",
-		"its binary":                 "missing=" + host.SwitchboardBinary + "\n",
+		"its binary":                 "missing=" + boxapi.SwitchboardBinary + "\n",
 	} {
 		script := prunedBoard()
 		script["missing="] = answer{stdout: said}
@@ -472,7 +472,7 @@ func TestASwitchboardAPruneRemovedIsRefusedWhenWhatItMountsIsGoneToo(t *testing.
 		if err == nil {
 			t.Fatalf("PreflightDeploy() let a deploy past a box missing its switchboard and %s", what)
 		}
-		for _, wanted := range []string{host.SwitchboardContainer, "bootstrap", strings.TrimPrefix(strings.Fields(said)[0], "missing=")} {
+		for _, wanted := range []string{boxapi.Switchboard, "bootstrap", strings.TrimPrefix(strings.Fields(said)[0], "missing=")} {
 			if !strings.Contains(err.Error(), wanted) {
 				t.Errorf("without %s the refusal is %q, want %q in it", what, err, wanted)
 			}
@@ -490,7 +490,7 @@ func TestASwitchboardThatCouldNotBeRestartedIsRefusedWithWhatTheBoxSaid(t *testi
 	if err == nil {
 		t.Fatal("PreflightDeploy() let a deploy past a switchboard it could not restart")
 	}
-	for _, wanted := range []string{host.SwitchboardContainer, "not pulled", "bootstrap"} {
+	for _, wanted := range []string{boxapi.Switchboard, "not pulled", "bootstrap"} {
 		if !strings.Contains(err.Error(), wanted) {
 			t.Errorf("PreflightDeploy() = %q, want %q in it", err, wanted)
 		}

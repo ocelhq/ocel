@@ -11,7 +11,7 @@ func (p *Provider) isAnsweredOnlyOnTheBox(ctx context.Context, hostname string) 
 	if p.host.FrontProxy().Guarantees().OwnsPorts {
 		return false, nil
 	}
-	tunneled, err := p.host.IsTunneled(ctx, hostname)
+	tunneled, err := p.routing.IsTunneled(ctx, hostname)
 	return !tunneled, err
 }
 

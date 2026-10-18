@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -46,10 +46,10 @@ func (b *box) remember(run []string) {
 		case "--name":
 			name = value
 		case "--label":
-			if ref, labelled := strings.CutPrefix(value, host.LabelRef+"="); labelled {
+			if ref, labelled := strings.CutPrefix(value, docker.LabelRef+"="); labelled {
 				image = ref
 			}
-			if env, labelled := strings.CutPrefix(value, host.LabelEnv+"="); labelled {
+			if env, labelled := strings.CutPrefix(value, docker.LabelEnv+"="); labelled {
 				digest = env
 			}
 		}

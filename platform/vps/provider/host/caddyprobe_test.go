@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 type answered struct {
@@ -24,18 +25,18 @@ type answered struct {
 	location string
 }
 
-func probing(t *testing.T, state RoutingTable) func(hostname string) answered {
+func probing(t *testing.T, state boxapi.RoutingTable) func(hostname string) answered {
 	t.Helper()
 	return probingConfig(t, state, mustRender(t, state))
 }
 
-func probingConfig(t *testing.T, state RoutingTable, rendered []byte, joined ...string) func(hostname string) answered {
+func probingConfig(t *testing.T, state boxapi.RoutingTable, rendered []byte, joined ...string) func(hostname string) answered {
 	t.Helper()
 	_, ask := probedBox(t, state, rendered, joined...)
 	return ask
 }
 
-func probedBox(t *testing.T, state RoutingTable, rendered []byte, joined ...string) (liveProxy, func(hostname string) answered) {
+func probedBox(t *testing.T, state boxapi.RoutingTable, rendered []byte, joined ...string) (liveProxy, func(hostname string) answered) {
 	t.Helper()
 
 	proxy := aLiveProxy(t)
@@ -89,9 +90,9 @@ func logsOf(name string) string {
 func TestARealProxyAnswersAHostnameNothingOnTheBoxClaimsWithABare404(t *testing.T) {
 	for _, box := range []struct {
 		what  string
-		state RoutingTable
+		state boxapi.RoutingTable
 	}{
-		{"a box serving nothing", RoutingTable{Grace: DrainWindow}},
+		{"a box serving nothing", boxapi.RoutingTable{Grace: routing.DrainWindow}},
 		{"a box serving one project", routed()},
 		{"a box serving two projects", twoProjects()},
 	} {
@@ -114,7 +115,7 @@ func TestARealProxyAnswersAHostnameNothingOnTheBoxClaimsWithABare404(t *testing.
 
 func TestARealProxyForwardsAClaimedHostnameToTheProjectThatClaimedIt(t *testing.T) {
 	state := twoProjects()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	ask := probing(t, state)
 
 	if said := ask(claimed); said.status == http.StatusNotFound {
@@ -130,7 +131,7 @@ func TestARealProxyForwardsAClaimedHostnameToTheProjectThatClaimedIt(t *testing.
 func TestARealProxyAnswersEveryHostnameOneSurfaceClaimsOnTheAppItRuns(t *testing.T) {
 	second := "second.example.com"
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: second, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: second, Owner: surface, Pointer: pointed}}
 	ask := probing(t, state)
 
 	for _, hostname := range []string{claimed, second} {
@@ -170,10 +171,10 @@ func anApp(t *testing.T, body string) (network, upstream string) {
 func TestARealProxyServesTheAppsBodyUnderTheHostnameAndNamesTheRouterThatServedIt(t *testing.T) {
 	network, upstream := anApp(t, "the app answered")
 
-	state := RoutingTable{
-		Grace:  DrainWindow,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
-		Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
+	state := boxapi.RoutingTable{
+		Grace:  routing.DrainWindow,
+		Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: upstream}},
+		Claims: []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 	}
 	said := probingConfig(t, state, issuedByNobody(t, mustRender(t, state)), network)(claimed)
 
@@ -189,13 +190,13 @@ func TestARealProxyServesTheAppsBodyUnderTheHostnameAndNamesTheRouterThatServedI
 func TestARealProxyStopsServingAHostnameTheProjectUnbound(t *testing.T) {
 	network, upstream := anApp(t, "the app answered")
 
-	bound := RoutingTable{
-		Grace:  DrainWindow,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
-		Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
+	bound := boxapi.RoutingTable{
+		Grace:  routing.DrainWindow,
+		Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: upstream}},
+		Claims: []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 	}
 	unbound := bound
-	unbound.Claims = Disclaiming(bound.Claims, func(claim HostClaim) bool {
+	unbound.Claims = routing.Disclaim(bound.Claims, func(claim boxapi.Claim) bool {
 		return claim.Hostname == claimed && claim.Owner == surface
 	})
 

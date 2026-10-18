@@ -50,12 +50,12 @@ func grants(tier environment.Tier, arch string, front Front) []Grant {
 			Detail: fmt.Sprintf("root-owned at %04o, run without sudo; %s runs it to record releases, archive a retired release's image under %s and load it back for a rollback, and remove the images and archives no release or running container names. It never forces or prunes", helper.Mode, deployer.name, releasesRoot),
 		})
 	}
-	if board := written(items, KindFile, SwitchboardBinary); board.Name != "" {
+	if board := written(items, KindFile, boxapi.SwitchboardBinary); board.Name != "" {
 		grants = append(grants, Grant{
 			Name: "runs " + board.Name,
 			Detail: fmt.Sprintf("root-owned at %04o, run without sudo; %s runs it on the box to read the certificate and the edge the box answers with on its own :443, and cannot write it. "+
 				"The same binary runs as the %s container that routes every hostname, reached over a socket inside that container through docker",
-				board.Mode, deployer.name, SwitchboardContainer),
+				board.Mode, deployer.name, boxapi.Switchboard),
 		})
 	}
 	grants = append(grants, sealing(items, tier, deployer)...)

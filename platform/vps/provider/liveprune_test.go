@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -43,7 +45,7 @@ func prunedAndRestarted(t *testing.T, front string) {
 		t.Fatalf("Apply(%s) behind %s = %v", environment.TierProduction, front, err)
 	}
 	t.Cleanup(func() {
-		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
+		vm.ssh(t, "sudo docker ps -aq --filter label="+docker.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 		if err := bootstrap.Remove(ctx, environment.TierProduction, progress.Discard()); err != nil {
 			t.Errorf("Remove(%s) = %v", environment.TierProduction, err)
 		}
@@ -66,10 +68,10 @@ func prunedAndRestarted(t *testing.T, front string) {
 		t.Fatalf("%s answered %q for %s before the prune, want the release it routes to the switchboard", front, served, frontedHostname)
 	}
 
-	vm.ssh(t, "sudo docker stop "+host.SwitchboardContainer+" >/dev/null")
+	vm.ssh(t, "sudo docker stop "+boxapi.Switchboard+" >/dev/null")
 	vm.ssh(t, "sudo docker container prune -f >/dev/null && sudo docker network prune -f >/dev/null")
-	if state := vm.state(t, host.SwitchboardContainer); state != "gone" {
-		t.Fatalf("%s is %s after the prune, and a switchboard the prune left proves nothing about starting it again", host.SwitchboardContainer, state)
+	if state := vm.state(t, boxapi.Switchboard); state != "gone" {
+		t.Fatalf("%s is %s after the prune, and a switchboard the prune left proves nothing about starting it again", boxapi.Switchboard, state)
 	}
 	if network := strings.TrimSpace(vm.ssh(t, "sudo docker network inspect "+quote(host.ProxyNetwork)+" >/dev/null 2>&1 && echo present || echo gone")); network != "gone" {
 		t.Fatalf("the %s network is %s after the prune, want it gone with the switchboard as a host tool's nightly cleanup leaves it", host.ProxyNetwork, network)
@@ -98,15 +100,15 @@ func prunedAndRestarted(t *testing.T, front string) {
 	}
 	reported := false
 	for _, check := range checks {
-		if check.Subject == host.SwitchboardContainer {
+		if check.Subject == boxapi.Switchboard {
 			reported = check.Verdict == provider.HostPass && strings.Contains(check.Finding, "a deploy started it again")
 			if !reported {
-				t.Errorf("the doctor says %v %q of %s, want it passed and the restoration named", check.Verdict, check.Finding, host.SwitchboardContainer)
+				t.Errorf("the doctor says %v %q of %s, want it passed and the restoration named", check.Verdict, check.Finding, boxapi.Switchboard)
 			}
 		}
 	}
 	if !reported {
-		t.Errorf("the doctor never reported on %s: %+v", host.SwitchboardContainer, checks)
+		t.Errorf("the doctor never reported on %s: %+v", boxapi.Switchboard, checks)
 	}
 
 	if err := stack.Destroy(ctx); err != nil {

@@ -8,9 +8,11 @@ import (
 	"strconv"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -65,13 +67,6 @@ func openFront(front Front, box frontBox) proxy.Proxy {
 	}
 }
 
-func destination(front proxy.Proxy) string {
-	if file := front.File(); file != ProxyConfig {
-		return file
-	}
-	return ""
-}
-
 func (f Front) adopted() bool { return f != Front{} }
 
 func (h *Host) RouteBy(hostname string) string {
@@ -82,37 +77,31 @@ func (h *Host) RouteBy(hostname string) string {
 	case byHand.Network == "":
 		return manual.Route(hostname, byHand.Port)
 	default:
-		return manual.RouteOn(hostname, byHand.Port, byHand.Network, "http://"+SwitchboardContainer+":"+switchboardPort)
+		return manual.RouteOn(hostname, byHand.Port, byHand.Network, "http://"+boxapi.Switchboard+":"+routing.SwitchboardPort)
 	}
 }
 
-type userNetwork struct {
-	name          string
-	option        string
-	createdByOcel bool
-}
-
-func (f Front) joined() []userNetwork {
+func (f Front) joined() []docker.Network {
 	switch {
 	case f.Manual != nil && f.Manual.Network != "" && f.Manual.Network != ProxyNetwork:
-		return []userNetwork{{name: f.Manual.Network, option: "proxy.manual.network"}}
+		return []docker.Network{{Name: f.Manual.Network, Option: "proxy.manual.network"}}
 	case f.Caddy != nil && f.Caddy.Network != "" && f.Caddy.Network != ProxyNetwork:
-		return []userNetwork{{name: f.Caddy.Network, option: "proxy.caddy.network"}}
+		return []docker.Network{{Name: f.Caddy.Network, Option: "proxy.caddy.network"}}
 	case f.Traefik != nil && f.Traefik.Network != "" && f.Traefik.Network != ProxyNetwork:
-		return []userNetwork{{name: f.Traefik.Network, option: "proxy.traefik.network"}}
+		return []docker.Network{{Name: f.Traefik.Network, Option: "proxy.traefik.network"}}
 	default:
 		return nil
 	}
 }
 
-func (f Front) published() []publish {
+func (f Front) published() []docker.Publish {
 	switch {
 	case f.Manual != nil:
-		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Manual.Port), target: switchboardPort}}
+		return []docker.Publish{{Addr: loopbackAddr, Port: strconv.Itoa(f.Manual.Port), Target: routing.SwitchboardPort}}
 	case f.Caddy != nil && f.Caddy.Network == "":
-		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Caddy.Port), target: boxapi.HTTPSListenPort}}
+		return []docker.Publish{{Addr: loopbackAddr, Port: strconv.Itoa(f.Caddy.Port), Target: boxapi.HTTPSListenPort}}
 	case f.Traefik != nil && f.Traefik.Network == "":
-		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Traefik.Port), target: boxapi.HTTPSListenPort}}
+		return []docker.Publish{{Addr: loopbackAddr, Port: strconv.Itoa(f.Traefik.Port), Target: boxapi.HTTPSListenPort}}
 	default:
 		return nil
 	}
@@ -123,7 +112,7 @@ func (f Front) listening() []string {
 	case f.Manual != nil:
 		relaying := []string{"--relay-network", ProxyNetwork}
 		for _, joined := range f.joined() {
-			relaying = append(relaying, "--relay-network", joined.name)
+			relaying = append(relaying, "--relay-network", joined.Name)
 		}
 		return relaying
 	case f.Caddy != nil:
@@ -181,7 +170,7 @@ func (f Front) describeForwarding() string {
 	if len(joined) == 0 {
 		return "on the " + ProxyNetwork + " network"
 	}
-	return "on the " + joined[0].name + " network"
+	return "on the " + joined[0].Name + " network"
 }
 
 const loopbackAddr = "127.0.0.1"

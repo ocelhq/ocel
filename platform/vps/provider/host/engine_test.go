@@ -20,9 +20,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/enginetest"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
+	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
@@ -38,7 +41,7 @@ func engineOrSkip(t *testing.T) {
 	}
 	for _, existing := range []struct{ kind, name, take string }{
 		{"container", caddy.Container, "docker rm --force " + caddy.Container},
-		{"container", SwitchboardContainer, "docker rm --force " + SwitchboardContainer},
+		{"container", boxapi.Switchboard, "docker rm --force " + boxapi.Switchboard},
 		{"network", ProxyNetwork, "docker network rm " + ProxyNetwork},
 	} {
 		if exec.Command(dockerEngine, existing.kind, "inspect", existing.name).Run() == nil {
@@ -75,10 +78,10 @@ func aLiveProxy(t *testing.T) liveProxy {
 		t.Skipf("no switchboard is built for a machine reporting %q", runtime.GOARCH)
 	}
 	proxy := liveProxy{name: name, board: board, network: network, dir: dir}
-	proxied, routing, switching := filepath.Join(dir, "proxy"), filepath.Join(dir, "routing"), filepath.Join(dir, "switchboard")
-	proxy.pins, proxy.table = filepath.Join(dir, "pins"), filepath.Join(routing, filepath.Base(boxapi.RoutingTablePath))
+	proxied, routedDir, switching := filepath.Join(dir, "proxy"), filepath.Join(dir, "routing"), filepath.Join(dir, "switchboard")
+	proxy.pins, proxy.table = filepath.Join(dir, "pins"), filepath.Join(routedDir, filepath.Base(boxapi.RoutingTablePath))
 	proxy.binary = filepath.Join(switching, boxapi.Switchboard)
-	for _, made := range []string{proxied, filepath.Join(proxied, "data"), routing, switching, proxy.pins, filepath.Join(dir, "control"), filepath.Join(dir, "front"), filepath.Join(dir, "connector")} {
+	for _, made := range []string{proxied, filepath.Join(proxied, "data"), routedDir, switching, proxy.pins, filepath.Join(dir, "control"), filepath.Join(dir, "front"), filepath.Join(dir, "connector")} {
 		if err := os.MkdirAll(made, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -92,17 +95,17 @@ func aLiveProxy(t *testing.T) liveProxy {
 	proxy.here = strings.NewReplacer(
 		boxapi.FrontDir, filepath.Join(dir, "front"),
 		boxapi.SwitchboardControlDir, filepath.Join(dir, "control"),
-		SwitchboardDir, switching,
+		boxapi.SwitchboardDir, switching,
 		ConnectorRun, filepath.Join(dir, "connector"),
 		boxapi.PinsDir, proxy.pins,
 		proxyRoot, proxied,
-		boxapi.RoutingDir, routing,
-		routingLock, dir,
+		boxapi.RoutingDir, routedDir,
+		routing.Lock, dir,
 		shell.Quote(caddy.Container), shell.Quote(name),
-		shell.Quote(SwitchboardContainer), shell.Quote(board),
-		shell.Quote(TunnelNetwork+":"+boxapi.TunnelListenPort), shell.Quote("127.0.0.1:"+boxapi.TunnelListenPort),
-		shell.Quote(TunnelNetwork), shell.Quote(tunneling),
-		`"`+TunnelNetwork+`"`, `"`+tunneling+`"`,
+		shell.Quote(boxapi.Switchboard), shell.Quote(board),
+		shell.Quote(tunnel.Network+":"+boxapi.TunnelListenPort), shell.Quote("127.0.0.1:"+boxapi.TunnelListenPort),
+		shell.Quote(tunnel.Network), shell.Quote(tunneling),
+		`"`+tunnel.Network+`"`, `"`+tunneling+`"`,
 		shell.Quote(ProxyNetwork), shell.Quote(network),
 		`"`+ProxyNetwork+`"`, `"`+network+`"`,
 		unprivilegedHere(t), "",
@@ -111,8 +114,8 @@ func aLiveProxy(t *testing.T) liveProxy {
 	taken(t, board)
 	taken(t, name)
 	for what, script := range map[string]string{
-		"the switchboard": switchboardBox(switchboardBinary(arch), Front{}).writing(containerRising),
-		"the proxy":       frontProxy().writing(containerRising),
+		"the switchboard": switchboardBox(switchboardBinary(arch), Front{}).Writing(docker.ContainerRising),
+		"the proxy":       frontProxy().Writing(docker.ContainerRising),
 	} {
 		if out, err := exec.Command("/bin/sh", "-c", proxy.here(script)).CombinedOutput(); err != nil {
 			t.Fatalf("the write that starts %s = %v\n%s", what, err, out)
@@ -127,11 +130,11 @@ func unprivilegedHere(t *testing.T) string {
 		return ""
 	}
 	t.Log("this engine refuses to exec anything under no-new-privileges, so the switchboard runs here without it")
-	return shell.Quote("--security-opt") + " " + shell.Quote(noNewPrivileges) + " "
+	return shell.Quote("--security-opt") + " " + shell.Quote(docker.NoNewPrivileges) + " "
 }
 
 var pinnable = sync.OnceValue(func() bool {
-	said, err := exec.Command(dockerEngine, "run", "--rm", "--security-opt", noNewPrivileges, "--entrypoint", "/bin/true", caddy.Image()).CombinedOutput()
+	said, err := exec.Command(dockerEngine, "run", "--rm", "--security-opt", docker.NoNewPrivileges, "--entrypoint", "/bin/true", caddy.Image()).CombinedOutput()
 	return err == nil || !strings.Contains(string(said), "operation not permitted")
 })
 
@@ -154,7 +157,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 
 	for _, target := range []struct {
 		name  string
-		as    boxContainer
+		as    docker.Service
 		binds []string
 	}{
 		{proxy.name, frontProxy(), []string{
@@ -162,17 +165,17 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 			proxy.pins + ":" + caddy.PinsMount + ":ro",
 			filepath.Join(proxy.dir, "proxy", "data") + ":" + caddy.DataMount,
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front") + ":ro",
-			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 		}},
 		{proxy.board, switchboardBox(switchboardBinary(arch), Front{}), []string{
-			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
 			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
 			filepath.Join(proxy.dir, "control") + ":" + filepath.Join(proxy.dir, "control"),
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front"),
 		}},
 	} {
-		rendered, err := exec.Command("/bin/sh", "-c", proxy.here(target.as.probe())).Output()
+		rendered, err := exec.Command("/bin/sh", "-c", proxy.here(containerProbe(target.as))).Output()
 		if err != nil {
 			t.Fatalf("probe %s on this machine: %v", target.name, err)
 		}
@@ -180,11 +183,11 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		stated := target.as.item("")
+		stated := containerItem(target.as, "")
 		stated.Name = target.name
-		stated.Content = []byte(proxy.here(string(target.as.factsOver(target.binds))))
+		stated.Content = []byte(proxy.here(string(target.as.FactsOver(target.binds))))
 		if observed[stated.ID()] != stated.Digest() {
-			box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", ContainerFactTemplate, target.name).Output()
+			box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", docker.ContainerFactTemplate, target.name).Output()
 			t.Errorf("a real engine reports %s as something other than the item ocel writes it from, so every re-run plans an update over a container that is already running:\n%s",
 				target.name, compared(canonical(proxy.here(string(box))), strings.TrimSpace(string(stated.Content))))
 		}
@@ -197,7 +200,7 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 
 	for _, target := range []struct {
 		name     string
-		as       boxContainer
+		as       docker.Service
 		replaced string
 		emptied  bool
 		binds    []string
@@ -207,17 +210,17 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 			proxy.pins + ":" + caddy.PinsMount + ":ro",
 			filepath.Join(proxy.dir, "proxy", "data") + ":" + caddy.DataMount,
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front") + ":ro",
-			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 		}},
 		{proxy.board, switchboardBox(switchboardBinary(arch), Front{}), filepath.Join(proxy.dir, "connector"), false, []string{
-			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
 			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
 			filepath.Join(proxy.dir, "control") + ":" + filepath.Join(proxy.dir, "control"),
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front"),
 		}},
 		{proxy.board, switchboardBox(switchboardBinary(arch), Front{}), filepath.Dir(proxy.binary), true, []string{
-			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
 			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
 			filepath.Join(proxy.dir, "control") + ":" + filepath.Join(proxy.dir, "control"),
@@ -236,7 +239,7 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 			}
 			runnable(t, proxy.binary, switchboardBinary(arch), 0o755)
 		}
-		rendered, err := exec.Command("/bin/sh", "-c", proxy.here(target.as.probe())).Output()
+		rendered, err := exec.Command("/bin/sh", "-c", proxy.here(containerProbe(target.as))).Output()
 		if err != nil {
 			t.Fatalf("probe %s on this machine: %v", target.name, err)
 		}
@@ -244,10 +247,10 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 		if err != nil {
 			t.Fatal(err)
 		}
-		moved := target.as.item("")
+		moved := containerItem(target.as, "")
 		moved.Name = target.name
-		moved.Content = bytes.Replace([]byte(proxy.here(string(target.as.factsOver(target.binds)))),
-			[]byte(mountsFact+mountsIntact), []byte(mountsFact+mountsMoved), 1)
+		moved.Content = bytes.Replace([]byte(proxy.here(string(target.as.FactsOver(target.binds)))),
+			[]byte(docker.MountsFact+docker.MountsIntact), []byte(docker.MountsFact+docker.MountsMoved), 1)
 		if observed[moved.ID()] != moved.Digest() {
 			t.Errorf("%s reads %s, a directory the host replaced after it started, and a probe with no root reports it as something other than a moved mount: an unelevated describe then calls a container current that serves a directory which is gone",
 				target.name, target.replaced)
@@ -284,7 +287,7 @@ func compared(box, stated string) string {
 func (p liveProxy) drives(t *testing.T, argv ...string) string {
 	t.Helper()
 
-	run := exec.Command(dockerEngine, append([]string{"exec", p.board, SwitchboardMounted}, argv...)...)
+	run := exec.Command(dockerEngine, append([]string{"exec", p.board, boxapi.SwitchboardMounted}, argv...)...)
 	said, err := run.Output()
 	if err != nil {
 		var stderr string
@@ -324,7 +327,7 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 
 	cutOver := routed()
 	proxy.runsApp(t, cutOver.Routes[0].Upstream, "the app answered")
-	cutOver.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	cutOver.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	const moved = `"grace_period":"29s"`
 	proxy.stages(t, routingTableItem().Content, cutOver, bytes.Replace(mustRender(t, cutOver), []byte(`"grace_period":"30s"`), []byte(moved), 1))
 	proxy.drives(t, "load", proxy.table)
@@ -360,7 +363,7 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 		t.Fatalf("read what the proxy answered for %q: %v", claimed, err)
 	}
 	if said.StatusCode != http.StatusOK || string(read) != "the app answered" {
-		t.Errorf("the hostname %q claims was answered %d %q, want the body of the app running on %s: the switchboard is handed the directory the table is renamed into, and one handed the file keeps routing the seed",
+		t.Errorf("the hostname %q claims was answered %d %q, want the body of the app running on %s: the switchboard is handed the directory the table is renamed into, and one handed the file keeps routedDir the seed",
 			surface, said.StatusCode, read, cutOver.Routes[0].Upstream)
 	}
 	if said.Header.Get(router.HeaderRouter) != string(boxapi.SwitchboardRouter) {
@@ -373,7 +376,7 @@ func TestTheSwitchboardTrustsWhatTheFrontProxyForwardsAndNothingAClientSays(t *t
 
 	state := routed()
 	proxy.runsApp(t, state.Routes[0].Upstream, "{http.request.header.X-Forwarded-For}|{http.request.header.X-Forwarded-Proto}|{http.request.host}")
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	proxy.moves(t, routingTableItem().Content, state)
 
 	request, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+caddy.HTTPPort+"/", nil)
@@ -408,7 +411,7 @@ func TestTheFrontProxyNamesTheRouterOnItsOwnAnswerWhileTheSwitchboardIsDown(t *t
 
 	state := routed()
 	proxy.runsApp(t, state.Routes[0].Upstream, "the app answered")
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	proxy.moves(t, routingTableItem().Content, state)
 	ask := func() *http.Response {
 		t.Helper()
@@ -437,24 +440,24 @@ func TestTheFrontProxyNamesTheRouterOnItsOwnAnswerWhileTheSwitchboardIsDown(t *t
 	}
 }
 
-func (p liveProxy) stages(t *testing.T, current []byte, state RoutingTable, config []byte) []byte {
+func (p liveProxy) stages(t *testing.T, current []byte, state boxapi.RoutingTable, config []byte) []byte {
 	t.Helper()
 
 	written := mustWrite(t, state)
-	write := exec.Command("/bin/sh", "-c", p.here(stagedWrite(tableDigest(contentSum(current)), ProxyConfig, nil)))
-	write.Stdin = strings.NewReader(pairFed(routingPair{table: written, config: []byte(p.here(string(config)))}))
+	write := exec.Command("/bin/sh", "-c", p.here(routing.StagedWrite(routing.Digest(contentSum(current)), ProxyConfig, nil)))
+	write.Stdin = strings.NewReader(routing.PairFed(routing.Pair{Table: written, Config: []byte(p.here(string(config)))}))
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
 	}
 	return written
 }
 
-func (p liveProxy) writes(t *testing.T, current []byte, state RoutingTable) []byte {
+func (p liveProxy) writes(t *testing.T, current []byte, state boxapi.RoutingTable) []byte {
 	t.Helper()
 	return p.stages(t, current, state, mustRender(t, state))
 }
 
-func (p liveProxy) moves(t *testing.T, current []byte, state RoutingTable) []byte {
+func (p liveProxy) moves(t *testing.T, current []byte, state boxapi.RoutingTable) []byte {
 	t.Helper()
 
 	written := p.writes(t, current, state)
@@ -485,11 +488,11 @@ func TestARealProxyDropsNoRequestWhileACutoverMovesAnExistingRouteBetweenUpstrea
 	one, two := "shop-web-1111:"+containerimage.PortText, "shop-web-2222:"+containerimage.PortText
 	proxy.runsApp(t, one, "one")
 	proxy.runsApp(t, two, "two")
-	serving := func(upstream string) RoutingTable {
-		return RoutingTable{
-			Grace:  DrainWindow,
-			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
-			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
+	serving := func(upstream string) boxapi.RoutingTable {
+		return boxapi.RoutingTable{
+			Grace:  routing.DrainWindow,
+			Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: upstream}},
+			Claims: []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
 	table := proxy.moves(t, routingTableItem().Content, serving(one))
@@ -565,7 +568,7 @@ func TestARealProxyDropsNoRequestWhileOtherHostnamesAreBoundAndUnboundBesideIt(t
 
 	state := routed()
 	proxy.runsApp(t, state.Routes[0].Upstream, "one")
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	table := proxy.moves(t, routingTableItem().Content, state)
 	initial := mustRender(t, state)
 
@@ -575,7 +578,7 @@ func TestARealProxyDropsNoRequestWhileOtherHostnamesAreBoundAndUnboundBesideIt(t
 			next := state
 			if round%2 == 0 {
 				next.Claims = append(slices.Clone(state.Claims),
-					HostClaim{Hostname: fmt.Sprintf("bound-%d.example.com", round), Owner: otherSurface, Pointer: pointed},
+					boxapi.Claim{Hostname: fmt.Sprintf("bound-%d.example.com", round), Owner: otherSurface, Pointer: pointed},
 					previewClaim(fmt.Sprintf("pr-%d", round), "", fmt.Sprintf("shop--pr-%d.%s", round, previewBase)))
 				next.PreviewBase = previewBase
 				next.Connector = "box.example.com"
@@ -610,11 +613,11 @@ func TestARealBoxServesTheNewReleaseTheMomentTheRetiredOneIsRemoved(t *testing.T
 	retired, next := "shop-web-1111:"+containerimage.PortText, "shop-web-2222:"+containerimage.PortText
 	proxy.runsSlowApp(t, retired, 2*time.Second)
 	proxy.runsApp(t, next, "two")
-	serving := func(upstream string) RoutingTable {
-		return RoutingTable{
-			Grace:  DrainWindow,
-			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
-			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
+	serving := func(upstream string) boxapi.RoutingTable {
+		return boxapi.RoutingTable{
+			Grace:  routing.DrainWindow,
+			Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: upstream}},
+			Claims: []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
 	table := proxy.moves(t, routingTableItem().Content, serving(retired))
@@ -672,11 +675,11 @@ func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheCutoverRetiringItHasDrainedIt(t
 	retired, next := "shop-web-1111:"+containerimage.PortText, "shop-web-2222:"+containerimage.PortText
 	proxy.runsSlowApp(t, retired, 4*time.Second)
 	proxy.runsApp(t, next, "two")
-	serving := func(upstream string) RoutingTable {
-		return RoutingTable{
-			Grace:  DrainWindow,
-			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
-			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
+	serving := func(upstream string) boxapi.RoutingTable {
+		return boxapi.RoutingTable{
+			Grace:  routing.DrainWindow,
+			Routes: []boxapi.Route{{RouteKey: keyed("web"), Upstream: upstream}},
+			Claims: []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
 	table := proxy.moves(t, routingTableItem().Content, serving(retired))
@@ -693,7 +696,7 @@ func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheCutoverRetiringItHasDrainedIt(t
 	proxy.writes(t, table, serving(next))
 	cutOver := make(chan string, 1)
 	go func() {
-		said, err := exec.Command(dockerEngine, "exec", proxy.board, SwitchboardMounted,
+		said, err := exec.Command(dockerEngine, "exec", proxy.board, boxapi.SwitchboardMounted,
 			"cutover", "--drain-timeout", "30", "--retire", retired, proxy.table).CombinedOutput()
 		cutOver <- fmt.Sprintf("%v %s", err, said)
 	}()

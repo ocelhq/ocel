@@ -18,7 +18,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -31,8 +33,8 @@ type engineState struct {
 
 func engineAsWritten() engineState {
 	return engineState{network: true, volume: true, facts: map[string]string{
-		caddy.Container:      engineSays(frontProxy(), migrateSet),
-		SwitchboardContainer: engineSays(switchboardBox(switchboardBinary(ssh.AMD64), Front{}), migrateSet),
+		caddy.Container:    engineSays(frontProxy(), docker.MigrateSet),
+		boxapi.Switchboard: engineSays(switchboardBox(switchboardBinary(ssh.AMD64), Front{}), docker.MigrateSet),
 	}}
 }
 
@@ -47,9 +49,9 @@ func containerNamed(name string) Item {
 
 func frontItem() Item { return containerNamed(caddy.Container) }
 
-func boardItem() Item { return containerNamed(SwitchboardContainer) }
+func boardItem() Item { return containerNamed(boxapi.Switchboard) }
 
-func containerCommand() string { return frontProxy().writing(containerRising) }
+func containerCommand() string { return frontProxy().Writing(docker.ContainerRising) }
 
 func dockered(t *testing.T, engine engineState) map[string]string {
 	t.Helper()
@@ -78,7 +80,7 @@ func dockered(t *testing.T, engine engineState) map[string]string {
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), frontProxy().probe(), switchboardBox(switchboardBinary(ssh.AMD64), Front{}).probe()}, "\n"))
+	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), containerProbe(frontProxy()), containerProbe(switchboardBox(switchboardBinary(ssh.AMD64), Front{}))}, "\n"))
 	cmd.Env = []string{"PATH=" + dir}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -222,9 +224,9 @@ func TestTheProxyImageIsPulledOffTheAnonymousHubCeilingAndRetriedBeforeTheRun(t 
 	}
 	for _, want := range []string{
 		"docker image inspect " + shell.Quote(caddy.Image()),
-		fmt.Sprintf("-ge %d", containerPulls),
-		scriptPullBackoff.Start(),
-		scriptPullBackoff.Again(),
+		fmt.Sprintf("-ge %d", docker.ContainerPulls),
+		docker.ScriptPullBackoff.Start(),
+		docker.ScriptPullBackoff.Again(),
 	} {
 		if !strings.Contains(command, want) {
 			t.Errorf("the pull includes no %q, so it is either unbounded or repeated on a box that already has the image:\n%s", want, command)
@@ -237,7 +239,7 @@ func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t 
 
 	command := containerCommand()
 	for _, flag := range []string{
-		shell.Quote("--restart") + " " + shell.Quote(containerRestart),
+		shell.Quote("--restart") + " " + shell.Quote(docker.ContainerRestart),
 		shell.Quote("--network") + " " + shell.Quote(ProxyNetwork),
 	} {
 		if !strings.Contains(command, flag) {
@@ -245,7 +247,7 @@ func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t 
 		}
 	}
 	facts := string(frontItem().Content)
-	for _, fact := range []string{"restart=" + containerRestart, "network=" + networkJoined, "state=running"} {
+	for _, fact := range []string{"restart=" + docker.ContainerRestart, "network=" + docker.NetworkJoined, "state=running"} {
 		if !strings.Contains(facts, fact) {
 			t.Errorf("the proxy is surveyed without %q, so a host that lost it would never be told:\n%s", fact, facts)
 		}
@@ -258,7 +260,7 @@ func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t 
 func TestOnlyTheFrontProxyPublishesAPortAndOnlyThePortsRequestsArriveOn(t *testing.T) {
 	t.Parallel()
 
-	command := shell.Words(frontProxy().run())
+	command := shell.Words(frontProxy().Run())
 	if strings.Count(command, "--publish") != len(proxyServing()) {
 		t.Errorf("the proxy is run with something other than the ports requests arrive on:\n%s", command)
 	}
@@ -268,7 +270,7 @@ func TestOnlyTheFrontProxyPublishesAPortAndOnlyThePortsRequestsArriveOn(t *testi
 		}
 	}
 	ports := map[string][]map[string]string{}
-	if err := json.Unmarshal([]byte(marshalled(published(frontProxy().ports))), &ports); err != nil {
+	if err := json.Unmarshal([]byte(docker.Marshalled(docker.Published(frontProxy().Ports))), &ports); err != nil {
 		t.Fatal(err)
 	}
 	for port := range ports {
@@ -279,8 +281,8 @@ func TestOnlyTheFrontProxyPublishesAPortAndOnlyThePortsRequestsArriveOn(t *testi
 	if strings.Contains(starting(t, command), caddy.AdminSocket) {
 		t.Errorf("the admin socket is named on the host side of the run command, and a socket that leaves the container is one anything on the box can dial:\n%s", command)
 	}
-	if strings.Contains(switchboardBox(nil, Front{}).writing(containerRising), "--publish") {
-		t.Errorf("the switchboard publishes a port, and nothing but the front proxy is reached from off the box:\n%s", switchboardBox(nil, Front{}).writing(containerRising))
+	if strings.Contains(switchboardBox(nil, Front{}).Writing(docker.ContainerRising), "--publish") {
+		t.Errorf("the switchboard publishes a port, and nothing but the front proxy is reached from off the box:\n%s", switchboardBox(nil, Front{}).Writing(docker.ContainerRising))
 	}
 }
 
@@ -300,7 +302,7 @@ func TestWhatTheProxyPersistsGoesNoWiderThanTheProxy(t *testing.T) {
 	t.Parallel()
 
 	var data string
-	for _, bind := range frontProxy().binds {
+	for _, bind := range frontProxy().Binds {
 		source, rest, _ := strings.Cut(bind, ":")
 		mount, options, _ := strings.Cut(rest, ":")
 		if mount == caddy.DataMount {
@@ -347,23 +349,23 @@ func TestTheSwitchboardBinaryIsRootsToWriteAndAnyonesToRunAndReachesItsContainer
 	t.Parallel()
 
 	items := ProxyItems(ssh.AMD64, Front{})
-	binary := itemAt(t, items, KindFile, SwitchboardBinary)
+	binary := itemAt(t, items, KindFile, boxapi.SwitchboardBinary)
 	if binary.Owner != rootOwner || binary.Mode&0o022 != 0 {
-		t.Errorf("%s is written by %s at %04o, want root alone able to write it: the switchboard routes every hostname on the box", SwitchboardBinary, binary.Owner, binary.Mode)
+		t.Errorf("%s is written by %s at %04o, want root alone able to write it: the switchboard routes every hostname on the box", boxapi.SwitchboardBinary, binary.Owner, binary.Mode)
 	}
 	if binary.Mode&0o005 != 0o005 {
-		t.Errorf("%s is written %04o, and the deploy login runs it on the box to read what the box serves on :443", SwitchboardBinary, binary.Mode)
+		t.Errorf("%s is written %04o, and the deploy login runs it on the box to read what the box serves on :443", boxapi.SwitchboardBinary, binary.Mode)
 	}
-	boardDir := itemAt(t, items, KindDir, SwitchboardDir)
-	if boardDir.Owner != rootOwner || slices.IndexFunc(items, func(item Item) bool { return item.Name == SwitchboardDir }) > slices.IndexFunc(items, func(item Item) bool { return item.Name == SwitchboardBinary }) {
-		t.Errorf("%s is written by %s after the binary in it", SwitchboardDir, boardDir.Owner)
+	boardDir := itemAt(t, items, KindDir, boxapi.SwitchboardDir)
+	if boardDir.Owner != rootOwner || slices.IndexFunc(items, func(item Item) bool { return item.Name == boxapi.SwitchboardDir }) > slices.IndexFunc(items, func(item Item) bool { return item.Name == boxapi.SwitchboardBinary }) {
+		t.Errorf("%s is written by %s after the binary in it", boxapi.SwitchboardDir, boardDir.Owner)
 	}
 	board := switchboardBox(binary.Content, Front{})
-	if !slices.Contains(board.binds, SwitchboardDir+":"+switchboardMount+":ro") {
-		t.Errorf("the switchboard is handed %v, want its binary's directory read-only: a bind of the file keeps the inode a rewrite replaced", board.binds)
+	if !slices.Contains(board.Binds, boxapi.SwitchboardDir+":"+boxapi.SwitchboardMount+":ro") {
+		t.Errorf("the switchboard is handed %v, want its binary's directory read-only: a bind of the file keeps the inode a rewrite replaced", board.Binds)
 	}
-	for _, bind := range board.binds {
-		if source, _, _ := strings.Cut(bind, ":"); source == SwitchboardBinary || source == boxapi.RoutingTablePath {
+	for _, bind := range board.Binds {
+		if source, _, _ := strings.Cut(bind, ":"); source == boxapi.SwitchboardBinary || source == boxapi.RoutingTablePath {
 			t.Errorf("the switchboard is handed %s as a file, and a file bind keeps reading the inode it started on after a rename replaces it", source)
 		}
 	}
@@ -375,13 +377,13 @@ func TestTheSwitchboardIsWrittenAgainWhenItsBinaryMoves(t *testing.T) {
 	binary := switchboardBinary(ssh.AMD64)
 	stamped := contentSum(binary)
 	board := switchboardBox(binary, Front{})
-	if !strings.Contains(shell.Words(board.run()), shell.Quote(configLabel+"="+stamped)) {
-		t.Errorf("the switchboard is run with no record of the binary it runs, so a box already running one would never be handed the next:\n%s", shell.Words(board.run()))
+	if !strings.Contains(shell.Words(board.Run()), shell.Quote(docker.ConfigLabel+"="+stamped)) {
+		t.Errorf("the switchboard is run with no record of the binary it runs, so a box already running one would never be handed the next:\n%s", shell.Words(board.Run()))
 	}
 	if !strings.Contains(string(boardItem().Content), "config="+stamped) {
 		t.Errorf("the switchboard is surveyed without the binary it was written under:\n%s", boardItem().Content)
 	}
-	if other := switchboardBox(append(slices.Clone(binary), 0), Front{}); bytes.Equal(other.facts(), board.facts()) {
+	if other := switchboardBox(append(slices.Clone(binary), 0), Front{}); bytes.Equal(other.Facts(), board.Facts()) {
 		t.Error("a switchboard written from another binary states the same facts, and bootstrap would leave the old one running")
 	}
 }
@@ -402,7 +404,7 @@ func TestTheContainerIsWrittenAgainWhenTheCommandItStartsWithMoves(t *testing.T)
 	t.Parallel()
 
 	started := strings.Join(caddy.Command(), " ")
-	if !strings.Contains(containerCommand(), shell.Quote(containerCmdLabel+"="+started)) {
+	if !strings.Contains(containerCommand(), shell.Quote(docker.ContainerCmdLabel+"="+started)) {
 		t.Errorf("the proxy is run with no record of the command it is started with:\n%s", containerCommand())
 	}
 	if !strings.Contains(string(frontItem().Content), "command="+started) {
@@ -483,7 +485,7 @@ func seedsIn(t *testing.T) (string, string, Item, Item) {
 }
 
 func seedScript(table, config Item) string {
-	return strings.ReplaceAll(seedingRouting(table, &config), shell.Quote(routingLock), shell.Quote(filepath.Dir(table.Name)))
+	return strings.ReplaceAll(seedingRouting(table, &config), shell.Quote(routing.Lock), shell.Quote(filepath.Dir(table.Name)))
 }
 
 func seeding(t *testing.T, bin string, table, config Item) {
@@ -542,9 +544,9 @@ func TestTheRoutingTableAndItsConfigAreRemovedUnderTheLockEveryWriterTakes(t *te
 			continue
 		}
 		command := removal.command()
-		locked := strings.Index(command, strings.TrimSuffix(routingLocked("-x"), "\n"))
+		locked := strings.Index(command, strings.TrimSuffix(routing.Locked("-x"), "\n"))
 		if locked < 0 || strings.Index(command, "rm ") < locked {
-			t.Errorf("%s is removed by\n%s\nwhich does not hold %s first, so a deploy mid-write moves a file back beside a removal", removal.path, command, routingLock)
+			t.Errorf("%s is removed by\n%s\nwhich does not hold %s first, so a deploy mid-write moves a file back beside a removal", removal.path, command, routing.Lock)
 		}
 	}
 }
@@ -635,7 +637,7 @@ func TestANetworkAnotherWorkloadUsesIsReportedKeptRatherThanRemoved(t *testing.T
 	t.Parallel()
 
 	command := (removal{kind: KindNetwork, path: ProxyNetwork}).command()
-	for inspectExit, want := range map[string]string{"0": networkInUse, "1": ""} {
+	for inspectExit, want := range map[string]string{"0": docker.NetworkInUse, "1": ""} {
 		stub := t.TempDir()
 		script := "#!/bin/sh\n" +
 			"case \"$1 $2\" in\n" +
@@ -678,7 +680,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	keys := []byte(aKey + "\n")
 	installed := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
 	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))}
-	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, boxapi.SwitchboardControlDir, boxapi.FrontDir, ProxyConfig, boxapi.RoutingTablePath, boxapi.RoutingDir}
+	proxied := []string{caddy.Container, boxapi.Switchboard, ProxyData, ProxyNetwork, proxyRoot, boxapi.SwitchboardBinary, boxapi.SwitchboardDir, boxapi.SwitchboardControlDir, boxapi.FrontDir, ProxyConfig, boxapi.RoutingTablePath, boxapi.RoutingDir}
 
 	for _, taken := range removing(installed, beside, appsPresent{}) {
 		if slices.Contains(proxied, taken.path) && taken.action == provider.ActionDelete {
@@ -700,8 +702,8 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 		t.Error("the proxy's data directory is taken with no reason, and every private key and the acme account key it stores go with it")
 	}
 	for container, used := range map[string][]string{
-		caddy.Container:      {ProxyData, ProxyNetwork, proxyRoot, boxapi.FrontDir},
-		SwitchboardContainer: {boxapi.SwitchboardControlDir, boxapi.FrontDir, SwitchboardDir, boxapi.RoutingDir, ProxyNetwork},
+		caddy.Container:    {ProxyData, ProxyNetwork, proxyRoot, boxapi.FrontDir},
+		boxapi.Switchboard: {boxapi.SwitchboardControlDir, boxapi.FrontDir, boxapi.SwitchboardDir, boxapi.RoutingDir, ProxyNetwork},
 	} {
 		running := slices.IndexFunc(last, func(r removal) bool { return r.path == container })
 		for _, after := range used {
@@ -819,7 +821,7 @@ func TestRemovingTheProxyNamesOcelsOwnContainerAndNeverAsksTheEngineWhatElseItRu
 	if !strings.HasPrefix(command, "if ! docker network rm ") {
 		t.Errorf("the network is taken by %q, and a destroy fails on a host still running something attached to it", command)
 	}
-	if !strings.Contains(command, shell.Quote(networkInUse)) {
+	if !strings.Contains(command, shell.Quote(docker.NetworkInUse)) {
 		t.Errorf("the network is taken by %q, which says nothing about whether it went", command)
 	}
 }
@@ -876,7 +878,7 @@ func TestTheHelperIsAStaticBinaryOcelBuildsForEveryArchitectureABoxMayRun(t *tes
 	if bytes.Equal(shipped[ssh.AMD64], shipped[ssh.ARM64]) {
 		t.Error("both architectures are shipped the same bytes, so one of the two boxes runs a binary built for the other")
 	}
-	if bytes.Equal(itemAt(t, ProxyItems(ssh.AMD64, Front{}), KindFile, SwitchboardBinary).Content, itemAt(t, ProxyItems(ssh.ARM64, Front{}), KindFile, SwitchboardBinary).Content) {
+	if bytes.Equal(itemAt(t, ProxyItems(ssh.AMD64, Front{}), KindFile, boxapi.SwitchboardBinary).Content, itemAt(t, ProxyItems(ssh.ARM64, Front{}), KindFile, boxapi.SwitchboardBinary).Content) {
 		t.Error("the switchboard item has the same bytes whatever the box reports, and the architecture is then not what selects it")
 	}
 }
@@ -974,8 +976,8 @@ func asked(t *testing.T, dir string) int {
 
 func writtenOver(attempts int, files []string) string {
 	written := frontProxy()
-	written.files = files
-	return written.writing(attempts)
+	written.Files = files
+	return written.Writing(attempts)
 }
 
 func writing(t *testing.T, dir, command string) (string, error) {
@@ -1154,24 +1156,24 @@ func TestAProxyConfiguredAsWrittenButNotRunningIsPlannedBackAndNeverCalledUpToDa
 func TestTheProxysFactsReadTheSameWhateverOrderTheEngineReportsItsMountsIn(t *testing.T) {
 	t.Parallel()
 
-	binds := frontProxy().binds
+	binds := frontProxy().Binds
 	if len(binds) < 3 {
 		t.Fatalf("the proxy has %d mounts, and nothing about ordering can be proven over fewer than two", len(binds))
 	}
-	stated := frontProxy().facts()
+	stated := frontProxy().Facts()
 	for _, order := range orderings(len(binds)) {
 		shuffled := make([]string, 0, len(binds))
 		for _, at := range order {
 			shuffled = append(shuffled, binds[at])
 		}
-		if got := frontProxy().factsOver(shuffled); !bytes.Equal(got, stated) {
+		if got := frontProxy().FactsOver(shuffled); !bytes.Equal(got, stated) {
 			t.Errorf("the engine reporting ocel's own mounts in the order %v reads as a proxy that drifted:\n%s\nwant\n%s",
 				order, got, stated)
 		}
 	}
 
 	for _, missing := range []([]string){binds[:2], append(slices.Clone(binds), "/somewhere/else:/etc/caddy/ocel.json:ro")} {
-		if bytes.Equal(frontProxy().factsOver(missing), stated) {
+		if bytes.Equal(frontProxy().FactsOver(missing), stated) {
 			t.Errorf("a proxy with the mounts %v reads as one with %v, and a proxy someone re-ran with different mounts is drift ocel must catch",
 				missing, binds)
 		}
@@ -1201,19 +1203,20 @@ func orderings(count int) [][]int {
 func TestEveryFactTheProbeReadsIsOneTheItemStates(t *testing.T) {
 	t.Parallel()
 
-	for _, key := range []string{"image=", "command=", "restart=", "network=", "bind=", "ports=", "config=", "state="} {
-		if !strings.Contains(ContainerFactTemplate, key) {
+	read := docker.ContainerFactTemplate
+	for _, key := range []string{"image=", "command=", "restart=", "network=", "bind=", "ports=", "config=", "state=", "memory="} {
+		if !strings.Contains(read, key) {
 			t.Errorf("the probe reads no %q off the box, and the item states one", key)
 		}
 		if !strings.Contains(string(frontItem().Content), key) {
 			t.Errorf("the item states no %q, and the probe reads one off the box", key)
 		}
 	}
-	if strings.Contains(ContainerFactTemplate, "json .HostConfig.Binds") {
+	if strings.Contains(docker.ContainerFactTemplate, "json .HostConfig.Binds") {
 		t.Error("the mounts are read off the box as one json array, and the engine does not promise the order of that array")
 	}
-	if !strings.Contains(frontProxy().probe(), "LC_ALL=C sort") {
-		t.Errorf("the probe hashes what the box says in the order the box happens to say it:\n%s", frontProxy().probe())
+	if !strings.Contains(containerProbe(frontProxy()), "LC_ALL=C sort") {
+		t.Errorf("the probe hashes what the box says in the order the box happens to say it:\n%s", containerProbe(frontProxy()))
 	}
 }
 
@@ -1281,7 +1284,7 @@ func TestADeployOverAConfigAnOlderOcelRenderedRendersItAgainEvenWhenTheTableIsUn
 	rig := claimingBox(t, routed())
 	config := olderRendering(t, routed())
 	rig.answer = servesPair(rig.bench, &rig.recorded, &config)
-	if err := rig.host().UnrouteApp(context.Background(), keyed("api")); err != nil {
+	if err := rig.host().routing.UnrouteApp(context.Background(), keyed("api")); err != nil {
 		t.Fatalf("UnrouteApp() of an app the box never routed = %v", err)
 	}
 	rig.mu.Lock()

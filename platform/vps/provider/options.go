@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -289,11 +290,11 @@ func (t *Target) UnmarshalJSON(data []byte) error {
 
 func (p *Provider) Target() Target { return p.options.SSH }
 
-func pins(configured map[string]string) []host.Pin {
-	sorted := make([]host.Pin, 0, len(configured))
+func pins(configured map[string]string) []boxapi.Pin {
+	sorted := make([]boxapi.Pin, 0, len(configured))
 	for hostname, path := range configured {
-		sorted = append(sorted, host.Pin{Hostname: hostname, Path: strings.TrimSuffix(path, "/")})
+		sorted = append(sorted, boxapi.Pin{Hostname: hostname, Path: strings.TrimSuffix(path, "/")})
 	}
-	slices.SortFunc(sorted, func(a, b host.Pin) int { return strings.Compare(a.Hostname, b.Hostname) })
+	slices.SortFunc(sorted, func(a, b boxapi.Pin) int { return strings.Compare(a.Hostname, b.Hostname) })
 	return sorted
 }

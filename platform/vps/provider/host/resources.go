@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -188,9 +189,9 @@ func (r ResourceContainer) digest() (string, error) {
 
 func (r ResourceContainer) labels() []string {
 	argv := []string{
-		"--label", LabelTier + "=" + string(r.Tier),
-		"--label", LabelProject + "=" + naming.Sanitize(r.Project),
-		"--label", LabelResource + "=" + r.Resource,
+		"--label", docker.LabelTier + "=" + string(r.Tier),
+		"--label", docker.LabelProject + "=" + naming.Sanitize(r.Project),
+		"--label", docker.LabelResource + "=" + r.Resource,
 	}
 	for _, key := range slices.Sorted(maps.Keys(r.Labels)) {
 		argv = append(argv, "--label", key+"="+r.Labels[key])
@@ -213,15 +214,15 @@ func (r ResourceContainer) VolumeName() string { return r.volume() }
 
 func volumesOf(tier environment.Tier, project, resource, name string) string {
 	return "docker volume ls --filter " + shell.Quote("name=^"+name) +
-		" --filter " + shell.Quote("label="+LabelTier+"="+string(tier)) +
-		" --filter " + shell.Quote("label="+LabelProject+"="+naming.Sanitize(project)) +
-		" --filter " + shell.Quote("label="+LabelResource+"="+resource)
+		" --filter " + shell.Quote("label="+docker.LabelTier+"="+string(tier)) +
+		" --filter " + shell.Quote("label="+docker.LabelProject+"="+naming.Sanitize(project)) +
+		" --filter " + shell.Quote("label="+docker.LabelResource+"="+resource)
 }
 
 func volumeCreating(spec ResourceContainer) string {
 	argv := append([]string{"docker", "volume", "create"}, spec.labels()...)
 	if spec.Volume.Generation != "" {
-		argv = append(argv, "--label", LabelGeneration+"="+spec.Volume.Generation)
+		argv = append(argv, "--label", docker.LabelGeneration+"="+spec.Volume.Generation)
 	}
 	if spec.Volume.Driver != "" {
 		argv = append(argv, "--driver", spec.Volume.Driver)
@@ -233,7 +234,7 @@ func volumeCreating(spec ResourceContainer) string {
 }
 
 func runResourceScript(spec ResourceContainer, digest, envFile string) string {
-	return imagePulled(spec.Image, appPulls, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
+	return docker.Pulled(spec.Image, appPulls, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
 		socketsCreating(spec) +
 		shell.Bounded(shell.DockerStepSeconds, "docker run of "+spec.Name, shell.Words(resourceRun(spec, digest, envFile))+" >/dev/null")
 }
@@ -245,12 +246,12 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 		"--network", boxapi.AppNetwork(spec.Tier, spec.Project),
 	}
 	argv = append(argv, spec.labels()...)
-	argv = append(argv, "--label", LabelRef+"="+spec.Image, "--label", LabelEnv+"="+digest)
+	argv = append(argv, "--label", docker.LabelRef+"="+spec.Image, "--label", docker.LabelEnv+"="+digest)
 	if spec.Backup != "" {
 		argv = append(argv, "--label", LabelBackup+"="+spec.Backup)
 	}
-	argv = append(argv, logging()...)
-	argv = append(argv, confined(spec.Capabilities, false)...)
+	argv = append(argv, docker.Logging()...)
+	argv = append(argv, docker.Confined(spec.Capabilities, false)...)
 	if spec.User != "" {
 		argv = append(argv, "--user", spec.User)
 	}
@@ -264,7 +265,7 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 	}
 	argv = append(argv, "--env-file", envFile)
 	for _, mount := range spec.Mounts {
-		argv = append(argv, "--mount", boundMount(mount.Source, mount.Target, "readonly"))
+		argv = append(argv, "--mount", docker.BoundMount(mount.Source, mount.Target, "readonly"))
 	}
 	if spec.Volume.Path != "" {
 		argv = append(argv, "--mount", "type=volume,src="+spec.volume()+",dst="+spec.Volume.Path)
@@ -278,7 +279,7 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 
 func generationCommand(spec ResourceContainer) string {
 	return volumesOf(spec.Tier, spec.Project, spec.Resource, spec.Name) +
-		" --format " + shell.Quote(`{{.Label "`+LabelGeneration+`"}}`)
+		" --format " + shell.Quote(`{{.Label "`+docker.LabelGeneration+`"}}`)
 }
 
 func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, elevation ssh.Acting) (string, error) {
@@ -482,7 +483,7 @@ func (h *Host) readResource(ctx context.Context, spec ResourceContainer, elevati
 	return read, read.refuseUpgradeOverStoppedServer()
 }
 
-func (r resourceReading) isCurrent() bool { return stillServing(r.serving, r.spec.Image, r.digest) }
+func (r resourceReading) isCurrent() bool { return docker.IsServing(r.serving, r.spec.Image, r.digest) }
 
 func (r resourceReading) refuseUpgradeOverStoppedServer() error {
 	if r.from == "" || r.spec.Volume.CopyOnUpgrade || strings.HasPrefix(r.serving, "running ") {

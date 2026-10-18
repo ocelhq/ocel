@@ -22,8 +22,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
 const (
@@ -43,7 +45,7 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 	bootstrapped(t, vm, environment.TierPreview)
 	fixtures(t, vm)
 	t.Cleanup(func() {
-		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+"="+teardownApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
+		vm.ssh(t, "sudo docker ps -aq --filter label="+docker.LabelApp+"="+teardownApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 		vm.ssh(t, "sudo docker images -q --filter reference="+teardownRepo+":* | xargs -r sudo docker rmi -f >/dev/null 2>&1 || true")
 		vm.ssh(t, "sudo rm -rf "+host.ReleasesDir()+"/"+teardownSlug)
 	})
@@ -223,7 +225,7 @@ func (vm machine) teardownImages(t *testing.T) string {
 func (vm machine) routedHosts(t *testing.T) []string {
 	t.Helper()
 
-	table, err := host.ReadRoutingTable([]byte(vm.ssh(t, "sudo cat "+quote(boxapi.RoutingTablePath))))
+	table, err := routing.ReadRoutingTable([]byte(vm.ssh(t, "sudo cat "+quote(boxapi.RoutingTablePath))))
 	if err != nil {
 		t.Fatalf("read the routing table the switchboard serves: %v", err)
 	}
@@ -239,7 +241,7 @@ func (vm machine) routedHosts(t *testing.T) []string {
 
 func (vm machine) handshakes(t *testing.T, hostname string) {
 	t.Helper()
-	vm.ssh(t, quote(host.SwitchboardBinary)+" leaf "+quote(hostname)+" >/dev/null 2>&1 || true")
+	vm.ssh(t, quote(boxapi.SwitchboardBinary)+" leaf "+quote(hostname)+" >/dev/null 2>&1 || true")
 }
 
 func TestLiveAPreviewTornDownLeavesNoRouteAndNoImageBehindAndKeepsItsCertificate(t *testing.T) {
