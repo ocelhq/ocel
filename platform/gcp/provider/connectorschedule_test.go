@@ -5,14 +5,17 @@ import (
 	"net/http"
 	"slices"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestTheConnectorsHeartbeatScheduleCallsItEveryMinuteWithAnIDTokenForItsOwnAccount(t *testing.T) {
 	t.Parallel()
 
-	c := &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}
+	c := &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}
 	url := servedAt(c.Connector())
-	schedule := c.buildConnectorSchedule(url)
+	schedule := buildConnectorSchedule(c, url)
 	if schedule.Name != "projects/acme-prod/locations/europe-west1/jobs/ocel-connector" {
 		t.Errorf("the schedule is named %q, want it beside the connector's service in its region", schedule.Name)
 	}
@@ -43,7 +46,7 @@ func TestTheConnectorsHeartbeatScheduleIsCreatedMendedAndTakenThroughCloudSchedu
 	url := servedAt(c.Connector())
 	path := schedulePath(c, c.Connector())
 
-	if err := c.scheduleConnectorHeartbeat(ctx, url); err != nil {
+	if err := scheduleConnectorHeartbeat(ctx, c, url); err != nil {
 		t.Fatalf("scheduleConnectorHeartbeat() = %v", err)
 	}
 	if created := server.schedule(path); created == nil || created.HttpTarget.Uri != url+"/v1/heartbeat" {
@@ -51,20 +54,20 @@ func TestTheConnectorsHeartbeatScheduleIsCreatedMendedAndTakenThroughCloudSchedu
 	}
 
 	server.change(func() { server.schedules[path].State = "PAUSED" })
-	if err := c.scheduleConnectorHeartbeat(ctx, url); err != nil {
+	if err := scheduleConnectorHeartbeat(ctx, c, url); err != nil {
 		t.Fatalf("scheduleConnectorHeartbeat() over a paused schedule = %v, want a reinstall to mend it", err)
 	}
 	if !server.wasPatched(path) || server.schedule(path).State != "ENABLED" {
 		t.Errorf("the schedule after a reinstall is %s, want it patched and calling again", encoded(t, server.schedule(path)))
 	}
 
-	if err := c.takeConnectorSchedule(ctx, nil); err != nil {
+	if err := takeConnectorSchedule(ctx, c, nil); err != nil {
 		t.Fatalf("takeConnectorSchedule() = %v", err)
 	}
 	if server.schedule(path) != nil {
 		t.Error("the schedule outlived the connector, and it would call a service that is gone every minute")
 	}
-	if err := c.takeConnectorSchedule(ctx, nil); err != nil {
+	if err := takeConnectorSchedule(ctx, c, nil); err != nil {
 		t.Errorf("takeConnectorSchedule() of one already gone = %v, want nothing to do", err)
 	}
 }

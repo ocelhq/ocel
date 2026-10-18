@@ -94,7 +94,7 @@ func TestATaskWhoseScheduleJobWasDeletedPlansAnUpdate(t *testing.T) {
 	p, server := servingTopics(t)
 	in := aTopic(t, provider.BindingTask, cronTask("*/5 * * * *"))
 	recorded := provisionTopic(t, p, in)
-	job := "projects/acme-prod/locations/europe-west1/jobs/" + taskNames(names(t, p), in.Ref).ScheduleJob("orders")
+	job := "projects/acme-prod/locations/europe-west1/jobs/" + taskNames(namesOf(t, p), in.Ref).ScheduleJob("orders")
 	if server.job(job) == nil {
 		t.Fatalf("no Cloud Scheduler job %s was made", job)
 	}
@@ -120,7 +120,7 @@ func TestATopicThatDropsAConsumerPlansAnUpdateNamingItsSubscription(t *testing.T
 	p, server := servingTopics(t)
 	in := aTopic(t, provider.BindingTopic, consumersNamed(false, "ship", "bill"))
 	recorded := provisionTopic(t, p, in)
-	subscription := "projects/acme-prod/subscriptions/" + taskNames(names(t, p), in.Ref).Subscription("orders", "bill")
+	subscription := "projects/acme-prod/subscriptions/" + taskNames(namesOf(t, p), in.Ref).Subscription("orders", "bill")
 	server.holdSubscription(subscription)
 
 	action, reason, err := planTopic(t, p, server, aTopic(t, provider.BindingTopic, consumersNamed(false, "ship")), recorded)

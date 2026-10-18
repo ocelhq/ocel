@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
 const bucketObjectsRole = "roles/storage.objectAdmin"
@@ -19,14 +20,14 @@ func grantedBuckets(app *provider.AppSpec) []string {
 	return granted
 }
 
-func bucketGrants(spec provider.StackSpec, account, member string) []appGrant {
+func bucketGrants(spec provider.StackSpec, account, member string) []grants.Grant {
 	buckets := grantedBuckets(spec.App)
 	if len(buckets) == 0 {
 		return nil
 	}
-	grants := make([]appGrant, 0, len(buckets)+1)
+	granted := make([]grants.Grant, 0, len(buckets)+1)
 	for _, bucket := range buckets {
-		grants = append(grants, on(targetBucket, bucket, bucketObjectsRole, member))
+		granted = append(granted, grants.On(grants.Bucket, bucket, bucketObjectsRole, member))
 	}
-	return append(grants, on(targetAccount, account, tokenCreatorRole, member))
+	return append(granted, grants.On(grants.Account, account, tokenCreatorRole, member))
 }

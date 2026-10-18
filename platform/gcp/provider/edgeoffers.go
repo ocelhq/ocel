@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const (
@@ -54,7 +55,7 @@ func adoptedEdgeKey(tier environment.Tier, kind edge.Kind) records.Key {
 
 func adoptEdgeOffers(
 	ctx context.Context,
-	c *clients,
+	c *gcloud.Clients,
 	store records.Store,
 	tier environment.Tier,
 	kind edge.Kind,
@@ -64,7 +65,7 @@ func adoptEdgeOffers(
 	if len(out.Offers) == 0 {
 		return nil
 	}
-	say := ensureProgress(runProgress)
+	say := gcloud.EnsureProgress(runProgress)
 	stored, storedCredentials, err := readAdoptedEdge(ctx, c, store, tier, kind)
 	if err != nil {
 		return err
@@ -111,7 +112,7 @@ func adoptEdgeOffers(
 	return writeAdoptedEdge(ctx, store, tier, kind, adopted)
 }
 
-func edgeCredentialUnrecorded(c *clients, tier environment.Tier, kind edge.Kind, surface, scriptName string) error {
+func edgeCredentialUnrecorded(c *gcloud.Clients, tier environment.Tier, kind edge.Kind, surface, scriptName string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %s edge reoffered its %s %q without a bootstrap credential, meaning it still has the one it was given, "+
 			"but secret %s stores none: a prior bootstrap set that credential and failed before storing it. It cannot be read "+
@@ -119,7 +120,7 @@ func edgeCredentialUnrecorded(c *clients, tier environment.Tier, kind edge.Kind,
 		kind, surface, scriptName, c.EdgeCredentialsSecret(tier, kind), scriptName, kind)
 }
 
-func readAdoptedEdge(ctx context.Context, c *clients, store records.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
+func readAdoptedEdge(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
 	var adopted adoptedEdge
 	entry, err := records.ReadOrEmpty(ctx, store, adoptedEdgeKey(tier, kind))
 	if err != nil {
@@ -137,13 +138,13 @@ func readAdoptedEdge(ctx context.Context, c *clients, store records.Store, tier 
 	return adopted, credentials, nil
 }
 
-func readEdgeCredentials(ctx context.Context, c *clients, tier environment.Tier, kind edge.Kind) (edgeCredentials, error) {
+func readEdgeCredentials(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) (edgeCredentials, error) {
 	service, err := c.Secrets()
 	if err != nil {
 		return edgeCredentials{}, err
 	}
 	name := c.EdgeCredentialsSecret(tier, kind)
-	payload, found, err := c.readSecretVersion(ctx, service, name, latestVersion)
+	payload, found, err := c.ReadSecretVersion(ctx, service, name, latestVersion)
 	if err != nil || !found {
 		return edgeCredentials{}, err
 	}
@@ -154,7 +155,7 @@ func readEdgeCredentials(ctx context.Context, c *clients, tier environment.Tier,
 	return credentials, nil
 }
 
-func writeEdgeCredentials(ctx context.Context, c *clients, tier environment.Tier, kind edge.Kind, credentials edgeCredentials) error {
+func writeEdgeCredentials(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind, credentials edgeCredentials) error {
 	service, err := c.Secrets()
 	if err != nil {
 		return err
@@ -164,33 +165,33 @@ func writeEdgeCredentials(ctx context.Context, c *clients, tier environment.Tier
 	if err != nil {
 		return fmt.Errorf("marshal the %s edge's bootstrap credentials: %w", kind, err)
 	}
-	if err := c.ensureSecret(ctx, service, name); err != nil {
+	if err := c.EnsureSecret(ctx, service, name); err != nil {
 		return err
 	}
-	added, err := c.addSecretVersion(ctx, service, name, payload)
+	added, err := c.AddSecretVersion(ctx, service, name, payload)
 	if err != nil {
 		return err
 	}
-	return c.destroyVersionsBefore(ctx, service, name, added)
+	return c.DestroyVersionsBefore(ctx, service, name, added)
 }
 
-func ensurePurgeSeed(ctx context.Context, c *clients, tier environment.Tier, kind edge.Kind) error {
+func ensurePurgeSeed(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) error {
 	service, err := c.Secrets()
 	if err != nil {
 		return err
 	}
 	name := c.PurgeSeedSecret(tier, kind)
-	if _, found, err := c.readSecretVersion(ctx, service, name, firstSecretVersion); err != nil || found {
+	if _, found, err := c.ReadSecretVersion(ctx, service, name, gcloud.FirstSecretVersion); err != nil || found {
 		return err
 	}
-	if err := c.ensureSecret(ctx, service, name); err != nil {
+	if err := c.EnsureSecret(ctx, service, name); err != nil {
 		return err
 	}
 	minted := make([]byte, purgeSeedLen)
 	if _, err := rand.Read(minted); err != nil {
 		return fmt.Errorf("mint the %s edge's purge seed: %w", kind, err)
 	}
-	_, err = c.addSecretVersion(ctx, service, name, []byte(hex.EncodeToString(minted)))
+	_, err = c.AddSecretVersion(ctx, service, name, []byte(hex.EncodeToString(minted)))
 	return err
 }
 
@@ -215,7 +216,7 @@ func notBootstrapped(tier environment.Tier, kind edge.Kind, missing string) erro
 		kind, missing, provider.BootstrapCommand(tier))
 }
 
-func requireAdoptedEdge(ctx context.Context, c *clients, store records.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
+func requireAdoptedEdge(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
 	adopted, credentials, err := readAdoptedEdge(ctx, c, store, tier, kind)
 	if err != nil {
 		return adoptedEdge{}, edgeCredentials{}, err
@@ -235,12 +236,12 @@ func requireAdoptedEdge(ctx context.Context, c *clients, store records.Store, ti
 	return adopted, credentials, nil
 }
 
-func readPurgeSeed(ctx context.Context, c *clients, tier environment.Tier, kind edge.Kind) (string, error) {
+func readPurgeSeed(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) (string, error) {
 	service, err := c.Secrets()
 	if err != nil {
 		return "", err
 	}
-	seed, found, err := c.readSecretVersion(ctx, service, c.PurgeSeedSecret(tier, kind), firstSecretVersion)
+	seed, found, err := c.ReadSecretVersion(ctx, service, c.PurgeSeedSecret(tier, kind), gcloud.FirstSecretVersion)
 	if err != nil {
 		return "", err
 	}
@@ -250,7 +251,7 @@ func readPurgeSeed(ctx context.Context, c *clients, tier environment.Tier, kind 
 	return string(seed), nil
 }
 
-func forgetEdgeOffers(ctx context.Context, c *clients, store records.Store, tier environment.Tier, kind edge.Kind) error {
+func forgetEdgeOffers(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, kind edge.Kind) error {
 	if err := records.Forget(ctx, store, adoptedEdgeKey(tier, kind)); err != nil {
 		return fmt.Errorf("forget the %s edge's adopted workers: %w", kind, err)
 	}
@@ -259,7 +260,7 @@ func forgetEdgeOffers(ctx context.Context, c *clients, store records.Store, tier
 		return err
 	}
 	for _, name := range []string{c.EdgeCredentialsSecret(tier, kind), c.PurgeSeedSecret(tier, kind)} {
-		if err := c.deleteSecret(ctx, service, name); err != nil {
+		if err := c.DeleteSecret(ctx, service, name); err != nil {
 			return err
 		}
 	}

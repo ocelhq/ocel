@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const (
@@ -46,12 +48,12 @@ func servesNext(app *provider.AppSpec) bool {
 	return app.Framework == buildoutput.FrameworkNext
 }
 
-func fillNextServingDefaults(s serving) serving {
-	if s.memory == 0 {
-		s.memory = nextMemoryMB
+func fillNextServingDefaults(s run.Serving) run.Serving {
+	if s.Memory == 0 {
+		s.Memory = nextMemoryMB
 	}
-	if s.timeout == 0 {
-		s.timeout = nextRequestTimeout
+	if s.Timeout == 0 {
+		s.Timeout = nextRequestTimeout
 	}
 	return s
 }
@@ -77,17 +79,17 @@ type nextCache struct {
 
 func signsEdgePurges(spec provider.StackSpec) bool {
 	return spec.App != nil && spec.App.ISR != nil &&
-		spec.App.Compute == provider.ComputeServerless && factsOf(spec.Edge).RunsCode
+		spec.App.Compute == provider.ComputeServerless && run.FactsOf(spec.Edge).RunsCode
 }
 
-func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, cache nextCache) map[string]string {
+func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, cache nextCache) map[string]string {
 	app := spec.App
-	env := map[string]string{memoryEnvVar: strconv.Itoa(s.memory)}
+	env := map[string]string{memoryEnvVar: strconv.Itoa(s.Memory)}
 	if app.Router != "" {
 		env[routerKindEnvVar] = string(app.Router)
 	}
 	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.RootFunction {
-		if factsOf(spec.Edge).RunsCode {
+		if run.FactsOf(spec.Edge).RunsCode {
 			env[imageEndpointEnvVar] = "1"
 		} else {
 			env[edge.OriginDispatchVar] = "1"
@@ -141,18 +143,18 @@ func newNextContainerEnv(spec provider.StackSpec, memory int, cache nextCache) m
 	return env
 }
 
-func fillNextContainerDefaults(s serving) serving {
-	if s.memory == 0 {
-		s.memory = nextMemoryMB
+func fillNextContainerDefaults(s run.Serving) run.Serving {
+	if s.Memory == 0 {
+		s.Memory = nextMemoryMB
 	}
 	return s
 }
 
-func newNextCache(names Names, tier environment.Tier, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
+func newNextCache(names names.Names, tier environment.Tier, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
 	return nextCache{
 		purgeSecret:     purgeSecret,
 		bucket:          names.Bucket(tier),
-		tagDatabase:     "projects/" + names.project + "/databases/" + names.TagDatabase(tier),
+		tagDatabase:     "projects/" + names.Project() + "/databases/" + names.TagDatabase(tier),
 		storageEndpoint: storageEndpoint,
 		tagEndpoint:     tagEndpoint,
 	}

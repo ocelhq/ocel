@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -35,7 +35,7 @@ func (s *deletingRun) open(t *testing.T) *Provider {
 			s.mu.Unlock()
 		}
 		serve(w, r)
-	}).endpoint)
+	}).Endpoint)
 }
 
 func recordWorkerRelease(t *testing.T, p *Provider, env, app, release string, workers map[string]string) {
@@ -57,7 +57,7 @@ func TestRetiringDeletesTheWorkerServicesOfEachAppNoLongerDeployed(t *testing.T)
 	t.Parallel()
 
 	server := &deletingRun{}
-	server.service = &run.GoogleCloudRunV2Service{Name: "projects/acme-prod/locations/europe-west1/services/any"}
+	server.service = &runv2.GoogleCloudRunV2Service{Name: "projects/acme-prod/locations/europe-west1/services/any"}
 	p := server.open(t)
 	recordWorkerRelease(t, p, "prod", "web", "r00000001", map[string]string{"media": "ocel-shop-prod-w-media"})
 	recordWorkerRelease(t, p, "prod", "jobs", "r00000001", map[string]string{"mail": "ocel-shop-prod-w-mail"})

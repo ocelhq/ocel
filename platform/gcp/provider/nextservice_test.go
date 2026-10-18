@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 func nextSpec() provider.StackSpec {
@@ -47,7 +48,7 @@ func nextSpec() provider.StackSpec {
 	}
 }
 
-func releasedNext(t *testing.T, spec provider.StackSpec) *run.GoogleCloudRunV2Container {
+func releasedNext(t *testing.T, spec provider.StackSpec) *runv2.GoogleCloudRunV2Container {
 	t.Helper()
 	server := &runServer{}
 	p := server.open(t)
@@ -66,8 +67,8 @@ func TestANextServiceAsksForTwoGibibytesOfMemoryBilledPerInstance(t *testing.T) 
 	if got := container.Resources.Limits["memory"]; got != "2048Mi" {
 		t.Errorf("a Next service asks for %q of memory, want 2048Mi: rendering a page and resizing an image in one instance outgrows the profile a node function runs on", got)
 	}
-	if got := container.Resources.Limits["cpu"]; got != revisionCPU {
-		t.Errorf("a Next service asks for %q CPU, want %q, which Cloud Run pairs with up to 4 GiB", got, revisionCPU)
+	if got := container.Resources.Limits["cpu"]; got != run.RevisionCPU {
+		t.Errorf("a Next service asks for %q CPU, want %q, which Cloud Run pairs with up to 4 GiB", got, run.RevisionCPU)
 	}
 	if container.Resources.CpuIdle {
 		t.Error("a Next service idles its CPU once a response ends, want it kept: work Next hands waitUntil runs after the response")
@@ -107,8 +108,8 @@ func TestANodeFunctionKeepsTheProfileItRunsOn(t *testing.T) {
 	spec.App.Functions[0].Framework.Name = buildoutput.FrameworkNode
 
 	container := releasedNext(t, spec)
-	if got := container.Resources.Limits["memory"]; got != revisionMemory {
-		t.Errorf("a node function asks for %q of memory, want the profile's %q", got, revisionMemory)
+	if got := container.Resources.Limits["memory"]; got != run.RevisionMemory {
+		t.Errorf("a node function asks for %q of memory, want the profile's %q", got, run.RevisionMemory)
 	}
 	if _, told := envOf(container)[memoryEnvVar]; told {
 		t.Errorf("a node function is told %s, which only the Next runtime reads", memoryEnvVar)
@@ -159,7 +160,7 @@ func TestANextServiceIsToldTheCacheBucketAndTheObjectPrefixItsEntriesLiveUnder(t
 	}
 	env := envOf(server.created[0].Template.Containers[0])
 
-	if got, want := env["OCEL_ISR_BUCKET"], names(t, p).Bucket(environment.TierProduction); got != want {
+	if got, want := env["OCEL_ISR_BUCKET"], namesOf(t, p).Bucket(environment.TierProduction); got != want {
 		t.Errorf("the Next service reads OCEL_ISR_BUCKET=%q, want its tier's bucket %q", got, want)
 	}
 	if got, want := env["OCEL_ISR_OBJECT_PREFIX"], "cache/shop/web/prod/r1/isr"; got != want {
@@ -291,7 +292,7 @@ func TestANextAppIsToldTheTagsDatabaseItsRecordsLiveIn(t *testing.T) {
 	}
 	env := envOf(server.created[0].Template.Containers[0])
 
-	if got, want := env["OCEL_TAG_DATABASE"], "projects/"+names(t, p).project+"/databases/"+names(t, p).TagDatabase(environment.TierProduction); got != want {
+	if got, want := env["OCEL_TAG_DATABASE"], "projects/"+namesOf(t, p).Project()+"/databases/"+namesOf(t, p).TagDatabase(environment.TierProduction); got != want {
 		t.Errorf("the Next service reads OCEL_TAG_DATABASE=%q, want %q", got, want)
 	}
 	endpoint, err := url.Parse(env["OCEL_FIRESTORE_ENDPOINT"])
@@ -365,7 +366,7 @@ func nextContainerSpec() provider.StackSpec {
 	}
 }
 
-func releasedNextContainer(t *testing.T, spec provider.StackSpec) (*run.GoogleCloudRunV2Service, *runServer) {
+func releasedNextContainer(t *testing.T, spec provider.StackSpec) (*runv2.GoogleCloudRunV2Service, *runServer) {
 	t.Helper()
 	server := &runServer{}
 	p := server.open(t)
@@ -405,8 +406,8 @@ func TestANextContainerAsksForTwoGibibytesOfMemory(t *testing.T) {
 	if got := container.Resources.Limits["memory"]; got != "2048Mi" {
 		t.Errorf("a Next container asks for %q of memory, want 2048Mi, as a serverless Next service does", got)
 	}
-	if got := container.Resources.Limits["cpu"]; got != revisionCPU {
-		t.Errorf("a Next container asks for %q CPU, want %q", got, revisionCPU)
+	if got := container.Resources.Limits["cpu"]; got != run.RevisionCPU {
+		t.Errorf("a Next container asks for %q CPU, want %q", got, run.RevisionCPU)
 	}
 	if got := envOf(container)[memoryEnvVar]; got != "2048" {
 		t.Errorf("the Next runtime reads %s=%q, want 2048", memoryEnvVar, got)
@@ -422,11 +423,11 @@ func TestANextContainerIsToldTheCacheBucketObjectPrefixAndTagsDatabaseItsEntries
 	env := envOf(server.created[0].Template.Containers[0])
 
 	for name, want := range map[string]string{
-		"OCEL_ISR_BUCKET":        names(t, p).Bucket(environment.TierProduction),
+		"OCEL_ISR_BUCKET":        namesOf(t, p).Bucket(environment.TierProduction),
 		"OCEL_ISR_OBJECT_PREFIX": "cache/shop/web/prod/r1/isr",
 		"OCEL_ISR_PREFIX":        "prod/shop/web/r1/isr",
 		"OCEL_ISR_TAG_NAMESPACE": "PROJECT#shop#STACK#prod--web--r1#TAG#",
-		"OCEL_TAG_DATABASE":      "projects/" + names(t, p).project + "/databases/" + names(t, p).TagDatabase(environment.TierProduction),
+		"OCEL_TAG_DATABASE":      "projects/" + namesOf(t, p).Project() + "/databases/" + namesOf(t, p).TagDatabase(environment.TierProduction),
 	} {
 		if got := env[name]; got != want {
 			t.Errorf("a Next container reads %s=%q, want %q", name, got, want)
@@ -459,8 +460,8 @@ func TestAContainerThatServesNoNextKeepsItsProfileAndIsToldNoCacheLocation(t *te
 	service, _ := releasedNextContainer(t, spec)
 
 	container := service.Template.Containers[0]
-	if got := container.Resources.Limits["memory"]; got != revisionMemory {
-		t.Errorf("a container that serves no Next asks for %q of memory, want the profile's %q", got, revisionMemory)
+	if got := container.Resources.Limits["memory"]; got != run.RevisionMemory {
+		t.Errorf("a container that serves no Next asks for %q of memory, want the profile's %q", got, run.RevisionMemory)
 	}
 	for name := range envOf(container) {
 		if strings.HasPrefix(name, "OCEL_ISR_") || name == tagDatabaseEnvVar || name == memoryEnvVar {

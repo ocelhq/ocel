@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func deployingBehindALB(slug string) provider.DeployPreflight {
@@ -154,7 +155,7 @@ func TestADryDeployBehindTheALBPlansItsLoadBalancerAndRaisesNothing(t *testing.T
 
 func TestADeployMayAddAndRetireTheALBsGateRepositoryAndTheBaseKeepsTheCDNPurgeRole(t *testing.T) {
 	t.Parallel()
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	parts := newPartsRole(names).permissions
 	for _, permission := range []string{"artifactregistry.repositories.create", "artifactregistry.repositories.delete"} {
 		if !slices.Contains(parts, permission) {

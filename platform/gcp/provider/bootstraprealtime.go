@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
 const (
@@ -24,16 +25,16 @@ func (b bootstrap) realtimePurpose(tier environment.Tier) accountPurpose {
 	}
 }
 
-func realtimeMember(c *clients, tier environment.Tier) string {
+func realtimeMember(c *gcloud.Clients, tier environment.Tier) string {
 	return "serviceAccount:" + c.RealtimeAccountEmail(tier)
 }
 
-func (b bootstrap) realtimeKeysCondition(ctx context.Context, tier environment.Tier) (*iampolicy.Condition, error) {
+func (b bootstrap) realtimeKeysCondition(ctx context.Context, tier environment.Tier) (*policy.Condition, error) {
 	number, err := b.clients.ReadProjectNumber(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &iampolicy.Condition{
+	return &policy.Condition{
 		Title: "ocel " + string(b.clients.Namespace()) + " " + string(tier) + " realtime keys",
 		Expression: fmt.Sprintf("resource.type == %q && resource.name.startsWith(%q)",
 			secretVersionType, fmt.Sprintf("projects/%d/secrets/%s", number, b.clients.RealtimeKeysSecretPrefix(tier))),
@@ -54,7 +55,7 @@ func (b bootstrap) bindRealtimeKeysRead(ctx context.Context, tier environment.Ti
 		return err
 	}
 	member := realtimeMember(b.clients, tier)
-	if err := b.clients.bindProjectRole(ctx, member, realtimeKeysReaderRole, condition, granting); err != nil {
+	if err := gcloud.BindProjectRole(ctx, b.clients, member, realtimeKeysReaderRole, condition, granting); err != nil {
 		return fmt.Errorf("set whether %s may read the %s tier's realtime keys: %w", member, tier, err)
 	}
 	return nil
@@ -65,5 +66,5 @@ func (b bootstrap) realtimeKeysReadGranted(ctx context.Context, tier environment
 	if err != nil {
 		return false, err
 	}
-	return b.clients.projectRoleGranted(ctx, realtimeMember(b.clients, tier), realtimeKeysReaderRole, condition)
+	return gcloud.ProjectRoleGranted(ctx, b.clients, realtimeMember(b.clients, tier), realtimeKeysReaderRole, condition)
 }

@@ -13,6 +13,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const (
@@ -23,11 +26,11 @@ const (
 	latestSecretVersion = "latest"
 )
 
-func gateMount(secret string) secretMount {
-	return secretMount{name: gateVolume, secret: secret, dir: gateDir, file: gateFile}
+func gateMount(secret string) run.SecretMount {
+	return run.SecretMount{Name: gateVolume, Secret: secret, Dir: gateDir, File: gateFile}
 }
 
-func (c *clients) writeGate(ctx context.Context, tier environment.Tier, slug string, held *gate.Gate) error {
+func writeGate(ctx context.Context, c *gcloud.Clients, tier environment.Tier, slug string, held *gate.Gate) error {
 	service, err := c.Secrets()
 	if err != nil {
 		return err
@@ -37,34 +40,34 @@ func (c *clients) writeGate(ctx context.Context, tier environment.Tier, slug str
 	if err != nil {
 		return err
 	}
-	current, found, err := c.readSecretVersion(ctx, service, name, latestSecretVersion)
+	current, found, err := c.ReadSecretVersion(ctx, service, name, latestSecretVersion)
 	if err != nil {
 		return err
 	}
 	if !found {
-		if err := c.ensureSecret(ctx, service, name); err != nil {
+		if err := c.EnsureSecret(ctx, service, name); err != nil {
 			return err
 		}
-		if current, found, err = c.readSecretVersion(ctx, service, name, latestSecretVersion); err != nil {
+		if current, found, err = c.ReadSecretVersion(ctx, service, name, latestSecretVersion); err != nil {
 			return err
 		}
 	}
 	if found && bytes.Equal(current, written) {
 		return nil
 	}
-	added, err := c.addSecretVersion(ctx, service, name, written)
+	added, err := c.AddSecretVersion(ctx, service, name, written)
 	if err != nil {
 		return err
 	}
-	return c.destroyVersionsBeforePrevious(ctx, service, name, added)
+	return c.DestroyVersionsBeforePrevious(ctx, service, name, added)
 }
 
-func (c *clients) readGate(ctx context.Context, tier environment.Tier, slug string) (*gate.Gate, bool, error) {
+func readGate(ctx context.Context, c *gcloud.Clients, tier environment.Tier, slug string) (*gate.Gate, bool, error) {
 	service, err := c.Secrets()
 	if err != nil {
 		return nil, false, err
 	}
-	current, found, err := c.readSecretVersion(ctx, service, c.GateSecret(tier, slug), latestSecretVersion)
+	current, found, err := c.ReadSecretVersion(ctx, service, c.GateSecret(tier, slug), latestSecretVersion)
 	if err != nil || !found {
 		return nil, false, err
 	}
@@ -72,19 +75,19 @@ func (c *clients) readGate(ctx context.Context, tier environment.Tier, slug stri
 	return held, true, err
 }
 
-func (c *clients) deleteGate(ctx context.Context, tier environment.Tier, slug string) error {
+func deleteGate(ctx context.Context, c *gcloud.Clients, tier environment.Tier, slug string) error {
 	service, err := c.Secrets()
 	if err != nil {
 		return err
 	}
-	return c.deleteSecret(ctx, service, c.GateSecret(tier, slug))
+	return c.DeleteSecret(ctx, service, c.GateSecret(tier, slug))
 }
 
-func (c *clients) gateGrants(spec provider.StackSpec, member string) []appGrant {
+func gateGrants(c *gcloud.Clients, spec provider.StackSpec, member string) []grants.Grant {
 	if !mountsGateOnAnyService(spec) {
 		return nil
 	}
-	return []appGrant{on(targetSecret, c.GateSecret(spec.Ref.Tier, spec.Ref.Project), gateReaderRole, member)}
+	return []grants.Grant{grants.On(grants.Secret, c.GateSecret(spec.Ref.Tier, spec.Ref.Project), gateReaderRole, member)}
 }
 
 func mountsGateOnAnyService(spec provider.StackSpec) bool {
@@ -99,17 +102,17 @@ var gateFrameworks = []string{buildoutput.FrameworkNode, buildoutput.FrameworkNe
 
 type gatedServing struct {
 	env    map[string]string
-	mounts []secretMount
+	mounts []run.SecretMount
 }
 
 func (g gatedServing) hasGate() bool { return len(g.env) > 0 }
 
-func (p *Provider) provisionGate(ctx context.Context, c *clients, spec provider.StackSpec) (gatedServing, error) {
+func (p *Provider) provisionGate(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec) (gatedServing, error) {
 	if !mountsGate(spec) {
 		return gatedServing{}, nil
 	}
 	tier, slug := spec.Ref.Tier, spec.Ref.Project
-	held, found, err := c.readGate(ctx, tier, slug)
+	held, found, err := readGate(ctx, c, tier, slug)
 	switch {
 	case err != nil:
 		return gatedServing{}, fmt.Errorf("read the %s gate of %s from the secret its services mount: %w", tier, slug, err)
@@ -128,18 +131,18 @@ func (p *Provider) provisionGate(ctx context.Context, c *clients, spec provider.
 	}
 	mount := gateMount(c.GateSecret(tier, slug))
 	return gatedServing{
-		env:    map[string]string{gate.MountedFileVar: mount.dir + "/" + mount.file},
-		mounts: []secretMount{mount},
+		env:    map[string]string{gate.MountedFileVar: mount.Dir + "/" + mount.File},
+		mounts: []run.SecretMount{mount},
 	}, nil
 }
 
-func (c *clients) applyGate(ctx context.Context, g gatedServing, what string, served *serving) error {
+func applyGate(ctx context.Context, c *gcloud.Clients, g gatedServing, what string, served *run.Serving) error {
 	if !g.hasGate() {
 		return nil
 	}
 	env := maps.Clone(g.env)
-	if served.compute == provider.ComputeContainer {
-		token, err := c.readProbeToken(ctx, served.service)
+	if served.Compute == provider.ComputeContainer {
+		token, err := readProbeToken(ctx, c, served.Service)
 		if err != nil {
 			return err
 		}
@@ -148,20 +151,20 @@ func (c *clients) applyGate(ctx context.Context, g gatedServing, what string, se
 				return err
 			}
 		}
-		served.probeToken = token
+		served.ProbeToken = token
 		env[originguard.ProbeTokenVar] = token
 	}
-	values, err := mergeValues(what, gateValues, served.env, env)
+	values, err := mergeValues(what, gateValues, served.Env, env)
 	if err != nil {
 		return err
 	}
-	served.env = values
-	served.mounts = append(served.mounts, g.mounts...)
+	served.Env = values
+	served.Mounts = append(served.Mounts, g.mounts...)
 	return nil
 }
 
 func mountsGate(spec provider.StackSpec) bool {
-	return factsOf(spec.Edge).GatesAtOrigin
+	return run.FactsOf(spec.Edge).GatesAtOrigin
 }
 
 func isGated(spec provider.StackSpec) bool {
@@ -190,7 +193,7 @@ func (s gateSecrets) Publish(ctx context.Context, tier environment.Tier, slug st
 	if err != nil {
 		return err
 	}
-	return c.writeGate(ctx, tier, slug, held)
+	return writeGate(ctx, c, tier, slug, held)
 }
 
 func (s gateSecrets) Remove(ctx context.Context, tier environment.Tier, slug string) error {
@@ -198,5 +201,5 @@ func (s gateSecrets) Remove(ctx context.Context, tier environment.Tier, slug str
 	if err != nil {
 		return err
 	}
-	return c.deleteGate(ctx, tier, slug)
+	return deleteGate(ctx, c, tier, slug)
 }

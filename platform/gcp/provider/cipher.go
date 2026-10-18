@@ -6,12 +6,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type cipher struct{ p *Provider }
 
-func (s cipher) openKMS(ctx context.Context, tier environment.Tier) (*clients, ports.Cipher, error) {
+func (s cipher) openKMS(ctx context.Context, tier environment.Tier) (*gcloud.Clients, ports.Cipher, error) {
 	if tier == "" {
 		return nil, ports.Cipher{}, ports.Tierless("a value")
 	}
@@ -32,7 +33,7 @@ func (s cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 		return sealed, err
 	}
 	project, _ := ports.ProjectSealedFor(bound)
-	if err := c.ensureProjectKey(ctx, tier, project); err != nil {
+	if err := ensureProjectKey(ctx, c, tier, project); err != nil {
 		return nil, err
 	}
 	return opened.Seal(ctx, tier, bound, plaintext)

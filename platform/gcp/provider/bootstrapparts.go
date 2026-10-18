@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const (
@@ -69,7 +70,7 @@ func (b bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 			Shape: &provider.PartShape{Vendor: string(Vendor), Region: read.Region, Resources: []pricing.Shaped{{
 				Name:       b.clients.Bastion(read.Tier),
 				Type:       tfCloudRunService,
-				Properties: serviceProperties(true, 0, revisionMemory, ingressInternal),
+				Properties: serviceProperties(true, 0, run.RevisionMemory, run.IngressInternal),
 			}}},
 		})
 	}
@@ -86,8 +87,8 @@ func (b bootstrap) surveyedParts(read survey, stacks []provider.BootstrapStack) 
 	}
 	for _, item := range bootstrapItems(read.Names, read.Tier, read.Emulated) {
 		base.Resources = append(base.Resources, provider.PartResource{Kind: string(item.Kind), ID: item.Name})
-		if resourceType, priced := itemTypes[item.Kind]; priced {
-			base.Shape.Resources = append(base.Shape.Resources, pricing.Shaped{Name: item.Name, Type: resourceType, Properties: itemProperties(item, read.Region)})
+		if shaped, priced := item.shape(read.Region); priced {
+			base.Shape.Resources = append(base.Shape.Resources, shaped)
 		}
 	}
 	parts := []provider.BootstrapPart{base}

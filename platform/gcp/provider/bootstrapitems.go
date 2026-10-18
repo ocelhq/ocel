@@ -7,23 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-)
-
-type Kind string
-
-const (
-	KindDatabase       Kind = "firestore:database"
-	KindBucket         Kind = "storage:bucket"
-	KindKeyRing        Kind = "kms:keyring"
-	KindKey            Kind = "kms:key"
-	KindSecret         Kind = "secretmanager:secret"
-	KindRepository     Kind = "artifactregistry:repository"
-	KindServiceAccount Kind = "iam:serviceaccount"
-	KindRole           Kind = "iam:role"
-	KindService        Kind = "run:service"
-	KindSchedule       Kind = "cloudscheduler:job"
-	KindGrant          Kind = "resourcemanager:grant"
-	KindQueue          Kind = "cloudtasks:queue"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const StampObject = "ocel/bootstrap.json"
@@ -53,26 +37,15 @@ type item struct {
 
 func (i item) ID() string { return string(i.Kind) + "/" + i.Name }
 
-var kindNouns = map[Kind]string{
-	KindDatabase:       "Firestore database",
-	KindBucket:         "bucket",
-	KindKeyRing:        "KMS key ring",
-	KindKey:            "KMS key",
-	KindSecret:         "secret",
-	KindRepository:     "Artifact Registry repository",
-	KindServiceAccount: "service account",
-	KindRole:           "custom role",
-	KindGrant:          "project grant of",
-	KindQueue:          "Cloud Tasks queue",
+func (i item) phrase() string { return i.kind().noun + " " + i.Name }
+
+func (i item) kind() kind { return kinds[i.Kind] }
+
+func provisioned(target item, emulated bool) bool {
+	return !emulated || !target.kind().emulatorSkips
 }
 
-func (i item) phrase() string { return kindNouns[i.Kind] + " " + i.Name }
-
-func provisioned(kind Kind, emulated bool) bool {
-	return !emulated || (kind != KindRepository && kind != KindRole && kind != KindGrant)
-}
-
-func stackItems(names Names, tier environment.Tier, emulated bool) []item {
+func stackItems(names names.Names, tier environment.Tier, emulated bool) []item {
 	items := []item{
 		{
 			Kind: KindDatabase, Name: names.Database(), Shared: true, Slow: true,
@@ -139,17 +112,17 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Note: "the identity the env source sync runs as and Cloud Scheduler calls it as: it reads and writes this tier's records, seals and opens under the tier key and its projects' keys, and calls the sync service alone",
 		},
 	}
-	return slices.DeleteFunc(items, func(each item) bool { return !provisioned(each.Kind, emulated) })
+	return slices.DeleteFunc(items, func(each item) bool { return !provisioned(each, emulated) })
 }
 
-func parameterItems(names Names, tier environment.Tier) []item {
+func parameterItems(names names.Names, tier environment.Tier) []item {
 	return []item{{
 		Kind: KindSecret, Name: names.PassphraseSecret(tier),
 		Note: "the passphrase this tier's state is encrypted under, minted here and never written over",
 	}}
 }
 
-func bootstrapItems(names Names, tier environment.Tier, emulated bool) []item {
+func bootstrapItems(names names.Names, tier environment.Tier, emulated bool) []item {
 	return slices.Concat(stackItems(names, tier, emulated), parameterItems(names, tier))
 }
 

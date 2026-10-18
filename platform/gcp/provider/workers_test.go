@@ -10,20 +10,23 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 func TestAWorkerIsAServiceOnlyPubSubReachesThatScalesToNothing(t *testing.T) {
 	t.Parallel()
 
-	worker := workerServing(provider.WorkerSpec{Name: "media", Concurrency: 4}, serving{
-		service: "ocel-shop-prod-web-w-media-a1b2c3",
-		image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
-		env:     map[string]string{"REGION": "eu"},
-		account: "ocel-1a2b3c4d5e@acme-prod.iam.gserviceaccount.com",
+	worker := workerServing(provider.WorkerSpec{Name: "media", Concurrency: 4}, run.Serving{
+		Service: "ocel-shop-prod-web-w-media-a1b2c3",
+		Image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
+		Env:     map[string]string{"REGION": "eu"},
+		Account: "ocel-1a2b3c4d5e@acme-prod.iam.gserviceaccount.com",
 	})
 	desired := desiredOf(t, worker)
 
-	if desired.Ingress != ingressInternal {
+	if desired.Ingress != run.IngressInternal {
 		t.Errorf("a worker takes %s traffic, want internal alone: Pub/Sub pushes to it from inside the project", desired.Ingress)
 	}
 	if desired.InvokerIamDisabled {
@@ -57,27 +60,27 @@ func TestAWorkerIsAServiceOnlyPubSubReachesThatScalesToNothing(t *testing.T) {
 func TestAWorkerIsNamedApartFromItsAppAndEveryOtherWorker(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
-	app, err := names.Service("shop", stackrecords.ProductionEnv, "web", "web")
+	named := names.New("ocel", "acme-prod")
+	app, err := named.Service("shop", stackrecords.ProductionEnv, "web", "web")
 	if err != nil {
 		t.Fatal(err)
 	}
-	media := names.WorkerService("shop", stackrecords.ProductionEnv, "web", "media")
-	ledger := names.WorkerService("shop", stackrecords.ProductionEnv, "web", "ledger")
-	if media == app || media == ledger || !strings.Contains(media, "media") || len(media) > maxServiceNameLength {
-		t.Errorf("WorkerService() = %q and %q beside the app's %q, want a service of each worker's own in %d characters", media, ledger, app, maxServiceNameLength)
+	media := named.WorkerService("shop", stackrecords.ProductionEnv, "web", "media")
+	ledger := named.WorkerService("shop", stackrecords.ProductionEnv, "web", "ledger")
+	if media == app || media == ledger || !strings.Contains(media, "media") || len(media) > names.MaxServiceNameLength {
+		t.Errorf("WorkerService() = %q and %q beside the app's %q, want a service of each worker's own in %d characters", media, ledger, app, names.MaxServiceNameLength)
 	}
-	long := names.WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 40))
-	longer := names.WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 41))
-	if len(long) > maxServiceNameLength || long == longer || !cloudRunService.MatchString(long) {
-		t.Errorf("WorkerService() of workers too long to spell out = %q and %q, want each cut to %d characters and kept apart by its hash", long, longer, maxServiceNameLength)
+	long := named.WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 40))
+	longer := named.WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 41))
+	if len(long) > names.MaxServiceNameLength || long == longer || !names.CloudRunService.MatchString(long) {
+		t.Errorf("WorkerService() of workers too long to spell out = %q and %q, want each cut to %d characters and kept apart by its hash", long, longer, names.MaxServiceNameLength)
 	}
 }
 
 func TestATasksManifestPinsTheTiersQueueAndPublishesDelaysAsTheAppsOwnAccount(t *testing.T) {
 	t.Parallel()
 
-	c := &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}
+	c := &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}
 	declared := map[string]*provider.TopicSpec{"resize": {TTL: time.Hour}}
 	tasks := tasksManifest(c, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack(stackrecords.ProductionEnv)}, "web", declared)
 

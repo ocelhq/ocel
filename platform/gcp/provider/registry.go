@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const registryUser = "oauth2accesstoken"
@@ -13,7 +14,7 @@ func (p *Provider) EnsureImageRegistry(ctx context.Context, tier environment.Tie
 	if p.emulated() {
 		return provider.RegistryTarget{}, nil
 	}
-	names, err := p.Names(ctx)
+	named, err := p.Names(ctx)
 	if err != nil {
 		return provider.RegistryTarget{}, err
 	}
@@ -22,8 +23,8 @@ func (p *Provider) EnsureImageRegistry(ctx context.Context, tier environment.Tie
 		return provider.RegistryTarget{}, err
 	}
 	return provider.RegistryTarget{
-		Server:    p.options.Region + dockerRegistryHost,
-		Namespace: names.project + "/" + names.Repository(tier),
+		Server:    p.options.Region + names.DockerRegistryHost,
+		Namespace: named.Project() + "/" + named.Repository(tier),
 		Username:  registryUser,
 		Password:  token,
 	}, nil

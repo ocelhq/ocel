@@ -14,6 +14,8 @@ import (
 	"cloud.google.com/go/firestore/apiv1/firestorepb"
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/kms/apiv1/kmspb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
 	pubsub "google.golang.org/api/pubsub/v1"
@@ -278,12 +280,12 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 	}
 }
 
-func (s *iamServer) open(t *testing.T) *clients {
+func (s *iamServer) open(t *testing.T) *gcloud.Clients {
 	t.Helper()
 	return s.serve(t, s.rest(t))
 }
 
-func (s *iamServer) serve(t *testing.T, rest http.HandlerFunc) *clients {
+func (s *iamServer) serve(t *testing.T, rest http.HandlerFunc) *gcloud.Clients {
 	t.Helper()
 	grpcServer := grpc.NewServer()
 	kmspb.RegisterKeyManagementServiceServer(grpcServer, s)
@@ -303,7 +305,7 @@ func (s *iamServer) serve(t *testing.T, rest http.HandlerFunc) *clients {
 	server.Start()
 	t.Cleanup(server.Close)
 	t.Cleanup(grpcServer.Stop)
-	return &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1", endpoint: server.URL}
+	return &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
 }
 
 func (s *iamServer) projectMembers(role string) ([]string, *cloudresourcemanager.Expr) {

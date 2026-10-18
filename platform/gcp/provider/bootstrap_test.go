@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestTheRepositoryPrunesOnlyUntaggedImagesOlderThanAWeek(t *testing.T) {
@@ -251,7 +252,7 @@ func TestABootstrapResourceAlreadyCurrentIsNotedOnlyAtDebug(t *testing.T) {
 func TestRemovingATierKeepsTheDatabaseItsSiblingShares(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	tier := environment.TierProduction
 	read := survey{Tier: tier, Names: names, present: map[string]bool{}, sibling: true}
 	for _, each := range bootstrapItems(names, tier, false) {
@@ -308,7 +309,7 @@ func TestABootstrapRefusingReplacementsRefusesBeforeWritingAnythingWhenItWouldRe
 func TestABootstrapRefusingReplacementsGoesAheadWhenNothingWouldBeReplaced(t *testing.T) {
 	t.Parallel()
 
-	read := survey{Tier: environment.TierProduction, Names: Names{namespace: "ocel", project: "acme-prod"}, present: map[string]bool{}}
+	read := survey{Tier: environment.TierProduction, Names: names.New("ocel", "acme-prod"), present: map[string]bool{}}
 
 	if err := refuseReplacements(read, bootstrapItems(read.Names, read.Tier, false)); err != nil {
 		t.Errorf("refuseReplacements() over a tier that replaces nothing = %v, want nil: making what is missing and mending what drifted replace nothing", err)

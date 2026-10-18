@@ -220,7 +220,7 @@ func TestARealtimeIsShapedAsItsEnvironmentsGatewayKeysAndSigningKey(t *testing.T
 	if err != nil {
 		t.Fatalf("Shape() = %v", err)
 	}
-	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 	want := map[string]string{
 		names.RealtimeGateway("shop", "prod"):                                "google_cloud_run_v2_service",
 		names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"): "google_secret_manager_secret",
@@ -254,7 +254,7 @@ func TestPriceOfARealtimeGatewayBillsEveryConnectedHourAtTheRequestRate(t *testi
 		t.Fatalf("Price() = %v", err)
 	}
 	var gateway string
-	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 	for _, resource := range set.GetResources() {
 		if resource.GetName() == names.RealtimeGateway("shop", "prod") {
 			gateway = resource.GetId()

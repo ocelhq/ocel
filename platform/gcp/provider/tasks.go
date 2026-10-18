@@ -7,10 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
 	firestoreadmin "google.golang.org/api/firestore/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -18,8 +15,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
 const (
@@ -29,10 +27,8 @@ const (
 	pubSubAgentDomain     = "@gcp-sa-pubsub.iam.gserviceaccount.com"
 	cloudTasksAgentDomain = "@gcp-sa-cloudtasks.iam.gserviceaccount.com"
 
-	taskRecordsRole   = "roles/datastore.user"
 	tokenCreatorRole  = "roles/iam.serviceAccountTokenCreator"
 	queueEnqueuerRole = "roles/cloudtasks.enqueuer"
-	queueDeleterRole  = "roles/cloudtasks.taskDeleter"
 
 	runsCollectionGroup    = "runs"
 	recordsCollectionGroup = "records"
@@ -47,10 +43,8 @@ const (
 
 var queueRoles = []string{queueEnqueuerRole}
 
-var retiredTierQueueRoles = []string{queueEnqueuerRole, queueDeleterRole}
-
-func taskDatabaseCondition(c *clients, tier environment.Tier) *iampolicy.Condition {
-	return &iampolicy.Condition{
+func taskDatabaseCondition(c *gcloud.Clients, tier environment.Tier) *policy.Condition {
+	return &policy.Condition{
 		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " task database",
 		Expression: fmt.Sprintf("resource.name == %q", databasePath(c, c.TaskDatabase(tier))),
 	}
@@ -58,14 +52,14 @@ func taskDatabaseCondition(c *clients, tier environment.Tier) *iampolicy.Conditi
 
 func (b bootstrap) tasksPart(tier environment.Tier) part {
 	var resources []provider.PartResource
-	if !b.clients.emulated() {
+	if !b.clients.Emulated() {
 		resources = append(resources, provider.PartResource{Kind: string(KindDatabase), ID: b.clients.TaskDatabase(tier)})
 	}
 	return part{
 		name:        tasksPart,
 		summary:     tasksSummary,
 		resources:   resources,
-		shape:       tasksShape(b.clients.Names, tier, b.clients.region),
+		shape:       tasksShape(b.clients.Names, tier, b.clients.Region),
 		make:        func(ctx context.Context) error { return b.makeTasks(ctx, tier) },
 		users:       func(ctx context.Context) ([]string, error) { return b.listTaskUsers(ctx, tier) },
 		refuseInUse: func(ctx context.Context, removal partRemoval) error { return b.refuseTasksInUse(ctx, tier, removal) },
@@ -73,17 +67,17 @@ func (b bootstrap) tasksPart(tier environment.Tier) part {
 	}
 }
 
-func tasksShape(names Names, tier environment.Tier, region string) []pricing.Shaped {
+func tasksShape(names names.Names, tier environment.Tier, region string) []pricing.Shaped {
 	return []pricing.Shaped{
 		{Name: names.TaskDatabase(tier), Type: tfFirestoreDatabase, Properties: map[string]any{"location_id": region, "type": nativeFirestore}},
 	}
 }
 
 func (b bootstrap) makeTasks(ctx context.Context, tier environment.Tier) error {
-	if b.clients.emulated() {
+	if b.clients.Emulated() {
 		return nil
 	}
-	if err := b.makeDatabase(ctx, survey{Project: b.clients.project, Region: b.clients.region}, b.clients.TaskDatabase(tier)); err != nil {
+	if err := b.makeDatabase(ctx, survey{Project: b.clients.Project(), Region: b.clients.Region}, b.clients.TaskDatabase(tier)); err != nil {
 		return err
 	}
 	return b.ensureRunIndexes(ctx, tier)
@@ -156,7 +150,7 @@ func (b bootstrap) refuseTasksInUse(ctx context.Context, tier environment.Tier, 
 }
 
 func (b bootstrap) removeTasks(ctx context.Context, tier environment.Tier) error {
-	if b.clients.emulated() {
+	if b.clients.Emulated() {
 		return nil
 	}
 	return b.takeDatabase(ctx, b.clients.TaskDatabase(tier))
@@ -178,7 +172,7 @@ func (b bootstrap) grantPushSigning(ctx context.Context, tier environment.Tier) 
 	if err != nil {
 		return err
 	}
-	return b.clients.bindAccountRole(ctx, b.clients.PushAccount(tier), tokenCreatorRole, agent, true)
+	return gcloud.BindAccountRole(ctx, b.clients, b.clients.PushAccount(tier), tokenCreatorRole, agent, true)
 }
 
 func (b bootstrap) forgetPushSigning(ctx context.Context, tier environment.Tier) error {
@@ -186,7 +180,7 @@ func (b bootstrap) forgetPushSigning(ctx context.Context, tier environment.Tier)
 	if err != nil {
 		return err
 	}
-	return b.clients.bindAccountRole(ctx, b.clients.PushAccount(tier), tokenCreatorRole, agent, false)
+	return gcloud.BindAccountRole(ctx, b.clients, b.clients.PushAccount(tier), tokenCreatorRole, agent, false)
 }
 
 func (b bootstrap) pushSigningGranted(ctx context.Context, tier environment.Tier) (bool, error) {
@@ -194,58 +188,16 @@ func (b bootstrap) pushSigningGranted(ctx context.Context, tier environment.Tier
 	if err != nil {
 		return false, err
 	}
-	return b.clients.accountRoleGranted(ctx, b.clients.PushAccount(tier), tokenCreatorRole, agent)
+	return gcloud.AccountRoleGranted(ctx, b.clients, b.clients.PushAccount(tier), tokenCreatorRole, agent)
 }
 
-func (b bootstrap) delayQueuePath(tier environment.Tier) string {
-	return b.clients.DelayQueuePath(b.clients.region, tier)
-}
-
-func (b bootstrap) readDelayQueue(ctx context.Context, tier environment.Tier) (*cloudtaskspb.Queue, error) {
-	client, err := b.clients.Workload().CloudTasks()
-	if err != nil {
-		return nil, err
-	}
-	queue, err := googleretry.Called(ctx, func() (*cloudtaskspb.Queue, error) {
-		return client.GetQueue(ctx, &cloudtaskspb.GetQueueRequest{Name: b.delayQueuePath(tier)})
-	})
-	if status.Code(err) == codes.NotFound {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read the %s delay queue: %w", b.clients.DelayQueue(tier), err)
-	}
-	return queue, nil
-}
-
-func (b bootstrap) ensureDelayQueue(ctx context.Context, tier environment.Tier) error {
-	if err := (topics.Delays{Queue: b.delayQueuePath(tier)}).Ensure(ctx, b.clients.Workload()); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, member string, roles, wanted []string) error {
-	changes := make([]iampolicy.Change, 0, len(roles))
+func bindQueueRoles(ctx context.Context, c *gcloud.Clients, tier environment.Tier, member string, roles, wanted []string) error {
+	changes := make([]policy.Change, 0, len(roles))
 	for _, role := range roles {
-		changes = append(changes, grantedOrRevoked(role, member, nil, slices.Contains(wanted, role)))
+		changes = append(changes, gcloud.GrantedOrRevoked(role, member, nil, slices.Contains(wanted, role)))
 	}
-	_, err := iampolicy.Edit(ctx, c.queuePolicy(c.DelayQueuePath(c.region, tier), "the "+c.DelayQueue(tier)+" delay queue"), iampolicy.Each(changes...))
+	_, err := policy.Edit(ctx, gcloud.QueuePolicy(c, c.DelayQueuePath(c.Region, tier), "the "+c.DelayQueue(tier)+" delay queue"), policy.Each(changes...))
 	return err
-}
-
-func (b bootstrap) purgeDelayQueue(ctx context.Context, tier environment.Tier) error {
-	client, err := b.clients.Workload().CloudTasks()
-	if err != nil {
-		return err
-	}
-	_, err = googleretry.Called(ctx, func() (*cloudtaskspb.Queue, error) {
-		return client.PurgeQueue(ctx, &cloudtaskspb.PurgeQueueRequest{Name: b.delayQueuePath(tier)})
-	})
-	if err != nil && status.Code(err) != codes.NotFound {
-		return fmt.Errorf("purge the %s delay queue: %w", b.clients.DelayQueue(tier), err)
-	}
-	return nil
 }
 
 func runIndexes() []*firestoreadmin.GoogleFirestoreAdminV1Index {
@@ -288,7 +240,7 @@ func (b bootstrap) ensureRunIndexes(ctx context.Context, tier environment.Tier) 
 	parent := database + "/collectionGroups/" + runsCollectionGroup
 	for _, index := range runIndexes() {
 		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(parent, index).Context(ctx).Do)
-		if taken(err) {
+		if gcloud.Taken(err) {
 			continue
 		}
 		if err != nil {

@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const cloudStorageScheme = "gs"
@@ -82,7 +83,7 @@ func (s albStacks) opened(ctx context.Context, target alb.Target) (*pulumi.Autom
 	return pulumi.New(config), ref, nil
 }
 
-func (s albStacks) config(clients *clients, target alb.Target, passphrase string) (pulumi.Config[alb.Program], provider.StackRef) {
+func (s albStacks) config(clients *gcloud.Clients, target alb.Target, passphrase string) (pulumi.Config[alb.Program], provider.StackRef) {
 	project := naming.PulumiProject(target.Prefix())
 	config := pulumi.Config[alb.Program]{
 		Backend: pulumi.Backend{
@@ -90,11 +91,11 @@ func (s albStacks) config(clients *clients, target alb.Target, passphrase string
 			Passphrase: passphrase,
 			Project:    project,
 			Env: map[string]string{
-				"GOOGLE_PROJECT": clients.project,
-				"GOOGLE_REGION":  clients.region,
+				"GOOGLE_PROJECT": clients.Project(),
+				"GOOGLE_REGION":  clients.Region,
 			},
 		},
-		Program: func(ctx *sdk.Context, program alb.Program) error { return program(ctx, clients.project) },
+		Program: func(ctx *sdk.Context, program alb.Program) error { return program(ctx, clients.Project()) },
 	}
 	if target.Slug == "" {
 		config.Refresh = refreshesTheFront
@@ -104,18 +105,18 @@ func (s albStacks) config(clients *clients, target alb.Target, passphrase string
 
 func refreshesTheFront(provider.StackRef, pulumi.Operation) bool { return true }
 
-func (s albStacks) passphrase(ctx context.Context, clients *clients, tier environment.Tier) (string, error) {
+func (s albStacks) passphrase(ctx context.Context, clients *gcloud.Clients, tier environment.Tier) (string, error) {
 	secrets, err := clients.Secrets()
 	if err != nil {
 		return "", err
 	}
 	secret := clients.PassphraseSecret(tier)
-	name := "projects/" + clients.project + "/secrets/" + secret + "/versions/latest"
+	name := "projects/" + clients.Project() + "/secrets/" + secret + "/versions/latest"
 	version, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*secretmanager.AccessSecretVersionResponse, error) {
 		return secrets.Projects.Secrets.Versions.Access(name).Context(ctx).Do(call...)
 	})
 	if err != nil {
-		if absent(err) {
+		if gcloud.Absent(err) {
 			return "", refusal.Refuse(refusal.CodeNotReady,
 				"the %s edge keeps the state of the load balancer it provisions sealed under the %s secret, and this project has none for tier %s: run `ocel bootstrap` for this tier first",
 				alb.Kind, secret, tier)

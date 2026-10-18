@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const (
@@ -52,9 +53,9 @@ func live(t *testing.T) *gcp.Provider {
 	return newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
 }
 
-func liveNames(t *testing.T) gcp.Names {
+func liveNames(t *testing.T) names.Names {
 	t.Helper()
-	return names(t, live(t))
+	return namesOf(t, live(t))
 }
 
 func TestLiveCredentials(t *testing.T) {

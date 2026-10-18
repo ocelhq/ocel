@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -14,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const (
@@ -33,12 +36,12 @@ func (p *Provider) EnsureEnvSourceSync(ctx context.Context, tier environment.Tie
 
 func (b bootstrap) syncDigest(tier environment.Tier) string {
 	s := b.syncServing(tier)
-	env := make([]string, 0, len(s.env))
-	for _, key := range slices.Sorted(maps.Keys(s.env)) {
-		env = append(env, key+"="+s.env[key])
+	env := make([]string, 0, len(s.Env))
+	for _, key := range slices.Sorted(maps.Keys(s.Env)) {
+		env = append(env, key+"="+s.Env[key])
 	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		s.service, s.image, s.account, s.cpu, s.timeout.String(), syncGeneration, syncSchedule, scheduleTimeZone, strings.Join(env, ","),
+		s.Service, s.Image, s.Account, s.CPU, s.Timeout.String(), syncGeneration, syncSchedule, scheduleTimeZone, strings.Join(env, ","),
 	}, "\n")))
 	return hex.EncodeToString(sum[:])
 }
@@ -87,8 +90,8 @@ func (b bootstrap) mendEnvSourceSync(ctx context.Context, tier environment.Tier)
 
 func syncShape(name, region string) []pricing.Shaped {
 	return []pricing.Shaped{
-		{Name: name, Type: itemTypes[KindService], Properties: itemProperties(item{Kind: KindService, Name: name}, region)},
-		{Name: name, Type: itemTypes[KindSchedule], Properties: itemProperties(item{Kind: KindSchedule, Name: name}, region)},
+		{Name: name, Type: tfCloudRunService, Properties: syncServiceProperties(region)},
+		{Name: name, Type: tfSchedulerJob, Properties: map[string]any{"region": region, "schedule": syncSchedule}},
 	}
 }
 
@@ -108,7 +111,7 @@ func (b bootstrap) envSourceSyncPart(ctx context.Context, tier environment.Tier)
 		Digest:    recorded.Digest,
 		Resources: b.syncResources(tier),
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: string(Vendor), Region: b.clients.region, Resources: syncShape(b.clients.EnvSourceSync(tier), b.clients.region)},
+		Shape:     &provider.PartShape{Vendor: string(Vendor), Region: b.clients.Region, Resources: syncShape(b.clients.EnvSourceSync(tier), b.clients.Region)},
 	}, true, nil
 }
 
@@ -134,7 +137,7 @@ func (b bootstrap) envSourceSyncRemovals(ctx context.Context, tier environment.T
 
 func (b bootstrap) removeEnvSourceSync(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	name := b.clients.EnvSourceSync(tier)
-	if err := b.clients.takeSchedule(ctx, name); err != nil {
+	if err := takeSchedule(ctx, b.clients, name); err != nil {
 		return err
 	}
 	service, err := b.readService(ctx, name)
@@ -144,6 +147,24 @@ func (b bootstrap) removeEnvSourceSync(ctx context.Context, tier environment.Tie
 	if err := b.takeService(ctx, name); err != nil {
 		return err
 	}
-	ensureProgress(progress).Say("Removed the env source sync " + name)
+	gcloud.EnsureProgress(progress).Say("Removed the env source sync " + name)
 	return nil
+}
+
+func syncServiceProperties(region string) map[string]any {
+	return map[string]any{
+		"location":                   region,
+		"ingress":                    run.IngressInternal,
+		"requests_per_hour":          syncRequestsPerHour,
+		"billed_seconds_per_request": syncBilledSecondsEach,
+		"template": map[string]any{
+			"scaling": map[string]any{"min_instance_count": 0, "max_instance_count": syncInstances},
+			"containers": []any{map[string]any{
+				"resources": map[string]any{
+					"cpu_idle": true,
+					"limits":   map[string]any{"cpu": syncCPU, "memory": strconv.Itoa(syncMemoryMiB) + "Mi"},
+				},
+			}},
+		},
+	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const (
@@ -25,7 +26,7 @@ const (
 
 type offersHarness struct {
 	secrets *secretServer
-	clients *clients
+	clients *gcloud.Clients
 	records records.Store
 	log     *fake.Log
 }

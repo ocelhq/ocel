@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bucket"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
 	s3store "github.com/ocelhq/ocel/platform/s3"
@@ -53,12 +54,12 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	return forwards, nil
 }
 
-func (p *Provider) newBastion(c *clients) bastion {
+func (p *Provider) newBastion(c *gcloud.Clients) bastion {
 	return bastion{
 		clients:        c,
-		deployAndRoute: p.deployAndRoute,
+		deployAndRoute: p.services().DeployAndRoute,
 		pushBinary:     p.pushBinary,
-		tearDown:       p.tearDown,
+		tearDown:       p.services().TearDown,
 		grantInvoker:   p.grantInvoker,
 		prove:          ports.ProveIdentity,
 		open:           relay.OpenForward,
@@ -77,7 +78,7 @@ func (b bastion) forwardPorts(ctx context.Context, tier environment.Tier, target
 	}
 	forwards := make([]*relay.Forward, 0, len(targets))
 	for _, target := range targets {
-		forward, err := b.openForward(ctx, relay.Link{URL: url, Target: target, Token: tokens.mintOrReuse, Warn: ensureProgress(progress).Warn, ReportFailure: reportFailure})
+		forward, err := b.openForward(ctx, relay.Link{URL: url, Target: target, Token: tokens.mintOrReuse, Warn: gcloud.EnsureProgress(progress).Warn, ReportFailure: reportFailure})
 		if err != nil {
 			for _, opened := range forwards {
 				opened.Close()
@@ -134,7 +135,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}
-		store, err := bucket.Open(ctx, c.endpoint)
+		store, err := bucket.Open(ctx, c.Endpoint)
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}

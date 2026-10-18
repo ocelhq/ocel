@@ -11,7 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
 const (
@@ -21,25 +23,25 @@ const (
 	assetReaderDescription = "the identity an edge that runs code reads a tier's static files as, through an HMAC key, and nothing else"
 )
 
-func (c *clients) assetReaderCondition(tier environment.Tier) *iampolicy.Condition {
-	return c.objectPrefixCondition("ocel "+string(c.Namespace())+" "+string(tier)+" assets", tier, provider.StoreAssets+"/")
+func assetReaderCondition(c *gcloud.Clients, tier environment.Tier) *policy.Condition {
+	return gcloud.ObjectPrefixCondition(c, "ocel "+string(c.Namespace())+" "+string(tier)+" assets", tier, provider.StoreAssets+"/")
 }
 
-func (c *clients) raiseAssetStore(ctx context.Context, tier environment.Tier, kind edge.Kind) error {
+func raiseAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) error {
 	account := c.AssetReaderAccount(tier)
-	if err := c.createAccount(ctx, account, "ocel "+string(tier)+" "+assetReaderName, assetReaderDescription); err != nil {
+	if err := c.CreateAccount(ctx, account, "ocel "+string(tier)+" "+assetReaderName, assetReaderDescription); err != nil {
 		return err
 	}
 	member := "serviceAccount:" + c.AssetReaderAccountEmail(tier)
-	if err := untilVisible(ctx, func() error {
-		return c.bindProjectRole(ctx, member, appAssetsRole, c.assetReaderCondition(tier), true)
+	if err := gcloud.UntilVisible(ctx, func() error {
+		return gcloud.BindProjectRole(ctx, c, member, grants.AssetsRole, assetReaderCondition(c, tier), true)
 	}); err != nil {
 		return err
 	}
-	return c.ensureAssetReaderKey(ctx, tier, kind)
+	return ensureAssetReaderKey(ctx, c, tier, kind)
 }
 
-func (c *clients) ensureAssetReaderKey(ctx context.Context, tier environment.Tier, kind edge.Kind) error {
+func ensureAssetReaderKey(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) error {
 	credentials, err := readEdgeCredentials(ctx, c, tier, kind)
 	if err != nil {
 		return err
@@ -50,15 +52,15 @@ func (c *clients) ensureAssetReaderKey(ctx context.Context, tier environment.Tie
 	}
 	email := c.AssetReaderAccountEmail(tier)
 	if credentials.hasAssetStoreKey() {
-		key, err := client.HMACKeyHandle(c.project, credentials.AssetStoreAccessKeyID).Get(ctx)
+		key, err := client.HMACKeyHandle(c.Project(), credentials.AssetStoreAccessKeyID).Get(ctx)
 		switch {
 		case err == nil && key.State == storage.Active && key.ServiceAccountEmail == email:
 			return nil
-		case err != nil && !absent(err):
+		case err != nil && !gcloud.Absent(err):
 			return fmt.Errorf("read the HMAC key %s of the %s service account: %w", credentials.AssetStoreAccessKeyID, email, err)
 		}
 	}
-	key, err := client.CreateHMACKey(ctx, c.project, email)
+	key, err := client.CreateHMACKey(ctx, c.Project(), email)
 	if err != nil {
 		return fmt.Errorf("create an HMAC key for the %s service account: %w", email, err)
 	}
@@ -66,18 +68,18 @@ func (c *clients) ensureAssetReaderKey(ctx context.Context, tier environment.Tie
 	if err := writeEdgeCredentials(ctx, c, tier, kind, credentials); err != nil {
 		return err
 	}
-	return c.deleteAssetReaderKeys(ctx, client, email, key.AccessID)
+	return deleteAssetReaderKeys(ctx, c, client, email, key.AccessID)
 }
 
-func (c *clients) deleteAssetReaderKeys(ctx context.Context, client *storage.Client, email, keep string) error {
-	keys := client.ListHMACKeys(ctx, c.project, storage.ForHMACKeyServiceAccountEmail(email))
+func deleteAssetReaderKeys(ctx context.Context, c *gcloud.Clients, client *storage.Client, email, keep string) error {
+	keys := client.ListHMACKeys(ctx, c.Project(), storage.ForHMACKeyServiceAccountEmail(email))
 	for {
 		key, err := keys.Next()
 		if errors.Is(err, iterator.Done) {
 			return nil
 		}
 		if err != nil {
-			if absent(err) {
+			if gcloud.Absent(err) {
 				return nil
 			}
 			return fmt.Errorf("list the HMAC keys of the %s service account: %w", email, err)
@@ -85,38 +87,38 @@ func (c *clients) deleteAssetReaderKeys(ctx context.Context, client *storage.Cli
 		if key.State == storage.Deleted || key.AccessID == keep {
 			continue
 		}
-		handle := client.HMACKeyHandle(c.project, key.AccessID)
+		handle := client.HMACKeyHandle(c.Project(), key.AccessID)
 		if key.State == storage.Active {
-			if _, err := handle.Update(ctx, storage.HMACKeyAttrsToUpdate{State: storage.Inactive}); err != nil && !absent(err) {
+			if _, err := handle.Update(ctx, storage.HMACKeyAttrsToUpdate{State: storage.Inactive}); err != nil && !gcloud.Absent(err) {
 				return fmt.Errorf("deactivate the HMAC key %s: %w", key.AccessID, err)
 			}
 		}
-		if err := handle.Delete(ctx); err != nil && !absent(err) {
+		if err := handle.Delete(ctx); err != nil && !gcloud.Absent(err) {
 			return fmt.Errorf("delete the HMAC key %s: %w", key.AccessID, err)
 		}
 	}
 }
 
-func (c *clients) takeAssetStore(ctx context.Context, tier environment.Tier) error {
+func takeAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tier) error {
 	client, err := c.Storage()
 	if err != nil {
 		return err
 	}
-	if err := c.deleteAssetReaderKeys(ctx, client, c.AssetReaderAccountEmail(tier), ""); err != nil {
+	if err := deleteAssetReaderKeys(ctx, c, client, c.AssetReaderAccountEmail(tier), ""); err != nil {
 		return err
 	}
 	member := "serviceAccount:" + c.AssetReaderAccountEmail(tier)
-	if err := c.bindProjectRole(ctx, member, appAssetsRole, c.assetReaderCondition(tier), false); err != nil {
+	if err := gcloud.BindProjectRole(ctx, c, member, grants.AssetsRole, assetReaderCondition(c, tier), false); err != nil {
 		return err
 	}
-	_, err = c.deleteAccount(ctx, c.AssetReaderAccount(tier))
+	_, err = c.DeleteAccount(ctx, c.AssetReaderAccount(tier))
 	return err
 }
 
-func (c *clients) plannedAssetStore(ctx context.Context, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
+func plannedAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
 	account := c.AssetReaderAccount(tier)
 	accountAction, accountReason := provider.ActionCreate, assetReaderDescription
-	present, err := c.accountExists(ctx, account)
+	present, err := c.AccountExists(ctx, account)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +126,7 @@ func (c *clients) plannedAssetStore(ctx context.Context, tier environment.Tier, 
 		accountAction, accountReason = provider.ActionKeep, provider.ReasonCurrent
 	}
 	keyAction, keyReason := provider.ActionCreate, "the key the edge's worker signs its reads of this tier's static files with"
-	active, err := c.hasActiveAssetReaderKey(ctx, tier, kind)
+	active, err := hasActiveAssetReaderKey(ctx, c, tier, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -137,8 +139,8 @@ func (c *clients) plannedAssetStore(ctx context.Context, tier environment.Tier, 
 	}, nil
 }
 
-func (c *clients) plannedAssetStoreRemoval(ctx context.Context, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
-	planned, err := c.plannedAssetStore(ctx, tier, kind)
+func plannedAssetStoreRemoval(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
+	planned, err := plannedAssetStore(ctx, c, tier, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +154,7 @@ func (c *clients) plannedAssetStoreRemoval(ctx context.Context, tier environment
 	return planned, nil
 }
 
-func (c *clients) hasActiveAssetReaderKey(ctx context.Context, tier environment.Tier, kind edge.Kind) (bool, error) {
+func hasActiveAssetReaderKey(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) (bool, error) {
 	credentials, err := readEdgeCredentials(ctx, c, tier, kind)
 	if err != nil || !credentials.hasAssetStoreKey() {
 		return false, err
@@ -161,8 +163,8 @@ func (c *clients) hasActiveAssetReaderKey(ctx context.Context, tier environment.
 	if err != nil {
 		return false, err
 	}
-	key, err := client.HMACKeyHandle(c.project, credentials.AssetStoreAccessKeyID).Get(ctx)
-	if absent(err) {
+	key, err := client.HMACKeyHandle(c.Project(), credentials.AssetStoreAccessKeyID).Get(ctx)
+	if gcloud.Absent(err) {
 		return false, nil
 	}
 	if err != nil {

@@ -2,49 +2,18 @@ package gcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
-	"time"
-
-	"golang.org/x/oauth2/google"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
-
-const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
-
-const tokenInfoURL = "https://oauth2.googleapis.com/tokeninfo"
-
-const credentialHint = "authenticate with Google Cloud: run `gcloud auth application-default login`"
-
-const tokenInfoTimeout = 10 * time.Second
-
-var tokenInfoClient = &http.Client{Timeout: tokenInfoTimeout}
-
-type TokenSource interface {
-	Token(ctx context.Context) (string, error)
-}
-
-type ApplicationDefault struct{}
-
-func (ApplicationDefault) Token(ctx context.Context) (string, error) {
-	found, err := google.FindDefaultCredentials(ctx, cloudPlatformScope)
-	if err != nil {
-		return "", err
-	}
-	token, err := found.TokenSource.Token()
-	if err != nil {
-		return "", err
-	}
-	return token.AccessToken, nil
-}
 
 type ProjectSource interface {
 	Project(ctx context.Context) (string, error)
@@ -58,7 +27,7 @@ type Credentials struct {
 	Project ProjectSource
 	Region  string
 
-	Tokens TokenSource
+	Tokens gcloud.TokenSource
 
 	TokenInfoURL string
 
@@ -69,8 +38,6 @@ type Credentials struct {
 	Namespace provider.Namespace
 }
 
-const emulatorPrincipal = "emulator"
-
 func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	project, err := c.Project.Project(ctx)
 	if err != nil {
@@ -79,7 +46,7 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	principal := provider.Principal{
 		Vendor:   Vendor,
 		Account:  project,
-		Name:     emulatorPrincipal,
+		Name:     gcloud.EmulatorPrincipal,
 		Location: c.Region,
 	}
 	if c.Endpoint != "" {
@@ -87,7 +54,7 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	} else {
 		token, err := c.Tokens.Token(ctx)
 		if err != nil {
-			return provider.Principal{}, unauthenticated()
+			return provider.Principal{}, gcloud.Unauthenticated()
 		}
 		name, err := c.principal(ctx, token)
 		if err != nil {
@@ -105,57 +72,12 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	return principal, nil
 }
 
-func unauthenticated() error {
-	return refusal.Refuse(refusal.CodeDenied, "%s", credentialHint)
-}
-
 func (c Credentials) principal(ctx context.Context, token string) (string, error) {
 	endpoint := c.TokenInfoURL
 	if endpoint == "" {
-		endpoint = tokenInfoURL
+		endpoint = gcloud.TokenInfoURL
 	}
-	return principalNamed(ctx, endpoint, token)
-}
-
-func principalNamed(ctx context.Context, endpoint, token string) (string, error) {
-	principal, status, err := googleretry.Asked(ctx, func() (string, int, error) {
-		return askTokenInfo(ctx, endpoint, token)
-	})
-	if err == nil && status == http.StatusOK {
-		return principal, nil
-	}
-	if isThrottledOrDown(status) {
-		return "", refusal.Refuse(refusal.CodeBusy,
-			"Google's token endpoint is throttling or down: it answered neither a principal nor a refusal in %d attempts, and this credential may well be good", googleretry.Attempts)
-	}
-	return "", unauthenticated()
-}
-
-func isThrottledOrDown(status int) bool {
-	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
-}
-
-func askTokenInfo(ctx context.Context, endpoint, token string) (string, int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return "", 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := tokenInfoClient.Do(req)
-	if err != nil {
-		return "", 0, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", resp.StatusCode, nil
-	}
-	var said struct {
-		Email string `json:"email"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&said); err != nil {
-		return "", 0, err
-	}
-	return said.Email, resp.StatusCode, nil
+	return gcloud.PrincipalNamed(ctx, endpoint, token)
 }
 
 func (c Credentials) Permissions(purpose edge.CredentialPurpose, _ environment.Tier) (edge.CredentialDocument, error) {
@@ -165,10 +87,10 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, _ environment.T
 		if err != nil {
 			return edge.CredentialDocument{}, err
 		}
-		names := Names{namespace: c.Namespace, project: project}
+		names := names.New(c.Namespace, project)
 		roles := slices.Clone(rolesFor(purpose))
 		if purpose == edge.PurposeDeploy {
-			roles = append(roles, realtimeSecretsGrant(names), gateSecretsGrant(names), appGrantsGrant(names), names.AppAccountsRolePath(), appBucketsGrant(names), databasesGrant(names), projectPermissionsGrant(), partsGrant(names), partDatabasesGrant(names), projectRecordsGrant(names, c.Region))
+			roles = append(roles, realtimeSecretsGrant(names), gateSecretsGrant(names), grants.AppGrantsGrant(names), names.AppAccountsRolePath(), appBucketsGrant(names), databasesGrant(names), projectPermissionsGrant(), partsGrant(names), partDatabasesGrant(names), projectRecordsGrant(names, c.Region))
 			roles = append(roles, queueGrants(names, c.Region)...)
 			roles = append(roles, untaggingGrants(names, c.Region)...)
 		}

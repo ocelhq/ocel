@@ -1,4 +1,4 @@
-package gcp
+package names
 
 import (
 	"crypto/sha256"
@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"google.golang.org/api/iam/v1"
 )
 
 const (
@@ -23,21 +24,21 @@ const (
 )
 
 const (
-	accountDomain      = ".iam.gserviceaccount.com"
-	dockerRegistryHost = "-docker.pkg.dev"
+	AccountDomain      = ".iam.gserviceaccount.com"
+	DockerRegistryHost = "-docker.pkg.dev"
 )
 
 const (
 	maxBucketName        = 63
-	maxAccountID         = 30
+	MaxAccountID         = 30
 	minDatabaseID        = 4
-	maxServiceNameLength = 49
+	MaxServiceNameLength = 49
 	maxTaggedLabelLength = 46
 	revisionTagLength    = 9
 
 	maxAppServiceNameLength = maxTaggedLabelLength - revisionTagLength
 	serviceHashLength       = 6
-	accountHashLen          = 10
+	AccountHashLen          = 10
 )
 
 var uuidLike = regexp.MustCompile(`[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}`)
@@ -62,7 +63,7 @@ func (n Names) StateBucket(tier environment.Tier) string {
 func (n Names) Repository(tier environment.Tier) string { return n.Bucket(tier) }
 
 func (n Names) RepositoryPath(region string, tier environment.Tier) string {
-	return region + dockerRegistryHost + "/" + n.project + "/" + n.Repository(tier)
+	return region + DockerRegistryHost + "/" + n.project + "/" + n.Repository(tier)
 }
 
 const (
@@ -88,11 +89,11 @@ func (n Names) CDNPurgeRolePath() string {
 }
 
 func (n Names) AppAccount(tier environment.Tier, project, env, app string) string {
-	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), project, env, app, appAccountInfix)
+	return string(n.namespace) + "-" + truncatedHash(AccountHashLen, string(tier), project, env, app, appAccountInfix)
 }
 
 func (n Names) AppAccountEmail(tier environment.Tier, project, env, app string) string {
-	return n.AppAccount(tier, project, env, app) + "@" + n.project + accountDomain
+	return n.AppAccount(tier, project, env, app) + "@" + n.project + AccountDomain
 }
 
 func (n Names) Service(project, env, app, function string) (string, error) {
@@ -126,7 +127,7 @@ const workerInfix = "w"
 
 func (n Names) WorkerService(project, env, app, worker string) string {
 	readable := strings.Join([]string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), workerInfix, naming.Sanitize(worker)}, "-")
-	readable = strings.TrimRight(readable[:min(len(readable), maxServiceNameLength-serviceHashLength-1)], "-")
+	readable = strings.TrimRight(readable[:min(len(readable), MaxServiceNameLength-serviceHashLength-1)], "-")
 	return readable + "-" + serviceHash(string(n.namespace), project, env, app, workerInfix, worker)
 }
 
@@ -140,7 +141,7 @@ const (
 
 func (n Names) RealtimeGateway(project, env string) string {
 	readable := strings.Join([]string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), realtimeInfix}, "-")
-	readable = strings.TrimRight(readable[:min(len(readable), maxServiceNameLength-serviceHashLength-1)], "-")
+	readable = strings.TrimRight(readable[:min(len(readable), MaxServiceNameLength-serviceHashLength-1)], "-")
 	return readable + "-" + serviceHash(string(n.namespace), project, env, realtimeInfix)
 }
 
@@ -187,24 +188,24 @@ func hashedSecretID(prefix string, readableParts []string, hashed ...string) str
 }
 
 func (n Names) RealtimeAccount(tier environment.Tier) string {
-	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), realtimeInfix)
+	return string(n.namespace) + "-" + truncatedHash(AccountHashLen, string(tier), realtimeInfix)
 }
 
 func (n Names) RealtimeAccountEmail(tier environment.Tier) string {
-	return n.RealtimeAccount(tier) + "@" + n.project + accountDomain
+	return n.RealtimeAccount(tier) + "@" + n.project + AccountDomain
 }
 
 const assetReaderInfix = "assets"
 
 func (n Names) AssetReaderAccount(tier environment.Tier) string {
-	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), assetReaderInfix)
+	return string(n.namespace) + "-" + truncatedHash(AccountHashLen, string(tier), assetReaderInfix)
 }
 
 func (n Names) AssetReaderAccountEmail(tier environment.Tier) string {
-	return n.AssetReaderAccount(tier) + "@" + n.project + accountDomain
+	return n.AssetReaderAccount(tier) + "@" + n.project + AccountDomain
 }
 
-var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
+var CloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
 
 func serviceHash(parts ...string) string { return truncatedHash(serviceHashLength, parts...) }
 
@@ -216,8 +217,8 @@ func truncatedHash(length int, parts ...string) string {
 const (
 	maxInstanceNameLength = 63
 	instanceHashLength    = 6
-	memorystorePolicy     = "memorystore"
-	cloudSQLPolicy        = "cloudsql"
+	MemorystorePolicy     = "memorystore"
+	CloudSQLPolicy        = "cloudsql"
 )
 
 func (n Names) KVInstance(project, env, store string) (string, error) {
@@ -247,13 +248,13 @@ func (n Names) AppBucket(project, env, bucket string) string {
 	return readable + "-" + truncatedHash(appBucketHashLength, n.project, string(n.namespace), project, env, bucket)
 }
 
-const instanceSuffixBytes = 3
+const InstanceSuffixBytes = 3
 
 func (n Names) PostgresInstancePrefix() string { return string(n.namespace) + namespaceEnd }
 
 func (n Names) PostgresInstance(project, env, database string) string {
 	readable := n.PostgresInstancePrefix() + strings.Join([]string{naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(database)}, "-")
-	return strings.TrimRight(readable[:min(len(readable), maxInstanceNameLength-2*instanceSuffixBytes-1)], "-")
+	return strings.TrimRight(readable[:min(len(readable), maxInstanceNameLength-2*InstanceSuffixBytes-1)], "-")
 }
 
 func (n Names) Network(tier environment.Tier) string {
@@ -281,11 +282,11 @@ func (n Names) EnvSourceSync(tier environment.Tier) string {
 }
 
 func (n Names) EnvSourceSyncAccount(tier environment.Tier) string {
-	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), envSourceSyncName)
+	return string(n.namespace) + "-" + truncatedHash(AccountHashLen, string(tier), envSourceSyncName)
 }
 
 func (n Names) EnvSourceSyncAccountEmail(tier environment.Tier) string {
-	return n.EnvSourceSyncAccount(tier) + "@" + n.project + accountDomain
+	return n.EnvSourceSyncAccount(tier) + "@" + n.project + AccountDomain
 }
 
 const bastionName = "bastion"
@@ -295,11 +296,11 @@ func (n Names) Bastion(tier environment.Tier) string {
 }
 
 func (n Names) BastionAccount(tier environment.Tier) string {
-	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), bastionName)
+	return string(n.namespace) + "-" + truncatedHash(AccountHashLen, string(tier), bastionName)
 }
 
 func (n Names) BastionAccountEmail(tier environment.Tier) string {
-	return n.BastionAccount(tier) + "@" + n.project + accountDomain
+	return n.BastionAccount(tier) + "@" + n.project + AccountDomain
 }
 
 const connectorSuffix = "-connector"
@@ -307,17 +308,17 @@ const connectorSuffix = "-connector"
 func (n Names) Connector() string { return string(n.namespace) + connectorSuffix }
 
 func (n Names) ConnectorAccountEmail() string {
-	return n.Connector() + "@" + n.project + accountDomain
+	return n.Connector() + "@" + n.project + AccountDomain
 }
 
 func (n Names) ConnectorKeySecret() string { return n.Connector() + "-key" }
 
-func (n Names) connectorFits() error {
-	if length := len(n.Connector()); length > maxAccountID {
+func (n Names) ConnectorFits() error {
+	if length := len(n.Connector()); length > MaxAccountID {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %q service account the connector runs as is %d characters and IAM takes %d.\n"+
 				"Name a shorter namespace in %s",
-			n.Connector(), length, maxAccountID, provider.NamespaceEnvVar)
+			n.Connector(), length, MaxAccountID, provider.NamespaceEnvVar)
 	}
 	return nil
 }
@@ -348,11 +349,11 @@ func (n Names) DelayQueuePath(region string, tier environment.Tier) string {
 }
 
 func (n Names) PushAccount(tier environment.Tier) string {
-	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), pushAccountName)
+	return string(n.namespace) + "-" + truncatedHash(AccountHashLen, string(tier), pushAccountName)
 }
 
 func (n Names) PushAccountEmail(tier environment.Tier) string {
-	return n.PushAccount(tier) + "@" + n.project + accountDomain
+	return n.PushAccount(tier) + "@" + n.project + AccountDomain
 }
 
 func (n Names) PassphraseSecret(tier environment.Tier) string {
@@ -367,7 +368,7 @@ func (n Names) PurgeSeedSecret(tier environment.Tier, kind edge.Kind) string {
 	return string(n.namespace) + "-" + string(tier) + "-" + string(kind) + purgeSeedSuffix
 }
 
-func (n Names) fit() error {
+func (n Names) Fit() error {
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		for _, bucket := range []string{n.StateBucket(tier), n.Bucket(tier)} {
 			if len(bucket) > maxBucketName {
@@ -391,12 +392,52 @@ func (n Names) fit() error {
 				"Name a namespace in %s that does not",
 			n.Database(), provider.NamespaceEnvVar)
 	}
-	if length := len(n.namespace) + len("-") + accountHashLen; length > maxAccountID {
+	if length := len(n.namespace) + len("-") + AccountHashLen; length > MaxAccountID {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the service accounts this bootstrap names are %d characters and Google takes %d: "+
 				"every tier and app account is the namespace, a dash and %d characters.\n"+
 				"Name a shorter namespace in %s",
-			length, maxAccountID, accountHashLen, provider.NamespaceEnvVar)
+			length, MaxAccountID, AccountHashLen, provider.NamespaceEnvVar)
 	}
 	return nil
+}
+
+const (
+	partsSuffix          = "parts"
+	partDatabasesSuffix  = "part_databases"
+	projectRecordsSuffix = "project_records"
+)
+
+func (n Names) PartsRole() string { return customRoleID(n.namespace, partsSuffix) }
+
+func (n Names) PartsRolePath() string {
+	return "projects/" + n.project + "/roles/" + n.PartsRole()
+}
+
+func (n Names) PartDatabasesRole() string { return customRoleID(n.namespace, partDatabasesSuffix) }
+
+func (n Names) PartDatabasesRolePath() string {
+	return "projects/" + n.project + "/roles/" + n.PartDatabasesRole()
+}
+
+func (n Names) ProjectDatabase(tier environment.Tier, project string) string {
+	return ports.ProjectDatabase(n.namespace, tier, project)
+}
+
+func (n Names) ProjectDatabasePrefix(tier environment.Tier) string {
+	return ports.ProjectDatabasePrefix(n.namespace, tier)
+}
+
+func (n Names) ProjectRecordsRole() string { return customRoleID(n.namespace, projectRecordsSuffix) }
+
+func (n Names) ProjectRecordsRolePath() string {
+	return "projects/" + n.project + "/roles/" + n.ProjectRecordsRole()
+}
+
+func (n Names) AccountID(account *iam.ServiceAccount) (string, bool) {
+	return strings.CutSuffix(account.Email, "@"+n.project+AccountDomain)
+}
+
+func New(namespace provider.Namespace, project string) Names {
+	return Names{namespace: namespace, project: project}
 }

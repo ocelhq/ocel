@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -159,45 +159,45 @@ func ensureSubscription(ctx context.Context, service *pubsub.Service, path strin
 	return nil
 }
 
-func TopicPolicy(service *pubsub.Service, path string) iampolicy.Resource {
-	return iampolicy.Resource{Name: "the Pub/Sub topic " + path, Read: func(ctx context.Context) ([]iampolicy.Binding, iampolicy.Write, error) {
-		policy, err := googleretry.Attempted(ctx, service.Projects.Topics.GetIamPolicy(path).Context(ctx).Do)
+func TopicPolicy(service *pubsub.Service, path string) policy.Resource {
+	return policy.Resource{Name: "the Pub/Sub topic " + path, Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
+		held, err := googleretry.Attempted(ctx, service.Projects.Topics.GetIamPolicy(path).Context(ctx).Do)
 		if isAnswered(err, http.StatusNotFound) {
-			return nil, nil, iampolicy.Absent(err)
+			return nil, nil, policy.Absent(err)
 		}
 		if err != nil {
 			return nil, nil, err
 		}
-		write := func(ctx context.Context, bindings []iampolicy.Binding) error {
-			policy.Bindings = make([]*pubsub.Binding, 0, len(bindings))
+		write := func(ctx context.Context, bindings []policy.Binding) error {
+			held.Bindings = make([]*pubsub.Binding, 0, len(bindings))
 			for _, binding := range bindings {
-				policy.Bindings = append(policy.Bindings, &pubsub.Binding{Role: binding.Role, Members: binding.Members, Condition: topicExpr(binding.Condition)})
+				held.Bindings = append(held.Bindings, &pubsub.Binding{Role: binding.Role, Members: binding.Members, Condition: topicExpr(binding.Condition)})
 			}
-			if iampolicy.IsConditioned(bindings) {
-				policy.Version = iampolicy.ConditionalVersion
+			if policy.IsConditioned(bindings) {
+				held.Version = policy.ConditionalVersion
 			}
-			_, err := googleretry.Attempted(ctx, service.Projects.Topics.SetIamPolicy(path, &pubsub.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
+			_, err := googleretry.Attempted(ctx, service.Projects.Topics.SetIamPolicy(path, &pubsub.SetIamPolicyRequest{Policy: held}).Context(ctx).Do)
 			if isAnswered(err, http.StatusNotFound) {
-				return iampolicy.Absent(err)
+				return policy.Absent(err)
 			}
 			return err
 		}
-		bindings := make([]iampolicy.Binding, 0, len(policy.Bindings))
-		for _, binding := range policy.Bindings {
-			bindings = append(bindings, iampolicy.Binding{Role: binding.Role, Members: binding.Members, Condition: topicCondition(binding.Condition)})
+		bindings := make([]policy.Binding, 0, len(held.Bindings))
+		for _, binding := range held.Bindings {
+			bindings = append(bindings, policy.Binding{Role: binding.Role, Members: binding.Members, Condition: topicCondition(binding.Condition)})
 		}
 		return bindings, write, nil
 	}}
 }
 
-func topicCondition(condition *pubsub.Expr) *iampolicy.Condition {
+func topicCondition(condition *pubsub.Expr) *policy.Condition {
 	if condition == nil {
 		return nil
 	}
-	return &iampolicy.Condition{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
+	return &policy.Condition{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
 }
 
-func topicExpr(condition *iampolicy.Condition) *pubsub.Expr {
+func topicExpr(condition *policy.Condition) *pubsub.Expr {
 	if condition == nil {
 		return nil
 	}

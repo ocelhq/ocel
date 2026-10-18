@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 type staticFile struct {
@@ -71,7 +72,7 @@ func (p *Provider) uploadStaticFiles(ctx context.Context, spec provider.StackSpe
 		return nil
 	}
 
-	ensureProgress(runProgress).Say("Uploading " + spec.App.App + "'s " + staticFileCount(len(files)))
+	gcloud.EnsureProgress(runProgress).Say("Uploading " + spec.App.App + "'s " + staticFileCount(len(files)))
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(functioncode.UploadConcurrency)
 	for _, file := range files {

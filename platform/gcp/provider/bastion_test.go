@@ -16,21 +16,24 @@ import (
 	"time"
 
 	"google.golang.org/api/iam/v1"
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
 )
 
-func bastionNames() Names { return Names{namespace: provider.Namespace("ocel"), project: "acme-prod"} }
+func bastionNames() names.Names { return names.New(provider.Namespace("ocel"), "acme-prod") }
 
-func desiredBastion(t *testing.T, tier environment.Tier) *run.GoogleCloudRunV2Service {
+func desiredBastion(t *testing.T, tier environment.Tier) *runv2.GoogleCloudRunV2Service {
 	t.Helper()
-	b := bastion{clients: &clients{Names: bastionNames(), region: "europe-west1"}}
-	desired, err := serviceOf(b.serving(tier, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-bastion:abc"))
+	b := bastion{clients: &gcloud.Clients{Names: bastionNames(), Region: "europe-west1"}}
+	desired, err := run.ServiceOf(b.serving(tier, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-bastion:abc"))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}
@@ -59,8 +62,8 @@ func TestTheBastionIsReachableFromAnywhereYetOnlyByAnIdentityHoldingTheInvokerRo
 	t.Parallel()
 
 	desired := desiredBastion(t, environment.TierProduction)
-	if desired.Ingress != ingressEverywhere {
-		t.Errorf("Ingress = %q, want %q: the caller is outside the network", desired.Ingress, ingressEverywhere)
+	if desired.Ingress != run.IngressEverywhere {
+		t.Errorf("Ingress = %q, want %q: the caller is outside the network", desired.Ingress, run.IngressEverywhere)
 	}
 	if desired.InvokerIamDisabled || desired.IapEnabled {
 		t.Errorf("the bastion skips Cloud Run's invoker check (invoker disabled %v, IAP %v), and anyone could then reach a private address", desired.InvokerIamDisabled, desired.IapEnabled)
@@ -104,16 +107,16 @@ func TestTheBastionRunsAsItsOwnAccountAndForwardsToPostgresAndValkeyOnItsTiersSu
 func TestEachTierHasItsOwnBastionAndAccount(t *testing.T) {
 	t.Parallel()
 
-	names := bastionNames()
-	if names.Bastion(environment.TierProduction) == names.Bastion(environment.TierPreview) ||
-		names.BastionAccount(environment.TierProduction) == names.BastionAccount(environment.TierPreview) {
+	named := bastionNames()
+	if named.Bastion(environment.TierProduction) == named.Bastion(environment.TierPreview) ||
+		named.BastionAccount(environment.TierProduction) == named.BastionAccount(environment.TierPreview) {
 		t.Error("the production and preview tiers share a bastion name or account")
 	}
-	if !cloudRunService.MatchString(names.Bastion(environment.TierPreview)) {
-		t.Errorf("Bastion() = %q, which Cloud Run will not take as a service name", names.Bastion(environment.TierPreview))
+	if !names.CloudRunService.MatchString(named.Bastion(environment.TierPreview)) {
+		t.Errorf("Bastion() = %q, which Cloud Run will not take as a service name", named.Bastion(environment.TierPreview))
 	}
-	if id := names.BastionAccount(environment.TierPreview); len(id) > maxAccountID {
-		t.Errorf("BastionAccount() = %q is %d characters, and IAM takes %d", id, len(id), maxAccountID)
+	if id := named.BastionAccount(environment.TierPreview); len(id) > names.MaxAccountID {
+		t.Errorf("BastionAccount() = %q is %d characters, and IAM takes %d", id, len(id), names.MaxAccountID)
 	}
 }
 
@@ -277,7 +280,7 @@ func TestTheDeployIdentityAloneMayInvokeTheBastion(t *testing.T) {
 		}
 	}
 	last := policies[len(policies)-1]
-	if len(last.Bindings) != 1 || last.Bindings[0].Role != invokerRole || !slices.Equal(last.Bindings[0].Members, []string{"user:" + emulatorPrincipal}) {
+	if len(last.Bindings) != 1 || last.Bindings[0].Role != invokerRole || !slices.Equal(last.Bindings[0].Members, []string{"user:" + gcloud.EmulatorPrincipal}) {
 		t.Errorf("the bastion's policy is %+v, want run.invoker for the deploy identity alone", last.Bindings)
 	}
 }
@@ -311,7 +314,7 @@ func TestABastionRunningAnOlderRelayIsReleasedAgainAndServesTheNewRevision(t *te
 	h.forward(t, target)
 
 	service := h.run.serving()
-	if served, latest := servedRevision(service), revisionName(service.LatestReadyRevision); served != latest {
+	if served, latest := run.ServedRevision(service), run.RevisionName(service.LatestReadyRevision); served != latest {
 		t.Errorf("the bastion serves %q, want %q, the revision its release made: an upgraded relay otherwise never carries a byte", served, latest)
 	}
 	if got := h.pushes(); len(got) != 2 {
@@ -325,13 +328,13 @@ func TestABastionWhoseLatestRevisionServesNoTrafficIsRoutedToItOnTheNextForward(
 	h := newBastionHarness(t, target)
 	h.forward(t, target)
 	h.run.mu.Lock()
-	h.run.service.Traffic = []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByRevision, Revision: "an-older-revision", Percent: 100}}
+	h.run.service.Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{{Type: run.TrafficByRevision, Revision: "an-older-revision", Percent: 100}}
 	h.run.mu.Unlock()
 
 	h.forward(t, target)
 
 	service := h.run.serving()
-	if served, latest := servedRevision(service), revisionName(service.LatestReadyRevision); served != latest {
+	if served, latest := run.ServedRevision(service), run.RevisionName(service.LatestReadyRevision); served != latest {
 		t.Errorf("the bastion serves %q, want %q: a release that came ready and was never routed is routed on the next forward", served, latest)
 	}
 }

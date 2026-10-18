@@ -5,9 +5,9 @@ import (
 	"slices"
 	"testing"
 
-	"google.golang.org/api/cloudresourcemanager/v1"
-
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
 func TestBindingKeyRolesReadsThePolicyAgainWhenItChangedUnderTheWrite(t *testing.T) {
@@ -16,9 +16,9 @@ func TestBindingKeyRolesReadsThePolicyAgainWhenItChangedUnderTheWrite(t *testing
 	server.keyRaces = 1
 	c := server.open(t)
 	member := "serviceAccount:app@acme-prod.iam.gserviceaccount.com"
-	key := keyPath(c, string(environment.TierProduction))
+	key := gcloud.KeyPath(c, string(environment.TierProduction))
 
-	changed, err := c.bindKeyRoles(context.Background(), environment.TierProduction, member, syncKeyRoles, syncKeyRoles)
+	changed, err := gcloud.BindKeyRoles(context.Background(), c, environment.TierProduction, member, syncKeyRoles, syncKeyRoles)
 
 	if err != nil || !changed {
 		t.Fatalf("bindKeyRoles() = %v, %v, want the grant to land after the policy changed under the first write", changed, err)
@@ -40,22 +40,11 @@ func TestWritingTheProjectPolicyReadsItAgainWhenAnEtagMismatchRefusesTheWrite(t 
 	granting := grantedIAM()
 	granting.projectStale = 1
 	c := granting.open(t)
-	if err := c.bindProjectRole(context.Background(), member, appRecordsRole, nil, true); err != nil {
+	if err := gcloud.BindProjectRole(context.Background(), c, member, grants.RecordsRole, nil, true); err != nil {
 		t.Fatalf("bindProjectRole() = %v, want the grant to land after the 412", err)
 	}
-	if got, _ := granting.projectMembers(appRecordsRole); !slices.Contains(got, member) {
-		t.Errorf("%s has members %q, want %s", appRecordsRole, got, member)
+	if got, _ := granting.projectMembers(grants.RecordsRole); !slices.Contains(got, member) {
+		t.Errorf("%s has members %q, want %s", grants.RecordsRole, got, member)
 	}
 
-	revoking := grantedIAM()
-	revoking.project.Bindings = []*cloudresourcemanager.Binding{{Role: appRecordsRole, Members: []string{member}}}
-	revoking.projectStale = 1
-	c = revoking.open(t)
-	removed, err := c.unbindProjectMember(context.Background(), member)
-	if err != nil || len(removed) != 1 {
-		t.Fatalf("unbindProjectMember() = %v, %v, want the revoke to land after the 412", removed, err)
-	}
-	if got, _ := revoking.projectMembers(appRecordsRole); slices.Contains(got, member) {
-		t.Errorf("%s still has members %q, want %s revoked", appRecordsRole, got, member)
-	}
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const (
@@ -65,7 +66,7 @@ func (b connectionBudget) warnOversubscribed(progress progress.Log) {
 	if len(b.databases) == 0 || opened <= b.appConnections() {
 		return
 	}
-	ensureProgress(progress).Warn(fmt.Sprintf(
+	gcloud.EnsureProgress(progress).Warn(fmt.Sprintf(
 		"app %s runs %d Cloud Run services bound to postgres %s, and each instance opens up to %d connections, so at one instance each they open %d, "+
 			"more than the %d the %s tier's %s Cloud SQL instance takes from apps: a query waits or fails once they are used up. Serve the app from fewer services",
 		b.app, b.services, b.named(), pooledConnections, opened, b.appConnections(), b.tier, b.size.machineType))

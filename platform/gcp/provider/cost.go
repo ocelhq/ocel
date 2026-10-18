@@ -16,6 +16,8 @@ import (
 	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -41,21 +43,6 @@ const (
 	tfProjectIAMMember    = "google_project_iam_member"
 )
 
-var itemTypes = map[Kind]string{
-	KindDatabase:       tfFirestoreDatabase,
-	KindBucket:         tfStorageBucket,
-	KindKeyRing:        tfKMSKeyRing,
-	KindKey:            tfKMSCryptoKey,
-	KindServiceAccount: tfServiceAccount,
-	KindRole:           tfProjectCustomRole,
-	KindRepository:     tfArtifactRepository,
-	KindSecret:         tfSecretManagerSecret,
-	KindService:        tfCloudRunService,
-	KindSchedule:       tfSchedulerJob,
-	KindGrant:          tfProjectIAMMember,
-	KindQueue:          tfCloudTasksQueue,
-}
-
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
 	names, err := p.named()
 	if err != nil {
@@ -71,16 +58,17 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		if item.Kind == KindQueue {
 			continue
 		}
-		typ, priced := itemTypes[item.Kind]
+		shaped, priced := item.shape(region)
 		if !priced {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap item %s has no shape", item.ID())
 		}
-		tree.Add(shared, string(Vendor), typ, item.Name, region, itemProperties(item, region))
+		tree.Add(shared, string(Vendor), shaped.Type, item.Name, region, shaped.Properties)
 	}
 	projectKey := item{Kind: KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)}
 	projectDatabase := item{Kind: KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)}
 	for _, owned := range []item{projectKey, projectDatabase} {
-		tree.Add(shared, string(Vendor), itemTypes[owned.Kind], owned.Name, region, itemProperties(owned, region))
+		shaped, _ := owned.shape(region)
+		tree.Add(shared, string(Vendor), shaped.Type, owned.Name, region, shaped.Properties)
 	}
 	tree.AddShaped(shared, string(Vendor), region, syncShape(names.EnvSourceSync(req.Deploy.Tier), region))
 	if slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {
@@ -93,7 +81,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	if err != nil {
 		return nil, err
 	}
-	ingress := ingressFor(factsOf(front))
+	ingress := run.IngressFor(run.FactsOf(front))
 	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Tier: req.Deploy.Tier, Region: region}
 	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
@@ -109,9 +97,9 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 
 	for _, app := range req.Deploy.Apps {
 		scope := tree.Scope(environment, pricing.ScopeApp, app.App)
-		memory := revisionMemory
+		memory := run.RevisionMemory
 		if app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext {
-			memory = formatMemoryLimit(nextMemoryMB)
+			memory = run.FormatMemoryLimit(nextMemoryMB)
 		}
 		if app.Compute() == provider.ComputeContainer {
 			service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, app.App)
@@ -137,7 +125,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 		for _, worker := range app.Workers {
 			service := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(true, 0, revisionMemory, ingressInternal))
+			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(true, 0, run.RevisionMemory, run.IngressInternal))
 		}
 	}
 	shapeBuckets(tree, names, req, region, environment)
@@ -149,17 +137,18 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	return tree.Set(provider.CostSource)
 }
 
-func shapeBuckets(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, environment string) {
+func shapeBuckets(tree *pricing.Tree, names names.Names, req provider.ShapeRequest, region, environment string) {
 	for _, resource := range req.Resources {
 		if resource.Type != provider.BindingBucket {
 			continue
 		}
 		bucket := names.AppBucket(req.Deploy.Slug, req.Deploy.Env, resource.Name)
-		tree.Add(environment, string(Vendor), tfStorageBucket, bucket, region, itemProperties(item{Kind: KindBucket}, region))
+		shaped, _ := item{Kind: KindBucket, Name: bucket}.shape(region)
+		tree.Add(environment, string(Vendor), shaped.Type, bucket, region, shaped.Properties)
 	}
 }
 
-func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, shared, environment string) error {
+func shapeStores(tree *pricing.Tree, names names.Names, req provider.ShapeRequest, region, shared, environment string) error {
 	declared := false
 	for _, resource := range req.Resources {
 		switch resource.Type {
@@ -192,7 +181,7 @@ func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	return nil
 }
 
-func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, shared, environment string) {
+func shapeTopics(tree *pricing.Tree, names names.Names, req provider.ShapeRequest, region, shared, environment string) {
 	scope := taskNames(names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
 	declared := false
 	for _, resource := range req.Resources {
@@ -215,11 +204,12 @@ func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	}
 	tree.AddShaped(shared, string(Vendor), region, tasksShape(names, req.Deploy.Tier, region))
 	queue := item{Kind: KindQueue, Name: names.DelayQueue(req.Deploy.Tier)}
-	tree.Add(shared, string(Vendor), itemTypes[KindQueue], queue.Name, region, itemProperties(queue, region))
+	shaped, _ := queue.shape(region)
+	tree.Add(shared, string(Vendor), shaped.Type, queue.Name, region, shaped.Properties)
 }
 
-func shapeRealtime(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, environment string) {
-	secret := itemProperties(item{Kind: KindSecret}, region)
+func shapeRealtime(tree *pricing.Tree, names names.Names, req provider.ShapeRequest, region, environment string) {
+	secret, _ := item{Kind: KindSecret}.shape(region)
 	declared := false
 	for _, resource := range req.Resources {
 		if resource.Type != provider.BindingRealtime {
@@ -227,15 +217,15 @@ func shapeRealtime(tree *pricing.Tree, names Names, req provider.ShapeRequest, r
 		}
 		declared = true
 		namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
-		tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace), region, secret)
+		tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace), region, secret.Properties)
 	}
 	if !declared {
 		return
 	}
-	tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env), region, secret)
+	tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env), region, secret.Properties)
 	tree.Add(environment, string(Vendor), tfCloudRunService, names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env), region, map[string]any{
 		"location":      region,
-		"ingress":       ingressEverywhere,
+		"ingress":       run.IngressEverywhere,
 		"holds_sockets": true,
 		"template": map[string]any{
 			"scaling":                          map[string]any{"min_instance_count": 0, "max_instance_count": realtimeGatewayInstances},
@@ -250,38 +240,6 @@ func shapeRealtime(tree *pricing.Tree, names Names, req provider.ShapeRequest, r
 	})
 }
 
-func itemProperties(item item, region string) map[string]any {
-	switch item.Kind {
-	case KindBucket:
-		return map[string]any{"location": region, "storage_class": "STANDARD", "versioning": map[string]any{"enabled": item.Versioned}}
-	case KindRepository:
-		return map[string]any{"location": region, "format": "DOCKER"}
-	case KindSecret:
-		return map[string]any{"replication": map[string]any{"auto": map[string]any{}}}
-	case KindService:
-		return map[string]any{
-			"location":                   region,
-			"ingress":                    ingressInternal,
-			"requests_per_hour":          syncRequestsPerHour,
-			"billed_seconds_per_request": syncBilledSecondsEach,
-			"template": map[string]any{
-				"scaling": map[string]any{"min_instance_count": 0, "max_instance_count": syncInstances},
-				"containers": []any{map[string]any{
-					"resources": map[string]any{
-						"cpu_idle": true,
-						"limits":   map[string]any{"cpu": syncCPU, "memory": strconv.Itoa(syncMemoryMiB) + "Mi"},
-					},
-				}},
-			},
-		}
-	case KindSchedule:
-		return map[string]any{"region": region, "schedule": syncSchedule}
-	case KindQueue:
-		return map[string]any{"location": region}
-	}
-	return map[string]any{}
-}
-
 func serviceProperties(billsPerRequest bool, minInstances int, memory, ingress string) map[string]any {
 	return map[string]any{
 		"ingress": ingress,
@@ -290,7 +248,7 @@ func serviceProperties(billsPerRequest bool, minInstances int, memory, ingress s
 			"containers": []any{map[string]any{
 				"resources": map[string]any{
 					"cpu_idle": billsPerRequest,
-					"limits":   map[string]any{"cpu": revisionCPU, "memory": memory},
+					"limits":   map[string]any{"cpu": run.RevisionCPU, "memory": memory},
 				},
 			}},
 		},

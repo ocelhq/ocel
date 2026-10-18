@@ -1,9 +1,11 @@
 package gcp
 
-func newCDNPurgeRole(names Names) customRole {
+import "github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+
+func newCDNPurgeRole(names names.Names) customRole {
 	return customRole{
 		id:          names.CDNPurgeRole(),
-		title:       "ocel cache purge (" + string(names.namespace) + ")",
+		title:       "ocel cache purge (" + string(names.Namespace()) + ")",
 		description: "lets a Next app behind the alb clear its revalidated pages from Cloud CDN, and nothing else",
 		permissions: []string{"compute.urlMaps.invalidateCache"},
 		driftReason: "it holds other permissions than clearing Cloud CDN, which is all a Next app behind the alb is granted it for",

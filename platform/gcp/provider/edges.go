@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -47,7 +48,7 @@ func (p *Provider) edges() edges {
 	return edges{
 		namespace: p.namespace,
 		keyValues: p.KeyValues(),
-		pins:      p,
+		pins:      p.services(),
 		gates:     gateSecrets{p: p},
 		stacks:    albStacks{p: p},
 		routes:    p,
@@ -129,5 +130,5 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 }
 
 func waitBeforeRetry(ctx context.Context, attempt int) bool {
-	return googleretry.WaitedFor(ctx, attempt, waitCeiling)
+	return googleretry.WaitedFor(ctx, attempt, gcloud.WaitCeiling)
 }

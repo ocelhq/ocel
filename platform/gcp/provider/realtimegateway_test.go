@@ -6,12 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
@@ -24,17 +26,17 @@ func productionRef(t *testing.T) provider.StackRef {
 	return provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
 }
 
-func gatewayService(t *testing.T, host string) *run.GoogleCloudRunV2Service {
+func gatewayService(t *testing.T, host string) *runv2.GoogleCloudRunV2Service {
 	t.Helper()
-	names := Names{namespace: provider.Namespace("ocel"), project: "acme-prod"}
-	desired, err := serviceOf(realtimeGatewayServing(names, productionRef(t), host, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-realtime:abc", ""))
+	names := names.New(provider.Namespace("ocel"), "acme-prod")
+	desired, err := run.ServiceOf(realtimeGatewayServing(names, productionRef(t), host, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-realtime:abc", ""))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}
 	return desired
 }
 
-func envOf(container *run.GoogleCloudRunV2Container) map[string]string {
+func envOf(container *runv2.GoogleCloudRunV2Container) map[string]string {
 	env := map[string]string{}
 	for _, entry := range container.Env {
 		env[entry.Name] = entry.Value
@@ -46,8 +48,8 @@ func TestTheGatewayServiceTakesBrowsersFromAnywhereWithoutCloudRunsInvokerCheck(
 	t.Parallel()
 
 	desired := gatewayService(t, "ocel-shop-prod-realtime-abc123-ew.a.run.app")
-	if desired.Ingress != ingressEverywhere {
-		t.Errorf("Ingress = %q, want %q: browsers connect straight to the gateway", desired.Ingress, ingressEverywhere)
+	if desired.Ingress != run.IngressEverywhere {
+		t.Errorf("Ingress = %q, want %q: browsers connect straight to the gateway", desired.Ingress, run.IngressEverywhere)
 	}
 	if !desired.InvokerIamDisabled {
 		t.Error("InvokerIamDisabled = false, and a browser carries no Google identity to pass Cloud Run's invoker check")
@@ -81,7 +83,7 @@ func TestTheGatewayReadsItsKeysFromTheLatestVersionOfItsEnvironmentsKeysSecret(t
 	t.Parallel()
 
 	desired := gatewayService(t, "ocel-shop-prod-realtime-abc123-ew.a.run.app")
-	names := Names{namespace: provider.Namespace("ocel"), project: "acme-prod"}
+	names := names.New(provider.Namespace("ocel"), "acme-prod")
 	if len(desired.Template.Volumes) != 1 {
 		t.Fatalf("volumes = %d, want the keys secret alone", len(desired.Template.Volumes))
 	}
@@ -123,9 +125,9 @@ func TestTheGatewayChecksTokensForItsOwnHostAdmitsAnyOriginAndCapsItsSockets(t *
 func TestOnTheEmulatorTheGatewayTakesItsKeysFromItsEnvironmentForWantOfSecretVolumes(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: provider.Namespace("ocel"), project: "acme-prod"}
+	names := names.New(provider.Namespace("ocel"), "acme-prod")
 	keys := `{"app":"AAAA"}`
-	desired, err := serviceOf(realtimeGatewayServing(names, productionRef(t), "gateway.run.app", "ocel-realtime:abc", keys))
+	desired, err := run.ServiceOf(realtimeGatewayServing(names, productionRef(t), "gateway.run.app", "ocel-realtime:abc", keys))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}
@@ -178,7 +180,7 @@ func TestAGatewayReleasedAgainServesTheRevisionThatReleaseMade(t *testing.T) {
 	h.provision(t, "app")
 
 	service := h.run.serving()
-	if served, latest := servedRevision(service), revisionName(service.LatestReadyRevision); served != latest {
+	if served, latest := run.ServedRevision(service), run.RevisionName(service.LatestReadyRevision); served != latest {
 		t.Errorf("the gateway serves %q, want %q, the revision its release made: an upgraded gateway otherwise never takes a socket", served, latest)
 	}
 }
@@ -189,12 +191,12 @@ func TestAGatewayWhoseLatestRevisionServesNoTrafficIsRoutedToItOnTheNextDeploy(t
 	h := newRealtimeHarness(t)
 	h.provision(t, "app")
 	h.run.mu.Lock()
-	h.run.service.Traffic = []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByRevision, Revision: "an-older-revision", Percent: 100}}
+	h.run.service.Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{{Type: run.TrafficByRevision, Revision: "an-older-revision", Percent: 100}}
 	h.run.mu.Unlock()
 	h.provision(t, "app")
 
 	service := h.run.serving()
-	if served, latest := servedRevision(service), revisionName(service.LatestReadyRevision); served != latest {
+	if served, latest := run.ServedRevision(service), run.RevisionName(service.LatestReadyRevision); served != latest {
 		t.Errorf("the gateway serves %q, want %q: a release that came ready and was never routed is routed once the gateway is next deployed", served, latest)
 	}
 }

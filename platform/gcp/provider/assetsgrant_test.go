@@ -8,12 +8,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
 func assetBindingsOf(server *iamServer) []string {
 	var bound []string
 	for _, binding := range projectBindingsOf(server) {
-		if strings.HasPrefix(binding, appAssetsRole+" ") {
+		if strings.HasPrefix(binding, grants.AssetsRole+" ") {
 			bound = append(bound, binding)
 		}
 	}
@@ -28,8 +29,8 @@ func TestAnAppsAccountMayReadItsOwnStaticFilesAndNoOtherApps(t *testing.T) {
 	}
 
 	granted := assetBindingsOf(server.identities())
-	want := appAssetsRole + " serviceAccount:" + names(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") +
-		` resource.name.startsWith("projects/_/buckets/` + names(t, p).Bucket(environment.TierProduction) + `/objects/assets/prod/shop/web/")`
+	want := grants.AssetsRole + " serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") +
+		` resource.name.startsWith("projects/_/buckets/` + namesOf(t, p).Bucket(environment.TierProduction) + `/objects/assets/prod/shop/web/")`
 	if !slices.Equal(granted, []string{want}) {
 		t.Errorf("the app's asset bindings = %q, want exactly %q", granted, want)
 	}
@@ -45,7 +46,7 @@ func TestAnAppsAssetsGrantIsTitledForTheApp(t *testing.T) {
 	}
 
 	for _, binding := range server.project.Bindings {
-		if binding.Role == appAssetsRole && (binding.Condition == nil || binding.Condition.Title != "ocel assets of prod/shop/web") {
+		if binding.Role == grants.AssetsRole && (binding.Condition == nil || binding.Condition.Title != "ocel assets of prod/shop/web") {
 			t.Errorf("the assets binding's condition = %+v, want the title %q", binding.Condition, "ocel assets of prod/shop/web")
 		}
 	}

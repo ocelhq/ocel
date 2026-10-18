@@ -9,11 +9,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestABootstrapMakesTheSyncAccountAndLeavesTheSyncToTheFirstScheduledEnvSource(t *testing.T) {
 	t.Parallel()
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	for _, tier := range bothTiers {
 		for _, emulated := range []bool{false, true} {
 			ids := idsOf(bootstrapItems(names, tier, emulated))
@@ -48,8 +49,8 @@ func TestTheFirstScheduledEnvSourceAddsTheSyncServiceAndScheduleAsAPartItRecords
 		t.Fatalf("ensureEnvSourceSync() = %v", err)
 	}
 
-	if server.service(b.clients.servicePath(name)) == nil {
-		t.Errorf("no sync service at %s", b.clients.servicePath(name))
+	if server.service(b.clients.ServicePath(name)) == nil {
+		t.Errorf("no sync service at %s", b.clients.ServicePath(name))
 	}
 	if found, err := b.schedulePresence(ctx, tier, name); err != nil || !found.present || found.mends != "" {
 		t.Errorf("schedulePresence() = %+v, %v, want the schedule calling the service", found, err)
@@ -123,7 +124,7 @@ func TestABootstrapAddsNoEnvSourceSyncNoScheduledEnvSourceAdded(t *testing.T) {
 	if repaired, err := b.repairParts(context.Background(), tier); err != nil || len(repaired) != 0 {
 		t.Fatalf("repairParts() = %v, %v, want nothing made", repaired, err)
 	}
-	if server.service(b.clients.servicePath(b.clients.EnvSourceSync(tier))) != nil {
+	if server.service(b.clients.ServicePath(b.clients.EnvSourceSync(tier))) != nil {
 		t.Error("a bootstrap made the env source sync, which only a scheduled env source adds")
 	}
 }
@@ -199,7 +200,7 @@ func TestRemovingATierTakesItsEnvSourceSyncAndAPlanToRemoveItListsIt(t *testing.
 	if err := b.removeEnvSourceSync(ctx, tier, nil); err != nil {
 		t.Fatalf("removeEnvSourceSync() = %v", err)
 	}
-	if server.service(b.clients.servicePath(name)) != nil {
+	if server.service(b.clients.ServicePath(name)) != nil {
 		t.Error("the sync service outlived its tier")
 	}
 	if found, err := b.schedulePresence(ctx, tier, name); err != nil || found.present {

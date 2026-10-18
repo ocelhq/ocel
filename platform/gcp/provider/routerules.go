@@ -7,9 +7,10 @@ import (
 	"google.golang.org/api/compute/v1"
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
-func routeRulesOf(clients *clients, dynamic string, routes *alb.StaticRoutes) []*compute.HttpRouteRule {
+func routeRulesOf(clients *gcloud.Clients, dynamic string, routes *alb.StaticRoutes) []*compute.HttpRouteRule {
 	if routes == nil {
 		return nil
 	}
@@ -28,7 +29,7 @@ func routeRulesOf(clients *clients, dynamic string, routes *alb.StaticRoutes) []
 		rules = append(rules, &compute.HttpRouteRule{
 			Priority:    int64(len(rules)),
 			MatchRules:  []*compute.HttpRouteRuleMatch{{PrefixMatch: prefix}},
-			Service:     clients.bucketLink(routes.Backend),
+			Service:     clients.BucketLink(routes.Backend),
 			RouteAction: &compute.HttpRouteAction{UrlRewrite: &compute.UrlRewrite{PathPrefixRewrite: routes.Objects + prefix}},
 		})
 	}

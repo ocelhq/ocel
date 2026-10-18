@@ -1,4 +1,4 @@
-package gcp
+package gcloud
 
 import (
 	"context"
@@ -10,29 +10,29 @@ import (
 )
 
 const (
-	waitAttempts = 60
-	waitCeiling  = 5 * time.Second
+	WaitAttempts = 60
+	WaitCeiling  = 5 * time.Second
 )
 
-func until[T any](ctx context.Context, doing string, ask func() (T, error), done func(T) bool) (T, error) {
-	return waiting(ctx, patience{attempts: waitAttempts, ceiling: waitCeiling}, doing, ask, done)
+func Until[T any](ctx context.Context, doing string, ask func() (T, error), done func(T) bool) (T, error) {
+	return Waiting(ctx, Patience{Attempts: WaitAttempts, Ceiling: WaitCeiling}, doing, ask, done)
 }
 
-type patience struct {
-	attempts int
-	ceiling  time.Duration
+type Patience struct {
+	Attempts int
+	Ceiling  time.Duration
 }
 
-func waiting[T any](
+func Waiting[T any](
 	ctx context.Context,
-	limits patience,
+	limits Patience,
 	doing string,
 	ask func() (T, error),
 	done func(T) bool,
 ) (T, error) {
 	var nothing T
-	for attempt := range limits.attempts {
-		if attempt > 0 && !googleretry.WaitedFor(ctx, attempt, limits.ceiling) {
+	for attempt := range limits.Attempts {
+		if attempt > 0 && !googleretry.WaitedFor(ctx, attempt, limits.Ceiling) {
 			return nothing, fmt.Errorf("wait for %s: %w", doing, ctx.Err())
 		}
 		value, err := ask()
@@ -46,5 +46,5 @@ func waiting[T any](
 	return nothing, refusal.Refuse(refusal.CodeNotReady,
 		"%s is still not done after %d attempts, and going on before it is leaves the work half made.\n"+
 			"It may still be provisioning: run the same command again once Google has caught up",
-		doing, limits.attempts)
+		doing, limits.Attempts)
 }

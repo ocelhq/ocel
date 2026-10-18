@@ -8,13 +8,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 var cloudRunName = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
 
-func serviceNames(t *testing.T) gcp.Names {
+func serviceNames(t *testing.T) names.Names {
 	t.Helper()
-	return names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	return namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 }
 
 func TestAServiceIsNamedForTheProjectEnvironmentAndAppItServes(t *testing.T) {

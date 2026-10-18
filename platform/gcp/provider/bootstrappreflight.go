@@ -14,6 +14,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const (
@@ -79,7 +82,7 @@ var bootstrapPermissions = []string{
 	"run.services.getIamPolicy",
 	"run.services.setIamPolicy",
 	"run.operations.get",
-	runLocationsPermission,
+	gcloud.RunLocationsPermission,
 	"cloudscheduler.jobs.create",
 	"cloudscheduler.jobs.get",
 	"cloudscheduler.jobs.update",
@@ -140,43 +143,25 @@ func prefixedSecretsGrant(role, prefix string) string {
 		role, "projects/"+projectNumberHole+"/secrets/"+prefix)
 }
 
-func gateSecretsGrant(names Names) string {
+func gateSecretsGrant(names names.Names) string {
 	return prefixedSecretsGrant(gateSecretsRole, names.GateSecretPrefix())
 }
 
-func realtimeSecretsGrant(names Names) string {
+func realtimeSecretsGrant(names names.Names) string {
 	return prefixedSecretsGrant(realtimeSecretsRole, names.RealtimeSecretPrefix())
 }
 
-const (
-	appGrantsRole       = "roles/resourcemanager.projectIamAdmin"
-	modifiedGrantsLimit = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])"
-)
-
-func appGrantsGrant(names Names) string {
-	granted := listGrantedRoles(names)
-	quoted := make([]string, len(granted))
-	for i, role := range granted {
-		quoted[i] = "'" + role + "'"
-	}
-	return fmt.Sprintf("%s, on the condition %s.hasOnly([%s])", appGrantsRole, modifiedGrantsLimit, strings.Join(quoted, ", "))
-}
-
-func queueAdminGrant(queue string) string {
-	return "roles/cloudtasks.queueAdmin on the queue " + queue
-}
-
-func queueGrants(names Names, region string) []string {
-	var grants []string
+func queueGrants(names names.Names, region string) []string {
+	var granted []string
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		grants = append(grants, queueAdminGrant(names.DelayQueuePath(region, tier)))
+		granted = append(granted, grants.QueueAdminGrant(names.DelayQueuePath(region, tier)))
 	}
-	return grants
+	return granted
 }
 
 const untaggingRole = "roles/artifactregistry.repoAdmin"
 
-func untaggingGrants(names Names, region string) []string {
+func untaggingGrants(names names.Names, region string) []string {
 	var grants []string
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
 		grants = append(grants, fmt.Sprintf("%s, on the repository projects/%s/locations/%s/repositories/%s",
@@ -198,21 +183,21 @@ var projectPermissions = []string{
 	"secretmanager.secrets.create",
 }
 
-func appBucketsGrant(names Names) string {
+func appBucketsGrant(names names.Names) string {
 	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
 		bucketsRole, "projects/_/buckets/"+names.AppBucketPrefix())
 }
 
-func databasesGrant(names Names) string {
+func databasesGrant(names names.Names) string {
 	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
-		databasesRole, "projects/"+names.project+"/instances/"+names.PostgresInstancePrefix())
+		databasesRole, "projects/"+names.Project()+"/instances/"+names.PostgresInstancePrefix())
 }
 
-func partsGrant(names Names) string {
+func partsGrant(names names.Names) string {
 	return names.PartsRolePath() + ", unconditioned: Compute Engine, Network Connectivity, Artifact Registry and Service Usage name no resource attribute an IAM condition could hold a part by"
 }
 
-func partDatabasesGrant(names Names) string {
+func partDatabasesGrant(names names.Names) string {
 	return names.PartDatabasesRolePath() + ", on the condition " + partDatabasesCondition(names)
 }
 
@@ -269,10 +254,10 @@ func (b bootstrap) servicesOn(ctx context.Context, apis []string) error {
 	}
 	var off []string
 	for _, api := range apis {
-		name := "projects/" + b.clients.project + "/services/" + api
+		name := "projects/" + b.clients.Project() + "/services/" + api
 		apiService, err := googleretry.Attempted(ctx, service.Services.Get(name).Context(ctx).Do)
 		if err != nil {
-			return fmt.Errorf("read whether %s is on in project %s: %w", api, b.clients.project, err)
+			return fmt.Errorf("read whether %s is on in project %s: %w", api, b.clients.Project(), err)
 		}
 		if apiService.State != enabledService {
 			off = append(off, api)
@@ -284,7 +269,7 @@ func (b bootstrap) servicesOn(ctx context.Context, apis []string) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"project %s has %s switched off, and ocel provisions resources rather than switching on the services that host them.\n"+
 			"Run `gcloud services enable %s --project %s`, then try again",
-		b.clients.project, strings.Join(off, ", "), strings.Join(off, " "), b.clients.project)
+		b.clients.Project(), strings.Join(off, ", "), strings.Join(off, " "), b.clients.Project())
 }
 
 func (b bootstrap) permitted(ctx context.Context, parts []string) error {
@@ -295,10 +280,10 @@ func (b bootstrap) permitted(ctx context.Context, parts []string) error {
 	needed := permissionsFor(parts)
 	var granted []string
 	for asked := range slices.Chunk(needed, testedPermissionsPerRequest) {
-		answer, err := googleretry.Attempted(ctx, service.Projects.TestIamPermissions(b.clients.project,
+		answer, err := googleretry.Attempted(ctx, service.Projects.TestIamPermissions(b.clients.Project(),
 			&cloudresourcemanager.TestIamPermissionsRequest{Permissions: asked}).Context(ctx).Do)
 		if err != nil {
-			return fmt.Errorf("ask project %s what this credential may do in it: %w", b.clients.project, err)
+			return fmt.Errorf("ask project %s what this credential may do in it: %w", b.clients.Project(), err)
 		}
 		granted = append(granted, answer.Permissions...)
 	}
@@ -314,7 +299,7 @@ func (b bootstrap) permitted(ctx context.Context, parts []string) error {
 	return refusal.Refuse(refusal.CodeDenied,
 		"this credential may not do what a bootstrap of project %s does: it lacks %s.\n"+
 			"Granting %s covers every one of them, but the permissions are what is checked",
-		b.clients.project, strings.Join(missing, ", "), strings.Join(rolesCovering(parts), ", "))
+		b.clients.Project(), strings.Join(missing, ", "), strings.Join(rolesCovering(parts), ", "))
 }
 
 func (b bootstrap) regionServed(ctx context.Context, read survey) error {
@@ -325,9 +310,9 @@ func (b bootstrap) regionServed(ctx context.Context, read survey) error {
 	if err != nil {
 		return err
 	}
-	listed, err := googleretry.Attempted(ctx, service.Projects.Locations.List("projects/"+b.clients.project).Context(ctx).Do)
+	listed, err := googleretry.Attempted(ctx, service.Projects.Locations.List("projects/"+b.clients.Project()).Context(ctx).Do)
 	if err != nil {
-		return fmt.Errorf("ask which locations Firestore serves project %s from: %w", b.clients.project, err)
+		return fmt.Errorf("ask which locations Firestore serves project %s from: %w", b.clients.Project(), err)
 	}
 	served := make([]string, 0, len(listed.Locations))
 	for _, location := range listed.Locations {

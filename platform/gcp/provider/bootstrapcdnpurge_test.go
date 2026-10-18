@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const cdnPurgeRoleEndpoint = "/v1/projects/acme-prod/roles/ocel_cdn_purge"
@@ -29,7 +30,7 @@ func currentCDNPurgeRole() *iam.Role {
 func TestTheCDNPurgeRoleHoldsOnlyThePermissionToClearCloudCDN(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 
 	role := newCDNPurgeRole(names)
 
@@ -44,9 +45,9 @@ func TestTheCDNPurgeRoleHoldsOnlyThePermissionToClearCloudCDN(t *testing.T) {
 func TestTheCDNPurgeRoleIDFitsTheLongestNamespaceAnAccountAllows(t *testing.T) {
 	t.Parallel()
 
-	width := maxAccountID - 1 - accountHashLen
+	width := names.MaxAccountID - 1 - names.AccountHashLen
 	namespace := strings.Repeat("a-", width/2) + strings.Repeat("b", width%2)
-	names := Names{namespace: provider.Namespace(namespace), project: "acme-prod"}
+	names := names.New(provider.Namespace(namespace), "acme-prod")
 
 	id := names.CDNPurgeRole()
 
@@ -158,7 +159,7 @@ func TestACachePurgeRoleDeletedTooLongAgoIsRefusedNamingTheWait(t *testing.T) {
 
 func TestEveryBootstrapItemRoleIsAKnownCustomRole(t *testing.T) {
 	t.Parallel()
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 
 	var roles int
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
@@ -182,7 +183,8 @@ func TestAnUnknownCustomRoleIsRefusedByName(t *testing.T) {
 	b := (&roleServer{}).bootstrap(t)
 	read := survey{Tier: environment.TierProduction, Names: b.clients.Names}
 
-	err := b.make(t.Context(), read, item{Kind: KindRole, Name: "ocel_other"})
+	target := item{Kind: KindRole, Name: "ocel_other"}
+	err := target.kind().make(t.Context(), b, read, target)
 
 	if err == nil || !strings.Contains(err.Error(), "no custom role is named ocel_other") {
 		t.Errorf("make(unknown role) = %v, want it to say no custom role is named ocel_other", err)

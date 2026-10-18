@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const (
@@ -33,14 +34,14 @@ func (i pluginImages) Ensure(ctx context.Context, tier environment.Tier, plugin 
 		return "", err
 	}
 	repository := c.Repository(tier) + pluginRepository
-	path := repositoryPath(c, repository)
+	path := gcloud.RepositoryPath(c, repository)
 	if err := ensurePluginRepository(ctx, c, service, repository, path); err != nil {
 		return "", err
 	}
 	digest := sha256.Sum256(plugin)
 	version := hex.EncodeToString(digest[:])[:pluginVersionLen]
 	_, err = googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Packages.Versions.Get(path+"/packages/"+pluginPackage+"/versions/"+version).Context(ctx).Do)
-	if err != nil && !absent(err) {
+	if err != nil && !gcloud.Absent(err) {
 		return "", fmt.Errorf("look for version %s of the gate plugin in %s: %w", version, repository, err)
 	}
 	if err != nil {
@@ -65,8 +66,8 @@ func (i pluginImages) Delete(ctx context.Context, tier environment.Tier) error {
 		return err
 	}
 	repository := c.Repository(tier) + pluginRepository
-	deleting, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Delete(repositoryPath(c, repository)).Context(ctx).Do)
-	if absent(err) {
+	deleting, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Delete(gcloud.RepositoryPath(c, repository)).Context(ctx).Do)
+	if gcloud.Absent(err) {
 		return nil
 	}
 	if err != nil {
@@ -75,19 +76,19 @@ func (i pluginImages) Delete(ctx context.Context, tier environment.Tier) error {
 	return bootstrap{clients: c}.repositoryAwaited(ctx, "deleting the "+repository+" repository", deleting)
 }
 
-func ensurePluginRepository(ctx context.Context, c *clients, service *artifactregistry.Service, name, path string) error {
+func ensurePluginRepository(ctx context.Context, c *gcloud.Clients, service *artifactregistry.Service, name, path string) error {
 	_, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Get(path).Context(ctx).Do)
 	if err == nil {
 		return nil
 	}
-	if !absent(err) {
+	if !gcloud.Absent(err) {
 		return fmt.Errorf("look for the %s repository: %w", name, err)
 	}
-	creating, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Create(repositoryParent(c), &artifactregistry.Repository{
+	creating, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Create(gcloud.RepositoryParent(c), &artifactregistry.Repository{
 		Format:      genericArtifacts,
 		Description: "the plugin that runs the gate on the load balancer",
 	}).RepositoryId(name).Context(ctx).Do)
-	if taken(err) {
+	if gcloud.Taken(err) {
 		return nil
 	}
 	if err != nil {

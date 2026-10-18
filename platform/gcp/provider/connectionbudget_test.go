@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -27,7 +27,7 @@ func productionSpec() provider.StackSpec {
 	return spec
 }
 
-func ceilingOf(service *run.GoogleCloudRunV2Service) int64 {
+func ceilingOf(service *runv2.GoogleCloudRunV2Service) int64 {
 	return service.Template.Scaling.MaxInstanceCount
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const (
@@ -47,8 +48,8 @@ func (p *Provider) Retire(ctx context.Context, live provider.LiveApps, progress 
 		return err
 	}
 	for _, worker := range retired {
-		ensureProgress(progress).Say(fmt.Sprintf("Retiring worker service %s: "+retiredAppTemplate, worker.service, worker.app, live.Env))
-		if _, err := p.deleteService(ctx, worker.service, progress); err != nil {
+		gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Retiring worker service %s: "+retiredAppTemplate, worker.service, worker.app, live.Env))
+		if _, err := p.services().DeleteService(ctx, worker.service, progress); err != nil {
 			return err
 		}
 	}
@@ -75,14 +76,14 @@ func (p *Provider) listRetiredWorkers(ctx context.Context, live provider.LiveApp
 	if len(recorded) == 0 {
 		return nil, nil
 	}
-	clients, services, err := p.openRun(ctx)
+	clients, services, err := p.services().OpenRun(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var retired []retiredWorker
 	for _, worker := range recorded {
-		_, err := p.read(ctx, services, clients.servicePath(worker.service), worker.service)
-		if absent(err) {
+		_, err := p.services().Read(ctx, services, clients.ServicePath(worker.service), worker.service)
+		if gcloud.Absent(err) {
 			continue
 		}
 		if err != nil {

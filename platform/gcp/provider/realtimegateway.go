@@ -8,12 +8,15 @@ import (
 	"strconv"
 
 	"google.golang.org/api/googleapi"
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
@@ -24,7 +27,7 @@ const (
 	realtimeGatewayConcurrency = 1000
 	realtimeGatewayMaxSockets  = 950
 	realtimeGatewayInstances   = 1
-	realtimeGatewayTimeout     = maxRequestTimeout
+	realtimeGatewayTimeout     = run.MaxRequestTimeout
 
 	realtimeKeysVolume = "realtime-keys"
 	realtimeKeysDir    = "/var/run/ocel/realtime"
@@ -36,50 +39,50 @@ const (
 
 var realtimeImageTag = binaryImageTag(payloads.RealtimeGateway)
 
-func realtimeGatewayServing(names Names, ref provider.StackRef, host, image, inlineKeys string) serving {
-	gateway := serving{
-		service:     names.RealtimeGateway(ref.Project, ref.Name.Env),
-		labels:      stackLabels(names, ref),
-		image:       image,
-		account:     names.RealtimeAccountEmail(ref.Tier),
-		compute:     provider.ComputeServerless,
-		public:      true,
-		ingress:     ingressEverywhere,
-		cpu:         realtimeGatewayCPU,
-		memory:      realtimeGatewayMemoryMiB,
-		concurrency: realtimeGatewayConcurrency,
-		instances:   provider.Instances{Max: realtimeGatewayInstances},
-		timeout:     realtimeGatewayTimeout,
-		env: map[string]string{
+func realtimeGatewayServing(named names.Names, ref provider.StackRef, host, image, inlineKeys string) run.Serving {
+	gateway := run.Serving{
+		Service:     named.RealtimeGateway(ref.Project, ref.Name.Env),
+		Labels:      names.StackLabels(named, ref),
+		Image:       image,
+		Account:     named.RealtimeAccountEmail(ref.Tier),
+		Compute:     provider.ComputeServerless,
+		Public:      true,
+		Ingress:     run.IngressEverywhere,
+		CPU:         realtimeGatewayCPU,
+		Memory:      realtimeGatewayMemoryMiB,
+		Concurrency: realtimeGatewayConcurrency,
+		Instances:   provider.Instances{Max: realtimeGatewayInstances},
+		Timeout:     realtimeGatewayTimeout,
+		Env: map[string]string{
 			gatewayenv.HostVar:       host,
 			gatewayenv.AnyOriginVar:  strconv.FormatBool(true),
 			gatewayenv.MaxSocketsVar: strconv.Itoa(realtimeGatewayMaxSockets),
 		},
 	}
 	if inlineKeys != "" {
-		gateway.env[gatewayenv.KeysVar] = inlineKeys
+		gateway.Env[gatewayenv.KeysVar] = inlineKeys
 		return gateway
 	}
-	keys := secretMount{name: realtimeKeysVolume, secret: names.RealtimeKeysSecret(ref.Tier, ref.Project, ref.Name.Env), dir: realtimeKeysDir, file: realtimeKeysFile}
-	gateway.mounts = []secretMount{keys}
-	gateway.env[gatewayenv.KeysFileVar] = keys.dir + "/" + keys.file
+	keys := run.SecretMount{Name: realtimeKeysVolume, Secret: named.RealtimeKeysSecret(ref.Tier, ref.Project, ref.Name.Env), Dir: realtimeKeysDir, File: realtimeKeysFile}
+	gateway.Mounts = []run.SecretMount{keys}
+	gateway.Env[gatewayenv.KeysFileVar] = keys.Dir + "/" + keys.File
 	return gateway
 }
 
 func (r realtimeEnvironment) gatewayImage() string {
-	return r.clients.RepositoryPath(r.clients.region, r.ref.Tier) + "/" + realtimeImageName + ":" + realtimeImageTag()
+	return r.clients.RepositoryPath(r.clients.Region, r.ref.Tier) + "/" + realtimeImageName + ":" + realtimeImageTag()
 }
 
-func (r realtimeEnvironment) readGateway(ctx context.Context) (*run.GoogleCloudRunV2Service, error) {
+func (r realtimeEnvironment) readGateway(ctx context.Context) (*runv2.GoogleCloudRunV2Service, error) {
 	services, err := r.clients.Run()
 	if err != nil {
 		return nil, err
 	}
 	name := r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
-	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
-		return services.Projects.Locations.Services.Get(r.clients.servicePath(name)).Context(ctx).Do(call...)
+	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*runv2.GoogleCloudRunV2Service, error) {
+		return services.Projects.Locations.Services.Get(r.clients.ServicePath(name)).Context(ctx).Do(call...)
 	})
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return nil, nil
 	}
 	if err != nil {
@@ -99,28 +102,28 @@ func (r realtimeEnvironment) encodeInlineKeys(keys map[string]string) (string, e
 	return string(encoded), nil
 }
 
-func (r realtimeEnvironment) findGatewayHost(current *run.GoogleCloudRunV2Service) string {
+func (r realtimeEnvironment) findGatewayHost(current *runv2.GoogleCloudRunV2Service) string {
 	if current != nil && hostOf(current.Uri) != "" {
 		return hostOf(current.Uri)
 	}
 	return r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
 }
 
-func (r realtimeEnvironment) compareGateway(current *run.GoogleCloudRunV2Service, host, image, inlineKeys string) (serving, string, error) {
+func (r realtimeEnvironment) compareGateway(current *runv2.GoogleCloudRunV2Service, host, image, inlineKeys string) (run.Serving, string, error) {
 	desired := realtimeGatewayServing(r.clients.Names, r.ref, host, image, inlineKeys)
-	wanted, err := serviceOf(desired)
+	wanted, err := run.ServiceOf(desired)
 	if err != nil {
-		return serving{}, "", err
+		return run.Serving{}, "", err
 	}
 	switch {
 	case current == nil:
-		return desired, "the realtime gateway " + desired.service + " is created", nil
+		return desired, "the realtime gateway " + desired.Service + " is created", nil
 	case imageOf(current) != image:
-		return desired, "the realtime gateway " + desired.service + " changes from image " + imageOf(current) + " to " + image, nil
+		return desired, "the realtime gateway " + desired.Service + " changes from image " + imageOf(current) + " to " + image, nil
 	case !sameServing(current, wanted):
-		return desired, "the realtime gateway " + desired.service + "'s Cloud Run settings differ from what ocel declares, so it is released again", nil
-	case !servesLatest(current):
-		return desired, "the realtime gateway " + desired.service + " does not serve its latest ready revision, so it is released again", nil
+		return desired, "the realtime gateway " + desired.Service + "'s Cloud Run settings differ from what ocel declares, so it is released again", nil
+	case !run.ServesLatest(current):
+		return desired, "the realtime gateway " + desired.Service + " does not serve its latest ready revision, so it is released again", nil
 	}
 	return desired, "", nil
 }
@@ -177,7 +180,7 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 		if err != nil {
 			return "", err
 		}
-		served := hostOf(ran.url)
+		served := hostOf(ran.Url)
 		if served == "" {
 			return "", refusal.Refuse(refusal.CodeNotReady,
 				"Cloud Run gave the realtime gateway %s no URL, and a realtime binding names the host browsers connect to", name)
@@ -200,12 +203,12 @@ func (r realtimeEnvironment) refuseUnbootstrappedTier(ctx context.Context) error
 		return err
 	}
 	account := r.clients.RealtimeAccount(r.ref.Tier)
-	_, err = googleretry.Attempted(ctx, accounts.Projects.ServiceAccounts.Get(accountPath(r.clients, account)).Context(ctx).Do)
-	if absent(err) {
+	_, err = googleretry.Attempted(ctx, accounts.Projects.ServiceAccounts.Get(gcloud.AccountPath(r.clients, account)).Context(ctx).Do)
+	if gcloud.Absent(err) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"the realtime gateways of tier %s run as the %s service account, and project %s has none: the tier was bootstrapped before realtime was served here.\n"+
 				"Run `ocel bootstrap` for this tier again, then deploy",
-			r.ref.Tier, account, r.clients.project)
+			r.ref.Tier, account, r.clients.Project())
 	}
 	if err != nil {
 		return fmt.Errorf("read the %s service account the realtime gateways of tier %s run as: %w", account, r.ref.Tier, err)
@@ -213,14 +216,14 @@ func (r realtimeEnvironment) refuseUnbootstrappedTier(ctx context.Context) error
 	return nil
 }
 
-func imageOf(service *run.GoogleCloudRunV2Service) string {
+func imageOf(service *runv2.GoogleCloudRunV2Service) string {
 	if service.Template == nil || len(service.Template.Containers) != 1 {
 		return ""
 	}
 	return service.Template.Containers[0].Image
 }
 
-func sameServing(current, desired *run.GoogleCloudRunV2Service) bool {
+func sameServing(current, desired *runv2.GoogleCloudRunV2Service) bool {
 	if current.Template == nil || len(current.Template.Containers) != 1 || current.Template.Containers[0].Resources == nil {
 		return false
 	}
@@ -228,7 +231,7 @@ func sameServing(current, desired *run.GoogleCloudRunV2Service) bool {
 	container, want := template.Containers[0], wanted.Containers[0]
 	scaling := template.Scaling
 	if scaling == nil {
-		scaling = &run.GoogleCloudRunV2RevisionScaling{}
+		scaling = &runv2.GoogleCloudRunV2RevisionScaling{}
 	}
 	return container.Image == want.Image &&
 		template.ServiceAccount == wanted.ServiceAccount &&
@@ -240,20 +243,20 @@ func sameServing(current, desired *run.GoogleCloudRunV2Service) bool {
 		scaling.MaxInstanceCount == wanted.Scaling.MaxInstanceCount &&
 		template.MaxInstanceRequestConcurrency == wanted.MaxInstanceRequestConcurrency &&
 		sameTimeout(template.Timeout, wanted.Timeout) &&
-		slices.EqualFunc(container.Env, want.Env, func(a, b *run.GoogleCloudRunV2EnvVar) bool {
+		slices.EqualFunc(container.Env, want.Env, func(a, b *runv2.GoogleCloudRunV2EnvVar) bool {
 			return a.Name == b.Name && a.Value == b.Value
 		}) &&
 		slices.EqualFunc(template.Volumes, wanted.Volumes, sameSecretVolume) &&
-		slices.EqualFunc(container.VolumeMounts, want.VolumeMounts, func(a, b *run.GoogleCloudRunV2VolumeMount) bool {
+		slices.EqualFunc(container.VolumeMounts, want.VolumeMounts, func(a, b *runv2.GoogleCloudRunV2VolumeMount) bool {
 			return a.Name == b.Name && a.MountPath == b.MountPath
 		})
 }
 
-func sameSecretVolume(a, b *run.GoogleCloudRunV2Volume) bool {
-	if a.Name != b.Name || a.Secret == nil || b.Secret == nil || revisionName(a.Secret.Secret) != revisionName(b.Secret.Secret) {
+func sameSecretVolume(a, b *runv2.GoogleCloudRunV2Volume) bool {
+	if a.Name != b.Name || a.Secret == nil || b.Secret == nil || run.RevisionName(a.Secret.Secret) != run.RevisionName(b.Secret.Secret) {
 		return false
 	}
-	return slices.EqualFunc(a.Secret.Items, b.Secret.Items, func(x, y *run.GoogleCloudRunV2VersionToPath) bool {
+	return slices.EqualFunc(a.Secret.Items, b.Secret.Items, func(x, y *runv2.GoogleCloudRunV2VersionToPath) bool {
 		return x.Version == y.Version && x.Path == y.Path
 	})
 }

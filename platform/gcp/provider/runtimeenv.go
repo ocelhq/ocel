@@ -11,19 +11,20 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
-func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec, tasks *variables.Tasks) (map[string]string, error) {
+func (p *Provider) runtimeEnv(names names.Names, spec provider.StackSpec, tasks *variables.Tasks) (map[string]string, error) {
 	app := spec.App
 	env := map[string]string{}
 	if app.HealthCheckPath != "" {
 		env[originguard.HealthPathVar] = app.HealthCheckPath
 	}
 	manifest, err := variables.Render(variables.Manifest{
-		Project:            names.project,
+		Project:            names.Project(),
 		Region:             p.options.Region,
-		Namespace:          string(names.namespace),
+		Namespace:          string(names.Namespace()),
 		Slug:               spec.Ref.Project,
 		Tier:               string(spec.Ref.Tier),
 		Environment:        liveEnvironment(spec.Ref),

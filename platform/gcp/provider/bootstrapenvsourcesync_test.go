@@ -9,59 +9,63 @@ import (
 	"testing"
 
 	"google.golang.org/api/cloudscheduler/v1"
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 var bothTiers = []environment.Tier{environment.TierProduction, environment.TierPreview}
 
-func longestNames() Names {
-	return Names{namespace: provider.Namespace(strings.Repeat("a", maxAccountID-len("-")-accountHashLen)), project: "acme-prod"}
+func longestNames() names.Names {
+	return names.New(provider.Namespace(strings.Repeat("a", names.MaxAccountID-len("-")-names.AccountHashLen)), "acme-prod")
 }
 
 func TestTheSyncAccountFitsTheLongestNamespaceAnAccountLeavesRoomFor(t *testing.T) {
 	t.Parallel()
-	names := longestNames()
-	if err := names.fit(); err != nil {
+	named := longestNames()
+	if err := named.Fit(); err != nil {
 		t.Fatalf("fit() = %v", err)
 	}
 	accountID := regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])$`)
 	for _, tier := range bothTiers {
-		account := names.EnvSourceSyncAccount(tier)
-		if len(account) < 6 || len(account) > maxAccountID || !accountID.MatchString(account) {
+		account := named.EnvSourceSyncAccount(tier)
+		if len(account) < 6 || len(account) > names.MaxAccountID || !accountID.MatchString(account) {
 			t.Errorf("%s is %d characters, and IAM takes an id of 6 to 30 lowercase letters, digits and dashes", account, len(account))
 		}
-		if !strings.HasPrefix(account, string(names.namespace)+"-") {
+		if !strings.HasPrefix(account, string(named.Namespace())+"-") {
 			t.Errorf("%s does not start with the namespace, so two namespaces in one project would share it", account)
 		}
-		if service := names.EnvSourceSync(tier); len(service) > maxServiceNameLength {
-			t.Errorf("%s is %d characters and Cloud Run takes %d", service, len(service), maxServiceNameLength)
+		if service := named.EnvSourceSync(tier); len(service) > names.MaxServiceNameLength {
+			t.Errorf("%s is %d characters and Cloud Run takes %d", service, len(service), names.MaxServiceNameLength)
 		}
 	}
 }
 
 func TestEachTierSyncsAsAnAccountOfItsOwnThatEveryReadNamesTheSame(t *testing.T) {
 	t.Parallel()
-	names := Names{namespace: "ocel", project: "acme-prod"}
-	production, preview := names.EnvSourceSyncAccount(environment.TierProduction), names.EnvSourceSyncAccount(environment.TierPreview)
+	named := names.New("ocel", "acme-prod")
+	production, preview := named.EnvSourceSyncAccount(environment.TierProduction), named.EnvSourceSyncAccount(environment.TierPreview)
 	if production == preview {
 		t.Errorf("both tiers sync as %s, and one role would then serve both tiers", production)
 	}
-	if again := (Names{namespace: "ocel", project: "acme-prod"}).EnvSourceSyncAccount(environment.TierProduction); again != production {
+	if again := (names.New("ocel", "acme-prod")).EnvSourceSyncAccount(environment.TierProduction); again != production {
 		t.Errorf("the production sync account is %s once and %s again, and a survey could not find the account an apply made", production, again)
 	}
 	for _, tier := range bothTiers {
-		if names.EnvSourceSyncAccount(tier) == names.AppAccount(tier, "shop", "production", "api") {
+		if named.EnvSourceSyncAccount(tier) == named.AppAccount(tier, "shop", "production", "api") {
 			t.Errorf("the %s sync runs as an app's account, and an app would then write every value", tier)
 		}
 	}
-	if got, want := names.EnvSourceSync(environment.TierPreview), "ocel-preview-envsourcesync"; got != want {
+	if got, want := named.EnvSourceSync(environment.TierPreview), "ocel-preview-envsourcesync"; got != want {
 		t.Errorf("EnvSourceSync(preview) = %q, want %q", got, want)
 	}
-	if got, want := names.EnvSourceSyncAccountEmail(environment.TierPreview), preview+"@acme-prod.iam.gserviceaccount.com"; got != want {
+	if got, want := named.EnvSourceSyncAccountEmail(environment.TierPreview), preview+"@acme-prod.iam.gserviceaccount.com"; got != want {
 		t.Errorf("EnvSourceSyncAccountEmail(preview) = %q, want %q", got, want)
 	}
 }
@@ -96,8 +100,8 @@ func TestTheSyncAccountMayWriteThisDatabaseAndSealAndOpenUnderItsTierKeyAlone(t 
 			t.Errorf("the production key binds %v to %s, want the sync account: it opens its credentials and seals what it copies", granted, role)
 		}
 	}
-	if readers, _ := server.projectMembers(appRecordsRole); slices.Contains(readers, member) {
-		t.Errorf("the sync account has an app's %s too, and one grant is what it needs", appRecordsRole)
+	if readers, _ := server.projectMembers(grants.RecordsRole); slices.Contains(readers, member) {
+		t.Errorf("the sync account has an app's %s too, and one grant is what it needs", grants.RecordsRole)
 	}
 
 	found, err := b.accountPresence(ctx, environment.TierProduction, name)
@@ -143,7 +147,7 @@ func TestTheSyncServiceRunsTheEmbeddedSyncAsItsOwnAccountAndOnlyThatAccountMayCa
 	ctx := context.Background()
 	tier := environment.TierProduction
 	name := b.clients.EnvSourceSync(tier)
-	path := b.clients.servicePath(name)
+	path := b.clients.ServicePath(name)
 
 	if err := b.makeService(ctx, tier, name); err != nil {
 		t.Fatalf("makeService() = %v", err)
@@ -213,20 +217,20 @@ func TestTheSyncServiceRunsTheEmbeddedSyncAsItsOwnAccountAndOnlyThatAccountMayCa
 
 func TestASyncServiceRunOrReachedOtherwiseIsMendedInPlace(t *testing.T) {
 	t.Parallel()
-	for drift, change := range map[string]func(*run.GoogleCloudRunV2Service){
-		"a new provider embeds a new sync":                 func(s *run.GoogleCloudRunV2Service) { s.Template.Containers[0].Image += "0" },
-		"instance-based billing charges every idle minute": func(s *run.GoogleCloudRunV2Service) { s.Template.Containers[0].Resources.CpuIdle = false },
-		"a warm instance bills around the clock":           func(s *run.GoogleCloudRunV2Service) { s.Template.Scaling.MinInstanceCount = 1 },
-		"a second instance races the first":                func(s *run.GoogleCloudRunV2Service) { s.Template.Scaling.MaxInstanceCount = 3 },
-		"a bigger instance bills more":                     func(s *run.GoogleCloudRunV2Service) { s.Template.Containers[0].Resources.Limits["cpu"] = "1" },
-		"anyone on the internet may reach it":              func(s *run.GoogleCloudRunV2Service) { s.Ingress = "INGRESS_TRAFFIC_ALL" },
-		"anyone may call it":                               func(s *run.GoogleCloudRunV2Service) { s.InvokerIamDisabled = true },
-		"a sync outlives its minute into the next":         func(s *run.GoogleCloudRunV2Service) { s.Template.Timeout = "300s" },
-		"one instance takes many syncs at once":            func(s *run.GoogleCloudRunV2Service) { s.Template.MaxInstanceRequestConcurrency = 80 },
-		"the second generation bills a larger floor": func(s *run.GoogleCloudRunV2Service) {
+	for drift, change := range map[string]func(*runv2.GoogleCloudRunV2Service){
+		"a new provider embeds a new sync":                 func(s *runv2.GoogleCloudRunV2Service) { s.Template.Containers[0].Image += "0" },
+		"instance-based billing charges every idle minute": func(s *runv2.GoogleCloudRunV2Service) { s.Template.Containers[0].Resources.CpuIdle = false },
+		"a warm instance bills around the clock":           func(s *runv2.GoogleCloudRunV2Service) { s.Template.Scaling.MinInstanceCount = 1 },
+		"a second instance races the first":                func(s *runv2.GoogleCloudRunV2Service) { s.Template.Scaling.MaxInstanceCount = 3 },
+		"a bigger instance bills more":                     func(s *runv2.GoogleCloudRunV2Service) { s.Template.Containers[0].Resources.Limits["cpu"] = "1" },
+		"anyone on the internet may reach it":              func(s *runv2.GoogleCloudRunV2Service) { s.Ingress = "INGRESS_TRAFFIC_ALL" },
+		"anyone may call it":                               func(s *runv2.GoogleCloudRunV2Service) { s.InvokerIamDisabled = true },
+		"a sync outlives its minute into the next":         func(s *runv2.GoogleCloudRunV2Service) { s.Template.Timeout = "300s" },
+		"one instance takes many syncs at once":            func(s *runv2.GoogleCloudRunV2Service) { s.Template.MaxInstanceRequestConcurrency = 80 },
+		"the second generation bills a larger floor": func(s *runv2.GoogleCloudRunV2Service) {
 			s.Template.ExecutionEnvironment = "EXECUTION_ENVIRONMENT_GEN2"
 		},
-		"it runs as an account that may write another tier": func(s *run.GoogleCloudRunV2Service) {
+		"it runs as an account that may write another tier": func(s *runv2.GoogleCloudRunV2Service) {
 			s.Template.ServiceAccount = "ocel-preview@acme-prod.iam.gserviceaccount.com"
 		},
 	} {
@@ -237,7 +241,7 @@ func TestASyncServiceRunOrReachedOtherwiseIsMendedInPlace(t *testing.T) {
 			ctx := context.Background()
 			tier := environment.TierPreview
 			name := b.clients.EnvSourceSync(tier)
-			path := b.clients.servicePath(name)
+			path := b.clients.ServicePath(name)
 			if err := b.makeService(ctx, tier, name); err != nil {
 				t.Fatal(err)
 			}
@@ -267,7 +271,7 @@ func TestAMendedSyncServiceServesTheRevisionTheMendMade(t *testing.T) {
 	ctx := context.Background()
 	tier := environment.TierPreview
 	name := b.clients.EnvSourceSync(tier)
-	path := b.clients.servicePath(name)
+	path := b.clients.ServicePath(name)
 	if err := b.makeService(ctx, tier, name); err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +283,7 @@ func TestAMendedSyncServiceServesTheRevisionTheMendMade(t *testing.T) {
 
 	var served, latest string
 	server.change(func() {
-		served, latest = servedRevision(server.services[path]), revisionName(server.services[path].LatestReadyRevision)
+		served, latest = run.ServedRevision(server.services[path]), run.RevisionName(server.services[path].LatestReadyRevision)
 	})
 	if served != latest {
 		t.Errorf("the sync service serves %q, want %q, the revision the mend made: the sync a new provider embeds otherwise never runs", served, latest)
@@ -293,12 +297,12 @@ func TestASyncServiceWhoseLatestRevisionServesNoTrafficIsMended(t *testing.T) {
 	ctx := context.Background()
 	tier := environment.TierPreview
 	name := b.clients.EnvSourceSync(tier)
-	path := b.clients.servicePath(name)
+	path := b.clients.ServicePath(name)
 	if err := b.makeService(ctx, tier, name); err != nil {
 		t.Fatal(err)
 	}
 	server.change(func() {
-		server.services[path].Traffic = []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByRevision, Revision: "an-older-revision", Percent: 100}}
+		server.services[path].Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{{Type: run.TrafficByRevision, Revision: "an-older-revision", Percent: 100}}
 	})
 
 	found, err := b.servicePresence(ctx, tier, name)
@@ -324,7 +328,7 @@ func TestASyncServiceCloudRunReadsBackInAnotherNotationForTheSameCPUAndMemoryIsC
 			if err := b.makeService(ctx, tier, name); err != nil {
 				t.Fatal(err)
 			}
-			server.change(func() { server.services[b.clients.servicePath(name)].Template.Containers[0].Resources.Limits = limits })
+			server.change(func() { server.services[b.clients.ServicePath(name)].Template.Containers[0].Resources.Limits = limits })
 
 			if found, err := b.servicePresence(ctx, tier, name); err != nil || !found.present || found.mends != "" {
 				t.Errorf("servicePresence() over %v = %+v, %v, want it current: it is the 0.08 vCPU and 128Mi this bootstrap deploys", limits, found, err)
@@ -360,18 +364,18 @@ func TestASyncServiceCloudRunReadsBackWithTheSameTimeoutInAnotherNotationIsCurre
 
 func TestASyncServiceAnyoneButTheSyncAccountMayCallIsMended(t *testing.T) {
 	t.Parallel()
-	for caller, change := range map[string]func(*run.GoogleIamV1Policy){
-		"anyone": func(p *run.GoogleIamV1Policy) {
+	for caller, change := range map[string]func(*runv2.GoogleIamV1Policy){
+		"anyone": func(p *runv2.GoogleIamV1Policy) {
 			p.Bindings[0].Members = append([]string{"allUsers"}, p.Bindings[0].Members...)
 		},
-		"another account": func(p *run.GoogleIamV1Policy) {
+		"another account": func(p *runv2.GoogleIamV1Policy) {
 			p.Bindings[0].Members = append(p.Bindings[0].Members, "serviceAccount:someone@acme-prod.iam.gserviceaccount.com")
 		},
-		"a group under a second binding": func(p *run.GoogleIamV1Policy) {
-			p.Bindings = append(p.Bindings, &run.GoogleIamV1Binding{
+		"a group under a second binding": func(p *runv2.GoogleIamV1Policy) {
+			p.Bindings = append(p.Bindings, &runv2.GoogleIamV1Binding{
 				Role:      "roles/run.invoker",
 				Members:   []string{"group:everyone@acme.example"},
-				Condition: &run.GoogleTypeExpr{Expression: "request.time < timestamp('2100-01-01T00:00:00Z')"},
+				Condition: &runv2.GoogleTypeExpr{Expression: "request.time < timestamp('2100-01-01T00:00:00Z')"},
 			})
 		},
 	} {
@@ -382,7 +386,7 @@ func TestASyncServiceAnyoneButTheSyncAccountMayCallIsMended(t *testing.T) {
 			ctx := context.Background()
 			tier := environment.TierProduction
 			name := b.clients.EnvSourceSync(tier)
-			path := b.clients.servicePath(name)
+			path := b.clients.ServicePath(name)
 			if err := b.makeService(ctx, tier, name); err != nil {
 				t.Fatal(err)
 			}
@@ -419,7 +423,7 @@ func TestLettingTheSyncAccountCallTheServiceRetriesWhenGoogleAnswers412(t *testi
 		t.Fatalf("letSyncCall() after one 412 = %v, want the write retried", err)
 	}
 	member := "serviceAccount:" + b.clients.EnvSourceSyncAccountEmail(tier)
-	policy := server.policy(b.clients.servicePath(name))
+	policy := server.policy(b.clients.ServicePath(name))
 	if policy == nil || len(policy.Bindings) != 1 || !slices.Equal(policy.Bindings[0].Members, []string{member}) {
 		t.Errorf("the policy is %s, want %s alone", encoded(t, policy), member)
 	}
@@ -447,7 +451,7 @@ func TestTakingTheSyncServiceTwiceIsNothingToDo(t *testing.T) {
 
 func TestTheScheduleCallsTheServiceEveryMinuteWithAnIDTokenForTheSyncAccount(t *testing.T) {
 	t.Parallel()
-	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}}
+	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
 	tier := environment.TierProduction
 	name := b.clients.EnvSourceSync(tier)
 	schedule := b.syncSchedule(tier, name, servedAt(name))
@@ -508,16 +512,16 @@ func TestTheScheduleIsCreatedAndMendedThroughCloudScheduler(t *testing.T) {
 		t.Errorf("schedulePresence() after the mend = %+v, %v", found, err)
 	}
 
-	servicePath := b.clients.servicePath(name)
+	servicePath := b.clients.ServicePath(name)
 	server.change(func() { server.services[servicePath].Uri = "https://elsewhere.a.run.app" })
 	if found, err := b.schedulePresence(ctx, tier, name); err != nil || found.mends != reasonScheduleChanged {
 		t.Errorf("schedulePresence() = %+v, %v, want a schedule calling a URL the service no longer answers on mended", found, err)
 	}
 
-	if err := b.clients.takeSchedule(ctx, name); err != nil {
+	if err := takeSchedule(ctx, b.clients, name); err != nil {
 		t.Fatalf("takeSchedule() = %v", err)
 	}
-	if err := b.clients.takeSchedule(ctx, name); err != nil {
+	if err := takeSchedule(ctx, b.clients, name); err != nil {
 		t.Errorf("takeSchedule() of one already gone = %v, want nothing to do", err)
 	}
 }
@@ -578,7 +582,7 @@ func TestAScheduleWithNoServiceToCallIsRefusedAndOneThatOutlivedItsServiceIsMend
 
 func TestAScheduleCallingAsAnotherAccountIsMended(t *testing.T) {
 	t.Parallel()
-	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}}
+	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
 	tier := environment.TierProduction
 	uri := servedAt(b.clients.EnvSourceSync(tier))
 	desired := b.syncSchedule(tier, b.clients.EnvSourceSync(tier), uri)
@@ -612,7 +616,7 @@ func TestAScheduleCallingAsAnotherAccountIsMended(t *testing.T) {
 
 func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheBucketWithTheStamp(t *testing.T) {
 	t.Parallel()
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	tier := environment.TierProduction
 	read := survey{Tier: tier, Names: names, present: map[string]bool{}}
 	for _, each := range bootstrapItems(names, tier, false) {

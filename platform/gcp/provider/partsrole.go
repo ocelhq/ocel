@@ -6,11 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-)
-
-const (
-	partsSuffix         = "parts"
-	partDatabasesSuffix = "part_databases"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 var partDatabasesPermissions = []string{
@@ -26,39 +22,27 @@ var partDatabasesPermissions = []string{
 
 const servicesReadPermission = "serviceusage.services.get"
 
-func (n Names) PartsRole() string { return customRoleID(n.namespace, partsSuffix) }
-
-func (n Names) PartsRolePath() string {
-	return "projects/" + n.project + "/roles/" + n.PartsRole()
-}
-
-func newPartsRole(names Names) customRole {
+func newPartsRole(names names.Names) customRole {
 	return customRole{
 		id:          names.PartsRole(),
-		title:       "ocel bootstrap parts (" + string(names.namespace) + ")",
+		title:       "ocel bootstrap parts (" + string(names.Namespace()) + ")",
 		description: "lets a deploy add the parts of a bootstrap it needs on first use, where Google offers no condition to name them by, and nothing else",
 		permissions: slices.Concat([]string{servicesReadPermission}, networkPartPermissions, albPartPermissions),
 		driftReason: "it holds other permissions than a deploy needs to add the parts of a bootstrap",
 	}
 }
 
-func (n Names) PartDatabasesRole() string { return customRoleID(n.namespace, partDatabasesSuffix) }
-
-func (n Names) PartDatabasesRolePath() string {
-	return "projects/" + n.project + "/roles/" + n.PartDatabasesRole()
-}
-
-func newPartDatabasesRole(names Names) customRole {
+func newPartDatabasesRole(names names.Names) customRole {
 	return customRole{
 		id:          names.PartDatabasesRole(),
-		title:       "ocel bootstrap part databases (" + string(names.namespace) + ")",
+		title:       "ocel bootstrap part databases (" + string(names.Namespace()) + ")",
 		description: "lets a deploy make the Firestore databases a part of a bootstrap holds, and their indexes, granted on the condition it names those databases",
 		permissions: partDatabasesPermissions,
 		driftReason: "it holds other permissions than a deploy needs to make the databases a part of a bootstrap holds",
 	}
 }
 
-func partDatabases(names Names) []string {
+func partDatabases(names names.Names) []string {
 	var databases []string
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		databases = append(databases, names.TagDatabase(tier), names.TaskDatabase(tier))
@@ -66,10 +50,10 @@ func partDatabases(names Names) []string {
 	return databases
 }
 
-func partDatabasesCondition(names Names) string {
+func partDatabasesCondition(names names.Names) string {
 	clauses := make([]string, 0, 2*len(partDatabases(names)))
 	for _, database := range partDatabases(names) {
-		path := "projects/" + names.project + "/databases/" + database
+		path := "projects/" + names.Project() + "/databases/" + database
 		clauses = append(clauses, fmt.Sprintf("resource.name == %q", path), fmt.Sprintf("resource.name.startsWith(%q)", path+"/"))
 	}
 	return strings.Join(clauses, " || ")

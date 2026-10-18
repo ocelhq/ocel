@@ -11,6 +11,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 type runLocation struct {
@@ -23,7 +25,7 @@ type runLocationsPage struct {
 	NextPageToken string        `json:"nextPageToken,omitempty"`
 }
 
-func servingRunIn(t *testing.T, pages ...[]string) *clients {
+func servingRunIn(t *testing.T, pages ...[]string) *gcloud.Clients {
 	t.Helper()
 	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/projects/acme-prod/locations" {
@@ -46,13 +48,13 @@ func servingRunIn(t *testing.T, pages ...[]string) *clients {
 		writeBody(w, page)
 	}))
 	t.Cleanup(served.Close)
-	return &clients{Names: Names{namespace: provider.Namespace("ocel"), project: "acme-prod"}, endpoint: served.URL}
+	return &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Endpoint: served.URL}
 }
 
-func refusedRegion(t *testing.T, c *clients, region string) refusal.Refusal {
+func refusedRegion(t *testing.T, c *gcloud.Clients, region string) refusal.Refusal {
 	t.Helper()
-	c.region = region
-	err := c.refuseRegionNotServed(context.Background())
+	c.Region = region
+	err := c.RefuseRegionNotServed(context.Background())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("refuseRegionNotServed(%q) = %v, want an %s refusal", region, err, refusal.CodeInvalid)
@@ -96,9 +98,9 @@ func TestARegionCloudRunServesIsAdmittedWhicheverPageListsIt(t *testing.T) {
 	t.Parallel()
 
 	c := servingRunIn(t, []string{"us-central1"}, []string{"europe-west1"})
-	c.region = "europe-west1"
+	c.Region = "europe-west1"
 
-	if err := c.refuseRegionNotServed(context.Background()); err != nil {
+	if err := c.RefuseRegionNotServed(context.Background()); err != nil {
 		t.Errorf("refuseRegionNotServed(europe-west1) = %v, want it admitted", err)
 	}
 }
@@ -123,9 +125,9 @@ func TestACredentialThatMayNotListTheRegionsCloudRunServesIsRefusedNamingThePerm
 			"message": "Permission 'run.locations.list' denied on resource 'projects/acme-prod'"}})
 	}))
 	t.Cleanup(denied.Close)
-	c := &clients{Names: Names{namespace: provider.Namespace("ocel"), project: "acme-prod"}, endpoint: denied.URL, region: "us-central1"}
+	c := &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Endpoint: denied.URL, Region: "us-central1"}
 
-	err := c.refuseRegionNotServed(context.Background())
+	err := c.RefuseRegionNotServed(context.Background())
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {

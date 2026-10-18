@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -24,10 +25,10 @@ func appAccountsOnly() *iamServer {
 	return server
 }
 
-func ensuringAccounts(t *testing.T, server *iamServer) (*Provider, *clients) {
+func ensuringAccounts(t *testing.T, server *iamServer) (*Provider, *gcloud.Clients) {
 	t.Helper()
 	c := server.open(t)
-	return pushing(t, c.endpoint), c
+	return pushing(t, c.Endpoint), c
 }
 
 func appNamed(app string, spec provider.StackSpec) provider.StackSpec {
@@ -322,7 +323,7 @@ func TestAQueueGrantRacedByAnotherDeployIsReadAgainAndWritten(t *testing.T) {
 	server.queueAborts = 2
 	c := server.open(t)
 
-	if err := c.bindQueueRoles(context.Background(), environment.TierProduction, "serviceAccount:app@acme-prod.iam.gserviceaccount.com", queueRoles, queueRoles); err != nil {
+	if err := bindQueueRoles(context.Background(), c, environment.TierProduction, "serviceAccount:app@acme-prod.iam.gserviceaccount.com", queueRoles, queueRoles); err != nil {
 		t.Fatalf("bindQueueRoles() = %v", err)
 	}
 
@@ -349,7 +350,7 @@ func TestADeployCredentialWithoutTheAppAccountsRoleIsToldWhichRoleItLacks(t *tes
 				t.Errorf("unexpected %s %s", r.Method, r.URL)
 			})
 
-			err := c.createAppAccount(context.Background(), provider.StackRef{Tier: environment.TierProduction, Project: "shop", Name: stackOf("production", "api", "r1")}, "api")
+			err := createAppAccount(context.Background(), c, provider.StackRef{Tier: environment.TierProduction, Project: "shop", Name: stackOf("production", "api", "r1")}, "api")
 
 			if err == nil || !strings.Contains(err.Error(), "projects/acme-prod/roles/ocel_app_accounts") {
 				t.Errorf("createAppAccount() = %v, want an error naming projects/acme-prod/roles/ocel_app_accounts", err)

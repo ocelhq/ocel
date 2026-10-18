@@ -5,9 +5,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
-var IngressFor = ingressFor
+var IngressFor = run.IngressFor
 
 const (
 	TasksPart       = tasksPart
@@ -20,5 +22,5 @@ func AddParts(ctx context.Context, p *Provider, tier environment.Tier, names ...
 }
 
 func PartsRolePermissions(namespace provider.Namespace, project string) []string {
-	return newPartsRole(Names{namespace: namespace, project: project}).permissions
+	return newPartsRole(names.New(namespace, project)).permissions
 }

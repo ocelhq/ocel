@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 
 	certmanager "google.golang.org/api/certificatemanager/v1"
 	"google.golang.org/api/googleapi"
@@ -30,7 +31,7 @@ const certificateRenewal = "Certificate Manager renews it while the authorizatio
 
 const certificateExpiry = 30 * 24 * time.Hour
 
-var issuance = patience{attempts: 100, ceiling: 15 * time.Second}
+var issuance = gcloud.Patience{Attempts: 100, Ceiling: 15 * time.Second}
 
 const maxCertificateName = 63
 
@@ -53,7 +54,7 @@ func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest
 	if err != nil {
 		return provider.Certificate{}, err
 	}
-	name := clients.certificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
+	name := clients.CertificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
 	cert := provider.Certificate{ID: name, Requested: true, Written: req.Current.Written, Manual: req.Current.Manual}
 
 	authorization, err := p.authorized(ctx, clients, req)
@@ -76,7 +77,7 @@ func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest
 
 func (p *Provider) authorized(
 	ctx context.Context,
-	clients *clients,
+	clients *gcloud.Clients,
 	req provider.CertificateRequest,
 ) (*certmanager.DnsAuthorization, error) {
 	certificates, err := clients.Certificates()
@@ -84,14 +85,14 @@ func (p *Provider) authorized(
 		return nil, err
 	}
 	id := authorizationID(req.Hostname)
-	name := clients.certificatesGlobal() + "/dnsAuthorizations/" + id
+	name := clients.CertificatesGlobal() + "/dnsAuthorizations/" + id
 	authorization, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
 		return certificates.Projects.Locations.DnsAuthorizations.Get(name).Context(ctx).Do(call...)
 	})
 	switch {
 	case err == nil:
 		return authorization, nil
-	case !absent(err):
+	case !gcloud.Absent(err):
 		return nil, fmt.Errorf("read the dns authorization for %s: %w", req.Hostname, err)
 	}
 	if req.Progress != nil {
@@ -100,7 +101,7 @@ func (p *Provider) authorized(
 	err = p.awaitCertificates(ctx, certificates, "authorize "+req.Hostname,
 		func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 			return certificates.Projects.Locations.DnsAuthorizations.
-				Create(clients.certificatesGlobal(), &certmanager.DnsAuthorization{Domain: authorizedDomain(req.Hostname)}).
+				Create(clients.CertificatesGlobal(), &certmanager.DnsAuthorization{Domain: authorizedDomain(req.Hostname)}).
 				DnsAuthorizationId(id).Context(ctx).Do(call...)
 		})
 	if err != nil {
@@ -120,7 +121,7 @@ func (p *Provider) authorized(
 	return authorization, nil
 }
 
-func (p *Provider) certificates(ctx context.Context) (*clients, *certmanager.Service, error) {
+func (p *Provider) certificates(ctx context.Context) (*gcloud.Clients, *certmanager.Service, error) {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -134,7 +135,7 @@ func (p *Provider) certificates(ctx context.Context) (*clients, *certmanager.Ser
 
 func (p *Provider) certified(
 	ctx context.Context,
-	clients *clients,
+	clients *gcloud.Clients,
 	req provider.CertificateRequest,
 	name, authorization string,
 ) error {
@@ -147,7 +148,7 @@ func (p *Provider) certified(
 	})
 	switch {
 	case err == nil:
-	case !absent(err):
+	case !gcloud.Absent(err):
 		return fmt.Errorf("read the certificate for %s: %w", req.Hostname, err)
 	default:
 		if req.Progress != nil {
@@ -156,7 +157,7 @@ func (p *Provider) certified(
 		err = p.awaitCertificates(ctx, certificates, "certify "+req.Hostname,
 			func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 				return certificates.Projects.Locations.Certificates.
-					Create(clients.certificatesGlobal(), &certmanager.Certificate{
+					Create(clients.CertificatesGlobal(), &certmanager.Certificate{
 						Managed: &certmanager.ManagedCertificate{
 							Domains:           []string{req.Hostname},
 							DnsAuthorizations: []string{authorization},
@@ -177,7 +178,7 @@ func (p *Provider) issued(
 	req provider.CertificateRequest,
 	name string,
 ) error {
-	certificate, err := waiting(ctx, issuance, "Certificate Manager to issue a certificate for "+req.Hostname,
+	certificate, err := gcloud.Waiting(ctx, issuance, "Certificate Manager to issue a certificate for "+req.Hostname,
 		func() (*certmanager.Certificate, error) {
 			return googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 				return certificates.Projects.Locations.Certificates.Get(name).Context(ctx).Do(call...)
@@ -228,7 +229,7 @@ func (p certificates) Inspect(
 	current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(cert.ID).Context(ctx).Do(call...)
 	})
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return provider.CertificateHealth{Terminates: true, Status: "gone", Renewal: certificateRenewal}, nil
 	}
 	if err != nil {
@@ -267,14 +268,14 @@ func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string
 	if err != nil {
 		return nil, err
 	}
-	parent := clients.certificatesGlobal() + "/certificateMaps/" + certificateMap
+	parent := clients.CertificatesGlobal() + "/certificateMaps/" + certificateMap
 	var bound []string
 	for page := ""; ; {
 		entries, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.ListCertificateMapEntriesResponse, error) {
 			return certificates.Projects.Locations.CertificateMaps.CertificateMapEntries.
 				List(parent).PageToken(page).Context(ctx).Do(call...)
 		})
-		if absent(err) {
+		if gcloud.Absent(err) {
 			return nil, nil
 		}
 		if err != nil {
@@ -319,13 +320,13 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	current, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(cert.ID).Context(ctx).Do(call...)
 	})
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("read the certificate %s: %w", cert.ID, err)
 	}
-	ensureProgress(progress).Say(discarding(cert.ID, current))
+	gcloud.EnsureProgress(progress).Say(discarding(cert.ID, current))
 	if err := p.awaitCertificates(ctx, certificates, "discard "+cert.ID,
 		func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 			return certificates.Projects.Locations.Certificates.Delete(cert.ID).Context(ctx).Do(call...)
@@ -356,7 +357,7 @@ func (p *Provider) awaitCertificates(
 	if err != nil {
 		return fmt.Errorf("ask Certificate Manager to %s: %w", doing, err)
 	}
-	finished, err := until(ctx, "Certificate Manager to "+doing, func() (*certmanager.Operation, error) {
+	finished, err := gcloud.Until(ctx, "Certificate Manager to "+doing, func() (*certmanager.Operation, error) {
 		if started.Done {
 			return started, nil
 		}

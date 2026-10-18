@@ -10,25 +10,27 @@ import (
 	"strings"
 	"testing"
 
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *testing.T) {
 	t.Parallel()
 
-	service, err := serviceOf(serving{
-		service:   "ocel-connector",
-		image:     "example.com/ocel-connector:sha256-abc",
-		account:   "ocel-connector@project.iam.gserviceaccount.com",
-		compute:   provider.ComputeServerless,
-		public:    true,
-		memory:    connectorMemory,
-		instances: provider.Instances{Max: connectorInstances},
-		ingress:   ingressEverywhere,
+	service, err := run.ServiceOf(run.Serving{
+		Service:   "ocel-connector",
+		Image:     "example.com/ocel-connector:sha256-abc",
+		Account:   "ocel-connector@project.iam.gserviceaccount.com",
+		Compute:   provider.ComputeServerless,
+		Public:    true,
+		Memory:    connectorMemory,
+		Instances: provider.Instances{Max: connectorInstances},
+		Ingress:   run.IngressEverywhere,
 	})
 	if err != nil {
 		t.Fatalf("serviceOf: %v", err)
@@ -42,7 +44,7 @@ func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *t
 	if service.Template.ServiceAccount != "ocel-connector@project.iam.gserviceaccount.com" {
 		t.Errorf("the connector runs as %q, want its own service account", service.Template.ServiceAccount)
 	}
-	if service.Ingress != ingressEverywhere {
+	if service.Ingress != run.IngressEverywhere {
 		t.Errorf("the connector takes traffic from %q, and the console dials it from outside the project", service.Ingress)
 	}
 }
@@ -50,7 +52,7 @@ func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *t
 func TestAnAppServiceStillScalesAsItDid(t *testing.T) {
 	t.Parallel()
 
-	service, err := serviceOf(serving{service: "app", image: "example.com/app:tag", compute: provider.ComputeServerless})
+	service, err := run.ServiceOf(run.Serving{Service: "app", Image: "example.com/app:tag", Compute: provider.ComputeServerless})
 	if err != nil {
 		t.Fatalf("serviceOf: %v", err)
 	}
@@ -62,18 +64,18 @@ func TestAnAppServiceStillScalesAsItDid(t *testing.T) {
 func TestTheConnectorIsNamedForTheNamespaceAndFitsWhatIAMTakes(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "example-project"}
-	if names.Connector() != "ocel-connector" {
-		t.Errorf("Connector() = %q, want ocel-connector", names.Connector())
+	named := names.New("ocel", "example-project")
+	if named.Connector() != "ocel-connector" {
+		t.Errorf("Connector() = %q, want ocel-connector", named.Connector())
 	}
-	if names.ConnectorAccountEmail() != "ocel-connector@example-project.iam.gserviceaccount.com" {
-		t.Errorf("ConnectorAccountEmail() = %q", names.ConnectorAccountEmail())
+	if named.ConnectorAccountEmail() != "ocel-connector@example-project.iam.gserviceaccount.com" {
+		t.Errorf("ConnectorAccountEmail() = %q", named.ConnectorAccountEmail())
 	}
-	if err := names.connectorFits(); err != nil {
+	if err := named.ConnectorFits(); err != nil {
 		t.Errorf("connectorFits() = %v, want the default namespace to fit", err)
 	}
-	long := Names{namespace: "averylongnamespacethatgoeson", project: "example-project"}
-	if err := long.connectorFits(); err == nil {
+	long := names.New("averylongnamespacethatgoeson", "example-project")
+	if err := long.ConnectorFits(); err == nil {
 		t.Errorf("connectorFits() on %q = nil, want it refused before IAM does", long.Connector())
 	}
 }
@@ -126,11 +128,11 @@ func TestRemovingTheConnectorAttemptsEveryStepAndReportsEveryFailure(t *testing.
 func TestTheConnectorServiceMountsItsKeyOutOfSecretManager(t *testing.T) {
 	t.Parallel()
 
-	service, err := serviceOf(serving{
-		service: "ocel-connector",
-		image:   "example.com/ocel-connector:sha256-abc",
-		compute: provider.ComputeServerless,
-		mounts:  []secretMount{connectorKeyMount("ocel-connector-key")},
+	service, err := run.ServiceOf(run.Serving{
+		Service: "ocel-connector",
+		Image:   "example.com/ocel-connector:sha256-abc",
+		Compute: provider.ComputeServerless,
+		Mounts:  []run.SecretMount{connectorKeyMount("ocel-connector-key")},
 	})
 	if err != nil {
 		t.Fatalf("serviceOf: %v", err)
@@ -180,8 +182,8 @@ func TestTheKeyMintedIntoSecretManagerNamesThePublicKeyTheConsoleVerifiesWith(t 
 func TestTheConnectorsPublicKeyIsReadOffTheServiceItRunsAs(t *testing.T) {
 	t.Parallel()
 
-	service := &run.GoogleCloudRunV2Service{Template: &run.GoogleCloudRunV2RevisionTemplate{
-		Containers: []*run.GoogleCloudRunV2Container{{Env: []*run.GoogleCloudRunV2EnvVar{
+	service := &runv2.GoogleCloudRunV2Service{Template: &runv2.GoogleCloudRunV2RevisionTemplate{
+		Containers: []*runv2.GoogleCloudRunV2Container{{Env: []*runv2.GoogleCloudRunV2EnvVar{
 			{Name: connectorVersionEnv, Value: "0.9.9"},
 			{Name: connectorPublicKeyEnv, Value: "cHVibGlj"},
 		}}},
@@ -189,7 +191,7 @@ func TestTheConnectorsPublicKeyIsReadOffTheServiceItRunsAs(t *testing.T) {
 	if got := connectorPublicKeyOf(service); got != "cHVibGlj" {
 		t.Errorf("connectorPublicKeyOf = %q, want the key the install stamped on the service", got)
 	}
-	if got := connectorPublicKeyOf(&run.GoogleCloudRunV2Service{}); got != "" {
+	if got := connectorPublicKeyOf(&runv2.GoogleCloudRunV2Service{}); got != "" {
 		t.Errorf("connectorPublicKeyOf on a bare service = %q", got)
 	}
 }
@@ -240,12 +242,12 @@ func TestTheConnectorHasOnlyTheKeyRolesItsGrantsCallFor(t *testing.T) {
 func TestTheConnectorServiceNamesTheAccountItAdmitsHeartbeatsFrom(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	served := buildConnectorServing(names, "europe-west1", "example.com/ocel-connector:sha256-abc", "0.9.9", "cHVibGlj", []byte("{}\n"))
-	if got := served.env[ports.ConnectorAccountEnvVar]; got != names.ConnectorAccountEmail() {
+	if got := served.Env[ports.ConnectorAccountEnvVar]; got != names.ConnectorAccountEmail() {
 		t.Errorf("the connector reads %s = %q, want %s, the account its schedule's ID token is minted for", ports.ConnectorAccountEnvVar, got, names.ConnectorAccountEmail())
 	}
-	if served.account != names.ConnectorAccountEmail() {
-		t.Errorf("the connector runs as %q, want its own account", served.account)
+	if served.Account != names.ConnectorAccountEmail() {
+		t.Errorf("the connector runs as %q, want its own account", served.Account)
 	}
 }

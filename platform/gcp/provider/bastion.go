@@ -7,7 +7,7 @@ import (
 	"slices"
 
 	"google.golang.org/api/googleapi"
-	run "google.golang.org/api/run/v2"
+	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
 )
@@ -31,22 +33,22 @@ const (
 var bastionImageTag = binaryImageTag(payloads.Bastion)
 
 type bastion struct {
-	clients        *clients
-	deployAndRoute func(ctx context.Context, s serving, progress progress.Log) (release, error)
+	clients        *gcloud.Clients
+	deployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
 	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	tearDown       func(ctx context.Context, service string, progress progress.Log) error
-	grantInvoker   func(ctx context.Context, c *clients, service, member string) error
+	grantInvoker   func(ctx context.Context, c *gcloud.Clients, service, member string) error
 	prove          func(ctx context.Context, audience string) (envsource.IdentityProof, error)
 	open           func(ctx context.Context, link relay.Link) (*relay.Forward, error)
 	waited         func(ctx context.Context, attempt int) bool
 }
 
 func (b bastion) imageRef(tier environment.Tier) string {
-	return b.clients.RepositoryPath(b.clients.region, tier) + "/" + bastionImageName + ":" + bastionImageTag()
+	return b.clients.RepositoryPath(b.clients.Region, tier) + "/" + bastionImageName + ":" + bastionImageTag()
 }
 
 func (b bastion) audience(tier environment.Tier) string {
-	return b.clients.project + "/" + b.clients.Bastion(tier)
+	return b.clients.Project() + "/" + b.clients.Bastion(tier)
 }
 
 func bastionDestinations() []relay.Destination {
@@ -54,32 +56,32 @@ func bastionDestinations() []relay.Destination {
 	return []relay.Destination{{Network: network, Port: postgresPort}, {Network: network, Port: defaultValkeyPort}}
 }
 
-func (b bastion) serving(tier environment.Tier, image string) serving {
-	return serving{
-		service:     b.clients.Bastion(tier),
-		image:       image,
-		account:     b.clients.BastionAccountEmail(tier),
-		compute:     provider.ComputeServerless,
-		ingress:     ingressEverywhere,
-		concurrency: bastionConcurrency,
-		instances:   provider.Instances{Max: bastionMaxInstances},
-		timeout:     maxRequestTimeout,
-		egress:      &privateEgress{network: b.clients.NetworkPath(tier), subnetwork: b.clients.SubnetworkPath(b.clients.region, tier)},
-		audiences:   []string{b.audience(tier)},
-		env:         map[string]string{relay.AllowedEnv: relay.FormatDestinations(bastionDestinations())},
+func (b bastion) serving(tier environment.Tier, image string) run.Serving {
+	return run.Serving{
+		Service:     b.clients.Bastion(tier),
+		Image:       image,
+		Account:     b.clients.BastionAccountEmail(tier),
+		Compute:     provider.ComputeServerless,
+		Ingress:     run.IngressEverywhere,
+		Concurrency: bastionConcurrency,
+		Instances:   provider.Instances{Max: bastionMaxInstances},
+		Timeout:     run.MaxRequestTimeout,
+		Egress:      &run.PrivateEgress{Network: b.clients.NetworkPath(tier), Subnetwork: b.clients.SubnetworkPath(b.clients.Region, tier)},
+		Audiences:   []string{b.audience(tier)},
+		Env:         map[string]string{relay.AllowedEnv: relay.FormatDestinations(bastionDestinations())},
 	}
 }
 
-func (b bastion) read(ctx context.Context, tier environment.Tier) (*run.GoogleCloudRunV2Service, error) {
+func (b bastion) read(ctx context.Context, tier environment.Tier) (*runv2.GoogleCloudRunV2Service, error) {
 	services, err := b.clients.Run()
 	if err != nil {
 		return nil, err
 	}
 	name := b.clients.Bastion(tier)
-	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
-		return services.Projects.Locations.Services.Get(b.clients.servicePath(name)).Context(ctx).Do(call...)
+	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*runv2.GoogleCloudRunV2Service, error) {
+		return services.Projects.Locations.Services.Get(b.clients.ServicePath(name)).Context(ctx).Do(call...)
 	})
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return nil, nil
 	}
 	if err != nil {
@@ -92,7 +94,7 @@ func (b bastion) provision(ctx context.Context, tier environment.Tier, progress 
 	var url string
 	var err error
 	for range bastionCreateTries {
-		if url, err = b.provisionService(ctx, tier, progress); !taken(err) {
+		if url, err = b.provisionService(ctx, tier, progress); !gcloud.Taken(err) {
 			break
 		}
 	}
@@ -103,7 +105,7 @@ func (b bastion) provision(ctx context.Context, tier environment.Tier, progress 
 	if err != nil {
 		return "", err
 	}
-	if err := b.grantInvoker(ctx, b.clients, b.clients.Bastion(tier), memberOf(principal)); err != nil {
+	if err := b.grantInvoker(ctx, b.clients, b.clients.Bastion(tier), gcloud.MemberOf(principal)); err != nil {
 		return "", err
 	}
 	if url == "" {
@@ -119,33 +121,33 @@ func (b bastion) provisionService(ctx context.Context, tier environment.Tier, pr
 	}
 	image := b.imageRef(tier)
 	desired := b.serving(tier, image)
-	wanted, err := serviceOf(desired)
+	wanted, err := run.ServiceOf(desired)
 	if err != nil {
 		return "", err
 	}
-	if current != nil && sameBastion(current, wanted) && servesLatest(current) {
+	if current != nil && sameBastion(current, wanted) && run.ServesLatest(current) {
 		return current.Uri, nil
 	}
 	if current == nil {
-		ensureProgress(progress).Say("Making the bastion " + desired.service + " that forwards ports into the " + string(tier) + " tier's network")
+		gcloud.EnsureProgress(progress).Say("Making the bastion " + desired.Service + " that forwards ports into the " + string(tier) + " tier's network")
 	}
 	if err := b.ensureAccount(ctx, tier); err != nil {
 		return "", err
 	}
 	if current == nil || imageOf(current) != image {
-		ensureProgress(progress).Say("Pushing the bastion image " + image)
+		gcloud.EnsureProgress(progress).Say("Pushing the bastion image " + image)
 		if err := b.pushBinary(ctx, tier, bastionImageName, image, payloads.Bastion(), bastionImagePath); err != nil {
 			return "", err
 		}
 	}
 	ran, err := b.deployAndRoute(ctx, desired, progress)
-	return ran.url, err
+	return ran.Url, err
 }
 
 func (b bastion) ensureAccount(ctx context.Context, tier environment.Tier) error {
 	account := b.clients.BastionAccount(tier)
-	err := b.clients.createAccount(ctx, account,
-		clipped("ocel bastion ("+b.clients.Namespace().String()+", "+string(tier)+")", maxDisplayNameBytes),
+	err := b.clients.CreateAccount(ctx, account,
+		gcloud.Clipped("ocel bastion ("+b.clients.Namespace().String()+", "+string(tier)+")", gcloud.MaxDisplayNameBytes),
 		"the identity the ocel bastion of the "+string(tier)+" tier runs as, which holds no role")
 	if err != nil {
 		return err
@@ -154,25 +156,25 @@ func (b bastion) ensureAccount(ctx context.Context, tier environment.Tier) error
 	if err != nil {
 		return err
 	}
-	return untilVisible(ctx, func() error {
-		return wrapAccountGrantError(b.clients.bindAccountRole(ctx, account, runAsRole, memberOf(principal), true), b.clients.AppAccountsRolePath())
+	return gcloud.UntilVisible(ctx, func() error {
+		return gcloud.WrapAccountGrantError(gcloud.BindAccountRole(ctx, b.clients, account, runAsRole, gcloud.MemberOf(principal), true), b.clients.AppAccountsRolePath())
 	})
 }
 
-func sameBastion(current, desired *run.GoogleCloudRunV2Service) bool {
+func sameBastion(current, desired *runv2.GoogleCloudRunV2Service) bool {
 	return sameServing(current, desired) &&
 		current.IapEnabled == desired.IapEnabled &&
 		slices.Equal(current.CustomAudiences, desired.CustomAudiences) &&
 		sameVPCAccess(current.Template.VpcAccess, desired.Template.VpcAccess)
 }
 
-func sameVPCAccess(current, desired *run.GoogleCloudRunV2VpcAccess) bool {
+func sameVPCAccess(current, desired *runv2.GoogleCloudRunV2VpcAccess) bool {
 	if current == nil || desired == nil {
 		return current == desired
 	}
 	return current.Egress == desired.Egress &&
-		slices.EqualFunc(current.NetworkInterfaces, desired.NetworkInterfaces, func(a, b *run.GoogleCloudRunV2NetworkInterface) bool {
-			return revisionName(a.Network) == revisionName(b.Network) && revisionName(a.Subnetwork) == revisionName(b.Subnetwork)
+		slices.EqualFunc(current.NetworkInterfaces, desired.NetworkInterfaces, func(a, b *runv2.GoogleCloudRunV2NetworkInterface) bool {
+			return run.RevisionName(a.Network) == run.RevisionName(b.Network) && run.RevisionName(a.Subnetwork) == run.RevisionName(b.Subnetwork)
 		})
 }
 
@@ -190,13 +192,13 @@ func (b bastion) remove(ctx context.Context, tier environment.Tier, progress pro
 }
 
 func (b bastion) removeAccount(ctx context.Context, tier environment.Tier, progress progress.Log) error {
-	found, err := b.clients.accountExists(ctx, b.clients.BastionAccount(tier))
+	found, err := b.clients.AccountExists(ctx, b.clients.BastionAccount(tier))
 	if err != nil || !found {
 		return err
 	}
-	deleted, err := b.clients.deleteAccount(ctx, b.clients.BastionAccount(tier))
+	deleted, err := b.clients.DeleteAccount(ctx, b.clients.BastionAccount(tier))
 	if deleted {
-		ensureProgress(progress).Say("Deleted the " + b.clients.BastionAccount(tier) + " service account the bastion ran as")
+		gcloud.EnsureProgress(progress).Say("Deleted the " + b.clients.BastionAccount(tier) + " service account the bastion ran as")
 	}
 	return err
 }

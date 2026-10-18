@@ -8,10 +8,34 @@ import (
 
 	"google.golang.org/api/iam/v1"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
+
+var roleKind = kind{
+	noun:          "custom role",
+	terraform:     tfProjectCustomRole,
+	emulatorSkips: true,
+	survey: func(ctx context.Context, b bootstrap, _ environment.Tier, target item) (presence, error) {
+		role, ok := findCustomRole(b.clients.Names, target.Name)
+		if !ok {
+			return presence{}, fmt.Errorf("no custom role is named %s", target.Name)
+		}
+		return b.rolePresence(ctx, role)
+	},
+	make: func(ctx context.Context, b bootstrap, read survey, target item) error {
+		role, ok := findCustomRole(read.Names, target.Name)
+		if !ok {
+			return fmt.Errorf("no custom role is named %s", target.Name)
+		}
+		return b.makeRole(ctx, role)
+	},
+	removal: func(_ survey, target item) removal { return kept(target, reasonRoleKept) },
+}
 
 const (
 	reasonRoleDeleted = "it was deleted, and its bindings grant nothing until it is undeleted"
@@ -37,17 +61,17 @@ type customRole struct {
 	driftReason string
 }
 
-func newAppAccountsRole(names Names) customRole {
+func newAppAccountsRole(names names.Names) customRole {
 	return customRole{
 		id:          names.AppAccountsRole(),
-		title:       "ocel app accounts (" + string(names.namespace) + ")",
+		title:       "ocel app accounts (" + string(names.Namespace()) + ")",
 		description: "lets a deploy create the service accounts its apps run as and set who may act as them, and nothing else",
 		permissions: appAccountsPermissions,
 		driftReason: reasonRoleDrifted,
 	}
 }
 
-func findCustomRole(names Names, id string) (customRole, bool) {
+func findCustomRole(names names.Names, id string) (customRole, bool) {
 	for _, role := range []customRole{newAppAccountsRole(names), newCDNPurgeRole(names), newPartsRole(names), newPartDatabasesRole(names), newProjectRecordsRole(names)} {
 		if role.id == id {
 			return role, true
@@ -59,7 +83,7 @@ func findCustomRole(names Names, id string) (customRole, bool) {
 func (b bootstrap) rolePresence(ctx context.Context, want customRole) (presence, error) {
 	id := want.id
 	role, err := b.readRole(ctx, id)
-	if absent(err) {
+	if gcloud.Absent(err) {
 		return presence{}, nil
 	}
 	if err != nil {
@@ -79,10 +103,10 @@ func (b bootstrap) readRole(ctx context.Context, id string) (*iam.Role, error) {
 	if err != nil {
 		return nil, err
 	}
-	return googleretry.Attempted(ctx, service.Projects.Roles.Get(b.clients.roleName(id)).Context(ctx).Do)
+	return googleretry.Attempted(ctx, service.Projects.Roles.Get(roleName(b.clients, id)).Context(ctx).Do)
 }
 
-func (c *clients) roleName(id string) string { return "projects/" + c.project + "/roles/" + id }
+func roleName(c *gcloud.Clients, id string) string { return "projects/" + c.Project() + "/roles/" + id }
 
 func roleDrifted(role *iam.Role, want customRole) bool {
 	return role.Stage == roleStageDisabled ||
@@ -96,16 +120,16 @@ func (b bootstrap) makeRole(ctx context.Context, want customRole) error {
 		return err
 	}
 	role, err := b.readRole(ctx, id)
-	if absent(err) {
+	if gcloud.Absent(err) {
 		role, err = b.createRole(ctx, want)
 	}
 	if err != nil {
 		return err
 	}
-	name := b.clients.roleName(id)
+	name := roleName(b.clients, id)
 	if role.Deleted {
 		if role, err = googleretry.Attempted(ctx, service.Projects.Roles.Undelete(name, &iam.UndeleteRoleRequest{Etag: role.Etag}).Context(ctx).Do); err != nil {
-			if googleretry.AnsweredCode(err) == http.StatusBadRequest || absent(err) {
+			if googleretry.AnsweredCode(err) == http.StatusBadRequest || gcloud.Absent(err) {
 				return refusePurgedRole(name)
 			}
 			return fmt.Errorf("undelete the %s custom role: %w", id, err)
@@ -130,7 +154,7 @@ func (b bootstrap) createRole(ctx context.Context, want customRole) (*iam.Role, 
 	if err != nil {
 		return nil, err
 	}
-	created, err := googleretry.Attempted(ctx, service.Projects.Roles.Create("projects/"+b.clients.project, &iam.CreateRoleRequest{
+	created, err := googleretry.Attempted(ctx, service.Projects.Roles.Create("projects/"+b.clients.Project(), &iam.CreateRoleRequest{
 		RoleId: id,
 		Role: &iam.Role{
 			Title:               want.title,
@@ -139,10 +163,10 @@ func (b bootstrap) createRole(ctx context.Context, want customRole) (*iam.Role, 
 			Stage:               roleStageGA,
 		},
 	}).Context(ctx).Do)
-	if taken(err) {
+	if gcloud.Taken(err) {
 		held, readErr := b.readRole(ctx, id)
-		if absent(readErr) {
-			return nil, refusePurgedRole(b.clients.roleName(id))
+		if gcloud.Absent(readErr) {
+			return nil, refusePurgedRole(roleName(b.clients, id))
 		}
 		if readErr != nil {
 			return nil, fmt.Errorf("read the %s custom role that already exists: %w", id, readErr)

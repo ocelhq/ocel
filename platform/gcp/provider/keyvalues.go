@@ -5,12 +5,13 @@ import (
 	"errors"
 
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type keyValues struct{ p *Provider }
 
-func (s keyValues) open(ctx context.Context) (*clients, ports.KeyValues, error) {
+func (s keyValues) open(ctx context.Context) (*gcloud.Clients, ports.KeyValues, error) {
 	resolved, err := s.p.openClients(ctx)
 	if err != nil {
 		return nil, ports.KeyValues{}, err
@@ -56,9 +57,9 @@ func (s keyValues) WritePair(ctx context.Context, first, second records.Entry) e
 	return store.WritePair(ctx, first, second)
 }
 
-func ensureProjectDatabaseOf(ctx context.Context, c *clients, in records.Partition) error {
+func ensureProjectDatabaseOf(ctx context.Context, c *gcloud.Clients, in records.Partition) error {
 	project, _ := ports.ProjectOfRecords(in)
-	return c.ensureProjectDatabase(ctx, in.Tier, project)
+	return ensureProjectDatabase(ctx, c, in.Tier, project)
 }
 
 func (s keyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {

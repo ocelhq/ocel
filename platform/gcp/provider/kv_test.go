@@ -27,7 +27,7 @@ func aKVStore(t *testing.T, spec provider.KVSpec) resources.ProvisionRequest {
 
 func storeInstance(t *testing.T, p *Provider) string {
 	t.Helper()
-	instance, err := names(t, p).KVInstance("shop", "prod", "cache")
+	instance, err := namesOf(t, p).KVInstance("shop", "prod", "cache")
 	if err != nil {
 		t.Fatal(err)
 	}

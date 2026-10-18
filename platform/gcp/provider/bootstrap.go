@@ -2,27 +2,15 @@ package gcp
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"path"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
-	"google.golang.org/api/artifactregistry/v1"
-	firestoreadmin "google.golang.org/api/firestore/v1"
-	"google.golang.org/api/iam/v1"
-	"google.golang.org/api/iterator"
-	"google.golang.org/api/secretmanager/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -31,48 +19,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const (
-	reasonCurrent      = "already current"
-	reasonEmulated     = "emulator serves one implicit database"
-	reasonRingKept     = "Google never deletes a key ring, so this one outlives every bootstrap that used it"
-	reasonShared       = "the %s bootstrap is still installed and shares it"
-	reasonSharedDB     = "the %s bootstrap is still installed and shares it, so only the records this tier keeps in it are deleted"
-	reasonKeyScheduled = "Cloud KMS destroys each version once the key's scheduled-destruction period passes, 30 days unless the key sets another"
-	reasonAbsent       = "nothing is provisioned here"
-	reasonQueuePurged  = "its waiting messages are deleted and the queue is kept, since Cloud Tasks will not create a queue under a deleted queue's name for 7 days"
-
-	reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
-	reasonUnpruned  = "it exists with cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
-
-	reasonUnprotected = "it exists with delete protection off, and one call would take every record it stores with it"
-
-	reasonUnlocked = "it is open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
-
-	reasonKeyReplaced        = "its primary version is destroyed or scheduled for destruction, and a new primary version replaces it: what the tier sealed under the old one opens again only if that version is restored"
-	reasonPassphraseReplaced = "its latest version is disabled or destroyed, and a new passphrase replaces it: what was written under the old one opens again only if that version is enabled"
-)
-
-const passphraseBytes = 32
-
-const runAsRole = "roles/iam.serviceAccountUser"
-
-const (
-	dockerImages     = "DOCKER"
-	standardImages   = "STANDARD_REPOSITORY"
-	deleteImages     = "DELETE"
-	untaggedImages   = "UNTAGGED"
-	untaggedLifetime = "604800s"
-
-	dropUntaggedPolicy = "drop-untagged"
-)
-
-const (
-	nativeFirestore = "FIRESTORE_NATIVE"
-	protectionOn    = "DELETE_PROTECTION_ENABLED"
-	protectionOff   = "DELETE_PROTECTION_DISABLED"
+	reasonCurrent = "already current"
+	reasonShared  = "the %s bootstrap is still installed and shares it"
+	reasonAbsent  = "nothing is provisioned here"
 )
 
 type bootstrapGate struct{ p *Provider }
@@ -100,8 +54,8 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 		writtenBy:      g.p.writtenBy,
 		surveyed:       &g.p.surveyed,
 		pushBinary:     g.p.pushBinary,
-		deployAndRoute: g.p.deployAndRoute,
-		tearDown:       g.p.tearDown,
+		deployAndRoute: g.p.services().DeployAndRoute,
+		tearDown:       g.p.services().TearDown,
 	}, nil
 }
 
@@ -146,7 +100,7 @@ func (g bootstrapGate) Remove(ctx context.Context, tier environment.Tier, progre
 }
 
 type bootstrap struct {
-	clients   *clients
+	clients   *gcloud.Clients
 	fronts    provider.Edges
 	stores    memorystore
 	records   records.Store
@@ -154,7 +108,7 @@ type bootstrap struct {
 	surveyed  *surveys
 
 	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
-	deployAndRoute func(ctx context.Context, s serving, progress progress.Log) (release, error)
+	deployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
 	tearDown       func(ctx context.Context, service string, progress progress.Log) error
 }
 
@@ -301,8 +255,8 @@ func planned(read survey, items []item) []provider.Change {
 			change.Action, change.Reason = provider.ActionUpdate, read.mends(item)
 		case item.Shared && read.sibling && read.has(item):
 			change.Action, change.Reason, change.Slow = provider.ActionKeep, sharedWith(read.Tier), false
-		case read.Emulated && item.Kind == KindDatabase:
-			change.Action, change.Reason, change.Slow = provider.ActionKeep, reasonEmulated, false
+		case read.Emulated && item.kind().emulatorKeeps != "":
+			change.Action, change.Reason, change.Slow = provider.ActionKeep, item.kind().emulatorKeeps, false
 		case read.has(item):
 			change.Action, change.Reason, change.Slow = provider.ActionKeep, reasonCurrent, false
 		}
@@ -373,7 +327,7 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	}
 	repaired, err := b.repairParts(ctx, req.Tier)
 	for _, part := range repaired {
-		ensureProgress(progress).Say("Checked the " + part + " part against this build, mending any drift")
+		gcloud.EnsureProgress(progress).Say("Checked the " + part + " part against this build, mending any drift")
 	}
 	return err
 }
@@ -402,65 +356,21 @@ func stampItem(items []item, stampBucket item) item {
 
 func (b bootstrap) provision(ctx context.Context, read survey, target item, progress progress.Log) error {
 	if mends := read.mends(target); mends != "" {
-		if err := b.mend(ctx, read, target); err != nil {
+		if err := target.kind().mendOrMake(ctx, b, read, target); err != nil {
 			return err
 		}
-		ensureProgress(progress).Say("Mended " + target.phrase() + ": " + mends)
+		gcloud.EnsureProgress(progress).Say("Mended " + target.phrase() + ": " + mends)
 		return nil
 	}
 	if read.has(target) {
-		ensureProgress(progress).Debug("The " + target.phrase() + " is " + reasonCurrent)
+		gcloud.EnsureProgress(progress).Debug("The " + target.phrase() + " is " + reasonCurrent)
 		return nil
 	}
-	if err := b.make(ctx, read, target); err != nil {
+	if err := target.kind().make(ctx, b, read, target); err != nil {
 		return err
 	}
-	ensureProgress(progress).Say("Created " + target.phrase())
+	gcloud.EnsureProgress(progress).Say("Created " + target.phrase())
 	return nil
-}
-
-func (b bootstrap) mend(ctx context.Context, read survey, target item) error {
-	switch target.Kind {
-	case KindDatabase:
-		return b.protectDatabase(ctx, target.Name)
-	case KindRepository:
-		return b.pruneRepository(ctx, target.Name)
-	case KindBucket:
-		return b.lockBucket(ctx, target.Name)
-	default:
-		return b.make(ctx, read, target)
-	}
-}
-
-func (b bootstrap) make(ctx context.Context, read survey, target item) error {
-	switch target.Kind {
-	case KindDatabase:
-		return b.makeDatabase(ctx, read, target.Name)
-	case KindBucket:
-		return b.makeBucket(ctx, read, target)
-	case KindKeyRing:
-		return b.makeKeyRing(ctx)
-	case KindKey:
-		return b.makeKey(ctx, target.Name)
-	case KindSecret:
-		return b.makeSecret(ctx, target.Name)
-	case KindRepository:
-		return b.makeRepository(ctx, target.Name)
-	case KindRole:
-		role, ok := findCustomRole(read.Names, target.Name)
-		if !ok {
-			return fmt.Errorf("no custom role is named %s", target.Name)
-		}
-		return b.makeRole(ctx, role)
-	case KindServiceAccount:
-		return b.makeAccount(ctx, read, target.Name)
-	case KindGrant:
-		return b.bindProjectGrant(ctx, target.Name, true)
-	case KindQueue:
-		return b.ensureDelayQueue(ctx, read.Tier)
-	default:
-		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing provisions a %s", target.Kind)
-	}
 }
 
 func (b bootstrap) stampWith(ctx context.Context, read survey, written stamp, generation int64) (int64, error) {
@@ -517,388 +427,6 @@ func writerNamed(writer string) string {
 	return writer
 }
 
-func (b bootstrap) makeBucket(ctx context.Context, read survey, target item) error {
-	client, err := b.clients.Storage()
-	if err != nil {
-		return err
-	}
-	if err := client.Bucket(target.Name).Create(ctx, read.Project, bucketAttrs(read.Region, target)); err != nil && !taken(err) {
-		return fmt.Errorf("create the %s bucket: %w", target.Name, err)
-	}
-	return nil
-}
-
-func bucketAttrs(region string, target item) *storage.BucketAttrs {
-	return &storage.BucketAttrs{
-		Location:                 region,
-		VersioningEnabled:        target.Versioned,
-		UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
-		PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
-	}
-}
-
-func locked(attrs *storage.BucketAttrs) bool {
-	return attrs.UniformBucketLevelAccess.Enabled && attrs.PublicAccessPrevention == storage.PublicAccessPreventionEnforced
-}
-
-func (b bootstrap) lockBucket(ctx context.Context, name string) error {
-	client, err := b.clients.Storage()
-	if err != nil {
-		return err
-	}
-	if _, err := client.Bucket(name).Update(ctx, storage.BucketAttrsToUpdate{
-		UniformBucketLevelAccess: &storage.UniformBucketLevelAccess{Enabled: true},
-		PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
-	}); err != nil {
-		return fmt.Errorf("restrict the %s bucket to IAM alone: %w", name, err)
-	}
-	return nil
-}
-
-func taken(err error) bool { return googleretry.AnsweredCode(err) == http.StatusConflict }
-
-func (b bootstrap) makeKeyRing(ctx context.Context) error {
-	client, err := b.clients.KMS()
-	if err != nil {
-		return err
-	}
-	_, err = googleretry.Called(ctx, func() (*kmspb.KeyRing, error) {
-		return client.CreateKeyRing(ctx, &kmspb.CreateKeyRingRequest{
-			Parent:    fmt.Sprintf("projects/%s/locations/%s", b.clients.project, b.clients.region),
-			KeyRingId: b.clients.KeyRing(),
-			KeyRing:   &kmspb.KeyRing{},
-		})
-	})
-	if err != nil && status.Code(err) != codes.AlreadyExists {
-		return fmt.Errorf("create the %s key ring: %w", b.clients.KeyRing(), err)
-	}
-	return nil
-}
-
-func (b bootstrap) makeKey(ctx context.Context, name string) error {
-	client, err := b.clients.KMS()
-	if err != nil {
-		return err
-	}
-	_, err = googleretry.Called(ctx, func() (*kmspb.CryptoKey, error) {
-		return client.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
-			Parent:      keyRingPath(b.clients),
-			CryptoKeyId: name,
-			CryptoKey:   &kmspb.CryptoKey{Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
-		})
-	})
-	if status.Code(err) != codes.AlreadyExists {
-		if err != nil {
-			return fmt.Errorf("create the %s key: %w", name, err)
-		}
-		return nil
-	}
-	minted, err := googleretry.Called(ctx, func() (*kmspb.CryptoKeyVersion, error) {
-		return client.CreateCryptoKeyVersion(ctx, &kmspb.CreateCryptoKeyVersionRequest{
-			Parent:           keyPath(b.clients, name),
-			CryptoKeyVersion: &kmspb.CryptoKeyVersion{},
-		})
-	})
-	if err != nil {
-		return fmt.Errorf("give the %s key a version to seal under again: %w", name, err)
-	}
-	if _, err := until(ctx, fmt.Sprintf("the material the %s key seals under", name),
-		func() (*kmspb.CryptoKeyVersion, error) {
-			return googleretry.Called(ctx, func() (*kmspb.CryptoKeyVersion, error) {
-				return client.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: minted.GetName()})
-			})
-		},
-		func(version *kmspb.CryptoKeyVersion) bool {
-			return version.GetState() == kmspb.CryptoKeyVersion_ENABLED
-		}); err != nil {
-		return err
-	}
-	if _, err := googleretry.Called(ctx, func() (*kmspb.CryptoKey, error) {
-		return client.UpdateCryptoKeyPrimaryVersion(ctx, &kmspb.UpdateCryptoKeyPrimaryVersionRequest{
-			Name:               keyPath(b.clients, name),
-			CryptoKeyVersionId: path.Base(minted.GetName()),
-		})
-	}); err != nil {
-		return fmt.Errorf("point the %s key at the version it seals under now: %w", name, err)
-	}
-	return nil
-}
-
-func (b bootstrap) makeSecret(ctx context.Context, name string) error {
-	service, err := b.clients.Secrets()
-	if err != nil {
-		return err
-	}
-	parent := "projects/" + b.clients.project
-	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.Create(parent, &secretmanager.Secret{
-		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
-	}).SecretId(name).Context(ctx).Do)
-	if err != nil && !taken(err) {
-		return fmt.Errorf("create the %s secret: %w", name, err)
-	}
-
-	latest, err := b.readPassphrase(ctx, name)
-	if err != nil {
-		return err
-	}
-	if passphrasePresenceOf(latest).present {
-		return nil
-	}
-
-	minted := make([]byte, passphraseBytes)
-	if _, err := rand.Read(minted); err != nil {
-		return fmt.Errorf("mint the passphrase %s stores: %w", name, err)
-	}
-	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.AddVersion(secretPath(b.clients.project, name), &secretmanager.AddSecretVersionRequest{
-		Payload: &secretmanager.SecretPayload{Data: base64.StdEncoding.EncodeToString(minted)},
-	}).Context(ctx).Do)
-	if err != nil {
-		return fmt.Errorf("write the passphrase into %s: %w", name, err)
-	}
-	return nil
-}
-
-type accountPurpose struct {
-	displayName string
-	description string
-	ungranted   string
-	grant       func(ctx context.Context, tier environment.Tier) error
-	forget      func(ctx context.Context, tier environment.Tier) error
-	granted     func(ctx context.Context, tier environment.Tier) (bool, error)
-}
-
-func (b bootstrap) purposeOf(tier environment.Tier, name string) (accountPurpose, error) {
-	switch name {
-	case b.clients.EnvSourceSyncAccount(tier):
-		return b.syncPurpose(tier), nil
-	case b.clients.PushAccount(tier):
-		return b.pushPurpose(tier), nil
-	case b.clients.RealtimeAccount(tier):
-		return b.realtimePurpose(tier), nil
-	}
-	return accountPurpose{}, fmt.Errorf("no purpose is known for the %s service account in the %s tier", name, tier)
-}
-
-func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) error {
-	service, err := b.clients.Accounts()
-	if err != nil {
-		return err
-	}
-	purpose, err := b.purposeOf(read.Tier, name)
-	if err != nil {
-		return err
-	}
-	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.clients.project, &iam.CreateServiceAccountRequest{
-		AccountId: name,
-		ServiceAccount: &iam.ServiceAccount{
-			DisplayName: purpose.displayName,
-			Description: purpose.description,
-		},
-	}).Context(ctx).Do)
-	if err != nil && !taken(err) {
-		return fmt.Errorf("create the %s service account: %w", name, err)
-	}
-	if err := b.grantRunAs(ctx, name); err != nil {
-		return err
-	}
-	return purpose.grant(ctx, read.Tier)
-}
-
-func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
-	member, err := b.clients.Principal(ctx)
-	if err != nil {
-		return err
-	}
-	if err := b.clients.bindAccountRole(ctx, name, runAsRole, memberOf(member), true); err != nil {
-		return fmt.Errorf("let %s deploy apps that run as the %s service account: %w", member, name, err)
-	}
-	return nil
-}
-
-func (b bootstrap) takeAccount(ctx context.Context, tier environment.Tier, name string) error {
-	purpose, err := b.purposeOf(tier, name)
-	if err != nil {
-		return err
-	}
-	if err := purpose.forget(ctx, tier); err != nil {
-		return err
-	}
-	service, err := b.clients.Accounts()
-	if err != nil {
-		return err
-	}
-	if _, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Delete(accountPath(b.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
-		return fmt.Errorf("delete the %s service account: %w", name, err)
-	}
-	return nil
-}
-
-func (b bootstrap) makeRepository(ctx context.Context, name string) error {
-	service, err := b.clients.Repositories()
-	if err != nil {
-		return err
-	}
-	creating, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Create(
-		repositoryParent(b.clients), imageRepository()).RepositoryId(name).Context(ctx).Do)
-	if taken(err) {
-		return b.pruneRepository(ctx, name)
-	}
-	if err != nil {
-		return fmt.Errorf("create the %s image repository: %w", name, err)
-	}
-	return b.repositoryAwaited(ctx, fmt.Sprintf("creating the %s image repository", name), creating)
-}
-
-func (b bootstrap) pruneRepository(ctx context.Context, name string) error {
-	service, err := b.clients.Repositories()
-	if err != nil {
-		return err
-	}
-	if _, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Patch(repositoryPath(b.clients, name),
-		&artifactregistry.Repository{CleanupPolicies: pruningUntaggedImages()}).
-		UpdateMask("cleanup_policies").Context(ctx).Do); err != nil {
-		return fmt.Errorf("set the %s image repository's cleanup policy to the one this bootstrap names: %w", name, err)
-	}
-	return nil
-}
-
-func imageRepository() *artifactregistry.Repository {
-	return &artifactregistry.Repository{
-		Format:          dockerImages,
-		Mode:            standardImages,
-		Description:     "the images ocel deploys into this project",
-		CleanupPolicies: pruningUntaggedImages(),
-	}
-}
-
-func pruningUntaggedImages() map[string]artifactregistry.CleanupPolicy {
-	return map[string]artifactregistry.CleanupPolicy{
-		dropUntaggedPolicy: {
-			Id:     dropUntaggedPolicy,
-			Action: deleteImages,
-			Condition: &artifactregistry.CleanupPolicyCondition{
-				TagState:  untaggedImages,
-				OlderThan: untaggedLifetime,
-			},
-		},
-	}
-}
-
-func (b bootstrap) takeRepository(ctx context.Context, name string) error {
-	service, err := b.clients.Repositories()
-	if err != nil {
-		return err
-	}
-	deleting, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Delete(repositoryPath(b.clients, name)).Context(ctx).Do)
-	if absent(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("delete the %s image repository: %w", name, err)
-	}
-	return b.repositoryAwaited(ctx, fmt.Sprintf("deleting the %s image repository", name), deleting)
-}
-
-func (b bootstrap) repositoryAwaited(ctx context.Context, doing string, operation *artifactregistry.Operation) error {
-	if operation == nil || operation.Done || operation.Name == "" {
-		return repositoryFailed(doing, operation)
-	}
-	service, err := b.clients.Repositories()
-	if err != nil {
-		return err
-	}
-	finished, err := until(ctx, doing, func() (*artifactregistry.Operation, error) {
-		return googleretry.Attempted(ctx, service.Projects.Locations.Operations.Get(operation.Name).Context(ctx).Do)
-	}, func(polled *artifactregistry.Operation) bool { return polled.Done })
-	if err != nil {
-		return err
-	}
-	return repositoryFailed(doing, finished)
-}
-
-func repositoryFailed(doing string, operation *artifactregistry.Operation) error {
-	if operation == nil || operation.Error == nil {
-		return nil
-	}
-	return fmt.Errorf("%s: %s", doing, operation.Error.Message)
-}
-
-func (b bootstrap) makeDatabase(ctx context.Context, read survey, id string) error {
-	service, err := b.clients.Databases()
-	if err != nil {
-		return err
-	}
-	operation, err := googleretry.Attempted(ctx, service.Projects.Databases.Create("projects/"+read.Project, &firestoreadmin.GoogleFirestoreAdminV1Database{
-		LocationId:            read.Region,
-		Type:                  nativeFirestore,
-		DeleteProtectionState: protectionOn,
-	}).DatabaseId(id).Context(ctx).Do)
-	if taken(err) {
-		return b.databaseServesThisRegion(ctx, read, id)
-	}
-	if err != nil {
-		return fmt.Errorf("create the %q Firestore database: %w", id, err)
-	}
-	return b.awaited(ctx, fmt.Sprintf("creating the %q Firestore database", id), operation)
-}
-
-func (b bootstrap) databaseServesThisRegion(ctx context.Context, read survey, id string) error {
-	service, err := b.clients.Databases()
-	if err != nil {
-		return err
-	}
-	database, err := googleretry.Attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients, id)).Context(ctx).Do)
-	if err != nil {
-		return fmt.Errorf("read the %q Firestore database that already exists: %w", id, err)
-	}
-	if database.LocationId == read.Region {
-		return b.protectDatabase(ctx, id)
-	}
-	return refusal.Refuse(refusal.CodeInvalid,
-		"project %s already has the %q Firestore database in %s and Firestore never moves one, "+
-			"so the records this bootstrap writes would sit a continent away from the buckets and keys it names %s for.\n"+
-			"Bootstrap this project in %s, or deploy into a project with no %q database",
-		read.Project, id, database.LocationId, read.Region, database.LocationId, id)
-}
-
-func (b bootstrap) protectDatabase(ctx context.Context, id string) error {
-	service, err := b.clients.Databases()
-	if err != nil {
-		return err
-	}
-	operation, err := googleretry.Attempted(ctx, service.Projects.Databases.Patch(databasePath(b.clients, id),
-		&firestoreadmin.GoogleFirestoreAdminV1Database{DeleteProtectionState: protectionOn}).
-		UpdateMask("deleteProtectionState").Context(ctx).Do)
-	if err != nil {
-		return fmt.Errorf("turn on delete protection for the %q Firestore database: %w", id, err)
-	}
-	return b.awaited(ctx, fmt.Sprintf("turning on delete protection for the %q Firestore database", id), operation)
-}
-
-func (b bootstrap) awaited(ctx context.Context, doing string, operation *firestoreadmin.GoogleLongrunningOperation) error {
-	if operation == nil || operation.Done || operation.Name == "" {
-		return operationFailed(doing, operation)
-	}
-	service, err := b.clients.Databases()
-	if err != nil {
-		return err
-	}
-	finished, err := until(ctx, doing, func() (*firestoreadmin.GoogleLongrunningOperation, error) {
-		return googleretry.Attempted(ctx, service.Projects.Databases.Operations.Get(operation.Name).Context(ctx).Do)
-	}, func(polled *firestoreadmin.GoogleLongrunningOperation) bool { return polled.Done })
-	if err != nil {
-		return fmt.Errorf("wait for %s: %w", doing, err)
-	}
-	return operationFailed(doing, finished)
-}
-
-func operationFailed(doing string, operation *firestoreadmin.GoogleLongrunningOperation) error {
-	if operation == nil || operation.Error == nil {
-		return nil
-	}
-	return fmt.Errorf("%s: %s", doing, operation.Error.Message)
-}
-
 type removal struct {
 	item         item
 	action       provider.ChangeAction
@@ -947,7 +475,7 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 			Reason: taking.reason,
 			Slow:   taking.item.Slow,
 		}
-		if taking.item.Kind == KindSecret {
+		if taking.item.kind().parameter {
 			params.Changes = append(params.Changes, change)
 			continue
 		}
@@ -983,31 +511,21 @@ func removals(read survey) []removal {
 }
 
 func removing(read survey, target item) removal {
-	taking := removal{item: target, action: provider.ActionDelete}
-	switch {
-	case target.Kind == KindKeyRing:
-		taking.action, taking.reason = provider.ActionKeep, reasonRingKept
-	case target.Kind == KindRole:
-		taking.action, taking.reason = provider.ActionKeep, reasonRoleKept
-	case target.Kind == KindDatabase && target.Shared && read.sibling:
-		taking.action, taking.reason = provider.ActionKeep, fmt.Sprintf(reasonSharedDB, read.Tier.Sibling())
-	case target.Shared && read.sibling:
-		taking.action, taking.reason = provider.ActionKeep, sharedWith(read.Tier)
-	case target.Kind == KindDatabase && read.Emulated:
-		taking.action, taking.reason = provider.ActionKeep, reasonEmulated
-	case target.Kind == KindDatabase:
-		taking.action = provider.ActionDisableThenDelete
-	case target.Kind == KindKey:
-		taking.reason, taking.item.Slow = reasonKeyScheduled, true
-	case target.Kind == KindQueue:
-		taking.action, taking.reason = provider.ActionUpdate, reasonQueuePurged
-	case target.Name == read.Names.Bucket(read.Tier):
-		taking.item.Slow = true
+	taking := deleting(read, target)
+	if kept := target.kind().removal; kept != nil {
+		taking = kept(read, target)
 	}
 	if taking.action != provider.ActionKeep && !read.has(taking.item) {
 		taking.action, taking.reason = provider.ActionKeep, reasonAbsent
 	}
 	return taking
+}
+
+func deleting(read survey, target item) removal {
+	if target.Shared && read.sibling {
+		return removal{item: target, action: provider.ActionKeep, reason: sharedWith(read.Tier)}
+	}
+	return removal{item: target, action: provider.ActionDelete}
 }
 
 func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
@@ -1048,40 +566,31 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		return err
 	}
 	for _, taking := range removals(read) {
-		if taking.action == provider.ActionKeep && taking.item.Kind == KindDatabase && taking.item.Shared {
-			if err := b.takeKeyValues(ctx, tier); err != nil {
-				return err
-			}
-		}
-		if taking.item.Kind == KindDatabase && taking.item.Shared {
-			if err := b.takeProjectRecords(ctx, tier); err != nil {
+		if leave := taking.item.kind().leave; leave != nil {
+			if err := leave(ctx, b, read, taking); err != nil {
 				return err
 			}
 		}
 		if taking.action != provider.ActionKeep {
 			var err error
-			if taking.destroyAfter, err = b.take(ctx, read, taking.item); err != nil {
+			if taking.destroyAfter, err = taking.item.kind().take(ctx, b, read, taking.item); err != nil {
 				return err
 			}
 		}
 		taking.report(progress)
 	}
-	return b.deleteRetiredWorkloadAccount(ctx, tier, progress)
+	return nil
 }
 
 func (r removal) report(progress progress.Log) {
-	progress = ensureProgress(progress)
+	progress = gcloud.EnsureProgress(progress)
 	switch {
 	case r.action == provider.ActionKeep && r.reason == reasonAbsent:
 		progress.Debug("Nothing to remove: " + r.item.phrase() + " does not exist")
 	case r.action == provider.ActionKeep:
 		progress.Say("Kept " + r.item.phrase() + ": " + r.reason)
-	case r.item.Kind == KindQueue:
-		progress.Say("Purged " + r.item.phrase() + ": " + r.reason)
-	case r.item.Kind == KindKey && r.destroyAfter == 0:
-		progress.Say("Scheduled every version of " + r.item.phrase() + " for destruction, which Cloud KMS carries out after " + formatPeriod(defaultKeyDestroyAfter) + ", its default")
-	case r.item.Kind == KindKey:
-		progress.Say("Scheduled every version of " + r.item.phrase() + " for destruction, which Cloud KMS carries out after " + formatPeriod(r.destroyAfter) + ", the key's own period")
+	case r.item.kind().taken != nil:
+		progress.Say(r.item.kind().taken(r))
 	default:
 		progress.Say("Removed " + r.item.phrase())
 	}
@@ -1092,187 +601,4 @@ func destroyIn(tier environment.Tier) string {
 		return "ocel destroy preview"
 	}
 	return "ocel destroy production"
-}
-
-func (b bootstrap) take(ctx context.Context, read survey, target item) (destroyAfter time.Duration, err error) {
-	switch target.Kind {
-	case KindSecret:
-		return 0, b.takeSecret(ctx, target.Name)
-	case KindKey:
-		return b.takeKey(ctx, target.Name)
-	case KindDatabase:
-		return 0, b.takeDatabase(ctx, target.Name)
-	case KindBucket:
-		return 0, b.takeBucket(ctx, target.Name)
-	case KindRepository:
-		return 0, b.takeRepository(ctx, target.Name)
-	case KindServiceAccount:
-		return 0, b.takeAccount(ctx, read.Tier, target.Name)
-	case KindGrant:
-		return 0, b.bindProjectGrant(ctx, target.Name, false)
-	case KindQueue:
-		return 0, b.purgeDelayQueue(ctx, read.Tier)
-	default:
-		return 0, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", target.Kind)
-	}
-}
-
-const defaultKeyDestroyAfter = 30 * 24 * time.Hour
-
-func formatPeriod(d time.Duration) string {
-	const day = 24 * time.Hour
-	switch {
-	case d == day:
-		return "24 hours"
-	case d%day == 0:
-		return fmt.Sprintf("%d days", d/day)
-	case d%time.Hour == 0:
-		return fmt.Sprintf("%d hours", d/time.Hour)
-	default:
-		return d.String()
-	}
-}
-
-func (b bootstrap) takeSecret(ctx context.Context, name string) error {
-	service, err := b.clients.Secrets()
-	if err != nil {
-		return err
-	}
-	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(secretPath(b.clients.project, name)).Context(ctx).Do); err != nil && !absent(err) {
-		return fmt.Errorf("delete the %s secret: %w", name, err)
-	}
-	return nil
-}
-
-func (b bootstrap) takeKey(ctx context.Context, name string) (destroyAfter time.Duration, err error) {
-	client, err := b.clients.KMS()
-	if err != nil {
-		return 0, err
-	}
-	key, err := b.readKey(ctx, name)
-	if err != nil {
-		return 0, err
-	}
-	if key == nil {
-		return 0, nil
-	}
-	versions := client.ListCryptoKeyVersions(ctx, &kmspb.ListCryptoKeyVersionsRequest{Parent: keyPath(b.clients, name)})
-	var listed []*kmspb.CryptoKeyVersion
-	for {
-		version, err := versions.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			return 0, fmt.Errorf("list the versions the %s key has: %w", name, err)
-		}
-		listed = append(listed, version)
-	}
-	for _, version := range destroyable(listed) {
-		if _, err := googleretry.Called(ctx, func() (*kmspb.CryptoKeyVersion, error) {
-			return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{Name: version})
-		}); err != nil {
-			return 0, fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
-		}
-	}
-	return key.GetDestroyScheduledDuration().AsDuration(), nil
-}
-
-func destroyable(versions []*kmspb.CryptoKeyVersion) []string {
-	var named []string
-	for _, version := range versions {
-		switch version.GetState() {
-		case kmspb.CryptoKeyVersion_ENABLED, kmspb.CryptoKeyVersion_DISABLED:
-			named = append(named, version.GetName())
-		}
-	}
-	return named
-}
-
-func (b bootstrap) takeDatabase(ctx context.Context, id string) error {
-	service, err := b.clients.Databases()
-	if err != nil {
-		return err
-	}
-	path := databasePath(b.clients, id)
-	lifting, err := googleretry.Attempted(ctx, service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
-		DeleteProtectionState: protectionOff,
-	}).UpdateMask("deleteProtectionState").Context(ctx).Do)
-	if absent(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("lift delete protection from the %q Firestore database: %w", id, err)
-	}
-	lifted := fmt.Sprintf("lifting delete protection from the %q Firestore database", id)
-	if err := b.awaited(ctx, lifted, lifting); err != nil {
-		return err
-	}
-
-	deleting, err := googleretry.Attempted(ctx, service.Projects.Databases.Delete(path).Context(ctx).Do)
-	if absent(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("delete the %q Firestore database: %w", id, err)
-	}
-	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", id), deleting)
-}
-
-func (b bootstrap) takeKeyValues(ctx context.Context, tier environment.Tier) error {
-	client, err := b.clients.Firestore()
-	if err != nil {
-		return err
-	}
-	documents := ports.OpenTierCollection(client, tier).Select().Documents(ctx)
-	defer documents.Stop()
-	for {
-		kept, err := documents.Next()
-		if errors.Is(err, iterator.Done) || status.Code(err) == codes.NotFound {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("list the entries the %s tier keeps: %w", tier, err)
-		}
-		if err := googleretry.Done(ctx, func() error {
-			_, err := kept.Ref.Delete(ctx)
-			return err
-		}); err != nil {
-			return fmt.Errorf("delete the %s entry %s: %w", tier, kept.Ref.ID, err)
-		}
-	}
-}
-
-func (b bootstrap) takeBucket(ctx context.Context, name string) error {
-	client, err := b.clients.Storage()
-	if err != nil {
-		return err
-	}
-	bucket := client.Bucket(name)
-	objects := bucket.Objects(ctx, &storage.Query{Versions: true})
-	for {
-		attrs, err := objects.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		}
-		if err != nil {
-			if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
-				return nil
-			}
-			return fmt.Errorf("list what %s contains: %w", name, err)
-		}
-		object := bucket.Object(attrs.Name)
-		if attrs.Generation != 0 {
-			object = object.Generation(attrs.Generation)
-		}
-		if err := googleretry.Done(ctx, func() error { return object.Delete(ctx) }); err != nil &&
-			!errors.Is(err, storage.ErrObjectNotExist) && !absent(err) {
-			return fmt.Errorf("empty %s: %w", name, err)
-		}
-	}
-	if err := googleretry.Done(ctx, func() error { return bucket.Delete(ctx) }); err != nil &&
-		!errors.Is(err, storage.ErrBucketNotExist) && !absent(err) {
-		return fmt.Errorf("delete the %s bucket: %w", name, err)
-	}
-	return nil
 }

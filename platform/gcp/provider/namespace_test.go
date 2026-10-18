@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
@@ -26,7 +27,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(provider.NamespaceEnvVar, tc.namespace)
 
-			names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+			names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 			for what, got := range map[string]string{
 				"artifact bucket":   names.Bucket(environment.TierProduction),
 				"state bucket":      names.StateBucket(environment.TierPreview),
@@ -93,7 +94,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 func TestTheCachePurgeRoleIDReplacesEveryDashOfTheNamespaceWithAnUnderscore(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, "ocel-dev")
 
-	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 
 	if got, want := names.CDNPurgeRole(), "ocel_dev_cdn_purge"; got != want {
 		t.Errorf("CDNPurgeRole() = %q, want %q: a custom role id allows no dash", got, want)
@@ -165,9 +166,9 @@ var secretID = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,255}$`)
 
 var accountID = regexp.MustCompile(`^[a-z]([-a-z0-9]{4,28}[a-z0-9])$`)
 
-func longNames(t *testing.T) gcp.Names {
+func longNames(t *testing.T) names.Names {
 	t.Helper()
-	return names(t, newProvider(t, gcp.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
+	return namesOf(t, newProvider(t, gcp.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
 }
 
 func TestAGatewayServiceFitsCloudRunWhateverItsProjectAndEnvironmentAreCalled(t *testing.T) {
@@ -248,7 +249,7 @@ func TestEveryRealtimeSecretSharesAPrefixNoOtherSecretOfAnyNamespaceStartsWith(t
 	}
 
 	t.Setenv(provider.NamespaceEnvVar, ours.Namespace().String()+"-realtime")
-	other := names(t, newProvider(t, gcp.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
+	other := namesOf(t, newProvider(t, gcp.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
 	for _, secret := range []string{
 		ours.PassphraseSecret(production), ours.ConnectorKeySecret(),
 		other.PassphraseSecret(production), other.ConnectorKeySecret(), other.RealtimeSigningSecret("shop", "prod", "app"),
@@ -275,7 +276,7 @@ func TestEachTierRunsItsGatewaysAsAnAccountOfItsOwn(t *testing.T) {
 
 func TestAnAppsAccountIsNamedForItsNamespaceAndAHashOfItsTierProjectEnvironmentAndApp(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 19))
-	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 
 	account := names.AppAccount(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 	if !regexp.MustCompile(`^a{19}-[0-9a-f]{10}$`).MatchString(account) || !accountID.MatchString(account) {
@@ -301,7 +302,7 @@ func TestAnAppsAccountIsNamedForItsNamespaceAndAHashOfItsTierProjectEnvironmentA
 }
 
 func TestEachTiersTagsDatabaseIsNamedForTheNamespaceAndTheTier(t *testing.T) {
-	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 
 	if got, want := names.TagDatabase(environment.TierProduction), "ocel-production-tags"; got != want {
 		t.Errorf("TagDatabase(production) = %q, want %q", got, want)

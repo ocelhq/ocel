@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -44,14 +46,14 @@ func readDeclaredTopic(binding provider.Binding) (declaredTopic, bool, error) {
 	return declaredTopic{declared: cmp.Or(binding.Properties[stackrecords.PropertyDeclared], binding.Name), spec: &spec}, true, nil
 }
 
-func taskNames(names Names, ref provider.StackRef) topics.Names {
+func taskNames(names names.Names, ref provider.StackRef) topics.Names {
 	return topics.Names{
-		Namespace: names.namespace,
+		Namespace: names.Namespace(),
 		Scope:     topics.Scope{Slug: ref.Project, Tier: ref.Tier, Environment: ref.Name.Env},
 	}
 }
 
-func topologyOf(c *clients, ref provider.StackRef, declared map[string]*provider.TopicSpec) topics.Topology {
+func topologyOf(c *gcloud.Clients, ref provider.StackRef, declared map[string]*provider.TopicSpec) topics.Topology {
 	return topics.Topology{Names: taskNames(c.Names, ref), Topics: declared}
 }
 
@@ -62,8 +64,8 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 	}
 	topic := declaredTopicOf(in.Resource)
 	topology := topologyOf(c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
-	path := topics.TopicPath(c.project, topology.Names.Topic(topic.declared))
-	ensureProgress(progress).Say(fmt.Sprintf("Provisioning %s %s as Pub/Sub topic %s with %d consumer(s)", in.Resource.Type, topic.declared, path, len(topic.spec.Consumers)))
+	path := topics.TopicPath(c.Project(), topology.Names.Topic(topic.declared))
+	gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Provisioning %s %s as Pub/Sub topic %s with %d consumer(s)", in.Resource.Type, topic.declared, path, len(topic.spec.Consumers)))
 	if previous, recorded, err := p.recordedTopic(ctx, in.Ref, in.Resource); err != nil {
 		return provider.Binding{}, err
 	} else if recorded {
@@ -194,6 +196,6 @@ func (p *Provider) RemoveTopic(ctx context.Context, ref provider.StackRef, bindi
 	if err != nil {
 		return err
 	}
-	ensureProgress(progress).Say(fmt.Sprintf("Removing %s %s and its consumers' subscriptions", binding.Type, topic.declared))
+	gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Removing %s %s and its consumers' subscriptions", binding.Type, topic.declared))
 	return topologyOf(c, ref, map[string]*provider.TopicSpec{topic.declared: topic.spec}).Remove(ctx, c.Workload())
 }

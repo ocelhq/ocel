@@ -10,6 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleAccepts(t *testing.T) {
@@ -35,7 +37,7 @@ func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleA
 		json.NewEncoder(w).Encode(map[string][]string{"permissions": request.Permissions})
 	}))
 	t.Cleanup(server.Close)
-	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1", endpoint: server.URL}}
+	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}}
 
 	if err := b.permitted(context.Background(), parts); err != nil {
 		t.Fatalf("permitted: %v", err)
@@ -45,7 +47,7 @@ func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleA
 	}
 }
 
-func servingFirestoreIn(t *testing.T, regions ...string) *clients {
+func servingFirestoreIn(t *testing.T, regions ...string) *gcloud.Clients {
 	t.Helper()
 	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/projects/acme-prod/locations" {
@@ -61,7 +63,7 @@ func servingFirestoreIn(t *testing.T, regions ...string) *clients {
 		writeBody(w, map[string]any{"locations": locations})
 	}))
 	t.Cleanup(served.Close)
-	return &clients{Names: Names{namespace: provider.Namespace("ocel"), project: "acme-prod"}, endpoint: served.URL}
+	return &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Endpoint: served.URL}
 }
 
 func TestARegionCloudRunServesAndFirestoreDoesNotIsRefusedNamingTheOnesFirestoreServes(t *testing.T) {

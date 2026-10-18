@@ -11,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const maxDNSLabel = 63
@@ -33,7 +35,7 @@ func originHostname(release, service, base string) string {
 }
 
 func (p *Provider) readOriginBase(ctx context.Context, spec provider.StackSpec) (string, error) {
-	if !factsOf(spec.Edge).RunsCode || spec.App == nil || len(spec.App.Functions) == 0 {
+	if !run.FactsOf(spec.Edge).RunsCode || spec.App == nil || len(spec.App.Functions) == 0 {
 		return "", nil
 	}
 	tier := spec.Ref.Tier
@@ -63,7 +65,7 @@ func (p *Provider) routeOriginHost(
 	runProgress progress.Log,
 ) (string, error) {
 	hostname := originHostname(spec.Ref.Name.Release.String(), service, base)
-	ensureProgress(runProgress).Say("Routing " + hostname + " to revision tag " + tag + " of Cloud Run service " + service)
+	gcloud.EnsureProgress(runProgress).Say("Routing " + hostname + " to revision tag " + tag + " of Cloud Run service " + service)
 	err := p.originRouting().RouteOriginHost(ctx, alb.OriginHost{
 		Tier: spec.Ref.Tier, Slug: spec.Ref.Project, Hostname: hostname, Service: service, Tag: tag, Revision: revision,
 	})

@@ -1,4 +1,4 @@
-package gcp
+package gcloud
 
 import (
 	"cmp"
@@ -8,39 +8,39 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-type operationOutcome struct {
-	name    string
-	done    bool
-	failure string
+type OperationOutcome struct {
+	Name    string
+	Done    bool
+	Failure string
 }
 
-func failureOf(code int64, message string) string {
+func FailureOf(code int64, message string) string {
 	return cmp.Or(message, fmt.Sprintf("the operation failed with code %d and no message", code))
 }
 
-func awaitOperation[T any](
+func AwaitOperation[T any](
 	ctx context.Context,
-	limits patience,
+	limits Patience,
 	service, doing string,
 	started T,
-	outcomeOf func(T) operationOutcome,
+	outcomeOf func(T) OperationOutcome,
 	read func(name string) (T, error),
 ) (T, error) {
 	var nothing T
 	first := outcomeOf(started)
-	if !first.done && first.name == "" {
+	if !first.Done && first.Name == "" {
 		return nothing, fmt.Errorf("%s answered %s with an operation that is not done and has no name, so nothing can be polled to say when it ends", service, doing)
 	}
-	finished, err := waiting(ctx, limits, doing, func() (T, error) {
-		if first.done {
+	finished, err := Waiting(ctx, limits, doing, func() (T, error) {
+		if first.Done {
 			return started, nil
 		}
-		return read(first.name)
-	}, func(polled T) bool { return outcomeOf(polled).done })
+		return read(first.Name)
+	}, func(polled T) bool { return outcomeOf(polled).Done })
 	if err != nil {
 		return nothing, err
 	}
-	if failure := outcomeOf(finished).failure; failure != "" {
+	if failure := outcomeOf(finished).Failure; failure != "" {
 		return nothing, refusal.Refuse(refusal.CodeNotReady, "%s refused %s: %s", service, doing, failure)
 	}
 	return finished, nil

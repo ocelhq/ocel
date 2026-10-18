@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func recordingTopics(t *testing.T, tier environment.Tier, bindings ...provider.Binding) records.Store {
@@ -68,7 +70,7 @@ func TestTopicsAndTasksRunOnAPartADeployAdds(t *testing.T) {
 	if slices.ContainsFunc(credentialParts(), func(f provider.Part) bool { return f.Name == tasksPart }) {
 		t.Errorf("credentialParts() = %v, want no %q part only the bootstrap credential adds: the first deploy declaring a topic or a task adds what they run on", credentialParts(), tasksPart)
 	}
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	push := item{Kind: KindServiceAccount, Name: names.PushAccount(environment.TierProduction)}
 	if !slices.Contains(idsOf(bootstrapItems(names, environment.TierProduction, false)), push.ID()) {
 		t.Errorf("the base provisions %v, want %s: Pub/Sub may sign a push as it only once a bootstrap grants it", idsOf(bootstrapItems(names, environment.TierProduction, false)), push.ID())
@@ -81,7 +83,7 @@ func TestTopicsAndTasksRunOnAPartADeployAdds(t *testing.T) {
 
 func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing.T) {
 	t.Parallel()
-	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}}
+	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
 	tasks := b.tasksPart(environment.TierProduction)
 
 	if slices.ContainsFunc(tasks.resources, func(resource provider.PartResource) bool { return resource.Kind == string(KindQueue) }) {
@@ -178,7 +180,7 @@ func TestABootstrapChecksEveryPermissionItsFirestoreAdminCallsNeed(t *testing.T)
 func TestABootstrapChecksFirestoreIndexPermissionsByTheirCurrentNames(t *testing.T) {
 	t.Parallel()
 
-	for _, permission := range slices.Concat(permissionsFor(nil), newPartDatabasesRole(Names{namespace: "ocel", project: "acme-prod"}).permissions) {
+	for _, permission := range slices.Concat(permissionsFor(nil), newPartDatabasesRole(names.New("ocel", "acme-prod")).permissions) {
 		if strings.HasPrefix(permission, "datastore.indexes.") {
 			t.Errorf("a bootstrap or a deploy is granted %s, want datastore.schemas.*: Google's role reference lists only the schemas names", permission)
 		}
@@ -237,7 +239,7 @@ func TestRemovingABootstrapPurgesItsDelayQueueAndKeepsIt(t *testing.T) {
 	if taking := removing(read, queue); taking.action != provider.ActionUpdate || taking.reason != reasonQueuePurged {
 		t.Errorf("removing the delay queue plans %s (%s), want it purged and kept", taking.action, taking.reason)
 	}
-	if _, err := b.take(ctx, read, queue); err != nil {
+	if _, err := queue.kind().take(ctx, b, read, queue); err != nil {
 		t.Fatalf("take(queue) = %v", err)
 	}
 	if !slices.Equal(server.queuesPurged, []string{b.delayQueuePath(tier)}) {

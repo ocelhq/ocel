@@ -58,8 +58,8 @@ func newRealtimeHarness(t *testing.T) *realtimeHarness {
 		clients:        p.resolved,
 		records:        fake.NewKeyValues(),
 		ref:            productionRef(t),
-		deployAndRoute: p.deployAndRoute,
-		tearDown:       p.tearDown,
+		deployAndRoute: p.services().DeployAndRoute,
+		tearDown:       p.services().TearDown,
 		pushBinary: func(_ context.Context, _ environment.Tier, _, ref string, binary []byte, _ string) error {
 			if len(binary) == 0 {
 				t.Error("the gateway image was pushed with no binary in it")

@@ -8,7 +8,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
 type policyServer struct {
@@ -18,7 +20,7 @@ type policyServer struct {
 	refusals int64
 }
 
-func (p *policyServer) open(t *testing.T) *clients {
+func (p *policyServer) open(t *testing.T) *gcloud.Clients {
 	t.Helper()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +42,7 @@ func (p *policyServer) open(t *testing.T) *clients {
 		}
 	}))
 	t.Cleanup(server.Close)
-	return &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1", endpoint: server.URL}
+	return &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
 }
 
 func TestAPolicyChangedUnderTheGrantIsReReadAndWrittenAgain(t *testing.T) {
@@ -61,7 +63,7 @@ func TestAPolicyChangedUnderTheGrantIsReReadAndWrittenAgain(t *testing.T) {
 func TestAPolicyThatKeepsChangingUnderTheGrantIsRefusedRatherThanRetriedForever(t *testing.T) {
 	t.Parallel()
 
-	server := &policyServer{refusals: iampolicy.EditAttempts + 1}
+	server := &policyServer{refusals: policy.EditAttempts + 1}
 	err := (bootstrap{clients: server.open(t)}).grantRunAs(context.Background(), "ocel-production")
 	if err == nil {
 		t.Fatal("grantRunAs() over a policy that never stops changing = nil, want the refusal that names what the grant is for")
@@ -69,7 +71,7 @@ func TestAPolicyThatKeepsChangingUnderTheGrantIsRefusedRatherThanRetriedForever(
 	if !strings.Contains(err.Error(), "ocel-production") {
 		t.Errorf("grantRunAs() = %v, want it to name the account the deploy would run apps as", err)
 	}
-	if got := server.writes.Load(); got != iampolicy.EditAttempts {
-		t.Errorf("the grant wrote the policy %d times, want %d: a retry that never gives up keeps a bootstrap open", got, iampolicy.EditAttempts)
+	if got := server.writes.Load(); got != policy.EditAttempts {
+		t.Errorf("the grant wrote the policy %d times, want %d: a retry that never gives up keeps a bootstrap open", got, policy.EditAttempts)
 	}
 }

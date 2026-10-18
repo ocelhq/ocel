@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const appAccountsRoleEndpoint = "/v1/projects/acme-prod/roles/ocel_app_accounts"
@@ -247,12 +248,12 @@ func TestAnAppAccountsRoleDeletedTooLongAgoIsRefusedNamingTheWait(t *testing.T) 
 func TestTheAppAccountsRoleIDFitsTheLongestNamespaceAnAccountAllows(t *testing.T) {
 	t.Parallel()
 
-	width := maxAccountID - 1 - accountHashLen
+	width := names.MaxAccountID - 1 - names.AccountHashLen
 	namespace := strings.Repeat("a-", width/2) + strings.Repeat("b", width%2)
 	if len(namespace) != width || !strings.Contains(namespace, "-") {
 		t.Fatalf("the test namespace %q is %d characters, want %d with dashes", namespace, len(namespace), width)
 	}
-	names := Names{namespace: provider.Namespace(namespace), project: "acme-prod"}
+	names := names.New(provider.Namespace(namespace), "acme-prod")
 
 	id := names.AppAccountsRole()
 
@@ -267,7 +268,7 @@ func TestTheAppAccountsRoleIDFitsTheLongestNamespaceAnAccountAllows(t *testing.T
 func TestRemovingABootstrapKeepsTheAppAccountsRole(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	target := item{Kind: KindRole, Name: names.AppAccountsRole(), Shared: true}
 	for _, sibling := range []bool{false, true} {
 		read := survey{Tier: environment.TierProduction, Names: names, sibling: sibling, present: map[string]bool{target.ID(): true}}
@@ -283,7 +284,7 @@ func TestRemovingABootstrapKeepsTheAppAccountsRole(t *testing.T) {
 func TestAnEmulatedBootstrapMakesNoCustomRole(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
+	names := names.New("ocel", "acme-prod")
 	count := func(emulated bool) int {
 		return len(slices.DeleteFunc(bootstrapItems(names, environment.TierProduction, emulated), func(each item) bool { return each.Kind != KindRole }))
 	}

@@ -113,7 +113,7 @@ func TestPruningOnALaneWithATagEmulatorDeletesTheTagRecordsThere(t *testing.T) {
 	fake := &taggedFirestore{listed: []string{tagDocument("aaa"), tagDocument("bbb")}}
 	p := pushing(t, "http://127.0.0.1:1")
 	p.tagEndpoint = tagRecordsServedAt(t, fake)
-	p.resolved.tagEndpoint = p.tagEndpoint
+	p.resolved.TagEndpoint = p.tagEndpoint
 	log := &sayings{Log: progress.Discard()}
 
 	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, "prod/shop/web/r1a2b3c4d/isr/", log); err != nil {

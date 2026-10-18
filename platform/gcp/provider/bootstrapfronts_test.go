@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 type frontRegistry struct {
@@ -105,7 +107,7 @@ func frontingWithSecrets(t *testing.T) (bootstrap, *frontRegistry, *offersHarnes
 
 func surveyed(parts ...string) survey {
 	return survey{
-		Names:   Names{namespace: "ocel", project: "acme-prod"},
+		Names:   names.New("ocel", "acme-prod"),
 		Tier:    environment.TierProduction,
 		Project: "acme-prod",
 		Present: true,
@@ -409,7 +411,7 @@ func TestTheLoadBalancerBehindTheALBEdgeIsAPartNoBootstrapRequires(t *testing.T)
 			t.Errorf("a bootstrap fronted by %q requires %v, want nothing: the first deploy behind the alb adds its load balancer", kind, required)
 		}
 	}
-	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}}
+	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
 	balancer := b.albPart(environment.TierProduction)
 	if !strings.Contains(balancer.summary, "$18") || !balancer.retires {
 		t.Errorf("the %s part is %+v, want its summary to say the price and it retiring with its last project", albPart, balancer)
@@ -457,7 +459,7 @@ func TestTheShieldedLoadBalancerIsAPartOnlyTheCloudflareEdgePullsIn(t *testing.T
 func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingAdded(t *testing.T) {
 	t.Parallel()
 
-	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}}
+	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
 	balancer := b.albPart(environment.TierPreview)
 	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com", "networkservices.googleapis.com"} {
 		if !slices.Contains(balancer.apis, api) {

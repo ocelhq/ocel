@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
@@ -78,8 +79,8 @@ func (p *Provider) ResolveFunctionBase(ctx context.Context, framework buildoutpu
 }
 
 func (p *Provider) based(ctx context.Context, ref string) (v1.Image, error) {
-	cached, _ := p.pulled.LoadOrStore(ref, &memo[v1.Image]{})
-	return cached.(*memo[v1.Image]).get(func() (v1.Image, error) { return p.pull(context.WithoutCancel(ctx), ref) })
+	cached, _ := p.pulled.LoadOrStore(ref, &gcloud.Memo[v1.Image]{})
+	return cached.(*gcloud.Memo[v1.Image]).Get(func() (v1.Image, error) { return p.pull(context.WithoutCancel(ctx), ref) })
 }
 
 func commandable(image v1.Image, bins []string) (v1.Image, error) {

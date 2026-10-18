@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge/gate"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 const (
@@ -36,7 +37,7 @@ func (p *Provider) probeGate(ctx context.Context, hostname, address string) (boo
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{
-		Timeout:       warmTimeout,
+		Timeout:       run.WarmTimeout,
 		Transport:     transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}

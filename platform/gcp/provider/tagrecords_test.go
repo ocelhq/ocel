@@ -11,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestTheTagRecordsOfAnISRPrefixAreReadThroughOneIndexOnPrefixThenWriteTime(t *testing.T) {
@@ -47,8 +49,8 @@ func TestNoTagRecordFieldAQueryNeverFiltersOnIsIndexed(t *testing.T) {
 func TestTheTagDatabaseIsAPartADeployAddsAndNoLongerInTheBase(t *testing.T) {
 	t.Parallel()
 
-	names := Names{namespace: "ocel", project: "acme-prod"}
-	b := bootstrap{clients: &clients{Names: names, region: "europe-west1"}}
+	names := names.New("ocel", "acme-prod")
+	b := bootstrap{clients: &gcloud.Clients{Names: names, Region: "europe-west1"}}
 	for _, tier := range bothTiers {
 		database := item{Kind: KindDatabase, Name: names.TagDatabase(tier)}
 		if slices.Contains(idsOf(bootstrapItems(names, tier, false)), database.ID()) {

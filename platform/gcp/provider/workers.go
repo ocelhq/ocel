@@ -12,7 +12,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -26,25 +29,25 @@ var workerCeilings = []provider.WorkerCeiling{
 	{Compute: provider.ComputeContainer, MaxDuration: pushCeiling},
 }
 
-func workerServing(worker provider.WorkerSpec, placed serving) serving {
-	env := maps.Clone(placed.env)
+func workerServing(worker provider.WorkerSpec, placed run.Serving) run.Serving {
+	env := maps.Clone(placed.Env)
 	if env == nil {
 		env = map[string]string{}
 	}
 	env[processenv.WorkerEnvVar] = worker.Name
-	placed.env = env
-	placed.compute, placed.ingress, placed.timeout, placed.concurrency = provider.ComputeServerless, ingressInternal, pushCeiling, worker.Concurrency
+	placed.Env = env
+	placed.Compute, placed.Ingress, placed.Timeout, placed.Concurrency = provider.ComputeServerless, run.IngressInternal, pushCeiling, worker.Concurrency
 	return placed
 }
 
-func publishURL(c *clients) string {
-	if c.emulated() {
-		return c.endpoint
+func publishURL(c *gcloud.Clients) string {
+	if c.Emulated() {
+		return c.Endpoint
 	}
 	return topics.PublishURL
 }
 
-func tasksManifest(c *clients, ref provider.StackRef, app string, declared map[string]*provider.TopicSpec) *live.Tasks {
+func tasksManifest(c *gcloud.Clients, ref provider.StackRef, app string, declared map[string]*provider.TopicSpec) *live.Tasks {
 	pinned := make(map[string]provider.TopicSpec, len(declared))
 	for name, spec := range declared {
 		pinned[name] = *spec
@@ -52,7 +55,7 @@ func tasksManifest(c *clients, ref provider.StackRef, app string, declared map[s
 	return &live.Tasks{
 		Environment: ref.Name.Env,
 		Topics:      pinned,
-		DelayQueue:  c.DelayQueuePath(c.region, ref.Tier),
+		DelayQueue:  c.DelayQueuePath(c.Region, ref.Tier),
 		Account:     c.AppAccountEmail(ref.Tier, ref.Project, ref.Name.Env, app),
 		PublishURL:  publishURL(c),
 	}
@@ -82,7 +85,7 @@ func reachesTopics(app *provider.AppSpec) bool {
 	})
 }
 
-func (p *Provider) tasksFor(ctx context.Context, c *clients, spec provider.StackSpec) (*live.Tasks, map[string]*provider.TopicSpec, error) {
+func (p *Provider) tasksFor(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec) (*live.Tasks, map[string]*provider.TopicSpec, error) {
 	if !reachesTopics(spec.App) {
 		return nil, nil, nil
 	}
@@ -104,7 +107,7 @@ func hostsWorkers(app *provider.AppSpec) bool {
 	return len(app.Workers) > 0
 }
 
-func nameWorkers(names Names, spec provider.StackSpec) []deployedWorker {
+func nameWorkers(names names.Names, spec provider.StackSpec) []deployedWorker {
 	if !hostsWorkers(spec.App) {
 		return nil
 	}
@@ -115,7 +118,7 @@ func nameWorkers(names Names, spec provider.StackSpec) []deployedWorker {
 	return named
 }
 
-func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provider.StackSpec, image, account string, env map[string]string,
+func (p *Provider) provisionWorkers(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, image, account string, env map[string]string,
 	declared map[string]*provider.TopicSpec, instances provider.Instances, progress progress.Log,
 ) ([]deployedWorker, error) {
 	named := nameWorkers(c.Names, spec)
@@ -126,26 +129,26 @@ func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provid
 	pushes := map[string]topics.Push{}
 	deployed := make([]deployedWorker, 0, len(named))
 	for at, worker := range named {
-		ran, err := p.deployService(ctx, workerServing(spec.App.Workers[at], serving{
-			service:   worker.service,
-			image:     image,
-			env:       env,
-			account:   account,
-			egress:    p.egressFor(c.Names, spec),
-			labels:    stackLabels(c.Names, spec.Ref),
-			instances: instances,
+		ran, err := p.services().DeployService(ctx, workerServing(spec.App.Workers[at], run.Serving{
+			Service:   worker.service,
+			Image:     image,
+			Env:       env,
+			Account:   account,
+			Egress:    p.egressFor(c.Names, spec),
+			Labels:    names.StackLabels(c.Names, spec.Ref),
+			Instances: instances,
 		}), progress)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := p.Pin(ctx, worker.service, ran.revision, nil); err != nil {
+		if _, err := p.services().Pin(ctx, worker.service, ran.Revision, nil); err != nil {
 			return nil, err
 		}
 		if err := p.grantInvoker(ctx, c, worker.service, "serviceAccount:"+pushAccount); err != nil {
 			return nil, err
 		}
-		pushes[worker.name] = topics.Push{URL: ran.url, ServiceAccount: pushAccount}
-		worker.url, worker.revision = ran.url, ran.revision
+		pushes[worker.name] = topics.Push{URL: ran.Url, ServiceAccount: pushAccount}
+		worker.url, worker.revision = ran.Url, ran.Revision
 		deployed = append(deployed, worker)
 	}
 	subscriptions := topics.Subscriptions{Names: taskNames(c.Names, spec.Ref), Topics: declared, Pushes: pushes}
@@ -171,7 +174,7 @@ func workerContainers(workers []deployedWorker, image string) []provider.AppCont
 	return containers
 }
 
-func (p *Provider) grantInvoker(ctx context.Context, c *clients, service, member string) error {
-	_, err := iampolicy.Edit(ctx, c.runServicePolicy(service), iampolicy.Grant(invokerRole, member, nil))
+func (p *Provider) grantInvoker(ctx context.Context, c *gcloud.Clients, service, member string) error {
+	_, err := policy.Edit(ctx, gcloud.RunServicePolicy(c, service), policy.Grant(invokerRole, member, nil))
 	return err
 }

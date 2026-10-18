@@ -15,9 +15,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
-func servingAccountsAndBuckets(t *testing.T) (*Provider, *clients, *iamServer, *storageServer) {
+func servingAccountsAndBuckets(t *testing.T) (*Provider, *gcloud.Clients, *iamServer, *storageServer) {
 	t.Helper()
 	accounts := appAccountsOnly()
 	accounts.accountPolicies = map[string]*iam.Policy{}
@@ -30,10 +31,10 @@ func servingAccountsAndBuckets(t *testing.T) (*Provider, *clients, *iamServer, *
 		}
 		rest(w, r)
 	})
-	return pushing(t, c.endpoint), c, accounts, buckets
+	return pushing(t, c.Endpoint), c, accounts, buckets
 }
 
-func bindingBucket(c *clients, name string) provider.Binding {
+func bindingBucket(c *gcloud.Clients, name string) provider.Binding {
 	return provider.Binding{
 		Type:       provider.BindingBucket,
 		Name:       name,
