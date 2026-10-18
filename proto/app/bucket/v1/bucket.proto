@@ -81,6 +81,8 @@ message PresignedTarget {
   string method = 6;
 
   map<string, string> fields = 7;
+
+  string etag_header = 8;
 }
 
 message CompletedFile {
@@ -330,7 +332,7 @@ message CompleteMultipartRequest {
 }
 
 message CompleteMultipartResponse {
-  ObjectInfo object = 1;
+  string etag = 1;
 }
 
 message AbortMultipartRequest {

@@ -32,7 +32,6 @@ func (r recordedValues) Fetch(context.Context) (map[string]string, error) { retu
 func serveRealtimeProxy(t *testing.T, key ed25519.PrivateKey, publishURL string) realtimev1connect.RealtimeServiceClient {
 	t.Helper()
 	record, err := protojson.Marshal(&bindingsv1.Binding{Name: "realtime--app", Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
-		Transport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY,
 		Url:        "wss://" + gatewayHost + gatewayenv.SocketPath,
 		Host:       gatewayHost,
 		SigningKey: key.Seed(),

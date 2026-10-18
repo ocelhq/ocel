@@ -59,6 +59,43 @@ func TestResolve(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses before reaching for docker what a deploy refuses: entries of one store whose patterns overlap", func(t *testing.T) {
+		t.Parallel()
+
+		opened := false
+		stack := devresources.New("shop", devresources.Options{StateDir: t.TempDir(), Open: func(context.Context) (docker.Engine, error) {
+			opened = true
+			return nil, errors.New("no daemon")
+		}})
+		cache := declaration.Resource{Name: "cache", Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV, KV: &resourcesv1.KvConfig{Entries: []*resourcesv1.KvEntry{
+			{Name: "visits", Pattern: "page/:id", Shape: resourcesv1.KvShape_KV_SHAPE_COUNTER},
+			{Name: "names", Pattern: "page/:slug", Shape: resourcesv1.KvShape_KV_SHAPE_TEXT},
+		}}}
+
+		_, err := stack.Resolve(context.Background(), []declaration.Resource{cache})
+		if err == nil || !strings.Contains(err.Error(), "overlaps pattern") {
+			t.Fatalf("Resolve = %v, want the overlap refused with the message a deploy gives", err)
+		}
+		if opened {
+			t.Fatal("docker was opened for a declaration ocel refuses")
+		}
+	})
+
+	t.Run("refuses a resource declared twice from two places", func(t *testing.T) {
+		t.Parallel()
+
+		stack := devresources.New("shop", devresources.Options{StateDir: t.TempDir(), Open: func(context.Context) (docker.Engine, error) {
+			return nil, errors.New("no daemon")
+		}})
+		first, second := postgres("main"), postgres("main")
+		first.Source, second.Source = "/nowhere/a.go:1", "/nowhere/b.go:2"
+
+		_, err := stack.Resolve(context.Background(), []declaration.Resource{first, second})
+		if err == nil || !strings.Contains(err.Error(), "duplicate resource declaration") {
+			t.Fatalf("Resolve = %v, want the duplicate refused with the message a deploy gives", err)
+		}
+	})
+
 	t.Run("dispatches each declaration to its kind and says where it landed, once", func(t *testing.T) {
 		t.Parallel()
 

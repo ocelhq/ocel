@@ -254,6 +254,7 @@ type PresignedTarget struct {
 	Headers            map[string]string      `protobuf:"bytes,5,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Method             string                 `protobuf:"bytes,6,opt,name=method,proto3" json:"method,omitempty"`
 	Fields             map[string]string      `protobuf:"bytes,7,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	EtagHeader         string                 `protobuf:"bytes,8,opt,name=etag_header,json=etagHeader,proto3" json:"etag_header,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -335,6 +336,13 @@ func (x *PresignedTarget) GetFields() map[string]string {
 		return x.Fields
 	}
 	return nil
+}
+
+func (x *PresignedTarget) GetEtagHeader() string {
+	if x != nil {
+		return x.EtagHeader
+	}
+	return ""
 }
 
 type CompletedFile struct {
@@ -1995,7 +2003,7 @@ func (x *CompleteMultipartRequest) GetIfMatch() string {
 
 type CompleteMultipartResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Object        *ObjectInfo            `protobuf:"bytes,1,opt,name=object,proto3" json:"object,omitempty"`
+	Etag          string                 `protobuf:"bytes,1,opt,name=etag,proto3" json:"etag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2030,11 +2038,11 @@ func (*CompleteMultipartResponse) Descriptor() ([]byte, []int) {
 	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{30}
 }
 
-func (x *CompleteMultipartResponse) GetObject() *ObjectInfo {
+func (x *CompleteMultipartResponse) GetEtag() string {
 	if x != nil {
-		return x.Object
+		return x.Etag
 	}
-	return nil
+	return ""
 }
 
 type AbortMultipartRequest struct {
@@ -2143,7 +2151,7 @@ const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"\x18buckets.presign_file.key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xad\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n" +
-	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"\x94\x03\n" +
+	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"\xb5\x03\n" +
 	"\x0fPresignedTarget\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +
@@ -2151,7 +2159,9 @@ const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12E\n" +
 	"\aheaders\x18\x05 \x03(\v2+.app.bucket.v1.PresignedTarget.HeadersEntryR\aheaders\x12\x16\n" +
 	"\x06method\x18\x06 \x01(\tR\x06method\x12B\n" +
-	"\x06fields\x18\a \x03(\v2*.app.bucket.v1.PresignedTarget.FieldsEntryR\x06fields\x1a:\n" +
+	"\x06fields\x18\a \x03(\v2*.app.bucket.v1.PresignedTarget.FieldsEntryR\x06fields\x12\x1f\n" +
+	"\vetag_header\x18\b \x01(\tR\n" +
+	"etagHeader\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
@@ -2301,9 +2311,9 @@ const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"\tupload_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\buploadId\x12<\n" +
 	"\x05parts\x18\x04 \x03(\v2\x1c.app.bucket.v1.CompletedPartB\b\xbaH\x05\x92\x01\x02\b\x01R\x05parts\x12\"\n" +
 	"\rif_none_match\x18\x05 \x01(\tR\vifNoneMatch\x12\x19\n" +
-	"\bif_match\x18\x06 \x01(\tR\aifMatch\"N\n" +
-	"\x19CompleteMultipartResponse\x121\n" +
-	"\x06object\x18\x01 \x01(\v2\x19.app.bucket.v1.ObjectInfoR\x06object\"\x8c\x04\n" +
+	"\bif_match\x18\x06 \x01(\tR\aifMatch\"/\n" +
+	"\x19CompleteMultipartResponse\x12\x12\n" +
+	"\x04etag\x18\x01 \x01(\tR\x04etag\"\x8c\x04\n" +
 	"\x15AbortMultipartRequest\x12\x1f\n" +
 	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xab\x03\n" +
 	"\x03key\x18\x02 \x01(\tB\x98\x03\xbaH\x94\x03\xba\x01\x8b\x03\n" +
@@ -2424,38 +2434,37 @@ var file_app_bucket_v1_bucket_proto_depIdxs = []int32{
 	41, // 21: app.bucket.v1.SignedPart.headers:type_name -> app.bucket.v1.SignedPart.HeadersEntry
 	29, // 22: app.bucket.v1.SignPartsResponse.parts:type_name -> app.bucket.v1.SignedPart
 	31, // 23: app.bucket.v1.CompleteMultipartRequest.parts:type_name -> app.bucket.v1.CompletedPart
-	6,  // 24: app.bucket.v1.CompleteMultipartResponse.object:type_name -> app.bucket.v1.ObjectInfo
-	7,  // 25: app.bucket.v1.BucketService.PresignUpload:input_type -> app.bucket.v1.PresignUploadRequest
-	9,  // 26: app.bucket.v1.BucketService.VerifyUploadSignature:input_type -> app.bucket.v1.VerifyUploadSignatureRequest
-	11, // 27: app.bucket.v1.BucketService.GetUploadStatus:input_type -> app.bucket.v1.GetUploadStatusRequest
-	13, // 28: app.bucket.v1.BucketService.CompleteUpload:input_type -> app.bucket.v1.CompleteUploadRequest
-	15, // 29: app.bucket.v1.BucketService.Head:input_type -> app.bucket.v1.HeadRequest
-	17, // 30: app.bucket.v1.BucketService.List:input_type -> app.bucket.v1.ListRequest
-	19, // 31: app.bucket.v1.BucketService.Delete:input_type -> app.bucket.v1.DeleteRequest
-	21, // 32: app.bucket.v1.BucketService.Copy:input_type -> app.bucket.v1.CopyRequest
-	24, // 33: app.bucket.v1.BucketService.Sign:input_type -> app.bucket.v1.SignRequest
-	26, // 34: app.bucket.v1.BucketService.CreateMultipart:input_type -> app.bucket.v1.CreateMultipartRequest
-	28, // 35: app.bucket.v1.BucketService.SignParts:input_type -> app.bucket.v1.SignPartsRequest
-	32, // 36: app.bucket.v1.BucketService.CompleteMultipart:input_type -> app.bucket.v1.CompleteMultipartRequest
-	34, // 37: app.bucket.v1.BucketService.AbortMultipart:input_type -> app.bucket.v1.AbortMultipartRequest
-	8,  // 38: app.bucket.v1.BucketService.PresignUpload:output_type -> app.bucket.v1.PresignUploadResponse
-	10, // 39: app.bucket.v1.BucketService.VerifyUploadSignature:output_type -> app.bucket.v1.VerifyUploadSignatureResponse
-	12, // 40: app.bucket.v1.BucketService.GetUploadStatus:output_type -> app.bucket.v1.GetUploadStatusResponse
-	14, // 41: app.bucket.v1.BucketService.CompleteUpload:output_type -> app.bucket.v1.CompleteUploadResponse
-	16, // 42: app.bucket.v1.BucketService.Head:output_type -> app.bucket.v1.HeadResponse
-	18, // 43: app.bucket.v1.BucketService.List:output_type -> app.bucket.v1.ListResponse
-	20, // 44: app.bucket.v1.BucketService.Delete:output_type -> app.bucket.v1.DeleteResponse
-	22, // 45: app.bucket.v1.BucketService.Copy:output_type -> app.bucket.v1.CopyResponse
-	25, // 46: app.bucket.v1.BucketService.Sign:output_type -> app.bucket.v1.SignResponse
-	27, // 47: app.bucket.v1.BucketService.CreateMultipart:output_type -> app.bucket.v1.CreateMultipartResponse
-	30, // 48: app.bucket.v1.BucketService.SignParts:output_type -> app.bucket.v1.SignPartsResponse
-	33, // 49: app.bucket.v1.BucketService.CompleteMultipart:output_type -> app.bucket.v1.CompleteMultipartResponse
-	35, // 50: app.bucket.v1.BucketService.AbortMultipart:output_type -> app.bucket.v1.AbortMultipartResponse
-	38, // [38:51] is the sub-list for method output_type
-	25, // [25:38] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	7,  // 24: app.bucket.v1.BucketService.PresignUpload:input_type -> app.bucket.v1.PresignUploadRequest
+	9,  // 25: app.bucket.v1.BucketService.VerifyUploadSignature:input_type -> app.bucket.v1.VerifyUploadSignatureRequest
+	11, // 26: app.bucket.v1.BucketService.GetUploadStatus:input_type -> app.bucket.v1.GetUploadStatusRequest
+	13, // 27: app.bucket.v1.BucketService.CompleteUpload:input_type -> app.bucket.v1.CompleteUploadRequest
+	15, // 28: app.bucket.v1.BucketService.Head:input_type -> app.bucket.v1.HeadRequest
+	17, // 29: app.bucket.v1.BucketService.List:input_type -> app.bucket.v1.ListRequest
+	19, // 30: app.bucket.v1.BucketService.Delete:input_type -> app.bucket.v1.DeleteRequest
+	21, // 31: app.bucket.v1.BucketService.Copy:input_type -> app.bucket.v1.CopyRequest
+	24, // 32: app.bucket.v1.BucketService.Sign:input_type -> app.bucket.v1.SignRequest
+	26, // 33: app.bucket.v1.BucketService.CreateMultipart:input_type -> app.bucket.v1.CreateMultipartRequest
+	28, // 34: app.bucket.v1.BucketService.SignParts:input_type -> app.bucket.v1.SignPartsRequest
+	32, // 35: app.bucket.v1.BucketService.CompleteMultipart:input_type -> app.bucket.v1.CompleteMultipartRequest
+	34, // 36: app.bucket.v1.BucketService.AbortMultipart:input_type -> app.bucket.v1.AbortMultipartRequest
+	8,  // 37: app.bucket.v1.BucketService.PresignUpload:output_type -> app.bucket.v1.PresignUploadResponse
+	10, // 38: app.bucket.v1.BucketService.VerifyUploadSignature:output_type -> app.bucket.v1.VerifyUploadSignatureResponse
+	12, // 39: app.bucket.v1.BucketService.GetUploadStatus:output_type -> app.bucket.v1.GetUploadStatusResponse
+	14, // 40: app.bucket.v1.BucketService.CompleteUpload:output_type -> app.bucket.v1.CompleteUploadResponse
+	16, // 41: app.bucket.v1.BucketService.Head:output_type -> app.bucket.v1.HeadResponse
+	18, // 42: app.bucket.v1.BucketService.List:output_type -> app.bucket.v1.ListResponse
+	20, // 43: app.bucket.v1.BucketService.Delete:output_type -> app.bucket.v1.DeleteResponse
+	22, // 44: app.bucket.v1.BucketService.Copy:output_type -> app.bucket.v1.CopyResponse
+	25, // 45: app.bucket.v1.BucketService.Sign:output_type -> app.bucket.v1.SignResponse
+	27, // 46: app.bucket.v1.BucketService.CreateMultipart:output_type -> app.bucket.v1.CreateMultipartResponse
+	30, // 47: app.bucket.v1.BucketService.SignParts:output_type -> app.bucket.v1.SignPartsResponse
+	33, // 48: app.bucket.v1.BucketService.CompleteMultipart:output_type -> app.bucket.v1.CompleteMultipartResponse
+	35, // 49: app.bucket.v1.BucketService.AbortMultipart:output_type -> app.bucket.v1.AbortMultipartResponse
+	37, // [37:50] is the sub-list for method output_type
+	24, // [24:37] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_app_bucket_v1_bucket_proto_init() }

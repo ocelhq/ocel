@@ -350,161 +350,6 @@ impl ::buffa::Enumeration for PostgresTlsMode {
         ]
     }
 }
-#[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-#[repr(i32)]
-pub enum RealtimeTransport {
-    REALTIME_TRANSPORT_UNSPECIFIED = 0i32,
-    REALTIME_TRANSPORT_APPSYNC_EVENTS = 1i32,
-    REALTIME_TRANSPORT_OCEL_GATEWAY = 2i32,
-}
-impl RealtimeTransport {
-    ///Idiomatic alias for [`Self::REALTIME_TRANSPORT_UNSPECIFIED`]; `Debug` prints the variant name.
-    #[allow(non_upper_case_globals)]
-    pub const Unspecified: Self = Self::REALTIME_TRANSPORT_UNSPECIFIED;
-    ///Idiomatic alias for [`Self::REALTIME_TRANSPORT_APPSYNC_EVENTS`]; `Debug` prints the variant name.
-    #[allow(non_upper_case_globals)]
-    pub const AppsyncEvents: Self = Self::REALTIME_TRANSPORT_APPSYNC_EVENTS;
-    ///Idiomatic alias for [`Self::REALTIME_TRANSPORT_OCEL_GATEWAY`]; `Debug` prints the variant name.
-    #[allow(non_upper_case_globals)]
-    pub const OcelGateway: Self = Self::REALTIME_TRANSPORT_OCEL_GATEWAY;
-}
-impl ::core::default::Default for RealtimeTransport {
-    fn default() -> Self {
-        Self::REALTIME_TRANSPORT_UNSPECIFIED
-    }
-}
-impl ::serde::Serialize for RealtimeTransport {
-    fn serialize<S: ::serde::Serializer>(
-        &self,
-        s: S,
-    ) -> ::core::result::Result<S::Ok, S::Error> {
-        s.serialize_str(::buffa::Enumeration::proto_name(self))
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for RealtimeTransport {
-    fn deserialize<D: ::serde::Deserializer<'de>>(
-        d: D,
-    ) -> ::core::result::Result<Self, D::Error> {
-        struct _V;
-        impl ::serde::de::Visitor<'_> for _V {
-            type Value = RealtimeTransport;
-            fn expecting(
-                &self,
-                f: &mut ::core::fmt::Formatter<'_>,
-            ) -> ::core::fmt::Result {
-                f.write_str(
-                    concat!(
-                        "a string, integer, or null for ", stringify!(RealtimeTransport)
-                    ),
-                )
-            }
-            fn visit_str<E: ::serde::de::Error>(
-                self,
-                v: &str,
-            ) -> ::core::result::Result<RealtimeTransport, E> {
-                <RealtimeTransport as ::buffa::Enumeration>::from_proto_name(v)
-                    .ok_or_else(|| { ::serde::de::Error::unknown_variant(v, &[]) })
-            }
-            fn visit_i64<E: ::serde::de::Error>(
-                self,
-                v: i64,
-            ) -> ::core::result::Result<RealtimeTransport, E> {
-                let v32 = i32::try_from(v)
-                    .map_err(|_| {
-                        ::serde::de::Error::custom(
-                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
-                        )
-                    })?;
-                <RealtimeTransport as ::buffa::Enumeration>::from_i32(v32)
-                    .ok_or_else(|| {
-                        ::serde::de::Error::custom(
-                            ::buffa::alloc::format!("unknown enum value {v32}"),
-                        )
-                    })
-            }
-            fn visit_u64<E: ::serde::de::Error>(
-                self,
-                v: u64,
-            ) -> ::core::result::Result<RealtimeTransport, E> {
-                let v32 = i32::try_from(v)
-                    .map_err(|_| {
-                        ::serde::de::Error::custom(
-                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
-                        )
-                    })?;
-                <RealtimeTransport as ::buffa::Enumeration>::from_i32(v32)
-                    .ok_or_else(|| {
-                        ::serde::de::Error::custom(
-                            ::buffa::alloc::format!("unknown enum value {v32}"),
-                        )
-                    })
-            }
-            fn visit_unit<E: ::serde::de::Error>(
-                self,
-            ) -> ::core::result::Result<RealtimeTransport, E> {
-                ::core::result::Result::Ok(::core::default::Default::default())
-            }
-        }
-        d.deserialize_any(_V)
-    }
-}
-impl ::buffa::json_helpers::ProtoElemJson for RealtimeTransport {
-    fn serialize_proto_json<S: ::serde::Serializer>(
-        v: &Self,
-        s: S,
-    ) -> ::core::result::Result<S::Ok, S::Error> {
-        ::serde::Serialize::serialize(v, s)
-    }
-    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
-        d: D,
-    ) -> ::core::result::Result<Self, D::Error> {
-        <Self as ::serde::Deserialize>::deserialize(d)
-    }
-}
-impl ::buffa::Enumeration for RealtimeTransport {
-    fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0i32 => ::core::option::Option::Some(Self::REALTIME_TRANSPORT_UNSPECIFIED),
-            1i32 => ::core::option::Option::Some(Self::REALTIME_TRANSPORT_APPSYNC_EVENTS),
-            2i32 => ::core::option::Option::Some(Self::REALTIME_TRANSPORT_OCEL_GATEWAY),
-            _ => ::core::option::Option::None,
-        }
-    }
-    fn to_i32(&self) -> i32 {
-        *self as i32
-    }
-    fn proto_name(&self) -> &'static str {
-        match self {
-            Self::REALTIME_TRANSPORT_UNSPECIFIED => "REALTIME_TRANSPORT_UNSPECIFIED",
-            Self::REALTIME_TRANSPORT_APPSYNC_EVENTS => {
-                "REALTIME_TRANSPORT_APPSYNC_EVENTS"
-            }
-            Self::REALTIME_TRANSPORT_OCEL_GATEWAY => "REALTIME_TRANSPORT_OCEL_GATEWAY",
-        }
-    }
-    fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
-        match name {
-            "REALTIME_TRANSPORT_UNSPECIFIED" => {
-                ::core::option::Option::Some(Self::REALTIME_TRANSPORT_UNSPECIFIED)
-            }
-            "REALTIME_TRANSPORT_APPSYNC_EVENTS" => {
-                ::core::option::Option::Some(Self::REALTIME_TRANSPORT_APPSYNC_EVENTS)
-            }
-            "REALTIME_TRANSPORT_OCEL_GATEWAY" => {
-                ::core::option::Option::Some(Self::REALTIME_TRANSPORT_OCEL_GATEWAY)
-            }
-            _ => ::core::option::Option::None,
-        }
-    }
-    fn values() -> &'static [Self] {
-        &[
-            Self::REALTIME_TRANSPORT_UNSPECIFIED,
-            Self::REALTIME_TRANSPORT_APPSYNC_EVENTS,
-            Self::REALTIME_TRANSPORT_OCEL_GATEWAY,
-        ]
-    }
-}
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize)]
 #[serde(default)]
@@ -2338,13 +2183,6 @@ pub const __KV_PROPERTIES_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buf
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
 pub struct RealtimeProperties {
-    /// Field 1: `transport`
-    #[serde(
-        rename = "transport",
-        with = "::buffa::json_helpers::proto_enum",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
-    )]
-    pub transport: ::buffa::EnumValue<RealtimeTransport>,
     /// Field 2: `url`
     #[serde(
         rename = "url",
@@ -2382,7 +2220,6 @@ pub struct RealtimeProperties {
 impl ::core::fmt::Debug for RealtimeProperties {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("RealtimeProperties")
-            .field("transport", &self.transport)
             .field("url", &self.url)
             .field("host", &self.host)
             .field("signing_key", &::core::format_args!("[REDACTED]"))
@@ -2417,12 +2254,6 @@ impl ::buffa::Message for RealtimeProperties {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         let mut size = 0u64;
-        {
-            let val = self.transport.to_i32();
-            if val != 0 {
-                size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
-            }
-        }
         if !self.url.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.url) as u64;
         }
@@ -2445,12 +2276,6 @@ impl ::buffa::Message for RealtimeProperties {
     ) {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
-        {
-            let val = self.transport.to_i32();
-            if val != 0 {
-                ::buffa::types::put_int32_field(1u32, val, buf);
-            }
-        }
         if !self.url.is_empty() {
             ::buffa::types::put_string_field(2u32, &self.url, buf);
         }
@@ -2476,15 +2301,6 @@ impl ::buffa::Message for RealtimeProperties {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         match tag.field_number() {
-            1u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::Varint,
-                )?;
-                self.transport = ::buffa::EnumValue::from(
-                    ::buffa::types::decode_int32(buf)?,
-                );
-            }
             2u32 => {
                 ::buffa::encoding::check_wire_type(
                     tag,
@@ -2521,7 +2337,6 @@ impl ::buffa::Message for RealtimeProperties {
         ::core::result::Result::Ok(())
     }
     fn clear(&mut self) {
-        self.transport = ::buffa::EnumValue::from(0);
         self.url.clear();
         self.host.clear();
         self.signing_key.clear();
@@ -5696,8 +5511,6 @@ pub mod __buffa {
         }
         #[derive(Clone, Default)]
         pub struct RealtimePropertiesView<'a> {
-            /// Field 1: `transport`
-            pub transport: ::buffa::EnumValue<super::super::RealtimeTransport>,
             /// Field 2: `url`
             pub url: &'a str,
             /// Field 3: `host`
@@ -5711,7 +5524,6 @@ pub mod __buffa {
         impl<'a> ::core::fmt::Debug for RealtimePropertiesView<'a> {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 f.debug_struct("RealtimePropertiesView")
-                    .field("transport", &self.transport)
                     .field("url", &self.url)
                     .field("host", &self.host)
                     .field("signing_key", &::core::format_args!("[REDACTED]"))
@@ -5755,15 +5567,6 @@ pub mod __buffa {
                 let view = self;
                 let mut cur = cur;
                 match tag.field_number() {
-                    1u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::Varint,
-                        )?;
-                        view.transport = ::buffa::EnumValue::from(
-                            ::buffa::types::decode_int32(&mut cur)?,
-                        );
-                    }
                     2u32 => {
                         ::buffa::encoding::check_wire_type(
                             tag,
@@ -5821,7 +5624,6 @@ pub mod __buffa {
                 use ::buffa::alloc::string::ToString as _;
                 let _ = __buffa_src;
                 ::core::result::Result::Ok(super::super::RealtimeProperties {
-                    transport: self.transport,
                     url: self.url.to_string(),
                     host: self.host.to_string(),
                     signing_key: (self.signing_key).to_vec(),
@@ -5840,12 +5642,6 @@ pub mod __buffa {
                 #[allow(unused_imports)]
                 use ::buffa::Enumeration as _;
                 let mut size = 0u64;
-                {
-                    let val = self.transport.to_i32();
-                    if val != 0 {
-                        size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
-                    }
-                }
                 if !self.url.is_empty() {
                     size += 1u64 + ::buffa::types::string_encoded_len(&self.url) as u64;
                 }
@@ -5874,12 +5670,6 @@ pub mod __buffa {
             ) {
                 #[allow(unused_imports)]
                 use ::buffa::Enumeration as _;
-                {
-                    let val = self.transport.to_i32();
-                    if val != 0 {
-                        ::buffa::types::put_int32_field(1u32, val, buf);
-                    }
-                }
                 if !self.url.is_empty() {
                     ::buffa::types::put_string_field(2u32, &self.url, buf);
                 }
@@ -5913,11 +5703,6 @@ pub mod __buffa {
             ) -> ::core::result::Result<__S::Ok, __S::Error> {
                 use ::serde::ser::SerializeMap as _;
                 let mut __map = __s.serialize_map(::core::option::Option::None)?;
-                if !::buffa::json_helpers::skip_if::is_default_enum_value(
-                    &self.transport,
-                ) {
-                    __map.serialize_entry("transport", &self.transport)?;
-                }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.url) {
                     __map.serialize_entry("url", self.url)?;
                 }
@@ -6032,13 +5817,6 @@ pub mod __buffa {
             #[must_use]
             pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
                 self.0.into_bytes()
-            }
-            /// Field 1: `transport`
-            #[must_use]
-            pub fn transport(
-                &self,
-            ) -> ::buffa::EnumValue<super::super::RealtimeTransport> {
-                self.0.reborrow().transport
             }
             /// Field 2: `url`
             #[must_use]

@@ -55,7 +55,6 @@ class FakeRealtimeRuntime:
     def binding(self) -> str:
         realtime = {
             **FIXTURE["realtime"],
-            "transport": "REALTIME_TRANSPORT_OCEL_GATEWAY",
             "url": "wss://realtime.shop.example/event/realtime",
             "host": "realtime.shop.example",
         }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ocel.dev/internal/binding"
+	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
 type realtimeOperation string
@@ -40,16 +41,16 @@ func signToken(signingKey []byte, header, claims any) (string, error) {
 	return input + "." + base64.RawURLEncoding.EncodeToString(signature), nil
 }
 
-func (d *Realtime) mintToken(delivered realtimeBinding, subject string, operation realtimeOperation, channel string) (mintedToken, error) {
+func (d *Realtime) mintToken(properties *bindingsv1.RealtimeProperties, subject string, operation realtimeOperation, channel string) (mintedToken, error) {
 	id := make([]byte, 16)
 	if _, err := rand.Read(id); err != nil {
 		return mintedToken{}, err
 	}
 	issuedAt := time.Now().Unix()
 	expiresAt := issuedAt + int64(d.settings.ttl/time.Second)
-	token, err := signToken(delivered.properties.GetSigningKey(), map[string]any{"alg": "EdDSA", "typ": "JWT"}, map[string]any{
+	token, err := signToken(properties.GetSigningKey(), map[string]any{"alg": "EdDSA", "typ": "JWT"}, map[string]any{
 		"iss": "ocel:rt:" + d.name,
-		"aud": delivered.properties.GetHost(),
+		"aud": properties.GetHost(),
 		"sub": subject,
 		"iat": issuedAt,
 		"exp": expiresAt,

@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -194,7 +193,6 @@ func (r realtimeEnvironment) provision(ctx context.Context, resource provider.Re
 		Name:     resource.Name,
 		Resource: resource.Declared,
 		Properties: map[string]string{
-			provider.PropertyTransport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY.String(),
 			provider.PropertyURL:        "wss://" + host + gatewayenv.SocketPath,
 			provider.PropertyHost:       host,
 			provider.PropertySigningKey: base64.StdEncoding.EncodeToString(seed),

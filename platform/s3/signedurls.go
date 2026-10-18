@@ -58,10 +58,11 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sign a read of %q: %w", req.GetKey(), err))
 		}
 		return &bucketv1.SignResponse{Target: &bucketv1.PresignedTarget{
-			Url:     signed.URL,
-			Key:     req.GetKey(),
-			Method:  signed.Method,
-			Headers: vendorHeaders(signed.SignedHeader),
+			Url:        signed.URL,
+			Key:        req.GetKey(),
+			Method:     signed.Method,
+			Headers:    vendorHeaders(signed.SignedHeader),
+			EtagHeader: s.cfg.etagHeader(),
 		}}, nil
 
 	case bucketv1.SignedOperation_SIGNED_OPERATION_PUT:
@@ -89,10 +90,11 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sign a write of %q: %w", req.GetKey(), err))
 		}
 		return &bucketv1.SignResponse{Target: &bucketv1.PresignedTarget{
-			Url:     signed.URL,
-			Key:     req.GetKey(),
-			Method:  signed.Method,
-			Headers: vendorHeaders(signed.SignedHeader),
+			Url:        signed.URL,
+			Key:        req.GetKey(),
+			Method:     signed.Method,
+			Headers:    vendorHeaders(signed.SignedHeader),
+			EtagHeader: s.cfg.etagHeader(),
 		}}, nil
 
 	case bucketv1.SignedOperation_SIGNED_OPERATION_POST_UPLOAD:
@@ -252,17 +254,11 @@ func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteM
 	if req.GetIfMatch() != "" {
 		in.IfMatch = aws.String(req.GetIfMatch())
 	}
-	if _, err := s.cfg.Objects.CompleteMultipartUpload(ctx, in); err != nil {
+	out, err := s.cfg.Objects.CompleteMultipartUpload(ctx, in)
+	if err != nil {
 		return nil, storeError("assemble "+req.GetKey(), err)
 	}
-	out, err := s.cfg.Objects.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(granted.bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return nil, storeError("head "+req.GetKey(), err)
-	}
-	return &bucketv1.CompleteMultipartResponse{Object: headInfo(req.GetKey(), out)}, nil
+	return &bucketv1.CompleteMultipartResponse{Etag: aws.ToString(out.ETag)}, nil
 }
 
 func (s *Service) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipartRequest) (*bucketv1.AbortMultipartResponse, error) {

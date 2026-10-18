@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"sync"
 
 	"cloud.google.com/go/compute/metadata"
@@ -123,6 +124,7 @@ func NewDispatch(ctx context.Context, store Store, records s3store.Records, call
 			Sessions:       name,
 			Granted:        []string{name},
 			MetadataPrefix: metadataHeader,
+			EtagHeader:     strings.ToLower(generationAnswer),
 		}))
 	}
 	return s3store.NewDispatch(s3store.NewGrantedDispatch(services...), records, callbacks), nil

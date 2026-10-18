@@ -81,14 +81,7 @@ message KvProperties {
   string tls_server_name = 7;
 }
 
-enum RealtimeTransport {
-  REALTIME_TRANSPORT_UNSPECIFIED = 0;
-  REALTIME_TRANSPORT_APPSYNC_EVENTS = 1;
-  REALTIME_TRANSPORT_OCEL_GATEWAY = 2;
-}
-
 message RealtimeProperties {
-  RealtimeTransport transport = 1;
   string url = 2;
   string host = 3;
   bytes signing_key = 4 [debug_redact = true];

@@ -730,6 +730,14 @@ pub struct PresignedTarget {
         ::buffa::alloc::string::String,
         ::buffa::alloc::string::String,
     >,
+    /// Field 8: `etag_header`
+    #[serde(
+        rename = "etagHeader",
+        alias = "etag_header",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub etag_header: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -744,6 +752,7 @@ impl ::core::fmt::Debug for PresignedTarget {
             .field("headers", &self.headers)
             .field("method", &self.method)
             .field("fields", &self.fields)
+            .field("etag_header", &self.etag_header)
             .finish()
     }
 }
@@ -804,6 +813,9 @@ impl ::buffa::Message for PresignedTarget {
                 ::buffa::map_codec::Str,
                 _,
             >(&self.fields, 1u64);
+        if !self.etag_header.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.etag_header) as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -839,6 +851,9 @@ impl ::buffa::Message for PresignedTarget {
             ::buffa::map_codec::Str,
             _,
         >(&self.fields, 7u32, buf);
+        if !self.etag_header.is_empty() {
+            ::buffa::types::put_string_field(8u32, &self.etag_header, buf);
+        }
         self.__buffa_unknown_fields.write_to(buf);
     }
     fn merge_field(
@@ -909,6 +924,13 @@ impl ::buffa::Message for PresignedTarget {
                     _,
                 >(&mut self.fields, buf, ctx)?;
             }
+            8u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.etag_header, buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -924,6 +946,7 @@ impl ::buffa::Message for PresignedTarget {
         self.headers.clear();
         self.method.clear();
         self.fields.clear();
+        self.etag_header.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -6017,21 +6040,20 @@ pub const __COMPLETE_MULTIPART_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAny
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
 pub struct CompleteMultipartResponse {
-    /// Field 1: `object`
+    /// Field 1: `etag`
     #[serde(
-        rename = "object",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+        rename = "etag",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
-    pub object: ::buffa::MessageField<ObjectInfo, ::buffa::Inline<ObjectInfo>>,
+    pub etag: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
 }
 impl ::core::fmt::Debug for CompleteMultipartResponse {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        f.debug_struct("CompleteMultipartResponse")
-            .field("object", &self.object)
-            .finish()
+        f.debug_struct("CompleteMultipartResponse").field("etag", &self.etag).finish()
     }
 }
 impl CompleteMultipartResponse {
@@ -6057,35 +6079,25 @@ impl ::buffa::Message for CompleteMultipartResponse {
     /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
     /// points reject, never a silently wrapped size.
     #[allow(clippy::let_and_return)]
-    fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+    fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         let mut size = 0u64;
-        if self.object.is_set() {
-            let __slot = __cache.reserve();
-            let inner_size = self.object.compute_size(__cache);
-            __cache.set(__slot, inner_size);
-            size
-                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                    + inner_size as u64;
+        if !self.etag.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.etag) as u64;
         }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
     fn write_to(
         &self,
-        __cache: &mut ::buffa::SizeCache,
+        _cache: &mut ::buffa::SizeCache,
         buf: &mut impl ::buffa::EncodeSink,
     ) {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
-        if self.object.is_set() {
-            ::buffa::types::put_len_delimited_header(
-                1u32,
-                u64::from(__cache.consume_next()),
-                buf,
-            );
-            self.object.write_to(__cache, buf);
+        if !self.etag.is_empty() {
+            ::buffa::types::put_string_field(1u32, &self.etag, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -6105,11 +6117,7 @@ impl ::buffa::Message for CompleteMultipartResponse {
                     tag,
                     ::buffa::encoding::WireType::LengthDelimited,
                 )?;
-                ::buffa::Message::merge_length_delimited(
-                    self.object.get_or_insert_default(),
-                    buf,
-                    ctx,
-                )?;
+                ::buffa::types::merge_string(&mut self.etag, buf)?;
             }
             _ => {
                 self.__buffa_unknown_fields
@@ -6119,7 +6127,7 @@ impl ::buffa::Message for CompleteMultipartResponse {
         ::core::result::Result::Ok(())
     }
     fn clear(&mut self) {
-        self.object = ::buffa::MessageField::none();
+        self.etag.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -6800,6 +6808,8 @@ pub mod __buffa {
             pub method: &'a str,
             /// Field 7: `fields` (map)
             pub fields: ::buffa::MapView<'a, &'a str, &'a str>,
+            /// Field 8: `etag_header`
+            pub etag_header: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for PresignedTargetView<'a> {
@@ -6872,6 +6882,13 @@ pub mod __buffa {
                             ::buffa::encoding::WireType::LengthDelimited,
                         )?;
                         view.method = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    8u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.etag_header = ::buffa::types::borrow_str(&mut cur)?;
                     }
                     5u32 => {
                         ::buffa::encoding::check_wire_type(
@@ -7003,6 +7020,7 @@ pub mod __buffa {
                         .iter()
                         .map(|(k, v)| (k.to_string(), v.to_string()))
                         .collect(),
+                    etag_header: self.etag_header.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -7055,6 +7073,12 @@ pub mod __buffa {
                     size
                         += 1u64 + ::buffa::encoding::varint_len(entry_size) as u64
                             + entry_size;
+                }
+                if !self.etag_header.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.etag_header)
+                                as u64;
                 }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
@@ -7131,6 +7155,9 @@ pub mod __buffa {
                         )
                         .encode(buf);
                     ::buffa::types::encode_string(v, buf);
+                }
+                if !self.etag_header.is_empty() {
+                    ::buffa::types::put_string_field(8u32, &self.etag_header, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -7213,6 +7240,9 @@ pub mod __buffa {
                         }
                     }
                     __map.serialize_entry("fields", &_WM(&self.fields))?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.etag_header) {
+                    __map.serialize_entry("etagHeader", self.etag_header)?;
                 }
                 __map.end()
             }
@@ -7343,6 +7373,11 @@ pub mod __buffa {
             #[must_use]
             pub fn fields(&self) -> &::buffa::MapView<'_, &'_ str, &'_ str> {
                 &self.0.reborrow().fields
+            }
+            /// Field 8: `etag_header`
+            #[must_use]
+            pub fn etag_header(&self) -> &'_ str {
+                self.0.reborrow().etag_header
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<PresignedTargetView<'static>>>
@@ -17218,10 +17253,8 @@ pub mod __buffa {
         }
         #[derive(Clone, Debug, Default)]
         pub struct CompleteMultipartResponseView<'a> {
-            /// Field 1: `object`
-            pub object: ::buffa::MessageFieldView<
-                super::super::__buffa::view::ObjectInfoView<'a>,
-            >,
+            /// Field 1: `etag`
+            pub etag: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for CompleteMultipartResponseView<'a> {
@@ -17265,25 +17298,7 @@ pub mod __buffa {
                             tag,
                             ::buffa::encoding::WireType::LengthDelimited,
                         )?;
-                        let __sub_ctx = ctx.descend()?;
-                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
-                        match view.object.as_mut() {
-                            Some(existing) => {
-                                ::buffa::MessageView::merge_into_view(
-                                    existing,
-                                    sub,
-                                    __sub_ctx,
-                                )?
-                            }
-                            None => {
-                                view.object = ::buffa::MessageFieldView::set(
-                                    <super::super::__buffa::view::ObjectInfoView as ::buffa::MessageView>::decode_view_ctx(
-                                        sub,
-                                        __sub_ctx,
-                                    )?,
-                                );
-                            }
-                        }
+                        view.etag = ::buffa::types::borrow_str(&mut cur)?;
                     }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
@@ -17314,15 +17329,7 @@ pub mod __buffa {
                 use ::buffa::alloc::string::ToString as _;
                 let _ = __buffa_src;
                 ::core::result::Result::Ok(super::super::CompleteMultipartResponse {
-                    object: match self.object.as_option() {
-                        Some(v) => {
-                            ::buffa::MessageField::<
-                                super::super::ObjectInfo,
-                                ::buffa::Inline<super::super::ObjectInfo>,
-                            >::some(v.to_owned_from_source(__buffa_src)?)
-                        }
-                        None => ::buffa::MessageField::none(),
-                    },
+                    etag: self.etag.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -17333,17 +17340,12 @@ pub mod __buffa {
         }
         impl<'a> ::buffa::ViewEncode<'a> for CompleteMultipartResponseView<'a> {
             #[allow(clippy::needless_borrow, clippy::let_and_return)]
-            fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+            fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
                 #[allow(unused_imports)]
                 use ::buffa::Enumeration as _;
                 let mut size = 0u64;
-                if self.object.is_set() {
-                    let __slot = __cache.reserve();
-                    let inner_size = self.object.compute_size(__cache);
-                    __cache.set(__slot, inner_size);
-                    size
-                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                            + inner_size as u64;
+                if !self.etag.is_empty() {
+                    size += 1u64 + ::buffa::types::string_encoded_len(&self.etag) as u64;
                 }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
@@ -17351,18 +17353,13 @@ pub mod __buffa {
             #[allow(clippy::needless_borrow)]
             fn write_to(
                 &self,
-                __cache: &mut ::buffa::SizeCache,
+                _cache: &mut ::buffa::SizeCache,
                 buf: &mut impl ::buffa::EncodeSink,
             ) {
                 #[allow(unused_imports)]
                 use ::buffa::Enumeration as _;
-                if self.object.is_set() {
-                    ::buffa::types::put_len_delimited_header(
-                        1u32,
-                        u64::from(__cache.consume_next()),
-                        buf,
-                    );
-                    self.object.write_to(__cache, buf);
+                if !self.etag.is_empty() {
+                    ::buffa::types::put_string_field(1u32, &self.etag, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -17385,10 +17382,8 @@ pub mod __buffa {
             ) -> ::core::result::Result<__S::Ok, __S::Error> {
                 use ::serde::ser::SerializeMap as _;
                 let mut __map = __s.serialize_map(::core::option::Option::None)?;
-                {
-                    if let ::core::option::Option::Some(__v) = self.object.as_option() {
-                        __map.serialize_entry("object", __v)?;
-                    }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.etag) {
+                    __map.serialize_entry("etag", self.etag)?;
                 }
                 __map.end()
             }
@@ -17489,14 +17484,10 @@ pub mod __buffa {
             pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
                 self.0.into_bytes()
             }
-            /// Field 1: `object`
+            /// Field 1: `etag`
             #[must_use]
-            pub fn object(
-                &self,
-            ) -> &::buffa::MessageFieldView<
-                super::super::__buffa::view::ObjectInfoView<'_>,
-            > {
-                &self.0.reborrow().object
+            pub fn etag(&self) -> &'_ str {
+                self.0.reborrow().etag
             }
         }
         impl ::core::convert::From<

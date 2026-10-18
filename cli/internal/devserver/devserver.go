@@ -120,7 +120,7 @@ func (s *Server) ResourceKinds() []string {
 }
 
 func (s *Server) ResetDeclarations() {
-	s.declarations.ForgetResources()
+	s.declarations.ForgetDeclarations()
 	s.env.forgetDeclarations()
 }
 

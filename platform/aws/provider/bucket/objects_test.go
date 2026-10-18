@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	s3store "github.com/ocelhq/ocel/platform/s3"
@@ -31,6 +32,17 @@ type fakeS3 struct {
 	uploads map[string][][]byte
 	nextID  int
 	calls   []string
+
+	overwrittenAfterWrite bool
+}
+
+func (f *fakeS3) overwriteIfAsked(bucket, key string) {
+	if !f.overwrittenAfterWrite {
+		return
+	}
+	obj := f.objects[bucket][key]
+	obj.etag = `"another writer's"`
+	f.objects[bucket][key] = obj
 }
 
 func newFakeS3() *fakeS3 {
@@ -55,6 +67,9 @@ func (f *fakeS3) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func
 	obj, ok := f.objects[aws.ToString(in.Bucket)][aws.ToString(in.Key)]
 	if !ok {
 		return nil, &s3types.NotFound{}
+	}
+	if in.IfMatch != nil && aws.ToString(in.IfMatch) != obj.etag {
+		return nil, &smithy.GenericAPIError{Code: "PreconditionFailed"}
 	}
 	return &s3.HeadObjectOutput{
 		ContentLength: aws.Int64(int64(len(obj.body))),
@@ -118,7 +133,8 @@ func (f *fakeS3) CopyObject(_ context.Context, in *s3.CopyObjectInput, _ ...func
 		return nil, &s3types.NoSuchKey{}
 	}
 	f.objects[aws.ToString(in.Bucket)][aws.ToString(in.Key)] = obj
-	return &s3.CopyObjectOutput{}, nil
+	f.overwriteIfAsked(aws.ToString(in.Bucket), aws.ToString(in.Key))
+	return &s3.CopyObjectOutput{CopyObjectResult: &s3types.CopyObjectResult{ETag: aws.String(obj.etag), LastModified: aws.Time(obj.modified)}}, nil
 }
 
 func (f *fakeS3) CreateMultipartUpload(_ context.Context, in *s3.CreateMultipartUploadInput, _ ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error) {
@@ -136,6 +152,7 @@ func (f *fakeS3) CompleteMultipartUpload(_ context.Context, in *s3.CompleteMulti
 	}
 	delete(f.uploads, aws.ToString(in.UploadId))
 	f.seed(aws.ToString(in.Bucket), aws.ToString(in.Key), "assembled", "application/octet-stream")
+	f.overwriteIfAsked(aws.ToString(in.Bucket), aws.ToString(in.Key))
 	return &s3.CompleteMultipartUploadOutput{ETag: aws.String(`"assembled"`)}, nil
 }
 
@@ -323,6 +340,22 @@ func TestCopy(t *testing.T) {
 		}
 		if resp.GetObject().GetKey() != "b.png" || resp.GetObject().GetSize() != 10 {
 			t.Fatalf("Copy = %+v, want the destination object", resp.GetObject())
+		}
+	})
+
+	t.Run("a copy another write replaces before it is read back answers the copy's own etag", func(t *testing.T) {
+		t.Parallel()
+		objects := newFakeS3()
+		objects.seed("storage", "a.png", "0123456789", "image/png")
+		objects.overwrittenAfterWrite = true
+		svc := newObjectService(t, objects)
+
+		resp, err := svc.Copy(context.Background(), &bucketv1.CopyRequest{Bucket: "storage", SourceKey: "a.png", DestinationKey: "b.png"})
+		if err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+		if got := resp.GetObject(); got.GetKey() != "b.png" || got.GetEtag() != `"a.png"` {
+			t.Fatalf("Copy = %+v, want b.png with the etag the copy wrote, not the later writer's", got)
 		}
 	})
 

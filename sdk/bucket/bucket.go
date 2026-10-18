@@ -24,6 +24,8 @@ const (
 	singleRequestCeiling = 16 << 20
 	defaultPartSize      = 8 << 20
 	partsInFlight        = 4
+	defaultContentType   = "application/octet-stream"
+	readAttempts         = 3
 )
 
 // ErrObjectNotFound is what every operation that cannot answer with nothing
@@ -32,8 +34,9 @@ const (
 var ErrObjectNotFound = errors.New("the bucket has no object under this key")
 
 // ErrPreconditionFailed is what a write conditioned with [IfNotExists] or
-// [IfMatch] reports when the object did not meet the condition. Match it with
-// [errors.Is].
+// [IfMatch] reports when the object did not meet the condition, and what a read
+// reports when other writes replaced the object every time it tried to read the
+// version it found. Match it with [errors.Is].
 var ErrPreconditionFailed = errors.New("the object did not meet the condition this write set")
 
 // An Object is what a bucket knows about one object it stores.

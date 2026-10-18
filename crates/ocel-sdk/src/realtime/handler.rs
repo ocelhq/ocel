@@ -1,5 +1,4 @@
 use super::token::{mint_token, MintedToken, Operation};
-use super::transport::{read_transport, Transport};
 use super::wire::encode_wire_channel;
 use super::{generate_envelope_id, DenialCode, ErasedAuth, Realtime, Request, ServedChannel};
 use crate::proto::common::bindings::v1::RealtimeProperties;
@@ -34,10 +33,8 @@ struct DeniedOperation {
 
 #[derive(Serialize)]
 struct Answer {
-    transport: Transport,
     url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    host: Option<String>,
+    host: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     connect: Option<MintedToken>,
     grants: Vec<Grant>,
@@ -323,8 +320,6 @@ async fn serve_batch(
     let properties = rt
         .read_properties("handle")
         .map_err(|_| "the realtime resource has no binding")?;
-    let transport = read_transport(&properties)
-        .ok_or("the realtime binding names no transport this SDK speaks")?;
     let request = Arc::new(request);
     let authorized = match &rt.inner.authorize {
         Some(authorize) => authorize(request.clone())
@@ -393,9 +388,8 @@ async fn serve_batch(
     }
 
     let mut answer = Answer {
-        transport,
         url: resolve_socket_url(&properties.url, &request),
-        host: (transport == Transport::AppsyncEvents).then(|| properties.host.clone()),
+        host: properties.host.clone(),
         connect,
         grants: Vec::new(),
         denied: Vec::new(),

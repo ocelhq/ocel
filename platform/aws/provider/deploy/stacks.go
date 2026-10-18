@@ -363,7 +363,6 @@ func bindingOf(kind provider.BindingType, binding *bindingsv1.Binding) provider.
 		properties[provider.PropertyTLS] = strconv.FormatBool(kv.GetTls())
 	case provider.BindingRealtime:
 		realtime := binding.GetRealtime()
-		properties[provider.PropertyTransport] = realtime.GetTransport().String()
 		properties[provider.PropertyURL] = realtime.GetUrl()
 		properties[provider.PropertyHost] = realtime.GetHost()
 		properties[provider.PropertySigningKey] = base64.StdEncoding.EncodeToString(realtime.GetSigningKey())

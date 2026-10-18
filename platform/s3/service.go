@@ -70,9 +70,20 @@ type Config struct {
 	Granted      []string
 
 	MetadataPrefix string
+	EtagHeader     string
 }
 
-const defaultMetadataPrefix = "x-amz-meta-"
+const (
+	defaultMetadataPrefix = "x-amz-meta-"
+	defaultEtagHeader     = "etag"
+)
+
+func (c Config) etagHeader() string {
+	if c.EtagHeader == "" {
+		return defaultEtagHeader
+	}
+	return c.EtagHeader
+}
 
 func (c Config) metadataPrefix() string {
 	if c.MetadataPrefix == "" {

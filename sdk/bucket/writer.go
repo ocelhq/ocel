@@ -24,6 +24,7 @@ type Writer struct {
 	options writeOptions
 
 	buffered  []byte
+	written   int64
 	pending   []stagedPart
 	completed []*bucketv1.CompletedPart
 	uploadID  string
@@ -31,6 +32,7 @@ type Writer struct {
 
 	closed bool
 	err    error
+	stored *Object
 }
 
 type stagedPart struct {
@@ -44,6 +46,9 @@ func (b *Bucket) NewWriter(ctx context.Context, key string, opts ...WriteOption)
 	w := &Writer{ctx: ctx, store: b, key: key, next: 1}
 	for _, opt := range opts {
 		opt.applyWrite(&w.options)
+	}
+	if w.options.contentType == "" {
+		w.options.contentType = defaultContentType
 	}
 	w.bound, w.err = b.connect("NewWriter")
 	return w
@@ -69,6 +74,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 		return 0, fmt.Errorf("the writer for %q is closed", w.key)
 	}
 	w.buffered = append(w.buffered, p...)
+	w.written += int64(len(p))
 	if err := w.drain(false); err != nil {
 		w.fail(err)
 		return 0, err
@@ -101,6 +107,26 @@ func (w *Writer) Close() error {
 	if err := w.completeMultipart(); err != nil {
 		w.fail(err)
 		return w.err
+	}
+	return nil
+}
+
+// Attrs is the object this writer stored, as the write itself answered it: the
+// etag is the version this write made, even when another write has replaced the
+// object since, so [IfMatch] with it is sound. UploadedAt is the zero time. It is
+// nil until [Writer.Close] returns without an error.
+func (w *Writer) Attrs() *Object { return w.stored }
+
+func (w *Writer) record(etag string) error {
+	if etag == "" {
+		return fmt.Errorf("the store answered the write of %q without its etag", w.key)
+	}
+	w.stored = &Object{
+		Key:         w.key,
+		Size:        w.written,
+		ETag:        etag,
+		ContentType: w.options.contentType,
+		Metadata:    w.options.metadata,
 	}
 	return nil
 }
@@ -265,7 +291,7 @@ func (w *Writer) completeMultipart() error {
 		return int(a.GetPartNumber() - b.GetPartNumber())
 	})
 	id := w.uploadID
-	_, err := w.bound.client.CompleteMultipart(w.ctx, &bucketv1.CompleteMultipartRequest{
+	res, err := w.bound.client.CompleteMultipart(w.ctx, &bucketv1.CompleteMultipartRequest{
 		Bucket:      w.bound.bucket,
 		Key:         w.key,
 		UploadId:    id,
@@ -277,7 +303,7 @@ func (w *Writer) completeMultipart() error {
 		return refused(w.key, err)
 	}
 	w.uploadID = ""
-	return nil
+	return w.record(res.GetEtag())
 }
 
 func (w *Writer) putWhole() error {
@@ -306,9 +332,7 @@ func (w *Writer) putWhole() error {
 	for name, value := range target.GetHeaders() {
 		req.Header.Set(name, value)
 	}
-	if w.options.contentType != "" {
-		req.Header.Set("Content-Type", w.options.contentType)
-	}
+	req.Header.Set("Content-Type", w.options.contentType)
 	if w.options.cacheControl != "" {
 		req.Header.Set("Cache-Control", w.options.cacheControl)
 	}
@@ -331,5 +355,5 @@ func (w *Writer) putWhole() error {
 		}
 		return fmt.Errorf("writing %q was refused (%d)", w.key, res.StatusCode)
 	}
-	return nil
+	return w.record(res.Header.Get(target.GetEtagHeader()))
 }

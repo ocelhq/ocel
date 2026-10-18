@@ -176,10 +176,9 @@ def test_a_realtime_declaration_outside_the_contract_is_refused_saying_why(decla
         declare()
 
 
-def test_the_handler_names_the_transport_and_mints_a_connect_token_when_asked(appsync):
+def test_the_handler_names_the_socket_and_mints_a_connect_token_when_asked(appsync):
     res = answer(declare_app(Rules()).asgi(), {"connect": True, "ops": []})
 
-    assert res["transport"] == "appsync-events"
     assert res["url"] == FIXTURE["realtime"]["url"]
     assert res["host"] == FIXTURE["realtime"]["host"]
     claims = read_claims(res["connect"]["token"])
@@ -196,7 +195,6 @@ def test_the_handler_answers_a_socket_path_on_the_origin_the_request_reached_it_
 ):
     realtime_properties = {
         **FIXTURE["realtime"],
-        "transport": "REALTIME_TRANSPORT_OCEL_GATEWAY",
         "url": "/.well-known/ocel-realtime",
         "host": "gateway:8080",
     }
@@ -445,8 +443,7 @@ def test_a_relayed_publish_runs_the_publish_rule_then_publishes_from_the_server(
         {"x-user": "u1"},
     )
 
-    assert res["transport"] == "ocel-gateway"
-    assert "host" not in res
+    assert res["host"] == "realtime.shop.example"
     assert res["grants"] == [{"i": 0, "wire": "/app/rooms/r1"}]
     ctx = rules.publishes[0]
     assert (ctx.auth, ctx.params, ctx.body) == (
@@ -588,12 +585,6 @@ def test_the_handler_answers_500_when_a_token_cannot_be_minted(monkeypatch):
 
 
 def test_the_handler_answers_500_when_the_resource_has_no_binding():
-    assert_server_failure(post(declare_app(Rules()).asgi(), {"ops": []}))
-
-
-def test_the_handler_answers_500_for_a_transport_it_does_not_speak(monkeypatch):
-    with_binding(monkeypatch, transport="REALTIME_TRANSPORT_UNSPECIFIED")
-
     assert_server_failure(post(declare_app(Rules()).asgi(), {"ops": []}))
 
 

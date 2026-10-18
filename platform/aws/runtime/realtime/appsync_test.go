@@ -98,8 +98,7 @@ func (noBackoff) BackoffDelay(int, error) (time.Duration, error) { return 0, nil
 
 func publish(cfg realtime.Config) error {
 	return realtime.NewAppSyncTransport(cfg)(context.Background(), &bindingsv1.RealtimeProperties{
-		Transport: bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_APPSYNC_EVENTS,
-		Host:      apiHost,
+		Host: apiHost,
 	}, &realtimev1.PublishRequest{Realtime: "app", Channel: channel, Event: event})
 }
 
@@ -207,8 +206,7 @@ func TestAPublishTheCallerCancelsWhileAppSyncIsThrottlingFailsAsCanceled(t *test
 	})
 	cfg.Retryer = retry.NewStandard(func(o *retry.StandardOptions) { o.Backoff = constantBackoff(time.Minute) })
 	err := realtime.NewAppSyncTransport(cfg)(ctx, &bindingsv1.RealtimeProperties{
-		Transport: bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_APPSYNC_EVENTS,
-		Host:      apiHost,
+		Host: apiHost,
 	}, &realtimev1.PublishRequest{Realtime: "app", Channel: channel, Event: event})
 	if connect.CodeOf(err) != connect.CodeCanceled {
 		t.Errorf("publish = %v, want canceled: the caller gave up while the publish waited to retry", err)
@@ -283,19 +281,6 @@ type constantBackoff time.Duration
 
 func (c constantBackoff) BackoffDelay(int, error) (time.Duration, error) {
 	return time.Duration(c), nil
-}
-
-func TestAnAppSyncRuntimeRefusesABindingOverAnotherTransport(t *testing.T) {
-	t.Parallel()
-
-	_, cfg := serveAppSync(t)
-	err := realtime.NewAppSyncTransport(cfg)(context.Background(), &bindingsv1.RealtimeProperties{
-		Transport: bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY,
-		Host:      apiHost,
-	}, &realtimev1.PublishRequest{Realtime: "app", Channel: channel, Event: event})
-	if err == nil || !strings.Contains(err.Error(), "OCEL_GATEWAY") {
-		t.Errorf("publish = %v, want a binding over the gateway refused", err)
-	}
 }
 
 func TestAPublishAppSyncAnswersWithAThrottlingErrorIsRetried(t *testing.T) {

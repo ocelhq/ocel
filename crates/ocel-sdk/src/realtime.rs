@@ -26,7 +26,6 @@ pub mod axum;
 mod denial;
 mod handler;
 mod token;
-mod transport;
 mod wire;
 
 pub use denial::DenialCode;
@@ -448,8 +447,8 @@ impl Realtime {
     }
 
     /// Serve one request to the realtime handler: a batched `POST` of `{ connect?, ops }`,
-    /// at most 50 ops, answered with the transport, its url, a connect token when asked, a
-    /// grant with a token for each op its rule allows and a denial with a [`DenialCode`]
+    /// at most 50 ops, answered with the socket url and the host its authorization names, a
+    /// connect token when asked, a grant with a token for each op its rule allows and a denial with a [`DenialCode`]
     /// for each it does not. A browser publish runs the channel's publish rule and is
     /// published from the server, in the order of the batch. It takes `POST` with
     /// `application/json` alone, serves its own origin and those the builder allowed (the

@@ -105,9 +105,8 @@ func TestADeclaredRealtimeIsBoundToItsEnvironmentsGatewayThroughTheAppsOwnOrigin
 		t.Errorf("the binding is %s %q of %q, want the realtime the app declared", binding.Type, binding.Name, binding.Resource)
 	}
 	for property, want := range map[string]string{
-		provider.PropertyTransport: "REALTIME_TRANSPORT_OCEL_GATEWAY",
-		provider.PropertyURL:       live.RealtimeSocketPath,
-		provider.PropertyHost:      realtimeGateway + ":8080",
+		provider.PropertyURL:  live.RealtimeSocketPath,
+		provider.PropertyHost: realtimeGateway + ":8080",
 	} {
 		if got := binding.Properties[property]; got != want {
 			t.Errorf("the binding's %s is %q, want %q", property, got, want)

@@ -1,10 +1,10 @@
 use super::{
-    build_signed_request, check_status, convert_object_info, refuse_access, send_request, Bucket,
+    answered_etag, build_signed_request, check_status, refuse_access, send_request, Bucket,
     Connection, Object, Thresholds, WriteOptions, PARTS_IN_FLIGHT,
 };
 use crate::proto::app::bucket::v1::{
     AbortMultipartRequest, CompleteMultipartRequest, CompletedPart, CreateMultipartRequest,
-    HeadRequest, SignConstraints, SignPartsRequest, SignRequest, SignedAudience, SignedOperation,
+    SignConstraints, SignPartsRequest, SignRequest, SignedAudience, SignedOperation,
 };
 use crate::{Code, Error};
 use bytes::Bytes;
@@ -13,10 +13,10 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll};
 
-/// One object's bytes, written as they are produced. A small body goes up in a single
-/// request; a body past the single-request ceiling is uploaded in parts, which
-/// shutting the writer down completes and dropping it aborts. Nothing is stored until
-/// the shutdown returns without an error.
+/// One object's bytes, written as they are produced, as `application/octet-stream`. A small
+/// body goes up in a single request; a body past the single-request ceiling is uploaded in
+/// parts, which shutting the writer down completes and dropping it aborts. Nothing is stored
+/// until the shutdown returns without an error.
 pub struct Writer {
     state: WriterState,
     multipart: Arc<MultipartUpload>,
@@ -47,8 +47,9 @@ enum WriterState {
     Spent,
 }
 
-type UploadFuture =
-    Pin<Box<dyn Future<Output = (Box<Upload>, Result<Option<Object>, Error>)> + Send>>;
+const UNTYPED: &str = "application/octet-stream";
+
+type UploadFuture = Pin<Box<dyn Future<Output = (Box<Upload>, Result<(), Error>)> + Send>>;
 
 struct Upload {
     connection: Connection,
@@ -56,6 +57,7 @@ struct Upload {
     options: WriteOptions,
     thresholds: Thresholds,
     buffered: Vec<u8>,
+    sent: u64,
     multipart: Arc<MultipartUpload>,
     next_part: i32,
     pending: Vec<(i32, Bytes)>,
@@ -74,8 +76,11 @@ impl Writer {
     pub(super) async fn open(
         bucket: &Bucket,
         key: &str,
-        options: WriteOptions,
+        mut options: WriteOptions,
     ) -> Result<Self, Error> {
+        if options.content_type.is_empty() {
+            options.content_type = UNTYPED.to_string();
+        }
         let connection = bucket.ensure_connection("writer")?.clone();
         let multipart = Arc::new(MultipartUpload {
             connection: connection.clone(),
@@ -89,6 +94,7 @@ impl Writer {
                 options,
                 thresholds: bucket.thresholds,
                 buffered: Vec::new(),
+                sent: 0,
                 multipart: multipart.clone(),
                 next_part: 1,
                 pending: Vec::new(),
@@ -121,35 +127,12 @@ impl Writer {
         else {
             return Err(refuse_finished_writer());
         };
-        match core.finish().await {
-            Ok(Some(written)) => Ok(written),
-            Ok(None) => head_object(&core.connection, &core.key).await,
-            Err(err) => {
-                core.abort().await;
-                Err(err)
-            }
+        let finished = core.finish().await;
+        if finished.is_err() {
+            core.abort().await;
         }
+        finished
     }
-}
-
-async fn head_object(connection: &Connection, key: &str) -> Result<Object, Error> {
-    let response = connection
-        .client
-        .head(HeadRequest {
-            bucket: connection.bucket.clone(),
-            key: key.to_string(),
-            ..Default::default()
-        })
-        .await
-        .map_err(|err| refuse_access(key, &err))?;
-    response
-        .into_owned()
-        .object
-        .into_option()
-        .map(convert_object_info)
-        .ok_or_else(|| Error::NotFound {
-            key: key.to_string(),
-        })
 }
 
 impl Upload {
@@ -178,18 +161,42 @@ impl Upload {
         self.flush().await
     }
 
-    async fn finish(&mut self) -> Result<Option<Object>, Error> {
-        if self.multipart.upload_id().is_empty()
+    async fn finish(&mut self) -> Result<Object, Error> {
+        let etag = if self.multipart.upload_id().is_empty()
             && self.buffered.len() <= self.thresholds.single_ceiling
         {
-            self.put_whole().await?;
-            return Ok(None);
+            self.put_whole().await?
+        } else {
+            self.drain(true).await?;
+            self.complete().await?
+        };
+        Ok(self.written(etag))
+    }
+
+    fn written(&self, etag: String) -> Object {
+        Object {
+            key: self.key.clone(),
+            size: self.sent,
+            etag,
+            content_type: self.options.content_type.clone(),
+            uploaded_at: None,
+            metadata: self.options.metadata.clone(),
         }
-        self.drain(true).await?;
-        self.complete().await.map(Some)
+    }
+
+    fn refuse_missing_etag(&self) -> Error {
+        Error::Refused {
+            key: self.key.clone(),
+            code: Code::Internal,
+            said: format!(
+                "the store answered the write of {} without its etag",
+                self.key
+            ),
+        }
     }
 
     fn stage(&mut self, part: Bytes) {
+        self.sent += part.len() as u64;
         self.pending.push((self.next_part, part));
         self.next_part += 1;
     }
@@ -269,7 +276,7 @@ impl Upload {
         Ok(())
     }
 
-    async fn complete(&mut self) -> Result<Object, Error> {
+    async fn complete(&mut self) -> Result<String, Error> {
         self.completed.sort_by_key(|part| part.part_number);
         let response = self
             .connection
@@ -287,17 +294,14 @@ impl Upload {
             .map_err(|err| refuse_access(&self.key, &err))?;
         self.multipart.locked_upload_id().clear();
         self.completed.clear();
-        response
-            .into_owned()
-            .object
-            .into_option()
-            .map(convert_object_info)
-            .ok_or_else(|| Error::NotFound {
-                key: self.key.clone(),
-            })
+        let etag = response.into_owned().etag;
+        if etag.is_empty() {
+            return Err(self.refuse_missing_etag());
+        }
+        Ok(etag)
     }
 
-    async fn put_whole(&mut self) -> Result<(), Error> {
+    async fn put_whole(&mut self) -> Result<String, Error> {
         let response = self
             .connection
             .client
@@ -335,8 +339,10 @@ impl Upload {
             })?;
         let request = build_signed_request(&target, "PUT");
         let body = Bytes::from(std::mem::take(&mut self.buffered));
+        self.sent += body.len() as u64;
         let response = send_request(&self.connection, request, body).await?;
-        check_status(&self.key, response.status().as_u16())
+        check_status(&self.key, response.status().as_u16())?;
+        answered_etag(&response, &target.etag_header).ok_or_else(|| self.refuse_missing_etag())
     }
 
     async fn abort(&mut self) {
@@ -408,7 +414,7 @@ impl tokio::io::AsyncWrite for Writer {
                 if outcome.is_err() {
                     core.abort().await;
                 }
-                (core, outcome.map(|()| None))
+                (core, outcome)
             }));
         }
         Poll::Ready(Ok(buffer.len()))
@@ -438,7 +444,7 @@ impl tokio::io::AsyncWrite for Writer {
                 )));
             };
             self.state = WriterState::Finishing(Box::pin(async move {
-                let outcome = core.finish().await;
+                let outcome = core.finish().await.map(drop);
                 if outcome.is_err() {
                     core.abort().await;
                 }

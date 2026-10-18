@@ -14,7 +14,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -133,7 +132,6 @@ func newRealtimeBinding(in resources.ProvisionRequest, seed []byte, verifyKey st
 		Name:     in.Resource.Name,
 		Resource: in.Resource.Declared,
 		Properties: map[string]string{
-			provider.PropertyTransport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY.String(),
 			provider.PropertyURL:        live.RealtimeSocketPath,
 			provider.PropertyHost:       realtimeGatewayAddress(in.Ref),
 			provider.PropertySigningKey: base64.StdEncoding.EncodeToString(seed),

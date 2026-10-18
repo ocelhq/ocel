@@ -53,10 +53,3 @@ func (s *Service) readProperties(name string) (*bindingsv1.RealtimeProperties, e
 	}
 	return record.GetRealtime(), nil
 }
-
-func RefuseOtherTransport(properties *bindingsv1.RealtimeProperties, served bindingsv1.RealtimeTransport) error {
-	if properties.GetTransport() == served {
-		return nil
-	}
-	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the realtime binding names transport %s, and this runtime publishes only over %s", properties.GetTransport(), served))
-}

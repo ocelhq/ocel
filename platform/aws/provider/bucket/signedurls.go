@@ -45,7 +45,10 @@ func vendorHeaders(signed map[string][]string) map[string]string {
 	return headers
 }
 
-const metadataCap = 2048
+const (
+	metadataCap = 2048
+	etagHeader  = "etag"
+)
 
 func withinMetadataCap(metadata map[string]string) error {
 	size := 0
@@ -154,10 +157,11 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 
 func target(key string, signed *v4.PresignedHTTPRequest) *bucketv1.PresignedTarget {
 	return &bucketv1.PresignedTarget{
-		Url:     signed.URL,
-		Key:     key,
-		Method:  signed.Method,
-		Headers: vendorHeaders(signed.SignedHeader),
+		Url:        signed.URL,
+		Key:        key,
+		Method:     signed.Method,
+		Headers:    vendorHeaders(signed.SignedHeader),
+		EtagHeader: etagHeader,
 	}
 }
 
@@ -234,17 +238,11 @@ func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteM
 	if req.GetIfMatch() != "" {
 		in.IfMatch = aws.String(req.GetIfMatch())
 	}
-	if _, err := s.objects.CompleteMultipartUpload(ctx, in); err != nil {
+	out, err := s.objects.CompleteMultipartUpload(ctx, in)
+	if err != nil {
 		return nil, storeError("assemble "+req.GetKey(), err)
 	}
-	head, err := s.objects.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(req.GetBucket()),
-		Key:    aws.String(req.GetKey()),
-	})
-	if err != nil {
-		return nil, storeError("head "+req.GetKey(), err)
-	}
-	return &bucketv1.CompleteMultipartResponse{Object: headInfo(req.GetKey(), head)}, nil
+	return &bucketv1.CompleteMultipartResponse{Etag: aws.ToString(out.ETag)}, nil
 }
 
 func (s *Service) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipartRequest) (*bucketv1.AbortMultipartResponse, error) {

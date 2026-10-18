@@ -148,9 +148,8 @@ func TestARealtimeIsBoundToItsEnvironmentsGatewayByTheHostCloudRunGaveIt(t *test
 	}
 	host := strings.TrimPrefix(service.Uri, "https://")
 	for property, want := range map[string]string{
-		provider.PropertyTransport: "REALTIME_TRANSPORT_OCEL_GATEWAY",
-		provider.PropertyURL:       "wss://" + host + "/event/realtime",
-		provider.PropertyHost:      host,
+		provider.PropertyURL:  "wss://" + host + "/event/realtime",
+		provider.PropertyHost: host,
 	} {
 		if got := binding.Properties[property]; got != want {
 			t.Errorf("the binding's %s is %q, want %q", property, got, want)

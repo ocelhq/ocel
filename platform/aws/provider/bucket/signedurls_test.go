@@ -178,8 +178,31 @@ func TestMultipart(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CompleteMultipart: %v", err)
 		}
-		if done.GetObject().GetKey() != "big.bin" {
-			t.Fatalf("CompleteMultipart = %+v, want the assembled object", done.GetObject())
+		if done.GetEtag() != `"assembled"` {
+			t.Fatalf("CompleteMultipart = %+v, want the etag the assembly answered", done)
+		}
+	})
+
+	t.Run("an assembled object another write replaces at once answers the assembly's own etag", func(t *testing.T) {
+		t.Parallel()
+		objects := newFakeS3()
+		objects.overwrittenAfterWrite = true
+		svc := newSigningService(objects)
+		ctx := context.Background()
+
+		created, err := svc.CreateMultipart(ctx, &bucketv1.CreateMultipartRequest{Bucket: "storage", Key: "big.bin"})
+		if err != nil {
+			t.Fatalf("CreateMultipart: %v", err)
+		}
+		done, err := svc.CompleteMultipart(ctx, &bucketv1.CompleteMultipartRequest{
+			Bucket: "storage", Key: "big.bin", UploadId: created.GetUploadId(),
+			Parts: []*bucketv1.CompletedPart{{PartNumber: 1, Etag: `"p1"`}},
+		})
+		if err != nil {
+			t.Fatalf("CompleteMultipart: %v", err)
+		}
+		if done.GetEtag() != `"assembled"` {
+			t.Fatalf("CompleteMultipart etag = %q, want the assembly's own, not the later writer's", done.GetEtag())
 		}
 	})
 

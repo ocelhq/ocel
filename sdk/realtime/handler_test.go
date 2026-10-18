@@ -28,7 +28,6 @@ import (
 type realtimeFixture struct {
 	Name     string `json:"name"`
 	Realtime struct {
-		Transport  string `json:"transport"`
 		URL        string `json:"url"`
 		Host       string `json:"host"`
 		SigningKey []byte `json:"signingKey"`
@@ -177,7 +176,6 @@ func serveFakeRuntime(t *testing.T, name string) (*fakeRuntime, realtimeFixture)
 	t.Setenv("OCEL_RUNTIME_ADDRESS", server.URL)
 	t.Setenv("OCEL_SESSION_TOKEN", sdktest.SessionToken)
 	fixture := readFixture(t)
-	fixture.Realtime.Transport = "REALTIME_TRANSPORT_OCEL_GATEWAY"
 	fixture.Realtime.Host = "realtime.shop.example"
 	fixture.Realtime.URL = "wss://realtime.shop.example/event/realtime"
 	deliver(t, name, fixture)
@@ -185,10 +183,9 @@ func serveFakeRuntime(t *testing.T, name string) (*fakeRuntime, realtimeFixture)
 }
 
 type realtimeAnswer struct {
-	Transport string `json:"transport"`
-	URL       string `json:"url"`
-	Host      string `json:"host"`
-	Connect   *struct {
+	URL     string `json:"url"`
+	Host    string `json:"host"`
+	Connect *struct {
 		Token     string `json:"token"`
 		ExpiresAt int64  `json:"expiresAt"`
 	} `json:"connect"`
@@ -265,15 +262,15 @@ func newHandlerRules() *handlerRules {
 	return &handlerRules{ownedOrdersByOwner: map[string]string{"o-1": "u1"}}
 }
 
-func TestTheHandlerNamesTheTransportAndMintsAConnectTokenWhenAsked(t *testing.T) {
+func TestTheHandlerNamesTheSocketAndMintsAConnectTokenWhenAsked(t *testing.T) {
 	fixture := readFixture(t)
 	deliver(t, "app", fixture)
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	answer := readAnswer(t, post(handler, `{"connect":true,"ops":[]}`, nil))
 
-	if answer.Transport != "appsync-events" || answer.URL != fixture.Realtime.URL || answer.Host != fixture.Realtime.Host {
-		t.Errorf("answer = %+v, want appsync-events at the fixture's url and host", answer)
+	if answer.URL != fixture.Realtime.URL || answer.Host != fixture.Realtime.Host {
+		t.Errorf("answer = %+v, want the fixture's url and host", answer)
 	}
 	if answer.Connect == nil {
 		t.Fatal("connect = nil, want a connect token")
@@ -290,7 +287,6 @@ func TestTheHandlerNamesTheTransportAndMintsAConnectTokenWhenAsked(t *testing.T)
 
 func TestTheHandlerAnswersASocketPathOnTheOriginTheRequestReachedItAt(t *testing.T) {
 	fixture := readFixture(t)
-	fixture.Realtime.Transport = "REALTIME_TRANSPORT_OCEL_GATEWAY"
 	fixture.Realtime.URL = "/.well-known/ocel-realtime"
 	fixture.Realtime.Host = "gateway:8080"
 	deliver(t, "app", fixture)
@@ -505,15 +501,6 @@ func TestTheHandlerSendsCORSWithEveryAnswerToAnAllowedOrigin(t *testing.T) {
 	}
 }
 
-func TestTheHandlerAnswers500WhenTheBindingNamesATransportItDoesNotSpeak(t *testing.T) {
-	fixture := readFixture(t)
-	fixture.Realtime.Transport = "REALTIME_TRANSPORT_UNSPECIFIED"
-	deliver(t, "app", fixture)
-	handler := declareHandlerResource(newHandlerRules()).Handler()
-
-	assertServerFailure(t, post(handler, `{"ops":[{"op":"subscribe","pattern":"status"}]}`, nil))
-}
-
 func TestTheHandlerAnswers500WhenAuthorizePanics(t *testing.T) {
 	deliver(t, "app", readFixture(t))
 	resource := realtime.New("app", realtime.Authorize(func(*http.Request) (*caller, error) { panic("secret detail") }))
@@ -701,14 +688,14 @@ func TestTheHandlerAnswers500WithoutTheCauseWhenAuthorizeFails(t *testing.T) {
 }
 
 func TestARelayedPublishRunsThePublishRuleThenPublishesFromTheServer(t *testing.T) {
-	runtime, _ := serveFakeRuntime(t, "app")
+	runtime, fixture := serveFakeRuntime(t, "app")
 	rules := newHandlerRules()
 	handler := declareHandlerResource(rules).Handler()
 
 	answer := readAnswer(t, post(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"hi"}}]}`, map[string]string{"X-User": "u1"}))
 
-	if answer.Transport != "ocel-gateway" || answer.Host != "" {
-		t.Errorf("answer = %+v, want ocel-gateway without a host", answer)
+	if answer.Host != fixture.Realtime.Host {
+		t.Errorf("answer = %+v, want the gateway's host %q", answer, fixture.Realtime.Host)
 	}
 	if len(answer.Grants) != 1 || answer.Grants[0].Wire != "/app/rooms/r1" || answer.Grants[0].Token != "" {
 		t.Errorf("grants = %+v, want /app/rooms/r1 granted without a token", answer.Grants)

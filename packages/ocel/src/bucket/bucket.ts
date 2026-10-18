@@ -63,12 +63,15 @@ export class Bucket<
     declare(name, { case: "bucket", value: { allowedOrigins, public: isPublic } });
   }
 
-  /** Writes `body` under `key`, in one request or in parts, and returns the stored object. */
+  /** Writes `body` under `key`, in one request or in parts, and returns the info of the version this write stored. */
   put(key: string, body: PutBody, options?: PutOptions): Promise<ObjectInfo> {
     return this.objects.put(key, body, options);
   }
 
-  /** Reads the object under `key`, or `undefined` when the bucket has none. */
+  /**
+   * Reads the object under `key`, or `undefined` when the bucket has none. Throws
+   * `PreconditionFailedError` when the object keeps changing while it is read.
+   */
   get(key: string, options?: GetOptions): Promise<ObjectBody | undefined> {
     return this.objects.get(key, options);
   }

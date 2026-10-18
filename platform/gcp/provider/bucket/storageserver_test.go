@@ -39,6 +39,9 @@ type storageServer struct {
 	uploads    map[string]multipartUpload
 	nextUpload int
 
+	assemblyAnswersNoGeneration bool
+	overwrittenAfterAssembly    bool
+
 	writes     []url.Values
 	completed  []string
 	aborted    []string
@@ -125,6 +128,11 @@ func (s *storageServer) single(w http.ResponseWriter, r *http.Request, bucket, k
 	object := s.objects[bucket][key]
 	if object == nil {
 		notFound(w)
+		return
+	}
+	if match := r.URL.Query().Get("ifGenerationMatch"); match != "" && match != strconv.FormatInt(object.generation, 10) {
+		w.WriteHeader(http.StatusPreconditionFailed)
+		writeJSON(w, map[string]any{"error": map[string]any{"code": http.StatusPreconditionFailed, "message": "conditionNotMet"}})
 		return
 	}
 	switch r.Method {
@@ -259,7 +267,14 @@ func (s *storageServer) xml(w http.ResponseWriter, r *http.Request, path string)
 		}
 		delete(s.uploads, query.Get("uploadId"))
 		s.completed = append(s.completed, query.Get("uploadId"))
-		s.store(bucket, key, []byte(strings.Repeat("p", len(asked.Parts))), upload.contentType, upload.metadata)
+		assembled := s.store(bucket, key, []byte(strings.Repeat("p", len(asked.Parts))), upload.contentType, upload.metadata)
+		w.Header().Set("X-Goog-Hash", "crc32c="+checksumOf(assembled.body)+",md5=AAAA")
+		if !s.assemblyAnswersNoGeneration {
+			w.Header().Set("X-Goog-Generation", strconv.FormatInt(assembled.generation, 10))
+		}
+		if s.overwrittenAfterAssembly {
+			s.store(bucket, key, []byte("another writer's"), "text/plain", nil)
+		}
 		w.Header().Set("Content-Type", "application/xml")
 		w.Write([]byte(`<?xml version="1.0"?><CompleteMultipartUploadResult><Bucket>` + bucket + `</Bucket><Key>` + key + `</Key><ETag>"x-2"</ETag></CompleteMultipartUploadResult>`))
 	case r.Method == http.MethodDelete && query.Get("uploadId") != "":

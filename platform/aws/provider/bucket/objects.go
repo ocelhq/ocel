@@ -101,6 +101,17 @@ func headInfo(key string, out *s3.HeadObjectOutput) *bucketv1.ObjectInfo {
 	return info
 }
 
+func copyInfo(key string, out *s3.CopyObjectOutput) *bucketv1.ObjectInfo {
+	info := &bucketv1.ObjectInfo{Key: key}
+	if result := out.CopyObjectResult; result != nil {
+		info.Etag = aws.ToString(result.ETag)
+		if result.LastModified != nil {
+			info.UploadedAt = timestamppb.New(*result.LastModified)
+		}
+	}
+	return info
+}
+
 func (s *Service) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
 	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
 		return nil, err
@@ -180,7 +191,7 @@ func (s *Service) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv
 	if err := s.reach(req.GetBucket(), req.GetSourceKey(), req.GetDestinationKey()); err != nil {
 		return nil, err
 	}
-	_, err := s.objects.CopyObject(ctx, &s3.CopyObjectInput{
+	copied, err := s.objects.CopyObject(ctx, &s3.CopyObjectInput{
 		Bucket:     aws.String(req.GetBucket()),
 		Key:        aws.String(req.GetDestinationKey()),
 		CopySource: aws.String(copySource(req.GetBucket(), req.GetSourceKey())),
@@ -188,10 +199,15 @@ func (s *Service) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv
 	if err != nil {
 		return nil, storeError("copy "+req.GetSourceKey(), err)
 	}
+	written := copyInfo(req.GetDestinationKey(), copied)
 	head, err := s.objects.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(req.GetBucket()),
-		Key:    aws.String(req.GetDestinationKey()),
+		Bucket:  aws.String(req.GetBucket()),
+		Key:     aws.String(req.GetDestinationKey()),
+		IfMatch: aws.String(written.GetEtag()),
 	})
+	if missing(err) || preconditionFailed(err) {
+		return &bucketv1.CopyResponse{Object: written}, nil
+	}
 	if err != nil {
 		return nil, storeError("head "+req.GetDestinationKey(), err)
 	}

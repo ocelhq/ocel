@@ -60,9 +60,8 @@ function post(body: unknown, headers: Record<string, string> = {}) {
 }
 
 interface Answer {
-  transport: string;
   url: string;
-  host?: string;
+  host: string;
   connect?: { token: string; expiresAt: number };
   grants: { i: number; wire: string; token?: string }[];
   denied: { i: number; code: string }[];
@@ -85,10 +84,10 @@ describe("the realtime handler on AppSync Events", () => {
     vi.unstubAllEnvs();
   });
 
-  it("names the transport, its url and host, and mints a connect token when asked", async () => {
+  it("names the socket url and host, and mints a connect token when asked", async () => {
     const res = await answer(await POST(post({ connect: true, ops: [] })));
 
-    expect(res).toMatchObject({ transport: "appsync-events", url: appsyncURL, host: appsyncHost });
+    expect(res).toMatchObject({ url: appsyncURL, host: appsyncHost });
     const claims = readClaims(res.connect?.token ?? "");
     expect(claims).toMatchObject({
       iss: "ocel:rt:app",
@@ -464,20 +463,8 @@ describe("the realtime handler's defaults", () => {
     expect(res.headers.get("access-control-allow-origin")).toBeNull();
   });
 
-  it.each([
-    ["no binding was delivered", undefined],
-    [
-      "the binding names a transport this SDK does not speak",
-      JSON.stringify({
-        name: "realtime--app",
-        realtime: {
-          ...JSON.parse(appsyncBinding).realtime,
-          transport: "REALTIME_TRANSPORT_UNSPECIFIED",
-        },
-      }),
-    ],
-  ])("answers 500 no-store when %s", async (_, binding) => {
-    vi.stubEnv(bindingKey("app", "realtime"), binding);
+  it("answers 500 no-store when no binding was delivered", async () => {
+    vi.stubEnv(bindingKey("app", "realtime"), undefined);
 
     const res = await POST(post({ connect: true, ops: [{ op: "subscribe", pattern: "status" }] }));
 
@@ -553,8 +540,7 @@ describe("a publish relayed through the realtime handler", () => {
       ),
     );
 
-    expect(res.transport).toBe("ocel-gateway");
-    expect(res.host).toBeUndefined();
+    expect(res.host).toBe(gateway.host);
     expect(res.grants).toEqual([{ i: 0, wire: "/app/rooms/r1" }]);
     expect(publishRule.mock.calls[0]?.[0]).toMatchObject({
       auth: { id: "u1" },
@@ -709,7 +695,6 @@ describe("a gateway the binding names by a path on the app's own origin", () => 
         name: "realtime--app",
         realtime: {
           ...JSON.parse(appsyncBinding).realtime,
-          transport: "REALTIME_TRANSPORT_OCEL_GATEWAY",
           url: socketPath,
           host: "gateway:8080",
         },
