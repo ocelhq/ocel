@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import type { LookupAddress } from "node:dns";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { IMAGE_PASSTHROUGH } from "@framework/next-protocol/image";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { isReachableAddress } from "../src/addresses.mjs";
 import { resetConfigMemo } from "../src/config.mjs";
-import { IMAGE_PASSTHROUGH } from "../src/contract.mjs";
 import { optimize } from "../src/optimize.mjs";
 import type { UpstreamDeps } from "../src/upstream.mjs";
 import { configHash, imageConfig, payload, storeWithConfig } from "../test-support/fixtures.mjs";
@@ -220,6 +220,69 @@ describe("a local image", () => {
     store.put(ASSET, { bytes: await solid("png") });
     const response = await optimize(payload(config), { store });
     expect(response.headers["cache-control"]).toBeUndefined();
+  });
+});
+
+describe("an image a route answered", () => {
+  function routeImage(bytes: Uint8Array) {
+    return {
+      base64: Buffer.from(bytes).toString("base64"),
+      cacheControl: "max-age=60",
+      etag: null,
+    };
+  }
+
+  test("is transformed from the bytes the request carries, never read from the store", async () => {
+    const config = imageConfig();
+    const store = storeWithConfig(config);
+    const response = await optimize(
+      payload(config, {
+        url: "/api/og",
+        mimeType: "image/webp",
+        routeImage: routeImage(await solid("png", 400, 200)),
+      }),
+      { store },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toBe("image/webp");
+    expect(response.headers["cache-control"]).toBe("max-age=60");
+    expect(response.headers["content-disposition"]).toBe('attachment; filename="og.webp"');
+    expect(store.reads).toEqual(["prod/proj1/web/r3f8a1c9d/image-config.json"]);
+  });
+
+  test("is capped at maximumResponseBody like any other read", async () => {
+    const config = imageConfig({ maximumResponseBody: 1024 });
+    const store = storeWithConfig(config);
+    const response = await optimize(
+      payload(config, {
+        url: "/api/og",
+        routeImage: routeImage(await solid("png", 400, 400)),
+      }),
+      { store },
+    );
+    expect(response.status).toBe(400);
+    expect(text(response.body)).toBe('"url" parameter is valid but upstream response is invalid');
+    expect(store.reads).toEqual(["prod/proj1/web/r3f8a1c9d/image-config.json"]);
+  });
+
+  test("never stands in for a remote source", async () => {
+    const config = imageConfig();
+    const store = storeWithConfig(config);
+    const response = await optimize(
+      payload(config, {
+        url: "https://cdn.example.com/a.png",
+        routeImage: routeImage(await solid("png")),
+      }),
+      {
+        store,
+        upstream: {
+          lookup: ((_h: string, _o: unknown, cb: LookupCallback) =>
+            cb(null, [{ address: "10.0.0.1", family: 4 }])) as UpstreamDeps["lookup"],
+        },
+      },
+    );
+    expect(response.status).toBe(400);
   });
 });
 

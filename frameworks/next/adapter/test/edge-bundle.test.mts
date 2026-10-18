@@ -1,10 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { edgeBundleVersion } from "@platform/edge-contract/edge-bundle";
 import { afterEach, expect, test, vi } from "vitest";
 
 import adapter from "../src/next-adapter.mts";
-import { defaultImages } from "./fixtures.mts";
+import { defaultImages, writePrerenderManifest } from "./fixtures.mts";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -18,6 +19,7 @@ const buildEnv = {
 
 async function synthEdgeProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-edge-"));
+  await writePrerenderManifest(join(projectDir, ".next"));
 
   const chunkDir = join(projectDir, ".next/server/edge/chunks");
   await mkdir(chunkDir, { recursive: true });
@@ -217,12 +219,6 @@ function outputDir(projectDir: string): string {
   return join(projectDir, ".ocel/output");
 }
 
-function assetTable(shim: string): Record<string, string> {
-  const match = /^const ASSETS = (.*)$/m.exec(shim);
-  if (!match) throw new Error("shim has no ASSETS table");
-  return JSON.parse(match[1]!) as Record<string, string>;
-}
-
 async function readBundleRaw(projectDir: string): Promise<string> {
   return readFile(join(outputDir(projectDir), "edge/bundle.json"), "utf8");
 }
@@ -250,8 +246,7 @@ test("gives every edge entry key one bundle entry, variants folded together", as
   await adapter.onBuildComplete!(args as never);
 
   const bundle = await readBundle(projectDir);
-  expect(bundle.version).toBe(2);
-  expect(bundle.mainModule).toBe("main.js");
+  expect(bundle.version).toBe(edgeBundleVersion);
   expect(Object.keys(bundle.entries).sort()).toEqual([
     "middleware_app/api/edge/route",
     "middleware_app/edge-page/page",
@@ -267,7 +262,7 @@ test("gives the edge runtime the client asset suffix Next's sandbox would have s
   await adapter.onBuildComplete!(args as never);
 
   const bundle = await readBundle(projectDir);
-  expect(bundle.shim).toContain('globalThis.NEXT_CLIENT_ASSET_SUFFIX = "?dpl=3f7c1b9a5e2d4c8f"');
+  expect(bundle.clientAssetSuffix).toBe("?dpl=3f7c1b9a5e2d4c8f");
 });
 
 test("leaves the client asset suffix empty when no deployment id was stamped", async () => {
@@ -275,7 +270,7 @@ test("leaves the client asset suffix empty when no deployment id was stamped", a
 
   await adapter.onBuildComplete!(args as never);
 
-  expect((await readBundle(projectDir)).shim).toContain('globalThis.NEXT_CLIENT_ASSET_SUFFIX = ""');
+  expect((await readBundle(projectDir)).clientAssetSuffix).toBe("");
 });
 
 test("dedupes chunks by content and assigns ids in sorted-key order", async () => {
@@ -381,46 +376,34 @@ test("embeds traced assets as base64, byte-exact", async () => {
   await adapter.onBuildComplete!(args as never);
 
   const bundle = await readBundle(projectDir);
-  const ids = assetTable(bundle.shim);
+  const ids = bundle.assetNames;
   for (const [name, bytes] of Object.entries(tracedAssets)) {
     expect(Buffer.from(bundle.assets[ids[name]!], "base64")).toEqual(bytes);
   }
 });
 
-test("maps each asset's blob name to its module id in the shim", async () => {
+test("maps each asset's blob name to its module id", async () => {
   const { projectDir, args, tracedAssets } = await synthEdgeProject();
 
   await adapter.onBuildComplete!(args as never);
 
   const bundle = await readBundle(projectDir);
-  const table = assetTable(bundle.shim);
+  const table: Record<string, string> = bundle.assetNames;
   expect(Object.keys(table).sort()).toEqual(Object.keys(tracedAssets).sort());
   for (const id of Object.values(table)) {
     expect(bundle.assets).toHaveProperty(id);
   }
-  expect(bundle.shim).toContain('url.startsWith("blob:")');
 });
 
-test("emits a loadable shim for an asset name containing template syntax", async () => {
+test("keys the asset table by the build's own name, template syntax and non-ASCII alike", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
   await adapter.onBuildComplete!(args as never);
 
-  const { shim } = await readBundle(projectDir);
+  const { assetNames } = await readBundle(projectDir);
   // biome-ignore lint/suspicious/noTemplateCurlyInString: the asset name under test contains a literal ${c}
-  expect(assetTable(shim)).toHaveProperty("server/edge/assets/a`b${c}.abc.txt");
-  const mod = await import(`data:text/javascript,${encodeURIComponent(shim)}`);
-  expect(typeof mod.default.fetch).toBe("function");
-});
-
-test("keys the asset table by the build's name and decodes to reach it", async () => {
-  const { projectDir, args } = await synthEdgeProject();
-
-  await adapter.onBuildComplete!(args as never);
-
-  const { shim } = await readBundle(projectDir);
-  expect(assetTable(shim)).toHaveProperty("server/edge/assets/caf\u00e9.abc.txt");
-  expect(shim).toContain("decodeURIComponent");
+  expect(assetNames).toHaveProperty("server/edge/assets/a`b${c}.abc.txt");
+  expect(assetNames).toHaveProperty("server/edge/assets/caf\u00e9.abc.txt");
 });
 
 test("embeds wasm assets as base64, declared once for the whole bundle", async () => {
@@ -568,41 +551,6 @@ test("bundles middleware alone when the app has no edge routes", async () => {
   const bundle = await readBundle(projectDir);
   expect(Object.keys(bundle.entries)).toEqual(["middleware_middleware"]);
   expect(bundle.chunks).toEqual({ "c/0.js": "MW", "c/1.js": "SHARED" });
-});
-
-test("inlines the entries table into the shim and imports only a hit entry's chunks", async () => {
-  const { projectDir, args } = await synthEdgeProject();
-
-  await adapter.onBuildComplete!(args as never);
-
-  const bundle = await readBundle(projectDir);
-  expect(bundle.shim).toContain("middleware_middleware");
-  expect(bundle.shim).toContain('await import("./" + id)');
-  expect(bundle.shim).toContain("ctx.props.entryKey");
-  expect(bundle.shim.indexOf("Object.assign(globalThis.process.env, env)")).toBeLessThan(
-    bundle.shim.indexOf("await import"),
-  );
-});
-
-test("emits a shim that is a loadable module exporting a fetch handler", async () => {
-  const { projectDir, args } = await synthEdgeProject();
-
-  await adapter.onBuildComplete!(args as never);
-
-  const { shim } = await readBundle(projectDir);
-  const mod = await import(`data:text/javascript,${encodeURIComponent(shim)}`);
-  expect(typeof mod.default.fetch).toBe("function");
-});
-
-test("installs no fetch cache of its own and binds no cache on the global", async () => {
-  const { projectDir, args } = await synthEdgeProject();
-
-  await adapter.onBuildComplete!(args as never);
-
-  const { shim } = await readBundle(projectDir);
-  expect(shim).not.toContain("@next/cache-handlers");
-  expect(shim).not.toContain("__OCEL_EDGE_CACHE");
-  expect(shim).not.toContain("OCEL_CACHE_RPC");
 });
 
 async function writeChunk(projectDir: string, key: string, body: string) {
@@ -774,11 +722,7 @@ test("binds each wasm module to the global name its chunks reach for", async () 
   await adapter.onBuildComplete!(args as never);
 
   const bundle = await readBundle(projectDir);
-  expect(bundle.shim).toContain('const WASM = {"wasm_hello":"w/0.wasm"}');
-  expect(bundle.shim).toContain('globalThis[name] ??= (await import("./" + id)).default');
-  expect(bundle.shim.indexOf("WASM")).toBeLessThan(
-    bundle.shim.indexOf("for (const id of e.chunks)"),
-  );
+  expect(bundle.wasmGlobals).toEqual({ wasm_hello: "w/0.wasm" });
 });
 
 test("prints the bundle size, chunk count and entry count", async () => {
@@ -790,16 +734,6 @@ test("prints the bundle size, chunk count and entry count", async () => {
   expect(log).toHaveBeenCalledWith(
     expect.stringMatching(/^ocel: edge bundle \d+\.\d MB, 5 chunks, 5 assets, 3 entries$/),
   );
-});
-
-test("hands the running entry key to the chunks on a global, before they evaluate", async () => {
-  const { projectDir, args } = await synthEdgeProject();
-
-  await adapter.onBuildComplete!(args as never);
-
-  const { shim } = await readBundle(projectDir);
-  expect(shim).toContain("globalThis.__OCEL_EDGE_ENTRY = k");
-  expect(shim.indexOf("__OCEL_EDGE_ENTRY")).toBeLessThan(shim.indexOf("await import"));
 });
 
 test("writes no value of its own into the edge bundle's env", async () => {

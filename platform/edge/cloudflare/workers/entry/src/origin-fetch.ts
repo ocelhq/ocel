@@ -1,3 +1,4 @@
+import type { OriginThrottle } from "@framework/next-router/retry";
 import { CLIENT_AUTHORIZATION_HEADER } from "@platform/edge-contract/client-authorization";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import type { Env } from "./env";
@@ -34,4 +35,17 @@ export function originFetchFor(env: OriginEnv): typeof fetch | undefined {
     return clientCertificateOriginFetch(certificate);
   }
   return edgeOriginFetch(env.OCEL_EDGE_ACCESS_KEY_ID, env.OCEL_EDGE_SECRET_KEY);
+}
+
+async function isCloudRunThrottle(response: Response): Promise<boolean> {
+  if (response.status !== 429) return false;
+  return (await response.clone().text()).includes("no available instance");
+}
+
+function isLambdaThrottle(response: Response): boolean {
+  return response.status === 429 && response.headers.has("x-amzn-errortype");
+}
+
+export function originThrottleFor(env: OriginEnv): OriginThrottle {
+  return env.OCEL_ORIGIN_CLIENT_CERTIFICATE ? isCloudRunThrottle : isLambdaThrottle;
 }

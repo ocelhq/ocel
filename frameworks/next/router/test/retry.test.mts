@@ -1,23 +1,29 @@
 import { describe, expect, it } from "vitest";
 
-import { isServiceThrottle, retryTransientOrigin } from "../src/retry.mjs";
+import { retryTransientOrigin } from "../src/retry.mjs";
 
 const noDelay = { sleep: async () => {}, random: () => 0 };
 
+const THROTTLE_HEADER = "x-host-throttle";
+
 function throttled() {
-  return new Response(null, {
-    status: 429,
-    headers: { "x-amzn-errortype": "TooManyRequestsException" },
-  });
+  return new Response(null, { status: 429, headers: { [THROTTLE_HEADER]: "1" } });
 }
+
+const isHostThrottle = (response: Response) =>
+  response.status === 429 && response.headers.has(THROTTLE_HEADER);
 
 describe("retryTransientOrigin", () => {
   it("returns a successful first attempt without retrying", async () => {
     let calls = 0;
-    const res = await retryTransientOrigin(async () => {
-      calls++;
-      return new Response("ok", { status: 200 });
-    }, noDelay);
+    const res = await retryTransientOrigin(
+      async () => {
+        calls++;
+        return new Response("ok", { status: 200 });
+      },
+      isHostThrottle,
+      noDelay,
+    );
 
     expect(res.status).toBe(200);
     expect(calls).toBe(1);
@@ -25,11 +31,15 @@ describe("retryTransientOrigin", () => {
 
   it("retries a service throttle and serves the response that follows", async () => {
     let calls = 0;
-    const res = await retryTransientOrigin(async () => {
-      calls++;
-      if (calls === 1) return throttled();
-      return new Response("served", { status: 200 });
-    }, noDelay);
+    const res = await retryTransientOrigin(
+      async () => {
+        calls++;
+        if (calls === 1) return throttled();
+        return new Response("served", { status: 200 });
+      },
+      isHostThrottle,
+      noDelay,
+    );
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("served");
@@ -39,21 +49,29 @@ describe("retryTransientOrigin", () => {
   it("throws once the retry budget is exhausted on repeated throttles", async () => {
     let calls = 0;
     await expect(
-      retryTransientOrigin(async () => {
-        calls++;
-        return throttled();
-      }, noDelay),
-    ).rejects.toThrow(/429/);
+      retryTransientOrigin(
+        async () => {
+          calls++;
+          return throttled();
+        },
+        isHostThrottle,
+        noDelay,
+      ),
+    ).rejects.toThrow(/throttled/);
     expect(calls).toBe(3);
   });
 
   it("retries a thrown connection failure and serves the response that follows", async () => {
     let calls = 0;
-    const res = await retryTransientOrigin(async () => {
-      calls++;
-      if (calls === 1) throw new Error("connection reset");
-      return new Response("served", { status: 200 });
-    }, noDelay);
+    const res = await retryTransientOrigin(
+      async () => {
+        calls++;
+        if (calls === 1) throw new Error("connection reset");
+        return new Response("served", { status: 200 });
+      },
+      isHostThrottle,
+      noDelay,
+    );
 
     expect(res.status).toBe(200);
     expect(calls).toBe(2);
@@ -62,35 +80,47 @@ describe("retryTransientOrigin", () => {
   it("throws the last error once the budget is exhausted on repeated failures", async () => {
     let calls = 0;
     await expect(
-      retryTransientOrigin(async () => {
-        calls++;
-        throw new Error(`boom ${calls}`);
-      }, noDelay),
+      retryTransientOrigin(
+        async () => {
+          calls++;
+          throw new Error(`boom ${calls}`);
+        },
+        isHostThrottle,
+        noDelay,
+      ),
     ).rejects.toThrow("boom 3");
     expect(calls).toBe(3);
   });
 
   it("does not retry a real 4xx/5xx the origin produced on purpose", async () => {
     let calls = 0;
-    const res = await retryTransientOrigin(async () => {
-      calls++;
-      return new Response("app error", { status: 500 });
-    }, noDelay);
+    const res = await retryTransientOrigin(
+      async () => {
+        calls++;
+        return new Response("app error", { status: 500 });
+      },
+      isHostThrottle,
+      noDelay,
+    );
 
     expect(res.status).toBe(500);
     expect(await res.text()).toBe("app error");
     expect(calls).toBe(1);
   });
 
-  it("does not retry an app-authored 429 (no x-amzn-errortype), and returns it verbatim", async () => {
+  it("does not retry a 429 the host's throttle check does not name, and returns it verbatim", async () => {
     let calls = 0;
-    const res = await retryTransientOrigin(async () => {
-      calls++;
-      return new Response("rate limited", {
-        status: 429,
-        headers: { "retry-after": "60" },
-      });
-    }, noDelay);
+    const res = await retryTransientOrigin(
+      async () => {
+        calls++;
+        return new Response("rate limited", {
+          status: 429,
+          headers: { "retry-after": "60" },
+        });
+      },
+      isHostThrottle,
+      noDelay,
+    );
 
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("60");
@@ -106,6 +136,7 @@ describe("retryTransientOrigin", () => {
         calls++;
         return calls === 1 ? throttled() : new Response("ok", { status: 200 });
       },
+      isHostThrottle,
       {
         random: () => 0.5,
         sleep: async (ms) => {
@@ -118,20 +149,34 @@ describe("retryTransientOrigin", () => {
   });
 });
 
-describe("isServiceThrottle", () => {
-  it("is true for a 429 with an x-amzn-errortype header", () => {
-    expect(isServiceThrottle(throttled())).toBe(true);
+describe("a host's throttle check", () => {
+  it("may read the response asynchronously without consuming the body served", async () => {
+    let calls = 0;
+    const res = await retryTransientOrigin(
+      async () => {
+        calls++;
+        return new Response(calls === 1 ? "busy" : "app said no", { status: 429 });
+      },
+      async (response) => (await response.clone().text()) === "busy",
+      noDelay,
+    );
+
+    expect(calls).toBe(2);
+    expect(await res.text()).toBe("app said no");
   });
 
-  it("is false for a 429 the app authored", () => {
-    expect(isServiceThrottle(new Response(null, { status: 429 }))).toBe(false);
-  });
+  it("is absent where a host names none, so no response is retried", async () => {
+    let calls = 0;
+    const res = await retryTransientOrigin(
+      async () => {
+        calls++;
+        return throttled();
+      },
+      undefined,
+      noDelay,
+    );
 
-  it("is false for a non-429 that happens to have x-amzn-errortype", () => {
-    expect(
-      isServiceThrottle(
-        new Response(null, { status: 500, headers: { "x-amzn-errortype": "InternalError" } }),
-      ),
-    ).toBe(false);
+    expect(res.status).toBe(429);
+    expect(calls).toBe(1);
   });
 });

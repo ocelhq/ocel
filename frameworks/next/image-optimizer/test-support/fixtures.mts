@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { CompiledImageConfig, ImageOriginRequest } from "../src/contract.mjs";
+import type { CompiledImageConfig, ImageOriginRequest } from "@framework/next-protocol/image";
 import type { ObjectStore, StoredObject } from "../src/store.mjs";
 
 export const ASSET_PREFIX = "prod/proj1/web/r3f8a1c9d/assets";

@@ -1,6 +1,5 @@
 export const CACHE_STATUS = "x-ocel-cache";
 export const NEXT_CACHE_STATUS = "x-nextjs-cache";
-export const VERCEL_CACHE_STATUS = "x-vercel-cache";
 
 export type CacheStatus = "HIT" | "PRERENDER" | "MISS" | "STALE" | "BYPASS";
 
@@ -61,15 +60,6 @@ export function withStatus(response: Response, status: CacheStatus): Response {
   const headers = new Headers(response.headers);
   headers.set(CACHE_STATUS, status);
   return respond(response, headers);
-}
-
-export function withVercelCacheAlias(response: Response, enabled: boolean | undefined): Response {
-  if (!enabled) return response;
-  const status = response.headers.get(CACHE_STATUS);
-  if (status === null) return response;
-  const aliased = new Response(response.body, response);
-  aliased.headers.set(VERCEL_CACHE_STATUS, status);
-  return aliased;
 }
 
 export function headResponse(response: Response): Response {

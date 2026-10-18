@@ -1,17 +1,24 @@
 import { describe, expect, test } from "vitest";
-import { validate } from "../src/validate.mjs";
-import { imageConfig, payload } from "../test-support/fixtures.mjs";
+import { type ImageQuery, type ImageRules, validateImage } from "../src/image.mjs";
 
-function check(overrides: Parameters<typeof payload>[1], config = imageConfig()) {
-  return validate(payload(config, overrides), config);
+function imageRules(overrides: Partial<ImageRules> = {}): ImageRules {
+  return {
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [32, 48, 64, 96, 128, 256, 384],
+    qualities: [75],
+    domains: [],
+    remotePatterns: [{ protocol: "https", hostname: "^cdn\\.example\\.com$", pathname: "^\\/.*$" }],
+    localPatterns: [{ pathname: "^\\/.*$", search: "" }],
+    ...overrides,
+  };
 }
 
-function rejects(
-  overrides: Parameters<typeof payload>[1],
-  message: string,
-  config?: ReturnType<typeof imageConfig>,
-) {
-  const result = check(overrides, config);
+function check(overrides: Partial<ImageQuery>, rules = imageRules()) {
+  return validateImage({ url: "/logo.png", w: 640, q: 75, ...overrides }, rules);
+}
+
+function rejects(overrides: Partial<ImageQuery>, message: string, rules?: ImageRules) {
+  const result = check(overrides, rules);
   expect(result.ok).toBe(false);
   if (result.ok) return;
   expect(result.status).toBe(400);
@@ -24,10 +31,7 @@ describe("url", () => {
   });
 
   test("cannot be an array", () => {
-    rejects(
-      { url: ["/a.png", "/b.png"] as unknown as string },
-      '"url" parameter cannot be an array',
-    );
+    rejects({ url: ["/a.png", "/b.png"] }, '"url" parameter cannot be an array');
   });
 
   test("too long", () => {
@@ -48,7 +52,7 @@ describe("url", () => {
   });
 
   test("relative and outside localPatterns", () => {
-    const config = imageConfig({
+    const config = imageRules({
       localPatterns: [{ pathname: "^\\/assets\\/.*$", search: "" }],
     });
     rejects({ url: "/elsewhere/a.png" }, '"url" parameter is not allowed', config);
@@ -60,15 +64,11 @@ describe("url", () => {
   });
 
   test("an empty localPatterns array denies every local path", () => {
-    rejects(
-      { url: "/a.png" },
-      '"url" parameter is not allowed',
-      imageConfig({ localPatterns: [] }),
-    );
+    rejects({ url: "/a.png" }, '"url" parameter is not allowed', imageRules({ localPatterns: [] }));
   });
 
   test("an absent localPatterns allows every local path", () => {
-    const config = imageConfig({ localPatterns: undefined });
+    const config = imageRules({ localPatterns: undefined });
     expect(check({ url: "/anything/at/all.png?v=1" }, config).ok).toBe(true);
   });
 
@@ -87,7 +87,7 @@ describe("url", () => {
   });
 
   test("the compiled hostname regex is anchored, so a suffix attack fails", () => {
-    const config = imageConfig({
+    const config = imageRules({
       remotePatterns: [
         {
           protocol: "https",
@@ -112,7 +112,7 @@ describe("url", () => {
   });
 
   test("domains matches an exact hostname", () => {
-    const config = imageConfig({ domains: ["images.example.org"], remotePatterns: [] });
+    const config = imageRules({ domains: ["images.example.org"], remotePatterns: [] });
     expect(check({ url: "https://images.example.org/a.png" }, config).ok).toBe(true);
     rejects(
       { url: "https://sub.images.example.org/a.png" },
@@ -124,19 +124,16 @@ describe("url", () => {
 
 describe("width and quality", () => {
   test("w required", () => {
-    rejects({ w: undefined as unknown as number }, '"w" parameter (width) is required');
+    rejects({ w: undefined }, '"w" parameter (width) is required');
   });
 
   test("w cannot be an array", () => {
-    rejects({ w: [640, 750] as unknown as number }, '"w" parameter (width) cannot be an array');
+    rejects({ w: [640, 750] }, '"w" parameter (width) cannot be an array');
   });
 
   test("w must be an integer", () => {
     rejects({ w: 99.9 }, '"w" parameter (width) must be an integer greater than 0');
-    rejects(
-      { w: "640" as unknown as number },
-      '"w" parameter (width) must be an integer greater than 0',
-    );
+    rejects({ w: "640" }, '"w" parameter (width) must be an integer greater than 0');
   });
 
   test("w not in deviceSizes union imageSizes", () => {
@@ -145,11 +142,11 @@ describe("width and quality", () => {
   });
 
   test("q required", () => {
-    rejects({ q: undefined as unknown as number }, '"q" parameter (quality) is required');
+    rejects({ q: undefined }, '"q" parameter (quality) is required');
   });
 
   test("q cannot be an array", () => {
-    rejects({ q: [75, 80] as unknown as number }, '"q" parameter (quality) cannot be an array');
+    rejects({ q: [75, 80] }, '"q" parameter (quality) cannot be an array');
   });
 
   test("q must be an integer between 1 and 100", () => {
@@ -157,12 +154,12 @@ describe("width and quality", () => {
     rejects(
       { q: 0 },
       '"q" parameter (quality) must be an integer between 1 and 100',
-      imageConfig({ qualities: undefined }),
+      imageRules({ qualities: undefined }),
     );
     rejects(
       { q: 101 },
       '"q" parameter (quality) must be an integer between 1 and 100',
-      imageConfig({ qualities: undefined }),
+      imageRules({ qualities: undefined }),
     );
   });
 
@@ -171,14 +168,11 @@ describe("width and quality", () => {
   });
 
   test("w=0 with no q is a quality error, not a width error", () => {
-    rejects({ w: 0, q: undefined as unknown as number }, '"q" parameter (quality) is required');
+    rejects({ w: 0, q: undefined }, '"q" parameter (quality) is required');
   });
 
   test("w=99.9 with no q is a width error", () => {
-    rejects(
-      { w: 99.9, q: undefined as unknown as number },
-      '"w" parameter (width) must be an integer greater than 0',
-    );
+    rejects({ w: 99.9, q: undefined }, '"w" parameter (width) must be an integer greater than 0');
   });
 
   test("w=0 with a valid q is a width error", () => {

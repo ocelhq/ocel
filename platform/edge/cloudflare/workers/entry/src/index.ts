@@ -28,7 +28,7 @@ import {
 } from "./gate";
 import { workersCacheImage } from "./image";
 import { nodeOrigin } from "./node";
-import { originFetchFor } from "./origin-fetch";
+import { originFetchFor, originThrottleFor } from "./origin-fetch";
 import { findPreviewTarget } from "./preview";
 import {
   answerPurgeOnWorker,
@@ -63,7 +63,10 @@ function hostRequestInit(request: Request): HostRequestExtras {
   return { cf: request.cf };
 }
 
-export type ResolveBase = Pick<RouteDeps, "fetch" | "originFetch" | "imageOrigin"> & {
+export type ResolveBase = Pick<
+  RouteDeps,
+  "fetch" | "originFetch" | "imageOrigin" | "isOriginThrottle"
+> & {
   imageOptimizerUrl?: string;
   serving: ServingPorts;
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
@@ -322,6 +325,7 @@ export default {
     const serveRequest = await resolveServe(releases, {
       fetch,
       originFetch,
+      isOriginThrottle: originThrottleFor(env),
       imageOrigin: functionUrlImageOrigin(env.OCEL_IMAGE_OPTIMIZER_URL, originFetch ?? fetch),
       imagesAtDeployment:
         !env.OCEL_IMAGE_OPTIMIZER_URL && env.OCEL_ORIGIN_CLIENT_CERTIFICATE !== undefined,

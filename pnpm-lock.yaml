@@ -445,6 +445,9 @@ importers:
 
   frameworks/next/image-optimizer:
     dependencies:
+      '@framework/next-protocol':
+        specifier: workspace:*
+        version: link:../protocol
       ipaddr.js:
         specifier: ^2.4.0
         version: 2.4.0
@@ -477,6 +480,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
 
   frameworks/next/router:
     dependencies:
@@ -802,6 +808,9 @@ importers:
       '@framework/next-image-optimizer':
         specifier: workspace:*
         version: link:../../../../frameworks/next/image-optimizer
+      '@framework/next-protocol':
+        specifier: workspace:*
+        version: link:../../../../frameworks/next/protocol
     devDependencies:
       '@types/node':
         specifier: ^24

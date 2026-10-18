@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { LauncherCache, LauncherConfig } from "@framework/next-protocol/launcher";
 
 export const previewModeId = "test-preview-id";
 
@@ -29,41 +30,41 @@ module.exports = { default: StubCacheHandler, __esModule: true };
 export interface NextProjectFixture {
   projectDir: string;
   cacheHandlerPath: string;
+  nextConfig: LauncherConfig;
+}
+
+export function launcherConfig(cache: Partial<LauncherCache> = {}): LauncherConfig {
+  return {
+    basePath: "",
+    i18n: null,
+    trailingSlash: false,
+    experimental: {},
+    clientAssetSuffix: "",
+    distDir: ".next",
+    cache: {
+      fetchCacheKeyPrefix: "prefix",
+      isrFlushToDisk: true,
+      cacheMaxMemorySize: 0,
+      previewModeId,
+      routes: {},
+      dynamicRoutes: [],
+      ...cache,
+    },
+  };
+}
+
+export function withLauncherConfig(source: string, nextConfig: LauncherConfig): string {
+  return `${source}\nmodule.exports.nextConfig = ${JSON.stringify(nextConfig)};\n`;
 }
 
 export async function writeNextProjectFixture(
   projectDir: string,
-  configOverrides: Record<string, unknown> = {},
-  prerenderOverrides: Record<string, unknown> = {},
+  cache: Partial<LauncherCache> = {},
 ): Promise<NextProjectFixture> {
   await mkdir(join(projectDir, ".next"), { recursive: true });
 
   const cacheHandlerPath = join(projectDir, "stub-cache-handler.cjs");
   await writeFile(cacheHandlerPath, cacheHandlerModule);
 
-  const config = {
-    distDir: ".next",
-    cacheMaxMemorySize: 0,
-    experimental: {
-      fetchCacheKeyPrefix: "prefix",
-      isrFlushToDisk: true,
-    },
-    ...configOverrides,
-  };
-  await writeFile(
-    join(projectDir, ".next/required-server-files.json"),
-    JSON.stringify({ version: 1, config }),
-  );
-  await writeFile(
-    join(projectDir, ".next/prerender-manifest.json"),
-    JSON.stringify({
-      version: 4,
-      routes: {},
-      dynamicRoutes: {},
-      preview: { previewModeId },
-      ...prerenderOverrides,
-    }),
-  );
-
-  return { projectDir, cacheHandlerPath };
+  return { projectDir, cacheHandlerPath, nextConfig: launcherConfig(cache) };
 }

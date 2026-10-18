@@ -7,7 +7,6 @@
   "description": "the host-neutral optimizer that answers a Next app's /_next/image requests",
   "exports": {
     "./config": "./src/config.mts",
-    "./contract": "./src/contract.mts",
     "./errors": "./src/errors.mts",
     "./optimize": "./src/optimize.mts",
     "./stage-sharp": "./scripts/stage-sharp.mjs",
@@ -20,6 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@framework/next-protocol": "workspace:*",
     "ipaddr.js": "^2.4.0",
     "sharp": "^0.35.3",
     "undici": "^8.9.0"

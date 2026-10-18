@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import {
@@ -94,10 +95,33 @@ test("the GCP service refuses an image request that is not an object", async () 
   }
 });
 
-test("the GCP service refuses an image request larger than any the edge sends", async () => {
+test("the GCP service optimizes an image a route answered, carried in the request", async () => {
+  const noise = randomBytes(120 * 120 * 3);
+  const png = await sharp(noise, { raw: { width: 120, height: 120, channels: 3 } })
+    .png()
+    .toBuffer();
+  expect(png.byteLength).toBeGreaterThan(16 * 1024);
+
   const response = await fetch(`${origin}/_ocel/image`, {
     method: "POST",
-    body: JSON.stringify(payload({ url: `/${"a".repeat(20_000)}` })),
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(
+      payload({
+        url: "/api/og",
+        routeImage: { base64: png.toString("base64"), cacheControl: null, etag: null },
+      }),
+    ),
+  });
+
+  expect(response.status).toBe(200);
+  const resized = await sharp(Buffer.from(await response.arrayBuffer())).metadata();
+  expect(resized).toMatchObject({ format: "webp", width: 64 });
+});
+
+test("the GCP service refuses an image request larger than Cloud Run admits", async () => {
+  const response = await fetch(`${origin}/_ocel/image`, {
+    method: "POST",
+    body: JSON.stringify(payload({ url: `/${"a".repeat(32 * 1024 * 1024)}` })),
   });
 
   expect(response.status).toBe(413);

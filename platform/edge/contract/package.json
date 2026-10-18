@@ -12,6 +12,7 @@
     "./client-address": "./src/client-address.mts",
     "./client-authorization": "./src/client-authorization.mts",
     "./edge-cache": "./src/edge-cache.mts",
+    "./edge-bundle": "./src/edge-bundle.mts",
     "./empty-body": "./src/empty-body.mts",
     "./gate": "./src/gate.mts",
     "./purge": "./src/purge.mts",

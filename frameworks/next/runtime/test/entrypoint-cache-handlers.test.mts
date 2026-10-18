@@ -7,7 +7,10 @@ import OcelCacheHandler from "../src/cache-handler.mjs";
 import { installNextHost } from "../src/host.mjs";
 import useCacheDefault from "../src/use-cache-default.mjs";
 import useCacheRemote from "../src/use-cache-remote.mjs";
-import { writeNextProjectFixture } from "../test-support/next-project-fixture.mjs";
+import {
+  withLauncherConfig,
+  writeNextProjectFixture,
+} from "../test-support/next-project-fixture.mjs";
 
 const launcherModule = `module.exports = { async handler(req, res) { res.end("rendered"); } };
 `;
@@ -39,9 +42,9 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => controlServer.listen(sockPath, resolve));
 
   const projectDir = join(dir, "project");
-  await writeNextProjectFixture(projectDir);
+  const fixture = await writeNextProjectFixture(projectDir);
   const launcherPath = join(projectDir, "__next_launcher.cjs");
-  await writeFile(launcherPath, launcherModule);
+  await writeFile(launcherPath, withLauncherConfig(launcherModule, fixture.nextConfig));
 
   process.env.OCEL_ORIGIN_DISPATCH = "1";
   process.env.OCEL_ORIGIN_SIGNED = "1";

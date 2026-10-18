@@ -73,11 +73,13 @@ describe("the PurgeQueue object", () => {
   it("refuses a raise for a prefix that names no release, and records nothing", async () => {
     const queue = freshQueue();
 
-    await expect(
-      queue.raise({ slug: "p1", isrPrefix: "not/a/release" }, "purge", [
-        { tag: "r1|a", raisedAt: 7_000 },
-      ]),
-    ).rejects.toThrow();
+    await runInDurableObject(queue, async (instance) => {
+      await expect(
+        instance.raise({ slug: "p1", isrPrefix: "not/a/release" }, "purge", [
+          { tag: "r1|a", raisedAt: 7_000 },
+        ]),
+      ).rejects.toThrow(/not the ISR prefix of a release/);
+    });
     expect(await queue.readTimes(["r1|a"])).toEqual({});
   });
 

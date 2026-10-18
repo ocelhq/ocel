@@ -1,14 +1,15 @@
+import type { ImageConfig, ImageOriginRequest } from "@framework/next-protocol/image";
 import { describe, expect, it, vi } from "vitest";
 import fixtures from "../fixtures/image-conformance.json" with { type: "json" };
 import {
   deploymentImageOrigin,
   getSupportedMimeType,
-  type ImageConfig,
-  type ImageOriginRequest,
   isImageRequest,
   serveImage,
   validateImageRequest,
 } from "../src/image.mjs";
+import { serve } from "../src/index.mjs";
+import { baseDeps } from "../test-support/dispatch-scenario.mjs";
 
 const ASSET_PREFIX = "prod/p1/web/r3f8a1c9d/assets";
 
@@ -417,5 +418,158 @@ describe("deploymentImageOrigin", () => {
     expect(deploymentImageOrigin(undefined, fetch)).toBeUndefined();
     expect(deploymentImageOrigin("", fetch)).toBeUndefined();
     expect(deploymentImageOrigin("not a url", fetch)).toBeUndefined();
+  });
+});
+
+describe("a local route source", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  function base64(bytes: Uint8Array): string {
+    return Buffer.from(bytes).toString("base64");
+  }
+
+  function routeDeps(overrides: Partial<Parameters<typeof serveImage>[2]> = {}) {
+    const seen: ImageOriginRequest[] = [];
+    const routed: Request[] = [];
+    const deps: Parameters<typeof serveImage>[2] = {
+      config: BASE_CONFIG,
+      basePath: "",
+      assetPrefix: ASSET_PREFIX,
+      slug: "p1",
+      appBuildId: "d1",
+      app: "web",
+      assetHashes: { "/a.png": "hash-a" },
+      origin: async (payload) => {
+        seen.push(payload);
+        return new Response("optimized", { headers: { "content-type": "image/webp" } });
+      },
+      route: async (request) => {
+        routed.push(request);
+        return new Response(PNG, {
+          headers: { "content-type": "image/png", "cache-control": "max-age=60", etag: '"og"' },
+        });
+      },
+      ...overrides,
+    };
+    return { deps, seen, routed };
+  }
+
+  it("is fetched through the app's own routes and handed to the optimizer", async () => {
+    const { deps, seen, routed } = routeDeps();
+    const url = imageUrl("url=%2Fapi%2Fog&w=640&q=75");
+
+    const response = await serveImage(new Request(url), url, deps);
+
+    expect(await response.text()).toBe("optimized");
+    expect(routed.map((request) => [request.method, request.url])).toEqual([
+      ["GET", "https://app.example/api/og"],
+    ]);
+    expect(seen[0]!.routeImage).toEqual({
+      base64: base64(PNG),
+      cacheControl: "max-age=60",
+      etag: '"og"',
+    });
+  });
+
+  it("carries none of the visitor's headers into the route", async () => {
+    const { deps, routed } = routeDeps();
+    const url = imageUrl("url=%2Fapi%2Fog&w=640&q=75");
+
+    await serveImage(
+      new Request(url, { method: "HEAD", headers: { cookie: "session=1", accept: "image/webp" } }),
+      url,
+      deps,
+    );
+
+    expect(routed[0]!.method).toBe("GET");
+    expect([...routed[0]!.headers.keys()]).toEqual([]);
+  });
+
+  it("is never fetched through the routes when a static asset backs the path", async () => {
+    const { deps, seen, routed } = routeDeps();
+    const url = imageUrl("url=%2Fa.png&w=640&q=75");
+
+    await serveImage(new Request(url), url, deps);
+
+    expect(routed).toEqual([]);
+    expect(seen[0]!.routeImage).toBeUndefined();
+  });
+
+  it("is an upstream failure when the route answers anything but 200", async () => {
+    const { deps, seen } = routeDeps({
+      route: async () => new Response("missing", { status: 404 }),
+    });
+    const url = imageUrl("url=%2Fapi%2Fog&w=640&q=75");
+
+    const response = await serveImage(new Request(url), url, deps);
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe('"url" parameter is valid but upstream response is invalid');
+    expect(seen).toEqual([]);
+  });
+
+  it("is refused once the route's body passes images.maximumResponseBody", async () => {
+    const { deps, seen } = routeDeps({
+      config: configWith({ maximumResponseBody: PNG.byteLength - 1 }),
+    });
+    const url = imageUrl("url=%2Fapi%2Fog&w=640&q=75");
+
+    const response = await serveImage(new Request(url), url, deps);
+
+    expect(response.status).toBe(400);
+    expect(seen).toEqual([]);
+  });
+
+  it("reaches the function that serves the route when served through the router", async () => {
+    const seen: ImageOriginRequest[] = [];
+    const called: string[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/api/og"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: { "/api/og": { kind: "function", id: "/api/og" } },
+        images: BASE_CONFIG,
+        assetHashes: {},
+      },
+      functionUrls: { "/api/og": "https://og.fn.example" },
+      fetch: (async (input: Request) => {
+        called.push(`${input.method} ${new URL(input.url).pathname}`);
+        return new Response(PNG, { headers: { "content-type": "image/png" } });
+      }) as unknown as typeof fetch,
+      imageOrigin: async (payload) => {
+        seen.push(payload);
+        return new Response("optimized", { headers: { "content-type": "image/webp" } });
+      },
+    });
+
+    const response = await serve(
+      new Request("https://app.example/_next/image?url=%2Fapi%2Fog&w=640&q=75"),
+      deps,
+    );
+
+    expect(await response.text()).toBe("optimized");
+    expect(called).toEqual(["GET /api/og"]);
+    expect(seen[0]!.routeImage?.base64).toBe(base64(PNG));
+  });
+
+  it("is optimized past the host's image cache, which cannot carry its bytes", async () => {
+    const imageCache = vi.fn(async () => new Response("cached"));
+    const { deps, seen } = routeDeps({ imageCache });
+    const url = imageUrl("url=%2Fapi%2Fog&w=640&q=75");
+
+    const response = await serveImage(new Request(url), url, deps);
+
+    expect(await response.text()).toBe("optimized");
+    expect(imageCache).not.toHaveBeenCalled();
+    expect(seen).toHaveLength(1);
   });
 });

@@ -1,4 +1,4 @@
-import type { CompiledImageConfig } from "./contract.mjs";
+import type { CompiledImageConfig } from "@framework/next-protocol/image";
 import { BootstrapError, ImageError } from "./errors.mjs";
 import { sharp } from "./sharp.mjs";
 import {

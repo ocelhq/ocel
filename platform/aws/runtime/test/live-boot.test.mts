@@ -2,7 +2,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeNextProjectFixture } from "@framework/next-runtime/test-support/next-project-fixture";
+import {
+  withLauncherConfig,
+  writeNextProjectFixture,
+} from "@framework/next-runtime/test-support/next-project-fixture";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
@@ -98,14 +101,17 @@ test("defers the application's import until the first push, then runs it with th
 test("defers the Next launcher's import until the first push", async () => {
   vi.stubEnv("OCEL_LIVE_KEYS", "API_TOKEN");
   const projectDir = join(dir, "project");
-  await writeNextProjectFixture(projectDir);
+  const fixture = await writeNextProjectFixture(projectDir);
   const launcher = join(projectDir, "__next_launcher.cjs");
   await writeFile(
     launcher,
-    `globalThis.__appImportedAt = (globalThis.__appImportedAt ?? 0) + 1;
+    withLauncherConfig(
+      `globalThis.__appImportedAt = (globalThis.__appImportedAt ?? 0) + 1;
 globalThis.__appSawLive = globalThis[Symbol.for("ocel.env.liveValues")]?.values?.API_TOKEN;
 module.exports = { handler(req, res) { res.end("ok"); } };
 `,
+      fixture.nextConfig,
+    ),
   );
   vi.stubEnv("OCEL_HANDLER", launcher);
 

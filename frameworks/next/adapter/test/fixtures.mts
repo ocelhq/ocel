@@ -1,3 +1,17 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+export async function writePrerenderManifest(
+  distDir: string,
+  manifest: Record<string, unknown> = {},
+): Promise<void> {
+  await mkdir(distDir, { recursive: true });
+  await writeFile(
+    join(distDir, "prerender-manifest.json"),
+    JSON.stringify({ version: 4, routes: {}, dynamicRoutes: {}, preview: {}, ...manifest }),
+  );
+}
+
 export const defaultImages = {
   deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
   imageSizes: [32, 48, 64, 96, 128, 256, 384],

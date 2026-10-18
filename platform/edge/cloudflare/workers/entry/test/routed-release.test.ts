@@ -362,7 +362,7 @@ describe("the image origin of a routed deployment", () => {
 
   function imageRelease(base: Partial<ResolveBase>) {
     return servedNextRelease({
-      table: { rootFunction: "bundle-0", images },
+      table: { rootFunction: "bundle-0", images, assetHashes: { "/a.png": "a-hash" } },
       record: { functionUrls: { "bundle-0": entryUrl }, isrPrefix: UNTOKENED_ISR_PREFIX },
       base,
     });

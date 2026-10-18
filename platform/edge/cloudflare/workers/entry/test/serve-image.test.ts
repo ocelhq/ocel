@@ -1,5 +1,5 @@
 import { createExecutionContext } from "cloudflare:test";
-import type { ImageOriginRequest } from "@framework/next-router/image";
+import type { ImageOriginRequest } from "@framework/next-protocol/image";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { Serve } from "../src/serve";

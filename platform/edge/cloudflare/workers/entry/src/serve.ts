@@ -1,9 +1,9 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
+import type { ImageOriginRequest } from "@framework/next-protocol/image";
 import { deltaSeconds } from "@framework/next-router/http-cache";
 import {
   functionUrlImageOrigin,
   type ImageCall,
-  type ImageOriginRequest,
   originImagePath,
   servedImage,
 } from "@framework/next-router/image";

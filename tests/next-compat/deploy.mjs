@@ -52,7 +52,6 @@ const appDir = process.cwd();
 const CHILD_ENV = {
   ...process.env,
   NEXT_PRIVATE_TEST_MODE: "e2e",
-  OCEL_E2E_VERCEL_CACHE_HEADER: "1",
   OCEL_EDGE_OBSERVABILITY: "off",
   ...SKIP_CHECKS_ENV,
   ...(hasTypeScriptNextConfig() ? { __NEXT_NODE_NATIVE_TS_LOADER_ENABLED: "true" } : {}),

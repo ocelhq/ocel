@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { CompiledImageConfig } from "./contract.mjs";
+import type { CompiledImageConfig } from "@framework/next-protocol/image";
 import { BootstrapError } from "./errors.mjs";
 import { imageConfigKey } from "./keys.mjs";
 import type { ObjectStore } from "./store.mjs";
@@ -65,6 +65,7 @@ function assertShape(config: CompiledImageConfig, key: string): void {
       ["domains", Array.isArray(config?.domains)],
       ["remotePatterns", Array.isArray(config?.remotePatterns)],
       ["minimumCacheTTL", typeof config?.minimumCacheTTL === "number"],
+      ["maximumRedirects", typeof config?.maximumRedirects === "number"],
       ["maximumResponseBody", typeof config?.maximumResponseBody === "number"],
       ["dangerouslyAllowSVG", typeof config?.dangerouslyAllowSVG === "boolean"],
       ["dangerouslyAllowLocalIP", typeof config?.dangerouslyAllowLocalIP === "boolean"],

@@ -5,7 +5,10 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import { writeNextProjectFixture } from "@framework/next-runtime/test-support/next-project-fixture";
+import {
+  withLauncherConfig,
+  writeNextProjectFixture,
+} from "@framework/next-runtime/test-support/next-project-fixture";
 import { init, parse } from "es-module-lexer";
 import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 
@@ -241,11 +244,14 @@ test("no file in the runtime directory contains a path of the checkout it was bu
 
 test("the entrypoint serves a Next app on the port Cloud Run names", async () => {
   const projectDir = join(dist, "project");
-  await writeNextProjectFixture(projectDir);
+  const fixture = await writeNextProjectFixture(projectDir);
   const launcher = join(projectDir, "__next_launcher.cjs");
   await writeFile(
     launcher,
-    `module.exports = { async handler(req, res) { res.end("rendered"); } };\n`,
+    withLauncherConfig(
+      `module.exports = { async handler(req, res) { res.end("rendered"); } };\n`,
+      fixture.nextConfig,
+    ),
   );
   const port = await freePort();
 

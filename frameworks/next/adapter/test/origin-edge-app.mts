@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { vi } from "vitest";
 
 import adapter from "../src/next-adapter.mjs";
-import { defaultImages } from "./fixtures.mjs";
+import { defaultImages, writePrerenderManifest } from "./fixtures.mjs";
 
 export interface OriginEdgeAppOptions {
   edgeKind?: string;
@@ -76,6 +76,7 @@ export async function buildOriginEdgeApp(
   const edgeAssets = options.edgeAssets ?? {};
 
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-origin-edge-"));
+  await writePrerenderManifest(join(projectDir, ".next"));
   const write = async (rel: string, body: string) => {
     const abs = join(projectDir, rel);
     await mkdir(dirname(abs), { recursive: true });

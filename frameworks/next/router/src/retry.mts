@@ -1,6 +1,4 @@
-export function isServiceThrottle(response: Response): boolean {
-  return response.status === 429 && response.headers.has("x-amzn-errortype");
-}
+export type OriginThrottle = (response: Response) => boolean | Promise<boolean>;
 
 interface RetrySeam {
   sleep: (ms: number) => Promise<void>;
@@ -17,6 +15,7 @@ const BASE_DELAY_MS = 50;
 
 export async function retryTransientOrigin(
   attempt: () => Promise<Response>,
+  isThrottle: OriginThrottle | undefined,
   seam: Partial<RetrySeam> = {},
 ): Promise<Response> {
   const { sleep, random } = { ...DEFAULT_SEAM, ...seam };
@@ -24,9 +23,9 @@ export async function retryTransientOrigin(
   for (let i = 0; i < ATTEMPTS; i++) {
     try {
       const response = await attempt();
-      if (!isServiceThrottle(response)) return response;
+      if (!(await isThrottle?.(response))) return response;
       await response.body?.cancel();
-      lastError = new Error(`middleware origin throttled (429) on attempt ${i + 1}/${ATTEMPTS}`);
+      lastError = new Error(`middleware origin throttled on attempt ${i + 1}/${ATTEMPTS}`);
     } catch (error) {
       lastError = error;
     }

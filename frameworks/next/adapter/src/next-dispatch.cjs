@@ -262,6 +262,7 @@ module.exports = function createDispatch({
   }
 
   return {
+    nextConfig,
     handler(req, res, ctx) {
       const pathname = (req.url || "/").split("?")[0];
       const key =

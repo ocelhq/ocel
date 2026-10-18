@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import type { CompiledImageConfig } from "@framework/next-protocol/image";
 import type {
   ImageConfigComplete,
   LocalPattern,
@@ -13,37 +14,6 @@ type MakeRe = (glob: string, options?: { dot?: boolean }) => RegExp;
 function appMakeRe(): MakeRe {
   const appRequire = createRequire(join(process.cwd(), "package.json"));
   return (appRequire("next/dist/compiled/picomatch") as { makeRe: MakeRe }).makeRe;
-}
-
-export interface CompiledRemotePattern {
-  protocol?: string;
-  hostname: string;
-  port?: string;
-  pathname: string;
-  search?: string;
-}
-
-export interface CompiledLocalPattern {
-  pathname: string;
-  search?: string;
-}
-
-export interface CompiledImageConfig {
-  path: string;
-  deviceSizes: number[];
-  imageSizes: number[];
-  qualities?: number[];
-  formats: ImageConfigComplete["formats"];
-  domains: string[];
-  minimumCacheTTL: number;
-  maximumRedirects: number;
-  maximumResponseBody: number;
-  dangerouslyAllowSVG: boolean;
-  dangerouslyAllowLocalIP: boolean;
-  contentSecurityPolicy: string;
-  contentDispositionType: ImageConfigComplete["contentDispositionType"];
-  remotePatterns: CompiledRemotePattern[];
-  localPatterns?: CompiledLocalPattern[];
 }
 
 function compilePathname(makeRe: MakeRe, glob: string | undefined): string {

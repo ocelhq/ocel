@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type http from "node:http";
 import { join } from "node:path";
-import type { ProjectManifest } from "./project-manifest.mjs";
+import type { LauncherConfig } from "@framework/next-protocol/launcher";
 
 const MAIN_KEY_PREFIX = "v4";
 const PRERENDER_REVALIDATE_HEADER = "x-prerender-revalidate";
@@ -59,22 +59,20 @@ class PagesRuntimeIncrementalCache {
 export type IncrementalCacheFactory = (req: http.IncomingMessage) => unknown;
 
 export function newIncrementalCacheFactory(
-  manifest: ProjectManifest | null,
+  config: LauncherConfig,
+  projectDir: string,
   CacheHandler: new (opts: any) => any,
-): IncrementalCacheFactory | null {
-  if (!manifest) return null;
-  const { config, distDir } = manifest;
-  const fetchCacheKeyPrefix = config.experimental?.fetchCacheKeyPrefix ?? "";
-  const previewModeId: string | undefined = manifest.prerender?.preview?.previewModeId;
+): IncrementalCacheFactory {
+  const { fetchCacheKeyPrefix, isrFlushToDisk, cacheMaxMemorySize, previewModeId } = config.cache;
 
   return (req) =>
     new PagesRuntimeIncrementalCache({
       handler: new CacheHandler({
         dev: false,
-        flushToDisk: config.experimental?.isrFlushToDisk,
-        serverDistDir: join(distDir, "server"),
+        flushToDisk: isrFlushToDisk,
+        serverDistDir: join(projectDir, config.distDir, "server"),
         revalidatedTags: [],
-        maxMemoryCacheSize: config.cacheMaxMemorySize,
+        maxMemoryCacheSize: cacheMaxMemorySize,
         _requestHeaders: req.headers,
         fetchCacheKeyPrefix,
       }),

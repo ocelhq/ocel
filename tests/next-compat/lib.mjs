@@ -401,7 +401,6 @@ export const GOLDEN_VOLATILE_HEADERS = new Set([
   "age",
   "x-nextjs-cache",
   "x-ocel-cache",
-  "x-vercel-cache",
   "cf-ray",
   "cf-cache-status",
   "x-amzn-requestid",

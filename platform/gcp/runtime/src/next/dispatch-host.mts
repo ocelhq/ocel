@@ -5,6 +5,7 @@ import { fetchUndecoded } from "@framework/node-runtime/undecoded-fetch";
 import { cloudCdnRelease } from "../cache/cloud-cdn-tags.mjs";
 import { readAssetStorage } from "./asset-storage.mjs";
 import { newCloudCdnDispatchInvoke } from "./cloud-cdn.mjs";
+import { isCloudRunThrottle } from "./cloud-run-throttle.mjs";
 import { newCloudStorageAssetBucket, newCloudStorageObjectStore } from "./cloud-storage-assets.mjs";
 import { newInProcessImageOrigin } from "./image-origin.mjs";
 
@@ -23,6 +24,7 @@ export function readGcpDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string)
   const storage = readAssetStorage(env);
   const host = readDispatchHost(env, localOrigin, {
     originFetch: fetchUndecoded,
+    isOriginThrottle: isCloudRunThrottle,
     ...(storage && {
       assetBucket: newCloudStorageAssetBucket(storage),
       imageOrigin: newInProcessImageOrigin(newCloudStorageObjectStore(storage)),

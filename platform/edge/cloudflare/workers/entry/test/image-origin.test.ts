@@ -1,8 +1,7 @@
+import type { ImageConfig, ImageOriginRequest } from "@framework/next-protocol/image";
 import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import {
   functionUrlImageOrigin,
-  type ImageConfig,
-  type ImageOriginRequest,
   serveImage,
   unprovisionedImageOrigin,
 } from "@framework/next-router/image";

@@ -1,5 +1,5 @@
+import type { ImageConfig, ImageOriginRequest } from "@framework/next-protocol/image";
 import fixtures from "@framework/next-router/fixtures/image-conformance.json";
-import type { ImageConfig, ImageOriginRequest } from "@framework/next-router/image";
 import { describe, expect, it } from "vitest";
 import { IMAGE_CALL_HEADER, RENDER_RELEASE_HEADER, readImageOptimizer } from "../src/serve-key";
 import { countingLoader, edgeBundle } from "./edge-bundle";
@@ -18,7 +18,16 @@ const ASSET_PREFIX = "prod/p1/web/r3f8a1c9d/assets";
 function imageRelease(over: NextRelease = {}) {
   return servedNextRelease({
     ...over,
-    table: { buildId: "b1", images: BASE_CONFIG, ...over.table },
+    table: {
+      buildId: "b1",
+      images: BASE_CONFIG,
+      assetHashes: {
+        "/a.png": "a-hash",
+        "/图片.png": "non-ascii-hash",
+        "/_next/static/media/logo.abc123.png": "logo-hash",
+      },
+      ...over.table,
+    },
     record: { assetPrefix: ASSET_PREFIX, isrPrefix: UNTOKENED_ISR_PREFIX, ...over.record },
     assets: { "/404.html": "<h1>not found</h1>" },
   });
@@ -302,7 +311,7 @@ describe("the /_next/image route through Workers Cache", () => {
     expect(response.headers.get("x-ocel-cache")).toBe("BYPASS");
   });
 
-  it("keys a relative image by the build its release names", async () => {
+  it("keys a static image by its asset hash, whatever build its release names", async () => {
     const keyed = async (buildId: string) => {
       const fake = fakeServing(optimized);
       await imageRelease({
@@ -313,7 +322,6 @@ describe("the /_next/image route through Workers Cache", () => {
       return fake.calls[0].request.url;
     };
 
-    expect(await keyed("d1")).toBe(await keyed("d1"));
-    expect(await keyed("d1")).not.toBe(await keyed("d2"));
+    expect(await keyed("d1")).toBe(await keyed("d2"));
   });
 });
