@@ -13,8 +13,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	cloudfrontpart "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
 )
 
 const (

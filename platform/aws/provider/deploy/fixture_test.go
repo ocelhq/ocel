@@ -19,42 +19,15 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	smithy "github.com/aws/smithy-go"
 
+	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 )
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := filepath.Abs(".")
-	if err != nil {
-		t.Fatalf("resolve working directory: %v", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("no go.work found above the working directory")
-		}
-		dir = parent
-	}
-}
-
-func nextCacheFixture(t *testing.T, name string) []byte {
-	t.Helper()
-	path := filepath.Join(repoRoot(t), "frameworks", "next", "cache", "fixtures", name)
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", name, err)
-	}
-	return body
-}
 
 func buildIDFor(label string) string {
 	if naming.ValidateBuildID(label) == nil {
@@ -95,28 +68,8 @@ func bytecodePrefixOf(c naming.Coordinate) string {
 	return strings.TrimSuffix(c.BytecodePrefix(), naming.PathSeparator)
 }
 
-func appAssetPrefix(c naming.Coordinate) string {
-	return c.AssetKey("")
-}
-
 func appEdgeBundleKey(c naming.Coordinate) string {
 	return path.Join(c.StoragePrefix()+"edge", "bundle.json")
-}
-
-func releaseTokenFor(buildID string) string {
-	return deployedAs(buildID).Token().String()
-}
-
-func nextManifest() *contractv1.Manifest {
-	return &contractv1.Manifest{
-		Slug: "proj",
-		Apps: []*contractv1.ManifestApp{{Name: "web", Framework: &contractv1.Framework{Name: "next"},
-			Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}})}},
-	}
-}
-
-func serverlessArtifact(functions ...*contractv1.ManifestFunction) *contractv1.ManifestApp_Serverless {
-	return &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: functions}}
 }
 
 func edgeRouteTable(key string) *provider.EdgeRouteTable {
@@ -264,4 +217,72 @@ func appOfRouteTable(rel string) (string, bool) {
 		return "", false
 	}
 	return parts[1], true
+}
+
+func fixedRelease(t *testing.T) naming.ReleaseToken {
+	t.Helper()
+	release, err := naming.ParseReleaseToken("r3f8a1c90")
+	if err != nil {
+		t.Fatalf("parse release: %v", err)
+	}
+	return release
+}
+
+func testStack(t *testing.T, env, app string) naming.StackName {
+	t.Helper()
+	return naming.AppStack(env, app, fixedRelease(t))
+}
+
+func testRuntimeLayers() map[string]string {
+	return map[string]string{
+		arch.X8664: testRuntimeLayerARN(arch.X8664),
+		arch.ARM64: testRuntimeLayerARN(arch.ARM64),
+	}
+}
+
+func testRuntimeLayerARN(architecture string) string {
+	return "arn:aws:lambda:us-east-1:123456789012:layer:ocel-runtime-" + architecture + "-beefbeefbeef:3"
+}
+
+const routedManifest = `{"rootFunction":"/","buildId":"WEB1","basePath":"","pathnames":[],"routes":{},"dispatch":{}}`
+
+func routedArtifactRoot(t *testing.T) string {
+	t.Helper()
+	return writeTree(t, map[string]string{
+		"apps/web/next-route-table.json": routedManifest,
+		"apps/web/hosting.json":          `{"version":1,"framework":"next","frameworkBuildId":"WEB1","rootFunction":"/","routeTable":"next","static":{"immutablePrefixes":["/_next/static/"],"mustRevalidatePrefixes":["/_next/static/service-worker/"]}}`,
+	})
+}
+
+func routedConfig(t *testing.T, kind edge.Kind) Config {
+	t.Helper()
+	return Config{
+		ArtifactRoot:      routedArtifactRoot(t),
+		AssetBucket:       "assets-bucket",
+		ImageOptimizerURL: "https://optimizer.lambda-url.us-east-1.on.aws/",
+		RuntimeLayers:     testRuntimeLayers(),
+		Slug:              "shop",
+		Edge:              fakeEdgeOf(kind),
+		AppBoundaryARN:    componenttest.BoundaryARN,
+	}
+}
+
+func routedCoordinate(t *testing.T) naming.Coordinate {
+	t.Helper()
+	return storageCoordinate("prod", "shop", "web", fixedRelease(t))
+}
+
+func functionEnvOf(t *testing.T, rec *inputRecorder, name string) map[string]string {
+	t.Helper()
+	variables := rec.object(t, "aws:lambda/function:Function", name, "environment")["variables"]
+	if !variables.IsObject() {
+		t.Fatalf("function %s has no environment variables", name)
+	}
+	env := map[string]string{}
+	for key, value := range variables.ObjectValue() {
+		if value.IsString() {
+			env[string(key)] = value.StringValue()
+		}
+	}
+	return env
 }

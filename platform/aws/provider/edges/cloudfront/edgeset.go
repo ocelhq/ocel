@@ -8,8 +8,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	cloudfrontpart "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
 )
 
 type edgeSet struct {

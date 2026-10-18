@@ -55,7 +55,8 @@ rest is added by the first deploy that needs it, with the deploy credential, and
 | `image-optimizer` | the first deploy of an app whose build optimizes images |
 | `tag-invalidator` | the first deploy of an app that revalidates |
 | `apigateway-preview` | the first `ocel domain use --preview` behind API Gateway: the REST API that answers 404 for a preview host no preview claims |
-| `function-network` | the first deploy of a serverless app that uses a `postgres` or `kv` ocel provisions: the [private subnets and NAT gateway](#serverless-apps-and-the-vpc) its functions run in, about $36.50 a month idle. The last app out takes it down |
+| `vpc-clients` | the first deploy that declares a `postgres` or `kv`: the security group every [database and cache](#the-default-vpc) of the tier admits, and nothing else. It costs nothing |
+| `function-network` | the first deploy of a serverless app that uses a `postgres` or `kv` ocel provisions: the [private subnets and NAT gateways](#serverless-apps-and-the-vpc) its functions run in, about $73 a month idle in production and $36.50 in preview. The last app out takes it down |
 
 A dry deploy lists the parts it would add. `ocel bootstrap production` makes each recorded part
 again, and `ocel bootstrap destroy production` removes them with the rest.
@@ -130,15 +131,60 @@ export default defineConfig({
 }
 ```
 
+## The default VPC
+
+Databases and caches live in the account's default VPC, in its default subnets, as do the
+container cluster, the bastion port forwards go through and the function network. A
+deploy that declares a `postgres` or `kv`, or the first container or VPC-attached serverless app
+of a tier, reads the default VPC before any stack runs, and refuses when the region has none,
+naming what goes there:
+
+```bash
+aws ec2 create-default-vpc --region eu-west-1
+```
+
+A project of buckets, topics, tasks and realtime needs no VPC and never looks for one.
+
+Nothing in the VPC reaches a database or cache by being there. Each admits its port from the
+tier's `vpc-clients` security group alone, which ocel adds the first time a deploy declares a
+`postgres` or `kv`, and which every function in the function network, every Lambda worker,
+every container service and worker task, and the bastion's task join. A function you
+[place in your own VPC](/docs/transforms#placing-a-function-in-your-own-vpc) reaches them only
+if you add that group, listed by `ocel bootstrap status`, to its `securityGroupIds`.
+
+## Postgres
+
+`postgres("db")` is an Aurora PostgreSQL Serverless v2 cluster with one writer, encrypted at
+rest, in the default subnets.
+
+- **Capacity follows the tier.** Production runs 0.5 to 8 ACU and never pauses, so the first
+  query after a quiet spell is not a resume; at 8 ACU it holds about 1,800 connections. Its floor
+  costs about $44 a month in us-east-1. A preview runs 0 to 2 ACU and pauses when idle, costing
+  nothing then.
+- **Apps sign in as `ocel_app`, by IAM.** The cluster enables IAM database authentication and
+  the Data API. A deploy creates the `ocel_app` login role once per cluster through the Data API,
+  under the cluster's RDS-managed master secret, and makes it the owner of the database and its
+  `public` schema. An app's role is granted `rds-db:connect` on that user alone, and its runtime
+  mints a 15-minute token with the app's own credentials at cold start and at each refresh of its
+  live values; the binding carries no password. No app role may read the master secret: only the
+  deploy credential, which creates the role, does.
+- **TLS** is `verify-full` against the RDS root certificates of the cluster's region.
+- **Port forwards.** A build that reaches its resources, or `ocel dev` and `ocel run` against a
+  deployed environment, forward the port through the tier's bastion and sign in as `ocel_app`
+  with a token minted from your own credentials, which need `rds-db:connect` (the deploy
+  credential has it).
+- **Production is protected.** A production cluster has deletion protection and keeps a final
+  snapshot; `ocel destroy` turns the protection off first and plans it as a slow delete.
+
 ## KV stores
 
 `kv("cache")` is an ElastiCache Valkey replication group, cluster mode off: a primary and a
 replica in another availability zone that takes over if the primary fails. Two
 `cache.t4g.micro` nodes cost about $18.69 a month in us-east-1.
 
-- **In the VPC.** The group sits in the default VPC's subnets and admits port 6379 from inside
-  that VPC only. A container app runs there; a serverless app joins it through the
-  [function network](#serverless-apps-and-the-vpc).
+- **In the VPC.** The group sits in the default VPC's subnets and admits port 6379 from the
+  tier's [`vpc-clients`](#the-default-vpc) group alone. A container app's tasks join it; a
+  serverless app joins it through the [function network](#serverless-apps-and-the-vpc).
 - **Auth.** TLS, encrypted at rest, and an AUTH token ocel generates, kept in SSM Parameter Store
   under `/<namespace>/kv/`.
 - **`memory`** picks the cheapest node that holds it: `cache.t4g.micro` up to 256mb, then
@@ -185,12 +231,15 @@ A function in a VPC has no internet access of its own, so the part holds:
   from the top of the default VPC's address range, so they never overlap a subnet already there.
   A deploy refuses a VPC with no free block. No database, cache, cluster or load balancer is
   placed in them.
-- **One NAT gateway** and its elastic IP, in a default subnet: about $32.85 a month (730 hours at
-  $0.045), $3.65 for the public IPv4 address, and $0.045 per GB it processes, in us-east-1. One
-  per tier, priced by `ocel cost scan` and `ocel bootstrap status`.
+- **NAT gateways** with their elastic IPs, in default subnets. Production has one per zone, so
+  losing a zone leaves the other subnet its own way out; a preview shares one between both
+  subnets. Each costs about $32.85 a month (730 hours at $0.045), $3.65 for its public IPv4
+  address, and $0.045 per GB it processes, in us-east-1, priced by `ocel cost scan` and
+  `ocel bootstrap status`.
 - **Gateway endpoints** for S3 and DynamoDB, at no charge, so ocel's own runtime traffic stays off
-  the NAT gateway.
-- **A security group** that lets functions call out and admits nothing.
+  the NAT gateways.
+- **A security group** that lets functions call out and admits nothing. Functions also join the
+  tier's [`vpc-clients`](#the-default-vpc) group, the one its databases and caches admit.
 
 The first deploy that attaches can take several minutes longer while Lambda builds its network
 interfaces, and a dry deploy lists the part as a slow create. Lambda reclaims an attachment
@@ -202,6 +251,17 @@ release their interfaces. A takedown that fails leaves the part recorded with no
 To place a function in subnets of your own, set `vpcConfig` in a
 [transform](/docs/transforms#placing-a-function-in-your-own-vpc). It takes the place of the
 automatic attach for the functions it names.
+
+## Concurrency
+
+Ocel reserves no Lambda concurrency for any function or worker. Every function in the account
+and region draws from one pool, 1,000 concurrent executions by default, so one app's burst can
+throttle another's. A reservation would fence each app off, but it is carved out of that same
+pool, which AWS keeps at least 100 executions unreserved, so a reservation on every app would
+exhaust a default account within a few projects and refuse the next deploy. Give production its
+own account, or raise the account's concurrency quota through Service Quotas, before one app's
+traffic can starve another. A `reservedConcurrentExecutions` set in a
+[transform](/docs/transforms) applies to the function it names.
 
 ## Topics, tasks and workers
 

@@ -17,14 +17,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 func newWorkerOutputs(names map[string]string) auto.OutputMap {
 	outputs := auto.OutputMap{}
 	for worker, physical := range names {
-		outputs[resources.WorkerName(worker)] = auto.OutputValue{Value: map[string]any{outputKeyFunctionName: physical}}
+		outputs[resources.WorkerName(worker)] = auto.OutputValue{Value: map[string]any{function.OutputKeyName: physical}}
 	}
 	return outputs
 }
@@ -105,8 +106,8 @@ func TestAProvisionedAppReturnsItsWorkersBesideItsFunctions(t *testing.T) {
 
 	release, spec, _, engine := newReleaseHostingWorkers(t, "media")
 	engine.outputs = auto.OutputMap{
-		"fn--web--entry": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://web.example/", outputKeyFunctionName: "shop-prod-web-entry"}},
-		"fn--web--admin": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://admin.example/", outputKeyFunctionName: "shop-prod-web-admin"}},
+		"fn--web--entry": auto.OutputValue{Value: map[string]any{function.OutputKeyURL: "https://web.example/", function.OutputKeyName: "shop-prod-web-entry"}},
+		"fn--web--admin": auto.OutputValue{Value: map[string]any{function.OutputKeyURL: "https://admin.example/", function.OutputKeyName: "shop-prod-web-admin"}},
 	}
 	for name, value := range newWorkerOutputs(map[string]string{"media": "ocel-app-shop-prod-web-media"}) {
 		engine.outputs[name] = value
@@ -122,63 +123,6 @@ func TestAProvisionedAppReturnsItsWorkersBesideItsFunctions(t *testing.T) {
 	}
 	if physical["fn--web--entry"] != "shop-prod-web-entry" || physical[resources.WorkerName("media")] != "ocel-app-shop-prod-web-media" || len(physical) != 3 {
 		t.Errorf("Functions = %v, want the app's two functions and its media worker, each by physical name", physical)
-	}
-}
-
-func TestTheWorkersProgramExportsEachWorkersLambdaNameForTheStackToDecode(t *testing.T) {
-	t.Parallel()
-
-	work := &workersWork{
-		project: "shop",
-		stack:   workersStack("prod", "web"),
-		workers: []provider.WorkerSpec{{Name: "media"}, {Name: "ledger"}},
-		args:    functionArgs{Runtime: defaultFunctionRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024},
-		role:    executionRole{App: "web", Boundary: componenttest.BoundaryARN},
-		region:  "us-east-1",
-		account: mockAccount,
-		table:   testStateTableARN,
-		prefix:  naming.TaskKeyPrefix("shop", "prod"),
-	}
-	rec := &inputRecorder{}
-	exported := make(chan map[string]any, 1)
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error {
-		if err := work.run(pctx); err != nil {
-			return err
-		}
-		pulumi.Map(pctx.GetCurrentExportMap()).ToMapOutput().ApplyT(func(resolved map[string]any) error {
-			exported <- resolved
-			return nil
-		})
-		return nil
-	}, pulumi.WithMocks("shop", "prod--web", rec)); err != nil {
-		t.Fatalf("run the workers program: %v", err)
-	}
-
-	lambdas := map[string]string{}
-	for _, name := range rec.registered("aws:lambda/function:Function") {
-		inputs := rec.inputs("aws:lambda/function:Function", name)
-		lambdas[inputs["environment"].ObjectValue()["variables"].ObjectValue()["OCEL_WORKER"].StringValue()] = inputs["name"].StringValue()
-	}
-	outputs := auto.OutputMap{}
-	for logical, value := range <-exported {
-		outputs[logical] = auto.OutputValue{Value: value}
-	}
-	for _, worker := range []string{"media", "ledger"} {
-		fields, _ := outputs[resources.WorkerName(worker)].Value.(map[string]any)
-		if lambdas[worker] == "" || fields[outputKeyFunctionName] != lambdas[worker] {
-			t.Errorf("export %s = %v, want the name of %s's Lambda, %q", resources.WorkerName(worker), fields, worker, lambdas[worker])
-		}
-	}
-	decoded, err := work.decode(outputs)
-	if err != nil {
-		t.Fatalf("decode the program's own exports: %v", err)
-	}
-	physical := map[string]string{}
-	for _, fn := range decoded.Functions {
-		physical[fn.Name] = fn.Physical
-	}
-	if len(physical) != 2 || physical[resources.WorkerName("media")] != lambdas["media"] || physical[resources.WorkerName("ledger")] != lambdas["ledger"] {
-		t.Errorf("decoded %v, want each worker by its Lambda's name %v", physical, lambdas)
 	}
 }
 
@@ -200,8 +144,8 @@ func recordWorkersStack(t *testing.T, store records.Store, ref provider.StackRef
 
 func provisionedWebOutputs() auto.OutputMap {
 	outputs := auto.OutputMap{
-		"fn--web--entry": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://web.example/", outputKeyFunctionName: "shop-prod-web-entry"}},
-		"fn--web--admin": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://admin.example/", outputKeyFunctionName: "shop-prod-web-admin"}},
+		"fn--web--entry": auto.OutputValue{Value: map[string]any{function.OutputKeyURL: "https://web.example/", function.OutputKeyName: "shop-prod-web-entry"}},
+		"fn--web--admin": auto.OutputValue{Value: map[string]any{function.OutputKeyURL: "https://admin.example/", function.OutputKeyName: "shop-prod-web-admin"}},
 	}
 	for name, value := range newWorkerOutputs(map[string]string{"media": "ocel-app-shop-prod-web-media"}) {
 		outputs[name] = value
@@ -273,7 +217,7 @@ func TestPlanningAnAppThatHostsWorkersIncludesTheWorkersStack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan() = %v", err)
 	}
-	workers := workersStack(spec.Ref.Name.Env, "web").String()
+	workers := worker.StackName(spec.Ref.Name.Env, "web").String()
 	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
 		return group.Kind == provider.StackGroupKind && group.Name == workers && group.Action == provider.ActionCreate
 	}) {
@@ -298,14 +242,14 @@ func TestRetiringWorkersTakesDownTheWorkersStackOfEachAppNoLongerDeployedToTheEn
 	cfg := conformingConfig(&fakeArtifactStore{})
 	cfg.KeyValues = fake.NewKeyValues()
 	engine := &mockedEngine{}
-	recordWorkersStacks(t, cfg.KeyValues, workersStack("prod", "web"), workersStack("prod", "jobs"), workersStack("staging", "jobs"))
+	recordWorkersStacks(t, cfg.KeyValues, worker.StackName("prod", "web"), worker.StackName("prod", "jobs"), worker.StackName("staging", "jobs"))
 	log := &fake.Log{}
 
 	if err := stacksWith(cfg, engine).RetireWorkers(context.Background(), liveInProd(provider.LiveApp{App: "web", Compute: provider.ComputeServerless, Workers: []string{"media"}}), log); err != nil {
 		t.Fatalf("RetireWorkers() = %v", err)
 	}
 
-	retired := workersStack("prod", "jobs").String()
+	retired := worker.StackName("prod", "jobs").String()
 	if got := engine.torn(); !slices.Equal(got, []string{retired}) {
 		t.Errorf("took down %v, want only %s, whose app this environment no longer deploys", got, retired)
 	}
@@ -323,7 +267,7 @@ func TestThePlanToRetireWorkersDeletesEachStackRetiringTakesDown(t *testing.T) {
 	cfg := conformingConfig(&fakeArtifactStore{})
 	cfg.KeyValues = fake.NewKeyValues()
 	engine := &mockedEngine{}
-	recordWorkersStacks(t, cfg.KeyValues, workersStack("prod", "web"), workersStack("prod", "jobs"), workersStack("staging", "jobs"))
+	recordWorkersStacks(t, cfg.KeyValues, worker.StackName("prod", "web"), worker.StackName("prod", "jobs"), worker.StackName("staging", "jobs"))
 
 	plan, err := stacksWith(cfg, engine).PlanWorkersRetirement(context.Background(), liveInProd(), nil)
 	if err != nil {
@@ -336,7 +280,7 @@ func TestThePlanToRetireWorkersDeletesEachStackRetiringTakesDown(t *testing.T) {
 		}
 	}
 	slices.Sort(deleted)
-	if want := []string{workersStack("prod", "jobs").String(), workersStack("prod", "web").String()}; !slices.Equal(deleted, want) {
+	if want := []string{worker.StackName("prod", "jobs").String(), worker.StackName("prod", "web").String()}; !slices.Equal(deleted, want) {
 		t.Errorf("plan deletes %v, want every workers stack of the environment with no app live %v", deleted, want)
 	}
 	if got := engine.torn(); len(got) != 0 {
@@ -463,7 +407,7 @@ func TestRetiringWorkersTakesDownTheWorkersStackOfALiveAppWhosePromotedReleaseNe
 			cfg := conformingConfig(&fakeArtifactStore{})
 			cfg.KeyValues = fake.NewKeyValues()
 			engine := &mockedEngine{}
-			recordWorkersStacks(t, cfg.KeyValues, workersStack("prod", "web"), workersStack("prod", "jobs"))
+			recordWorkersStacks(t, cfg.KeyValues, worker.StackName("prod", "web"), worker.StackName("prod", "jobs"))
 			stacks := stacksWith(cfg, engine)
 			live := liveInProd(web, provider.LiveApp{App: "jobs", Compute: provider.ComputeServerless, Workers: []string{"mail"}})
 			log := &fake.Log{}
@@ -476,7 +420,7 @@ func TestRetiringWorkersTakesDownTheWorkersStackOfALiveAppWhosePromotedReleaseNe
 				t.Fatalf("RetireWorkers() = %v", err)
 			}
 
-			retired := workersStack("prod", "web").String()
+			retired := worker.StackName("prod", "web").String()
 			var planned []string
 			for _, group := range plan.Groups {
 				if group.Kind == provider.StackGroupKind && group.Action == provider.ActionDelete {
@@ -512,12 +456,21 @@ func TestAppWorkersRunFromTheFunctionWhoseArtifactCarriesTheWorkerEntry(t *testi
 		t.Fatalf("appWork() = %v", err)
 	}
 
-	hosted, err := release.workersWork(spec, work)
+	hosted, err := worker.NewStack(spec, work.functions, work.role, work.network, release.cfg.workerTarget())
 	if err != nil {
 		t.Fatalf("workersWork() = %v", err)
 	}
-	if want := stagedOf(spec)[1].Ref.Key; hosted.artifact.Key != want {
-		t.Errorf("the workers run from %s, want %s, the one artifact that carries the worker entry", hosted.artifact.Key, want)
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(hosted.Declare, pulumi.WithMocks("shop", "prod--web", rec)); err != nil {
+		t.Fatalf("run the workers program: %v", err)
+	}
+	lambdas := rec.registered("aws:lambda/function:Function")
+	if len(lambdas) != 1 {
+		t.Fatalf("declared %d functions, want the one worker", len(lambdas))
+	}
+	key := rec.inputs("aws:lambda/function:Function", lambdas[0])["s3Key"].StringValue()
+	if want := stagedOf(spec)[1].Ref.Key; key != want {
+		t.Errorf("the workers run from %s, want %s, the one artifact that carries the worker entry", key, want)
 	}
 }
 
@@ -533,7 +486,7 @@ func TestAppWorkersAreRefusedWhenNoFunctionCarriesTheWorkerEntry(t *testing.T) {
 		t.Fatalf("appWork() = %v", err)
 	}
 
-	if _, err := release.workersWork(spec, work); err == nil || !strings.Contains(err.Error(), "media") {
+	if _, err := worker.NewStack(spec, work.functions, work.role, work.network, release.cfg.workerTarget()); err == nil || !strings.Contains(err.Error(), "media") {
 		t.Fatalf("workersWork() = %v, want a refusal naming the worker no function can start", err)
 	}
 }

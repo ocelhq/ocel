@@ -100,7 +100,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 		Engine:  "Postgres",
 		Port:    args.Port,
 		VPCID:   network.VPCID,
-		VPCCIDR: network.VPCCIDR,
+		Clients: network.Clients,
 		Egress: ec2.SecurityGroupEgressArray{
 			&ec2.SecurityGroupEgressArgs{
 				Protocol:    pulumi.String("-1"),

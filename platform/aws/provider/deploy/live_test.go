@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
 )
 
 const (
@@ -59,6 +60,32 @@ func TestAppExecutionRoleLiveValues(t *testing.T) {
 		}
 		if withoutLive.Variables.KeyARN != productionVariablesKeyARN {
 			t.Errorf("VariablesKeyARN = %q, want the decrypt grant every app keeps", withoutLive.Variables.KeyARN)
+		}
+	})
+}
+
+func TestAppExecutionRole(t *testing.T) {
+	t.Parallel()
+
+	t.Run("is granted the bootstrap's variables key", func(t *testing.T) {
+		t.Parallel()
+
+		caches := map[string]*site.ISR{"web": {Prefix: "prod/proj/web/WEB1"}}
+
+		role := appExecutionRole(Config{VariablesKeyARN: productionVariablesKeyARN}, "web", caches, nil, variables.Bundle{}, nil, nil, false, nil)
+		if role.Variables.KeyARN != productionVariablesKeyARN {
+			t.Errorf("VariablesKeyARN = %q, want the bootstrap's own key", role.Variables.KeyARN)
+		}
+		if role.Cache != caches["web"] {
+			t.Errorf("Cache = %+v, want the app's own cache", role.Cache)
+		}
+
+		preview := appExecutionRole(Config{VariablesKeyARN: previewVariablesKeyARN}, "api", caches, nil, variables.Bundle{}, nil, nil, false, nil)
+		if preview.Variables.KeyARN != previewVariablesKeyARN {
+			t.Errorf("VariablesKeyARN = %q, want the preview bootstrap's key", preview.Variables.KeyARN)
+		}
+		if preview.Cache != nil {
+			t.Errorf("Cache = %+v, want none for an app that keeps no cache", preview.Cache)
 		}
 	})
 }

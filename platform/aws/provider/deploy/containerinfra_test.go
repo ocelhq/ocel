@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
@@ -43,8 +44,8 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 	cfg.Passphrase = "a-passphrase"
 	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL:      "http://" + fixtureOrigin,
-		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
+		container.OutputKeyURL:      "http://" + fixtureOrigin,
+		container.OutputKeyPhysical: "shop-prod-web-container-r3f8a1c90",
 	}}
 	engine := &mockedEngine{outputs: outputs}
 	stacks := stacksWith(cfg, engine)

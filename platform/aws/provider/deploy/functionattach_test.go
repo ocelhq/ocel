@@ -7,6 +7,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
@@ -111,13 +112,13 @@ func TestTheWorkersOfAnAttachedAppRunInThePrivateSubnetsToo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	hosted, err := release.workersWork(spec, work)
+	hosted, err := worker.NewStack(spec, work.functions, work.role, work.network, release.cfg.workerTarget())
 	if err != nil {
 		t.Fatalf("workersWork() = %v", err)
 	}
 
 	rec := &inputRecorder{}
-	if err := pulumi.RunErr(hosted.run, pulumi.WithMocks("shop", "prod-workers", rec)); err != nil {
+	if err := pulumi.RunErr(hosted.Declare, pulumi.WithMocks("shop", "prod-workers", rec)); err != nil {
 		t.Fatalf("run the workers program: %v", err)
 	}
 

@@ -40,9 +40,7 @@ type TeardownAPIs struct {
 	Records RecordStore
 	Buckets cfn.BucketEmptierAPI
 
-	RemoveBastion       func(ctx context.Context, tier environment.Tier) error
-	RemoveEnvSourceSync func(ctx context.Context, tier environment.Tier) error
-	RemoveParts         func(ctx context.Context, tier environment.Tier) error
+	RemoveParts func(ctx context.Context, tier environment.Tier, progress progress.Log) error
 }
 
 func TierParamNames(ns Namespace, tier environment.Tier) ([]string, error) {
@@ -150,19 +148,8 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		return err
 	}
 
-	progress.Say(fmt.Sprintf("Removing the %s tier's bastion (ECS, IAM, EC2)", tier))
-	if err := apis.RemoveBastion(ctx, tier); err != nil {
-		return err
-	}
-
-	progress.Say(fmt.Sprintf("Removing the %s tier's env source sync (Lambda, EventBridge Scheduler, IAM)", tier))
-	if err := apis.RemoveEnvSourceSync(ctx, tier); err != nil {
-		return err
-	}
-
 	if apis.RemoveParts != nil {
-		progress.Say(fmt.Sprintf("Removing the bootstrap parts the %s tier's deploys added (Lambda, SQS, CloudFront, API Gateway, IAM)", tier))
-		if err := apis.RemoveParts(ctx, tier); err != nil {
+		if err := apis.RemoveParts(ctx, tier, progress); err != nil {
 			return err
 		}
 	}

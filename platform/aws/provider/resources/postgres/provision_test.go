@@ -256,3 +256,30 @@ func TestAClusterLetsItsAppRoleSignInByIAMAndTheDeployCreateItThroughTheDataAPI(
 		t.Errorf("app role secret = %q, want the cluster's managed master secret: only the deploy signs in as master", got)
 	}
 }
+
+func TestADatabaseAdmitsItsPortFromTheTiersVPCClientsAlone(t *testing.T) {
+	t.Parallel()
+
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		return register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
+	}, masterUserSecret)
+
+	ingress := rec.InputsOf(t, component.TokenEC2SecurityGroup, "db-main-security-group")["ingress"].ArrayValue()
+	if len(ingress) != 1 {
+		t.Fatalf("security group has %d ingress rules, want the one admitting the database's port", len(ingress))
+	}
+	rule := ingress[0].ObjectValue()
+	if cidrs, open := rule["cidrBlocks"]; open && len(cidrs.ArrayValue()) > 0 {
+		t.Errorf("ingress admits %v, want no address range: anything in the VPC could reach the database", cidrs)
+	}
+	if groups := rule["securityGroups"].ArrayValue(); len(groups) != 1 || groups[0].StringValue() != "sg-vpc-clients" {
+		t.Errorf("ingress admits %v, want the tier's vpc-clients group alone", groups)
+	}
+
+	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
+		return register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), component.Network{VPCID: "vpc-1", SubnetIDs: []string{"subnet-1"}})
+	}, pulumi.WithMocks("shop", "prod--infra", componenttest.NewRecorder(masterUserSecret)))
+	if err == nil || !strings.Contains(err.Error(), "vpc-clients") {
+		t.Errorf("register() with no clients group = %v, want it refused rather than admitting nothing or everything", err)
+	}
+}

@@ -24,9 +24,9 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
-	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
 )
 
 const Kind edge.Kind = "api-gateway"

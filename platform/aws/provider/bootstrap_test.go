@@ -5,33 +5,39 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
-	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 )
 
 type partsRemoved struct{ names []string }
 
-func (r *partsRemoved) removable(name string) removablePart {
-	return removablePart{
-		Part: provider.Part{Name: name, Summary: imageoptimizer.Summary},
-		plan: func(context.Context, environment.Tier) (*provider.ChangeGroup, error) {
-			return partDeletion(name, "", nil), nil
-		},
-		remove: func(context.Context, environment.Tier, progress.Log) error {
-			r.names = append(r.names, name)
-			return nil
+func (r *partsRemoved) removable(name string) tier.Part {
+	return tier.Part{
+		Name:    name,
+		Summary: imageoptimizer.Summary,
+		Removal: &tier.Removal{
+			Plan: func(context.Context, environment.Tier) (*provider.ChangeGroup, error) {
+				return tier.Deletion(name, "", nil), nil
+			},
+			Remove: func(context.Context, environment.Tier, progress.Log) error {
+				r.names = append(r.names, name)
+				return nil
+			},
 		},
 	}
 }
 
-func removingParts(t *testing.T) (forgetting, *fake.Bootstrap, *partsRemoved) {
+func removingParts(t *testing.T) (tierBootstrap, *fake.Bootstrap, *partsRemoved) {
 	t.Helper()
 	inner := fake.NewBootstrap()
 	if err := inner.Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}, nil); err != nil {
@@ -42,12 +48,16 @@ func removingParts(t *testing.T) (forgetting, *fake.Bootstrap, *partsRemoved) {
 		t.Fatal(err)
 	}
 	removed := &partsRemoved{}
-	return forgetting{
+	var parts tier.Parts
+	for _, offered := range inner.Parts() {
+		parts = append(parts, tier.Stacked(offered))
+	}
+	return tierBootstrap{
 		Bootstrap: inner,
 		forget:    func() {},
 		key:       func(context.Context, environment.Tier) (string, error) { return "", nil },
 		keyValues: store,
-		removable: []removablePart{removed.removable(imageoptimizer.Part)},
+		parts:     append(parts, removed.removable(imageoptimizer.Part)),
 	}, inner, removed
 }
 
@@ -108,32 +118,16 @@ func TestRemovingAPartADeployAddedTakesItDownAndForgetsItsRecord(t *testing.T) {
 func TestTheContainerInfrastructureTheFunctionNetworkAndTheBastionAreOfferedForRemovalByName(t *testing.T) {
 	t.Parallel()
 
-	removable := (&Provider{}).removableParts()
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	parts := p.tierParts(tier.Records{KeyValues: fake.NewKeyValues(), Reads: &tier.Reads{}})
 	for _, name := range []string{containers.Part, functionnetwork.Part, bastion.Part} {
-		at := slices.IndexFunc(removable, func(each removablePart) bool { return each.Name == name })
-		if at < 0 {
-			t.Errorf("removableParts() offers no %s, want `ocel bootstrap <tier> --remove %s` to take it down", name, name)
+		each, found := parts.Named(name)
+		if !found || each.Removal == nil {
+			t.Errorf("tierParts() offers no %s for removal, want `ocel bootstrap <tier> --remove %s` to take it down", name, name)
 			continue
 		}
-		if each := removable[at]; each.Summary == "" || len(each.Edges) != 0 || each.plan == nil || each.remove == nil {
-			t.Errorf("%s is offered as %+v, want its summary, no edge, and a way to plan and take it down", name, each.Part)
-		}
-	}
-}
-
-func TestRemovingAPartSaysWhichDeployOrCommandAddedIt(t *testing.T) {
-	t.Parallel()
-
-	for _, c := range []struct {
-		recorded stackrecords.BootstrapPart
-		want     string
-	}{
-		{stackrecords.BootstrapPart{AddedWith: "ocel domain use --preview"}, "added by `ocel domain use --preview` on first use; it goes"},
-		{stackrecords.BootstrapPart{AddedBy: "shop"}, "added by shop on first use; it goes"},
-		{stackrecords.BootstrapPart{AddedBy: "shop", AddedWith: "ocel bootstrap"}, "added by `ocel bootstrap` for shop on first use; it goes"},
-	} {
-		if got := addedPartDeletion("cloudfront", "it goes", c.recorded).Reason; got != c.want {
-			t.Errorf("reason for %+v = %q, want %q", c.recorded, got, c.want)
+		if each.Summary == "" || len(each.Edges) != 0 || each.Removal.Plan == nil || each.Removal.Remove == nil {
+			t.Errorf("%s is offered as %+v, want its summary, no edge, and a way to plan and take it down", name, each.Offer())
 		}
 	}
 }

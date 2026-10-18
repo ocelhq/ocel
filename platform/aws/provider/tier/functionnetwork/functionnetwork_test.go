@@ -3,6 +3,8 @@ package functionnetwork
 import (
 	"testing"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -31,5 +33,17 @@ func TestOnlyProvisionedPostgresAndKVNeedTheFunctionNetwork(t *testing.T) {
 				t.Errorf("IsNeededForAny() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestAFunctionInTheNetworkJoinsTheTiersVPCClientsSoItsDatabasesAdmitIt(t *testing.T) {
+	t.Parallel()
+
+	joined := (&Network{SecurityGroup: "sg-functions", Clients: "sg-vpc-clients"}).securityGroups()
+	if len(joined) != 2 || joined[0] != pulumi.String("sg-functions") || joined[1] != pulumi.String("sg-vpc-clients") {
+		t.Errorf("a function joins %v, want its own group and the tier's vpc-clients group", joined)
+	}
+	if alone := (&Network{SecurityGroup: "sg-functions"}).securityGroups(); len(alone) != 1 {
+		t.Errorf("a function joins %v with no clients group recorded, want its own group alone", alone)
 	}
 }

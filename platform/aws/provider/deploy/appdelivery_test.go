@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
@@ -38,11 +39,11 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	}
 
 	outputs := auto.OutputMap{"fn--web--entry": auto.OutputValue{Value: map[string]any{
-		outputKeyFunctionURL:  "https://web.lambda-url.us-east-1.on.aws/",
-		outputKeyFunctionName: "shop-prod-web-entry",
+		function.OutputKeyURL:  "https://web.lambda-url.us-east-1.on.aws/",
+		function.OutputKeyName: "shop-prod-web-entry",
 	}}, "fn--web--admin": auto.OutputValue{Value: map[string]any{
-		outputKeyFunctionURL:  "https://admin.lambda-url.us-east-1.on.aws/",
-		outputKeyFunctionName: "shop-prod-web-admin",
+		function.OutputKeyURL:  "https://admin.lambda-url.us-east-1.on.aws/",
+		function.OutputKeyName: "shop-prod-web-admin",
 	}}}
 
 	result, err := release.decodeApp(work, outputs)
@@ -76,8 +77,8 @@ func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 	}
 
 	result, err := release.decodeApp(work, auto.OutputMap{
-		"fn--web--entry": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://web.example/"}},
-		"fn--web--admin": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://admin.example/"}},
+		"fn--web--entry": auto.OutputValue{Value: map[string]any{function.OutputKeyURL: "https://web.example/"}},
+		"fn--web--admin": auto.OutputValue{Value: map[string]any{function.OutputKeyURL: "https://admin.example/"}},
 	})
 	if err != nil {
 		t.Fatalf("decodeApp() = %v", err)

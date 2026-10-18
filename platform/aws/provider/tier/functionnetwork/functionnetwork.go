@@ -55,6 +55,7 @@ var Shared = sharedstack.Stack{
 type Network struct {
 	Subnets       []string
 	SecurityGroup string
+	Clients       string
 }
 
 var Pending = Network{
@@ -68,8 +69,16 @@ func (n *Network) VPCConfig() lambda.FunctionVpcConfigPtrInput {
 	}
 	return &lambda.FunctionVpcConfigArgs{
 		SubnetIds:        pulumi.ToStringArray(n.Subnets),
-		SecurityGroupIds: pulumi.StringArray{pulumi.String(n.SecurityGroup)},
+		SecurityGroupIds: n.securityGroups(),
 	}
+}
+
+func (n *Network) securityGroups() pulumi.StringArray {
+	groups := pulumi.StringArray{pulumi.String(n.SecurityGroup)}
+	if n.Clients != "" {
+		groups = append(groups, pulumi.String(n.Clients))
+	}
+	return groups
 }
 
 func IsNeededFor(typ provider.BindingType, source string) bool {
@@ -141,6 +150,9 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 	}
 	owner, err := s.Open(ctx, StackRef(tier))
 	if err != nil {
+		return Network{}, err
+	}
+	if _, err := component.ReadDefaultVPC(ctx, owner.Subnets, owner.Region, "the function network serverless apps reach their databases and caches through"); err != nil {
 		return Network{}, err
 	}
 	if progress != nil {

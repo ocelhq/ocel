@@ -2,673 +2,35 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
-	"maps"
-	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
-	"github.com/ocelhq/ocel/platform/aws/provider/iam"
-	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
-	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/arn"
-	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
-	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/appautoscaling"
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
-	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/containerimage"
-	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	"github.com/ocelhq/ocel/platform/aws/provider/queues"
-	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
-
-const rootHealthPath = "/"
-
-const (
-	containerPort    = "8080"
-	containerCPU     = "512"
-	containerMemory  = "1024"
-	containerName    = "app"
-	containerPortEnv = "PORT"
-
-	containerLocalName = "container"
-
-	deregistrationSeconds = 10
-	healthGraceSeconds    = 60
-
-	healthCheckIntervalSeconds = 15
-	healthCheckTimeoutSeconds  = 5
-	healthyThreshold           = 2
-	unhealthyThreshold         = 3
-	healthyStatuses            = "200-399"
-
-	outputKeyContainerURL      = "url"
-	outputKeyContainerPhysical = "physical"
-
-	maxRulePriority = 50000
-
-	scalingNamespace          = "ecs"
-	scalingDimension          = "ecs:service:DesiredCount"
-	requestsPerTaskPerMinute  = 1000
-	scaleOutCooldownSeconds   = 60
-	scaleInCooldownSeconds    = 300
-	requestCountPerTargetType = "ALBRequestCountPerTarget"
-)
-
-type RulesAPI interface {
-	DescribeRules(ctx context.Context, in *elbv2.DescribeRulesInput, opts ...func(*elbv2.Options)) (*elbv2.DescribeRulesOutput, error)
-}
-
-type containerWork struct {
-	priority    int
-	app         string
-	arch        string
-	image       string
-	healthPath  string
-	instances   provider.Instances
-	env         map[string]string
-	tags        map[string]string
-	boundary    string
-	rolePath    string
-	region      string
-	secrets     []string
-	policies    []bindingPolicy
-	tasksPolicy string
-	values      executionRole
-	transformed *transformPatches
-	service     naming.Coordinate
-	role        naming.Coordinate
-	infra       containers.Infrastructure
-	public      bool
-	workerApp   bool
-}
-
-func (w *containerWork) readListenerArn() string {
-	if w.public {
-		return w.infra.PublicListener
-	}
-	return w.infra.Listener
-}
-
-func (w *containerWork) readServiceURL() string {
-	if w.public {
-		return "https://" + w.infra.PublicHost
-	}
-	return "http://" + w.infra.OriginHost
-}
-
-func isRoutedPublicly(spec provider.StackSpec) bool {
-	return spec.App != nil && spec.App.Router == alb.Kind
-}
-
-var fargateCPUArchitectures = map[string]string{
-	arch.X8664: "X86_64",
-	arch.ARM64: "ARM64",
-}
-
-func fargateCPUArchitecture(declared string) string {
-	return fargateCPUArchitectures[arch.Architecture(declared)]
-}
-
-func ContainerArch(app, declared string) (string, error) {
-	runs, known := arch.GoArch(declared)
-	if !known {
-		return "", refusal.Refuse(refusal.CodeInvalid,
-			"app %s declares arch %q, and a container runs on %s or %s alone", app, declared, arch.X8664, arch.ARM64)
-	}
-	return runs, nil
-}
-
-func (w *containerWork) readsLive() bool { return w.values.Variables.TableARN != "" }
-
-type containerDefinition struct {
-	Name         string            `json:"name"`
-	Image        string            `json:"image"`
-	Essential    bool              `json:"essential"`
-	PortMappings []portMapping     `json:"portMappings"`
-	Environment  []environmentPair `json:"environment"`
-	LogConfig    logConfiguration  `json:"logConfiguration"`
-}
-
-type portMapping struct {
-	ContainerPort int    `json:"containerPort"`
-	Protocol      string `json:"protocol"`
-}
-
-type environmentPair struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-type logConfiguration struct {
-	Driver  string            `json:"logDriver"`
-	Options map[string]string `json:"options"`
-}
-
-func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error) {
-	app := spec.App
-	project, stack := naming.Sanitize(spec.Ref.Project), spec.Ref.Name
-	if strings.TrimSpace(app.Image) == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s names no image, and a container on this provider runs what a registry coordinate names and nothing else", app.App)
-	}
-	healthPath := app.HealthCheckPath
-	if healthPath == "" {
-		healthPath = rootHealthPath
-	}
-	if !containerimage.IsHealthCheckPath(healthPath) {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s is probed at %q, which is not a path a load balancer can send a health check to", app.App, healthPath)
-	}
-	if r.cfg.OriginSecret == "" {
-		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this tier has no origin secret, and a container answers only to an edge that presents one: re-run `%s`", provider.BootstrapCommand(spec.Ref.Tier))
-	}
-	if r.cfg.AppBoundaryARN == "" {
-		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, provider.BootstrapCommand(spec.Ref.Tier))
-	}
-	policies, err := planBindingPolicies(app.Grants)
-	if err != nil {
-		return nil, err
-	}
-	bundle, err := r.sealApp(spec.Ref.Project, app.App, liveOnly(app.Values))
-	if err != nil {
-		return nil, err
-	}
-	var front *originGuard
-	if !isRoutedPublicly(spec) {
-		front = &originGuard{Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}
-	}
-	env, err := containerEnv(app.App, app.Values, front, bundle.Live)
-	if err != nil {
-		return nil, err
-	}
-	tasksPolicyDoc := ""
-	if reachesTasks(app) {
-		topics := topic.Of(project, stack.Env, app.Topics)
-		topology, err := topic.QueueTopology(r.cfg.stateTable(), project, stack.Env, topics, containerWorkers(r.cfg.Tier, project, stack.Env, app.DeploymentWorkers))
-		if err != nil {
-			return nil, err
-		}
-		rendered, err := queues.Render(topology)
-		if err != nil {
-			return nil, err
-		}
-		if len(rendered) > 0 {
-			env[queues.EnvVar] = string(rendered)
-		}
-		if tasksPolicyDoc, err = topic.TasksPolicy(r.cfg.stateTable(), project, stack.Env, topics, containerServiceARNs(r.cfg, project, stack.Env, app.DeploymentWorkers)); err != nil {
-			return nil, err
-		}
-	}
-	values := executionRole{App: app.App, Variables: variables.Reader{KeyARN: r.cfg.VariablesKeyARN}}
-	if bundle.HasLive() {
-		values.Variables.TableARN = r.cfg.VariablesTableARN
-		values.Variables.Referenced = bundle.Referenced
-		values.Variables.Slug = r.cfg.Slug
-		values.Variables.Tier = string(r.cfg.Tier)
-	}
-	return &containerWork{
-		app:         app.App,
-		arch:        app.Arch,
-		image:       app.Image,
-		healthPath:  healthPath,
-		instances:   app.Instances,
-		env:         env,
-		tags:        spec.Tags,
-		boundary:    r.cfg.AppBoundaryARN,
-		rolePath:    r.cfg.AppRolePath,
-		region:      r.cfg.Region,
-		secrets:     presentedSecrets(r.cfg.OriginSecret, r.cfg.PreviousOriginSecret),
-		policies:    policies,
-		tasksPolicy: tasksPolicyDoc,
-		values:      values,
-		service:     serviceCoordinate(project, stack),
-		role:        roleCoordinate(project, stack),
-		public:      isRoutedPublicly(spec),
-		workerApp:   provider.IsWorkerApp(app.App, app.Workers),
-	}, nil
-}
-
-func liveOnly(values provider.AppValues) provider.AppValues {
-	values.Sensitive = nil
-	return values
-}
-
-func (r *release) containerWork(spec provider.StackSpec, infra containers.Infrastructure) (*containerWork, error) {
-	work, err := r.checkContainer(spec)
-	if err != nil {
-		return nil, err
-	}
-	work.infra = infra
-	return work, nil
-}
-
-func rulePriority(physical string, taken map[int]bool) int {
-	sum := fnv.New32a()
-	_, _ = sum.Write([]byte(physical))
-	start := int(sum.Sum32() % uint32(maxRulePriority))
-	for step := range maxRulePriority {
-		priority := 1 + (start+step)%maxRulePriority
-		if !taken[priority] {
-			return priority
-		}
-	}
-	return 0
-}
-
-func takenPriorities(ctx context.Context, rules RulesAPI, listener, physical string) (map[int]bool, error) {
-	taken := map[int]bool{}
-	if rules == nil {
-		return taken, nil
-	}
-	var marker *string
-	for {
-		page, err := rules.DescribeRules(ctx, &elbv2.DescribeRulesInput{ListenerArn: aws.String(listener), Marker: marker})
-		if err != nil {
-			return nil, fmt.Errorf("read the rules already on the container front: %w", err)
-		}
-		for _, rule := range page.Rules {
-			if routesContainer(rule, physical) {
-				continue
-			}
-			if priority, err := strconv.Atoi(aws.ToString(rule.Priority)); err == nil {
-				taken[priority] = true
-			}
-		}
-		if marker = page.NextMarker; marker == nil {
-			return taken, nil
-		}
-	}
-}
-
-func routesContainer(rule elbv2types.Rule, physical string) bool {
-	for _, condition := range rule.Conditions {
-		header := condition.HttpHeaderConfig
-		if header == nil || !strings.EqualFold(aws.ToString(header.HttpHeaderName), edge.OriginContainerHeader) {
-			continue
-		}
-		if slices.Contains(header.Values, physical) {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *release) placeRule(ctx context.Context, work *containerWork) error {
-	if work.workerApp {
-		return nil
-	}
-	taken, err := takenPriorities(ctx, r.cfg.Rules, work.readListenerArn(), work.physical())
-	if err != nil {
-		return err
-	}
-	if work.priority = rulePriority(work.physical(), taken); work.priority == 0 {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"the container front for the %s tier has a rule at every priority a listener allows, so %s has no slot: prune the releases behind it", r.cfg.Tier, work.app)
-	}
-	return nil
-}
-
-const (
-	priorityInUseCode = "PriorityInUse"
-	rulePlacements    = 3
-)
-
-func priorityTaken(err error) bool {
-	return err != nil && strings.Contains(err.Error(), priorityInUseCode)
-}
-
-func presentedSecrets(current, previous string) []string {
-	if previous == "" {
-		return []string{current}
-	}
-	return []string{current, previous}
-}
-
-func containerEnv(app string, values provider.AppValues, front *originGuard, manifest []byte) (map[string]string, error) {
-	env := make(map[string]string, len(values.Plain)+len(values.Sensitive)+8)
-	maps.Copy(env, values.Plain)
-	maps.Copy(env, values.Sensitive)
-	if values.Folder != "" {
-		env[processenv.AppFolderEnvVar] = values.Folder
-	}
-	maps.Copy(env, values.PhaseEnv())
-	if _, set := env[containerPortEnv]; set {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s sets %s, and a container on this provider listens on %s, which it is handed as %s: drop the value and read the port from the environment",
-			app, containerPortEnv, containerPort, containerPortEnv)
-	}
-	env[containerPortEnv] = containerPort
-	front.front(env)
-	if len(manifest) > 0 {
-		env[livefile.EnvVar] = string(manifest)
-	}
-	return env, nil
-}
-
-func (w *containerWork) definitionEnv() map[string]string {
-	env := make(map[string]string, len(w.env)+1)
-	maps.Copy(env, w.env)
-	env[originguard.HealthPathVar] = w.healthPath
-	return env
-}
-
-func serviceCoordinate(project string, stack naming.StackName) naming.Coordinate {
-	return naming.Coordinate{
-		Project: project,
-		Env:     stack.Env,
-		App:     stack.App,
-		Kind:    naming.KindService,
-		Name:    containerLocalName,
-		Release: stack.Release,
-	}
-}
-
-func (w *containerWork) physical() string {
-	return w.service.PhysicalName(component.MaxLambdaNameLen)
-}
-
-func (w *containerWork) definition() (string, error) {
-	env := w.definitionEnv()
-	pairs := make([]environmentPair, 0, len(env))
-	for _, key := range slices.Sorted(maps.Keys(env)) {
-		pairs = append(pairs, environmentPair{Name: key, Value: env[key]})
-	}
-	encoded, err := json.Marshal([]containerDefinition{{
-		Name:         containerName,
-		Image:        w.image,
-		Essential:    true,
-		PortMappings: []portMapping{{ContainerPort: containers.TaskPort, Protocol: "tcp"}},
-		Environment:  pairs,
-		LogConfig: logConfiguration{
-			Driver: "awslogs",
-			Options: map[string]string{
-				"awslogs-group":         w.infra.LogGroup,
-				"awslogs-region":        w.region,
-				"awslogs-stream-prefix": w.physical(),
-			},
-		},
-	}})
-	if err != nil {
-		return "", fmt.Errorf("render %s's container definition: %w", w.app, err)
-	}
-	return string(encoded), nil
-}
-
-func (w *containerWork) run(ctx *pulumi.Context) error {
-	physical := w.physical()
-	tags := component.Tags(naming.KindService, "", w.taggedWith(w.transformed.TagsFor(transformTypeContainer, w.app)))
-
-	if err := w.transformed.install(ctx); err != nil {
-		return err
-	}
-	if w.workerApp {
-		return nil
-	}
-
-	var taskRole pulumi.StringPtrInput
-	var before []pulumi.Resource
-	if len(w.policies) > 0 || w.tasksPolicy != "" || w.readsLive() {
-		role, granted, err := w.taskRole(ctx)
-		if err != nil {
-			return err
-		}
-		taskRole = role.Arn
-		before = granted
-	}
-
-	definition, err := w.definition()
-	if err != nil {
-		return err
-	}
-	task, err := ecs.NewTaskDefinition(ctx, naming.ResourceID(naming.KindService, containerLocalName, "task"), &ecs.TaskDefinitionArgs{
-		Family:                  pulumi.String(physical),
-		Cpu:                     pulumi.String(containerCPU),
-		Memory:                  pulumi.String(containerMemory),
-		NetworkMode:             pulumi.String("awsvpc"),
-		RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
-		ExecutionRoleArn:        pulumi.String(w.infra.ExecutionRole),
-		TaskRoleArn:             taskRole,
-		ContainerDefinitions:    pulumi.ToSecret(pulumi.String(definition)).(pulumi.StringOutput),
-		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
-			OperatingSystemFamily: pulumi.String("LINUX"),
-			CpuArchitecture:       pulumi.String(fargateCPUArchitecture(w.arch)),
-		},
-		Tags: tags,
-	}, pulumi.DependsOn(before))
-	if err != nil {
-		return err
-	}
-
-	group, err := lb.NewTargetGroup(ctx, naming.ResourceID(naming.KindService, containerLocalName, "targets"), &lb.TargetGroupArgs{
-		NamePrefix:          pulumi.String(containers.TargetGroupNamePrefix),
-		Port:                pulumi.Int(containers.TaskPort),
-		Protocol:            pulumi.String("HTTP"),
-		TargetType:          pulumi.String("ip"),
-		VpcId:               pulumi.String(w.infra.VPC),
-		DeregistrationDelay: pulumi.Int(deregistrationSeconds),
-		HealthCheck: &lb.TargetGroupHealthCheckArgs{
-			Enabled:            pulumi.Bool(true),
-			Protocol:           pulumi.String("HTTP"),
-			Path:               pulumi.String(w.healthPath),
-			Matcher:            pulumi.String(healthyStatuses),
-			Interval:           pulumi.Int(healthCheckIntervalSeconds),
-			Timeout:            pulumi.Int(healthCheckTimeoutSeconds),
-			HealthyThreshold:   pulumi.Int(healthyThreshold),
-			UnhealthyThreshold: pulumi.Int(unhealthyThreshold),
-		},
-		Tags: tags,
-	})
-	if err != nil {
-		return err
-	}
-	rule, err := lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, containerLocalName, "rule"), &lb.ListenerRuleArgs{
-		ListenerArn: pulumi.String(w.readListenerArn()),
-		Priority:    pulumi.Int(w.priority),
-		Conditions: lb.ListenerRuleConditionArray{
-			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
-				HttpHeaderName: pulumi.String(edge.OriginSecretHeader),
-				Values:         pulumi.ToStringArray(w.secrets),
-			}},
-			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
-				HttpHeaderName: pulumi.String(edge.OriginContainerHeader),
-				Values:         pulumi.StringArray{pulumi.String(physical)},
-			}},
-		},
-		Actions: lb.ListenerRuleActionArray{&lb.ListenerRuleActionArgs{
-			Type:           pulumi.String("forward"),
-			TargetGroupArn: group.Arn,
-		}},
-		Tags: tags,
-	})
-	if err != nil {
-		return err
-	}
-
-	serviceOptions := []pulumi.ResourceOption{pulumi.DependsOn([]pulumi.Resource{rule})}
-	if w.scales() {
-		serviceOptions = append(serviceOptions, pulumi.IgnoreChanges([]string{"desiredCount"}))
-	}
-	service, err := ecs.NewService(ctx, naming.ResourceID(naming.KindService, containerLocalName), &ecs.ServiceArgs{
-		Name:                          pulumi.String(physical),
-		Cluster:                       pulumi.String(w.infra.Cluster),
-		TaskDefinition:                task.Arn,
-		DesiredCount:                  pulumi.Int(w.instances.Min),
-		LaunchType:                    pulumi.String("FARGATE"),
-		HealthCheckGracePeriodSeconds: pulumi.Int(healthGraceSeconds),
-		WaitForSteadyState:            pulumi.Bool(true),
-		NetworkConfiguration: &ecs.ServiceNetworkConfigurationArgs{
-			Subnets:        pulumi.ToStringArray(w.infra.Subnets),
-			SecurityGroups: pulumi.StringArray{pulumi.String(w.infra.TaskSecurity)},
-			AssignPublicIp: pulumi.Bool(true),
-		},
-		LoadBalancers: ecs.ServiceLoadBalancerArray{&ecs.ServiceLoadBalancerArgs{
-			TargetGroupArn: group.Arn,
-			ContainerName:  pulumi.String(containerName),
-			ContainerPort:  pulumi.Int(containers.TaskPort),
-		}},
-		Tags: tags,
-	}, serviceOptions...)
-	if err != nil {
-		return err
-	}
-	if w.scales() {
-		if err := w.scaleOnRequests(ctx, service, group, tags); err != nil {
-			return err
-		}
-	}
-	ctx.Export(w.app, pulumi.Map{
-		outputKeyContainerURL:      pulumi.String(w.readServiceURL()),
-		outputKeyContainerPhysical: service.Name,
-	})
-	return nil
-}
-
-func (w *containerWork) scales() bool { return w.instances.Max > w.instances.Min }
-
-func (w *containerWork) scaleOnRequests(ctx *pulumi.Context, service *ecs.Service, group *lb.TargetGroup, tags pulumi.StringMap) error {
-	clusterARN, err := arn.Parse(w.infra.Cluster)
-	cluster, found := strings.CutPrefix(clusterARN.Resource, "cluster/")
-	if err != nil || !found {
-		return fmt.Errorf("the container cluster %q is not an ECS cluster ARN, so %s's service has no scalable target to name", w.infra.Cluster, w.app)
-	}
-	balancer, err := parseBalancerSuffix(w.readListenerArn())
-	if err != nil {
-		return err
-	}
-	resourceID := pulumi.Sprintf("service/%s/%s", cluster, service.Name)
-	target, err := appautoscaling.NewTarget(ctx, naming.ResourceID(naming.KindService, containerLocalName, "scaling"), &appautoscaling.TargetArgs{
-		ServiceNamespace:  pulumi.String(scalingNamespace),
-		ScalableDimension: pulumi.String(scalingDimension),
-		ResourceId:        resourceID,
-		MinCapacity:       pulumi.Int(w.instances.Min),
-		MaxCapacity:       pulumi.Int(w.instances.Max),
-		Tags:              tags,
-	})
-	if err != nil {
-		return err
-	}
-	_, err = appautoscaling.NewPolicy(ctx, naming.ResourceID(naming.KindService, containerLocalName, "scaling", "requests"), &appautoscaling.PolicyArgs{
-		PolicyType:        pulumi.String("TargetTrackingScaling"),
-		ServiceNamespace:  target.ServiceNamespace,
-		ScalableDimension: target.ScalableDimension,
-		ResourceId:        target.ResourceId,
-		TargetTrackingScalingPolicyConfiguration: &appautoscaling.PolicyTargetTrackingScalingPolicyConfigurationArgs{
-			TargetValue:      pulumi.Float64(requestsPerTaskPerMinute),
-			ScaleOutCooldown: pulumi.Int(scaleOutCooldownSeconds),
-			ScaleInCooldown:  pulumi.Int(scaleInCooldownSeconds),
-			PredefinedMetricSpecification: &appautoscaling.PolicyTargetTrackingScalingPolicyConfigurationPredefinedMetricSpecificationArgs{
-				PredefinedMetricType: pulumi.String(requestCountPerTargetType),
-				ResourceLabel:        pulumi.Sprintf("%s/%s", balancer, group.ArnSuffix),
-			},
-		},
-	})
-	return err
-}
-
-func parseBalancerSuffix(listener string) (string, error) {
-	parsed, err := arn.Parse(listener)
-	parts := strings.Split(parsed.Resource, "/")
-	if err != nil || len(parts) != 5 || parts[0] != "listener" || parts[1] != "app" {
-		return "", fmt.Errorf("the container front's listener %q is not an application load balancer listener ARN, so requests per task cannot be counted against it", listener)
-	}
-	return strings.Join(parts[1:4], "/"), nil
-}
-
-func (w *containerWork) taggedWith(extra map[string]string) map[string]string {
-	if len(extra) == 0 {
-		return w.tags
-	}
-	tags := make(map[string]string, len(w.tags)+len(extra))
-	maps.Copy(tags, w.tags)
-	maps.Copy(tags, extra)
-	return tags
-}
-
-func (w *containerWork) taskRole(ctx *pulumi.Context) (*awsiam.Role, []pulumi.Resource, error) {
-	role, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &awsiam.RoleArgs{
-		NamePrefix:          pulumi.String(component.RolePrefix(w.role)),
-		Description:         component.Describe(w.role, "task role for this app's container"),
-		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.ECSTasksPrincipal)),
-		PermissionsBoundary: pulumi.String(w.boundary),
-		Path:                pulumi.String(w.rolePath),
-		Tags:                component.Tags(naming.KindRole, "", w.taggedWith(w.transformed.TagsFor(transformTypeContainer, w.app))),
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	granted := make([]pulumi.Resource, 0, len(w.policies))
-	for _, binding := range w.policies {
-		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(binding.Policy),
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		granted = append(granted, policy)
-	}
-	if w.tasksPolicy != "" {
-		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "tasks"), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(w.tasksPolicy),
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		granted = append(granted, policy)
-	}
-	if w.readsLive() {
-		rendered, err := variables.ReadPolicy(w.values.Variables)
-		if err != nil {
-			return nil, nil, err
-		}
-		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "variables", "read"), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(rendered),
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		granted = append(granted, policy)
-	}
-	return role, granted, nil
-}
 
 func runsContainer(spec provider.StackSpec) bool {
 	return spec.App != nil && spec.App.Compute == provider.ComputeContainer
 }
 
 func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
-	work, err := r.checkContainer(spec)
+	work, err := container.NewDefinition(spec, r.cfg.containerTarget())
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, r.registry, spec); err != nil {
+	transformed, err := transformStackSpec(ctx, r.cfg.Transform, r.registry, spec)
+	if err != nil {
 		return provider.StackResult{}, err
 	}
+	work.TransformTags = transformed.TagsFor(transformTypeContainer, work.App)
 	if err := spec.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
@@ -680,12 +42,12 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	work.infra = infra
-	result, err := r.runContainer(ctx, spec, work, progress)
+	work.Infra = infra
+	result, err := r.runContainer(ctx, spec, work, transformed, progress)
 	if err != nil {
 		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, spec.Lease, progress))
 	}
-	if err := work.transformed.refuseUnclaimed(); err != nil {
+	if err := transformed.refuseUnclaimed(); err != nil {
 		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, spec.Lease, progress))
 	}
 	workers, err := r.provisionContainerWorkers(ctx, spec, work, progress)
@@ -699,28 +61,28 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	return result, nil
 }
 
-func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, work *containerWork, progress progress.Log) (provider.StackResult, error) {
+func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, work *container.Definition, transformed *transformPatches, progress progress.Log) (provider.StackResult, error) {
 	var err error
-	for attempt := range rulePlacements {
-		if err = r.placeRule(ctx, work); err != nil {
+	for attempt := range container.RulePlacements {
+		if err = work.PlaceRule(ctx, r.cfg.Rules); err != nil {
 			return provider.StackResult{}, err
 		}
 		var outputs auto.OutputMap
-		if outputs, err = r.automation.Run(ctx, spec.Ref, r.containerProgram(spec, work), spec.Lease, progress); err == nil {
-			return r.decodeContainer(work, outputs)
+		if outputs, err = r.automation.Run(ctx, spec.Ref, r.containerProgram(spec, work, transformed), spec.Lease, progress); err == nil {
+			return work.Decode(outputs)
 		}
-		if !priorityTaken(err) {
+		if !container.IsPriorityTaken(err) {
 			return provider.StackResult{}, err
 		}
-		if progress != nil && attempt+1 < rulePlacements {
-			progress.Say(fmt.Sprintf("Placing %s's listener rule again: another deploy claimed priority %d first (attempt %d of %d)", work.app, work.priority, attempt+2, rulePlacements))
+		if progress != nil && attempt+1 < container.RulePlacements {
+			progress.Say(fmt.Sprintf("Placing %s's listener rule again: another deploy claimed priority %d first (attempt %d of %d)", work.App, work.Priority(), attempt+2, container.RulePlacements))
 		}
 	}
-	return provider.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
+	return provider.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.App, container.RulePlacements, err)
 }
 
 func readPublicRanges(spec provider.StackSpec) ([]string, error) {
-	if !isRoutedPublicly(spec) {
+	if !container.IsRoutedPublicly(spec) {
 		return nil, nil
 	}
 	var ranges []string
@@ -746,7 +108,7 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if !present || (isRoutedPublicly(spec) && infra.PublicListener == "") {
+	if !present || (container.IsRoutedPublicly(spec) && infra.PublicListener == "") {
 		shared := provider.ChangeGroup{
 			Kind:   provider.StackGroupKind,
 			Name:   containers.StackRef(spec.Ref.Tier).Name.String(),
@@ -764,21 +126,24 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 		}
 		return provider.Plan{Groups: groups}, nil
 	}
-	work, err := r.containerWork(spec, infra)
+	work, err := container.NewDefinition(spec, r.cfg.containerTarget())
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, r.registry, spec); err != nil {
-		return provider.Plan{}, err
-	}
-	if err := r.placeRule(ctx, work); err != nil {
-		return provider.Plan{}, err
-	}
-	previewed, err := r.automation.Preview(ctx, spec.Ref, r.containerProgram(spec, work), spec.Lease, progress)
+	work.Infra = infra
+	transformed, err := transformStackSpec(ctx, r.cfg.Transform, r.registry, spec)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if err := work.transformed.refuseUnclaimed(); err != nil {
+	work.TransformTags = transformed.TagsFor(transformTypeContainer, work.App)
+	if err := work.PlaceRule(ctx, r.cfg.Rules); err != nil {
+		return provider.Plan{}, err
+	}
+	previewed, err := r.automation.Preview(ctx, spec.Ref, r.containerProgram(spec, work, transformed), spec.Lease, progress)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	if err := transformed.refuseUnclaimed(); err != nil {
 		return provider.Plan{}, err
 	}
 	workerGroups, err := r.previewContainerWorkers(ctx, spec, work, progress)
@@ -789,8 +154,14 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	return previewed, nil
 }
 
-func (r *release) containerProgram(spec provider.StackSpec, work *containerWork) component.Program {
-	return component.Program{Run: work.run, Tags: spec.Tags, Secrets: r.appSecrets(spec)}
+func (r *release) containerProgram(spec provider.StackSpec, work *container.Definition, transformed *transformPatches) component.Program {
+	run := func(pctx *sdk.Context) error {
+		if err := transformed.install(pctx); err != nil {
+			return err
+		}
+		return work.Declare(pctx)
+	}
+	return component.Program{Run: run, Tags: spec.Tags, Secrets: r.appSecrets(spec)}
 }
 
 func unpreviewedStack(ref provider.StackRef) provider.ChangeGroup {
@@ -801,28 +172,4 @@ func unpreviewedStack(ref provider.StackRef) provider.ChangeGroup {
 		Reason: provider.DetailUnavailable,
 		Slow:   true,
 	}
-}
-
-func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (provider.StackResult, error) {
-	if work.workerApp {
-		return provider.StackResult{}, nil
-	}
-	fields, err := component.RequireOutputFields(outputs, work.app)
-	if err != nil {
-		return provider.StackResult{}, err
-	}
-	url, err := component.RequireStringField(fields, work.app, outputKeyContainerURL)
-	if err != nil {
-		return provider.StackResult{}, err
-	}
-	physical, err := component.RequireStringField(fields, work.app, outputKeyContainerPhysical)
-	if err != nil {
-		return provider.StackResult{}, err
-	}
-	return provider.StackResult{Containers: []provider.AppContainer{{
-		Name:     work.app,
-		Physical: physical,
-		URL:      url,
-		Image:    work.image,
-	}}}, nil
 }

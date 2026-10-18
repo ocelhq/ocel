@@ -47,7 +47,7 @@ func (b Bastion) startTask(ctx context.Context, c Clients) (string, error) {
 		EnableExecuteCommand: true,
 		NetworkConfiguration: &ecstypes.NetworkConfiguration{AwsvpcConfiguration: &ecstypes.AwsVpcConfiguration{
 			Subnets:        b.Subnets,
-			SecurityGroups: []string{b.SecurityGroup},
+			SecurityGroups: b.securityGroups(),
 			AssignPublicIp: ecstypes.AssignPublicIpEnabled,
 		}},
 	}
@@ -144,4 +144,11 @@ func (t *Task) stoppedReason(ctx context.Context) (string, bool) {
 		return "", false
 	}
 	return aws.ToString(described.Tasks[0].StoppedReason), true
+}
+
+func (b Bastion) securityGroups() []string {
+	if b.Clients == "" {
+		return []string{b.SecurityGroup}
+	}
+	return []string{b.SecurityGroup, b.Clients}
 }

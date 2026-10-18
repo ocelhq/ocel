@@ -129,7 +129,7 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 		Engine:  "Valkey",
 		Port:    args.Port,
 		VPCID:   network.VPCID,
-		VPCCIDR: network.VPCCIDR,
+		Clients: network.Clients,
 		Egress:  ec2.SecurityGroupEgressArray{},
 		Tags:    tags,
 	})

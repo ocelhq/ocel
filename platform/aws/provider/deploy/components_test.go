@@ -1,7 +1,12 @@
 package deploy
 
 import (
+	"context"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -19,7 +24,7 @@ func registeredKV(t *testing.T, project string) *componenttest.Recorder {
 	at := component.Stack{
 		Project:    project,
 		Env:        "prod",
-		Network:    component.Network{VPCID: "vpc-1", VPCCIDR: "10.0.0.0/16", SubnetIDs: []string{"subnet-1", "subnet-2"}},
+		Network:    component.Network{VPCID: "vpc-1", SubnetIDs: []string{"subnet-1", "subnet-2"}, Clients: "sg-vpc-clients"},
 		Transforms: (*transformPatches)(nil),
 	}
 	return componenttest.Record(t, func(ctx *pulumi.Context) error {
@@ -35,4 +40,14 @@ func declareTopicsAndTasks(pctx *pulumi.Context, r *release, project, env string
 		}
 	}
 	return nil
+}
+
+type defaultVPCNetwork struct{}
+
+func (defaultVPCNetwork) DescribeVpcs(context.Context, *awsec2.DescribeVpcsInput, ...func(*awsec2.Options)) (*awsec2.DescribeVpcsOutput, error) {
+	return &awsec2.DescribeVpcsOutput{Vpcs: []ec2types.Vpc{{VpcId: aws.String("vpc-default"), CidrBlock: aws.String("172.31.0.0/16")}}}, nil
+}
+
+func (defaultVPCNetwork) DescribeSubnets(context.Context, *awsec2.DescribeSubnetsInput, ...func(*awsec2.Options)) (*awsec2.DescribeSubnetsOutput, error) {
+	return &awsec2.DescribeSubnetsOutput{}, nil
 }

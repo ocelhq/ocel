@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 )
 
@@ -31,6 +32,7 @@ func (r *release) readFunctionNetworkFor(ctx context.Context, spec provider.Stac
 	if !present {
 		network = functionnetwork.Pending
 	}
+	network.Clients = r.vpcClientsOr(component.PendingClients)
 	return &network, !present, nil
 }
 
@@ -47,5 +49,13 @@ func (r *release) claimFunctionNetworkFor(ctx context.Context, spec provider.Sta
 	if err != nil {
 		return nil, false, err
 	}
+	network.Clients = r.cfg.VPCClients
 	return &network, functions, nil
+}
+
+func (r *release) vpcClientsOr(pending string) string {
+	if r.cfg.VPCClients != "" {
+		return r.cfg.VPCClients
+	}
+	return pending
 }

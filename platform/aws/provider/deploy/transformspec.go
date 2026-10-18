@@ -8,13 +8,12 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 )
 
 //go:generate go generate -C ../../../../pkg/provider/transform ./...
@@ -45,7 +44,7 @@ func transformStackSpec(ctx context.Context, pass transform.Pass, registry compo
 		req.Resources = append(req.Resources, transform.Resource{Type: transformTypeContainer, Name: app.App, App: app.App})
 		candidates = append(candidates, transformCandidate{
 			key:   resourceKey{Type: transformTypeContainer, Name: app.App},
-			names: containerResourceNames(),
+			names: container.ResourceNames(),
 		})
 	} else if app != nil {
 		for _, spec := range app.Functions {
@@ -85,68 +84,11 @@ func transformStackSpec(ctx context.Context, pass transform.Pass, registry compo
 func functionCandidate(project string, stack naming.StackName, name string) transformCandidate {
 	return transformCandidate{
 		key:   resourceKey{Type: transformTypeFunction, Name: name},
-		names: functionResourceNames(project, stack, name),
+		names: function.ResourceNames(project, stack, name),
 		check: func(name string, patches map[string]map[string]any) error {
 			return checkVPCConfig(name, patches["lambda"])
 		},
 	}
-}
-
-func translateFunctionSpec(appFramework string, spec provider.FunctionSpec) (functionArgs, error) {
-	execution, err := executionFor(spec.Framework)
-	if err != nil {
-		return functionArgs{}, err
-	}
-	handler := defaultFunctionEntry
-	if spec.EntryFile != "" {
-		handler = spec.EntryFile
-	}
-	memoryMB := defaultFunctionMemoryMB
-	if appFramework == buildoutput.FrameworkNext {
-		memoryMB = nextBundleFunctionMemoryMB
-	}
-	if spec.Memory > 0 {
-		memoryMB = spec.Memory
-	}
-	return functionArgs{
-		Runtime:        execution.Runtime,
-		Handler:        handler,
-		Arch:           execution.Arch,
-		MemorySizeMB:   memoryMB,
-		TimeoutSeconds: defaultFunctionTimeoutSeconds,
-		InvokeMode:     functionURLInvokeModeStream,
-	}, nil
-}
-
-type execution struct {
-	Runtime string
-	Arch    string
-}
-
-func executionFor(framework buildoutput.Framework) (execution, error) {
-	if framework.Name != "" && !buildoutput.IsKnownFramework(framework.Name) {
-		return execution{}, refusal.Refuse(refusal.CodeInvalid, "this provider has no framework named %q", framework.Name)
-	}
-	architecture := arch.Architecture(framework.Arch)
-	if architecture != arch.X8664 && architecture != arch.ARM64 {
-		return execution{}, refusal.Refuse(refusal.CodeInvalid,
-			"this provider runs functions on %s and %s, and %q asks for %s",
-			arch.X8664, arch.ARM64, framework.Name, framework.Arch)
-	}
-	return execution{Runtime: managedRuntime(framework.Name), Arch: architecture}, nil
-}
-
-func managedRuntime(name string) string {
-	switch name {
-	case buildoutput.FrameworkPython:
-		return pythonFunctionRuntime
-	case "":
-		return defaultFunctionRuntime
-	}
-	if buildoutput.RunsOnNode(name) {
-		return defaultFunctionRuntime
-	}
-	return providedFunctionRuntime
 }
 
 func resolveSpecOutputs(ctx context.Context, spec provider.StackSpec, candidates []transformCandidate, results []transform.Result) error {

@@ -143,3 +143,23 @@ func TestStopEndsTheTaskOnceHoweverOftenItIsCalled(t *testing.T) {
 		t.Errorf("tasks %v are still running", running)
 	}
 }
+
+func TestABastionTaskJoinsTheTiersClientsGroupSoTheDatabasesItForwardsToAdmitIt(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	clients := account.clients()
+	spec := testSpec
+	spec.Clients = "sg-vpc-clients"
+	reconciled, err := bastion.Reconcile(context.Background(), clients, spec)
+	if err != nil {
+		t.Fatalf("Reconcile() = %v", err)
+	}
+	if _, err := reconciled.Run(context.Background(), clients); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+	launched := account.tasks[account.runningTasks()[0]]
+	if len(launched.groups) != 2 || launched.groups[0] != reconciled.SecurityGroup || launched.groups[1] != "sg-vpc-clients" {
+		t.Errorf("the task joins %v, want the bastion's own group and the tier's clients group: a database admits the clients group alone", launched.groups)
+	}
+}

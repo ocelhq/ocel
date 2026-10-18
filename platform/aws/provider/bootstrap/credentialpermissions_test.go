@@ -19,10 +19,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
-	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
-	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
-	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
 
 type parsedPolicy struct {

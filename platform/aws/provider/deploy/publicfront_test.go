@@ -7,12 +7,12 @@ import (
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
@@ -34,8 +34,8 @@ func TestTheFirstContainerRoutedByTheLoadBalancerRaisesThePublicFrontOnceAndHang
 	cfg.Passphrase = "a-passphrase"
 	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL:      "http://" + fixtureOrigin,
-		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
+		container.OutputKeyURL:      "http://" + fixtureOrigin,
+		container.OutputKeyPhysical: "shop-prod-web-container-r3f8a1c90",
 	}}
 	infra := containers.StackRef(environment.TierProduction).Name.String()
 	runs := 0
@@ -81,8 +81,8 @@ func TestThePublicFrontAdmitsTheEdgesCurrentRangesOnceTheyChange(t *testing.T) {
 	cfg.Passphrase = "a-passphrase"
 	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL:      "http://" + fixtureOrigin,
-		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
+		container.OutputKeyURL:      "http://" + fixtureOrigin,
+		container.OutputKeyPhysical: "shop-prod-web-container-r3f8a1c90",
 	}}
 	infra := containers.StackRef(environment.TierProduction).Name.String()
 	runs := 0
@@ -123,39 +123,6 @@ func (widenedEdge) Kind() edge.Kind { return "cloudflare" }
 
 func (widenedEdge) Facts() edge.Facts {
 	return edge.Facts{OriginFacingRanges: append(slices.Clone(fixtureRanges), "192.0.2.0/24")}
-}
-
-func TestAContainerRoutedByTheLoadBalancerIsReachedThroughThePublicFrontAlone(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	spec.App.Router = alb.Kind
-	infra := fixtureContainerInfra()
-	infra.PublicListener, infra.PublicHost = fixturePublicListener, fixturePublicHost
-	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, infra)
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	if err := release.placeRule(context.Background(), work); err != nil {
-		t.Fatalf("placeRule() = %v", err)
-	}
-	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
-		t.Fatalf("run the container program: %v", err)
-	}
-
-	rule := recordedOf(t, rec, "aws:lb/listenerRule:ListenerRule")
-	if rule["listenerArn"].StringValue() != fixturePublicListener {
-		t.Errorf("the release's rule hangs off %v, want the public listener: a target group answers behind one load balancer, and the router forwards this app's hostnames to it there", rule["listenerArn"])
-	}
-	env := definitionEnvOf(t, rec)
-	if _, guarded := env[edge.OriginSecretVar]; guarded {
-		t.Errorf("the container is handed %s, and a request the load balancer forwards by hostname carries no secret: it would refuse every one of them", edge.OriginSecretVar)
-	}
-	if _, fronted := env[edge.OriginFrontedVar]; fronted {
-		t.Errorf("the container is handed %s, and no front presents a secret to it: it would refuse to start", edge.OriginFrontedVar)
-	}
 }
 
 type rangedEdge struct{ edge.Edge }

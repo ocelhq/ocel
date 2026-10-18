@@ -311,3 +311,15 @@ func BatchingWindowSeconds(queue Queue) int {
 	}
 	return window
 }
+
+func ReachesTasks(app *provider.AppSpec) bool {
+	if len(app.Workers) > 0 {
+		return true
+	}
+	for _, binding := range app.Grants {
+		if binding.Type == provider.BindingTask || binding.Type == provider.BindingTopic {
+			return true
+		}
+	}
+	return false
+}

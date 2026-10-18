@@ -5,7 +5,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
-	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
 
 const (

@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -11,61 +10,48 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
 func (p *Provider) forget() {
 	p.deployed.forget()
 	p.params.forget()
 	p.layers.forget()
-	p.parts.forget()
+	p.partReads.Forget()
 }
 
-type forgetting struct {
+type tierBootstrap struct {
 	provider.Bootstrap
 	forget    func()
 	key       func(context.Context, environment.Tier) (string, error)
 	keyValues records.Store
-	region    string
-
-	envSourceSync func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)
-	repairParts   func(ctx context.Context, tier environment.Tier) ([]string, error)
-	addedParts    func(ctx context.Context, tier environment.Tier) ([]provider.BootstrapPart, error)
-
-	removable []removablePart
+	parts     tier.Parts
 }
 
-func (s forgetting) Parts() []provider.Part {
-	offered := s.Bootstrap.Parts()
-	for _, each := range s.removable {
-		offered = append(offered, each.Part)
-	}
-	return offered
-}
+func (s tierBootstrap) Parts() []provider.Part { return s.parts.Offered() }
 
-func (s forgetting) addedRemovals(req provider.BootstrapRequest) ([]removablePart, provider.BootstrapRequest) {
-	var added []removablePart
+func (s tierBootstrap) removals(req provider.BootstrapRequest) (tier.Parts, provider.BootstrapRequest) {
+	var removed tier.Parts
 	var stacks []string
 	for _, name := range req.Remove {
-		if at := slices.IndexFunc(s.removable, func(each removablePart) bool { return each.Name == name }); at >= 0 {
-			added = append(added, s.removable[at])
+		if part, found := s.parts.Named(name); found && part.Removal != nil {
+			removed = append(removed, part)
 		} else {
 			stacks = append(stacks, name)
 		}
 	}
 	req.Remove = stacks
-	return added, req
+	return removed, req
 }
 
-func (s forgetting) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
-	added, req := s.addedRemovals(req)
+func (s tierBootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
+	removed, req := s.removals(req)
 	plan, err := s.Bootstrap.Plan(ctx, req)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	for _, each := range added {
-		group, err := each.plan(ctx, req.Tier)
+	for _, part := range removed {
+		group, err := part.Removal.Plan(ctx, req.Tier)
 		if err != nil {
 			return provider.Plan{}, err
 		}
@@ -76,58 +62,45 @@ func (s forgetting) Plan(ctx context.Context, req provider.BootstrapRequest) (pr
 	return plan, nil
 }
 
-func (s forgetting) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
+func (s tierBootstrap) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
 	parts, err := s.Bootstrap.DescribeParts(ctx, described)
 	if err != nil || !described.Present {
 		return parts, err
 	}
-	infra, present, err := containers.ReadPart(ctx, s.keyValues, s.region, described.Tier)
-	if err != nil {
-		return nil, err
+	for _, part := range s.parts {
+		if part.Describe == nil {
+			continue
+		}
+		each, present, err := part.Describe(ctx, described.Tier)
+		if err != nil {
+			return nil, err
+		}
+		if present {
+			parts = append(parts, each)
+		}
 	}
-	if present {
-		parts = append(parts, infra)
-	}
-	network, present, err := functionnetwork.ReadPart(ctx, s.keyValues, s.region, described.Tier)
-	if err != nil {
-		return nil, err
-	}
-	if present {
-		parts = append(parts, network)
-	}
-	sync, present, err := s.envSourceSync(ctx, described.Tier)
-	if err != nil {
-		return nil, err
-	}
-	if present {
-		parts = append(parts, sync)
-	}
-	added, err := s.addedParts(ctx, described.Tier)
-	if err != nil {
-		return nil, err
-	}
-	return append(parts, added...), nil
+	return parts, nil
 }
 
-func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+func (s tierBootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	sealing, err := s.key(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
-	added, req := s.addedRemovals(req)
+	removed, req := s.removals(req)
 	if err := s.Bootstrap.Apply(ctx, req, progress); err != nil {
 		return err
 	}
 	s.forget()
-	for _, each := range added {
-		if err := each.remove(ctx, req.Tier, progress); err != nil {
-			return fmt.Errorf("remove the %s tier's %s bootstrap part: %w", req.Tier, each.Name, err)
+	for _, part := range removed {
+		if err := part.Removal.Remove(ctx, req.Tier, progress); err != nil {
+			return fmt.Errorf("remove the %s tier's %s bootstrap part: %w", req.Tier, part.Name, err)
 		}
-		if err := stackrecords.ForgetBootstrapPart(ctx, s.keyValues, req.Tier, each.Name); err != nil {
+		if err := stackrecords.ForgetBootstrapPart(ctx, s.keyValues, req.Tier, part.Name); err != nil {
 			return err
 		}
 		if progress != nil {
-			progress.Say("Removed the " + each.Name + " part of the " + string(req.Tier) + " bootstrap")
+			progress.Say("Removed the " + part.Name + " part of the " + string(req.Tier) + " bootstrap")
 		}
 	}
 	s.forget()
@@ -144,37 +117,30 @@ func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, pr
 	return envsource.ForgetDigestKey(ctx, s.keyValues, req.Tier)
 }
 
-func (s forgetting) repair(ctx context.Context, tier environment.Tier, progress progress.Log) error {
-	if s.repairParts == nil {
+func (s tierBootstrap) repair(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	var repaired []string
+	for _, part := range s.parts {
+		if part.Repair == nil {
+			continue
+		}
+		made, err := part.Repair(ctx, tier)
+		if err != nil {
+			return err
+		}
+		if made {
+			repaired = append(repaired, part.Name)
+		}
+	}
+	if progress == nil {
 		return nil
 	}
-	repaired, err := s.repairParts(ctx, tier)
-	if err != nil || progress == nil {
-		return err
-	}
-	for _, part := range repaired {
-		progress.Say("Made the " + part + " part again from this build, mending any drift")
+	for _, name := range repaired {
+		progress.Say("Made the " + name + " part again from this build, mending any drift")
 	}
 	return nil
 }
 
-func (p *Provider) repairParts(ctx context.Context, tier environment.Tier) ([]string, error) {
-	var works []stackrecords.PartWork
-	sync, keyed, err := p.envSourceSyncWork(ctx, tier, "", true)
-	if err != nil {
-		return nil, err
-	}
-	if keyed {
-		works = append(works, sync)
-	}
-	added, err := p.addedPartWorks(ctx, tier)
-	if err != nil {
-		return nil, err
-	}
-	return stackrecords.RepairBootstrapParts(ctx, p.KeyValues(), tier, append(works, added...))
-}
-
-func (s forgetting) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+func (s tierBootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	if err := s.Bootstrap.Remove(ctx, tier, progress); err != nil {
 		return err
 	}

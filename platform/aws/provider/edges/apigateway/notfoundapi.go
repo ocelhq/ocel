@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
 )
 
 const notFoundAddedWith = "ocel domain use --preview"

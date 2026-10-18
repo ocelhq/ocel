@@ -5,8 +5,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/rdsdata"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -41,13 +43,13 @@ type Provider struct {
 	aws        aws.Config
 	namespace  bootstrap.Namespace
 
-	deployed memo[environment.Tier, bootstrap.Reading]
-	params   memo[tierEdge, bootstrap.TierParams]
-	layers   memo[environment.Tier, map[string]string]
-	parts    memo[tierPart, partRead]
-	identity memo[struct{}, *sts.GetCallerIdentityOutput]
-	opened   edges.Opened
-	sts      control.STSAPI
+	deployed  memo[environment.Tier, bootstrap.Reading]
+	params    memo[tierEdge, bootstrap.TierParams]
+	layers    memo[environment.Tier, map[string]string]
+	partReads tier.Reads
+	identity  memo[struct{}, *sts.GetCallerIdentityOutput]
+	opened    edges.Opened
+	sts       control.STSAPI
 
 	stacks *deploy.Stacks
 
@@ -100,7 +102,7 @@ func (p *Provider) Facts() provider.Facts {
 		WorkerCeilings:    topic.WorkerCeilings,
 		CachesBytecode:    p.options.Bytecode.Cache,
 
-		MaxFunctionBytes: deploy.MaxFunctionBytes,
+		MaxFunctionBytes: function.MaxBytes,
 	}
 }
 
@@ -124,9 +126,9 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 		return nil, err
 	}
 	b := control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VariablesKey, p.namespace, p.readBootstrap)
-	b.RemoveParts, b.PlanPartRemoval = p.removeAddedParts, p.planAddedPartRemoval
-	return forgetting{Bootstrap: b, forget: p.forget, key: p.Key, keyValues: p.KeyValues(), region: p.aws.Region, envSourceSync: p.envSourceSyncPart, addedParts: p.describeAddedParts, repairParts: p.repairParts,
-		removable: p.removableParts()}, nil
+	records := p.partRecords()
+	b.TierParts = p.tierParts(records)
+	return tierBootstrap{Bootstrap: b, forget: p.forget, key: p.Key, keyValues: records.KeyValues, parts: b.TierParts}, nil
 }
 
 func (p *Provider) Stacks() provider.Stacks { return p.stacks }

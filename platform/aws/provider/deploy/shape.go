@@ -9,6 +9,10 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 
 	"github.com/ocelhq/ocel/pkg/arch"
@@ -112,11 +116,11 @@ func (s costShape) functions(scope, project string, app provider.AppEntry, specs
 		if spec.Framework.Arch == "" {
 			spec.Framework.Arch = arch.Architecture(app.Manifest.GetFramework().GetArch())
 		}
-		args, err := translateFunctionSpec(framework, spec)
+		args, err := function.NewArgs(framework, spec)
 		if err != nil {
 			return err
 		}
-		names := functionResourceNames(project, app.Stack, spec.Name)
+		names := function.ResourceNames(project, app.Stack, spec.Name)
 		s.Add(scope, component.TerraformLambdaFunction, spec.Name, map[string]any{
 			"runtime":           args.Runtime,
 			"memory_size":       args.MemorySizeMB,
@@ -188,23 +192,23 @@ func (s costShape) cronSchedules(scope string, topics topic.Topics, worker strin
 
 func (s costShape) containerWorkers(environment string, app provider.AppEntry, topics topic.Topics) error {
 	scope := s.tree.Scope(environment, pricing.ScopeApp, app.App)
-	for _, worker := range app.Workers {
-		name := resources.WorkerName(worker.Name)
-		platform := map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"}
+	for _, hosted := range app.Workers {
+		name := resources.WorkerName(hosted.Name)
+		platform := map[string]any{"cpu_architecture": container.CPUArchitecture(app.Arch), "operating_system_family": "LINUX"}
 		s.AddPlain(scope, component.TerraformECSTaskDefinition, name, map[string]any{
-			"cpu": containerCPU, "memory": containerMemory, "requires_compatibilities": []any{"FARGATE"}, "runtime_platform": platform,
+			"cpu": container.CPU, "memory": container.Memory, "requires_compatibilities": []any{"FARGATE"}, "runtime_platform": platform,
 		})
 		s.AddPlain(scope, component.TerraformECSService, name, map[string]any{
-			"desired_count": workerFloor(app.App, app.Instances, app.Workers), "launch_type": "FARGATE", "cpu": containerCPU, "memory": containerMemory, "runtime_platform": platform,
+			"desired_count": worker.Floor(app.App, app.Instances, app.Workers), "launch_type": "FARGATE", "cpu": container.CPU, "memory": container.Memory, "runtime_platform": platform,
 		})
 		var queueNames []string
-		for _, queue := range topics.Served(worker.Name) {
+		for _, queue := range topics.Served(hosted.Name) {
 			queueNames = append(queueNames, queue.Name)
 		}
-		for at, group := range slices.Collect(slices.Chunk(queueNames, backlogAlarmQueues)) {
+		for at, group := range slices.Collect(slices.Chunk(queueNames, worker.BacklogAlarmQueues)) {
 			s.AddPlain(scope, component.TerraformMetricAlarm, name+"/"+strconv.Itoa(at), map[string]any{"metrics": len(group)})
 		}
-		if err := s.cronSchedules(scope, topics, worker.Name); err != nil {
+		if err := s.cronSchedules(scope, topics, hosted.Name); err != nil {
 			return err
 		}
 	}
@@ -218,7 +222,7 @@ func batchSize(consumer provider.ConsumerSpec) int {
 	return max(consumer.Batch.Size, 1)
 }
 
-func workerFunctionArgs(app provider.AppEntry, specs []provider.FunctionSpec) (functionArgs, error) {
+func workerFunctionArgs(app provider.AppEntry, specs []provider.FunctionSpec) (function.Args, error) {
 	framework := app.Manifest.GetFramework().GetName()
 	spec := provider.FunctionSpec{Name: app.App}
 	if at := slices.IndexFunc(specs, func(fn provider.FunctionSpec) bool { return fn.HasWorkerEntry }); at >= 0 {
@@ -230,23 +234,23 @@ func workerFunctionArgs(app provider.AppEntry, specs []provider.FunctionSpec) (f
 	if spec.Framework.Arch == "" {
 		spec.Framework.Arch = arch.Architecture(app.Manifest.GetFramework().GetArch())
 	}
-	return translateFunctionSpec(framework, spec)
+	return function.NewArgs(framework, spec)
 }
 
 func (s costShape) container(scope string, app provider.AppEntry) {
 	if !provider.IsWorkerApp(app.App, app.Workers) {
 		s.AddPlain(scope, component.TerraformECSTaskDefinition, app.App, map[string]any{
-			"cpu":                      containerCPU,
-			"memory":                   containerMemory,
+			"cpu":                      container.CPU,
+			"memory":                   container.Memory,
 			"requires_compatibilities": []any{"FARGATE"},
-			"runtime_platform":         map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
+			"runtime_platform":         map[string]any{"cpu_architecture": container.CPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
 		})
 		s.AddPlain(scope, component.TerraformECSService, app.App, map[string]any{
 			"desired_count":    app.Instances.Min,
 			"launch_type":      "FARGATE",
-			"cpu":              containerCPU,
-			"memory":           containerMemory,
-			"runtime_platform": map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
+			"cpu":              container.CPU,
+			"memory":           container.Memory,
+			"runtime_platform": map[string]any{"cpu_architecture": container.CPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
 		})
 	}
 	s.AddPlain(scope, component.TerraformECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
@@ -297,7 +301,7 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, registry componen
 		}
 		for _, spec := range specs {
 			request.Resources = append(request.Resources, transform.Resource{Type: transformTypeFunction, Name: spec.Name, App: app.App})
-			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeFunction, Name: spec.Name}, names: functionResourceNames(project, app.Stack, spec.Name)})
+			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeFunction, Name: spec.Name}, names: function.ResourceNames(project, app.Stack, spec.Name)})
 		}
 	}
 	if len(candidates) == 0 {

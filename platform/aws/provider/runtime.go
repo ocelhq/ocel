@@ -3,14 +3,14 @@ package aws
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 type containerRuntime struct{ *Provider }
 
 func (p containerRuntime) Arch(_ context.Context, app, declared string) (string, error) {
-	return deploy.ContainerArch(app, declared)
+	return container.Arch(app, declared)
 }
 
 func (containerRuntime) NextServer(context.Context) (map[string][]byte, error) { return nil, nil }

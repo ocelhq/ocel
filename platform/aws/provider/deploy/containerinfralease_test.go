@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
@@ -49,8 +50,8 @@ func containerStacks(t *testing.T, store records.Store) (*Stacks, *mockedEngine,
 	cfg.Passphrase = "a-passphrase"
 	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL:      "http://" + fixtureOrigin,
-		outputKeyContainerPhysical: containerPhysical,
+		container.OutputKeyURL:      "http://" + fixtureOrigin,
+		container.OutputKeyPhysical: containerPhysical,
 	}}
 	engine := &mockedEngine{outputs: outputs}
 	return stacksWith(cfg, engine), engine, spec

@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"slices"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -19,22 +19,14 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
-	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
-	"github.com/ocelhq/ocel/platform/aws/provider/iam"
-	"github.com/ocelhq/ocel/platform/aws/provider/queues"
-	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
-	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
@@ -97,28 +89,6 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	return cfg, spec
 }
 
-func declaringASecret(spec provider.StackSpec) provider.StackSpec {
-	spec.App.Values.Secrets = []provider.SecretRef{{Key: "DATABASE_URL"}}
-	return spec
-}
-
-func definitionEnvOf(t *testing.T, rec *inputRecorder) map[string]string {
-	t.Helper()
-	task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")
-	if !task["containerDefinitions"].IsSecret() {
-		t.Fatal("containerDefinitions is not a secret, so every delivered value would sit in the state checkpoint in the clear")
-	}
-	var definitions []containerDefinition
-	if err := json.Unmarshal([]byte(task["containerDefinitions"].SecretValue().Element.StringValue()), &definitions); err != nil || len(definitions) != 1 {
-		t.Fatalf("containerDefinitions = %v, want one container: %v", task["containerDefinitions"], err)
-	}
-	env := map[string]string{}
-	for _, pair := range definitions[0].Environment {
-		env[pair.Name] = pair.Value
-	}
-	return env
-}
-
 func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
 	t.Parallel()
 
@@ -126,254 +96,6 @@ func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
 	spec.App.Compute = provider.ComputeServerless
 	if _, err := releasing(t, cfg).prepare(context.Background(), spec, runProvision, nil); err == nil || !strings.Contains(err.Error(), "serverless") {
 		t.Fatalf("prepare() of a serverless app that pushes an image = %v, want it refused: functions run no image", err)
-	}
-}
-
-func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	if work.env["GREETING"] != "hello" || work.env["API_TOKEN"] != "sensitive-token" || work.env[processenv.PhaseEnvVar] != "production" {
-		t.Errorf("env = %v, want the plain and sensitive values and the phase: those are handed to the runtime once, in the task definition", work.env)
-	}
-	if work.env[containerPortEnv] != containerPort {
-		t.Errorf("%s = %q, want %s, the port the target group probes", containerPortEnv, work.env[containerPortEnv], containerPort)
-	}
-	if work.env[edge.OriginSecretVar] != fixtureSecret {
-		t.Errorf("%s = %q, want the tier's origin secret: the runtime in the container guards with it the way the node runtime does on Lambda", edge.OriginSecretVar, work.env[edge.OriginSecretVar])
-	}
-	if _, fronted := work.env[edge.OriginFrontedVar]; !fronted {
-		t.Errorf("env has no %s, so a container whose secret is lost on the way starts open to anyone who reaches its load balancer", edge.OriginFrontedVar)
-	}
-	if _, pinned := work.env[livefile.EnvVar]; pinned {
-		t.Errorf("env contains %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", livefile.EnvVar)
-	}
-	if work.readsLive() {
-		t.Error("an app with nothing live is granted a read on the variable table")
-	}
-	if got := work.definitionEnv()[originguard.HealthPathVar]; got != "/healthz" {
-		t.Errorf("%s = %q, want the manifest's probe path, which the runtime answers without the origin secret", originguard.HealthPathVar, got)
-	}
-
-	_, err = containerEnv("web", provider.AppValues{Plain: map[string]string{containerPortEnv: "3000"}}, &originGuard{Secret: fixtureSecret}, nil)
-	if err == nil || !strings.Contains(err.Error(), containerPortEnv) {
-		t.Errorf("containerEnv with %s = %v, want it refused by name: the load balancer would probe a port nothing listens on", containerPortEnv, err)
-	}
-
-	spec.App.HealthCheckPath = "not a path"
-	if _, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra()); err == nil {
-		t.Error("containerWork accepted a health check path a load balancer cannot probe")
-	}
-	spec.App.HealthCheckPath = ""
-	unnamed, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() with no health check path = %v, want the root probed", err)
-	}
-	if got := unnamed.definitionEnv()[originguard.HealthPathVar]; got != "/" {
-		t.Errorf("%s = %q with no health check path, want /", originguard.HealthPathVar, got)
-	}
-	cfg.OriginSecret = ""
-	spec.App.HealthCheckPath = "/healthz"
-	if _, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra()); err == nil {
-		t.Error("containerWork accepted a tier with no origin secret, so the listener rule would admit every stranger")
-	}
-}
-
-func TestAContainerDeployedDuringARotationAcceptsBothSecretsAndItsRuleAdmitsEither(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	cfg.PreviousOriginSecret = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
-	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	if work.env[edge.OriginSecretVar] != fixtureSecret || work.env[edge.OriginSecretPreviousVar] != cfg.PreviousOriginSecret {
-		t.Errorf("env has %q and %q, want the current secret and the one it replaced: a route written before the rotation still presents the old one", work.env[edge.OriginSecretVar], work.env[edge.OriginSecretPreviousVar])
-	}
-	if err := release.placeRule(context.Background(), work); err != nil {
-		t.Fatalf("placeRule() = %v", err)
-	}
-	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
-		t.Fatalf("run the container program: %v", err)
-	}
-	rule := recordedOf(t, rec, "aws:lb/listenerRule:ListenerRule")
-	for _, condition := range rule["conditions"].ArrayValue() {
-		header := condition.ObjectValue()["httpHeader"].ObjectValue()
-		if header["httpHeaderName"].StringValue() != edge.OriginSecretHeader {
-			continue
-		}
-		var admitted []string
-		for _, value := range header["values"].ArrayValue() {
-			admitted = append(admitted, value.StringValue())
-		}
-		if !slices.Equal(admitted, []string{fixtureSecret, cfg.PreviousOriginSecret}) {
-			t.Errorf("the rule admits %v, want the current secret and the one it replaced", admitted)
-		}
-	}
-
-	cfg.PreviousOriginSecret = ""
-	unrotated, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	if _, set := unrotated.env[edge.OriginSecretPreviousVar]; set || len(unrotated.secrets) != 1 {
-		t.Errorf("a tier with no rotation underway hands the container %v and env %v, want the current secret alone", unrotated.secrets, unrotated.env)
-	}
-}
-
-func TestAContainerStackProvisionsAFargateServiceBehindTheSharedFront(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	spec.App.Grants = []provider.Binding{{
-		Type: provider.BindingBucket,
-		Name: "bucket--uploads",
-		Grants: []provider.Grant{{
-			Label:     "objects",
-			Actions:   []string{"s3:GetObject"},
-			Resources: []string{"arn:aws:s3:::uploads/*"},
-		}},
-	}}
-	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	if err := release.placeRule(context.Background(), work); err != nil {
-		t.Fatalf("placeRule() = %v", err)
-	}
-
-	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
-		t.Fatalf("run the container program: %v", err)
-	}
-
-	task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")
-	if task["family"].StringValue() != "shop-prod-web-container-r3f8a1c90" {
-		t.Errorf("family = %v, want project, env, app and release", task["family"])
-	}
-	if task["executionRoleArn"].StringValue() != fixtureContainerInfra().ExecutionRole {
-		t.Errorf("executionRoleArn = %v, want the shared container infrastructure's execution role", task["executionRoleArn"])
-	}
-	if task["taskRoleArn"].StringValue() == "" {
-		t.Error("an app granted a binding runs without a task role, so the grant reaches nothing")
-	}
-	var definitions []containerDefinition
-	if err := json.Unmarshal([]byte(task["containerDefinitions"].SecretValue().Element.StringValue()), &definitions); err != nil || len(definitions) != 1 {
-		t.Fatalf("containerDefinitions = %v, want one container: %v", task["containerDefinitions"], err)
-	}
-	definition := definitions[0]
-	if definition.Image != containerImage || definition.Name != containerName || definition.PortMappings[0].ContainerPort != containers.TaskPort {
-		t.Errorf("container = %+v, want the pushed image listening on %d", definition, containers.TaskPort)
-	}
-	env := definitionEnvOf(t, rec)
-	if env["GREETING"] != "hello" || env[containerPortEnv] != containerPort {
-		t.Errorf("environment = %v, want the delivered values and the port", env)
-	}
-	if definition.LogConfig.Options["awslogs-group"] != "/ocel/containers/production" || definition.LogConfig.Options["awslogs-region"] != "us-east-1" {
-		t.Errorf("logs = %v, want the tier log group in the deploy's region", definition.LogConfig)
-	}
-
-	group := recordedOf(t, rec, "aws:lb/targetGroup:TargetGroup")
-	health := group["healthCheck"].ObjectValue()
-	if health["path"].StringValue() != "/healthz" || group["targetType"].StringValue() != "ip" || group["vpcId"].StringValue() != "vpc-123" {
-		t.Errorf("target group = %v, want an ip target group in the shared container infrastructure's VPC probed on the manifest's path", group)
-	}
-
-	rule := recordedOf(t, rec, "aws:lb/listenerRule:ListenerRule")
-	if rule["listenerArn"].StringValue() != fixtureListener {
-		t.Errorf("listenerArn = %v, want the shared container infrastructure's listener", rule["listenerArn"])
-	}
-	if priority := rule["priority"].NumberValue(); priority < 1 || priority > maxRulePriority || priority != float64(rulePriority("shop-prod-web-container-r3f8a1c90", nil)) {
-		t.Errorf("priority = %v, want one derived from the service name: two releases deployed at once must not both take the next free slot", priority)
-	}
-	demanded := map[string]string{}
-	for _, condition := range rule["conditions"].ArrayValue() {
-		header := condition.ObjectValue()["httpHeader"].ObjectValue()
-		demanded[header["httpHeaderName"].StringValue()] = header["values"].ArrayValue()[0].StringValue()
-	}
-	if demanded[edge.OriginSecretHeader] != fixtureSecret {
-		t.Errorf("the rule demands %v, want the tier's origin secret: without it every stranger reaches the container", demanded)
-	}
-	if demanded[edge.OriginContainerHeader] != "shop-prod-web-container-r3f8a1c90" {
-		t.Errorf("the rule demands %v, want the container the edge names: every release shares one front", demanded)
-	}
-
-	service := recordedOf(t, rec, "aws:ecs/service:Service")
-	if service["launchType"].StringValue() != "FARGATE" || service["cluster"].StringValue() != fixtureContainerInfra().Cluster {
-		t.Errorf("service = %v, want a Fargate service in the shared container infrastructure's cluster", service)
-	}
-	network := service["networkConfiguration"].ObjectValue()
-	if network["securityGroups"].ArrayValue()[0].StringValue() != "sg-tasks" || len(network["subnets"].ArrayValue()) != 2 {
-		t.Errorf("network = %v, want the shared container infrastructure's task security group and subnets", network)
-	}
-	if !service["waitForSteadyState"].BoolValue() {
-		t.Error("the deploy does not wait for the service to reach a steady state, so it would record a container nothing answers on yet")
-	}
-
-	for key, inputs := range rec.recorded {
-		if strings.HasPrefix(key, "aws:iam/role:Role::") && !strings.Contains(inputs["assumeRolePolicy"].StringValue(), iam.ECSTasksPrincipal) {
-			t.Errorf("%s trusts %q, want %s, which is what the task runs as", key, inputs["assumeRolePolicy"].StringValue(), iam.ECSTasksPrincipal)
-		}
-	}
-}
-
-func TestAContainerWithNoGrantsRunsWithoutATaskRole(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
-		t.Fatalf("run the container program: %v", err)
-	}
-	for key := range rec.recorded {
-		if strings.HasPrefix(key, "aws:iam/role:Role::") {
-			t.Errorf("an app granted nothing was minted %s, which can only widen what the container reaches", key)
-		}
-	}
-}
-
-func TestAContainerStackDecodesIntoTheContainerItDeployed(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	outputs := auto.OutputMap{"web": auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL:      "http://" + fixtureOrigin,
-		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
-	}}}
-	result, err := release.decodeContainer(work, outputs)
-	if err != nil {
-		t.Fatalf("Decode() = %v", err)
-	}
-	if len(result.Functions) != 0 {
-		t.Errorf("Functions = %v, want none: a container stack provisions no function", result.Functions)
-	}
-	if len(result.Containers) != 1 {
-		t.Fatalf("Containers = %v, want the one service the stack provisioned", result.Containers)
-	}
-	deployed := result.Containers[0]
-	if deployed.Name != "web" || deployed.URL != "http://"+fixtureOrigin || deployed.Image != containerImage || deployed.Physical != "shop-prod-web-container-r3f8a1c90" {
-		t.Errorf("container = %+v, want the app's name, the front the edge reaches, the image it runs and the service the rule names", deployed)
-	}
-
-	if _, err := release.decodeContainer(work, auto.OutputMap{}); err == nil {
-		t.Error("Decode() of a stack that produced no output succeeded, so a deploy would record a container with no origin")
 	}
 }
 
@@ -402,39 +124,6 @@ func (f *fakeRules) claim(priority int) {
 	f.taken = append(f.taken, strconv.Itoa(priority))
 }
 
-func ruleRouting(priority int, physical string) elbv2types.Rule {
-	return elbv2types.Rule{
-		Priority: aws.String(strconv.Itoa(priority)),
-		Conditions: []elbv2types.RuleCondition{
-			{Field: aws.String("http-header"), HttpHeaderConfig: &elbv2types.HttpHeaderConditionConfig{
-				HttpHeaderName: aws.String(edge.OriginSecretHeader), Values: []string{"secret"},
-			}},
-			{Field: aws.String("http-header"), HttpHeaderConfig: &elbv2types.HttpHeaderConditionConfig{
-				HttpHeaderName: aws.String(edge.OriginContainerHeader), Values: []string{physical},
-			}},
-		},
-	}
-}
-
-func TestARuleStepsPastThePrioritiesTheFrontAlreadyUses(t *testing.T) {
-	t.Parallel()
-
-	hashed := rulePriority("shop-prod-web-container-r3f8a1c90", nil)
-	cfg, spec := containerStackSpec(t)
-	cfg.Rules = &fakeRules{taken: []string{strconv.Itoa(hashed), strconv.Itoa(hashed + 1), "default"}}
-	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	if err := release.placeRule(context.Background(), work); err != nil {
-		t.Fatalf("placeRule() = %v", err)
-	}
-	if work.priority != hashed+2 {
-		t.Errorf("priority = %d, want %d: the two slots the hash landed on are taken, and a collision is a refused deploy", work.priority, hashed+2)
-	}
-}
-
 func recordedOf(t *testing.T, rec *inputRecorder, typeToken string) resource.PropertyMap {
 	t.Helper()
 	for key, inputs := range rec.recorded {
@@ -446,56 +135,6 @@ func recordedOf(t *testing.T, rec *inputRecorder, typeToken string) resource.Pro
 	return nil
 }
 
-func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanThePlaintext(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	spec = declaringASecret(spec)
-	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	manifest, err := livefile.Parse([]byte(work.env[livefile.EnvVar]))
-	if err != nil {
-		t.Fatalf("%s = %q, which the runtime cannot read: %v", livefile.EnvVar, work.env[livefile.EnvVar], err)
-	}
-	if len(manifest.Keys) != 1 || manifest.Keys[0].Key != "DATABASE_URL" || manifest.Table != cfg.VariablesTable || manifest.KeyARN != cfg.VariablesKeyARN || manifest.Slug != "shop" {
-		t.Errorf("manifest = %+v, want the secret pinned by name with the table and key the runtime reads it through", manifest)
-	}
-	for name, value := range work.definitionEnv() {
-		if strings.Contains(value, "postgres://") || name == "DATABASE_URL" {
-			t.Errorf("the task definition contains %s=%q: a secret's plaintext is readable by anyone who can describe the task definition, so the runtime reads it live instead", name, value)
-		}
-	}
-	if !work.readsLive() {
-		t.Fatal("an app declaring a secret is granted no read on the variable table, so the runtime cannot resolve it")
-	}
-
-	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
-		t.Fatalf("run the container program: %v", err)
-	}
-	if recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")["taskRoleArn"].StringValue() == "" {
-		t.Error("the task runs without a role, so the runtime has nothing to read the store with")
-	}
-	var policies []string
-	for key, inputs := range rec.recorded {
-		if strings.HasPrefix(key, "aws:iam/rolePolicy:RolePolicy::") {
-			policies = append(policies, inputs["policy"].StringValue())
-		}
-	}
-	if len(policies) != 1 {
-		t.Fatalf("the task role has %d policies, want the one variables read policy Lambda's execution role gets", len(policies))
-	}
-	own := variables.ValuePartition("shop", string(environment.TierProduction))
-	for _, want := range []string{"kms:Decrypt", cfg.VariablesKeyARN, "dynamodb:Query", cfg.VariablesTableARN, own} {
-		if !strings.Contains(policies[0], want) {
-			t.Errorf("policy = %s, want it to contain %q: the read is fenced to this project's partition and the tier key", policies[0], want)
-		}
-	}
-}
-
 func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *testing.T) {
 	t.Parallel()
 
@@ -503,21 +142,23 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *te
 	pass := &fakePass{tags: map[string]string{"team": "shop"}}
 	cfg.Transform = pass
 	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureContainerInfra())
+	work, err := containerDefinitionOf(cfg, spec)
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	if work.transformed, err = transformStackSpec(context.Background(), cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec); err != nil {
+	transformed, err := transformStackSpec(context.Background(), cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec)
+	if err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
+	work.TransformTags = transformed.TagsFor(transformTypeContainer, work.App)
 	if len(pass.seen.Resources) != 1 || pass.seen.Resources[0].Type != transformTypeContainer || pass.seen.Resources[0].App != "web" {
 		t.Fatalf("the transform was shown %+v, want the container as the one resource of app web", pass.seen.Resources)
 	}
-	if err := release.placeRule(context.Background(), work); err != nil {
+	if err := work.PlaceRule(context.Background(), cfg.Rules); err != nil {
 		t.Fatalf("placeRule() = %v", err)
 	}
 	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
+	if err := pulumi.RunErr(release.containerProgram(spec, work, transformed).Run, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
 	for _, token := range []string{"aws:ecs/service:Service", "aws:ecs/taskDefinition:TaskDefinition", "aws:lb/targetGroup:TargetGroup"} {
@@ -527,149 +168,15 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *te
 	}
 
 	pass.out = []transform.Patches{{"role": {"description": "patched"}}}
-	if work.transformed, err = transformStackSpec(context.Background(), cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec); err != nil {
+	if transformed, err = transformStackSpec(context.Background(), cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), &inputRecorder{})); err != nil {
+	work.TransformTags = transformed.TagsFor(transformTypeContainer, work.App)
+	if err := pulumi.RunErr(release.containerProgram(spec, work, transformed).Run, pulumi.WithMocks("shop", spec.Ref.Name.String(), &inputRecorder{})); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
-	if err := work.transformed.refuseUnclaimed(); err == nil || !strings.Contains(err.Error(), "role") {
+	if err := transformed.refuseUnclaimed(); err == nil || !strings.Contains(err.Error(), "role") {
 		t.Errorf("refuseUnclaimed() = %v, want the patch on a role this app never minted refused by name rather than dropped", err)
-	}
-}
-
-func TestAContainerWhoseTierResolvedNoAppBoundaryIsRefusedBeforeARoleIsMinted(t *testing.T) {
-	cfg, spec := containerStackSpec(t)
-	cfg.AppBoundaryARN = ""
-	_, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
-	if err == nil || !strings.Contains(err.Error(), "boundary") {
-		t.Fatalf("containerWork() with no boundary = %v, want a refusal naming the boundary", err)
-	}
-}
-
-func TestAContainersTaskRunsOnTheArchitectureItsAppDeclares(t *testing.T) {
-	t.Parallel()
-
-	for declared, want := range map[string]string{"": "X86_64", arch.X8664: "X86_64", arch.ARM64: "ARM64"} {
-		cfg, spec := containerStackSpec(t)
-		spec.App.Arch = declared
-		release := releasing(t, cfg)
-		work, err := release.containerWork(spec, fixtureContainerInfra())
-		if err != nil {
-			t.Fatalf("containerWork() = %v", err)
-		}
-		if err := release.placeRule(context.Background(), work); err != nil {
-			t.Fatalf("placeRule() = %v", err)
-		}
-		rec := &inputRecorder{}
-		if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
-			t.Fatalf("run the container program: %v", err)
-		}
-		task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")
-		if got := task["runtimePlatform"].ObjectValue()["cpuArchitecture"].StringValue(); got != want {
-			t.Errorf("an app declaring arch %q runs on %s, want %s: its image is built for the architecture it declares", declared, got, want)
-		}
-	}
-}
-
-func runContainerProgram(t *testing.T, cfg Config, spec provider.StackSpec) *inputRecorder {
-	t.Helper()
-	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	if err := release.placeRule(context.Background(), work); err != nil {
-		t.Fatalf("placeRule() = %v", err)
-	}
-	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
-		t.Fatalf("run the container program: %v", err)
-	}
-	return rec
-}
-
-func TestAContainerAppWithOneInstanceCountRunsThatManyTasksAndScalesNothing(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	spec.App.Instances = provider.Instances{Min: 3, Max: 3}
-	rec := runContainerProgram(t, cfg, spec)
-
-	if got := recordedOf(t, rec, "aws:ecs/service:Service")["desiredCount"].NumberValue(); got != 3 {
-		t.Errorf("desiredCount = %v, want the 3 instances the app names", got)
-	}
-	for _, typeToken := range []string{"aws:appautoscaling/target:Target", "aws:appautoscaling/policy:Policy"} {
-		if names := rec.registered(typeToken); len(names) != 0 {
-			t.Errorf("an app whose floor is its ceiling declared %s %v, and there is nothing to scale", typeToken, names)
-		}
-	}
-}
-
-func TestAContainerAppScalesOnRequestsBetweenItsFloorAndCeiling(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	spec.App.Instances = provider.Instances{Min: 2, Max: 6}
-	rec := runContainerProgram(t, cfg, spec)
-
-	if got := recordedOf(t, rec, "aws:ecs/service:Service")["desiredCount"].NumberValue(); got != 2 {
-		t.Errorf("desiredCount = %v, want the service to start at its floor of 2", got)
-	}
-	target := recordedOf(t, rec, "aws:appautoscaling/target:Target")
-	if target["minCapacity"].NumberValue() != 2 || target["maxCapacity"].NumberValue() != 6 {
-		t.Errorf("the scalable target spans %v to %v, want 2 to 6", target["minCapacity"], target["maxCapacity"])
-	}
-	if got, want := target["resourceId"].StringValue(), "service/ocel-containers-production/shop-prod-web-container-r3f8a1c90"; got != want {
-		t.Errorf("resourceId = %q, want %q, the service this release runs", got, want)
-	}
-	if target["serviceNamespace"].StringValue() != "ecs" || target["scalableDimension"].StringValue() != "ecs:service:DesiredCount" {
-		t.Errorf("the scalable target is %v on %v, want an ECS service's desired count", target["serviceNamespace"], target["scalableDimension"])
-	}
-	if target["tags"].ObjectValue()["ocel:managed-by"].StringValue() != "ocel" {
-		t.Errorf("tags = %v, want the scalable target tagged as ocel's, which is what the deploy credential may change", target["tags"])
-	}
-
-	policy := recordedOf(t, rec, "aws:appautoscaling/policy:Policy")
-	if policy["policyType"].StringValue() != "TargetTrackingScaling" {
-		t.Errorf("policyType = %v, want target tracking", policy["policyType"])
-	}
-	tracking := policy["targetTrackingScalingPolicyConfiguration"].ObjectValue()
-	metric := tracking["predefinedMetricSpecification"].ObjectValue()
-	if metric["predefinedMetricType"].StringValue() != "ALBRequestCountPerTarget" {
-		t.Errorf("the policy tracks %v, want requests per task", metric["predefinedMetricType"])
-	}
-	label := metric["resourceLabel"].StringValue()
-	if !strings.HasPrefix(label, "app/ocel-containers-production/abc/targetgroup/") {
-		t.Errorf("resourceLabel = %q, want the load balancer behind the listener and this release's target group", label)
-	}
-	if tracking["targetValue"].NumberValue() <= 0 {
-		t.Errorf("targetValue = %v, want a request count per task to hold", tracking["targetValue"])
-	}
-}
-
-func TestAContainerAppThatStopsScalingIsHeldAtItsFloorAgainAndScalesNothing(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	spec.App.Instances = provider.Instances{Min: 2, Max: 6}
-	scaling := runContainerProgram(t, cfg, spec)
-	if ignored := scaling.ignoredOf("aws:ecs/service:Service"); !slices.Contains(ignored, "desiredCount") {
-		t.Fatalf("a scaling service ignores %v, want desiredCount left to the autoscaler", ignored)
-	}
-
-	spec.App.Instances = provider.Instances{Min: 2, Max: 2}
-	fixed := runContainerProgram(t, cfg, spec)
-	if ignored := fixed.ignoredOf("aws:ecs/service:Service"); slices.Contains(ignored, "desiredCount") {
-		t.Errorf("a service that stopped scaling ignores %v, want desiredCount set back to its floor", ignored)
-	}
-	if got := recordedOf(t, fixed, "aws:ecs/service:Service")["desiredCount"].NumberValue(); got != 2 {
-		t.Errorf("desiredCount = %v, want the floor of 2 the app now runs at", got)
-	}
-	for _, typeToken := range []string{"aws:appautoscaling/target:Target", "aws:appautoscaling/policy:Policy"} {
-		if names := fixed.registered(typeToken); len(names) != 0 {
-			t.Errorf("a service that stopped scaling still declares %s %v, which would keep scaling it", typeToken, names)
-		}
 	}
 }
 
@@ -712,8 +219,8 @@ func retainingContainers(t *testing.T) (*Stacks, *mockedEngine, *retaining, prov
 	cfg.Retention = retained.hooks()
 	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL:      "http://" + fixtureOrigin,
-		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
+		container.OutputKeyURL:      "http://" + fixtureOrigin,
+		container.OutputKeyPhysical: "shop-prod-web-container-r3f8a1c90",
 	}}
 	engine := &mockedEngine{outputs: outputs}
 	return stacksWith(cfg, engine), engine, retained, spec
@@ -853,60 +360,23 @@ func TestAContainerReleaseWhoseImageCannotBePushedProvisionsNothing(t *testing.T
 	}
 }
 
-func TestAContainerThatSendsIsHandedTheQueueTopologyAndATasksPolicyOnItsTaskRole(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	cfg.StateTable = "ocel-state"
-	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
-	resize := taskResource("resize", provider.ConsumerSpec{Worker: "worker"})
-	spec.App.Topics = []provider.Resource{resize}
-	spec.App.Grants = []provider.Binding{{Name: "resize", Type: provider.BindingTask}}
-	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
+func containerDefinitionOf(cfg Config, spec provider.StackSpec) (*container.Definition, error) {
+	work, err := container.NewDefinition(spec, cfg.containerTarget())
 	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
+		return nil, err
 	}
-	topology, err := queues.Parse([]byte(work.env[queues.EnvVar]))
-	if err != nil {
-		t.Fatalf("%s = %q, which the runtime cannot read: %v", queues.EnvVar, work.env[queues.EnvVar], err)
-	}
-	queue := queues.QueueName("shop", "prod", "resize", "resize", false)
-	if topology.Table != "ocel-state" || topology.Topics["resize"].Queues["resize"] != queue {
-		t.Errorf("topology = %+v, want the state table and the queue %s behind resize", topology, queue)
-	}
-
-	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
-		t.Fatalf("run the container program: %v", err)
-	}
-	if recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")["taskRoleArn"].StringValue() == "" {
-		t.Fatal("the task runs without a role, so it can reach no queue")
-	}
-	var policies []string
-	for key, inputs := range rec.recorded {
-		if strings.HasPrefix(key, "aws:iam/rolePolicy:RolePolicy::") {
-			policies = append(policies, inputs["policy"].StringValue())
-		}
-	}
-	if len(policies) != 1 {
-		t.Fatalf("the task role has %d policies, want the one tasks policy a function's role gets", len(policies))
-	}
-	for _, want := range []string{"sqs:SendMessage", queue, cfg.StateTableARN, "dynamodb:PutItem"} {
-		if !strings.Contains(policies[0], want) {
-			t.Errorf("policy = %s, want it to contain %q", policies[0], want)
-		}
-	}
+	work.Infra = fixtureContainerInfra()
+	return work, nil
 }
 
-func TestAContainerThatSendsToNothingIsHandedNoQueueTopology(t *testing.T) {
-	t.Parallel()
-
-	cfg, spec := containerStackSpec(t)
-	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
+func hashedPriority(t *testing.T) int {
+	t.Helper()
+	work, err := containerDefinitionOf(containerStackSpec(t))
 	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
+		t.Fatalf("containerDefinitionOf() = %v", err)
 	}
-	if _, set := work.env[queues.EnvVar]; set {
-		t.Errorf("%s is set for an app that binds no task or topic", queues.EnvVar)
+	if err := work.PlaceRule(context.Background(), nil); err != nil {
+		t.Fatalf("PlaceRule() = %v", err)
 	}
+	return work.Priority()
 }

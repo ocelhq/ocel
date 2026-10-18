@@ -43,6 +43,7 @@ type Spec struct {
 	Tier     environment.Tier
 	Boundary string
 	Ports    []int
+	Clients  string
 }
 
 type Bastion struct {
@@ -50,6 +51,7 @@ type Bastion struct {
 	Cluster        string
 	TaskDefinition string
 	SecurityGroup  string
+	Clients        string
 	Subnets        []string
 	Ports          []int
 }

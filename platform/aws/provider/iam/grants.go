@@ -10,6 +10,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+type BindingPolicy struct {
+	Binding string
+	Policy  string
+}
+
 type UnscopedGrantError struct {
 	Binding string
 	Label   string
@@ -104,4 +109,22 @@ func grantCondition(grant *variablestorev1.Grant) map[string]any {
 		}
 	}
 	return out
+}
+
+func NewBindingPolicies(grants []provider.Binding) ([]BindingPolicy, error) {
+	out := make([]BindingPolicy, 0, len(grants))
+	for _, binding := range grants {
+		if slices.ContainsFunc(out, func(planned BindingPolicy) bool { return planned.Binding == binding.Name }) {
+			continue
+		}
+		policy, err := GrantPolicy(binding.Name, provider.GrantMessages(binding.Grants))
+		if err != nil {
+			return nil, err
+		}
+		if policy == "" {
+			continue
+		}
+		out = append(out, BindingPolicy{Binding: binding.Name, Policy: policy})
+	}
+	return out, nil
 }

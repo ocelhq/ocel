@@ -3,9 +3,11 @@ package deploy
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
-
-	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -37,8 +39,8 @@ type Config struct {
 	Tags      TagClock
 	KeyValues records.Store
 	WrittenBy provider.WrittenBy
-	Rules     RulesAPI
-	Subnets   awsec2.DescribeSubnetsAPIClient
+	Rules     container.RulesAPI
+	Network   component.NetworkAPI
 
 	RequiredParts []string
 
@@ -49,6 +51,7 @@ type Config struct {
 	VariablesKeyARN     string
 	AppBoundaryARN      string
 	AppRolePath         string
+	VPCClients          string
 	Tier                environment.Tier
 	VariablesReferenced map[variablestore.Coordinate]string
 
@@ -60,10 +63,10 @@ type Config struct {
 	ArtifactBucket string
 	Objects        payloads.ObjectStore
 
-	Invoker InvokeAPI
+	Invoker function.InvokeAPI
 
-	Getter      ObjectsAPI
-	CodeUpdater FunctionCodeAPI
+	Getter      function.ObjectsAPI
+	CodeUpdater function.FunctionCodeAPI
 
 	AssetBucket string
 
@@ -105,6 +108,30 @@ type Config struct {
 
 func (c Config) variableStore() variables.Store {
 	return variables.Store{Table: c.VariablesTable, KeyARN: c.VariablesKeyARN, Tier: c.Tier, Env: c.Env, Referenced: c.VariablesReferenced}
+}
+
+func (c Config) functionClients() *function.Clients {
+	return &function.Clients{Invoker: c.Invoker, Getter: c.Getter, CodeUpdater: c.CodeUpdater, Buckets: c.buckets(), BytecodeEmbed: c.BytecodeEmbed}
+}
+
+func (c Config) containerTarget() container.Target {
+	return container.Target{
+		Tier:                 c.Tier,
+		Region:               c.Region,
+		Slug:                 c.Slug,
+		StateTable:           c.stateTable(),
+		Variables:            c.variableStore(),
+		VariablesTableARN:    c.VariablesTableARN,
+		AppBoundaryARN:       c.AppBoundaryARN,
+		AppRolePath:          c.AppRolePath,
+		OriginSecret:         c.OriginSecret,
+		PreviousOriginSecret: c.PreviousOriginSecret,
+		VPCClients:           c.VPCClients,
+	}
+}
+
+func (c Config) workerTarget() worker.Target {
+	return worker.Target{Tier: c.Tier, StateTable: c.stateTable()}
 }
 
 func (c Config) buckets() site.Buckets {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
@@ -154,7 +155,7 @@ func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transformStackSpec() = %v", err)
 	}
-	names := functionResourceNames("shop", specUnderTransform().Ref.Name, "fn--api--users")
+	names := function.ResourceNames("shop", specUnderTransform().Ref.Name, "fn--api--users")
 	patch, claimed := transformed.patches[names["lambda"]]
 	if !claimed {
 		t.Fatalf("nothing was claimed for %q, want the lambda patch", names["lambda"])
@@ -224,7 +225,7 @@ func TestATransformReadsABindingOutputThroughTheSpecsOwnBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transformStackSpec() = %v", err)
 	}
-	names := functionResourceNames("shop", spec.Ref.Name, "fn--api--users")
+	names := function.ResourceNames("shop", spec.Ref.Name, "fn--api--users")
 	if got := transformed.patches[names["lambda"]]["runtime"]; got != "nodejs22.x" {
 		t.Errorf("the function runs %q, want the value the published binding records", got)
 	}
@@ -286,7 +287,7 @@ func TestATransformReadsABoundResourceUnderTheNameItIsPublishedAs(t *testing.T) 
 	if err != nil {
 		t.Fatalf("transformStackSpec() = %v, want the bound resource's own published record read", err)
 	}
-	names := functionResourceNames("shop", spec.Ref.Name, "fn--api--users")
+	names := function.ResourceNames("shop", spec.Ref.Name, "fn--api--users")
 	if got := transformed.patches[names["lambda"]]["runtime"]; got != "nodejs22.x" {
 		t.Errorf("the function runs %q, want the value the bound record has", got)
 	}

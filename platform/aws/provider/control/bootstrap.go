@@ -19,10 +19,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
 const groupVendor provider.Vendor = "aws"
@@ -51,17 +50,13 @@ type Bootstrap struct {
 	KMS          bootstrap.KeyAPI
 	Store        bootstrap.ObjectStore
 	Buckets      cfn.BucketEmptierAPI
-	Bastion      bastion.Clients
-	EnvSync      envsourcesync.Clients
 	Edge         edge.Edge
 	Edges        provider.Edges
 	Kinds        []edge.Kind
 	Region       string
 	VariablesKey string
 	Read         func(context.Context, environment.Tier) (bootstrap.Reading, error)
-
-	RemoveParts     func(ctx context.Context, tier environment.Tier) error
-	PlanPartRemoval func(ctx context.Context, tier environment.Tier) ([]provider.ChangeGroup, error)
+	TierParts    []tier.Part
 
 	Namespace bootstrap.Namespace
 }
@@ -76,8 +71,6 @@ func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kind
 		KMS:          kms.NewFromConfig(cfg),
 		Store:        s3.NewFromConfig(cfg),
 		Buckets:      s3.NewFromConfig(cfg),
-		Bastion:      bastion.NewClients(cfg),
-		EnvSync:      envsourcesync.NewClients(cfg),
 		Edge:         front,
 		Edges:        registry,
 		Kinds:        kinds,
@@ -333,18 +326,20 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		Records: b.Records,
 		Buckets: b.Buckets,
 
-		RemoveBastion:       b.removeBastion,
-		RemoveEnvSourceSync: b.removeEnvSourceSync,
-		RemoveParts:         b.RemoveParts,
+		RemoveParts: b.tearDownParts,
 	}, b.Namespace, tier, progress)
 }
 
-func (b Bootstrap) removeEnvSourceSync(ctx context.Context, tier environment.Tier) error {
-	return envsourcesync.Remove(ctx, b.EnvSync, string(b.Namespace), tier)
-}
-
-func (b Bootstrap) removeBastion(ctx context.Context, tier environment.Tier) error {
-	return bastion.Remove(ctx, b.Bastion, tier)
+func (b Bootstrap) tearDownParts(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	for _, part := range b.TierParts {
+		if part.Teardown == nil {
+			continue
+		}
+		if err := part.Teardown.Remove(ctx, tier, progress); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (b Bootstrap) apis() bootstrap.APIs {
