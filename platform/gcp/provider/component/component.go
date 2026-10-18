@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -21,6 +22,7 @@ type Component struct {
 	Shape     func(shape Shape, declared []provider.Resource) error
 	Grants    func(ctx context.Context, app App) ([]grants.Grant, error)
 	Egress    bool
+	Accounts  []bootstrap.Account
 }
 
 type Part struct {
@@ -43,6 +45,7 @@ type App struct {
 	Spec    provider.StackSpec
 	Account string
 	Member  string
+	Topics  map[string]*provider.TopicSpec
 }
 
 type Registry []Component
@@ -147,4 +150,25 @@ func (r Registry) Egress(bindings []provider.Binding) bool {
 		each, ok := r.For(binding.Type)
 		return ok && each.Egress
 	})
+}
+
+func (r Registry) Unserved() []provider.BindingType {
+	served := resources.ServedBindingTypes(r.Hooks())
+	var unserved []provider.BindingType
+	for _, each := range r {
+		for _, kind := range each.Types {
+			if !slices.Contains(served, kind) && !slices.Contains(unserved, kind) {
+				unserved = append(unserved, kind)
+			}
+		}
+	}
+	return unserved
+}
+
+func (r Registry) Accounts() []bootstrap.Account {
+	var accounts []bootstrap.Account
+	for _, each := range r {
+		accounts = append(accounts, each.Accounts...)
+	}
+	return accounts
 }

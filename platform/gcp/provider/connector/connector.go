@@ -21,10 +21,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
@@ -331,18 +329,10 @@ func (p Connector) bindConnectorProject(ctx context.Context, granting bool) erro
 		return err
 	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
-	if err := gcloud.BindProjectRole(ctx, clients, member, connectorRecordsRole, connectorRecordsCondition(clients), granting); err != nil {
+	if err := gcloud.BindProjectRole(ctx, clients, member, connectorRecordsRole, variables.RecordsCondition(clients, environment.TierProduction, environment.TierPreview), granting); err != nil {
 		return fmt.Errorf("let %s read and write the %s database's records and every project's: %w", member, ports.Database(clients.Namespace()), err)
 	}
 	return nil
-}
-
-func connectorRecordsCondition(c *gcloud.Clients) *policy.Condition {
-	clauses := []string{fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.Database()))}
-	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		clauses = append(clauses, fmt.Sprintf("resource.name.startsWith(%q)", bootstrap.DatabasePath(c, c.ProjectDatabasePrefix(tier))))
-	}
-	return &policy.Condition{Title: "ocel " + string(c.Namespace()) + " records", Expression: strings.Join(clauses, " || ")}
 }
 
 func (p Connector) bindConnectorKeys(ctx context.Context, wanted []string, progress progress.Log) error {

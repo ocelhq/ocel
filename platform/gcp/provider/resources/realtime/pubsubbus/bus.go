@@ -153,16 +153,31 @@ func (b *Bus) pull(ctx context.Context) {
 			continue
 		}
 		failed = 0
-		b.deliver(answer.ReceivedMessages)
+		b.deliver(answer.ReceivedMessages, time.Now())
 		b.acknowledge(ctx, answer.ReceivedMessages)
 	}
 }
 
-func (b *Bus) deliver(received []*pubsub.ReceivedMessage) {
+func (b *Bus) deliver(received []*pubsub.ReceivedMessage, now time.Time) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	stale := 0
+	defer func() {
+		if stale > 0 {
+			fmt.Fprintf(os.Stderr, "drop %d messages on %s published more than %s ago, which are no longer live\n", stale, b.subscription, ackDeadline)
+		}
+	}()
 	for _, each := range received {
 		if each.Message == nil {
+			continue
+		}
+		published, err := time.Parse(time.RFC3339Nano, each.Message.PublishTime)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "drop message %s on %s, whose publish time %q is no RFC 3339 time: %v\n", each.Message.MessageId, b.subscription, each.Message.PublishTime, err)
+			continue
+		}
+		if now.Sub(published) > ackDeadline {
+			stale++
 			continue
 		}
 		event, err := base64.StdEncoding.DecodeString(each.Message.Data)
@@ -184,10 +199,10 @@ func (b *Bus) acknowledge(ctx context.Context, received []*pubsub.ReceivedMessag
 	for _, each := range received {
 		ids = append(ids, each.AckId)
 	}
-	acking, cancel := context.WithTimeout(context.WithoutCancel(ctx), ackDeadline)
+	acking, cancel := context.WithTimeout(ctx, ackDeadline)
 	defer cancel()
 	_, err := googleretry.Attempted(acking, b.service.Projects.Subscriptions.Acknowledge(b.subscription, &pubsub.AcknowledgeRequest{AckIds: ids}).Context(acking).Do)
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		fmt.Fprintf(os.Stderr, "acknowledge %d messages on %s, which Pub/Sub delivers again: %v\n", len(ids), b.subscription, err)
 	}
 }

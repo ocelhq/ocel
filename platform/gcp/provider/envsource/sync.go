@@ -74,7 +74,7 @@ func Purpose(b bootstrap.Engine, tier environment.Tier) bootstrap.AccountPurpose
 
 func grantSyncWrites(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
 	member := syncMember(b.Clients, tier)
-	if err := gcloud.BindProjectRole(ctx, b.Clients, member, syncRecordsRole, variables.TierRecordsCondition(b.Clients, tier), true); err != nil {
+	if err := gcloud.BindProjectRole(ctx, b.Clients, member, syncRecordsRole, variables.RecordsCondition(b.Clients, tier), true); err != nil {
 		return fmt.Errorf("let %s read and write the %s tier's records: %w", member, tier, err)
 	}
 	if _, err := gcloud.BindKeyRoles(ctx, b.Clients, tier, member, SyncKeyRoles, SyncKeyRoles); err != nil {
@@ -90,7 +90,7 @@ func forgetSyncWrites(ctx context.Context, b bootstrap.Engine, tier environment.
 	member := syncMember(b.Clients, tier)
 	return gcloud.EveryStep(
 		func() error {
-			return gcloud.BindProjectRole(ctx, b.Clients, member, syncRecordsRole, variables.TierRecordsCondition(b.Clients, tier), false)
+			return gcloud.BindProjectRole(ctx, b.Clients, member, syncRecordsRole, variables.RecordsCondition(b.Clients, tier), false)
 		},
 		func() error {
 			_, err := gcloud.BindKeyRoles(ctx, b.Clients, tier, member, SyncKeyRoles, nil)
@@ -105,7 +105,7 @@ func forgetSyncWrites(ctx context.Context, b bootstrap.Engine, tier environment.
 
 func syncWritesGranted(ctx context.Context, b bootstrap.Engine, tier environment.Tier) (bool, error) {
 	member := syncMember(b.Clients, tier)
-	records, err := gcloud.ProjectRoleGranted(ctx, b.Clients, member, syncRecordsRole, variables.TierRecordsCondition(b.Clients, tier))
+	records, err := gcloud.ProjectRoleGranted(ctx, b.Clients, member, syncRecordsRole, variables.RecordsCondition(b.Clients, tier))
 	if err != nil || !records {
 		return false, err
 	}

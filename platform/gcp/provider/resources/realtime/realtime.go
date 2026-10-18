@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
@@ -65,9 +66,10 @@ func New(
 
 func (p *Realtime) Component() component.Component {
 	return component.Component{
-		Types: []provider.BindingType{provider.BindingRealtime},
-		Hooks: resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
-		Shape: shapeRealtime,
+		Types:    []provider.BindingType{provider.BindingRealtime},
+		Hooks:    resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
+		Shape:    shapeRealtime,
+		Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}},
 	}
 }
 

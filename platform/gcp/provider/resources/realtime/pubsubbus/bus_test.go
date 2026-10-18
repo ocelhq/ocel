@@ -98,6 +98,30 @@ func TestEachBusSubscribesForItselfAndASubscriptionLeftBehindLapsesInADay(t *tes
 	}
 }
 
+func TestABusDropsAMessagePublishedLongerAgoThanItsAckDeadline(t *testing.T) {
+	t.Parallel()
+
+	fake, options := newPubSub(t)
+	bus := openBus(t, options)
+	got := listen(t, bus)
+	fake.Mu.Lock()
+	fake.PublishedAgo = 11 * time.Second
+	fake.Mu.Unlock()
+	if err := bus.Publish(context.Background(), "/app/a", `"stale"`); err != nil {
+		t.Fatalf("Publish() = %v", err)
+	}
+	fake.Mu.Lock()
+	fake.PublishedAgo = 0
+	fake.Mu.Unlock()
+	if err := bus.Publish(context.Background(), "/app/a", `"live"`); err != nil {
+		t.Fatalf("Publish() = %v", err)
+	}
+	awaitHeard(t, got, "the bus", heard{channel: "/app/a", event: `"live"`})
+	if acked := fake.AwaitAcknowledged(2, 5*time.Second); acked != 2 {
+		t.Errorf("%d messages were acknowledged, want 2: a dropped message is delivered again unless it is acknowledged", acked)
+	}
+}
+
 func TestClosingABusDeletesItsSubscription(t *testing.T) {
 	t.Parallel()
 
@@ -115,6 +139,35 @@ func TestClosingABusDeletesItsSubscription(t *testing.T) {
 	}
 }
 
+func TestClosingABusDeletesItsSubscriptionWithoutWaitingOutAnAcknowledgeInFlight(t *testing.T) {
+	t.Parallel()
+
+	fake, options := newPubSub(t)
+	bus, err := pubsubbus.Open(context.Background(), topic, options...)
+	if err != nil {
+		t.Fatalf("Open() = %v", err)
+	}
+	listen(t, bus)
+	stalled := fake.StallNextAcknowledge(time.Minute)
+	if err := bus.Publish(context.Background(), "/app/a", "{}"); err != nil {
+		t.Fatalf("Publish() = %v", err)
+	}
+	select {
+	case <-stalled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the bus never acknowledged what it delivered")
+	}
+
+	window, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := bus.Close(window); err != nil {
+		t.Fatalf("Close() = %v, want the subscription deleted within the stop window", err)
+	}
+	if left := fake.SubscriptionsOf(topic); len(left) != 0 {
+		t.Errorf("the topic keeps %d subscriptions once its only bus closed, want none: a stranded subscription lingers a day", len(left))
+	}
+}
+
 func TestABusAcknowledgesWhatItDelivers(t *testing.T) {
 	t.Parallel()
 
@@ -125,10 +178,7 @@ func TestABusAcknowledgesWhatItDelivers(t *testing.T) {
 		t.Fatalf("Publish() = %v", err)
 	}
 	awaitHeard(t, got, "the bus", heard{channel: "/app/a", event: "{}"})
-	if err := bus.Close(context.Background()); err != nil {
-		t.Fatalf("Close() = %v", err)
-	}
-	if acked := fake.Acknowledged(); acked != 1 {
+	if acked := fake.AwaitAcknowledged(1, 5*time.Second); acked != 1 {
 		t.Errorf("%d messages were acknowledged, want 1: an unacknowledged message is delivered again ten seconds later", acked)
 	}
 }

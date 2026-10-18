@@ -10,7 +10,7 @@ import (
 func (p *Provider) bucketHooks() *bucket.Bucket { return bucket.New(p.openClients) }
 
 func composed(b bootstrap.Engine) bootstrap.Engine {
-	b.Removable, b.Accounts, b.FrontParts = tierParts(), tierAccounts(), tierFronts()
+	b.Removable, b.Accounts, b.FrontParts = tierParts(), tierAccounts((&Provider{}).components()), tierFronts()
 	b.TakeRecords, b.SweepAccounts = variables.TakeProjectRecords, release.DeleteUnusedAccounts
 	return b
 }

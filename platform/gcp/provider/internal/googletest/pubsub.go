@@ -23,10 +23,14 @@ type PubSub struct {
 	Deleted       []string
 	Published     int
 	DeniedCreates int
+	PublishedAgo  time.Duration
 
 	pending map[string][]*pubsub.ReceivedMessage
 	arrived map[string]chan struct{}
 	acked   int
+	ackedTo chan struct{}
+	stall   time.Duration
+	stalled chan struct{}
 	nextID  int
 }
 
@@ -36,6 +40,7 @@ func NewPubSub() *PubSub {
 		Subscriptions: map[string]*pubsub.Subscription{},
 		pending:       map[string][]*pubsub.ReceivedMessage{},
 		arrived:       map[string]chan struct{}{},
+		ackedTo:       make(chan struct{}),
 	}
 }
 
@@ -104,6 +109,7 @@ func (p *PubSub) serveTopic(t *testing.T, w http.ResponseWriter, r *http.Request
 		for _, message := range asked.Messages {
 			p.nextID++
 			message.MessageId = strconv.Itoa(p.nextID)
+			message.PublishTime = time.Now().Add(-p.PublishedAgo).UTC().Format(time.RFC3339Nano)
 			ids = append(ids, message.MessageId)
 			for name, subscription := range p.Subscriptions {
 				if subscription.Topic == topic {
@@ -175,7 +181,19 @@ func (p *PubSub) serveSubscription(t *testing.T, w http.ResponseWriter, r *http.
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		if stall, stalled := p.stall, p.stalled; stall > 0 {
+			p.stall, p.stalled = 0, nil
+			close(stalled)
+			p.Mu.Unlock()
+			select {
+			case <-r.Context().Done():
+			case <-time.After(stall):
+			}
+			p.Mu.Lock()
+		}
 		p.acked += len(asked.AckIds)
+		close(p.ackedTo)
+		p.ackedTo = make(chan struct{})
 		_, _ = w.Write([]byte(`{}`))
 	default:
 		p.Mu.Unlock()
@@ -210,10 +228,28 @@ func (p *PubSub) pull(w http.ResponseWriter, r *http.Request, name string, exist
 	_ = json.NewEncoder(w).Encode(&pubsub.PullResponse{ReceivedMessages: received})
 }
 
-func (p *PubSub) Acknowledged() int {
+func (p *PubSub) StallNextAcknowledge(stall time.Duration) <-chan struct{} {
 	p.Mu.Lock()
 	defer p.Mu.Unlock()
-	return p.acked
+	p.stall, p.stalled = stall, make(chan struct{})
+	return p.stalled
+}
+
+func (p *PubSub) AwaitAcknowledged(count int, within time.Duration) int {
+	deadline := time.After(within)
+	for {
+		p.Mu.Lock()
+		acked, more := p.acked, p.ackedTo
+		p.Mu.Unlock()
+		if acked >= count {
+			return acked
+		}
+		select {
+		case <-more:
+		case <-deadline:
+			return acked
+		}
+	}
 }
 
 func (p *PubSub) SubscriptionsOf(topic string) []*pubsub.Subscription {
