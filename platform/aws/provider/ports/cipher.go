@@ -2,8 +2,8 @@ package ports
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
-	"maps"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
+
+const associatedDataContextKey = "ocel:associated-data"
 
 type CryptoAPI interface {
 	Encrypt(context.Context, *kms.EncryptInput, ...func(*kms.Options)) (*kms.EncryptOutput, error)
@@ -59,10 +61,6 @@ func RefuseUnkeyed(tier environment.Tier) error {
 }
 
 func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	encryptionContext, err := newEncryptionContext(bound)
-	if err != nil {
-		return nil, err
-	}
 	key, err := s.readKey(ctx, tier)
 	if err != nil {
 		return nil, err
@@ -70,7 +68,7 @@ func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 	out, err := s.KMS.Encrypt(ctx, &kms.EncryptInput{
 		KeyId:             aws.String(key),
 		Plaintext:         plaintext,
-		EncryptionContext: encryptionContext,
+		EncryptionContext: newEncryptionContext(bound),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encrypt value: %w", err)
@@ -79,10 +77,6 @@ func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 }
 
 func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	encryptionContext, err := newEncryptionContext(bound)
-	if err != nil {
-		return nil, err
-	}
 	key, err := s.readKey(ctx, tier)
 	if err != nil {
 		return nil, err
@@ -90,7 +84,7 @@ func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.Asso
 	out, err := s.KMS.Decrypt(ctx, &kms.DecryptInput{
 		KeyId:             aws.String(key),
 		CiphertextBlob:    sealed,
-		EncryptionContext: encryptionContext,
+		EncryptionContext: newEncryptionContext(bound),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("decrypt value: %w", err)
@@ -98,18 +92,6 @@ func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.Asso
 	return out.Plaintext, nil
 }
 
-func newEncryptionContext(bound seal.AssociatedData) (map[string]string, error) {
-	encryptionContext := make(map[string]string, len(bound))
-	for _, field := range bound {
-		if field.Name == "" {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "a sealed value is bound to a field with no name")
-		}
-		if _, named := encryptionContext[field.Name]; named {
-			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"a sealed value is bound to %s twice, and an encryption context holds one value per name", field.Name)
-		}
-		encryptionContext[field.Name] = field.Value
-	}
-	maps.DeleteFunc(encryptionContext, func(_, value string) bool { return value == "" })
-	return encryptionContext, nil
+func newEncryptionContext(bound seal.AssociatedData) map[string]string {
+	return map[string]string{associatedDataContextKey: base64.StdEncoding.EncodeToString(bound.Bytes())}
 }

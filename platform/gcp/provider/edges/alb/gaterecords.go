@@ -44,11 +44,11 @@ func gatePublicationKey(tier environment.Tier) records.Key {
 }
 
 func gateRecordData(tier environment.Tier, slug string) seal.AssociatedData {
-	return seal.AssociatedData{{Name: "record", Value: "alb-gate"}, {Name: "tier", Value: string(tier)}, {Name: "slug", Value: slug}}
+	return seal.Bind("alb gate", string(tier), slug)
 }
 
 func gatePublicationData(tier environment.Tier) seal.AssociatedData {
-	return seal.AssociatedData{{Name: "record", Value: "alb-gate-publication"}, {Name: "tier", Value: string(tier)}}
+	return seal.Bind("alb gate publication", string(tier))
 }
 
 func (e *Edge) sealRecord(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, record any) (json.RawMessage, error) {

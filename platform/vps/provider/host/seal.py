@@ -92,27 +92,6 @@ def open_(key, aad, sealed):
         lib.EVP_CIPHER_CTX_free(ctypes.c_void_p(ctx))
 
 
-def additional(values):
-    return "".join(part.replace("%", "%25").replace("/", "%2F") + "/" for part in values).encode()
-
-
-def parse_associated_data(args):
-    fields = []
-    named = set()
-    while args:
-        flag = args.pop(0)
-        field = flag[2:] if flag.startswith("--") else ""
-        if not re.fullmatch("[a-z]+", field):
-            abort("%s names no field" % flag)
-        if field in named:
-            abort("%s was given twice" % flag)
-        if not args:
-            abort("%s was given no value" % flag)
-        named.add(field)
-        fields.append(args.pop(0))
-    return additional(fields)
-
-
 def key_of(path):
     try:
         with open(path, "rb") as f:
@@ -150,7 +129,7 @@ def mint(path):
 
 def main(argv):
     if len(argv) < 2:
-        abort("usage: seal <tier> init|seal|open [--<field> <value>]...")
+        abort("usage: seal <tier> init|seal|open [<associated data>]")
     tier, verb, rest = argv[0], argv[1], list(argv[2:])
     if not re.fullmatch("[a-z0-9-]+", tier):
         abort("%s is not a valid tier" % tier)
@@ -158,13 +137,15 @@ def main(argv):
 
     if verb == "init":
         if rest:
-            abort("init takes no fields")
+            abort("init takes no associated data")
         mint(path)
         return
     if verb not in ("seal", "open"):
         abort("unknown verb %s" % verb)
 
-    aad = parse_associated_data(rest)
+    if len(rest) != 1:
+        abort("%s takes the associated data as one argument" % verb)
+    aad = os.fsencode(rest[0])
     key = key_of(path)
     fed = sys.stdin.buffer.read().strip()
     try:

@@ -149,7 +149,7 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 	if sealing < 0 {
 		t.Fatal("no value was sealed")
 	}
-	for _, want := range []string{"'--project' 'shop'", "'--binding' 'main'"} {
+	for _, want := range []string{"4:shop,", "4:main,"} {
 		if !strings.Contains(machine.commands()[sealing], want) {
 			t.Errorf("the password is sealed by %q and is not bound to %s, so a sealed value moved under another resource still opens", machine.commands()[sealing], want)
 		}
@@ -425,7 +425,7 @@ func TestAPostgresPasswordIsBoundToItsProjectTierStackAndResourceUnderResources(
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := base64.StdEncoding.DecodeString("sWIUf1KP5yMtoAEKeAiQrTiLmDAiPkJahkrUAWvrQ25qoaoA4yTuUTVvRA==")
+	sealed, err := base64.StdEncoding.DecodeString("sWIUf1KP5yMtoAEKeAiQrTiLmDAiPkJahkrUmCjCNqML4iRCMtTWw+L7Jw==")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +441,7 @@ func TestAPostgresPasswordIsBoundToItsProjectTierStackAndResourceUnderResources(
 	}
 	opened, err := live.Open(key, bound, sealed)
 	if err != nil || string(opened) != "s3cr3t-postgres" {
-		t.Fatalf("Open() = %q, %v, want the password sealed at shop/production/prod--infra/resources/main/password/ to open: every box's Postgres password is bound to those bytes", opened, err)
+		t.Fatalf("Open() = %q, %v, want the password sealed as a resource secret of shop at production/prod--infra/resources/main/password to open: every box's Postgres password is bound to those", opened, err)
 	}
 }
 

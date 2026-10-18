@@ -1,6 +1,7 @@
 package providerserver_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http/httptest"
@@ -557,7 +558,7 @@ type countingCipher struct {
 }
 
 func (c *countingCipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	if slices.ContainsFunc(bound, func(f seal.Field) bool { return f.Name == "binding" && f.Value != "" }) {
+	if bytes.HasPrefix(bound.Bytes(), []byte("7:binding,")) {
 		c.mu.Lock()
 		c.opened++
 		c.mu.Unlock()

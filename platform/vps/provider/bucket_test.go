@@ -1,6 +1,7 @@
 package vps_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"net/http"
@@ -368,10 +369,10 @@ func TestTheAssociatedDataTheRuntimeOpensTheStoreSecretUnderIsTheOneTheDeploySea
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(opened, want) {
-		t.Errorf("the runtime would open the store's credential at %+v and the deploy sealed it at %+v:"+
+	if !bytes.Equal(opened.Bytes(), want.Bytes()) {
+		t.Errorf("the runtime would open the store's credential at %s and the deploy sealed it at %s:"+
 			" a resource is provisioned on its environment's infra stack and an app runs on its own, so associated data"+
-			" naming the asking stack opens nothing", opened, want)
+			" naming the asking stack opens nothing", opened.Bytes(), want.Bytes())
 	}
 	if manifest.Store.Endpoint != "http://"+vps.StoreName(provisioned.Ref)+":9000" {
 		t.Errorf("the runtime is pointed at %q, want the store this environment runs", manifest.Store.Endpoint)

@@ -1007,9 +1007,9 @@ func withPreviewOnlyGateRecords(t *testing.T) (*Edge, *world) {
 	balancer, w := balancing(t)
 	partition := stackrecords.EdgeStacksPartition(environment.TierPreview)
 	recordSealedFor(t, balancer, partition.Key(string(Kind), "gate-publication"),
-		seal.AssociatedData{{Name: "record", Value: "alb-preview-gate-publication"}}, gatePublication{Confirmed: true})
+		seal.Bind("alb preview gate publication"), gatePublication{Confirmed: true})
 	recordSealedFor(t, balancer, partition.Key(string(Kind), "gates", "blog"),
-		seal.AssociatedData{{Name: "record", Value: "alb-preview-gate"}, {Name: "slug", Value: "blog"}}, gateRecord{Gate: blogGate})
+		seal.Bind("alb preview gate", "blog"), gateRecord{Gate: blogGate})
 	return balancer, w
 }
 

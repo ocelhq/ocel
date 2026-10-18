@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -63,7 +64,7 @@ func TestReadGatesOfAProviderWithNoRecordIsNoGates(t *testing.T) {
 func TestReadGatesRefusesARecordSealedUnderAnotherTierOrContext(t *testing.T) {
 	t.Parallel()
 	store, cipher := fake.NewKeyValues(), fake.NewCipher()
-	sealed, err := cipher.Seal(context.Background(), environment.TierPreview, nil, []byte(`{"shop":{"gate":{"key":"k"}}}`))
+	sealed, err := cipher.Seal(context.Background(), environment.TierPreview, seal.Bind("other"), []byte(`{"shop":{"gate":{"key":"k"}}}`))
 	if err != nil {
 		t.Fatal(err)
 	}

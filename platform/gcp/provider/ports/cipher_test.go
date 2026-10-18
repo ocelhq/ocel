@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	boundBytes = "shop/production/staging/%2Fweb//STRIPE_API_KEY/"
+	boundBytes = "8:variable,4:shop,10:production,7:staging,4:/web,14:STRIPE_API_KEY,"
 	ringPath   = "projects/acme/locations/us-central1/keyRings/ocel"
 	tierKey    = ringPath + "/cryptoKeys/production"
 )
@@ -131,14 +131,7 @@ func TestTheCipherSealsAsEveryCipherMust(t *testing.T) {
 	conformance.RunCipher(t, Cipher{Clients: serveKMS(t, &aeadKMS{keys: map[string]cipher.AEAD{}})})
 }
 
-var bound = seal.AssociatedData{
-	{Name: "project", Value: "shop"},
-	{Name: "class", Value: "production"},
-	{Name: "environment", Value: "staging"},
-	{Name: "folder", Value: "/web"},
-	{Name: "binding", Value: ""},
-	{Name: "key", Value: "STRIPE_API_KEY"},
-}
+var bound = seal.BindToProject("shop", "variable", "production", "staging", "/web", "STRIPE_API_KEY")
 
 func TestAProjectsValueIsSealedUnderItsProjectsKeyAndBoundToItsAssociatedDataBytes(t *testing.T) {
 	clients, fake := serveRecordingKMS(t)
@@ -178,7 +171,7 @@ func TestACellAndABindingAreSealedUnderTheAssociatedDataBytesEveryStoredValueIsB
 		t.Fatalf("SetBinding() = %v", err)
 	}
 
-	want := []string{boundBytes, "shop/production/*/%2F/orders/PROPERTIES/"}
+	want := []string{boundBytes, "7:binding,4:shop,10:production,1:*,6:orders,"}
 	got := make([]string, 0, len(kms.encrypted))
 	for _, req := range kms.encrypted {
 		got = append(got, string(req.GetAdditionalAuthenticatedData()))
@@ -190,8 +183,7 @@ func TestACellAndABindingAreSealedUnderTheAssociatedDataBytesEveryStoredValueIsB
 
 func TestTwoProjectsOfATierSealUnderKeysOfTheirOwn(t *testing.T) {
 	clients, kms := serveRecordingKMS(t)
-	blog := slices.Clone(bound)
-	blog[0].Value = "blog"
+	blog := seal.BindToProject("blog", "variable", "production", "staging", "/web", "STRIPE_API_KEY")
 
 	for _, each := range []seal.AssociatedData{bound, blog} {
 		if _, err := (Cipher{Clients: clients}).Seal(context.Background(), environment.TierProduction, each, []byte("v")); err != nil {
@@ -206,8 +198,8 @@ func TestTwoProjectsOfATierSealUnderKeysOfTheirOwn(t *testing.T) {
 
 func TestAValueBoundToNoOneProjectIsSealedUnderTheTierKey(t *testing.T) {
 	for name, each := range map[string]seal.AssociatedData{
-		"no project field": {{Name: "record", Value: "gates"}},
-		"every project":    {{Name: "project", Value: "*"}, {Name: "key", Value: "DIGEST"}},
+		"no project":                 seal.Bind("gates"),
+		"a project no slug can name": seal.BindToProject("*", "variable", "DIGEST"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			clients, kms := serveRecordingKMS(t)

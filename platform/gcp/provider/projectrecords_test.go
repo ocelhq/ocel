@@ -126,7 +126,7 @@ func servingProjectKeys(t *testing.T) (*Provider, *projectKeysKMS) {
 func TestTheFirstValueAProjectSealsMakesTheProjectsKeyAndIsSealedUnderIt(t *testing.T) {
 	t.Parallel()
 	p, kms := servingProjectKeys(t)
-	bound := seal.AssociatedData{{Name: "project", Value: "shop"}, {Name: "key", Value: "STRIPE_KEY"}}
+	bound := seal.BindToProject("shop", "variable", "STRIPE_KEY")
 
 	for range 2 {
 		if _, err := p.Cipher().Seal(context.Background(), environment.TierProduction, bound, []byte("sk_live")); err != nil {
@@ -143,7 +143,7 @@ func TestAValueOfEveryProjectIsSealedUnderTheTierKeyAndMakesNoKey(t *testing.T) 
 	t.Parallel()
 	p, kms := servingProjectKeys(t)
 
-	if _, err := p.Cipher().Seal(context.Background(), environment.TierProduction, seal.AssociatedData{{Name: "record", Value: "gates"}}, []byte("v")); err != nil {
+	if _, err := p.Cipher().Seal(context.Background(), environment.TierProduction, seal.Bind("gates"), []byte("v")); err != nil {
 		t.Fatalf("Seal() = %v", err)
 	}
 

@@ -95,7 +95,7 @@ type keylessBootstrap struct{}
 
 func (keylessBootstrap) Key(context.Context, environment.Tier) (string, error) { return "", nil }
 
-var bound = seal.AssociatedData{{Name: "project", Value: "shop"}, {Name: "key", Value: "STRIPE_API_KEY"}}
+var bound = seal.BindToProject("shop", "variable", "STRIPE_API_KEY")
 
 func TestSealingWithoutAKeyNamesThePart(t *testing.T) {
 	cipher := awsports.Cipher{Keys: keylessBootstrap{}}
@@ -135,7 +135,7 @@ func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 	}
 }
 
-func TestTheDigestKeyIsSealedUnderAnEncryptionContextNamingEveryProjectItsClassAndTheEnvSourceBinding(t *testing.T) {
+func TestTheDigestKeyIsSealedUnderAnEncryptionContextBindingItAsItsTiersDigestKey(t *testing.T) {
 	table, _ := newSplitRecords()
 	cipher, crypto := newCipher()
 
@@ -143,14 +143,7 @@ func TestTheDigestKeyIsSealedUnderAnEncryptionContextNamingEveryProjectItsClassA
 		t.Fatalf("EnsureDigestKey err = %v", err)
 	}
 
-	want := map[string]string{
-		"project":     "*",
-		"class":       "production",
-		"environment": "*",
-		"folder":      "/",
-		"binding":     "envsource",
-		"key":         "digestkey",
-	}
+	want := map[string]string{"ocel:associated-data": encodedContext("21:env source digest key,0:,10:production,")}
 	if len(crypto.contexts) == 0 || !maps.Equal(crypto.contexts[0], want) {
 		t.Fatalf("encryption contexts = %v, want the digest key sealed under %v: every digest key already stored is bound to it", crypto.contexts, want)
 	}

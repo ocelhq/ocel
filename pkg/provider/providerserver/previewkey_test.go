@@ -29,7 +29,7 @@ func TestAProviderSessionOpensThePreviewKeyAtMostOnce(t *testing.T) {
 		}
 	}
 
-	previewKey := seal.AssociatedData{{Name: "record", Value: "preview-key"}}
+	previewKey := seal.Bind("preview key")
 	if opened := vendor.Cipher().(*fake.Cipher).OpenedUnder(previewKey); opened > 1 {
 		t.Errorf("the preview key was opened %d times in one provider session, want at most once", opened)
 	}

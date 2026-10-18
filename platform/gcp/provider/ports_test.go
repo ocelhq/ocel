@@ -259,8 +259,8 @@ func TestSealingAValueThatNamesNoTierIsTheCallersMistake(t *testing.T) {
 	p := testProvider(t)
 
 	for name, refused := range map[string]error{
-		"Seal": errorOf(p.Cipher().Seal(ctx, "", seal.AssociatedData{{Name: "key", Value: "K"}}, nil)),
-		"Open": errorOf(p.Cipher().Open(ctx, "", seal.AssociatedData{{Name: "key", Value: "K"}}, nil)),
+		"Seal": errorOf(p.Cipher().Seal(ctx, "", seal.Bind("variable", "K"), nil)),
+		"Open": errorOf(p.Cipher().Open(ctx, "", seal.Bind("variable", "K"), nil)),
 	} {
 		var rejection refusal.Refusal
 		if !errors.As(refused, &rejection) || rejection.Code != refusal.CodeInvalid {

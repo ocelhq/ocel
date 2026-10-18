@@ -72,12 +72,8 @@ func ProjectOfRecords(in records.Partition) (string, bool) {
 }
 
 func ProjectSealedFor(bound seal.AssociatedData) (string, bool) {
-	for _, field := range bound {
-		if field.Name == projectField {
-			return field.Value, naming.Validate(projectField, field.Value) == nil
-		}
-	}
-	return "", false
+	project, owned := bound.Project()
+	return project, owned && naming.Validate(projectField, project) == nil
 }
 
 type missingProjectPart struct {

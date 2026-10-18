@@ -16,8 +16,6 @@ import (
 const (
 	OwnerOcel = "OCEL"
 
-	bindingValueKey = "PROPERTIES"
-
 	bindingAttempts = 5
 )
 

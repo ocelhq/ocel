@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-var previewKeyAssociatedData = seal.AssociatedData{{Name: "record", Value: "preview-key"}}
+var previewKeyAssociatedData = seal.Bind("preview key")
 
 type openedPreviewKeys struct {
 	mu       sync.Mutex

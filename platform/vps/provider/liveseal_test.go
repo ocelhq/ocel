@@ -63,12 +63,7 @@ func dirties(t *testing.T, vm machine) {
 }
 
 func newKeyAssociatedData(name string) seal.AssociatedData {
-	return seal.AssociatedData{
-		{Name: "project", Value: "shop"},
-		{Name: "environment", Value: "*"},
-		{Name: "folder", Value: "/"},
-		{Name: "key", Value: name},
-	}
+	return seal.BindToProject("shop", "variable", "*", "/", name)
 }
 
 func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {

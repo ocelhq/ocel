@@ -100,10 +100,7 @@ func TestLiveSealingWhereNoKeyRingExistsSaysWhatToRun(t *testing.T) {
 
 	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "australia-southeast2"})
 	var refused refusal.Refusal
-	_, err := elsewhere.Cipher().Seal(context.Background(), environment.TierProduction, seal.AssociatedData{
-		{Name: "project", Value: "shop"},
-		{Name: "key", Value: "DATABASE_URL"},
-	}, []byte("postgres://example"))
+	_, err := elsewhere.Cipher().Seal(context.Background(), environment.TierProduction, seal.BindToProject("shop", "variable", "DATABASE_URL"), []byte("postgres://example"))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Seal() where no key ring exists = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}

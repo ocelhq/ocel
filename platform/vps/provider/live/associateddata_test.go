@@ -15,7 +15,7 @@ func TestAStoreSecretIsBoundToItsProjectTierStackAndTheStoreKeyUnderResources(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := base64.StdEncoding.DecodeString("1F1t2UqIf00/MBsBS1X51mG2eSXf7ufZbcsyacsKGbgLgT7aCPgaKw==")
+	sealed, err := base64.StdEncoding.DecodeString("1F1t2UqIf00/MBsBS1X51mG2eSXf7ufZwmA1Rxep0nyVtMhyHHjthw==")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestAStoreSecretIsBoundToItsProjectTierStackAndTheStoreKeyUnderResources(t 
 	}
 	opened, err := Open(key, bound, sealed)
 	if err != nil || string(opened) != "s3cr3t-store" {
-		t.Fatalf("Open() = %q, %v, want the store secret sealed at shop/production/shop-prod/resources/store/storekey/ to open: every box's store secret is bound to those bytes", opened, err)
+		t.Fatalf("Open() = %q, %v, want the store secret sealed as a resource secret of shop at production/shop-prod/resources/store/storekey to open: every box's store secret is bound to those bytes", opened, err)
 	}
 }
 

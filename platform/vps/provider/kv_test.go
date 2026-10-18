@@ -138,7 +138,7 @@ func TestAKVPasswordReachesTheBoxOnlyOnStdinAndIsKeptSealed(t *testing.T) {
 			t.Errorf("the box keeps the password in plaintext:\n%s", command)
 		}
 	}
-	if !strings.Contains(strings.Join(machine.commands(), "\n"), "'--binding' 'cache'") {
+	if !strings.Contains(strings.Join(machine.commands(), "\n"), "5:cache,") {
 		t.Error("the password is not sealed to the store it belongs to")
 	}
 }
