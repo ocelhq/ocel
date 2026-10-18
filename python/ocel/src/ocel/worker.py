@@ -8,6 +8,7 @@ from typing import Any, cast
 from protobuf import Oneof
 
 from ocel import _registry
+from ocel._callables import call_function, is_async
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._error import format_error
 from ocel._loop import LoopLocal
@@ -65,7 +66,7 @@ class Worker:
     async def _start(self) -> None:
         if self._started:
             return
-        starting = self._starting.get(lambda: asyncio.ensure_future(_call_function(self.on_start)))
+        starting = self._starting.get(lambda: asyncio.ensure_future(call_function(self.on_start)))
         try:
             await asyncio.shield(starting)
         except asyncio.CancelledError:
@@ -193,7 +194,7 @@ async def _run_attempt(
 
     async def run_handler() -> Any:
         arguments = _build_arguments(registration.handler, payload, ctx)
-        return await _call_function(registration.handler, *arguments)
+        return await call_function(registration.handler, *arguments)
 
     async def run_task_middleware() -> Any:
         if hooks.middleware is None:
@@ -202,7 +203,7 @@ async def _run_attempt(
 
     async def run_attempt() -> Any:
         if hooks.on_start_attempt is not None:
-            await _call_function(hooks.on_start_attempt, payload, ctx)
+            await call_function(hooks.on_start_attempt, payload, ctx)
         return await run_task_middleware()
 
     failure: Exception | None = None
@@ -269,7 +270,7 @@ async def _call_catch_error(
     if catch_error is None:
         return False
     try:
-        answer = await _call_function(catch_error, payload, error, ctx)
+        answer = await call_function(catch_error, payload, error, ctx)
     except AbortTaskRunError:
         return True
     except Exception as failure:
@@ -303,7 +304,7 @@ async def _call_hook(
     registration: _registry.Registration, hook: str, function: Callable[..., Any], *arguments: Any
 ) -> None:
     try:
-        await _call_function(function, *arguments)
+        await call_function(function, *arguments)
     except Exception as error:
         _log_failure(registration, hook, error)
 
@@ -319,20 +320,12 @@ def _log_failure(registration: _registry.Registration, hook: str, error: Excepti
     )
 
 
-async def _call_function(function: Callable[..., Any] | None, *arguments: Any) -> Any:
-    if function is None:
-        return None
-    if _is_async(function):
-        return await function(*arguments)
-    return await asyncio.to_thread(function, *arguments)
-
-
 async def _call_middleware(
     middleware: Callable[..., Any],
     arguments: tuple[Any, ...],
     step: Callable[[], Coroutine[Any, Any, Any]],
 ) -> Any:
-    if _is_async(middleware):
+    if is_async(middleware):
         return await middleware(*arguments, step)
     loop = asyncio.get_running_loop()
 
@@ -340,12 +333,6 @@ async def _call_middleware(
         return asyncio.run_coroutine_threadsafe(step(), loop).result()
 
     return await asyncio.to_thread(middleware, *arguments, run_step)
-
-
-def _is_async(function: Callable[..., Any]) -> bool:
-    return inspect.iscoroutinefunction(function) or inspect.iscoroutinefunction(
-        type(function).__call__
-    )
 
 
 def _build_arguments(handler: Callable[..., Any], payload: Any, ctx: RunContext) -> tuple[Any, ...]:

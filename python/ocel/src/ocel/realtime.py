@@ -1,6 +1,6 @@
 import asyncio
-import inspect
 import json
+import logging
 import secrets
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -14,6 +14,7 @@ from protobuf import Oneof
 from protobuf.wkt import Duration
 
 from ocel._binding import read_realtime_binding, refuse_unprovisioned
+from ocel._callables import call_function
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._error import OcelError
 from ocel._payload import Codec
@@ -42,6 +43,7 @@ from ocel.gen.app.resources.v1.resources_pb import (
 )
 from ocel.gen.common.bindings.v1.bindings_pb import RealtimeProperties
 
+_logger = logging.getLogger("ocel")
 _MIN_TOKEN_TTL_SECONDS = 10
 _MAX_TOKEN_TTL_SECONDS = 300
 _MAX_OPS = 50
@@ -127,12 +129,6 @@ type ASGIApplication = Callable[
 
 type WSGIApplication = Callable[[dict[str, object], StartResponse], Iterable[bytes]]
 """A WSGI application, as :meth:`Realtime.wsgi` returns it."""
-
-
-async def _await_if_awaitable[T](value: T | Awaitable[T]) -> T:
-    if inspect.isawaitable(value):
-        return cast(T, await value)
-    return cast(T, value)
 
 
 def _read_subject(auth: object) -> str:
@@ -535,6 +531,7 @@ class Realtime[A]:
         try:
             await self._publish_async("handler", wire, envelope)
         except Exception:
+            _logger.exception('realtime "%s" failed to publish a relayed event', self.name)
             return _deny("publish-failed")
         return {"wire": wire}
 
@@ -544,7 +541,7 @@ class Realtime[A]:
         properties = self._read_properties("handler")
         auth: A | None = None
         if self._authorize is not None:
-            auth = await _await_if_awaitable(self._authorize(request))
+            auth = await call_function(self._authorize, request)
 
         async def serve(i: int, op: object) -> tuple[int, dict[str, object]]:
             return i, await self._serve_op(properties, request, auth, op)
@@ -618,6 +615,7 @@ class Realtime[A]:
         try:
             return _Response(200, await self._answer_batch(request, connect, ops), cors)
         except Exception:
+            _logger.exception('realtime "%s" failed to answer a request', self.name)
             return _build_error_response(500, "the realtime handler failed", cors)
 
     def asgi(self, *, allowed_origins: Iterable[str] = ()) -> ASGIApplication:
@@ -731,8 +729,9 @@ async def _run_rule[A](
     rule: Rule[A], context: RuleContext[A]
 ) -> Literal["forbidden", "rule-error"] | None:
     try:
-        allowed = await _await_if_awaitable(rule(context))
+        allowed = await call_function(rule, context)
     except Exception:
+        _logger.exception("a realtime rule raised")
         return "rule-error"
     return None if allowed else "forbidden"
 

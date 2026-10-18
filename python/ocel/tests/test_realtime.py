@@ -245,9 +245,8 @@ def test_the_handler_runs_the_subscribe_rule_with_the_auth_params_and_request(ap
     assert res["denied"] == [{"i": 1, "code": "forbidden"}]
     assert read_claims(res["connect"]["token"])["sub"] == "u1"
     assert read_claims(res["grants"][0]["token"])["sub"] == "u1"
-    ctx = rules.subscribes[0]
+    ctx = next(ctx for ctx in rules.subscribes if ctx.params == {"order_id": "o-1"})
     assert ctx.auth == {"id": "u1"}
-    assert ctx.params == {"order_id": "o-1"}
     assert ctx.request.headers["x-user"] == "u1"
     assert ctx.request.url == "https://shop.example/api/realtime"
 
@@ -748,3 +747,79 @@ def test_relayed_publishes_reach_the_runtime_in_batch_order(runtime):
         "second",
         "third",
     ]
+
+
+def is_loop_running():
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
+def test_a_sync_authorize_and_rule_run_where_no_event_loop_is_running(appsync):
+    seen = []
+
+    def authorize(request):
+        seen.append(("authorize", is_loop_running()))
+        return {"id": "u1"}
+
+    resource = realtime("app", authorize=authorize)
+
+    @resource.channel("orders/:order_id", schema=OrderEvent)
+    def orders(ctx):
+        seen.append(("rule", is_loop_running()))
+        return True
+
+    body = json.dumps(
+        {"ops": [{"op": "subscribe", "pattern": "orders/:order_id", "params": {"order_id": "o"}}]}
+    ).encode()
+    status, _, content = call_wsgi(resource.wsgi(), body)
+
+    assert status == "200 OK", content
+    assert seen == [("authorize", False), ("rule", False)]
+
+
+def test_an_authorize_that_raises_is_logged_with_its_cause(appsync, caplog):
+    def failing(request):
+        raise RuntimeError("secret detail")
+
+    status, _, _ = post(realtime("app", authorize=failing).asgi(), {"ops": []})
+
+    assert status == 500
+    assert [record.name for record in caplog.records] == ["ocel"]
+    assert "secret detail" in caplog.text
+
+
+def test_a_rule_that_raises_is_logged_with_its_cause(appsync, caplog):
+    rules = Rules()
+    rules.fail_next_subscribe = True
+    answer(
+        declare_app(rules).asgi(),
+        {"ops": [{"op": "subscribe", "pattern": "orders/:order_id", "params": {"order_id": "o"}}]},
+        {"x-user": "u1"},
+    )
+
+    assert [record.name for record in caplog.records] == ["ocel"]
+    assert "db down" in caplog.text
+
+
+def test_a_relayed_publish_the_runtime_refuses_is_logged_with_its_cause(runtime, caplog):
+    runtime.refusal = "the gateway refused it with status 401"
+    answer(
+        declare_app(Rules()).asgi(),
+        {
+            "ops": [
+                {
+                    "op": "publish",
+                    "pattern": "rooms/:room_id",
+                    "params": {"room_id": "r1"},
+                    "body": {"text": "hi"},
+                }
+            ]
+        },
+        {"x-user": "u1"},
+    )
+
+    assert "ocel" in [record.name for record in caplog.records]
+    assert "status 401" in caplog.text

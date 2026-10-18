@@ -399,6 +399,19 @@ def test_a_part_the_store_refuses_abandons_the_whole_write(uploads):
     assert "a.txt" not in uploads.store.objects
 
 
+@pytest.mark.asyncio
+async def test_an_async_write_abandoned_by_a_refused_part_aborts_after_every_part_settles(uploads):
+    uploads.store.refuse_part = 2
+    uploads.store.slow_part = 1
+    store = bucket("uploads")
+    store._single_request_limit_bytes = 8
+    store._part_size_bytes = 4
+
+    with pytest.raises(OcelError):
+        await store.put_async("a.txt", b"0123456789abcde")
+    assert uploads.store.events.index("part1-done") < uploads.store.events.index("abort")
+
+
 def test_a_write_in_parts_that_must_not_replace_is_refused(uploads):
     store = bucket("uploads")
     store._single_request_limit_bytes = 8
