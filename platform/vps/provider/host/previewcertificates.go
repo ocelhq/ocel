@@ -35,7 +35,7 @@ func (h *Host) RefusePerHostnamePreviewCertificates(ctx context.Context, destina
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s on %s orders a publicly trusted certificate for each preview hostname under %s, and Certificate Transparency logs publish every one of them within minutes, so anyone can find this preview\n"+
 			"%s, or front this box with an edge that presents its own certificate and shields the box with an origin certificate, or set the option %q to true to accept that its hostnames are published",
-		h.proxyOption.named(), h.named(), edge.PreviewWildcard(base), h.proxyOption.describeSharedPreviewCertificate(base), PerHostnamePreviewCertificatesOption)
+		h.proxyOption.named(), h.Named(), edge.PreviewWildcard(base), h.proxyOption.describeSharedPreviewCertificate(base), PerHostnamePreviewCertificatesOption)
 }
 
 func (f Front) describeSharedPreviewCertificate(base string) string {

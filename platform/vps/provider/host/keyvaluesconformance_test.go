@@ -16,8 +16,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 type helperHere struct {
@@ -75,11 +75,11 @@ func TestAnEntryOnTheBoxIsAJSONFileHoldingTheValueAsWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path, err := live.PathOf(key)
+	path, err := boxapi.PathOf(key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(live.KeyValuesDir(here.root, environment.TierProduction), path+live.EntrySuffix))
+	raw, err := os.ReadFile(filepath.Join(boxapi.KeyValuesDir(here.root, environment.TierProduction), path+boxapi.EntrySuffix))
 	if err != nil {
 		t.Fatalf("read the entry's file: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestAnEntryOnTheBoxIsAJSONFileHoldingTheValueAsWritten(t *testing.T) {
 		t.Errorf("the entry's file holds revision %q and value %s, want %q and the value written", file.Revision, file.Value, revision)
 	}
 
-	read, err := (live.KeyValues{Root: here.root}).Read(context.Background(), key)
+	read, err := (boxapi.KeyValues{Root: here.root}).Read(context.Background(), key)
 	if err != nil || read.Revision != revision || string(read.Value) != `{"parts":["cache"]}` {
 		t.Errorf("the box-side reader answered %+v, %v, want the entry the helper wrote", read, err)
 	}

@@ -6,20 +6,20 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func (b *box) serving(command string) (session.Result, bool) {
+func (b *box) serving(command string) (ssh.Result, bool) {
 	if !b.remembers {
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if strings.Contains(command, "docker inspect --type container") {
 		for name, serving := range b.containers {
 			if strings.Contains(command, quoted(name)+" 2>&1") {
-				return session.Result{Stdout: serving + "\n"}, true
+				return ssh.Result{Stdout: serving + "\n"}, true
 			}
 		}
-		return session.Result{}, true
+		return ssh.Result{}, true
 	}
 	for _, line := range strings.Split(command, "\n") {
 		fields := strings.Fields(line)
@@ -34,7 +34,7 @@ func (b *box) serving(command string) (session.Result, bool) {
 			}
 		}
 	}
-	return session.Result{}, false
+	return ssh.Result{}, false
 }
 
 func (b *box) remember(run []string) {

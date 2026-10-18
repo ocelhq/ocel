@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -49,33 +51,33 @@ func principal() Item {
 }
 
 func (l login) command() string {
-	fields := " -d " + quoted(l.home) + " -s " + quoted(l.shell) + " " + quoted(l.name)
+	fields := " -d " + shell.Quote(l.home) + " -s " + shell.Quote(l.shell) + " " + shell.Quote(l.name)
 	return strings.Join([]string{"set -e",
-		"getent group " + quoted(l.name) + " >/dev/null 2>&1 || groupadd -r " + quoted(l.name),
-		"if getent passwd " + quoted(l.name) + " >/dev/null 2>&1; then",
-		"usermod -g " + quoted(l.name) + " -G ''" + fields,
+		"getent group " + shell.Quote(l.name) + " >/dev/null 2>&1 || groupadd -r " + shell.Quote(l.name),
+		"if getent passwd " + shell.Quote(l.name) + " >/dev/null 2>&1; then",
+		"usermod -g " + shell.Quote(l.name) + " -G ''" + fields,
 		"else",
-		"useradd -r -M -g " + quoted(l.name) + fields,
+		"useradd -r -M -g " + shell.Quote(l.name) + fields,
 		"fi",
-		"usermod -p " + quoted(lockedPassword) + " " + quoted(l.name),
+		"usermod -p " + shell.Quote(lockedPassword) + " " + shell.Quote(l.name),
 	}, "\n")
 }
 
 func (l login) survey() string {
-	return `if entry=$(getent passwd ` + quoted(l.name) + ` 2>/dev/null); then found=0; else found=$?; fi
+	return `if entry=$(getent passwd ` + shell.Quote(l.name) + ` 2>/dev/null); then found=0; else found=$?; fi
 if [ "$found" -ne 0 ] && [ "$found" -ne ` + strconv.Itoa(getentNoSuchKey) + ` ]; then
-` + unreadable(KindUser, quoted(l.name), `"getent passwd exited $found"`) + `
+` + unreadable(KindUser, shell.Quote(l.name), `"getent passwd exited $found"`) + `
 elif [ "$found" -eq 0 ]; then
-groups=$(id -nG ` + quoted(l.name) + ` 2>/dev/null | tr ' ' '\n' | grep -vx ` + quoted(l.name) + ` | LC_ALL=C sort | tr '\n' ',' | sed 's/,$//')
-line=$(getent shadow ` + quoted(l.name) + ` 2>/dev/null || true)
-if [ -z "$line" ] && [ -r /etc/shadow ]; then line=$(grep ` + quoted("^"+l.name+":") + ` /etc/shadow 2>/dev/null || true); fi
+groups=$(id -nG ` + shell.Quote(l.name) + ` 2>/dev/null | tr ' ' '\n' | grep -vx ` + shell.Quote(l.name) + ` | LC_ALL=C sort | tr '\n' ',' | sed 's/,$//')
+line=$(getent shadow ` + shell.Quote(l.name) + ` 2>/dev/null || true)
+if [ -z "$line" ] && [ -r /etc/shadow ]; then line=$(grep ` + shell.Quote("^"+l.name+":") + ` /etc/shadow 2>/dev/null || true); fi
 password=''
-if [ -n "$line" ] && [ "$(printf '%s' "$line" | cut -d: -f2)" = ` + quoted(lockedPassword) + ` ]; then password=` + quoted(lockedFact) + `
+if [ -n "$line" ] && [ "$(printf '%s' "$line" | cut -d: -f2)" = ` + shell.Quote(lockedPassword) + ` ]; then password=` + shell.Quote(lockedFact) + `
 elif [ -n "$line" ]; then password=unlocked
 fi
 if [ -n "$password" ]; then
 sum=$(printf 'shell=%s\nhome=%s\ngroups=%s\npassword=%s\n' "$(printf '%s' "$entry" | cut -d: -f7)" "$(printf '%s' "$entry" | cut -d: -f6)" "$groups" "$password" | sha256sum | cut -d' ' -f1)
-` + reports(quoted(KindUser), quoted(l.name), "0", quoted(l.name), `"$sum"`) + `
+` + reports(shell.Quote(KindUser), shell.Quote(l.name), "0", shell.Quote(l.name), `"$sum"`) + `
 fi
 fi`
 }
@@ -150,11 +152,7 @@ func (h *Host) resolve(ctx context.Context) ([]byte, error) {
 	if h.deploy.Path != "" {
 		return h.deploy.named()
 	}
-	live, err := h.dial(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result, err := live.Stream(ctx, "cat ~/.ssh/authorized_keys 2>/dev/null", nil)
+	result, err := h.Stream(ctx, ssh.Login, "cat ~/.ssh/authorized_keys 2>/dev/null", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +160,7 @@ func (h *Host) resolve(ctx context.Context) ([]byte, error) {
 	if len(keys) == 0 {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s has no ~/.ssh/authorized_keys for %s to inherit\nName a public key file with the %q option",
-			h.named(), deployUser, "deployKey")
+			h.Named(), deployUser, "deployKey")
 	}
 	return keys, nil
 }

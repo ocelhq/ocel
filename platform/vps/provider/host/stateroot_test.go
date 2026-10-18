@@ -13,10 +13,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func loggedInAs(user string, facts session.Facts) *bench {
+func loggedInAs(user string, facts ssh.Facts) *bench {
 	rig := machine(nil)
 	rig.dest.User = user
 	rig.facts = facts
@@ -36,52 +37,52 @@ func commandWith(t *testing.T, rig *bench, marker string) string {
 }
 
 func TestALoginWithSudoLoadsImagesAsTheDeployLogin(t *testing.T) {
-	rig := loggedInAs("ubuntu", session.Facts{Sudo: true, Systemd: true})
+	rig := loggedInAs("ubuntu", ssh.Facts{Sudo: true, Systemd: true})
 
 	if _, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as a login with sudo = %v", err)
 	}
-	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" flock -x "+quoted(imagesLock)) {
+	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" sh -c "+strings.TrimSuffix(shell.Quote("flock -x "+shell.Quote(imagesLock)), "'")) {
 		t.Errorf("the load ran as %q: %s is %s's and closed to every other login, so the lock is taken as %s", loaded, stateRoot, deployUser, deployUser)
 	}
 }
 
 func TestARootLoginLoadsImagesAsTheDeployLogin(t *testing.T) {
-	rig := loggedInAs("root", session.Facts{Root: true, Systemd: true})
+	rig := loggedInAs("root", ssh.Facts{Root: true, Systemd: true})
 
 	if _, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as root = %v", err)
 	}
-	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "runuser -u "+deployUser+" -- env PATH="+deployPath+" flock -x "+quoted(imagesLock)) {
+	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "runuser -u "+deployUser+" -- env PATH="+deployPath+" sh -c "+strings.TrimSuffix(shell.Quote("flock -x "+shell.Quote(imagesLock)), "'")) {
 		t.Errorf("the load ran as %q: a lock root creates under %s is one %s cannot open on its next deploy", loaded, stateRoot, deployUser)
 	}
 }
 
 func TestTheDeployLoginLoadsImagesAsItself(t *testing.T) {
-	rig := loggedInAs(deployUser, session.Facts{Systemd: true})
+	rig := loggedInAs(deployUser, ssh.Facts{Systemd: true})
 	rig.floor = refusal.Refuse(refusal.CodeDenied, "%s can neither act as root nor run sudo without a password", deployUser)
 
 	if _, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as %s = %v", deployUser, err)
 	}
-	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "flock -x "+quoted(imagesLock)) {
+	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "flock -x "+shell.Quote(imagesLock)) {
 		t.Errorf("the load ran as %q, want no elevation: %s owns %s and can sudo nothing", loaded, deployUser, stateRoot)
 	}
 }
 
 func TestALoginWithSudoRecordsReleasesAsTheDeployLogin(t *testing.T) {
-	rig := loggedInAs("ubuntu", session.Facts{Sudo: true, Systemd: true})
+	rig := loggedInAs("ubuntu", ssh.Facts{Sudo: true, Systemd: true})
 
 	if err := rig.host().Promote(context.Background(), environment.TierProduction, "shop", "web", imageRef); err != nil {
 		t.Fatalf("Promote() as a login with sudo = %v", err)
 	}
-	if recorded := commandWith(t, rig, quoted(releasesHelper)); !strings.HasPrefix(recorded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" "+quoted(releasesHelper)) {
+	if recorded := commandWith(t, rig, shell.Quote(releasesHelper)); !strings.HasPrefix(recorded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" sh -c "+strings.TrimSuffix(shell.Quote(shell.Quote(releasesHelper)), "'")) {
 		t.Errorf("the release was recorded as %q, want it written as %s, who owns %s", recorded, deployUser, releasesRoot)
 	}
 }
 
 func TestALoginWithoutSudoIsToldToDeployAsTheDeployLogin(t *testing.T) {
-	rig := loggedInAs("ubuntu", session.Facts{Systemd: true})
+	rig := loggedInAs("ubuntu", ssh.Facts{Systemd: true})
 	rig.floor = refusal.Refuse(refusal.CodeDenied, "ubuntu@ocelbox can neither act as root nor run sudo without a password")
 
 	_, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes"))
@@ -100,12 +101,12 @@ func TestALoginWithoutSudoIsToldToDeployAsTheDeployLogin(t *testing.T) {
 }
 
 func TestADaemonThatIsDownIsReportedWhenTheDeployLoginIsActedAs(t *testing.T) {
-	rig := loggedInAs("ubuntu", session.Facts{Sudo: true, Systemd: true})
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, dockerReach) {
-			return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"}, true
+	rig := loggedInAs("ubuntu", ssh.Facts{Sudo: true, Systemd: true})
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, ssh.DockerReach) {
+			return ssh.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	err := rig.host().TakeDown(context.Background(), environment.TierProduction, "shop-web")
@@ -150,12 +151,12 @@ func TestEveryFileALoginWithSudoWritesAsTheDeployLoginHoldsWhatItWasFed(t *testi
 	if os.Geteuid() == 0 {
 		t.Skip("root reopens a pipe whatever its mode, so this machine cannot stand in for the deploy login")
 	}
-	rig := loggedInAs("ubuntu", session.Facts{Sudo: true, Systemd: true})
+	rig := loggedInAs("ubuntu", ssh.Facts{Sudo: true, Systemd: true})
 	imaging(rig, "false ")
 	served := rig.answer
-	rig.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (ssh.Result, bool) {
 		if !strings.HasPrefix(command, "sudo ") && strings.Contains(command, "install ") && strings.Contains(command, stateRoot+"/") {
-			return session.Result{Code: 1, Stderr: "install: cannot create regular file: Permission denied"}, true
+			return ssh.Result{Code: 1, Stderr: "install: cannot create regular file: Permission denied"}, true
 		}
 		return served(command)
 	}

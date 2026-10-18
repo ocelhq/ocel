@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func claiming(hostnames ...string) proxy.Spec { return proxy.Spec{Hostnames: hostnames} }
@@ -87,7 +87,7 @@ func TestAReloadStuckBehindAFileOfYoursThatDoesNotParseNamesIt(t *testing.T) {
 
 			machine := &box{
 				spec:   claiming("shop.example.com"),
-				beside: append(besideIn(t, "dokploy"), switchboard.SiblingFile{Name: name, Content: []byte(content)}),
+				beside: append(besideIn(t, "dokploy"), boxapi.SiblingFile{Name: name, Content: []byte(content)}),
 			}
 			err := dokploys(machine).Reload(context.Background(), proxy.Spec{})
 			unreloaded(t, err, dokployDynamic+"/"+name, "does not parse")
@@ -105,7 +105,7 @@ func TestAReloadLeavesUnblamedAFileOfYoursThatReadsTraefiksOwnEnvironment(t *tes
 
 	machine := &box{
 		spec:   claiming("shop.example.com"),
-		beside: append(besideIn(t, "dokploy"), switchboard.SiblingFile{Name: "env.yml", Content: []byte("http:\n  routers:\n    web:\n      rule: Host(`{{ env \"SHOP\" }}`)\n      service: web\n")}),
+		beside: append(besideIn(t, "dokploy"), boxapi.SiblingFile{Name: "env.yml", Content: []byte("http:\n  routers:\n    web:\n      rule: Host(`{{ env \"SHOP\" }}`)\n      service: web\n")}),
 	}
 	err := dokploys(machine).Reload(context.Background(), proxy.Spec{})
 	unreloaded(t, err, "shop.example.com")

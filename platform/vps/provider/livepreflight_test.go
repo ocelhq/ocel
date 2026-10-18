@@ -14,9 +14,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func liveDeployPreflight(t *testing.T, image string) provider.DeployPreflight {
@@ -231,8 +231,8 @@ func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testin
 		},
 		{
 			what:    "the switchboard's control socket is there and nothing is listening on it",
-			induce:  func() { vm.deafens(t, switchboard.ControlSocket) },
-			restore: func() { vm.hears(t, switchboard.ControlSocket) },
+			induce:  func() { vm.deafens(t, boxapi.SwitchboardControlSocket) },
+			restore: func() { vm.hears(t, boxapi.SwitchboardControlSocket) },
 			wants:   []string{host.SwitchboardContainer, "answered nothing over", "connection refused"},
 		},
 	} {

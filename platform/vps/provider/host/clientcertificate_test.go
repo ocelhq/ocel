@@ -17,9 +17,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func pulledCertificate(t *testing.T) (string, string) {
@@ -81,10 +82,10 @@ func TestARealProxyRedirectsAShieldedHostnameOverPlainHTTPToHTTPSAndStillServesT
 	state.Shields = []Shield{{Hostname: claimed, Owner: surface, ClientCAs: []string{certificate}}}
 	ask := probing(t, state)
 
-	if said := ask(claimed); said.status != http.StatusPermanentRedirect || said.location != "https://"+claimed+"/" || said.router == switchboard.RouterKind {
+	if said := ask(claimed); said.status != http.StatusPermanentRedirect || said.location != "https://"+claimed+"/" || said.router == boxapi.SwitchboardRouter {
 		t.Errorf("a shielded hostname over plain http answered %d to %q from %q, want 308 to https://%s/ before the switchboard: :80 carries no client certificate, so a request that skips the edge must reach no app, and a visitor Cloudflare forwarded over http lands on https", said.status, said.location, said.router, claimed)
 	}
-	if said := ask("blog.example.com"); said.router != switchboard.RouterKind {
+	if said := ask("blog.example.com"); said.router != boxapi.SwitchboardRouter {
 		t.Errorf("a hostname nothing shields over plain http answered %d from %q, want the switchboard: its http-01 challenge and plain-http leg go through here", said.status, said.router)
 	}
 }
@@ -147,12 +148,12 @@ func TestABoxBehindYourProxyRefusesToShieldAHostnameYourProxyAnswersWithoutACert
 	box := machine(nil)
 	probed := 0
 	answers := "switchboard\n"
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted("probe")) {
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote("probe")) {
 			probed++
-			return session.Result{Stdout: answers}, true
+			return ssh.Result{Stdout: answers}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	yours := box.fronted(Front{Manual: &ManualFront{Port: 8480}})
 
@@ -163,12 +164,12 @@ func TestABoxBehindYourProxyRefusesToShieldAHostnameYourProxyAnswersWithoutACert
 	}
 
 	answers = ""
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted("probe")) {
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote("probe")) {
 			probed++
-			return session.Result{Code: 3, Stderr: "shop.example.com at 127.0.0.1:443: remote error: tls: certificate required\n"}, true
+			return ssh.Result{Code: 3, Stderr: "shop.example.com at 127.0.0.1:443: remote error: tls: certificate required\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if err := yours.RefuseUnshielded(context.Background(), "shop.example.com"); err != nil {
 		t.Errorf("RefuseUnshielded over a proxy that refuses a client with no certificate = %v, want nil", err)

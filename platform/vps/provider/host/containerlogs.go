@@ -8,25 +8,26 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 //go:embed containerlogs.sh
 var containerLogsScript string
 
 func (h *Host) FollowContainerLogs(ctx context.Context, names []string, since time.Time, each func(container int, line Line) error, gone func(container int) error) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
 	newest := make([][2]time.Time, len(names))
 	reported := make([]bool, len(names))
-	return h.streamLines(ctx, followLogsCommand(names, since), elevation, func(raw session.Line) error {
-		stderr := raw.Pipe == session.Stderr
+	return h.RunLines(ctx, elevation, followLogsCommand(names, since), func(raw ssh.Line) error {
+		stderr := raw.Pipe == ssh.Stderr
 		container, text, tagged := cutContainerTag(raw.Text, len(names))
 		if !tagged {
 			if stderr {
-				return refusal.Refuse(refusal.CodeNotReady, "%s cannot follow container logs: %s", h.named(), raw.Text)
+				return refusal.Refuse(refusal.CodeNotReady, "%s cannot follow container logs: %s", h.Named(), raw.Text)
 			}
 			return nil
 		}
@@ -41,7 +42,7 @@ func (h *Host) FollowContainerLogs(ctx context.Context, names []string, since ti
 			reported[container] = true
 			return gone(container)
 		case !stamped:
-			return refusal.Refuse(refusal.CodeNotReady, "%s cannot follow the logs of %s: %s", h.named(), names[container], text)
+			return refusal.Refuse(refusal.CodeNotReady, "%s cannot follow the logs of %s: %s", h.Named(), names[container], text)
 		}
 		stream := 0
 		if stderr {
@@ -56,9 +57,9 @@ func (h *Host) FollowContainerLogs(ctx context.Context, names []string, since ti
 }
 
 func followLogsCommand(names []string, since time.Time) string {
-	command := "sh -c " + quoted(containerLogsScript) + " containerlogs " + quoted(since.UTC().Format(time.RFC3339Nano))
+	command := "sh -c " + shell.Quote(containerLogsScript) + " containerlogs " + shell.Quote(since.UTC().Format(time.RFC3339Nano))
 	for _, name := range names {
-		command += " " + quoted(name)
+		command += " " + shell.Quote(name)
 	}
 	return command
 }

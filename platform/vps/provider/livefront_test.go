@@ -19,10 +19,10 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const frontsDir = "../../../tests/fronts"
@@ -277,7 +277,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if served := vm.throughTheFront(t, frontedHostname, "/"); served != "one" {
 		t.Fatalf("%s answered %q for %s, want the release it routes to the switchboard", front, served, frontedHostname)
 	}
-	if kind, err := d.ServingRouter(ctx, frontedHostname); err != nil || kind != switchboard.RouterKind {
+	if kind, err := d.ServingRouter(ctx, frontedHostname); err != nil || kind != boxapi.SwitchboardRouter {
 		t.Errorf("Serving(%s) = %q, %v, want the switchboard proven through %s", frontedHostname, kind, err, front)
 	}
 
@@ -391,7 +391,7 @@ func servesAPreviewBehind(t *testing.T, vm machine, d *vps.Provider, opened edge
 		t.Errorf("%s answered %q for the preview %s, want the release it was promoted to", front, served, hostname)
 	}
 	probe := edge.ProbeHostname(edge.PreviewWildcard(frontedPreview))
-	if said, err := d.Host().ProbeRouter(ctx, probe); err != nil || said.Router != switchboard.RouterKind {
+	if said, err := d.Host().ProbeRouter(ctx, probe); err != nil || said.Router != boxapi.SwitchboardRouter {
 		t.Errorf("ProbeRouter(%s) = %+v, %v, want the preview catch-all answered by the box through %s", probe, said, err, front)
 	}
 

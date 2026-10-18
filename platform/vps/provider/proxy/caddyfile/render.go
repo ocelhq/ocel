@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -31,7 +31,7 @@ type shieldedSite struct {
 
 func (c Caddyfile) upstream() string {
 	if c.Network != "" {
-		return net.JoinHostPort(switchboard.Name, switchboard.HTTPSListenPort)
+		return net.JoinHostPort(boxapi.Switchboard, boxapi.HTTPSListenPort)
 	}
 	return net.JoinHostPort("127.0.0.1", strconv.Itoa(c.Port))
 }

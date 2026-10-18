@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 type RoutingTable struct {
@@ -87,5 +87,5 @@ func ReadRoutingTable(document []byte) (RoutingTable, error) {
 func unrenderable(err error) error {
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s contains what ocel cannot render into %s: %v",
-		live.RoutingTable, ProxyConfig, err)
+		boxapi.RoutingTable, ProxyConfig, err)
 }

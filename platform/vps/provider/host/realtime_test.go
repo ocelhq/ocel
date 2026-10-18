@@ -10,18 +10,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestABootstrapPlacesTheRealtimeGatewayRootOwnedForItsContainersToMountReadOnly(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	at := slices.IndexFunc(Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}), func(item Item) bool { return item.Name == RealtimeBinary })
+	at := slices.IndexFunc(Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{}), func(item Item) bool { return item.Name == RealtimeBinary })
 	if at < 0 {
 		t.Fatalf("a bootstrap places no %s, and every realtime gateway runs it", RealtimeBinary)
 	}
-	placed := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})[at]
-	if placed.Kind != KindFile || placed.Owner != rootOwner || placed.Mode != 0o755 || !bytes.Equal(placed.Content, realtimeBinary(ArchAMD64)) {
+	placed := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})[at]
+	if placed.Kind != KindFile || placed.Owner != rootOwner || placed.Mode != 0o755 || !bytes.Equal(placed.Content, realtimeBinary(ssh.AMD64)) {
 		t.Errorf("%s is placed as %s %s %o, want the gateway built for the box, root's and executable by the container's user", RealtimeBinary, placed.Kind, placed.Owner, placed.Mode)
 	}
 

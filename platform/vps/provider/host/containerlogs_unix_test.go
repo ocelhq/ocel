@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type localShell struct {
@@ -33,19 +33,19 @@ func (l localShell) command(ctx context.Context, command string) *exec.Cmd {
 	return cmd
 }
 
-func (l localShell) Stream(ctx context.Context, command string, stdin io.Reader) (session.Result, error) {
+func (l localShell) Stream(ctx context.Context, command string, stdin io.Reader) (ssh.Result, error) {
 	cmd := l.command(ctx, command)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, &stdout, &stderr
 	err := cmd.Run()
 	var exited *exec.ExitError
 	if errors.As(err, &exited) {
-		return session.Result{Stdout: stdout.String(), Stderr: stderr.String(), Code: exited.ExitCode()}, nil
+		return ssh.Result{Stdout: stdout.String(), Stderr: stderr.String(), Code: exited.ExitCode()}, nil
 	}
-	return session.Result{Stdout: stdout.String(), Stderr: stderr.String()}, err
+	return ssh.Result{Stdout: stdout.String(), Stderr: stderr.String()}, err
 }
 
-func (l localShell) RunLines(ctx context.Context, command string, each func(session.Line) error) error {
+func (l localShell) RunLines(ctx context.Context, command string, each func(ssh.Line) error) error {
 	cmd := l.command(context.Background(), command)
 	input, err := cmd.StdinPipe()
 	if err != nil {
@@ -64,12 +64,12 @@ func (l localShell) RunLines(ctx context.Context, command string, each func(sess
 	}
 	l.t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
 	var mu sync.Mutex
-	for pipe, reader := range map[session.Pipe]io.Reader{session.Stdout: stdout, session.Stderr: stderr} {
+	for pipe, reader := range map[ssh.Pipe]io.Reader{ssh.Stdout: stdout, ssh.Stderr: stderr} {
 		go func() {
 			scanner := bufio.NewScanner(reader)
 			for scanner.Scan() {
 				mu.Lock()
-				_ = each(session.Line{Pipe: pipe, Text: scanner.Text()})
+				_ = each(ssh.Line{Pipe: pipe, Text: scanner.Text()})
 				mu.Unlock()
 			}
 		}()
@@ -84,13 +84,13 @@ func (l localShell) Run(ctx context.Context, command string) (string, error) {
 	return result.Stdout, err
 }
 
-func (l localShell) Preflight(context.Context) (session.Facts, error) { return session.Facts{}, nil }
+func (l localShell) Preflight(context.Context) (ssh.Facts, error) { return ssh.Facts{}, nil }
 
 func (l localShell) ForwardPort(context.Context, string) (string, func(), error) {
 	return "", nil, errors.New("a local shell forwards no port")
 }
 
-func (l localShell) Destination() session.Destination { return session.Destination{} }
+func (l localShell) Destination() ssh.Destination { return ssh.Destination{} }
 
 const standInDocker = `#!/bin/sh
 [ "$1" = logs ] || exit 0
@@ -132,7 +132,7 @@ func TestFollowContainerLogsOnABoxFollowsEveryContainerAndStopsThemWhenTheCaller
 		t.Fatal(err)
 	}
 	box := localShell{t: t, path: bin}
-	h := New(func(context.Context) (Conn, error) { return box, nil }, Keys{}, nil, Front{})
+	h := New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return box, nil }, nil), Keys{}, nil, Front{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

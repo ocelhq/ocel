@@ -16,14 +16,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type box struct {
 	mu         sync.Mutex
 	asked      []string
-	beside     []switchboard.SiblingFile
+	beside     []boxapi.SiblingFile
 	containers string
 	services   string
 	coolify    string
@@ -82,7 +82,7 @@ func (b *box) Ran(_ context.Context, _ string, argv []string) (string, error) {
 		return b.containers, nil
 	case strings.Contains(command, "coolify-proxy"):
 		return b.coolify, nil
-	case strings.Contains(command, switchboard.Name):
+	case strings.Contains(command, boxapi.Switchboard):
 		return b.board, nil
 	default:
 		return "", nil
@@ -116,7 +116,7 @@ func (b *box) Pause(_ context.Context, wait time.Duration) error {
 	return nil
 }
 
-func (b *box) ReadBeside(_ context.Context, path string) ([]switchboard.SiblingFile, error) {
+func (b *box) ReadBeside(_ context.Context, path string) ([]boxapi.SiblingFile, error) {
 	b.mu.Lock()
 	b.asked = append(b.asked, "beside "+path)
 	b.mu.Unlock()
@@ -132,18 +132,18 @@ func fixture(t *testing.T, path string) string {
 	return string(read)
 }
 
-func besideIn(t *testing.T, dir string) []switchboard.SiblingFile {
+func besideIn(t *testing.T, dir string) []boxapi.SiblingFile {
 	t.Helper()
 	entries, err := os.ReadDir(filepath.Join("testdata", dir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var found []switchboard.SiblingFile
+	var found []boxapi.SiblingFile
 	for _, entry := range entries {
 		if ext := filepath.Ext(entry.Name()); ext != ".yml" && ext != ".yaml" && ext != ".toml" {
 			continue
 		}
-		found = append(found, switchboard.SiblingFile{Name: entry.Name(), Content: []byte(fixture(t, filepath.Join(dir, entry.Name())))})
+		found = append(found, boxapi.SiblingFile{Name: entry.Name(), Content: []byte(fixture(t, filepath.Join(dir, entry.Name())))})
 	}
 	return found
 }

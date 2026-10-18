@@ -16,10 +16,10 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type traefikFront struct {
@@ -98,7 +98,7 @@ func servedByTheBox(t *testing.T, d *vps.Provider, hostname string) {
 	deadline := time.Now().Add(traefikServeWait)
 	for {
 		said, err := d.Host().ProbeRouter(context.Background(), hostname)
-		if err == nil && said.Router == switchboard.RouterKind {
+		if err == nil && said.Router == boxapi.SwitchboardRouter {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -201,7 +201,7 @@ func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
 	}
 	vm.routesThrough(t, tf.bound, "one")
 	servedByTheBox(t, d, tf.bound)
-	if kind, err := d.ServingRouter(ctx, tf.bound); err != nil || kind != switchboard.RouterKind {
+	if kind, err := d.ServingRouter(ctx, tf.bound); err != nil || kind != boxapi.SwitchboardRouter {
 		t.Errorf("Serving(%s) = %q, %v, want the switchboard proven through %s", tf.bound, kind, err, tf.front)
 	}
 

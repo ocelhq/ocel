@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 //go:embed backups.sh
@@ -93,9 +94,9 @@ func backupRemovals() []removal {
 }
 
 func dumpCommand(tier environment.Tier, container string) string {
-	return words([]string{BackupsHelper, string(tier), "dump", container})
+	return shell.Words([]string{BackupsHelper, string(tier), "dump", container})
 }
 
 func restoreCommand(tier environment.Tier, container, file string) string {
-	return words([]string{BackupsHelper, string(tier), "restore", container, file})
+	return shell.Words([]string{BackupsHelper, string(tier), "restore", container, file})
 }

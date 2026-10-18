@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const deployLogin = "ocel-deploy"
@@ -130,7 +131,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
-	for _, item := range host.Items(tier, nil, host.ArchAMD64, host.Front{}) {
+	for _, item := range host.Items(tier, nil, ssh.AMD64, host.Front{}) {
 		if item.Owner != deployLogin || item.Kind == "linux:user" {
 			continue
 		}

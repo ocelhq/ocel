@@ -9,21 +9,21 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func applyReading(t *testing.T, kernel string) []string {
 	t.Helper()
 	tier := environment.TierProduction
 	box := bootstrappedOn(t, tier)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		switch command {
 		case kernelSettingsCommand:
-			return session.Result{Stdout: kernel}, true
+			return ssh.Result{Stdout: kernel}, true
 		case "cat ~/.ssh/authorized_keys 2>/dev/null":
-			return session.Result{Stdout: aKey + "\n"}, true
+			return ssh.Result{Stdout: aKey + "\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	progress := &fake.Log{}
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),

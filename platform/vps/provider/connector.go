@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -35,7 +35,7 @@ func dialable(hostname string) error {
 	return nil
 }
 
-func hostKeyDigest(offered session.HostKey) (string, error) {
+func hostKeyDigest(offered ssh.HostKey) (string, error) {
 	fingerprinted, err := offered.Fingerprinted()
 	if err != nil {
 		return "", err
@@ -114,7 +114,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 		return provider.ConnectorAddress{}, err
 	}
 	return provider.ConnectorAddress{
-		URL:       "https://" + hostname + switchboard.ConnectorPath,
+		URL:       "https://" + hostname + boxapi.ConnectorPath,
 		PublicKey: installed.PublicKey,
 		Compute:   compute,
 	}, nil

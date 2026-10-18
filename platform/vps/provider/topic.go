@@ -24,8 +24,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -39,16 +39,16 @@ type queueDatabases struct {
 }
 
 func newQueueContainer(ref provider.StackRef) host.ResourceContainer {
-	spec := newPostgresContainer(ref, live.QueueDatabaseName, queueKind, images.QueueDatabase(),
+	spec := newPostgresContainer(ref, boxapi.QueueDatabaseName, queueKind, images.QueueDatabase(),
 		host.Volume{Path: queueData, Generation: images.QueueDatabaseMajor()})
 	spec.Args = []string{"postgres", "-c", "listen_addresses="}
-	spec.Sockets = live.QueueSocketsPath
+	spec.Sockets = boxapi.QueueSocketsPath
 	spec.Ready = []string{"pg_isready", "-U", postgresSuperuser}
-	spec.Labels = map[string]string{host.LabelOwner: live.QueueRole}
+	spec.Labels = map[string]string{host.LabelOwner: boxapi.QueueRole}
 	superuser := spec.Credential.Reassert
 	spec.Credential.Reassert = func(secret string) ([]string, string) {
 		argv, stdin := superuser(secret)
-		return argv, live.QueueRoleSQL() + stdin
+		return argv, boxapi.QueueRoleSQL() + stdin
 	}
 	return spec
 }
@@ -62,7 +62,7 @@ func newTopicRecord(in resources.ProvisionRequest) (records.Key, []byte, error) 
 	if err != nil {
 		return records.Key{}, nil, err
 	}
-	return live.QueueTopicKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, chooseDeclaredName(in.Resource.Declared, in.Resource.Name)), config, nil
+	return boxapi.QueueTopicKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, chooseDeclaredName(in.Resource.Declared, in.Resource.Name)), config, nil
 }
 
 func (p *Provider) PlanTopic(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
@@ -178,7 +178,7 @@ func chooseDeclaredName(declared, name string) string {
 }
 
 func newQueueDatabaseRecord(ref provider.StackRef, spec host.ResourceContainer, deliverySealed []byte) ([]byte, error) {
-	return json.Marshal(live.QueueDatabase{
+	return json.Marshal(boxapi.QueueDatabase{
 		Container: spec.Name, Stack: ref.Name.String(),
 		DeliverySealed: base64.StdEncoding.EncodeToString(deliverySealed),
 	})
@@ -216,7 +216,7 @@ func (p *Provider) planQueue(ctx context.Context, ref provider.StackRef, change 
 	if err != nil {
 		return err
 	}
-	recorded, err := records.ReadOrEmpty(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
+	recorded, err := records.ReadOrEmpty(ctx, p.keyValues, boxapi.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 		return nil
 	}
 	progress.Say("Provisioning the queue database for " + ref.Name.Env + "'s topics and tasks in container " + spec.Name)
-	bound, err := live.NewQueueSecretAssociatedData(ref.Project, ref.Tier, ref.Name.String())
+	bound, err := boxapi.NewQueueSecretAssociatedData(ref.Project, ref.Tier, ref.Name.String())
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	if err != nil {
 		return err
 	}
-	deliveryBound, err := live.NewQueueDeliverySecretAssociatedData(ref.Project, ref.Tier, ref.Name.String())
+	deliveryBound, err := boxapi.NewQueueDeliverySecretAssociatedData(ref.Project, ref.Tier, ref.Name.String())
 	if err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	if err != nil {
 		return err
 	}
-	key := live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env)
+	key := boxapi.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env)
 	if err := records.Change(ctx, p.keyValues, key, func(recorded records.Entry) ([]byte, bool, error) {
 		return record, string(recorded.Value) != string(record), nil
 	}); err != nil {
@@ -271,15 +271,15 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 }
 
 func nameDeliverySecret(queue host.ResourceContainer) string {
-	return queue.Name + "-" + live.QueueDeliverySecretName
+	return queue.Name + "-" + boxapi.QueueDeliverySecretName
 }
 
 func (p *Provider) RemoveTopic(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	name := chooseDeclaredName(binding.Resource, binding.Name)
-	if err := records.Forget(ctx, p.keyValues, live.QueueTopicKey(ref.Tier, ref.Project, ref.Name.Env, name)); err != nil {
+	if err := records.Forget(ctx, p.keyValues, boxapi.QueueTopicKey(ref.Tier, ref.Project, ref.Name.Env, name)); err != nil {
 		return err
 	}
-	partition, under := live.QueueTopicsUnder(ref.Tier, ref.Project, ref.Name.Env)
+	partition, under := boxapi.QueueTopicsUnder(ref.Tier, ref.Project, ref.Name.Env)
 	remaining, err := p.keyValues.List(ctx, partition, under...)
 	if err != nil {
 		return err
@@ -298,7 +298,7 @@ func (p *Provider) RemoveTopic(ctx context.Context, ref provider.StackRef, bindi
 	p.queues.Lock()
 	delete(p.queues.ensured, spec.Name)
 	p.queues.Unlock()
-	if err := records.Forget(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env)); err != nil && !errors.Is(err, records.ErrNotFound) {
+	if err := records.Forget(ctx, p.keyValues, boxapi.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env)); err != nil && !errors.Is(err, records.ErrNotFound) {
 		return fmt.Errorf("forget the queue database %s: %w", spec.Name, err)
 	}
 	return nil

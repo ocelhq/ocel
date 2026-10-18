@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type PortOwner struct {
@@ -72,7 +72,7 @@ func (m Manual) routing(ctx context.Context, hostname string) (provider.HostChec
 		return check, err
 	case failure != "":
 		check.Finding = failure
-	case answered != switchboard.RouterKind:
+	case answered != boxapi.SwitchboardRouter:
 		check.Finding = fmt.Sprintf("%s answers on this box's 443 as %q, not through ocel's switchboard", hostname, answered)
 	default:
 		check.Verdict, check.Fix = provider.HostPass, ""

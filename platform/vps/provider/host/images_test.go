@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -21,18 +22,18 @@ func (b *bench) feeds() []string {
 }
 
 func imaged(b *bench, present bool) {
-	b.answer = func(command string) (session.Result, bool) {
+	b.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker image ls"):
 			if present {
-				return session.Result{Stdout: imageID + "\n"}, true
+				return ssh.Result{Stdout: imageID + "\n"}, true
 			}
-			return session.Result{}, true
+			return ssh.Result{}, true
 		case strings.Contains(command, "docker load"):
 			present = true
-			return session.Result{Stdout: "Loaded image: " + imageRef + "\n"}, true
+			return ssh.Result{Stdout: "Loaded image: " + imageRef + "\n"}, true
 		default:
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
 	}
 }
@@ -49,7 +50,7 @@ func TestAnImageTheMachineAlreadyHasIsAnswered(t *testing.T) {
 		t.Error("HasImage() says no over a machine whose daemon names the image ref, so an unchanged redeploy would stream the whole image again")
 	}
 	for _, command := range rig.commands() {
-		if strings.Contains(command, quoted(imageRef)) {
+		if strings.Contains(command, shell.Quote(imageRef)) {
 			return
 		}
 	}
@@ -71,11 +72,11 @@ func TestAnImageTheMachineDoesNotHaveIsAbsentRatherThanAFailure(t *testing.T) {
 
 func TestADaemonThatDoesNotAnswerIsRefusedRatherThanReadAsAnAbsence(t *testing.T) {
 	rig := machine(nil)
-	rig.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker image ls") {
-			return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true
+			return ssh.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	_, err := rig.host().HasImage(context.Background(), imageRef)
@@ -107,7 +108,7 @@ func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.
 		switch {
 		case strings.Contains(command, "docker load"):
 			loaded = true
-			if !strings.Contains(command, "flock -x "+quoted(imagesLock)+" docker load") {
+			if !strings.Contains(command, "flock -x "+shell.Quote(imagesLock)+" docker load") {
 				t.Errorf("the load runs as %q and takes no lock: two deploys loading onto one box at once share base layers, and the daemon's import writes each blob under one ingest ref, so the second load finds the first's lock and ends with an image missing content", command)
 			}
 		case loaded && strings.Contains(command, "docker image ls"):
@@ -121,16 +122,16 @@ func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.
 
 func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 	rig := machine(nil)
-	rig.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker image ls"):
-			return session.Result{}, true
+			return ssh.Result{}, true
 		case strings.Contains(command, "docker load"):
-			return session.Result{Stdout: "Loaded image: something-else\n"}, true
+			return ssh.Result{Stdout: "Loaded image: something-else\n"}, true
 		case strings.Contains(command, "docker events"):
-			return session.Result{Stdout: "containerd[1]: content digest sha256:abc: not found\n--- disk\n/dev/root 20G 19G 1G 95% /\n"}, true
+			return ssh.Result{Stdout: "containerd[1]: content digest sha256:abc: not found\n--- disk\n/dev/root 20G 19G 1G 95% /\n"}, true
 		default:
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
 	}
 
@@ -148,12 +149,12 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 func refusedPull(said string) (*bench, *int) {
 	rig := machine(nil)
 	var asked int
-	rig.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, "docker pull") {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
 		asked++
-		return session.Result{Code: 1, Stderr: said}, true
+		return ssh.Result{Code: 1, Stderr: said}, true
 	}
 	return rig, &asked
 }
@@ -208,15 +209,15 @@ func TestAThrottledPullIsStillAskedAgainWhereTheDaemonSaysSo(t *testing.T) {
 
 func TestALoginOutsideTheDockerGroupReachesTheDaemonAsRoot(t *testing.T) {
 	rig := machine(nil)
-	rig.facts = session.Facts{Systemd: true}
-	rig.answer = func(command string) (session.Result, bool) {
+	rig.facts = ssh.Facts{Systemd: true}
+	rig.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker") && !strings.HasPrefix(command, "sudo -n ") {
-			return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
+			return ssh.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
 		}
 		if strings.Contains(command, "docker image ls") {
-			return session.Result{Stdout: imageID + "\n"}, true
+			return ssh.Result{Stdout: imageID + "\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	has, err := rig.host().HasImage(context.Background(), imageRef)
@@ -230,17 +231,17 @@ func TestALoginOutsideTheDockerGroupReachesTheDaemonAsRoot(t *testing.T) {
 
 func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
 	rig := machine(nil)
-	rig.facts = session.Facts{Systemd: true}
+	rig.facts = ssh.Facts{Systemd: true}
 	var probes int
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, dockerReach) {
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, ssh.DockerReach) {
 			probes++
-			return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"}, true
+			return ssh.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"}, true
 		}
 		if strings.HasPrefix(command, "sudo -n ") {
-			return session.Result{Code: 1, Stderr: "sudo: a password is required"}, true
+			return ssh.Result{Code: 1, Stderr: "sudo: a password is required"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	h := rig.host()
 
@@ -275,7 +276,7 @@ func TestTheDaemonIsFoundOnceHoweverManyImagesAreAskedAbout(t *testing.T) {
 	}
 	var found int
 	for _, command := range rig.commands() {
-		if strings.Contains(command, dockerReach) {
+		if strings.Contains(command, ssh.DockerReach) {
 			found++
 		}
 	}

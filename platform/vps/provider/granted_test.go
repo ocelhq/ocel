@@ -10,8 +10,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
@@ -21,7 +22,7 @@ func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 	written, err := host.WriteRoutingTable(host.RoutingTable{
 		Grace: host.DrainWindow,
 		Claims: []host.HostClaim{{
-			Hostname: "shop.example.com", Owner: variables.Surface("shop", "production"),
+			Hostname: "shop.example.com", Owner: boxapi.Surface("shop", "production"),
 			Pointer: "@production", App: "web",
 		}},
 	})
@@ -50,9 +51,9 @@ func grantedBucket() provider.Binding {
 	}
 }
 
-func manifestFor(t *testing.T, machine *box, options vps.Options, app provider.AppSpec) variables.Manifest {
+func manifestFor(t *testing.T, machine *box, options vps.Options, app provider.AppSpec) boxapi.Manifest {
 	t.Helper()
-	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
+	p := vps.ProviderOver(options, func(context.Context) (ssh.Conn, error) { return machine, nil })
 	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -95,7 +96,7 @@ func TestAnAppsUploadSessionsLiveWhereNoOtherAppsAccountReaches(t *testing.T) {
 		t.Fatalf("both apps keep their upload sessions at %q, so either reads the other's session secrets and forges its callbacks",
 			web.Store.Sessions)
 	}
-	for _, store := range []*variables.Store{web.Store, admin.Store} {
+	for _, store := range []*boxapi.Store{web.Store, admin.Store} {
 		if !strings.HasPrefix(store.Sessions, s3store.SessionsBucket()+"/") {
 			t.Errorf("upload sessions live at %q, want a prefix inside the store's own sessions bucket", store.Sessions)
 		}

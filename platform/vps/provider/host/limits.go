@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -27,32 +28,32 @@ type Limits struct {
 	CPUs        string
 }
 
-type sizing struct {
+type Engine struct {
+	box *ssh.Box
+
 	mu    sync.Mutex
 	known bool
 	size  boxSize
 }
 
-func (h *Host) readBoxSize(ctx context.Context) (boxSize, error) {
-	h.sizing.mu.Lock()
-	defer h.sizing.mu.Unlock()
-	if h.sizing.known {
-		return h.sizing.size, nil
+func NewEngine(box *ssh.Box) *Engine { return &Engine{box: box} }
+
+func (e *Engine) readBoxSize(ctx context.Context) (boxSize, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.known {
+		return e.size, nil
 	}
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
-		return boxSize{}, err
-	}
-	said, err := h.ran(ctx, "read how much memory and how many CPUs the engine has", sizeCommand, nil, elevation)
+	said, err := e.box.Run(ctx, ssh.Docker, "read how much memory and how many CPUs the engine has", sizeCommand, nil)
 	if err != nil {
 		return boxSize{}, err
 	}
 	size, err := readSize(said)
 	if err != nil {
 		return boxSize{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s answered %q for its memory and CPUs, so no container can be given a limit: %v", h.named(), strings.TrimSpace(said), err)
+			"%s answered %q for its memory and CPUs, so no container can be given a limit: %v", e.box.Named(), strings.TrimSpace(said), err)
 	}
-	h.sizing.known, h.sizing.size = true, size
+	e.known, e.size = true, size
 	return size, nil
 }
 
@@ -94,8 +95,8 @@ func (l Limits) argv() []string {
 	return argv
 }
 
-func (h *Host) tierLimits(ctx context.Context, tier environment.Tier) (Limits, error) {
-	size, err := h.readBoxSize(ctx)
+func (e *Engine) Limits(ctx context.Context, tier environment.Tier) (Limits, error) {
+	size, err := e.readBoxSize(ctx)
 	if err != nil {
 		return Limits{}, err
 	}

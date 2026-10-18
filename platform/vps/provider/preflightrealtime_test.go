@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func gatewaySurveyed(t *testing.T, content []byte) answer {
@@ -18,7 +19,7 @@ func gatewaySurveyed(t *testing.T, content []byte) answer {
 
 func currentGateway(t *testing.T) []byte {
 	t.Helper()
-	for _, item := range host.RealtimeItems(host.ArchAMD64) {
+	for _, item := range host.RealtimeItems(ssh.AMD64) {
 		if item.Name == host.RealtimeBinary {
 			return item.Content
 		}

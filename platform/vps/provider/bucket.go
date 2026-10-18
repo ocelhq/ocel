@@ -25,9 +25,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	s3store "github.com/ocelhq/ocel/platform/s3"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -53,9 +52,9 @@ func storeRoute(ref provider.StackRef, store string) host.AppRoute {
 	}
 	return host.AppRoute{
 		RouteKey: host.RouteKey{
-			Owner:   live.Surface(ref.Project, string(ref.Tier)),
+			Owner:   boxapi.Surface(ref.Project, string(ref.Tier)),
 			Pointer: pointer,
-			App:     switchboard.StoreLabel,
+			App:     boxapi.StoreLabel,
 		},
 		Upstream: store + ":" + storePort,
 	}
@@ -208,7 +207,7 @@ func (s *liveStores) once(name string, mint func() (storeCredential, error)) (st
 }
 
 func newStoreSecretAssociatedData(ref provider.StackRef) (seal.AssociatedData, error) {
-	return live.NewStoreSecretAssociatedData(ref.Project, ref.Tier, storeRef(ref).Name.String())
+	return boxapi.NewStoreSecretAssociatedData(ref.Project, ref.Tier, storeRef(ref).Name.String())
 }
 
 func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, name string) (storeCredential, error) {
@@ -382,7 +381,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 	return newBucketBinding(in, declared, p.stores.sweeping()), nil
 }
 
-func (p *Provider) storeSection(ctx context.Context, spec provider.StackSpec) (*live.Store, error) {
+func (p *Provider) storeSection(ctx context.Context, spec provider.StackSpec) (*boxapi.Store, error) {
 	if !slices.ContainsFunc(spec.App.Values.Bindings, func(binding provider.Binding) bool {
 		return binding.Type == provider.BindingBucket && !binding.Endpointed()
 	}) {
@@ -403,7 +402,7 @@ func (p *Provider) storeSection(ctx context.Context, spec provider.StackSpec) (*
 	if err != nil {
 		return nil, err
 	}
-	return &live.Store{
+	return &boxapi.Store{
 		Env:          storeRef(spec.Ref).Name.String(),
 		Endpoint:     "http://" + container.Name + ":" + storePort,
 		Region:       storeRegion,
@@ -516,9 +515,9 @@ func (p *Provider) bucketOrigins(ctx context.Context, ref provider.StackRef, spe
 
 func corsOrigins(ref provider.StackRef, declared []string, claims []host.HostClaim) []string {
 	origins := slices.Clone(declared)
-	owner := live.Surface(ref.Project, string(ref.Tier))
+	owner := boxapi.Surface(ref.Project, string(ref.Tier))
 	for _, claim := range claims {
-		if claim.Owner != owner || claim.App == switchboard.StoreLabel {
+		if claim.Owner != owner || claim.App == boxapi.StoreLabel {
 			continue
 		}
 		if origin := "https://" + claim.Hostname; !slices.Contains(origins, origin) {

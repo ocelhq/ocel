@@ -8,8 +8,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
@@ -18,15 +19,15 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 	spec := valued()
 	rig := runningWith(t, spec)
 	swept := rig.at(sweepCommand())
-	wrote := rig.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Tier, spec.Name)))
+	wrote := rig.at("install -m 0600 /dev/stdin " + shell.Quote(EnvFile(spec.Tier, spec.Name)))
 	if swept < 0 || wrote < 0 || swept > wrote {
 		t.Fatalf("the sweep ran at %d and the env file was written at %d: a sweep after the write is a sweep of nothing, and a SIGKILL between the write and the forget leaves plaintext nothing but the next deploy's sweep takes", swept, wrote)
 	}
 	command := sweepCommand()
 	for what, wanted := range map[string]string{
-		"the production records it sweeps":       quoted(StateDir(environment.TierProduction)),
-		"the preview records it sweeps":          quoted(StateDir(environment.TierPreview)),
-		"the env files a deploy hands over":      quoted("*" + envFileSuffix),
+		"the production records it sweeps":       shell.Quote(StateDir(environment.TierProduction)),
+		"the preview records it sweeps":          shell.Quote(StateDir(environment.TierPreview)),
+		"the env files a deploy hands over":      shell.Quote("*" + envFileSuffix),
 		"an age that spares a deploy in flight":  "-mmin +" + orphanMinutes,
 		"a depth that never reaches the records": "-maxdepth 1",
 	} {
@@ -46,7 +47,7 @@ func TestARegistryLoginIsHandedToTheCheckedDockerAndNeverToAConfigTheDeployLogin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(command, "docker "+live.DockerPullAs+" "+words([]string{"ghcr.io", "ada", "ghcr.io/shop/web@sha256:0000"})) {
+	if !strings.Contains(command, "docker "+boxapi.DockerPullAs+" "+shell.Words([]string{"ghcr.io", "ada", "ghcr.io/shop/web@sha256:0000"})) {
 		t.Errorf("the pull logs in with %q, want the checked docker to log in and pull under a config only root writes", command)
 	}
 	for _, refused := range []string{"DOCKER_CONFIG", "docker login", "hunter2"} {
@@ -55,11 +56,11 @@ func TestARegistryLoginIsHandedToTheCheckedDockerAndNeverToAConfigTheDeployLogin
 		}
 	}
 	rig := machine(nil)
-	rig.answer = func(said string) (session.Result, bool) {
+	rig.answer = func(said string) (ssh.Result, bool) {
 		if strings.Contains(said, "docker image ls -q") {
-			return session.Result{Stdout: "abc\n"}, true
+			return ssh.Result{Stdout: "abc\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if _, err := rig.host().PullImage(context.Background(), provider.RegistryTarget{Server: "ghcr.io"}, "ghcr.io/shop/web:one", "sha256:0000"); err != nil {
 		t.Fatalf("PullImage() = %v", err)

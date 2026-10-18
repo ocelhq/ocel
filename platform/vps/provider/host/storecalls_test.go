@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestAStoreThatIsBusyOrSilentExitsSoTheCallIsTriedAgainAndARefusalDoesNot(t *testing.T) {
@@ -51,8 +52,8 @@ func TestEveryStoreCallBoundsTheDockerExecItRunsCurlIn(t *testing.T) {
 		"a bucket call":   curlCommand(spec.Store, req, calls[0]),
 		"a store listing": storeScript(spec.Store, []*http.Request{req}, calls[:1]),
 	} {
-		at := strings.Index(script, quoted("docker")+" "+quoted("exec"))
-		if at < 0 || !strings.Contains(script[:at], quoted("timeout")) {
+		at := strings.Index(script, shell.Quote("docker")+" "+shell.Quote("exec"))
+		if at < 0 || !strings.Contains(script[:at], shell.Quote("timeout")) {
 			t.Errorf("%s runs docker exec with no time bound of its own, so a docker that stops answering stalls the deploy:\n%s", what, script)
 		}
 	}
@@ -61,9 +62,9 @@ func TestEveryStoreCallBoundsTheDockerExecItRunsCurlIn(t *testing.T) {
 func storeAnswering(codes ...int) *bench {
 	box := machine(nil)
 	var mu sync.Mutex
-	box.answer = func(command string) (session.Result, bool) {
-		if !strings.Contains(command, quoted("docker")+" "+quoted("exec")) {
-			return session.Result{}, false
+	box.answer = func(command string) (ssh.Result, bool) {
+		if !strings.Contains(command, shell.Quote("docker")+" "+shell.Quote("exec")) {
+			return ssh.Result{}, false
 		}
 		mu.Lock()
 		defer mu.Unlock()
@@ -71,7 +72,7 @@ func storeAnswering(codes ...int) *bench {
 		if len(codes) > 1 {
 			codes = codes[1:]
 		}
-		return session.Result{Code: code, Stderr: "the store answered 503"}, true
+		return ssh.Result{Code: code, Stderr: "the store answered 503"}, true
 	}
 	return box
 }
@@ -79,7 +80,7 @@ func storeAnswering(codes ...int) *bench {
 func storeCalls(box *bench) int {
 	called := 0
 	for _, command := range box.commands() {
-		if strings.Contains(command, quoted("docker")+" "+quoted("exec")) {
+		if strings.Contains(command, shell.Quote("docker")+" "+shell.Quote("exec")) {
 			called++
 		}
 	}
@@ -101,8 +102,8 @@ func TestAStoreThatIsBusyIsAskedAgainAfterABackoff(t *testing.T) {
 		t.Fatalf("the call waited %v between tries, want two waits", waits)
 	}
 	for _, wait := range waits {
-		if wait <= 0 || wait > time.Duration(storeCallBackoff.ceiling+storeCallBackoff.spread)*time.Second {
-			t.Errorf("a wait of %s is outside the backoff's ceiling of %ds", wait, storeCallBackoff.ceiling)
+		if wait <= 0 || wait > time.Duration(storeCallBackoff.Ceiling+storeCallBackoff.Spread)*time.Second {
+			t.Errorf("a wait of %s is outside the backoff's ceiling of %ds", wait, storeCallBackoff.Ceiling)
 		}
 	}
 }

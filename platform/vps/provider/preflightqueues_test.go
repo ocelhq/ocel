@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func agentSurveyed(t *testing.T, content []byte) answer {
@@ -22,7 +23,7 @@ func agentSurveyed(t *testing.T, content []byte) answer {
 
 func currentAgent(t *testing.T) []byte {
 	t.Helper()
-	for _, item := range host.LiveItems(host.ArchAMD64) {
+	for _, item := range host.LiveItems(ssh.AMD64) {
 		if item.Name == host.LiveBinary {
 			return item.Content
 		}
@@ -35,7 +36,7 @@ func preflightingResources(t *testing.T, machine *scripted, declared ...provider
 	t.Helper()
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	p.Reaching(reachedFromOutside)
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")

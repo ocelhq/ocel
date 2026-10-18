@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const buildID = "0123456789abcdef0123456789abcdef"
@@ -44,7 +44,7 @@ func anApp() provider.AppSpec {
 func over(machine *box) *vps.Provider {
 	return vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 }
 
@@ -90,12 +90,12 @@ func TestTwoReleasesOfOneAppNeverShareAContainerName(t *testing.T) {
 	}
 }
 
-func findingHealthPath(found session.Result) *box {
-	return &box{refuses: func(command string) (session.Result, bool) {
+func findingHealthPath(found ssh.Result) *box {
+	return &box{refuses: func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "find-health-path") {
 			return found, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}}
 }
 
@@ -104,7 +104,7 @@ func TestAnAppWithNoHealthPathRecordsThePathTheBoxFoundForItBeforeItIsPromoted(t
 
 	pathless := anApp()
 	pathless.HealthCheckPath = ""
-	machine := findingHealthPath(session.Result{Stdout: switchboard.Answered + " /up 404\n" + switchboard.Answered + " /health 200\n"})
+	machine := findingHealthPath(ssh.Result{Stdout: boxapi.Answered + " /up 404\n" + boxapi.Answered + " /health 200\n"})
 	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, pathless), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
@@ -133,9 +133,9 @@ func TestAnAppWhoseEveryProbedPathIsAbsentIsRefusedWithHowToNameOne(t *testing.T
 	pathless.HealthCheckPath = ""
 	var said strings.Builder
 	for _, path := range []string{"/up", "/health", "/healthz", "/"} {
-		said.WriteString(switchboard.Answered + " " + path + " 404\n")
+		said.WriteString(boxapi.Answered + " " + path + " 404\n")
 	}
-	_, err := over(findingHealthPath(session.Result{Code: 6, Stdout: said.String()})).ProvisionContainers(context.Background(), aStack(t, pathless), progress.Discard())
+	_, err := over(findingHealthPath(ssh.Result{Code: 6, Stdout: said.String()})).ProvisionContainers(context.Background(), aStack(t, pathless), progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "health.path") {
 		t.Fatalf("ProvisionContainers() = %v, want a refusal naming health.path", err)
 	}
@@ -147,7 +147,7 @@ func TestAnAppWithAPathAnEarlierReleaseDiscoveredIsGatedOnItWithNoProbing(t *tes
 	pinned := anApp()
 	pinned.HealthCheckPath = ""
 	pinned.DiscoveredHealthCheckPath = "/healthz"
-	machine := findingHealthPath(session.Result{Code: 1})
+	machine := findingHealthPath(ssh.Result{Code: 1})
 	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, pinned), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)

@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 var shopGate = gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string{"b"}, AllowOptions: []string{"/api"}}
@@ -71,7 +71,7 @@ func TestPuttingNoGateTakesTheOneTheOwnerHeldAndNoOnesElse(t *testing.T) {
 func TestEachTierOfAProjectHoldsItsOwnGateAndTakingOneLeavesTheOther(t *testing.T) {
 	t.Parallel()
 
-	preview := live.Surface("shop", string(environment.TierPreview))
+	preview := boxapi.Surface("shop", string(environment.TierPreview))
 	box := claimingBox(t, routed())
 	h := box.host()
 	previewGate := gate.Gate{Key: "preview"}

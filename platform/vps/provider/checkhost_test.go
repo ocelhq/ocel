@@ -15,7 +15,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const boxAddress = "203.0.113.10"
@@ -204,7 +204,7 @@ func TestTheReachVerdictFailsWhenNothingAnsweredAndNamesTheFirewall(t *testing.T
 func checksOver(machine *scripted) []provider.HostCheck {
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	p.Resolving(stubResolver(map[string][]string{"box.invalid": {boxAddress}}))
 	p.Reaching(func(context.Context, string) error { return nil })
@@ -360,7 +360,7 @@ func TestASwitchboardThatIsGoneStoppedOrSilentFailsByWhatIsWrongWithIt(t *testin
 
 type addressless struct{ *scripted }
 
-func (a addressless) Destination() session.Destination {
+func (a addressless) Destination() ssh.Destination {
 	destination := a.scripted.Destination()
 	destination.Address = ""
 	return destination
@@ -387,7 +387,7 @@ func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
 
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return addressless{boxSaying(nil)}, nil },
+		func(context.Context) (ssh.Conn, error) { return addressless{boxSaying(nil)}, nil },
 	)
 	checks, err := p.CheckHost(context.Background(), provider.HostCheckRequest{
 		Tier:      environment.TierProduction,

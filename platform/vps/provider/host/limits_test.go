@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 
 func flagOf(command, flag string) (string, bool) {
 	fields := strings.Fields(command)
-	at := slices.Index(fields, quoted(flag))
+	at := slices.Index(fields, shell.Quote(flag))
 	if at < 0 || at+1 >= len(fields) {
 		return "", false
 	}
@@ -28,7 +29,7 @@ func flagOf(command, flag string) (string, bool) {
 func runOnBench(t *testing.T, box *bench) string {
 	t.Helper()
 	for _, command := range box.commands() {
-		if strings.Contains(command, quoted("docker")+" "+quoted("run")) {
+		if strings.Contains(command, shell.Quote("docker")+" "+shell.Quote("run")) {
 			return command
 		}
 	}
@@ -96,11 +97,11 @@ func TestABoxWhoseSizeCannotBeReadRunsNothingUnlimited(t *testing.T) {
 	t.Parallel()
 
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, sizeFields) {
-			return session.Result{Stderr: "Cannot connect to the Docker daemon", Code: 1}, true
+			return ssh.Result{Stderr: "Cannot connect to the Docker daemon", Code: 1}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if _, err := box.host().RunContainer(context.Background(), valued()); err == nil {
 		t.Fatal("RunContainer() = nil on a box whose size could not be read, so the app ran with no memory limit")

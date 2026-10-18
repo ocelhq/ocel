@@ -10,62 +10,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
-
-const dockerReach = "docker version"
 
 const StaticImage = "gcr.io/distroless/static-debian12@sha256:d75cdd72874d4790092fcb1b058493ecf6bb5bf2b2b897045b00ff01d91843f2"
 
-func (h *Host) reachDocker(ctx context.Context) (acting, error) {
-	h.engining.Lock()
-	defer h.engining.Unlock()
-	if h.engined {
-		return h.engine, nil
-	}
-	if acting, ok := h.actAsStateOwner(ctx); ok {
-		result, err := h.stream(ctx, dockerReach+" >/dev/null", nil, acting)
-		if err != nil {
-			return "", err
-		}
-		if result.Code != 0 {
-			return "", refusal.Refuse(refusal.CodeNotReady,
-				"%s cannot run docker as %s: %s",
-				h.named(), stateOwner, spoken(result))
-		}
-		h.engine, h.engined = acting, true
-		return h.engine, nil
-	}
-	result, err := h.stream(ctx, dockerReach+" >/dev/null", nil, "")
-	if err != nil {
-		return "", err
-	}
-	if result.Code != 0 {
-		if !deniedSocket(result.Stderr) {
-			return "", refusal.Refuse(refusal.CodeNotReady,
-				"%s cannot run docker: %s",
-				h.named(), spoken(result))
-		}
-		elevation, err := h.elevate(ctx)
-		if err != nil {
-			return "", err
-		}
-		h.engine = elevation
-	}
-	h.engined = true
-	return h.engine, nil
-}
-
-func deniedSocket(stderr string) bool {
-	return strings.Contains(strings.ToLower(stderr), "permission denied")
-}
-
 func (h *Host) HasImage(ctx context.Context, imageRef string) (bool, error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return false, err
 	}
-	named, err := h.ran(ctx, "ask whether the engine has "+imageRef, "docker image ls -q "+quoted(imageRef), nil, elevation)
+	named, err := h.Run(ctx, elevation, "ask whether the engine has "+imageRef, "docker image ls -q "+shell.Quote(imageRef), nil)
 	if err != nil {
 		return false, err
 	}
@@ -77,7 +34,7 @@ func (h *Host) PullImage(ctx context.Context, target provider.RegistryTarget, im
 	if err != nil {
 		return "", err
 	}
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return "", err
 	}
@@ -95,7 +52,7 @@ func (h *Host) PullImage(ctx context.Context, target provider.RegistryTarget, im
 	if !has {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s pulled from %s but has no %s: %s",
-			h.named(), target.Server, imageRef, strings.TrimSpace(said))
+			h.Named(), target.Server, imageRef, strings.TrimSpace(said))
 	}
 	return strings.TrimSpace(said), nil
 }
@@ -106,7 +63,7 @@ const (
 	pullCeiling  = 8 * time.Second
 )
 
-func (h *Host) pulling(ctx context.Context, target provider.RegistryTarget, imageRef, command string, elevation acting) (string, error) {
+func (h *Host) pulling(ctx context.Context, target provider.RegistryTarget, imageRef, command string, elevation ssh.Acting) (string, error) {
 	what := "pull " + imageRef + " from " + target.Server
 	var said, stderr string
 	var err error
@@ -120,7 +77,7 @@ func (h *Host) pulling(ctx context.Context, target provider.RegistryTarget, imag
 		if target.Password != "" {
 			secret = strings.NewReader(target.Password)
 		}
-		if said, stderr, err = h.spoke(ctx, what, command, secret, elevation); err == nil || !images.RetryablePush(stderr) {
+		if said, stderr, err = h.Attempt(ctx, elevation, what, command, secret); err == nil || !images.RetryablePush(stderr) {
 			return said, err
 		}
 	}
@@ -160,11 +117,11 @@ func pull(target provider.RegistryTarget, imageRef, digest string) (string, erro
 		if err := CheckLogin(target); err != nil {
 			return "", err
 		}
-		steps = append(steps, "docker "+live.DockerPullAs+" "+words([]string{target.Server, target.Username, pinned}))
+		steps = append(steps, "docker "+boxapi.DockerPullAs+" "+shell.Words([]string{target.Server, target.Username, pinned}))
 	} else {
-		steps = append(steps, "docker pull "+quoted(pinned))
+		steps = append(steps, "docker pull "+shell.Quote(pinned))
 	}
-	steps = append(steps, "docker tag "+quoted(pinned)+" "+quoted(imageRef))
+	steps = append(steps, "docker tag "+shell.Quote(pinned)+" "+shell.Quote(imageRef))
 	return strings.Join(steps, "\n"), nil
 }
 
@@ -183,11 +140,7 @@ func pinnedTo(imageRef, digest string) (string, error) {
 }
 
 func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (string, error) {
-	acting, err := h.reachStateRoot(ctx)
-	if err != nil {
-		return "", err
-	}
-	said, err := h.ran(ctx, "load "+imageRef, acting.prefixed("flock -x "+quoted(imagesLock)+" docker load"), tar, asLogin)
+	said, err := h.Run(ctx, ssh.Deploy, "load "+imageRef, "flock -x "+shell.Quote(imagesLock)+" docker load", tar)
 	if err != nil {
 		return "", err
 	}
@@ -196,10 +149,10 @@ func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (s
 		return "", err
 	}
 	if !has {
-		elevation, _ := h.reachDocker(ctx)
+		elevation, _ := ssh.Docker, h.Assume(ctx, ssh.Docker)
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s loaded the image but has no %s: %s\nengine state:\n%s",
-			h.named(), imageRef, strings.TrimSpace(said), h.readEvidence(ctx, loadEvidenceCommand(), elevation))
+			h.Named(), imageRef, strings.TrimSpace(said), h.Evidence(ctx, elevation, loadEvidenceCommand()))
 	}
 	return strings.TrimSpace(said), nil
 }

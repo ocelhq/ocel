@@ -12,11 +12,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const proxyNotServingYet = 3
@@ -68,7 +70,7 @@ const (
 )
 
 func pairCommand(path string) string {
-	certificate, key := quoted(caddy.PinCertificate(path)), quoted(caddy.PinKey(path))
+	certificate, key := shell.Quote(caddy.PinCertificate(path)), shell.Quote(caddy.PinKey(path))
 	return "if ! command -v openssl >/dev/null 2>&1; then echo " + pairUnchecked + "; exit 0; fi\n" +
 		"certified=$(openssl x509 -in " + certificate + " -noout -pubkey 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum)\n" +
 		"keyed=$(openssl pkey -in " + key + " -pubout -outform DER 2>/dev/null | sha256sum)\n" +
@@ -76,7 +78,7 @@ func pairCommand(path string) string {
 }
 
 func (h *Host) paired(ctx context.Context, pin Pin) error {
-	said, err := h.run(ctx, "check the key pinned beside "+caddy.PinCertificate(pin.Path), pairCommand(pin.Path), nil)
+	said, err := h.Run(ctx, ssh.Root, "check the key pinned beside "+caddy.PinCertificate(pin.Path), pairCommand(pin.Path), nil)
 	if err != nil {
 		return err
 	}
@@ -94,8 +96,7 @@ func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, erro
 			"pinned certificate %q is outside %s",
 			path, caddy.PinsDir)
 	}
-	read, err := h.run(ctx, "read the certificate pinned at "+caddy.PinCertificate(path),
-		"cat "+quoted(caddy.PinCertificate(path)), nil)
+	read, err := h.Run(ctx, ssh.Root, "read the certificate pinned at "+caddy.PinCertificate(path), "cat "+shell.Quote(caddy.PinCertificate(path)), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +106,7 @@ func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, erro
 func (h *Host) FrontProxy() proxy.Proxy { return h.front }
 
 func (h *Host) ReadServedCertificate(ctx context.Context, hostname string) ([]byte, error) {
-	result, err := h.stream(ctx, words([]string{SwitchboardBinary, "leaf", hostname}), nil, "")
+	result, err := h.Stream(ctx, ssh.Login, shell.Words([]string{SwitchboardBinary, "leaf", hostname}), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func (h *Host) ReadServedCertificate(ctx context.Context, hostname string) ([]by
 	case proxyNotServingYet:
 		return nil, nil
 	default:
-		return nil, h.refuse("read what this box serves for "+hostname, result, "")
+		return nil, h.Refuse("read what this box serves for "+hostname, result)
 	}
 }
 
@@ -133,7 +134,7 @@ func (h *Host) ProbeRouterOverPlainHTTP(ctx context.Context, hostname string) (A
 }
 
 func (h *Host) probe(ctx context.Context, what, hostname string, flags ...string) (Answer, error) {
-	result, err := h.stream(ctx, words(slices.Concat([]string{SwitchboardBinary, "probe"}, flags, []string{hostname})), nil, "")
+	result, err := h.Stream(ctx, ssh.Login, shell.Words(slices.Concat([]string{SwitchboardBinary, "probe"}, flags, []string{hostname})), nil)
 	if err != nil {
 		return Answer{}, err
 	}
@@ -141,9 +142,9 @@ func (h *Host) probe(ctx context.Context, what, hostname string, flags ...string
 	case 0:
 		return Answer{Router: router.Kind(strings.TrimSpace(result.Stdout))}, nil
 	case proxyNotServingYet:
-		return Answer{Failure: spoken(result)}, nil
+		return Answer{Failure: ssh.Spoken(result)}, nil
 	default:
-		return Answer{}, h.refuse(what, result, "")
+		return Answer{}, h.Refuse(what, result)
 	}
 }
 
@@ -162,14 +163,14 @@ func (b frontBox) RanWithStdin(ctx context.Context, what string, argv []string, 
 	if stdin != nil {
 		fed = bytes.NewReader(stdin)
 	}
-	return b.h.ran(ctx, what, words(argv), fed, elevation)
+	return b.h.Run(ctx, elevation, what, shell.Words(argv), fed)
 }
 
-func (b frontBox) elevation(ctx context.Context, argv []string) (acting, error) {
+func (b frontBox) elevation(ctx context.Context, argv []string) (ssh.Acting, error) {
 	if len(argv) == 0 || argv[0] != "docker" && argv[0] != "sh" {
-		return "", nil
+		return ssh.Login, nil
 	}
-	return b.h.reachDocker(ctx)
+	return ssh.Docker, b.h.Assume(ctx, ssh.Docker)
 }
 
 func (b frontBox) PlacedSum(ctx context.Context, path string) (string, error) {
@@ -226,22 +227,22 @@ func (b frontBox) ProbeAnyCertificate(ctx context.Context, hostname string) (str
 	return string(said.Router), said.Failure, err
 }
 
-func (b frontBox) Pause(ctx context.Context, wait time.Duration) error { return b.h.pause(ctx, wait) }
+func (b frontBox) Pause(ctx context.Context, wait time.Duration) error { return b.h.Wait(ctx, wait) }
 
 func (b frontBox) ReadLeaf(ctx context.Context, hostname string) ([]byte, error) {
 	return b.h.ReadServedCertificate(ctx, hostname)
 }
 
-func (b frontBox) ReadBeside(ctx context.Context, path string) ([]switchboard.SiblingFile, error) {
-	elevation, err := b.h.reachDocker(ctx)
+func (b frontBox) ReadBeside(ctx context.Context, path string) ([]boxapi.SiblingFile, error) {
+	elevation, err := ssh.Docker, b.h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return nil, err
 	}
-	said, err := b.h.ran(ctx, "read what your proxy reads beside "+path, words(placementCommand(filepath.Dir(path), "beside", path)), nil, elevation)
+	said, err := b.h.Run(ctx, elevation, "read what your proxy reads beside "+path, shell.Words(placementCommand(filepath.Dir(path), "beside", path)), nil)
 	if err != nil {
 		return nil, err
 	}
-	var beside []switchboard.SiblingFile
+	var beside []boxapi.SiblingFile
 	if err := json.Unmarshal([]byte(said), &beside); err != nil {
 		return nil, unread("what was read beside "+path, said)
 	}
@@ -254,9 +255,9 @@ func (b frontBox) ProbePlainHTTP(ctx context.Context, hostname string) (router.K
 }
 
 func (b frontBox) Said(ctx context.Context, argv []string) (string, error) {
-	elevation, err := b.h.reachDocker(ctx)
+	elevation, err := ssh.Docker, b.h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return "", err
 	}
-	return b.h.said(ctx, words(argv), elevation)
+	return b.h.Said(ctx, elevation, shell.Words(argv))
 }

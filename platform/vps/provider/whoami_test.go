@@ -8,31 +8,31 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type surveyed struct {
-	facts session.Facts
+	facts ssh.Facts
 	err   error
 }
 
-func (s surveyed) Facts(context.Context) (session.Facts, error) { return s.facts, s.err }
+func (s surveyed) Facts(context.Context) (ssh.Facts, error) { return s.facts, s.err }
 
-func (s surveyed) HostKey() session.HostKey {
-	return session.HostKey{Type: "ssh-ed25519", Fingerprint: "SHA256:whoami"}
+func (s surveyed) HostKey() ssh.HostKey {
+	return ssh.HostKey{Type: "ssh-ed25519", Fingerprint: "SHA256:whoami"}
 }
 
-func (s surveyed) Destination() session.Destination {
-	return session.Destination{Written: "box.example", Address: "203.0.113.7", Port: 22, User: "ocel-deploy"}
+func (s surveyed) Destination() ssh.Destination {
+	return ssh.Destination{Written: "box.example", Address: "203.0.113.7", Port: 22, User: "ocel-deploy"}
 }
 
-func deployLoginFacts() session.Facts {
-	return session.Facts{
+func deployLoginFacts() ssh.Facts {
+	return ssh.Facts{
 		Systemd: true,
 		OS:      "Ubuntu 24.04 LTS",
 		Arch:    "x86_64",
 		Kernel:  "6.8.0",
-		Tools:   session.BootstrapTools(),
+		Tools:   ssh.BootstrapTools(),
 	}
 }
 

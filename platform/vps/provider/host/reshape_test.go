@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestAClaimComposedOntoAFileOneDeployMovedOnceIsRetriedOntoWhatThatDeployLeft(t *testing.T) {
@@ -15,7 +15,7 @@ func TestAClaimComposedOntoAFileOneDeployMovedOnceIsRetriedOntoWhatThatDeployLef
 	moved := mustWrite(t, twoProjects())
 	proxied := servesProxy(box.bench, &box.recorded)
 	writes := 0
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if !writesProxy(command) {
 			return proxied(command)
 		}
@@ -27,7 +27,7 @@ func TestAClaimComposedOntoAFileOneDeployMovedOnceIsRetriedOntoWhatThatDeployLef
 		}
 		box.mu.Unlock()
 		if first {
-			return session.Result{Code: routingMoved, Stderr: digested(string(moved))}, true
+			return ssh.Result{Code: routingMoved, Stderr: digested(string(moved))}, true
 		}
 		return proxied(command)
 	}

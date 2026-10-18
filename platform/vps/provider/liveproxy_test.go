@@ -13,8 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -184,7 +184,7 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 		t.Errorf("%s is %q, want 755:root:root: root alone writes what routes every hostname, and the deploy login runs it to read what the box serves", host.SwitchboardBinary, mode)
 	}
 	board := vm.inspects(t, "container", host.SwitchboardContainer, "{{range .Mounts}}{{.Type}}:{{.Destination}}:{{.RW}} {{end}}")
-	for _, mount := range []string{"bind:/ocel/switchboard:false", "bind:" + variables.RoutingDir + ":false"} {
+	for _, mount := range []string{"bind:/ocel/switchboard:false", "bind:" + boxapi.RoutingDir + ":false"} {
 		if !strings.Contains(board, mount) {
 			t.Errorf("the switchboard mounts %q, want %s among them: a directory it reads and cannot write", board, mount)
 		}
@@ -324,8 +324,8 @@ func TestLiveTheProxysConfigIsStatedAndItsLogContainsNoQueryString(t *testing.T)
 	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+host.ProxyConfig)); owner != deployLogin+":640" {
 		t.Errorf("%s is owned by %q, want the deploy principal's own file: the config is what a deploy renders", host.ProxyConfig, owner)
 	}
-	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+variables.RoutingTable)); owner != deployLogin+":640" {
-		t.Errorf("%s is owned by %q, want the deploy principal's own file: the table is what a deploy writes", variables.RoutingTable, owner)
+	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+boxapi.RoutingTable)); owner != deployLogin+":640" {
+		t.Errorf("%s is owned by %q, want the deploy principal's own file: the table is what a deploy writes", boxapi.RoutingTable, owner)
 	}
 	grace := vm.frontGrace(t)
 	if grace == "" || grace == "null" {
@@ -390,7 +390,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	if network := vm.inspects(t, "network", host.ProxyNetwork, "{{.Name}}"); network != "" {
 		t.Errorf("the network %s still exists after a destroy", host.ProxyNetwork)
 	}
-	for _, gone := range []string{host.SwitchboardBinary, host.ProxyConfig, host.ProxyData, variables.RoutingTable} {
+	for _, gone := range []string{host.SwitchboardBinary, host.ProxyConfig, host.ProxyData, boxapi.RoutingTable} {
 		if vm.exists(t, gone) {
 			t.Errorf("%s still exists after a destroy took the last tier on this host", gone)
 		}

@@ -8,17 +8,17 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func unprivileged() *bench {
 	b := machine(nil)
-	b.facts = session.Facts{Root: false, Systemd: true, Arch: "x86_64"}
-	b.answer = func(command string) (session.Result, bool) {
+	b.facts = ssh.Facts{Root: false, Systemd: true, Arch: "x86_64"}
+	b.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, listeners.TCPPath) {
-			return session.Result{Stdout: "  sl  local_address\n"}, true
+			return ssh.Result{Stdout: "  sl  local_address\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	return b
 }
@@ -74,11 +74,11 @@ func TestAListenerReadThisHostDeniedIsRefusedWithWhatItSaid(t *testing.T) {
 	t.Parallel()
 
 	b := unprivileged()
-	b.answer = func(command string) (session.Result, bool) {
+	b.answer = func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, listeners.TCPPath) {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
-		denied := session.Result{Code: 1, Stderr: "cat: " + listeners.TCPPath + ": Permission denied"}
+		denied := ssh.Result{Code: 1, Stderr: "cat: " + listeners.TCPPath + ": Permission denied"}
 		if strings.Contains(command, "|| true") {
 			denied.Code, denied.Stderr = 0, ""
 		}

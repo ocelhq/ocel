@@ -11,26 +11,27 @@ import (
 	"testing"
 
 	connect "connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestAPostgresOrKVBindingIsForwardedFromLoopbackToItsContainersAddressOnTheBox(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{refuses: func(command string) (session.Result, bool) {
+	machine := &box{refuses: func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-infra-orders-postgres"):
-			return session.Result{Stdout: "172.18.0.5 \n"}, true
+			return ssh.Result{Stdout: "172.18.0.5 \n"}, true
 		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-infra-cache-kv"):
-			return session.Result{Stdout: "172.18.0.6 \n"}, true
+			return ssh.Result{Stdout: "172.18.0.6 \n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}}
 
 	forwards, err := over(machine).Hooks().BindingAccess.ForwardPorts(context.Background(), provider.PortForwardRequest{
@@ -61,14 +62,14 @@ func TestAPostgresOrKVBindingIsForwardedFromLoopbackToItsContainersAddressOnTheB
 func TestAForwardThatFailsPartWayStopsTheForwardsItAlreadyOpened(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{refuses: func(command string) (session.Result, bool) {
+	machine := &box{refuses: func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-infra-orders-postgres"):
-			return session.Result{Stdout: "172.18.0.5 \n"}, true
+			return ssh.Result{Stdout: "172.18.0.5 \n"}, true
 		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-infra-cache-kv"):
-			return session.Result{Stdout: " \n"}, true
+			return ssh.Result{Stdout: " \n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}}
 
 	_, err := over(machine).Hooks().BindingAccess.ForwardPorts(context.Background(), provider.PortForwardRequest{
@@ -143,11 +144,11 @@ func tokenOf(t *testing.T, proxy provider.BindingProxy, grantee string) string {
 func servedGrants(t *testing.T, grants ...provider.BindingGrant) (provider.BindingProxy, *storeSeen, *box) {
 	t.Helper()
 	store := &storeSeen{}
-	machine := &box{kept: sealedRootKey(), listening: store.serve(t), refuses: func(command string) (session.Result, bool) {
+	machine := &box{kept: sealedRootKey(), listening: store.serve(t), refuses: func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker inspect") {
-			return session.Result{Stdout: "172.18.0.9 \n"}, true
+			return ssh.Result{Stdout: "172.18.0.9 \n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}}
 	serve := over(machine).Hooks().BindingAccess
 	if serve == nil {

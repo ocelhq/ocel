@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 type daemonBench struct {
@@ -20,7 +22,7 @@ func daemonOn(t *testing.T, swarm string, config *string) daemonBench {
 	t.Helper()
 	bench := daemonBench{bin: t.TempDir(), config: filepath.Join(t.TempDir(), "daemon.json")}
 	log := filepath.Join(bench.bin, "log")
-	executable(t, filepath.Join(bench.bin, "docker"), "#!/bin/sh\nprintf '%s\\n' "+quoted(swarm)+"\n")
+	executable(t, filepath.Join(bench.bin, "docker"), "#!/bin/sh\nprintf '%s\\n' "+shell.Quote(swarm)+"\n")
 	executable(t, filepath.Join(bench.bin, "dockerd"), "#!/bin/sh\nprintf 'dockerd %s\\n' \"$*\" >>"+log+"\n"+
 		"for f; do :; done\npython3 -I -c 'import json,sys; assert isinstance(json.load(open(sys.argv[1])), dict)' \"$f\"\n")
 	executable(t, filepath.Join(bench.bin, "systemctl"), "#!/bin/sh\nprintf 'systemctl %s\\n' \"$*\" >>"+log+"\n")

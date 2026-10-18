@@ -7,8 +7,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -32,7 +34,7 @@ func connectorUnit() []byte {
 		"[Service]",
 		"User=" + deployUser,
 		"Group=" + deployUser,
-		"ExecStart=" + ConnectorBinary + " --config " + ConnectorConfig + " --listen unix://" + switchboard.ConnectorSocket,
+		"ExecStart=" + ConnectorBinary + " --config " + ConnectorConfig + " --listen unix://" + boxapi.ConnectorSocket,
 		"Restart=on-failure",
 		"RestartSec=5s",
 		"",
@@ -75,7 +77,7 @@ type ConnectorState struct {
 }
 
 func (c *Connector) Describe(ctx context.Context) (ConnectorState, error) {
-	rendered, err := c.host.run(ctx, "ask this host what connector it has installed", connectorSurvey(), nil)
+	rendered, err := c.host.Run(ctx, ssh.Root, "ask this host what connector it has installed", connectorSurvey(), nil)
 	if err != nil {
 		return ConnectorState{}, err
 	}
@@ -83,10 +85,10 @@ func (c *Connector) Describe(ctx context.Context) (ConnectorState, error) {
 }
 
 func connectorSurvey() string {
-	printing := quoted(ConnectorBinary) + " --config " + quoted(ConnectorConfig) + " --print-public-key"
-	return "if [ -x " + quoted(ConnectorBinary) + " ] && [ -f " + quoted(ConnectorConfig) + " ]; then\n" +
-		"printf 'version=%s\\n' \"$(" + quoted(ConnectorBinary) + " --version 2>/dev/null || true)\"\n" +
-		"printf 'key=%s\\n' \"$(su -s /bin/sh -c " + quoted(printing) + " " + quoted(deployUser) + " 2>/dev/null || true)\"\n" +
+	printing := shell.Quote(ConnectorBinary) + " --config " + shell.Quote(ConnectorConfig) + " --print-public-key"
+	return "if [ -x " + shell.Quote(ConnectorBinary) + " ] && [ -f " + shell.Quote(ConnectorConfig) + " ]; then\n" +
+		"printf 'version=%s\\n' \"$(" + shell.Quote(ConnectorBinary) + " --version 2>/dev/null || true)\"\n" +
+		"printf 'key=%s\\n' \"$(su -s /bin/sh -c " + shell.Quote(printing) + " " + shell.Quote(deployUser) + " 2>/dev/null || true)\"\n" +
 		"fi"
 }
 
@@ -132,7 +134,7 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 		return ConnectorState{}, err
 	}
 	items := ConnectorItems(binary, written)
-	rendered, err := c.host.run(ctx, "survey the connector this host has installed", survey(items), nil)
+	rendered, err := c.host.Run(ctx, ssh.Root, "survey the connector this host has installed", survey(items), nil)
 	if err != nil {
 		return ConnectorState{}, err
 	}
@@ -153,7 +155,7 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	if err := c.Route(ctx, hostname); err != nil {
 		return ConnectorState{}, err
 	}
-	progress.Say("Routed https://" + hostname + switchboard.ConnectorPath + " to the connector")
+	progress.Say("Routed https://" + hostname + boxapi.ConnectorPath + " to the connector")
 	if route := c.host.RouteBy(hostname); route != "" {
 		progress.Say(route)
 	}
@@ -164,8 +166,8 @@ func (c *Connector) Remove(ctx context.Context, progress progress.Log) error {
 	if err := c.Route(ctx, ""); err != nil {
 		return err
 	}
-	progress.Say("Stopped routing " + switchboard.ConnectorPath + " to the connector")
-	if _, err := c.host.run(ctx, "take the connector off this host", connectorRemoval(), nil); err != nil {
+	progress.Say("Stopped routing " + boxapi.ConnectorPath + " to the connector")
+	if _, err := c.host.Run(ctx, ssh.Root, "take the connector off this host", connectorRemoval(), nil); err != nil {
 		return err
 	}
 	progress.Say("Removed the connector's systemd unit " + ConnectorUnit + ", its binary " + ConnectorBinary + " and directory " + connectorRoot)
@@ -173,15 +175,15 @@ func (c *Connector) Remove(ctx context.Context, progress progress.Log) error {
 }
 
 func connectorRemoval() string {
-	unit := quoted(ConnectorUnit)
+	unit := shell.Quote(ConnectorUnit)
 	return strings.Join([]string{
 		"if systemctl cat " + unit + " >/dev/null 2>&1; then systemctl disable --now " + unit + " >/dev/null 2>&1 || true; fi",
-		"rm -f " + quoted(connectorUnitFile),
+		"rm -f " + shell.Quote(connectorUnitFile),
 		"systemctl daemon-reload >/dev/null 2>&1 || true",
-		"rm -f " + quoted(ConnectorBinary),
-		"rm -rf " + quoted(connectorRoot),
-		"rm -f " + quoted(connectorTmpfiles),
-		"rm -f " + quoted(switchboard.ConnectorSocket),
+		"rm -f " + shell.Quote(ConnectorBinary),
+		"rm -rf " + shell.Quote(connectorRoot),
+		"rm -f " + shell.Quote(connectorTmpfiles),
+		"rm -f " + shell.Quote(boxapi.ConnectorSocket),
 	}, "\n")
 }
 

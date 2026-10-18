@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 func TestABucketThatIsNoLongerPublicHasItsAnonymousReadPolicyDeleted(t *testing.T) {
@@ -344,11 +345,11 @@ func TestPlanningABucketOnlyReadsFromTheStore(t *testing.T) {
 		t.Fatalf("PlanBucket() = %v", err)
 	}
 	asked := strings.Join(box.commands(), "\n")
-	if !strings.Contains(asked, quoted(http.MethodGet)) {
+	if !strings.Contains(asked, shell.Quote(http.MethodGet)) {
 		t.Fatalf("planning a bucket asked the store nothing:\n%s", asked)
 	}
 	for _, method := range []string{http.MethodPut, http.MethodDelete, http.MethodPost} {
-		if strings.Contains(asked, quoted(method)) {
+		if strings.Contains(asked, shell.Quote(method)) {
 			t.Errorf("planning a bucket sent the store a %s:\n%s", method, asked)
 		}
 	}

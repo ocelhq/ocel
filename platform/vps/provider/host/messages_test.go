@@ -9,8 +9,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func heardAll(t *testing.T, progress *fake.Log, want ...string) {
@@ -28,11 +29,11 @@ func TestABootstrapRemovalSaysWhatItRemovedAndWhatItKeptAndWhy(t *testing.T) {
 
 	tier := environment.TierProduction
 	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.HasPrefix(command, "rmdir "+quoted("/usr/local/lib/ocel")+" ") {
-			return session.Result{Stdout: dirNonEmpty + "\n"}, true
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.HasPrefix(command, "rmdir "+shell.Quote("/usr/local/lib/ocel")+" ") {
+			return ssh.Result{Stdout: dirNonEmpty + "\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	progress := &fake.Log{}
 
@@ -87,7 +88,7 @@ func TestAConnectorInstallSaysWhatItWroteAndWhereTheConsoleReachesIt(t *testing.
 	heardAll(t, progress,
 		"INFO Installed file /usr/local/lib/ocel/connector",
 		"INFO Installed systemd unit ocel-connector.service",
-		"INFO Routed https://box.example.com"+switchboard.ConnectorPath+" to the connector",
+		"INFO Routed https://box.example.com"+boxapi.ConnectorPath+" to the connector",
 	)
 }
 
@@ -103,7 +104,7 @@ func TestAConnectorRemovalSaysWhatItUnroutedAndRemoved(t *testing.T) {
 		t.Fatalf("Remove() = %v", err)
 	}
 	heardAll(t, progress,
-		"INFO Stopped routing "+switchboard.ConnectorPath+" to the connector",
+		"INFO Stopped routing "+boxapi.ConnectorPath+" to the connector",
 		"INFO Removed the connector's systemd unit ocel-connector.service, its binary /usr/local/lib/ocel/connector and directory /etc/ocel/connector",
 	)
 }
@@ -112,11 +113,11 @@ func TestReconcilingAnAppsImagesReturnsWhatItRemovedAndWhatTheRegistryStillHolds
 	t.Parallel()
 
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
-		if !strings.HasPrefix(command, quoted(releasesHelper)) || !strings.Contains(command, quoted("reconcile")) {
-			return session.Result{}, false
+	box.answer = func(command string) (ssh.Result, bool) {
+		if !strings.HasPrefix(command, shell.Quote(releasesHelper)) || !strings.Contains(command, shell.Quote("reconcile")) {
+			return ssh.Result{}, false
 		}
-		return session.Result{Stdout: "removed ocel/shop-web:1111\nunused ocel/shop-web:1111\nunused ocel/shop-web:2222\n"}, true
+		return ssh.Result{Stdout: "removed ocel/shop-web:1111\nunused ocel/shop-web:1111\nunused ocel/shop-web:2222\n"}, true
 	}
 	swept, err := box.host().Reconcile(context.Background(), "shop", "web", "ocel/shop-web:3333")
 	if err != nil {

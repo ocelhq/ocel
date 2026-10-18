@@ -8,27 +8,28 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
-	SwitchboardContainer = switchboard.Name
+	SwitchboardContainer = boxapi.Switchboard
 	SwitchboardDir       = boxstore.Dir + "/switchboard"
-	SwitchboardBinary    = SwitchboardDir + "/" + switchboard.Name
+	SwitchboardBinary    = SwitchboardDir + "/" + boxapi.Switchboard
 	switchboardMount     = "/ocel/switchboard"
-	SwitchboardMounted   = switchboardMount + "/" + switchboard.Name
+	SwitchboardMounted   = switchboardMount + "/" + boxapi.Switchboard
 	switchboardPort      = "8080"
-	SwitchboardUpstream  = "unix/" + switchboard.FrontSocket
+	SwitchboardUpstream  = "unix/" + boxapi.FrontSocket
 )
 
-var SwitchboardPermission = proxy.Permission{Dial: "unix/" + switchboard.AdmitSocket, Path: switchboard.AdmitPath}
+var SwitchboardPermission = proxy.Permission{Dial: "unix/" + boxapi.AdmitSocket, Path: boxapi.AdmitPath}
 
 var switchboardCapabilities = []string{"DAC_OVERRIDE"}
 
-func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
+func switchboardBinary(arch string) []byte { return embedded(boxapi.Switchboard, arch) }
 
 func switchboardBox(binary []byte, front Front) boxContainer {
 	return boxContainer{
@@ -36,25 +37,25 @@ func switchboardBox(binary []byte, front Front) boxContainer {
 		image: StaticImage,
 		command: append([]string{SwitchboardMounted, "serve",
 			"--listen", ":" + switchboardPort,
-			"--front", switchboard.FrontSocket,
-			"--admit", switchboard.AdmitSocket,
-			"--table", live.RoutingTable,
-			"--tunnel-listen", TunnelNetwork + ":" + switchboard.TunnelListenPort,
+			"--front", boxapi.FrontSocket,
+			"--admit", boxapi.AdmitSocket,
+			"--table", boxapi.RoutingTable,
+			"--tunnel-listen", TunnelNetwork + ":" + boxapi.TunnelListenPort,
 		}, front.listening()...),
 		ports:    front.published(),
 		networks: append(front.joined(), userNetwork{name: TunnelNetwork, createdByOcel: true}),
 		config:   contentSum(binary),
 		binds: []string{
 			SwitchboardDir + ":" + switchboardMount + ":ro",
-			live.RoutingDir + ":" + live.RoutingDir + ":ro",
+			boxapi.RoutingDir + ":" + boxapi.RoutingDir + ":ro",
 			ConnectorRun + ":" + ConnectorRun + ":ro",
-			switchboard.ControlDir + ":" + switchboard.ControlDir,
-			switchboard.FrontDir + ":" + switchboard.FrontDir,
+			boxapi.SwitchboardControlDir + ":" + boxapi.SwitchboardControlDir,
+			boxapi.FrontDir + ":" + boxapi.FrontDir,
 		},
 		caps:    switchboardCapabilities,
-		files:   []string{live.RoutingTable, SwitchboardBinary},
+		files:   []string{boxapi.RoutingTable, SwitchboardBinary},
 		ready:   []string{SwitchboardMounted, "upstreams"},
-		unready: "answered nothing over its control socket in " + switchboard.ControlDir,
+		unready: "answered nothing over its control socket in " + boxapi.SwitchboardControlDir,
 		inodes:  []string{SwitchboardMounted, "inodes"},
 		joins:   true,
 	}
@@ -74,7 +75,7 @@ func placementRun(fed bool, dir string, argv []string) []string {
 	run = append(run,
 		"--mount", boundMount(SwitchboardDir, switchboardMount, "readonly"),
 		"--mount", boundMount(dir, dir),
-		"--env", switchboard.PlaceEnv+"="+dir,
+		"--env", boxapi.PlaceEnv+"="+dir,
 		StaticImage, SwitchboardMounted)
 	return append(run, argv...)
 }
@@ -110,7 +111,7 @@ func (s boxContainer) sources() []string {
 func presenceRead(board boxContainer) string {
 	var script []string
 	missing := func(test, path string) {
-		script = append(script, "[ "+test+" "+quoted(path)+" ] || printf 'missing=%s\\n' "+quoted(path))
+		script = append(script, "[ "+test+" "+shell.Quote(path)+" ] || printf 'missing=%s\\n' "+shell.Quote(path))
 	}
 	for _, source := range board.sources() {
 		missing("-d", source)
@@ -118,17 +119,17 @@ func presenceRead(board boxContainer) string {
 	for _, file := range board.files {
 		missing("-f", file)
 	}
-	binary := quoted(SwitchboardBinary)
+	binary := shell.Quote(SwitchboardBinary)
 	script = append(script, "if [ -f "+binary+" ]; then printf 'sum=%s\\n' \"$(sha256sum "+binary+" | cut -d' ' -f1)\"; fi")
 	return strings.Join(script, "\n")
 }
 
-func (s boxContainer) restoring(attempts int) string {
+func (s boxContainer) restoring(attempts int, locked string) string {
 	return "set -e\n" +
-		imagePulled(s.image, containerPulls, pullAttemptSeconds, pullBudgetSeconds) +
-		routingLocked("-x") +
-		"if [ \"$(docker inspect --type container --format " + quoted("{{.State.Running}}") + " " + quoted(s.name) + " 2>/dev/null)\" != true ]; then\n" +
-		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
+		imagePulled(s.image, containerPulls, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
+		locked +
+		"if [ \"$(docker inspect --type container --format " + shell.Quote("{{.State.Running}}") + " " + shell.Quote(s.name) + " 2>/dev/null)\" != true ]; then\n" +
+		"docker rm --force " + shell.Quote(s.name) + " >/dev/null 2>&1 || true\n" +
 		s.networksPresent() +
 		networkCommand() + "\n" +
 		bindsPresent(s.files) +
@@ -138,9 +139,9 @@ func (s boxContainer) restoring(attempts int) string {
 		s.rising(attempts)
 }
 
-func (h *Host) restoreSwitchboard(ctx context.Context, elevation acting) error {
+func (h *Host) restoreSwitchboard(ctx context.Context, elevation ssh.Acting) error {
 	board := switchboardBox(nil, h.proxyOption)
-	said, err := h.ran(ctx, "read what "+board.name+" is started from", presenceRead(board), nil, elevation)
+	said, err := h.Run(ctx, elevation, "read what "+board.name+" is started from", presenceRead(board), nil)
 	if err != nil {
 		return err
 	}
@@ -158,13 +159,13 @@ func (h *Host) restoreSwitchboard(ctx context.Context, elevation acting) error {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s container on %s, and it cannot be started again without %s\n"+
 				"Run `ocel bootstrap %s`",
-			board.name, h.named(), strings.Join(missing, ", "), environment.TierProduction)
+			board.name, h.Named(), strings.Join(missing, ", "), environment.TierProduction)
 	}
 	if board.config == "" {
 		return unread("the switchboard binary's sha256", strings.TrimSpace(said))
 	}
 	board.restored = true
-	result, err := h.stream(ctx, board.restoring(containerRising), nil, elevation)
+	result, err := h.Stream(ctx, elevation, board.restoring(containerRising, routingLocked("-x")), nil)
 	if err != nil {
 		return err
 	}
@@ -172,18 +173,18 @@ func (h *Host) restoreSwitchboard(ctx context.Context, elevation acting) error {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s container on %s, and starting it again failed: %s\n"+
 				"Run `ocel bootstrap %s`",
-			board.name, h.named(), spoken(result), environment.TierProduction)
+			board.name, h.Named(), ssh.Spoken(result), environment.TierProduction)
 	}
 	return nil
 }
 
 func restoredCommand() string {
 	return "docker inspect --type container --format " +
-		quoted(fmt.Sprintf(`{{index .Config.Labels %q}} {{.Created}}`, restoredLabel)) + " " +
-		quoted(SwitchboardContainer) + " 2>/dev/null || true"
+		shell.Quote(fmt.Sprintf(`{{index .Config.Labels %q}} {{.Created}}`, restoredLabel)) + " " +
+		shell.Quote(SwitchboardContainer) + " 2>/dev/null || true"
 }
 
-func (h *Host) restoredAt(ctx context.Context, elevation acting) (string, bool) {
-	by, at, _ := strings.Cut(strings.TrimSpace(h.readEvidence(ctx, restoredCommand(), elevation)), " ")
+func (h *Host) restoredAt(ctx context.Context, elevation ssh.Acting) (string, bool) {
+	by, at, _ := strings.Cut(strings.TrimSpace(h.Evidence(ctx, elevation, restoredCommand())), " ")
 	return at, by == restoredBy
 }

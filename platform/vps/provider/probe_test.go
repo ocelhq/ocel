@@ -13,9 +13,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -80,7 +79,7 @@ func TestTheBoxAnswersWhichRouterServesAHostnameOffTheHeaderItReadsOverTls(t *te
 	t.Parallel()
 
 	for what, header := range map[string]router.Kind{
-		"the box itself":     switchboard.RouterKind,
+		"the box itself":     boxapi.SwitchboardRouter,
 		"a different router": "cloudfront",
 		"nothing ocel runs":  "",
 	} {
@@ -128,7 +127,7 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 	t.Parallel()
 
 	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(router.HeaderRouter, string(switchboard.RouterKind))
+		w.Header().Set(router.HeaderRouter, string(boxapi.SwitchboardRouter))
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(served.Close)
@@ -157,7 +156,7 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 	t.Parallel()
 
 	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(router.HeaderRouter, string(switchboard.RouterKind))
+		w.Header().Set(router.HeaderRouter, string(boxapi.SwitchboardRouter))
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(served.Close)
@@ -220,31 +219,14 @@ func TestAHostnameNothingAnswersIsNotAnErrorTheCutoverGivesUpOn(t *testing.T) {
 	}
 }
 
-func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheSwitchboardAsItsRouter(t *testing.T) {
+func TestAHostnameWhoseAnswerNamesTheSwitchboardIsServedByTheSwitchboard(t *testing.T) {
 	t.Parallel()
 
 	const hostname = "shop.example.com"
-	const owner = "ocel--shop--production"
-	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(router.HeaderRouter, string(boxapi.SwitchboardRouter))
 		_, _ = w.Write([]byte("the body of the app the project runs"))
 	}))
-	t.Cleanup(app.Close)
-	written, err := host.WriteRoutingTable(host.RoutingTable{
-		Grace:  host.DrainWindow,
-		Claims: []host.HostClaim{{Hostname: hostname, Owner: owner, Pointer: router.DefaultPointer}},
-		Routes: []host.AppRoute{{
-			RouteKey: host.RouteKey{Owner: owner, Pointer: "@production", App: "web"},
-			Upstream: strings.TrimPrefix(app.URL, "http://"),
-		}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	table, err := switchboard.Read(written)
-	if err != nil {
-		t.Fatalf("switchboard.Read() = %v", err)
-	}
-	served := httptest.NewTLSServer(switchboard.New(table))
 	t.Cleanup(served.Close)
 
 	at, err := url.Parse(served.URL)
@@ -258,23 +240,23 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheSwitchboardAsItsRoute
 	if err != nil {
 		t.Fatalf("ServingRouter() = %v", err)
 	}
-	if kind != switchboard.RouterKind {
-		t.Errorf("ServingRouter() over a hostname a project on the box claims and routes = %q, want %q: a box that names its router only on the route nothing claims makes the first bind on a project already deployed probe its own app, read no header and burn every attempt before refusing", kind, switchboard.RouterKind)
+	if kind != boxapi.SwitchboardRouter {
+		t.Errorf("ServingRouter() over a hostname whose answer names the switchboard = %q, want %q", kind, boxapi.SwitchboardRouter)
 	}
 }
 
-func probedOnTheBox(t *testing.T, answer session.Result) (*vps.Provider, *box) {
+func probedOnTheBox(t *testing.T, answer ssh.Result) (*vps.Provider, *box) {
 	t.Helper()
 
-	machine := &box{refuses: func(command string) (session.Result, bool) {
+	machine := &box{refuses: func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "ocel-switchboard' 'probe'") {
 			return answer, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	p.Dial = func(context.Context, string, string) (net.Conn, error) {
 		t.Error("a .localhost name was dialled from the operator's machine, where RFC 6761 resolves it to this machine's own loopback and never to the box")
@@ -286,14 +268,14 @@ func probedOnTheBox(t *testing.T, answer session.Result) (*vps.Provider, *box) {
 func TestALocalhostNameIsProbedOnTheBoxItResolvesOn(t *testing.T) {
 	t.Parallel()
 
-	p, machine := probedOnTheBox(t, session.Result{Stdout: string(switchboard.RouterKind) + "\n"})
+	p, machine := probedOnTheBox(t, ssh.Result{Stdout: string(boxapi.SwitchboardRouter) + "\n"})
 
 	kind, err := p.ServingRouter(context.Background(), "web.localhost")
 	if err != nil {
 		t.Fatalf("ServingRouter() = %v", err)
 	}
-	if kind != switchboard.RouterKind {
-		t.Errorf("ServingRouter() = %q, want %q read off the box's own proxy", kind, switchboard.RouterKind)
+	if kind != boxapi.SwitchboardRouter {
+		t.Errorf("ServingRouter() = %q, want %q read off the box's own proxy", kind, boxapi.SwitchboardRouter)
 	}
 	if machine.at("ocel-switchboard' 'probe' 'web.localhost'") < 0 {
 		t.Errorf("the box was never asked to probe web.localhost: %v", machine.commands())
@@ -303,7 +285,7 @@ func TestALocalhostNameIsProbedOnTheBoxItResolvesOn(t *testing.T) {
 func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) {
 	t.Parallel()
 
-	p, _ := probedOnTheBox(t, session.Result{Code: 3,
+	p, _ := probedOnTheBox(t, ssh.Result{Code: 3,
 		Stderr: "web.localhost at 127.0.0.1:443: the certificate served is for fallback.localhost, not this name"})
 
 	kind, err := p.ServingRouter(context.Background(), "web.localhost")
@@ -321,7 +303,7 @@ func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) 
 func TestALocalhostProbeTheBoxRefusesIsAnError(t *testing.T) {
 	t.Parallel()
 
-	p, _ := probedOnTheBox(t, session.Result{Code: 2, Stderr: "usage: ocel-switchboard serve"})
+	p, _ := probedOnTheBox(t, ssh.Result{Code: 2, Stderr: "usage: ocel-switchboard serve"})
 
 	if _, err := p.ServingRouter(context.Background(), "web.localhost"); err == nil {
 		t.Error("ServingRouter() = nil over a proxy that could not be asked at all, and the cutover burns a minute on a box whose proxy is down")

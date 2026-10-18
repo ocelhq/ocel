@@ -15,9 +15,9 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func clientCertificate(t *testing.T) string {
@@ -158,7 +158,7 @@ func TestAShieldedHostnameRequiresTheZonesClientCertificatesAndServesItsOriginCe
 	}
 
 	bundle := originFile(t, front, spec)
-	if !strings.HasPrefix(bundle.Path, front.Directory+"/"+switchboard.OriginPrefix) {
+	if !strings.HasPrefix(bundle.Path, front.Directory+"/"+boxapi.OriginPrefix) {
 		t.Errorf("the origin certificate is placed at %s, want it in %s, where the switchboard places files", bundle.Path, front.Directory)
 	}
 	readAs := "/traefik/dynamic/" + bundle.Path[len(front.Directory)+1:]
@@ -274,11 +274,11 @@ func TestInspectPassesAShieldedHostnameYourTraefikRefusesToAClientWithNoCertific
 		verdict provider.HostVerdict
 	}{
 		{name: "refused", verdict: provider.HostPass},
-		{name: "answered", answers: []string{string(switchboard.RouterKind)}, verdict: provider.HostFail},
+		{name: "answered", answers: []string{string(boxapi.SwitchboardRouter)}, verdict: provider.HostFail},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			b := &box{spec: spec, board: "mount=/data/coolify/proxy/dynamic network=coolify",
-				routes:   map[string][]string{"shop.example.com": tc.answers, "blog.example.com": {string(switchboard.RouterKind)}},
+				routes:   map[string][]string{"shop.example.com": tc.answers, "blog.example.com": {string(boxapi.SwitchboardRouter)}},
 				failures: map[string]string{"shop.example.com": "remote error: tls: certificate required"},
 				leaves:   map[string][]byte{"blog.example.com": certificate(t, "blog.example.com")}}
 			front.Box = b
@@ -308,7 +308,7 @@ func TestReloadTakesAShieldedHostnameAsRoutedOnceYourTraefikRefusesItToAClientWi
 		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{clientCertificate(t)}, OriginCertificate: origin}},
 	}
 	b := &box{spec: spec,
-		routes:   map[string][]string{"shop.example.com": {string(switchboard.RouterKind), string(switchboard.RouterKind), ""}},
+		routes:   map[string][]string{"shop.example.com": {string(boxapi.SwitchboardRouter), string(boxapi.SwitchboardRouter), ""}},
 		failures: map[string]string{"shop.example.com": "remote error: tls: certificate required"}}
 	front.Box = b
 	if err := front.Reload(context.Background(), proxy.Spec{}); err != nil {

@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 	droppedTemplate     = "app %s no longer hosts these workers"
 )
 
-func retiredReason(apps provider.LiveApps, name string, worker live.QueueWorker) (string, bool) {
+func retiredReason(apps provider.LiveApps, name string, worker boxapi.QueueWorker) (string, bool) {
 	deployed, found := apps.Find(worker.App)
 	if !found {
 		return fmt.Sprintf(retiredAppTemplate, worker.App, apps.Env), true
@@ -31,14 +31,14 @@ func retiredReason(apps provider.LiveApps, name string, worker live.QueueWorker)
 }
 
 func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _ progress.Log) (provider.Plan, error) {
-	partition, under := live.QueueWorkersUnder(apps.Tier, apps.Slug, apps.Env)
+	partition, under := boxapi.QueueWorkersUnder(apps.Tier, apps.Slug, apps.Env)
 	entries, err := p.keyValues.List(ctx, partition, under...)
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	var plan provider.Plan
 	for _, entry := range entries {
-		var worker live.QueueWorker
+		var worker boxapi.QueueWorker
 		if err := json.Unmarshal(entry.Value, &worker); err != nil {
 			continue
 		}
@@ -60,7 +60,7 @@ func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _
 
 func (p *Provider) Retire(ctx context.Context, apps provider.LiveApps, progress progress.Log) error {
 	ref := provider.StackRef{Project: apps.Slug, Tier: apps.Tier, Name: naming.StackName{Env: apps.Env}}
-	return p.retireWorkers(ctx, ref, func(name string, worker live.QueueWorker) bool {
+	return p.retireWorkers(ctx, ref, func(name string, worker boxapi.QueueWorker) bool {
 		reason, retired := retiredReason(apps, name, worker)
 		if retired {
 			progress.Say(fmt.Sprintf("Taking down worker %s's container %s: %s", name, worker.Container, reason))

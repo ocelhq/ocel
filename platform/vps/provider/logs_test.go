@@ -10,27 +10,27 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func loggingBox(logs map[string]session.Result) *box {
-	return &box{refuses: func(command string) (session.Result, bool) {
+func loggingBox(logs map[string]ssh.Result) *box {
+	return &box{refuses: func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, "docker logs") {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
 		for name, result := range logs {
 			if strings.Contains(command, "'"+name+"'") {
 				return result, true
 			}
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}}
 }
 
 func TestLogsReadsEachContainerOfTheTargetsByItsPhysicalName(t *testing.T) {
 	t.Parallel()
 
-	machine := loggingBox(map[string]session.Result{
+	machine := loggingBox(map[string]ssh.Result{
 		"shop-web-r1": {
 			Stdout: "2026-01-05T12:00:01Z served /\n",
 			Stderr: "2026-01-05T12:00:03Z warn: slow\n",
@@ -72,7 +72,7 @@ func TestLogsReadsEachContainerOfTheTargetsByItsPhysicalName(t *testing.T) {
 func TestLogsNamesTheTargetsWhoseContainerNoLongerExists(t *testing.T) {
 	t.Parallel()
 
-	machine := loggingBox(map[string]session.Result{
+	machine := loggingBox(map[string]ssh.Result{
 		"shop-web-r1": {Code: 1, Stderr: "Error response from daemon: No such container: shop-web-r1"},
 		"shop-web-r2": {Stdout: "2026-01-05T12:00:01Z served /\n"},
 	})
@@ -117,7 +117,7 @@ func TestLogsReadsNothingFromAnEmptyTargetList(t *testing.T) {
 func TestLogsKeepsOnlyTheLinesThatContainTheText(t *testing.T) {
 	t.Parallel()
 
-	machine := loggingBox(map[string]session.Result{
+	machine := loggingBox(map[string]ssh.Result{
 		"shop-web-r1": {Stdout: "2026-01-05T12:00:01Z boom one\n2026-01-05T12:00:02Z fine\n"},
 	})
 	var entries []provider.LogEntry
@@ -171,8 +171,8 @@ func followedNames(command string) []string {
 	return names
 }
 
-func saying(lines ...session.Line) func(context.Context, string, func(session.Line) error) error {
-	return func(ctx context.Context, _ string, each func(session.Line) error) error {
+func saying(lines ...ssh.Line) func(context.Context, string, func(ssh.Line) error) error {
+	return func(ctx context.Context, _ string, each func(ssh.Line) error) error {
 		for _, line := range lines {
 			if err := each(line); err != nil {
 				return err
@@ -243,9 +243,9 @@ func TestLogsTailsEveryContainerThroughOneFollowerFromSince(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{follows: saying(
-		session.Line{Pipe: session.Stdout, Text: "0 2026-01-05T12:00:01Z served /"},
-		session.Line{Pipe: session.Stderr, Text: "0 2026-01-05T12:00:03Z warn: slow"},
-		session.Line{Pipe: session.Stdout, Text: "1 2026-01-05T12:00:02Z resized"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "0 2026-01-05T12:00:01Z served /"},
+		ssh.Line{Pipe: ssh.Stderr, Text: "0 2026-01-05T12:00:03Z warn: slow"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "1 2026-01-05T12:00:02Z resized"},
 	)}
 	read := tailOn(machine, provider.LogQuery{Targets: []provider.LogTarget{
 		tailTarget("r1", "http", "shop-web-r1"),
@@ -291,8 +291,8 @@ func TestLogsTailKeepsOnlyTheLinesThatContainTheText(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{follows: saying(
-		session.Line{Text: "0 2026-01-05T12:00:01Z fine"},
-		session.Line{Text: "0 2026-01-05T12:00:02Z boom one"},
+		ssh.Line{Text: "0 2026-01-05T12:00:01Z fine"},
+		ssh.Line{Text: "0 2026-01-05T12:00:02Z boom one"},
 	)}
 	read := tailOn(machine, provider.LogQuery{Targets: []provider.LogTarget{tailTarget("r1", "http", "shop-web-r1")}, Contains: "boom"})
 	read.settle(t, 1, 0)
@@ -306,8 +306,8 @@ func TestLogsTailSaysAContainerIsGoneAndFollowsTheRest(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{follows: saying(
-		session.Line{Pipe: session.Stderr, Text: "0 Error response from daemon: No such container: shop-web-r1"},
-		session.Line{Text: "1 2026-01-05T12:00:01Z still here"},
+		ssh.Line{Pipe: ssh.Stderr, Text: "0 Error response from daemon: No such container: shop-web-r1"},
+		ssh.Line{Text: "1 2026-01-05T12:00:01Z still here"},
 	)}
 	read := tailOn(machine, provider.LogQuery{Targets: []provider.LogTarget{
 		tailTarget("r1", "http", "shop-web-r1"),
@@ -329,7 +329,7 @@ func TestLogsTailReturnsAFailureOfTheBox(t *testing.T) {
 	t.Parallel()
 
 	failure := errors.New("the connection dropped")
-	machine := &box{follows: func(context.Context, string, func(session.Line) error) error { return failure }}
+	machine := &box{follows: func(context.Context, string, func(ssh.Line) error) error { return failure }}
 	read := tailOn(machine, provider.LogQuery{Targets: []provider.LogTarget{tailTarget("r1", "http", "shop-web-r1")}})
 	select {
 	case err := <-read.done:

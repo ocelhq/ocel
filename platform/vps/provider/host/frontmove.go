@@ -13,10 +13,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -26,7 +28,7 @@ const (
 
 const moveWait = 10 * time.Minute
 
-var movePauses = retryBackoff{base: 2, ceiling: 15, spread: 2}
+var movePauses = shell.Backoff{Base: 2, Ceiling: 15, Spread: 2}
 
 type frontMove struct {
 	host     *Host
@@ -267,7 +269,7 @@ func (m *frontMove) awaitFront(ctx context.Context, tier environment.Tier, progr
 
 func (m *frontMove) awaitPlacement(ctx context.Context, tier environment.Tier) error {
 	placed, old := m.to.resolvePlacedFile(), m.from.resolvePlacedFile()
-	if _, err := m.host.run(ctx, "touch "+old+" so "+m.to.named()+" reads its directory again", "touch -c "+quoted(old), nil); err != nil {
+	if _, err := m.host.Run(ctx, ssh.Root, "touch "+old+" so "+m.to.named()+" reads its directory again", "touch -c "+shell.Quote(old), nil); err != nil {
 		return err
 	}
 	hostname := traefik.DerivePlacementHostname(placed)
@@ -322,7 +324,7 @@ func (h *Host) awaitSwitchboardAnswers(ctx context.Context, hostnames []string, 
 				return nil, nil, err
 			}
 			switch {
-			case said.Router == switchboard.RouterKind:
+			case said.Router == boxapi.SwitchboardRouter:
 				continue
 			case said.Failure != "":
 				failures[hostname] = said.Failure
@@ -334,8 +336,8 @@ func (h *Host) awaitSwitchboardAnswers(ctx context.Context, hostnames []string, 
 		if waiting = still; len(waiting) == 0 || waited >= moveWait {
 			break
 		}
-		pause := movePauses.after(try)
-		if err := h.pause(ctx, pause); err != nil {
+		pause := movePauses.After(try)
+		if err := h.Wait(ctx, pause); err != nil {
 			return nil, nil, err
 		}
 		waited += pause

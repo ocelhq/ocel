@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 type LocalTransport struct {
@@ -24,7 +24,7 @@ func (LocalTransport) HasStore(_ context.Context, tier environment.Tier) (bool, 
 	if _, err := os.Stat(KeyValuesHelper); err != nil {
 		return false, nil
 	}
-	info, err := os.Stat(live.KeyValuesDir(live.StateRoot, tier))
+	info, err := os.Stat(boxapi.KeyValuesDir(boxapi.StateRoot, tier))
 	return err == nil && info.IsDir(), nil
 }
 

@@ -13,9 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func refusedBy(said string) string {
@@ -28,11 +27,11 @@ func refusedBy(said string) string {
 
 func boxWhoseProxyWasRefused(said string) *box {
 	machine := &box{}
-	machine.refuses = func(command string) (session.Result, bool) {
+	machine.refuses = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "'docker' 'logs'") && strings.Contains(command, caddy.Container) {
-			return session.Result{Stdout: said}, true
+			return ssh.Result{Stdout: said}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	return machine
 }
@@ -40,7 +39,7 @@ func boxWhoseProxyWasRefused(said string) *box {
 func certifying(machine *box) *vps.Provider {
 	return vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 }
 
@@ -120,11 +119,11 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 	t.Parallel()
 
 	machine := &box{}
-	machine.refuses = func(command string) (session.Result, bool) {
+	machine.refuses = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker version") {
-			return session.Result{Code: 125, Stderr: "Cannot connect to the Docker daemon"}, true
+			return ssh.Result{Code: 125, Stderr: "Cannot connect to the Docker daemon"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	spoken := &fake.Log{}
 	cert, err := certifying(machine).Certificates().Issue(context.Background(), provider.CertificateRequest{

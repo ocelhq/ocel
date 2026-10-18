@@ -8,22 +8,23 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const crashLooping = "Status=restarting ExitCode=1 OOMKilled=false Error= StartedAt=2026-01-01T00:00:09Z FinishedAt=2026-01-01T00:00:09Z RestartCount=10"
 
-func searchedOnCrashing(found session.Result, state string) *bench {
+func searchedOnCrashing(found ssh.Result, state string) *bench {
 	box := searchedOnIdling(found, true)
 	searched := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case command == stateCommand(physical):
-			return session.Result{Stdout: state}, true
+			return ssh.Result{Stdout: state}, true
 		case command == renderLastRunLogs(physical):
-			return session.Result{Stdout: "Error: Cannot find module '/app/index.js'\nocel: the app exited: exit status 1\n"}, true
+			return ssh.Result{Stdout: "Error: Cannot find module '/app/index.js'\nocel: the app exited: exit status 1\n"}, true
 		case strings.HasPrefix(command, "docker logs"):
-			return session.Result{Stdout: "2026-01-01T00:00:01Z first run\n2026-01-01T00:00:09Z last run\n"}, true
+			return ssh.Result{Stdout: "2026-01-01T00:00:01Z first run\n2026-01-01T00:00:09Z last run\n"}, true
 		}
 		return searched(command)
 	}
@@ -31,14 +32,14 @@ func searchedOnCrashing(found session.Result, state string) *bench {
 }
 
 func insideWatch(command string) string {
-	written := quoted(command)
+	written := shell.Quote(command)
 	return written[1 : len(written)-1]
 }
 
 func TestAnAppWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStartAndNeverAsAHealthCheck(t *testing.T) {
 	t.Parallel()
 
-	for what, found := range map[string]session.Result{
+	for what, found := range map[string]ssh.Result{
 		"the watcher stopped the probe": {Code: 1, Stdout: unstartedMarker + " " + physical + "\n"},
 		"the probe ran out its window":  {Code: 4, Stderr: nextTarget + " never answered /up within 1m0s"},
 	} {
@@ -65,7 +66,7 @@ func TestAnAppWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStartAndNeve
 func TestAnAppStillRunningWhenTheProbeGivesUpIsRefusedAsNeverAnswering(t *testing.T) {
 	t.Parallel()
 
-	box := searchedOnCrashing(session.Result{Code: 4, Stderr: nextTarget + " never answered /up within 1m0s"},
+	box := searchedOnCrashing(ssh.Result{Code: 4, Stderr: nextTarget + " never answered /up within 1m0s"},
 		"Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0")
 	_, err := box.host().FindHealthPath(context.Background(), aHealthPathSearch(), progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "never answered /up") || strings.Contains(err.Error(), "failing to start") {
@@ -76,7 +77,7 @@ func TestAnAppStillRunningWhenTheProbeGivesUpIsRefusedAsNeverAnswering(t *testin
 func TestAGateWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStart(t *testing.T) {
 	t.Parallel()
 
-	for what, gate := range map[string]session.Result{
+	for what, gate := range map[string]ssh.Result{
 		"the watcher stopped the gate": {Code: 1, Stdout: unstartedMarker + " " + physical + "\n"},
 		"the gate ran out its window":  {Code: 4, Stderr: nextTarget + " never answered /healthz within 30s"},
 	} {
@@ -92,13 +93,13 @@ func TestAGateWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStart(t *tes
 func TestTheGateWatchesEveryContainerItReleases(t *testing.T) {
 	t.Parallel()
 
-	box, err := rolledOut(t, bothApps(), session.Result{}, session.Result{}, progress.Discard())
+	box, err := rolledOut(t, bothApps(), ssh.Result{}, ssh.Result{}, progress.Discard())
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
-	gated := box.commands()[box.at(quoted("gate"))]
+	gated := box.commands()[box.at(shell.Quote("gate"))]
 	for _, name := range []string{containerOf(nextTarget), containerOf(apiNextTarget)} {
-		if !strings.Contains(gated, insideWatch("crashed "+quoted(name))) {
+		if !strings.Contains(gated, insideWatch("crashed "+shell.Quote(name))) {
 			t.Errorf("the gate ran\n%s\nand never watches %s", gated, name)
 		}
 	}

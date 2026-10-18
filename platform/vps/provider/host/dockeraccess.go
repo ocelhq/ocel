@@ -6,10 +6,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -22,7 +21,7 @@ const (
 )
 
 func dockerShim() []byte {
-	return []byte("#!/bin/sh\nexec sudo -n " + LiveBinary + " " + live.DockerCommand + " \"$@\"\n")
+	return []byte("#!/bin/sh\nexec sudo -n " + LiveBinary + " " + boxapi.DockerCommand + " \"$@\"\n")
 }
 
 func loginShell() []byte {
@@ -30,26 +29,26 @@ func loginShell() []byte {
 }
 
 func dockerSudoers() []byte {
-	return []byte(deployUser + " ALL=(root) NOPASSWD: " + LiveBinary + " " + live.DockerCommand + " *\n")
+	return []byte(deployUser + " ALL=(root) NOPASSWD: " + LiveBinary + " " + boxapi.DockerCommand + " *\n")
 }
 
-func dockerGrants(front Front) live.DockerGrants {
-	grants := live.DockerGrants{
-		Binds: []live.DockerBind{
+func dockerGrants(front Front) boxapi.DockerGrants {
+	grants := boxapi.DockerGrants{
+		Binds: []boxapi.DockerBind{
 			{Path: SwitchboardDir},
 			{Path: RealtimeDir},
 			{Path: LiveSocketDir},
-			{Path: live.RoutingDir},
+			{Path: boxapi.RoutingDir},
 			{Path: ConnectorRun},
-			{Path: switchboard.ControlDir, Writable: true},
-			{Path: switchboard.FrontDir, Writable: true},
+			{Path: boxapi.SwitchboardControlDir, Writable: true},
+			{Path: boxapi.FrontDir, Writable: true},
 			{Path: TunnelDir, Writable: true},
 		},
 		Containers: []string{SwitchboardContainer, caddy.Container, TunnelContainer},
 		Networks:   []string{},
 	}
 	if placed := destination(openFront(front, frontBox{})); placed != "" {
-		grants.Binds = append(grants.Binds, live.DockerBind{Path: filepath.Dir(placed), Writable: true})
+		grants.Binds = append(grants.Binds, boxapi.DockerBind{Path: filepath.Dir(placed), Writable: true})
 	}
 	for _, joined := range front.joined() {
 		grants.Networks = append(grants.Networks, joined.name)
@@ -57,7 +56,7 @@ func dockerGrants(front Front) live.DockerGrants {
 	if front.Caddy != nil && front.Caddy.Container != "" {
 		grants.Containers = append(grants.Containers, front.Caddy.Container)
 	}
-	slices.SortFunc(grants.Binds, func(a, b live.DockerBind) int { return strings.Compare(a.Path, b.Path) })
+	slices.SortFunc(grants.Binds, func(a, b boxapi.DockerBind) int { return strings.Compare(a.Path, b.Path) })
 	return grants
 }
 
@@ -74,8 +73,8 @@ func DockerAccessItems(front Front) []Item {
 		dir(dockerShims, 0o755, rootOwner, ""),
 		{Kind: KindFile, Name: DockerShim, Mode: 0o755, Owner: rootOwner, Content: dockerShim(), Note: "docker for the deploy login, through the checks in " + LiveBinary},
 		{Kind: KindFile, Name: LoginShell, Mode: 0o755, Owner: rootOwner, Content: loginShell(), Note: "the deploy login's shell"},
-		dir(live.DockerConfigDir, 0o700, rootOwner, "registry logins, one per pull"),
-		{Kind: KindFile, Name: live.DockerGrantsPath, Mode: 0o644, Owner: rootOwner, Content: dockerGrantsContent(front), Note: "what deploys may mount, join and run inside"},
+		dir(boxapi.DockerConfigDir, 0o700, rootOwner, "registry logins, one per pull"),
+		{Kind: KindFile, Name: boxapi.DockerGrantsPath, Mode: 0o644, Owner: rootOwner, Content: dockerGrantsContent(front), Note: "what deploys may mount, join and run inside"},
 		{Kind: KindFile, Name: sudoersDocker, Mode: 0o440, Owner: rootOwner, Content: dockerSudoers(), Note: "sudo for docker, checked"},
 	}
 }
@@ -83,8 +82,8 @@ func DockerAccessItems(front Front) []Item {
 func dockerAccessRemovals() []removal {
 	return []removal{
 		taking(KindFile, sudoersDocker, ""),
-		taking(KindFile, live.DockerGrantsPath, ""),
-		taking(KindDir, live.DockerConfigDir, ""),
+		taking(KindFile, boxapi.DockerGrantsPath, ""),
+		taking(KindDir, boxapi.DockerConfigDir, ""),
 		taking(KindFile, LoginShell, ""),
 		taking(KindFile, DockerShim, ""),
 		taking(KindDir, dockerShims, ""),

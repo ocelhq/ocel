@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -40,7 +40,7 @@ const (
 
 type Box interface {
 	Ran(ctx context.Context, what string, argv []string) (string, error)
-	ReadBeside(ctx context.Context, path string) ([]switchboard.SiblingFile, error)
+	ReadBeside(ctx context.Context, path string) ([]boxapi.SiblingFile, error)
 	ReadSpec(ctx context.Context) (proxy.Spec, error)
 	ProbeAnyCertificate(ctx context.Context, hostname string) (answered, failure string, err error)
 	Pause(ctx context.Context, wait time.Duration) error
@@ -87,7 +87,7 @@ func (t Traefik) file() string { return filepath.Join(t.directory(), FileName) }
 
 func (t Traefik) upstream() string {
 	if t.Network != "" {
-		return "http://" + switchboard.Name + ":" + switchboard.HTTPSListenPort
+		return "http://" + boxapi.Switchboard + ":" + boxapi.HTTPSListenPort
 	}
 	return "http://127.0.0.1:" + strconv.Itoa(t.Port)
 }

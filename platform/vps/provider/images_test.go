@@ -29,11 +29,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const loadedImageRef = "ocel/shop/web:sha256-abc"
@@ -52,8 +52,8 @@ type box struct {
 	leaf       string
 	kept       string
 	routingDoc string
-	refuses    func(command string) (session.Result, bool)
-	follows    func(ctx context.Context, command string, each func(session.Line) error) error
+	refuses    func(command string) (ssh.Result, bool)
+	follows    func(ctx context.Context, command string, each func(ssh.Line) error) error
 	forwarded  []string
 	stopped    []string
 	listening  string
@@ -88,16 +88,16 @@ func (b *box) forwardedTo() []string {
 	return slices.Clone(b.forwarded)
 }
 
-func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
+func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Result, error) {
 	var input string
 	if stdin != nil && b.drains {
 		if _, err := io.Copy(io.Discard, stdin); err != nil {
-			return session.Result{}, err
+			return ssh.Result{}, err
 		}
 	} else if stdin != nil {
 		raw, err := io.ReadAll(stdin)
 		if err != nil {
-			return session.Result{}, err
+			return ssh.Result{}, err
 		}
 		input = string(raw)
 	}
@@ -117,10 +117,10 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		return answered, nil
 	}
 	if strings.Contains(command, "{{.MemTotal}} {{.NCPU}}") {
-		return session.Result{Stdout: "8589934592 4\n"}, nil
+		return ssh.Result{Stdout: "8589934592 4\n"}, nil
 	}
 	if b.unsocket && strings.HasPrefix(command, "docker version") {
-		return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, nil
+		return ssh.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, nil
 	}
 	if read, named := b.proxying(command, input); named {
 		return read, nil
@@ -135,7 +135,7 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		if strings.Contains(command, "ln ") && b.kept == "" {
 			b.kept = input
 		}
-		return session.Result{Stdout: b.kept}, nil
+		return ssh.Result{Stdout: b.kept}, nil
 	}
 	var said string
 	for _, line := range strings.Split(command, "\n") {
@@ -163,17 +163,17 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 			}
 		}
 	}
-	return session.Result{Stdout: said}, nil
+	return ssh.Result{Stdout: said}, nil
 }
 
-func (b *box) proxying(command, input string) (session.Result, bool) {
-	if !strings.Contains(command, quote(variables.RoutingTable)) {
-		return session.Result{}, false
+func (b *box) proxying(command, input string) (ssh.Result, bool) {
+	if !strings.Contains(command, quote(boxapi.RoutingTable)) {
+		return ssh.Result{}, false
 	}
 	if b.routingDoc == "" {
 		written, err := host.WriteRoutingTable(host.RoutingTable{Grace: host.DrainWindow})
 		if err != nil {
-			return session.Result{Code: 1, Stderr: err.Error()}, true
+			return ssh.Result{Code: 1, Stderr: err.Error()}, true
 		}
 		b.routingDoc = string(written)
 	}
@@ -181,66 +181,66 @@ func (b *box) proxying(command, input string) (session.Result, bool) {
 	case strings.Contains(command, "flock -s 9"):
 		table, err := host.ReadRoutingTable([]byte(b.routingDoc))
 		if err != nil {
-			return session.Result{Code: 1, Stderr: err.Error()}, true
+			return ssh.Result{Code: 1, Stderr: err.Error()}, true
 		}
 		rendered, err := host.RenderProxyConfig(caddy.Builtin{}, table)
 		if err != nil {
-			return session.Result{Code: 1, Stderr: err.Error()}, true
+			return ssh.Result{Code: 1, Stderr: err.Error()}, true
 		}
 		encoded := func(read []byte) string { return "+" + base64.StdEncoding.EncodeToString(read) + "\n" }
-		return session.Result{Stdout: encoded([]byte(b.routingDoc)) + encoded(rendered)}, true
+		return ssh.Result{Stdout: encoded([]byte(b.routingDoc)) + encoded(rendered)}, true
 	case strings.Contains(command, `mv "$staged" `):
 		fed, _, _ := strings.Cut(input, "\n")
 		written, err := base64.StdEncoding.DecodeString(fed)
 		if err != nil {
-			return session.Result{Code: 1, Stderr: err.Error()}, true
+			return ssh.Result{Code: 1, Stderr: err.Error()}, true
 		}
 		b.routingDoc = string(written)
 		sum := sha256.Sum256([]byte(b.routingDoc))
-		return session.Result{Stdout: hex.EncodeToString(sum[:]) + "\n"}, true
+		return ssh.Result{Stdout: hex.EncodeToString(sum[:]) + "\n"}, true
 	}
-	return session.Result{}, false
+	return ssh.Result{}, false
 }
 
-func (b *box) catting(command string) (session.Result, bool) {
+func (b *box) catting(command string) (ssh.Result, bool) {
 	if named, catted := strings.CutPrefix(command, "cat "); catted && !strings.HasPrefix(named, "| ") {
 		var said string
 		for _, path := range strings.Fields(named) {
 			read, found := b.reads[unquoted(path)]
 			if !found {
-				return session.Result{Code: 1, Stderr: "cat: " + unquoted(path) + ": No such file or directory"}, true
+				return ssh.Result{Code: 1, Stderr: "cat: " + unquoted(path) + ": No such file or directory"}, true
 			}
 			said += read
 		}
-		return session.Result{Stdout: said}, true
+		return ssh.Result{Stdout: said}, true
 	}
 	if !strings.Contains(command, "'leaf'") {
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if b.leaf == "" {
-		return session.Result{Code: 3, Stderr: "ocel-switchboard: 127.0.0.1:443 served no certificate for shop.example.com: EOF"}, true
+		return ssh.Result{Code: 3, Stderr: "ocel-switchboard: 127.0.0.1:443 served no certificate for shop.example.com: EOF"}, true
 	}
-	return session.Result{Stdout: b.leaf}, true
+	return ssh.Result{Stdout: b.leaf}, true
 }
 
 const fakeSeal = "sealed:"
 
-func (b *box) sealing(command, input string) (session.Result, bool) {
+func (b *box) sealing(command, input string) (ssh.Result, bool) {
 	if !strings.Contains(command, boxstore.SealHelper) {
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(input))
 	if err != nil {
-		return session.Result{Code: 1, Stderr: "seal: not base64"}, true
+		return ssh.Result{Code: 1, Stderr: "seal: not base64"}, true
 	}
 	if strings.Contains(command, "'open'") {
 		if body, err = base64.StdEncoding.DecodeString(strings.TrimPrefix(string(body), fakeSeal)); err != nil {
-			return session.Result{Code: 1, Stderr: "seal: not a value this box sealed"}, true
+			return ssh.Result{Code: 1, Stderr: "seal: not a value this box sealed"}, true
 		}
 	} else {
 		body = []byte(fakeSeal + base64.StdEncoding.EncodeToString(body))
 	}
-	return session.Result{Stdout: base64.StdEncoding.EncodeToString(body) + "\n"}, true
+	return ssh.Result{Stdout: base64.StdEncoding.EncodeToString(body) + "\n"}, true
 }
 
 func (b *box) at(fragment string) int {
@@ -274,7 +274,7 @@ func (b *box) under(ref string) string {
 
 func unquoted(field string) string { return strings.Trim(field, "'") }
 
-func (b *box) RunLines(ctx context.Context, command string, each func(session.Line) error) error {
+func (b *box) RunLines(ctx context.Context, command string, each func(ssh.Line) error) error {
 	b.mu.Lock()
 	b.ran = append(b.ran, command)
 	b.fed = append(b.fed, "")
@@ -291,18 +291,18 @@ func (b *box) Run(ctx context.Context, command string) (string, error) {
 	return result.Stdout, err
 }
 
-func (b *box) Preflight(context.Context) (session.Facts, error) {
+func (b *box) Preflight(context.Context) (ssh.Facts, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return session.Facts{Root: !b.unsocket, Systemd: true}, nil
+	return ssh.Facts{Root: !b.unsocket, Systemd: true}, nil
 }
 
-func (b *box) Destination() session.Destination {
+func (b *box) Destination() ssh.Destination {
 	login := b.login
 	if login == "" {
 		login = host.DeployUser()
 	}
-	return session.Destination{Written: "ada@box.invalid", Address: "box.invalid", Port: 22, User: login}
+	return ssh.Destination{Written: "ada@box.invalid", Address: "box.invalid", Port: 22, User: login}
 }
 
 func (b *box) commands() []string {
@@ -332,7 +332,7 @@ func directImagesOn(t *testing.T, machine *box) provider.ImageStore {
 	t.Helper()
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	store, err := p.OpenDirectImages(context.Background())
 	if err != nil {
@@ -480,7 +480,7 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	machine := &box{}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
 	t.Cleanup(served.Close)
@@ -509,7 +509,7 @@ func TestAnImagePulledOntoTheMachineIsRemovedFromTheRegistryItWasPushedTo(t *tes
 	machine := &box{}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
 	t.Cleanup(served.Close)
@@ -564,9 +564,9 @@ func TestAnImageAnotherBoxRemovedFromTheRegistryBeforeThisOnePulledItIsPushedAga
 		t.Fatal(err)
 	}
 	pulls := 0
-	machine := &box{refuses: func(command string) (session.Result, bool) {
+	machine := &box{refuses: func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, "docker pull") {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
 		pulls++
 		if pulls == 1 {
@@ -575,13 +575,13 @@ func TestAnImageAnotherBoxRemovedFromTheRegistryBeforeThisOnePulledItIsPushedAga
 			}
 		}
 		if _, err := remote.Head(tag); err != nil {
-			return session.Result{Code: 1, Stderr: "Error response from daemon: manifest unknown"}, true
+			return ssh.Result{Code: 1, Stderr: "Error response from daemon: manifest unknown"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	store, err := p.OpenRegistryImages(context.Background(), provider.RegistryTarget{Server: server})
 	if err != nil {
@@ -605,7 +605,7 @@ func TestAnImageTheMachineHoldsAndTheRegistryLostIsNotHeld(t *testing.T) {
 	machine := &box{hasImage: true}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	store, err := p.OpenRegistryImages(context.Background(), provider.RegistryTarget{Server: server})
 	if err != nil {

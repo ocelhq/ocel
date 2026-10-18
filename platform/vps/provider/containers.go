@@ -13,8 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.AppContainer, error) {
@@ -31,7 +31,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)
 	}
-	pinned := variables.Manifest{
+	pinned := boxapi.Manifest{
 		Slug:               spec.Ref.Project,
 		Tier:               string(spec.Ref.Tier),
 		Environment:        liveEnvironment(spec.Ref),
@@ -43,11 +43,11 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if hasQueue(app) {
 		pinned.Queue = spec.Ref.Name.Env
 	}
-	manifest, err := variables.Render(pinned)
+	manifest, err := boxapi.Render(pinned)
 	if err != nil {
 		return nil, fmt.Errorf("pin %s's live values: %w", app.App, err)
 	}
-	for _, owned := range []string{originguard.HealthPathVar, variables.EnvVar} {
+	for _, owned := range []string{originguard.HealthPathVar, boxapi.EnvVar} {
 		if _, taken := app.Values.ContainerEnv[owned]; taken {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"app %s sets %s, which ocel's runtime reserves: rename it", app.App, owned)

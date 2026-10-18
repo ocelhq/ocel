@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -22,7 +23,7 @@ func realtimeBinary(arch string) []byte { return embedded(realtimeBinaryName, ar
 
 var RealtimeBinarySum = sync.OnceValue(func() string {
 	sum := sha256.New()
-	for _, arch := range []string{ArchAMD64, ArchARM64} {
+	for _, arch := range []string{ssh.AMD64, ssh.ARM64} {
 		sum.Write(realtimeBinary(arch))
 	}
 	return hex.EncodeToString(sum.Sum(nil))

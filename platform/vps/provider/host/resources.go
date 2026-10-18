@@ -19,7 +19,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -36,54 +38,44 @@ func KeptPath(tier environment.Tier, name string) string {
 }
 
 func keptCommand(path string) string {
-	return "if [ -e " + quoted(stateRoot) + " ] && [ ! -x " + quoted(stateRoot) + " ]; then echo " + quoted(stateRoot+": Permission denied") + " >&2; exit 1; fi\n" +
-		"if [ -s " + quoted(path) + " ]; then cat " + quoted(path) + "; fi"
+	return "if [ -e " + shell.Quote(stateRoot) + " ] && [ ! -x " + shell.Quote(stateRoot) + " ]; then echo " + shell.Quote(stateRoot+": Permission denied") + " >&2; exit 1; fi\n" +
+		"if [ -s " + shell.Quote(path) + " ]; then cat " + shell.Quote(path) + "; fi"
 }
 
 func (h *Host) unhand(ctx context.Context, delivery handoff) error {
 	taking, stop := context.WithTimeout(context.WithoutCancel(ctx), forgetWindow)
 	defer stop()
-	if _, err := h.owning(taking, "take back "+delivery.path, "rm -f "+quoted(delivery.path), nil); err != nil {
+	if _, err := h.owning(taking, "take back "+delivery.path, "rm -f "+shell.Quote(delivery.path), nil); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"could not remove %s on %s, which contains a plaintext credential: %v",
-			delivery.path, h.named(), err)
+			delivery.path, h.Named(), err)
 	}
 	return nil
 }
 
 func handedBack(tier environment.Tier, path string) string {
-	return "if [ \"$(id -u)\" -eq 0 ]; then chown -R --reference=" + quoted(StateDir(tier)) + " " + quoted(path) + "; fi"
+	return "if [ \"$(id -u)\" -eq 0 ]; then chown -R --reference=" + shell.Quote(StateDir(tier)) + " " + shell.Quote(path) + "; fi"
 }
 
 func (h *Host) owning(ctx context.Context, what, command string, stdin []byte) (string, error) {
-	fed := func() io.Reader {
-		if stdin == nil {
-			return nil
-		}
-		return bytes.NewReader(stdin)
+	var fed io.Reader
+	if stdin != nil {
+		fed = bytes.NewReader(stdin)
 	}
-	said, refused, err := h.spoke(ctx, what, command, fed(), "")
-	if err == nil || !strings.Contains(strings.ToLower(refused), "permission denied") {
-		return said, err
-	}
-	acting, unreached := h.reachStateRoot(ctx)
-	if unreached != nil || acting == "" {
-		return said, err
-	}
-	return h.ran(ctx, what, command, fed(), acting)
+	return h.Run(ctx, ssh.Deploy, what, command, fed)
 }
 
 func keepCommand(tier environment.Tier, path string) string {
 	dir := path[:strings.LastIndex(path, "/")]
 	return "set -e\n" +
 		"umask 077\n" +
-		"mkdir -p " + quoted(dir) + "\n" +
-		"writing=$(mktemp " + quoted(dir+"/.writing.XXXXXX") + ")\n" +
+		"mkdir -p " + shell.Quote(dir) + "\n" +
+		"writing=$(mktemp " + shell.Quote(dir+"/.writing.XXXXXX") + ")\n" +
 		"cat >\"$writing\"\n" +
-		"ln \"$writing\" " + quoted(path) + " 2>/dev/null || true\n" +
+		"ln \"$writing\" " + shell.Quote(path) + " 2>/dev/null || true\n" +
 		"rm -f \"$writing\"\n" +
 		handedBack(tier, dir) + "\n" +
-		"cat " + quoted(path)
+		"cat " + shell.Quote(path)
 }
 
 func (h *Host) ForgetKept(ctx context.Context, tier environment.Tier, names []string) error {
@@ -92,7 +84,7 @@ func (h *Host) ForgetKept(ctx context.Context, tier environment.Tier, names []st
 	}
 	paths := make([]string, 0, len(names))
 	for _, name := range names {
-		paths = append(paths, quoted(KeptPath(tier, name)))
+		paths = append(paths, shell.Quote(KeptPath(tier, name)))
 	}
 	_, err := h.owning(ctx, "forget what "+strings.Join(names, ", ")+" was bound to",
 		"rm -f "+strings.Join(paths, " "), nil)
@@ -177,7 +169,7 @@ func socketsCreating(spec ResourceContainer) string {
 	if spec.Sockets == "" {
 		return ""
 	}
-	return words(append(append([]string{"docker", "volume", "create"}, spec.labels()...), spec.socketsVolume())) + " >/dev/null\n"
+	return shell.Words(append(append([]string{"docker", "volume", "create"}, spec.labels()...), spec.socketsVolume())) + " >/dev/null\n"
 }
 
 func ResourceName(project, stack, resource, kind string) string {
@@ -220,10 +212,10 @@ func (r ResourceContainer) volume() string { return volumeName(r.Name, r.Volume.
 func (r ResourceContainer) VolumeName() string { return r.volume() }
 
 func volumesOf(tier environment.Tier, project, resource, name string) string {
-	return "docker volume ls --filter " + quoted("name=^"+name) +
-		" --filter " + quoted("label="+LabelTier+"="+string(tier)) +
-		" --filter " + quoted("label="+LabelProject+"="+naming.Sanitize(project)) +
-		" --filter " + quoted("label="+LabelResource+"="+resource)
+	return "docker volume ls --filter " + shell.Quote("name=^"+name) +
+		" --filter " + shell.Quote("label="+LabelTier+"="+string(tier)) +
+		" --filter " + shell.Quote("label="+LabelProject+"="+naming.Sanitize(project)) +
+		" --filter " + shell.Quote("label="+LabelResource+"="+resource)
 }
 
 func volumeCreating(spec ResourceContainer) string {
@@ -237,20 +229,20 @@ func volumeCreating(spec ResourceContainer) string {
 	for _, key := range slices.Sorted(maps.Keys(spec.Volume.Options)) {
 		argv = append(argv, "--opt", key+"="+spec.Volume.Options[key])
 	}
-	return words(append(argv, spec.volume())) + " >/dev/null"
+	return shell.Words(append(argv, spec.volume())) + " >/dev/null"
 }
 
 func runResourceScript(spec ResourceContainer, digest, envFile string) string {
-	return imagePulled(spec.Image, appPulls, pullAttemptSeconds, pullBudgetSeconds) +
+	return imagePulled(spec.Image, appPulls, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
 		socketsCreating(spec) +
-		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(resourceRun(spec, digest, envFile))+" >/dev/null")
+		shell.Bounded(shell.DockerStepSeconds, "docker run of "+spec.Name, shell.Words(resourceRun(spec, digest, envFile))+" >/dev/null")
 }
 
 func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
 		"--restart", appRestart,
-		"--network", live.AppNetwork(spec.Tier, spec.Project),
+		"--network", boxapi.AppNetwork(spec.Tier, spec.Project),
 	}
 	argv = append(argv, spec.labels()...)
 	argv = append(argv, "--label", LabelRef+"="+spec.Image, "--label", LabelEnv+"="+digest)
@@ -286,14 +278,14 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 
 func generationCommand(spec ResourceContainer) string {
 	return volumesOf(spec.Tier, spec.Project, spec.Resource, spec.Name) +
-		" --format " + quoted(`{{.Label "`+LabelGeneration+`"}}`)
+		" --format " + shell.Quote(`{{.Label "`+LabelGeneration+`"}}`)
 }
 
-func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, elevation acting) (string, error) {
+func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, elevation ssh.Acting) (string, error) {
 	if spec.Volume.Generation == "" {
 		return "", nil
 	}
-	said, err := h.ran(ctx, "read what initialised "+spec.Resource+"'s data", generationCommand(spec), nil, elevation)
+	said, err := h.Run(ctx, elevation, "read what initialised "+spec.Resource+"'s data", generationCommand(spec), nil)
 	if err != nil {
 		return "", err
 	}
@@ -305,8 +297,8 @@ func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, ele
 }
 
 func swapCommand(spec ResourceContainer, from, digest, envFile string, steps upgradeSteps, secret string) (command, stdin string) {
-	name, retired := quoted(spec.Name), quoted(spec.Name+retiredSuffix)
-	fresh, stale := quoted(spec.volume()), quoted(volumeName(spec.Name, from))
+	name, retired := shell.Quote(spec.Name), shell.Quote(spec.Name+retiredSuffix)
+	fresh, stale := shell.Quote(spec.volume()), shell.Quote(volumeName(spec.Name, from))
 	moving := fresh != stale
 	authenticated := ""
 	if spec.Credential.Reassert != nil {
@@ -333,13 +325,13 @@ func swapCommand(spec ResourceContainer, from, digest, envFile string, steps upg
 		"docker rm --force " + retired + " >/dev/null 2>&1 || true\n" +
 		"trap back EXIT\n" +
 		"trap 'exit 1' HUP INT TERM\n" +
-		boundedStep(dockerStepSeconds, "docker stop of "+spec.Name, "docker stop --time "+strconv.Itoa(resourceStopSeconds)+" "+name+" >/dev/null") + "\n" +
+		shell.Bounded(shell.DockerStepSeconds, "docker stop of "+spec.Name, "docker stop --time "+strconv.Itoa(resourceStopSeconds)+" "+name+" >/dev/null") + "\n" +
 		"docker rename " + name + " " + retired + "\n" +
 		createFresh +
 		socketsCreating(spec) +
 		steps.before +
-		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(resourceRun(spec, digest, envFile))+" >/dev/null") + "\n" +
-		readyCommand(spec, readySeconds) + "\n" +
+		shell.Bounded(shell.DockerStepSeconds, "docker run of "+spec.Name, shell.Words(resourceRun(spec, digest, envFile))+" >/dev/null") + "\n" +
+		readyCommand(spec, shell.ReadySeconds) + "\n" +
 		authenticated +
 		steps.after +
 		"swapped=1\n" +
@@ -348,7 +340,7 @@ func swapCommand(spec ResourceContainer, from, digest, envFile string, steps upg
 }
 
 func reassertCommand(name string, argv []string) string {
-	return words(append([]string{"docker", "exec", "--interactive", name}, argv...)) + " >/dev/null 2>&1"
+	return shell.Words(append([]string{"docker", "exec", "--interactive", name}, argv...)) + " >/dev/null 2>&1"
 }
 
 type upgradeSteps struct {
@@ -365,22 +357,21 @@ func volumeCopy(spec ResourceContainer, from string) upgradeSteps {
 		"--mount", "type=volume,src="+volumeName(spec.Name, from)+",dst=/from,readonly",
 		"--mount", "type=volume,src="+spec.volume()+",dst="+spec.Volume.Path,
 		"--entrypoint", "cp", spec.Image, "-a", "/from/.", spec.Volume.Path+"/")
-	return upgradeSteps{before: words(argv) + "\n"}
+	return upgradeSteps{before: shell.Words(argv) + "\n"}
 }
 
-func (h *Host) prepareUpgrade(ctx context.Context, spec ResourceContainer, from string, elevation acting) (upgradeSteps, error) {
+func (h *Host) prepareUpgrade(ctx context.Context, spec ResourceContainer, from string, elevation ssh.Acting) (upgradeSteps, error) {
 	if spec.Volume.CopyOnUpgrade {
 		return volumeCopy(spec, from), nil
 	}
-	dumped, err := h.ran(ctx, "dump "+spec.Resource+" while version "+from+" still serves it",
-		dumpCommand(spec.Tier, spec.Name), nil, elevation)
+	dumped, err := h.Run(ctx, elevation, "dump "+spec.Resource+" while version "+from+" still serves it", dumpCommand(spec.Tier, spec.Name), nil)
 	if err != nil {
 		return upgradeSteps{}, err
 	}
 	return upgradeSteps{after: restoreCommand(spec.Tier, spec.Name, strings.TrimSpace(dumped)) + "\n"}, nil
 }
 
-func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest, secret string, elevation acting) (err error) {
+func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest, secret string, elevation ssh.Acting) (err error) {
 	steps, err := h.prepareUpgrade(ctx, spec, from, elevation)
 	if err != nil {
 		return err
@@ -391,8 +382,7 @@ func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest
 	}
 	defer func() { err = errors.Join(err, h.unhand(ctx, delivery)) }()
 	swap, stdin := swapCommand(spec, from, digest, delivery.path, steps, secret)
-	if _, err := h.ran(ctx, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation,
-		swap, strings.NewReader(stdin), elevation); err != nil {
+	if _, err := h.Run(ctx, elevation, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation, swap, strings.NewReader(stdin)); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s could not move from version %s to %s and is back on %s, data intact: %v",
 			spec.Resource, from, spec.Volume.Generation, from, err)
@@ -401,7 +391,7 @@ func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest
 }
 
 func (h *Host) limited(ctx context.Context, spec ResourceContainer) (ResourceContainer, error) {
-	limits, err := h.tierLimits(ctx, spec.Tier)
+	limits, err := h.engine.Limits(ctx, spec.Tier)
 	if err != nil {
 		return ResourceContainer{}, err
 	}
@@ -414,7 +404,7 @@ func (h *Host) limited(ctx context.Context, spec ResourceContainer) (ResourceCon
 	return spec, nil
 }
 
-func (h *Host) replaceResource(ctx context.Context, spec ResourceContainer, digest, secret string, elevation acting) (err error) {
+func (h *Host) replaceResource(ctx context.Context, spec ResourceContainer, digest, secret string, elevation ssh.Acting) (err error) {
 	if err := h.sweep(ctx, elevation); err != nil {
 		return err
 	}
@@ -424,7 +414,7 @@ func (h *Host) replaceResource(ctx context.Context, spec ResourceContainer, dige
 	}
 	defer func() { err = errors.Join(err, h.unhand(ctx, delivery)) }()
 	swap, stdin := swapCommand(spec, spec.Volume.Generation, digest, delivery.path, upgradeSteps{}, secret)
-	if _, err := h.ran(ctx, "replace "+spec.Resource+"'s container "+spec.Name, swap, strings.NewReader(stdin), elevation); err != nil {
+	if _, err := h.Run(ctx, elevation, "replace "+spec.Resource+"'s container "+spec.Name, swap, strings.NewReader(stdin)); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s's new container did not take over, so its previous container is back, data intact: %v", spec.Resource, err)
 	}
@@ -450,12 +440,12 @@ func (h *Host) handResource(ctx context.Context, spec ResourceContainer, secret 
 }
 
 func readyCommand(spec ResourceContainer, seconds int) string {
-	probe := within(min(probeSeconds, seconds), words(append([]string{"docker", "exec", spec.Name}, spec.Ready...)))
+	probe := shell.Within(min(shell.ProbeSeconds, seconds), shell.Words(append([]string{"docker", "exec", spec.Name}, spec.Ready...)))
 	return "deadline=$(($(date +%s) + " + strconv.Itoa(seconds) + "))\n" +
 		"until " + probe + " >/dev/null 2>&1; do\n" +
 		"if [ \"$(date +%s)\" -ge \"$deadline\" ]; then\n" +
-		"printf '%s\\n' " + quoted(spec.Name+" never answered "+strings.Join(spec.Ready, " ")+" within "+spelledSeconds(seconds)) + " >&2\n" +
-		within(probeSeconds, "docker logs --tail "+appLogTail+" "+quoted(spec.Name)) + " >&2 || true\n" +
+		"printf '%s\\n' " + shell.Quote(spec.Name+" never answered "+strings.Join(spec.Ready, " ")+" within "+shell.Seconds(seconds)) + " >&2\n" +
+		shell.Within(shell.ProbeSeconds, "docker logs --tail "+appLogTail+" "+shell.Quote(spec.Name)) + " >&2 || true\n" +
 		"exit 1\n" +
 		"fi\n" +
 		"sleep 1\n" +
@@ -469,7 +459,7 @@ type resourceReading struct {
 	from    string
 }
 
-func (h *Host) readResource(ctx context.Context, spec ResourceContainer, elevation acting) (resourceReading, error) {
+func (h *Host) readResource(ctx context.Context, spec ResourceContainer, elevation ssh.Acting) (resourceReading, error) {
 	spec, err := h.limited(ctx, spec)
 	if err != nil {
 		return resourceReading{}, err
@@ -478,7 +468,7 @@ func (h *Host) readResource(ctx context.Context, spec ResourceContainer, elevati
 	if err != nil {
 		return resourceReading{}, err
 	}
-	said, err := h.readServing(ctx, spec.Name, elevation)
+	said, err := h.engine.ReadServing(ctx, spec.Name)
 	if err != nil {
 		return resourceReading{}, err
 	}
@@ -523,7 +513,7 @@ func (r resourceReading) planChange() (provider.ChangeAction, string) {
 }
 
 func (h *Host) PlanResource(ctx context.Context, spec ResourceContainer) (provider.ChangeAction, string, error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return "", "", err
 	}
@@ -536,11 +526,11 @@ func (h *Host) PlanResource(ctx context.Context, spec ResourceContainer) (provid
 }
 
 func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret string) (err error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
-	if err := h.joining(ctx, spec.Resource, spec.Tier, spec.Project, joinNetworkScript(spec.Tier, spec.Project), elevation); err != nil {
+	if err := h.engine.Join(ctx, spec.Resource, spec.Tier, spec.Project); err != nil {
 		return err
 	}
 	read, err := h.readResource(ctx, spec, elevation)
@@ -560,7 +550,7 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 		return err
 	}
 	if spec.Volume.Path != "" {
-		if _, err := h.ran(ctx, "keep a volume for "+spec.Resource, volumeCreating(spec), nil, elevation); err != nil {
+		if _, err := h.Run(ctx, elevation, "keep a volume for "+spec.Resource, volumeCreating(spec), nil); err != nil {
 			return err
 		}
 	}
@@ -569,18 +559,16 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 		return err
 	}
 	defer func() { err = errors.Join(err, h.unhand(ctx, delivery)) }()
-	_, refused, failed := h.spoke(ctx, "run "+spec.Resource+" as "+spec.Name,
-		runResourceScript(spec, digest, delivery.path), nil, elevation)
+	_, refused, failed := h.Attempt(ctx, elevation, "run "+spec.Resource+" as "+spec.Name, runResourceScript(spec, digest, delivery.path), nil)
 	if failed != nil && !strings.Contains(refused, nameTaken) {
 		return failed
 	}
-	if _, err := h.ran(ctx, "wait for "+spec.Resource+" to answer", readyCommand(spec, readySeconds), nil, elevation); err != nil {
+	if _, err := h.Run(ctx, elevation, "wait for "+spec.Resource+" to answer", readyCommand(spec, shell.ReadySeconds), nil); err != nil {
 		return err
 	}
 	if spec.Credential.Reassert != nil {
 		argv, stdin := spec.Credential.Reassert(secret)
-		if _, err := h.ran(ctx, "reassert "+spec.Resource+"'s credential",
-			reassertCommand(spec.Name, argv), strings.NewReader(stdin), elevation); err != nil {
+		if _, err := h.Run(ctx, elevation, "reassert "+spec.Resource+"'s credential", reassertCommand(spec.Name, argv), strings.NewReader(stdin)); err != nil {
 			return err
 		}
 	}
@@ -595,20 +583,18 @@ type ResourceRef struct {
 }
 
 func (h *Host) RemoveResource(ctx context.Context, ref ResourceRef) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
 	volumes := volumesOf(ref.Tier, ref.Project, ref.Resource, ref.Name) + " --quiet"
-	_, err = h.ran(ctx, "take "+ref.Name+" and its data down",
-		boundedTolerated(dockerStepSeconds, "docker rm of "+ref.Name,
-			"docker rm --force "+quoted(ref.Name)+" "+quoted(ref.Name+retiredSuffix)+" >/dev/null 2>&1")+"\n"+
-			volumes+" | xargs -r "+within(dockerStepSeconds, "docker volume rm")+" >/dev/null\n"+
-			"[ -z \"$("+volumes+")\" ]", nil, elevation)
+	_, err = h.Run(ctx, elevation, "take "+ref.Name+" and its data down", shell.BoundedTolerating(shell.DockerStepSeconds, "docker rm of "+ref.Name,
+		"docker rm --force "+shell.Quote(ref.Name)+" "+shell.Quote(ref.Name+retiredSuffix)+" >/dev/null 2>&1")+"\n"+
+		volumes+" | xargs -r "+shell.Within(shell.DockerStepSeconds, "docker volume rm")+" >/dev/null\n"+
+		"[ -z \"$("+volumes+")\" ]", nil)
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "remove "+ref.Name+"'s kept credential and backups",
-		"rm -f "+quoted(KeptPath(ref.Tier, ref.Name))+"\nrm -rf "+quoted(BackupsDir(ref.Tier, ref.Name)), nil, elevation)
+	_, err = h.Run(ctx, elevation, "remove "+ref.Name+"'s kept credential and backups", "rm -f "+shell.Quote(KeptPath(ref.Tier, ref.Name))+"\nrm -rf "+shell.Quote(BackupsDir(ref.Tier, ref.Name)), nil)
 	return err
 }

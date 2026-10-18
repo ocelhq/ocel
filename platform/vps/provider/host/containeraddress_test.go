@@ -5,16 +5,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestAContainersAddressIsTheOneItHoldsOnItsNetwork(t *testing.T) {
 	rig := machine(nil)
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted("shop-infra-orders-postgres")) {
-			return session.Result{Stdout: "172.18.0.5 \n"}, true
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote("shop-infra-orders-postgres")) {
+			return ssh.Result{Stdout: "172.18.0.5 \n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	address, err := rig.host().ReadContainerAddress(context.Background(), "shop-infra-orders-postgres")
@@ -25,11 +26,11 @@ func TestAContainersAddressIsTheOneItHoldsOnItsNetwork(t *testing.T) {
 
 func TestAContainerWithNoAddressIsRefusedNamingIt(t *testing.T) {
 	rig := machine(nil)
-	rig.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker inspect") {
-			return session.Result{Stdout: " \n"}, true
+			return ssh.Result{Stdout: " \n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	_, err := rig.host().ReadContainerAddress(context.Background(), "shop-infra-orders-postgres")

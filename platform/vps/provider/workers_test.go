@@ -15,8 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func aWorkerApp() provider.AppSpec {
@@ -27,13 +27,13 @@ func aWorkerApp() provider.AppSpec {
 	return app
 }
 
-func recordedWorker(t *testing.T, store records.Store, name string) (live.QueueWorker, bool) {
+func recordedWorker(t *testing.T, store records.Store, name string) (boxapi.QueueWorker, bool) {
 	t.Helper()
-	entry, err := store.Read(context.Background(), live.QueueWorkerKey(environment.TierProduction, "shop", "prod", name))
+	entry, err := store.Read(context.Background(), boxapi.QueueWorkerKey(environment.TierProduction, "shop", "prod", name))
 	if err != nil {
-		return live.QueueWorker{}, false
+		return boxapi.QueueWorker{}, false
 	}
-	var worker live.QueueWorker
+	var worker boxapi.QueueWorker
 	if err := json.Unmarshal(entry.Value, &worker); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestAWorkerIsHandedItsNameAndTheAppsValuesButNeverTheEdgesSecret(t *testing
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
 	handed := machine.fedTo("install -m 0600 /dev/stdin '" + host.EnvFile(environment.TierProduction, ledger.Container) + "'")
-	for _, want := range []string{"OCEL_WORKER=ledger", "GREETING=hello", live.EnvVar + "="} {
+	for _, want := range []string{"OCEL_WORKER=ledger", "GREETING=hello", boxapi.EnvVar + "="} {
 		if !strings.Contains(handed, want) {
 			t.Errorf("ledger is handed %q, want %s in it", handed, want)
 		}
@@ -120,7 +120,7 @@ func TestAWorkerNeverReachesTheRoutingTable(t *testing.T) {
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
 	for _, command := range machine.commands() {
-		if strings.Contains(command, live.RoutingTable) && strings.Contains(command, ledger.Container) {
+		if strings.Contains(command, boxapi.RoutingTable) && strings.Contains(command, ledger.Container) {
 			t.Errorf("the worker reached the routing table: %s", command)
 		}
 	}
@@ -226,11 +226,11 @@ func TestAWorkerAdmitsOnlyDeliveriesSignedWithItsEnvironmentsDeliverySecret(t *t
 	if _, err := p.ProvisionTopic(context.Background(), aTask(t, "receipt"), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
-	entry, err := store.Read(context.Background(), live.QueueDatabaseKey(environment.TierProduction, "shop", "prod"))
+	entry, err := store.Read(context.Background(), boxapi.QueueDatabaseKey(environment.TierProduction, "shop", "prod"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var database live.QueueDatabase
+	var database boxapi.QueueDatabase
 	if err := json.Unmarshal(entry.Value, &database); err != nil {
 		t.Fatal(err)
 	}

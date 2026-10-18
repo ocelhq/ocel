@@ -17,10 +17,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	s3store "github.com/ocelhq/ocel/platform/s3"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const Vendor provider.Vendor = "vps"
@@ -41,7 +41,7 @@ type Provider struct {
 	queues queueDatabases
 
 	dial sync.Mutex
-	live *session.Session
+	live *ssh.Session
 
 	liveness.Net
 }
@@ -73,7 +73,7 @@ func NewProvider(options Options) *Provider {
 	return p.onHost(p.conn)
 }
 
-func newProvider(options Options, dial host.Dial) *Provider {
+func newProvider(options Options, dial ssh.Dial) *Provider {
 	return (&Provider{options: options, now: time.Now}).onHost(dial)
 }
 
@@ -84,8 +84,8 @@ func (p *Provider) Facts() provider.Facts {
 		Computes: []provider.Compute{provider.ComputeContainer},
 		Edges:    slices.Clone(supportedEdges),
 		Pairings: []provider.Pairing{
-			{Edge: edge.None, Router: switchboard.RouterKind, Computes: []provider.Compute{provider.ComputeContainer}},
-			{Edge: cloudflare.Kind, Router: switchboard.RouterKind, Computes: []provider.Compute{provider.ComputeContainer}},
+			{Edge: edge.None, Router: boxapi.SwitchboardRouter, Computes: []provider.Compute{provider.ComputeContainer}},
+			{Edge: cloudflare.Kind, Router: boxapi.SwitchboardRouter, Computes: []provider.Compute{provider.ComputeContainer}},
 		},
 		DNSKinds:                 []provider.DNSKind{dnsCloudflare},
 		RendersTransforms:        true,

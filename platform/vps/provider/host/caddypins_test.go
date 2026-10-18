@@ -12,7 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const wildcard = "*.preview.example.com"
@@ -22,15 +23,15 @@ func pinnedBox(t *testing.T, pins []Pin, files map[string][]byte) *Host {
 
 	rig := claimingBox(t, routed())
 	serves := rig.answer
-	rig.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (ssh.Result, bool) {
 		for path, block := range files {
-			if strings.Contains(command, quoted(path)) {
-				return session.Result{Stdout: string(block)}, true
+			if strings.Contains(command, shell.Quote(path)) {
+				return ssh.Result{Stdout: string(block)}, true
 			}
 		}
 		return serves(command)
 	}
-	return New(rig.dial, Keys{}, pins, Front{})
+	return New(ssh.NewBox(rig.dial, nil), Keys{}, pins, Front{})
 }
 
 func pinning(t *testing.T) (*claimBench, *Host) {
@@ -40,13 +41,13 @@ func pinning(t *testing.T) (*claimBench, *Host) {
 	covering, _ := pinnedBlocks(t, []string{wildcard}, 90*24*time.Hour)
 	rig := claimingBox(t, routed())
 	serves := rig.answer
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(caddy.PinCertificate(at))) {
-			return session.Result{Stdout: string(covering)}, true
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote(caddy.PinCertificate(at))) {
+			return ssh.Result{Stdout: string(covering)}, true
 		}
 		return serves(command)
 	}
-	return rig, New(rig.dial, Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
+	return rig, New(ssh.NewBox(rig.dial, nil), Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
 }
 
 func claiming(t *testing.T, pins []Pin, files map[string][]byte) error {
@@ -137,14 +138,14 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 	rig := claimingBox(t, routed())
 	serves := rig.answer
 	reads := 0
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.HasPrefix(command, "cat "+quoted(caddy.PinCertificate(at))) {
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.HasPrefix(command, "cat "+shell.Quote(caddy.PinCertificate(at))) {
 			reads++
-			return session.Result{Stdout: string(covering)}, true
+			return ssh.Result{Stdout: string(covering)}, true
 		}
 		return serves(command)
 	}
-	h := New(rig.dial, Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
+	h := New(ssh.NewBox(rig.dial, nil), Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
 
 	ctx := context.Background()
 	for _, hostname := range []string{claimed, "blog.example.com", "www.example.com"} {

@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -202,14 +202,14 @@ func TestAKVStoreDeclaredUnderANewerMajorCopiesItsDataIntoTheNewGenerationWithAW
 
 	machine := &box{}
 	withRecordedKV(machine)
-	machine.refuses = func(command string) (session.Result, bool) {
+	machine.refuses = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker volume ls") && strings.Contains(command, host.LabelGeneration):
-			return session.Result{Stdout: "8\n"}, true
+			return ssh.Result{Stdout: "8\n"}, true
 		case strings.Contains(command, ".State.Status"):
-			return session.Result{Stdout: "exited valkey/valkey:8 0123456789ab\n"}, true
+			return ssh.Result{Stdout: "exited valkey/valkey:8 0123456789ab\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if _, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "9"), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionKV() = %v, and a stopped store's files copy as well as a running one's", err)

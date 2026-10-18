@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 const stalledDocker = `#!/bin/sh
@@ -129,7 +130,7 @@ func TestAContainerWhoseInspectStallsIsReportedNotRisenWithinItsAttempts(t *test
 func TestADockerStepThatStallsFailsNamingWhatStalledAndHowLongItWaited(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, boundedStep(1, "docker run of shop-store", "docker run --detach shop-store >/dev/null"))
+	ran := runAgainstStalledDocker(t, shell.Bounded(1, "docker run of shop-store", "docker run --detach shop-store >/dev/null"))
 	if ran.failed == nil {
 		t.Fatalf("a docker run that never returned passed:\n%s", ran.said)
 	}
@@ -144,7 +145,7 @@ func TestADockerStepThatStallsFailsNamingWhatStalledAndHowLongItWaited(t *testin
 func TestADockerStepThatFailsOnItsOwnKeepsItsStatusAndIsNotCalledAStall(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, boundedStep(1, "docker volume create", "sh -c 'echo refused >&2; exit 3'")+"\necho unreached")
+	ran := runAgainstStalledDocker(t, shell.Bounded(1, "docker volume create", "sh -c 'echo refused >&2; exit 3'")+"\necho unreached")
 	var exit *exec.ExitError
 	if ran.failed == nil || !errors.As(ran.failed, &exit) || exit.ExitCode() != 3 {
 		t.Fatalf("a step that exited 3 left the script with %v:\n%s", ran.failed, ran.said)
@@ -157,11 +158,11 @@ func TestADockerStepThatFailsOnItsOwnKeepsItsStatusAndIsNotCalledAStall(t *testi
 func TestATakeDownToleratesAContainerAlreadyGoneButNotADockerThatNeverAnswers(t *testing.T) {
 	t.Parallel()
 
-	gone := runAgainstStalledDocker(t, boundedTolerated(1, "docker rm of shop-web", "sh -c 'exit 1'")+"\necho kept-going")
+	gone := runAgainstStalledDocker(t, shell.BoundedTolerating(1, "docker rm of shop-web", "sh -c 'exit 1'")+"\necho kept-going")
 	if gone.failed != nil || !strings.Contains(gone.said, "kept-going") {
 		t.Errorf("removing a container that is already gone stopped the script: %v\n%s", gone.failed, gone.said)
 	}
-	stuck := runAgainstStalledDocker(t, boundedTolerated(1, "docker rm of shop-web", "docker rm --force shop-web")+"\necho kept-going")
+	stuck := runAgainstStalledDocker(t, shell.BoundedTolerating(1, "docker rm of shop-web", "docker rm --force shop-web")+"\necho kept-going")
 	if stuck.failed == nil || strings.Contains(stuck.said, "kept-going") {
 		t.Fatalf("a docker rm that never returned was passed over: %v\n%s", stuck.failed, stuck.said)
 	}
@@ -223,7 +224,7 @@ func TestAResourceIsRunWithinABound(t *testing.T) {
 
 	script := runResourceScript(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name))
 	for _, line := range strings.Split(script, "\n") {
-		if at := strings.Index(line, quoted("docker")+" "+quoted("run")); at >= 0 && !strings.Contains(line[:at], "timeout ") {
+		if at := strings.Index(line, shell.Quote("docker")+" "+shell.Quote("run")); at >= 0 && !strings.Contains(line[:at], "timeout ") {
 			t.Errorf("the resource is started with no time bound on docker run:\n%s", line)
 		}
 	}
@@ -246,7 +247,7 @@ func TestAWaitOnTheRoutingLockGivesUpNamingTheLockRatherThanWaitingForever(t *te
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	ran := runAgainstStalledDocker(t, lockedWithin(held, "-x", 1)+"echo got-the-lock")
+	ran := runAgainstStalledDocker(t, shell.Locked(held, "-x", 1)+"echo got-the-lock")
 	if ran.failed == nil || strings.Contains(ran.said, "got-the-lock") {
 		t.Fatalf("a wait on a lock held elsewhere passed: %v\n%s", ran.failed, ran.said)
 	}
@@ -263,7 +264,7 @@ func TestAWaitOnTheRoutingLockGivesUpNamingTheLockRatherThanWaitingForever(t *te
 func TestASwitchboardStartedAgainPullsItsImageBeforeItTakesTheRoutingLock(t *testing.T) {
 	t.Parallel()
 
-	script := switchboardBox(nil, Front{}).restoring(containerRising)
+	script := switchboardBox(nil, Front{}).restoring(containerRising, routingLocked("-x"))
 	pull, locked := strings.Index(script, "docker pull"), strings.Index(script, routingLocked("-x"))
 	if pull < 0 || locked < 0 {
 		t.Fatalf("restoring the switchboard neither pulls nor locks:\n%s", script)

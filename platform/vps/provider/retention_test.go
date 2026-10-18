@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func helperCalls(machine *box, verb string) []string {
@@ -50,11 +50,11 @@ func TestAStartedReleaseIsRecordedAtTheHeadOfItsWindow(t *testing.T) {
 func TestAReleaseThatNeverStartedRecordsNothing(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{refuses: func(command string) (session.Result, bool) {
+	machine := &box{refuses: func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, "'--detach'") {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
-		return session.Result{Code: 1, Stderr: "refused"}, true
+		return ssh.Result{Code: 1, Stderr: "refused"}, true
 	}}
 	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), progress.Discard()); err == nil {
 		t.Fatal("ProvisionContainers() succeeded over a box that never ran the container")
@@ -98,14 +98,14 @@ func TestTheWindowIsWrittenUnderNoElevationAtAll(t *testing.T) {
 func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{refuses: func(command string) (session.Result, bool) {
+	machine := &box{refuses: func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "echo present"):
-			return session.Result{Stdout: "present\n"}, true
+			return ssh.Result{Stdout: "present\n"}, true
 		case strings.Contains(command, "/usr/local/lib/ocel/keyvalues"):
-			return session.Result{Code: 1, Stderr: "refused"}, true
+			return ssh.Result{Code: 1, Stderr: "refused"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}}
 	p := over(machine)
 
@@ -224,26 +224,26 @@ func quoted(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''
 const registryImageRef = "registry.example.com/acme/shop.web:sha256-new"
 
 func sweepingOff(removed ...string) *box {
-	return &box{refuses: func(command string) (session.Result, bool) {
+	return &box{refuses: func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, "/usr/local/lib/ocel/releases") || !strings.Contains(command, "'reconcile'") {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
 		var said strings.Builder
 		for _, image := range removed {
 			said.WriteString("removed " + image + "\nunused " + image + "\n")
 		}
-		return session.Result{Stdout: said.String()}, true
+		return ssh.Result{Stdout: said.String()}, true
 	}}
 }
 
 func sweepingOffWhileADeployClaims(claimed string, removed ...string) *box {
 	sweeping := sweepingOff(removed...)
-	return &box{refuses: func(command string) (session.Result, bool) {
+	return &box{refuses: func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "/usr/local/lib/ocel/releases") && strings.Contains(command, "'claimed'") {
 			if strings.Contains(command, quoted(claimed)) {
-				return session.Result{Stdout: claimed + "\n"}, true
+				return ssh.Result{Stdout: claimed + "\n"}, true
 			}
-			return session.Result{}, true
+			return ssh.Result{}, true
 		}
 		return sweeping.refuses(command)
 	}}

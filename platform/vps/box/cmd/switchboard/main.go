@@ -1,0 +1,493 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"io/fs"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/box/switchboard"
+)
+
+const controlEnv = "OCEL_SWITCHBOARD_CONTROL"
+
+const (
+	exitRefused        = 2
+	exitNotServingYet  = 3
+	exitSilent         = 4
+	exitUnattributable = 5
+	exitNoHealthPath   = 6
+)
+
+const (
+	controlTimeout = 30 * time.Second
+	socketMask     = 0o177
+	controlDirMode = 0o700
+	lockMode       = 0o600
+	lockSuffix     = ".lock"
+)
+
+const (
+	gateInterval = 250 * time.Millisecond
+	gateAttempt  = 2 * time.Second
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
+}
+
+func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) int {
+	control := os.Getenv(controlEnv)
+	if control == "" {
+		control = boxapi.SwitchboardControlSocket
+	}
+	if len(argv) == 0 {
+		return usage(errs)
+	}
+	rest := argv[1:]
+	speaking := controlClient{socket: control, out: out, errs: errs}
+	switch argv[0] {
+	case "serve":
+		return serve(ctx, control, rest, errs)
+	case "load":
+		if len(rest) != 1 {
+			return usage(errs)
+		}
+		return speaking.load(ctx, rest[0])
+	case "cutover":
+		return speaking.cutover(ctx, rest)
+	case "gate":
+		return gate(rest, out, errs)
+	case "find-health-path":
+		return findHealthPath(rest, out, errs)
+	case "idle":
+		if len(rest) == 0 {
+			return usage(errs)
+		}
+		return speaking.speak(ctx, http.MethodPost, switchboard.IdlePath, url.Values{switchboard.TargetField: rest})
+	case "upstreams":
+		if len(rest) != 0 {
+			return usage(errs)
+		}
+		return speaking.speak(ctx, http.MethodGet, switchboard.UpstreamsPath, nil)
+	case "leaf":
+		return leaf(rest, out, errs)
+	case "probe":
+		return probe(rest, out, errs)
+	case "inodes":
+		return inodes(rest, out, errs)
+	case "answers":
+		return answers(rest, errs)
+	case "place":
+		return place(rest, in, errs)
+	case "unplace":
+		return unplace(rest, errs)
+	case "placed":
+		return digest(rest, out, errs)
+	case "beside":
+		return beside(rest, out, errs)
+	case "place-secret":
+		return placeSecret(rest, in, errs)
+	case "place-origin":
+		return placeOrigin(rest, in, errs)
+	case "unplace-origins":
+		return unplaceOrigins(rest, errs)
+	case "origin-group":
+		return originGroup(rest, out, errs)
+	default:
+		return usage(errs)
+	}
+}
+
+func usage(errs io.Writer) int {
+	fmt.Fprintln(errs, "usage: "+boxapi.Switchboard+" serve --listen <host:port> --front <socket> --admit <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... [--https-listen <host:port|docker network:port>] [--tunnel-listen <host:port|docker network:port>] |")
+	fmt.Fprintln(errs, "       load <table> |")
+	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
+	fmt.Fprintln(errs, "       find-health-path --deploy-timeout <seconds> <host:port> </path>... |")
+	fmt.Fprintln(errs, "       cutover [--drain-timeout <seconds> --retire <host:port>...] <table> |")
+	fmt.Fprintln(errs, "       idle <host:port>... |")
+	fmt.Fprintln(errs, "       upstreams |")
+	fmt.Fprintln(errs, "       leaf [--at <host:port>] <hostname> |")
+	fmt.Fprintln(errs, "       probe [--any-certificate] [--plain] [--at <host:port>] <hostname> |")
+	fmt.Fprintln(errs, "       inodes <path>... |")
+	fmt.Fprintln(errs, "       answers <socket> <path> |")
+	fmt.Fprintln(errs, "       place <path> < <file> |")
+	fmt.Fprintln(errs, "       unplace <path> |")
+	fmt.Fprintln(errs, "       placed <path> |")
+	fmt.Fprintln(errs, "       beside <path> |")
+	fmt.Fprintln(errs, "       place-secret <path> < <secret> |")
+	fmt.Fprintln(errs, "       place-origin <path> < <bundle> |")
+	fmt.Fprintln(errs, "       unplace-origins [<kept path>...]")
+	return exitRefused
+}
+
+func refuse(errs io.Writer, err error) int {
+	fmt.Fprintf(errs, "%s: %v\n", boxapi.Switchboard, err)
+	return exitRefused
+}
+
+type repeated []string
+
+func (r *repeated) String() string { return strings.Join(*r, " ") }
+
+func (r *repeated) Set(value string) error {
+	*r = append(*r, value)
+	return nil
+}
+
+func serve(ctx context.Context, control string, argv []string, errs io.Writer) int {
+	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
+	flags.SetOutput(errs)
+	listen := flags.String("listen", "", "")
+	fronting := flags.String("front", "", "")
+	admit := flags.String("admit", "", "")
+	path := flags.String("table", "", "")
+	https := flags.String("https-listen", "", "")
+	tunneling := flags.String("tunnel-listen", "", "")
+	var relaying, networks repeated
+	flags.Var(&relaying, "relay", "")
+	flags.Var(&networks, "relay-network", "")
+	if err := flags.Parse(argv); err != nil || *listen == "" || *fronting == "" || *admit == "" || *path == "" || flags.NArg() != 0 {
+		return usage(errs)
+	}
+	relayed, err := relayOf(ctx, relaying, networks)
+	if err != nil {
+		return refuse(errs, err)
+	}
+	var stamping, tunneled []string
+	if *https != "" {
+		if stamping, err = listenerBinds(ctx, "--https-listen", *https, systemResolve, net.InterfaceAddrs); err != nil {
+			return refuse(errs, err)
+		}
+	}
+	if *tunneling != "" {
+		if tunneled, err = listenerBinds(ctx, "--tunnel-listen", *tunneling, systemResolve, net.InterfaceAddrs); err != nil {
+			return refuse(errs, err)
+		}
+	}
+	document, err := os.ReadFile(*path)
+	if err != nil {
+		return refuse(errs, err)
+	}
+	table, err := boxapi.ReadTable(document)
+	if err != nil {
+		return refuse(errs, fmt.Errorf("%s: %w", *path, err))
+	}
+	board := switchboard.New(table, relayed...)
+	lock, err := lockControl(control)
+	if err != nil {
+		return refuse(errs, err)
+	}
+	defer lock.Close()
+	var opened []net.Listener
+	unwind := func(err error) int {
+		for _, listener := range opened {
+			_ = listener.Close()
+		}
+		return refuse(errs, err)
+	}
+	front, err := socketListener(*fronting)
+	if err != nil {
+		return unwind(err)
+	}
+	opened = append(opened, front)
+	data, err := net.Listen("tcp", *listen)
+	if err != nil {
+		return unwind(err)
+	}
+	opened = append(opened, data)
+	admitting, err := socketListener(*admit)
+	if err != nil {
+		return unwind(err)
+	}
+	opened = append(opened, admitting)
+	var stamped, tunnels []net.Listener
+	for _, address := range stamping {
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			return unwind(err)
+		}
+		opened = append(opened, listener)
+		stamped = append(stamped, listener)
+	}
+	for _, address := range tunneled {
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			return unwind(err)
+		}
+		opened = append(opened, listener)
+		tunnels = append(tunnels, listener)
+	}
+	controlling, err := socketListener(control)
+	if err != nil {
+		return unwind(err)
+	}
+	opened = append(opened, controlling)
+	controller := &http.Server{Handler: board.Control(), ReadHeaderTimeout: switchboard.ReadHeaderTimeout}
+	failed := make(chan error, len(opened))
+	go func() {
+		if err := board.ServeAdmit(admitting); err != nil {
+			failed <- err
+		}
+	}()
+	go func() {
+		if err := board.Serve(data); err != nil {
+			failed <- err
+		}
+	}()
+	go func() {
+		if err := board.ServeFront(front); err != nil {
+			failed <- err
+		}
+	}()
+	for _, listener := range stamped {
+		go func() {
+			if err := board.ServeHTTPS(listener); err != nil {
+				failed <- err
+			}
+		}()
+	}
+	for _, listener := range tunnels {
+		go func() {
+			if err := board.ServeTunnel(listener); err != nil {
+				failed <- err
+			}
+		}()
+	}
+	go func() {
+		if err := controller.Serve(controlling); !errors.Is(err, http.ErrServerClosed) {
+			failed <- err
+		}
+	}()
+	code := 0
+	select {
+	case <-ctx.Done():
+	case err := <-failed:
+		code = refuse(errs, err)
+	}
+	_ = controller.Close()
+	grace, stop := context.WithTimeout(context.WithoutCancel(ctx), board.Grace())
+	defer stop()
+	if err := board.Shutdown(grace); err != nil {
+		_ = board.Close()
+	}
+	return code
+}
+
+func lockControl(path string) (io.Closer, error) {
+	if err := os.MkdirAll(filepath.Dir(path), controlDirMode); err != nil {
+		return nil, err
+	}
+	lock, err := os.OpenFile(path+lockSuffix, os.O_RDWR|os.O_CREATE, lockMode)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = lock.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, fmt.Errorf("another switchboard already has %s locked", path)
+		}
+		return nil, err
+	}
+	return lock, nil
+}
+
+func socketListener(path string) (net.Listener, error) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	mask := syscall.Umask(socketMask)
+	listener, err := net.Listen("unix", path)
+	syscall.Umask(mask)
+	return listener, err
+}
+
+type controlClient struct {
+	socket    string
+	out, errs io.Writer
+}
+
+func (c controlClient) load(ctx context.Context, path string) int {
+	table, err := filepath.Abs(path)
+	if err != nil {
+		return refuse(c.errs, err)
+	}
+	return c.speak(ctx, http.MethodPost, switchboard.LoadPath, url.Values{switchboard.TableField: {table}})
+}
+
+func (c controlClient) cutover(ctx context.Context, argv []string) int {
+	flags := flag.NewFlagSet("cutover", flag.ContinueOnError)
+	flags.SetOutput(c.errs)
+	var retiring repeated
+	flags.Var(&retiring, "retire", "")
+	drainTimeout := flags.Int("drain-timeout", 0, "")
+	if err := flags.Parse(argv); err != nil || flags.NArg() != 1 || (len(retiring) > 0 && *drainTimeout <= 0) {
+		return usage(c.errs)
+	}
+	table, err := filepath.Abs(flags.Arg(0))
+	if err != nil {
+		return refuse(c.errs, err)
+	}
+	form := url.Values{switchboard.TableField: {table}, switchboard.RetireField: retiring}
+	if len(retiring) > 0 {
+		form.Set(switchboard.WindowField, (time.Duration(*drainTimeout) * time.Second).String())
+	}
+	return c.speak(ctx, http.MethodPost, switchboard.CutoverPath, form)
+}
+
+func (c controlClient) speak(ctx context.Context, method, path string, form url.Values) int {
+	if path != switchboard.CutoverPath {
+		var stop context.CancelFunc
+		ctx, stop = context.WithTimeout(ctx, controlTimeout)
+		defer stop()
+	}
+	var body io.Reader
+	if form != nil {
+		body = strings.NewReader(form.Encode())
+	}
+	request, err := http.NewRequestWithContext(ctx, method, "http://switchboard"+path, body)
+	if err != nil {
+		return refuse(c.errs, err)
+	}
+	if form != nil {
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", c.socket)
+		},
+	}}
+	answer, err := client.Do(request)
+	if err != nil {
+		return refuse(c.errs, fmt.Errorf("the switchboard answered nothing over %s: %w", c.socket, err))
+	}
+	defer answer.Body.Close()
+	if answer.StatusCode/100 != 2 {
+		said, _ := io.ReadAll(answer.Body)
+		return refuse(c.errs, fmt.Errorf("the switchboard refused %s: %s", path, strings.TrimSpace(string(said))))
+	}
+	if _, err := io.Copy(c.out, answer.Body); err != nil {
+		return refuse(c.errs, fmt.Errorf("the switchboard cut its answer to %s short: %w", path, err))
+	}
+	return 0
+}
+
+func gate(argv []string, out, errs io.Writer) int {
+	flags := flag.NewFlagSet("gate", flag.ContinueOnError)
+	flags.SetOutput(errs)
+	deployTimeout := flags.Int("deploy-timeout", 0, "")
+	if err := flags.Parse(argv); err != nil {
+		return usage(errs)
+	}
+	targets := flags.Args()
+	if *deployTimeout <= 0 || len(targets) == 0 {
+		return usage(errs)
+	}
+	for _, target := range targets {
+		if !strings.Contains(target, "/") {
+			return usage(errs)
+		}
+	}
+	deadline := time.Now().Add(time.Duration(*deployTimeout) * time.Second)
+	for _, target := range targets {
+		address, path, _ := strings.Cut(target, "/")
+		if code := gating(address, "/"+path, max(time.Until(deadline), gateInterval), out, errs); code != 0 {
+			fmt.Fprintf(out, "%s %s\n", boxapi.Ungated, target)
+			return code
+		}
+	}
+	return 0
+}
+
+func gating(target, path string, window time.Duration, out, errs io.Writer) int {
+	client := &http.Client{Timeout: min(window, gateAttempt)}
+	deadline := time.Now().Add(window)
+	status := 0
+	for {
+		answer, err := client.Get("http://" + target + path)
+		if err == nil {
+			status = answer.StatusCode
+			_, _ = io.Copy(io.Discard, answer.Body)
+			_ = answer.Body.Close()
+			if status/100 == 2 {
+				fmt.Fprintln(out, status)
+				return 0
+			}
+		}
+		if time.Now().Add(gateInterval).After(deadline) {
+			break
+		}
+		time.Sleep(gateInterval)
+	}
+	if status == 0 {
+		fmt.Fprintf(errs, "%s never answered %s within %s\n", target, path, window)
+		return exitSilent
+	}
+	fmt.Fprintln(out, status)
+	fmt.Fprintf(errs, "%s answered %s with status %d, no 2xx within %s\n", target, path, status, window)
+	return exitNotServingYet
+}
+
+func findHealthPath(argv []string, out, errs io.Writer) int {
+	flags := flag.NewFlagSet("find-health-path", flag.ContinueOnError)
+	flags.SetOutput(errs)
+	deployTimeout := flags.Int("deploy-timeout", 0, "")
+	if err := flags.Parse(argv); err != nil || *deployTimeout <= 0 || flags.NArg() < 2 {
+		return usage(errs)
+	}
+	target, paths := flags.Arg(0), flags.Args()[1:]
+	for _, path := range paths {
+		if !strings.HasPrefix(path, "/") {
+			return usage(errs)
+		}
+	}
+	window := time.Duration(*deployTimeout) * time.Second
+	deadline := time.Now().Add(window)
+	client := &http.Client{Timeout: min(window, gateAttempt)}
+	for _, path := range paths {
+		status := appAnswer(client, target, path, deadline)
+		if status == 0 {
+			fmt.Fprintf(errs, "%s never answered %s within %s\n", target, path, window)
+			return exitSilent
+		}
+		fmt.Fprintf(out, "%s %s %d\n", boxapi.Answered, path, status)
+		if status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
+			return 0
+		}
+	}
+	fmt.Fprintf(errs, "%s answered 404 or 405 on every path asked: %s\n", target, strings.Join(paths, ", "))
+	return exitNoHealthPath
+}
+
+func appAnswer(client *http.Client, target, path string, deadline time.Time) int {
+	for {
+		answer, err := client.Get("http://" + target + path)
+		if err == nil {
+			_, _ = io.Copy(io.Discard, answer.Body)
+			_ = answer.Body.Close()
+			if answer.Header.Get(originguard.AppUnansweredHeader) == "" {
+				return answer.StatusCode
+			}
+		}
+		if time.Now().Add(gateInterval).After(deadline) {
+			return 0
+		}
+		time.Sleep(gateInterval)
+	}
+}

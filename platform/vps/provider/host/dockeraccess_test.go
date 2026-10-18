@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/dockerpolicy"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type everyContainerOcels struct{}
@@ -113,15 +114,15 @@ func TestTheDeployLoginsDockerIsTheCheckedOneOnEveryPathItRunsCommandsBy(t *test
 		box := machine(nil)
 		box.dest.User = login
 		box.facts.Root = login == "root"
-		acting, err := box.host().reachStateRoot(context.Background())
-		if err != nil {
+		if _, err := box.host().Run(context.Background(), ssh.Deploy, "act as the deploy login", "true", nil); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(acting), "PATH="+deployPath) {
+		acting := box.commands()[len(box.commands())-1]
+		if !strings.Contains(acting, "PATH="+boxapi.DeployPath) {
 			t.Errorf("a %s login acts as %s through %q, which leaves the daemon's own client first on its PATH", login, deployUser, acting)
 		}
 	}
-	if !strings.Contains(string(dockerSudoers()), LiveBinary+" "+live.DockerCommand+" *") {
+	if !strings.Contains(string(dockerSudoers()), LiveBinary+" "+boxapi.DockerCommand+" *") {
 		t.Errorf("the sudo line is %q, want it to reach docker only through the check", dockerSudoers())
 	}
 }
@@ -130,7 +131,7 @@ func TestEveryBindTheCheckedDockerAllowsSitsUnderDirectoriesTheDeployLoginCannot
 	t.Parallel()
 
 	owned := map[string]bool{}
-	for _, item := range Items("production", nil, ArchAMD64, coolifysTraefik()) {
+	for _, item := range Items("production", nil, ssh.AMD64, coolifysTraefik()) {
 		if item.Kind == KindDir && item.Owner == deployUser {
 			owned[item.Name] = true
 		}
@@ -142,7 +143,7 @@ func TestEveryBindTheCheckedDockerAllowsSitsUnderDirectoriesTheDeployLoginCannot
 			}
 		}
 	}
-	if !slices.ContainsFunc(Items("production", nil, ArchAMD64, Front{}), func(item Item) bool {
+	if !slices.ContainsFunc(Items("production", nil, ssh.AMD64, Front{}), func(item Item) bool {
 		return item.Kind == KindDir && item.Name == stateRoot && item.Owner == rootOwner
 	}) {
 		t.Errorf("%s is not root's, and every bind beneath it is one the deploy login can swap", stateRoot)

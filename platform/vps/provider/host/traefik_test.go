@@ -12,10 +12,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func traefikOnTheHost() Front {
@@ -55,14 +56,14 @@ func TestTheSwitchboardBesideYourTraefikOnItsNetworkHearsHTTPSThereAloneAndStart
 	t.Parallel()
 
 	board := switchboardOf(t, coolifysTraefik())
-	if got := flagged(board.command, "--https-listen"); !slices.Equal(got, []string{"coolify:" + switchboard.HTTPSListenPort}) {
+	if got := flagged(board.command, "--https-listen"); !slices.Equal(got, []string{"coolify:" + boxapi.HTTPSListenPort}) {
 		t.Errorf("the switchboard serves as %q, want https heard on its own address on coolify alone", board.command)
 	}
 	if got := flagged(board.command, "--relay-network"); len(got) != 0 {
 		t.Errorf("the switchboard serves as %q, want no network relayed from: every tenant on coolify would name its own scheme and host", board.command)
 	}
-	running := words(board.run())
-	if !strings.Contains(running, words([]string{"--network", ProxyNetwork, "--network", "coolify"})) {
+	running := shell.Words(board.run())
+	if !strings.Contains(running, shell.Words([]string{"--network", ProxyNetwork, "--network", "coolify"})) {
 		t.Errorf("the switchboard runs as %s, want it started on coolify: the https listener binds its address there once, as it starts", running)
 	}
 	if strings.Contains(running, "--publish") {
@@ -77,13 +78,13 @@ func TestTheSwitchboardBesideATraefikOnTheHostHearsHTTPSOnItsBoxNetworkAddressPu
 	t.Parallel()
 
 	board := switchboardOf(t, traefikOnTheHost())
-	if got := flagged(board.command, "--https-listen"); !slices.Equal(got, []string{ProxyNetwork + ":" + switchboard.HTTPSListenPort}) {
+	if got := flagged(board.command, "--https-listen"); !slices.Equal(got, []string{ProxyNetwork + ":" + boxapi.HTTPSListenPort}) {
 		t.Errorf("the switchboard serves as %q, want https heard on its own address on %s, where the loopback port is published to", board.command, ProxyNetwork)
 	}
 	if got := flagged(board.command, "--relay-network"); len(got) != 0 {
 		t.Errorf("the switchboard serves as %q, want no network relayed from", board.command)
 	}
-	if running := words(board.run()); !strings.Contains(running, words([]string{"--publish", "127.0.0.1:9000:" + switchboard.HTTPSListenPort})) {
+	if running := shell.Words(board.run()); !strings.Contains(running, shell.Words([]string{"--publish", "127.0.0.1:9000:" + boxapi.HTTPSListenPort})) {
 		t.Errorf("the switchboard runs as %s, want the https listener published on 127.0.0.1:9000", running)
 	}
 }
@@ -95,7 +96,7 @@ func TestYourTraefikIsAskedWhetherItRoutesAHostnameWhateverCertificateItHasForIt
 	if _, _, err := (frontBox{box.host()}).ProbeAnyCertificate(context.Background(), "web.localhost"); err != nil {
 		t.Fatalf("Routed() = %v", err)
 	}
-	want := words([]string{SwitchboardBinary, "probe", "--any-certificate", "web.localhost"})
+	want := shell.Words([]string{SwitchboardBinary, "probe", "--any-certificate", "web.localhost"})
 	if box.at(want) < 0 {
 		t.Errorf("Routed() ran %q, want %s: Traefik routes a hostname before it holds its certificate, and issuing waits on DNS", box.commands(), want)
 	}
@@ -121,9 +122,9 @@ func TestTheLastDestroyBehindYourTraefikTakesOcelYmlOutOfItsDirectoryBeforeTheSw
 	}
 	taken := box.commands()
 	unplaced := slices.IndexFunc(taken, func(command string) bool {
-		return strings.Contains(command, words(placementCommand(coolifyDynamic, "unplace", coolifyFile)))
+		return strings.Contains(command, shell.Words(placementCommand(coolifyDynamic, "unplace", coolifyFile)))
 	})
-	removed := slices.Index(taken, "docker rm --force "+quoted(SwitchboardContainer))
+	removed := slices.Index(taken, "docker rm --force "+shell.Quote(SwitchboardContainer))
 	if unplaced < 0 || removed < 0 || unplaced > removed {
 		t.Errorf("the destroy ran\n%s\nwant %s unplaced before the switchboard is removed: Traefik would route ocel's hostnames to a service that is gone", strings.Join(taken, "\n"), coolifyFile)
 	}
@@ -188,9 +189,9 @@ func TestBootstrapOntoYourTraefikInADirectoryTheBoxLacksIsRefusedBeforeOcelsProx
 	tier := environment.TierProduction
 	box := boxRecordedFor(t, tier, Front{})
 	prior := box.answer
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "[ ! -d "+quoted("/etc/traefik/dynamic")+" ]") {
-			return session.Result{Code: 1, Stderr: "option \"proxy.traefik.directory\" names the directory /etc/traefik/dynamic, which this box does not have"}, true
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, "[ ! -d "+shell.Quote("/etc/traefik/dynamic")+" ]") {
+			return ssh.Result{Code: 1, Stderr: "option \"proxy.traefik.directory\" names the directory /etc/traefik/dynamic, which this box does not have"}, true
 		}
 		return prior(command)
 	}
@@ -198,7 +199,7 @@ func TestBootstrapOntoYourTraefikInADirectoryTheBoxLacksIsRefusedBeforeOcelsProx
 	if err == nil || !strings.Contains(err.Error(), "proxy.traefik.directory") {
 		t.Errorf("Apply() = %v, want it refused naming proxy.traefik.directory", err)
 	}
-	if at := box.at("docker rm --force " + quoted(caddy.Container)); at >= 0 {
+	if at := box.at("docker rm --force " + shell.Quote(caddy.Container)); at >= 0 {
 		t.Errorf("the bootstrap took ocel's proxy away before finding your Traefik has nowhere to read ocel's file: %s", box.commands()[at])
 	}
 }
@@ -206,10 +207,10 @@ func TestBootstrapOntoYourTraefikInADirectoryTheBoxLacksIsRefusedBeforeOcelsProx
 func TestASwitchboardADeployRecreatesBesideYourTraefikHearsHTTPSWhereBootstrapHadIt(t *testing.T) {
 	t.Parallel()
 
-	restored := switchboardBox(nil, coolifysTraefik()).restoring(containerRising)
+	restored := switchboardBox(nil, coolifysTraefik()).restoring(containerRising, routingLocked("-x"))
 	for _, want := range []string{
-		words([]string{"--https-listen", "coolify:" + switchboard.HTTPSListenPort}),
-		words([]string{"--network", ProxyNetwork, "--network", "coolify"}),
+		shell.Words([]string{"--https-listen", "coolify:" + boxapi.HTTPSListenPort}),
+		shell.Words([]string{"--network", ProxyNetwork, "--network", "coolify"}),
 	} {
 		if !strings.Contains(restored, want) {
 			t.Errorf("a deploy recreates the switchboard as\n%s\nwithout %s", restored, want)
@@ -219,17 +220,17 @@ func TestASwitchboardADeployRecreatesBesideYourTraefikHearsHTTPSWhereBootstrapHa
 
 func TestYourTraefiksRoutersAreReadAsRootByALoginOutsideTheDockerGroup(t *testing.T) {
 	rig := machine(nil)
-	rig.facts = session.Facts{Systemd: true}
+	rig.facts = ssh.Facts{Systemd: true}
 	var unelevated []string
-	rig.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker") && !strings.HasPrefix(command, "sudo -n ") {
 			unelevated = append(unelevated, command)
-			return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
+			return ssh.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
 		}
 		if strings.Contains(command, "beside") {
-			return session.Result{Stdout: "[]"}, true
+			return ssh.Result{Stdout: "[]"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	front := openFront(traefikOnTheHost(), frontBox{rig.host()})

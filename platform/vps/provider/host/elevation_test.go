@@ -10,7 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type sudoless struct {
@@ -23,8 +24,8 @@ func (c *sudoless) ForwardPort(context.Context, string) (string, func(), error) 
 	return "", nil, errors.New("a sudoless session forwards no port")
 }
 
-func (c *sudoless) Preflight(context.Context) (session.Facts, error) {
-	return session.Facts{Systemd: true}, refusal.Refuse(refusal.CodeDenied,
+func (c *sudoless) Preflight(context.Context) (ssh.Facts, error) {
+	return ssh.Facts{Systemd: true}, refusal.Refuse(refusal.CodeDenied,
 		"ocel-deploy@box.example can neither act as root nor run sudo without a password, and bootstrap writes as root throughout")
 }
 
@@ -33,41 +34,41 @@ func (c *sudoless) Run(ctx context.Context, command string) (string, error) {
 	return said.Stdout, err
 }
 
-func (c *sudoless) Stream(_ context.Context, command string, _ io.Reader) (session.Result, error) {
+func (c *sudoless) Stream(_ context.Context, command string, _ io.Reader) (ssh.Result, error) {
 	c.asked = append(c.asked, command)
 	switch {
 	case strings.HasPrefix(command, "cat ~/.ssh/authorized_keys"):
-		return session.Result{Stdout: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB deploy@ocel\n"}, nil
+		return ssh.Result{Stdout: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB deploy@ocel\n"}, nil
 	case command == "uname -m":
-		return session.Result{Stdout: "x86_64\n"}, nil
+		return ssh.Result{Stdout: "x86_64\n"}, nil
 	case command == frontReading():
-		return session.Result{Stdout: c.recorded}, nil
-	case c.stamped != "" && command == "cat "+quoted(StampPath(environment.TierProduction)):
-		return session.Result{Stdout: c.stamped}, nil
+		return ssh.Result{Stdout: c.recorded}, nil
+	case c.stamped != "" && command == "cat "+shell.Quote(StampPath(environment.TierProduction)):
+		return ssh.Result{Stdout: c.stamped}, nil
 	case c.stamped != "" && strings.Contains(command, "for p in"):
-		return session.Result{Stdout: KindFile + "\t" + StampPath(environment.TierProduction) + "\t644\troot\tabc\n" +
+		return ssh.Result{Stdout: KindFile + "\t" + StampPath(environment.TierProduction) + "\t644\troot\tabc\n" +
 			KindFile + "\t" + FrontRecordPath + "\t644\troot\tdef\n" +
 			KindSealKey + "\t" + SealKeyPath(environment.TierProduction) + "\t400\troot\t\t2026-09-23T23:27:00Z\n"}, nil
 	default:
-		return session.Result{}, nil
+		return ssh.Result{}, nil
 	}
 }
 
-func (c *sudoless) RunLines(ctx context.Context, command string, each func(session.Line) error) error {
+func (c *sudoless) RunLines(ctx context.Context, command string, each func(ssh.Line) error) error {
 	said, err := c.Stream(ctx, command, nil)
 	if err != nil {
 		return err
 	}
 	for text := range strings.Lines(said.Stdout) {
-		if err := each(session.Line{Pipe: session.Stdout, Text: strings.TrimSuffix(text, "\n")}); err != nil {
+		if err := each(ssh.Line{Pipe: ssh.Stdout, Text: strings.TrimSuffix(text, "\n")}); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *sudoless) Destination() session.Destination {
-	return session.Destination{Written: "box.example", Address: "203.0.113.7", Port: 22, User: "ocel-deploy"}
+func (c *sudoless) Destination() ssh.Destination {
+	return ssh.Destination{Written: "box.example", Address: "203.0.113.7", Port: 22, User: "ocel-deploy"}
 }
 
 func (c *sudoless) elevated() []string {
@@ -81,7 +82,7 @@ func (c *sudoless) elevated() []string {
 }
 
 func hostFor(conn *sudoless) *Host {
-	return New(func(context.Context) (Conn, error) { return conn, nil }, Keys{}, nil, Front{})
+	return New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return conn, nil }, nil), Keys{}, nil, Front{})
 }
 
 func TestDescribingAHostNeedsNoPowerToWriteToIt(t *testing.T) {
@@ -123,7 +124,7 @@ func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
 		t.Fatal(err)
 	}
 	conn.recorded = string(record.Content)
-	written := digests(append(Items(environment.TierProduction, keys, ArchAMD64, Front{}), record))
+	written := digests(append(Items(environment.TierProduction, keys, ssh.AMD64, Front{}), record))
 	change(written)
 	stamp, err := json.Marshal(Stamp{
 		State:   StateComplete,

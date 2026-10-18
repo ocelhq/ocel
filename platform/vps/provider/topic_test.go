@@ -25,8 +25,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const queueContainer = "shop-prod-infra-ocel-queue"
@@ -102,8 +102,8 @@ func TestADeclaredTaskRunsTheEnvironmentsQueueDatabaseAsAConfinedContainerOnlyIt
 		"'--cap-drop' 'ALL'",
 		images.QueueDatabase(),
 		"'listen_addresses='",
-		"dst=" + live.QueueSocketsPath,
-		"'" + host.LabelOwner + "=" + live.QueueRole + "'",
+		"dst=" + boxapi.QueueSocketsPath,
+		"'" + host.LabelOwner + "=" + boxapi.QueueRole + "'",
 	} {
 		if !strings.Contains(runCommand, want) {
 			t.Errorf("the queue database was started without %q:\n%s", want, runCommand)
@@ -133,13 +133,13 @@ func TestTheAgentReachesTheQueueAsARoleThatOwnsOnlyItsDatabaseAndHoldsNoPassword
 			granted = machine.fed[at]
 		}
 	}
-	for _, want := range []string{"CREATE ROLE " + live.QueueRole + " LOGIN", "NOSUPERUSER", "ALTER DATABASE " + live.QueueDatabaseName + " OWNER TO " + live.QueueRole} {
+	for _, want := range []string{"CREATE ROLE " + boxapi.QueueRole + " LOGIN", "NOSUPERUSER", "ALTER DATABASE " + boxapi.QueueDatabaseName + " OWNER TO " + boxapi.QueueRole} {
 		if !strings.Contains(granted, want) {
 			t.Errorf("the queue database was handed %q, want it to hold %q", granted, want)
 		}
 	}
 
-	entry, err := store.Read(context.Background(), live.QueueDatabaseKey(environment.TierProduction, "shop", "prod"))
+	entry, err := store.Read(context.Background(), boxapi.QueueDatabaseKey(environment.TierProduction, "shop", "prod"))
 	if err != nil {
 		t.Fatalf("no queue database is recorded: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestTheAgentReachesTheQueueAsARoleThatOwnsOnlyItsDatabaseAndHoldsNoPassword
 		t.Errorf("the record names %+v, want the container and the stack", recorded)
 	}
 	if _, holds := recorded["sealed"]; holds {
-		t.Errorf("the record holds the superuser's password for the agent, which reaches the queue as %s and needs none: %+v", live.QueueRole, recorded)
+		t.Errorf("the record holds the superuser's password for the agent, which reaches the queue as %s and needs none: %+v", boxapi.QueueRole, recorded)
 	}
 }
 
@@ -163,7 +163,7 @@ func TestADeclaredTaskIsRecordedUnderItsDeclaredNameWithItsWholeTopic(t *testing
 	if _, err := p.ProvisionTopic(context.Background(), in, progress.Discard()); err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
-	entry, err := store.Read(context.Background(), live.QueueTopicKey(environment.TierProduction, "shop", "prod", "send-email"))
+	entry, err := store.Read(context.Background(), boxapi.QueueTopicKey(environment.TierProduction, "shop", "prod", "send-email"))
 	if err != nil {
 		t.Fatalf("the task is not recorded under its declared name: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 	if err := p.RemoveTopic(context.Background(), first.Ref, bindings[0], progress.Discard()); err != nil {
 		t.Fatalf("RemoveTopic() = %v", err)
 	}
-	if _, err := store.Read(context.Background(), live.QueueTopicKey(environment.TierProduction, "shop", "prod", "send-email")); err == nil {
+	if _, err := store.Read(context.Background(), boxapi.QueueTopicKey(environment.TierProduction, "shop", "prod", "send-email")); err == nil {
 		t.Error("the removed task is still recorded, and the engine keeps serving it")
 	}
 	if strings.Contains(strings.Join(machine.commands()[before:], "\n"), "docker rm --force '"+queueContainer+"'") {
@@ -239,13 +239,13 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 	for _, want := range []string{
 		"docker rm --force '" + queueContainer + "'",
 		host.KeptPath(environment.TierProduction, queueContainer),
-		host.KeptPath(environment.TierProduction, queueContainer+"-"+live.QueueDeliverySecretName),
+		host.KeptPath(environment.TierProduction, queueContainer+"-"+boxapi.QueueDeliverySecretName),
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("removing the last task ran %q and never reached %s", joined, want)
 		}
 	}
-	if _, err := store.Read(context.Background(), live.QueueDatabaseKey(environment.TierProduction, "shop", "prod")); err == nil {
+	if _, err := store.Read(context.Background(), boxapi.QueueDatabaseKey(environment.TierProduction, "shop", "prod")); err == nil {
 		t.Error("the queue database is still recorded after it was taken down")
 	}
 }

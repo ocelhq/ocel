@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const originDigestChars = 12
@@ -42,5 +42,5 @@ func (p CertificatePair) Bundle() []byte {
 func (s Shield) OriginFileName() string {
 	digest := sha256.Sum256(s.OriginCertificate.Bundle())
 	hostname := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s.Hostname)), "*", "_")
-	return switchboard.OriginPrefix + hostname + "-" + hex.EncodeToString(digest[:])[:originDigestChars] + ".pem"
+	return boxapi.OriginPrefix + hostname + "-" + hex.EncodeToString(digest[:])[:originDigestChars] + ".pem"
 }

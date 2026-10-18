@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func pinnedBlocks(t *testing.T, names []string, until time.Duration) (cert, key []byte) {
@@ -128,7 +128,7 @@ func TestARealProxyOrdersOnTheFirstHandshakeForAClaimedHostnameAndNeverForAnUncl
 		t.Errorf("a claimed hostname over plain http answers %d, want it served. Caddy appends its catch-all http->https redirect behind the one terminal forward this config renders, so a forward that stops being terminal turns the redirect on and takes the http-01 challenge and the e2e run's plain-http leg with it",
 			said.status)
 	}
-	if said := ask("unclaimed.example.com"); said.status != http.StatusNotFound || said.router != switchboard.RouterKind {
+	if said := ask("unclaimed.example.com"); said.status != http.StatusNotFound || said.router != boxapi.SwitchboardRouter {
 		t.Errorf("a hostname nothing claims answers %d as %q over plain http, want the box's own refusal on both ports", said.status, said.router)
 	}
 

@@ -10,10 +10,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type Front struct {
@@ -127,9 +129,9 @@ func (f Front) published() []publish {
 	case f.Manual != nil:
 		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Manual.Port), target: switchboardPort}}
 	case f.Caddy != nil && f.Caddy.Network == "":
-		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Caddy.Port), target: switchboard.HTTPSListenPort}}
+		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Caddy.Port), target: boxapi.HTTPSListenPort}}
 	case f.Traefik != nil && f.Traefik.Network == "":
-		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Traefik.Port), target: switchboard.HTTPSListenPort}}
+		return []publish{{addr: loopbackAddr, port: strconv.Itoa(f.Traefik.Port), target: boxapi.HTTPSListenPort}}
 	default:
 		return nil
 	}
@@ -144,9 +146,9 @@ func (f Front) listening() []string {
 		}
 		return relaying
 	case f.Caddy != nil:
-		return []string{"--https-listen", cmp.Or(f.Caddy.Network, ProxyNetwork) + ":" + switchboard.HTTPSListenPort}
+		return []string{"--https-listen", cmp.Or(f.Caddy.Network, ProxyNetwork) + ":" + boxapi.HTTPSListenPort}
 	case f.Traefik != nil:
-		return []string{"--https-listen", cmp.Or(f.Traefik.Network, ProxyNetwork) + ":" + switchboard.HTTPSListenPort}
+		return []string{"--https-listen", cmp.Or(f.Traefik.Network, ProxyNetwork) + ":" + boxapi.HTTPSListenPort}
 	default:
 		return nil
 	}
@@ -171,8 +173,8 @@ func (f Front) directoryPresent() string {
 	dir := filepath.Dir(at)
 	missing := fmt.Sprintf("option %q names the directory %s, which this box does not have: name the directory your proxy reads, or create it",
 		f.directoryOption(), dir)
-	return "if [ ! -d " + quoted(dir) + " ]; then\n" +
-		"printf '%s\\n' " + quoted(missing) + " >&2\n" +
+	return "if [ ! -d " + shell.Quote(dir) + " ]; then\n" +
+		"printf '%s\\n' " + shell.Quote(missing) + " >&2\n" +
 		"exit 1\n" +
 		"fi\n"
 }
@@ -182,7 +184,7 @@ func (h *Host) refuseDirectoryMissing(ctx context.Context, front Front) error {
 	if present == "" {
 		return nil
 	}
-	_, err := h.run(ctx, "find the directory "+front.directoryOption()+" names", present, nil)
+	_, err := h.Run(ctx, ssh.Root, "find the directory "+front.directoryOption()+" names", present, nil)
 	return err
 }
 

@@ -6,8 +6,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 func handedTo(spec Container) handoff {
@@ -39,12 +40,12 @@ func resourced() ResourceContainer {
 
 func running() map[string]string {
 	return map[string]string{
-		appContainer:      words(containerRun(valued(), handedTo(valued()))),
-		proxyContainer:    words(frontProxy().run()),
-		boardContainer:    words(switchboardBox(nil, Front{}).run()),
-		resourceContainer: words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name))),
-		tunnelContainer:   words(tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector()).run()),
-		tokenPlacer:       words(renderTunnelTokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d")),
+		appContainer:      shell.Words(containerRun(valued(), handedTo(valued()))),
+		proxyContainer:    shell.Words(frontProxy().run()),
+		boardContainer:    shell.Words(switchboardBox(nil, Front{}).run()),
+		resourceContainer: shell.Words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name))),
+		tunnelContainer:   shell.Words(tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector()).run()),
+		tokenPlacer:       shell.Words(renderTunnelTokenArgv("place-secret", "ocel-203-0-113-10-0a1b2c3d")),
 	}
 }
 
@@ -52,7 +53,7 @@ func entitledPaths() map[string][]string {
 	return map[string][]string{
 		appContainer:      {EnvFile(valued().Tier, valued().Name)},
 		proxyContainer:    {proxyRoot, caddy.PinsDir, ProxyData},
-		boardContainer:    {live.RoutingDir, live.RoutingTable},
+		boardContainer:    {boxapi.RoutingDir, boxapi.RoutingTable},
 		resourceContainer: {EnvFile(resourced().Tier, resourced().Name)},
 		tunnelContainer:   {TunnelDir},
 		tokenPlacer:       {TunnelDir},
@@ -74,7 +75,7 @@ func TestNoContainerSharesAProcessNamespaceWithAnother(t *testing.T) {
 	t.Parallel()
 
 	for what, command := range running() {
-		for _, shared := range []string{"--pid=host", "--pid=container:", quoted("--pid")} {
+		for _, shared := range []string{"--pid=host", "--pid=container:", shell.Quote("--pid")} {
 			if strings.Contains(command, shared) {
 				t.Errorf("%s runs %q, and %q makes a sibling's /proc/1/environ readable from inside it",
 					what, command, shared)
@@ -174,8 +175,8 @@ func TestEveryContainerThisPackageRunsIsBoundByTheIsolationRules(t *testing.T) {
 func TestAPlacementContainerIsBoundByTheIsolationRulesAndMountsNothingButItsDirectoryAndTheSwitchboardBinary(t *testing.T) {
 	t.Parallel()
 
-	command := words(placementFed("/etc/traefik/dynamic", "place", "/etc/traefik/dynamic/ocel.yml"))
-	for _, refused := range []string{"docker.sock", quoted("--pid"), "--pid=", "--privileged", "--volume"} {
+	command := shell.Words(placementFed("/etc/traefik/dynamic", "place", "/etc/traefik/dynamic/ocel.yml"))
+	for _, refused := range []string{"docker.sock", shell.Quote("--pid"), "--pid=", "--privileged", "--volume"} {
 		if strings.Contains(command, refused) {
 			t.Errorf("a placement runs %q, and names %s", command, refused)
 		}
@@ -199,7 +200,7 @@ func TestAVolumeCopyRunsOfflineWithoutCapabilitiesAndMountsNothingButTheTwoVolum
 	spec := resourced()
 	spec.User, spec.Volume.Generation = "valkey:valkey", "9"
 	command := volumeCopy(spec, "8").before
-	for _, want := range []string{quoted("--network") + " " + quoted("none"), quoted("--cap-drop") + " " + quoted("ALL"), quoted("--user") + " " + quoted("valkey:valkey")} {
+	for _, want := range []string{shell.Quote("--network") + " " + shell.Quote("none"), shell.Quote("--cap-drop") + " " + shell.Quote("ALL"), shell.Quote("--user") + " " + shell.Quote("valkey:valkey")} {
 		if !strings.Contains(command, want) {
 			t.Errorf("a volume copy runs %q, without %s", command, want)
 		}

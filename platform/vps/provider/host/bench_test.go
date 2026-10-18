@@ -17,15 +17,16 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type bench struct {
 	mu        sync.Mutex
-	dest      session.Destination
-	facts     session.Facts
+	dest      ssh.Destination
+	facts     ssh.Facts
 	installed map[environment.Tier][]Item
 	ran       []string
 	fed       []string
@@ -33,22 +34,22 @@ type bench struct {
 	paused    []time.Duration
 	dead      error
 	floor     error
-	answer    func(command string) (session.Result, bool)
+	answer    func(command string) (ssh.Result, bool)
 	broke     func(command string) error
 	after     func(b *bench, command string)
-	followed  func(command string, each func(session.Line) error) error
+	followed  func(command string, each func(ssh.Line) error) error
 }
 
 func machine(installed map[environment.Tier][]Item) *bench {
 	return &bench{
-		dest: session.Destination{
+		dest: ssh.Destination{
 			Written:    "ocelbox",
 			Address:    "203.0.113.10",
 			Port:       2222,
 			User:       deployUser,
 			KnownHosts: []string{"/home/ada/.ssh/known_hosts"},
 		},
-		facts:     session.Facts{Root: true, Systemd: true, Arch: "x86_64"},
+		facts:     ssh.Facts{Root: true, Systemd: true, Arch: "x86_64"},
 		installed: installed,
 	}
 }
@@ -56,9 +57,7 @@ func machine(installed map[environment.Tier][]Item) *bench {
 func (b *bench) host() *Host { return b.fronted(Front{}) }
 
 func (b *bench) fronted(front Front) *Host {
-	h := New(b.dial, Keys{}, nil, front)
-	h.pause = b.pause
-	return h
+	return New(ssh.NewBox(b.dial, b.pause), Keys{}, nil, front)
 }
 
 func (b *bench) pause(ctx context.Context, wait time.Duration) error {
@@ -90,7 +89,7 @@ func (recorder) Debug(string) {}
 
 func (recorder) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
-func (b *bench) dial(ctx context.Context) (Conn, error) {
+func (b *bench) dial(ctx context.Context) (ssh.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -150,9 +149,9 @@ func (b *bench) took(fragment string) int {
 
 type wire struct{ b *bench }
 
-func (w wire) Destination() session.Destination { return w.b.dest }
+func (w wire) Destination() ssh.Destination { return w.b.dest }
 
-func (w wire) Preflight(context.Context) (session.Facts, error) { return w.b.facts, w.b.floor }
+func (w wire) Preflight(context.Context) (ssh.Facts, error) { return w.b.facts, w.b.floor }
 
 func (w wire) ForwardPort(context.Context, string) (string, func(), error) {
 	return "", nil, errors.New("the bench forwards no port")
@@ -169,11 +168,11 @@ func (w wire) Run(ctx context.Context, command string) (string, error) {
 	return result.Stdout, nil
 }
 
-func (w wire) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
+func (w wire) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Result, error) {
 	b := w.b
 	fed, err := drained(stdin)
 	if err != nil {
-		return session.Result{}, err
+		return ssh.Result{}, err
 	}
 	b.mu.Lock()
 	b.ran = append(b.ran, command)
@@ -183,7 +182,7 @@ func (w wire) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 
 	if broke != nil {
 		if err := broke(command); err != nil {
-			return session.Result{}, err
+			return ssh.Result{}, err
 		}
 	}
 	result := b.rendered(command)
@@ -198,7 +197,7 @@ func (w wire) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	return result, nil
 }
 
-func (w wire) RunLines(_ context.Context, command string, each func(session.Line) error) error {
+func (w wire) RunLines(_ context.Context, command string, each func(ssh.Line) error) error {
 	b := w.b
 	b.mu.Lock()
 	b.ran = append(b.ran, command)
@@ -211,54 +210,54 @@ func (w wire) RunLines(_ context.Context, command string, each func(session.Line
 	return followed(command, each)
 }
 
-func (b *bench) rendered(command string) session.Result {
+func (b *bench) rendered(command string) ssh.Result {
 	switch {
 	case strings.Contains(command, "id -u"):
-		return session.Result{Stdout: "0\n"}
+		return ssh.Result{Stdout: "0\n"}
 	case command == "uname -m":
-		return session.Result{Stdout: b.facts.Arch + "\n"}
+		return ssh.Result{Stdout: b.facts.Arch + "\n"}
 	case strings.Contains(command, sizeFields):
-		return session.Result{Stdout: strconv.Itoa(benchMemoryBytes) + " " + strconv.Itoa(benchCPUs) + "\n"}
+		return ssh.Result{Stdout: strconv.Itoa(benchMemoryBytes) + " " + strconv.Itoa(benchCPUs) + "\n"}
 	case readsProxy(command):
-		return session.Result{Stdout: pairSaid(string(routingTableItem().Content), string(proxyConfigItem().Content))}
+		return ssh.Result{Stdout: pairSaid(string(routingTableItem().Content), string(proxyConfigItem().Content))}
 	case strings.Contains(command, "for p in"):
 		for tier, items := range b.installed {
-			if strings.Contains(command, quoted(StampPath(tier))) {
-				return session.Result{Stdout: surveyed(items)}
+			if strings.Contains(command, shell.Quote(StampPath(tier))) {
+				return ssh.Result{Stdout: surveyed(items)}
 			}
 		}
-		return session.Result{}
+		return ssh.Result{}
 	case command == frontReading():
 		for _, items := range b.installed {
 			for _, item := range items {
 				if item.Name == FrontRecordPath {
-					return session.Result{Stdout: string(item.Content)}
+					return ssh.Result{Stdout: string(item.Content)}
 				}
 			}
 		}
-		return session.Result{}
+		return ssh.Result{}
 	case strings.Contains(command, "'--filter' 'publish="):
 		for _, items := range b.installed {
 			if slices.ContainsFunc(items, func(item Item) bool { return item.Kind == KindContainer && item.Name == caddy.Container }) {
-				return session.Result{Stdout: caddy.Container + "\n"}
+				return ssh.Result{Stdout: caddy.Container + "\n"}
 			}
 		}
-		return session.Result{}
+		return ssh.Result{}
 	case strings.HasPrefix(command, ownersCommand):
-		return session.Result{}
-	case strings.Contains(command, quoted(releaseSelectors())):
-		return session.Result{Stdout: "shop web " + appImage + "\n"}
+		return ssh.Result{}
+	case strings.Contains(command, shell.Quote(releaseSelectors())):
+		return ssh.Result{Stdout: "shop web " + appImage + "\n"}
 	case strings.HasPrefix(command, "cat ") && !strings.HasPrefix(command, "cat | "):
 		for _, items := range b.installed {
 			for _, item := range items {
-				if command == "cat "+quoted(item.Name) {
-					return session.Result{Stdout: string(item.Content)}
+				if command == "cat "+shell.Quote(item.Name) {
+					return ssh.Result{Stdout: string(item.Content)}
 				}
 			}
 		}
-		return session.Result{Code: 1, Stderr: "no such file or directory"}
+		return ssh.Result{Code: 1, Stderr: "no such file or directory"}
 	default:
-		return session.Result{}
+		return ssh.Result{}
 	}
 }
 
@@ -283,14 +282,14 @@ func bootstrapped(t *testing.T, tier environment.Tier) []Item {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return append(Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}), stamp)
+	return append(Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{}), stamp)
 }
 
 func TestASurveyedHostReadsBackAsTheItemsThatAreInstalledOnIt(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})
 	box := machine(map[environment.Tier][]Item{tier: items})
 
 	read, err := box.host().Survey(context.Background(), tier)
@@ -319,7 +318,7 @@ func bootstrappedBehind(t *testing.T, tier environment.Tier, front Front, table,
 	t.Helper()
 
 	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ArchAMD64, front)
+	items := Items(tier, keys, ssh.AMD64, front)
 	minted := []byte("the key this box minted for itself")
 	present := make([]Item, 0, len(items)+1)
 	for _, item := range items {
@@ -343,9 +342,9 @@ func bootstrappedBehind(t *testing.T, tier environment.Tier, front Front, table,
 	}
 	box := machine(map[environment.Tier][]Item{tier: append(present, stamp, record)})
 	proxied := servesPair(box, table, config)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if command == "cat ~/.ssh/authorized_keys 2>/dev/null" {
-			return session.Result{Stdout: aKey + "\n"}, true
+			return ssh.Result{Stdout: aKey + "\n"}, true
 		}
 		return proxied(command)
 	}
@@ -377,9 +376,9 @@ func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(
 	tier := environment.TierProduction
 	box := bootstrappedOn(t, tier)
 	answered := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "for p in") {
-			return session.Result{Stdout: strings.Join([]string{kindUnreadable, deployUser, "0", KindUser, "getent passwd exited 126"}, "\t") + "\n"}, true
+			return ssh.Result{Stdout: strings.Join([]string{kindUnreadable, deployUser, "0", KindUser, "getent passwd exited 126"}, "\t") + "\n"}, true
 		}
 		return answered(command)
 	}
@@ -478,38 +477,38 @@ func pairSaid(table, config string) string {
 	return line(table) + line(config)
 }
 
-func servesProxy(b *bench, table *string) func(string) (session.Result, bool) {
+func servesProxy(b *bench, table *string) func(string) (ssh.Result, bool) {
 	return servesPair(b, table, nil)
 }
 
-func servesPair(b *bench, table, config *string) func(string) (session.Result, bool) {
-	return func(command string) (session.Result, bool) {
+func servesPair(b *bench, table, config *string) func(string) (ssh.Result, bool) {
+	return func(command string) (ssh.Result, bool) {
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		switch {
 		case writesProxy(command):
 			if expected := expectedDigest(command); expected != digested(*table) {
-				return session.Result{Code: routingMoved, Stderr: digested(*table)}, true
+				return ssh.Result{Code: routingMoved, Stderr: digested(*table)}, true
 			}
 			*table = tableOf(b.fed[len(b.fed)-1])
 			if config != nil {
 				*config = configOf(b.fed[len(b.fed)-1])
 			}
-			return session.Result{Stdout: digested(*table)}, true
+			return ssh.Result{Stdout: digested(*table)}, true
 		case readsProxy(command):
 			if config != nil {
-				return session.Result{Stdout: pairSaid(*table, *config)}, true
+				return ssh.Result{Stdout: pairSaid(*table, *config)}, true
 			}
-			return session.Result{Stdout: pairSaid(*table, renderedFrom(*table))}, true
+			return ssh.Result{Stdout: pairSaid(*table, renderedFrom(*table))}, true
 		default:
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
 	}
 }
 
 func admittedBy(t *testing.T, state RoutingTable) func(hostname string) bool {
 	t.Helper()
-	table, err := switchboard.Read(mustWrite(t, state))
+	table, err := boxapi.ReadTable(mustWrite(t, state))
 	if err != nil {
 		t.Fatalf("the switchboard refuses the table this state writes: %v", err)
 	}
@@ -518,7 +517,7 @@ func admittedBy(t *testing.T, state RoutingTable) func(hostname string) bool {
 
 func routedBy(t *testing.T, state RoutingTable) func(hostname, path string) (string, bool) {
 	t.Helper()
-	table, err := switchboard.Read(mustWrite(t, state))
+	table, err := boxapi.ReadTable(mustWrite(t, state))
 	if err != nil {
 		t.Fatalf("the switchboard refuses the table this state writes: %v", err)
 	}

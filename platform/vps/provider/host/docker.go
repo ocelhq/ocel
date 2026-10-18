@@ -3,14 +3,14 @@ package host
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -33,33 +33,10 @@ const (
 
 const engineInstallTries = 3
 
-type retryBackoff struct {
-	counter string
-	base    int
-	ceiling int
-	spread  int
-}
-
 var (
-	engineInstallBackoff = retryBackoff{base: 15, ceiling: 60, spread: 15}
-	scriptPullBackoff    = retryBackoff{counter: "at", base: 2, ceiling: 30, spread: 5}
+	engineInstallBackoff = shell.Backoff{Base: 15, Ceiling: 60, Spread: 15}
+	scriptPullBackoff    = shell.Backoff{Counter: "at", Base: 2, Ceiling: 30, Spread: 5}
 )
-
-func (h retryBackoff) after(try int) time.Duration {
-	backoff := min(h.base<<(try-1), h.ceiling)
-	return time.Duration(backoff+rand.IntN(h.spread)) * time.Second
-}
-
-func (h retryBackoff) start() string { return "backoff=" + strconv.Itoa(h.base) + "\n" }
-
-func (h retryBackoff) again() string {
-	return `jitter=$(awk -v seed=$$ -v n="$` + h.counter + `" -v spread=` + strconv.Itoa(h.spread) + ` 'BEGIN{srand(seed+n);print int(rand()*spread)}' 2>/dev/null || echo 0)
-[ -n "$jitter" ] || jitter=0
-sleep $((backoff + jitter))
-backoff=$((backoff * 2))
-if [ "$backoff" -gt ` + strconv.Itoa(h.ceiling) + ` ]; then backoff=` + strconv.Itoa(h.ceiling) + `; fi
-`
-}
 
 const (
 	engineFact = "engine=present\n"
@@ -138,32 +115,32 @@ exit 1`
 }
 
 func (h *Host) installEngine(ctx context.Context, progress progress.Log) error {
-	elevation, err := h.elevate(ctx)
+	elevation, err := ssh.Root, h.Assume(ctx, ssh.Root)
 	if err != nil {
 		return err
 	}
 	for try := 1; ; try++ {
-		result, err := h.stream(ctx, engineCommand(), nil, elevation)
+		result, err := h.Stream(ctx, elevation, engineCommand(), nil)
 		if err != nil || result.Code == 0 {
 			return err
 		}
 		attempt := fmt.Sprintf("try %d of %d", try, engineInstallTries)
-		if try == engineInstallTries || (elevation != "" && sudoRefused(result)) {
-			return h.refuse("install docker, "+attempt+",", result, elevation)
+		if try == engineInstallTries || ssh.IsSudoRefused(result) {
+			return h.Refuse("install docker, "+attempt+",", result)
 		}
 		progress.Warn(fmt.Sprintf("Docker's install on %s failed on try %d of %d and runs again",
-			h.named(), try, engineInstallTries))
-		for _, line := range strings.Split(spoken(result), "\n") {
+			h.Named(), try, engineInstallTries))
+		for _, line := range strings.Split(ssh.Spoken(result), "\n") {
 			progress.Detail(line)
 		}
-		if err := h.pause(ctx, engineInstallBackoff.after(try)); err != nil {
+		if err := h.Wait(ctx, engineInstallBackoff.After(try)); err != nil {
 			return err
 		}
 	}
 }
 
 func unitCommand(i Item) string {
-	name := quoted(i.Name)
+	name := shell.Quote(i.Name)
 	if len(i.Watch) == 0 {
 		return "systemctl enable --now " + name
 	}
@@ -182,36 +159,36 @@ const (
 	engineUnserved engineKind = "unserved"
 )
 
-type Engine struct {
+type InstalledEngine struct {
 	Kind    engineKind
 	Version string
 }
 
 func engineProbe() string {
 	return `kind=''
-case "$(systemctl is-enabled ` + quoted(dockerUnit) + ` 2>/dev/null)" in masked*) kind=` + string(engineMasked) + ` ;; esac
+case "$(systemctl is-enabled ` + shell.Quote(dockerUnit) + ` 2>/dev/null)" in masked*) kind=` + string(engineMasked) + ` ;; esac
 version=''
-if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then
-if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then engine=present
-elif ` + systemdAnswers + `; then engine=` + quoted(string(engineUnserved)) + `
+if command -v ` + shell.Quote(dockerEngine) + ` >/dev/null 2>&1; then
+if systemctl cat ` + shell.Quote(dockerUnit) + ` >/dev/null 2>&1; then engine=present
+elif ` + systemdAnswers + `; then engine=` + shell.Quote(string(engineUnserved)) + `
 else engine=''
-` + unreadable(KindEngine, quoted(dockerEngine), `'systemctl did not answer: check systemctl status (ocel needs systemd)'`) + `
+` + unreadable(KindEngine, shell.Quote(dockerEngine), `'systemctl did not answer: check systemctl status (ocel needs systemd)'`) + `
 fi
 if [ -n "$engine" ]; then
-` + reports(quoted(KindEngine), quoted(dockerEngine), "0", quoted(rootOwner),
+` + reports(shell.Quote(KindEngine), shell.Quote(dockerEngine), "0", shell.Quote(rootOwner),
 		`"$(printf 'engine=%s\n' "$engine" | sha256sum | cut -d' ' -f1)"`) + `
 if [ -n "$kind" ]; then :
 elif [ "$engine" = present ]; then kind=` + string(engineStandard) + `
-elif snap list ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then kind=` + string(engineSnap) + `
+elif snap list ` + shell.Quote(dockerEngine) + ` >/dev/null 2>&1; then kind=` + string(engineSnap) + `
 elif pgrep -x rootlesskit >/dev/null 2>&1; then kind=` + string(engineRootless) + `
-elif pgrep -x ` + quoted(dockerDaemon) + ` >/dev/null 2>&1; then kind=` + string(engineUnserved) + `
+elif pgrep -x ` + shell.Quote(dockerDaemon) + ` >/dev/null 2>&1; then kind=` + string(engineUnserved) + `
 fi
-version=$(timeout 10 ` + quoted(dockerEngine) + ` version --format '{{.Server.Version}}' 2>/dev/null) || version=''
-[ -n "$version" ] || version=$(` + quoted(dockerDaemon) + ` --version 2>/dev/null) || version=''
+version=$(timeout 10 ` + shell.Quote(dockerEngine) + ` version --format '{{.Server.Version}}' 2>/dev/null) || version=''
+[ -n "$version" ] || version=$(` + shell.Quote(dockerDaemon) + ` --version 2>/dev/null) || version=''
 fi
 fi
 if [ -n "$kind" ]; then
-` + reports(quoted(engineFactsRow), quoted(dockerEngine), "0", `"$kind"`, `"$version"`) + `
+` + reports(shell.Quote(engineFactsRow), shell.Quote(dockerEngine), "0", `"$kind"`, `"$version"`) + `
 fi`
 }
 
@@ -265,20 +242,20 @@ func (r Reading) runnableEngine(named string) error {
 	return nil
 }
 
-func (e Engine) release() (int, int, bool) {
+func (e InstalledEngine) release() (int, int, bool) {
 	var major, minor int
 	read, err := fmt.Sscanf(e.Version, "%d.%d", &major, &minor)
 	return major, minor, err == nil && read == 2
 }
 
-func readEngine(rendered string) Engine {
+func readEngine(rendered string) InstalledEngine {
 	for line := range strings.Lines(rendered) {
 		columns := strings.Split(strings.TrimRight(line, "\r\n"), "\t")
 		if len(columns) == 5 && columns[0] == engineFactsRow {
-			return Engine{Kind: engineKind(columns[3]), Version: engineVersion(columns[4])}
+			return InstalledEngine{Kind: engineKind(columns[3]), Version: engineVersion(columns[4])}
 		}
 	}
-	return Engine{}
+	return InstalledEngine{}
 }
 
 func engineVersion(said string) string {
@@ -292,17 +269,17 @@ func engineVersion(said string) string {
 const systemdAnswers = "systemctl list-unit-files >/dev/null 2>&1"
 
 func unitProbe(i Item) string {
-	name := quoted(i.Name)
+	name := shell.Quote(i.Name)
 	watching := ""
 	for _, path := range i.Watch {
-		watching += "printf 'watch=%s\\n' \"$(sha256sum " + quoted(path) + " 2>/dev/null | cut -d' ' -f1)\"\n"
+		watching += "printf 'watch=%s\\n' \"$(sha256sum " + shell.Quote(path) + " 2>/dev/null | cut -d' ' -f1)\"\n"
 	}
 	return `if systemctl cat ` + name + ` >/dev/null 2>&1; then
 active=$(systemctl is-active ` + name + ` 2>/dev/null || true)
 enabled=$(systemctl is-enabled ` + name + ` 2>/dev/null || true)
 facts=$( printf 'active=%s\nenabled=%s\n' "$active" "$enabled"
 ` + watching + `)
-` + reports(quoted(KindUnit), name, "0", quoted(rootOwner), `"$(printf '%s\n' "$facts" | sha256sum | cut -d' ' -f1)"`) + `
+` + reports(shell.Quote(KindUnit), name, "0", shell.Quote(rootOwner), `"$(printf '%s\n' "$facts" | sha256sum | cut -d' ' -f1)"`) + `
 elif ! ` + systemdAnswers + `; then
 ` + unreadable(KindUnit, name, `'systemctl did not answer'`) + `
 fi`

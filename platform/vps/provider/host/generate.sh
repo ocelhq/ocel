@@ -3,7 +3,7 @@ set -eu
 
 host_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 provider_dir=$(CDPATH= cd -- "$host_dir/.." && pwd)
-runtime_dir=$(CDPATH= cd -- "$provider_dir/../runtime" && pwd)
+box_dir=$(CDPATH= cd -- "$provider_dir/../box" && pwd)
 realtime_dir=$(CDPATH= cd -- "$provider_dir/../../realtime" && pwd)
 dist="$host_dir/dist"
 
@@ -13,12 +13,9 @@ rm -rf "$dist"
 mkdir -p "$dist"
 for arch in $arches; do
   (
-    cd "$provider_dir"
+    cd "$box_dir"
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
       go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/ocel-switchboard-$arch" ./cmd/switchboard
-  )
-  (
-    cd "$runtime_dir"
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
       go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/ocel-live-$arch" ./cmd/live
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \

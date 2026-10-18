@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type Options struct {
@@ -251,8 +251,8 @@ type Target struct {
 
 func (Target) AlsoAString() {}
 
-func (t Target) session() session.Target {
-	return session.Target{
+func (t Target) session() ssh.Target {
+	return ssh.Target{
 		Alias:        t.Alias,
 		Config:       t.Config,
 		Host:         t.Host,

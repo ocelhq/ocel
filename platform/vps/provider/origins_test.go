@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func lastFedTo(t *testing.T, machine *box, needle string) (string, string) {
@@ -142,11 +142,11 @@ func TestTheNextDeployLimitsTheBucketToWhatTheProjectStillClaimsAfterAnUnbindCou
 		t.Fatalf("BindDomain() = %v", err)
 	}
 	machine.mu.Lock()
-	machine.refuses = func(command string) (session.Result, bool) {
+	machine.refuses = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "?cors") {
-			return session.Result{Code: 7, Stderr: "curl: (7) the store answered nothing"}, true
+			return ssh.Result{Code: 7, Stderr: "curl: (7) the store answered nothing"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	machine.mu.Unlock()
 

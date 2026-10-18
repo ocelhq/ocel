@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestTheKeyValueHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
@@ -350,17 +350,17 @@ func TestTheKeyValueTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 	t.Parallel()
 
 	b := machine(nil)
-	b.facts = session.Facts{Systemd: true}
+	b.facts = ssh.Facts{Systemd: true}
 	b.floor = refusal.Refuse(refusal.CodeDenied,
 		"%s can neither act as root nor run sudo without a password", deployUser)
-	b.answer = func(command string) (session.Result, bool) {
+	b.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "echo present"):
-			return session.Result{Stdout: "present\n"}, true
+			return ssh.Result{Stdout: "present\n"}, true
 		case strings.Contains(command, boxstore.KeyValuesHelper):
-			return session.Result{Stdout: "0123456789abcdef0123456789abcdef\t{}\n"}, true
+			return ssh.Result{Stdout: "0123456789abcdef0123456789abcdef\t{}\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	entry, err := NewKeyValues(b.host()).Read(context.Background(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
@@ -389,17 +389,17 @@ func TestAnEntryThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 	t.Parallel()
 
 	b := machine(nil)
-	b.facts = session.Facts{Systemd: true}
+	b.facts = ssh.Facts{Systemd: true}
 	b.floor = refusal.Refuse(refusal.CodeDenied,
 		"%s can neither act as root nor run sudo without a password", deployUser)
-	b.answer = func(command string) (session.Result, bool) {
+	b.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "echo present"):
-			return session.Result{Stdout: "present\n"}, true
+			return ssh.Result{Stdout: "present\n"}, true
 		case strings.Contains(command, boxstore.KeyValuesHelper):
-			return session.Result{Code: 1, Stderr: "Permission denied"}, true
+			return ssh.Result{Code: 1, Stderr: "Permission denied"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	_, err := NewKeyValues(b.host()).Read(context.Background(), stackrecords.ProjectKey(environment.TierProduction, "shop"))

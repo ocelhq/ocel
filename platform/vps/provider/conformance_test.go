@@ -24,9 +24,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
@@ -68,7 +68,7 @@ func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T)
 	if got := p.Facts().DefaultEdge; got != edge.None {
 		t.Errorf("Facts().DefaultEdge = %q, want no edge: a deploy that names none reaches the box's own proxy", got)
 	}
-	if got := p.Facts().ListPairedRouters(edge.None); !slices.Equal(got, []router.Kind{switchboard.RouterKind}) {
+	if got := p.Facts().ListPairedRouters(edge.None); !slices.Equal(got, []router.Kind{boxapi.SwitchboardRouter}) {
 		t.Errorf("ListPairedRouters(no edge) = %v, want the switchboard alone", got)
 	}
 
@@ -101,7 +101,7 @@ func TestCloudflareFrontsTheBoxAsAProxyThatRunsNoCodeAndForwardsToTheSwitchboard
 	if front.Hooks().ClientCertificates == nil {
 		t.Error("the cloudflare edge presents no client certificate, so the box could not refuse a request that did not come through it")
 	}
-	if got := p.Facts().ListPairedRouters("cloudflare"); !slices.Equal(got, []router.Kind{switchboard.RouterKind}) {
+	if got := p.Facts().ListPairedRouters("cloudflare"); !slices.Equal(got, []router.Kind{boxapi.SwitchboardRouter}) {
 		t.Errorf("ListPairedRouters(cloudflare) = %v, want the switchboard alone", got)
 	}
 }
@@ -237,7 +237,7 @@ func (d *dockerLogs) feed(_ *testing.T, target provider.LogTarget, entries []pro
 	}
 }
 
-func (d *dockerLogs) follow(ctx context.Context, command string, each func(session.Line) error) error {
+func (d *dockerLogs) follow(ctx context.Context, command string, each func(ssh.Line) error) error {
 	_, args, _ := strings.Cut(command, "' containerlogs ")
 	words := strings.Fields(strings.ReplaceAll(args, "'", ""))
 	since, _ := time.Parse(time.RFC3339Nano, words[0])
@@ -261,7 +261,7 @@ func (d *dockerLogs) follow(ctx context.Context, command string, each func(sessi
 			delete(d.followers, follower)
 		}
 	}()
-	lines := make(chan session.Line)
+	lines := make(chan ssh.Line)
 	for follower, container := range followers {
 		go func() {
 			for {
@@ -270,7 +270,7 @@ func (d *dockerLogs) follow(ctx context.Context, command string, each func(sessi
 					return
 				case entry := <-follower:
 					select {
-					case lines <- session.Line{Pipe: session.Stdout, Text: strconv.Itoa(container) + " " + entry.Time.Format(time.RFC3339Nano) + " " + entry.Message}:
+					case lines <- ssh.Line{Pipe: ssh.Stdout, Text: strconv.Itoa(container) + " " + entry.Time.Format(time.RFC3339Nano) + " " + entry.Message}:
 					case <-ctx.Done():
 						return
 					}
@@ -299,9 +299,9 @@ func (d *dockerLogs) seed(_ *testing.T, target provider.LogTarget, entries []pro
 	d.entries[target.Container.Physical] = entries
 }
 
-func (d *dockerLogs) answer(command string) (session.Result, bool) {
+func (d *dockerLogs) answer(command string) (ssh.Result, bool) {
 	if !strings.Contains(command, "docker logs") {
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	words := strings.Fields(strings.ReplaceAll(command, "'", ""))
 	flag := func(name string) string {
@@ -331,7 +331,7 @@ func (d *dockerLogs) answer(command string) (session.Result, bool) {
 	for _, entry := range kept {
 		stdout.WriteString(entry.Time.Format(time.RFC3339Nano) + " " + entry.Message + "\n")
 	}
-	return session.Result{Stdout: stdout.String()}, true
+	return ssh.Result{Stdout: stdout.String()}, true
 }
 
 func TestTheLogsPortKeepsTheConformanceHistoryOfAContainerOnTheBox(t *testing.T) {

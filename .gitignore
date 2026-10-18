@@ -218,7 +218,7 @@ cli/platform/dist/
 
 mise.local.toml
 
-platform/vps/provider/cmd/switchboard/switchboard
+platform/vps/box/cmd/switchboard/switchboard
 
 # Turborepo
 .turbo

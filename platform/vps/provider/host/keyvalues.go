@@ -8,6 +8,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 //go:embed keyvalues.sh
@@ -22,12 +24,12 @@ func (s sshKeyValues) HasStore(ctx context.Context, tier environment.Tier) (bool
 }
 
 func (s sshKeyValues) Run(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
-	command := quoted(boxstore.KeyValuesHelper) + " " + quoted(string(tier))
+	command := shell.Quote(boxstore.KeyValuesHelper) + " " + shell.Quote(string(tier))
 	for _, arg := range argv {
-		command += " " + quoted(arg)
+		command += " " + shell.Quote(arg)
 	}
-	elevation, refused := s.host.elevate(ctx)
-	result, err := s.host.stream(ctx, command, stdin, elevation)
+	elevation := ssh.RootWhenAble
+	result, err := s.host.Stream(ctx, elevation, command, stdin)
 	if err != nil {
 		return "", err
 	}
@@ -39,6 +41,6 @@ func (s sshKeyValues) Run(ctx context.Context, tier environment.Tier, stdin io.R
 	case boxstore.ExitStale:
 		return "", records.ErrStale
 	default:
-		return "", unelevated(refused, s.host.refuse("keyvalues "+argv[0], result, elevation))
+		return "", s.host.Refuse("keyvalues "+argv[0], result)
 	}
 }

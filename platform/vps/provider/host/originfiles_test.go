@@ -9,15 +9,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 const placedGroup = "4321"
 
 var shieldedOrigins = []proxy.OriginFile{
-	{Path: coolifyDynamic + "/" + switchboard.OriginPrefix + "shop.example.com-aaa.pem", Bundle: []byte("SHOP CERTIFICATE\nSHOP KEY\n")},
-	{Path: coolifyDynamic + "/" + switchboard.OriginPrefix + "_.preview.example.com-bbb.pem", Bundle: []byte("PREVIEW CERTIFICATE\nPREVIEW KEY\n")},
+	{Path: coolifyDynamic + "/" + boxapi.OriginPrefix + "shop.example.com-aaa.pem", Bundle: []byte("SHOP CERTIFICATE\nSHOP KEY\n")},
+	{Path: coolifyDynamic + "/" + boxapi.OriginPrefix + "_.preview.example.com-bbb.pem", Bundle: []byte("PREVIEW CERTIFICATE\nPREVIEW KEY\n")},
 }
 
 type loggingShell struct {
@@ -30,9 +31,9 @@ func shellLogging(t *testing.T) *loggingShell {
 	box := &loggingShell{placingShell: shellPlacing(t)}
 	box.calls, box.feeds = filepath.Join(box.dir, "calls"), filepath.Join(box.dir, "feeds")
 	executable(t, filepath.Join(box.bin, "docker"), "#!/bin/sh\n"+
-		"printf '%s\\n' \"$*\" >> "+quoted(box.calls)+"\n"+
+		"printf '%s\\n' \"$*\" >> "+shell.Quote(box.calls)+"\n"+
 		"case \"$*\" in *origin-group*) echo "+placedGroup+"; exit 0;; esac\n"+
-		"if [ \"$2\" = -i ]; then cat >> "+quoted(box.feeds)+"; printf '|\\n' >> "+quoted(box.feeds)+"; fi\n")
+		"if [ \"$2\" = -i ]; then cat >> "+shell.Quote(box.feeds)+"; printf '|\\n' >> "+shell.Quote(box.feeds)+"; fi\n")
 	return box
 }
 
@@ -138,7 +139,7 @@ func TestADeployPlacesTheOriginCertificatesYourProxyNamesWithTheRenderingThatNam
 	}
 	command := adopted.commands()[written]
 	for _, path := range originPaths(shieldedOrigins) {
-		if !strings.Contains(command, quoted("place-origin")+" "+quoted(path)) {
+		if !strings.Contains(command, shell.Quote("place-origin")+" "+shell.Quote(path)) {
 			t.Errorf("the write\n%s\nplaces no %s", command, path)
 		}
 	}
@@ -167,13 +168,13 @@ func TestDestroyUnplacesTheOriginCertificatesBesideOcelsFileOnceYourProxyNoLonge
 
 			dir, bin := t.TempDir(), t.TempDir()
 			executable(t, filepath.Join(bin, "docker"), "#!/bin/sh\n[ \"$1\" = inspect ] && echo true\n[ \"$1\" = run ] && exit 1\nexit 0\n")
-			for _, name := range []string{switchboard.OriginPrefix + "shop.example.com-aaa.pem", "yours.pem"} {
+			for _, name := range []string{boxapi.OriginPrefix + "shop.example.com-aaa.pem", "yours.pem"} {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o640); err != nil {
 					t.Fatal(err)
 				}
 			}
 			taken := front(dir).placedRemovals()[0]
-			if command := taken.command(); !strings.Contains(command, quoted("unplace-origins")) {
+			if command := taken.command(); !strings.Contains(command, shell.Quote("unplace-origins")) {
 				t.Errorf("the destroy runs\n%s\nwant the origin certificates unplaced", command)
 			}
 			run := exec.Command("sh", "-c", taken.command())

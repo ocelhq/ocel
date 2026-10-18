@@ -26,8 +26,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -105,7 +105,7 @@ func TestADeclaredRealtimeIsBoundToItsEnvironmentsGatewayThroughTheAppsOwnOrigin
 		t.Errorf("the binding is %s %q of %q, want the realtime the app declared", binding.Type, binding.Name, binding.Resource)
 	}
 	for property, want := range map[string]string{
-		provider.PropertyURL:  live.RealtimeSocketPath,
+		provider.PropertyURL:  boxapi.RealtimeSocketPath,
 		provider.PropertyHost: realtimeGateway + ":8080",
 	} {
 		if got := binding.Properties[property]; got != want {
@@ -325,9 +325,9 @@ type deployArrivingMidRun struct {
 
 func (s *deployArrivingMidRun) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	listed, err := s.Store.List(ctx, in, under...)
-	if in.Root == live.RootRealtime && s.always {
+	if in.Root == boxapi.RootRealtime && s.always {
 		s.arrive(ctx)
-	} else if in.Root == live.RootRealtime {
+	} else if in.Root == boxapi.RootRealtime {
 		s.once.Do(func() { s.arrive(ctx) })
 	}
 	return listed, err
@@ -338,14 +338,14 @@ func TestAGatewayWhoseRealtimeKeepsChangingUnderItIsRefusedAsBusy(t *testing.T) 
 
 	p, store := recording(&box{})
 	ref := aRealtime(t, "app").Ref
-	record, err := json.Marshal(live.RealtimeNamespace{VerifyKey: base64.StdEncoding.EncodeToString(make([]byte, ed25519.PublicKeySize))})
+	record, err := json.Marshal(boxapi.RealtimeNamespace{VerifyKey: base64.StdEncoding.EncodeToString(make([]byte, ed25519.PublicKeySize))})
 	if err != nil {
 		t.Fatal(err)
 	}
 	arrived := 0
 	p.Recording(&deployArrivingMidRun{Store: store, always: true, arrive: func(ctx context.Context) {
 		arrived++
-		key := live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, fmt.Sprintf("chat%d", arrived))
+		key := boxapi.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, fmt.Sprintf("chat%d", arrived))
 		if _, err := store.Write(ctx, records.Entry{Key: key, Value: record}); err != nil {
 			t.Errorf("record chat%d: %v", arrived, err)
 		}
@@ -364,12 +364,12 @@ func TestARealtimeAnotherDeployRecordsWhileTheGatewayRestartsIsVerifiedByTheGate
 	machine := &box{}
 	p, store := recording(machine)
 	ref := aRealtime(t, "app").Ref
-	chat, err := json.Marshal(live.RealtimeNamespace{VerifyKey: base64.StdEncoding.EncodeToString(make([]byte, ed25519.PublicKeySize))})
+	chat, err := json.Marshal(boxapi.RealtimeNamespace{VerifyKey: base64.StdEncoding.EncodeToString(make([]byte, ed25519.PublicKeySize))})
 	if err != nil {
 		t.Fatal(err)
 	}
 	p.Recording(&deployArrivingMidRun{Store: store, arrive: func(ctx context.Context) {
-		key := live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, "chat")
+		key := boxapi.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, "chat")
 		if _, err := store.Write(ctx, records.Entry{Key: key, Value: chat}); err != nil {
 			t.Errorf("record chat: %v", err)
 		}

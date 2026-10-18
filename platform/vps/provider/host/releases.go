@@ -10,6 +10,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 //go:embed releases.sh
@@ -91,12 +93,7 @@ func (h *Host) archive(ctx context.Context, project, app, imageRef string) error
 }
 
 func (h *Host) EnsureImage(ctx context.Context, project, app, imageRef string) (bool, error) {
-	acting, err := h.reachStateRoot(ctx)
-	if err != nil {
-		return false, err
-	}
-	said, err := h.ran(ctx, "load "+imageRef+" from its archive if the engine lacks it",
-		acting.prefixed("flock -x "+quoted(imagesLock)+" "+releasesCommand(Scope(project, app), "restore", imageRef)), nil, asLogin)
+	said, err := h.Run(ctx, ssh.Deploy, "load "+imageRef+" from its archive if the engine lacks it", "flock -x "+shell.Quote(imagesLock)+" "+releasesCommand(Scope(project, app), "restore", imageRef), nil)
 	if err != nil {
 		return false, err
 	}
@@ -105,12 +102,12 @@ func (h *Host) EnsureImage(ctx context.Context, project, app, imageRef string) (
 
 func (h *Host) CheckReleases(ctx context.Context, tier environment.Tier) provider.HostCheck {
 	check := provider.HostCheck{Subject: releasesRoot, Verdict: provider.HostFail}
-	acting, err := h.reachStateRoot(ctx)
+	acting, err := ssh.Deploy, h.Assume(ctx, ssh.Deploy)
 	if err != nil {
-		check.Finding = fmt.Sprintf("read which releases %s keeps for `ocel rollback`: %v", h.named(), err)
+		check.Finding = fmt.Sprintf("read which releases %s keeps for `ocel rollback`: %v", h.Named(), err)
 		return check
 	}
-	said, err := h.ran(ctx, "read which releases kept for `ocel rollback` lost their image", lostCommand(releasesRoot, releasesHelper, tier), nil, acting)
+	said, err := h.Run(ctx, acting, "read which releases kept for `ocel rollback` lost their image", lostCommand(releasesRoot, releasesHelper, tier), nil)
 	if err != nil {
 		check.Finding = err.Error()
 		return check
@@ -135,28 +132,24 @@ func (h *Host) CheckReleases(ctx context.Context, tier environment.Tier) provide
 
 func lostCommand(root, helper string, tier environment.Tier) string {
 	return "status=0\n" +
-		"for dir in " + quoted(root) + "/*/*/; do\n" +
+		"for dir in " + shell.Quote(root) + "/*/*/; do\n" +
 		"[ -d \"$dir\" ] || continue\n" +
 		"scope=${dir%/}\n" +
-		"scope=${scope#" + quoted(root+"/") + "}\n" +
-		"said=$(" + quoted(helper) + " \"$scope\" lost " + quoted(string(tier)) + ") || status=1\n" +
+		"scope=${scope#" + shell.Quote(root+"/") + "}\n" +
+		"said=$(" + shell.Quote(helper) + " \"$scope\" lost " + shell.Quote(string(tier)) + ") || status=1\n" +
 		"printf '%s\\n' \"$said\" | sed -n \"s|^lost |$scope |p\"\n" +
 		"done\n" +
 		"exit \"$status\"\n"
 }
 
 func (h *Host) releases(ctx context.Context, what, scope string, args ...string) (string, error) {
-	acting, err := h.reachStateRoot(ctx)
-	if err != nil {
-		return "", err
-	}
-	return h.ran(ctx, what, acting.prefixed(releasesCommand(scope, args...)), nil, asLogin)
+	return h.Run(ctx, ssh.Deploy, what, releasesCommand(scope, args...), nil)
 }
 
 func releasesCommand(scope string, args ...string) string {
-	command := quoted(releasesHelper) + " " + quoted(scope)
+	command := shell.Quote(releasesHelper) + " " + shell.Quote(scope)
 	for _, arg := range args {
-		command += " " + quoted(arg)
+		command += " " + shell.Quote(arg)
 	}
 	return command
 }

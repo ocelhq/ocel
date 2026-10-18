@@ -1,0 +1,1008 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"maps"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/box/switchboard"
+)
+
+func ran(t *testing.T, argv ...string) (int, string, string) {
+	t.Helper()
+	return fed(t, strings.NewReader(""), argv...)
+}
+
+func controlAt(t *testing.T) string {
+	t.Helper()
+	control := filepath.Join(t.TempDir(), "control.sock")
+	if len(control) > 100 {
+		t.Skipf("a unix socket path this host accepts does not fit under %s", control)
+	}
+	t.Setenv(controlEnv, control)
+	return control
+}
+
+func admitAt(t *testing.T) string {
+	t.Helper()
+	admit := filepath.Join(t.TempDir(), "admit.sock")
+	if len(admit) > 100 {
+		t.Skipf("a unix socket path this host accepts does not fit under %s", admit)
+	}
+	return admit
+}
+
+func frontAt(t *testing.T) string {
+	t.Helper()
+	front := filepath.Join(t.TempDir(), "front.sock")
+	if len(front) > 100 {
+		t.Skipf("a unix socket path this host accepts does not fit under %s", front)
+	}
+	return front
+}
+
+func freeAddress(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	return listener.Addr().String()
+}
+
+func tableFile(t *testing.T, upstreams map[string]string) string {
+	t.Helper()
+	type claim struct {
+		Owner    string `json:"owner"`
+		Hostname string `json:"hostname"`
+		Pointer  string `json:"pointer"`
+	}
+	type route struct {
+		Owner    string `json:"owner"`
+		Pointer  string `json:"pointer"`
+		App      string `json:"app"`
+		Upstream string `json:"upstream"`
+	}
+	table := struct {
+		Grace  string  `json:"grace"`
+		Claims []claim `json:"claims"`
+		Routes []route `json:"routes"`
+	}{Grace: "30s"}
+	for at, hostname := range slices.Sorted(maps.Keys(upstreams)) {
+		owner := fmt.Sprintf("ocel--site-%d--production", at)
+		table.Claims = append(table.Claims, claim{Owner: owner, Hostname: hostname, Pointer: "@production"})
+		table.Routes = append(table.Routes, route{Owner: owner, Pointer: "@production", App: "web", Upstream: upstreams[hostname]})
+	}
+	written, err := json.Marshal(table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return documentAt(t, written)
+}
+
+func documentAt(t *testing.T, document []byte) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "routing.json")
+	if err := os.WriteFile(path, document, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func backend(t *testing.T, name string) string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, name)
+	}))
+	t.Cleanup(server.Close)
+	return strings.TrimPrefix(server.URL, "http://")
+}
+
+type serving struct {
+	data    string
+	front   string
+	admit   string
+	control string
+	stop    context.CancelFunc
+	done    chan int
+	errs    *strings.Builder
+}
+
+func accepting(control, data string) bool {
+	for network, address := range map[string]string{"unix": control, "tcp": data} {
+		conn, err := net.Dial(network, address)
+		if err != nil {
+			return false
+		}
+		_ = conn.Close()
+	}
+	return true
+}
+
+func served(t *testing.T, table string, flags ...string) serving {
+	t.Helper()
+	running := serving{data: freeAddress(t), front: frontAt(t), admit: admitAt(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
+	ctx, stop := context.WithCancel(t.Context())
+	running.stop = stop
+	argv := append([]string{"serve", "--listen", running.data, "--front", running.front, "--admit", running.admit, "--table", table}, flags...)
+	go func() { running.done <- run(ctx, argv, strings.NewReader(""), io.Discard, running.errs) }()
+	t.Cleanup(func() {
+		stop()
+		<-running.done
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if accepting(running.control, running.data) {
+			return running
+		}
+		select {
+		case code := <-running.done:
+			running.done <- code
+			t.Fatalf("serve exited %d before its control socket answered: %s", code, running.errs)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	t.Fatalf("serve never answered on %s", running.control)
+	return running
+}
+
+func (s serving) ask(t *testing.T, host string) (int, string, router.Kind) {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodGet, "http://"+s.data+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = host
+	said, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET %s: %v", host, err)
+	}
+	defer said.Body.Close()
+	body, _ := io.ReadAll(said.Body)
+	return said.StatusCode, string(body), router.Kind(said.Header.Get(router.HeaderRouter))
+}
+
+func TestServeAnswersEachHostnameItsTableClaimsAndNamesTheBox(t *testing.T) {
+	web := backend(t, "web")
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
+
+	if status, body, named := running.ask(t, "shop.example.com"); status != http.StatusOK || body != "web" || named != boxapi.SwitchboardRouter {
+		t.Errorf("shop.example.com answered %d %q naming %q, want the app's 200 naming %s", status, body, named, boxapi.SwitchboardRouter)
+	}
+	if status, _, named := running.ask(t, "unclaimed.example.com"); status != http.StatusNotFound || named != boxapi.SwitchboardRouter {
+		t.Errorf("an unclaimed hostname answered %d naming %q, want a 404 naming %s", status, named, boxapi.SwitchboardRouter)
+	}
+}
+
+func TestServeTrustsWhatArrivesOverTheFrontSocketAndNothingElse(t *testing.T) {
+	seen := make(chan string, 2)
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Get("X-Forwarded-Proto")
+	}))
+	t.Cleanup(upstream.Close)
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}))
+	dialer := &net.Dialer{}
+	fronting := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return dialer.DialContext(ctx, "unix", running.front)
+		},
+	}}
+
+	for what, client := range map[string]*http.Client{"http": http.DefaultClient, "https": fronting} {
+		request, err := http.NewRequest(http.MethodGet, "http://"+running.data+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Host = "shop.example.com"
+		request.Header.Set("X-Forwarded-Proto", "https")
+		said, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = said.Body.Close()
+		if proto := <-seen; proto != what {
+			t.Errorf("a request that said it forwarded https reached the app as %q, want %q: only what arrives over the front socket is the front proxy's, whatever address it was recreated at", proto, what)
+		}
+	}
+}
+
+func TestServeAnswersTheFrontProxysAdmissionOnASocketOfItsOwn(t *testing.T) {
+	web := backend(t, "web")
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
+	asking := func(client *http.Client, at string) (int, string) {
+		t.Helper()
+		request, err := http.NewRequest(http.MethodGet, at+boxapi.AdmitPath+"?"+boxapi.AdmitField+"=shop.example.com", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Host = "shop.example.com"
+		said, err := client.Do(request)
+		if err != nil {
+			t.Fatalf("ask %s: %v", at, err)
+		}
+		defer said.Body.Close()
+		body, err := io.ReadAll(said.Body)
+		if err != nil {
+			t.Fatalf("read what %s answered: %v", at, err)
+		}
+		return said.StatusCode, string(body)
+	}
+	over := func(socket string) *http.Client {
+		return &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+		}}}
+	}
+
+	if status, _ := asking(over(running.admit), "http://switchboard"); status != http.StatusOK {
+		t.Errorf("the admit socket answered the front proxy %d for a claimed hostname, want 200", status)
+	}
+	if status, body := asking(http.DefaultClient, "http://"+running.data); status != http.StatusOK || body != "web" {
+		t.Errorf("the data listener answered %d %q for the admit path on a claimed hostname, want it forwarded to web like any other path: a forwarded request must never reach the admission", status, body)
+	}
+	if status, body := asking(over(running.front), "http://switchboard"); status != http.StatusOK || body != "web" {
+		t.Errorf("the front socket answered %d %q for the admit path on a claimed hostname, want it forwarded to web like any other path: a forwarded request must never reach the admission", status, body)
+	}
+	if status, _ := asking(over(running.control), "http://switchboard"); status/100 == 2 {
+		t.Errorf("the control socket answered %d for the admit path, want it to serve control alone", status)
+	}
+	info, err := os.Stat(running.admit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Errorf("the admit socket is mode %v, want 0600: whoever can connect to it is answered as the front proxy", mode)
+	}
+}
+
+func TestServeRefusesAnAdmitSocketItCannotTake(t *testing.T) {
+	controlAt(t)
+
+	var errs strings.Builder
+	unreachable := filepath.Join(t.TempDir(), "absent", "admit.sock")
+	if code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil), "--admit", unreachable}, strings.NewReader(""), io.Discard, &errs); code != exitRefused {
+		t.Errorf("serve over an admit socket it cannot create = %d, %q, want %d", code, errs.String(), exitRefused)
+	}
+}
+
+func TestTheControlAndFrontSocketsAreTheServingUsersAlone(t *testing.T) {
+	running := served(t, tableFile(t, nil))
+
+	for socket, why := range map[string]string{
+		running.control: "whoever can connect to it can reroute every hostname on the box",
+		running.front:   "whoever can connect to it is trusted to say who the client was",
+	} {
+		info, err := os.Stat(socket)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode := info.Mode().Perm(); mode != 0o600 {
+			t.Errorf("%s is mode %v, want 0600: %s", socket, mode, why)
+		}
+	}
+}
+
+func TestServeRefusesToTakeTheControlSocketFromASwitchboardStillAnsweringOnIt(t *testing.T) {
+	running := served(t, tableFile(t, nil))
+
+	var errs strings.Builder
+	code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)}, strings.NewReader(""), io.Discard, &errs)
+	if code != exitRefused {
+		t.Errorf("a second serve on %s = %d, want %d: it would unlink the socket the first answers on and leave it unreachable", running.control, code, exitRefused)
+	}
+	if code, _, errs := ran(t, "upstreams"); code != 0 {
+		t.Errorf("the first switchboard answered upstreams = %d, %q after the second was refused, want it still reachable", code, errs)
+	}
+}
+
+func TestOfServesStartedTogetherOnOneControlSocketExactlyOneTakesIt(t *testing.T) {
+	control := controlAt(t)
+	table := tableFile(t, nil)
+	ctx, stop := context.WithCancel(t.Context())
+	const racing = 16
+	exited := make(chan int, racing)
+	var errs [racing]strings.Builder
+	for at := range racing {
+		argv := []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", table}
+		go func() { exited <- run(ctx, argv, strings.NewReader(""), io.Discard, &errs[at]) }()
+	}
+	refused := 0
+	t.Cleanup(func() {
+		stop()
+		for range racing - refused {
+			<-exited
+		}
+	})
+
+	for refused < racing-1 {
+		select {
+		case code := <-exited:
+			refused++
+			if code != exitRefused {
+				t.Errorf("a serve that lost the control socket exited %d, want %d", code, exitRefused)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%d of %d serves started together are still serving on one control socket, want exactly one", racing-refused, racing)
+		}
+	}
+	if !controlAnswers(control, 5*time.Second) {
+		t.Fatalf("the serve that kept the control socket never answered on %s once the other %d were refused", control, racing-1)
+	}
+	if code, _, errs := ran(t, "upstreams"); code != 0 {
+		t.Errorf("the serve that kept the control socket answered upstreams = %d, %q, want it reachable", code, errs)
+	}
+}
+
+func controlAnswers(control string, within time.Duration) bool {
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if conn, err := net.Dial("unix", control); err == nil {
+			_ = conn.Close()
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
+}
+
+func TestServeAnswersItsControlSocketOnlyOnceEveryListenerTakesConnections(t *testing.T) {
+	https := freeAddress(t)
+	running := serving{data: freeAddress(t), front: frontAt(t), admit: admitAt(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
+	ctx, stop := context.WithCancel(t.Context())
+	argv := []string{"serve", "--listen", running.data, "--front", running.front, "--admit", running.admit, "--table", tableFile(t, nil), "--https-listen", https}
+	go func() { running.done <- run(ctx, argv, strings.NewReader(""), io.Discard, running.errs) }()
+	t.Cleanup(func() {
+		stop()
+		<-running.done
+	})
+
+	if !controlAnswers(running.control, 5*time.Second) {
+		t.Fatalf("serve never answered on %s: %s", running.control, running.errs)
+	}
+	for _, listener := range [][2]string{{"tcp", running.data}, {"unix", running.front}, {"unix", running.admit}, {"tcp", https}} {
+		network, address := listener[0], listener[1]
+		conn, err := net.Dial(network, address)
+		if err != nil {
+			t.Errorf("%s refused a connection once the control socket answered: %v; whoever waits on the control socket is told the switchboard is up", address, err)
+			continue
+		}
+		_ = conn.Close()
+	}
+}
+
+func TestServeReplacesASocketNothingAnswersOn(t *testing.T) {
+	control := controlAt(t)
+	stale, err := net.Listen("unix", control)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale.(*net.UnixListener).SetUnlinkOnClose(false)
+	_ = stale.Close()
+
+	web := backend(t, "web")
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
+	if status, body, _ := running.ask(t, "shop.example.com"); status != http.StatusOK || body != "web" {
+		t.Errorf("a switchboard started over a dead socket answered %d %q, want it serving", status, body)
+	}
+}
+
+func TestServeHearsARelayingPeerOnTheSchemeAndNeverOnTheClient(t *testing.T) {
+	seen := make(chan http.Header, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Clone()
+	}))
+	t.Cleanup(upstream.Close)
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}), "--relay", "127.0.0.1")
+
+	request, err := http.NewRequest(http.MethodGet, "http://"+running.data+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "shop.example.com"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	request.Header.Set("X-Forwarded-For", "6.6.6.6")
+	said, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = said.Body.Close()
+	heard := <-seen
+	if proto, client := heard.Get("X-Forwarded-Proto"), heard.Get("X-Forwarded-For"); proto != "https" || client != "127.0.0.1" {
+		t.Errorf("the app heard proto %q for client %q, want https for 127.0.0.1: a relaying peer is heard on the scheme and never on the client", proto, client)
+	}
+}
+
+func TestARelayedNetworkIsTheOneTheSwitchboardIsNamedOnNeverTheOneItsDefaultRouteLeavesBy(t *testing.T) {
+	const relayed, app = "ocel", "ocel--shop--production"
+	addresses := func() ([]net.Addr, error) {
+		return []net.Addr{
+			&net.IPNet{IP: net.ParseIP("127.0.0.1"), Mask: net.CIDRMask(8, 32)},
+			&net.IPNet{IP: net.ParseIP("172.19.0.2"), Mask: net.CIDRMask(16, 32)},
+			&net.IPNet{IP: net.ParseIP("172.21.0.2"), Mask: net.CIDRMask(16, 32)},
+		}, nil
+	}
+	resolve := func(_ context.Context, name string) ([]netip.Addr, error) {
+		switch name {
+		case boxapi.Switchboard + "." + relayed:
+			return []netip.Addr{netip.MustParseAddr("172.19.0.2")}, nil
+		case boxapi.Switchboard + "." + app:
+			return []netip.Addr{netip.MustParseAddr("172.21.0.2")}, nil
+		default:
+			return nil, fmt.Errorf("no such host %s", name)
+		}
+	}
+	got, err := networkPrefixes(t.Context(), relayed, resolve, addresses)
+	if err != nil {
+		t.Fatalf("networkPrefixes() = %v", err)
+	}
+	if want := []netip.Prefix{netip.MustParsePrefix("172.19.0.0/16")}; !slices.Equal(got, want) {
+		t.Errorf("networkPrefixes(ocel) = %v, want %v: an app network the switchboard joins may be the one its default route leaves by, and every app container on it would be heard on the scheme it claims", got, want)
+	}
+}
+
+func TestARelayedNetworkTheSwitchboardHasNoAddressOnIsRefused(t *testing.T) {
+	addresses := func() ([]net.Addr, error) {
+		return []net.Addr{&net.IPNet{IP: net.ParseIP("172.21.0.2"), Mask: net.CIDRMask(16, 32)}}, nil
+	}
+	for name, resolve := range map[string]func(context.Context, string) ([]netip.Addr, error){
+		"a name nothing answers for": func(context.Context, string) ([]netip.Addr, error) {
+			return nil, errors.New("no such host")
+		},
+		"a name answered with an address assigned elsewhere": func(context.Context, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("172.19.0.9")}, nil
+		},
+	} {
+		if got, err := networkPrefixes(t.Context(), "ocel", resolve, addresses); err == nil {
+			t.Errorf("%s: networkPrefixes() = %v, want a refusal: relaying from a network this switchboard is not on hears nobody it should", name, got)
+		}
+	}
+}
+
+func TestServeAnswersATunneledHostnameOnItsTunnelListenerAndNowhereElse(t *testing.T) {
+	web := backend(t, "web")
+	table := documentAt(t, []byte(`{"grace":"30s",`+
+		`"claims":[{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production"}],`+
+		`"routes":[{"owner":"ocel--shop--production","pointer":"@production","app":"web","upstream":"`+web+`"}],`+
+		`"tunneled":[{"hostname":"shop.example.com","owner":"ocel--shop--production"}]}`))
+	tunnel := freeAddress(t)
+	running := served(t, table, "--tunnel-listen", tunnel)
+
+	request, err := http.NewRequest(http.MethodGet, "http://"+tunnel+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "shop.example.com"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	said, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(said.Body)
+	_ = said.Body.Close()
+	if said.StatusCode != http.StatusOK || string(body) != "web" {
+		t.Errorf("the tunnel listener answered shop.example.com %d %q, want it forwarded to web", said.StatusCode, body)
+	}
+	if status, _, _ := running.ask(t, "shop.example.com"); status != http.StatusMisdirectedRequest {
+		t.Errorf("the data listener answered shop.example.com %d, want 421: a tunneled hostname is reached through the tunnel only", status)
+	}
+}
+
+func TestServeStampsHTTPSOnItsHTTPSListenerWhateverThePeerSends(t *testing.T) {
+	seen := make(chan http.Header, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Clone()
+	}))
+	t.Cleanup(upstream.Close)
+	https := freeAddress(t)
+	served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}), "--https-listen", https, "--relay", "127.0.0.1")
+
+	request, err := http.NewRequest(http.MethodGet, "http://"+https+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "shop.example.com"
+	request.Header.Set("X-Forwarded-Proto", "http")
+	request.Header.Set("X-Forwarded-Host", "bank.example.com")
+	request.Header.Set("X-Forwarded-For", "6.6.6.6")
+	request.Header.Set("X_Forwarded_Proto", "http")
+	request.Header.Set("X_Forwarded_Host", "bank.example.com")
+	request.Header.Set("X-Real-Ip", "6.6.6.6")
+	request.Header.Set("True-Client-Ip", "6.6.6.6")
+	said, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = said.Body.Close()
+	heard := <-seen
+	for header, want := range map[string]string{
+		"X-Forwarded-Proto": "https",
+		"X-Forwarded-Host":  "shop.example.com",
+		"X-Forwarded-For":   "127.0.0.1",
+		"X_Forwarded_Proto": "",
+		"X_Forwarded_Host":  "",
+		"X-Real-Ip":         "",
+		"True-Client-Ip":    "",
+	} {
+		if got := heard.Get(header); got != want {
+			t.Errorf("the app heard %s %q over the https listener, want %q: a peer there is stamped https for the Host it asked and heard on nothing it says, even one the board relays from", header, got, want)
+		}
+	}
+}
+
+func interfaces(cidrs ...string) func() ([]net.Addr, error) {
+	return func() ([]net.Addr, error) {
+		var addrs []net.Addr
+		for _, spelled := range cidrs {
+			ip, network, err := net.ParseCIDR(spelled)
+			if err != nil {
+				return nil, err
+			}
+			addrs = append(addrs, &net.IPNet{IP: ip, Mask: network.Mask})
+		}
+		return addrs, nil
+	}
+}
+
+func TestTheHTTPSListenerOnANetworkBindsOnlyTheSwitchboardsAddressOnIt(t *testing.T) {
+	const relayed = "ocel"
+	addresses := interfaces("127.0.0.1/8", "172.19.0.2/16", "10.0.1.7/24", "fd00:c0::7/64")
+	resolve := func(_ context.Context, name string) ([]netip.Addr, error) {
+		switch name {
+		case boxapi.Switchboard + ".coolify":
+			return []netip.Addr{netip.MustParseAddr("10.0.1.7"), netip.MustParseAddr("fd00:c0::7")}, nil
+		case boxapi.Switchboard + "." + relayed:
+			return []netip.Addr{netip.MustParseAddr("172.19.0.2")}, nil
+		default:
+			return nil, fmt.Errorf("no such host %s", name)
+		}
+	}
+	got, err := listenerBinds(t.Context(), "--https-listen", "coolify:8443", resolve, addresses)
+	if err != nil {
+		t.Fatalf("httpsBinds() = %v", err)
+	}
+	if want := []string{"10.0.1.7:8443", "[fd00:c0::7]:8443"}; !slices.Equal(got, want) {
+		t.Errorf("httpsBinds(coolify:8443) = %v, want %v: the listener that stamps https is reached from the network the user's proxy sits on and from no other the switchboard joins", got, want)
+	}
+}
+
+func TestTheHTTPSListenerAtAnAddressBindsThatAddressAsSpelled(t *testing.T) {
+	unasked := func(context.Context, string) ([]netip.Addr, error) {
+		t.Fatal("an address was resolved as a network")
+		return nil, nil
+	}
+	for _, spelled := range []string{"127.0.0.1:8443", "[::1]:8443", "10.0.1.7:8443"} {
+		got, err := listenerBinds(t.Context(), "--https-listen", spelled, unasked, interfaces())
+		if err != nil || !slices.Equal(got, []string{spelled}) {
+			t.Errorf("httpsBinds(%s) = %v, %v; want it bound as spelled", spelled, got, err)
+		}
+	}
+}
+
+func TestTheHTTPSListenerRefusesAnAddressThatBindsEveryInterface(t *testing.T) {
+	unasked := func(context.Context, string) ([]netip.Addr, error) {
+		t.Fatal("an address was resolved as a network")
+		return nil, nil
+	}
+	for _, spelled := range []string{":8443", "0.0.0.0:8443", "[::]:8443", "[::ffff:0.0.0.0]:8443", "[::%lo]:8443"} {
+		got, err := listenerBinds(t.Context(), "--https-listen", spelled, unasked, interfaces("127.0.0.1/8", "172.19.0.2/16", "10.0.1.7/24"))
+		if err == nil {
+			t.Errorf("httpsBinds(%s) = %v, want a refusal: every interface includes each project network the switchboard joins, and every app container there would be stamped https", spelled, got)
+			continue
+		}
+		if !strings.Contains(err.Error(), "--https-listen") {
+			t.Errorf("httpsBinds(%s) = %v, want the flag named", spelled, err)
+		}
+	}
+}
+
+func TestTheHTTPSListenerRefusesANetworkTheSwitchboardHasNoAddressOn(t *testing.T) {
+	addresses := interfaces("172.21.0.2/16")
+	for name, resolve := range map[string]func(context.Context, string) ([]netip.Addr, error){
+		"a name nothing answers for": func(context.Context, string) ([]netip.Addr, error) {
+			return nil, errors.New("no such host")
+		},
+		"a name answered with an address assigned elsewhere": func(context.Context, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("10.0.1.9")}, nil
+		},
+	} {
+		got, err := listenerBinds(t.Context(), "--https-listen", "coolify:8443", resolve, addresses)
+		if err == nil {
+			t.Errorf("%s: httpsBinds() = %v, want a refusal: a listener bound anywhere else would stamp https for peers the user's proxy is not", name, got)
+			continue
+		}
+		if !strings.Contains(err.Error(), "--https-listen") || !strings.Contains(err.Error(), boxapi.Switchboard+".coolify") {
+			t.Errorf("%s: httpsBinds() = %v, want the flag and the name it resolved named", name, err)
+		}
+	}
+}
+
+func TestServeRefusesATableAFrontSocketOrARelayItCannotTake(t *testing.T) {
+	controlAt(t)
+	for what, argv := range map[string][]string{
+		"a table that is not there":                   {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
+		"a table it cannot render":                    {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
+		"a front socket it cannot open":               {"serve", "--listen", freeAddress(t), "--front", filepath.Join(t.TempDir(), "absent", "front.sock"), "--admit", admitAt(t), "--table", tableFile(t, nil)},
+		"no front socket":                             {"serve", "--listen", freeAddress(t), "--admit", admitAt(t), "--table", tableFile(t, nil)},
+		"no admit socket":                             {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil)},
+		"a relay that is no prefix":                   {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--relay", "ocel-proxy"},
+		"a relayed network unnamed":                   {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--relay-network", ""},
+		"an https listener with no port":              {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--https-listen", "coolify"},
+		"an https listener on a network it is not on": {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--https-listen", "ocel-no-such-network.invalid:8443"},
+		"an https listener it cannot bind":            {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--https-listen", "192.0.2.1:8443"},
+		"a tunnel listener on every interface":        {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--tunnel-listen", ":8444"},
+		"no listen address":                           {"serve", "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)},
+		"no table":                                    {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t)},
+	} {
+		if code, _, errs := ran(t, argv...); code != exitRefused {
+			t.Errorf("serve with %s = %d, %q, want %d", what, code, errs, exitRefused)
+		}
+	}
+}
+
+func TestLoadSwapsTheTableTheSwitchboardServesAndRefusesOneItCannotRead(t *testing.T) {
+	blue, green := backend(t, "blue"), backend(t, "green")
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+
+	if code, out, errs := ran(t, "load", tableFile(t, map[string]string{"shop.example.com": green})); code != 0 {
+		t.Fatalf("load = %d, %q %q", code, out, errs)
+	}
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "green" {
+		t.Errorf("after the load shop.example.com answered %q, want green", body)
+	}
+	code, _, errs := ran(t, "load", documentAt(t, []byte(`{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"nowhere"}]}`)))
+	if code != exitRefused || !strings.Contains(errs, "nowhere") {
+		t.Errorf("loading a table routing to no address = %d, %q, want %d naming what it could not dial", code, errs, exitRefused)
+	}
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "green" {
+		t.Errorf("after a refused load shop.example.com answered %q, want green still serving", body)
+	}
+}
+
+func TestLoadTakesATablePathRelativeToWhereItRan(t *testing.T) {
+	green := backend(t, "green")
+	running := served(t, tableFile(t, nil))
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "routing.json"), []byte(`{"grace":"1s","claims":[{"owner":"o","hostname":"shop.example.com","pointer":"p"}],"routes":[{"owner":"o","pointer":"p","app":"web","upstream":"`+green+`"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	if code, out, errs := ran(t, "load", "routing.json"); code != 0 {
+		t.Fatalf("load routing.json = %d, %q %q", code, out, errs)
+	}
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "green" {
+		t.Errorf("after loading a relative path shop.example.com answered %q, want green", body)
+	}
+}
+
+func TestCutoverSwitchesThenPrintsEachRetireeTheMomentItDrains(t *testing.T) {
+	blue, green := backend(t, "blue"), backend(t, "green")
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+
+	code, out, errs := ran(t, "cutover", "--drain-timeout", "5", "--retire", "tcp/"+blue, tableFile(t, map[string]string{"shop.example.com": green}))
+	if code != 0 {
+		t.Fatalf("cutover = %d, %q %q", code, out, errs)
+	}
+	if out != boxapi.Drained+" "+blue+"\n" {
+		t.Errorf("cutover printed %q, want %q: the release reads each retiree's outcome off these lines", out, boxapi.Drained+" "+blue+"\n")
+	}
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "green" {
+		t.Errorf("after the cutover shop.example.com answered %q, want green", body)
+	}
+	if code, out, errs := ran(t, "cutover", tableFile(t, map[string]string{"shop.example.com": blue})); code != 0 || out != "" {
+		t.Errorf("a cutover retiring nothing = %d, %q %q, want it silent", code, out, errs)
+	}
+}
+
+func TestACutoverWhoseCeilingPassesPrintsWhatTheRetireeStillHadInFlightAndSucceeds(t *testing.T) {
+	release := make(chan struct{})
+	arrived := make(chan struct{}, 1)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		arrived <- struct{}{}
+		<-release
+		_, _ = io.WriteString(w, "slow")
+	}))
+	t.Cleanup(slow.Close)
+	t.Cleanup(func() { close(release) })
+	blue, green := strings.TrimPrefix(slow.URL, "http://"), backend(t, "green")
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+	go func() {
+		request, _ := http.NewRequest(http.MethodGet, "http://"+running.data+"/", nil)
+		request.Host = "shop.example.com"
+		if said, err := http.DefaultClient.Do(request); err == nil {
+			_ = said.Body.Close()
+		}
+	}()
+	<-arrived
+
+	code, out, errs := ran(t, "cutover", "--drain-timeout", "1", "--retire", blue, tableFile(t, map[string]string{"shop.example.com": green}))
+	if code != 0 {
+		t.Fatalf("a cutover whose drain expired = %d, %q, want it borne as a warning: the new release is serving", code, errs)
+	}
+	if want := boxapi.DrainExpired + " " + blue + " 1\n"; out != want {
+		t.Errorf("cutover printed %q, want %q", out, want)
+	}
+}
+
+func TestACutoverWhoseAnswerIsCutShortAfterADrainLineExitsRefused(t *testing.T) {
+	control := controlAt(t)
+	listener, err := net.Listen("unix", control)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, boxapi.Drained+" 127.0.0.1:1\n")
+		_ = http.NewResponseController(w).Flush()
+		panic(http.ErrAbortHandler)
+	}))
+	partial.Listener = listener
+	partial.Start()
+	t.Cleanup(partial.Close)
+
+	code, out, errs := ran(t, "cutover", "--drain-timeout", "5", "--retire", "127.0.0.1:1", "--retire", "127.0.0.1:2", tableFile(t, nil))
+	if code != exitRefused {
+		t.Errorf("a cutover whose answer stopped after one of two retirees = %d, %q %q, want %d: a partial drain report is not a finished cutover", code, out, errs, exitRefused)
+	}
+	if !strings.Contains(errs, "short") {
+		t.Errorf("the refusal read %q, want it to say the switchboard cut its answer short", errs)
+	}
+}
+
+func TestACutoverTheSwitchboardRefusesSwitchesNothing(t *testing.T) {
+	blue := backend(t, "blue")
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+
+	for what, argv := range map[string][]string{
+		"a table it cannot read":   {"cutover", "--drain-timeout", "5", "--retire", blue, documentAt(t, []byte(`{}`))},
+		"a retiree with no port":   {"cutover", "--drain-timeout", "5", "--retire", "blue", tableFile(t, nil)},
+		"a retiree and no ceiling": {"cutover", "--retire", blue, tableFile(t, nil)},
+		"no table":                 {"cutover"},
+		"two tables":               {"cutover", tableFile(t, nil), tableFile(t, nil)},
+	} {
+		if code, out, _ := ran(t, argv...); code != exitRefused || out != "" {
+			t.Errorf("a cutover with %s = %d, %q, want %d and nothing drained", what, code, out, exitRefused)
+		}
+	}
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "blue" {
+		t.Errorf("after the refused cutover shop.example.com answered %q, want blue still serving", body)
+	}
+}
+
+func TestIdleNamesOnlyTheTargetsNoRouteDialsAndNoCutoverIsDraining(t *testing.T) {
+	blue, green := backend(t, "blue"), backend(t, "green")
+	served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+
+	code, out, errs := ran(t, "idle", "tcp/"+blue, green)
+	if code != 0 {
+		t.Fatalf("idle = %d, %q", code, errs)
+	}
+	if out != green+"\n" {
+		t.Errorf("idle printed %q, want only %s: the routed upstream is serving", out, green)
+	}
+	if code, out, _ := ran(t, "idle", "blue"); code != exitRefused || out != "" {
+		t.Errorf("idle blue = %d, %q, want it refused: an address with no port keys nothing and would read as idle whatever listens on it", code, out)
+	}
+}
+
+func TestUpstreamsListsWhatEachUpstreamHasInFlight(t *testing.T) {
+	blue := backend(t, "blue")
+	served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+
+	code, out, errs := ran(t, "upstreams")
+	if code != 0 {
+		t.Fatalf("upstreams = %d, %q", code, errs)
+	}
+	var listed []switchboard.Upstream
+	if err := json.Unmarshal([]byte(out), &listed); err != nil {
+		t.Fatalf("upstreams printed %q: %v", out, err)
+	}
+	if !slices.Equal(listed, []switchboard.Upstream{{Address: blue}}) {
+		t.Errorf("upstreams listed %+v, want the one routed upstream with nothing in flight", listed)
+	}
+
+	served(t, tableFile(t, nil))
+	if code, out, _ := ran(t, "upstreams"); code != 0 || strings.TrimSpace(out) != "[]" {
+		t.Errorf("upstreams on a box routing nothing = %d, %q, want []", code, out)
+	}
+}
+
+func TestEveryVerbThatSpeaksToTheSwitchboardNamesTheSocketItCouldNotReach(t *testing.T) {
+	control := controlAt(t)
+	for _, argv := range [][]string{
+		{"upstreams"}, {"load", tableFile(t, nil)}, {"cutover", tableFile(t, nil)}, {"idle", "a:1"},
+	} {
+		code, _, errs := ran(t, argv...)
+		if code != exitRefused || !strings.Contains(errs, control) {
+			t.Errorf("%s with nothing serving = %d, %q, want %d naming %s", argv[0], code, errs, exitRefused, control)
+		}
+	}
+}
+
+func TestServeStopsOnItsContextAndLetsARequestInFlightFinishWithinTheGrace(t *testing.T) {
+	release := make(chan struct{})
+	arrived := make(chan struct{}, 1)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		arrived <- struct{}{}
+		<-release
+		_, _ = io.WriteString(w, "slow")
+	}))
+	t.Cleanup(slow.Close)
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(slow.URL, "http://")}))
+
+	answered := make(chan string, 1)
+	go func() {
+		request, _ := http.NewRequest(http.MethodGet, "http://"+running.data+"/", nil)
+		request.Host = "shop.example.com"
+		said, err := http.DefaultClient.Do(request)
+		if err != nil {
+			answered <- err.Error()
+			return
+		}
+		defer said.Body.Close()
+		body, _ := io.ReadAll(said.Body)
+		answered <- string(body)
+	}()
+	<-arrived
+	running.stop()
+	deadline := time.Now().Add(5 * time.Second)
+	for conn, err := net.Dial("tcp", running.data); err == nil; conn, err = net.Dial("tcp", running.data) {
+		_ = conn.Close()
+		if time.Now().After(deadline) {
+			t.Fatalf("serve still takes connections on %s five seconds after it was told to stop", running.data)
+		}
+	}
+	close(release)
+	if body := <-answered; body != "slow" {
+		t.Errorf("the request in flight when serve was told to stop answered %q, want its upstream's answer", body)
+	}
+	select {
+	case code := <-running.done:
+		running.done <- code
+		if code != 0 {
+			t.Errorf("serve exited %d on its context, want 0: %s", code, running.errs)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve never returned after its context ended")
+	}
+}
+
+func TestTheGateCallsATargetUpOnlyOnATwoHundredAndNamesTheOneThatWasNot(t *testing.T) {
+	var mu sync.Mutex
+	refusals := 2
+	warming := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if refusals > 0 {
+			refusals--
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(warming.Close)
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(down.Close)
+	up := strings.TrimPrefix(warming.URL, "http://")
+
+	if code, out, errs := ran(t, "gate", "--deploy-timeout", "5", up+"/up"); code != 0 || out != "204\n" {
+		t.Errorf("gating a target that warms up into a 204 = %d, %q %q, want it passed with the status it read", code, out, errs)
+	}
+	code, out, errs := ran(t, "gate", "--deploy-timeout", "1", up+"/up", strings.TrimPrefix(down.URL, "http://")+"/up")
+	if code != exitNotServingYet {
+		t.Errorf("gating a target answering 503 throughout = %d, %q, want %d", code, errs, exitNotServingYet)
+	}
+	if want := boxapi.Ungated + " " + strings.TrimPrefix(down.URL, "http://") + "/up\n"; !strings.HasSuffix(out, want) {
+		t.Errorf("the gate printed %q, want it to end naming the target that failed: %q", out, want)
+	}
+	if code, out, errs := ran(t, "gate", "--deploy-timeout", "1", "127.0.0.1:1/up"); code != exitSilent || !strings.Contains(out, boxapi.Ungated) {
+		t.Errorf("gating a target that never answers = %d, %q %q, want %d naming it ungated", code, out, errs, exitSilent)
+	}
+	for what, argv := range map[string][]string{
+		"no target":             {"gate", "--deploy-timeout", "1"},
+		"a target with no path": {"gate", "--deploy-timeout", "1", "127.0.0.1:1"},
+		"no window":             {"gate", "127.0.0.1:1/up"},
+	} {
+		if code, _, _ := ran(t, argv...); code != exitRefused {
+			t.Errorf("gating %s = %d, want the usage refusal", what, code)
+		}
+	}
+}
+
+func appAnswering(t *testing.T, statuses map[string]int, starting int) string {
+	t.Helper()
+	var mu sync.Mutex
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if starting > 0 {
+			starting--
+			w.Header().Set(originguard.AppUnansweredHeader, "true")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		status, named := statuses[r.URL.Path]
+		if !named {
+			status = http.StatusNotFound
+		}
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(server.Close)
+	return strings.TrimPrefix(server.URL, "http://")
+}
+
+func TestFindingAHealthPathWaitsOutTheRuntimeAndTakesTheFirstPathThatIsNotAbsent(t *testing.T) {
+	target := appAnswering(t, map[string]int{"/up": http.StatusMethodNotAllowed, "/healthz": http.StatusServiceUnavailable, "/": http.StatusOK}, 3)
+
+	code, out, errs := ran(t, "find-health-path", "--deploy-timeout", "5", target, "/up", "/health", "/healthz", "/")
+	if code != 0 {
+		t.Fatalf("finding a health path = %d, %q %q, want 0", code, out, errs)
+	}
+	want := boxapi.Answered + " /up 405\n" + boxapi.Answered + " /health 404\n" + boxapi.Answered + " /healthz 503\n"
+	if out != want {
+		t.Errorf("printed %q, want %q: a 503 the app gives means the path exists and is unhealthy, never that it is absent", out, want)
+	}
+}
+
+func TestFindingAHealthPathWhereEveryPathIsAbsentNamesWhatEachAnswered(t *testing.T) {
+	target := appAnswering(t, map[string]int{"/health": http.StatusMethodNotAllowed}, 0)
+
+	code, out, errs := ran(t, "find-health-path", "--deploy-timeout", "5", target, "/up", "/health", "/")
+	if code != exitNoHealthPath {
+		t.Errorf("finding a health path among absent ones = %d, %q, want %d", code, errs, exitNoHealthPath)
+	}
+	want := boxapi.Answered + " /up 404\n" + boxapi.Answered + " /health 405\n" + boxapi.Answered + " / 404\n"
+	if out != want {
+		t.Errorf("printed %q, want %q", out, want)
+	}
+}
+
+func TestFindingAHealthPathOnATargetThatNeverAnswersAppIsSilent(t *testing.T) {
+	starting := appAnswering(t, nil, 1<<30)
+	for _, target := range []string{"127.0.0.1:1", starting} {
+		if code, out, errs := ran(t, "find-health-path", "--deploy-timeout", "1", target, "/up", "/"); code != exitSilent || out != "" {
+			t.Errorf("finding a health path on %s = %d, %q %q, want %d with nothing answered", target, code, out, errs, exitSilent)
+		}
+	}
+	for what, argv := range map[string][]string{
+		"no path":            {"find-health-path", "--deploy-timeout", "1", "127.0.0.1:1"},
+		"no window":          {"find-health-path", "127.0.0.1:1", "/up"},
+		"a path off no root": {"find-health-path", "--deploy-timeout", "1", "127.0.0.1:1", "up"},
+	} {
+		if code, _, _ := ran(t, argv...); code != exitRefused {
+			t.Errorf("finding a health path with %s = %d, want the usage refusal", what, code)
+		}
+	}
+}
+
+func TestAVerbTheSwitchboardDoesNotKnowIsRefusedWithTheOnesItDoes(t *testing.T) {
+	for _, argv := range [][]string{{}, {"forget", "shop.example.com"}, {"config", "/"}, {"listeners"}} {
+		code, _, errs := ran(t, argv...)
+		if code != exitRefused {
+			t.Errorf("%v = %d, want the usage refusal", argv, code)
+		}
+		for _, verb := range []string{"serve", "load", "gate", "cutover", "idle", "upstreams", "leaf", "probe", "inodes", "answers", "find-health-path"} {
+			if !strings.Contains(errs, verb) {
+				t.Errorf("the usage %q never names %s", errs, verb)
+			}
+		}
+	}
+}

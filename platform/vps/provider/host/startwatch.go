@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -18,19 +21,19 @@ var unstartedStatuses = []string{"restarting", "exited", "dead"}
 func renderStartWatch(names []string, probe []string) string {
 	var checks strings.Builder
 	for _, name := range names {
-		checks.WriteString("\tcrashed " + quoted(name) + "\n")
+		checks.WriteString("\tcrashed " + shell.Quote(name) + "\n")
 	}
-	return "sh -c " + quoted(words(probe)+" &\n"+
+	return "sh -c " + shell.Quote(shell.Words(probe)+" &\n"+
 		"probe=$!\n"+
 		"crashed() {\n"+
-		"\tset -- \"$1\" $(docker inspect --type container --format "+quoted(restartFormat)+" \"$1\" 2>/dev/null)\n"+
+		"\tset -- \"$1\" $(docker inspect --type container --format "+shell.Quote(restartFormat)+" \"$1\" 2>/dev/null)\n"+
 		"\tcase $2 in\n"+
 		"\texited | dead) ;;\n"+
 		"\trestarting) [ \"${3:-0}\" -ge "+strconv.Itoa(crashLoopRestarts)+" ] || return 0 ;;\n"+
 		"\t*) return 0 ;;\n"+
 		"\tesac\n"+
 		"\tkill \"$probe\" 2>/dev/null\n"+
-		"\tprintf '%s %s\\n' "+quoted(unstartedMarker)+" \"$1\"\n"+
+		"\tprintf '%s %s\\n' "+shell.Quote(unstartedMarker)+" \"$1\"\n"+
 		"\texit 1\n"+
 		"}\n"+
 		"while kill -0 \"$probe\" 2>/dev/null; do\n"+
@@ -60,15 +63,15 @@ func isUnstarted(state string) bool {
 }
 
 func renderLastRunLogs(name string) string {
-	return "started=$(docker inspect --type container --format '{{.State.StartedAt}}' " + quoted(name) + ") && " +
-		"docker logs --since \"$started\" --tail " + appLogTail + " " + quoted(name) + " 2>&1 || true"
+	return "started=$(docker inspect --type container --format '{{.State.StartedAt}}' " + shell.Quote(name) + ") && " +
+		"docker logs --since \"$started\" --tail " + appLogTail + " " + shell.Quote(name) + " 2>&1 || true"
 }
 
-func (h *Host) describeUnstarted(ctx context.Context, app, name, state string, elevation acting) string {
-	logs := h.readEvidence(ctx, renderLastRunLogs(name), elevation)
+func (h *Host) describeUnstarted(ctx context.Context, app, name, state string, elevation ssh.Acting) string {
+	logs := h.Evidence(ctx, elevation, renderLastRunLogs(name))
 	ran := "its last run, last " + appLogTail + " lines"
 	if logs == "" {
-		logs = h.readEvidence(ctx, logCommand(name), elevation)
+		logs = h.Evidence(ctx, elevation, logCommand(name))
 		ran = "the last " + appLogTail + " lines"
 	}
 	if logs == "" {

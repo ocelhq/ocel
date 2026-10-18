@@ -5,18 +5,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestAnEngineThatCannotBeReachedIsReportedRatherThanReadAsNoTrouble(t *testing.T) {
 	t.Parallel()
 
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, dockerReach) {
-			return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, ssh.DockerReach) {
+			return ssh.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	_, err := box.host().FrontProxy().Certificate(context.Background(), "shop.example.com")
 	if err == nil {

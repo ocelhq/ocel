@@ -9,19 +9,20 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func noted(box *bench, answer string) {
 	imaged := box.answer
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(HandedNote(environment.TierProduction, physical))) && strings.Contains(command, "echo "+handedUnknown) {
-			return session.Result{Stdout: answer}, true
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote(HandedNote(environment.TierProduction, physical))) && strings.Contains(command, "echo "+handedUnknown) {
+			return ssh.Result{Stdout: answer}, true
 		}
 		if imaged != nil {
 			return imaged(command)
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 }
 
@@ -31,9 +32,9 @@ func TestADeployNotesTheNamesItHandedBeforeTheRunAndATakeDownForgetsThem(t *test
 	spec := valued()
 	box := runningWith(t, spec)
 	note := HandedNote(spec.Tier, spec.Name)
-	wrote := box.at("install -D -m 0600 /dev/stdin " + quoted(note))
-	handed := box.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Tier, spec.Name)))
-	ran := box.at(quoted("run") + " " + quoted("--detach"))
+	wrote := box.at("install -D -m 0600 /dev/stdin " + shell.Quote(note))
+	handed := box.at("install -m 0600 /dev/stdin " + shell.Quote(EnvFile(spec.Tier, spec.Name)))
+	ran := box.at(shell.Quote("run") + " " + shell.Quote("--detach"))
 	if wrote < 0 || handed < 0 || ran < 0 || wrote < handed || wrote > ran {
 		t.Fatalf("the note was written at %d, the values at %d and the container run at %d: the note is what a later promotion reads once the container is gone, so it is written before there is a container to lose", wrote, handed, ran)
 	}
@@ -60,7 +61,7 @@ func TestADeployNotesTheNamesItHandedBeforeTheRunAndATakeDownForgetsThem(t *test
 	if err := box.host().TakeDown(context.Background(), spec.Tier, spec.Name); err != nil {
 		t.Fatalf("TakeDown() = %v", err)
 	}
-	if box.at("rm -f "+quoted(note)) < 0 {
+	if box.at("rm -f "+shell.Quote(note)) < 0 {
 		t.Errorf("taking the container down left its note behind: %v", box.commands())
 	}
 }
@@ -84,7 +85,7 @@ func TestAPromotionOfAnAppHandedABakedValueWhoseContainerIsGoneIsRefusedByName(t
 	if strings.Contains(err.Error(), "DATABASE_URL") {
 		t.Errorf("the refusal reads %q and names a value the container reads live, which no promotion needs to pass", err)
 	}
-	if box.at(quoted("run")+" "+quoted("--detach")) >= 0 {
+	if box.at(shell.Quote("run")+" "+shell.Quote("--detach")) >= 0 {
 		t.Errorf("a refused promotion still ran a container: %v", box.commands())
 	}
 }
@@ -103,7 +104,7 @@ func TestAPromotionOfALiveOnlyAppWhoseContainerIsGoneRunsItAgainWithTheManifestI
 		t.Fatalf("RunContainer() of an app that reads everything live = %v, want it running again: the values reach it from the box, not from the deploy", err)
 	}
 	command := ranContainer(t, box)
-	if !strings.Contains(command, quoted("--mount")) || !strings.Contains(command, LiveSocketDir) {
+	if !strings.Contains(command, shell.Quote("--mount")) || !strings.Contains(command, LiveSocketDir) {
 		t.Errorf("the re-created container runs %q and is handed no socket to read its values through", command)
 	}
 	file := wrote(t, box, EnvFile(spec.Tier, spec.Name))
@@ -129,7 +130,7 @@ func TestAPromotionOfAContainerThisBoxHasNoNoteForIsRefusedRatherThanGuessedEmpt
 	if !strings.Contains(err.Error(), "no note") || !strings.Contains(err.Error(), "ocel deploy") {
 		t.Errorf("the refusal reads %q and does not say the note is missing or what to run", err)
 	}
-	if box.at(quoted("run")+" "+quoted("--detach")) >= 0 {
+	if box.at(shell.Quote("run")+" "+shell.Quote("--detach")) >= 0 {
 		t.Errorf("a refused promotion still ran a container: %v", box.commands())
 	}
 }

@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const sensitiveValue = "sk-live-0123456789"
@@ -48,7 +49,7 @@ func wrote(t *testing.T, rig *bench, path string) string {
 	rig.mu.Lock()
 	defer rig.mu.Unlock()
 	for at, command := range rig.ran {
-		if strings.Contains(command, "install") && strings.Contains(command, quoted(path)) {
+		if strings.Contains(command, "install") && strings.Contains(command, shell.Quote(path)) {
 			return rig.fed[at]
 		}
 	}
@@ -64,7 +65,7 @@ func TestAContainerIsHandedItsValuesInAFileRatherThanOnTheCommandLine(t *testing
 	rig := runningWith(t, spec)
 
 	command := ranContainer(t, rig)
-	if !strings.Contains(command, quoted("--env-file")+" "+quoted(path)) {
+	if !strings.Contains(command, shell.Quote("--env-file")+" "+shell.Quote(path)) {
 		t.Fatalf("starting a container runs %q, which hands it no env file", command)
 	}
 	if !strings.HasPrefix(path, StateDir(spec.Tier)+"/") {
@@ -78,14 +79,14 @@ func TestAContainerIsHandedItsValuesInAFileRatherThanOnTheCommandLine(t *testing
 }
 
 func denyingDocker(rig *bench, served string) {
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, dockerReach) {
-			return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, ssh.DockerReach) {
+			return ssh.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
 		}
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted(servingSelectors())) {
-			return session.Result{Stdout: served + "\n"}, true
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(servingSelectors())) {
+			return ssh.Result{Stdout: served + "\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 }
 
@@ -116,7 +117,7 @@ func TestTheEnvFileIsWrittenAtSixHundredToTheDeployPrincipalWithNoElevation(t *t
 
 	written := ""
 	for _, command := range rig.commands() {
-		if strings.Contains(command, "install") && strings.Contains(command, quoted(path)) {
+		if strings.Contains(command, "install") && strings.Contains(command, shell.Quote(path)) {
 			written = command
 		}
 	}
@@ -141,7 +142,7 @@ func TestTheEnvFileIsTakenBackOnTheSuccessPath(t *testing.T) {
 	path := EnvFile(spec.Tier, spec.Name)
 	rig := runningWith(t, spec)
 
-	taken, ran := rig.at("rm -f "+quoted(path)), rig.at(quoted("--env-file"))
+	taken, ran := rig.at("rm -f "+shell.Quote(path)), rig.at(shell.Quote("--env-file"))
 	if taken < 0 {
 		t.Fatalf("a deploy that finished left %s in place: %v", path, rig.commands())
 	}
@@ -159,20 +160,20 @@ func TestTheEnvFileIsTakenBackWhenTheContainerCannotBeStarted(t *testing.T) {
 	spec := valued()
 	path := EnvFile(spec.Tier, spec.Name)
 	rig := machine(nil)
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted(servingSelectors())) {
-			return session.Result{Stdout: "false \n"}, true
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(servingSelectors())) {
+			return ssh.Result{Stdout: "false \n"}, true
 		}
-		if strings.Contains(command, quoted("--detach")) {
-			return session.Result{Code: 125, Stderr: "no such image"}, true
+		if strings.Contains(command, shell.Quote("--detach")) {
+			return ssh.Result{Code: 125, Stderr: "no such image"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	_, err := rig.host().RunContainer(context.Background(), spec)
 	if err == nil {
 		t.Fatal("RunContainer() over a daemon that refused the run = nil")
 	}
-	if rig.at("rm -f "+quoted(path)) < 0 {
+	if rig.at("rm -f "+shell.Quote(path)) < 0 {
 		t.Fatalf("a deploy that fell over left %s in place with every value in it: %v", path, rig.commands())
 	}
 	for name, value := range spec.Env {
@@ -188,14 +189,14 @@ func TestTheEnvFileIsTakenBackWhenTheWriteItselfFallsOver(t *testing.T) {
 	spec := valued()
 	path := EnvFile(spec.Tier, spec.Name)
 	rig := machine(nil)
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted(servingSelectors())) {
-			return session.Result{Stdout: "false \n"}, true
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(servingSelectors())) {
+			return ssh.Result{Stdout: "false \n"}, true
 		}
 		if strings.Contains(command, "install -m 0600") {
-			return session.Result{Code: 1, Stderr: "no space left on device"}, true
+			return ssh.Result{Code: 1, Stderr: "no space left on device"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if _, err := rig.host().RunContainer(context.Background(), spec); err == nil {
 		t.Fatal("RunContainer() over a write that fell over = nil")
@@ -203,7 +204,7 @@ func TestTheEnvFileIsTakenBackWhenTheWriteItselfFallsOver(t *testing.T) {
 	if rig.at("install -m 0600") < 0 {
 		t.Fatalf("nothing tried to write %s, so this bench proves nothing about a write that fell over: %v", path, rig.commands())
 	}
-	if rig.at("rm -f "+quoted(path)) < 0 {
+	if rig.at("rm -f "+shell.Quote(path)) < 0 {
 		t.Fatalf("a write that fell over left %s to whatever `install` had already put on disk, and no deploy after this one takes it back: %v", path, rig.commands())
 	}
 }
@@ -227,7 +228,7 @@ func TestTheEnvFileIsTakenBackWhenTheDeployIsInterrupted(t *testing.T) {
 	if rig.at("install -m 0600") < 0 {
 		t.Fatalf("nothing wrote %s before the interrupt, so what follows it proves nothing: %v", path, rig.commands())
 	}
-	if rig.at("rm -f "+quoted(path)) < 0 {
+	if rig.at("rm -f "+shell.Quote(path)) < 0 {
 		t.Fatalf("a deploy interrupted after the write left %s in place with every value in it: %v", path, rig.commands())
 	}
 }
@@ -332,7 +333,7 @@ func TestAContainerRunningTheSameImageWithOtherValuesIsReplaced(t *testing.T) {
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	for _, command := range rig.commands() {
-		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
+		if strings.Contains(command, shell.Quote("run")+" "+shell.Quote("--detach")) {
 			t.Errorf("a redeploy of the same image and the same values ran %q and tore down a container serving live traffic", command)
 		}
 	}
@@ -364,7 +365,7 @@ func TestADeployThatResolvedNoValueReplacesAContainerRunningWithTheOnesItDropped
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	joined := strings.Join(rig.commands(), "\n")
-	if !strings.Contains(joined, quoted("run")+" "+quoted("--detach")) {
+	if !strings.Contains(joined, shell.Quote("run")+" "+shell.Quote("--detach")) {
 		t.Fatalf("a deploy that resolved no value at all kept the container running with the values the deploy before it handed over, so removing the last value an app declares never reaches what serves it and API_TOKEN goes on being served for the life of the release:\n%s", joined)
 	}
 	if file := wrote(t, rig, EnvFile(emptied.Tier, emptied.Name)); file != "OCEL_HEALTH_PATH=/healthz\n" {
@@ -383,7 +384,7 @@ func TestAPromotionKeepsTheContainerItRePointsAtRatherThanReRenderingIt(t *testi
 		t.Fatalf("RunContainer() = %v", err)
 	}
 	for _, command := range rig.commands() {
-		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
+		if strings.Contains(command, shell.Quote("run")+" "+shell.Quote("--detach")) {
 			t.Errorf("re-pointing the proxy at a running container ran %q, and the values it was started with are not the promotion's to re-render", command)
 		}
 	}
@@ -407,7 +408,7 @@ func TestAPromotionIsRefusedByNameRatherThanStartingAnAppWithNoValues(t *testing
 		}
 	}
 	for _, command := range rig.commands() {
-		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
+		if strings.Contains(command, shell.Quote("run")+" "+shell.Quote("--detach")) {
 			t.Errorf("a refused promotion still ran %q", command)
 		}
 	}
@@ -438,10 +439,10 @@ func TestAPromotionStartsTheStoppedContainerItRePointsAtRatherThanRefusingIt(t *
 		t.Fatalf("RunContainer() of a stopped container = %v, want it started back up: a deploy stops the container it replaces and never removes it, so a rollback re-points at the one that still has the values its own deploy handed it", err)
 	}
 	joined := strings.Join(rig.commands(), "\n")
-	if !strings.Contains(joined, "docker start "+quoted(spec.Name)) {
+	if !strings.Contains(joined, "docker start "+shell.Quote(spec.Name)) {
 		t.Errorf("a promotion of a stopped container ran\n%s\nand never started it", joined)
 	}
-	for _, unwanted := range []string{quoted("run") + " " + quoted("--detach"), "docker rm"} {
+	for _, unwanted := range []string{shell.Quote("run") + " " + shell.Quote("--detach"), "docker rm"} {
 		if strings.Contains(joined, unwanted) {
 			t.Errorf("a promotion of a stopped container ran %q, and re-creating it is what loses every value that container was handed:\n%s", unwanted, joined)
 		}
@@ -465,7 +466,7 @@ func TestAPromotionStartsEveryStateDockerCanStartRatherThanRefusingIt(t *testing
 			continue
 		}
 		joined := strings.Join(rig.commands(), "\n")
-		if !strings.Contains(joined, want+quoted(spec.Name)) {
+		if !strings.Contains(joined, want+shell.Quote(spec.Name)) {
 			t.Errorf("a promotion of a %s container ran\n%s\nand never %s it", state, joined, strings.TrimSpace(want))
 		}
 		if strings.Contains(joined, "docker rm") {

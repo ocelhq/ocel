@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const publicPreviewBase = "preview.example.com"
@@ -23,7 +24,7 @@ func refusePreviewCertificatesDeployingTo(t *testing.T, state RoutingTable, fron
 	table := string(mustWrite(t, state))
 	b := machine(nil)
 	b.answer = servesProxy(b, &table)
-	h := New(b.dial, Keys{}, pins, front)
+	h := New(ssh.NewBox(b.dial, nil), Keys{}, pins, front)
 	return h.RefusePerHostnamePreviewCertificates(context.Background(), destination)
 }
 

@@ -10,9 +10,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -160,7 +160,7 @@ func TestAFileOfYoursOcelCannotReadForRoutersFailsNamingIt(t *testing.T) {
 	t.Parallel()
 
 	machine, front := healthy(t)
-	machine.beside = append(machine.beside, switchboard.SiblingFile{Name: "broken.yml", Content: []byte("http:\n  routers:\n    web:\n      rule: Host(`a.example.com`)\n     service: web\n")})
+	machine.beside = append(machine.beside, boxapi.SiblingFile{Name: "broken.yml", Content: []byte("http:\n  routers:\n    web:\n      rule: Host(`a.example.com`)\n     service: web\n")})
 	check, ok := inspected(t, front)["routers in "+coolifyDynamic+"/broken.yml"]
 	if !ok || check.Verdict != provider.HostFail || check.Fix == "" {
 		t.Errorf("Inspect() checked broken.yml as %+v, want it failed with a fix: ocel cannot see which hostnames its routers take", check)

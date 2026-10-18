@@ -8,10 +8,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
 )
 
-func newRecordedGate(store records.Store, cipher seal.Cipher) box.RecordedGate {
+func newRecordedGate(store records.Store, cipher seal.Cipher) switchboard.RecordedGate {
 	return func(ctx context.Context, tier environment.Tier, project string) (*gate.Gate, error) {
 		records, err := stackrecords.ReadGates(ctx, store, cipher, tier)
 		if err != nil {

@@ -11,8 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func TestAnAppReachesTheStoreUnderAnAccountOfItsOwn(t *testing.T) {
@@ -67,7 +67,7 @@ func TestAnAppsStoreAccountIsLimitedToTheBucketsItBinds(t *testing.T) {
 	}
 }
 
-func storeOfProject(t *testing.T, project string) *variables.Store {
+func storeOfProject(t *testing.T, project string) *boxapi.Store {
 	t.Helper()
 	machine := &box{kept: sealedRootKey()}
 	app := anApp()

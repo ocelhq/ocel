@@ -17,10 +17,10 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type caddyFront struct {
@@ -213,7 +213,7 @@ func servesBehindCaddy(t *testing.T, vm machine, cf caddyFront) {
 	}
 	vm.awaitsCaddy(t, frontedHostname, "one")
 	vm.awaitsCaddy(t, cf.theirs, "mine")
-	if kind, err := d.ServingRouter(ctx, frontedHostname); err != nil || kind != switchboard.RouterKind {
+	if kind, err := d.ServingRouter(ctx, frontedHostname); err != nil || kind != boxapi.SwitchboardRouter {
 		t.Errorf("Serving(%s) = %q, %v, want the switchboard proven through %s", frontedHostname, kind, err, cf.front)
 	}
 
