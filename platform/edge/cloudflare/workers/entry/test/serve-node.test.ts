@@ -4,7 +4,7 @@ import {
   readOcelRouteTable,
 } from "@platform/edge-contract/ocel-route-table";
 import { describe, expect, it, vi } from "vitest";
-import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
+import { resolveServe, type ServeFetch } from "../src/index";
 import {
   RENDER_RELEASE_HEADER,
   type RenderRelease,
@@ -15,6 +15,7 @@ import {
 import { serveNodeOrigin } from "../src/serve-node";
 import type { ServingPorts } from "../src/serving";
 import { answerEveryRecordWith, capturing, FN_URL, makeRecord } from "./origin-deps";
+import { resolveBase } from "./resolve-base";
 import { objectStoreHolding, routeTableKey } from "./route-table-store";
 import { fakeServing } from "./serving-deps";
 
@@ -692,22 +693,18 @@ describe("a node release resolved by the gateway", () => {
   async function resolved(
     over: Parameters<typeof makeRecord>[0],
     routes: OcelRouteTable | string | undefined,
-    serving?: ServingPorts,
+    serving: ServingPorts,
   ) {
     const record = makeRecord({ isrPrefix: "prod/p1/api/r0a1b2c3d/isr", ...over });
     const wire = capturing();
-    const base: ResolveBase = {
-      assetStore: {
-        cache: { match: async () => undefined, put: async () => {} },
-        waitUntil: () => {},
-      },
+    const base = resolveBase({
       originFetch: wire.fetch,
       routeTableStore:
         routes === undefined
           ? undefined
           : objectStoreHolding({ [routeTableKey()]: routes as never }),
       serving,
-    };
+    });
     const serve = await resolveServe(
       {
         binding: answerEveryRecordWith(async () => ({

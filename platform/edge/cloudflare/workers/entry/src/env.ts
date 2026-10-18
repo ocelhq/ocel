@@ -22,5 +22,5 @@ export interface Env {
   OCEL_ORIGIN_CLIENT_CERTIFICATE?: Fetcher;
   OCEL_ENVELOPE_KEY?: string;
   OCEL_IMAGE_OPTIMIZER_URL?: string;
-  LOADER?: WorkerLoader;
+  LOADER: WorkerLoader;
 }

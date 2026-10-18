@@ -9,21 +9,13 @@ import {
   makeRecord,
   withGlobalFetch,
 } from "./origin-deps";
+import { resolveBase } from "./resolve-base";
 import { objectStoreHolding, routeTableKey } from "./route-table-store";
 
 function bindingReturning(record: ReleaseRecord): ReleasesBinding {
   return answerEveryRecordWith(async () => {
     return { kind: "record", release: record.release, record };
   });
-}
-
-const assetStore: ResolveBase["assetStore"] = {
-  cache: { match: async () => undefined, put: async () => {} },
-  waitUntil: () => {},
-};
-
-function base(over: Partial<ResolveBase> = {}): ResolveBase {
-  return { assetStore, ...over };
 }
 
 async function resolved(
@@ -38,7 +30,7 @@ async function resolved(
       host: "api.example.com",
       app: record.app,
     },
-    base(over),
+    resolveBase(over),
   );
 }
 

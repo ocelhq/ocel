@@ -19,12 +19,13 @@ import {
 import { type BucketAccess, findBucketAccess, signBucket } from "./bucket-access";
 import { createReleaseEdgeInvoker, ownBundleKey } from "./edge";
 import type { Env } from "./env";
+import { openPurgeQueue } from "./exports";
 import { originFetchFor } from "./origin-fetch";
 import { PPR_SHELL_VARIANT } from "./ppr";
 import type { PurgeOutcome } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
-import { openInBandQueue, openPurgeQueue } from "./purge-request";
+import type { ReleaseScope } from "./purge-times";
 import type { ReleaseRecord } from "./releases";
 import {
   BROWSER_REVALIDATES,
@@ -54,7 +55,7 @@ import {
   type ServeProps,
   type StoredEntryCall,
 } from "./serve-key";
-import { type ServeFactory, serveObjects } from "./serve-objects";
+import { serveObjects } from "./serve-objects";
 import { settledWithin } from "./settled";
 import { readFromStore, type StoreAnswer } from "./store-read";
 import { openEntrySource } from "./store-source";
@@ -357,11 +358,12 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     ) {
       return respondMiss();
     }
+    const scope = { slug: found.render.slug, isrPrefix: found.render.isrPrefix };
     const render = () =>
-      this.renderAtOrigin(request, { host, release, keyedUrl, honoursAppCacheHeaders });
+      this.renderAtOrigin(request, { host, release, scope, keyedUrl, honoursAppCacheHeaders });
     if (variant === PPR_SHELL_VARIANT) {
       const regenerate = () =>
-        this.renderAtOrigin(request, { host, release, keyedUrl, unconditional: true });
+        this.renderAtOrigin(request, { host, release, scope, keyedUrl, unconditional: true });
       return this.fromStoredShell(
         request,
         { render: regenerate, release, keyedUrl, cached },
@@ -462,6 +464,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     call: {
       host: string;
       release: string;
+      scope: ReleaseScope;
       keyedUrl: string;
       unconditional?: boolean;
       honoursAppCacheHeaders?: boolean;
@@ -488,9 +491,8 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (announced !== null) {
       this.ctx.waitUntil(
         purgeInBand(readPurge(announced), {
-          cache: this,
-          queue: openInBandQueue(this.ctx.exports),
-          times: openPurgeQueue(this.ctx.exports),
+          queue: openPurgeQueue(this.ctx.exports),
+          scope: call.scope,
           now: Date.now,
         }),
       );
@@ -504,8 +506,6 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
 
   private async fromEdge(request: Request, entryKey: string): Promise<Response> {
     const { host, app, release } = readRenderCall(request.url);
-    const { LOADER: loader } = this.env;
-    if (!loader) return respondRefused("no edge runtime to render with");
     const found = await readRenderRecord(this.env, request, release);
     if (!found) return respondRefused("the release is not served");
     const { record, render: edge } = found;
@@ -513,12 +513,10 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (!edgeWorkers || !ownBundleKey(edgeWorkers.bundleKey, edge.slug, app)) {
       return respondRefused("the release has no edge bundle of its own to render with");
     }
-    const { Serve: serve } = this.ctx.exports as { Serve?: ServeFactory };
-    if (!serve || !readsObjects(this.env)) {
-      return respondRefused("no store to read the edge bundle from");
-    }
+    if (!readsObjects(this.env)) return respondRefused("no store to read the edge bundle from");
     const invoke = createReleaseEdgeInvoker(
-      { loader, store: serveObjects(serve, host), envelopeKey: this.env.OCEL_ENVELOPE_KEY },
+      { loader: this.env.LOADER, envelopeKey: this.env.OCEL_ENVELOPE_KEY },
+      serveObjects(this.ctx.exports.Serve, host),
       { ...record, edgeWorkers },
     );
     const headers = new Headers(request.headers);

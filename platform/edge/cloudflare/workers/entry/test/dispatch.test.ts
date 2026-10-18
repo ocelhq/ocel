@@ -1,39 +1,27 @@
-import { baseDeps } from "@framework/next-router/test-support/dispatch-scenario";
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
-import { dispatchResult, type RouteDeps, serve } from "../src/index";
+import { EMPTY_ROUTES, servedNextRelease, UNTOKENED_ISR_PREFIX } from "./next-release";
 import { fakeServing } from "./serving-deps";
 
-describe("dispatchResult", () => {
+type Dispatch = NextRouteTable["dispatch"];
+
+describe("a routed prerender", () => {
   it("invokes the parent function for a prerender route until ISR lands", async () => {
-    const deps = baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: { "/": { kind: "prerender", id: "/" } },
-      },
-      functionUrls: { "/": "https://fn.example.com" },
+    const serve = servedNextRelease({
+      table: { dispatch: { "/": { kind: "prerender", id: "/" } } },
+      record: { functionUrls: { "/": "https://fn.example.com" }, isrPrefix: UNTOKENED_ISR_PREFIX },
       fetch: (async () => new Response("rendered", { status: 200 })) as unknown as typeof fetch,
     });
 
-    const res = await dispatchResult(
-      { resolvedPathname: "/", invocationTarget: { pathname: "/" } },
-      new Request("https://app.example/"),
-      deps,
-    );
+    const res = await serve(new Request("https://app.example/"));
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("rendered");
   });
 
-  function bypassDeps(bypassKey: string): RouteDeps {
-    return baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
+  function bypassRelease(bypassKey: string) {
+    return servedNextRelease({
+      table: {
         dispatch: {
           "/preview": {
             kind: "prerender",
@@ -42,41 +30,31 @@ describe("dispatchResult", () => {
           },
         },
       },
-      functionUrls: { "/preview": "https://fn.example.com" },
+      record: { functionUrls: { "/preview": "https://fn.example.com" } },
       fetch: (async () =>
         new Response("rendered", {
           status: 200,
           headers: { "cache-control": "s-maxage=60" },
         })) as unknown as typeof fetch,
-      serving: fakeServing().serving,
     });
   }
 
-  async function dispatchPreview(deps: RouteDeps, cookie: string) {
-    return dispatchResult(
-      { resolvedPathname: "/preview", invocationTarget: { pathname: "/preview" } },
-      new Request("https://app.example/preview", { headers: { cookie } }),
-      deps,
-    );
-  }
+  const preview = (cookie: string) =>
+    new Request("https://app.example/preview", { headers: { cookie } });
 
   it("does not treat a valueless cookie as a bypass match on a key prefix", async () => {
-    const res = await dispatchPreview(bypassDeps("badcooki"), "badcookie");
+    const res = await bypassRelease("badcooki")(preview("badcookie"));
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
   });
 
   it("bypasses the cache when a real bypass cookie is present", async () => {
-    const res = await dispatchPreview(bypassDeps("preview"), "preview=1");
+    const res = await bypassRelease("preview")(preview("preview=1"));
     expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
   });
 
-  function draftDeps(capture: (req: Request) => void): RouteDeps {
-    return baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
+  function draftRelease(capture: (req: Request) => void) {
+    return servedNextRelease({
+      table: {
         dispatch: {
           "/ssg-draft-mode/test-1": {
             kind: "prerender",
@@ -88,38 +66,20 @@ describe("dispatchResult", () => {
           },
         },
       },
-      functionUrls: { "/ssg-draft-mode/[[...route]]": "https://fn.example.com" },
+      record: { functionUrls: { "/ssg-draft-mode/[[...route]]": "https://fn.example.com" } },
       fetch: (async (req: Request) => {
         capture(req);
         return new Response("rendered", { status: 200 });
       }) as unknown as typeof fetch,
-      serving: fakeServing().serving,
     });
-  }
-
-  function draftRequest(init: RequestInit = {}) {
-    return new Request("https://app.example/ssg-draft-mode/test-1", {
-      headers: { cookie: "__prerender_bypass=abc123" },
-      ...init,
-    });
-  }
-
-  async function dispatchDraft(deps: RouteDeps, request: Request) {
-    return dispatchResult(
-      {
-        resolvedPathname: "/ssg-draft-mode/test-1",
-        invocationTarget: { pathname: "/ssg-draft-mode/test-1" },
-      },
-      request,
-      deps,
-    );
   }
 
   it("forwards the draft cookie to a prerender origin, which allowHeader omits", async () => {
     let captured: Request | undefined;
-    const res = await dispatchDraft(
-      draftDeps((req) => (captured = req)),
-      draftRequest(),
+    const res = await draftRelease((req) => (captured = req))(
+      new Request("https://app.example/ssg-draft-mode/test-1", {
+        headers: { cookie: "__prerender_bypass=abc123" },
+      }),
     );
 
     expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
@@ -128,8 +88,7 @@ describe("dispatchResult", () => {
 
   it("forwards a server action to a prerender origin with its own headers", async () => {
     let captured: Request | undefined;
-    const res = await dispatchDraft(
-      draftDeps((req) => (captured = req)),
+    const res = await draftRelease((req) => (captured = req))(
       new Request("https://app.example/ssg-draft-mode/test-1", {
         method: "POST",
         headers: { cookie: "session=xyz", "next-action": "abc" },
@@ -143,8 +102,7 @@ describe("dispatchResult", () => {
 
   it("drops a client-forged next-resume from a server-action prerender forward", async () => {
     let captured: Request | undefined;
-    await dispatchDraft(
-      draftDeps((req) => (captured = req)),
+    await draftRelease((req) => (captured = req))(
       new Request("https://app.example/ssg-draft-mode/test-1", {
         method: "POST",
         headers: { "next-resume": "1", "next-action": "abc" },
@@ -155,28 +113,19 @@ describe("dispatchResult", () => {
     expect(captured?.headers.get("next-resume")).toBeNull();
   });
 
+  const blog: Dispatch = {
+    "/blog": { kind: "prerender", id: "/blog", config: { allowHeader: ["host"] } },
+  };
+
   it("forwards the RSC-family headers to Serve past allowHeader", async () => {
     const served = fakeServing();
-    const deps = baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: {
-          "/blog": {
-            kind: "prerender",
-            id: "/blog",
-            config: { allowHeader: ["host"] },
-          },
-        },
-      },
-      functionUrls: { "/blog": "https://fn.example.com" },
-      serving: served.serving,
+    const serve = servedNextRelease({
+      table: { dispatch: blog },
+      record: { functionUrls: { "/blog": "https://fn.example.com" } },
+      serve: served.serving.serve,
     });
 
-    await dispatchResult(
-      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+    await serve(
       new Request("https://app.example/blog?_rsc=abc", {
         headers: {
           rsc: "1",
@@ -184,7 +133,6 @@ describe("dispatchResult", () => {
           "next-router-state-tree": "%5B%22%22%5D",
         },
       }),
-      deps,
     );
 
     const sent = served.calls[0].request;
@@ -196,21 +144,9 @@ describe("dispatchResult", () => {
 
   it("forwards the client's cookie to an uncacheable prerender origin", async () => {
     let captured: Request | undefined;
-    const deps = baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: {
-          "/blog": {
-            kind: "prerender",
-            id: "/blog",
-            config: { allowHeader: ["host"] },
-          },
-        },
-      },
-      functionUrls: { "/blog": "https://fn.example.com" },
+    const serve = servedNextRelease({
+      table: { dispatch: blog },
+      record: { functionUrls: { "/blog": "https://fn.example.com" } },
       fetch: (async (req: Request) => {
         captured = req;
         return new Response("rendered", {
@@ -218,11 +154,9 @@ describe("dispatchResult", () => {
           headers: { "cache-control": "s-maxage=60" },
         });
       }) as unknown as typeof fetch,
-      serving: fakeServing().serving,
     });
 
-    const res = await dispatchResult(
-      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+    const res = await serve(
       new Request("https://app.example/blog", {
         headers: {
           rsc: "1",
@@ -230,7 +164,6 @@ describe("dispatchResult", () => {
           cookie: "testCookie=initialValue",
         },
       }),
-      deps,
     );
 
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
@@ -239,26 +172,13 @@ describe("dispatchResult", () => {
 
   it("hands Serve none of the client's cookie for a cacheable prerender", async () => {
     const served = fakeServing();
-    const deps = baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: {
-          "/blog": {
-            kind: "prerender",
-            id: "/blog",
-            config: { allowHeader: ["host"] },
-          },
-        },
-      },
-      functionUrls: { "/blog": "https://fn.example.com" },
-      serving: served.serving,
+    const serve = servedNextRelease({
+      table: { dispatch: blog },
+      record: { functionUrls: { "/blog": "https://fn.example.com" } },
+      serve: served.serving.serve,
     });
 
-    const res = await dispatchResult(
-      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+    const res = await serve(
       new Request("https://app.example/blog", {
         headers: {
           rsc: "1",
@@ -266,7 +186,6 @@ describe("dispatchResult", () => {
           cookie: "testCookie=initialValue",
         },
       }),
-      deps,
     );
 
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
@@ -277,14 +196,11 @@ describe("dispatchResult", () => {
 describe("an afterFiles rewrite shadowed by a dynamic route", () => {
   it("uses the exact page's own prerender config after the swap, not the shadowing template's", async () => {
     const served = fakeServing();
-    const deps = baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
+    const serve = servedNextRelease({
+      table: {
         pathnames: ["/ssg/hello", "/ssg/[slug]"],
         routes: {
-          beforeMiddleware: [],
-          beforeFiles: [],
+          ...EMPTY_ROUTES,
           afterFiles: [{ sourceRegex: "^/to-ssg(?:/)?$", destination: "/ssg/hello" }],
           dynamicRoutes: [
             {
@@ -292,8 +208,6 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
               destination: "/ssg/[slug]?nxtPslug=$nxtPslug",
             },
           ],
-          onMatch: [],
-          fallback: [],
         },
         dispatch: {
           "/ssg/hello": {
@@ -308,18 +222,19 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
           },
         },
       },
-      functionUrls: {
-        "hello-fn": "https://hello.example.com",
-        "slug-fn": "https://slug.example.com",
+      record: {
+        functionUrls: {
+          "hello-fn": "https://hello.example.com",
+          "slug-fn": "https://slug.example.com",
+        },
       },
-      serving: served.serving,
+      serve: served.serving.serve,
     });
 
     const res = await serve(
       new Request("https://app.example/to-ssg", {
         headers: { "x-marker-hello": "1", "x-marker-slug": "1" },
       }),
-      deps,
     );
 
     expect(res.headers.get("x-matched-path")).toBe("/ssg/hello");
@@ -339,19 +254,8 @@ describe("an origin that cannot answer a segment prefetch", () => {
           headers: { "cf-cache-status": "MISS", ...originHeaders },
         }),
     );
-    const deps = baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: ["/settings"],
-        routes: {
-          beforeMiddleware: [],
-          beforeFiles: [],
-          afterFiles: [],
-          dynamicRoutes: [],
-          onMatch: [],
-          fallback: [],
-        } as unknown as RouteDeps["manifest"]["routes"],
+    const serve = servedNextRelease({
+      table: {
         dispatch: {
           "/settings": {
             kind: "prerender",
@@ -361,8 +265,8 @@ describe("an origin that cannot answer a segment prefetch", () => {
           },
         },
       },
-      functionUrls: { settings: "https://fn.example.com" },
-      serving: served.serving,
+      record: { functionUrls: { settings: "https://fn.example.com" } },
+      serve: served.serving.serve,
     });
     return serve(
       new Request("https://app.example/settings", {
@@ -372,7 +276,6 @@ describe("an origin that cannot answer a segment prefetch", () => {
           "next-router-segment-prefetch": "/$d$team/$d$project/settings",
         },
       }),
-      deps,
     );
   }
 
@@ -388,53 +291,5 @@ describe("an origin that cannot answer a segment prefetch", () => {
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("SHELL-OR-SEGMENT");
-  });
-});
-
-describe("the x-vercel-cache alias", () => {
-  const emptyRoutes = {
-    beforeMiddleware: [],
-    beforeFiles: [],
-    afterFiles: [],
-    dynamicRoutes: [],
-    onMatch: [],
-    fallback: [],
-  };
-
-  function aliasDeps(vercelCacheAlias?: boolean): RouteDeps {
-    return baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: ["/"],
-        routes: emptyRoutes,
-        dispatch: { "/": { kind: "prerender", id: "/", config: {} } },
-        ...(vercelCacheAlias !== undefined && { vercelCacheAlias }),
-      },
-      functionUrls: { "/": "https://fn.example.com" },
-      fetch: (async () =>
-        new Response("rendered", {
-          status: 200,
-          headers: { "cache-control": "s-maxage=60" },
-        })) as unknown as typeof fetch,
-      serving: fakeServing(
-        () => new Response("rendered", { headers: { "cf-cache-status": "MISS" } }),
-      ).serving,
-    });
-  }
-
-  it("stamps the tier that answered under Vercel's name", async () => {
-    const res = await serve(new Request("https://app.example/"), aliasDeps(true));
-
-    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
-    expect(res.headers.get("x-vercel-cache")).toBe("MISS");
-    expect(await res.text()).toBe("rendered");
-  });
-
-  it("emits nothing for a build that did not ask for it", async () => {
-    const res = await serve(new Request("https://app.example/"), aliasDeps());
-
-    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
-    expect(res.headers.get("x-vercel-cache")).toBeNull();
   });
 });

@@ -185,7 +185,7 @@ async function purgeCloudflareTargets(
   raise: Raise,
 ): Promise<void> {
   if (urls.length === 0 || inv.cloudflare === undefined) return;
-  const secret = derivePurgeSecret(await readSeed(), isrPrefix);
+  const secret = await derivePurgeSecret(await readSeed(), isrPrefix);
   const results = await Promise.allSettled(
     urls.map((url) => postPurge(inv.cloudflare!, url, secret, isrPrefix, raise.entries)),
   );

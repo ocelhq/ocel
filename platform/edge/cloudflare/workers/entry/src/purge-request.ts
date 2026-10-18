@@ -5,15 +5,13 @@ import {
   purgeSignatureHeader,
   readReleaseToken,
   tagsPerPurgeRequest,
+  verifyPurge,
 } from "@platform/edge-contract/purge";
 import { readCapped } from "./capped-body";
 import type { Env } from "./env";
+import { type EntryExports, openPurgeQueue } from "./exports";
 import type { RaisedTag } from "./purge-backlog";
-import type { TagTimes } from "./purge-times";
-
-export const PURGE_QUEUE_NAME = "purge";
-
-const IN_BAND_QUEUE_NAME = "in-band";
+import type { ReleaseScope, TagTimes } from "./purge-times";
 
 const PURGE_PROJECT_PARAM = "project";
 
@@ -24,9 +22,9 @@ export type ServedLookup =
   | { kind: "not-served" };
 
 export interface PurgeGatewayPorts {
+  slug: string;
   readServed(isrPrefix: string): Promise<ServedLookup>;
-  queue: { raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
-  times: { record(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
+  queue: Pick<PurgeQueuePort, "raise">;
   now?(): number;
   warn?(message: string): void;
 }
@@ -70,24 +68,6 @@ function parseBody(text: string): PurgeBody | undefined {
   return body as PurgeBody;
 }
 
-function decodeHex(hex: string): Uint8Array | undefined {
-  if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) return undefined;
-  return Uint8Array.from(hex.match(/../g)!, (pair) => Number.parseInt(pair, 16));
-}
-
-async function isSignedBy(secret: string, bytes: Uint8Array, signature: string): Promise<boolean> {
-  const expected = decodeHex(signature);
-  if (!expected) return false;
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"],
-  );
-  return crypto.subtle.verify("HMAC", key, expected, bytes);
-}
-
 export function isControlHost(host: string): boolean {
   return host.split(":", 1)[0].toLowerCase().endsWith(".workers.dev");
 }
@@ -97,23 +77,8 @@ export function respondOnControlHost(): Response {
 }
 
 export interface PurgeQueuePort {
-  raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void>;
-  record(mode: PurgeMode, tags: RaisedTag[]): Promise<void>;
+  raise(scope: ReleaseScope, mode: PurgeMode, tags: RaisedTag[]): Promise<void>;
   readTimes(tags: string[]): Promise<TagTimes>;
-}
-
-function openQueue(exports: unknown, name: string): PurgeQueuePort {
-  const queues = (exports as { PurgeQueue: { getByName(name: string): PurgeQueuePort } })
-    .PurgeQueue;
-  return queues.getByName(name);
-}
-
-export function openPurgeQueue(exports: unknown): PurgeQueuePort {
-  return openQueue(exports, PURGE_QUEUE_NAME);
-}
-
-export function openInBandQueue(exports: unknown): PurgeQueuePort {
-  return openQueue(exports, IN_BAND_QUEUE_NAME);
 }
 
 function findPurgedProject(
@@ -127,14 +92,14 @@ function findPurgedProject(
 export function answerPurgeOnWorker(
   request: Request,
   env: Pick<Env, "RELEASES" | "OCEL_SLUG" | "OCEL_PREVIEW_GLOBAL">,
-  ctx: { exports: unknown },
+  ctx: { exports: Pick<EntryExports, "PurgeQueue"> },
 ): Promise<Response> | Response {
   const slug = findPurgedProject(request, env);
   if (!slug) return reply(404, "Not Found");
   return answerPurge(request, {
+    slug,
     readServed: (isrPrefix) => env.RELEASES.readServedRecord({ slug, isrPrefix }),
     queue: openPurgeQueue(ctx.exports),
-    times: openPurgeQueue(ctx.exports),
   });
 }
 
@@ -157,7 +122,7 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
 
   const { purgeSecret } = served.record;
   const signature = request.headers.get(purgeSignatureHeader);
-  if (!purgeSecret || !signature || !(await isSignedBy(purgeSecret, bytes, signature))) {
+  if (!purgeSecret || !signature || !(await verifyPurge(purgeSecret, bytes, signature))) {
     return reply(401, "unauthorized");
   }
 
@@ -183,8 +148,7 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
 
   const raisedTags = [...raisedAt].map(([tag, at]) => ({ tag, raisedAt: at }));
   try {
-    await ports.times.record(body.mode, raisedTags);
-    await ports.queue.raise(body.mode, raisedTags);
+    await ports.queue.raise({ slug: ports.slug, isrPrefix: body.isrPrefix }, body.mode, raisedTags);
   } catch (error) {
     console.error(`ocel: the purge queue refused the tags of release ${release}`, error);
     return reply(503, "unavailable");

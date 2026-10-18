@@ -118,16 +118,12 @@ func (p *cloudflare) readServedApps(ctx context.Context, state edge.StackState) 
 
 var errStoreIdentityTaken = errors.New("the releases store already has an identity for this project that this deploy's state does not record, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this tier's edge to reset the store")
 
-func (p *cloudflare) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
-	body := map[string]any{"ownerToken": present.ownerToken, "secret": present.secret, "force": false}
-	res, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, nil)
+func (p *cloudflare) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred, secret string) error {
+	res, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", map[string]string{"secret": secret}, nil)
 	if res != nil && res.StatusCode == http.StatusConflict {
-		return storeIdentity{}, fmt.Errorf("%w: %w", errStoreIdentityTaken, err)
+		return fmt.Errorf("%w: %w", errStoreIdentityTaken, err)
 	}
-	if err != nil {
-		return storeIdentity{}, err
-	}
-	return present, nil
+	return err
 }
 
 func (p *cloudflare) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, *http.Response, error) {

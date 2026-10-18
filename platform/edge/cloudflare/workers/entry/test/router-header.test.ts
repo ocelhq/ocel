@@ -1,52 +1,9 @@
-import type { AssetBucket } from "@framework/next-router/assets";
 import { describe, expect, it } from "vitest";
-import {
-  type ResolveBase,
-  type RouteDeps,
-  resolveServe,
-  type ServeFetch,
-  serve,
-} from "../src/index";
+import { resolveServe, type ServeFetch } from "../src/index";
 import type { PointerRecordResult, ReleaseRecord, ReleasesBinding } from "../src/releases";
+import { servedNextRelease } from "./next-release";
 import { answerEveryRecordWith } from "./origin-deps";
-
-function routedDeps(): RouteDeps {
-  const store: AssetBucket = {
-    async get(key) {
-      const body: string | undefined = { "/a.html": "<h1>a</h1>" }[key];
-      if (body === undefined) return null;
-      return { body: new Blob([body]).stream() };
-    },
-  };
-  return {
-    manifest: {
-      buildId: "t",
-      basePath: "",
-      trailingSlash: false,
-      pathnames: ["/a"],
-      routes: {
-        beforeMiddleware: [],
-        beforeFiles: [],
-        afterFiles: [],
-        dynamicRoutes: [],
-        onMatch: [],
-        fallback: [],
-      } as unknown as RouteDeps["manifest"]["routes"],
-      dispatch: { "/a": { kind: "static" as const } },
-    },
-    functionUrls: {},
-    slug: "p1",
-    appBuildId: "d1",
-    app: "web",
-    assetStore: {
-      store,
-      assetPrefix: "",
-      basePath: "",
-      cache: { match: async () => undefined, put: async () => {} },
-      waitUntil: () => {},
-    },
-  };
-}
+import { resolveBase } from "./resolve-base";
 
 const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
 
@@ -67,17 +24,10 @@ function bindingReturning(result: PointerRecordResult): ReleasesBinding {
   });
 }
 
-const base: ResolveBase = {
-  assetStore: {
-    cache: { match: async () => undefined, put: async () => {} },
-    waitUntil: () => {},
-  },
-};
-
 async function resolved(binding: ReleasesBinding, host: string) {
   return resolveServe(
     { binding, slug: "p1", host, app: "api" },
-    { ...base, fetch: (async () => new Response("origin")) as typeof fetch },
+    resolveBase({ fetch: (async () => new Response("origin")) as typeof fetch }),
   );
 }
 
@@ -105,7 +55,12 @@ describe("the Cloudflare router names itself on every response", () => {
   });
 
   it("marks what dispatch serves", async () => {
-    const response = await serve(new Request("https://shop.example.com/a"), routedDeps());
+    const serve = servedNextRelease({
+      table: { dispatch: { "/a": { kind: "static" } } },
+      assets: { "/a.html": "<h1>a</h1>" },
+    });
+
+    const response = await serve(new Request("https://shop.example.com/a"));
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-ocel-router")).toBe("cloudflare");

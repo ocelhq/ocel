@@ -19,6 +19,7 @@ export interface ReleaseRecord {
   env?: Record<string, string>;
   envelope?: string;
   releaseFingerprint?: string;
+  buildAssets?: Record<string, string>;
 }
 
 export type PointerRecordResult =

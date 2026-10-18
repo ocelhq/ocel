@@ -375,7 +375,7 @@ describe("the Cloudflare target", () => {
       mode: "purge",
       tags: [{ tag: "_N_T_/blog/a", raisedAt: 5_000 }],
     });
-    const secret = derivePurgeSecret(SEED, PREFIX);
+    const secret = await derivePurgeSecret(SEED, PREFIX);
     expect(sent.signature).toBe(
       createHmac("sha256", secret).update(JSON.stringify(sent.body)).digest("hex"),
     );

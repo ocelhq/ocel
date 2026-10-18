@@ -12,6 +12,7 @@ import {
   maxPurgeBodyBytes,
   type PurgeGatewayPorts,
 } from "../src/purge-request";
+import type { ReleaseScope } from "../src/purge-times";
 
 const SECRET = "ab12cd34".repeat(8);
 
@@ -47,14 +48,14 @@ const raise = {
   tags: [{ tag: "_N_T_/blog/a", raisedAt: 1_000 }],
 };
 
-let raised: { mode: PurgeMode; tags: RaisedTag[] }[];
-let recorded: { mode: PurgeMode; tags: RaisedTag[] }[];
+let raised: { scope: ReleaseScope; mode: PurgeMode; tags: RaisedTag[] }[];
 let served: Record<string, { purgeSecret?: string }>;
 let storeDown: boolean;
 let warnings: string[];
 
 function deps(): PurgeGatewayPorts {
   return {
+    slug: "p1",
     now: () => 1_000_000,
     async readServed(isrPrefix) {
       if (storeDown) throw new Error("releases store is down");
@@ -62,13 +63,8 @@ function deps(): PurgeGatewayPorts {
       return record ? { kind: "record", record } : { kind: "not-served" };
     },
     queue: {
-      async raise(mode, tags) {
-        raised.push({ mode, tags });
-      },
-    },
-    times: {
-      async record(mode, tags) {
-        recorded.push({ mode, tags });
+      async raise(scope, mode, tags) {
+        raised.push({ scope, mode, tags });
       },
     },
     warn: (message) => warnings.push(message),
@@ -77,7 +73,6 @@ function deps(): PurgeGatewayPorts {
 
 beforeEach(() => {
   raised = [];
-  recorded = [];
   served = { [PREFIX]: { purgeSecret: SECRET } };
   storeDown = false;
   warnings = [];
@@ -102,23 +97,16 @@ describe("recognising a purge request", () => {
 });
 
 describe("answering a signed purge request", () => {
-  it("records the time the origin raised each tag at, as announced", async () => {
-    await answerPurge(await signed({ ...raise, mode: "invalidate" }), deps());
-
-    expect(recorded).toEqual([
-      {
-        mode: "invalidate",
-        tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 1_000 }],
-      },
-    ]);
-  });
-
-  it("hands the queue the release-stamped tags with the mode, and accepts", async () => {
+  it("hands the queue the release, its release-stamped tags and the mode, and accepts", async () => {
     const response = await answerPurge(await signed(raise), deps());
 
     expect(response.status).toBe(202);
     expect(raised).toEqual([
-      { mode: "purge", tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 1_000 }] },
+      {
+        scope: { slug: "p1", isrPrefix: PREFIX },
+        mode: "purge",
+        tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 1_000 }],
+      },
     ]);
   });
 

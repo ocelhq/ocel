@@ -1,7 +1,6 @@
-import type { PurgeMode } from "@platform/edge-contract/purge";
-import type { RaisedTag } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
-import { ORIGIN_PURGE_SCOPE, type RenderCoordinates } from "./serve-key";
+import type { PurgeQueuePort } from "./purge-request";
+import type { RenderCoordinates } from "./serve-key";
 import type { ServeFactory } from "./serve-objects";
 import type { Serving } from "./serve-prerender";
 import { settledWithin } from "./settled";
@@ -10,8 +9,7 @@ export const AWAITED_PURGE_MS = 3_000;
 
 export interface ServingPorts {
   serve: ServeFactory;
-  queue: { raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
-  times: { record(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
+  queue: Pick<PurgeQueuePort, "raise">;
   waitUntil(promise: Promise<unknown>): void;
   now?(): number;
   awaitedPurgeMs?: number;
@@ -29,9 +27,8 @@ export function newServing(
     isrPrefix: scope.isrPrefix,
     purge(groups, awaited) {
       const run = purgeInBand(groups, {
-        cache: ports.serve({ props: ORIGIN_PURGE_SCOPE }),
         queue: ports.queue,
-        times: ports.times,
+        scope: { slug: scope.slug, isrPrefix: scope.isrPrefix },
         now: ports.now ?? Date.now,
       });
       ports.waitUntil(run);

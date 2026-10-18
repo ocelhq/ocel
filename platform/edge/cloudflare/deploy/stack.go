@@ -157,11 +157,11 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, err
 	}
 
-	id, stamps, err := p.ensureInstance(ctx, spec, prior)
+	secret, stamps, err := p.ensureInstance(ctx, spec, prior)
 	if err != nil {
 		return nil, err
 	}
-	held := edge.StackState{Endpoint: endpoint, Slug: slug, Secret: id.secret, Tier: spec.Tier}
+	held := edge.StackState{Endpoint: endpoint, Slug: slug, Secret: secret, Tier: spec.Tier}
 	if err := p.putGate(ctx, held, spec.Gate); err != nil {
 		return nil, fmt.Errorf("publish the %s gate of %s: %w", spec.Tier, slug, err)
 	}
@@ -245,7 +245,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if err != nil {
 		return nil, err
 	}
-	if err := p.putVersionStamp(ctx, endpoint, slug, id.secret, encoded); err != nil {
+	if err := p.putVersionStamp(ctx, endpoint, slug, secret, encoded); err != nil {
 		return nil, fmt.Errorf("set stack version stamp: %w", err)
 	}
 
@@ -253,8 +253,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	next.PurgeURL = purgeURL
 	next.Slug = slug
 	next.Endpoint = endpoint
-	next.Secret = id.secret
-	next.OwnerToken = id.ownerToken
+	next.Secret = secret
 	next.Tier = spec.Tier
 	return opened(next)
 }
@@ -283,43 +282,25 @@ func (p *cloudflare) putWorkerScript(ctx context.Context, up upload, what string
 	return nil
 }
 
-type storeIdentity struct {
-	secret     string
-	ownerToken string
-}
-
-func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (storeIdentity, stampSet, error) {
+func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (string, stampSet, error) {
 	if secret := prior.Secret; secret != "" && prior.Slug == spec.Slug {
 		current, res, err := p.getVersionStamp(ctx, spec.Program.StoreEndpoint, spec.Slug, secret)
 		switch {
 		case err == nil:
-			return storeIdentity{secret: secret, ownerToken: prior.OwnerToken}, decodeStampSet(current), nil
+			return secret, decodeStampSet(current), nil
 		case !isUnauthorized(res):
-			return storeIdentity{}, nil, fmt.Errorf("read stack version stamp: %w", err)
+			return "", nil, fmt.Errorf("read stack version stamp: %w", err)
 		}
 	}
 
-	minted, err := mintIdentity()
-	if err != nil {
-		return storeIdentity{}, nil, err
-	}
-	adopted, err := p.initializeInstance(ctx, spec.Program.StoreEndpoint, spec.Slug, spec.Program.BootstrapCredential, minted)
-	if err != nil {
-		return storeIdentity{}, nil, fmt.Errorf("initialize project store instance: %w", err)
-	}
-	return adopted, stampSet{}, nil
-}
-
-func mintIdentity() (storeIdentity, error) {
 	secret, err := mintSecret()
 	if err != nil {
-		return storeIdentity{}, fmt.Errorf("mint project store secret: %w", err)
+		return "", nil, fmt.Errorf("mint project store secret: %w", err)
 	}
-	ownerToken, err := mintSecret()
-	if err != nil {
-		return storeIdentity{}, fmt.Errorf("mint project store owner token: %w", err)
+	if err := p.initializeInstance(ctx, spec.Program.StoreEndpoint, spec.Slug, spec.Program.BootstrapCredential, secret); err != nil {
+		return "", nil, fmt.Errorf("initialize project store instance: %w", err)
 	}
-	return storeIdentity{secret: secret, ownerToken: ownerToken}, nil
+	return secret, stampSet{}, nil
 }
 
 func (s *stack) Destroy(ctx context.Context) error {

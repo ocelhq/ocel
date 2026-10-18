@@ -1,16 +1,12 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
-import type { AssetBucket } from "@framework/next-router/assets";
+import fixtures from "@framework/next-router/fixtures/image-conformance.json";
+import type { ImageConfig } from "@framework/next-router/image";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  type ResolveBase,
-  type RouteDeps,
-  resolveRouteDeps,
-  resolveServe,
-  type ServeFetch,
-} from "../src/index";
+import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import type { ReleaseRecord, ReleasesBinding } from "../src/releases";
-import type { ServingPorts } from "../src/serving";
-import { answerEveryRecordWith } from "./origin-deps";
+import { servedNextRelease, UNTOKENED_ISR_PREFIX } from "./next-release";
+import { answerEveryRecordWith, capturing } from "./origin-deps";
+import { resolveBase } from "./resolve-base";
 import { type CountingObjectStore, objectStoreHolding, routeTableKey } from "./route-table-store";
 import { fakeServing } from "./serving-deps";
 
@@ -56,17 +52,11 @@ function failingBinding(): ReleasesBinding {
   });
 }
 
-const assetStore: RouteDeps["assetStore"] = {
-  cache: { match: async () => undefined, put: async () => {} },
-  waitUntil: () => {},
-};
-
 function baseWith(over: Partial<ResolveBase> = {}): ResolveBase {
-  return {
-    assetStore,
+  return resolveBase({
     routeTableStore: objectStoreHolding({ [routeTableKey()]: TABLE }),
     ...over,
-  };
+  });
 }
 
 function lookup(record: ReleaseRecord, slug = "p1") {
@@ -78,15 +68,7 @@ function lookup(record: ReleaseRecord, slug = "p1") {
   };
 }
 
-function servingBase(): ServingPorts {
-  return {
-    serve: fakeServing().serving.serve,
-    queue: { raise: async () => {} },
-    waitUntil: () => {},
-  };
-}
-
-describe("resolveRouteDeps", () => {
+describe("a routed release", () => {
   it("refuses a record whose edge bundle lies outside the deployment's own prefix", async () => {
     const record = makeRecord({
       edgeWorkers: {
@@ -96,7 +78,7 @@ describe("resolveRouteDeps", () => {
       },
     });
 
-    await expect(resolveRouteDeps(lookup(record), baseWith())).rejects.toThrow(
+    await expect(resolveServe(lookup(record), baseWith())).rejects.toThrow(
       /outside its own prefix/,
     );
   });
@@ -110,87 +92,106 @@ describe("resolveRouteDeps", () => {
       },
     });
 
-    const deps = await resolveRouteDeps(lookup(record), baseWith());
-    expect(deps).not.toBeInstanceOf(Response);
+    const served = await resolveServe(lookup(record), baseWith());
+    expect(served).not.toBeInstanceOf(Response);
   });
 
-  it("wires the resolved Deployment's route table and functionUrls into RouteDeps", async () => {
-    const record = makeRecord();
-    const deps = await resolveRouteDeps(lookup(record), baseWith());
+  it("forwards a function route to the function URL the record names", async () => {
+    const wire = capturing();
+    const serve = servedNextRelease({
+      table: { dispatch: { "/api": { kind: "function", id: "/" } } },
+      record: { functionUrls: { "/": "https://fn.example.com" } },
+      fetch: wire.fetch,
+    });
 
-    expect(deps).not.toBeInstanceOf(Response);
-    const routeDeps = deps as RouteDeps;
-    expect(routeDeps.manifest).toEqual(TABLE);
-    expect(routeDeps.functionUrls).toEqual(record.functionUrls);
-    expect(routeDeps.appBuildId).toBe("deploy-1");
+    const response = await serve(new Request("https://shop.example.com/api"));
+
+    expect(await response.text()).toBe("origin");
+    expect(wire.calls.map(({ url }) => url)).toEqual(["https://fn.example.com/api"]);
   });
 
-  it("fills the asset store's prefix from the record's asset prefix", async () => {
-    const record = makeRecord({ assetPrefix: "assets/p1/web/build-1" });
-    const deps = await resolveRouteDeps(lookup(record), baseWith());
+  it("reads static pages under the record's asset prefix", async () => {
+    const serve = servedNextRelease({
+      table: { dispatch: { "/a": { kind: "static" } } },
+      record: { assetPrefix: "assets/p1/web/build-1" },
+      assets: { "/a.html": "<h1>a</h1>" },
+    });
 
-    expect(deps).not.toBeInstanceOf(Response);
-    expect((deps as RouteDeps).assetStore.assetPrefix).toBe("assets/p1/web/build-1");
+    const response = await serve(new Request("https://shop.example.com/a"));
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("<h1>a</h1>");
   });
+
+  const prerender: NextRouteTable["dispatch"] = {
+    "/blog": { kind: "prerender", id: "/blog", config: {} },
+  };
 
   it("serves prerenders through Serve under the release token its ISR prefix names", async () => {
-    const record = makeRecord({ isrPrefix: "prod/p1/web/r0a1b2c3d/isr" });
-    const deps = await resolveRouteDeps(lookup(record), baseWith({ serving: servingBase() }));
+    const served = fakeServing();
+    const serve = servedNextRelease({
+      table: { dispatch: prerender },
+      record: { functionUrls: { "/blog": "https://fn.example.com" } },
+      serve: served.serving.serve,
+    });
 
-    expect(deps).not.toBeInstanceOf(Response);
-    expect((deps as RouteDeps).serving?.release).toBe("r0a1b2c3d");
+    await serve(new Request("https://shop.example.com/blog"));
+
+    expect(served.calls.map(({ coordinates }) => coordinates.release)).toEqual(["r0a1b2c3d"]);
   });
 
   it("serves prerenders through Serve under the token, not the build's own name", async () => {
-    const record = makeRecord({ isrPrefix: "prod/p1/web/r0a1b2c3d/isr", release: "build-1~abc" });
-    const deps = await resolveRouteDeps(lookup(record), baseWith({ serving: servingBase() }));
+    const served = fakeServing();
+    const serve = servedNextRelease({
+      table: { dispatch: prerender },
+      record: { functionUrls: { "/blog": "https://fn.example.com" }, release: "build-1~abc" },
+      serve: served.serving.serve,
+    });
 
-    expect((deps as RouteDeps).serving?.release).not.toBe("build-1~abc");
+    await serve(new Request("https://shop.example.com/blog"));
+
+    expect(served.calls[0].coordinates.release).not.toBe("build-1~abc");
   });
 
   it("leaves prerenders to the origin when the ISR prefix names no release token", async () => {
-    const record = makeRecord({ isrPrefix: "prod/p1/web/build-1" });
-    const deps = await resolveRouteDeps(lookup(record), baseWith({ serving: servingBase() }));
+    const served = fakeServing();
+    const wire = capturing();
+    const serve = servedNextRelease({
+      table: { dispatch: prerender },
+      record: {
+        functionUrls: { "/blog": "https://fn.example.com" },
+        isrPrefix: UNTOKENED_ISR_PREFIX,
+      },
+      serve: served.serving.serve,
+      fetch: wire.fetch,
+    });
 
-    expect((deps as RouteDeps).serving).toBeUndefined();
-  });
+    await serve(new Request("https://shop.example.com/blog"));
 
-  it("leaves prerenders to the origin when no Serve is bound", async () => {
-    const deps = await resolveRouteDeps(lookup(makeRecord()), baseWith());
-
-    expect((deps as RouteDeps).serving).toBeUndefined();
+    expect(served.calls).toHaveLength(0);
+    expect(wire.calls.map(({ url }) => url)).toEqual(["https://fn.example.com/blog"]);
   });
 
   it("returns the baked-in 404 when the app has no active pointer", async () => {
-    const deps = await resolveRouteDeps(
-      { binding: bindingReturning(undefined, undefined), slug: "p1", app: "web" },
+    const served = await resolveServe(
+      { binding: bindingReturning(undefined, undefined), slug: "p1", host: "a", app: "web" },
       baseWith(),
     );
 
-    expect(deps).toBeInstanceOf(Response);
-    const response = deps as Response;
+    expect(served).toBeInstanceOf(Response);
+    const response = served as Response;
     expect(response.status).toBe(404);
     expect(await response.text()).toMatch(/deployment/i);
   });
 
-  it("returns 501 for a Deployment that ships no route table", async () => {
-    const record = makeRecord({ framework: "node", routeTable: undefined });
-    const deps = await resolveRouteDeps(lookup(record), baseWith());
-
-    expect(deps).toBeInstanceOf(Response);
-    const response = deps as Response;
-    expect(response.status).toBe(501);
-    expect(await response.text()).toMatch(/node/);
-  });
-
   it("returns 503 when the store is unreachable on a cold isolate", async () => {
-    const deps = await resolveRouteDeps(
-      { binding: failingBinding(), slug: "p1", app: "web" },
+    const served = await resolveServe(
+      { binding: failingBinding(), slug: "p1", host: "a", app: "web" },
       baseWith(),
     );
 
-    expect(deps).toBeInstanceOf(Response);
-    expect((deps as Response).status).toBe(503);
+    expect(served).toBeInstanceOf(Response);
+    expect((served as Response).status).toBe(503);
   });
 });
 
@@ -204,7 +205,7 @@ describe("the route table of a routed deployment", () => {
   }
 
   async function answered(store: CountingObjectStore | undefined, record = makeRecord()) {
-    return resolveRouteDeps(lookup(record), baseWith({ routeTableStore: store }));
+    return resolveServe(lookup(record), baseWith({ routeTableStore: store }));
   }
 
   it("is read from the cache store at the record's key and routes the request", async () => {
@@ -224,16 +225,22 @@ describe("the route table of a routed deployment", () => {
         dispatch: { "/a": { kind: "static" } },
       },
     });
-    const assets: AssetBucket = {
-      async get(key) {
-        if (!key.endsWith("/a.html")) return null;
-        return { body: new Blob(["<h1>a</h1>"]).stream() };
-      },
-    };
 
     const serving = await resolveServe(
-      { ...lookup(makeRecord()), host: "shop.example.com" },
-      baseWith({ routeTableStore: store, assetStore: { ...assetStore, store: assets } }),
+      lookup(makeRecord()),
+      baseWith({
+        routeTableStore: store,
+        assetStore: {
+          store: {
+            async get(key) {
+              if (!key.endsWith("/a.html")) return null;
+              return { body: new Blob(["<h1>a</h1>"]).stream() };
+            },
+          },
+          cache: { match: async () => undefined, put: async () => {} },
+          waitUntil: () => {},
+        },
+      }),
     );
 
     expect(typeof serving).toBe("function");
@@ -247,9 +254,9 @@ describe("the route table of a routed deployment", () => {
     const store = objectStoreHolding({ [routeTableKey()]: TABLE });
 
     await answered(store);
-    const deps = await answered(store);
+    const served = await answered(store);
 
-    expect((deps as RouteDeps).manifest).toEqual(TABLE);
+    expect(typeof served).toBe("function");
     expect(store.reads).toHaveLength(1);
   });
 
@@ -258,17 +265,17 @@ describe("the route table of a routed deployment", () => {
 
     const [first, second] = await Promise.all([answered(store), answered(store)]);
 
-    expect((first as RouteDeps).manifest).toEqual(TABLE);
-    expect((second as RouteDeps).manifest).toEqual(TABLE);
+    expect(typeof first).toBe("function");
+    expect(typeof second).toBe("function");
     expect(store.reads).toHaveLength(1);
   });
 
   it("answers 503 and names the release and key when no cache store is bound", async () => {
     const errors = silencedErrors();
 
-    const deps = await answered(undefined);
+    const served = await answered(undefined);
 
-    expect((deps as Response).status).toBe(503);
+    expect((served as Response).status).toBe(503);
     expect(errors).toHaveBeenCalledWith(
       expect.stringMatching(new RegExp(`deploy-1.*${routeTableKey()}`)),
       expect.anything(),
@@ -280,9 +287,9 @@ describe("the route table of a routed deployment", () => {
     const key = "prod/p1/web/deploy-1/edge/bundle.json";
     const store = objectStoreHolding({ [key]: TABLE });
 
-    const deps = await answered(store, makeRecord({ routeTable: { format: "next", key } }));
+    const served = await answered(store, makeRecord({ routeTable: { format: "next", key } }));
 
-    expect((deps as Response).status).toBe(503);
+    expect((served as Response).status).toBe(503);
     expect(store.reads).toEqual([]);
     expect(errors).toHaveBeenCalledWith(
       expect.stringMatching(new RegExp(`deploy-1.*${key}`)),
@@ -295,9 +302,9 @@ describe("the route table of a routed deployment", () => {
     const key = routeTableKey("other");
     const store = objectStoreHolding({ [key]: TABLE });
 
-    const deps = await answered(store, makeRecord({ routeTable: { format: "next", key } }));
+    const served = await answered(store, makeRecord({ routeTable: { format: "next", key } }));
 
-    expect((deps as Response).status).toBe(503);
+    expect((served as Response).status).toBe(503);
     expect(store.reads).toEqual([]);
     expect(errors).toHaveBeenCalledWith(
       expect.stringMatching(new RegExp(`deploy-1.*${key}`)),
@@ -308,9 +315,9 @@ describe("the route table of a routed deployment", () => {
   it("answers 503 when no route table is stored at the key", async () => {
     const errors = silencedErrors();
 
-    const deps = await answered(objectStoreHolding({}));
+    const served = await answered(objectStoreHolding({}));
 
-    expect((deps as Response).status).toBe(503);
+    expect((served as Response).status).toBe(503);
     expect(errors).toHaveBeenCalledWith(
       expect.stringMatching(new RegExp(`deploy-1.*${routeTableKey()}`)),
       expect.anything(),
@@ -320,9 +327,9 @@ describe("the route table of a routed deployment", () => {
   it("answers 503 when the stored route table is not JSON", async () => {
     const errors = silencedErrors();
 
-    const deps = await answered(objectStoreHolding({ [routeTableKey()]: "{not json" }));
+    const served = await answered(objectStoreHolding({ [routeTableKey()]: "{not json" }));
 
-    expect((deps as Response).status).toBe(503);
+    expect((served as Response).status).toBe(503);
     expect(errors).toHaveBeenCalledWith(
       expect.stringMatching(new RegExp(`deploy-1.*${routeTableKey()}`)),
       expect.anything(),
@@ -335,33 +342,16 @@ describe("the route table of a routed deployment", () => {
     await answered(store);
     store.objects.set(routeTableKey(), JSON.stringify(TABLE));
 
-    const deps = await answered(store);
+    const served = await answered(store);
 
-    expect((deps as RouteDeps).manifest).toEqual(TABLE);
+    expect(typeof served).toBe("function");
     expect(store.reads).toHaveLength(2);
   });
 });
 
 describe("the image origin of a routed deployment", () => {
   const entryUrl = "https://r1-x.o.example.com";
-
-  function imageRecord(): ReleaseRecord {
-    return makeRecord({ functionUrls: { "bundle-0": entryUrl } });
-  }
-
-  const imageTableStore = objectStoreHolding({
-    [routeTableKey()]: { ...TABLE, rootFunction: "bundle-0" },
-  });
-
-  const payload = {
-    assetPrefix: "build-1",
-    url: "/a.png",
-    w: 640,
-    q: 75,
-    accept: "image/webp",
-    mimeType: "image/webp",
-    configHash: "deadbeef",
-  };
+  const images = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
   function reached(fetched: string[]): typeof fetch {
     return (async (input: RequestInfo | URL) => {
@@ -370,19 +360,24 @@ describe("the image origin of a routed deployment", () => {
     }) as typeof fetch;
   }
 
-  async function depsWith(base: Partial<ResolveBase>) {
-    const deps = await resolveRouteDeps(
-      lookup(imageRecord()),
-      baseWith({ routeTableStore: imageTableStore, ...base }),
-    );
-    return deps as RouteDeps;
+  function imageRelease(base: Partial<ResolveBase>) {
+    return servedNextRelease({
+      table: { rootFunction: "bundle-0", images },
+      record: { functionUrls: { "bundle-0": entryUrl }, isrPrefix: UNTOKENED_ISR_PREFIX },
+      base,
+    });
   }
+
+  const imageRequest = () =>
+    new Request("https://shop.example.com/_next/image?url=%2Fa.png&w=640&q=75", {
+      headers: { accept: "image/webp" },
+    });
 
   it("asks the deployment's own service for an image when no optimizer is bound", async () => {
     const fetched: string[] = [];
-    const deps = await depsWith({ imagesAtDeployment: true, originFetch: reached(fetched) });
+    const serve = imageRelease({ imagesAtDeployment: true, originFetch: reached(fetched) });
 
-    const response = await deps.imageOrigin!(payload);
+    const response = await serve(imageRequest());
 
     expect(response.status).toBe(200);
     expect(fetched).toEqual(["https://r1-x.o.example.com/_ocel/image"]);
@@ -390,26 +385,32 @@ describe("the image origin of a routed deployment", () => {
 
   it("keeps the AWS optimizer when one is bound", async () => {
     const optimizer = async () => new Response("optimizer", { status: 200 });
-    const deps = await depsWith({ imagesAtDeployment: false, imageOrigin: optimizer });
+    const serve = imageRelease({ imagesAtDeployment: false, imageOrigin: optimizer });
 
-    expect(deps.imageOrigin).toBe(optimizer);
+    const response = await serve(imageRequest());
+
+    expect(await response.text()).toBe("optimizer");
   });
 
   it("leaves an origin reached with AWS keys without a deployment image origin", async () => {
-    const deps = await depsWith({ originFetch: reached([]) });
+    const fetched: string[] = [];
+    const serve = imageRelease({ originFetch: reached(fetched) });
 
-    expect(deps.imageOrigin).toBeUndefined();
+    const response = await serve(imageRequest());
+
+    expect(response.status).toBe(502);
+    expect(fetched).toEqual([]);
   });
 
   it("answers unprovisioned when the deployment's service cannot be reached", async () => {
-    const deps = await depsWith({
+    const serve = imageRelease({
       imagesAtDeployment: true,
       originFetch: (async () => {
         throw new Error("unreachable");
       }) as typeof fetch,
     });
 
-    const response = await deps.imageOrigin!(payload);
+    const response = await serve(imageRequest());
 
     expect(response.status).toBe(502);
     expect(await response.text()).toContain("No image optimizer is provisioned");

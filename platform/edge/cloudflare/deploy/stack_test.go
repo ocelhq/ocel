@@ -616,8 +616,8 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
-		if state.Secret == "" || state.OwnerToken == "" {
-			t.Fatalf("persisted identity = %q/%q, want the minted pair", state.Secret, state.OwnerToken)
+		if state.Secret == "" {
+			t.Fatal("persisted secret is empty, want the minted one")
 		}
 		if err := p.putVersionStamp(t.Context(), store.URL, "acme-web", state.Secret, "v3"); err != nil {
 			t.Errorf("the persisted secret does not authenticate: %v", err)
@@ -948,17 +948,17 @@ func TestEnsureInstance(t *testing.T) {
 			t.Fatalf("destroyInstance: %v", err)
 		}
 
-		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), state)
+		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), state)
 		if err != nil {
 			t.Fatalf("ensureInstance after a wipe: %v", err)
 		}
 		if len(stamps) != 0 {
 			t.Errorf("stamps = %v, want none: a wiped instance has no version stamp", stamps)
 		}
-		if id.secret == "" || id.ownerToken == "" {
-			t.Fatalf("identity = %+v, want the freshly seeded pair the wiped instance now has", id)
+		if secret == "" {
+			t.Fatal("secret is empty, want the one the wiped instance is seeded with")
 		}
-		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", id.secret, "v2"); err != nil {
+		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", secret, "v2"); err != nil {
 			t.Fatalf("the re-seeded instance still rejects the project: %v", err)
 		}
 	})
@@ -984,35 +984,35 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 		putStampSet(t, p, srv.URL, "s3cr3t", stampSet{"": "stamp-v2"})
-		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"))
+		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"))
 		if err != nil {
 			t.Fatalf("ensureInstance: %v", err)
 		}
 		if stamps[""] != "stamp-v2" {
 			t.Errorf("stamps = %v, want the stamp the edge stack already has", stamps)
 		}
-		if id.secret != "s3cr3t" {
-			t.Errorf("secret = %q, want the one already in state", id.secret)
+		if secret != "s3cr3t" {
+			t.Errorf("secret = %q, want the one already in state", secret)
 		}
 	})
 
-	t.Run("a first reconcile seeds two distinct credentials", func(t *testing.T) {
+	t.Run("a first reconcile seeds a minted secret", func(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "")
 		p := &cloudflare{}
 
-		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), edge.StackState{})
+		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), edge.StackState{})
 		if err != nil {
 			t.Fatalf("ensureInstance with no prior state: %v", err)
 		}
 		if len(stamps) != 0 {
 			t.Errorf("stamps = %v, want none for a project with no edge stack yet", stamps)
 		}
-		if id.secret == "" || id.ownerToken == "" || id.secret == id.ownerToken {
-			t.Fatalf("minted identity = %+v, want two distinct non-empty credentials", id)
+		if secret == "" {
+			t.Fatal("minted secret is empty")
 		}
-		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", id.secret, "v1"); err != nil {
+		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", secret, "v1"); err != nil {
 			t.Fatalf("the seeded instance rejects the minted secret: %v", err)
 		}
 	})

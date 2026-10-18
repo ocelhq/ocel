@@ -1,18 +1,14 @@
+import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
-
-import { dispatchResult, type RouteDeps } from "../src/index";
+import type { ServeFetch } from "../src/index";
 import { buildEdgeUrl, readEdgeEntry } from "../src/serve-key";
+import { countingLoader, edgeBundle } from "./edge-bundle";
+import { servedNextRelease, UNTOKENED_ISR_PREFIX } from "./next-release";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
 const ENTRY_HEADER = "x-ocel-entry";
 
-function noAssets(): RouteDeps["assetStore"] {
-  return {
-    assetPrefix: "",
-    cache: { match: async () => undefined, put: async () => {} },
-    waitUntil: () => {},
-  };
-}
+type Target = NextRouteTable["dispatch"][string];
 
 function recorder() {
   const requests: Request[] = [];
@@ -26,46 +22,28 @@ function recorder() {
   return { requests, fetch, entries: () => requests.map((r) => r.headers.get(ENTRY_HEADER)) };
 }
 
-function deps(over: Partial<RouteDeps>): RouteDeps {
-  return {
-    manifest: { buildId: "t", basePath: "", pathnames: [], routes: {}, dispatch: {} },
-    functionUrls: {},
-    slug: "p1",
-    appBuildId: "d1",
-    app: "web",
-    assetStore: noAssets(),
-    ...over,
-  };
+function lambdaRelease(
+  origin: ReturnType<typeof recorder>,
+  dispatch: Record<string, Target>,
+  functionUrls: Record<string, string> = { "bundle-0": "https://fn.example.com" },
+): ServeFetch {
+  return servedNextRelease({
+    table: { dispatch },
+    record: { functionUrls },
+    fetch: origin.fetch,
+  });
 }
 
-const dispatchTo = (pathname: string, deps: RouteDeps, request?: Request) =>
-  dispatchResult(
-    { resolvedPathname: pathname, invocationTarget: { pathname } },
-    request ?? new Request(`https://app.example${pathname}`),
-    deps,
-  );
+const dispatchTo = (pathname: string, serve: ServeFetch, request?: Request) =>
+  serve(request ?? new Request(`https://app.example${pathname}`));
 
 describe("a lambda route's bundle entry", () => {
   it("forwards x-ocel-entry naming the entry inside the bundle", async () => {
     const origin = recorder();
     const res = await dispatchTo(
       "/blog/hello",
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: [],
-          routes: {},
-          dispatch: {
-            "/blog/hello": {
-              kind: "function",
-              id: "bundle-0",
-              entryKey: "app/blog/[slug]/page",
-            },
-          },
-        },
-        functionUrls: { "bundle-0": "https://fn.example.com" },
-        fetch: origin.fetch,
+      lambdaRelease(origin, {
+        "/blog/hello": { kind: "function", id: "bundle-0", entryKey: "app/blog/[slug]/page" },
       }),
     );
 
@@ -78,17 +56,11 @@ describe("a lambda route's bundle entry", () => {
     const origin = recorder();
     await dispatchTo(
       "/api/documents",
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: [],
-          routes: {},
-          dispatch: { "/api/documents": { kind: "function", id: "/api/documents" } },
-        },
-        functionUrls: { "/api/documents": "https://fn.example.com" },
-        fetch: origin.fetch,
-      }),
+      lambdaRelease(
+        origin,
+        { "/api/documents": { kind: "function", id: "/api/documents" } },
+        { "/api/documents": "https://fn.example.com" },
+      ),
     );
 
     expect(origin.requests[0].headers.has(ENTRY_HEADER)).toBe(false);
@@ -98,19 +70,7 @@ describe("a lambda route's bundle entry", () => {
     const origin = recorder();
     await dispatchTo(
       "/blog/hello",
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: [],
-          routes: {},
-          dispatch: {
-            "/blog/hello": { kind: "function", id: "bundle-0", entryKey: "" },
-          },
-        },
-        functionUrls: { "bundle-0": "https://fn.example.com" },
-        fetch: origin.fetch,
-      }),
+      lambdaRelease(origin, { "/blog/hello": { kind: "function", id: "bundle-0", entryKey: "" } }),
       new Request("https://app.example/blog/hello", {
         headers: { [ENTRY_HEADER]: "attacker/admin/page" },
       }),
@@ -124,22 +84,12 @@ describe("a lambda route's bundle entry", () => {
     const origin = recorder();
     await dispatchTo(
       "/api/documents",
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: [],
-          routes: {},
-          dispatch: {
-            "/api/documents": {
-              kind: "function",
-              id: "bundle-0",
-              entryKey: "app/api/documents/route",
-            },
-          },
+      lambdaRelease(origin, {
+        "/api/documents": {
+          kind: "function",
+          id: "bundle-0",
+          entryKey: "app/api/documents/route",
         },
-        functionUrls: { "bundle-0": "https://fn.example.com" },
-        fetch: origin.fetch,
       }),
       new Request("https://app.example/api/documents", {
         method: "POST",
@@ -153,24 +103,10 @@ describe("a lambda route's bundle entry", () => {
 
   it("resolves every pathname of one bundle to its single Function URL", async () => {
     const origin = recorder();
-    const shared = deps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: {
-          "/": { kind: "function", id: "bundle-0", entryKey: "app/page" },
-          "/about": { kind: "function", id: "bundle-0", entryKey: "app/about/page" },
-          "/api/hook": {
-            kind: "function",
-            id: "bundle-0",
-            entryKey: "app/api/hook/route",
-          },
-        },
-      },
-      functionUrls: { "bundle-0": "https://fn.example.com" },
-      fetch: origin.fetch,
+    const shared = lambdaRelease(origin, {
+      "/": { kind: "function", id: "bundle-0", entryKey: "app/page" },
+      "/about": { kind: "function", id: "bundle-0", entryKey: "app/about/page" },
+      "/api/hook": { kind: "function", id: "bundle-0", entryKey: "app/api/hook/route" },
     });
 
     for (const pathname of ["/", "/about", "/api/hook"]) {
@@ -187,30 +123,24 @@ describe("a lambda route's bundle entry", () => {
 });
 
 describe("a prerender whose parent is a node bundle", () => {
-  const target = {
-    kind: "prerender" as const,
+  const target: Target = {
+    kind: "prerender",
     id: "bundle-0",
     entryKey: "app/blog/page",
     config: {
       allowHeader: ["host", "x-matched-path", "x-prerender-revalidate"],
-      bypassFor: [{ type: "cookie" as const, key: "preview" }],
+      bypassFor: [{ type: "cookie", key: "preview" }],
       bypassToken: "TOKEN",
     },
     fallback: { initialRevalidate: 60 },
   };
 
-  function blogDeps(origin: ReturnType<typeof recorder>, serving: FakeServing) {
-    return deps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: { "/blog": target },
-      },
-      functionUrls: { "bundle-0": "https://fn.example.com" },
+  function blogRelease(origin: ReturnType<typeof recorder>, serving: FakeServing) {
+    return servedNextRelease({
+      table: { dispatch: { "/blog": target } },
+      record: { functionUrls: { "bundle-0": "https://fn.example.com" } },
       fetch: origin.fetch,
-      serving: serving.serving,
+      serve: serving.serving.serve,
     });
   }
 
@@ -218,7 +148,7 @@ describe("a prerender whose parent is a node bundle", () => {
     const origin = recorder();
     const res = await dispatchTo(
       "/blog",
-      blogDeps(origin, fakeServing()),
+      blogRelease(origin, fakeServing()),
       new Request("https://app.example/blog", {
         headers: { cookie: "preview=1" },
       }),
@@ -233,7 +163,7 @@ describe("a prerender whose parent is a node bundle", () => {
     const origin = recorder();
     const serving = fakeServing();
 
-    await dispatchTo("/blog", blogDeps(origin, serving));
+    await dispatchTo("/blog", blogRelease(origin, serving));
 
     expect(serving.calls).toHaveLength(1);
     expect(serving.calls[0].request.headers.get(ENTRY_HEADER)).toBe("app/blog/page");
@@ -246,7 +176,7 @@ describe("a prerender whose parent is a node bundle", () => {
 
     await dispatchTo(
       "/blog",
-      blogDeps(origin, serving),
+      blogRelease(origin, serving),
       new Request("https://app.example/blog", { headers: { "x-prerender-revalidate": "TOKEN" } }),
     );
 
@@ -256,11 +186,11 @@ describe("a prerender whose parent is a node bundle", () => {
 });
 
 describe("a PPR prerender whose parent is a node bundle", () => {
-  const target = {
-    kind: "prerender" as const,
+  const target: Target = {
+    kind: "prerender",
     id: "bundle-0",
     entryKey: "app/ppr/page",
-    config: { renderingMode: "PARTIALLY_STATIC" as const },
+    config: { renderingMode: "PARTIALLY_STATIC" },
     fallback: { initialRevalidate: 60 },
   };
 
@@ -275,17 +205,11 @@ describe("a PPR prerender whose parent is a node bundle", () => {
 
     await dispatchTo(
       "/ppr",
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: [],
-          routes: {},
-          dispatch: { "/ppr": target },
-        },
-        functionUrls: { "bundle-0": "https://fn.example.com" },
+      servedNextRelease({
+        table: { dispatch: { "/ppr": target } },
+        record: { functionUrls: { "bundle-0": "https://fn.example.com" } },
         fetch: origin.fetch,
-        serving: serving.serving,
+        serve: serving.serving.serve,
       }),
     );
 
@@ -298,18 +222,12 @@ describe("a PPR prerender whose parent is a node bundle", () => {
 });
 
 describe("a client-supplied control header", () => {
-  const lambdaDeps = (origin: ReturnType<typeof recorder>, target: Record<string, unknown>) =>
-    deps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: { "/blog/hello": target as never },
-      },
-      functionUrls: { legacy: "https://fn.example.com", "bundle-0": "https://fn.example.com" },
-      fetch: origin.fetch,
-    });
+  const legacyRelease = (origin: ReturnType<typeof recorder>, target: Target) =>
+    lambdaRelease(
+      origin,
+      { "/blog/hello": target },
+      { legacy: "https://fn.example.com", "bundle-0": "https://fn.example.com" },
+    );
 
   const smuggled = (headers: Record<string, string>) =>
     new Request("https://app.example/blog/hello", { headers });
@@ -318,7 +236,7 @@ describe("a client-supplied control header", () => {
     const origin = recorder();
     await dispatchTo(
       "/blog/hello",
-      lambdaDeps(origin, { kind: "function", id: "legacy" }),
+      legacyRelease(origin, { kind: "function", id: "legacy" }),
       smuggled({ [ENTRY_HEADER]: "attacker/admin/page" }),
     );
 
@@ -329,7 +247,7 @@ describe("a client-supplied control header", () => {
     const origin = recorder();
     await dispatchTo(
       "/blog/hello",
-      lambdaDeps(origin, {
+      legacyRelease(origin, {
         kind: "function",
         id: "bundle-0",
         entryKey: "app/blog/[slug]/page",
@@ -345,7 +263,7 @@ describe("a client-supplied control header", () => {
     const origin = recorder();
     await dispatchTo(
       "/blog/hello",
-      lambdaDeps(origin, { kind: "function", id: "legacy" }),
+      legacyRelease(origin, { kind: "function", id: "legacy" }),
       smuggled({
         [ENTRY_HEADER]: "attacker/admin/page",
         "next-resume": "1",
@@ -363,93 +281,86 @@ describe("a client-supplied control header", () => {
 });
 
 describe("a prerender whose parent renders on the edge", () => {
-  const edgeTarget = {
-    kind: "prerender" as const,
+  const edgeTarget: Target = {
+    kind: "prerender",
     id: "/edge-blog",
     edgeEntryKey: "middleware_app/edge-blog",
     config: {},
     fallback: { initialRevalidate: 60 },
   };
 
-  const unnamedTarget = (({ id: _unused, ...rest }) => rest)(edgeTarget);
+  const { id: _unused, ...unnamedTarget } = edgeTarget as Target & { id: string };
 
-  function edgeDeps(
-    over: {
-      target?: typeof edgeTarget | typeof unnamedTarget;
-      functionUrls?: Record<string, string>;
-      throughServe?: boolean;
-    } = {},
-  ): {
-    serving: FakeServing;
-    deps: RouteDeps;
-    invocations: () => string[];
-    urls: () => string[];
-  } {
-    const invocations: string[] = [];
-    const urls: string[] = [];
+  const renderer = edgeBundle({
+    "middleware_app/edge-blog": `async () =>
+       new Response("<html>rendered-on-edge</html>", {
+         status: 200,
+         headers: { "cache-control": "s-maxage=60" },
+       })`,
+  });
+
+  function edgeRelease(
+    over: { target?: Target; functionUrls?: Record<string, string>; throughServe?: boolean } = {},
+  ) {
     const serving = fakeServing();
-    return {
-      serving,
-      invocations: () => invocations,
-      urls: () => urls,
-      deps: deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: [],
-          routes: {},
-          dispatch: { "/edge-blog": over.target ?? edgeTarget },
-        },
+    const { loader, invocations } = countingLoader();
+    const serve = servedNextRelease({
+      table: { dispatch: { "/edge-blog": over.target ?? edgeTarget } },
+      record: {
         functionUrls: over.functionUrls ?? {},
-        edge: async (entryKey, request) => {
-          invocations.push(entryKey);
-          urls.push(request.url);
-          return new Response("<html>rendered-on-edge</html>", {
-            status: 200,
-            headers: { "cache-control": "s-maxage=60" },
-          });
-        },
-        fetch: (async () => {
-          throw new Error("an edge-parented prerender must not reach a Function URL");
-        }) as unknown as typeof fetch,
-        serving: over.throughServe === false ? undefined : serving.serving,
-      }),
+        ...(over.throughServe === false && { isrPrefix: UNTOKENED_ISR_PREFIX }),
+      },
+      edgeBundle: renderer,
+      loader,
+      fetch: (async () => {
+        throw new Error("an edge-parented prerender must not reach a Function URL");
+      }) as unknown as typeof fetch,
+      serve: serving.serving.serve,
+    });
+    return {
+      serve,
+      serving,
+      invocations: () => invocations.map(({ entryKey }) => entryKey),
+      urls: () => invocations.map(({ url }) => url),
     };
   }
 
-  it("renders through the edge entry when no Serve is bound", async () => {
-    const { deps, invocations } = edgeDeps({ throughServe: false });
+  it("renders through the edge entry when its release names no token to store it under", async () => {
+    const { serve, invocations } = edgeRelease({ throughServe: false });
 
-    const res = await dispatchTo("/edge-blog", deps);
+    const res = await dispatchTo("/edge-blog", serve);
 
     expect(await res.text()).toBe("<html>rendered-on-edge</html>");
     expect(invocations()).toEqual(["middleware_app/edge-blog"]);
   });
 
   it("renders through the edge entry with no id to name a parent at all", async () => {
-    const { deps, invocations } = edgeDeps({ target: unnamedTarget, throughServe: false });
+    const { serve, invocations } = edgeRelease({
+      target: unnamedTarget as Target,
+      throughServe: false,
+    });
 
-    const res = await dispatchTo("/edge-blog", deps);
+    const res = await dispatchTo("/edge-blog", serve);
 
     expect(await res.text()).toBe("<html>rendered-on-edge</html>");
     expect(invocations()).toEqual(["middleware_app/edge-blog"]);
   });
 
   it("502s when neither a Function URL nor an edge entry resolves", async () => {
-    const { edgeEntryKey: _none, ...orphan } = unnamedTarget;
-    const { deps, invocations } = edgeDeps({ target: orphan as typeof unnamedTarget });
+    const { edgeEntryKey: _none, ...orphan } = unnamedTarget as Target & { edgeEntryKey: string };
+    const { serve, invocations } = edgeRelease({ target: orphan as Target });
 
-    expect((await dispatchTo("/edge-blog", deps)).status).toBe(502);
+    expect((await dispatchTo("/edge-blog", serve)).status).toBe(502);
     expect(invocations()).toEqual([]);
   });
 
   it("ignores a Function URL that its id happens to name", async () => {
-    const { deps, invocations, urls } = edgeDeps({
+    const { serve, invocations, urls } = edgeRelease({
       functionUrls: { "/edge-blog": "https://fn.example.com" },
       throughServe: false,
     });
 
-    const res = await dispatchTo("/edge-blog", deps);
+    const res = await dispatchTo("/edge-blog", serve);
 
     expect(await res.text()).toBe("<html>rendered-on-edge</html>");
     expect(invocations()).toEqual(["middleware_app/edge-blog"]);
@@ -457,15 +368,15 @@ describe("a prerender whose parent renders on the edge", () => {
   });
 
   it("is rendered by Serve from its edge entry at the host it serves, and never by the gateway", async () => {
-    const { deps, serving, invocations } = edgeDeps({
+    const { serve, serving, invocations } = edgeRelease({
       functionUrls: { "/edge-blog": "https://fn.example.com" },
     });
 
-    await dispatchTo("/edge-blog", deps);
+    await dispatchTo("/edge-blog", serve);
 
     expect(serving.calls).toHaveLength(1);
     expect(readEdgeEntry(serving.calls[0].request.url)).toBe("middleware_app/edge-blog");
-    expect(buildEdgeUrl(serving.calls[0].request.url)).toBe("https://shop.example.com/edge-blog");
+    expect(buildEdgeUrl(serving.calls[0].request.url)).toBe("https://app.example/edge-blog");
     expect(invocations()).toEqual([]);
   });
 });

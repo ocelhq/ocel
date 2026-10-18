@@ -26,7 +26,7 @@ async function initialize(slug = SLUG, secret = SECRET) {
   return SELF.fetch(
     bearerReq(`/${slug}/initialize`, BOOTSTRAP, {
       method: "POST",
-      body: JSON.stringify({ ownerToken: "owner-1", secret }),
+      body: JSON.stringify({ secret }),
     }),
   );
 }
@@ -63,7 +63,7 @@ describe("initialize", () => {
     const res = await SELF.fetch(
       bearerReq(`/${SLUG}/initialize`, "wrong", {
         method: "POST",
-        body: JSON.stringify({ ownerToken: "owner-1", secret: SECRET }),
+        body: JSON.stringify({ secret: SECRET }),
       }),
     );
     expect(res.status).toBe(401);
@@ -82,12 +82,11 @@ describe("initialize", () => {
     const res = await SELF.fetch(
       bearerReq(`/${SLUG}/initialize`, BOOTSTRAP, {
         method: "POST",
-        body: JSON.stringify({ ownerToken: "owner-2", secret: "other" }),
+        body: JSON.stringify({ secret: "other" }),
       }),
     );
     expect(res.status).toBe(409);
     const body = await res.text();
-    expect(body).not.toMatch(/owner-1/);
     expect(body).not.toMatch(new RegExp(SECRET));
 
     expect((await SELF.fetch(authedReq("/apps"))).status).toBe(200);
@@ -99,24 +98,11 @@ describe("initialize", () => {
     const res = await SELF.fetch(
       bearerReq(`/${SLUG}/initialize`, SECRET, {
         method: "POST",
-        body: JSON.stringify({ ownerToken: "owner-2", secret: "other" }),
+        body: JSON.stringify({ secret: "other" }),
       }),
     );
     expect(res.status).toBe(401);
-    expect(await res.text()).not.toMatch(/owner-1/);
-  });
-
-  it("adopts the presented identity when force is set", async () => {
-    await initialize();
-    const res = await SELF.fetch(
-      bearerReq(`/${SLUG}/initialize`, BOOTSTRAP, {
-        method: "POST",
-        body: JSON.stringify({ ownerToken: "owner-2", secret: "other", force: true }),
-      }),
-    );
-    expect(res.status).toBe(204);
-    expect(await res.text()).toBe("");
-    expect((await SELF.fetch(bearerReq(`/${SLUG}/apps`, "other"))).status).toBe(200);
+    expect(await res.text()).not.toMatch(new RegExp(SECRET));
   });
 });
 

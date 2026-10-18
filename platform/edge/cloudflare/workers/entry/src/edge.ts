@@ -60,7 +60,6 @@ export type { EdgeEntryKind, EdgeInvoker };
 
 export interface EdgeRuntime {
   loader: WorkerLoader;
-  store: EdgeObjectStore;
   envelopeKey?: string;
 }
 
@@ -72,8 +71,12 @@ export interface EdgeRelease {
   releaseFingerprint?: string;
 }
 
-export function createReleaseEdgeInvoker(runtime: EdgeRuntime, record: EdgeRelease): EdgeInvoker {
-  return createEdgeInvoker(runtime.loader, record.edgeWorkers, runtime.store, {
+export function createReleaseEdgeInvoker(
+  runtime: EdgeRuntime,
+  store: EdgeObjectStore,
+  record: EdgeRelease,
+): EdgeInvoker {
+  return createEdgeInvoker(runtime.loader, record.edgeWorkers, store, {
     scope: record.isrPrefix,
     env: record.env,
     envelope: record.envelope,

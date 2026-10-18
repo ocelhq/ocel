@@ -1,7 +1,6 @@
 import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
-import { newServePort, type PurgeQueue } from "../src/purge-queue";
-import { openInBandQueue, openPurgeQueue } from "../src/purge-request";
+import { newServePort, type PurgeQueue, RETIREMENT_CHECK_EVERY_MS } from "../src/purge-queue";
 import { newSqliteBacklogStore } from "../src/purge-sqlite-store";
 import { buildOriginCall, type ServeProps } from "../src/serve-key";
 import { memoryBacklogStore } from "./purge-backlog-store";
@@ -15,6 +14,8 @@ declare module "cloudflare:test" {
 
 let objects = 0;
 const freshQueue = () => env.PURGE_QUEUE.getByName(`queue-${objects++}`);
+
+const SCOPE = { slug: "p1", isrPrefix: "production/p1/web/r1/isr" };
 
 describeBacklogStore("memory", async (body) => {
   await body(memoryBacklogStore());
@@ -46,10 +47,44 @@ describe("the SQLite backlog store", () => {
 });
 
 describe("the PurgeQueue object", () => {
-  it("arms an alarm when a tag is raised", async () => {
+  it("records a raised tag's time and purges it at once, leaving nothing pending", async () => {
+    const queue = freshQueue();
+    const purged: string[] = [];
+    await runInDurableObject(queue, async (instance) => {
+      instance.serve = {
+        purgeTags: async (mode, tags) => {
+          purged.push(`${mode}:${tags.join(",")}`);
+          return { ok: true };
+        },
+      };
+    });
+
+    const raisedAt = Date.now();
+    await queue.raise(SCOPE, "invalidate", [{ tag: "r1|a", raisedAt }]);
+
+    expect(purged).toEqual(["invalidate:r1|a"]);
+    expect(await queue.readTimes(["r1|a"])).toEqual({ "r1|a": { invalidatedAt: raisedAt } });
+    await runInDurableObject(queue, async (_instance, state) => {
+      expect(newSqliteBacklogStore(state.storage).hasAnyPending()).toBe(false);
+      expect(await state.storage.getAlarm()).toBeNull();
+    });
+  });
+
+  it("refuses a raise for a prefix that names no release, and records nothing", async () => {
     const queue = freshQueue();
 
-    await queue.raise("purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
+    await expect(
+      queue.raise({ slug: "p1", isrPrefix: "not/a/release" }, "purge", [
+        { tag: "r1|a", raisedAt: 7_000 },
+      ]),
+    ).rejects.toThrow();
+    expect(await queue.readTimes(["r1|a"])).toEqual({});
+  });
+
+  it("arms an alarm when a raised tag cannot be purged at once", async () => {
+    const queue = freshQueue();
+
+    await queue.raise(SCOPE, "purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
 
     await runInDurableObject(queue, async (_instance, state) => {
       expect(await state.storage.getAlarm()).not.toBeNull();
@@ -63,7 +98,7 @@ describe("the PurgeQueue object", () => {
       store.settleBatch("purge", ["r1|a"], 2_000);
     });
 
-    await queue.raise("purge", [{ tag: "r1|a", raisedAt: 1_000 }]);
+    await queue.raise(SCOPE, "purge", [{ tag: "r1|a", raisedAt: 1_000 }]);
 
     await runInDurableObject(queue, async (_instance, state) => {
       expect(await state.storage.getAlarm()).toBeNull();
@@ -85,10 +120,8 @@ describe("the PurgeQueue object", () => {
           },
         };
       });
-      await queue.raise("purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
+      await queue.raise(SCOPE, "purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
 
-      vi.setSystemTime(Date.now() + 1_000);
-      await runDurableObjectAlarm(queue);
       limited = false;
       const refusedAt = Date.now();
       const armed = await runInDurableObject(queue, (_instance, state) => state.storage.getAlarm());
@@ -122,9 +155,7 @@ describe("the PurgeQueue object", () => {
           },
         };
       });
-      await queue.raise("purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
-      vi.setSystemTime(Date.now() + 1_000);
-      await runDurableObjectAlarm(queue);
+      await queue.raise(SCOPE, "purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
 
       vi.setSystemTime(Date.now() + 61_000);
       await runDurableObjectAlarm(queue);
@@ -142,7 +173,7 @@ describe("the PurgeQueue object", () => {
 
   it("keeps the tags pending and arms the alarm again when Serve cannot purge", async () => {
     const queue = freshQueue();
-    await queue.raise("purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
+    await queue.raise(SCOPE, "purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
 
     expect(await runDurableObjectAlarm(queue)).toBe(true);
 
@@ -152,13 +183,15 @@ describe("the PurgeQueue object", () => {
       expect(newSqliteBacklogStore(state.storage).readFailures()).toBe(1);
     });
   });
+
   it("arms the alarm again when its own storage fails mid-flush, and logs the failure", async () => {
     const queue = freshQueue();
-    await queue.raise("purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
+    await queue.raise(SCOPE, "purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
     await runInDurableObject(queue, async (instance, state) => {
       instance.serve = {
         purgeTags: async () => ({ ok: true }),
       };
+      newSqliteBacklogStore(state.storage).clearBackoff();
       state.storage.sql.exec("DROP TABLE purged");
     });
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -173,96 +206,107 @@ describe("the PurgeQueue object", () => {
   });
 });
 
-describe("the queue an in-band purge falls back to", () => {
-  it("covers nothing the origin's later announcement of the same tag would purge", async () => {
+describe("the PurgeQueue's tag times", () => {
+  it("keeps a tag's time past a day while its release is served", async () => {
+    const queue = freshQueue();
+    const now = Date.now();
+
+    await queue.raise(SCOPE, "purge", [{ tag: "r1|posts", raisedAt: now - 2 * 86_400_000 }]);
+    await queue.raise(SCOPE, "purge", [{ tag: "r1|other", raisedAt: now }]);
+
+    expect((await queue.readTimes(["r1|posts"]))["r1|posts"]?.purgedAt).toBe(now - 2 * 86_400_000);
+  });
+
+  it("evicts a release's cache on escalation without marking the release itself purged", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(1_800_000_000_000);
-      const raisedAt = Date.now();
-      const tag = "rinband|a";
-      const exports = { PurgeQueue: env.PURGE_QUEUE };
-      const fallback = openInBandQueue(exports) as DurableObjectStub<PurgeQueue>;
-      const durable = openPurgeQueue(exports) as DurableObjectStub<PurgeQueue>;
-      await runInDurableObject(fallback, async (instance) => {
-        instance.serve = { purgeTags: async () => ({ ok: true }) };
+      const queue = freshQueue();
+      await runInDurableObject(queue, async (instance) => {
+        instance.serve = {
+          purgeTags: async (_mode, tags) =>
+            tags.includes("r1") ? { ok: true } : { ok: false, codes: [1134], message: "limited" },
+        };
       });
+      await queue.raise(SCOPE, "purge", [{ tag: "r1|a", raisedAt: Date.now() }]);
+      vi.setSystemTime(Date.now() + 61_000);
+      await runDurableObjectAlarm(queue);
 
-      await fallback.raise("purge", [{ tag, raisedAt: raisedAt + 500 }]);
-      vi.setSystemTime(raisedAt + 2_000);
-      await runDurableObjectAlarm(fallback);
-      await durable.raise("purge", [{ tag, raisedAt }]);
-
-      await runInDurableObject(durable, async (_instance, state) => {
-        expect(newSqliteBacklogStore(state.storage).readBatch("purge", 100)).toContain(tag);
-      });
+      expect(await queue.readTimes(["r1", "r1|untouched"])).toEqual({});
     } finally {
       vi.useRealTimers();
     }
   });
 });
 
-describe("the in-band queue recording the purge times", () => {
-  it("records the time of a tag it purges in the purge queue the next read asks", async () => {
+describe("the PurgeQueue retiring a release", () => {
+  const released = (answer: () => Promise<"record" | "not-served">) => ({
+    readServedRecord: async () => {
+      const kind = await answer();
+      return kind === "record" ? { kind, record: {} as never } : ({ kind: "not-served" } as const);
+    },
+  });
+
+  async function raiseThenCheckAnHourOn(
+    answer: () => Promise<"record" | "not-served">,
+  ): Promise<DurableObjectStub<PurgeQueue>> {
+    const queue = freshQueue();
+    await runInDurableObject(queue, async (instance) => {
+      instance.serve = { purgeTags: async () => ({ ok: true }) };
+      instance.releases = released(answer);
+    });
+    await queue.raise(SCOPE, "invalidate", [{ tag: "r1|a", raisedAt: 1_800_000_000_000 }]);
+    await queue.raise(SCOPE, "purge", [{ tag: "r1|b", raisedAt: 1_800_000_000_500 }]);
+    vi.setSystemTime(1_800_000_000_000 + RETIREMENT_CHECK_EVERY_MS + 1);
+    await queue.raise({ slug: "p1", isrPrefix: "production/p1/web/r2/isr" }, "purge", [
+      { tag: "r2|a", raisedAt: Date.now() },
+    ]);
+    await runDurableObjectAlarm(queue);
+    return queue;
+  }
+
+  it("replaces the tag times of a release no longer served with one purge time for the release, at its latest", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(1_800_000_000_000);
-      const tag = "rrecorded|a";
-      const exports = { PurgeQueue: env.PURGE_QUEUE };
-      const fallback = openInBandQueue(exports) as DurableObjectStub<PurgeQueue>;
-      const durable = openPurgeQueue(exports) as DurableObjectStub<PurgeQueue>;
-      const purged: string[] = [];
-      await runInDurableObject(fallback, async (instance) => {
-        instance.serve = {
-          purgeTags: async (_mode, tags) => {
-            purged.push(...tags);
-            return { ok: true };
-          },
-        };
+      const queue = await raiseThenCheckAnHourOn(async () => "not-served");
+
+      expect(await queue.readTimes(["r1", "r1|a", "r1|b", "r2|a"])).toEqual({
+        r1: { purgedAt: 1_800_000_000_500 },
+        "r2|a": { purgedAt: 1_800_000_000_000 + RETIREMENT_CHECK_EVERY_MS + 1 },
       });
-
-      await fallback.raise("purge", [{ tag, raisedAt: Date.now() }]);
-      vi.setSystemTime(Date.now() + 2_000);
-      await runDurableObjectAlarm(fallback);
-
-      expect(purged).toContain(tag);
-      expect((await durable.readTimes([tag]))[tag]?.purgedAt).toBeGreaterThanOrEqual(
-        1_800_000_000_000,
-      );
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("purges nothing, and keeps the tag pending, while the time cannot be recorded", async () => {
-    const tag = "runrecorded|a";
-    const exports = { PurgeQueue: env.PURGE_QUEUE };
-    const fallback = openInBandQueue(exports) as DurableObjectStub<PurgeQueue>;
-    const purged: string[] = [];
-    await runInDurableObject(fallback, async (instance) => {
-      instance.serve = {
-        purgeTags: async (_mode, tags) => {
-          purged.push(...tags);
-          return { ok: true };
-        },
-      };
-      const recorder = instance.recorder;
-      instance.recorder = {
-        record: async (mode, tags) => {
-          if (tags.some((raised) => raised.tag === tag)) {
-            throw new Error("the purge queue is unreachable");
-          }
-          await recorder.record(mode, tags);
-        },
-      };
-    });
+  it("keeps every tag time of a release still served", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(1_800_000_000_000);
+      const queue = await raiseThenCheckAnHourOn(async () => "record");
 
-    await fallback.raise("purge", [{ tag, raisedAt: Date.now() }]);
-    await runDurableObjectAlarm(fallback);
+      expect(Object.keys(await queue.readTimes(["r1", "r1|a", "r1|b"]))).toEqual(["r1|a", "r1|b"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-    expect(purged).not.toContain(tag);
-    await runInDurableObject(fallback, async (_instance, state) => {
-      expect(newSqliteBacklogStore(state.storage).readBatch("purge", 100)).toContain(tag);
-    });
+  it("keeps every tag time of a release while the releases store cannot say whether it is served", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.setSystemTime(1_800_000_000_000);
+      const queue = await raiseThenCheckAnHourOn(async () => {
+        throw new Error("releases store down");
+      });
+
+      expect(Object.keys(await queue.readTimes(["r1", "r1|a", "r1|b"]))).toEqual(["r1|a", "r1|b"]);
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });
 
