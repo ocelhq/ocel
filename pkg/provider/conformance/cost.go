@@ -25,9 +25,6 @@ const costImageDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456
 
 func runCost(t *testing.T, suite Suite) {
 	t.Helper()
-	if suite.Server.New == nil {
-		t.Skip("the suite has no Spec, so there is no mux to serve")
-	}
 	server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
 	t.Cleanup(server.Close)
 
@@ -46,12 +43,7 @@ func runCost(t *testing.T, suite Suite) {
 		}
 		t.Skip("this provider prices no deploy, and says so")
 	}
-	vendor := ""
-	if suite.New != nil {
-		if p, err := suite.New(context.Background(), provider.Settings{Options: suite.Options}); err == nil {
-			vendor = string(p.Facts().Vendor)
-		}
-	}
+	vendor := string(readDeclaredFacts(t, suite).Vendor)
 	RunCost(t, providerClient, costv1connect.NewCostServiceClient(server.Client(), server.URL), vendor)
 }
 

@@ -52,6 +52,8 @@ func (p *Provider) everyHook(hooks *provider.Hooks) {
 
 func (p *Provider) ResourceHooks() resources.Hooks {
 	return resources.Hooks{
+		Postgres:   p.primitiveHooks(),
+		Bucket:     p.primitiveHooks(),
 		Functions:  &resources.FunctionHooks{Provision: p.ProvisionFunctions, Remove: p.RemoveFunctions},
 		Containers: &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
 	}

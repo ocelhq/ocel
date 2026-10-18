@@ -19,7 +19,7 @@ var changeSpanNames = map[provider.ChangeAction]string{
 	provider.ActionDelete:  "delete resource",
 }
 
-func reportChange(log progress.Log, kind, name string, action provider.ChangeAction, start time.Time, err error) {
+func ReportChange(log progress.Log, kind, name string, action provider.ChangeAction, start time.Time, err error) {
 	if log == nil || (action == provider.ActionKeep && err == nil) {
 		return
 	}
@@ -36,10 +36,10 @@ func reportChange(log progress.Log, kind, name string, action provider.ChangeAct
 
 func reportProvisionedCompute(log progress.Log, recorded stackrecords.Stack, provisioned provider.StackResult, start time.Time) {
 	for _, function := range provisioned.Functions {
-		reportChange(log, functionKind, function.Name, classifyFunctionChange(recorded.Functions, function), start, nil)
+		ReportChange(log, functionKind, function.Name, classifyFunctionChange(recorded.Functions, function), start, nil)
 	}
 	for _, container := range provisioned.Containers {
-		reportChange(log, containerKind, container.Name, classifyContainerChange(recorded.Containers, container), start, nil)
+		ReportChange(log, containerKind, container.Name, classifyContainerChange(recorded.Containers, container), start, nil)
 	}
 }
 

@@ -26,35 +26,73 @@ type Suite struct {
 	Logs *LogChecks
 }
 
+type constructor func(ctx context.Context, settings provider.Settings) (provider.Provider, error)
+
 func Run(t *testing.T, suite Suite) {
 	t.Helper()
 
-	t.Run("ports", func(t *testing.T) { runPorts(t, suite) })
-	t.Run("rpc", func(t *testing.T) { runRPC(t, suite) })
-	t.Run("certificates", func(t *testing.T) { runCertificates(t, suite) })
-	t.Run("hooks", func(t *testing.T) { runHooks(t, suite) })
+	if suite.New == nil {
+		t.Fatal("the suite has no constructor, so nothing here reaches the provider's ports or hooks. " +
+			"A provider whose ports need an account behind them runs RunWithoutAccount at its unit tier and Run where the account is")
+	}
+	refuseIncompleteServer(t, suite)
+
+	t.Run("rpc", func(t *testing.T) {
+		runServedRPC(t, suite)
+		t.Run("a run says what it would change and then what it is doing", func(t *testing.T) { runBootstrapStream(t, suite) })
+	})
+	t.Run("cost", func(t *testing.T) { runCost(t, suite) })
+	t.Run("certificates", func(t *testing.T) { runCertificates(t, suite, suite.New) })
+	t.Run("ports", func(t *testing.T) { RunPorts(t, construct(t, suite, suite.New)) })
+	t.Run("hooks", func(t *testing.T) { RunHooks(t, construct(t, suite, suite.New)) })
 	t.Run("logs", func(t *testing.T) { runLogs(t, suite) })
 	t.Run("vendor", func(t *testing.T) { runVendor(t, suite) })
 }
 
-func runHooks(t *testing.T, suite Suite) {
+func RunWithoutAccount(t *testing.T, suite Suite) {
 	t.Helper()
 
-	if suite.New == nil {
-		t.Skip("the suite has no constructor, so there are no hooks to read")
+	if suite.New != nil || suite.Vendor != nil || suite.Logs != nil {
+		t.Fatal("the suite names a constructor, vendor checks or log checks, and only Run runs them: " +
+			"a suite run without an account would report a pass having left them unexercised")
 	}
-	p, err := suite.New(context.Background(), provider.Settings{Options: suite.Options})
+	refuseIncompleteServer(t, suite)
+
+	t.Run("rpc", func(t *testing.T) { runServedRPC(t, suite) })
+	t.Run("cost", func(t *testing.T) { runCost(t, suite) })
+	t.Run("certificates", func(t *testing.T) { runCertificates(t, suite, suite.Server.New) })
+	t.Run("logs", func(t *testing.T) {
+		p := construct(t, suite, suite.Server.New)
+		RunLogs(t, p.Facts(), p.Logs())
+	})
+}
+
+func refuseIncompleteServer(t *testing.T, suite Suite) {
+	t.Helper()
+
+	if suite.Server.New == nil {
+		t.Fatal("the suite has no Server.New, so there is no RPC server to serve and nothing reads Facts() back off what it serves")
+	}
+	if suite.Binary == "" {
+		t.Fatal("the suite names no binary, so nothing checks that the provider a CLI spawns pairs, serves and stops")
+	}
+}
+
+func construct(t *testing.T, suite Suite, build constructor) provider.Provider {
+	t.Helper()
+
+	p, err := build(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}
+	return p
+}
+
+func RunHooks(t *testing.T, p provider.Provider) {
+	t.Helper()
+
 	hooks := p.Hooks()
 
-	t.Run("Cost", func(t *testing.T) {
-		if hooks.Cost == nil {
-			t.Skip("this provider sets no Cost hooks, so no deploy of it is priced")
-		}
-		runCost(t, suite)
-	})
 	t.Run("ForwardPorts", func(t *testing.T) {
 		if hooks.BindingAccess == nil {
 			t.Skip("this provider forwards no ports, so a build gets no bindings to its private resources")
@@ -90,12 +128,5 @@ func runVendor(t *testing.T, suite Suite) {
 	if suite.Vendor == nil {
 		t.Skip("this provider hangs no checks of its own here; its live tests are its own to run")
 	}
-	if suite.New == nil {
-		t.Fatal("the suite has vendor checks and no constructor, so there is no provider to run them against")
-	}
-	p, err := suite.New(context.Background(), provider.Settings{Options: suite.Options})
-	if err != nil {
-		t.Fatalf("New() error = %v, want a provider", err)
-	}
-	suite.Vendor(t, p)
+	suite.Vendor(t, construct(t, suite, suite.New))
 }

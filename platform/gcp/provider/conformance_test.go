@@ -30,7 +30,7 @@ func TestGCPProvider(t *testing.T) {
 	withoutApplicationDefaultCredentials(t)
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	conformance.Run(t, conformance.Suite{
+	conformance.RunWithoutAccount(t, conformance.Suite{
 		Server:       providerserver.Config{Version: "test", New: gcp.New},
 		Options:      provider.Options{"project": "conformance", "region": "europe-west1"},
 		Binary:       buildProvider(t),

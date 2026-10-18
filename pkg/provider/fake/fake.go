@@ -48,6 +48,7 @@ type Provider struct {
 	bootstrap      *Bootstrap
 	stacks         *Stacks
 	resourceStacks provider.Stacks
+	primitives     provisionedPrimitives
 	creds          *Credentials
 	edges          *Edges
 	routers        *Routers

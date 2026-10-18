@@ -181,6 +181,7 @@ func TestLiveTheMachineAnswersEveryPortTheConformanceSuiteAsks(t *testing.T) {
 	}
 
 	conformance.RunPorts(t, p)
+	t.Run("Hooks", func(t *testing.T) { conformance.RunHooks(t, p) })
 }
 
 func TestLiveWhoamiAnswersFromTheMachineItself(t *testing.T) {
