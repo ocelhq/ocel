@@ -15,6 +15,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/topiclimits"
 )
 
 func topicManifestResource(typ resourcesv1.ResourceType, name string, topic *contractv1.ManifestTopic) *contractv1.ManifestResource {
@@ -126,7 +127,7 @@ func TestAConsumerNamingNoRetryRunsTheTopicsPolicyOverTheDefaults(t *testing.T) 
 	if err != nil {
 		t.Fatalf("manifestResource: %v", err)
 	}
-	want := provider.RetryPolicy{MaxAttempts: 7, MinDelay: provider.DefaultRetryMinDelay, MaxDelay: provider.DefaultRetryMaxDelay}
+	want := provider.RetryPolicy{MaxAttempts: 7, MinDelay: topiclimits.DefaultRetryMinDelay, MaxDelay: topiclimits.DefaultRetryMaxDelay}
 	if got := resource.Topic.Consumers[0].Retry; got != want {
 		t.Errorf("Retry = %+v, want %+v", got, want)
 	}

@@ -201,10 +201,8 @@ func TestAnAppStackWhoseSpecHasNoAppIsRefusedRatherThanProvisionedEmpty(t *testi
 		Ref:  provider.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewReleaseToken("d1", ""))},
 		Kind: provider.StackApp,
 	}
-	err := pulumi.RunErr(func(pctx *pulumi.Context) error { return release.Run(pctx, spec) },
-		pulumi.WithMocks("shop", spec.Ref.Name.String(), &inputRecorder{}))
-	if err == nil || !strings.Contains(err.Error(), "names none") {
-		t.Fatalf("Run() = %v, want it refused: an app stack with no app provisions nothing", err)
+	if _, err := release.prepare(context.Background(), spec, runProvision, nil); err == nil || !strings.Contains(err.Error(), "names none") {
+		t.Fatalf("prepare() = %v, want it refused: an app stack with no app provisions nothing", err)
 	}
 }
 

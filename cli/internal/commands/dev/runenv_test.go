@@ -45,7 +45,7 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwards {
 	t.Helper()
 	seen := &forwards{}
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			seen.mutex.Lock()
 			defer seen.mutex.Unlock()
 			var out []provider.PortForward
@@ -224,8 +224,8 @@ func TestRunInADeployedEnvironmentAsksForTheForwardsOfThatEnvironmentsTier(t *te
 	deployProject(t, fixture, clitest.NewInvocation())
 	asked := make(chan provider.PortForwardRequest, 1)
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		forward := h.ForwardPorts
-		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, said progress.Log) ([]provider.PortForward, error) {
+		forward := fake.EnsureBindingAccess(h).ForwardPorts
+		fake.EnsureBindingAccess(h).ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, said progress.Log) ([]provider.PortForward, error) {
 			asked <- req
 			return forward(ctx, req, said)
 		}
@@ -247,8 +247,8 @@ func TestRunInADeployedEnvironmentWhoseForwardFailsWhileTheCommandRunsFailsAndSa
 	forwardingPorts(t, fixture)
 	deployProject(t, fixture, clitest.NewInvocation())
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		forward := h.ForwardPorts
-		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, said progress.Log) ([]provider.PortForward, error) {
+		forward := fake.EnsureBindingAccess(h).ForwardPorts
+		fake.EnsureBindingAccess(h).ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, said progress.Log) ([]provider.PortForward, error) {
 			forwards, err := forward(ctx, req, said)
 			req.ReportFailure(errors.New("the bastion task stopped: Essential container in task exited"))
 			return forwards, err

@@ -704,10 +704,9 @@ func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, wor
 		if err = r.placeRule(ctx, work); err != nil {
 			return provider.StackResult{}, err
 		}
-		spec.VendorState = work
-		var result provider.StackResult
-		if result, err = r.automation.Run(ctx, spec, progress); err == nil {
-			return result, nil
+		var outputs auto.OutputMap
+		if outputs, err = r.automation.Run(ctx, spec.Ref, r.containerProgram(spec, work), progress); err == nil {
+			return r.decodeContainer(work, outputs)
 		}
 		if !priorityTaken(err) {
 			return provider.StackResult{}, err
@@ -774,8 +773,7 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err := r.placeRule(ctx, work); err != nil {
 		return provider.Plan{}, err
 	}
-	spec.VendorState = work
-	previewed, err := r.automation.Preview(ctx, spec, progress)
+	previewed, err := r.automation.Preview(ctx, spec.Ref, r.containerProgram(spec, work), progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -788,6 +786,10 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	}
 	previewed.Groups = append(previewed.Groups, workerGroups...)
 	return previewed, nil
+}
+
+func (r *release) containerProgram(spec provider.StackSpec, work *containerWork) stackProgram {
+	return stackProgram{run: work.run, tags: spec.Tags, secrets: r.appSecrets(spec)}
 }
 
 func unpreviewedStack(ref provider.StackRef) provider.ChangeGroup {

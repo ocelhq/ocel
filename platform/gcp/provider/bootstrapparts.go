@@ -33,12 +33,9 @@ func (g bootstrapGate) DescribeParts(ctx context.Context, described provider.Boo
 }
 
 func (b bootstrap) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
-	read, passed := described.VendorState.(survey)
-	if !passed || read.Tier != described.Tier {
-		var err error
-		if read, err = b.survey(ctx, described.Tier); err != nil {
-			return nil, err
-		}
+	read, err := b.surveyFor(ctx, described.Tier)
+	if err != nil {
+		return nil, err
 	}
 	if !read.Present {
 		return nil, nil

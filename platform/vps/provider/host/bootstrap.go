@@ -55,11 +55,11 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 			return provider.BootstrapDescription{}, err
 		}
 	}
+	b.host.rememberReading(read)
 	return provider.BootstrapDescription{
-		Tier:        read.Tier,
-		Present:     read.Present,
-		Unfinished:  read.unfinished(),
-		VendorState: read,
+		Tier:       read.Tier,
+		Present:    read.Present,
+		Unfinished: read.unfinished(),
 		Stacks: []provider.BootstrapStack{{
 			Name:          principal,
 			Present:       read.Present,
@@ -70,13 +70,13 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 }
 
 func (b Bootstrap) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
-	read, passed := described.VendorState.(Reading)
-	if !passed || read.Tier != described.Tier {
+	read, remembered := b.host.recallReading(described.Tier)
+	if !remembered {
 		var err error
 		if described, err = b.Describe(ctx, described.Tier); err != nil {
 			return nil, err
 		}
-		read = described.VendorState.(Reading)
+		read, _ = b.host.recallReading(described.Tier)
 	}
 	if !read.Present {
 		return nil, nil
@@ -92,7 +92,7 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 }
 
 func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
-	read, err := b.reading(ctx, req)
+	read, err := b.reading(ctx, req.Tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -100,7 +100,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	read = described.VendorState.(Reading)
+	read, _ = b.host.recallReading(req.Tier)
 	if err := read.runnableEngine(b.host.named()); err != nil {
 		return provider.Plan{}, err
 	}
@@ -174,11 +174,11 @@ func slowLast(changes []provider.Change) []provider.Change {
 	return changes
 }
 
-func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (Reading, error) {
-	if cached, ok := req.VendorState.(Reading); ok && cached.Tier == req.Tier {
-		return cached, nil
+func (b Bootstrap) reading(ctx context.Context, tier environment.Tier) (Reading, error) {
+	if remembered, ok := b.host.recallReading(tier); ok {
+		return remembered, nil
 	}
-	return b.read(ctx, req.Tier)
+	return b.read(ctx, tier)
 }
 
 func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (Reading, error) {
@@ -190,10 +190,11 @@ func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (Reading, er
 }
 
 func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	shown, err := b.reading(ctx, req)
+	shown, err := b.reading(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
+	defer b.host.forgetReading(req.Tier)
 	current, err := b.read(ctx, req.Tier)
 	if err != nil {
 		return err
@@ -389,6 +390,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 
 func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	defer b.host.forgetTiers()
+	defer b.host.forgetReading(tier)
 	forget, err := b.host.forgetting(ctx)
 	if err != nil {
 		return err

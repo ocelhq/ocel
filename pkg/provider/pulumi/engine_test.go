@@ -40,16 +40,6 @@ func (e *recordingEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.O
 
 func (*recordingEngine) Unlock(context.Context, pulumi.WorkspaceSpec) error { return nil }
 
-type decoding struct{ program }
-
-func (decoding) Decode(_ context.Context, _ provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
-	properties := make(map[string]string, len(outputs))
-	for name, output := range outputs {
-		properties[name], _ = output.Value.(string)
-	}
-	return provider.StackResult{Bindings: []provider.Binding{{Name: "uploads", Properties: properties}}}, nil
-}
-
 type sayings struct {
 	progress.Log
 	said []string

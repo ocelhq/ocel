@@ -199,9 +199,9 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 	}
 	if !described.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() calls a box whose proxy has just been installed drifted, %s\n%s",
-			stillMoving(t, bootstrap, tier, described.VendorState), vm.proxySaid(t))
+			stillMoving(t, bootstrap, tier), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 	if torn.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls a box whose proxy is gone current, and a proxy nothing notices is one nothing repairs")
 	}
-	repairing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: torn.VendorState}
+	repairing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}
 	writing, err := bootstrap.Plan(ctx, repairing)
 	if err != nil {
 		t.Fatal(err)

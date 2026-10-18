@@ -36,7 +36,7 @@ func TestLiveTheFirstScheduledEnvSourceAddsAnEnvSourceSyncAndRemovingTheTierRemo
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
-	if err := p.Hooks().EnsureEnvSourceSync(ctx, tier, "shop"); err != nil {
+	if err := p.Hooks().EnvSource.EnsureSync(ctx, tier, "shop"); err != nil {
 		t.Fatalf("EnsureEnvSourceSync() = %v", err)
 	}
 	function := envsourcesync.NamesFor(string(defaultNamespace), tier).Function

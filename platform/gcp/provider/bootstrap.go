@@ -11,6 +11,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
@@ -89,6 +90,7 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 		stores:         g.p.memorystore(),
 		records:        g.p.KeyValues(),
 		writtenBy:      g.p.writtenBy,
+		surveyed:       &g.p.surveyed,
 		pushBinary:     g.p.pushBinary,
 		deployAndRoute: g.p.deployAndRoute,
 		tearDown:       g.p.tearDown,
@@ -141,6 +143,7 @@ type bootstrap struct {
 	stores    memorystore
 	records   keyvalue.Store
 	writtenBy provider.WrittenBy
+	surveyed  *surveys
 
 	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	deployAndRoute func(ctx context.Context, s serving, progress progress.Log) (release, error)
@@ -185,25 +188,61 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 			WrittenBy:     read.Stamp.Writer,
 		})
 	}
+	b.surveyed.remember(read)
 	return provider.BootstrapDescription{
-		Tier:        read.Tier,
-		Present:     read.Present,
-		Unfinished:  read.Present && read.Stamp.State != stateComplete,
-		VendorState: read,
-		Stacks:      stacks,
+		Tier:       read.Tier,
+		Present:    read.Present,
+		Unfinished: read.Present && read.Stamp.State != stateComplete,
+		Stacks:     stacks,
 	}, nil
 }
 
-func (b bootstrap) surveyFor(ctx context.Context, req provider.BootstrapRequest) (survey, error) {
-	if passed, ok := req.VendorState.(survey); ok && passed.Tier == req.Tier {
-		return passed, nil
+func (b bootstrap) surveyFor(ctx context.Context, tier environment.Tier) (survey, error) {
+	if remembered, ok := b.surveyed.recall(tier); ok {
+		return remembered, nil
 	}
-	return b.survey(ctx, req.Tier)
+	return b.survey(ctx, tier)
+}
+
+type surveys struct {
+	mu   sync.Mutex
+	read map[environment.Tier]survey
+}
+
+func (s *surveys) remember(read survey) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.read == nil {
+		s.read = map[environment.Tier]survey{}
+	}
+	s.read[read.Tier] = read
+}
+
+func (s *surveys) recall(tier environment.Tier) (survey, bool) {
+	if s == nil {
+		return survey{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	read, ok := s.read[tier]
+	return read, ok
+}
+
+func (s *surveys) forget(tier environment.Tier) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.read, tier)
 }
 
 func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	named, req := splitRemovals(req)
-	read, err := b.surveyFor(ctx, req)
+	read, err := b.surveyFor(ctx, req.Tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -270,10 +309,11 @@ func sharedWith(tier environment.Tier) string {
 
 func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	named, req := splitRemovals(req)
-	read, err := b.surveyFor(ctx, req)
+	read, err := b.surveyFor(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
+	defer b.surveyed.forget(req.Tier)
 	items := bootstrapItems(read.Names, req.Tier, read.Emulated)
 	if req.RefuseReplacements {
 		if err := refuseReplacements(read, items); err != nil {
@@ -963,6 +1003,7 @@ func removing(read survey, target item) removal {
 }
 
 func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	defer b.surveyed.forget(tier)
 	read, err := b.survey(ctx, tier)
 	if err != nil {
 		return err

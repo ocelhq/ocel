@@ -31,8 +31,6 @@ type BootstrapDescription struct {
 	Stacks  []BootstrapStack
 
 	Unfinished bool
-
-	VendorState any
 }
 
 type BootstrapStack struct {
@@ -90,8 +88,6 @@ type BootstrapRequest struct {
 	RefuseReplacements bool
 
 	WrittenBy WrittenBy
-
-	VendorState any
 }
 
 type WantedPartError struct {

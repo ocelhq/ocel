@@ -298,18 +298,17 @@ func TestAContainerWorkersTaskRoleReachesOnlyTheQueuesItServesAndItsOwnService(t
 func TestAContainerWorkersStackExportsEachWorkersServiceForTheDeployToRecord(t *testing.T) {
 	t.Parallel()
 
-	opened, spec, hosted := hostingContainerWorkers(t, mediaOnContainers)
-	spec.VendorState = hosted
+	_, _, hosted := hostingContainerWorkers(t, mediaOnContainers)
 	outputs := auto.OutputMap{resources.WorkerName("media"): auto.OutputValue{Value: map[string]any{outputKeyContainerPhysical: "ocel-app-shop-prod-web-media"}}}
 
-	result, err := opened.Decode(context.Background(), spec, outputs)
+	result, err := hosted.decode(outputs)
 	if err != nil {
 		t.Fatalf("Decode() = %v", err)
 	}
 	if len(result.Containers) != 1 || result.Containers[0].Name != resources.WorkerName("media") || result.Containers[0].Physical != "ocel-app-shop-prod-web-media" || result.Containers[0].URL != "" || result.Containers[0].Image != containerImage {
 		t.Errorf("Containers = %+v, want the media worker by its service, with no URL: it takes no traffic", result.Containers)
 	}
-	if _, err := opened.Decode(context.Background(), spec, auto.OutputMap{}); err == nil {
+	if _, err := hosted.decode(auto.OutputMap{}); err == nil {
 		t.Error("Decode() of a stack that exported no service succeeded, so a deploy would record a worker it cannot find")
 	}
 }

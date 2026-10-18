@@ -21,11 +21,10 @@ type estimate func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estim
 
 func (s BootstrapStatus) description() provider.BootstrapDescription {
 	return provider.BootstrapDescription{
-		Tier:        s.Tier,
-		Present:     s.Present,
-		Stacks:      s.Stacks,
-		Unfinished:  s.Unfinished,
-		VendorState: s.VendorState,
+		Tier:       s.Tier,
+		Present:    s.Present,
+		Stacks:     s.Stacks,
+		Unfinished: s.Unfinished,
 	}
 }
 

@@ -77,7 +77,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 	ctx := context.Background()
 	counter := &pushCounter{}
 	backend := "file://" + t.TempDir()
-	automation := pulumi.New(pulumi.Config{
+	automation := pulumi.New(pulumi.Config[provider.StackSpec]{
 		Backend: pulumi.Backend{
 			URL:        backend,
 			Passphrase: "a-passphrase",
@@ -94,7 +94,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 	}
 	spec := provider.StackSpec{Ref: ref, Kind: provider.StackInfra}
 
-	planned, err := automation.Preview(ctx, spec, nil)
+	planned, err := automation.Preview(ctx, spec.Ref, spec, nil)
 	if err != nil {
 		t.Fatalf("Preview() over an attached plugin = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 		t.Fatalf("Preview() pushed %d times, want none: a plan writes nothing", pushed)
 	}
 
-	if _, err := automation.Run(ctx, spec, nil); err != nil {
+	if _, err := automation.Run(ctx, spec.Ref, spec, nil); err != nil {
 		t.Fatalf("Run() over an attached plugin = %v", err)
 	}
 	if pushed := counter.created.Load(); pushed != 1 {
@@ -123,13 +123,13 @@ func TestPreviewDestroyOfAProvisionedStackShowsEachResourceGoingOnThePinnedRunti
 	}
 
 	ctx := context.Background()
-	automation := pulumi.New(pulumi.Config{
+	automation := pulumi.New(pulumi.Config[provider.StackSpec]{
 		Backend: pulumi.Backend{URL: "file://" + t.TempDir(), Passphrase: "a-passphrase", Project: "ocel-plugin-probe"},
 		Program: pushing{}.Run,
 		Plugins: []pulumi.Plugin{probePlugin(t, &pushCounter{})},
 	})
 	ref := provider.StackRef{Project: "probe", Tier: environment.TierProduction, Name: naming.InfraStack("prod")}
-	if _, err := automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
+	if _, err := automation.Run(ctx, ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 
@@ -162,7 +162,7 @@ func TestPreviewDestroyOfAStackNeverProvisionedShowsNothingAndWritesNoStack(t *t
 	}
 
 	dir := t.TempDir()
-	automation := pulumi.New(pulumi.Config{
+	automation := pulumi.New(pulumi.Config[provider.StackSpec]{
 		Backend: pulumi.Backend{URL: "file://" + dir, Passphrase: "a-passphrase", Project: "ocel-plugin-probe"},
 		Program: pushing{}.Run,
 		Plugins: []pulumi.Plugin{probePlugin(t, &pushCounter{})},
@@ -189,16 +189,16 @@ func changedRows(plan provider.Plan) int {
 	return rows
 }
 
-func refreshingProbe(t *testing.T, counter *pushCounter) (*pulumi.Automation, provider.StackRef) {
+func refreshingProbe(t *testing.T, counter *pushCounter) (*pulumi.Automation[provider.StackSpec], provider.StackRef) {
 	t.Helper()
-	automation := pulumi.New(pulumi.Config{
+	automation := pulumi.New(pulumi.Config[provider.StackSpec]{
 		Backend: pulumi.Backend{URL: "file://" + t.TempDir(), Passphrase: "a-passphrase", Project: "ocel-plugin-probe"},
 		Program: pushing{}.Run,
 		Plugins: []pulumi.Plugin{probePlugin(t, counter)},
 		Refresh: func(provider.StackRef, pulumi.Operation) bool { return true },
 	})
 	ref := provider.StackRef{Project: "probe", Tier: environment.TierProduction, Name: naming.InfraStack("prod")}
-	if _, err := automation.Run(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
+	if _, err := automation.Run(context.Background(), ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 	t.Cleanup(func() {
@@ -217,7 +217,7 @@ func TestARefreshingPreviewOfAStackWhoseResourceVanishedPlansItCreatedAgain(t *t
 	automation, ref := refreshingProbe(t, counter)
 	counter.vanished.Store(true)
 
-	planned, err := automation.Preview(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil)
+	planned, err := automation.Preview(context.Background(), ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil)
 	if err != nil {
 		t.Fatalf("Preview() = %v", err)
 	}

@@ -30,6 +30,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -63,7 +64,7 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 	t.Helper()
 	seen := &forwardsSeen{}
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			seen.mutex.Lock()
 			defer seen.mutex.Unlock()
 			seen.asked = append(seen.asked, req)
@@ -184,7 +185,7 @@ func TestTheForwardingStepNamesTheResourcesAsTheAppDeclaresThem(t *testing.T) {
 	fixture := setUpDeployProject(t)
 	writeNextUsageProject(t, fixture.Root, "")
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
 			return nil, errors.New("the box is unreachable")
 		}
 	})
@@ -207,7 +208,7 @@ func TestWhatTheProviderSaysWhileForwardingPortsIsShownInTheBuild(t *testing.T) 
 	fixture := setUpDeployProject(t)
 	writeNextUsageProject(t, fixture.Root, "")
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
 			progress.Say("Creating Cloud Run service ocel-production-bastion")
 			progress.Warn("A connection to db--main failed")
 			forwards := make([]provider.PortForward, 0, len(req.Bindings))
@@ -396,7 +397,7 @@ func TestADeployWhoseForwardIsNotReadyBuildsWithoutThatBindingAndDeploysSayingWh
 	fixture := setUpDeployProject(t)
 	writeNextUsageProject(t, fixture.Root, "")
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
+		fake.EnsureBindingAccess(h).ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
 			return nil, refusal.Refuse(refusal.CodeNotReady, "container db holds no address on any network, so it is not running")
 		}
 	})
@@ -485,7 +486,7 @@ func servingBindingProxy(t *testing.T, fixture clitest.FakeProject) *forwardsSee
 	t.Helper()
 	seen := forwardingPorts(t, fixture)
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ServeBindingProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
+		fake.EnsureBindingAccess(h).ServeProxy = func(_ context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
 			seen.mutex.Lock()
 			defer seen.mutex.Unlock()
 			seen.open++

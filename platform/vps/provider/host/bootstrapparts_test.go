@@ -11,8 +11,10 @@ func TestAVPSBootstrapsBaseHoldsEveryItemTheBoxIsSetUpWith(t *testing.T) {
 	t.Parallel()
 	read := currentHost()
 
-	parts, err := Bootstrap{}.DescribeParts(context.Background(), provider.BootstrapDescription{
-		Tier: read.Tier, Present: true, VendorState: read,
+	described := Bootstrap{host: &Host{}}
+	described.host.rememberReading(read)
+	parts, err := described.DescribeParts(context.Background(), provider.BootstrapDescription{
+		Tier: read.Tier, Present: true,
 		Stacks: []provider.BootstrapStack{{Name: "root@box", Present: true, DigestCurrent: true}},
 	})
 	if err != nil {
@@ -32,7 +34,9 @@ func TestAVPSWithNoBootstrapHasNoParts(t *testing.T) {
 	read := currentHost()
 	read.Present = false
 
-	parts, err := Bootstrap{}.DescribeParts(context.Background(), provider.BootstrapDescription{Tier: read.Tier, VendorState: read})
+	described := Bootstrap{host: &Host{}}
+	described.host.rememberReading(read)
+	parts, err := described.DescribeParts(context.Background(), provider.BootstrapDescription{Tier: read.Tier})
 
 	if err != nil || len(parts) != 0 {
 		t.Errorf("DescribeParts() = %+v, %v, want none", parts, err)

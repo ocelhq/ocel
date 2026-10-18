@@ -28,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/topiclimits"
 )
 
 func runPorts(t *testing.T, suite Suite) {
@@ -765,9 +766,9 @@ func declared(serves []provider.BindingType) []provider.Resource {
 		resource := provider.Resource{Name: "c-" + string(kind), Declared: "c-" + string(kind), Type: kind}
 		switch kind {
 		case provider.BindingTopic:
-			resource.Topic = &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: "c-consumer", Worker: "c-worker", Retry: provider.ResolveRetryPolicy()}}}
+			resource.Topic = &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: "c-consumer", Worker: "c-worker", Retry: topiclimits.ResolveRetryPolicy()}}}
 		case provider.BindingTask:
-			resource.Topic = &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: resource.Name, Worker: "c-worker", Exclusive: true, Retry: provider.ResolveRetryPolicy()}}}
+			resource.Topic = &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: resource.Name, Worker: "c-worker", Exclusive: true, Retry: topiclimits.ResolveRetryPolicy()}}}
 		case provider.BindingRealtime:
 			resource.Realtime = &provider.RealtimeSpec{TokenTTL: realtime.DefaultTokenTTL, Channels: []provider.ChannelSpec{{
 				Pattern: "orders/:orderId", Subscribe: realtime.ChannelAccessRule, Publish: realtime.ChannelAccessServer,

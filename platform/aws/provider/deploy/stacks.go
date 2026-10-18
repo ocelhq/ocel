@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"sync"
@@ -74,8 +75,16 @@ type Stacks struct {
 type release struct {
 	*Stacks
 	cfg        Config
-	automation *pulumi.Automation
+	automation *pulumi.Automation[stackProgram]
 }
+
+type stackProgram struct {
+	run     func(*sdk.Context) error
+	tags    map[string]string
+	secrets []string
+}
+
+func runStackProgram(pctx *sdk.Context, program stackProgram) error { return program.run(pctx) }
 
 func NewStacks(resolve ReleaseConfig, realized *Realized) *Stacks {
 	return newStacks(resolve, realized, nil)
@@ -114,17 +123,16 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 		return nil, err
 	}
 	created := &release{Stacks: r, cfg: cfg}
-	created.automation = pulumi.New(pulumi.Config{
+	created.automation = pulumi.New(pulumi.Config[stackProgram]{
 		Backend: pulumi.Backend{
 			URL:        cfg.BackendURL,
 			Passphrase: cfg.Passphrase,
 			Project:    cfg.PulumiProject,
 			Env:        map[string]string{"AWS_REGION": cfg.Region},
 		},
-		Program:   created.Run,
-		Configure: created.Configure,
-		Secrets:   created.Secrets,
-		Decode:    created.Decode,
+		Program:   runStackProgram,
+		Configure: configureDefaultTags,
+		Secrets:   created.secrets,
 		Refresh:   r.refreshPolicy(),
 		Engine:    r.engine,
 		Plugins:   []pulumi.Plugin{plugin},
@@ -146,12 +154,6 @@ func (r *Stacks) refreshPolicy() func(provider.StackRef, pulumi.Operation) bool 
 	}
 }
 
-type stackWork struct {
-	program sdk.RunFunc
-	tags    map[string]string
-	outputs auto.OutputMap
-}
-
 type infraWork struct {
 	transformed *transformPatches
 	completer   payloads.Placement
@@ -159,40 +161,36 @@ type infraWork struct {
 	previewing  bool
 }
 
-func (r *release) Run(pctx *sdk.Context, spec provider.StackSpec) error {
-	shipped, err := r.shipArtifacts(pctx, spec.Uploads)
-	if err != nil {
-		return err
+func (r *release) infraProgram(spec provider.StackSpec, work *infraWork) stackProgram {
+	return stackProgram{
+		run: func(pctx *sdk.Context) error {
+			if _, err := r.shipArtifacts(pctx, spec.Uploads); err != nil {
+				return err
+			}
+			if err := work.transformed.install(pctx); err != nil {
+				return err
+			}
+			return r.infra(pctx, spec, work)
+		},
+		tags: spec.Tags,
 	}
-	switch work := spec.VendorState.(type) {
-	case *stackWork:
-		return work.program(pctx)
-	case *appWork:
-		if err := work.transformed.install(pctx); err != nil {
-			return err
-		}
-		return work.run(pctx, shipped)
-	case *containerWork:
-		return work.run(pctx)
-	case *containerInfraWork:
-		return work.run(pctx)
-	case *functionNetworkWork:
-		return work.run(pctx)
-	case *workersWork:
-		return work.run(pctx)
-	case *containerWorkersWork:
-		return work.run(pctx)
-	case *infraWork:
-		if err := work.transformed.install(pctx); err != nil {
-			return err
-		}
-		return r.infra(pctx, spec, work)
+}
+
+func (r *release) appProgram(spec provider.StackSpec, work *appWork) stackProgram {
+	return stackProgram{
+		run: func(pctx *sdk.Context) error {
+			shipped, err := r.shipArtifacts(pctx, spec.Uploads)
+			if err != nil {
+				return err
+			}
+			if err := work.transformed.install(pctx); err != nil {
+				return err
+			}
+			return work.run(pctx, shipped)
+		},
+		tags:    spec.Tags,
+		secrets: r.appSecrets(spec),
 	}
-	if spec.Kind != provider.StackInfra {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"%s provisions an app and this spec names none", spec.Ref.Name)
-	}
-	return r.infra(pctx, spec, &infraWork{})
 }
 
 func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraWork) error {
@@ -268,54 +266,30 @@ func provisionsBucket(spec provider.StackSpec) bool {
 	})
 }
 
-func (r *release) Configure(_ context.Context, spec provider.StackSpec) (auto.ConfigMap, error) {
-	tags := spec.Tags
-	if work, ok := spec.VendorState.(*stackWork); ok {
-		tags = work.tags
-	}
-	if len(tags) == 0 {
+func configureDefaultTags(_ context.Context, program stackProgram) (auto.ConfigMap, error) {
+	if len(program.tags) == 0 {
 		return auto.ConfigMap{}, nil
 	}
-	encoded, err := json.Marshal(map[string]map[string]string{"tags": tags})
+	encoded, err := json.Marshal(map[string]map[string]string{"tags": program.tags})
 	if err != nil {
 		return nil, fmt.Errorf("render default tags: %w", err)
 	}
 	return auto.ConfigMap{"aws:defaultTags": auto.ConfigValue{Value: string(encoded)}}, nil
 }
 
-func (r *release) Secrets(spec provider.StackSpec) []string {
-	secrets := []string{r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, r.cfg.PurgeSeed}
-	if r.cfg.PurgeSeed != "" && spec.App != nil && spec.App.ISR != nil {
+func (r *release) secrets(program stackProgram) []string {
+	return append([]string{r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, r.cfg.PurgeSeed}, program.secrets...)
+}
+
+func (r *release) appSecrets(spec provider.StackSpec) []string {
+	secrets := slices.Collect(maps.Values(spec.App.Values.Sensitive))
+	if r.cfg.PurgeSeed != "" && spec.App.ISR != nil {
 		secrets = append(secrets, cloudflare.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.ISR.Prefix))
 	}
 	return secrets
 }
 
-func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
-	if work, ok := spec.VendorState.(*stackWork); ok {
-		work.outputs = outputs
-		return provider.StackResult{}, nil
-	}
-	if work, ok := spec.VendorState.(*containerInfraWork); ok {
-		work.outputs = outputs
-		return provider.StackResult{}, nil
-	}
-	if work, ok := spec.VendorState.(*functionNetworkWork); ok {
-		work.outputs = outputs
-		return provider.StackResult{}, nil
-	}
-	if work, ok := spec.VendorState.(*workersWork); ok {
-		return work.decode(outputs)
-	}
-	if work, ok := spec.VendorState.(*containerWorkersWork); ok {
-		return work.decode(outputs)
-	}
-	if work, ok := spec.VendorState.(*containerWork); ok {
-		return r.decodeContainer(work, outputs)
-	}
-	if spec.App != nil {
-		return r.decodeApp(spec, outputs)
-	}
+func (r *release) decodeInfra(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
 	sessions := newSessionScope(naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env, r.cfg.StateTableARN)
 	result := provider.StackResult{}
 	for _, resource := range spec.Resources {
@@ -490,10 +464,11 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		}()
 		return r.provisionContainer(ctx, spec, progress)
 	}
-	prepared, work, err := r.prepare(ctx, spec, runProvision, progress)
+	prepared, err := r.prepare(ctx, spec, runProvision, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
+	work := prepared.app
 	if work != nil && len(work.sets) > 0 {
 		r.pending.add(work.stack, work.sets, progress)
 		defer r.pending.drop(work.stack, work.sets)
@@ -507,14 +482,18 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 			return provider.StackResult{}, err
 		}
 	}
-	result, err := r.automation.Run(ctx, prepared, progress)
+	outputs, err := r.automation.Run(ctx, spec.Ref, prepared.program, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
+	result, err := r.decode(ctx, spec, prepared, outputs)
+	if err != nil {
 		return provider.StackResult{}, err
 	}
-	workers, err := r.provisionWorkers(ctx, prepared, work, progress)
+	if err := prepared.transformed.refuseUnclaimed(); err != nil {
+		return provider.StackResult{}, err
+	}
+	workers, err := r.provisionWorkers(ctx, spec, work, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -537,21 +516,22 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	if runsContainer(spec) {
 		return r.planContainer(ctx, spec, progress)
 	}
-	prepared, work, err := r.prepare(ctx, spec, runPreview, progress)
+	prepared, err := r.prepare(ctx, spec, runPreview, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	previewed, err := r.automation.Preview(ctx, prepared, progress)
+	work := prepared.app
+	previewed, err := r.automation.Preview(ctx, spec.Ref, prepared.program, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
+	if err := prepared.transformed.refuseUnclaimed(); err != nil {
 		return provider.Plan{}, err
 	}
 	if work != nil && work.networkPending {
 		previewed.Groups = append([]provider.ChangeGroup{functionNetworkGroup(spec.Ref.Tier)}, previewed.Groups...)
 	}
-	workerGroups, err := r.previewWorkers(ctx, prepared, work, progress)
+	workerGroups, err := r.previewWorkers(ctx, spec, work, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -559,14 +539,17 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	return previewed, nil
 }
 
-func transformedIn(spec provider.StackSpec) *transformPatches {
-	switch work := spec.VendorState.(type) {
-	case *appWork:
-		return work.transformed
-	case *infraWork:
-		return work.transformed
+type preparedStack struct {
+	program     stackProgram
+	transformed *transformPatches
+	app         *appWork
+}
+
+func (r *release) decode(ctx context.Context, spec provider.StackSpec, prepared preparedStack, outputs auto.OutputMap) (provider.StackResult, error) {
+	if prepared.app != nil {
+		return r.decodeApp(prepared.app, outputs)
 	}
-	return nil
+	return r.decodeInfra(ctx, spec, outputs)
 }
 
 type runKind int
@@ -576,35 +559,35 @@ const (
 	runPreview
 )
 
-func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind runKind, progress progress.Log) (provider.StackSpec, *appWork, error) {
-	if spec.VendorState != nil {
-		return spec, nil, nil
-	}
+func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind runKind, progress progress.Log) (preparedStack, error) {
 	if len(spec.Images.Pushes) > 0 {
-		return provider.StackSpec{}, nil, refusal.Refuse(refusal.CodeInvalid,
+		return preparedStack{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs on serverless compute, which runs functions rather than an image, and this release pushes %d", spec.Ref.Name, len(spec.Images.Pushes))
+	}
+	if spec.Kind == provider.StackApp && spec.App == nil {
+		return preparedStack{}, refusal.Refuse(refusal.CodeInvalid,
+			"%s provisions an app and this spec names none", spec.Ref.Name)
 	}
 	transformed, err := transformStackSpec(ctx, r.cfg.Transform, spec)
 	if err != nil {
-		return provider.StackSpec{}, nil, err
+		return preparedStack{}, err
 	}
 	if spec.App == nil {
 		if err := r.refuseHandover(ctx, spec); err != nil {
-			return provider.StackSpec{}, nil, err
+			return preparedStack{}, err
 		}
 		work := &infraWork{transformed: transformed, previewing: kind == runPreview}
 		if provisionsBucket(spec) {
 			if work.completer, err = placeUploadCompleter(ctx, r.cfg); err != nil {
-				return provider.StackSpec{}, nil, err
+				return preparedStack{}, err
 			}
 		}
 		if provisionsRealtime(spec) {
 			if work.authorizer, err = placeRealtimeAuthorizer(ctx, r.cfg); err != nil {
-				return provider.StackSpec{}, nil, err
+				return preparedStack{}, err
 			}
 		}
-		spec.VendorState = work
-		return spec, nil, nil
+		return preparedStack{program: r.infraProgram(spec, work), transformed: transformed}, nil
 	}
 	var network *functionNetwork
 	var pending, functionsAttach bool
@@ -614,16 +597,15 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 		network, functionsAttach, err = r.claimFunctionNetworkFor(ctx, spec, transformed, progress)
 	}
 	if err != nil {
-		return provider.StackSpec{}, nil, err
+		return preparedStack{}, err
 	}
 	work, err := r.appWork(spec, transformed, network)
 	if err != nil {
-		return provider.StackSpec{}, nil, err
+		return preparedStack{}, err
 	}
 	work.networkPending = pending
 	work.functionsAttach = functionsAttach
-	spec.VendorState = work
-	return spec, work, nil
+	return preparedStack{program: r.appProgram(spec, work), transformed: transformed, app: work}, nil
 }
 
 func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {

@@ -45,6 +45,7 @@ type Provider struct {
 	mu            sync.Mutex
 	resolved      *clients
 	regionChecked bool
+	surveyed      surveys
 
 	bases  map[string]base
 	pull   func(ctx context.Context, ref string) (v1.Image, error)
@@ -129,11 +130,9 @@ func (p *Provider) Hooks() provider.Hooks {
 		EnsureImageRegistry:   p.EnsureImageRegistry,
 		OpenDirectImages:      p.OpenDirectImages,
 		CheckBucket:           s3store.Check,
-		ProveIdentity:         ports.ProveIdentity,
-		EnsureEnvSourceSync:   p.EnsureEnvSourceSync,
+		EnvSource:             &provider.EnvSourceHooks{ProveIdentity: ports.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
 		RemovePartUser:        p.RemovePartUser,
-		ForwardPorts:          p.ForwardPorts,
-		ServeBindingProxy:     p.ServeBindingProxy,
+		BindingAccess:         &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Cost:                  &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		FunctionImages:        &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
 		Retirement:            &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},

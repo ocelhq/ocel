@@ -28,13 +28,12 @@ type Readiness struct {
 }
 
 type BootstrapStatus struct {
-	Tier        environment.Tier
-	Present     bool
-	Stacks      []provider.BootstrapStack
-	Parts       []string
-	WrittenBy   provider.WrittenBy
-	Unfinished  bool
-	VendorState any
+	Tier       environment.Tier
+	Present    bool
+	Stacks     []provider.BootstrapStack
+	Parts      []string
+	WrittenBy  provider.WrittenBy
+	Unfinished bool
 }
 
 func (r Readiness) Status(ctx context.Context, tier environment.Tier) (BootstrapStatus, error) {
@@ -43,7 +42,7 @@ func (r Readiness) Status(ctx context.Context, tier environment.Tier) (Bootstrap
 		return BootstrapStatus{}, err
 	}
 	status := BootstrapStatus{Tier: tier, Present: described.Present, Stacks: described.Stacks,
-		Unfinished: described.Unfinished, VendorState: described.VendorState}
+		Unfinished: described.Unfinished}
 	var present []string
 	for _, stack := range described.Stacks {
 		if stack.Part == "" {
@@ -238,7 +237,6 @@ func (c partChange) request(tier environment.Tier, req ApplyRequest, writer prov
 		Force:              req.Force,
 		RefuseReplacements: !req.AcceptReplacements,
 		WrittenBy:          writer,
-		VendorState:        c.status.VendorState,
 	}
 }
 

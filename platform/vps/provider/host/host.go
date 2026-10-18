@@ -58,6 +58,9 @@ type Host struct {
 	principal string
 	tiers     map[environment.Tier]bool
 
+	described sync.Mutex
+	readings  map[environment.Tier]Reading
+
 	sizing sizing
 
 	pause func(context.Context, time.Duration) error
@@ -451,6 +454,28 @@ func (r Reading) upToDate() bool {
 		}
 	}
 	return true
+}
+
+func (h *Host) rememberReading(read Reading) {
+	h.described.Lock()
+	defer h.described.Unlock()
+	if h.readings == nil {
+		h.readings = map[environment.Tier]Reading{}
+	}
+	h.readings[read.Tier] = read
+}
+
+func (h *Host) recallReading(tier environment.Tier) (Reading, bool) {
+	h.described.Lock()
+	defer h.described.Unlock()
+	read, remembered := h.readings[tier]
+	return read, remembered
+}
+
+func (h *Host) forgetReading(tier environment.Tier) {
+	h.described.Lock()
+	defer h.described.Unlock()
+	delete(h.readings, tier)
 }
 
 func (h *Host) Read(ctx context.Context, tier environment.Tier) (Reading, error) {

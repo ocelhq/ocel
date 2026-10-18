@@ -6,14 +6,39 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-
+	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/buildproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
+
+func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
+	if len(req.Bindings) == 0 {
+		return nil, nil
+	}
+	deployed, err := p.bootstrapped(ctx, req.Tier)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.requireBootstrapped(deployed, req.Tier); err != nil {
+		return nil, err
+	}
+	clients := bastion.NewClients(p.aws)
+	reconciled, err := bastion.Reconcile(ctx, clients, bastion.Spec{
+		Tier:     req.Tier,
+		Boundary: deployed.AppBoundaryARN,
+		Ports:    []int{deploy.PostgresPort, kvstore.ValkeyPort},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return reconciled.Forward(ctx, clients, bastion.OpenSession(p.aws), req.ReportFailure, req.Bindings)
+}
 
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
 	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, grants []provider.BindingGrant) (provider.BindingProxy, error) {

@@ -14,6 +14,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/topiclimits"
 )
 
 type Placement struct {
@@ -139,11 +140,11 @@ func attachConsumers(topics map[string]declaredResource, declarations []declared
 		}
 		ordered := topic.Topic.GetOrdered()
 		if ordered {
-			if err := provider.RefuseOrderedConsumer(d.Consumer.GetLanes(), d.Consumer.GetBatch()); err != nil {
+			if err := topiclimits.RefuseOrderedConsumer(d.Consumer.GetLanes(), d.Consumer.GetBatch()); err != nil {
 				return nil, refuse(d, "%v", err)
 			}
 		}
-		if err := provider.RefuseConsumerCount(len(consumers[name])+1, ordered); err != nil {
+		if err := topiclimits.RefuseConsumerCount(len(consumers[name])+1, ordered); err != nil {
 			return nil, refuse(d, "is one consumer too many: %s %v", topic.label(), err)
 		}
 		consumers[name] = append(consumers[name], d)
@@ -172,7 +173,7 @@ func manifestTopic(d declaredResource, consumers []declaredResource) *contractv1
 }
 
 func withRetry(consumer *contractv1.ManifestConsumer, declared *resourcesv1.RetryPolicy) *contractv1.ManifestConsumer {
-	resolved := provider.ResolveRetryPolicy(declared, consumer.GetRetry())
+	resolved := topiclimits.ResolveRetryPolicy(declared, consumer.GetRetry())
 	consumer.Retry = &resourcesv1.RetryPolicy{
 		MaxAttempts: int32(resolved.MaxAttempts),
 		MinDelay:    durationpb.New(resolved.MinDelay),
@@ -182,7 +183,7 @@ func withRetry(consumer *contractv1.ManifestConsumer, declared *resourcesv1.Retr
 }
 
 func refuseTopicLimits(d declaredResource) error {
-	return refuseAtDeclaration(d, provider.RefuseRetry(d.Topic.GetRetry()))
+	return refuseAtDeclaration(d, topiclimits.RefuseRetry(d.Topic.GetRetry()))
 }
 
 func refuseConsumerLimits(d declaredResource) error {
@@ -192,10 +193,10 @@ func refuseConsumerLimits(d declaredResource) error {
 func refuseTaskLimits(d declaredResource) error {
 	task := d.Task
 	return firstRefusal(
-		refuseAtDeclaration(d, provider.RefuseRetry(task.GetRetry())),
+		refuseAtDeclaration(d, topiclimits.RefuseRetry(task.GetRetry())),
 		refuseRunLimits(d, taskConsumer(d)),
-		refuseAtDeclaration(d, provider.RefuseTTL(task.GetTtl())),
-		refuseAtDeclaration(d, provider.RefuseOrderedTask(task.GetOrdered(), task.GetBatch())),
+		refuseAtDeclaration(d, topiclimits.RefuseTTL(task.GetTtl())),
+		refuseAtDeclaration(d, topiclimits.RefuseOrderedTask(task.GetOrdered(), task.GetBatch())),
 		refuseSchedule(d, task.GetCron()),
 	)
 }
@@ -212,9 +213,9 @@ func refuseSchedule(d declaredResource, expr string) error {
 
 func refuseRunLimits(d declaredResource, runs *contractv1.ManifestConsumer) error {
 	return firstRefusal(
-		refuseAtDeclaration(d, provider.RefuseRetry(runs.GetRetry())),
+		refuseAtDeclaration(d, topiclimits.RefuseRetry(runs.GetRetry())),
 		refuseAtDeclaration(d, provider.RefuseConcurrency(runs.GetConcurrency())),
-		refuseAtDeclaration(d, provider.RefuseMaxDuration(runs.GetMaxDuration())),
-		refuseAtDeclaration(d, provider.RefuseBatch(runs.GetBatch())),
+		refuseAtDeclaration(d, topiclimits.RefuseMaxDuration(runs.GetMaxDuration())),
+		refuseAtDeclaration(d, topiclimits.RefuseBatch(runs.GetBatch())),
 	)
 }

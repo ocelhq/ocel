@@ -614,6 +614,17 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	}}
 	b := planningBootstrapper(front)
 	cfn := b.CFN.(*teardownCFN)
+	remembered := map[environment.Tier]bootstrap.Reading{}
+	b.Read = func(ctx context.Context, tier environment.Tier) (bootstrap.Reading, error) {
+		if read, ok := remembered[tier]; ok {
+			return read, nil
+		}
+		read, err := bootstrap.Read(ctx, cfn, b.Namespace, tier)
+		if err == nil {
+			remembered[tier] = read
+		}
+		return read, err
+	}
 	readiness := providerserver.Readiness{Bootstrap: b, KeyValues: fake.NewKeyValues(), Edge: cloudflareKind}
 
 	status, err := readiness.Status(context.Background(), environment.TierProduction)

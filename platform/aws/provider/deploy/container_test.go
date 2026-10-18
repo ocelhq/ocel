@@ -117,7 +117,7 @@ func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
 
 	cfg, spec := containerStackSpec(t)
 	spec.App.Compute = provider.ComputeServerless
-	if _, _, err := releasing(t, cfg).prepare(context.Background(), spec, runProvision, nil); err == nil || !strings.Contains(err.Error(), "serverless") {
+	if _, err := releasing(t, cfg).prepare(context.Background(), spec, runProvision, nil); err == nil || !strings.Contains(err.Error(), "serverless") {
 		t.Fatalf("prepare() of a serverless app that pushes an image = %v, want it refused: functions run no image", err)
 	}
 }
@@ -343,12 +343,11 @@ func TestAContainerStackDecodesIntoTheContainerItDeployed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	spec.VendorState = work
 	outputs := auto.OutputMap{"web": auto.OutputValue{Value: map[string]any{
 		outputKeyContainerURL:      "http://" + fixtureOrigin,
 		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
 	}}}
-	result, err := release.Decode(context.Background(), spec, outputs)
+	result, err := release.decodeContainer(work, outputs)
 	if err != nil {
 		t.Fatalf("Decode() = %v", err)
 	}
@@ -363,7 +362,7 @@ func TestAContainerStackDecodesIntoTheContainerItDeployed(t *testing.T) {
 		t.Errorf("container = %+v, want the app's name, the front the edge reaches, the image it runs and the service the rule names", deployed)
 	}
 
-	if _, err := release.Decode(context.Background(), spec, auto.OutputMap{}); err == nil {
+	if _, err := release.decodeContainer(work, auto.OutputMap{}); err == nil {
 		t.Error("Decode() of a stack that produced no output succeeded, so a deploy would record a container with no origin")
 	}
 }
@@ -765,7 +764,7 @@ func TestADeployThatRunsNoContainerReconcilesNoImage(t *testing.T) {
 	spec.Images = provider.ImagePushes{}
 	spec.App.Image = ""
 
-	_, _, _ = releasing(t, cfg).prepare(context.Background(), spec, runProvision, nil)
+	_, _ = releasing(t, cfg).prepare(context.Background(), spec, runProvision, nil)
 
 	if len(retained.reconciled) != 0 {
 		t.Errorf("a serverless release reconciled %v, want no image", retained.reconciled)

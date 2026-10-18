@@ -62,16 +62,14 @@ type Engine interface {
 	Unlock(ctx context.Context, setup WorkspaceSpec) error
 }
 
-type Config struct {
+type Config[S any] struct {
 	Backend Backend
 
-	Program func(ctx *pulumi.Context, spec provider.StackSpec) error
+	Program func(ctx *pulumi.Context, work S) error
 
-	Configure func(ctx context.Context, spec provider.StackSpec) (auto.ConfigMap, error)
+	Configure func(ctx context.Context, work S) (auto.ConfigMap, error)
 
-	Secrets func(spec provider.StackSpec) []string
-
-	Decode func(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error)
+	Secrets func(work S) []string
 
 	Parallel int
 
@@ -82,20 +80,20 @@ type Config struct {
 	Plugins []Plugin
 }
 
-type Automation struct {
-	config  Config
+type Automation[S any] struct {
+	config  Config[S]
 	plugins *hostedPlugins
 }
 
-func New(config Config) *Automation {
-	return &Automation{config: config, plugins: &hostedPlugins{declared: config.Plugins}}
+func New[S any](config Config[S]) *Automation[S] {
+	return &Automation[S]{config: config, plugins: &hostedPlugins{declared: config.Plugins}}
 }
 
-func (a *Automation) Backend() Backend { return a.config.Backend }
+func (a *Automation[S]) Backend() Backend { return a.config.Backend }
 
-func (a *Automation) StackName(ref provider.StackRef) string { return ref.Name.String() }
+func (a *Automation[S]) StackName(ref provider.StackRef) string { return ref.Name.String() }
 
-func (a *Automation) ProjectName(ref provider.StackRef) string {
+func (a *Automation[S]) ProjectName(ref provider.StackRef) string {
 	if a.config.Backend.Project != "" {
 		return a.config.Backend.Project
 	}
@@ -124,26 +122,26 @@ type WorkspaceSpec struct {
 	Refresh bool
 }
 
-func (a *Automation) Workspace(spec provider.StackSpec) (WorkspaceSpec, error) {
-	return a.workspace(spec, OperationProvision)
+func (a *Automation[S]) Workspace(ref provider.StackRef, work S) (WorkspaceSpec, error) {
+	return a.workspace(ref, work, OperationProvision)
 }
 
-func (a *Automation) workspace(spec provider.StackSpec, op Operation) (WorkspaceSpec, error) {
+func (a *Automation[S]) workspace(ref provider.StackRef, work S, op Operation) (WorkspaceSpec, error) {
 	backend := a.config.Backend
 	switch {
 	case backend.URL == "":
 		return WorkspaceSpec{}, refusal.Refuse(refusal.CodeNotReady,
-			"this provider names no state backend, and an engine run has nowhere to keep %s's state", spec.Ref.Name)
+			"this provider names no state backend, and an engine run has nowhere to keep %s's state", ref.Name)
 	case backend.Passphrase == "":
 		return WorkspaceSpec{}, refusal.Refuse(refusal.CodeNotReady,
-			"this provider names no state passphrase, and %s's state would be written unsealed", spec.Ref.Name)
+			"this provider names no state passphrase, and %s's state would be written unsealed", ref.Name)
 	case a.config.Program == nil:
 		return WorkspaceSpec{}, refusal.Refuse(refusal.CodeNotReady,
-			"this automation has no program, so there is nothing for the engine to run over %s", spec.Ref.Name)
+			"this automation has no program, so there is nothing for the engine to run over %s", ref.Name)
 	}
 
 	project := workspace.Project{
-		Name:    tokens.PackageName(a.ProjectName(spec.Ref)),
+		Name:    tokens.PackageName(a.ProjectName(ref)),
 		Runtime: workspace.NewProjectRuntimeInfo("go", nil),
 		Backend: &workspace.ProjectBackend{URL: backend.URL},
 	}
@@ -151,16 +149,16 @@ func (a *Automation) workspace(spec provider.StackSpec, op Operation) (Workspace
 	if err != nil {
 		return WorkspaceSpec{}, err
 	}
-	program := func(ctx *pulumi.Context) error { return a.config.Program(ctx, spec) }
+	program := func(ctx *pulumi.Context) error { return a.config.Program(ctx, work) }
 
 	return WorkspaceSpec{
-		Ref:          spec.Ref,
-		Stack:        a.StackName(spec.Ref),
+		Ref:          ref,
+		Stack:        a.StackName(ref),
 		Project:      project,
 		Program:      program,
 		EnvVariables: env,
 		Parallel:     a.parallel(),
-		Refresh:      a.refreshes(spec.Ref, op),
+		Refresh:      a.refreshes(ref, op),
 		Options: []auto.LocalWorkspaceOption{
 			auto.Project(project),
 			auto.EnvVars(env),
@@ -170,18 +168,18 @@ func (a *Automation) workspace(spec provider.StackSpec, op Operation) (Workspace
 	}, nil
 }
 
-func (a *Automation) parallel() int {
+func (a *Automation[S]) parallel() int {
 	if a.config.Parallel > 0 {
 		return a.config.Parallel
 	}
 	return DefaultParallel
 }
 
-func (a *Automation) refreshes(ref provider.StackRef, op Operation) bool {
+func (a *Automation[S]) refreshes(ref provider.StackRef, op Operation) bool {
 	return a.config.Refresh != nil && a.config.Refresh(ref, op)
 }
 
-func (a *Automation) env() (map[string]string, error) {
+func (a *Automation[S]) env() (map[string]string, error) {
 	env := map[string]string{
 		passphraseEnvVar: a.config.Backend.Passphrase,
 		backendEnvVar:    a.config.Backend.URL,
@@ -202,28 +200,28 @@ func (a *Automation) env() (map[string]string, error) {
 	return env, nil
 }
 
-func (a *Automation) StackConfig(ctx context.Context, spec provider.StackSpec) (auto.ConfigMap, error) {
-	if _, err := a.Workspace(spec); err != nil {
+func (a *Automation[S]) StackConfig(ctx context.Context, ref provider.StackRef, work S) (auto.ConfigMap, error) {
+	if _, err := a.Workspace(ref, work); err != nil {
 		return nil, err
 	}
 	if a.config.Configure == nil {
 		return auto.ConfigMap{}, nil
 	}
-	return a.config.Configure(ctx, spec)
+	return a.config.Configure(ctx, work)
 }
 
-func (a *Automation) setup(ctx context.Context, spec provider.StackSpec, op Operation, progress progress.Log) (WorkspaceSpec, error) {
-	setup, err := a.workspace(spec, op)
+func (a *Automation[S]) setup(ctx context.Context, ref provider.StackRef, work S, op Operation, progress progress.Log) (WorkspaceSpec, error) {
+	setup, err := a.workspace(ref, work, op)
 	if err != nil {
 		return WorkspaceSpec{}, err
 	}
-	if setup.Config, err = a.StackConfig(ctx, spec); err != nil {
+	if setup.Config, err = a.StackConfig(ctx, ref, work); err != nil {
 		return WorkspaceSpec{}, err
 	}
 	if err := refuseSecretConfig(setup.Config, setup.Stack); err != nil {
 		return WorkspaceSpec{}, err
 	}
-	setup.Secrets = a.secrets(spec)
+	setup.Secrets = a.secrets(work)
 	if a.config.Engine == nil {
 		command, err := pinned.install(ctx, progress)
 		if err != nil {
@@ -234,23 +232,24 @@ func (a *Automation) setup(ctx context.Context, spec provider.StackSpec, op Oper
 	return setup, nil
 }
 
-func (a *Automation) engine() Engine {
+func (a *Automation[S]) engine() Engine {
 	if a.config.Engine != nil {
 		return a.config.Engine
 	}
 	return autoEngine{}
 }
 
-func (a *Automation) Preview(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {
-	return a.preview(ctx, spec, OperationProvision, progress)
+func (a *Automation[S]) Preview(ctx context.Context, ref provider.StackRef, work S, progress progress.Log) (provider.Plan, error) {
+	return a.preview(ctx, ref, work, OperationProvision, progress)
 }
 
-func (a *Automation) PreviewDestroy(ctx context.Context, ref provider.StackRef, progress progress.Log) (provider.Plan, error) {
-	return a.preview(ctx, provider.StackSpec{Ref: ref}, OperationDestroy, progress)
+func (a *Automation[S]) PreviewDestroy(ctx context.Context, ref provider.StackRef, progress progress.Log) (provider.Plan, error) {
+	var none S
+	return a.preview(ctx, ref, none, OperationDestroy, progress)
 }
 
-func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Operation, progress progress.Log) (provider.Plan, error) {
-	setup, err := a.setup(ctx, spec, op, progress)
+func (a *Automation[S]) preview(ctx context.Context, ref provider.StackRef, work S, op Operation, progress progress.Log) (provider.Plan, error) {
+	setup, err := a.setup(ctx, ref, work, op, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -329,25 +328,23 @@ func plannedAction(op apitype.OpType) (provider.ChangeAction, bool) {
 	}
 }
 
-func (a *Automation) Run(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
-	setup, err := a.setup(ctx, spec, OperationProvision, progress)
+func (a *Automation[S]) Run(ctx context.Context, ref provider.StackRef, work S, progress progress.Log) (auto.OutputMap, error) {
+	setup, err := a.setup(ctx, ref, work, OperationProvision, progress)
 	if err != nil {
-		return provider.StackResult{}, err
+		return nil, err
 	}
 	outputs, err := runReleasingStaleLock(ctx, a, setup, progress, func() (auto.OutputMap, error) {
 		return a.engine().Up(ctx, setup, progress)
 	})
 	if err != nil {
-		return provider.StackResult{}, masked(busy(err, setup), setup.Secrets)
+		return nil, masked(busy(err, setup), setup.Secrets)
 	}
-	if a.config.Decode == nil {
-		return provider.StackResult{}, nil
-	}
-	return a.config.Decode(ctx, spec, outputs)
+	return outputs, nil
 }
 
-func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
-	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OperationDestroy, progress)
+func (a *Automation[S]) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+	var none S
+	setup, err := a.setup(ctx, ref, none, OperationDestroy, progress)
 	if err != nil {
 		return err
 	}
@@ -360,8 +357,9 @@ func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progres
 	return nil
 }
 
-func (a *Automation) Outputs(ctx context.Context, ref provider.StackRef, progress progress.Log) (auto.OutputMap, error) {
-	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OperationProvision, progress)
+func (a *Automation[S]) Outputs(ctx context.Context, ref provider.StackRef, progress progress.Log) (auto.OutputMap, error) {
+	var none S
+	setup, err := a.setup(ctx, ref, none, OperationProvision, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -613,13 +611,10 @@ func refuseSecretConfig(values auto.ConfigMap, stack string) error {
 	return nil
 }
 
-func (a *Automation) secrets(spec provider.StackSpec) []string {
+func (a *Automation[S]) secrets(work S) []string {
 	secrets := []string{a.config.Backend.Passphrase}
-	if spec.App != nil {
-		secrets = append(secrets, slices.Collect(maps.Values(spec.App.Values.Sensitive))...)
-	}
 	if a.config.Secrets != nil {
-		secrets = append(secrets, a.config.Secrets(spec)...)
+		secrets = append(secrets, a.config.Secrets(work)...)
 	}
 	return slices.DeleteFunc(secrets, func(secret string) bool { return secret == "" })
 }

@@ -81,11 +81,11 @@ type planning interface {
 	Plan(context.Context, provider.BootstrapRequest) (provider.Plan, error)
 }
 
-func stillMoving(t *testing.T, planner planning, tier environment.Tier, vendorState any) string {
+func stillMoving(t *testing.T, planner planning, tier environment.Tier) string {
 	t.Helper()
 
 	plan, err := planner.Plan(context.Background(),
-		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: vendorState})
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"})
 	if err != nil {
 		return "and a re-plan over it said " + err.Error()
 	}
@@ -147,7 +147,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 		t.Error("Describe() says nothing about the apply that never finished, so status has nothing to banner and reads the host as ordinarily stale")
 	}
 
-	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"})
 	if err != nil {
 		t.Fatalf("Plan() over a half-applied host = %v", err)
 	}
@@ -167,7 +167,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	}
 
 	var said sayings
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState}, &said); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, &said); err != nil {
 		t.Fatalf("the same command over a half-applied host = %v, want recovery to be the first run's command", err)
 	}
 	unchanged := "File " + boxstore.SealHelper + " is already current"
@@ -183,7 +183,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	}
 	if !finished.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() still reads the host as drifted after the apply that finished it, %s",
-			stillMoving(t, bootstrap, tier, finished.VendorState))
+			stillMoving(t, bootstrap, tier))
 	}
 	if finished.Unfinished {
 		t.Error("Describe() still banners the host as half-applied after the apply that finished it")
@@ -218,11 +218,9 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 	}
 
 	vm.ssh(t, "sudo chmod 700 "+helperDir)
-	converging, err := bootstrap.Describe(ctx, tier)
-	if err != nil {
+	if _, err := bootstrap.Describe(ctx, tier); err != nil {
 		t.Fatal(err)
 	}
-	refusing.VendorState = converging.VendorState
 	if err := bootstrap.Apply(ctx, refusing, progress.Discard()); err != nil {
 		t.Fatalf("an apply that refuses replacements over a host whose %s has moved mode = %v, want a converge that destroys nothing to proceed", helperDir, err)
 	}
@@ -231,11 +229,9 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 	}
 
 	vm.ssh(t, "sudo chmod 700 "+keyValuesHelper)
-	moved, err := bootstrap.Describe(ctx, tier)
-	if err != nil {
+	if _, err := bootstrap.Describe(ctx, tier); err != nil {
 		t.Fatal(err)
 	}
-	refusing.VendorState = moved.VendorState
 	got := refused(t, bootstrap.Apply(ctx, refusing, progress.Discard()), refusal.CodeNotReady)
 	if !strings.Contains(got.Message, keyValuesHelper) {
 		t.Errorf("the refusal says %q, want it to name %s as what it would write over", got.Message, keyValuesHelper)
@@ -244,7 +240,7 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 		t.Errorf("%s is %q after the apply that refused it, want the refusal to have written nothing", keyValuesHelper, got)
 	}
 
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: moved.VendorState}, progress.Discard()); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("the same apply accepting replacements = %v", err)
 	}
 	if got := mode(t, vm, keyValuesHelper); got != "755" {

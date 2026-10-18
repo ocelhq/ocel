@@ -50,13 +50,13 @@ func TestADestroyUnderTheLeaseReleasesTheLockAKilledRunLeftAndTearsTheStackDown(
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	automation := pulumi.New(pulumi.Config{
+	automation := pulumi.New(pulumi.Config[provider.StackSpec]{
 		Backend: pulumi.Backend{URL: "file://" + dir, Passphrase: "a-passphrase", Project: lockProbeProject},
 		Program: program{}.Run,
 	})
 	locked, other := lockProbeRef("pr-7"), lockProbeRef("pr-8")
 	for _, ref := range []provider.StackRef{locked, other} {
-		if _, err := automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
+		if _, err := automation.Run(ctx, ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
 			t.Fatalf("Run(%s) = %v", ref.Name, err)
 		}
 	}
@@ -84,12 +84,12 @@ func TestADestroyWithoutTheLeaseStillRefusesALockedStack(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	automation := pulumi.New(pulumi.Config{
+	automation := pulumi.New(pulumi.Config[provider.StackSpec]{
 		Backend: pulumi.Backend{URL: "file://" + dir, Passphrase: "a-passphrase", Project: lockProbeProject},
 		Program: program{}.Run,
 	})
 	ref := lockProbeRef("pr-7")
-	if _, err := automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
+	if _, err := automation.Run(ctx, ref, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 	lock := plantLock(t, dir, ref)
@@ -152,13 +152,19 @@ func leasedSpec() context.Context {
 func TestEachLeasedOperationReleasesAStaleLockAndRetriesOnce(t *testing.T) {
 	t.Parallel()
 
-	for name, run := range map[string]func(*pulumi.Automation) error{
-		"provision": func(a *pulumi.Automation) error { _, err := a.Run(leasedSpec(), spec(), nil); return err },
-		"destroy":   func(a *pulumi.Automation) error { return a.Destroy(leasedSpec(), spec().Ref, nil) },
-		"plan":      func(a *pulumi.Automation) error { _, err := a.Preview(leasedSpec(), spec(), nil); return err },
+	for name, run := range map[string]func(*pulumi.Automation[provider.StackSpec]) error{
+		"provision": func(a *pulumi.Automation[provider.StackSpec]) error {
+			_, err := a.Run(leasedSpec(), spec().Ref, spec(), nil)
+			return err
+		},
+		"destroy": func(a *pulumi.Automation[provider.StackSpec]) error { return a.Destroy(leasedSpec(), spec().Ref, nil) },
+		"plan": func(a *pulumi.Automation[provider.StackSpec]) error {
+			_, err := a.Preview(leasedSpec(), spec().Ref, spec(), nil)
+			return err
+		},
 	} {
 		engine := &lockedEngine{locks: 1}
-		if err := run(pulumi.New(pulumi.Config{Backend: backend(), Program: program{}.Run, Engine: engine})); err != nil {
+		if err := run(pulumi.New(pulumi.Config[provider.StackSpec]{Backend: backend(), Program: program{}.Run, Engine: engine})); err != nil {
 			t.Errorf("%s: under the lease over a stale lock = %v, want it to run once the lock is released", name, err)
 		}
 		if engine.attempts != 2 || !slices.Equal(engine.unlocked, []string{spec().Ref.Name.String()}) {
@@ -171,7 +177,7 @@ func TestALockThatComesBackAfterItsReleaseReadsAsBusy(t *testing.T) {
 	t.Parallel()
 
 	engine := &lockedEngine{locks: 2}
-	err := pulumi.New(pulumi.Config{Backend: backend(), Program: program{}.Run, Engine: engine}).
+	err := pulumi.New(pulumi.Config[provider.StackSpec]{Backend: backend(), Program: program{}.Run, Engine: engine}).
 		Destroy(leasedSpec(), spec().Ref, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
@@ -186,7 +192,7 @@ func TestAnOperationWithoutTheLeaseNeverReleasesALock(t *testing.T) {
 	t.Parallel()
 
 	engine := &lockedEngine{locks: 1}
-	err := pulumi.New(pulumi.Config{Backend: backend(), Program: program{}.Run, Engine: engine}).
+	err := pulumi.New(pulumi.Config[provider.StackSpec]{Backend: backend(), Program: program{}.Run, Engine: engine}).
 		Destroy(context.Background(), spec().Ref, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {

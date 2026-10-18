@@ -35,7 +35,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 		t.Fatal("Describe() claims a bootstrap on an account nothing has written to")
 	}
 
-	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, VendorState: fresh.VendorState}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter}
 	plan, err := boot.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
@@ -117,7 +117,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 		}
 	}
 
-	again, err := boot.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, VendorState: installed.VendorState})
+	again, err := boot.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}

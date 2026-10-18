@@ -23,48 +23,39 @@ const cloudStorageScheme = "gs"
 
 type albStacks struct{ p *Provider }
 
-type albProgram struct {
-	run     alb.Program
-	project string
-}
-
-func (a albProgram) Run(ctx *sdk.Context, _ provider.StackSpec) error {
-	return a.run(ctx, a.project)
-}
-
 func (s albStacks) Up(
 	ctx context.Context,
 	target alb.Target,
 	program alb.Program,
 	progress progress.Log,
 ) (map[string]string, error) {
-	automation, spec, err := s.opened(ctx, target, program)
+	automation, ref, err := s.opened(ctx, target)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := automation.Run(ctx, spec, progress); err != nil {
+	if _, err := automation.Run(ctx, ref, program, progress); err != nil {
 		return nil, err
 	}
-	return outputsOf(ctx, automation, spec.Ref)
+	return outputsOf(ctx, automation, ref)
 }
 
 func (s albStacks) Destroy(ctx context.Context, target alb.Target, progress progress.Log) error {
-	automation, spec, err := s.opened(ctx, target, nil)
+	automation, ref, err := s.opened(ctx, target)
 	if err != nil {
 		return err
 	}
-	return automation.Destroy(ctx, spec.Ref, progress)
+	return automation.Destroy(ctx, ref, progress)
 }
 
 func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]string, error) {
-	automation, spec, err := s.opened(ctx, target, nil)
+	automation, ref, err := s.opened(ctx, target)
 	if err != nil {
 		return nil, err
 	}
-	return outputsOf(ctx, automation, spec.Ref)
+	return outputsOf(ctx, automation, ref)
 }
 
-func outputsOf(ctx context.Context, automation *pulumi.Automation, ref provider.StackRef) (map[string]string, error) {
+func outputsOf(ctx context.Context, automation *pulumi.Automation[alb.Program], ref provider.StackRef) (map[string]string, error) {
 	outputs, err := automation.Outputs(ctx, ref, progress.Discard())
 	if err != nil {
 		return nil, err
@@ -78,31 +69,22 @@ func outputsOf(ctx context.Context, automation *pulumi.Automation, ref provider.
 	return read, nil
 }
 
-func (s albStacks) opened(
-	ctx context.Context,
-	target alb.Target,
-	program alb.Program,
-) (*pulumi.Automation, provider.StackSpec, error) {
+func (s albStacks) opened(ctx context.Context, target alb.Target) (*pulumi.Automation[alb.Program], provider.StackRef, error) {
 	clients, err := s.p.openClients(ctx)
 	if err != nil {
-		return nil, provider.StackSpec{}, err
+		return nil, provider.StackRef{}, err
 	}
 	passphrase, err := s.passphrase(ctx, clients, target.Tier)
 	if err != nil {
-		return nil, provider.StackSpec{}, err
+		return nil, provider.StackRef{}, err
 	}
-	config, spec := s.config(clients, target, passphrase, program)
-	return pulumi.New(config), spec, nil
+	config, ref := s.config(clients, target, passphrase)
+	return pulumi.New(config), ref, nil
 }
 
-func (s albStacks) config(
-	clients *clients,
-	target alb.Target,
-	passphrase string,
-	program alb.Program,
-) (pulumi.Config, provider.StackSpec) {
+func (s albStacks) config(clients *clients, target alb.Target, passphrase string) (pulumi.Config[alb.Program], provider.StackRef) {
 	project := naming.PulumiProject(target.Prefix())
-	config := pulumi.Config{
+	config := pulumi.Config[alb.Program]{
 		Backend: pulumi.Backend{
 			URL:        naming.StateBackendURL(cloudStorageScheme, clients.StateBucket(target.Tier), project),
 			Passphrase: passphrase,
@@ -112,17 +94,12 @@ func (s albStacks) config(
 				"GOOGLE_REGION":  clients.region,
 			},
 		},
-	}
-	if program != nil {
-		config.Program = albProgram{run: program, project: clients.project}.Run
+		Program: func(ctx *sdk.Context, program alb.Program) error { return program(ctx, clients.project) },
 	}
 	if target.Slug == "" {
 		config.Refresh = refreshesTheFront
 	}
-	return config, provider.StackSpec{
-		Ref:  provider.StackRef{Project: project, Tier: target.Tier, Name: naming.InfraStack(target.Name())},
-		Kind: provider.StackInfra,
-	}
+	return config, provider.StackRef{Project: project, Tier: target.Tier, Name: naming.InfraStack(target.Name())}
 }
 
 func refreshesTheFront(provider.StackRef, pulumi.Operation) bool { return true }

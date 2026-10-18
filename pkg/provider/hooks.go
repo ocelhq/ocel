@@ -27,15 +27,22 @@ type Hooks struct {
 	OpenDirectImages      func(ctx context.Context) (ImageStore, error)
 	ReadNextServerRuntime func(ctx context.Context) (map[string][]byte, error)
 	CheckHost             func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
-	ProveIdentity         func(ctx context.Context, audience string) (envsource.IdentityProof, error)
-	EnsureEnvSourceSync   func(ctx context.Context, tier environment.Tier, project string) error
 	RemovePartUser        func(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error
-	OpenTaskStore         func(ctx context.Context) (TaskStore, error)
-	ForwardPorts          func(ctx context.Context, req PortForwardRequest, progress progress.Log) ([]PortForward, error)
-	ServeBindingProxy     func(ctx context.Context, req BindingProxyRequest, progress progress.Log) (BindingProxy, error)
+	BindingAccess         *BindingAccessHooks
+	EnvSource             *EnvSourceHooks
 	Cost                  *CostHooks
 	FunctionImages        *FunctionImageHooks
 	Retirement            *RetirementHooks
+}
+
+type BindingAccessHooks struct {
+	ForwardPorts func(ctx context.Context, req PortForwardRequest, progress progress.Log) ([]PortForward, error)
+	ServeProxy   func(ctx context.Context, req BindingProxyRequest, progress progress.Log) (BindingProxy, error)
+}
+
+type EnvSourceHooks struct {
+	ProveIdentity func(ctx context.Context, audience string) (envsource.IdentityProof, error)
+	EnsureSync    func(ctx context.Context, tier environment.Tier, project string) error
 }
 
 type CostHooks struct {

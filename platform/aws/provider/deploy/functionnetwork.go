@@ -66,7 +66,6 @@ type functionNetworkWork struct {
 	region  string
 	tags    map[string]string
 	subnets awsec2.DescribeSubnetsAPIClient
-	outputs auto.OutputMap
 }
 
 func (n *functionNetwork) vpcConfig() lambda.FunctionVpcConfigPtrInput {
@@ -149,16 +148,10 @@ func (r *Stacks) claimFunctionNetwork(ctx context.Context, ref provider.StackRef
 		progress.Say("Provisioning the shared function network for the " + string(tier) + " tier: private subnets, a NAT gateway and gateway endpoints every serverless app that reaches a VPC-only resource attaches to; the first attach can take several minutes")
 	}
 	work := &functionNetworkWork{tier: tier, region: owner.cfg.Region, tags: functionNetworkTags(tier), subnets: owner.cfg.Subnets}
-	spec := provider.StackSpec{
-		Ref:         functionNetworkRef(tier),
-		Kind:        provider.StackInfra,
-		Tags:        functionNetworkTags(tier),
-		VendorState: work,
-	}
 	var decoded functionNetwork
 	err = raiseShared(ctx, functionNetworkShare, owner, tier, ref.Project, func() ([]provider.PartResource, error) {
 		var err error
-		if decoded, err = provisionFunctionNetwork(ctx, owner, spec, work, progress); err != nil {
+		if decoded, err = provisionFunctionNetwork(ctx, owner, functionNetworkRef(tier), work, progress); err != nil {
 			return nil, err
 		}
 		return listFunctionNetworkResources(tier, decoded), nil
@@ -169,18 +162,19 @@ func (r *Stacks) claimFunctionNetwork(ctx context.Context, ref provider.StackRef
 	return decoded, r.claimShared(ctx, functionNetworkShare, ref)
 }
 
-func provisionFunctionNetwork(ctx context.Context, owner *release, spec provider.StackSpec, work *functionNetworkWork, progress progress.Log) (functionNetwork, error) {
-	tier := spec.Ref.Tier
-	if err := stackrecords.Write(ctx, owner.cfg.KeyValues, tier, FunctionNetworkSlug, spec.Ref.Name, stackrecords.Stack{
+func provisionFunctionNetwork(ctx context.Context, owner *release, ref provider.StackRef, work *functionNetworkWork, progress progress.Log) (functionNetwork, error) {
+	tier := ref.Tier
+	if err := stackrecords.Write(ctx, owner.cfg.KeyValues, tier, FunctionNetworkSlug, ref.Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
 		WrittenBy: owner.cfg.WrittenBy,
 	}); err != nil {
 		return functionNetwork{}, err
 	}
-	if _, err := owner.automation.Run(ctx, spec, progress); err != nil {
+	outputs, err := owner.automation.Run(ctx, ref, stackProgram{run: work.run, tags: work.tags}, progress)
+	if err != nil {
 		return functionNetwork{}, fmt.Errorf("provision the shared function network for the %s tier: %w", tier, err)
 	}
-	return decodeFunctionNetwork(work.outputs)
+	return decodeFunctionNetwork(outputs)
 }
 
 func natGateways(tier environment.Tier) int {
