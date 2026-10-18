@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
-	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
+	"github.com/ocelhq/ocel/platform/gcp/provider/bastion/relay"
 )
 
 const (

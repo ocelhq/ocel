@@ -9,8 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
-	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 

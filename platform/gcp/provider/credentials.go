@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 type ProjectSource interface {
@@ -91,7 +92,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, _ environment.T
 		names := names.New(c.Namespace, project)
 		roles := slices.Clone(bootstrap.RolesFor(purpose))
 		if purpose == edge.PurposeDeploy {
-			roles = append(roles, bootstrap.RealtimeSecretsGrant(names), bootstrap.GateSecretsGrant(names), grants.AppGrantsGrant(names), names.AppAccountsRolePath(), bootstrap.AppBucketsGrant(names), bootstrap.DatabasesGrant(names), bootstrap.ProjectPermissionsGrant(), bootstrap.PartsGrant(names), bootstrap.PartDatabasesGrant(names), projectRecordsGrant(names, c.Region))
+			roles = append(roles, bootstrap.RealtimeSecretsGrant(names), bootstrap.GateSecretsGrant(names), grants.AppGrantsGrant(names), names.AppAccountsRolePath(), bootstrap.AppBucketsGrant(names), bootstrap.DatabasesGrant(names), bootstrap.ProjectPermissionsGrant(), bootstrap.PartsGrant(names), bootstrap.PartDatabasesGrant(names), variables.ProjectRecordsGrant(names, c.Region))
 			roles = append(roles, bootstrap.QueueGrants(names, c.Region)...)
 			roles = append(roles, bootstrap.UntaggingGrants(names, c.Region)...)
 		}

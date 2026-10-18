@@ -8,7 +8,17 @@ import (
 
 var controlPlane = []string{
 	"github.com/ocelhq/ocel/platform/gcp/provider",
+	"github.com/ocelhq/ocel/platform/gcp/provider/assets",
+	"github.com/ocelhq/ocel/platform/gcp/provider/certs",
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/containers",
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/functions",
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next",
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release",
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges",
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb",
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart",
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin",
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun",
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads",
 }
 

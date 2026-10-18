@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
+	"github.com/ocelhq/ocel/platform/gcp/provider/bastion/relay"
 )
 
 func env(values map[string]string) func(string) string {

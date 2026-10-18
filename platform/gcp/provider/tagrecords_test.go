@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -52,9 +53,9 @@ func TestTheTagDatabaseIsAPartADeployAddsAndNoLongerInTheBase(t *testing.T) {
 
 	names := names.New("ocel", "acme-prod")
 	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names, Region: "europe-west1"}})
-	for _, tier := range bothTiers {
+	for _, tier := range googletest.BothTiers {
 		database := bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.TagDatabase(tier)}
-		if slices.Contains(idsOf(bootstrap.Resources(names, tier, false)), database.ID()) {
+		if slices.Contains(googletest.IdsOf(bootstrap.Resources(names, tier, false)), database.ID()) {
 			t.Errorf("a %s bootstrap provisions %s, which the first deploy that revalidates adds", tier, database.ID())
 		}
 		tags := newTagDatabasePart(b, tier)

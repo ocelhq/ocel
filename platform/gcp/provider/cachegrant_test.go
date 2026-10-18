@@ -59,7 +59,7 @@ func TestTheCacheGrantPrefixIsTheOneTheRuntimeWritesUnder(t *testing.T) {
 	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
 	var expressions []string
 	for _, binding := range server.Identities().Project.Bindings {
@@ -192,7 +192,7 @@ func TestANextContainersAccountMayUseItsOwnCachePrefixAndTagRecords(t *testing.T
 	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 	account := "serviceAccount:" + server.Created[0].Template.ServiceAccount
 
 	var expressions []string

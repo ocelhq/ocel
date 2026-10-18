@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 )
 
 type codeRunningFront struct {
@@ -71,7 +72,7 @@ func TestANextDeployBehindTheCodeRunningEdgeHandsItsPurgeSecretToTheRecord(t *te
 	h := newOffersHarness(t)
 	order := &orderLog{}
 	adoptTheWorker(t, h)
-	seed, err := readPurgeSeed(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
+	seed, err := cloudflareorigin.ReadPurgeSeed(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
 	if err != nil {
 		t.Fatal(err)
 	}

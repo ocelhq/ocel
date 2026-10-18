@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 func (p *Provider) pushImage(ctx context.Context, tier environment.Tier, app, ref string, built v1.Image, progress progress.Log) error {
@@ -41,4 +42,16 @@ func (p *Provider) imageStore(ctx context.Context, tier environment.Tier) (provi
 		return nil, err
 	}
 	return images.RegistryStore(at), nil
+}
+
+func (p *Provider) pushBinary(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error {
+	base, err := p.images.Based(ctx, run.StaticImage)
+	if err != nil {
+		return err
+	}
+	built, err := run.BinaryImage(base, binary, path)
+	if err != nil {
+		return err
+	}
+	return p.pushImage(ctx, tier, name, ref, built, nil)
 }

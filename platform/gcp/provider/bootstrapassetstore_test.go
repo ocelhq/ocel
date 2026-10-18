@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
@@ -41,14 +42,14 @@ func newAssetStoreHarness(t *testing.T) *assetStoreHarness {
 
 func (h *assetStoreHarness) raise(t *testing.T) {
 	t.Helper()
-	if err := raiseAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err != nil {
+	if err := cloudflareorigin.RaiseAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err != nil {
 		t.Fatalf("raiseAssetStore() = %v", err)
 	}
 }
 
-func (h *assetStoreHarness) stored(t *testing.T) edgeCredentials {
+func (h *assetStoreHarness) stored(t *testing.T) cloudflareorigin.EdgeCredentials {
 	t.Helper()
-	credentials, err := readEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
+	credentials, err := cloudflareorigin.ReadEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +121,7 @@ func TestBootstrappingAfterTheSecretWasLostRetiresTheKeyNobodyCanReadAndMintsAno
 	lost := h.hmac.active()[0]
 	credentials := h.stored(t)
 	credentials.AssetStoreAccessKeyID, credentials.AssetStoreSecretAccessKey = "", ""
-	if err := writeEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
+	if err := cloudflareorigin.WriteEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
 		t.Fatal(err)
 	}
 
@@ -142,7 +143,7 @@ func TestBootstrappingMintsTheNewKeyBeforeItDeletesTheOneTheWorkerStillSignsWith
 	lost := h.hmac.active()[0]
 	credentials := h.stored(t)
 	credentials.AssetStoreSecretAccessKey = ""
-	if err := writeEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
+	if err := cloudflareorigin.WriteEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,12 +162,12 @@ func TestABootstrapThatCannotMintAKeyKeepsTheOneTheWorkerSignsWith(t *testing.T)
 	signing := h.hmac.active()[0]
 	credentials := h.stored(t)
 	credentials.AssetStoreSecretAccessKey = ""
-	if err := writeEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
+	if err := cloudflareorigin.WriteEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
 		t.Fatal(err)
 	}
 	h.hmac.refusesCreate = true
 
-	if err := raiseAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err == nil {
+	if err := cloudflareorigin.RaiseAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err == nil {
 		t.Fatal("raiseAssetStore() = nil, want the refused key creation")
 	}
 
@@ -181,12 +182,12 @@ func TestABootstrapThatCannotDeleteTheStaleKeyHasRecordedTheNewOne(t *testing.T)
 	h.raise(t)
 	credentials := h.stored(t)
 	credentials.AssetStoreSecretAccessKey = ""
-	if err := writeEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
+	if err := cloudflareorigin.WriteEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind, credentials); err != nil {
 		t.Fatal(err)
 	}
 	h.hmac.refusesDelete = true
 
-	if err := raiseAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err == nil {
+	if err := cloudflareorigin.RaiseAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err == nil {
 		t.Fatal("raiseAssetStore() = nil, want the refused deletion")
 	}
 
@@ -217,8 +218,8 @@ func TestBootstrappingReplacesAKeyThatWasDeactivated(t *testing.T) {
 func TestBootstrappingKeepsTheCredentialOfTheWorkerItAdopted(t *testing.T) {
 	t.Parallel()
 	h := newAssetStoreHarness(t)
-	if err := writeEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind,
-		edgeCredentials{ReleasesStore: "c1"}); err != nil {
+	if err := cloudflareorigin.WriteEdgeCredentials(t.Context(), h.clients, environment.TierProduction, cloudflareKind,
+		cloudflareorigin.EdgeCredentials{ReleasesStore: "c1"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -235,7 +236,7 @@ func TestTakingTheAssetStoreDownDeletesItsKeyItsGrantAndItsAccount(t *testing.T)
 	h.raise(t)
 	minted := h.hmac.active()[0]
 
-	if err := takeAssetStore(t.Context(), h.clients, environment.TierProduction); err != nil {
+	if err := cloudflareorigin.TakeAssetStore(t.Context(), h.clients, environment.TierProduction); err != nil {
 		t.Fatalf("takeAssetStore() = %v", err)
 	}
 
@@ -254,7 +255,7 @@ func TestTakingTheAssetStoreDownWhereNothingWasRaisedIsNotAnError(t *testing.T) 
 	t.Parallel()
 	h := newAssetStoreHarness(t)
 
-	if err := takeAssetStore(t.Context(), h.clients, environment.TierProduction); err != nil {
+	if err := cloudflareorigin.TakeAssetStore(t.Context(), h.clients, environment.TierProduction); err != nil {
 		t.Errorf("takeAssetStore() = %v, want nothing to take down", err)
 	}
 }
@@ -263,7 +264,7 @@ func TestAnEdgeThatRunsCodePlansTheAccountAndKeyItsBootstrapRaises(t *testing.T)
 	t.Parallel()
 	h := newAssetStoreHarness(t)
 
-	changes, err := plannedAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
+	changes, err := cloudflareorigin.PlannedAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
 	if err != nil {
 		t.Fatalf("plannedAssetStore() = %v", err)
 	}
@@ -277,7 +278,7 @@ func TestAnEdgeThatRunsCodePlansTheAccountAndKeyItsBootstrapRaises(t *testing.T)
 	}
 
 	h.raise(t)
-	changes, err = plannedAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
+	changes, err = cloudflareorigin.PlannedAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
 	if err != nil {
 		t.Fatalf("plannedAssetStore() = %v", err)
 	}
@@ -310,8 +311,8 @@ func TestRaisingAFrontThatRunsCodeRaisesItsAssetReaderAndDroppingItTakesTheReade
 	h := newAssetStoreHarness(t)
 	b, registry := frontWithAssetReader(h)
 	req := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{bootstrap.CloudflareOriginPart}}
-	recorded := func() edgeCredentials {
-		credentials, err := readEdgeCredentials(t.Context(), h.clients, environment.TierProduction, registry.front.Kind())
+	recorded := func() cloudflareorigin.EdgeCredentials {
+		credentials, err := cloudflareorigin.ReadEdgeCredentials(t.Context(), h.clients, environment.TierProduction, registry.front.Kind())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -331,7 +332,7 @@ func TestRaisingAFrontThatRunsCodeRaisesItsAssetReaderAndDroppingItTakesTheReade
 	if len(h.hmac.keys) != 0 || len(h.iam.DeletedAccounts) != 1 {
 		t.Errorf("tearing the front down left the keys %v and deleted the accounts %v, want no key and the asset reader deleted", h.hmac.keys, h.iam.DeletedAccounts)
 	}
-	if got := recorded(); got != (edgeCredentials{}) {
+	if got := recorded(); got != (cloudflareorigin.EdgeCredentials{}) {
 		t.Errorf("tearing the front down left the credentials %+v, want none", got)
 	}
 }

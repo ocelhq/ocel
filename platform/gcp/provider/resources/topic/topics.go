@@ -23,8 +23,8 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
-	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 

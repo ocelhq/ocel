@@ -19,3 +19,10 @@ func WriteBody(w http.ResponseWriter, body any) {
 		panic(err)
 	}
 }
+
+func WriteNotFound(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNotFound)
+	if _, err := w.Write([]byte(`{"error":{"code":404,"message":"not found"}}`)); err != nil {
+		panic(err)
+	}
+}

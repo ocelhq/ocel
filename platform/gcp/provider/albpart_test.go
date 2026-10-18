@@ -17,7 +17,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -32,7 +34,7 @@ func TestTheFirstDeployBehindTheALBAddsItsLoadBalancerOnceAndEveryProjectBehindI
 	tier := environment.TierProduction
 
 	for _, slug := range []string{"shop", "blog", "shop"} {
-		if err := b.AddParts(ctx, deployingBehindALB(slug), []string{albPart}); err != nil {
+		if err := b.AddParts(ctx, deployingBehindALB(slug), []string{albpart.PartName}); err != nil {
 			t.Fatalf("addParts(%s) = %v", slug, err)
 		}
 	}
@@ -44,12 +46,12 @@ func TestTheFirstDeployBehindTheALBAddsItsLoadBalancerOnceAndEveryProjectBehindI
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := slices.IndexFunc(parts, func(part provider.BootstrapPart) bool { return part.Name == albPart })
+	at := slices.IndexFunc(parts, func(part provider.BootstrapPart) bool { return part.Name == albpart.PartName })
 	if at < 0 {
-		t.Fatalf("listDescribedParts() = %+v, want the %s part", parts, albPart)
+		t.Fatalf("listDescribedParts() = %+v, want the %s part", parts, albpart.PartName)
 	}
 	if got := parts[at]; !got.RetiresWithLastUser || !slices.Equal(got.UsedBy, []string{"blog", "shop"}) || got.Shape == nil || len(got.Shape.Resources) == 0 {
-		t.Errorf("the %s part = %+v, want it used by blog and shop, priced, and retiring with its last user", albPart, got)
+		t.Errorf("the %s part = %+v, want it used by blog and shop, priced, and retiring with its last user", albpart.PartName, got)
 	}
 }
 
@@ -66,28 +68,28 @@ func TestTheLoadBalancerIsTakenDownWithTheLastProjectBehindItAndNotBefore(t *tes
 	ctx := context.Background()
 	tier := environment.TierProduction
 	for _, slug := range []string{"shop", "blog"} {
-		if err := b.AddParts(ctx, deployingBehindALB(slug), []string{albPart}); err != nil {
+		if err := b.AddParts(ctx, deployingBehindALB(slug), []string{albpart.PartName}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if err := releaseALB(ctx, b, tier, "shop", true, nil); err != nil {
+	if err := albpart.Release(ctx, b, tier, "shop", true, nil); err != nil {
 		t.Fatalf("releaseALB(shop) = %v", err)
 	}
 	if len(front.torn) != 0 {
 		t.Fatalf("the load balancer was taken down while blog still deploys behind it")
 	}
-	if err := releaseALB(ctx, b, tier, "blog", true, nil); err != nil {
+	if err := albpart.Release(ctx, b, tier, "blog", true, nil); err != nil {
 		t.Fatalf("releaseALB(blog) = %v", err)
 	}
 	if !slices.Equal(front.torn, []environment.Tier{tier}) {
 		t.Errorf("the load balancer was taken down for %v, want once its last project left", front.torn)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, albPart); err != nil || present {
-		t.Errorf("the %s part record outlived its load balancer: %t, %v", albPart, present, err)
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, albpart.PartName); err != nil || present {
+		t.Errorf("the %s part record outlived its load balancer: %t, %v", albpart.PartName, present, err)
 	}
 
-	if err := b.AddParts(ctx, deployingBehindALB("docs"), []string{albPart}); err != nil {
+	if err := b.AddParts(ctx, deployingBehindALB("docs"), []string{albpart.PartName}); err != nil {
 		t.Fatalf("addParts(docs) after the retirement = %v", err)
 	}
 	if len(front.raised) != 2 {
@@ -100,21 +102,21 @@ func TestTheLastProjectLeavingKeepsTheLoadBalancerWhileAHostnameIsBoundToIt(t *t
 	b, front := frontingALB(t)
 	ctx := context.Background()
 	tier := environment.TierProduction
-	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albPart}); err != nil {
+	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albpart.PartName}); err != nil {
 		t.Fatal(err)
 	}
 	front.bound = []string{"shop.example.com"}
 
-	if err := releaseALB(ctx, b, tier, "shop", false, nil); err != nil {
+	if err := albpart.Release(ctx, b, tier, "shop", false, nil); err != nil {
 		t.Fatalf("releaseALB() by a deploy moving off the alb = %v", err)
 	}
-	if users, _ := listALBUsers(ctx, b, tier); len(front.torn) != 0 || !slices.Equal(users, []string{"shop"}) {
+	if users, _ := albpart.ListUsers(ctx, b, tier); len(front.torn) != 0 || !slices.Equal(users, []string{"shop"}) {
 		t.Errorf("a deploy moving off the alb while its hostname is bound tore down %v and left users %v, want the load balancer kept and shop still its user", front.torn, users)
 	}
-	if err := releaseALB(ctx, b, tier, "shop", true, nil); err != nil {
+	if err := albpart.Release(ctx, b, tier, "shop", true, nil); err != nil {
 		t.Fatalf("releaseALB() by a destroy = %v", err)
 	}
-	if users, _ := listALBUsers(ctx, b, tier); len(front.torn) != 0 || len(users) != 0 {
+	if users, _ := albpart.ListUsers(ctx, b, tier); len(front.torn) != 0 || len(users) != 0 {
 		t.Errorf("a destroy while a hostname is bound tore down %v and left users %v, want the load balancer kept and the project forgotten", front.torn, users)
 	}
 }
@@ -124,16 +126,16 @@ func TestADeployBehindTheALBWhileItIsBeingTakenDownIsRefusedAsBusy(t *testing.T)
 	b, _ := frontingALB(t)
 	ctx := context.Background()
 	tier := environment.TierProduction
-	if _, err := writeALBLease(ctx, b.Records, records.Entry{Key: albLeaseAt(tier)}, albLease{Retiring: true, RetiringSince: time.Now()}); err != nil {
+	if _, err := albpart.WriteLease(ctx, b.Records, records.Entry{Key: albpart.LeaseAt(tier)}, albpart.Lease{Retiring: true, RetiringSince: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
 
-	err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albPart})
+	err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albpart.PartName})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Errorf("addParts() while the load balancer goes down = %v, want a %s refusal", err, refusal.CodeBusy)
 	}
-	if users, _ := listALBUsers(ctx, b, tier); len(users) != 0 {
+	if users, _ := albpart.ListUsers(ctx, b, tier); len(users) != 0 {
 		t.Errorf("a refused claim left users %v, want none", users)
 	}
 }
@@ -146,11 +148,11 @@ func TestADryDeployBehindTheALBPlansItsLoadBalancerAndRaisesNothing(t *testing.T
 	pre.Dry = true
 	pre.AddToPlan = func(groups ...provider.ChangeGroup) { planned = append(planned, groups...) }
 
-	if err := b.AddParts(context.Background(), pre, []string{albPart}); err != nil {
+	if err := b.AddParts(context.Background(), pre, []string{albpart.PartName}); err != nil {
 		t.Fatalf("addParts() = %v", err)
 	}
-	if len(front.raised) != 0 || len(planned) != 1 || planned[0].Part != albPart || planned[0].Action != provider.ActionCreate {
-		t.Errorf("a dry deploy raised %v and planned %+v, want nothing raised and the %s part planned", front.raised, planned, albPart)
+	if len(front.raised) != 0 || len(planned) != 1 || planned[0].Part != albpart.PartName || planned[0].Action != provider.ActionCreate {
+		t.Errorf("a dry deploy raised %v and planned %+v, want nothing raised and the %s part planned", front.raised, planned, albpart.PartName)
 	}
 }
 
@@ -164,8 +166,8 @@ func TestADeployMayAddAndRetireTheALBsGateRepositoryAndTheBaseKeepsTheCDNPurgeRo
 		}
 	}
 	role := bootstrap.Resource{Kind: bootstrap.KindRole, Name: names.CDNPurgeRole()}
-	if !slices.Contains(idsOf(bootstrap.Resources(names, environment.TierProduction, false)), role.ID()) {
-		t.Errorf("the base provisions %v, want %s: a deploy grants Next apps behind the alb a role only a bootstrap may make", idsOf(bootstrap.Resources(names, environment.TierProduction, false)), role.ID())
+	if !slices.Contains(googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), role.ID()) {
+		t.Errorf("the base provisions %v, want %s: a deploy grants Next apps behind the alb a role only a bootstrap may make", googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), role.ID())
 	}
 	if slices.ContainsFunc(composed(bootstrap.Engine{}).Parts(), func(f provider.Part) bool { return strings.Contains(f.Name, "alb-edge") }) {
 		t.Errorf("Parts() = %v, want no alb-edge part: the first deploy behind the alb adds its load balancer", composed(bootstrap.Engine{}).Parts())
@@ -205,23 +207,23 @@ func TestTwoLastProjectsLeavingTheALBAtOnceTakeItsLoadBalancerDownOnce(t *testin
 	ctx := context.Background()
 	tier := environment.TierProduction
 	for _, slug := range []string{"shop", "blog"} {
-		if err := b.AddParts(ctx, deployingBehindALB(slug), []string{albPart}); err != nil {
+		if err := b.AddParts(ctx, deployingBehindALB(slug), []string{albpart.PartName}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	b.Records = &listingTogether{Store: b.Records, under: albConsumers(tier), parties: 2, all: make(chan struct{})}
+	b.Records = &listingTogether{Store: b.Records, under: albpart.Consumers(tier), parties: 2, all: make(chan struct{})}
 
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
 	for i, slug := range []string{"shop", "blog"} {
-		wg.Go(func() { errs[i] = releaseALB(ctx, b, tier, slug, true, nil) })
+		wg.Go(func() { errs[i] = albpart.Release(ctx, b, tier, slug, true, nil) })
 	}
 	wg.Wait()
 
 	if err := errors.Join(errs...); err != nil {
 		t.Fatalf("releaseALB() = %v", err)
 	}
-	if users, _ := listALBUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
+	if users, _ := albpart.ListUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
 		t.Errorf("two last projects leaving at once tore down %v and left users %v, want the load balancer taken down once", front.torn, users)
 	}
 }
@@ -231,16 +233,16 @@ func TestALoadBalancerWhoseTeardownFailedIsRaisedAgainByTheNextDeployBehindIt(t 
 	b, front := frontingALB(t)
 	ctx := context.Background()
 	tier := environment.TierProduction
-	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albPart}); err != nil {
+	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albpart.PartName}); err != nil {
 		t.Fatal(err)
 	}
 	front.refusal = errors.New("google refused to delete the url map")
 
-	if err := releaseALB(ctx, b, tier, "shop", true, nil); err == nil {
+	if err := albpart.Release(ctx, b, tier, "shop", true, nil); err == nil {
 		t.Fatal("releaseALB() with a failing teardown = nil, want the failure")
 	}
 	front.refusal = nil
-	if err := b.AddParts(ctx, deployingBehindALB("docs"), []string{albPart}); err != nil {
+	if err := b.AddParts(ctx, deployingBehindALB("docs"), []string{albpart.PartName}); err != nil {
 		t.Fatalf("addParts(docs) after a failed teardown = %v", err)
 	}
 	if len(front.raised) != 2 {
@@ -252,7 +254,7 @@ func failingALBTeardown(t *testing.T) (bootstrap.Engine, *countingFront) {
 	t.Helper()
 	b, front := frontingALB(t)
 	ctx := context.Background()
-	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albPart}); err != nil {
+	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albpart.PartName}); err != nil {
 		t.Fatal(err)
 	}
 	front.refusal = errors.New("google refused to delete the url map")
@@ -271,12 +273,12 @@ func TestALoadBalancerWhoseTeardownFailedStaysListedAsBehind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := slices.IndexFunc(parts, func(part provider.BootstrapPart) bool { return part.Name == albPart })
+	at := slices.IndexFunc(parts, func(part provider.BootstrapPart) bool { return part.Name == albpart.PartName })
 	if at < 0 {
-		t.Fatalf("listDescribedParts() after a failed teardown = %+v, want the %s part still listed", parts, albPart)
+		t.Fatalf("listDescribedParts() after a failed teardown = %+v, want the %s part still listed", parts, albpart.PartName)
 	}
 	if got := parts[at]; got.Current || len(got.Resources) == 0 {
-		t.Errorf("the %s part after a failed teardown = %+v, want it behind and naming its resources", albPart, got)
+		t.Errorf("the %s part after a failed teardown = %+v, want it behind and naming its resources", albpart.PartName, got)
 	}
 }
 
@@ -292,8 +294,8 @@ func TestDestroyingTheBootstrapTakesDownALoadBalancerWhoseTeardownFailed(t *test
 	if !slices.Equal(front.torn, []environment.Tier{tier}) {
 		t.Errorf("destroying the bootstrap tore down %v, want the load balancer whose teardown failed taken down", front.torn)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, albPart); err != nil || present {
-		t.Errorf("the %s part record outlived its load balancer: %t, %v", albPart, present, err)
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, albpart.PartName); err != nil || present {
+		t.Errorf("the %s part record outlived its load balancer: %t, %v", albpart.PartName, present, err)
 	}
 }
 
@@ -303,11 +305,11 @@ func TestRemovingTheALBPartTakesDownALoadBalancerWhoseTeardownFailed(t *testing.
 	ctx := context.Background()
 	tier := environment.TierProduction
 
-	if err := b.RemoveNamedParts(ctx, tier, []string{albPart}, false, nil); err != nil {
-		t.Fatalf("removeNamedParts(%s) = %v", albPart, err)
+	if err := b.RemoveNamedParts(ctx, tier, []string{albpart.PartName}, false, nil); err != nil {
+		t.Fatalf("removeNamedParts(%s) = %v", albpart.PartName, err)
 	}
 	if !slices.Equal(front.torn, []environment.Tier{tier}) {
-		t.Errorf("--remove %s tore down %v, want the load balancer whose teardown failed taken down", albPart, front.torn)
+		t.Errorf("--remove %s tore down %v, want the load balancer whose teardown failed taken down", albpart.PartName, front.torn)
 	}
 }
 
@@ -320,11 +322,11 @@ func TestRemovingTheLastProjectAgainRetriesALoadBalancerTeardownThatFailed(t *te
 	if err := removePartUser(ctx, b, tier, "shop", nil); err != nil {
 		t.Fatalf("removePartUser() again = %v", err)
 	}
-	if users, _ := listALBUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
+	if users, _ := albpart.ListUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
 		t.Errorf("removing shop again tore down %v and left users %v, want the teardown retried and shop forgotten", front.torn, users)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, albPart); err != nil || present {
-		t.Errorf("the %s part record outlived its load balancer: %t, %v", albPart, present, err)
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, albpart.PartName); err != nil || present {
+		t.Errorf("the %s part record outlived its load balancer: %t, %v", albpart.PartName, present, err)
 	}
 }
 
@@ -332,7 +334,7 @@ func TestARetireCancelledMidwayLeavesTheNextDeployBehindTheALBUnrefused(t *testi
 	t.Parallel()
 	b, front := frontingALB(t)
 	tier := environment.TierProduction
-	if err := b.AddParts(context.Background(), deployingBehindALB("shop"), []string{albPart}); err != nil {
+	if err := b.AddParts(context.Background(), deployingBehindALB("shop"), []string{albpart.PartName}); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -341,11 +343,11 @@ func TestARetireCancelledMidwayLeavesTheNextDeployBehindTheALBUnrefused(t *testi
 		return ctx.Err()
 	}
 
-	if err := releaseALB(ctx, b, tier, "shop", true, nil); !errors.Is(err, context.Canceled) {
+	if err := albpart.Release(ctx, b, tier, "shop", true, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("releaseALB() cancelled during the teardown = %v, want the cancellation", err)
 	}
 	front.tearing = nil
-	if err := b.AddParts(context.Background(), deployingBehindALB("docs"), []string{albPart}); err != nil {
+	if err := b.AddParts(context.Background(), deployingBehindALB("docs"), []string{albpart.PartName}); err != nil {
 		t.Fatalf("addParts(docs) after a cancelled retire = %v, want the lease lifted and the load balancer raised again", err)
 	}
 	if len(front.raised) != 2 {
@@ -357,13 +359,13 @@ func TestADeployBehindTheALBTakesOverARetireThatOutlivedItsTimeLimit(t *testing.
 	t.Parallel()
 	b, front := frontingALB(t)
 	ctx := context.Background()
-	stale := albLease{Retiring: true, RetiringSince: time.Now().Add(-2 * albRetireLimit)}
-	if _, err := writeALBLease(ctx, b.Records, records.Entry{Key: albLeaseAt(environment.TierProduction)}, stale); err != nil {
+	stale := albpart.Lease{Retiring: true, RetiringSince: time.Now().Add(-2 * albpart.RetireLimit)}
+	if _, err := albpart.WriteLease(ctx, b.Records, records.Entry{Key: albpart.LeaseAt(environment.TierProduction)}, stale); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albPart}); err != nil {
-		t.Fatalf("addParts() with a retire older than %s = %v, want the deploy to take it over", albRetireLimit, err)
+	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albpart.PartName}); err != nil {
+		t.Fatalf("addParts() with a retire older than %s = %v, want the deploy to take it over", albpart.RetireLimit, err)
 	}
 	if len(front.raised) != 1 {
 		t.Errorf("the load balancer was raised %d times, want it raised by the deploy that took the stale retire over", len(front.raised))
@@ -375,21 +377,21 @@ func TestARefusedClaimOnTheALBKeepsTheUserRecordAnEarlierDeployWrote(t *testing.
 	b, _ := frontingALB(t)
 	ctx := context.Background()
 	tier := environment.TierProduction
-	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albPart}); err != nil {
+	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albpart.PartName}); err != nil {
 		t.Fatal(err)
 	}
-	leased, _, err := readALBLease(ctx, b.Records, tier)
+	leased, _, err := albpart.ReadLease(ctx, b.Records, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writeALBLease(ctx, b.Records, leased, albLease{Retiring: true, RetiringSince: time.Now()}); err != nil {
+	if _, err := albpart.WriteLease(ctx, b.Records, leased, albpart.Lease{Retiring: true, RetiringSince: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := claimALB(ctx, b, tier, "shop"); refusalCode(err) != refusal.CodeBusy {
+	if err := albpart.Claim(ctx, b, tier, "shop"); refusalCode(err) != refusal.CodeBusy {
 		t.Fatalf("claimALB() while the load balancer goes down = %v, want a %s refusal", err, refusal.CodeBusy)
 	}
-	if users, _ := listALBUsers(ctx, b, tier); !slices.Equal(users, []string{"shop"}) {
+	if users, _ := albpart.ListUsers(ctx, b, tier); !slices.Equal(users, []string{"shop"}) {
 		t.Errorf("a refused claim left users %v, want shop, whose record an earlier deploy wrote", users)
 	}
 }
@@ -399,14 +401,14 @@ func TestRemovingAProjectWhoseOnlyALBDeployFailedTakesItsLoadBalancerDown(t *tes
 	b, front := frontingALB(t)
 	ctx := context.Background()
 	tier := environment.TierProduction
-	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albPart}); err != nil {
+	if err := b.AddParts(ctx, deployingBehindALB("shop"), []string{albpart.PartName}); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := removePartUser(ctx, b, tier, "shop", nil); err != nil {
 		t.Fatalf("removePartUser() = %v", err)
 	}
-	if users, _ := listALBUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
+	if users, _ := albpart.ListUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
 		t.Errorf("removing shop tore down %v and left users %v, want the load balancer shop alone used taken down", front.torn, users)
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
@@ -38,7 +39,7 @@ func applyAppGrants(t *testing.T, c *gcloud.Clients, spec provider.StackSpec) er
 	t.Helper()
 	ref := spec.Ref
 	account := c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, spec.App.App)
-	want, err := appGrants(context.Background(), c, component.Registry{bucket.New(nil).Component()}, spec, account, appMember(c, ref, spec.App.App), nil, nil)
+	want, err := release.AppGrants(context.Background(), c, component.Registry{bucket.New(nil).Component()}, cacheGrants, spec, account, appMember(c, ref, spec.App.App), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -56,7 +57,7 @@ func grantedAccountOf(t *testing.T, server *googletest.IAM, spec provider.StackS
 	p, c := ensuringAccounts(t, server)
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
 	recordApp(t, p, spec.Ref, spec.Ref.Name)
-	email, err := p.ensureAppAccount(context.Background(), c, spec, declared)
+	email, err := p.release().EnsureAccount(context.Background(), c, spec, declared)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
@@ -72,7 +73,7 @@ func recordApp(t *testing.T, p *Provider, ref provider.StackRef, name naming.Sta
 
 func removeStack(t *testing.T, p *Provider, c *gcloud.Clients, ref provider.StackRef) {
 	t.Helper()
-	if err := p.revokeAfterRemoval(context.Background(), c, ref, nil, nil, nil); err != nil {
+	if err := p.release().RevokeAfterRemoval(context.Background(), c, ref, nil, nil, nil); err != nil {
 		t.Fatalf("revokeAfterRemoval(%s) = %v", ref.Name, err)
 	}
 }
@@ -121,11 +122,11 @@ func TestEachEnvironmentOfAnAppRunsAsAnAccountOfItsOwn(t *testing.T) {
 	seven := functionStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{})
 	eight := functionStackDeclaring(environment.TierPreview, "pr-8", provider.AppValues{})
 
-	first, err := p.ensureAppAccount(context.Background(), c, seven, nil)
+	first, err := p.release().EnsureAccount(context.Background(), c, seven, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(pr-7) = %v", err)
 	}
-	second, err := p.ensureAppAccount(context.Background(), c, eight, nil)
+	second, err := p.release().EnsureAccount(context.Background(), c, eight, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(pr-8) = %v", err)
 	}
@@ -148,11 +149,11 @@ func TestAPreviewsAccountHoldsNothingOnAnotherPreviewsBucket(t *testing.T) {
 	eight := functionStackDeclaring(environment.TierPreview, "pr-8", provider.AppValues{})
 	eight.App.Values.Bindings = []provider.Binding{{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{provider.PropertyBucket: eights}}}
 
-	sevenAccount, err := p.ensureAppAccount(context.Background(), c, seven, nil)
+	sevenAccount, err := p.release().EnsureAccount(context.Background(), c, seven, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(pr-7) = %v", err)
 	}
-	if _, err := p.ensureAppAccount(context.Background(), c, eight, nil); err != nil {
+	if _, err := p.release().EnsureAccount(context.Background(), c, eight, nil); err != nil {
 		t.Fatalf("ensureAppAccount(pr-8) = %v", err)
 	}
 
@@ -168,7 +169,7 @@ func TestADeployThatStopsBindingABucketOfAnotherEnvironmentTakesTheGrantOnItAway
 	existingBuckets(buckets, shared)
 	spec := functionStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{})
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingBucket, Name: "media", Properties: map[string]string{provider.PropertyBucket: shared}}}
-	account, err := p.ensureAppAccount(context.Background(), c, spec, nil)
+	account, err := p.release().EnsureAccount(context.Background(), c, spec, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
@@ -177,7 +178,7 @@ func TestADeployThatStopsBindingABucketOfAnotherEnvironmentTakesTheGrantOnItAway
 	}
 	spec.App.Grants = nil
 
-	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err != nil {
+	if _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() without the grant = %v", err)
 	}
 
@@ -194,7 +195,7 @@ func TestADeployRecordsWhatItGrantsBeforeItGrantsIt(t *testing.T) {
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 
-	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err == nil {
+	if _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err == nil {
 		t.Fatal("ensureAppAccount() over a denied account policy = nil, want the refusal")
 	}
 
@@ -256,7 +257,7 @@ func TestRemovingOneEnvironmentLeavesAnotherEnvironmentsAccountAlone(t *testing.
 	other := spec
 	other.Ref.Name = stackOf("pr-8", "web", "r1")
 	recordApp(t, p, other.Ref, other.Ref.Name)
-	otherMember, err := p.ensureAppAccount(context.Background(), c, other, map[string]*provider.TopicSpec{"resize": {}})
+	otherMember, err := p.release().EnsureAccount(context.Background(), c, other, map[string]*provider.TopicSpec{"resize": {}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +322,7 @@ func TestADeployThatStopsReachingATopicTakesItsPublisherGrantAway(t *testing.T) 
 	server.TopicPolicies[resizePath(c, spec)].Bindings = append(server.TopicPolicies[resizePath(c, spec)].Bindings,
 		&pubsub.Binding{Role: "roles/pubsub.publisher", Members: []string{"serviceAccount:other@acme-prod.iam.gserviceaccount.com"}})
 
-	if _, err := p.ensureAppAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{}); err != nil {
+	if _, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{}); err != nil {
 		t.Fatalf("ensureAppAccount() without the topic = %v", err)
 	}
 
@@ -389,7 +390,7 @@ func TestAStackThatStillRecordsComputeAfterARemovalKeepsItsAppGrants(t *testing.
 		{going: []string{"web"}, want: true},
 		{going: []string{"web", "web-image"}, want: false},
 	} {
-		kept, err := stackKeepsRunning(ctx, p.KeyValues(), ref, test.going, nil)
+		kept, err := release.StackKeepsRunning(ctx, p.KeyValues(), ref, test.going, nil)
 		if err != nil {
 			t.Fatalf("stackKeepsRunning(%v) = %v", test.going, err)
 		}

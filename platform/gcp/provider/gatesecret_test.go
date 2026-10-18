@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
@@ -35,14 +36,14 @@ func publishGate(t *testing.T, p *Provider, held *gate.Gate) {
 
 func publishGateOn(t *testing.T, p *Provider, tier environment.Tier, held *gate.Gate) {
 	t.Helper()
-	if err := (gateSecrets{p: p}).Publish(context.Background(), tier, "shop", held); err != nil {
+	if err := (cloudrun.GateSecrets{OpenClients: p.openClients}).Publish(context.Background(), tier, "shop", held); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func openPreviewSpec(p *Provider) provider.StackSpec {
 	spec := previewSpec()
-	spec.Edge = p.edges().openCloudRun()
+	spec.Edge = p.edges().OpenCloudRun()
 	return spec
 }
 
@@ -88,10 +89,10 @@ func TestAGatedPreviewContainerMountsTheProjectsGateSecretAtItsLatestVersion(t *
 	}
 	mounts := server.Service.Template.Containers[0].VolumeMounts
 	file := mounts[0].MountPath + "/" + volumes[0].Secret.Items[0].Path
-	if got := envOf(server.Service.Template.Containers[0])[gate.MountedFileVar]; got != file {
+	if got := googletest.EnvOf(server.Service.Template.Containers[0])[gate.MountedFileVar]; got != file {
 		t.Errorf("%s = %q, want the mounted file %s", gate.MountedFileVar, got, file)
 	}
-	if _, inline := envOf(server.Service.Template.Containers[0])[gate.MountedInlineVar]; inline {
+	if _, inline := googletest.EnvOf(server.Service.Template.Containers[0])[gate.MountedInlineVar]; inline {
 		t.Errorf("the service carries its gate in %s, want it only in the mounted secret", gate.MountedInlineVar)
 	}
 }
@@ -106,7 +107,7 @@ func TestAGatedPreviewContainersStartupProbeCarriesTheTokenItsFrontExemptsAlone(
 	}
 
 	container := server.Service.Template.Containers[0]
-	token := envOf(container)[originguard.ProbeTokenVar]
+	token := googletest.EnvOf(container)[originguard.ProbeTokenVar]
 	if len(token) < 32 {
 		t.Fatalf("%s = %q, want a token no visitor can guess", originguard.ProbeTokenVar, token)
 	}
@@ -127,7 +128,7 @@ func TestAPreviewContainerKeepsItsProbeTokenAcrossDeploysAndGateRotations(t *tes
 	if _, err := p.ProvisionContainers(context.Background(), gatedPreviewSpec(p, &shopGate), &fake.Log{}); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	token := envOf(server.Service.Template.Containers[0])[originguard.ProbeTokenVar]
+	token := googletest.EnvOf(server.Service.Template.Containers[0])[originguard.ProbeTokenVar]
 	rotated := shopGate
 	rotated.Key = "rotated-key"
 	publishGate(t, p, &rotated)
@@ -136,7 +137,7 @@ func TestAPreviewContainerKeepsItsProbeTokenAcrossDeploysAndGateRotations(t *tes
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	if got := envOf(server.Service.Template.Containers[0])[originguard.ProbeTokenVar]; got != token {
+	if got := googletest.EnvOf(server.Service.Template.Containers[0])[originguard.ProbeTokenVar]; got != token {
 		t.Errorf("the second deploy set %s = %q, want %q: a token that changes each deploy rolls a revision for nothing", originguard.ProbeTokenVar, got, token)
 	}
 }
@@ -151,7 +152,7 @@ func TestAnOpenPreviewContainerOnCloudRunProbesWithATokenSoTurningProtectionOnLe
 	}
 
 	container := server.Service.Template.Containers[0]
-	token := envOf(container)[originguard.ProbeTokenVar]
+	token := googletest.EnvOf(container)[originguard.ProbeTokenVar]
 	probe := container.StartupProbe.HttpGet
 	if len(token) < 32 || len(probe.HttpHeaders) != 1 || probe.HttpHeaders[0].Value != token {
 		t.Errorf("an open preview's probe sends %+v and its front holds %q, want the same token: once a gate is published, a probe without it gets the login page and no new instance starts", probe.HttpHeaders, token)
@@ -176,7 +177,7 @@ func TestAGatedProductionContainerMountsTheProductionGateSecretAndNeverThePrevie
 		t.Fatalf("volumes = %+v, want the production gate secret %s mounted at latest", volumes, secret)
 	}
 	container := server.Service.Template.Containers[0]
-	if token := envOf(container)[originguard.ProbeTokenVar]; len(token) < 32 || len(container.StartupProbe.HttpGet.HttpHeaders) != 1 {
+	if token := googletest.EnvOf(container)[originguard.ProbeTokenVar]; len(token) < 32 || len(container.StartupProbe.HttpGet.HttpHeaders) != 1 {
 		t.Errorf("a gated production container probes with %+v and holds %q, want the token its front exempts", container.StartupProbe.HttpGet.HttpHeaders, token)
 	}
 }
@@ -218,8 +219,8 @@ func TestEachTiersServiceMayReadOnlyItsOwnTiersGateSecret(t *testing.T) {
 
 	previewAccount := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
 	productionAccount := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
-	productionReaders := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierProduction, "shop"), gateReaderRole)
-	previewReaders := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierPreview, "shop"), gateReaderRole)
+	productionReaders := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierProduction, "shop"), cloudrun.GateReaderRole)
+	previewReaders := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierPreview, "shop"), cloudrun.GateReaderRole)
 	if !slices.Contains(productionReaders, productionAccount) || slices.Contains(productionReaders, previewAccount) {
 		t.Errorf("the production gate secret lets %v read it, want %s and never the preview account %s", productionReaders, productionAccount, previewAccount)
 	}
@@ -241,12 +242,12 @@ func TestRevokingAGatedProductionAppTakesItsReadOfTheProductionGateSecretAway(t 
 		t.Fatal(err)
 	}
 
-	if err := p.revokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+	if err := p.release().RevokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
 		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 
 	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
-	if readers := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierProduction, "shop"), gateReaderRole); slices.Contains(readers, member) {
+	if readers := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierProduction, "shop"), cloudrun.GateReaderRole); slices.Contains(readers, member) {
 		t.Errorf("the production gate secret still lets %s read it after no environment runs the app", member)
 	}
 }
@@ -333,7 +334,7 @@ func TestAnOpenPreviewOnCloudRunMountsTheGateSecretSoTurningProtectionOnReachesI
 		t.Fatalf("volumes = %+v, want the project's gate secret %s mounted at latest while protection is off", volumes, secret)
 	}
 	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
-	if readers := server.Secrets.Members(secret, gateReaderRole); !slices.Contains(readers, member) {
+	if readers := server.Secrets.Members(secret, cloudrun.GateReaderRole); !slices.Contains(readers, member) {
 		t.Errorf("the gate secret lets %v read it, want the app's account %s before the service mounts it", readers, member)
 	}
 	if server.Revision != revisions {
@@ -394,7 +395,7 @@ func TestAGatedPreviewFunctionMountsTheGateToo(t *testing.T) {
 	if volumes := server.Service.Template.Volumes; len(volumes) != 1 || volumes[0].Secret.Secret != namesOf(t, p).GateSecret(environment.TierPreview, "shop") {
 		t.Errorf("volumes = %+v, want the project's gate secret mounted", volumes)
 	}
-	if got := envOf(server.Service.Template.Containers[0])[gate.MountedFileVar]; got == "" {
+	if got := googletest.EnvOf(server.Service.Template.Containers[0])[gate.MountedFileVar]; got == "" {
 		t.Errorf("the function names no %s, and its runtime reads the gate from there", gate.MountedFileVar)
 	}
 }
@@ -424,8 +425,8 @@ func TestAPreviewBehindAnEdgeThatGatesItselfMountsNothingAndCreatesNoSecret(t *t
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	if len(server.Service.Template.Volumes) != 0 || envOf(server.Service.Template.Containers[0])[gate.MountedFileVar] != "" {
-		t.Errorf("the preview mounts %+v and names %q, and its edge runs the gate", server.Service.Template.Volumes, envOf(server.Service.Template.Containers[0])[gate.MountedFileVar])
+	if len(server.Service.Template.Volumes) != 0 || googletest.EnvOf(server.Service.Template.Containers[0])[gate.MountedFileVar] != "" {
+		t.Errorf("the preview mounts %+v and names %q, and its edge runs the gate", server.Service.Template.Volumes, googletest.EnvOf(server.Service.Template.Containers[0])[gate.MountedFileVar])
 	}
 	if server.Secrets != nil && server.Secrets.Has(namesOf(t, p).GateSecret(environment.TierPreview, "shop")) {
 		t.Error("a preview whose edge gates it created a gate secret")
@@ -443,11 +444,11 @@ func TestAGatedPreviewServiceMayReadOnlyItsProjectsGateSecret(t *testing.T) {
 
 	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
 	secret := namesOf(t, p).GateSecret(environment.TierPreview, "shop")
-	if readers := server.Secrets.Members(secret, gateReaderRole); !slices.Contains(readers, member) {
+	if readers := server.Secrets.Members(secret, cloudrun.GateReaderRole); !slices.Contains(readers, member) {
 		t.Errorf("the gate secret %s lets %v read it, want the app's account %s", secret, readers, member)
 	}
 	for _, bound := range projectBindingsOf(server.Identities()) {
-		if strings.HasPrefix(bound, gateReaderRole+" ") {
+		if strings.HasPrefix(bound, cloudrun.GateReaderRole+" ") {
 			t.Errorf("the project binds %q, want no project-wide secret reader: the gate is granted on its own secret", bound)
 		}
 	}
@@ -466,12 +467,12 @@ func TestRevokingAGatedPreviewAppTakesItsReadOfTheGateSecretAway(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := p.revokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+	if err := p.release().RevokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
 		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 
 	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
-	if readers := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierPreview, "shop"), gateReaderRole); slices.Contains(readers, member) {
+	if readers := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierPreview, "shop"), cloudrun.GateReaderRole); slices.Contains(readers, member) {
 		t.Errorf("the gate secret still lets %s read it after no environment runs the app", member)
 	}
 }
@@ -506,8 +507,8 @@ func TestAnEmulatedGatedPreviewCarriesItsGateInItsEnvironmentBecauseTheEmulatorM
 		t.Errorf("volumes = %+v, want none: floci-gcp mounts no secret volume", server.Service.Template.Volumes)
 	}
 	var got gate.Gate
-	if err := json.Unmarshal([]byte(envOf(server.Service.Template.Containers[0])[gate.MountedInlineVar]), &got); err != nil || got.Key != shopGate.Key {
-		t.Errorf("%s = %q (%v), want the project's gate", gate.MountedInlineVar, envOf(server.Service.Template.Containers[0])[gate.MountedInlineVar], err)
+	if err := json.Unmarshal([]byte(googletest.EnvOf(server.Service.Template.Containers[0])[gate.MountedInlineVar]), &got); err != nil || got.Key != shopGate.Key {
+		t.Errorf("%s = %q (%v), want the project's gate", gate.MountedInlineVar, googletest.EnvOf(server.Service.Template.Containers[0])[gate.MountedInlineVar], err)
 	}
 }
 
@@ -521,7 +522,7 @@ func TestAnEmulatedOpenPreviewCarriesTheWithdrawnMarkerInItsEnvironment(t *testi
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	if got := envOf(server.Service.Template.Containers[0])[gate.MountedInlineVar]; got != "null" {
+	if got := googletest.EnvOf(server.Service.Template.Containers[0])[gate.MountedInlineVar]; got != "null" {
 		t.Errorf("%s = %q, want the withdrawn marker the runtime reads as an open preview", gate.MountedInlineVar, got)
 	}
 }
@@ -542,12 +543,12 @@ func TestPublishingAGateAddsAVersionTheMountedFileReadsWithNoNewRevision(t *test
 	rotated := shopGate
 	rotated.Key = "rotated-key"
 
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
 		t.Fatal(err)
 	}
 	before := server.Secrets.VersionsAdded()
 	revisions := server.Revision
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", &rotated); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", &rotated); err != nil {
 		t.Fatal(err)
 	}
 
@@ -565,7 +566,7 @@ func TestPublishingAGateKeepsTheVersionItReplacesReadableAndDestroysOlderOnes(t 
 	gates[1].Key, gates[2].Key = "second-key", "third-key"
 
 	for i := range gates {
-		if err := writeGate(t.Context(), c, environment.TierPreview, "shop", &gates[i]); err != nil {
+		if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", &gates[i]); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -577,12 +578,12 @@ func TestPublishingAGateKeepsTheVersionItReplacesReadableAndDestroysOlderOnes(t 
 
 func TestPublishingTheGateASecretAlreadyHoldsAddsNoVersion(t *testing.T) {
 	server, c := openGateSecrets(t)
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
 		t.Fatal(err)
 	}
 	before := server.Secrets.VersionsAdded()
 
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
 		t.Fatal(err)
 	}
 
@@ -593,10 +594,10 @@ func TestPublishingTheGateASecretAlreadyHoldsAddsNoVersion(t *testing.T) {
 
 func TestWithdrawingAGateOpensTheServicesThatMountIt(t *testing.T) {
 	server, c := openGateSecrets(t)
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", nil); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -609,7 +610,7 @@ func TestWithdrawingAGateOpensTheServicesThatMountIt(t *testing.T) {
 func TestWithdrawingTheGateOfAProjectThatNeverHadOneCreatesItsSecretHoldingTheWithdrawnMarker(t *testing.T) {
 	server, c := openGateSecrets(t)
 
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", nil); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -620,18 +621,18 @@ func TestWithdrawingTheGateOfAProjectThatNeverHadOneCreatesItsSecretHoldingTheWi
 
 func TestRemovingAProjectsGateDeletesItsSecret(t *testing.T) {
 	server, c := openGateSecrets(t)
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := deleteGate(t.Context(), c, environment.TierPreview, "shop"); err != nil {
+	if err := cloudrun.DeleteGate(t.Context(), c, environment.TierPreview, "shop"); err != nil {
 		t.Fatal(err)
 	}
 
 	if server.Secrets.Has(c.GateSecret(environment.TierPreview, "shop")) {
 		t.Error("the gate secret outlived the project's previews")
 	}
-	if err := deleteGate(t.Context(), c, environment.TierPreview, "shop"); err != nil {
+	if err := cloudrun.DeleteGate(t.Context(), c, environment.TierPreview, "shop"); err != nil {
 		t.Errorf("deleting a gate secret that is gone = %v, want it idempotent", err)
 	}
 }
@@ -668,14 +669,14 @@ func TestPublishingAProductionGateLeavesThePreviewSecretAlone(t *testing.T) {
 	server, c := openGateSecrets(t)
 	production := shopGate
 	production.Key = "production-key"
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := writeGate(t.Context(), c, environment.TierProduction, "shop", &production); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierProduction, "shop", &production); err != nil {
 		t.Fatal(err)
 	}
-	if err := deleteGate(t.Context(), c, environment.TierProduction, "shop"); err != nil {
+	if err := cloudrun.DeleteGate(t.Context(), c, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -690,10 +691,10 @@ func TestAGateSecretIsAPublishedGateTheEdgeConformanceSuiteAccepts(t *testing.T)
 
 	edgeconformance.RunPublishedGate(t, edgeconformance.PublishedGate{
 		Publish: func(ctx context.Context, held *gate.Gate) error {
-			return writeGate(ctx, c, environment.TierPreview, "shop", held)
+			return cloudrun.WriteGate(ctx, c, environment.TierPreview, "shop", held)
 		},
 		Read: func(ctx context.Context) (*gate.Gate, error) {
-			held, _, err := readGate(ctx, c, environment.TierPreview, "shop")
+			held, _, err := cloudrun.ReadGate(ctx, c, environment.TierPreview, "shop")
 			return held, err
 		},
 	})
@@ -704,7 +705,7 @@ func TestAGateSecretAnotherWriterCreatedFirstWithTheSameGateTakesNoSecondVersion
 	server.Secrets = googletest.NewSecrets()
 	server.Secrets.WrittenFirstElsewhere = map[string]string{c.GateSecret(environment.TierPreview, "shop"): "null"}
 
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", nil); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", nil); err != nil {
 		t.Fatalf("writeGate() = %v, want a secret another writer created first to be written as one that already existed", err)
 	}
 
@@ -718,7 +719,7 @@ func TestAGateSecretAnotherWriterCreatedFirstWithAnotherGateTakesTheNewOne(t *te
 	server.Secrets = googletest.NewSecrets()
 	server.Secrets.WrittenFirstElsewhere = map[string]string{c.GateSecret(environment.TierPreview, "shop"): "null"}
 
-	if err := writeGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
+	if err := cloudrun.WriteGate(t.Context(), c, environment.TierPreview, "shop", &shopGate); err != nil {
 		t.Fatalf("writeGate() = %v", err)
 	}
 
@@ -802,7 +803,7 @@ func TestAnOpenPreviewOfOnlyFunctionsThatIgnoreTheGateNeedsNoGateSecretAndGrants
 		t.Errorf("ProvisionFunctions() = %+v, want the function recorded as ignoring the gate", functions)
 	}
 	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
-	if server.Secrets != nil && slices.Contains(server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierPreview, "shop"), gateReaderRole), member) {
+	if server.Secrets != nil && slices.Contains(server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierPreview, "shop"), cloudrun.GateReaderRole), member) {
 		t.Errorf("the app's account %s may read the gate secret, and none of its services mounts it", member)
 	}
 }

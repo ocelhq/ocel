@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
@@ -19,12 +20,12 @@ func TestBindingKeyRolesReadsThePolicyAgainWhenItChangedUnderTheWrite(t *testing
 	member := "serviceAccount:app@acme-prod.iam.gserviceaccount.com"
 	key := gcloud.KeyPath(c, string(environment.TierProduction))
 
-	changed, err := gcloud.BindKeyRoles(context.Background(), c, environment.TierProduction, member, syncKeyRoles, syncKeyRoles)
+	changed, err := gcloud.BindKeyRoles(context.Background(), c, environment.TierProduction, member, envsource.SyncKeyRoles, envsource.SyncKeyRoles)
 
 	if err != nil || !changed {
 		t.Fatalf("bindKeyRoles() = %v, %v, want the grant to land after the policy changed under the first write", changed, err)
 	}
-	for _, role := range syncKeyRoles {
+	for _, role := range envsource.SyncKeyRoles {
 		if got := server.KeyMembers(key, role); !slices.Contains(got, member) {
 			t.Errorf("%s has members %q, want %s", role, got, member)
 		}

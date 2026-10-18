@@ -10,11 +10,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
-const (
-	BastionPart    = "bastion"
-	baseSummary    = "the database, buckets, keys, secrets, accounts and roles every deploy in this tier runs on"
-	BastionSummary = "the service a port forward runs inside the tier's network"
-)
+const baseSummary = "the database, buckets, keys, secrets, accounts and roles every deploy in this tier runs on"
 
 func DescribeParts(ctx context.Context, b Engine, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
 	read, err := b.surveyFor(ctx, described.Tier)

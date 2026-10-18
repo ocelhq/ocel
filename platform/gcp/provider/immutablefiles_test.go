@@ -16,6 +16,7 @@ import (
 	raw "google.golang.org/api/storage/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/assets"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
@@ -121,7 +122,7 @@ func TestCopyingImmutableFilesGivesTheTargetReleaseTheFilesOnlyTheSourceUploaded
 		staticObject("assets/production/shop/web/r1/assets/_next/static/chunks/a1.js", immutableCache, nil),
 		staticObject("assets/production/shop/web/r2/assets/_next/static/chunks/b2.js", immutableCache, nil),
 	)
-	if err := p.CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
+	if err := p.objects().CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
 		t.Fatalf("CopyImmutableFiles = %v", err)
 	}
 
@@ -132,7 +133,7 @@ func TestCopyingImmutableFilesGivesTheTargetReleaseTheFilesOnlyTheSourceUploaded
 	if copied.ContentType != "text/javascript" || copied.CacheControl != immutableCache {
 		t.Errorf("the copy is typed %q and cached %q, want the source's %q and %q", copied.ContentType, copied.CacheControl, "text/javascript", immutableCache)
 	}
-	if copied.Metadata[copiedFromKey] == "" {
+	if copied.Metadata[assets.CopiedFromKey] == "" {
 		t.Errorf("the copy carries metadata %v, want it marked as a copy so the next promotion does not pass it on", copied.Metadata)
 	}
 }
@@ -143,10 +144,10 @@ func TestCopyingImmutableFilesSkipsWhatTheTargetHoldsWhatTheSourceCopiedAndWhatM
 	p, server := servingObjects(t,
 		staticObject("assets/production/shop/web/r1/assets/_next/static/chunks/shared.js", immutableCache, nil),
 		staticObject("assets/production/shop/web/r2/assets/_next/static/chunks/shared.js", immutableCache, nil),
-		staticObject("assets/production/shop/web/r1/assets/_next/static/chunks/old.js", immutableCache, map[string]string{copiedFromKey: "/assets/production/shop/web/r0/assets"}),
+		staticObject("assets/production/shop/web/r1/assets/_next/static/chunks/old.js", immutableCache, map[string]string{assets.CopiedFromKey: "/assets/production/shop/web/r0/assets"}),
 		staticObject("assets/production/shop/web/r1/assets/_next/static/live/feed.json", "no-cache", nil),
 	)
-	if err := p.CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
+	if err := p.objects().CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
 		t.Fatalf("CopyImmutableFiles = %v", err)
 	}
 	if got := server.copied(); got != 0 {

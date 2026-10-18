@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 )
 
 const appBucket = "ocel-shop-prod-uploads-0dd909b8"

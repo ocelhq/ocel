@@ -26,7 +26,7 @@ func TestANodeServiceThatRevalidatesBehindTheALBIsToldWhichCloudCDNToClear(t *te
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 	if got, want := env["OCEL_CDN_URL_MAP"], "projects/acme-prod/global/urlMaps/ocel-alb-production-routes"; got != want {
 		t.Errorf("the node service reads OCEL_CDN_URL_MAP=%q, want %q", got, want)
 	}
@@ -52,7 +52,7 @@ func TestANodeServiceThatRevalidatesBehindTheWorkerIsToldWhereToPurgeAndTheSecre
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	env := envOf(w.server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(w.server.Created[0].Template.Containers[0])
 	if got := env[edge.PurgeURLVar]; got != "https://shop.acct.workers.dev/purge" {
 		t.Errorf("%s = %q, want the URL the worker takes purges at", edge.PurgeURLVar, got)
 	}
@@ -77,7 +77,7 @@ func TestANodeServiceThatRevalidatesNothingIsToldNoEdgeToPurge(t *testing.T) {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 	for _, name := range []string{"OCEL_CDN_URL_MAP", "OCEL_ISR_PREFIX", "OCEL_PURGE_URL", "OCEL_PURGE_SECRET"} {
 		if got, told := env[name]; told {
 			t.Errorf("the node service reads %s=%q, want none", name, got)

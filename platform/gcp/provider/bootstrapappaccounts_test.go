@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
@@ -151,7 +152,7 @@ func sweepingWith(t *testing.T, s *serviceAccountListing, server *googletest.IAM
 const sweptEnv = "pr-8"
 
 func appAccountOf(c *gcloud.Clients, tier environment.Tier, project, app string) listedAccount {
-	return listedAccount{id: c.AppAccount(tier, project, sweptEnv, app), description: appAccountDescription(tier, project, sweptEnv, app)}
+	return listedAccount{id: c.AppAccount(tier, project, sweptEnv, app), description: release.AppAccountDescription(tier, project, sweptEnv, app)}
 }
 
 func sweepNames() names.Names { return names.New("ocel", "acme-prod") }
@@ -170,7 +171,7 @@ func TestABootstrapDeletesTheAccountOfAnAppNoEnvironmentOfItsTierRuns(t *testing
 	server := listing(unused)
 	b, log := sweepingFor(t, server)
 
-	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
+	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); !slices.Equal(got, []string{unused.id}) {
@@ -187,7 +188,7 @@ func TestABootstrapKeepsTheAccountOfAnAppItsEnvironmentStillRuns(t *testing.T) {
 	server := listing(running)
 	b, log := sweepingFor(t, server, recordedApp{environment.TierPreview, "shop", stackOf("pr-8", "web", "r1")})
 
-	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
+	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); len(got) != 0 {
@@ -204,7 +205,7 @@ func TestABootstrapDeletesTheAccountOfAnEnvironmentGoneThoughAnotherEnvironmentR
 	server := listing(gone)
 	b, log := sweepingFor(t, server, recordedApp{environment.TierPreview, "shop", stackOf("pr-9", "web", "r1")})
 
-	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
+	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); !slices.Equal(got, []string{gone.id}) {
@@ -220,7 +221,7 @@ func TestABootstrapDeletesTheAccountOfAnAppWhoseProjectOnlyHoldsOtherAppsAndInfr
 		recordedApp{environment.TierPreview, "shop", naming.InfraStack("pr-8")},
 		recordedApp{environment.TierPreview, "shop", stackOf("pr-8", "api", "r1")})
 
-	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
+	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); !slices.Equal(got, []string{unused.id}) {
@@ -232,7 +233,7 @@ func TestABootstrapKeepsEveryTierAccountWhateverItsDescriptionSays(t *testing.T)
 	t.Parallel()
 	names := sweepNamed()
 	held := composed(bootstrap.Engine{Clients: names})
-	forged := appAccountDescription(environment.TierPreview, "shop", sweptEnv, "web")
+	forged := release.AppAccountDescription(environment.TierPreview, "shop", sweptEnv, "web")
 	var accounts []listedAccount
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
 		for _, id := range []string{names.PushAccount(tier), names.RealtimeAccount(tier), names.EnvSourceSyncAccount(tier)} {
@@ -251,7 +252,7 @@ func TestABootstrapKeepsEveryTierAccountWhateverItsDescriptionSays(t *testing.T)
 	server := listing(accounts...)
 	b, log := sweepingFor(t, server)
 
-	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
+	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); len(got) != 0 {
@@ -270,7 +271,7 @@ func TestABootstrapKeepsAccountsOfAnotherTierAnotherNamespaceOrAnotherMaker(t *t
 	server := listing(otherTier, otherNamespace, forged, otherProject)
 	b, log := sweepingFor(t, server)
 
-	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
+	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); len(got) != 0 {
@@ -288,7 +289,7 @@ func TestABootstrapFindsAnUnusedAppAccountOnALaterPageOfTheListing(t *testing.T)
 	}}
 	b, log := sweepingFor(t, server)
 
-	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
+	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); !slices.Equal(got, []string{unused.id}) {
@@ -308,7 +309,7 @@ func TestABootstrapThatCannotDeleteOneAccountStillDeletesTheOthersAndSaysWhichFa
 	server.refusing = map[string]int{first.id: http.StatusForbidden}
 	b, log := sweepingFor(t, server)
 
-	err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log)
+	err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log)
 	if err == nil || !strings.Contains(err.Error(), first.id) {
 		t.Fatalf("deleteUnusedAccounts() = %v, want an error naming %s", err, first.id)
 	}
@@ -326,7 +327,7 @@ func TestAnAppAccountIsReadBackFromTheDescriptionItWasCreatedWith(t *testing.T) 
 	p, c := ensuringAccounts(t, server)
 	spec := appNamed("web", reachingTopics(routedNextSpec()))
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
-	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err != nil {
+	if _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 	if len(server.Created) == 0 {
@@ -334,8 +335,8 @@ func TestAnAppAccountIsReadBackFromTheDescriptionItWasCreatedWith(t *testing.T) 
 	}
 	made := server.Created[0]
 
-	got, ok := readAppAccount(c.Names, &iam.ServiceAccount{Email: made.AccountId + "@acme-prod" + names.AccountDomain, Description: made.ServiceAccount.Description})
-	want := appAccount{id: made.AccountId, tier: spec.Ref.Tier, project: spec.Ref.Project, env: spec.Ref.Name.Env, app: spec.App.App}
+	got, ok := release.ReadAppAccount(c.Names, &iam.ServiceAccount{Email: made.AccountId + "@acme-prod" + names.AccountDomain, Description: made.ServiceAccount.Description})
+	want := release.AppAccount{ID: made.AccountId, Tier: spec.Ref.Tier, Project: spec.Ref.Project, Env: spec.Ref.Name.Env, App: spec.App.App}
 	if !ok || got != want {
 		t.Errorf("readAppAccount() = %+v, %v, want %+v, true", got, ok, want)
 	}
@@ -384,7 +385,7 @@ func TestABootstrapReadsAProjectsRecordsOnceToChooseAndOnceMoreBeforeEachDelete(
 	records := &countingRecords{Store: b.Records}
 	b.Records = records
 
-	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(tier), log); err != nil {
+	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(tier), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got, want := server.deletes(), []string{names.AppAccount(tier, "shop", sweptEnv, "worker"), names.AppAccount(tier, "shop", sweptEnv, "cron")}; !slices.Equal(got, want) {
@@ -411,7 +412,7 @@ func TestABootstrapKeepsTheAccountOfAnAppDeployedWhileItSweeps(t *testing.T) {
 	}
 	b.Records = records
 
-	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(tier), log); err != nil {
+	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(tier), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); len(got) != 0 {

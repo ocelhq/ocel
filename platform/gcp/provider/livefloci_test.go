@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/realtime"
 )
 
 const (
@@ -84,7 +85,7 @@ func TestLiveStacks(t *testing.T) {
 		bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart, gcp.NetworkPart)
 	}
 
-	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues(), gcp.RootRealtime, postgres.RootPostgres)
+	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues(), realtime.RootRealtime, postgres.RootPostgres)
 }
 
 func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {

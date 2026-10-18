@@ -9,8 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
-	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 )
 
 type storeSource struct {

@@ -7,8 +7,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 type bootstrapGate struct{ p *Provider }
@@ -40,8 +43,8 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, err
 		Removable:      tierParts(),
 		Accounts:       tierAccounts(),
 		FrontParts:     tierFronts(),
-		TakeRecords:    takeProjectRecords,
-		SweepAccounts:  deleteUnusedAccounts,
+		TakeRecords:    variables.TakeProjectRecords,
+		SweepAccounts:  release.DeleteUnusedAccounts,
 		PushBinary:     g.p.pushBinary,
 		DeployAndRoute: g.p.services().DeployAndRoute,
 		TearDown:       g.p.services().TearDown,
@@ -97,7 +100,7 @@ func (g bootstrapGate) DescribeParts(ctx context.Context, described provider.Boo
 }
 
 func (p *Provider) removePartUser(ctx context.Context, tier environment.Tier, project string, progress progress.Log) error {
-	consumer, err := records.ReadOrEmpty(ctx, p.KeyValues(), albConsumerAt(tier, project))
+	consumer, err := records.ReadOrEmpty(ctx, p.KeyValues(), albpart.ConsumerAt(tier, project))
 	if err != nil || len(consumer.Value) == 0 {
 		return err
 	}
@@ -109,5 +112,5 @@ func (p *Provider) removePartUser(ctx context.Context, tier environment.Tier, pr
 }
 
 func removePartUser(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, progress progress.Log) error {
-	return releaseALB(ctx, b, tier, project, true, progress)
+	return albpart.Release(ctx, b, tier, project, true, progress)
 }

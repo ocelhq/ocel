@@ -12,8 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
-	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 )
 
 func containerStackDeclaring(tier environment.Tier, env string, values provider.AppValues) provider.StackSpec {

@@ -26,3 +26,13 @@ func JSON(t *testing.T, value any) string {
 	}
 	return string(encoded)
 }
+
+var BothTiers = []environment.Tier{environment.TierProduction, environment.TierPreview}
+
+func IdsOf[T interface{ ID() string }](items []T) []string {
+	ids := make([]string, 0, len(items))
+	for _, each := range items {
+		ids = append(ids, each.ID())
+	}
+	return ids
+}

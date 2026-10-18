@@ -3,28 +3,10 @@ package gcp
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 )
-
-func (p *Provider) readEdgePurgeSecret(ctx context.Context, spec provider.StackSpec) (string, error) {
-	if !signsEdgePurges(spec) {
-		return "", nil
-	}
-	c, err := p.openClients(ctx)
-	if err != nil {
-		return "", err
-	}
-	if _, _, err := requireAdoptedEdge(ctx, c, p.KeyValues(), spec.Ref.Tier, spec.Edge.Kind()); err != nil {
-		return "", err
-	}
-	seed, err := readPurgeSeed(ctx, c, spec.Ref.Tier, spec.Edge.Kind())
-	if err != nil {
-		return "", err
-	}
-	return edge.DerivePurgeSecret(seed, spec.App.ISR.Prefix), nil
-}
 
 type stacks struct {
 	provider.Stacks
@@ -32,7 +14,7 @@ type stacks struct {
 }
 
 func (s stacks) Plan(ctx context.Context, spec provider.StackSpec, runProgress progress.Log) (provider.Plan, error) {
-	spec, err := s.p.withFunctionImages(ctx, spec)
+	spec, err := s.p.functionImages().WithImages(ctx, spec)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -40,15 +22,15 @@ func (s stacks) Plan(ctx context.Context, spec provider.StackSpec, runProgress p
 }
 
 func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgress progress.Log) (provider.StackResult, error) {
-	facts, err := s.p.readEdgeFacts(ctx, spec)
+	facts, err := s.p.release().ReadEdgeFacts(ctx, spec)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	if spec, err = s.p.withFunctionImages(ctx, spec); err != nil {
+	if spec, err = s.p.functionImages().WithImages(ctx, spec); err != nil {
 		return provider.StackResult{}, err
 	}
-	ctx = withEdgeFacts(ctx, spec, facts)
-	routeTableKey, err := s.p.putEdgeRouteTable(ctx, spec, runProgress)
+	ctx = release.WithEdgeFacts(ctx, spec, facts)
+	routeTableKey, err := s.p.objects().PutEdgeRouteTable(ctx, spec, runProgress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -57,6 +39,6 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 		return result, err
 	}
 	result.RouteTableKey = routeTableKey
-	result.PurgeSecret = facts.purgeSecret
+	result.PurgeSecret = facts.PurgeSecret
 	return result, nil
 }

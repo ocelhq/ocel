@@ -14,7 +14,6 @@ import (
 	"cloud.google.com/go/firestore/apiv1/firestorepb"
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/kms/apiv1/kmspb"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"google.golang.org/api/cloudresourcemanager/v1"
@@ -158,7 +157,7 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 		path := r.URL.Path
 		switch {
 		case r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/projects/acme-prod/services/"):
-			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": bootstrap.EnabledService})
+			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": "ENABLED"})
 		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":
 			_, _ = w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":getIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):

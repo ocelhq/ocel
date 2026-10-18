@@ -72,12 +72,12 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 	p := providerServing(server, t)
 	spec := functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})
 	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
-	account, err := p.ensureAppAccount(context.Background(), p.resolved, spec, nil)
+	account, err := p.release().EnsureAccount(context.Background(), p.resolved, spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := p.provisionWorkers(context.Background(), p.resolved, spec, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, nil, provider.Instances{}, nil); err != nil {
+	if _, err := p.release().ProvisionWorkers(context.Background(), p.resolved, spec, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, nil, provider.Instances{}, nil); err != nil {
 		t.Fatalf("provisionWorkers() = %v", err)
 	}
 
@@ -91,22 +91,6 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 		if got := service.Labels[names.ProjectLabel]; got != "shop" {
 			t.Errorf("a worker service is labelled %s=%q, want shop", names.ProjectLabel, got)
 		}
-	}
-}
-
-func TestARealtimeGatewayIsLabelledWithNoApp(t *testing.T) {
-	service := gatewayService(t, "gateway.run.app")
-
-	if got, labelled := service.Labels[names.AppLabel]; labelled {
-		t.Errorf("the gateway is labelled %s=%q, want no app label", names.AppLabel, got)
-	}
-}
-
-func TestARealtimeGatewayIsLabelledWithTheProjectItServes(t *testing.T) {
-	service := gatewayService(t, "gateway.run.app")
-
-	if got := service.Labels[names.ProjectLabel]; got != "shop" {
-		t.Errorf("the gateway of project shop is labelled %s=%q, want shop", names.ProjectLabel, got)
 	}
 }
 

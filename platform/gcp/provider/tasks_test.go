@@ -75,12 +75,12 @@ func TestTopicsAndTasksRunOnAPartADeployAdds(t *testing.T) {
 	}
 	names := names.New("ocel", "acme-prod")
 	push := bootstrap.Resource{Kind: bootstrap.KindServiceAccount, Name: names.PushAccount(environment.TierProduction)}
-	if !slices.Contains(idsOf(bootstrap.Resources(names, environment.TierProduction, false)), push.ID()) {
-		t.Errorf("the base provisions %v, want %s: Pub/Sub may sign a push as it only once a bootstrap grants it", idsOf(bootstrap.Resources(names, environment.TierProduction, false)), push.ID())
+	if !slices.Contains(googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), push.ID()) {
+		t.Errorf("the base provisions %v, want %s: Pub/Sub may sign a push as it only once a bootstrap grants it", googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), push.ID())
 	}
 	queue := bootstrap.Resource{Kind: bootstrap.KindQueue, Name: names.DelayQueue(environment.TierProduction)}
-	if !slices.Contains(idsOf(bootstrap.Resources(names, environment.TierProduction, true)), queue.ID()) {
-		t.Errorf("the base provisions %v, want %s: a deploy grants apps the queue and may grant only on a queue that already exists", idsOf(bootstrap.Resources(names, environment.TierProduction, true)), queue.ID())
+	if !slices.Contains(googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, true)), queue.ID()) {
+		t.Errorf("the base provisions %v, want %s: a deploy grants apps the queue and may grant only on a queue that already exists", googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, true)), queue.ID())
 	}
 }
 

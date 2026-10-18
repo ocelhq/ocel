@@ -190,11 +190,11 @@ func pushedToDaemon(t *testing.T, repository string, image v1.Image) string {
 func functionImage(t *testing.T, p *gcp.Provider, repository string, framework buildoutput.Framework, dir string) string {
 	t.Helper()
 	ctx := context.Background()
-	base, err := p.ResolveFunctionBase(ctx, framework)
+	base, err := p.FunctionImages().ResolveBase(ctx, framework)
 	if err != nil {
 		t.Fatalf("read the base a %s function is built on: %v", framework.Name, err)
 	}
-	runtime, err := p.ReadFunctionRuntime(ctx, framework)
+	runtime, err := p.FunctionImages().ReadRuntime(ctx, framework)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework b
 
 func serverImage(t *testing.T, p *gcp.Provider, repository, mark string) string {
 	t.Helper()
-	base, err := p.ResolveFunctionBase(context.Background(), nodeRuntime)
+	base, err := p.FunctionImages().ResolveBase(context.Background(), nodeRuntime)
 	if err != nil {
 		t.Fatal(err)
 	}
