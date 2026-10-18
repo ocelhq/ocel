@@ -273,9 +273,7 @@ describe("awsBindingStore", () => {
         recordItem(
           "bindings#orders#records#*#",
           {
-            name: "orders",
-            postgres: {},
-            source: "sst",
+            binding: { name: "orders", postgres: {}, source: "sst" },
             grants: [
               { actions: ["rds-db:connect"], resources: ["arn:aws:rds-db:x"], label: "connect" },
             ],
@@ -284,7 +282,7 @@ describe("awsBindingStore", () => {
         ),
         recordItem(
           "bindings#network#records#*#",
-          { name: "network", custom: {}, source: "sst" },
+          { binding: { name: "network", custom: {}, source: "sst" } },
           owner,
         ),
       ]);

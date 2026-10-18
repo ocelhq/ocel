@@ -924,11 +924,11 @@ func TestDeployLeavesAnotherPublishersBindingAlone(t *testing.T) {
 		Slug:  "shop",
 		Tier:  environmentv1.Tier_TIER_PRODUCTION,
 		Owner: "acme",
-		Binding: &bindingsv1.Binding{
+		Published: &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{
 			Name:       "warehouse",
 			Source:     "acme",
 			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.acme"}},
-		},
+		}},
 	}); err != nil {
 		t.Fatalf("SetBinding() = %v", err)
 	}

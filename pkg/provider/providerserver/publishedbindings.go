@@ -17,7 +17,7 @@ import (
 func (r *deployRun) publish(ctx context.Context, bindings []provider.Binding) error {
 	publishing := make([]variablestore.NamedBindingWrite, 0, len(bindings))
 	for _, binding := range bindings {
-		message, err := provider.BindingMessage(binding)
+		message, err := provider.PublishedBindingMessage(binding)
 		if err != nil {
 			return err
 		}
@@ -149,11 +149,11 @@ func (p *publishedBindings) Named(ctx context.Context, name string) (provider.Bi
 }
 
 func bindingPublished(name string, published variablestore.StoredBinding) (provider.Binding, error) {
-	message, err := variablestoreserver.DecodeBinding(published.Value)
+	message, err := variablestoreserver.DecodePublishedBinding(published.Value)
 	if err != nil {
 		return provider.Binding{}, fmt.Errorf("read binding %s: %w", name, err)
 	}
-	binding := provider.BindingOf(message)
+	binding := provider.PublishedBindingOf(message)
 	binding.Version = published.Version
 	return binding, nil
 }

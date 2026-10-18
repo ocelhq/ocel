@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -57,7 +58,7 @@ func rdsRootCAs(region string) (string, error) {
 	return out.String(), nil
 }
 
-func collectPostgresBinding(region, name string, fields map[string]any) (*bindingsv1.Binding, error) {
+func collectPostgresBinding(region, name string, fields map[string]any) (*variablestorev1.PublishedBinding, error) {
 	host, err := requireStringField(fields, name, outputKeyHost)
 	if err != nil {
 		return nil, err
@@ -85,22 +86,24 @@ func collectPostgresBinding(region, name string, fields map[string]any) (*bindin
 		return nil, fmt.Errorf("postgres %s: %w", name, err)
 	}
 
-	return &bindingsv1.Binding{
-		Name: name,
-		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
-			Host:     host,
-			Port:     int32(port),
-			Database: database,
-			Username: username,
-			TlsMode:  bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
-			TlsCa:    roots,
-		}},
+	return &variablestorev1.PublishedBinding{
+		Binding: &bindingsv1.Binding{
+			Name: name,
+			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
+				Host:     host,
+				Port:     int32(port),
+				Database: database,
+				Username: username,
+				TlsMode:  bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
+				TlsCa:    roots,
+			}},
+		},
 		Grants: postgresGrants(secretARN),
 	}, nil
 }
 
-func postgresGrants(secretARN string) []*bindingsv1.Grant {
-	return []*bindingsv1.Grant{{
+func postgresGrants(secretARN string) []*variablestorev1.Grant {
+	return []*variablestorev1.Grant{{
 		Label:     provider.GrantPasswordSecret,
 		Actions:   []string{"secretsmanager:GetSecretValue"},
 		Resources: []string{secretARN},

@@ -148,7 +148,6 @@ type Binding struct {
 	//	*Binding_Kv
 	//	*Binding_Realtime
 	Properties    isBinding_Properties `protobuf_oneof:"properties"`
-	Grants        []*Grant             `protobuf:"bytes,4,rep,name=grants,proto3" json:"grants,omitempty"`
 	Source        string               `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -257,13 +256,6 @@ func (x *Binding) GetRealtime() *RealtimeProperties {
 		if x, ok := x.Properties.(*Binding_Realtime); ok {
 			return x.Realtime
 		}
-	}
-	return nil
-}
-
-func (x *Binding) GetGrants() []*Grant {
-	if x != nil {
-		return x.Grants
 	}
 	return nil
 }
@@ -769,139 +761,11 @@ func (x *RealtimeProperties) GetVerifyKey() []byte {
 	return nil
 }
 
-type Grant struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Actions       []string               `protobuf:"bytes,1,rep,name=actions,proto3" json:"actions,omitempty"`
-	Resources     []string               `protobuf:"bytes,2,rep,name=resources,proto3" json:"resources,omitempty"`
-	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
-	Conditions    []*GrantCondition      `protobuf:"bytes,4,rep,name=conditions,proto3" json:"conditions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Grant) Reset() {
-	*x = Grant{}
-	mi := &file_common_bindings_v1_bindings_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Grant) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Grant) ProtoMessage() {}
-
-func (x *Grant) ProtoReflect() protoreflect.Message {
-	mi := &file_common_bindings_v1_bindings_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Grant.ProtoReflect.Descriptor instead.
-func (*Grant) Descriptor() ([]byte, []int) {
-	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *Grant) GetActions() []string {
-	if x != nil {
-		return x.Actions
-	}
-	return nil
-}
-
-func (x *Grant) GetResources() []string {
-	if x != nil {
-		return x.Resources
-	}
-	return nil
-}
-
-func (x *Grant) GetLabel() string {
-	if x != nil {
-		return x.Label
-	}
-	return ""
-}
-
-func (x *Grant) GetConditions() []*GrantCondition {
-	if x != nil {
-		return x.Conditions
-	}
-	return nil
-}
-
-type GrantCondition struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Operator      string                 `protobuf:"bytes,1,opt,name=operator,proto3" json:"operator,omitempty"`
-	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Values        []string               `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GrantCondition) Reset() {
-	*x = GrantCondition{}
-	mi := &file_common_bindings_v1_bindings_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GrantCondition) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GrantCondition) ProtoMessage() {}
-
-func (x *GrantCondition) ProtoReflect() protoreflect.Message {
-	mi := &file_common_bindings_v1_bindings_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GrantCondition.ProtoReflect.Descriptor instead.
-func (*GrantCondition) Descriptor() ([]byte, []int) {
-	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *GrantCondition) GetOperator() string {
-	if x != nil {
-		return x.Operator
-	}
-	return ""
-}
-
-func (x *GrantCondition) GetKey() string {
-	if x != nil {
-		return x.Key
-	}
-	return ""
-}
-
-func (x *GrantCondition) GetValues() []string {
-	if x != nil {
-		return x.Values
-	}
-	return nil
-}
-
 var File_common_bindings_v1_bindings_proto protoreflect.FileDescriptor
 
 const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\n" +
-	"!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xa0\x04\n" +
+	"!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xed\x03\n" +
 	"\aBinding\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12D\n" +
 	"\bpostgres\x18\x02 \x01(\v2&.common.bindings.v1.PostgresPropertiesH\x00R\bpostgres\x12>\n" +
@@ -911,8 +775,7 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x04task\x18\b \x01(\v2\".common.bindings.v1.TaskPropertiesH\x00R\x04task\x122\n" +
 	"\x02kv\x18\t \x01(\v2 .common.bindings.v1.KvPropertiesH\x00R\x02kv\x12D\n" +
 	"\brealtime\x18\n" +
-	" \x01(\v2&.common.bindings.v1.RealtimePropertiesH\x00R\brealtime\x121\n" +
-	"\x06grants\x18\x04 \x03(\v2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n" +
+	" \x01(\v2&.common.bindings.v1.RealtimePropertiesH\x00R\brealtime\x12\x16\n" +
 	"\x06source\x18\x05 \x01(\tR\x06sourceB\f\n" +
 	"\n" +
 	"properties\"\xab\x02\n" +
@@ -953,18 +816,7 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\vsigning_key\x18\x04 \x01(\fB\x03\x80\x01\x01R\n" +
 	"signingKey\x12\x1d\n" +
 	"\n" +
-	"verify_key\x18\x05 \x01(\fR\tverifyKey\"\x99\x01\n" +
-	"\x05Grant\x12\x18\n" +
-	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
-	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +
-	"\x05label\x18\x03 \x01(\tR\x05label\x12B\n" +
-	"\n" +
-	"conditions\x18\x04 \x03(\v2\".common.bindings.v1.GrantConditionR\n" +
-	"conditions\"V\n" +
-	"\x0eGrantCondition\x12\x1a\n" +
-	"\boperator\x18\x01 \x01(\tR\boperator\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n" +
-	"\x06values\x18\x03 \x03(\tR\x06values*\xd7\x01\n" +
+	"verify_key\x18\x05 \x01(\fR\tverifyKey*\xd7\x01\n" +
 	"\vBindingType\x12\x1c\n" +
 	"\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n" +
@@ -992,7 +844,7 @@ func file_common_bindings_v1_bindings_proto_rawDescGZIP() []byte {
 }
 
 var file_common_bindings_v1_bindings_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_common_bindings_v1_bindings_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_common_bindings_v1_bindings_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_common_bindings_v1_bindings_proto_goTypes = []any{
 	(BindingType)(0),           // 0: common.bindings.v1.BindingType
 	(PostgresTlsMode)(0),       // 1: common.bindings.v1.PostgresTlsMode
@@ -1003,26 +855,22 @@ var file_common_bindings_v1_bindings_proto_goTypes = []any{
 	(*TaskProperties)(nil),     // 6: common.bindings.v1.TaskProperties
 	(*KvProperties)(nil),       // 7: common.bindings.v1.KvProperties
 	(*RealtimeProperties)(nil), // 8: common.bindings.v1.RealtimeProperties
-	(*Grant)(nil),              // 9: common.bindings.v1.Grant
-	(*GrantCondition)(nil),     // 10: common.bindings.v1.GrantCondition
-	(*structpb.Struct)(nil),    // 11: google.protobuf.Struct
+	(*structpb.Struct)(nil),    // 9: google.protobuf.Struct
 }
 var file_common_bindings_v1_bindings_proto_depIdxs = []int32{
-	3,  // 0: common.bindings.v1.Binding.postgres:type_name -> common.bindings.v1.PostgresProperties
-	4,  // 1: common.bindings.v1.Binding.bucket:type_name -> common.bindings.v1.BucketProperties
-	11, // 2: common.bindings.v1.Binding.custom:type_name -> google.protobuf.Struct
-	5,  // 3: common.bindings.v1.Binding.topic:type_name -> common.bindings.v1.TopicProperties
-	6,  // 4: common.bindings.v1.Binding.task:type_name -> common.bindings.v1.TaskProperties
-	7,  // 5: common.bindings.v1.Binding.kv:type_name -> common.bindings.v1.KvProperties
-	8,  // 6: common.bindings.v1.Binding.realtime:type_name -> common.bindings.v1.RealtimeProperties
-	9,  // 7: common.bindings.v1.Binding.grants:type_name -> common.bindings.v1.Grant
-	1,  // 8: common.bindings.v1.PostgresProperties.tls_mode:type_name -> common.bindings.v1.PostgresTlsMode
-	10, // 9: common.bindings.v1.Grant.conditions:type_name -> common.bindings.v1.GrantCondition
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	3, // 0: common.bindings.v1.Binding.postgres:type_name -> common.bindings.v1.PostgresProperties
+	4, // 1: common.bindings.v1.Binding.bucket:type_name -> common.bindings.v1.BucketProperties
+	9, // 2: common.bindings.v1.Binding.custom:type_name -> google.protobuf.Struct
+	5, // 3: common.bindings.v1.Binding.topic:type_name -> common.bindings.v1.TopicProperties
+	6, // 4: common.bindings.v1.Binding.task:type_name -> common.bindings.v1.TaskProperties
+	7, // 5: common.bindings.v1.Binding.kv:type_name -> common.bindings.v1.KvProperties
+	8, // 6: common.bindings.v1.Binding.realtime:type_name -> common.bindings.v1.RealtimeProperties
+	1, // 7: common.bindings.v1.PostgresProperties.tls_mode:type_name -> common.bindings.v1.PostgresTlsMode
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_common_bindings_v1_bindings_proto_init() }
@@ -1045,7 +893,7 @@ func file_common_bindings_v1_bindings_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_bindings_v1_bindings_proto_rawDesc), len(file_common_bindings_v1_bindings_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   9,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

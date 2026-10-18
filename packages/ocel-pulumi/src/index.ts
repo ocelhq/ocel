@@ -3,6 +3,7 @@ import { custom, postgres } from "./resource.js";
 export type { CustomBinding } from "./custom.js";
 export type { Grant, GrantInput } from "./grants.js";
 export type { PostgresBinding, PostgresProperties } from "./postgres.js";
+export type { PublishedBinding } from "./published.js";
 export type {
   BindOptions,
   CustomProperties,

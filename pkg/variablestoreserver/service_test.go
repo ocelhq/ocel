@@ -315,10 +315,10 @@ func TestBindingsAnswerAcrossTheWire(t *testing.T) {
 	}
 
 	set, err := variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{
-		Slug:    slug,
-		Tier:    environmentv1.Tier_TIER_PRODUCTION,
-		Binding: binding,
-		Owner:   "neon",
+		Slug:      slug,
+		Tier:      environmentv1.Tier_TIER_PRODUCTION,
+		Published: &variablestorev1.PublishedBinding{Binding: binding},
+		Owner:     "neon",
 	})
 	if err != nil || set.GetVersion() != 1 {
 		t.Fatalf("SetBinding() = %+v, %v", set, err)
@@ -343,10 +343,10 @@ func TestBindingsAnswerAcrossTheWire(t *testing.T) {
 	}
 
 	_, err = variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{
-		Slug:    slug,
-		Tier:    environmentv1.Tier_TIER_PRODUCTION,
-		Binding: binding,
-		Owner:   "supabase",
+		Slug:      slug,
+		Tier:      environmentv1.Tier_TIER_PRODUCTION,
+		Published: &variablestorev1.PublishedBinding{Binding: binding},
+		Owner:     "supabase",
 	})
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Fatalf("a second publisher taking the name: code = %v, want %v", got, connect.CodeFailedPrecondition)
@@ -373,42 +373,27 @@ func TestABindingOcelCouldNotHaveProducedIsRefused(t *testing.T) {
 	variables, _ := served(t)
 	ctx := context.Background()
 
-	for name, binding := range map[string]*bindingsv1.Binding{
-		"unsourced": {
+	files := &bindingsv1.Binding{
+		Name:       "files",
+		Source:     "acme",
+		Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+	}
+	for name, published := range map[string]*variablestorev1.PublishedBinding{
+		"unsourced": {Binding: &bindingsv1.Binding{
 			Name:       "db",
 			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.example"}},
-		},
-		"granting no action": {
-			Name:       "files",
-			Source:     "acme",
-			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*bindingsv1.Grant{{Resources: []string{"arn:aws:s3:::files"}}},
-		},
-		"granting over no resource": {
-			Name:       "files",
-			Source:     "acme",
-			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*bindingsv1.Grant{{Actions: []string{"s3:GetObject"}}},
-		},
-		"granting every action": {
-			Name:       "files",
-			Source:     "acme",
-			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*bindingsv1.Grant{{Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::files"}}},
-		},
-		"granting over every resource": {
-			Name:       "files",
-			Source:     "acme",
-			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*bindingsv1.Grant{{Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
-		},
+		}},
+		"granting no action":           {Binding: files, Grants: []*variablestorev1.Grant{{Resources: []string{"arn:aws:s3:::files"}}}},
+		"granting over no resource":    {Binding: files, Grants: []*variablestorev1.Grant{{Actions: []string{"s3:GetObject"}}}},
+		"granting every action":        {Binding: files, Grants: []*variablestorev1.Grant{{Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::files"}}}},
+		"granting over every resource": {Binding: files, Grants: []*variablestorev1.Grant{{Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{
-				Slug:    slug,
-				Tier:    environmentv1.Tier_TIER_PRODUCTION,
-				Binding: binding,
-				Owner:   "acme",
+				Slug:      slug,
+				Tier:      environmentv1.Tier_TIER_PRODUCTION,
+				Published: published,
+				Owner:     "acme",
 			})
 			if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 				t.Fatalf("SetBinding(): code = %v, want %v", got, connect.CodeInvalidArgument)
@@ -441,25 +426,25 @@ func deployPreview(t *testing.T, provider *fake.Provider, preview string) {
 func TestTheRecordsInlineBindingsKeepAreWrittenByThemAlone(t *testing.T) {
 	variables, _ := served(t)
 	ctx := context.Background()
-	record := func(name string) *bindingsv1.Binding {
-		return &bindingsv1.Binding{
+	record := func(name string) *variablestorev1.PublishedBinding {
+		return &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{
 			Name:       name,
 			Source:     "ocel.json",
 			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Url: "postgres://u:p@db/shop"}},
-		}
+		}}
 	}
 	inline := naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders")
 
 	for name, req := range map[string]*variablestorev1.SetBindingRequest{
-		"a publisher writing a reserved name":       {Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Binding: record(inline), Owner: "terraform"},
-		"the inline owner writing an ordinary name": {Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Binding: record("orders"), Owner: naming.InlineRecordOwner},
+		"a publisher writing a reserved name":       {Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Published: record(inline), Owner: "terraform"},
+		"the inline owner writing an ordinary name": {Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Published: record("orders"), Owner: naming.InlineRecordOwner},
 	} {
 		if _, err := variables.SetBinding(ctx, req); connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Errorf("%s: code = %v, want %v", name, connect.CodeOf(err), connect.CodeInvalidArgument)
 		}
 	}
 
-	if _, err := variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Binding: record(inline), Owner: naming.InlineRecordOwner}); err != nil {
+	if _, err := variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Published: record(inline), Owner: naming.InlineRecordOwner}); err != nil {
 		t.Fatalf("the inline owner writing its own record: %v", err)
 	}
 }

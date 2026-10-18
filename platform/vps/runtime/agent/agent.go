@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -477,7 +476,7 @@ func (s Store) Resolve(ctx context.Context, manifest variables.Manifest) (map[st
 	if err != nil {
 		return nil, err
 	}
-	answer := merged(resolved, manifest.Bindings, records)
+	answer := live.MergeBindings(resolved, manifest.Bindings, records)
 	if manifest.Store == nil {
 		return answer, nil
 	}
@@ -555,13 +554,4 @@ func published(answer map[string]string, bindings []live.Binding, base string) {
 		}
 		answer[binding.Key] = string(republished)
 	}
-}
-
-func merged(resolved map[string]string, bindings []live.Binding, records []variablestore.StoredBinding) map[string]string {
-	out := make(map[string]string, len(resolved)+len(records))
-	maps.Copy(out, resolved)
-	for i, record := range records {
-		out[bindings[i].Key] = string(record.Value)
-	}
-	return out
 }

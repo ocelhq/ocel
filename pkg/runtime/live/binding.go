@@ -10,6 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type Key struct {
@@ -78,6 +80,27 @@ func (l Binding) conform(raw string) error {
 		return fmt.Errorf("%w: binding %s publishes a %s record under %s, and this deployment was built to read a %s", ErrDrift, l.Name, published, l.Key, l.Type)
 	}
 	return nil
+}
+
+func MergeBindings(resolved map[string]string, bindings []Binding, records []variablestore.StoredBinding) map[string]string {
+	out := make(map[string]string, len(resolved)+len(records))
+	maps.Copy(out, resolved)
+	for i, record := range records {
+		out[bindings[i].Key] = delivered(record.Value)
+	}
+	return out
+}
+
+func delivered(value []byte) string {
+	published := &variablestorev1.PublishedBinding{}
+	if err := protojson.Unmarshal(value, published); err != nil || published.GetBinding() == nil {
+		return ""
+	}
+	encoded, err := protojson.Marshal(published.GetBinding())
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 func Keys(keys []Key, bindings []Binding) []string {

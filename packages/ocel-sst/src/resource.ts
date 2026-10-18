@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { checkTarget, runBindings, type Target } from "./cli.js";
-import { customBinding } from "./custom.js";
+import { publishedCustom } from "./custom.js";
 import type { Grant, SSTInclude } from "./grants.js";
-import { type DescribedPostgres, postgresBinding } from "./postgres.js";
+import { type DescribedPostgres, publishedPostgres } from "./postgres.js";
 
 /** An SST component, as SST already describes itself to its own binding consumers. */
 export interface SSTPostgresBindable {
@@ -103,7 +103,7 @@ function bindingProvider<I extends BindingInputs>(
 
 export const postgresProvider = bindingProvider<PostgresInputs>(
   (inputs) =>
-    postgresBinding(inputs.name, {
+    publishedPostgres(inputs.name, {
       properties: inputs.properties,
       include: inputs.include,
       grants: inputs.grants,
@@ -112,7 +112,7 @@ export const postgresProvider = bindingProvider<PostgresInputs>(
 );
 
 export const customProvider = bindingProvider<CustomInputs>(
-  (inputs) => customBinding(inputs.name, inputs.properties),
+  (inputs) => publishedCustom(inputs.name, inputs.properties),
   (inputs) => Object.values(inputs.properties).every((value) => value !== undefined),
 );
 

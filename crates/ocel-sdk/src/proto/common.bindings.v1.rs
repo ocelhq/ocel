@@ -361,13 +361,6 @@ pub struct Binding {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub name: ::buffa::alloc::string::String,
-    /// Field 4: `grants`
-    #[serde(
-        rename = "grants",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
-        deserialize_with = "::buffa::json_helpers::null_as_default"
-    )]
-    pub grants: ::buffa::alloc::vec::Vec<Grant>,
     /// Field 5: `source`
     #[serde(
         rename = "source",
@@ -385,7 +378,6 @@ impl ::core::fmt::Debug for Binding {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("Binding")
             .field("name", &self.name)
-            .field("grants", &self.grants)
             .field("source", &self.source)
             .field("properties", &self.properties)
             .finish()
@@ -481,14 +473,6 @@ impl ::buffa::Message for Binding {
                 }
             }
         }
-        for v in &self.grants {
-            let __slot = __cache.reserve();
-            let inner_size = v.compute_size(__cache);
-            __cache.set(__slot, inner_size);
-            size
-                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                    + inner_size as u64;
-        }
         if !self.source.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.source) as u64;
         }
@@ -564,14 +548,6 @@ impl ::buffa::Message for Binding {
                     x.write_to(__cache, buf);
                 }
             }
-        }
-        for v in &self.grants {
-            ::buffa::types::put_len_delimited_header(
-                4u32,
-                u64::from(__cache.consume_next()),
-                buf,
-            );
-            v.write_to(__cache, buf);
         }
         if !self.source.is_empty() {
             ::buffa::types::put_string_field(5u32, &self.source, buf);
@@ -736,18 +712,6 @@ impl ::buffa::Message for Binding {
                     );
                 }
             }
-            4u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                let mut elem = ::core::default::Default::default();
-                ctx.register_element_memory(
-                    ::buffa::__private::element_footprint(&elem),
-                )?;
-                ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
-                self.grants.push(elem);
-            }
             5u32 => {
                 ::buffa::encoding::check_wire_type(
                     tag,
@@ -765,7 +729,6 @@ impl ::buffa::Message for Binding {
     fn clear(&mut self) {
         self.name.clear();
         self.properties = ::core::option::Option::None;
-        self.grants.clear();
         self.source.clear();
         self.__buffa_unknown_fields.clear();
     }
@@ -800,9 +763,6 @@ impl<'de> ::serde::Deserialize<'de> for Binding {
                 let mut __f_name: ::core::option::Option<
                     ::buffa::alloc::string::String,
                 > = None;
-                let mut __f_grants: ::core::option::Option<
-                    ::buffa::alloc::vec::Vec<Grant>,
-                > = None;
                 let mut __f_source: ::core::option::Option<
                     ::buffa::alloc::string::String,
                 > = None;
@@ -824,24 +784,6 @@ impl<'de> ::serde::Deserialize<'de> for Binding {
                                         D::Error,
                                     > {
                                         ::buffa::json_helpers::proto_string::deserialize(d)
-                                    }
-                                }
-                                map.next_value_seed(_S)?
-                            });
-                        }
-                        "grants" => {
-                            __f_grants = Some({
-                                struct _S;
-                                impl<'de> ::serde::de::DeserializeSeed<'de> for _S {
-                                    type Value = ::buffa::alloc::vec::Vec<Grant>;
-                                    fn deserialize<D: ::serde::Deserializer<'de>>(
-                                        self,
-                                        d: D,
-                                    ) -> ::core::result::Result<
-                                        ::buffa::alloc::vec::Vec<Grant>,
-                                        D::Error,
-                                    > {
-                                        ::buffa::json_helpers::null_as_default(d)
                                     }
                                 }
                                 map.next_value_seed(_S)?
@@ -1043,9 +985,6 @@ impl<'de> ::serde::Deserialize<'de> for Binding {
                 let mut __r = <Binding as ::core::default::Default>::default();
                 if let ::core::option::Option::Some(v) = __f_name {
                     __r.name = v;
-                }
-                if let ::core::option::Option::Some(v) = __f_grants {
-                    __r.grants = v;
                 }
                 if let ::core::option::Option::Some(v) = __f_source {
                     __r.source = v;
@@ -2373,395 +2312,6 @@ pub const __REALTIME_PROPERTIES_JSON_ANY: ::buffa::type_registry::JsonAnyEntry =
     from_json: ::buffa::type_registry::any_from_json::<RealtimeProperties>,
     is_wkt: false,
 };
-#[derive(Clone, PartialEq, Default)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(default)]
-pub struct Grant {
-    /// Field 1: `actions`
-    #[serde(
-        rename = "actions",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
-        deserialize_with = "::buffa::json_helpers::null_as_default"
-    )]
-    pub actions: ::buffa::alloc::vec::Vec<::buffa::alloc::string::String>,
-    /// Field 2: `resources`
-    #[serde(
-        rename = "resources",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
-        deserialize_with = "::buffa::json_helpers::null_as_default"
-    )]
-    pub resources: ::buffa::alloc::vec::Vec<::buffa::alloc::string::String>,
-    /// Field 3: `label`
-    #[serde(
-        rename = "label",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub label: ::buffa::alloc::string::String,
-    /// Field 4: `conditions`
-    #[serde(
-        rename = "conditions",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
-        deserialize_with = "::buffa::json_helpers::null_as_default"
-    )]
-    pub conditions: ::buffa::alloc::vec::Vec<GrantCondition>,
-    #[serde(skip)]
-    #[doc(hidden)]
-    pub __buffa_unknown_fields: ::buffa::UnknownFields,
-}
-impl ::core::fmt::Debug for Grant {
-    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        f.debug_struct("Grant")
-            .field("actions", &self.actions)
-            .field("resources", &self.resources)
-            .field("label", &self.label)
-            .field("conditions", &self.conditions)
-            .finish()
-    }
-}
-impl Grant {
-    /// Protobuf type URL for this message, for use with `Any::pack` and
-    /// `Any::unpack_if`.
-    ///
-    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.Grant";
-}
-::buffa::impl_default_instance!(Grant);
-impl ::buffa::MessageName for Grant {
-    const PACKAGE: &'static str = "common.bindings.v1";
-    const NAME: &'static str = "Grant";
-    const FULL_NAME: &'static str = "common.bindings.v1.Grant";
-    const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.Grant";
-}
-impl ::buffa::Message for Grant {
-    /// Returns the total encoded size in bytes.
-    ///
-    /// Accumulates in `u64` (which cannot overflow for in-memory
-    /// data) and saturates to `u32` at return, so a message whose
-    /// encoded size exceeds the 2 GiB protobuf limit yields a value
-    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
-    /// points reject, never a silently wrapped size.
-    #[allow(clippy::let_and_return)]
-    fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
-        #[allow(unused_imports)]
-        use ::buffa::Enumeration as _;
-        let mut size = 0u64;
-        for v in &self.actions {
-            size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
-        }
-        for v in &self.resources {
-            size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
-        }
-        if !self.label.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.label) as u64;
-        }
-        for v in &self.conditions {
-            let __slot = __cache.reserve();
-            let inner_size = v.compute_size(__cache);
-            __cache.set(__slot, inner_size);
-            size
-                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                    + inner_size as u64;
-        }
-        size += self.__buffa_unknown_fields.encoded_len() as u64;
-        ::buffa::saturate_size(size)
-    }
-    fn write_to(
-        &self,
-        __cache: &mut ::buffa::SizeCache,
-        buf: &mut impl ::buffa::EncodeSink,
-    ) {
-        #[allow(unused_imports)]
-        use ::buffa::Enumeration as _;
-        for v in &self.actions {
-            ::buffa::types::put_string_field(1u32, v, buf);
-        }
-        for v in &self.resources {
-            ::buffa::types::put_string_field(2u32, v, buf);
-        }
-        if !self.label.is_empty() {
-            ::buffa::types::put_string_field(3u32, &self.label, buf);
-        }
-        for v in &self.conditions {
-            ::buffa::types::put_len_delimited_header(
-                4u32,
-                u64::from(__cache.consume_next()),
-                buf,
-            );
-            v.write_to(__cache, buf);
-        }
-        self.__buffa_unknown_fields.write_to(buf);
-    }
-    fn merge_field(
-        &mut self,
-        tag: ::buffa::encoding::Tag,
-        buf: &mut impl ::buffa::bytes::Buf,
-        ctx: ::buffa::DecodeContext<'_>,
-    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
-        #[allow(unused_imports)]
-        use ::buffa::bytes::Buf as _;
-        #[allow(unused_imports)]
-        use ::buffa::Enumeration as _;
-        match tag.field_number() {
-            1u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                let __elem = ::buffa::types::decode_string(buf)?;
-                ctx.register_element_memory(
-                    ::buffa::__private::element_footprint(&__elem),
-                )?;
-                self.actions.push(__elem);
-            }
-            2u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                let __elem = ::buffa::types::decode_string(buf)?;
-                ctx.register_element_memory(
-                    ::buffa::__private::element_footprint(&__elem),
-                )?;
-                self.resources.push(__elem);
-            }
-            3u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.label, buf)?;
-            }
-            4u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                let mut elem = ::core::default::Default::default();
-                ctx.register_element_memory(
-                    ::buffa::__private::element_footprint(&elem),
-                )?;
-                ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
-                self.conditions.push(elem);
-            }
-            _ => {
-                self.__buffa_unknown_fields
-                    .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
-            }
-        }
-        ::core::result::Result::Ok(())
-    }
-    fn clear(&mut self) {
-        self.actions.clear();
-        self.resources.clear();
-        self.label.clear();
-        self.conditions.clear();
-        self.__buffa_unknown_fields.clear();
-    }
-}
-impl ::buffa::ExtensionSet for Grant {
-    const PROTO_FQN: &'static str = "common.bindings.v1.Grant";
-    fn unknown_fields(&self) -> &::buffa::UnknownFields {
-        &self.__buffa_unknown_fields
-    }
-    fn unknown_fields_mut(&mut self) -> &mut ::buffa::UnknownFields {
-        &mut self.__buffa_unknown_fields
-    }
-}
-impl ::buffa::json_helpers::ProtoElemJson for Grant {
-    fn serialize_proto_json<S: ::serde::Serializer>(
-        v: &Self,
-        s: S,
-    ) -> ::core::result::Result<S::Ok, S::Error> {
-        ::serde::Serialize::serialize(v, s)
-    }
-    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
-        d: D,
-    ) -> ::core::result::Result<Self, D::Error> {
-        <Self as ::serde::Deserialize>::deserialize(d)
-    }
-}
-#[doc(hidden)]
-pub const __GRANT_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/common.bindings.v1.Grant",
-    to_json: ::buffa::type_registry::any_to_json::<Grant>,
-    from_json: ::buffa::type_registry::any_from_json::<Grant>,
-    is_wkt: false,
-};
-#[derive(Clone, PartialEq, Default)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(default)]
-pub struct GrantCondition {
-    /// Field 1: `operator`
-    #[serde(
-        rename = "operator",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub operator: ::buffa::alloc::string::String,
-    /// Field 2: `key`
-    #[serde(
-        rename = "key",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub key: ::buffa::alloc::string::String,
-    /// Field 3: `values`
-    #[serde(
-        rename = "values",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
-        deserialize_with = "::buffa::json_helpers::null_as_default"
-    )]
-    pub values: ::buffa::alloc::vec::Vec<::buffa::alloc::string::String>,
-    #[serde(skip)]
-    #[doc(hidden)]
-    pub __buffa_unknown_fields: ::buffa::UnknownFields,
-}
-impl ::core::fmt::Debug for GrantCondition {
-    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        f.debug_struct("GrantCondition")
-            .field("operator", &self.operator)
-            .field("key", &self.key)
-            .field("values", &self.values)
-            .finish()
-    }
-}
-impl GrantCondition {
-    /// Protobuf type URL for this message, for use with `Any::pack` and
-    /// `Any::unpack_if`.
-    ///
-    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.GrantCondition";
-}
-::buffa::impl_default_instance!(GrantCondition);
-impl ::buffa::MessageName for GrantCondition {
-    const PACKAGE: &'static str = "common.bindings.v1";
-    const NAME: &'static str = "GrantCondition";
-    const FULL_NAME: &'static str = "common.bindings.v1.GrantCondition";
-    const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.GrantCondition";
-}
-impl ::buffa::Message for GrantCondition {
-    /// Returns the total encoded size in bytes.
-    ///
-    /// Accumulates in `u64` (which cannot overflow for in-memory
-    /// data) and saturates to `u32` at return, so a message whose
-    /// encoded size exceeds the 2 GiB protobuf limit yields a value
-    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
-    /// points reject, never a silently wrapped size.
-    #[allow(clippy::let_and_return)]
-    fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
-        #[allow(unused_imports)]
-        use ::buffa::Enumeration as _;
-        let mut size = 0u64;
-        if !self.operator.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.operator) as u64;
-        }
-        if !self.key.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.key) as u64;
-        }
-        for v in &self.values {
-            size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
-        }
-        size += self.__buffa_unknown_fields.encoded_len() as u64;
-        ::buffa::saturate_size(size)
-    }
-    fn write_to(
-        &self,
-        _cache: &mut ::buffa::SizeCache,
-        buf: &mut impl ::buffa::EncodeSink,
-    ) {
-        #[allow(unused_imports)]
-        use ::buffa::Enumeration as _;
-        if !self.operator.is_empty() {
-            ::buffa::types::put_string_field(1u32, &self.operator, buf);
-        }
-        if !self.key.is_empty() {
-            ::buffa::types::put_string_field(2u32, &self.key, buf);
-        }
-        for v in &self.values {
-            ::buffa::types::put_string_field(3u32, v, buf);
-        }
-        self.__buffa_unknown_fields.write_to(buf);
-    }
-    fn merge_field(
-        &mut self,
-        tag: ::buffa::encoding::Tag,
-        buf: &mut impl ::buffa::bytes::Buf,
-        ctx: ::buffa::DecodeContext<'_>,
-    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
-        #[allow(unused_imports)]
-        use ::buffa::bytes::Buf as _;
-        #[allow(unused_imports)]
-        use ::buffa::Enumeration as _;
-        match tag.field_number() {
-            1u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.operator, buf)?;
-            }
-            2u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.key, buf)?;
-            }
-            3u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                let __elem = ::buffa::types::decode_string(buf)?;
-                ctx.register_element_memory(
-                    ::buffa::__private::element_footprint(&__elem),
-                )?;
-                self.values.push(__elem);
-            }
-            _ => {
-                self.__buffa_unknown_fields
-                    .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
-            }
-        }
-        ::core::result::Result::Ok(())
-    }
-    fn clear(&mut self) {
-        self.operator.clear();
-        self.key.clear();
-        self.values.clear();
-        self.__buffa_unknown_fields.clear();
-    }
-}
-impl ::buffa::ExtensionSet for GrantCondition {
-    const PROTO_FQN: &'static str = "common.bindings.v1.GrantCondition";
-    fn unknown_fields(&self) -> &::buffa::UnknownFields {
-        &self.__buffa_unknown_fields
-    }
-    fn unknown_fields_mut(&mut self) -> &mut ::buffa::UnknownFields {
-        &mut self.__buffa_unknown_fields
-    }
-}
-impl ::buffa::json_helpers::ProtoElemJson for GrantCondition {
-    fn serialize_proto_json<S: ::serde::Serializer>(
-        v: &Self,
-        s: S,
-    ) -> ::core::result::Result<S::Ok, S::Error> {
-        ::serde::Serialize::serialize(v, s)
-    }
-    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
-        d: D,
-    ) -> ::core::result::Result<Self, D::Error> {
-        <Self as ::serde::Deserialize>::deserialize(d)
-    }
-}
-#[doc(hidden)]
-pub const __GRANT_CONDITION_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/common.bindings.v1.GrantCondition",
-    to_json: ::buffa::type_registry::any_to_json::<GrantCondition>,
-    from_json: ::buffa::type_registry::any_from_json::<GrantCondition>,
-    is_wkt: false,
-};
 #[allow(
     non_camel_case_types,
     dead_code,
@@ -2783,11 +2333,6 @@ pub mod __buffa {
         pub struct BindingView<'a> {
             /// Field 1: `name`
             pub name: &'a str,
-            /// Field 4: `grants`
-            pub grants: ::buffa::RepeatedView<
-                'a,
-                super::super::__buffa::view::GrantView<'a>,
-            >,
             /// Field 5: `source`
             pub source: &'a str,
             pub properties: ::core::option::Option<
@@ -2844,26 +2389,6 @@ pub mod __buffa {
                             ::buffa::encoding::WireType::LengthDelimited,
                         )?;
                         view.source = ::buffa::types::borrow_str(&mut cur)?;
-                    }
-                    4u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        let __sub_ctx = ctx.descend()?;
-                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
-                        ctx.register_element_memory(
-                            ::core::mem::size_of::<
-                                super::super::__buffa::view::GrantView,
-                            >(),
-                        )?;
-                        view.grants
-                            .push(
-                                <super::super::__buffa::view::GrantView as ::buffa::MessageView>::decode_view_ctx(
-                                    sub,
-                                    __sub_ctx,
-                                )?,
-                            );
                     }
                     2u32 => {
                         ::buffa::encoding::check_wire_type(
@@ -3106,11 +2631,6 @@ pub mod __buffa {
                 let _ = __buffa_src;
                 ::core::result::Result::Ok(super::super::Binding {
                     name: self.name.to_string(),
-                    grants: self
-                        .grants
-                        .iter()
-                        .map(|v| v.to_owned_from_source(__buffa_src))
-                        .collect::<::core::result::Result<_, ::buffa::DecodeError>>()?,
                     source: self.source.to_string(),
                     properties: match self.properties.as_ref() {
                         ::core::option::Option::Some(v) => {
@@ -3275,14 +2795,6 @@ pub mod __buffa {
                         }
                     }
                 }
-                for v in &self.grants {
-                    let __slot = __cache.reserve();
-                    let inner_size = v.compute_size(__cache);
-                    __cache.set(__slot, inner_size);
-                    size
-                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                            + inner_size as u64;
-                }
                 if !self.source.is_empty() {
                     size
                         += 1u64
@@ -3376,14 +2888,6 @@ pub mod __buffa {
                         }
                     }
                 }
-                for v in &self.grants {
-                    ::buffa::types::put_len_delimited_header(
-                        4u32,
-                        u64::from(__cache.consume_next()),
-                        buf,
-                    );
-                    v.write_to(__cache, buf);
-                }
                 if !self.source.is_empty() {
                     ::buffa::types::put_string_field(5u32, &self.source, buf);
                 }
@@ -3410,9 +2914,6 @@ pub mod __buffa {
                 let mut __map = __s.serialize_map(::core::option::Option::None)?;
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.name) {
                     __map.serialize_entry("name", self.name)?;
-                }
-                if !self.grants.is_empty() {
-                    __map.serialize_entry("grants", &*self.grants)?;
                 }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.source) {
                     __map.serialize_entry("source", self.source)?;
@@ -3553,13 +3054,6 @@ pub mod __buffa {
             #[must_use]
             pub fn name(&self) -> &'_ str {
                 self.0.reborrow().name
-            }
-            /// Field 4: `grants`
-            #[must_use]
-            pub fn grants(
-                &self,
-            ) -> &::buffa::RepeatedView<'_, super::super::__buffa::view::GrantView<'_>> {
-                &self.0.reborrow().grants
             }
             /// Field 5: `source`
             #[must_use]
@@ -5869,696 +5363,6 @@ pub mod __buffa {
                 ::serde::Serialize::serialize(&self.0, __s)
             }
         }
-        #[derive(Clone, Debug, Default)]
-        pub struct GrantView<'a> {
-            /// Field 1: `actions`
-            pub actions: ::buffa::RepeatedView<'a, &'a str>,
-            /// Field 2: `resources`
-            pub resources: ::buffa::RepeatedView<'a, &'a str>,
-            /// Field 3: `label`
-            pub label: &'a str,
-            /// Field 4: `conditions`
-            pub conditions: ::buffa::RepeatedView<
-                'a,
-                super::super::__buffa::view::GrantConditionView<'a>,
-            >,
-            pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
-        }
-        impl<'a> ::buffa::MessageView<'a> for GrantView<'a> {
-            type Owned = super::super::Grant;
-            fn decode_view(
-                buf: &'a [u8],
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                let __limit = ::core::cell::Cell::new(
-                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
-                );
-                let __elem = ::core::cell::Cell::new(
-                    ::buffa::DEFAULT_ELEMENT_MEMORY_LIMIT,
-                );
-                <Self as ::buffa::MessageView>::decode_view_ctx(
-                    buf,
-                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit)
-                        .with_element_memory(&__elem),
-                )
-            }
-            fn decode_view_with_ctx(
-                buf: &'a [u8],
-                ctx: ::buffa::DecodeContext<'_>,
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
-            }
-            #[inline]
-            fn merge_view_field(
-                &mut self,
-                tag: ::buffa::encoding::Tag,
-                cur: &'a [u8],
-                before_tag: &'a [u8],
-                ctx: ::buffa::DecodeContext<'_>,
-            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
-                let _ = ctx;
-                #[allow(unused_variables)]
-                let view = self;
-                let mut cur = cur;
-                match tag.field_number() {
-                    3u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        view.label = ::buffa::types::borrow_str(&mut cur)?;
-                    }
-                    1u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        let __elem = ::buffa::types::borrow_str(&mut cur)?;
-                        ctx.register_element_memory(
-                            ::buffa::__private::element_footprint(&__elem),
-                        )?;
-                        view.actions.push(__elem);
-                    }
-                    2u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        let __elem = ::buffa::types::borrow_str(&mut cur)?;
-                        ctx.register_element_memory(
-                            ::buffa::__private::element_footprint(&__elem),
-                        )?;
-                        view.resources.push(__elem);
-                    }
-                    4u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        let __sub_ctx = ctx.descend()?;
-                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
-                        ctx.register_element_memory(
-                            ::core::mem::size_of::<
-                                super::super::__buffa::view::GrantConditionView,
-                            >(),
-                        )?;
-                        view.conditions
-                            .push(
-                                <super::super::__buffa::view::GrantConditionView as ::buffa::MessageView>::decode_view_ctx(
-                                    sub,
-                                    __sub_ctx,
-                                )?,
-                            );
-                    }
-                    _ => {
-                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
-                        let span_len = before_tag.len() - cur.len();
-                        view.__buffa_unknown_fields
-                            .push_record(before_tag, span_len, ctx)?;
-                    }
-                }
-                ::core::result::Result::Ok(cur)
-            }
-            fn to_owned_message(
-                &self,
-            ) -> ::core::result::Result<super::super::Grant, ::buffa::DecodeError> {
-                self.to_owned_from_source(None)
-            }
-            #[allow(clippy::useless_conversion, clippy::needless_update)]
-            fn to_owned_from_source(
-                &self,
-                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
-            ) -> ::core::result::Result<super::super::Grant, ::buffa::DecodeError> {
-                #[allow(unused_imports)]
-                use ::buffa::alloc::string::ToString as _;
-                let _ = __buffa_src;
-                ::core::result::Result::Ok(super::super::Grant {
-                    actions: self.actions.iter().map(|s| s.to_string()).collect(),
-                    resources: self.resources.iter().map(|s| s.to_string()).collect(),
-                    label: self.label.to_string(),
-                    conditions: self
-                        .conditions
-                        .iter()
-                        .map(|v| v.to_owned_from_source(__buffa_src))
-                        .collect::<::core::result::Result<_, ::buffa::DecodeError>>()?,
-                    __buffa_unknown_fields: self
-                        .__buffa_unknown_fields
-                        .to_owned()?
-                        .into(),
-                    ..::core::default::Default::default()
-                })
-            }
-        }
-        impl<'a> ::buffa::ViewEncode<'a> for GrantView<'a> {
-            #[allow(clippy::needless_borrow, clippy::let_and_return)]
-            fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
-                #[allow(unused_imports)]
-                use ::buffa::Enumeration as _;
-                let mut size = 0u64;
-                for v in &self.actions {
-                    size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
-                }
-                for v in &self.resources {
-                    size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
-                }
-                if !self.label.is_empty() {
-                    size
-                        += 1u64 + ::buffa::types::string_encoded_len(&self.label) as u64;
-                }
-                for v in &self.conditions {
-                    let __slot = __cache.reserve();
-                    let inner_size = v.compute_size(__cache);
-                    __cache.set(__slot, inner_size);
-                    size
-                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                            + inner_size as u64;
-                }
-                size += self.__buffa_unknown_fields.encoded_len() as u64;
-                ::buffa::saturate_size(size)
-            }
-            #[allow(clippy::needless_borrow)]
-            fn write_to(
-                &self,
-                __cache: &mut ::buffa::SizeCache,
-                buf: &mut impl ::buffa::EncodeSink,
-            ) {
-                #[allow(unused_imports)]
-                use ::buffa::Enumeration as _;
-                for v in &self.actions {
-                    ::buffa::types::put_string_field(1u32, v, buf);
-                }
-                for v in &self.resources {
-                    ::buffa::types::put_string_field(2u32, v, buf);
-                }
-                if !self.label.is_empty() {
-                    ::buffa::types::put_string_field(3u32, &self.label, buf);
-                }
-                for v in &self.conditions {
-                    ::buffa::types::put_len_delimited_header(
-                        4u32,
-                        u64::from(__cache.consume_next()),
-                        buf,
-                    );
-                    v.write_to(__cache, buf);
-                }
-                self.__buffa_unknown_fields.write_to(buf);
-            }
-        }
-        /// Serializes this view as protobuf JSON.
-        ///
-        /// Implicit-presence fields with default values are omitted, `required`
-        /// fields are always emitted, explicit-presence (`optional`) fields are
-        /// emitted only when set, bytes fields are base64-encoded, and enum
-        /// values are their proto name strings.
-        ///
-        /// This impl uses `serialize_map(None)` because the number of emitted
-        /// fields depends on default-omission rules; serializers that require
-        /// known map lengths (e.g. `bincode`) will return a runtime error.
-        /// Use the owned message type for those formats.
-        impl<'__a> ::serde::Serialize for GrantView<'__a> {
-            fn serialize<__S: ::serde::Serializer>(
-                &self,
-                __s: __S,
-            ) -> ::core::result::Result<__S::Ok, __S::Error> {
-                use ::serde::ser::SerializeMap as _;
-                let mut __map = __s.serialize_map(::core::option::Option::None)?;
-                if !self.actions.is_empty() {
-                    __map.serialize_entry("actions", &*self.actions)?;
-                }
-                if !self.resources.is_empty() {
-                    __map.serialize_entry("resources", &*self.resources)?;
-                }
-                if !::buffa::json_helpers::skip_if::is_empty_str(self.label) {
-                    __map.serialize_entry("label", self.label)?;
-                }
-                if !self.conditions.is_empty() {
-                    __map.serialize_entry("conditions", &*self.conditions)?;
-                }
-                __map.end()
-            }
-        }
-        impl<'a> ::buffa::MessageName for GrantView<'a> {
-            const PACKAGE: &'static str = "common.bindings.v1";
-            const NAME: &'static str = "Grant";
-            const FULL_NAME: &'static str = "common.bindings.v1.Grant";
-            const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.Grant";
-        }
-        ::buffa::impl_default_view_instance!(GrantView);
-        ::buffa::impl_view_reborrow!(GrantView);
-        /** Self-contained, `'static` owned view of a `Grant` message.
-
- Wraps [`::buffa::OwnedView`]`<`[`GrantView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
-
- Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`GrantView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
-        #[derive(Clone, Debug)]
-        pub struct GrantOwnedView(::buffa::OwnedView<GrantView<'static>>);
-        impl GrantOwnedView {
-            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
-            ///
-            /// The view borrows directly from the buffer's data; the buffer is
-            /// retained inside the returned handle.
-            ///
-            /// # Errors
-            ///
-            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
-            /// protobuf data.
-            pub fn decode(
-                bytes: ::buffa::bytes::Bytes,
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                ::core::result::Result::Ok(
-                    GrantOwnedView(::buffa::OwnedView::decode(bytes)?),
-                )
-            }
-            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
-            /// max message size).
-            ///
-            /// # Errors
-            ///
-            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
-            /// exceeds the configured limits.
-            pub fn decode_with_options(
-                bytes: ::buffa::bytes::Bytes,
-                opts: &::buffa::DecodeOptions,
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                ::core::result::Result::Ok(
-                    GrantOwnedView(::buffa::OwnedView::decode_with_options(bytes, opts)?),
-                )
-            }
-            /// Build from an owned message via an encode → decode round-trip.
-            ///
-            /// # Errors
-            ///
-            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
-            /// message's encoded size exceeds the 2 GiB protobuf limit, or
-            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
-            /// somehow invalid (should not happen for well-formed messages).
-            pub fn from_owned(
-                msg: &super::super::Grant,
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                ::core::result::Result::Ok(
-                    GrantOwnedView(::buffa::OwnedView::from_owned(msg)?),
-                )
-            }
-            /// Borrow the full [`GrantView`] with its lifetime tied to `&self`.
-            #[must_use]
-            pub fn view(&self) -> &GrantView<'_> {
-                self.0.reborrow()
-            }
-            /// Convert to the owned message type.
-            ///
-            /// Infallible: this type's constructors wire-decode their
-            /// buffer, and a view produced by wire decoding always
-            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
-            /// whose contract also governs handles converted from a raw
-            /// [`::buffa::OwnedView`].
-            #[must_use]
-            pub fn to_owned_message(&self) -> super::super::Grant {
-                self.0.to_owned_message()
-            }
-            /// The underlying bytes buffer.
-            #[must_use]
-            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
-                self.0.bytes()
-            }
-            /// Consume the handle, returning the underlying bytes buffer.
-            #[must_use]
-            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
-                self.0.into_bytes()
-            }
-            /// Field 1: `actions`
-            #[must_use]
-            pub fn actions(&self) -> &::buffa::RepeatedView<'_, &'_ str> {
-                &self.0.reborrow().actions
-            }
-            /// Field 2: `resources`
-            #[must_use]
-            pub fn resources(&self) -> &::buffa::RepeatedView<'_, &'_ str> {
-                &self.0.reborrow().resources
-            }
-            /// Field 3: `label`
-            #[must_use]
-            pub fn label(&self) -> &'_ str {
-                self.0.reborrow().label
-            }
-            /// Field 4: `conditions`
-            #[must_use]
-            pub fn conditions(
-                &self,
-            ) -> &::buffa::RepeatedView<
-                '_,
-                super::super::__buffa::view::GrantConditionView<'_>,
-            > {
-                &self.0.reborrow().conditions
-            }
-        }
-        impl ::core::convert::From<::buffa::OwnedView<GrantView<'static>>>
-        for GrantOwnedView {
-            fn from(inner: ::buffa::OwnedView<GrantView<'static>>) -> Self {
-                GrantOwnedView(inner)
-            }
-        }
-        impl ::core::convert::From<GrantOwnedView>
-        for ::buffa::OwnedView<GrantView<'static>> {
-            fn from(wrapper: GrantOwnedView) -> Self {
-                wrapper.0
-            }
-        }
-        impl ::core::convert::AsRef<::buffa::OwnedView<GrantView<'static>>>
-        for GrantOwnedView {
-            fn as_ref(&self) -> &::buffa::OwnedView<GrantView<'static>> {
-                &self.0
-            }
-        }
-        impl ::buffa::HasMessageView for super::super::Grant {
-            type View<'a> = GrantView<'a>;
-            type ViewHandle = GrantOwnedView;
-        }
-        impl ::serde::Serialize for GrantOwnedView {
-            fn serialize<__S: ::serde::Serializer>(
-                &self,
-                __s: __S,
-            ) -> ::core::result::Result<__S::Ok, __S::Error> {
-                ::serde::Serialize::serialize(&self.0, __s)
-            }
-        }
-        #[derive(Clone, Debug, Default)]
-        pub struct GrantConditionView<'a> {
-            /// Field 1: `operator`
-            pub operator: &'a str,
-            /// Field 2: `key`
-            pub key: &'a str,
-            /// Field 3: `values`
-            pub values: ::buffa::RepeatedView<'a, &'a str>,
-            pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
-        }
-        impl<'a> ::buffa::MessageView<'a> for GrantConditionView<'a> {
-            type Owned = super::super::GrantCondition;
-            fn decode_view(
-                buf: &'a [u8],
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                let __limit = ::core::cell::Cell::new(
-                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
-                );
-                let __elem = ::core::cell::Cell::new(
-                    ::buffa::DEFAULT_ELEMENT_MEMORY_LIMIT,
-                );
-                <Self as ::buffa::MessageView>::decode_view_ctx(
-                    buf,
-                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit)
-                        .with_element_memory(&__elem),
-                )
-            }
-            fn decode_view_with_ctx(
-                buf: &'a [u8],
-                ctx: ::buffa::DecodeContext<'_>,
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
-            }
-            #[inline]
-            fn merge_view_field(
-                &mut self,
-                tag: ::buffa::encoding::Tag,
-                cur: &'a [u8],
-                before_tag: &'a [u8],
-                ctx: ::buffa::DecodeContext<'_>,
-            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
-                let _ = ctx;
-                #[allow(unused_variables)]
-                let view = self;
-                let mut cur = cur;
-                match tag.field_number() {
-                    1u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        view.operator = ::buffa::types::borrow_str(&mut cur)?;
-                    }
-                    2u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        view.key = ::buffa::types::borrow_str(&mut cur)?;
-                    }
-                    3u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        let __elem = ::buffa::types::borrow_str(&mut cur)?;
-                        ctx.register_element_memory(
-                            ::buffa::__private::element_footprint(&__elem),
-                        )?;
-                        view.values.push(__elem);
-                    }
-                    _ => {
-                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
-                        let span_len = before_tag.len() - cur.len();
-                        view.__buffa_unknown_fields
-                            .push_record(before_tag, span_len, ctx)?;
-                    }
-                }
-                ::core::result::Result::Ok(cur)
-            }
-            fn to_owned_message(
-                &self,
-            ) -> ::core::result::Result<
-                super::super::GrantCondition,
-                ::buffa::DecodeError,
-            > {
-                self.to_owned_from_source(None)
-            }
-            #[allow(clippy::useless_conversion, clippy::needless_update)]
-            fn to_owned_from_source(
-                &self,
-                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
-            ) -> ::core::result::Result<
-                super::super::GrantCondition,
-                ::buffa::DecodeError,
-            > {
-                #[allow(unused_imports)]
-                use ::buffa::alloc::string::ToString as _;
-                let _ = __buffa_src;
-                ::core::result::Result::Ok(super::super::GrantCondition {
-                    operator: self.operator.to_string(),
-                    key: self.key.to_string(),
-                    values: self.values.iter().map(|s| s.to_string()).collect(),
-                    __buffa_unknown_fields: self
-                        .__buffa_unknown_fields
-                        .to_owned()?
-                        .into(),
-                    ..::core::default::Default::default()
-                })
-            }
-        }
-        impl<'a> ::buffa::ViewEncode<'a> for GrantConditionView<'a> {
-            #[allow(clippy::needless_borrow, clippy::let_and_return)]
-            fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
-                #[allow(unused_imports)]
-                use ::buffa::Enumeration as _;
-                let mut size = 0u64;
-                if !self.operator.is_empty() {
-                    size
-                        += 1u64
-                            + ::buffa::types::string_encoded_len(&self.operator) as u64;
-                }
-                if !self.key.is_empty() {
-                    size += 1u64 + ::buffa::types::string_encoded_len(&self.key) as u64;
-                }
-                for v in &self.values {
-                    size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
-                }
-                size += self.__buffa_unknown_fields.encoded_len() as u64;
-                ::buffa::saturate_size(size)
-            }
-            #[allow(clippy::needless_borrow)]
-            fn write_to(
-                &self,
-                _cache: &mut ::buffa::SizeCache,
-                buf: &mut impl ::buffa::EncodeSink,
-            ) {
-                #[allow(unused_imports)]
-                use ::buffa::Enumeration as _;
-                if !self.operator.is_empty() {
-                    ::buffa::types::put_string_field(1u32, &self.operator, buf);
-                }
-                if !self.key.is_empty() {
-                    ::buffa::types::put_string_field(2u32, &self.key, buf);
-                }
-                for v in &self.values {
-                    ::buffa::types::put_string_field(3u32, v, buf);
-                }
-                self.__buffa_unknown_fields.write_to(buf);
-            }
-        }
-        /// Serializes this view as protobuf JSON.
-        ///
-        /// Implicit-presence fields with default values are omitted, `required`
-        /// fields are always emitted, explicit-presence (`optional`) fields are
-        /// emitted only when set, bytes fields are base64-encoded, and enum
-        /// values are their proto name strings.
-        ///
-        /// This impl uses `serialize_map(None)` because the number of emitted
-        /// fields depends on default-omission rules; serializers that require
-        /// known map lengths (e.g. `bincode`) will return a runtime error.
-        /// Use the owned message type for those formats.
-        impl<'__a> ::serde::Serialize for GrantConditionView<'__a> {
-            fn serialize<__S: ::serde::Serializer>(
-                &self,
-                __s: __S,
-            ) -> ::core::result::Result<__S::Ok, __S::Error> {
-                use ::serde::ser::SerializeMap as _;
-                let mut __map = __s.serialize_map(::core::option::Option::None)?;
-                if !::buffa::json_helpers::skip_if::is_empty_str(self.operator) {
-                    __map.serialize_entry("operator", self.operator)?;
-                }
-                if !::buffa::json_helpers::skip_if::is_empty_str(self.key) {
-                    __map.serialize_entry("key", self.key)?;
-                }
-                if !self.values.is_empty() {
-                    __map.serialize_entry("values", &*self.values)?;
-                }
-                __map.end()
-            }
-        }
-        impl<'a> ::buffa::MessageName for GrantConditionView<'a> {
-            const PACKAGE: &'static str = "common.bindings.v1";
-            const NAME: &'static str = "GrantCondition";
-            const FULL_NAME: &'static str = "common.bindings.v1.GrantCondition";
-            const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.GrantCondition";
-        }
-        ::buffa::impl_default_view_instance!(GrantConditionView);
-        ::buffa::impl_view_reborrow!(GrantConditionView);
-        /** Self-contained, `'static` owned view of a `GrantCondition` message.
-
- Wraps [`::buffa::OwnedView`]`<`[`GrantConditionView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
-
- Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`GrantConditionView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
-        #[derive(Clone, Debug)]
-        pub struct GrantConditionOwnedView(
-            ::buffa::OwnedView<GrantConditionView<'static>>,
-        );
-        impl GrantConditionOwnedView {
-            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
-            ///
-            /// The view borrows directly from the buffer's data; the buffer is
-            /// retained inside the returned handle.
-            ///
-            /// # Errors
-            ///
-            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
-            /// protobuf data.
-            pub fn decode(
-                bytes: ::buffa::bytes::Bytes,
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                ::core::result::Result::Ok(
-                    GrantConditionOwnedView(::buffa::OwnedView::decode(bytes)?),
-                )
-            }
-            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
-            /// max message size).
-            ///
-            /// # Errors
-            ///
-            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
-            /// exceeds the configured limits.
-            pub fn decode_with_options(
-                bytes: ::buffa::bytes::Bytes,
-                opts: &::buffa::DecodeOptions,
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                ::core::result::Result::Ok(
-                    GrantConditionOwnedView(
-                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
-                    ),
-                )
-            }
-            /// Build from an owned message via an encode → decode round-trip.
-            ///
-            /// # Errors
-            ///
-            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
-            /// message's encoded size exceeds the 2 GiB protobuf limit, or
-            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
-            /// somehow invalid (should not happen for well-formed messages).
-            pub fn from_owned(
-                msg: &super::super::GrantCondition,
-            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
-                ::core::result::Result::Ok(
-                    GrantConditionOwnedView(::buffa::OwnedView::from_owned(msg)?),
-                )
-            }
-            /// Borrow the full [`GrantConditionView`] with its lifetime tied to `&self`.
-            #[must_use]
-            pub fn view(&self) -> &GrantConditionView<'_> {
-                self.0.reborrow()
-            }
-            /// Convert to the owned message type.
-            ///
-            /// Infallible: this type's constructors wire-decode their
-            /// buffer, and a view produced by wire decoding always
-            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
-            /// whose contract also governs handles converted from a raw
-            /// [`::buffa::OwnedView`].
-            #[must_use]
-            pub fn to_owned_message(&self) -> super::super::GrantCondition {
-                self.0.to_owned_message()
-            }
-            /// The underlying bytes buffer.
-            #[must_use]
-            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
-                self.0.bytes()
-            }
-            /// Consume the handle, returning the underlying bytes buffer.
-            #[must_use]
-            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
-                self.0.into_bytes()
-            }
-            /// Field 1: `operator`
-            #[must_use]
-            pub fn operator(&self) -> &'_ str {
-                self.0.reborrow().operator
-            }
-            /// Field 2: `key`
-            #[must_use]
-            pub fn key(&self) -> &'_ str {
-                self.0.reborrow().key
-            }
-            /// Field 3: `values`
-            #[must_use]
-            pub fn values(&self) -> &::buffa::RepeatedView<'_, &'_ str> {
-                &self.0.reborrow().values
-            }
-        }
-        impl ::core::convert::From<::buffa::OwnedView<GrantConditionView<'static>>>
-        for GrantConditionOwnedView {
-            fn from(inner: ::buffa::OwnedView<GrantConditionView<'static>>) -> Self {
-                GrantConditionOwnedView(inner)
-            }
-        }
-        impl ::core::convert::From<GrantConditionOwnedView>
-        for ::buffa::OwnedView<GrantConditionView<'static>> {
-            fn from(wrapper: GrantConditionOwnedView) -> Self {
-                wrapper.0
-            }
-        }
-        impl ::core::convert::AsRef<::buffa::OwnedView<GrantConditionView<'static>>>
-        for GrantConditionOwnedView {
-            fn as_ref(&self) -> &::buffa::OwnedView<GrantConditionView<'static>> {
-                &self.0
-            }
-        }
-        impl ::buffa::HasMessageView for super::super::GrantCondition {
-            type View<'a> = GrantConditionView<'a>;
-            type ViewHandle = GrantConditionOwnedView;
-        }
-        impl ::serde::Serialize for GrantConditionOwnedView {
-            fn serialize<__S: ::serde::Serializer>(
-                &self,
-                __s: __S,
-            ) -> ::core::result::Result<__S::Ok, __S::Error> {
-                ::serde::Serialize::serialize(&self.0, __s)
-            }
-        }
         pub mod oneof {
             #[allow(unused_imports)]
             use super::*;
@@ -6760,8 +5564,6 @@ pub mod __buffa {
         reg.register_json_any(super::__TASK_PROPERTIES_JSON_ANY);
         reg.register_json_any(super::__KV_PROPERTIES_JSON_ANY);
         reg.register_json_any(super::__REALTIME_PROPERTIES_JSON_ANY);
-        reg.register_json_any(super::__GRANT_JSON_ANY);
-        reg.register_json_any(super::__GRANT_CONDITION_JSON_ANY);
     }
 }
 #[doc(inline)]
@@ -6792,13 +5594,5 @@ pub use self::__buffa::view::KvPropertiesOwnedView;
 pub use self::__buffa::view::RealtimePropertiesView;
 #[doc(inline)]
 pub use self::__buffa::view::RealtimePropertiesOwnedView;
-#[doc(inline)]
-pub use self::__buffa::view::GrantView;
-#[doc(inline)]
-pub use self::__buffa::view::GrantOwnedView;
-#[doc(inline)]
-pub use self::__buffa::view::GrantConditionView;
-#[doc(inline)]
-pub use self::__buffa::view::GrantConditionOwnedView;
 #[doc(inline)]
 pub use self::__buffa::register_types;

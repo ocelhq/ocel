@@ -78,8 +78,10 @@ func newSetCommand(invocation commands.Invocation) *cobra.Command {
 		Use:   "set",
 		Short: "Publish one binding, read as JSON on stdin",
 		Long: "Publish one binding, read as JSON on stdin.\n\n" +
-			"The binding is a common.bindings.v1.Binding in protobuf JSON, and it includes its own name, so " +
-			"there is nothing to name on the command line:\n\n" +
+			"The record is a provider.variablestore.v1.PublishedBinding in protobuf JSON: under \"binding\" the " +
+			"common.bindings.v1.Binding an app reads, and under \"grants\" the permissions a deploy gives the apps " +
+			"bound to it, which no app ever sees. The binding includes its own name, so there is nothing to name " +
+			"on the command line:\n\n" +
 			"  ocel bindings set < binding.json\n\n" +
 			"A name belongs to whoever published it. Publishing over a name another publisher " +
 			"owns is refused rather than handing every app bound to that name another " +
@@ -179,10 +181,11 @@ func withBindingProvider(ctx context.Context, invocation commands.Invocation, cw
 }
 
 func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd string, stdin io.Reader, opts bindingsOptions, stdout io.Writer) error {
-	binding, err := decodeBinding(stdin)
+	published, err := decodePublishedBinding(stdin)
 	if err != nil {
 		return err
 	}
+	binding := published.GetBinding()
 	owner := opts.ownerOrDefault()
 	if owner == naming.InlineRecordOwner {
 		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
@@ -196,7 +199,7 @@ func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd str
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
-			Binding:     binding,
+			Published:   published,
 			Owner:       owner,
 		})
 		if err != nil {
@@ -210,13 +213,13 @@ func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd str
 	})
 }
 
-func decodeBinding(stdin io.Reader) (*bindingsv1.Binding, error) {
+func decodePublishedBinding(stdin io.Reader) (*variablestorev1.PublishedBinding, error) {
 	raw, err := io.ReadAll(stdin)
 	if err != nil {
 		return nil, fmt.Errorf("read the binding on stdin: %w", err)
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
-		return nil, errors.New("nothing came in on stdin; `ocel bindings set` reads one binding as protobuf JSON, so pipe it in: `ocel bindings set < binding.json`")
+		return nil, errors.New("nothing came in on stdin; `ocel bindings set` reads one published binding as protobuf JSON, so pipe it in: `ocel bindings set < binding.json`")
 	}
 	var shape any
 	if err := json.Unmarshal(raw, &shape); err != nil {
@@ -226,14 +229,17 @@ func decodeBinding(stdin io.Reader) (*bindingsv1.Binding, error) {
 		}
 		return nil, errors.New("the binding on stdin is not JSON")
 	}
-	binding := &bindingsv1.Binding{}
-	if err := protojson.Unmarshal(raw, binding); err != nil {
-		if at := mismatchedField(binding.ProtoReflect().Descriptor(), shape, ""); at != "" {
-			return nil, fmt.Errorf("the binding on stdin does not have the shape of a binding: %s", at)
+	published := &variablestorev1.PublishedBinding{}
+	if err := protojson.Unmarshal(raw, published); err != nil {
+		if at := mismatchedField(published.ProtoReflect().Descriptor(), shape, ""); at != "" {
+			return nil, fmt.Errorf("the binding on stdin does not have the shape of a published binding: %s", at)
 		}
-		return nil, errors.New("the binding on stdin does not have the shape of a binding")
+		return nil, errors.New("the binding on stdin does not have the shape of a published binding")
 	}
-	return binding, nil
+	if published.GetBinding() == nil {
+		return nil, errors.New(`the published binding on stdin names no "binding": it is {"binding": <the record an app reads>, "grants": [<what a deploy grants the apps bound to it>]}`)
+	}
+	return published, nil
 }
 
 func mismatchedField(message protoreflect.MessageDescriptor, value any, path string) string {

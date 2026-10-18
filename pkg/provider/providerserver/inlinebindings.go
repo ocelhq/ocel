@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -36,7 +37,7 @@ func readInlineBindings(req *contractv1.DeployRequest) ([]inlineBinding, error) 
 		if err := variablestoreserver.ValidateInlineClaim(naming.InlineRecordOwner, name); err != nil {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 		}
-		if err := variablestoreserver.VerifyBinding(record); err != nil {
+		if err := variablestoreserver.VerifyBinding(&variablestorev1.PublishedBinding{Binding: record}); err != nil {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 		}
 		if err := variablestoreserver.RefuseUnsourced(naming.InlineRecordOwner, record); err != nil {
@@ -170,7 +171,7 @@ func (r *deployRun) readInlineRecords(ctx context.Context) error {
 	carried := make([]provider.Binding, 0, len(r.inline))
 	for _, bound := range r.inline {
 		name := bound.record.GetName()
-		pair, err := variablestoreserver.BindingPair(naming.InlineRecordOwner, bound.record)
+		pair, err := variablestoreserver.BindingPair(naming.InlineRecordOwner, &variablestorev1.PublishedBinding{Binding: bound.record})
 		if err != nil {
 			return err
 		}

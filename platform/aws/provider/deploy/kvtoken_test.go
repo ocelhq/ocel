@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -202,7 +203,7 @@ func TestAKVBindingCarriesTheTokenItsParameterHoldsOverTLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collectKVBinding() = %v", err)
 	}
-	got := bindingOf(provider.BindingKV, binding)
+	got := bindingOf(provider.BindingKV, &variablestorev1.PublishedBinding{Binding: binding})
 	want := map[string]string{
 		provider.PropertyHost:     "master.ocel-app-shop-prod-cache.abc123.use1.cache.amazonaws.com",
 		provider.PropertyPort:     "6379",

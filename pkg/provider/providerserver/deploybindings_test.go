@@ -13,6 +13,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -46,7 +47,7 @@ func declaredAs(kind bindingsv1.BindingType) resourcesv1.ResourceType {
 
 func publishRecord(t *testing.T, vendor *fake.Provider, tier environment.Tier, owner string, binding *bindingsv1.Binding) {
 	t.Helper()
-	pair, err := variablestoreserver.BindingPair(owner, binding)
+	pair, err := variablestoreserver.BindingPair(owner, &variablestorev1.PublishedBinding{Binding: binding})
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}

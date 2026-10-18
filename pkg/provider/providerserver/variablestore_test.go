@@ -52,12 +52,11 @@ func TestSetBindingRefusesAGrantOfAWholeService(t *testing.T) {
 		Slug:  slug,
 		Tier:  environmentv1.Tier_TIER_PRODUCTION,
 		Owner: "acme",
-		Binding: &bindingsv1.Binding{
+		Published: &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{
 			Name:       "files",
 			Source:     "acme",
 			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*bindingsv1.Grant{{Actions: []string{"s3:*"}, Resources: []string{"arn:aws:s3:::files"}}},
-		},
+		}, Grants: []*variablestorev1.Grant{{Actions: []string{"s3:*"}, Resources: []string{"arn:aws:s3:::files"}}}},
 	})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Fatalf("SetBinding(): code = %v, want %v: s3:* grants every action of a service", got, connect.CodeInvalidArgument)
@@ -115,11 +114,11 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 				Slug:  slug,
 				Tier:  environmentv1.Tier_TIER_PRODUCTION,
 				Owner: "acme",
-				Binding: &bindingsv1.Binding{
+				Published: &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{
 					Name:       "db",
 					Source:     "acme",
 					Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
-				},
+				}},
 			})
 			return err
 		},

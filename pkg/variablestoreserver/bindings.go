@@ -35,7 +35,8 @@ func (h *Service) SetBinding(ctx context.Context, req *variablestorev1.SetBindin
 	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
-	binding := req.GetBinding()
+	published := req.GetPublished()
+	binding := published.GetBinding()
 	if err := variablestore.ValidateBindingName(req.GetEnvironment(), binding.GetName()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -48,10 +49,10 @@ func (h *Service) SetBinding(ctx context.Context, req *variablestorev1.SetBindin
 	if err := RefuseUnsourced(req.GetOwner(), binding); err != nil {
 		return nil, bindingsError(err)
 	}
-	if err := VerifyBinding(binding); err != nil {
+	if err := VerifyBinding(published); err != nil {
 		return nil, bindingsError(err)
 	}
-	pair, err := BindingPair(req.GetOwner(), binding)
+	pair, err := BindingPair(req.GetOwner(), published)
 	if err != nil {
 		return nil, bindingsError(err)
 	}
@@ -99,7 +100,7 @@ func (h *Service) ListBindings(ctx context.Context, req *variablestorev1.ListBin
 	}
 	resp := &variablestorev1.ListBindingsResponse{Bindings: make([]*variablestorev1.BindingSummary, 0, len(found))}
 	for _, published := range found {
-		binding, err := DecodeBinding(published.Record)
+		record, err := DecodePublishedBinding(published.Record)
 		if err != nil {
 			return nil, bindingsError(fmt.Errorf("read binding %s's record: %w: %w", published.Name, err, ErrUnreadableRecord))
 		}
@@ -109,8 +110,8 @@ func (h *Service) ListBindings(ctx context.Context, req *variablestorev1.ListBin
 		}
 		resp.Bindings = append(resp.Bindings, &variablestorev1.BindingSummary{
 			Name:       published.Name,
-			Type:       naming.BindingTypeOf(binding),
-			Source:     binding.GetSource(),
+			Type:       naming.BindingTypeOf(record.GetBinding()),
+			Source:     record.GetBinding().GetSource(),
 			Owner:      published.Owner,
 			Version:    uint64(published.Version),
 			Properties: naming.PropertyShapeMessages(shapes),
@@ -144,38 +145,44 @@ func bindingsError(err error) error {
 	}
 }
 
-func EncodeBinding(binding *bindingsv1.Binding) ([]byte, error) { return protojson.Marshal(binding) }
-
-func DecodeBinding(raw []byte) (*bindingsv1.Binding, error) {
-	binding := &bindingsv1.Binding{}
-	if err := protojson.Unmarshal(raw, binding); err != nil {
-		return nil, err
-	}
-	return binding, nil
+func EncodePublishedBinding(published *variablestorev1.PublishedBinding) ([]byte, error) {
+	return protojson.Marshal(published)
 }
 
-func BindingPair(owner string, binding *bindingsv1.Binding) (variablestore.BindingWrite, error) {
-	value, err := EncodeBinding(binding)
+func DecodePublishedBinding(raw []byte) (*variablestorev1.PublishedBinding, error) {
+	published := &variablestorev1.PublishedBinding{}
+	if err := protojson.Unmarshal(raw, published); err != nil {
+		return nil, err
+	}
+	return published, nil
+}
+
+func BindingPair(owner string, published *variablestorev1.PublishedBinding) (variablestore.BindingWrite, error) {
+	name := published.GetBinding().GetName()
+	value, err := EncodePublishedBinding(published)
 	if err != nil {
-		return variablestore.BindingWrite{}, fmt.Errorf("render binding %s: %w", binding.GetName(), err)
+		return variablestore.BindingWrite{}, fmt.Errorf("render binding %s: %w", name, err)
 	}
 	if len(value) > variablestore.MaxValueBytes {
-		return variablestore.BindingWrite{}, refusal.Refuse(refusal.CodeInvalid, "binding %s is too large: %d bytes, limit %d", binding.GetName(), len(value), variablestore.MaxValueBytes)
+		return variablestore.BindingWrite{}, refusal.Refuse(refusal.CodeInvalid, "binding %s is too large: %d bytes, limit %d", name, len(value), variablestore.MaxValueBytes)
 	}
-	record, err := EncodeBinding(redacted(binding))
+	record, err := EncodePublishedBinding(redacted(published))
 	if err != nil {
-		return variablestore.BindingWrite{}, fmt.Errorf("render binding %s's record: %w", binding.GetName(), err)
+		return variablestore.BindingWrite{}, fmt.Errorf("render binding %s's record: %w", name, err)
 	}
-	shapes, err := json.Marshal(naming.BindingPropertyShapes(binding))
+	shapes, err := json.Marshal(naming.BindingPropertyShapes(published.GetBinding()))
 	if err != nil {
-		return variablestore.BindingWrite{}, fmt.Errorf("render binding %s's shape: %w", binding.GetName(), err)
+		return variablestore.BindingWrite{}, fmt.Errorf("render binding %s's shape: %w", name, err)
 	}
 	return variablestore.BindingWrite{Record: record, Shapes: shapes, Value: value, Owner: owner}, nil
 }
 
-func redacted(binding *bindingsv1.Binding) *bindingsv1.Binding {
-	out := proto.Clone(binding).(*bindingsv1.Binding)
-	m := out.ProtoReflect()
+func redacted(published *variablestorev1.PublishedBinding) *variablestorev1.PublishedBinding {
+	out := proto.Clone(published).(*variablestorev1.PublishedBinding)
+	if out.Binding == nil {
+		return out
+	}
+	m := out.Binding.ProtoReflect()
 	if fd := m.WhichOneof(m.Descriptor().Oneofs().ByName("properties")); fd != nil {
 		m.Set(fd, protoreflect.ValueOfMessage(m.Get(fd).Message().New()))
 	}
@@ -234,7 +241,8 @@ func ValidateInlineClaim(publisher, name string) error {
 	return nil
 }
 
-func VerifyBinding(binding *bindingsv1.Binding) error {
+func VerifyBinding(published *variablestorev1.PublishedBinding) error {
+	binding := published.GetBinding()
 	if binding.GetName() == "" {
 		return fmt.Errorf("a binding has no name; the name is what a consuming app binds to: %w", ErrUnreadableRecord)
 	}
@@ -245,14 +253,14 @@ func VerifyBinding(binding *bindingsv1.Binding) error {
 		if binding.GetSource() == "" {
 			return unsourcedCustom(binding)
 		}
-		if len(binding.GetGrants()) > 0 {
+		if len(published.GetGrants()) > 0 {
 			return fmt.Errorf(
 				"binding %s is a custom record with %d grants: no consumer attaches a custom binding's grants yet; a grant nobody attaches is a permission the record claims and no app has. "+
 					"Publish it without them: %w",
-				binding.GetName(), len(binding.GetGrants()), ErrUnattachedGrant)
+				binding.GetName(), len(published.GetGrants()), ErrUnattachedGrant)
 		}
 	}
-	return VerifyGrantScope(binding)
+	return VerifyGrantScope(published)
 }
 
 const grantWildcard = "*"
@@ -262,8 +270,9 @@ func wildcardsAService(action string) bool {
 	return scoped && (service == grantWildcard || verb == grantWildcard)
 }
 
-func VerifyGrantScope(binding *bindingsv1.Binding) error {
-	for _, g := range binding.GetGrants() {
+func VerifyGrantScope(published *variablestorev1.PublishedBinding) error {
+	binding := published.GetBinding()
+	for _, g := range published.GetGrants() {
 		if len(g.GetActions()) == 0 {
 			return fmt.Errorf("binding %s has a grant over %v naming no action: a grant names what an app may do with the resource it binds: %w",
 				binding.GetName(), g.GetResources(), provider.ErrUnscopedGrant)

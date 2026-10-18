@@ -2,7 +2,6 @@ package live
 
 import (
 	"context"
-	"maps"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -29,7 +28,7 @@ func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return merged(resolved, f.bindings, stored), nil
+	return live.MergeBindings(resolved, f.bindings, stored), nil
 }
 
 func bindingNames(bindings []live.Binding) []string {
@@ -38,15 +37,6 @@ func bindingNames(bindings []live.Binding) []string {
 		names = append(names, l.Name)
 	}
 	return names
-}
-
-func merged(resolved map[string]string, bindings []live.Binding, stored []variablestore.StoredBinding) map[string]string {
-	out := make(map[string]string, len(resolved)+len(stored))
-	maps.Copy(out, resolved)
-	for i, record := range stored {
-		out[bindings[i].Key] = string(record.Value)
-	}
-	return out
 }
 
 func FromManifest(raw []byte) (*live.Values, error) {

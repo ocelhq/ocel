@@ -502,12 +502,16 @@ Bind to a published record (`"orders": "@orders"`). Publish production's once wi
 `ocel bindings set < orders.json`, and each preview's with `--environment`, even before it
 first deploys. A preview without one falls back to a preview-tier record, or is refused.
 
+A published record holds the binding an app reads under `binding`, and under `grants` the
+provider permissions the apps bound to it are given at deploy, such as `rds-db:connect` on a
+database user. The app is handed the binding alone.
+
 ```yaml title=".github/workflows/preview.yml"
 - run: |
     NAME=pr-${{ github.event.number }}
     neonctl branches get "$NAME" > /dev/null 2>&1 || neonctl branches create --name "$NAME"
     URL=$(neonctl connection-string "$NAME")
-    jq -n --arg url "$URL" '{name: "orders", source: "neon", postgres: {url: $url}}' |
+    jq -n --arg url "$URL" '{binding: {name: "orders", source: "neon", postgres: {url: $url}}}' |
       ocel bindings set --preview --environment "$NAME"
 - run: ocel preview up pr-${{ github.event.number }}
 ```
