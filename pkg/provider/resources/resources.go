@@ -94,6 +94,7 @@ type hookStacks struct {
 	keyValues keyvalue.Store
 	artifacts provider.ArtifactStore
 	hooks     Hooks
+	running   RunningStacks
 }
 
 func (f *hookStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Log) (provider.Plan, error) {
@@ -129,6 +130,11 @@ func recordedResult(recorded stackrecords.Stack) provider.StackResult {
 }
 
 func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
+	release, err := f.running.Claim(spec.Ref)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
+	defer release()
 	if spec.App != nil {
 		defer func() {
 			_ = ReconcileImages(ctx, f.hooks.Retention, spec.Ref, spec.App.App, spec.App.Image, spec.Images.Store, progress)
@@ -166,7 +172,7 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 		if err == nil {
 			err = provider.VerifyProperties(binding)
 		}
-		reportChange(progress, string(resource.Type), resource.Name, action, start, err)
+		ReportChange(progress, string(resource.Type), resource.Name, action, start, err)
 		if err != nil {
 			return provider.StackResult{}, err
 		}
@@ -267,6 +273,11 @@ func (f *hookStacks) hooksFor(kind provider.BindingType, name string) (*Resource
 
 func (f *hookStacks) Destroy(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
 	ref, images := req.Ref, req.Images
+	release, err := f.running.Claim(ref)
+	if err != nil {
+		return err
+	}
+	defer release()
 	recorded, err := f.recorded(ctx, ref)
 	if err != nil {
 		return err
@@ -379,7 +390,7 @@ func (f *hookStacks) removeFunctions(ctx context.Context, ref provider.StackRef,
 		return err
 	}
 	for _, function := range going {
-		reportChange(progress, functionKind, function.Name, provider.ActionDelete, start, nil)
+		ReportChange(progress, functionKind, function.Name, provider.ActionDelete, start, nil)
 	}
 	return nil
 }
@@ -396,7 +407,7 @@ func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef
 		return err
 	}
 	for _, container := range going {
-		reportChange(progress, containerKind, container.Name, provider.ActionDelete, start, nil)
+		ReportChange(progress, containerKind, container.Name, provider.ActionDelete, start, nil)
 	}
 	return nil
 }
@@ -480,7 +491,7 @@ func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding 
 	}
 	start := time.Now()
 	err = hooks.Remove(ctx, ref, binding, progress)
-	reportChange(progress, string(binding.Type), binding.Name, provider.ActionDelete, start, err)
+	ReportChange(progress, string(binding.Type), binding.Name, provider.ActionDelete, start, err)
 	return err
 }
 

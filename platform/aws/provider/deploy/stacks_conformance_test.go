@@ -34,6 +34,7 @@ type mockedEngine struct {
 	previewed []provider.Change
 	upErr     func(stack string) error
 	downErr   func(stack string) error
+	state     *engineState
 }
 
 type pushingAssetSets struct {
@@ -76,19 +77,29 @@ func (e *mockedEngine) stacks() []string {
 
 var _ pulumi.Engine = (*mockedEngine)(nil)
 
-func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Log) (auto.OutputMap, error) {
+func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, log progress.Log) (auto.OutputMap, error) {
 	var monitor sdk.MockResourceMonitor = standInCloud{}
 	if e.mocks != nil {
 		monitor = e.mocks
 	}
-	monitor = pushingAssetSets{inner: monitor, pending: e.pending}
-	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, monitor)); err != nil {
+	declared := recordDeclared(pushingAssetSets{inner: monitor, pending: e.pending})
+	if e.state != nil {
+		if err := e.state.lock(setup.Stack); err != nil {
+			return nil, err
+		}
+		defer e.state.unlock(setup.Stack)
+		e.state.hold(setup.Stack)
+	}
+	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, declared)); err != nil {
 		return nil, err
 	}
 	if e.upErr != nil {
 		if err := e.upErr(setup.Stack); err != nil {
 			return nil, err
 		}
+	}
+	if e.state != nil {
+		e.state.apply(setup.Stack, declared.declared, log)
 	}
 	e.mu.Lock()
 	e.ran = append(e.ran, setup.Stack)
@@ -98,6 +109,9 @@ func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progr
 }
 
 func (e *mockedEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ progress.Log) ([]provider.Change, error) {
+	if e.state != nil {
+		return e.previewState(setup, op)
+	}
 	if op == pulumi.OperationDestroy {
 		rows := make([]provider.Change, 0, len(e.previewed))
 		for _, row := range e.previewed {
@@ -115,6 +129,21 @@ func (e *mockedEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op
 	}
 	e.previewed = watcher.rows
 	return watcher.rows, nil
+}
+
+func (e *mockedEngine) previewState(setup pulumi.WorkspaceSpec, op pulumi.Operation) ([]provider.Change, error) {
+	if op == pulumi.OperationDestroy {
+		return e.state.teardown(setup.Stack), nil
+	}
+	var monitor sdk.MockResourceMonitor = standInCloud{}
+	if e.mocks != nil {
+		monitor = e.mocks
+	}
+	declared := recordDeclared(monitor)
+	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, declared)); err != nil {
+		return nil, err
+	}
+	return e.state.diff(setup.Stack, declared.declared), nil
 }
 
 type previewing struct {
@@ -148,6 +177,9 @@ func (e *mockedEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ 
 	}
 	e.torndown = append(e.torndown, setup.Stack)
 	e.sequence = append(e.sequence, "destroy "+setup.Stack)
+	if e.state != nil {
+		e.state.forget(setup.Stack)
+	}
 	return nil
 }
 
@@ -319,7 +351,7 @@ func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ environment.Tier, p
 
 func TestStacksRunTheConformancePortTier(t *testing.T) {
 	store := newShippedArtifacts()
-	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store}
+	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store, state: newEngineState()}
 	conformance.RunStacks(t, provider.Facts{Bindings: Serves(), StoresArtifacts: true}, conformingStacks(engine), store, nil)
 }
 

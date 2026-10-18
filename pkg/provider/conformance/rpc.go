@@ -33,13 +33,10 @@ const unknownOption = "an-option-no-provider-accepts"
 
 const readyTimeout = 20 * time.Second
 
-func runRPC(t *testing.T, suite Suite) {
+func runServedRPC(t *testing.T, suite Suite) {
 	t.Helper()
 
 	t.Run("in process", func(t *testing.T) {
-		if suite.Server.New == nil {
-			t.Skip("the suite has no Spec, so there is no mux to serve")
-		}
 		server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
 		t.Cleanup(server.Close)
 
@@ -53,24 +50,7 @@ func runRPC(t *testing.T, suite Suite) {
 		})
 	})
 
-	t.Run("a run says what it would change and then what it is doing", func(t *testing.T) {
-		if suite.Server.New == nil || suite.New == nil {
-			t.Skip("this provider provisions nothing without an account behind it, so no run reaches its stream here")
-		}
-		server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
-		t.Cleanup(server.Close)
-
-		served := client(server.Client(), server.URL)
-		if _, err := served.Configure(context.Background(), configureWith(t, suite.Options)); err != nil {
-			t.Fatalf("Configure() error = %v, want the session configured", err)
-		}
-		saysWhatItWouldChange(t, served)
-	})
-
 	t.Run("spawned", func(t *testing.T) {
-		if suite.Binary == "" {
-			t.Skip("the suite names no binary, so there is nothing to spawn")
-		}
 		child := spawn(t, suite.Binary)
 
 		child.refusesAnUnpairedClient(t)
@@ -85,6 +65,19 @@ func runRPC(t *testing.T, suite Suite) {
 
 		child.stopsOnSIGTERM(t)
 	})
+}
+
+func runBootstrapStream(t *testing.T, suite Suite) {
+	t.Helper()
+
+	server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
+	t.Cleanup(server.Close)
+
+	served := client(server.Client(), server.URL)
+	if _, err := served.Configure(context.Background(), configureWith(t, suite.Options)); err != nil {
+		t.Fatalf("Configure() error = %v, want the session configured", err)
+	}
+	saysWhatItWouldChange(t, served)
 }
 
 const providerURL = "https://localhost"

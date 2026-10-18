@@ -18,7 +18,7 @@ import (
 )
 
 func TestAWSProvider(t *testing.T) {
-	conformance.Run(t, conformance.Suite{
+	conformance.RunWithoutAccount(t, conformance.Suite{
 		Server:  providerserver.Config{Version: "test", New: aws.New},
 		Options: provider.Options{"region": "us-east-1"},
 		Binary:  buildProvider(t),

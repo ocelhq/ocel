@@ -116,7 +116,7 @@ func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
 func TestVPSProvider(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	conformance.Run(t, conformance.Suite{
+	conformance.RunWithoutAccount(t, conformance.Suite{
 		Server:  providerserver.Config{Version: "test", New: vps.New},
 		Options: provider.Options{"ssh": map[string]any{"host": "203.0.113.10"}},
 		Binary:  buildProvider(t),

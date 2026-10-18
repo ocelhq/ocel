@@ -30,52 +30,91 @@ func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest
 	if err != nil {
 		return err
 	}
-	tier, err := decodeTier(req.GetEnvironment().GetTier())
+	read, err := decodeLogRead(req)
 	if err != nil {
 		return err
 	}
+	if read.query.Targets, err = h.chooseLogTargets(ctx, p, read.query.Tier, read.query.Env, req); err != nil {
+		return provider.RefusalError(err)
+	}
+	return readLogs(ctx, p.Logs(), read, logStream{stream: stream})
+}
+
+type logRead struct {
+	query    provider.LogQuery
+	tail     bool
+	tailFrom time.Time
+}
+
+func decodeLogRead(req *contractv1.ReadLogsRequest) (logRead, error) {
+	tier, err := decodeTier(req.GetEnvironment().GetTier())
+	if err != nil {
+		return logRead{}, err
+	}
 	env, err := envName(req.GetEnvironment())
 	if err != nil {
-		return provider.RefusalError(err)
+		return logRead{}, provider.RefusalError(err)
 	}
 	if req.GetSince() == nil {
-		return provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "a log read names no start time, and without one it would scan the project's whole retention"))
+		return logRead{}, provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "a log read names no start time, and without one it would scan the project's whole retention"))
 	}
 	if req.GetTail() && req.GetUntil() != nil {
-		return provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "a tail has no end time, because it ends only when the caller stops it"))
+		return logRead{}, provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "a tail has no end time, because it ends only when the caller stops it"))
 	}
-	targets, err := h.chooseLogTargets(ctx, p, tier, env, req)
-	if err != nil {
-		return provider.RefusalError(err)
-	}
-	query := provider.LogQuery{
-		Tier:     tier,
-		Slug:     req.GetSlug(),
-		Env:      env,
-		Targets:  targets,
-		Since:    req.GetSince().AsTime(),
-		Limit:    int(req.GetLimit()),
-		Contains: req.GetContains(),
+	read := logRead{
+		query: provider.LogQuery{
+			Tier:     tier,
+			Slug:     req.GetSlug(),
+			Env:      env,
+			Since:    req.GetSince().AsTime(),
+			Limit:    int(req.GetLimit()),
+			Contains: req.GetContains(),
+		},
+		tail:     req.GetTail(),
+		tailFrom: time.Now(),
 	}
 	if req.GetUntil() != nil {
-		query.Until = req.GetUntil().AsTime()
+		read.query.Until = req.GetUntil().AsTime()
 	}
-	tailFrom := time.Now()
-	if req.GetTail() {
-		query.Until = tailFrom
+	if read.tail {
+		read.query.Until = read.tailFrom
 	}
+	return read, nil
+}
+
+type logStream struct {
+	stream *connect.ServerStream[contractv1.ReadLogsResponse]
+}
+
+func (l logStream) entries(entries []provider.LogEntry) error {
+	return sendLogEntries(l.stream, entries)
+}
+
+func (l logStream) notice(notice provider.LogNotice) error {
+	return sendProviderNotice(l.stream, notice)
+}
+
+func (l logStream) gone(target provider.LogTarget) error {
+	return sendLogNotice(l.stream, contractv1.LogNotice_KIND_SOURCE_GONE, sourceGoneMessage(target))
+}
+
+func (l logStream) caughtUp() error {
+	return sendLogNotice(l.stream, contractv1.LogNotice_KIND_CAUGHT_UP, "")
+}
+
+func readLogs(ctx context.Context, logs provider.Logs, read logRead, sink logStream) error {
+	query := read.query
 	history := sentLogHistory{ids: map[sentLogEntry]bool{}}
 	emitHistory := func(entries []provider.LogEntry) error {
 		history.record(entries)
-		return sendLogEntries(stream, entries)
+		return sink.entries(entries)
 	}
-	notice := func(notice provider.LogNotice) error { return sendProviderNotice(stream, notice) }
 	var missing provider.LogTargetsMissing
-	if len(targets) > 0 {
-		err := p.Logs().Read(ctx, query, emitHistory, notice)
+	if len(query.Targets) > 0 {
+		err := logs.Read(ctx, query, emitHistory, sink.notice)
 		if errors.As(err, &missing) {
 			for _, target := range missing.Targets {
-				if err := sendLogNotice(stream, contractv1.LogNotice_KIND_SOURCE_GONE, sourceGoneMessage(target)); err != nil {
+				if err := sink.gone(target); err != nil {
 					return err
 				}
 			}
@@ -83,10 +122,10 @@ func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest
 			return provider.RefusalError(err)
 		}
 	}
-	if err := sendLogNotice(stream, contractv1.LogNotice_KIND_CAUGHT_UP, ""); err != nil || !req.GetTail() {
+	if err := sink.caughtUp(); err != nil || !read.tail {
 		return err
 	}
-	if rewound := tailFrom.Add(-lateEntryWindow); rewound.After(query.Since) {
+	if rewound := read.tailFrom.Add(-lateEntryWindow); rewound.After(query.Since) {
 		query.Since = rewound
 	}
 	query.Tail, query.Until = true, time.Time{}
@@ -95,14 +134,13 @@ func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest
 		if len(unsent) == 0 {
 			return nil
 		}
-		return sendLogEntries(stream, unsent)
+		return sink.entries(unsent)
 	}
-	query.Targets = slices.DeleteFunc(slices.Clone(targets), func(target provider.LogTarget) bool {
+	query.Targets = slices.DeleteFunc(slices.Clone(query.Targets), func(target provider.LogTarget) bool {
 		return slices.ContainsFunc(missing.Targets, func(gone provider.LogTarget) bool { return gone.Physical() == target.Physical() })
 	})
 	if len(query.Targets) > 0 {
-		err = p.Logs().Read(ctx, query, emitTail, notice)
-		if err != nil && ctx.Err() == nil {
+		if err := logs.Read(ctx, query, emitTail, sink.notice); err != nil && ctx.Err() == nil {
 			return provider.RefusalError(err)
 		}
 	}

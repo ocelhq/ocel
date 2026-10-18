@@ -35,6 +35,12 @@ func TestReferenceProvider(t *testing.T) {
 	})
 }
 
+func TestStacksBuiltOnResourceHooksPassTheStacksTier(t *testing.T) {
+	p := fake.NewProvider(fake.Options{Region: "nowhere"})
+	p.ResourceStacks(p.ResourceHooks())
+	conformance.RunStacks(t, p.Facts(), p.Stacks(), p.Artifacts(), p.KeyValues())
+}
+
 func buildFakeProvider(t *testing.T) string {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "fakeprovider")

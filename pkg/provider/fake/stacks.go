@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -25,9 +26,11 @@ type Stacks struct {
 	artifacts provider.ArtifactStore
 	journal   *Journal
 	refusal   error
+	running   resources.RunningStacks
 
 	mu             sync.Mutex
 	stacks         map[string]provider.StackResult
+	resources      map[string][]provider.Resource
 	provisioned    []provider.StackSpec
 	taken          []string
 	destroyedWith  []provider.ImageStore
@@ -56,7 +59,7 @@ func (r *Stacks) functionsIgnoreGate(spec provider.StackSpec) bool {
 }
 
 func NewStacks(artifacts provider.ArtifactStore) *Stacks {
-	return &Stacks{artifacts: artifacts, stacks: map[string]provider.StackResult{}}
+	return &Stacks{artifacts: artifacts, stacks: map[string]provider.StackResult{}, resources: map[string][]provider.Resource{}}
 }
 
 func (r *Stacks) journalling(journal *Journal) *Stacks {
@@ -89,12 +92,16 @@ func (r *Stacks) Provisioned() []provider.StackSpec {
 }
 
 func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Log) (provider.Plan, error) {
+	if err := refuseUnknownPrimitives(spec); err != nil {
+		return provider.Plan{}, err
+	}
 	spec, imaged, err := r.withFunctionImages(ctx, spec)
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	if imaged {
-		return resources.SynthesizedPlan(ctx, spec, r.Inspect(spec.Ref).Result)
+		planned, err := resources.SynthesizedPlan(ctx, spec, r.Inspect(spec.Ref).Result)
+		return planUpdates(planned, spec, r.provisionedResources(spec.Ref)), err
 	}
 	staged, err := functioncode.Stage(spec, nil)
 	if err != nil {
@@ -105,7 +112,8 @@ func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.L
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return resources.SynthesizedPlan(ctx, spec, r.Inspect(spec.Ref).Result, shipped...)
+	planned, err := resources.SynthesizedPlan(ctx, spec, r.Inspect(spec.Ref).Result, shipped...)
+	return planUpdates(planned, spec, r.provisionedResources(spec.Ref)), err
 }
 
 func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ progress.Log) (provider.Plan, error) {
@@ -130,6 +138,14 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 			return provider.StackResult{}, err
 		}
 	}
+	if err := refuseUnknownPrimitives(spec); err != nil {
+		return provider.StackResult{}, err
+	}
+	release, err := r.running.Claim(spec.Ref)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
+	defer release()
 	if !spec.Recorded && r.Inspect(spec.Ref).Present {
 		return provider.StackResult{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s already exists and this project has no record of it: ocel deploys over what it provisioned itself, never over what it finds. "+
@@ -153,6 +169,8 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 		return provider.StackResult{}, err
 	}
 	r.recordShipped(spec, staged)
+	start := time.Now()
+	recorded, provisioned := r.Inspect(spec.Ref).Result.Bindings, r.provisionedResources(spec.Ref)
 	result := provider.StackResult{}
 	for _, resource := range spec.Resources {
 		if resource.Binding != "" {
@@ -177,14 +195,31 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 	if err := spec.Images.PushRemoved(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
+	reportChanges(progress, spec, recorded, provisioned, start)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.provisioned = append(r.provisioned, spec)
 	r.stacks[stackKey(spec.Ref)] = result
+	r.resources[stackKey(spec.Ref)] = slices.Clone(spec.Resources)
 	if progress != nil {
 		progress.Say("Provisioned stack " + spec.Ref.Name.String())
 	}
 	return result, nil
+}
+
+var contractPrimitives = []provider.BindingType{
+	provider.BindingPostgres, provider.BindingBucket, provider.BindingTopic, provider.BindingTask,
+	provider.BindingKV, provider.BindingRealtime, provider.BindingCustom,
+}
+
+func refuseUnknownPrimitives(spec provider.StackSpec) error {
+	for _, resource := range spec.Resources {
+		if !slices.Contains(contractPrimitives, resource.Type) {
+			return refusal.Refuse(refusal.CodeInvalid,
+				"resource %s is a %s, and the contract names no such primitive, so nothing here can provision it", resource.Name, resource.Type)
+		}
+	}
+	return nil
 }
 
 func (r *Stacks) RefuseNextDestroy(err error) {
@@ -219,6 +254,11 @@ func (r *Stacks) Destroy(_ context.Context, req provider.StackDestroy, progress 
 			return err
 		}
 	}
+	release, err := r.running.Claim(ref)
+	if err != nil {
+		return err
+	}
+	defer release()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.destroyedWith = append(r.destroyedWith, images)
@@ -228,6 +268,7 @@ func (r *Stacks) Destroy(_ context.Context, req provider.StackDestroy, progress 
 		return refused
 	}
 	delete(r.stacks, stackKey(ref))
+	delete(r.resources, stackKey(ref))
 	if progress != nil {
 		progress.Say("Destroyed stack " + ref.Name.String())
 	}

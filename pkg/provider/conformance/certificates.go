@@ -20,27 +20,13 @@ type CertificateChecks struct {
 	Handle func(hostname string) string
 }
 
-func runCertificates(t *testing.T, suite Suite) {
+func runCertificates(t *testing.T, suite Suite, build constructor) {
 	t.Helper()
 
-	construct := suite.New
-	if construct == nil {
-		construct = suite.Server.New
-	}
-	if construct == nil {
-		if suite.Certificates == nil {
-			t.Skip("this suite has no constructor and declares no certificate checks, so there is nothing here to check")
-		}
-		t.Fatal("the suite declares certificate checks and has no constructor, so there is no provider to run them against")
-	}
-	p, err := construct(context.Background(), provider.Settings{Options: suite.Options})
-	if err != nil {
-		t.Fatalf("New() error = %v, want a provider", err)
-	}
 	if suite.Certificates == nil {
 		t.Fatal("the suite states no checks for the provider's Certificates port, so the only tier that checks it skips over it. A provider opts out by certifying nothing, never by leaving the field off")
 	}
-	RunCertificates(t, p.Certificates(), *suite.Certificates)
+	RunCertificates(t, construct(t, suite, build).Certificates(), *suite.Certificates)
 }
 
 func RunCertificates(t *testing.T, certificates provider.Certificates, checks CertificateChecks) {

@@ -112,44 +112,71 @@ func (l *streamLog) Debug(line string) {
 func (l *streamLog) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
 func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPortsRequest, stream *connect.ServerStream[contractv1.ForwardPortsEvent]) error {
-	release := h.forwards.hold()
-	var forwards []provider.PortForward
-	var proxy *provider.BindingProxy
-	closeInBackground := false
-	defer func() {
-		if closeInBackground {
-			go func() {
-				defer release()
-				closeForwards(forwards)
-				closeProxy(proxy)
-			}()
-			return
-		}
-		defer release()
-		closeForwards(forwards)
-		closeProxy(proxy)
-	}()
+	opened := &openedForwards{release: h.forwards.hold(), failed: make(chan error, 1)}
+	defer opened.close()
 	p, err := h.session.use()
 	if err != nil {
 		return err
 	}
-	tier, err := decodeTier(req.GetEnvironment().GetTier())
+	forwarding, err := decodeForwardPorts(req)
 	if err != nil {
 		return err
 	}
+	said := &streamLog{stream: stream}
+	defer said.close()
+	if err := opened.open(ctx, p, forwarding, said); err != nil {
+		return provider.RefusalError(err)
+	}
+	resp, err := forwardedResponse(opened.bindings, opened.forwards, opened.proxied, opened.proxy)
+	if err != nil {
+		return provider.RefusalError(err)
+	}
+	if err := said.send(&contractv1.ForwardPortsEvent{Body: &contractv1.ForwardPortsEvent_Response{Response: resp}}); err != nil {
+		return err
+	}
+	return opened.hold(ctx)
+}
+
+type portForwarding struct {
+	spec   provider.DeploySpec
+	names  []string
+	grants []*contractv1.ForwardPortsGrant
+}
+
+func decodeForwardPorts(req *contractv1.ForwardPortsRequest) (portForwarding, error) {
+	tier, err := decodeTier(req.GetEnvironment().GetTier())
+	if err != nil {
+		return portForwarding{}, err
+	}
 	env, err := envName(req.GetEnvironment())
 	if err != nil {
-		return provider.RefusalError(err)
+		return portForwarding{}, provider.RefusalError(err)
 	}
-	spec := provider.DeploySpec{Slug: req.GetSlug(), Tier: tier, Env: env}
 	names, err := listGrantedNames(req.GetGrants())
 	if err != nil {
-		return provider.RefusalError(err)
+		return portForwarding{}, provider.RefusalError(err)
 	}
-	bindings, err := readPublishedBindings(ctx, p, spec, names)
+	return portForwarding{spec: provider.DeploySpec{Slug: req.GetSlug(), Tier: tier, Env: env}, names: names, grants: req.GetGrants()}, nil
+}
+
+type openedForwards struct {
+	release func()
+	failed  chan error
+
+	bindings []provider.Binding
+	forwards []provider.PortForward
+	proxied  []provider.Binding
+	proxy    *provider.BindingProxy
+
+	closeInBackground bool
+}
+
+func (o *openedForwards) open(ctx context.Context, p provider.Provider, forwarding portForwarding, said progress.Log) error {
+	bindings, err := readPublishedBindings(ctx, p, forwarding.spec, forwarding.names)
 	if err != nil {
-		return provider.RefusalError(err)
+		return err
 	}
+	o.bindings = bindings
 	access := p.Hooks().BindingAccess
 	reachable := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
 		return access == nil || !isReachableByPort(binding)
@@ -157,50 +184,60 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	proxied := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
 		return access == nil || !isReachableByProxy(binding)
 	})
-	said := &streamLog{stream: stream}
-	defer said.close()
-	failed := make(chan error, 1)
-	reportFailure := func(err error) {
-		select {
-		case failed <- err:
-		default:
-		}
-	}
+	spec := forwarding.spec
 	if len(reachable) > 0 {
-		forwards, err = access.ForwardPorts(ctx, provider.PortForwardRequest{Tier: tier, Bindings: reachable, ReportFailure: reportFailure}, said)
-		if err != nil {
-			return provider.RefusalError(err)
+		if o.forwards, err = access.ForwardPorts(ctx, provider.PortForwardRequest{Tier: spec.Tier, Bindings: reachable, ReportFailure: o.reportFailure}, said); err != nil {
+			return err
 		}
 	}
 	if len(proxied) > 0 {
-		served, err := access.ServeProxy(ctx, provider.BindingProxyRequest{Slug: spec.Slug, Tier: tier, Env: env, Grants: listProxiedGrants(req.GetGrants(), proxied), ReportFailure: reportFailure}, said)
+		served, err := access.ServeProxy(ctx, provider.BindingProxyRequest{Slug: spec.Slug, Tier: spec.Tier, Env: spec.Env, Grants: listProxiedGrants(forwarding.grants, proxied), ReportFailure: o.reportFailure}, said)
 		if err != nil {
-			return provider.RefusalError(err)
+			return err
 		}
 		if served.Address == "" {
 			closeProxy(&served)
 			proxied = nil
 		} else {
-			proxy = &served
+			o.proxy = &served
 		}
 	}
-	resp, err := forwardedResponse(bindings, forwards, proxied, proxy)
-	if err != nil {
-		return provider.RefusalError(err)
+	o.proxied = proxied
+	return nil
+}
+
+func (o *openedForwards) reportFailure(err error) {
+	select {
+	case o.failed <- err:
+	default:
 	}
-	if err := said.send(&contractv1.ForwardPortsEvent{Body: &contractv1.ForwardPortsEvent_Response{Response: resp}}); err != nil {
-		return err
-	}
-	if len(forwards) == 0 && proxy == nil {
+}
+
+func (o *openedForwards) hold(ctx context.Context) error {
+	if len(o.forwards) == 0 && o.proxy == nil {
 		return nil
 	}
 	select {
 	case <-ctx.Done():
 		return nil
-	case err := <-failed:
-		closeInBackground = true
+	case err := <-o.failed:
+		o.closeInBackground = true
 		return provider.RefusalError(err)
 	}
+}
+
+func (o *openedForwards) close() {
+	if o.closeInBackground {
+		go func() {
+			defer o.release()
+			closeForwards(o.forwards)
+			closeProxy(o.proxy)
+		}()
+		return
+	}
+	defer o.release()
+	closeForwards(o.forwards)
+	closeProxy(o.proxy)
 }
 
 func listGrantedNames(grants []*contractv1.ForwardPortsGrant) ([]string, error) {

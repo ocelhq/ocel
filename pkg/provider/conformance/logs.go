@@ -31,24 +31,12 @@ var logsEpoch = time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
 func runLogs(t *testing.T, suite Suite) {
 	t.Helper()
 
-	construct := suite.New
-	if construct == nil {
-		construct = suite.Server.New
+	if suite.Logs == nil {
+		t.Skip("the suite states no way to seed this provider's logs, so its history and tail are checked by its own live tests; the ports tier checks the rest of its Logs port")
 	}
-	if construct == nil {
-		t.Skip("this suite has no constructor, so there is no Logs port to exercise")
-	}
-	p, err := construct(context.Background(), provider.Settings{Options: suite.Options})
-	if err != nil {
-		t.Fatalf("New() error = %v, want a provider", err)
-	}
-	if suite.New == nil {
-		RunLogs(t, p.Facts(), p.Logs())
-	}
-	if suite.Logs != nil {
-		RunLogHistory(t, p.Facts(), p.Logs(), suite.Logs.Seed)
-	}
-	if suite.Logs != nil && suite.Logs.Feed != nil {
+	p := construct(t, suite, suite.New)
+	RunLogHistory(t, p.Facts(), p.Logs(), suite.Logs.Seed)
+	if suite.Logs.Feed != nil {
 		RunLogTail(t, p.Facts(), p.Logs(), suite.Logs.Feed)
 		t.Run("a tailing ReadLogs sends CAUGHT_UP before any live entry and stops within a second of its caller cancelling", func(t *testing.T) {
 			RunLogTailRPC(t, p, suite.Options, suite.Logs.Feed)
