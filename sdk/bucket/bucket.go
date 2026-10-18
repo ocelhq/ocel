@@ -9,13 +9,10 @@ import (
 	"iter"
 	"net/http"
 	"net/url"
-	"runtime"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"ocel.dev"
 	"ocel.dev/internal/binding"
 	bucketv1 "ocel.dev/internal/proto/app/bucket/v1"
 	"ocel.dev/internal/proto/app/bucket/v1/bucketv1connect"
@@ -75,17 +72,23 @@ type SignedUpload struct {
 }
 
 // An Option tunes the bucket [New] declares.
-type Option func(*resourcesv1.BucketConfig)
+type Option interface {
+	applyBucket(*resourcesv1.BucketConfig)
+}
+
+type option func(*resourcesv1.BucketConfig)
+
+func (o option) applyBucket(c *resourcesv1.BucketConfig) { o(c) }
 
 // Public serves every object in the bucket anonymously over HTTP.
 func Public() Option {
-	return func(c *resourcesv1.BucketConfig) { c.Public = true }
+	return option(func(c *resourcesv1.BucketConfig) { c.Public = true })
 }
 
 // AllowedOrigins names the browser origins allowed to upload straight to
 // the store.
 func AllowedOrigins(origins ...string) Option {
-	return func(c *resourcesv1.BucketConfig) { c.AllowedOrigins = origins }
+	return option(func(c *resourcesv1.BucketConfig) { c.AllowedOrigins = origins })
 }
 
 // A Bucket is a bucket an app declares and reads and writes its objects
@@ -97,8 +100,7 @@ type Bucket struct {
 	singleCeiling int64
 	partSize      int64
 
-	mu    sync.Mutex
-	bound *boundBucket
+	connection binding.Connection[*boundBucket]
 }
 
 type boundBucket struct {
@@ -112,24 +114,14 @@ type boundBucket struct {
 // folder: during discovery the call is the declaration, and at runtime it reads
 // the binding the deploy delivered for that name.
 func New(name string, opts ...Option) *Bucket {
-	if binding.Discovering() {
-		config := &resourcesv1.BucketConfig{}
-		for _, opt := range opts {
-			opt(config)
-		}
-		_, file, line, _ := runtime.Caller(1)
-		err := binding.Declare(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{
-				Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET,
-				Name: name,
-			},
-			Config: &resourcesv1.DeclareRequest_Bucket{Bucket: config},
-			Source: fmt.Sprintf("%s:%d", file, line),
-		})
-		if err != nil {
-			panic(fmt.Sprintf("ocel: declare bucket %q: %v", name, err))
-		}
+	config := &resourcesv1.BucketConfig{}
+	for _, opt := range opts {
+		opt.applyBucket(config)
 	}
+	binding.Declare(binding.CallSite(0), &resourcesv1.DeclareRequest{
+		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: name},
+		Config:   &resourcesv1.DeclareRequest_Bucket{Bucket: config},
+	})
 	return &Bucket{
 		name:          name,
 		http:          http.DefaultClient,
@@ -361,29 +353,22 @@ func (b *Bucket) sign(
 }
 
 func (b *Bucket) connect(access string) (*boundBucket, error) {
-	if binding.Discovering() {
-		return nil, &ocel.UnprovisionedError{Resource: b.resource(), Access: access}
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.bound != nil {
-		return b.bound, nil
-	}
-	delivered, err := binding.Read(b.name, bindingsv1.BindingType_BINDING_TYPE_BUCKET)
-	if err != nil {
-		return nil, err
-	}
-	address, authorized, err := binding.ReadRuntimeConnection()
-	if err != nil {
-		return nil, err
-	}
-	properties := delivered.GetBucket()
-	b.bound = &boundBucket{
-		client:        bucketv1connect.NewBucketServiceClient(b.http, address, authorized),
-		bucket:        properties.GetBucket(),
-		publicBaseURL: properties.GetPublicBaseUrl(),
-	}
-	return b.bound, nil
+	return b.connection.Connect(b.resource(), access, func() (*boundBucket, error) {
+		delivered, err := binding.Read(b.name, bindingsv1.BindingType_BINDING_TYPE_BUCKET)
+		if err != nil {
+			return nil, err
+		}
+		address, authorized, err := binding.ReadRuntimeConnection()
+		if err != nil {
+			return nil, err
+		}
+		properties := delivered.GetBucket()
+		return &boundBucket{
+			client:        bucketv1connect.NewBucketServiceClient(b.http, address, authorized),
+			bucket:        properties.GetBucket(),
+			publicBaseURL: properties.GetPublicBaseUrl(),
+		}, nil
+	})
 }
 
 func (b *Bucket) resource() string {

@@ -38,7 +38,7 @@ func New[P, R any](name string, run func(ctx context.Context, payload P) (R, err
 		panic(fmt.Sprintf("ocel: task %q runs one payload at a time, so it batches nothing: declare it with NewBatch", name))
 	}
 	hooks := mustAssertHookTypes[P, R](name, settings.hooks)
-	declare(binding.ReadCallSite(), name, settings)
+	declare(binding.CallSite(0), name, settings)
 	delivery.RegisterRoute(name, name, &delivery.Route{
 		Kind:   runs.KindTask,
 		Name:   name,
@@ -59,7 +59,7 @@ func NewBatch[P, R any](name string, size int, run func(ctx context.Context, pay
 	settings := newSettings(opts)
 	delivery.EnsureBatchPolicy(&settings.config.Batch).Size = int32(size)
 	hooks := mustAssertHookTypes[[]P, R](name, settings.hooks)
-	declare(binding.ReadCallSite(), name, settings)
+	declare(binding.CallSite(0), name, settings)
 	delivery.RegisterRoute(name, name, &delivery.Route{
 		Kind:    runs.KindTask,
 		Name:    name,
@@ -79,7 +79,7 @@ func newSettings(opts []Option) settings {
 }
 
 func declare(source, name string, s settings) {
-	binding.DeclareResource(source, &resourcesv1.DeclareRequest{
+	binding.Declare(source, &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: name},
 		Config:   &resourcesv1.DeclareRequest_Task{Task: s.config},
 	})
@@ -111,7 +111,7 @@ func (t *Task[P, R]) Trigger(ctx context.Context, payload P, opts ...TriggerOpti
 	if err != nil {
 		return runs.Handle{}, err
 	}
-	res, err := task.Client.Trigger(ctx, &taskv1.TriggerRequest{Task: t.name, Payload: body, Options: options})
+	res, err := task.Trigger(ctx, &taskv1.TriggerRequest{Task: t.name, Payload: body, Options: options})
 	if err != nil {
 		return runs.Handle{}, err
 	}
@@ -137,7 +137,7 @@ func (t *Task[P, R]) BatchTrigger(ctx context.Context, triggers ...Trigger[P]) (
 		}
 		req.Items = append(req.Items, &taskv1.BatchTriggerItem{Payload: body, Options: options})
 	}
-	res, err := task.Client.BatchTrigger(ctx, req)
+	res, err := task.BatchTrigger(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +148,8 @@ func (t *Task[P, R]) BatchTrigger(ctx context.Context, triggers ...Trigger[P]) (
 	return handles, nil
 }
 
-func (t *Task[P, R]) connect(access string) (*binding.Resource[taskv1connect.TaskServiceClient], error) {
-	return t.connection.Connect(fmt.Sprintf("task(%q)", t.name), access, func() (*binding.Resource[taskv1connect.TaskServiceClient], error) {
+func (t *Task[P, R]) connect(access string) (taskv1connect.TaskServiceClient, error) {
+	return t.connection.Connect(fmt.Sprintf("task(%q)", t.name), access, func() (taskv1connect.TaskServiceClient, error) {
 		return binding.Dial(t.name, bindingsv1.BindingType_BINDING_TYPE_TASK, taskv1connect.NewTaskServiceClient)
 	})
 }

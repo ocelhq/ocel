@@ -48,5 +48,5 @@ func serveBindings(ctx context.Context, records s3store.Records, app, topology s
 	if services.Empty() {
 		return bindingproxy.Served{}, nil
 	}
-	return bindingproxy.Serve(services)
+	return bindingproxy.Serve([]bindingproxy.Grant{{Services: services}}, func(error) {})
 }

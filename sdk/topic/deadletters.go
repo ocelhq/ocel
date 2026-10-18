@@ -17,7 +17,7 @@ import (
 type DeadLetters struct {
 	topic    string
 	consumer string
-	connect  func(access string) (*binding.Resource[topicv1connect.TopicServiceClient], error)
+	connect  func(access string) (topicv1connect.TopicServiceClient, error)
 }
 
 // A DeadLetter is a message a consumer gave up on.
@@ -80,7 +80,7 @@ func (d *DeadLetters) List(ctx context.Context, opts ...DeadLetterListOption) (*
 	for _, opt := range opts {
 		opt.applyDeadLetterList(&settings)
 	}
-	res, err := topic.Client.ListDeadLetters(ctx, &topicv1.ListDeadLettersRequest{
+	res, err := topic.ListDeadLetters(ctx, &topicv1.ListDeadLettersRequest{
 		Topic:    d.topic,
 		Consumer: d.consumer,
 		Cursor:   settings.cursor,
@@ -107,7 +107,7 @@ func (d *DeadLetters) Redrive(ctx context.Context, executions ...string) (int64,
 	if err != nil {
 		return 0, err
 	}
-	res, err := topic.Client.RedriveDeadLetters(ctx, &topicv1.RedriveDeadLettersRequest{
+	res, err := topic.RedriveDeadLetters(ctx, &topicv1.RedriveDeadLettersRequest{
 		Topic:      d.topic,
 		Consumer:   d.consumer,
 		Executions: executions,
@@ -125,7 +125,7 @@ func (d *DeadLetters) Purge(ctx context.Context, executions ...string) (int64, e
 	if err != nil {
 		return 0, err
 	}
-	res, err := topic.Client.PurgeDeadLetters(ctx, &topicv1.PurgeDeadLettersRequest{
+	res, err := topic.PurgeDeadLetters(ctx, &topicv1.PurgeDeadLettersRequest{
 		Topic:      d.topic,
 		Consumer:   d.consumer,
 		Executions: executions,
@@ -142,7 +142,7 @@ func (d *DeadLetters) Count(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	res, err := topic.Client.CountDeadLetters(ctx, &topicv1.CountDeadLettersRequest{
+	res, err := topic.CountDeadLetters(ctx, &topicv1.CountDeadLettersRequest{
 		Topic:    d.topic,
 		Consumer: d.consumer,
 	})

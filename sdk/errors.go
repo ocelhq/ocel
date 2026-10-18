@@ -39,3 +39,24 @@ func (e *MissingBindingError) Error() string {
 		e.Key,
 	)
 }
+
+// A RuntimeCallError is returned when the ocel runtime fails or refuses a call an
+// accessor made. Match it with errors.As to read the Connect code the runtime
+// answered with, without importing the transport.
+type RuntimeCallError struct {
+	// Procedure is the procedure that was called, as /<service>/<method>.
+	Procedure string
+	// Code is the Connect code the runtime answered with, in its wire form, such as
+	// "not_found" or "unavailable".
+	Code string
+	// Err is the transport's own error.
+	Err error
+}
+
+// Error names the procedure and the transport's error.
+func (e *RuntimeCallError) Error() string {
+	return fmt.Sprintf("ocel: %s: %v", e.Procedure, e.Err)
+}
+
+// Unwrap returns the transport's own error.
+func (e *RuntimeCallError) Unwrap() error { return e.Err }

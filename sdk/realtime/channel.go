@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"runtime"
 	"strings"
 	"time"
 
@@ -164,8 +163,7 @@ type Channel[E, P any] struct {
 // [ChannelPublish], [ChannelWildcard] and [Schema] are optional. A declaration outside
 // these rules panics.
 func NewChannel[E, P any](realtime *Realtime, pattern string, opts ...ChannelOption) *Channel[E, P] {
-	_, file, line, _ := runtime.Caller(1)
-	source := fmt.Sprintf("%s:%d", file, line)
+	source := binding.CallSite(0)
 	fail := func(format string, args ...any) {
 		panic(fmt.Sprintf("ocel: realtime %q: channel %q declared at %s ", realtime.name, pattern, source) + fmt.Sprintf(format, args...))
 	}

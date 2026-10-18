@@ -59,7 +59,7 @@ func (b bearer) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.
 func serveBuckets(t *testing.T) (bucketv1connect.BucketServiceClient, *recordingBuckets) {
 	t.Helper()
 	svc := &recordingBuckets{}
-	ts := httptest.NewServer(NewMux(testToken, Services{Buckets: svc}))
+	ts := httptest.NewServer(NewMux(Services{Buckets: svc}))
 	t.Cleanup(ts.Close)
 	return bucketv1connect.NewBucketServiceClient(http.DefaultClient, ts.URL,
 		connect.WithInterceptors(bearer{token: testToken})), svc
@@ -154,7 +154,7 @@ func TestPresignUploadRequiresABucketAndAFile(t *testing.T) {
 func TestTheProxyMountsOnlyTheServicesItIsHanded(t *testing.T) {
 	t.Parallel()
 
-	mux := NewMux(testToken, Services{Tasks: taskv1connect.UnimplementedTaskServiceHandler{}})
+	mux := NewMux(Services{Tasks: taskv1connect.UnimplementedTaskServiceHandler{}})
 	for service, mounted := range map[string]bool{
 		taskv1connect.TaskServiceName:     true,
 		topicv1connect.TopicServiceName:   false,
@@ -175,7 +175,7 @@ func TestTheProxyAnswersForEveryBindingTypeAnAppReachesThroughIt(t *testing.T) {
 		bindingsv1.BindingType_BINDING_TYPE_TOPIC:    topicv1connect.TopicServiceName,
 		bindingsv1.BindingType_BINDING_TYPE_REALTIME: realtimev1connect.RealtimeServiceName,
 	}
-	mux := NewMux(testToken, Services{
+	mux := NewMux(Services{
 		Buckets:  &recordingBuckets{},
 		Tasks:    taskv1connect.UnimplementedTaskServiceHandler{},
 		Topics:   topicv1connect.UnimplementedTopicServiceHandler{},

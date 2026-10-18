@@ -61,21 +61,10 @@ func readLiveFile(key string) (string, bool) {
 }
 
 func typeOf(delivered *bindingsv1.Binding) bindingsv1.BindingType {
-	switch delivered.GetProperties().(type) {
-	case *bindingsv1.Binding_Postgres:
-		return bindingsv1.BindingType_BINDING_TYPE_POSTGRES
-	case *bindingsv1.Binding_Bucket:
-		return bindingsv1.BindingType_BINDING_TYPE_BUCKET
-	case *bindingsv1.Binding_Custom:
-		return bindingsv1.BindingType_BINDING_TYPE_CUSTOM
-	case *bindingsv1.Binding_Topic:
-		return bindingsv1.BindingType_BINDING_TYPE_TOPIC
-	case *bindingsv1.Binding_Task:
-		return bindingsv1.BindingType_BINDING_TYPE_TASK
-	case *bindingsv1.Binding_Kv:
-		return bindingsv1.BindingType_BINDING_TYPE_KV
-	case *bindingsv1.Binding_Realtime:
-		return bindingsv1.BindingType_BINDING_TYPE_REALTIME
+	message := delivered.ProtoReflect()
+	field := message.WhichOneof(message.Descriptor().Oneofs().ByName("properties"))
+	if field == nil {
+		return bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED
 	}
-	return bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED
+	return bindingsv1.BindingType(bindingsv1.BindingType_value["BINDING_TYPE_"+strings.ToUpper(string(field.Name()))])
 }

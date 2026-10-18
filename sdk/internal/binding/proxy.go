@@ -12,43 +12,42 @@ import (
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
-type Resource[C any] struct {
-	Client C
-}
-
 type Connection[C any] struct {
-	mu       sync.Mutex
-	resource *Resource[C]
+	mu     sync.Mutex
+	opened bool
+	value  C
 }
 
 type serviceClientConstructor[C any] func(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) C
 
-func (c *Connection[C]) Connect(resource, access string, dial func() (*Resource[C], error)) (*Resource[C], error) {
+func (c *Connection[C]) Connect(resource, access string, open func() (C, error)) (C, error) {
+	var none C
 	if Discovering() {
-		return nil, &ocel.UnprovisionedError{Resource: resource, Access: access}
+		return none, &ocel.UnprovisionedError{Resource: resource, Access: access}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.resource != nil {
-		return c.resource, nil
+	if c.opened {
+		return c.value, nil
 	}
-	dialed, err := dial()
+	value, err := open()
 	if err != nil {
-		return nil, err
+		return none, err
 	}
-	c.resource = dialed
-	return dialed, nil
+	c.value, c.opened = value, true
+	return value, nil
 }
 
-func Dial[C any](name string, bindingType bindingsv1.BindingType, newClient serviceClientConstructor[C]) (*Resource[C], error) {
+func Dial[C any](name string, bindingType bindingsv1.BindingType, newClient serviceClientConstructor[C]) (C, error) {
+	var none C
 	if err := RefuseUnbound(name, bindingType); err != nil {
-		return nil, err
+		return none, err
 	}
 	address, authorized, err := ReadRuntimeConnection()
 	if err != nil {
-		return nil, err
+		return none, err
 	}
-	return &Resource[C]{Client: newClient(http.DefaultClient, address, authorized)}, nil
+	return newClient(http.DefaultClient, address, authorized), nil
 }
 
 func ReadRuntimeConnection() (string, connect.ClientOption, error) {
@@ -60,7 +59,7 @@ func ReadRuntimeConnection() (string, connect.ClientOption, error) {
 	if token == "" {
 		return "", nil, &missingSessionTokenError{}
 	}
-	return address, connect.WithInterceptors(newBearerInterceptor(token)), nil
+	return address, connect.WithInterceptors(refusing, newBearerInterceptor(token)), nil
 }
 
 type missingRuntimeAddressError struct{}
@@ -82,6 +81,16 @@ func (*missingSessionTokenError) Error() string {
 		SessionTokenEnv, RuntimeAddressEnv, RuntimeAddressEnv,
 	)
 }
+
+var refusing = connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		res, err := next(ctx, req)
+		if err != nil {
+			return nil, &ocel.RuntimeCallError{Procedure: req.Spec().Procedure, Code: connect.CodeOf(err).String(), Err: err}
+		}
+		return res, nil
+	}
+})
 
 func newBearerInterceptor(token string) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {

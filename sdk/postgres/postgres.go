@@ -9,9 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"runtime"
 	"strconv"
-	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -24,19 +22,24 @@ import (
 const defaultPostgresVersion = "17"
 
 // An Option tunes the database [New] declares.
-type Option func(*resourcesv1.PostgresConfig)
+type Option interface {
+	applyPostgres(*resourcesv1.PostgresConfig)
+}
+
+type option func(*resourcesv1.PostgresConfig)
+
+func (o option) applyPostgres(c *resourcesv1.PostgresConfig) { o(c) }
 
 // Version declares the major postgres version to provision, "17" by default.
 func Version(v string) Option {
-	return func(c *resourcesv1.PostgresConfig) { c.Version = v }
+	return option(func(c *resourcesv1.PostgresConfig) { c.Version = v })
 }
 
 // A DB is a postgres database an app declares and reads its binding from.
 type DB struct {
 	name string
 
-	mu   sync.Mutex
-	pool *pgxpool.Pool
+	connection binding.Connection[*pgxpool.Pool]
 }
 
 // New declares a postgres database named name and returns the handle an app
@@ -44,24 +47,14 @@ type DB struct {
 // discovery the call is the declaration, and at runtime it reads the binding the
 // deploy delivered for that name.
 func New(name string, opts ...Option) *DB {
-	if binding.Discovering() {
-		config := &resourcesv1.PostgresConfig{Version: defaultPostgresVersion}
-		for _, opt := range opts {
-			opt(config)
-		}
-		_, file, line, _ := runtime.Caller(1)
-		err := binding.Declare(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{
-				Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
-				Name: name,
-			},
-			Config: &resourcesv1.DeclareRequest_Postgres{Postgres: config},
-			Source: fmt.Sprintf("%s:%d", file, line),
-		})
-		if err != nil {
-			panic(fmt.Sprintf("ocel: declare postgres %q: %v", name, err))
-		}
+	config := &resourcesv1.PostgresConfig{Version: defaultPostgresVersion}
+	for _, opt := range opts {
+		opt.applyPostgres(config)
 	}
+	binding.Declare(binding.CallSite(0), &resourcesv1.DeclareRequest{
+		Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: name},
+		Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: config},
+	})
 	return &DB{name: name}
 }
 
@@ -110,32 +103,21 @@ func connectionString(properties *bindingsv1.PostgresProperties) string {
 // is opened on the first call and the same pool is returned on every one after. It
 // fails when no binding was delivered for the name, and during discovery.
 func (p *DB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
-	if binding.Discovering() {
-		return nil, &ocel.UnprovisionedError{Resource: p.resource(), Access: "Pool"}
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.pool != nil {
-		return p.pool, nil
-	}
-	properties, err := p.properties("Pool")
-	if err != nil {
-		return nil, err
-	}
-	config, err := pgxpool.ParseConfig(connectionString(properties))
-	if err != nil {
-		return nil, err
-	}
-	if err := trustCA(config, properties.GetTlsCa()); err != nil {
-		return nil, err
-	}
-	setTLSServerName(config, properties.GetTlsServerName())
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return nil, err
-	}
-	p.pool = pool
-	return pool, nil
+	return p.connection.Connect(p.resource(), "Pool", func() (*pgxpool.Pool, error) {
+		properties, err := p.properties("Pool")
+		if err != nil {
+			return nil, err
+		}
+		config, err := pgxpool.ParseConfig(connectionString(properties))
+		if err != nil {
+			return nil, err
+		}
+		if err := trustCA(config, properties.GetTlsCa()); err != nil {
+			return nil, err
+		}
+		setTLSServerName(config, properties.GetTlsServerName())
+		return pgxpool.NewWithConfig(ctx, config)
+	})
 }
 
 func trustCA(config *pgxpool.Config, ca string) error {

@@ -59,7 +59,7 @@ func TestAContainerAppBoundToATaskTriggersItThroughTheProxyOnlyWithTheQueueTopol
 		t.Fatalf("serveBindings: %v", err)
 	}
 	t.Cleanup(func() { _ = served.Close() })
-	client := taskv1connect.NewTaskServiceClient(&http.Client{Transport: bearerToken(envValue(served.Env, localrpc.SessionTokenEnvVar))}, envValue(served.Env, processenv.RuntimeAddressEnvVar))
+	client := taskv1connect.NewTaskServiceClient(&http.Client{Transport: bearerToken(envValue(served.Env(""), localrpc.SessionTokenEnvVar))}, envValue(served.Env(""), processenv.RuntimeAddressEnvVar))
 	_, err = client.Trigger(context.Background(), &taskv1.TriggerRequest{Task: "resize"})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("a trigger of a task the topology does not declare = %v, want NotFound from the engine behind the proxy", err)
@@ -68,7 +68,7 @@ func TestAContainerAppBoundToATaskTriggersItThroughTheProxyOnlyWithTheQueueTopol
 
 func TestAContainerAppBoundToNeitherABucketNorATaskServesNoProxy(t *testing.T) {
 	served, err := serveBindings(context.Background(), fixedRecords{bindings: []live.Binding{{Name: "db", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}}, "127.0.0.1:1", "")
-	if err != nil || len(served.Env) != 0 {
+	if err != nil || len(served.Env("")) != 0 {
 		t.Fatalf("serveBindings = %+v, %v, want no proxy for an app that reaches nothing through it", served, err)
 	}
 }
@@ -84,10 +84,10 @@ func TestAContainerAppBoundToABucketIsServedTheProxyAndNeverHandedTheStoresKey(t
 		t.Fatalf("serveBindings: %v", err)
 	}
 	t.Cleanup(func() { _ = served.Close() })
-	if envValue(served.Env, processenv.RuntimeAddressEnvVar) == "" {
+	if envValue(served.Env(""), processenv.RuntimeAddressEnvVar) == "" {
 		t.Fatal("the app is handed no proxy, and it reaches a bound bucket only through one")
 	}
-	for _, entry := range served.Env {
+	for _, entry := range served.Env("") {
 		if strings.Contains(entry, "r2-secret") {
 			t.Errorf("the app is handed %q: the store's key is the proxy's alone", entry)
 		}
@@ -105,11 +105,11 @@ func TestAContainerAppBoundToARealtimeChannelPublishesThroughTheProxy(t *testing
 		t.Fatalf("serveBindings: %v", err)
 	}
 	t.Cleanup(func() { _ = served.Close() })
-	address := envValue(served.Env, processenv.RuntimeAddressEnvVar)
+	address := envValue(served.Env(""), processenv.RuntimeAddressEnvVar)
 	if address == "" {
 		t.Fatal("the app is handed no proxy, and it publishes to a realtime channel only through one")
 	}
-	client := realtimev1connect.NewRealtimeServiceClient(&http.Client{Transport: bearerToken(envValue(served.Env, localrpc.SessionTokenEnvVar))}, address)
+	client := realtimev1connect.NewRealtimeServiceClient(&http.Client{Transport: bearerToken(envValue(served.Env(""), localrpc.SessionTokenEnvVar))}, address)
 	_, err = client.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "chat", Channel: "/chat/room", Event: `{}`})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("a publish to a channel whose record never arrived = %v, want FailedPrecondition from the realtime service behind the proxy", err)

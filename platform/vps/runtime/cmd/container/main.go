@@ -94,7 +94,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 
 	env = append(env, containerimage.PortEnvVar+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
-	env = append(env, fronting.Env...)
+	env = append(env, fronting.Env("")...)
 
 	proc, err := child.Start(child.Options{Command: command, Env: env, Stdout: os.Stdout, Stderr: os.Stderr})
 	if err != nil {
@@ -233,7 +233,7 @@ func proxying(manifest boxlive.Manifest, values *live.Values, socket, app string
 	if services.Empty() {
 		return bindingproxy.Served{}, nil
 	}
-	return bindingproxy.Serve(services)
+	return bindingproxy.Serve([]bindingproxy.Grant{{Services: services}}, func(error) {})
 }
 
 func newRealtime(manifest boxlive.Manifest, values *live.Values) realtimev1connect.RealtimeServiceHandler {

@@ -39,7 +39,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 				Granted:          func() []string { return slices.Clone(buckets) },
 			})}})
 		}
-		proxy, err := bindingproxy.ServeGrants(served, req.ReportFailure)
+		proxy, err := bindingproxy.Serve(served, req.ReportFailure)
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}

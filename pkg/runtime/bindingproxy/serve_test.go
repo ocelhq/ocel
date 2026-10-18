@@ -48,17 +48,17 @@ func TestServe(t *testing.T) {
 	t.Parallel()
 
 	svc := &silentBuckets{}
-	served, err := bindingproxy.Serve(bindingproxy.Services{Buckets: svc})
+	served, err := bindingproxy.Serve([]bindingproxy.Grant{{Services: bindingproxy.Services{Buckets: svc}}}, func(error) {})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { served.Close() })
 
-	addr := envValue(t, served.Env, processenv.RuntimeAddressEnvVar)
+	addr := envValue(t, served.Env(""), processenv.RuntimeAddressEnvVar)
 	if !strings.HasPrefix(addr, "http://127.0.0.1:") {
 		t.Fatalf("%s = %q, want a loopback address nothing off the host can reach", processenv.RuntimeAddressEnvVar, addr)
 	}
-	token := envValue(t, served.Env, localrpc.SessionTokenEnvVar)
+	token := envValue(t, served.Env(""), localrpc.SessionTokenEnvVar)
 	if len(token) < 32 {
 		t.Fatalf("%s = %q, want a token long enough not to be guessed", localrpc.SessionTokenEnvVar, token)
 	}
@@ -91,18 +91,18 @@ func TestServe(t *testing.T) {
 func TestServeMintsAFreshTokenEachTime(t *testing.T) {
 	t.Parallel()
 
-	first, err := bindingproxy.Serve(bindingproxy.Services{Buckets: &silentBuckets{}})
+	first, err := bindingproxy.Serve([]bindingproxy.Grant{{Services: bindingproxy.Services{Buckets: &silentBuckets{}}}}, func(error) {})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { first.Close() })
-	second, err := bindingproxy.Serve(bindingproxy.Services{Buckets: &silentBuckets{}})
+	second, err := bindingproxy.Serve([]bindingproxy.Grant{{Services: bindingproxy.Services{Buckets: &silentBuckets{}}}}, func(error) {})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { second.Close() })
 
-	if envValue(t, first.Env, localrpc.SessionTokenEnvVar) == envValue(t, second.Env, localrpc.SessionTokenEnvVar) {
+	if envValue(t, first.Env(""), localrpc.SessionTokenEnvVar) == envValue(t, second.Env(""), localrpc.SessionTokenEnvVar) {
 		t.Fatal("two proxies were handed the same token, so one deployment's credential opens the other")
 	}
 }
@@ -110,17 +110,17 @@ func TestServeMintsAFreshTokenEachTime(t *testing.T) {
 func TestServeNamesItsAddressAndTokenForACallerThatDeliversThemItself(t *testing.T) {
 	t.Parallel()
 
-	served, err := bindingproxy.Serve(bindingproxy.Services{Buckets: &silentBuckets{}})
+	served, err := bindingproxy.Serve([]bindingproxy.Grant{{Services: bindingproxy.Services{Buckets: &silentBuckets{}}}}, func(error) {})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { served.Close() })
 
-	if want := envValue(t, served.Env, processenv.RuntimeAddressEnvVar); served.Address != want {
+	if want := envValue(t, served.Env(""), processenv.RuntimeAddressEnvVar); served.Address != want {
 		t.Errorf("Address = %q, want %q: the address the env delivers", served.Address, want)
 	}
-	if want := envValue(t, served.Env, localrpc.SessionTokenEnvVar); served.Token != want {
-		t.Errorf("Token = %q, want the token the env delivers", served.Token)
+	if want := envValue(t, served.Env(""), localrpc.SessionTokenEnvVar); served.Sessions[0].Token != want {
+		t.Errorf("Token = %q, want the token the env delivers", served.Sessions[0].Token)
 	}
 }
 
@@ -128,9 +128,9 @@ func TestServedGrantsReportNothingWhenClosedOnPurpose(t *testing.T) {
 	t.Parallel()
 
 	var reported []error
-	served, err := bindingproxy.ServeGrants([]bindingproxy.Grant{{Grantee: "web", Services: bindingproxy.Services{Buckets: &silentBuckets{}}}}, func(err error) { reported = append(reported, err) })
+	served, err := bindingproxy.Serve([]bindingproxy.Grant{{Grantee: "web", Services: bindingproxy.Services{Buckets: &silentBuckets{}}}}, func(err error) { reported = append(reported, err) })
 	if err != nil {
-		t.Fatalf("ServeGrants: %v", err)
+		t.Fatalf("Serve: %v", err)
 	}
 
 	if err := served.Close(); err != nil {
@@ -152,12 +152,12 @@ func TestEachGrantIsMintedItsOwnTokenThatReachesOnlyItsOwnServices(t *testing.T)
 	t.Parallel()
 
 	web, docs := &silentBuckets{}, &silentBuckets{}
-	served, err := bindingproxy.ServeGrants([]bindingproxy.Grant{
+	served, err := bindingproxy.Serve([]bindingproxy.Grant{
 		{Grantee: "web", Services: bindingproxy.Services{Buckets: web}},
 		{Grantee: "docs", Services: bindingproxy.Services{Buckets: docs}},
 	}, func(error) {})
 	if err != nil {
-		t.Fatalf("ServeGrants: %v", err)
+		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { served.Close() })
 
@@ -186,12 +186,12 @@ func TestEachGrantIsMintedItsOwnTokenThatReachesOnlyItsOwnServices(t *testing.T)
 func TestAGrantWithoutABucketServiceIsRefusedTheBucketService(t *testing.T) {
 	t.Parallel()
 
-	served, err := bindingproxy.ServeGrants([]bindingproxy.Grant{
+	served, err := bindingproxy.Serve([]bindingproxy.Grant{
 		{Grantee: "web", Services: bindingproxy.Services{Buckets: &silentBuckets{}}},
 		{Grantee: "docs", Services: bindingproxy.Services{}},
 	}, func(error) {})
 	if err != nil {
-		t.Fatalf("ServeGrants: %v", err)
+		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { served.Close() })
 
@@ -210,9 +210,9 @@ func TestATokenNoGrantWasMintedIsRefusedWhicheverGrantsAreServed(t *testing.T) {
 	t.Parallel()
 
 	web := &silentBuckets{}
-	served, err := bindingproxy.ServeGrants([]bindingproxy.Grant{{Grantee: "web", Services: bindingproxy.Services{Buckets: web}}}, func(error) {})
+	served, err := bindingproxy.Serve([]bindingproxy.Grant{{Grantee: "web", Services: bindingproxy.Services{Buckets: web}}}, func(error) {})
 	if err != nil {
-		t.Fatalf("ServeGrants: %v", err)
+		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { served.Close() })
 

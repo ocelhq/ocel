@@ -25,7 +25,7 @@ func (r *recordingRealtime) Publish(_ context.Context, req *realtimev1.PublishRe
 func serveRealtime(t *testing.T) (realtimev1connect.RealtimeServiceClient, *recordingRealtime) {
 	t.Helper()
 	svc := &recordingRealtime{}
-	ts := httptest.NewServer(NewMux(testToken, Services{Realtime: svc}))
+	ts := httptest.NewServer(NewMux(Services{Realtime: svc}))
 	t.Cleanup(ts.Close)
 	return realtimev1connect.NewRealtimeServiceClient(http.DefaultClient, ts.URL, connect.WithInterceptors(bearer{token: testToken})), svc
 }
