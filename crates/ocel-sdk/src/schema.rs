@@ -10,7 +10,7 @@ pub fn generate_json_schema<P: schemars::JsonSchema>() -> String {
 macro_rules! __json_schema {
     ($payload:ty) => {
         ::core::option::Option::Some(
-            ::ocel::generate_json_schema::<$payload> as fn() -> ::std::string::String,
+            $crate::generate_json_schema::<$payload> as fn() -> ::std::string::String,
         )
     };
 }

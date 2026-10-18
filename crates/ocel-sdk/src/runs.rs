@@ -9,7 +9,7 @@ use crate::proto::app::task::v1::{
     Run as WireRun, RunStatus as WireRunStatus, TaskServiceClient,
 };
 use crate::runtime::read_client_config;
-use crate::{Error, RunHandle};
+use crate::{Code, Error, RunHandle};
 use connectrpc::client::HttpClient;
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
@@ -134,6 +134,7 @@ fn refuse_access(id: &str, access: &str, err: connectrpc::ConnectError) -> Error
     Error::RuntimeRefused {
         resource: "runs".to_string(),
         access: access.to_string(),
+        code: Code::from_connect(err.code),
         said: err.to_string(),
     }
 }
@@ -143,6 +144,7 @@ fn convert_run(run: Option<&WireRun>, access: &str) -> Result<RunRecord, Error> 
     let refuse_json = |field: &str, err: serde_json::Error| Error::RuntimeRefused {
         resource: "runs".to_string(),
         access: access.to_string(),
+        code: Code::DataLoss,
         said: format!("run {} has a {field} that is not JSON: {err}", run.id),
     };
     let payload = read_json(&run.payload).map_err(|err| refuse_json("payload", err))?;
@@ -335,6 +337,7 @@ impl IntoFuture for RunList {
                 .map_err(|err| Error::RuntimeRefused {
                     resource: "runs".to_string(),
                     access: "list".to_string(),
+                    code: Code::from_connect(err.code),
                     said: err.to_string(),
                 })?
                 .into_owned();

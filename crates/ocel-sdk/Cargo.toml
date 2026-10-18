@@ -6,7 +6,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-include = ["/src", "/tests", "/LICENSE", "/NOTICE"]
+readme = "README.md"
+documentation = "https://docs.rs/ocel-sdk"
+keywords = ["infrastructure", "cloud", "deploy", "serverless", "iac"]
+categories = ["api-bindings", "web-programming", "development-tools"]
+include = ["/src", "/tests", "/LICENSE", "/NOTICE", "/README.md"]
 
 [lib]
 name = "ocel"

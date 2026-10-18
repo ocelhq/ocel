@@ -12,7 +12,7 @@ use crate::proto::app::bucket::v1::{
     PresignedTarget, SignConstraints, SignRequest, SignedAudience, SignedOperation,
 };
 use crate::runtime::read_client_config;
-use crate::Error;
+use crate::{Code, Error};
 use bytes::Bytes;
 use connectrpc::client::{ClientTransport, HttpClient};
 use futures_core::Stream;
@@ -385,6 +385,7 @@ impl Bucket {
             .into_option()
             .ok_or_else(|| Error::Refused {
                 key: signed.key.to_string(),
+                code: Code::Internal,
                 said: "the runtime signed nothing".to_string(),
             })
     }
@@ -467,45 +468,9 @@ impl<'a> IntoFuture for Put<'a> {
                 body,
                 options,
             } = self;
-            if body.len() > bucket.thresholds.single_ceiling {
-                let mut writer = Writer::open(bucket, &key, options).await?;
-                writer.put(body).await?;
-                return writer.finish().await;
-            }
-            let target = bucket
-                .sign(
-                    "put",
-                    SignOptions {
-                        key: &key,
-                        operation: SignedOperation::Put,
-                        audience: SignedAudience::Internal,
-                        expires_in: None,
-                        constraints: Some(SignConstraints {
-                            content_type: options.content_type.clone(),
-                            if_none_match: options.if_none_match.clone(),
-                            if_match: options.if_match.clone(),
-                            ..Default::default()
-                        }),
-                    },
-                )
-                .await?;
-            let mut request = build_signed_request(&target, "PUT");
-            for (name, value) in [
-                ("content-type", &options.content_type),
-                ("cache-control", &options.cache_control),
-                ("if-none-match", &options.if_none_match),
-                ("if-match", &options.if_match),
-            ] {
-                if !value.is_empty() {
-                    request = request.header(name, value);
-                }
-            }
-            for (name, value) in &options.metadata {
-                request = request.header(format!("x-amz-meta-{name}"), value);
-            }
-            let response = send_request(bucket.ensure_connection("put")?, request, body).await?;
-            check_status(&key, response.status().as_u16())?;
-            bucket.head(&key).await?.ok_or(Error::NotFound { key })
+            let mut writer = Writer::open(bucket, &key, options).await?;
+            writer.put(body).await?;
+            writer.finish().await
         })
     }
 }
@@ -596,6 +561,7 @@ impl GetResult {
             .await
             .map_err(|err| Error::Refused {
                 key,
+                code: Code::Unavailable,
                 said: err.to_string(),
             })?
             .to_bytes())
@@ -608,6 +574,7 @@ impl GetResult {
             http_body_util::BodyDataStream::new(self.body),
             move |err| Error::Refused {
                 key: key.clone(),
+                code: Code::Unavailable,
                 said: err.to_string(),
             },
         )
@@ -828,6 +795,7 @@ async fn send_request(
         .body(connectrpc::client::full_body(body))
         .map_err(|err| Error::Refused {
             key: key.clone(),
+            code: Code::Internal,
             said: err.to_string(),
         })?;
     connection
@@ -836,6 +804,7 @@ async fn send_request(
         .await
         .map_err(|err| Error::Refused {
             key,
+            code: Code::Unavailable,
             said: err.to_string(),
         })
 }
@@ -851,6 +820,7 @@ fn check_status(key: &str, status: u16) -> Result<(), Error> {
         }),
         other => Err(Error::Refused {
             key: key.to_string(),
+            code: Code::from_store_status(other),
             said: format!("the store answered {other}"),
         }),
     }
@@ -864,8 +834,9 @@ fn refuse_access(key: &str, err: &connectrpc::ConnectError) -> Error {
         connectrpc::ErrorCode::FailedPrecondition => Error::PreconditionFailed {
             key: key.to_string(),
         },
-        _ => Error::Refused {
+        code => Error::Refused {
             key: key.to_string(),
+            code: Code::from_connect(code),
             said: err.to_string(),
         },
     }

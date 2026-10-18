@@ -8,7 +8,7 @@ use crate::proto::app::topic::v1::{
 };
 use crate::run::Message;
 use crate::runtime::read_client_config;
-use crate::{Error, Lane};
+use crate::{Code, Error, Lane};
 use connectrpc::client::HttpClient;
 use serde::Serialize;
 use std::future::{Future, IntoFuture};
@@ -126,6 +126,7 @@ impl<T> Topic<T> {
         Error::RuntimeRefused {
             resource: self.describe_resource(),
             access: access.to_string(),
+            code: Code::from_connect(err.code),
             said: err.to_string(),
         }
     }
@@ -223,6 +224,7 @@ impl<'a, T> IntoFuture for TopicSend<'a, T> {
                 .map_err(|err| Error::RuntimeRefused {
                     resource,
                     access: "send".to_string(),
+                    code: Code::from_connect(err.code),
                     said: err.to_string(),
                 })?;
             Ok(response.into_owned().message_id)
@@ -404,6 +406,7 @@ impl<'a, T> IntoFuture for DeadLetterList<'a, T> {
                 .map_err(|err| Error::RuntimeRefused {
                     resource: resource.clone(),
                     access: "dead_letter.list".to_string(),
+                    code: Code::from_connect(err.code),
                     said: err.to_string(),
                 })?
                 .into_owned();
@@ -416,6 +419,7 @@ impl<'a, T> IntoFuture for DeadLetterList<'a, T> {
                             read_json(&letter.payload).map_err(|err| Error::RuntimeRefused {
                                 resource: resource.clone(),
                                 access: "dead_letter.list".to_string(),
+                                code: Code::DataLoss,
                                 said: format!(
                                     "dead letter {} has a payload that is not JSON: {err}",
                                     letter.execution

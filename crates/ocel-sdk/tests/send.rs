@@ -76,6 +76,20 @@ async fn a_send_refused_by_the_runtime_names_the_topic_and_the_access() {
         "{err}"
     );
     assert!(err.to_string().contains("due_at is too far away"), "{err}");
+    assert_eq!(err.code(), Some(ocel::Code::InvalidArgument), "{err}");
+    assert!(!err.is_retryable(), "{err}");
+}
+
+#[tokio::test]
+async fn a_send_the_runtime_could_not_serve_says_it_is_worth_retrying() {
+    let runtime = runtime();
+    runtime.refuse("Send", 503, "unavailable", "the queue is restarting");
+    let err = orders()
+        .send(Order { id: 7 })
+        .await
+        .expect_err("an unserved send");
+    assert_eq!(err.code(), Some(ocel::Code::Unavailable), "{err}");
+    assert!(err.is_retryable(), "{err}");
 }
 
 #[tokio::test]

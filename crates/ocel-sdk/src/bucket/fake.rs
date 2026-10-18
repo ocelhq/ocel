@@ -2,8 +2,8 @@ use crate::proto::app::bucket::v1::{
     AbortMultipartRequest, AbortMultipartResponse, CompleteMultipartRequest,
     CompleteMultipartResponse, CopyRequest, CopyResponse, CreateMultipartRequest,
     CreateMultipartResponse, DeleteRequest, DeleteResponse, HeadRequest, HeadResponse, ListRequest,
-    ListResponse, ObjectInfo, PresignedTarget, SignPartsRequest, SignPartsResponse, SignRequest,
-    SignResponse, SignedOperation, SignedPart,
+    ListResponse, ObjectInfo, PresignedTarget, SignConstraints, SignPartsRequest,
+    SignPartsResponse, SignRequest, SignResponse, SignedOperation, SignedPart,
 };
 use buffa::Message;
 use std::collections::BTreeMap;
@@ -14,6 +14,15 @@ use std::sync::{Arc, Mutex};
 
 pub(super) const TOKEN: &str = "opensesame";
 pub(super) const UPLOADED_AT: i64 = 1_700_000_000;
+const METADATA_HEADER: &str = "x-fake-meta-";
+const TRANSPORT_HEADERS: [&str; 6] = [
+    "host",
+    "content-length",
+    "connection",
+    "user-agent",
+    "accept-encoding",
+    "transfer-encoding",
+];
 
 #[derive(Clone, Default)]
 pub(super) struct Stored {
@@ -28,6 +37,7 @@ pub(super) struct Stored {
 pub(super) struct Store {
     objects: Mutex<BTreeMap<String, Stored>>,
     uploads: Mutex<BTreeMap<String, BTreeMap<i32, Vec<u8>>>>,
+    signed_writes: Mutex<Vec<SignConstraints>>,
     pub(super) aborted: Mutex<Vec<String>>,
     pub(super) refuse_parts: AtomicBool,
     pub(super) refuse_complete: AtomicBool,
@@ -46,6 +56,21 @@ impl Store {
             .lock()
             .expect("the objects")
             .insert(key.to_string(), stored);
+    }
+
+    fn record_signed_write(&self, constraints: SignConstraints) -> usize {
+        let mut signed = self.signed_writes.lock().expect("the signed writes");
+        signed.push(constraints);
+        signed.len() - 1
+    }
+
+    fn find_signed_write(&self, signature: &str) -> Option<SignConstraints> {
+        let index: usize = signature.parse().ok()?;
+        self.signed_writes
+            .lock()
+            .expect("the signed writes")
+            .get(index)
+            .cloned()
     }
 
     fn tag(&self) -> String {
@@ -137,7 +162,13 @@ fn read(stream: &TcpStream) -> Option<Received> {
             break;
         }
         let (name, value) = header.split_once(':')?;
-        headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
+        headers
+            .entry(name.trim().to_ascii_lowercase())
+            .and_modify(|combined: &mut String| {
+                combined.push(',');
+                combined.push_str(value.trim());
+            })
+            .or_insert_with(|| value.trim().to_string());
     }
     let length: usize = headers
         .get("content-length")
@@ -223,44 +254,68 @@ fn object(stream: &mut TcpStream, store: &Store, key: &str, received: &Received)
         return;
     }
 
+    let Some(constraints) = query
+        .get("signature")
+        .and_then(|signature| store.find_signed_write(signature))
+    else {
+        answer(stream, 403, "text/plain", Vec::new(), &[]);
+        return;
+    };
+    let sent: BTreeMap<String, String> = received
+        .headers
+        .iter()
+        .filter(|(name, _)| !TRANSPORT_HEADERS.contains(&name.as_str()))
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    if sent != signed_headers(&constraints) {
+        answer(stream, 403, "text/plain", Vec::new(), &[]);
+        return;
+    }
     let existing = store.object(key);
-    if received.headers.get("if-none-match").map(String::as_str) == Some("*") && existing.is_some()
-    {
+    if constraints.if_none_match == "*" && existing.is_some() {
         answer(stream, 412, "text/plain", Vec::new(), &[]);
         return;
     }
-    if let Some(wanted) = received.headers.get("if-match") {
-        if existing.as_ref().map(|existing| existing.etag.as_str()) != Some(wanted.as_str()) {
-            answer(stream, 412, "text/plain", Vec::new(), &[]);
-            return;
-        }
+    if !constraints.if_match.is_empty()
+        && existing.as_ref().map(|existing| existing.etag.as_str())
+            != Some(constraints.if_match.as_str())
+    {
+        answer(stream, 412, "text/plain", Vec::new(), &[]);
+        return;
     }
     let etag = store.tag();
     store.insert(
         key,
         Stored {
             body: received.body.clone(),
-            content_type: received
-                .headers
-                .get("content-type")
-                .cloned()
-                .unwrap_or_default(),
-            cache_control: received
-                .headers
-                .get("cache-control")
-                .cloned()
-                .unwrap_or_default(),
+            content_type: constraints.content_type.clone(),
+            cache_control: constraints.cache_control.clone(),
             etag: etag.clone(),
-            metadata: received
-                .headers
+            metadata: constraints
+                .metadata
                 .iter()
-                .filter_map(|(name, value)| {
-                    Some((name.strip_prefix("x-amz-meta-")?.to_string(), value.clone()))
-                })
+                .map(|(name, value)| (name.clone(), value.clone()))
                 .collect(),
         },
     );
     answer(stream, 200, "text/plain", Vec::new(), &[("etag", etag)]);
+}
+
+fn signed_headers(constraints: &SignConstraints) -> BTreeMap<String, String> {
+    let mut headers: BTreeMap<String, String> = [
+        ("content-type", &constraints.content_type),
+        ("cache-control", &constraints.cache_control),
+        ("if-none-match", &constraints.if_none_match),
+        ("if-match", &constraints.if_match),
+    ]
+    .into_iter()
+    .filter(|(_, value)| !value.is_empty())
+    .map(|(name, value)| (name.to_string(), value.clone()))
+    .collect();
+    for (name, value) in &constraints.metadata {
+        headers.insert(format!("{METADATA_HEADER}{name}"), value.clone());
+    }
+    headers
 }
 
 fn sliced(body: &[u8], range: &str) -> Vec<u8> {
@@ -380,20 +435,27 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
         }
         "Sign" => {
             let request: SignRequest = decode(body, json);
+            let operation = request.operation.as_known();
+            let mut target = PresignedTarget {
+                url: format!("{base}/o/{}", request.key),
+                key: request.key.clone(),
+                method: match operation {
+                    Some(SignedOperation::Get) => "GET",
+                    Some(SignedOperation::PostUpload) => "POST",
+                    _ => "PUT",
+                }
+                .to_string(),
+                ..Default::default()
+            };
+            if operation == Some(SignedOperation::Put) {
+                let constraints = request.constraints.into_option().unwrap_or_default();
+                target.headers = signed_headers(&constraints).into_iter().collect();
+                let signature = store.record_signed_write(constraints);
+                target.url = format!("{}?signature={signature}", target.url);
+            }
             encode(
                 &SignResponse {
-                    target: PresignedTarget {
-                        url: format!("{base}/o/{}", request.key),
-                        key: request.key.clone(),
-                        method: match request.operation.as_known() {
-                            Some(SignedOperation::Get) => "GET",
-                            Some(SignedOperation::PostUpload) => "POST",
-                            _ => "PUT",
-                        }
-                        .to_string(),
-                        ..Default::default()
-                    }
-                    .into(),
+                    target: target.into(),
                     ..Default::default()
                 },
                 json,

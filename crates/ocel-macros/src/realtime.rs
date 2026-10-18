@@ -1,4 +1,4 @@
-use crate::attribute::parse_entries;
+use crate::attribute::{parse_entries, respan, take_crate_path};
 use crate::options::{quote_none, read_duration, refuse_unknown_attribute};
 use crate::source::source;
 use proc_macro2::{Span, TokenStream};
@@ -90,7 +90,9 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     let mut publish = false;
     let mut schema_entry = None;
     let mut token_ttl = quote_none();
-    for entry in parse_entries(&input.attrs)? {
+    let mut entries = parse_entries(&input.attrs)?;
+    let krate = take_crate_path(&mut entries)?;
+    for entry in entries {
         match entry.name.to_string().as_str() {
             "realtime" => realtime = Some((entry.read_literal()?.to_string(), entry.span())),
             "pattern" => pattern = Some((entry.read_literal()?.to_string(), entry.span())),
@@ -158,7 +160,8 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
         ));
     };
     if let Some(span) = schema_entry {
-        schema = quote_spanned!(span=> ::ocel::__json_schema!(#event));
+        let krate = respan(&krate, span);
+        schema = quote_spanned!(span=> #krate::__json_schema!(#event));
     }
     let parameters =
         parse_parameters(&pattern).map_err(|reason| syn::Error::new(pattern_span, reason))?;
@@ -193,8 +196,8 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     };
     let (file, line) = source(ident.span());
     Ok(quote! {
-        ::ocel::__realtime_channel! {
-        impl ::ocel::realtime::Channel for #ident {
+        #krate::__realtime_channel! {
+        impl #krate::realtime::Channel for #ident {
             type Event = #event;
             const REALTIME: &'static str = #realtime;
             const PATTERN: &'static str = #pattern;
@@ -211,8 +214,8 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
             }
         }
 
-        ::ocel::inventory::submit! {
-            ::ocel::realtime::RegisteredChannel(|| ::ocel::realtime::DeclaredChannel {
+        #krate::inventory::submit! {
+            #krate::realtime::RegisteredChannel(|| #krate::realtime::DeclaredChannel {
                 realtime: #realtime,
                 pattern: #pattern,
                 wildcard: #wildcard,

@@ -83,7 +83,7 @@ pub use bucket::{
 };
 pub use declare::discover;
 pub use env::{deployment_url, Secret};
-pub use error::Error;
+pub use error::{Code, Error};
 pub use kv::{Kv, KvKey, KvParameter};
 pub use lane::Lane;
 pub use postgres::Postgres;

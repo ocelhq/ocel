@@ -1,4 +1,5 @@
 use proc_macro2::Span;
+use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream, Parser};
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Ident, Lit, LitStr, Token};
@@ -98,7 +99,7 @@ impl Entry {
 
 impl Parse for Entry {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let name: Ident = input.parse()?;
+        let name = input.call(Ident::parse_any)?;
         if input.peek(syn::token::Paren) {
             let inner;
             syn::parenthesized!(inner in input);
@@ -194,6 +195,62 @@ pub(crate) fn parse_entries(attributes: &[Attribute]) -> syn::Result<Vec<Entry>>
         found.extend(parsed);
     }
     Ok(found)
+}
+
+pub(crate) fn read_container_crate_path(
+    input: &syn::DeriveInput,
+    owner: &str,
+) -> syn::Result<syn::Path> {
+    let mut entries = parse_entries(&input.attrs)?;
+    let krate = take_crate_path(&mut entries)?;
+    match entries.first() {
+        Some(entry) => Err(syn::Error::new(
+            entry.span(),
+            format!(
+                "#[derive({owner})] has an unknown struct attribute '{}'. Its only struct attribute is crate = <PATH>.",
+                entry.name
+            ),
+        )),
+        None => Ok(krate),
+    }
+}
+
+pub(crate) fn respan(path: &syn::Path, span: Span) -> proc_macro2::TokenStream {
+    quote::ToTokens::to_token_stream(path)
+        .into_iter()
+        .map(|mut token| {
+            token.set_span(span);
+            token
+        })
+        .collect()
+}
+
+pub(crate) fn take_crate_path(entries: &mut Vec<Entry>) -> syn::Result<syn::Path> {
+    let mut krate: syn::Path = syn::parse_quote!(::ocel);
+    let mut kept = Vec::with_capacity(entries.len());
+    for entry in entries.drain(..) {
+        if entry.name != "crate" {
+            kept.push(entry);
+            continue;
+        }
+        krate = match &entry.value {
+            Value::Path(path) => path.clone(),
+            Value::Literal(text) => syn::parse_str(text).map_err(|_| {
+                syn::Error::new(
+                    entry.span(),
+                    format!("'crate' is \"{text}\", and it names the path ocel-sdk is reached by: crate = <PATH>."),
+                )
+            })?,
+            _ => {
+                return Err(syn::Error::new(
+                    entry.span(),
+                    "'crate' names the path ocel-sdk is reached by: crate = <PATH>.",
+                ))
+            }
+        };
+    }
+    *entries = kept;
+    Ok(krate)
 }
 
 #[cfg(test)]

@@ -1117,8 +1117,11 @@ dependencies = [
 name = "ocel-macros"
 version = "0.0.2"
 dependencies = [
+ "ocel-sdk",
  "proc-macro2",
  "quote",
+ "schemars",
+ "serde",
  "syn 2.0.119",
 ]
 

@@ -1,4 +1,4 @@
-use crate::attribute::{parse_entries, Entry};
+use crate::attribute::{parse_entries, read_container_crate_path, respan, Entry};
 use crate::options::{parse_count, parse_retry, quote_none};
 use crate::source::source;
 use proc_macro2::TokenStream;
@@ -45,7 +45,8 @@ struct Resource {
 }
 
 pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
-    let resources = read_resources(input)?;
+    let krate = &read_container_crate_path(input, "ocel::Resources")?;
+    let resources = read_resources(input, krate)?;
     let ident = &input.ident;
 
     let mut hooks = Vec::new();
@@ -56,13 +57,13 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
             let (file, line) = (&resource.file, resource.line);
             let config = match &resource.config {
                 Config::Postgres { version } => {
-                    quote!(::ocel::DeclaredConfig::Postgres { version: #version })
+                    quote!(#krate::DeclaredConfig::Postgres { version: #version })
                 }
                 Config::Bucket {
                     public,
                     allowed_origins,
                 } => quote! {
-                    ::ocel::DeclaredConfig::Bucket {
+                    #krate::DeclaredConfig::Bucket {
                         public: #public,
                         allowed_origins: &[#(#allowed_origins),*],
                     }
@@ -73,7 +74,7 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                     retry,
                     ..
                 } => quote! {
-                    ::ocel::DeclaredConfig::Topic {
+                    #krate::DeclaredConfig::Topic {
                         schema: #schema,
                         ordered: #ordered,
                         retry: #retry,
@@ -85,11 +86,11 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                     memory,
                     entries,
                 } => quote! {
-                    ::ocel::DeclaredConfig::Kv {
+                    #krate::DeclaredConfig::Kv {
                         version: #version,
                         eviction: #eviction,
                         memory: #memory,
-                        entries: ::std::vec![#(<#entries as ::ocel::KvKey>::ENTRY),*],
+                        entries: ::std::vec![#(<#entries as #krate::KvKey>::ENTRY),*],
                     }
                 },
                 Config::Worker {
@@ -102,7 +103,7 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                             let wrapper = format_ident!("__ocel_{}_on_start", resource.ident);
                             let call = quote_spanned!(path.span()=> ::std::boxed::Box::pin(#path()));
                             hooks.push(quote! {
-                                fn #wrapper() -> ::ocel::BoxFuture<'static, ::core::result::Result<(), ::ocel::RunError>> {
+                                fn #wrapper() -> #krate::BoxFuture<'static, ::core::result::Result<(), #krate::RunError>> {
                                     #call
                                 }
                             });
@@ -116,9 +117,9 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                             let call = quote_spanned!(path.span()=> ::std::boxed::Box::pin(#path(run, next)));
                             hooks.push(quote! {
                                 fn #wrapper<'a>(
-                                    run: &'a ::ocel::Run,
-                                    next: ::ocel::Next<'a>,
-                                ) -> ::ocel::BoxFuture<'a, ::core::result::Result<(), ::ocel::RunError>> {
+                                    run: &'a #krate::Run,
+                                    next: #krate::Next<'a>,
+                                ) -> #krate::BoxFuture<'a, ::core::result::Result<(), #krate::RunError>> {
                                     #call
                                 }
                             });
@@ -127,7 +128,7 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                         None => quote_none(),
                     };
                     quote! {
-                        ::ocel::DeclaredConfig::Worker {
+                        #krate::DeclaredConfig::Worker {
                             concurrency: #concurrency,
                             on_start: #on_start,
                             middleware: #middleware,
@@ -136,21 +137,21 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                 }
             };
             quote! {
-                ::ocel::DeclaredResource { name: #name, config: #config, file: #file, line: #line }
+                #krate::DeclaredResource { name: #name, config: #config, file: #file, line: #line }
             }
         })
         .collect();
     let fields = resources.iter().map(|resource| {
         let (field, name) = (&resource.ident, &resource.name);
         match &resource.config {
-            Config::Postgres { .. } => quote!(#field: ::ocel::Postgres::new(#name)),
-            Config::Bucket { .. } => quote!(#field: ::ocel::Bucket::new(#name)),
+            Config::Postgres { .. } => quote!(#field: #krate::Postgres::new(#name)),
+            Config::Bucket { .. } => quote!(#field: #krate::Bucket::new(#name)),
             Config::Topic { payload, .. } => {
-                quote!(#field: ::ocel::Topic::<#payload>::new(#name))
+                quote!(#field: #krate::Topic::<#payload>::new(#name))
             }
-            Config::Worker { .. } => quote!(#field: ::ocel::Worker::new(#name)),
+            Config::Worker { .. } => quote!(#field: #krate::Worker::new(#name)),
             Config::Kv { entries, .. } => {
-                quote!(#field: ::ocel::Kv::new(#name)#(.with_entry::<#entries>())*)
+                quote!(#field: #krate::Kv::new(#name)#(.with_entry::<#entries>())*)
             }
         }
     });
@@ -174,43 +175,43 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
         );
         Some(quote! {
             #[doc = #doc]
-            #visibility const #constant: ::ocel::TopicName<#payload> = ::ocel::TopicName::new(#name);
+            #visibility const #constant: #krate::TopicName<#payload> = #krate::TopicName::new(#name);
         })
     });
 
     Ok(quote! {
-        impl ::ocel::Declare for #ident {
-            fn declared() -> ::ocel::Declared {
+        impl #krate::Declare for #ident {
+            fn declared() -> #krate::Declared {
                 #(#hooks)*
 
-                ::ocel::Declared {
+                #krate::Declared {
                     resources: ::std::vec![#(#declared),*],
                     variables: ::std::vec::Vec::new(),
                     groups: ::std::vec::Vec::new(),
                 }
             }
 
-            fn load() -> ::core::result::Result<Self, ::ocel::Error> {
+            fn load() -> ::core::result::Result<Self, #krate::Error> {
                 ::core::result::Result::Ok(Self { #(#fields),* })
             }
         }
 
         impl #ident {
             /// The struct with a handle in every field, ready to read bindings through.
-            pub fn load() -> ::core::result::Result<Self, ::ocel::Error> {
-                <Self as ::ocel::Declare>::load()
+            pub fn load() -> ::core::result::Result<Self, #krate::Error> {
+                <Self as #krate::Declare>::load()
             }
 
             #(#topic_names)*
         }
 
-        ::ocel::inventory::submit! {
-            ::ocel::Registered(<#ident as ::ocel::Declare>::declared)
+        #krate::inventory::submit! {
+            #krate::Registered(<#ident as #krate::Declare>::declared)
         }
     })
 }
 
-fn read_resources(input: &DeriveInput) -> syn::Result<Vec<Resource>> {
+fn read_resources(input: &DeriveInput, krate: &syn::Path) -> syn::Result<Vec<Resource>> {
     let Data::Struct(data) = &input.data else {
         return Err(syn::Error::new_spanned(
             &input.ident,
@@ -264,7 +265,7 @@ fn read_resources(input: &DeriveInput) -> syn::Result<Vec<Resource>> {
             },
         };
         for entry in parse_entries(&field.attrs)? {
-            read_entry(&ident, &kind, &mut name, &mut config, &entry).map_err(|err| {
+            read_entry(&ident, &kind, &mut name, &mut config, &entry, krate).map_err(|err| {
                 match err.to_string().starts_with("field ") {
                     true => err,
                     false => syn::Error::new(err.span(), format!("field {ident}: {err}")),
@@ -301,6 +302,7 @@ fn read_entry(
     name: &mut String,
     config: &mut Config,
     entry: &Entry,
+    krate: &syn::Path,
 ) -> syn::Result<()> {
     match (config, entry.name.to_string().as_str()) {
         (_, "name") => *name = entry.read_literal()?.to_string(),
@@ -316,13 +318,13 @@ fn read_entry(
             entry.expect_flag()?;
             *ordered = true;
         }
-        (Config::Topic { retry: policy, .. }, "retry") => *policy = parse_retry(entry)?,
+        (Config::Topic { retry: policy, .. }, "retry") => *policy = parse_retry(entry, krate)?,
         (
             Config::Topic {
                 schema, payload, ..
             },
             "schema",
-        ) => *schema = quote_topic_schema(entry, payload)?,
+        ) => *schema = quote_topic_schema(entry, payload, krate)?,
         (Config::Worker { concurrency, .. }, "concurrency") => *concurrency = parse_count(entry)?,
         (Config::Worker { on_start, .. }, "on_start") => {
             *on_start = Some(entry.read_path()?.clone())
@@ -348,9 +350,14 @@ fn read_entry(
     Ok(())
 }
 
-fn quote_topic_schema(entry: &Entry, payload: &Type) -> syn::Result<TokenStream> {
+fn quote_topic_schema(
+    entry: &Entry,
+    payload: &Type,
+    krate: &syn::Path,
+) -> syn::Result<TokenStream> {
     entry.expect_flag()?;
-    Ok(quote_spanned!(entry.span()=> ::ocel::__json_schema!(#payload)))
+    let krate = respan(krate, entry.span());
+    Ok(quote_spanned!(entry.span()=> #krate::__json_schema!(#payload)))
 }
 
 fn read_namespace(config: &Config) -> &'static str {

@@ -6,7 +6,7 @@ use crate::proto::app::bucket::v1::{
     AbortMultipartRequest, CompleteMultipartRequest, CompletedPart, CreateMultipartRequest,
     HeadRequest, SignConstraints, SignPartsRequest, SignRequest, SignedAudience, SignedOperation,
 };
-use crate::Error;
+use crate::{Code, Error};
 use bytes::Bytes;
 use std::future::Future;
 use std::pin::Pin;
@@ -65,6 +65,7 @@ struct Upload {
 fn refuse_finished_writer() -> Error {
     Error::Refused {
         key: String::new(),
+        code: Code::FailedPrecondition,
         said: "this writer has already finished".to_string(),
     }
 }
@@ -242,6 +243,7 @@ impl Upload {
             async move {
                 let target = target.ok_or_else(|| Error::Refused {
                     key: key.to_string(),
+                    code: Code::Internal,
                     said: format!("the runtime signed no url for part {number}"),
                 })?;
                 let mut request = http::Request::builder().method("PUT").uri(&target.url);
@@ -328,19 +330,10 @@ impl Upload {
             .into_option()
             .ok_or_else(|| Error::Refused {
                 key: self.key.clone(),
+                code: Code::Internal,
                 said: "the runtime signed nothing".to_string(),
             })?;
-        let mut request = build_signed_request(&target, "PUT");
-        for (name, value) in [
-            ("content-type", &self.options.content_type),
-            ("cache-control", &self.options.cache_control),
-            ("if-none-match", &self.options.if_none_match),
-            ("if-match", &self.options.if_match),
-        ] {
-            if !value.is_empty() {
-                request = request.header(name, value);
-            }
-        }
+        let request = build_signed_request(&target, "PUT");
         let body = Bytes::from(std::mem::take(&mut self.buffered));
         let response = send_request(&self.connection, request, body).await?;
         check_status(&self.key, response.status().as_u16())

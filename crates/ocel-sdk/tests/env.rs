@@ -111,7 +111,7 @@ fn a_required_variable_with_no_value_names_the_command_that_sets_one() {
 
     assert_eq!(
         err.to_string(),
-        "'DATABASE_NAME' has no value. Set one with `ocel env set DATABASE_NAME=<VALUE>`."
+        "'DATABASE_NAME' has no value: set one with `ocel env set DATABASE_NAME=<VALUE>`"
     );
     assert!(matches!(err, ocel::Error::Unset { .. }));
 }
@@ -127,7 +127,7 @@ fn a_plain_value_its_type_rejects_is_reported_with_the_parse_message() {
 
     assert_eq!(
         err.to_string(),
-        "'PORT' is set but does not satisfy its type: invalid digit found in string. Fix it with `ocel env set PORT=<VALUE>`."
+        "'PORT' is set but does not satisfy its type: invalid digit found in string; fix it with `ocel env set PORT=<VALUE>`"
     );
     assert!(matches!(err, ocel::Error::Invalid { .. }));
 }
@@ -147,7 +147,7 @@ fn a_confidential_value_its_type_rejects_is_reported_without_the_parse_message()
     );
     assert_eq!(
         err.to_string(),
-        "'API_KEY' is set but does not satisfy its type: withheld, because a 'sensitive' value's parse message can quote the value itself. Fix it with `ocel env set API_KEY=<VALUE>`."
+        "'API_KEY' is set but does not satisfy its type: withheld, because a 'sensitive' value's parse message can quote the value itself; fix it with `ocel env set API_KEY=<VALUE>`"
     );
 }
 
@@ -173,7 +173,7 @@ fn a_secret_resolves_on_every_read_and_prints_a_redaction() {
     let err = loaded.signing_key.value().expect_err("the secret is gone");
     assert_eq!(
         err.to_string(),
-        "'SIGNING_KEY' has no value. Set one with `ocel env set SIGNING_KEY=<VALUE>`."
+        "'SIGNING_KEY' has no value: set one with `ocel env set SIGNING_KEY=<VALUE>`"
     );
 }
 
@@ -199,7 +199,7 @@ fn a_variable_scoped_past_the_folder_this_app_is_bound_to_names_both() {
 
     assert_eq!(
         err.to_string(),
-        "'FLAG' is scoped to /apps/web, /apps/api, but this app is bound to /apps/admin. Bind this app to one of those folders in ocel.config.ts, or widen the variable's scope."
+        "'FLAG' is scoped to /apps/web, /apps/api, but this app is bound to /apps/admin: bind this app to one of those folders in ocel.json, or widen the variable's scope"
     );
     assert!(matches!(err, ocel::Error::Scope { .. }));
 
@@ -255,7 +255,7 @@ fn a_value_no_sdk_reads_as_a_bool_is_refused_with_the_forms_that_are_read() {
         let err = Toggles::load().expect_err("a value no sdk reads as a bool");
         assert_eq!(
             err.to_string(),
-            "'TOGGLE' is set but does not satisfy its type: want one of 1 t T TRUE true True 0 f F FALSE false False. Fix it with `ocel env set TOGGLE=<VALUE>`."
+            "'TOGGLE' is set but does not satisfy its type: want one of 1 t T TRUE true True 0 f F FALSE false False; fix it with `ocel env set TOGGLE=<VALUE>`"
         );
     }
 }
