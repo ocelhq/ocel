@@ -13,9 +13,10 @@ import (
 var errResourceOperationFailed = errors.New("resource operation failed")
 
 var changeSpanNames = map[provider.ChangeAction]string{
-	provider.ActionCreate: "create resource",
-	provider.ActionUpdate: "update resource",
-	provider.ActionDelete: "delete resource",
+	provider.ActionCreate:  "create resource",
+	provider.ActionUpdate:  "update resource",
+	provider.ActionReplace: "replace resource",
+	provider.ActionDelete:  "delete resource",
 }
 
 func reportChange(log progress.Log, kind, name string, action provider.ChangeAction, start time.Time, err error) {

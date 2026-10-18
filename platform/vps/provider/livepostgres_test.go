@@ -89,8 +89,8 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Errorf("version 16's volume %q outlives the move, and nothing after this reclaims it", left)
 	}
 
-	if err := p.RemoveResource(ctx, in.Ref, again, progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource() = %v", err)
+	if err := p.RemovePostgres(ctx, in.Ref, again, progress.Discard()); err != nil {
+		t.Fatalf("RemovePostgres() = %v", err)
 	}
 	if vm.running(t, name) {
 		t.Errorf("%s still runs after its stack was removed", name)

@@ -52,10 +52,10 @@ func TestRemovingTheLastBucketSaysWhatItRemovedAndThatTheStoreGoesWithIt(t *test
 	t.Parallel()
 
 	progress := &fake.Log{}
-	err := over(&box{kept: sealedRootKey()}).RemoveResource(context.Background(),
+	err := over(&box{kept: sealedRootKey()}).RemoveBucket(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)}, bindingBucket(), progress)
 	if err != nil {
-		t.Fatalf("RemoveResource(bucket) = %v", err)
+		t.Fatalf("RemoveBucket() = %v", err)
 	}
 	heardAll(t, progress,
 		"INFO Removing bucket uploads and its objects from object store shop-prod-infra-store-s3",
@@ -67,10 +67,10 @@ func TestABucketWhoseStoreKeepsNoCredentialIsSaidToBeSkipped(t *testing.T) {
 	t.Parallel()
 
 	progress := &fake.Log{}
-	err := over(&box{}).RemoveResource(context.Background(),
+	err := over(&box{}).RemoveBucket(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)}, bindingBucket(), progress)
 	if err != nil {
-		t.Fatalf("RemoveResource(bucket) = %v", err)
+		t.Fatalf("RemoveBucket() = %v", err)
 	}
 	heardAll(t, progress,
 		"INFO Skipped removing bucket uploads: the box keeps no credential for object store shop-prod-infra-store-s3")
@@ -80,11 +80,11 @@ func TestRemovingAPostgresNamesTheContainerAndTheDataItTakes(t *testing.T) {
 	t.Parallel()
 
 	progress := &fake.Log{}
-	err := over(&box{}).RemoveResource(context.Background(),
+	err := over(&box{}).RemovePostgres(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)},
 		provider.Binding{Type: provider.BindingPostgres, Name: "main"}, progress)
 	if err != nil {
-		t.Fatalf("RemoveResource(postgres) = %v", err)
+		t.Fatalf("RemovePostgres() = %v", err)
 	}
 	heardAll(t, progress, "INFO Removing postgres main, its container shop-prod-web-r0a1b2c3d-main-pg and its data")
 }

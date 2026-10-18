@@ -83,14 +83,32 @@ func (s cloudSQLSize) backups() *sqladmin.BackupConfiguration {
 	}
 }
 
-func (s cloudSQLSize) isSize(instance *sqladmin.DatabaseInstance) bool {
+func (s cloudSQLSize) listDifferences(instance *sqladmin.DatabaseInstance) []string {
 	settings := instance.Settings
-	if settings == nil || settings.BackupConfiguration == nil {
-		return false
+	if settings == nil {
+		settings = &sqladmin.Settings{}
 	}
-	return settings.Tier == s.machineType && settings.AvailabilityType == s.availability &&
-		settings.DeletionProtectionEnabled == s.deletionProtection &&
-		settings.BackupConfiguration.Enabled && settings.BackupConfiguration.PointInTimeRecoveryEnabled == s.pointInTimeRecovery
+	backups := settings.BackupConfiguration
+	if backups == nil {
+		backups = &sqladmin.BackupConfiguration{}
+	}
+	var differences []string
+	if settings.Tier != s.machineType {
+		differences = append(differences, fmt.Sprintf("machine type changes from %s to %s", settings.Tier, s.machineType))
+	}
+	if settings.AvailabilityType != s.availability {
+		differences = append(differences, fmt.Sprintf("availability changes from %s to %s", settings.AvailabilityType, s.availability))
+	}
+	if settings.DeletionProtectionEnabled != s.deletionProtection {
+		differences = append(differences, fmt.Sprintf("deletion protection changes from %t to %t", settings.DeletionProtectionEnabled, s.deletionProtection))
+	}
+	if !backups.Enabled {
+		differences = append(differences, "daily backups turn on")
+	}
+	if backups.PointInTimeRecoveryEnabled != s.pointInTimeRecovery {
+		differences = append(differences, fmt.Sprintf("point-in-time recovery changes from %t to %t", backups.PointInTimeRecoveryEnabled, s.pointInTimeRecovery))
+	}
+	return differences
 }
 
 func cloudSQLSizeOf(tier environment.Tier) cloudSQLSize {
@@ -169,7 +187,69 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Provision
 	return instances.provision(ctx, in.Resource, spec, progress)
 }
 
-func (p *Provider) removePostgres(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+func (p *Provider) PlanPostgres(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
+	spec, err := readPostgres(in.Resource)
+	if err != nil {
+		return "", "", err
+	}
+	instances, err := p.openPostgres(ctx, in.Ref)
+	if err != nil {
+		return "", "", err
+	}
+	return instances.plan(ctx, in.Resource.Name, spec)
+}
+
+func (i postgresInstances) plan(ctx context.Context, database string, spec postgresSpec) (provider.ChangeAction, string, error) {
+	current, err := i.findInstance(ctx, database)
+	if err != nil {
+		return "", "", err
+	}
+	if current == nil {
+		return provider.ActionCreate, "", nil
+	}
+	if !slices.Contains(settlingStates, current.State) {
+		if err := refuseUnrunnable(database, current); err != nil {
+			return "", "", err
+		}
+	}
+	if err := refuseVersionChange(database, spec, current); err != nil {
+		return "", "", err
+	}
+	differences := cloudSQLSizeOf(i.ref.Tier).listDifferences(current)
+	held, err := i.hasDatabase(ctx, current.Name)
+	if err != nil {
+		return "", "", err
+	}
+	if !held {
+		differences = append(differences, "the "+postgresDatabaseName+" database is created on Cloud SQL instance "+current.Name)
+	}
+	password, recorded, err := i.readRecordedPassword(ctx, database)
+	if err != nil {
+		return "", "", err
+	}
+	switch {
+	case !recorded:
+		differences = append(differences, "a new password is minted and set for the "+postgresAccount+" user")
+	case password.SetOn != current.Name:
+		differences = append(differences, "the recorded password is set for the "+postgresAccount+" user on Cloud SQL instance "+current.Name)
+	}
+	if len(differences) > 0 {
+		return provider.ActionUpdate, strings.Join(differences, "; "), nil
+	}
+	return provider.ActionKeep, provider.ReasonCurrent, nil
+}
+
+func refuseVersionChange(database string, spec postgresSpec, current *sqladmin.DatabaseInstance) error {
+	if current.DatabaseVersion == spec.version {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"postgres %s asks for %s, and its Cloud SQL instance %s runs %s: a major version changes by an upgrade ocel does not run.\n"+
+			"Declare %s again, or upgrade it with `gcloud sql instances patch %s --database-version=%s` and deploy again",
+		database, spec.version, current.Name, current.DatabaseVersion, current.DatabaseVersion, current.Name, spec.version)
+}
+
+func (p *Provider) RemovePostgres(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	instances, err := p.openPostgres(ctx, ref)
 	if err != nil {
 		return err
@@ -224,11 +304,8 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	if current.DatabaseVersion != spec.version {
-		return provider.Binding{}, refusal.Refuse(refusal.CodeInvalid,
-			"postgres %s asks for %s, and its Cloud SQL instance %s runs %s: a major version changes by an upgrade ocel does not run.\n"+
-				"Declare %s again, or upgrade it with `gcloud sql instances patch %s --database-version=%s` and deploy again",
-			resource.Name, spec.version, current.Name, current.DatabaseVersion, current.DatabaseVersion, current.Name, spec.version)
+	if err := refuseVersionChange(resource.Name, spec, current); err != nil {
+		return provider.Binding{}, err
 	}
 	if current, err = i.resize(ctx, resource.Name, current, progress); err != nil {
 		return provider.Binding{}, err
@@ -320,11 +397,12 @@ func (i postgresInstances) create(ctx context.Context, database string, spec pos
 
 func (i postgresInstances) resize(ctx context.Context, database string, current *sqladmin.DatabaseInstance, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
 	size := cloudSQLSizeOf(i.ref.Tier)
-	if size.isSize(current) {
+	differences := size.listDifferences(current)
+	if len(differences) == 0 {
 		return current, nil
 	}
-	ensureProgress(progress).Say("Resizing postgres " + database + "'s Cloud SQL instance " + current.Name + " to " + size.machineType + ", " +
-		strings.ToLower(size.availability) + ", as the " + string(i.ref.Tier) + " tier runs it: Cloud SQL restarts an instance whose machine type or availability changes")
+	ensureProgress(progress).Say("Resizing postgres " + database + "'s Cloud SQL instance " + current.Name + " as the " + string(i.ref.Tier) + " tier runs it (" +
+		strings.Join(differences, "; ") + "): Cloud SQL restarts an instance whose machine type or availability changes")
 	started, err := googleretry.Attempted(ctx, i.sql.Instances.Patch(i.clients.project, current.Name, &sqladmin.DatabaseInstance{
 		Settings: &sqladmin.Settings{
 			Tier:                      size.machineType,
@@ -363,10 +441,17 @@ func (i postgresInstances) awaitSettled(ctx context.Context, database string, cu
 			return nil, err
 		}
 	}
-	if current.State == cloudSQLRunnable {
-		return current, nil
+	if err := refuseUnrunnable(database, current); err != nil {
+		return nil, err
 	}
-	return nil, refusal.Refuse(refusal.CodeNotReady,
+	return current, nil
+}
+
+func refuseUnrunnable(database string, current *sqladmin.DatabaseInstance) error {
+	if current.State == cloudSQLRunnable {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
 		"postgres %s runs on the Cloud SQL instance %s, which is %s, and a database is bound only once it is %s.\n"+
 			"Start it with `gcloud sql instances patch %s --activation-policy=ALWAYS` if it was stopped, and deploy again",
 		database, current.Name, current.State, cloudSQLRunnable, current.Name)
@@ -427,13 +512,21 @@ func cloudSQLOutcome(operation *sqladmin.Operation) operationOutcome {
 	return outcome
 }
 
-func (i postgresInstances) ensureDatabase(ctx context.Context, instance string) error {
+func (i postgresInstances) hasDatabase(ctx context.Context, instance string) (bool, error) {
 	_, err := googleretry.Attempted(ctx, i.sql.Databases.Get(i.clients.project, instance, postgresDatabaseName).Context(ctx).Do)
-	if err == nil {
-		return nil
+	switch {
+	case err == nil:
+		return true, nil
+	case absent(err):
+		return false, nil
 	}
-	if !absent(err) {
-		return fmt.Errorf("read the %s database on Cloud SQL instance %s: %w", postgresDatabaseName, instance, err)
+	return false, fmt.Errorf("read the %s database on Cloud SQL instance %s: %w", postgresDatabaseName, instance, err)
+}
+
+func (i postgresInstances) ensureDatabase(ctx context.Context, instance string) error {
+	held, err := i.hasDatabase(ctx, instance)
+	if err != nil || held {
+		return err
 	}
 	started, err := googleretry.Attempted(ctx, i.sql.Databases.Insert(i.clients.project, instance, &sqladmin.Database{Name: postgresDatabaseName}).Context(ctx).Do)
 	if taken(err) {
@@ -505,13 +598,12 @@ func (i postgresInstances) ensurePassword(ctx context.Context, database string) 
 	if err != nil {
 		return recordedPassword{}, err
 	}
-	entry, err := i.records.Read(ctx, key)
+	recorded, found, err := i.readRecordedPassword(ctx, database)
 	if err != nil {
-		return recordedPassword{}, fmt.Errorf("read the password recorded for postgres %s: %w", database, err)
+		return recordedPassword{}, err
 	}
-	var recorded recordedPassword
-	if err := json.Unmarshal(entry.Value, &recorded); err != nil {
-		return recordedPassword{}, fmt.Errorf("read the password recorded for postgres %s: %w", database, err)
+	if !found {
+		return recordedPassword{}, fmt.Errorf("read the password recorded for postgres %s: %w", database, keyvalue.ErrNotFound)
 	}
 	opened, err := i.cipher.Open(ctx, i.ref.Tier, i.passwordBound(database), recorded.Sealed)
 	if err != nil {
@@ -519,6 +611,21 @@ func (i postgresInstances) ensurePassword(ctx context.Context, database string) 
 	}
 	recorded.plain = string(opened)
 	return recorded, nil
+}
+
+func (i postgresInstances) readRecordedPassword(ctx context.Context, database string) (recordedPassword, bool, error) {
+	entry, err := keyvalue.ReadOrEmpty(ctx, i.records, i.passwordKey(database))
+	if err != nil {
+		return recordedPassword{}, false, fmt.Errorf("read the password recorded for postgres %s: %w", database, err)
+	}
+	if len(entry.Value) == 0 {
+		return recordedPassword{}, false, nil
+	}
+	var recorded recordedPassword
+	if err := json.Unmarshal(entry.Value, &recorded); err != nil {
+		return recordedPassword{}, false, fmt.Errorf("read the password recorded for postgres %s: %w", database, err)
+	}
+	return recorded, true, nil
 }
 
 func (i postgresInstances) recordPasswordSet(ctx context.Context, database, instance string) error {

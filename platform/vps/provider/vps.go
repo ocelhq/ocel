@@ -109,14 +109,13 @@ func (p *Provider) Hooks() provider.Hooks {
 
 func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
-		ProvisionPostgres: p.ProvisionPostgres,
-		ProvisionBucket:   p.ProvisionBucket,
-		ProvisionKV:       p.ProvisionKV,
-		ProvisionTopic:    p.ProvisionTopic,
-		ProvisionRealtime: p.ProvisionRealtime,
-		RemoveResource:    p.RemoveResource,
-		Containers:        &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
-		Retention:         &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
+		Postgres:   &resources.ResourceHooks{Plan: p.PlanPostgres, Provision: p.ProvisionPostgres, Remove: p.RemovePostgres},
+		Bucket:     &resources.ResourceHooks{Plan: p.PlanBucket, Provision: p.ProvisionBucket, Remove: p.RemoveBucket},
+		KV:         &resources.ResourceHooks{Plan: p.PlanKV, Provision: p.ProvisionKV, Remove: p.RemoveKV},
+		Topic:      &resources.ResourceHooks{Plan: p.PlanTopic, Provision: p.ProvisionTopic, Remove: p.RemoveTopic},
+		Realtime:   &resources.ResourceHooks{Plan: p.PlanRealtime, Provision: p.ProvisionRealtime, Remove: p.RemoveRealtime},
+		Containers: &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
+		Retention:  &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
 	}
 }
 

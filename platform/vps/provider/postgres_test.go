@@ -223,8 +223,8 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 	}
 	name := binding.Properties[provider.PropertyHost]
 	before := len(machine.commands())
-	if err := p.RemoveResource(context.Background(), in.Ref, binding, progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource() = %v", err)
+	if err := p.RemovePostgres(context.Background(), in.Ref, binding, progress.Discard()); err != nil {
+		t.Fatalf("RemovePostgres() = %v", err)
 	}
 	joined := strings.Join(machine.commands()[before:], "\n")
 	if !strings.Contains(joined, "docker rm") || !strings.Contains(joined, name) {
@@ -253,8 +253,8 @@ func TestARemovalReachesOnlyTheServerItsOwnStackProvisioned(t *testing.T) {
 		Type: provider.BindingPostgres, Name: "main",
 		Properties: map[string]string{provider.PropertyHost: "someone-elses-container"},
 	}
-	if err := over(machine).RemoveResource(context.Background(), in.Ref, foreign, progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource() = %v", err)
+	if err := over(machine).RemovePostgres(context.Background(), in.Ref, foreign, progress.Discard()); err != nil {
+		t.Fatalf("RemovePostgres() = %v", err)
 	}
 	joined := strings.Join(machine.commands(), "\n")
 	if strings.Contains(joined, "someone-elses-container") {
@@ -475,5 +475,66 @@ func TestAPostgresNameFitsTheDNSLabelAnAppResolvesItBy(t *testing.T) {
 	}
 	if name := binding.Properties[provider.PropertyHost]; len(name) > 63 {
 		t.Errorf("postgres main runs as %q, %d characters, and no resolver answers a label past 63", name, len(name))
+	}
+}
+
+func postgresProvisioned(t *testing.T, machine *box, in resources.ProvisionRequest) provider.Binding {
+	t.Helper()
+	binding, err := over(machine).ProvisionPostgres(context.Background(), in, progress.Discard())
+	if err != nil {
+		t.Fatalf("ProvisionPostgres() = %v", err)
+	}
+	return binding
+}
+
+func plannedPostgres(t *testing.T, machine *box, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string) {
+	t.Helper()
+	mark := len(machine.commands())
+	action, reason, err := over(machine).PlanPostgres(context.Background(), in, recorded)
+	if err != nil {
+		t.Fatalf("PlanPostgres() = %v", err)
+	}
+	refuseWrites(t, machine.since(mark))
+	return action, reason
+}
+
+func TestAnUnchangedPostgresPlansKeep(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true}
+	recorded := postgresProvisioned(t, machine, aPostgres(t, "17"))
+	if action, reason := plannedPostgres(t, machine, aPostgres(t, "17"), &recorded); action != provider.ActionKeep {
+		t.Errorf("a postgres declared as it was provisioned plans %s %q, want keep", action, reason)
+	}
+}
+
+func TestAPostgresNoContainerServesPlansACreate(t *testing.T) {
+	t.Parallel()
+
+	if action, reason := plannedPostgres(t, &box{remembers: true}, aPostgres(t, "17"), nil); action != provider.ActionCreate {
+		t.Errorf("a postgres no container serves plans %s %q, want create", action, reason)
+	}
+}
+
+func TestAPostgresDeclaredUnderAnotherVersionPlansAReplaceNamingTheImage(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true}
+	recorded := postgresProvisioned(t, machine, aPostgres(t, "16"))
+	action, reason := plannedPostgres(t, machine, aPostgres(t, "17"), &recorded)
+	image, _ := images.Postgres("17")
+	if action != provider.ActionReplace || !strings.Contains(reason, image) {
+		t.Errorf("a postgres moving from 16 to 17 plans %s %q, and the apply swaps its container for one on %s", action, reason, image)
+	}
+}
+
+func TestAPostgresWhosePasswordTheBoxNoLongerKeepsPlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true}
+	recorded := postgresProvisioned(t, machine, aPostgres(t, "17"))
+	machine.kept = ""
+	if action, reason := plannedPostgres(t, machine, aPostgres(t, "17"), &recorded); action != provider.ActionUpdate || !strings.Contains(reason, "password") {
+		t.Errorf("a postgres whose kept password is gone plans %s %q, and the apply mints a new one", action, reason)
 	}
 }

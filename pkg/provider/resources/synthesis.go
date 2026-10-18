@@ -16,11 +16,17 @@ const (
 	reasonBound      = "ocel.json binds it to a published record"
 )
 
+type resourcePlan func(ctx context.Context, spec provider.StackSpec, resource provider.Resource, recorded *provider.Binding) (provider.ChangeAction, string, error)
+
 func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec provider.StackSpec, deployed provider.StackResult) (provider.Plan, error) {
-	return synthesizedPlan(ctx, store, spec, deployed, false)
+	return synthesizedPlan(ctx, store, spec, deployed, false, planFromRecord)
 }
 
-func synthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec provider.StackSpec, deployed provider.StackResult, recordsWorkers bool) (provider.Plan, error) {
+func planFromRecord(_ context.Context, _ provider.StackSpec, _ provider.Resource, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	return provider.KeepOrCreate(recorded != nil), "", nil
+}
+
+func synthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec provider.StackSpec, deployed provider.StackResult, recordsWorkers bool, plan resourcePlan) (provider.Plan, error) {
 	images, err := spec.Images.Rows(ctx)
 	if err != nil {
 		return provider.Plan{}, err
@@ -36,11 +42,11 @@ func synthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec pro
 		if resource.Binding != "" {
 			continue
 		}
-		changes = append(changes, provider.Change{
-			Kind:   string(resource.Type),
-			Name:   resource.Name,
-			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Bindings, BindingFor(resource))),
-		})
+		action, reason, err := plan(ctx, spec, resource, findRecorded(deployed.Bindings, resource))
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		changes = append(changes, provider.Change{Kind: string(resource.Type), Name: resource.Name, Action: action, Reason: reason})
 	}
 	declared := DeclaredFunctions(spec, recordsWorkers)
 	for _, function := range declared {

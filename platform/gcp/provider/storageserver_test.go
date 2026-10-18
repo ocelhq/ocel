@@ -24,6 +24,7 @@ type storageServer struct {
 	setters  []*raw.Policy
 	deleted  []string
 	removed  []string
+	writes   []string
 
 	takenElsewhere bool
 	staleSets      int
@@ -42,6 +43,9 @@ func (s *storageServer) serve() http.HandlerFunc {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			s.writes = append(s.writes, r.Method+" "+r.URL.Path)
+		}
 		path := strings.TrimPrefix(r.URL.EscapedPath(), "/storage/v1/")
 		parts := strings.Split(path, "/")
 		switch {
@@ -178,4 +182,16 @@ func (s *storageServer) granted(bucket string) *raw.Policy {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.policies[bucket]
+}
+
+func (s *storageServer) wrote() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.writes)
+}
+
+func (s *storageServer) drift(bucket string, change func(*raw.Bucket)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	change(s.buckets[bucket])
 }

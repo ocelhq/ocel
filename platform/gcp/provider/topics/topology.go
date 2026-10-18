@@ -63,7 +63,7 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 		if err := ensureTopic(ctx, service, path); err != nil {
 			return err
 		}
-		if topic.Cron != "" && runs.IsTask(topic) {
+		if isScheduled(topic) {
 			if err := t.ensureSchedule(ctx, clients, name, topic.Cron); err != nil {
 				return err
 			}
@@ -221,28 +221,103 @@ func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, t
 	return nil
 }
 
+func findDroppedConsumers(before, after *provider.TopicSpec) []string {
+	var dropped []string
+	for _, consumer := range before.Consumers {
+		if !slices.ContainsFunc(after.Consumers, func(kept provider.ConsumerSpec) bool { return kept.Name == consumer.Name }) {
+			dropped = append(dropped, consumer.Name)
+		}
+	}
+	return dropped
+}
+
+func isCronDropped(before, after *provider.TopicSpec) bool {
+	return before.Cron != "" && after.Cron == ""
+}
+
+func isScheduled(topic *provider.TopicSpec) bool { return topic.Cron != "" && runs.IsTask(topic) }
+
 func (t Topology) RemoveDropped(ctx context.Context, clients *ports.Clients, previous map[string]*provider.TopicSpec) error {
 	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
 		before, declared := previous[name]
 		if !declared {
 			continue
 		}
-		var dropped []string
-		for _, consumer := range before.Consumers {
-			if !slices.ContainsFunc(t.Topics[name].Consumers, func(kept provider.ConsumerSpec) bool { return kept.Name == consumer.Name }) {
-				dropped = append(dropped, consumer.Name)
-			}
-		}
-		if err := t.removeConsumers(ctx, clients, name, dropped); err != nil {
+		if err := t.removeConsumers(ctx, clients, name, findDroppedConsumers(before, t.Topics[name])); err != nil {
 			return err
 		}
-		if before.Cron != "" && t.Topics[name].Cron == "" {
+		if isCronDropped(before, t.Topics[name]) {
 			if err := t.removeSchedule(ctx, clients, name); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (t Topology) FindMissing(ctx context.Context, clients *ports.Clients) ([]string, error) {
+	service, err := clients.PubSub()
+	if err != nil {
+		return nil, err
+	}
+	var missing []string
+	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
+		path := TopicPath(clients.Project, t.Names.Topic(name))
+		_, err := googleretry.Attempted(ctx, service.Projects.Topics.Get(path).Context(ctx).Do)
+		switch {
+		case isAnswered(err, http.StatusNotFound):
+			missing = append(missing, name)
+		case err != nil:
+			return nil, fmt.Errorf("read Pub/Sub topic %s: %w", path, err)
+		}
+	}
+	return missing, nil
+}
+
+func (t Topology) ReadDifferences(ctx context.Context, clients *ports.Clients, previous map[string]*provider.TopicSpec) ([]string, error) {
+	service, err := clients.PubSub()
+	if err != nil {
+		return nil, err
+	}
+	var differences []string
+	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
+		topic := t.Topics[name]
+		if before, declared := previous[name]; declared {
+			for _, consumer := range findDroppedConsumers(before, topic) {
+				path := subscriptionPath(clients.Project, t.Names.Subscription(name, consumer))
+				_, err := googleretry.Attempted(ctx, service.Projects.Subscriptions.Get(path).Context(ctx).Do)
+				switch {
+				case isAnswered(err, http.StatusNotFound):
+				case err != nil:
+					return nil, fmt.Errorf("read Pub/Sub subscription %s: %w", path, err)
+				default:
+					differences = append(differences, "consumer "+consumer+" of "+name+" is no longer declared, so its Pub/Sub subscription "+path+" is deleted")
+				}
+			}
+			if isCronDropped(before, topic) {
+				difference, err := t.readDroppedScheduleDifference(ctx, clients, name)
+				if err != nil {
+					return nil, err
+				}
+				differences = appendDifference(differences, difference)
+			}
+		}
+		if isScheduled(topic) {
+			difference, err := t.readScheduleDifference(ctx, clients, name, topic.Cron)
+			if err != nil {
+				return nil, err
+			}
+			differences = appendDifference(differences, difference)
+		}
+	}
+	return differences, nil
+}
+
+func appendDifference(differences []string, difference string) []string {
+	if difference == "" {
+		return differences
+	}
+	return append(differences, difference)
 }
 
 func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {

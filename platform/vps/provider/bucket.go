@@ -245,10 +245,95 @@ func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, n
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
-func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
+func (p *Provider) shapeStore(ctx context.Context, in resources.ProvisionRequest) (host.ResourceContainer, error) {
+	return p.reshaped(ctx, in, transformTypeBucket, storeContainer(in))
+}
 
-	spec := storeContainer(in)
-	spec, err := p.reshaped(ctx, in, transformTypeBucket, spec)
+func newSessionsBucketSpec(ref provider.StackRef, store, secret string) host.BucketSpec {
+	return storeBucketSpec(ref, store, secret, host.BucketSpec{Bucket: s3store.SessionsBucket(), Internal: true})
+}
+
+func (p *Provider) readDeclaredBucketSpec(ctx context.Context, in resources.ProvisionRequest, store, secret string) (host.BucketSpec, error) {
+	origins, err := p.bucketOrigins(ctx, in.Ref, in.Resource.Bucket)
+	if err != nil {
+		return host.BucketSpec{}, err
+	}
+	return storeBucketSpec(in.Ref, store, secret, host.BucketSpec{
+		Bucket:         storeBucketName(in.Ref, in.Resource.Name),
+		AllowedOrigins: origins,
+		Public:         declaredPublic(in.Resource.Bucket),
+	}), nil
+}
+
+func newBucketBinding(in resources.ProvisionRequest, spec host.BucketSpec, sweeps bool) provider.Binding {
+	return provider.Binding{
+		Type:     provider.BindingBucket,
+		Name:     in.Resource.Name,
+		Resource: in.Resource.Declared,
+		Properties: map[string]string{
+			provider.PropertyBucket:             spec.Bucket,
+			provider.PropertyPublic:             strconv.FormatBool(spec.Public),
+			stackrecords.PropertySweepUploads:   strconv.FormatBool(sweeps),
+			stackrecords.PropertyAllowedOrigins: strings.Join(declaredOrigins(in.Resource.Bucket), " "),
+		},
+	}
+}
+
+func (p *Provider) PlanBucket(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	spec, err := p.shapeStore(ctx, in)
+	if err != nil {
+		return "", "", err
+	}
+	action, reason, err := p.host.PlanResource(ctx, spec)
+	if err != nil || action == provider.ActionCreate {
+		return action, "", err
+	}
+	var change resourceChange
+	if action != provider.ActionKeep {
+		change.add(provider.ActionUpdate, "its object store "+spec.Name+" is replaced: "+reason)
+	}
+	root, err := p.storeRoot(ctx, in.Ref, spec.Name)
+	if err != nil {
+		return "", "", err
+	}
+	if root.secret == "" {
+		change.add(provider.ActionUpdate, "the box keeps no credential for its object store "+spec.Name+", so a new one is minted that the running store was never handed")
+		return change.report()
+	}
+	route := storeRoute(in.Ref, spec.Name)
+	upstream, err := p.host.Serving(ctx, route.RouteKey)
+	if err != nil {
+		return "", "", err
+	}
+	if upstream != route.Upstream {
+		change.add(provider.ActionUpdate, "its object store "+spec.Name+" is routed to from "+route.Pointer)
+	}
+	sessions, reason, err := p.host.PlanBucket(ctx, newSessionsBucketSpec(in.Ref, spec.Name, root.secret))
+	if err != nil {
+		return "", "", err
+	}
+	switch sessions {
+	case provider.ActionKeep:
+	case provider.ActionCreate:
+		change.add(provider.ActionUpdate, "its object store's upload sessions bucket is created")
+	default:
+		change.add(provider.ActionUpdate, "its object store's upload sessions bucket changes: "+reason)
+	}
+	declared, err := p.readDeclaredBucketSpec(ctx, in, spec.Name, root.secret)
+	if err != nil {
+		return "", "", err
+	}
+	action, reason, err = p.host.PlanBucket(ctx, declared)
+	if err != nil {
+		return "", "", err
+	}
+	change.add(action, reason)
+	change.addRecorded(recorded, newBucketBinding(in, declared, false), stackrecords.PropertySweepUploads)
+	return change.report()
+}
+
+func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
+	spec, err := p.shapeStore(ctx, in)
 	if err != nil {
 		return provider.Binding{}, err
 	}
@@ -271,8 +356,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 		if err := p.host.RouteResource(ctx, storeRoute(in.Ref, spec.Name)); err != nil {
 			return storeCredential{}, err
 		}
-		state, err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, credential.secret,
-			host.BucketSpec{Bucket: s3store.SessionsBucket(), Internal: true}))
+		state, err := p.host.ProvisionBucket(ctx, newSessionsBucketSpec(in.Ref, spec.Name, credential.secret))
 		if err != nil {
 			return storeCredential{}, err
 		}
@@ -286,33 +370,16 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 		p.stores.expiring(sessions)
 	}
 
-	origins, err := p.bucketOrigins(ctx, in.Ref, in.Resource.Bucket)
+	declared, err := p.readDeclaredBucketSpec(ctx, in, spec.Name, root.secret)
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	public := declaredPublic(in.Resource.Bucket)
-	bucket := storeBucketName(in.Ref, in.Resource.Name)
-	state, err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, root.secret, host.BucketSpec{
-		Bucket:         bucket,
-		AllowedOrigins: origins,
-		Public:         public,
-	}))
+	state, err := p.host.ProvisionBucket(ctx, declared)
 	if err != nil {
 		return provider.Binding{}, err
 	}
 	p.stores.expiring(state)
-
-	return provider.Binding{
-		Type:     provider.BindingBucket,
-		Name:     in.Resource.Name,
-		Resource: in.Resource.Declared,
-		Properties: map[string]string{
-			provider.PropertyBucket:             bucket,
-			provider.PropertyPublic:             strconv.FormatBool(public),
-			stackrecords.PropertySweepUploads:   strconv.FormatBool(p.stores.sweeping()),
-			stackrecords.PropertyAllowedOrigins: strings.Join(declaredOrigins(in.Resource.Bucket), " "),
-		},
-	}, nil
+	return newBucketBinding(in, declared, p.stores.sweeping()), nil
 }
 
 func (p *Provider) storeSection(ctx context.Context, spec provider.StackSpec) (*live.Store, error) {
@@ -510,7 +577,7 @@ func declaredPublic(spec *provider.BucketSpec) bool {
 	return spec != nil && spec.Public
 }
 
-func (p *Provider) removeBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+func (p *Provider) RemoveBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	if err := p.dropBucket(ctx, ref, binding, progress); err != nil {
 		return err
 	}

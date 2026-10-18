@@ -57,6 +57,9 @@ type box struct {
 	forwarded  []string
 	stopped    []string
 	listening  string
+	remembers  bool
+	containers map[string]string
+	store      *heldStore
 }
 
 func (b *box) ForwardPort(_ context.Context, remote string) (string, func(), error) {
@@ -106,6 +109,12 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		if result, refused := b.refuses(command); refused {
 			return result, nil
 		}
+	}
+	if served, asked := b.serving(command); asked {
+		return served, nil
+	}
+	if answered, asked := b.store.answer(command, input); asked {
+		return answered, nil
 	}
 	if strings.Contains(command, "{{.MemTotal}} {{.NCPU}}") {
 		return session.Result{Stdout: "8589934592 4\n"}, nil

@@ -3,6 +3,7 @@ package vps_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -221,8 +222,8 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 	}
 
 	before := len(machine.commands())
-	if err := p.RemoveResource(context.Background(), first.Ref, bindings[0], progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource() = %v", err)
+	if err := p.RemoveTopic(context.Background(), first.Ref, bindings[0], progress.Discard()); err != nil {
+		t.Fatalf("RemoveTopic() = %v", err)
 	}
 	if _, err := store.Read(context.Background(), live.QueueTopicKey(environment.TierProduction, "shop", "prod", "send-email")); err == nil {
 		t.Error("the removed task is still recorded, and the engine keeps serving it")
@@ -231,8 +232,8 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 		t.Fatal("the queue database was taken down while another task still runs on it")
 	}
 
-	if err := p.RemoveResource(context.Background(), first.Ref, bindings[1], progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource() = %v", err)
+	if err := p.RemoveTopic(context.Background(), first.Ref, bindings[1], progress.Discard()); err != nil {
+		t.Fatalf("RemoveTopic() = %v", err)
 	}
 	joined := strings.Join(machine.commands()[before:], "\n")
 	for _, want := range []string{
@@ -246,5 +247,78 @@ func TestARemovedTaskIsForgottenAndTheLastTakesTheQueueDatabaseWithIt(t *testing
 	}
 	if _, err := store.Read(context.Background(), live.QueueDatabaseKey(environment.TierProduction, "shop", "prod")); err == nil {
 		t.Error("the queue database is still recorded after it was taken down")
+	}
+}
+
+func plannedTopic(t *testing.T, machine *box, store *fake.KeyValues, in resources.ProvisionRequest) (provider.ChangeAction, string) {
+	t.Helper()
+	mark, recorded := len(machine.commands()), store.Snapshot()
+	p := over(machine)
+	p.Recording(store)
+	action, reason, err := p.PlanTopic(context.Background(), in, nil)
+	if err != nil {
+		t.Fatalf("PlanTopic() = %v", err)
+	}
+	refuseWrites(t, machine.since(mark))
+	if !maps.Equal(store.Snapshot(), recorded) {
+		t.Errorf("planning a topic wrote a record, and a plan records nothing")
+	}
+	return action, reason
+}
+
+func topicProvisioned(t *testing.T, machine *box, store *fake.KeyValues, in resources.ProvisionRequest) {
+	t.Helper()
+	p := over(machine)
+	p.Recording(store)
+	if _, err := p.ProvisionTopic(context.Background(), in, progress.Discard()); err != nil {
+		t.Fatalf("ProvisionTopic() = %v", err)
+	}
+}
+
+func TestAnUnchangedTaskPlansKeep(t *testing.T) {
+	t.Parallel()
+
+	machine, store := &box{remembers: true}, fake.NewKeyValues()
+	topicProvisioned(t, machine, store, aTask(t, "send-email"))
+	if action, reason := plannedTopic(t, machine, store, aTask(t, "send-email")); action != provider.ActionKeep {
+		t.Errorf("a task declared as it was provisioned plans %s %q, want keep", action, reason)
+	}
+}
+
+func TestATaskNeverRecordedPlansACreate(t *testing.T) {
+	t.Parallel()
+
+	machine, store := &box{remembers: true}, fake.NewKeyValues()
+	if action, reason := plannedTopic(t, machine, store, aTask(t, "send-email")); action != provider.ActionCreate {
+		t.Errorf("a task on a box that never ran one plans %s %q, want create", action, reason)
+	}
+	topicProvisioned(t, machine, store, aTask(t, "send-email"))
+	if action, reason := plannedTopic(t, machine, store, aTask(t, "resize")); action != provider.ActionCreate {
+		t.Errorf("a second task beside a running queue database plans %s %q, want create", action, reason)
+	}
+}
+
+func TestATaskWhoseScheduleChangesPlansAnUpdateNamingBothSchedules(t *testing.T) {
+	t.Parallel()
+
+	machine, store := &box{remembers: true}, fake.NewKeyValues()
+	topicProvisioned(t, machine, store, aTask(t, "send-email"))
+	moved := aTask(t, "send-email")
+	moved.Resource.Topic.Cron = "30 * * * *"
+	action, reason := plannedTopic(t, machine, store, moved)
+	if action != provider.ActionUpdate || !strings.Contains(reason, `"0 * * * *"`) || !strings.Contains(reason, `"30 * * * *"`) {
+		t.Errorf("a task moved to another schedule plans %s %q, and the apply records the new schedule", action, reason)
+	}
+}
+
+func TestATaskWhoseQueueDatabaseStoppedPlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	machine, store := &box{remembers: true}, fake.NewKeyValues()
+	topicProvisioned(t, machine, store, aTask(t, "send-email"))
+	machine.containers[queueContainer] = strings.Replace(machine.containers[queueContainer], "running", "exited", 1)
+	action, reason := plannedTopic(t, machine, store, aTask(t, "send-email"))
+	if action != provider.ActionUpdate || !strings.Contains(reason, queueContainer) {
+		t.Errorf("a task whose queue database exited plans %s %q, and the apply starts a new one", action, reason)
 	}
 }

@@ -61,7 +61,85 @@ func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.Provision
 	return environment.provision(ctx, in.Resource, progress)
 }
 
-func (p *Provider) removeRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+func (p *Provider) PlanRealtime(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
+	environment, err := p.openRealtime(ctx, in.Ref)
+	if err != nil {
+		return "", "", err
+	}
+	return environment.plan(ctx, in.Resource)
+}
+
+func (r realtimeEnvironment) plan(ctx context.Context, resource provider.Resource) (provider.ChangeAction, string, error) {
+	if err := refuseUnconfiguredRealtime(resource); err != nil {
+		return "", "", err
+	}
+	namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
+	service, err := r.secrets()
+	if err != nil {
+		return "", "", err
+	}
+	seed, found, err := r.readSigningSeed(ctx, service, namespace)
+	if err != nil {
+		return "", "", err
+	}
+	if !found {
+		return provider.ActionCreate, "", nil
+	}
+	verifyKey := deriveVerifyKey(seed)
+	record, err := encodeNamespaceRecord(verifyKey)
+	if err != nil {
+		return "", "", err
+	}
+	var differences []string
+	recorded, err := keyvalue.ReadOrEmpty(ctx, r.records, r.namespaceKey(namespace))
+	if err != nil {
+		return "", "", err
+	}
+	if string(recorded.Value) != string(record) {
+		differences = append(differences, "realtime "+namespace+"'s verify key is recorded for its gateway to trust")
+	}
+	keys, err := r.readKeys(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	keys[namespace] = verifyKey
+	secret, err := r.readKeysSecret(ctx, service, keys)
+	if err != nil {
+		return "", "", err
+	}
+	if difference := secret.describeChange(keys); difference != "" {
+		differences = append(differences, difference)
+	}
+	difference, err := r.readGatewayDifference(ctx, keys)
+	if err != nil {
+		return "", "", err
+	}
+	if difference != "" {
+		differences = append(differences, difference)
+	}
+	if len(differences) > 0 {
+		return provider.ActionUpdate, strings.Join(differences, "; "), nil
+	}
+	return provider.ActionKeep, provider.ReasonCurrent, nil
+}
+
+func refuseUnconfiguredRealtime(resource provider.Resource) error {
+	if resource.Realtime != nil {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"realtime %s reached the provider with no config, so nothing knows its channels", resource.Declared)
+}
+
+func deriveVerifyKey(seed []byte) string {
+	return base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
+}
+
+func encodeNamespaceRecord(verifyKey string) ([]byte, error) {
+	return json.Marshal(realtimeNamespace{VerifyKey: verifyKey})
+}
+
+func (p *Provider) RemoveRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	environment, err := p.openRealtime(ctx, ref)
 	if err != nil {
 		return err
@@ -89,17 +167,16 @@ func (r realtimeEnvironment) namespaceKey(namespace string) keyvalue.Key {
 }
 
 func (r realtimeEnvironment) provision(ctx context.Context, resource provider.Resource, progress progress.Log) (provider.Binding, error) {
-	if resource.Realtime == nil {
-		return provider.Binding{}, refusal.Refuse(refusal.CodeInvalid,
-			"realtime %s reached the provider with no config, so nothing knows its channels", resource.Declared)
+	if err := refuseUnconfiguredRealtime(resource); err != nil {
+		return provider.Binding{}, err
 	}
 	namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
 	seed, err := r.ensureSigningSeed(ctx, namespace)
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	verifyKey := base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
-	record, err := json.Marshal(realtimeNamespace{VerifyKey: verifyKey})
+	verifyKey := deriveVerifyKey(seed)
+	record, err := encodeNamespaceRecord(verifyKey)
 	if err != nil {
 		return provider.Binding{}, err
 	}

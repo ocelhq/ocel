@@ -284,14 +284,14 @@ func TestRemovingAStoreDeletesItsInstanceAndAMissingOneIsAlreadyGone(t *testing.
 		t.Fatalf("ProvisionKV() = %v", err)
 	}
 
-	if err := p.RemoveResource(context.Background(), in.Ref, binding, nil); err != nil {
-		t.Fatalf("RemoveResource() = %v", err)
+	if err := p.RemoveKV(context.Background(), in.Ref, binding, nil); err != nil {
+		t.Fatalf("RemoveKV() = %v", err)
 	}
 	if deleted := server.deletes(); len(deleted) != 1 || deleted[0] != storeInstance(t, p) {
 		t.Errorf("Memorystore deleted %v, want the store's instance", deleted)
 	}
-	if err := p.RemoveResource(context.Background(), in.Ref, binding, nil); err != nil {
-		t.Errorf("RemoveResource() of a store already gone = %v, want nil", err)
+	if err := p.RemoveKV(context.Background(), in.Ref, binding, nil); err != nil {
+		t.Errorf("RemoveKV() of a store already gone = %v, want nil", err)
 	}
 }
 
@@ -317,6 +317,80 @@ func TestAStoreMemorystoreHoldsInAStateThatNeverSettlesIsRefusedWithoutWaiting(t
 				t.Errorf("a store held %s was read %d times, want it refused on the read that sees the state rather than awaited", state, reads)
 			}
 		})
+	}
+}
+
+func planKV(t *testing.T, p *Provider, server *memorystoreServer, spec provider.KVSpec) (provider.ChangeAction, string, error) {
+	t.Helper()
+	before := len(server.requestIDs())
+	action, reason, err := p.PlanKV(context.Background(), aKVStore(t, spec), nil)
+	if wrote := len(server.requestIDs()) - before; wrote != 0 {
+		t.Errorf("PlanKV() sent %d writes to Memorystore, want a plan that only reads", wrote)
+	}
+	return action, reason, err
+}
+
+func TestAMissingStorePlansACreate(t *testing.T) {
+	p, server := servingMemorystore(t)
+
+	action, _, err := planKV(t, p, server, provider.KVSpec{MemoryBytes: 256 << 20})
+	if err != nil || action != provider.ActionCreate {
+		t.Errorf("PlanKV() = %s, %v, want %s", action, err, provider.ActionCreate)
+	}
+}
+
+func TestAStoreAsDeclaredPlansKeep(t *testing.T) {
+	p, server := servingMemorystore(t)
+	if _, err := p.ProvisionKV(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	action, reason, err := planKV(t, p, server, provider.KVSpec{MemoryBytes: 256 << 20})
+	if err != nil || action != provider.ActionKeep || reason != provider.ReasonCurrent {
+		t.Errorf("PlanKV() = %s %q, %v, want %s %q", action, reason, err, provider.ActionKeep, provider.ReasonCurrent)
+	}
+}
+
+func TestAStoreWhoseEvictionOrMemoryChangedPlansAnUpdateNamingWhatChanges(t *testing.T) {
+	p, server := servingMemorystore(t)
+	if _, err := p.ProvisionKV(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	action, reason, err := planKV(t, p, server, provider.KVSpec{Eviction: "allkeys-lfu", MemoryBytes: 2 << 30})
+	if err != nil || action != provider.ActionUpdate {
+		t.Fatalf("PlanKV() = %s, %v, want %s", action, err, provider.ActionUpdate)
+	}
+	for _, want := range []string{"node type changes from CUSTOM_PICO to CUSTOM_MINI", "maxmemory-policy changes from noeviction to allkeys-lfu"} {
+		if !strings.Contains(reason, want) {
+			t.Errorf("PlanKV() reason = %q, want it to say %q", reason, want)
+		}
+	}
+}
+
+func TestAStoreStillSettlingPlansAnUpdate(t *testing.T) {
+	p, server := servingMemorystore(t)
+	if _, err := p.ProvisionKV(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil); err != nil {
+		t.Fatal(err)
+	}
+	server.heldIn(storeInstance(t, p), "UPDATING")
+
+	if action, _, err := planKV(t, p, server, provider.KVSpec{MemoryBytes: 256 << 20}); err != nil || action != provider.ActionUpdate {
+		t.Errorf("PlanKV() of a store Memorystore is updating = %s, %v, want %s: the deploy cannot know what it applies once it settles", action, err, provider.ActionUpdate)
+	}
+}
+
+func TestAStoreHeldInAStateThatNeverSettlesIsRefusedAtPlan(t *testing.T) {
+	p, server := servingMemorystore(t)
+	if _, err := p.ProvisionKV(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil); err != nil {
+		t.Fatal(err)
+	}
+	server.heldIn(storeInstance(t, p), "FAILED")
+
+	_, _, err := planKV(t, p, server, provider.KVSpec{MemoryBytes: 256 << 20})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "FAILED") {
+		t.Errorf("PlanKV() of a store held FAILED = %v, want the refusal the provision would give", err)
 	}
 }
 

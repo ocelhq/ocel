@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -91,30 +92,42 @@ func nameSigningKey(ref provider.StackRef, binding string) string {
 	return host.ResourceName(ref.Project, ref.Name.String(), binding, realtimeSigningKind)
 }
 
-func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
-	if in.Resource.Realtime == nil {
-		return provider.Binding{}, refusal.Refuse(refusal.CodeInvalid,
-			"realtime %s reached the box with no config, so nothing knows its channels", in.Resource.Declared)
+func refuseUnconfiguredRealtime(in resources.ProvisionRequest) error {
+	if in.Resource.Realtime != nil {
+		return nil
 	}
-	seed, err := p.realtimeSigningSeed(ctx, in)
-	if err != nil {
-		return provider.Binding{}, err
-	}
-	verifyKey := base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
+	return refusal.Refuse(refusal.CodeInvalid,
+		"realtime %s reached the box with no config, so nothing knows its channels", in.Resource.Declared)
+}
+
+type realtimeNamespaceRecord struct {
+	key       keyvalue.Key
+	namespace string
+	verifyKey string
+	value     []byte
+}
+
+func newRealtimeNamespaceKey(in resources.ProvisionRequest) (string, keyvalue.Key) {
 	namespace := chooseDeclaredName(in.Resource.Declared, in.Resource.Name)
-	record, err := json.Marshal(live.RealtimeNamespace{VerifyKey: verifyKey})
+	return namespace, live.RealtimeNamespaceKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, namespace)
+}
+
+func newRealtimeNamespaceRecord(in resources.ProvisionRequest, seed []byte) (realtimeNamespaceRecord, error) {
+	verifyKey := base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
+	value, err := json.Marshal(live.RealtimeNamespace{VerifyKey: verifyKey})
 	if err != nil {
-		return provider.Binding{}, err
+		return realtimeNamespaceRecord{}, err
 	}
-	key := live.RealtimeNamespaceKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, namespace)
-	if err := keyvalue.Change(ctx, p.keyValues, key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
-		return record, string(recorded.Value) != string(record), nil
-	}); err != nil {
-		return provider.Binding{}, err
-	}
-	if err := p.runRealtimeGateway(ctx, in.Ref, progress); err != nil {
-		return provider.Binding{}, err
-	}
+	namespace, key := newRealtimeNamespaceKey(in)
+	return realtimeNamespaceRecord{
+		key:       key,
+		namespace: namespace,
+		verifyKey: verifyKey,
+		value:     value,
+	}, nil
+}
+
+func newRealtimeBinding(in resources.ProvisionRequest, seed []byte, verifyKey string) provider.Binding {
 	return provider.Binding{
 		Type:     provider.BindingRealtime,
 		Name:     in.Resource.Name,
@@ -126,11 +139,100 @@ func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.Provision
 			provider.PropertySigningKey: base64.StdEncoding.EncodeToString(seed),
 			provider.PropertyVerifyKey:  verifyKey,
 		},
-	}, nil
+	}
+}
+
+func (p *Provider) PlanRealtime(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	if err := refuseUnconfiguredRealtime(in); err != nil {
+		return "", "", err
+	}
+	bound, err := newRealtimeSigningAssociatedData(in)
+	if err != nil {
+		return "", "", err
+	}
+	sealed, opened, err := p.readKeptSealed(ctx, in.Ref.Tier, nameSigningKey(in.Ref, in.Resource.Name), in.Resource.Name, bound)
+	if err != nil {
+		return "", "", err
+	}
+	_, key := newRealtimeNamespaceKey(in)
+	held, err := keyvalue.ReadOrEmpty(ctx, p.keyValues, key)
+	if err != nil {
+		return "", "", err
+	}
+	if len(sealed) == 0 {
+		if len(held.Value) == 0 {
+			return provider.ActionCreate, "", nil
+		}
+		return provider.ActionUpdate, "the box keeps no signing key for it, so a new one is minted and its gateway " + realtimeGatewayName(in.Ref) + " restarted to verify it", nil
+	}
+	seed, err := decodeSigningSeed(in, opened)
+	if err != nil {
+		return "", "", err
+	}
+	record, err := newRealtimeNamespaceRecord(in, seed)
+	if err != nil {
+		return "", "", err
+	}
+	var change resourceChange
+	switch {
+	case len(held.Value) == 0:
+		change.add(provider.ActionCreate, "")
+	case string(held.Value) != string(record.value):
+		change.add(provider.ActionUpdate, "its verify key is recorded anew")
+	}
+	keys, err := p.readRealtimeKeys(ctx, in.Ref)
+	if err != nil {
+		return "", "", err
+	}
+	keys[record.namespace] = record.verifyKey
+	gateway, err := newRealtimeGateway(in.Ref, keys)
+	if err != nil {
+		return "", "", err
+	}
+	action, reason, err := p.host.PlanResource(ctx, gateway)
+	if err != nil {
+		return "", "", err
+	}
+	switch action {
+	case provider.ActionKeep:
+	case provider.ActionCreate:
+		change.add(provider.ActionUpdate, "its gateway "+gateway.Name+" is started")
+	default:
+		change.add(provider.ActionUpdate, "its gateway "+gateway.Name+" is replaced: "+reason)
+	}
+	change.addRecorded(recorded, newRealtimeBinding(in, seed, record.verifyKey))
+	return change.report()
+}
+
+func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
+	if err := refuseUnconfiguredRealtime(in); err != nil {
+		return provider.Binding{}, err
+	}
+	seed, err := p.realtimeSigningSeed(ctx, in)
+	if err != nil {
+		return provider.Binding{}, err
+	}
+	record, err := newRealtimeNamespaceRecord(in, seed)
+	if err != nil {
+		return provider.Binding{}, err
+	}
+	if err := keyvalue.Change(ctx, p.keyValues, record.key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+		return record.value, string(recorded.Value) != string(record.value), nil
+	}); err != nil {
+		return provider.Binding{}, err
+	}
+	if err := p.runRealtimeGateway(ctx, in.Ref, progress); err != nil {
+		return provider.Binding{}, err
+	}
+	return newRealtimeBinding(in, seed, record.verifyKey), nil
+}
+
+func newRealtimeSigningAssociatedData(in resources.ProvisionRequest) (seal.AssociatedData, error) {
+	return live.NewSecretAssociatedData(in.Ref.Project, in.Ref.Tier, in.Ref.Name.String(), resourceSecretFolder, in.Resource.Name, realtimeSigningName)
 }
 
 func (p *Provider) realtimeSigningSeed(ctx context.Context, in resources.ProvisionRequest) ([]byte, error) {
-	bound, err := live.NewSecretAssociatedData(in.Ref.Project, in.Ref.Tier, in.Ref.Name.String(), resourceSecretFolder, in.Resource.Name, realtimeSigningName)
+	bound, err := newRealtimeSigningAssociatedData(in)
 	if err != nil {
 		return nil, err
 	}
@@ -138,6 +240,10 @@ func (p *Provider) realtimeSigningSeed(ctx context.Context, in resources.Provisi
 	if err != nil {
 		return nil, err
 	}
+	return decodeSigningSeed(in, opened)
+}
+
+func decodeSigningSeed(in resources.ProvisionRequest, opened string) ([]byte, error) {
 	seed, err := base64.StdEncoding.DecodeString(opened)
 	if err != nil || len(seed) != ed25519.SeedSize {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
@@ -202,7 +308,7 @@ func (p *Provider) placeRealtimeGateway(ctx context.Context, ref provider.StackR
 	return p.host.RunResource(ctx, gateway, "")
 }
 
-func (p *Provider) removeRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+func (p *Provider) RemoveRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	namespace := chooseDeclaredName(binding.Resource, binding.Name)
 	if err := keyvalue.Forget(ctx, p.keyValues, live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, namespace)); err != nil {
 		return err

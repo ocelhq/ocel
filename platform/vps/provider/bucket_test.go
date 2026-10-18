@@ -3,6 +3,8 @@ package vps_test
 import (
 	"context"
 	"encoding/base64"
+	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -18,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -316,11 +319,11 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey()}
-	err := over(machine).RemoveResource(context.Background(),
+	err := over(machine).RemoveBucket(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)},
 		bindingBucket(), progress.Discard())
 	if err != nil {
-		t.Fatalf("RemoveResource(bucket) = %v", err)
+		t.Fatalf("RemoveBucket() = %v", err)
 	}
 	if joined := strings.Join(machine.commands(), "\n"); strings.Contains(joined, s3store.SessionsBucket()) {
 		t.Errorf("dropping one declared bucket reached for the store's sessions:\n%s", joined)
@@ -417,11 +420,11 @@ func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey()}
-	err := over(machine).RemoveResource(context.Background(),
+	err := over(machine).RemoveBucket(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)},
 		bindingBucket(), progress.Discard())
 	if err != nil {
-		t.Fatalf("RemoveResource(bucket) = %v", err)
+		t.Fatalf("RemoveBucket() = %v", err)
 	}
 	joined := strings.Join(machine.commands(), "\n")
 	if strings.Contains(joined, "rm -rf /data/") {
@@ -465,4 +468,178 @@ func aStackName(t *testing.T) naming.StackName {
 		t.Fatal(err)
 	}
 	return stack
+}
+
+type heldStore struct {
+	buckets map[string]map[string][]byte
+}
+
+func (s *heldStore) answer(command, input string) (session.Result, bool) {
+	if s == nil || !strings.Contains(command, "'--request'") || !strings.Contains(command, "'http://127.0.0.1:9000/") {
+		return session.Result{}, false
+	}
+	if !strings.Contains(command, "said=$(") {
+		body, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(input))
+		s.call(command, body)
+		return session.Result{}, true
+	}
+	var said strings.Builder
+	var code string
+	var answered []byte
+	for _, line := range strings.Split(command, "\n") {
+		switch {
+		case strings.HasPrefix(line, "said=$("):
+			var body []byte
+			if fed, piped := strings.CutPrefix(line, "said=$(printf '%s' '"); piped {
+				encoded, _, _ := strings.Cut(fed, "'")
+				body, _ = base64.StdEncoding.DecodeString(encoded)
+			}
+			code, answered = s.call(line, body)
+		case strings.HasPrefix(line, "printf '%s=%s\\n' "):
+			said.WriteString(unquoted(strings.Fields(line)[2]) + "=" + code + "\n")
+		case strings.HasPrefix(line, "printf '%s.body=%s\\n' "):
+			said.WriteString(unquoted(strings.Fields(line)[2]) + ".body=" + base64.StdEncoding.EncodeToString(answered) + "\n")
+		}
+	}
+	return session.Result{Stdout: said.String()}, true
+}
+
+func (s *heldStore) call(line string, body []byte) (string, []byte) {
+	fields := strings.Fields(line)
+	var method string
+	var target *url.URL
+	for at, field := range fields {
+		if field == "'--request'" && at+1 < len(fields) {
+			method = unquoted(fields[at+1])
+		}
+		if address, isURL := strings.CutPrefix(unquoted(strings.TrimSuffix(field, ")")), "http://127.0.0.1:9000/"); isURL {
+			target, _ = url.Parse("http://127.0.0.1:9000/" + address)
+		}
+	}
+	if target == nil {
+		return "400", nil
+	}
+	bucket, _, _ := strings.Cut(strings.TrimPrefix(target.Path, "/"), "/")
+	if s.buckets == nil {
+		s.buckets = map[string]map[string][]byte{}
+	}
+	held, exists := s.buckets[bucket]
+	query := target.RawQuery
+	switch {
+	case query == "" && method == http.MethodPut && exists:
+		return "409", nil
+	case query == "" && method == http.MethodPut:
+		s.buckets[bucket] = map[string][]byte{}
+		return "200", nil
+	case query == "" && method == http.MethodDelete:
+		delete(s.buckets, bucket)
+		return "204", nil
+	case !exists:
+		return "404", nil
+	case query == "location":
+		return "200", []byte("<LocationConstraint/>")
+	case strings.HasPrefix(query, "uploads"):
+		return "200", []byte("<ListMultipartUploadsResult></ListMultipartUploadsResult>")
+	case strings.HasPrefix(query, "list-type"):
+		return "200", []byte("<ListBucketResult></ListBucketResult>")
+	case method == http.MethodGet:
+		if config, set := held[query]; set {
+			return "200", config
+		}
+		return "404", nil
+	case method == http.MethodPut:
+		held[query] = body
+		return "200", nil
+	case method == http.MethodDelete:
+		delete(held, query)
+		return "204", nil
+	default:
+		return "200", nil
+	}
+}
+
+func bucketProvisioned(t *testing.T, machine *box, in resources.ProvisionRequest) provider.Binding {
+	t.Helper()
+	binding, err := over(machine).ProvisionBucket(context.Background(), in, progress.Discard())
+	if err != nil {
+		t.Fatalf("ProvisionBucket() = %v", err)
+	}
+	return binding
+}
+
+func plannedBucket(t *testing.T, machine *box, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string) {
+	t.Helper()
+	mark := len(machine.commands())
+	action, reason, err := over(machine).PlanBucket(context.Background(), in, recorded)
+	if err != nil {
+		t.Fatalf("PlanBucket() = %v", err)
+	}
+	refuseWrites(t, machine.since(mark))
+	return action, reason
+}
+
+func TestABucketTurningPublicPlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true, store: &heldStore{}}
+	recorded := bucketProvisioned(t, machine, aBucket(t, "uploads", false))
+	action, reason := plannedBucket(t, machine, aBucket(t, "uploads", true), &recorded)
+	if action != provider.ActionUpdate || !strings.Contains(reason, "becomes readable by anyone") {
+		t.Errorf("a private bucket declared public plans %s %q, and the apply opens it to anonymous reads", action, reason)
+	}
+}
+
+func TestABucketTurningPrivatePlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true, store: &heldStore{}}
+	recorded := bucketProvisioned(t, machine, aBucket(t, "uploads", true))
+	action, reason := plannedBucket(t, machine, aBucket(t, "uploads", false), &recorded)
+	if action != provider.ActionUpdate || !strings.Contains(reason, "stops being readable by anyone") {
+		t.Errorf("a public bucket declared private plans %s %q, and the apply closes it to anonymous reads", action, reason)
+	}
+}
+
+func TestABucketWhoseOriginsChangePlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true, store: &heldStore{}}
+	recorded := bucketProvisioned(t, machine, aBucket(t, "uploads", false))
+	widened := aBucket(t, "uploads", false)
+	widened.Resource.Bucket.AllowedOrigins = append(widened.Resource.Bucket.AllowedOrigins, "https://admin.example.com")
+	action, reason := plannedBucket(t, machine, widened, &recorded)
+	if action != provider.ActionUpdate || !strings.Contains(reason, "https://admin.example.com") {
+		t.Errorf("a bucket gaining an origin plans %s %q, and the apply rewrites its CORS", action, reason)
+	}
+}
+
+func TestAnUnchangedBucketPlansKeep(t *testing.T) {
+	t.Parallel()
+
+	for _, public := range []bool{false, true} {
+		machine := &box{remembers: true, store: &heldStore{}}
+		recorded := bucketProvisioned(t, machine, aBucket(t, "uploads", public))
+		if action, reason := plannedBucket(t, machine, aBucket(t, "uploads", public), &recorded); action != provider.ActionKeep {
+			t.Errorf("a bucket (public %t) declared as it was provisioned plans %s %q, want keep", public, action, reason)
+		}
+	}
+}
+
+func TestABucketTheStoreDoesNotHoldPlansACreate(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true, store: &heldStore{}}
+	bucketProvisioned(t, machine, aBucket(t, "uploads", false))
+	if action, reason := plannedBucket(t, machine, aBucket(t, "avatars", false), nil); action != provider.ActionCreate {
+		t.Errorf("a bucket the store does not hold plans %s %q, want create", action, reason)
+	}
+}
+
+func TestABucketOnABoxRunningNoStorePlansACreateAndKeepsNothing(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true, store: &heldStore{}}
+	if action, reason := plannedBucket(t, machine, aBucket(t, "uploads", false), nil); action != provider.ActionCreate {
+		t.Errorf("a bucket on a box running no store plans %s %q, want create", action, reason)
+	}
 }

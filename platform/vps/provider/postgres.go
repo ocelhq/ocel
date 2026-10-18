@@ -42,9 +42,13 @@ func resolvePostgresContainer(in resources.ProvisionRequest) (host.ResourceConta
 		host.Volume{Path: postgresData, Generation: version}), nil
 }
 
+func namePostgres(ref provider.StackRef, database, kind string) string {
+	return host.ResourceName(ref.Project, ref.Name.String(), database, kind)
+}
+
 func newPostgresContainer(ref provider.StackRef, database, kind, image string, volume host.Volume) host.ResourceContainer {
 	return host.ResourceContainer{
-		Name:     host.ResourceName(ref.Project, ref.Name.String(), database, kind),
+		Name:     namePostgres(ref, database, kind),
 		Project:  ref.Project,
 		Resource: database,
 		Tier:     ref.Tier,
@@ -66,22 +70,15 @@ func newPostgresContainer(ref provider.StackRef, database, kind, image string, v
 	}
 }
 
-func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
+func (p *Provider) postgresContainer(ctx context.Context, in resources.ProvisionRequest) (host.ResourceContainer, error) {
 	spec, err := resolvePostgresContainer(in)
 	if err != nil {
-		return provider.Binding{}, err
+		return host.ResourceContainer{}, err
 	}
-	if spec, err = p.reshaped(ctx, in, transformTypePostgres, spec); err != nil {
-		return provider.Binding{}, err
-	}
-	progress.Say("Provisioning postgres " + in.Resource.Name + " in container " + spec.Name)
-	secret, err := p.postgresSecret(ctx, in, spec.Name)
-	if err != nil {
-		return provider.Binding{}, err
-	}
-	if err := p.host.RunResource(ctx, spec, secret); err != nil {
-		return provider.Binding{}, err
-	}
+	return p.reshaped(ctx, in, transformTypePostgres, spec)
+}
+
+func newPostgresBinding(in resources.ProvisionRequest, spec host.ResourceContainer, secret string) provider.Binding {
 	return provider.Binding{
 		Type:     provider.BindingPostgres,
 		Name:     in.Resource.Name,
@@ -93,7 +90,51 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Provision
 			provider.PropertyUsername: postgresSuperuser,
 			provider.PropertyPassword: secret,
 		},
-	}, nil
+	}
+}
+
+func (p *Provider) PlanPostgres(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	spec, err := p.postgresContainer(ctx, in)
+	if err != nil {
+		return "", "", err
+	}
+	action, reason, err := p.host.PlanResource(ctx, spec)
+	if err != nil || action == provider.ActionCreate {
+		return action, reason, err
+	}
+	var change resourceChange
+	change.add(action, reason)
+	sealed, err := p.host.Kept(ctx, in.Ref.Tier, spec.Name)
+	if err != nil {
+		return "", "", err
+	}
+	if len(sealed) == 0 {
+		change.add(provider.ActionUpdate, "the box keeps no password for it, so a new one is minted that its running server was never handed")
+	}
+	change.addRecorded(recorded, newPostgresBinding(in, spec, ""))
+	return change.report()
+}
+
+func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
+	spec, err := p.postgresContainer(ctx, in)
+	if err != nil {
+		return provider.Binding{}, err
+	}
+	progress.Say("Provisioning postgres " + in.Resource.Name + " in container " + spec.Name)
+	secret, err := p.postgresSecret(ctx, in, spec.Name)
+	if err != nil {
+		return provider.Binding{}, err
+	}
+	if err := p.host.RunResource(ctx, spec, secret); err != nil {
+		return provider.Binding{}, err
+	}
+	return newPostgresBinding(in, spec, secret), nil
+}
+
+func (p *Provider) RemovePostgres(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+	name := namePostgres(ref, binding.Name, postgresKind)
+	progress.Say("Removing postgres " + binding.Name + ", its container " + name + " and its data")
+	return p.host.RemoveResource(ctx, host.ResourceRef{Tier: ref.Tier, Project: ref.Project, Resource: binding.Name, Name: name})
 }
 
 func newPostgresSecretAssociatedData(ref provider.StackRef, resource string) (seal.AssociatedData, error) {

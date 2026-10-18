@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/realtime"
@@ -27,6 +28,7 @@ type realtimeHarness struct {
 
 	mu          sync.Mutex
 	pushed      []string
+	writes      []string
 	unaccounted bool
 }
 
@@ -35,6 +37,11 @@ func newRealtimeHarness(t *testing.T) *realtimeHarness {
 	h := &realtimeHarness{run: &runServer{}, secrets: newSecretServer()}
 	serveRun := h.run.serve(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			h.mu.Lock()
+			h.writes = append(h.writes, r.Method+" "+r.URL.Path)
+			h.mu.Unlock()
+		}
 		if strings.HasPrefix(r.URL.Path, "/v1/projects/") && strings.Contains(r.URL.Path, "/secrets") {
 			h.secrets.serve(t, w, r)
 			return
@@ -229,5 +236,121 @@ func TestAnEmulatedEnvironmentHandsItsGatewayEveryKeyInItsEnvironment(t *testing
 	}
 	if len(keys) != 1 || keys["app"] != app.Properties[provider.PropertyVerifyKey] {
 		t.Errorf("the gateway's keys are %v, want app's alone", keys)
+	}
+}
+
+func (h *realtimeHarness) plan(t *testing.T, name string) (provider.ChangeAction, string, error) {
+	t.Helper()
+	h.mu.Lock()
+	written, pushed := len(h.writes), len(h.pushed)
+	h.mu.Unlock()
+	key := h.env.namespaceKey(name)
+	before, _ := keyvalue.ReadOrEmpty(context.Background(), h.env.records, key)
+
+	action, reason, err := h.env.plan(context.Background(), aRealtime(name))
+
+	h.mu.Lock()
+	if got := h.writes[written:]; len(got) != 0 {
+		t.Errorf("plan(%s) wrote %q, want a plan that only reads", name, got)
+	}
+	if got := h.pushed[pushed:]; len(got) != 0 {
+		t.Errorf("plan(%s) pushed the gateway image %q, want a plan that only reads", name, got)
+	}
+	h.mu.Unlock()
+	if after, _ := keyvalue.ReadOrEmpty(context.Background(), h.env.records, key); string(after.Value) != string(before.Value) {
+		t.Errorf("plan(%s) changed the realtime's record, want a plan that only reads", name)
+	}
+	return action, reason, err
+}
+
+func TestAMissingRealtimePlansACreate(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	action, _, err := h.plan(t, "app")
+	if err != nil || action != provider.ActionCreate {
+		t.Errorf("plan() = %s, %v, want %s", action, err, provider.ActionCreate)
+	}
+	if h.secrets.has(h.env.clients.RealtimeSigningSecret("shop", "prod", "app")) {
+		t.Error("plan() minted a signing key, want a plan that only reads")
+	}
+}
+
+func TestARealtimeAsProvisionedPlansKeep(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+	h.provision(t, "chat")
+
+	action, reason, err := h.plan(t, "app")
+	if err != nil || action != provider.ActionKeep || reason != provider.ReasonCurrent {
+		t.Errorf("plan() = %s %q, %v, want %s %q", action, reason, err, provider.ActionKeep, provider.ReasonCurrent)
+	}
+}
+
+func TestARealtimeWhoseGatewayDriftedPlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+	h.run.mu.Lock()
+	h.run.service.Template.MaxInstanceRequestConcurrency = 80
+	h.run.mu.Unlock()
+
+	action, reason, err := h.plan(t, "app")
+	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "released again") {
+		t.Errorf("plan() = %s %q, %v, want an update saying the gateway is released again", action, reason, err)
+	}
+}
+
+func TestARealtimeWhoseGatewayIsGonePlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+	h.run.mu.Lock()
+	h.run.service = nil
+	h.run.mu.Unlock()
+
+	action, reason, err := h.plan(t, "app")
+	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "is created") {
+		t.Errorf("plan() = %s %q, %v, want an update saying the gateway is created", action, reason, err)
+	}
+}
+
+func TestARealtimeWhoseRecordWasLostPlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+	if err := keyvalue.Forget(context.Background(), h.env.records, h.env.namespaceKey("app")); err != nil {
+		t.Fatal(err)
+	}
+
+	action, reason, err := h.plan(t, "app")
+	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "verify key") {
+		t.Errorf("plan() = %s %q, %v, want an update saying the verify key is recorded", action, reason, err)
+	}
+}
+
+func TestARealtimeWhoseKeysChangedPlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+	stale, err := json.Marshal(realtimeNamespace{VerifyKey: "c3RhbGU="})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := keyvalue.Change(context.Background(), h.env.records, h.env.namespaceKey("chat"), func(keyvalue.Entry) ([]byte, bool, error) {
+		return stale, true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	action, reason, err := h.plan(t, "app")
+	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "chat") {
+		t.Errorf("plan() = %s %q, %v, want an update naming the realtimes the gateway's keys secret comes to hold", action, reason, err)
 	}
 }
