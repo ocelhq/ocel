@@ -14,7 +14,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -72,22 +74,22 @@ func TestEachTierSyncsAsAnAccountOfItsOwnThatEveryReadNamesTheSame(t *testing.T)
 
 func TestTheSyncAccountMayWriteThisDatabaseAndSealAndOpenUnderItsTierKeyAlone(t *testing.T) {
 	t.Parallel()
-	server := grantedIAM()
-	b := bootstrap{clients: server.open(t)}
-	read := survey{Tier: environment.TierProduction, Names: b.clients.Names}
+	server := googletest.GrantedIAM()
+	b := composed(bootstrap.Engine{Clients: server.Open(t)})
+	read := bootstrap.Survey{Tier: environment.TierProduction, Names: b.Clients.Names}
 	ctx := context.Background()
-	name := b.clients.EnvSourceSyncAccount(environment.TierProduction)
+	name := b.Clients.EnvSourceSyncAccount(environment.TierProduction)
 
-	if err := b.makeAccount(ctx, read, name); err != nil {
+	if err := b.MakeAccount(ctx, read, name); err != nil {
 		t.Fatalf("makeAccount() = %v", err)
 	}
-	if len(server.created) != 1 || server.created[0].AccountId != name ||
-		server.created[0].ServiceAccount.DisplayName != "ocel env source sync (ocel, production)" ||
-		!strings.Contains(server.created[0].ServiceAccount.Description, "env source sync") {
-		t.Errorf("created %+v, want %s named for what it is and whose it is: its id is a hash", server.created, name)
+	if len(server.Created) != 1 || server.Created[0].AccountId != name ||
+		server.Created[0].ServiceAccount.DisplayName != "ocel env source sync (ocel, production)" ||
+		!strings.Contains(server.Created[0].ServiceAccount.Description, "env source sync") {
+		t.Errorf("created %+v, want %s named for what it is and whose it is: its id is a hash", server.Created, name)
 	}
-	member := "serviceAccount:" + b.clients.EnvSourceSyncAccountEmail(environment.TierProduction)
-	members, condition := server.projectMembers(syncRecordsRole)
+	member := "serviceAccount:" + b.Clients.EnvSourceSyncAccountEmail(environment.TierProduction)
+	members, condition := server.ProjectMembers(syncRecordsRole)
 	if !slices.Contains(members, member) {
 		t.Errorf("the project binds %v to %s, want the sync account: it writes what an env source has into the records", members, syncRecordsRole)
 	}
@@ -96,27 +98,27 @@ func TestTheSyncAccountMayWriteThisDatabaseAndSealAndOpenUnderItsTierKeyAlone(t 
 	}
 	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
 	for _, role := range []string{syncSealingRole, syncOpeningRole} {
-		if granted := server.keyMembers(key, role); !slices.Contains(granted, member) {
+		if granted := server.KeyMembers(key, role); !slices.Contains(granted, member) {
 			t.Errorf("the production key binds %v to %s, want the sync account: it opens its credentials and seals what it copies", granted, role)
 		}
 	}
-	if readers, _ := server.projectMembers(grants.RecordsRole); slices.Contains(readers, member) {
+	if readers, _ := server.ProjectMembers(grants.RecordsRole); slices.Contains(readers, member) {
 		t.Errorf("the sync account has an app's %s too, and one grant is what it needs", grants.RecordsRole)
 	}
 
-	found, err := b.accountPresence(ctx, environment.TierProduction, name)
-	if err != nil || !found.present || found.mends != "" {
+	found, err := b.AccountPresence(ctx, environment.TierProduction, name)
+	if err != nil || !found.Present || found.Mends != "" {
 		t.Errorf("accountPresence() = %+v, %v after the grants landed, want it present with nothing to mend", found, err)
 	}
 
-	if err := b.takeAccount(ctx, environment.TierProduction, name); err != nil {
+	if err := b.TakeAccount(ctx, environment.TierProduction, name); err != nil {
 		t.Fatalf("takeAccount() = %v", err)
 	}
-	if writers, _ := server.projectMembers(syncRecordsRole); slices.Contains(writers, member) {
+	if writers, _ := server.ProjectMembers(syncRecordsRole); slices.Contains(writers, member) {
 		t.Errorf("the project still binds the deleted sync account to %s", syncRecordsRole)
 	}
 	for _, role := range []string{syncSealingRole, syncOpeningRole} {
-		if granted := server.keyMembers(key, role); slices.Contains(granted, member) {
+		if granted := server.KeyMembers(key, role); slices.Contains(granted, member) {
 			t.Errorf("the key still binds the deleted sync account to %s", role)
 		}
 	}
@@ -124,15 +126,15 @@ func TestTheSyncAccountMayWriteThisDatabaseAndSealAndOpenUnderItsTierKeyAlone(t 
 
 func TestASyncAccountThatMayNotWriteIsSurveyedAsMendable(t *testing.T) {
 	t.Parallel()
-	b := bootstrap{clients: grantedIAM().open(t)}
+	b := composed(bootstrap.Engine{Clients: googletest.GrantedIAM().Open(t)})
 
-	found, err := b.accountPresence(context.Background(), environment.TierProduction, b.clients.EnvSourceSyncAccount(environment.TierProduction))
-	if err != nil || !found.present || found.mends != reasonUnwritable {
+	found, err := b.AccountPresence(context.Background(), environment.TierProduction, b.Clients.EnvSourceSyncAccount(environment.TierProduction))
+	if err != nil || !found.Present || found.Mends != reasonUnwritable {
 		t.Errorf("accountPresence() = %+v, %v, want it present and mended for the writes it lacks", found, err)
 	}
 }
 
-func idsOf(items []item) []string {
+func idsOf(items []bootstrap.Resource) []string {
 	ids := make([]string, 0, len(items))
 	for _, each := range items {
 		ids = append(ids, each.ID())
@@ -146,17 +148,17 @@ func TestTheSyncServiceRunsTheEmbeddedSyncAsItsOwnAccountAndOnlyThatAccountMayCa
 	b := server.open(t)
 	ctx := context.Background()
 	tier := environment.TierProduction
-	name := b.clients.EnvSourceSync(tier)
-	path := b.clients.ServicePath(name)
+	name := b.Clients.EnvSourceSync(tier)
+	path := b.Clients.ServicePath(name)
 
-	if err := b.makeService(ctx, tier, name); err != nil {
+	if err := makeService(ctx, b, tier, name); err != nil {
 		t.Fatalf("makeService() = %v", err)
 	}
-	ref := syncImageRef(b.clients, tier)
+	ref := syncImageRef(b.Clients, tier)
 	if !slices.Equal(server.pushed, []string{ref}) {
 		t.Errorf("pushed %v, want the sync image at %s", server.pushed, ref)
 	}
-	if !strings.HasPrefix(ref, "europe-west1-docker.pkg.dev/acme-prod/"+b.clients.Repository(tier)+"/ocel-envsourcesync:") {
+	if !strings.HasPrefix(ref, "europe-west1-docker.pkg.dev/acme-prod/"+b.Clients.Repository(tier)+"/ocel-envsourcesync:") {
 		t.Errorf("the sync image is %s, want it in the tier's own repository", ref)
 	}
 	service := server.service(path)
@@ -167,7 +169,7 @@ func TestTheSyncServiceRunsTheEmbeddedSyncAsItsOwnAccountAndOnlyThatAccountMayCa
 	if len(template.Containers) != 1 || template.Containers[0].Image != ref {
 		t.Fatalf("the service runs %+v, want the one image %s", template.Containers, ref)
 	}
-	if template.ServiceAccount != b.clients.EnvSourceSyncAccountEmail(tier) {
+	if template.ServiceAccount != b.Clients.EnvSourceSyncAccountEmail(tier) {
 		t.Errorf("the service runs as %q, want the sync's own account", template.ServiceAccount)
 	}
 	env := map[string]string{}
@@ -204,13 +206,13 @@ func TestTheSyncServiceRunsTheEmbeddedSyncAsItsOwnAccountAndOnlyThatAccountMayCa
 	}
 
 	policy := server.policy(path)
-	member := "serviceAccount:" + b.clients.EnvSourceSyncAccountEmail(tier)
+	member := "serviceAccount:" + b.Clients.EnvSourceSyncAccountEmail(tier)
 	if policy == nil || len(policy.Bindings) != 1 || policy.Bindings[0].Role != "roles/run.invoker" || !slices.Equal(policy.Bindings[0].Members, []string{member}) {
 		t.Errorf("the service's policy is %s, want %s alone with roles/run.invoker", encoded(t, policy), member)
 	}
 
-	found, err := b.servicePresence(ctx, tier, name)
-	if err != nil || !found.present || found.mends != "" {
+	found, err := servicePresence(ctx, b, tier, name)
+	if err != nil || !found.Present || found.Mends != "" {
 		t.Errorf("servicePresence() = %+v, %v, want it present with nothing to mend", found, err)
 	}
 }
@@ -240,24 +242,24 @@ func TestASyncServiceRunOrReachedOtherwiseIsMendedInPlace(t *testing.T) {
 			b := server.open(t)
 			ctx := context.Background()
 			tier := environment.TierPreview
-			name := b.clients.EnvSourceSync(tier)
-			path := b.clients.ServicePath(name)
-			if err := b.makeService(ctx, tier, name); err != nil {
+			name := b.Clients.EnvSourceSync(tier)
+			path := b.Clients.ServicePath(name)
+			if err := makeService(ctx, b, tier, name); err != nil {
 				t.Fatal(err)
 			}
 			server.change(func() { change(server.services[path]) })
 
-			found, err := b.servicePresence(ctx, tier, name)
-			if err != nil || !found.present || found.mends != reasonServiceChanged {
+			found, err := servicePresence(ctx, b, tier, name)
+			if err != nil || !found.Present || found.Mends != reasonServiceChanged {
 				t.Fatalf("servicePresence() = %+v, %v, want it present and mended", found, err)
 			}
-			if err := b.makeService(ctx, tier, name); err != nil {
+			if err := makeService(ctx, b, tier, name); err != nil {
 				t.Fatalf("makeService() = %v", err)
 			}
 			if !server.wasPatched(path) {
 				t.Error("the mend did not update the service in place")
 			}
-			if found, err := b.servicePresence(ctx, tier, name); err != nil || found.mends != "" {
+			if found, err := servicePresence(ctx, b, tier, name); err != nil || found.Mends != "" {
 				t.Errorf("servicePresence() after the mend = %+v, %v", found, err)
 			}
 		})
@@ -270,14 +272,14 @@ func TestAMendedSyncServiceServesTheRevisionTheMendMade(t *testing.T) {
 	b := server.open(t)
 	ctx := context.Background()
 	tier := environment.TierPreview
-	name := b.clients.EnvSourceSync(tier)
-	path := b.clients.ServicePath(name)
-	if err := b.makeService(ctx, tier, name); err != nil {
+	name := b.Clients.EnvSourceSync(tier)
+	path := b.Clients.ServicePath(name)
+	if err := makeService(ctx, b, tier, name); err != nil {
 		t.Fatal(err)
 	}
 	server.change(func() { server.services[path].Template.Containers[0].Image += "0" })
 
-	if err := b.makeService(ctx, tier, name); err != nil {
+	if err := makeService(ctx, b, tier, name); err != nil {
 		t.Fatalf("makeService() = %v", err)
 	}
 
@@ -296,17 +298,17 @@ func TestASyncServiceWhoseLatestRevisionServesNoTrafficIsMended(t *testing.T) {
 	b := server.open(t)
 	ctx := context.Background()
 	tier := environment.TierPreview
-	name := b.clients.EnvSourceSync(tier)
-	path := b.clients.ServicePath(name)
-	if err := b.makeService(ctx, tier, name); err != nil {
+	name := b.Clients.EnvSourceSync(tier)
+	path := b.Clients.ServicePath(name)
+	if err := makeService(ctx, b, tier, name); err != nil {
 		t.Fatal(err)
 	}
 	server.change(func() {
 		server.services[path].Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{{Type: run.TrafficByRevision, Revision: "an-older-revision", Percent: 100}}
 	})
 
-	found, err := b.servicePresence(ctx, tier, name)
-	if err != nil || found.mends != reasonServiceChanged {
+	found, err := servicePresence(ctx, b, tier, name)
+	if err != nil || found.Mends != reasonServiceChanged {
 		t.Errorf("servicePresence() = %+v, %v, want it mended: the revision that serves is not the one this bootstrap deployed", found, err)
 	}
 }
@@ -324,41 +326,16 @@ func TestASyncServiceCloudRunReadsBackInAnotherNotationForTheSameCPUAndMemoryIsC
 			b := server.open(t)
 			ctx := context.Background()
 			tier := environment.TierPreview
-			name := b.clients.EnvSourceSync(tier)
-			if err := b.makeService(ctx, tier, name); err != nil {
+			name := b.Clients.EnvSourceSync(tier)
+			if err := makeService(ctx, b, tier, name); err != nil {
 				t.Fatal(err)
 			}
-			server.change(func() { server.services[b.clients.ServicePath(name)].Template.Containers[0].Resources.Limits = limits })
+			server.change(func() { server.services[b.Clients.ServicePath(name)].Template.Containers[0].Resources.Limits = limits })
 
-			if found, err := b.servicePresence(ctx, tier, name); err != nil || !found.present || found.mends != "" {
+			if found, err := servicePresence(ctx, b, tier, name); err != nil || !found.Present || found.Mends != "" {
 				t.Errorf("servicePresence() over %v = %+v, %v, want it current: it is the 0.08 vCPU and 128Mi this bootstrap deploys", limits, found, err)
 			}
 		})
-	}
-	for _, limits := range []map[string]string{
-		{"cpu": "81m", "memory": "128Mi"},
-		{"cpu": "0.08", "memory": "128M"},
-		{"cpu": "0.08"},
-		{"cpu": "0.08", "memory": "128Mi", "nvidia.com/gpu": "1"},
-		{"cpu": "a lot", "memory": "128Mi"},
-	} {
-		if sameLimits(limits, map[string]string{"cpu": "0.08", "memory": "128Mi"}) {
-			t.Errorf("sameLimits(%v) reads as the 0.08 vCPU and 128Mi this bootstrap deploys", limits)
-		}
-	}
-}
-
-func TestASyncServiceCloudRunReadsBackWithTheSameTimeoutInAnotherNotationIsCurrent(t *testing.T) {
-	t.Parallel()
-	for _, timeout := range []string{"60s", "60.000s", "1m0s"} {
-		if !sameTimeout(timeout, "60s") {
-			t.Errorf("sameTimeout(%q) reads as another timeout than the 60s this bootstrap deploys", timeout)
-		}
-	}
-	for _, timeout := range []string{"61s", "", "a minute"} {
-		if sameTimeout(timeout, "60s") {
-			t.Errorf("sameTimeout(%q) reads as the 60s this bootstrap deploys", timeout)
-		}
 	}
 }
 
@@ -385,26 +362,26 @@ func TestASyncServiceAnyoneButTheSyncAccountMayCallIsMended(t *testing.T) {
 			b := server.open(t)
 			ctx := context.Background()
 			tier := environment.TierProduction
-			name := b.clients.EnvSourceSync(tier)
-			path := b.clients.ServicePath(name)
-			if err := b.makeService(ctx, tier, name); err != nil {
+			name := b.Clients.EnvSourceSync(tier)
+			path := b.Clients.ServicePath(name)
+			if err := makeService(ctx, b, tier, name); err != nil {
 				t.Fatal(err)
 			}
 			server.change(func() { change(server.policies[path]) })
 
-			found, err := b.servicePresence(ctx, tier, name)
-			if err != nil || !found.present || found.mends != reasonCallersChanged {
+			found, err := servicePresence(ctx, b, tier, name)
+			if err != nil || !found.Present || found.Mends != reasonCallersChanged {
 				t.Fatalf("servicePresence() = %+v, %v, want a service %s may call mended", found, err, caller)
 			}
-			if err := b.makeService(ctx, tier, name); err != nil {
+			if err := makeService(ctx, b, tier, name); err != nil {
 				t.Fatalf("makeService() over one that exists = %v", err)
 			}
-			member := "serviceAccount:" + b.clients.EnvSourceSyncAccountEmail(tier)
+			member := "serviceAccount:" + b.Clients.EnvSourceSyncAccountEmail(tier)
 			policy := server.policy(path)
 			if len(policy.Bindings) != 1 || policy.Bindings[0].Condition != nil || !slices.Equal(policy.Bindings[0].Members, []string{member}) {
 				t.Errorf("the mended policy is %s, want %s alone", encoded(t, policy), member)
 			}
-			if found, err := b.servicePresence(ctx, tier, name); err != nil || found.mends != "" {
+			if found, err := servicePresence(ctx, b, tier, name); err != nil || found.Mends != "" {
 				t.Errorf("servicePresence() after the mend = %+v, %v", found, err)
 			}
 		})
@@ -417,13 +394,13 @@ func TestLettingTheSyncAccountCallTheServiceRetriesWhenGoogleAnswers412(t *testi
 	server.policyChanges = 1
 	b := server.open(t)
 	tier := environment.TierProduction
-	name := b.clients.EnvSourceSync(tier)
+	name := b.Clients.EnvSourceSync(tier)
 
-	if err := b.letSyncCall(context.Background(), tier, name); err != nil {
+	if err := letSyncCall(context.Background(), b, tier, name); err != nil {
 		t.Fatalf("letSyncCall() after one 412 = %v, want the write retried", err)
 	}
-	member := "serviceAccount:" + b.clients.EnvSourceSyncAccountEmail(tier)
-	policy := server.policy(b.clients.ServicePath(name))
+	member := "serviceAccount:" + b.Clients.EnvSourceSyncAccountEmail(tier)
+	policy := server.policy(b.Clients.ServicePath(name))
 	if policy == nil || len(policy.Bindings) != 1 || !slices.Equal(policy.Bindings[0].Members, []string{member}) {
 		t.Errorf("the policy is %s, want %s alone", encoded(t, policy), member)
 	}
@@ -434,34 +411,34 @@ func TestTakingTheSyncServiceTwiceIsNothingToDo(t *testing.T) {
 	server := newSyncServer()
 	b := server.open(t)
 	ctx := context.Background()
-	name := b.clients.EnvSourceSync(environment.TierProduction)
-	if err := b.makeService(ctx, environment.TierProduction, name); err != nil {
+	name := b.Clients.EnvSourceSync(environment.TierProduction)
+	if err := makeService(ctx, b, environment.TierProduction, name); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.takeService(ctx, name); err != nil {
+	if err := takeService(ctx, b, name); err != nil {
 		t.Fatalf("takeService() = %v", err)
 	}
-	if found, err := b.servicePresence(ctx, environment.TierProduction, name); err != nil || found.present {
+	if found, err := servicePresence(ctx, b, environment.TierProduction, name); err != nil || found.Present {
 		t.Errorf("servicePresence() after takeService() = %+v, %v, want it gone", found, err)
 	}
-	if err := b.takeService(ctx, name); err != nil {
+	if err := takeService(ctx, b, name); err != nil {
 		t.Errorf("takeService() of one already gone = %v, want nothing to do", err)
 	}
 }
 
 func TestTheScheduleCallsTheServiceEveryMinuteWithAnIDTokenForTheSyncAccount(t *testing.T) {
 	t.Parallel()
-	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
+	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
 	tier := environment.TierProduction
-	name := b.clients.EnvSourceSync(tier)
-	schedule := b.syncSchedule(tier, name, servedAt(name))
+	name := b.Clients.EnvSourceSync(tier)
+	schedule := syncJob(b, tier, name, servedAt(name))
 	if schedule.Schedule != "* * * * *" {
 		t.Errorf("the schedule fires on %q, want every minute", schedule.Schedule)
 	}
 	if schedule.HttpTarget.Uri != servedAt(name)+"/" || schedule.HttpTarget.HttpMethod != http.MethodPost {
 		t.Errorf("the schedule calls %s %s, want POST on the service's root", schedule.HttpTarget.HttpMethod, schedule.HttpTarget.Uri)
 	}
-	if schedule.HttpTarget.OidcToken.ServiceAccountEmail != b.clients.EnvSourceSyncAccountEmail(tier) || schedule.HttpTarget.OauthToken != nil {
+	if schedule.HttpTarget.OidcToken.ServiceAccountEmail != b.Clients.EnvSourceSyncAccountEmail(tier) || schedule.HttpTarget.OauthToken != nil {
 		t.Errorf("the schedule logs in as %+v, want an ID token for the sync account: Cloud Run takes an ID token, not an OAuth one", schedule.HttpTarget)
 	}
 	if schedule.HttpTarget.OidcToken.Audience != servedAt(name) {
@@ -478,28 +455,28 @@ func TestTheScheduleIsCreatedAndMendedThroughCloudScheduler(t *testing.T) {
 	b := server.open(t)
 	ctx := context.Background()
 	tier := environment.TierProduction
-	name := b.clients.EnvSourceSync(tier)
-	path := schedulePath(b.clients, name)
+	name := b.Clients.EnvSourceSync(tier)
+	path := schedulePath(b.Clients, name)
 
-	if err := b.makeService(ctx, tier, name); err != nil {
+	if err := makeService(ctx, b, tier, name); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.makeSchedule(ctx, tier, name); err != nil {
+	if err := makeSchedule(ctx, b, tier, name); err != nil {
 		t.Fatalf("makeSchedule() = %v", err)
 	}
 	created := server.schedule(path)
 	if created == nil || created.HttpTarget.Uri != servedAt(name)+"/" {
 		t.Fatalf("the schedule is %s, want one calling the URL the service is at", encoded(t, created))
 	}
-	if found, err := b.schedulePresence(ctx, tier, name); err != nil || !found.present || found.mends != "" {
+	if found, err := schedulePresence(ctx, b, tier, name); err != nil || !found.Present || found.Mends != "" {
 		t.Errorf("schedulePresence() = %+v, %v, want it present with nothing to mend", found, err)
 	}
 
 	server.change(func() { server.schedules[path].Schedule = "*/5 * * * *" })
-	if found, err := b.schedulePresence(ctx, tier, name); err != nil || found.mends != reasonScheduleChanged {
+	if found, err := schedulePresence(ctx, b, tier, name); err != nil || found.Mends != reasonScheduleChanged {
 		t.Fatalf("schedulePresence() = %+v, %v, want a schedule edited by hand mended", found, err)
 	}
-	if err := b.makeSchedule(ctx, tier, name); err != nil {
+	if err := makeSchedule(ctx, b, tier, name); err != nil {
 		t.Fatalf("makeSchedule() over one that exists = %v", err)
 	}
 	if !server.wasPatched(path) {
@@ -508,20 +485,20 @@ func TestTheScheduleIsCreatedAndMendedThroughCloudScheduler(t *testing.T) {
 	if patched := server.schedule(path); patched.Name != path {
 		t.Errorf("the patched schedule is named %q, want %q", patched.Name, path)
 	}
-	if found, err := b.schedulePresence(ctx, tier, name); err != nil || found.mends != "" {
+	if found, err := schedulePresence(ctx, b, tier, name); err != nil || found.Mends != "" {
 		t.Errorf("schedulePresence() after the mend = %+v, %v", found, err)
 	}
 
-	servicePath := b.clients.ServicePath(name)
+	servicePath := b.Clients.ServicePath(name)
 	server.change(func() { server.services[servicePath].Uri = "https://elsewhere.a.run.app" })
-	if found, err := b.schedulePresence(ctx, tier, name); err != nil || found.mends != reasonScheduleChanged {
+	if found, err := schedulePresence(ctx, b, tier, name); err != nil || found.Mends != reasonScheduleChanged {
 		t.Errorf("schedulePresence() = %+v, %v, want a schedule calling a URL the service no longer answers on mended", found, err)
 	}
 
-	if err := takeSchedule(ctx, b.clients, name); err != nil {
+	if err := takeSchedule(ctx, b.Clients, name); err != nil {
 		t.Fatalf("takeSchedule() = %v", err)
 	}
-	if err := takeSchedule(ctx, b.clients, name); err != nil {
+	if err := takeSchedule(ctx, b.Clients, name); err != nil {
 		t.Errorf("takeSchedule() of one already gone = %v, want nothing to do", err)
 	}
 }
@@ -535,26 +512,26 @@ func TestAScheduleThatIsPausedDisabledOrFailedItsUpdateIsMendedToCallEveryMinute
 			b := server.open(t)
 			ctx := context.Background()
 			tier := environment.TierProduction
-			name := b.clients.EnvSourceSync(tier)
-			path := schedulePath(b.clients, name)
-			if err := b.makeService(ctx, tier, name); err != nil {
+			name := b.Clients.EnvSourceSync(tier)
+			path := schedulePath(b.Clients, name)
+			if err := makeService(ctx, b, tier, name); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.makeSchedule(ctx, tier, name); err != nil {
+			if err := makeSchedule(ctx, b, tier, name); err != nil {
 				t.Fatal(err)
 			}
 
 			server.change(func() { server.schedules[path].State = state })
-			if found, err := b.schedulePresence(ctx, tier, name); err != nil || !found.present || found.mends != reasonScheduleStopped {
+			if found, err := schedulePresence(ctx, b, tier, name); err != nil || !found.Present || found.Mends != reasonScheduleStopped {
 				t.Fatalf("schedulePresence() of a %s schedule = %+v, %v, want it mended: it never calls the sync", state, found, err)
 			}
-			if err := b.makeSchedule(ctx, tier, name); err != nil {
+			if err := makeSchedule(ctx, b, tier, name); err != nil {
 				t.Fatalf("makeSchedule() over a %s schedule = %v", state, err)
 			}
 			if mended := server.schedule(path); mended == nil || mended.State != "ENABLED" || mended.HttpTarget.Uri != servedAt(name)+"/" {
 				t.Errorf("the mended schedule is %s, want it enabled and calling the service", encoded(t, mended))
 			}
-			if found, err := b.schedulePresence(ctx, tier, name); err != nil || found.mends != "" {
+			if found, err := schedulePresence(ctx, b, tier, name); err != nil || found.Mends != "" {
 				t.Errorf("schedulePresence() after the mend = %+v, %v, want nothing to mend", found, err)
 			}
 		})
@@ -567,25 +544,25 @@ func TestAScheduleWithNoServiceToCallIsRefusedAndOneThatOutlivedItsServiceIsMend
 	b := server.open(t)
 	ctx := context.Background()
 	tier := environment.TierPreview
-	name := b.clients.EnvSourceSync(tier)
+	name := b.Clients.EnvSourceSync(tier)
 
-	if err := b.makeSchedule(ctx, tier, name); err == nil || !strings.Contains(err.Error(), name) {
+	if err := makeSchedule(ctx, b, tier, name); err == nil || !strings.Contains(err.Error(), name) {
 		t.Errorf("makeSchedule() without the service = %v, want a refusal naming %s: there is no URL to call", err, name)
 	}
 	server.change(func() {
-		server.schedules[schedulePath(b.clients, name)] = &cloudscheduler.Job{Schedule: "* * * * *", HttpTarget: &cloudscheduler.HttpTarget{Uri: "https://gone.a.run.app/"}}
+		server.schedules[schedulePath(b.Clients, name)] = &cloudscheduler.Job{Schedule: "* * * * *", HttpTarget: &cloudscheduler.HttpTarget{Uri: "https://gone.a.run.app/"}}
 	})
-	if found, err := b.schedulePresence(ctx, tier, name); err != nil || !found.present || found.mends != reasonScheduleChanged {
+	if found, err := schedulePresence(ctx, b, tier, name); err != nil || !found.Present || found.Mends != reasonScheduleChanged {
 		t.Errorf("schedulePresence() = %+v, %v, want a schedule that outlived its service mended once the service exists again", found, err)
 	}
 }
 
 func TestAScheduleCallingAsAnotherAccountIsMended(t *testing.T) {
 	t.Parallel()
-	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
+	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
 	tier := environment.TierProduction
-	uri := servedAt(b.clients.EnvSourceSync(tier))
-	desired := b.syncSchedule(tier, b.clients.EnvSourceSync(tier), uri)
+	uri := servedAt(b.Clients.EnvSourceSync(tier))
+	desired := syncJob(b, tier, b.Clients.EnvSourceSync(tier), uri)
 	signedBy := func(email, audience string) *cloudscheduler.Job {
 		copied := *desired
 		target := *desired.HttpTarget
@@ -596,7 +573,7 @@ func TestAScheduleCallingAsAnotherAccountIsMended(t *testing.T) {
 		copied.HttpTarget = &target
 		return &copied
 	}
-	account := b.clients.EnvSourceSyncAccountEmail(tier)
+	account := b.Clients.EnvSourceSyncAccountEmail(tier)
 	if !sameSchedule(signedBy(account, uri), desired, false) {
 		t.Error("the schedule this bootstrap created reads as another")
 	}
@@ -618,24 +595,24 @@ func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheBucketWithTheStamp(t
 	t.Parallel()
 	names := names.New("ocel", "acme-prod")
 	tier := environment.TierProduction
-	read := survey{Tier: tier, Names: names, present: map[string]bool{}}
-	for _, each := range bootstrapItems(names, tier, false) {
-		read.present[each.ID()] = true
+	read := bootstrap.Survey{Tier: tier, Names: names, Held: map[string]bool{}}
+	for _, each := range bootstrap.Resources(names, tier, false) {
+		read.Held[each.ID()] = true
 	}
 
 	var order []string
-	for _, taking := range removals(read) {
-		order = append(order, taking.item.ID())
+	for _, taking := range bootstrap.Removals(read) {
+		order = append(order, taking.Resource.ID())
 	}
-	at := func(target item) int { return slices.Index(order, target.ID()) }
-	if at(item{Kind: KindBucket, Name: names.StateBucket(tier)}) > at(item{Kind: KindBucket, Name: names.Bucket(tier)}) {
+	at := func(target bootstrap.Resource) int { return slices.Index(order, target.ID()) }
+	if at(bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.StateBucket(tier)}) > at(bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.Bucket(tier)}) {
 		t.Errorf("removal runs %v, want the state bucket before the bucket with the stamp", order)
 	}
-	if last := order[len(order)-1]; last != (item{Kind: KindBucket, Name: names.Bucket(tier)}).ID() {
+	if last := order[len(order)-1]; last != (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.Bucket(tier)}).ID() {
 		t.Errorf("removal ends on %s, want the bucket with the stamp: a removal stopped part way reads as unfinished only while the stamp exists", last)
 	}
-	if len(order) != len(bootstrapItems(names, tier, false)) {
-		t.Errorf("removal takes %d items, want every one of the %d the bootstrap provisions", len(order), len(bootstrapItems(names, tier, false)))
+	if len(order) != len(bootstrap.Resources(names, tier, false)) {
+		t.Errorf("removal takes %d items, want every one of the %d the bootstrap provisions", len(order), len(bootstrap.Resources(names, tier, false)))
 	}
 }
 
@@ -649,19 +626,19 @@ func TestABootstrapChecksThePermissionsTheEnvSourceSyncNeeds(t *testing.T) {
 		"iam.serviceAccounts.actAs",
 		"artifactregistry.repositories.uploadArtifacts", "artifactregistry.repositories.downloadArtifacts",
 	} {
-		if !slices.Contains(bootstrapPermissions, permission) {
+		if !slices.Contains(bootstrap.BootstrapPermissions, permission) {
 			t.Errorf("a bootstrap does not check %s, and the apply would fail at the env source sync", permission)
 		}
 	}
-	if !slices.Contains(rolesFor(edge.PurposeBootstrap), "roles/cloudscheduler.admin") {
-		t.Errorf("bootstrap credentials are granted %v, want roles/cloudscheduler.admin among them", rolesFor(edge.PurposeBootstrap))
+	if !slices.Contains(bootstrap.RolesFor(edge.PurposeBootstrap), "roles/cloudscheduler.admin") {
+		t.Errorf("bootstrap credentials are granted %v, want roles/cloudscheduler.admin among them", bootstrap.RolesFor(edge.PurposeBootstrap))
 	}
 	for _, role := range []string{"roles/cloudscheduler.admin", "roles/run.admin", "roles/iam.serviceAccountUser", "roles/artifactregistry.writer"} {
-		if !slices.Contains(rolesCovering(nil), role) {
-			t.Errorf("a refusal over a missing permission names %v, want %s among them: it covers what the env source sync checks", rolesCovering(nil), role)
+		if !slices.Contains(bootstrap.RolesCovering(nil), role) {
+			t.Errorf("a refusal over a missing permission names %v, want %s among them: it covers what the env source sync checks", bootstrap.RolesCovering(nil), role)
 		}
 	}
-	if !slices.Contains(BootstrapAPIs, "cloudscheduler.googleapis.com") {
-		t.Errorf("a bootstrap checks %v are on, want cloudscheduler.googleapis.com among them", BootstrapAPIs)
+	if !slices.Contains(bootstrap.BootstrapAPIs, "cloudscheduler.googleapis.com") {
+		t.Errorf("a bootstrap checks %v are on, want cloudscheduler.googleapis.com among them", bootstrap.BootstrapAPIs)
 	}
 }

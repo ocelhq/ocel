@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const mintedAccessToken = "ya29.a0-secret"
@@ -60,8 +61,8 @@ func TestWhoamiNamesTheProjectTheRegionAndWhoTheTokenBelongsTo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() = %v, want the principal the ADC token belongs to", err)
 	}
-	if named := providerserver.PrincipalProto(gcp.Vendor, principal).GetProvider(); named != string(gcp.Vendor) {
-		t.Errorf("the principal names %q and the provider names itself %q; the CLI matches a credential problem to its section by that string, so a mismatch loses the problem", named, gcp.Vendor)
+	if named := providerserver.PrincipalProto(gcloud.Vendor, principal).GetProvider(); named != string(gcloud.Vendor) {
+		t.Errorf("the principal names %q and the provider names itself %q; the CLI matches a credential problem to its section by that string, so a mismatch loses the problem", named, gcloud.Vendor)
 	}
 	if principal.Account != "acme-prod" {
 		t.Errorf("Whoami().Account = %q, want the project the options name", principal.Account)

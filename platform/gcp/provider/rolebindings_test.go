@@ -7,14 +7,15 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
 func TestBindingKeyRolesReadsThePolicyAgainWhenItChangedUnderTheWrite(t *testing.T) {
 	t.Parallel()
-	server := grantedIAM()
-	server.keyRaces = 1
-	c := server.open(t)
+	server := googletest.GrantedIAM()
+	server.KeyRaces = 1
+	c := server.Open(t)
 	member := "serviceAccount:app@acme-prod.iam.gserviceaccount.com"
 	key := gcloud.KeyPath(c, string(environment.TierProduction))
 
@@ -24,11 +25,11 @@ func TestBindingKeyRolesReadsThePolicyAgainWhenItChangedUnderTheWrite(t *testing
 		t.Fatalf("bindKeyRoles() = %v, %v, want the grant to land after the policy changed under the first write", changed, err)
 	}
 	for _, role := range syncKeyRoles {
-		if got := server.keyMembers(key, role); !slices.Contains(got, member) {
+		if got := server.KeyMembers(key, role); !slices.Contains(got, member) {
 			t.Errorf("%s has members %q, want %s", role, got, member)
 		}
 	}
-	if got := server.keyMembers(key, "roles/cloudkms.viewer"); !slices.Equal(got, []string{"user:concurrent"}) {
+	if got := server.KeyMembers(key, "roles/cloudkms.viewer"); !slices.Equal(got, []string{"user:concurrent"}) {
 		t.Errorf("the concurrent binding has members %q, want it kept: the retry reads the policy again", got)
 	}
 }
@@ -37,13 +38,13 @@ func TestWritingTheProjectPolicyReadsItAgainWhenAnEtagMismatchRefusesTheWrite(t 
 	t.Parallel()
 	member := "serviceAccount:app@acme-prod.iam.gserviceaccount.com"
 
-	granting := grantedIAM()
-	granting.projectStale = 1
-	c := granting.open(t)
+	granting := googletest.GrantedIAM()
+	granting.ProjectStale = 1
+	c := granting.Open(t)
 	if err := gcloud.BindProjectRole(context.Background(), c, member, grants.RecordsRole, nil, true); err != nil {
 		t.Fatalf("bindProjectRole() = %v, want the grant to land after the 412", err)
 	}
-	if got, _ := granting.projectMembers(grants.RecordsRole); !slices.Contains(got, member) {
+	if got, _ := granting.ProjectMembers(grants.RecordsRole); !slices.Contains(got, member) {
 		t.Errorf("%s has members %q, want %s", grants.RecordsRole, got, member)
 	}
 

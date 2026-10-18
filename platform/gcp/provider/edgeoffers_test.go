@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 const (
@@ -25,7 +26,7 @@ const (
 )
 
 type offersHarness struct {
-	secrets *secretServer
+	secrets *googletest.Secrets
 	clients *gcloud.Clients
 	records records.Store
 	log     *fake.Log
@@ -33,10 +34,10 @@ type offersHarness struct {
 
 func newOffersHarness(t *testing.T) *offersHarness {
 	t.Helper()
-	h := &offersHarness{secrets: newSecretServer(), records: fake.NewKeyValues(), log: &fake.Log{}}
+	h := &offersHarness{secrets: googletest.NewSecrets(), records: fake.NewKeyValues(), log: &fake.Log{}}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/secrets") {
-			h.secrets.serve(t, w, r)
+			h.secrets.Serve(t, w, r)
 			return
 		}
 		t.Errorf("%s %s reached a server that serves only Secret Manager", r.Method, r.URL.Path)
@@ -74,7 +75,7 @@ func (h *offersHarness) record(t *testing.T) (adoptedEdge, bool) {
 
 func (h *offersHarness) credentials(t *testing.T) string {
 	t.Helper()
-	got, _ := h.secrets.latest(t, h.clients.EdgeCredentialsSecret(environment.TierProduction, cloudflareKind))
+	got, _ := h.secrets.Latest(t, h.clients.EdgeCredentialsSecret(environment.TierProduction, cloudflareKind))
 	return got
 }
 
@@ -131,7 +132,7 @@ func TestABootstrapAdoptsTheCloudflareEdgesWorkerAndCertificateAndKeepsItsCreden
 	if got, want := h.credentials(t), `{"releasesStore":"c1"}`; got != want {
 		t.Errorf("credentials secret = %q, want %q", got, want)
 	}
-	seed, _ := h.secrets.latest(t, h.clients.PurgeSeedSecret(environment.TierProduction, cloudflareKind))
+	seed, _ := h.secrets.Latest(t, h.clients.PurgeSeedSecret(environment.TierProduction, cloudflareKind))
 	if !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(seed) {
 		t.Errorf("seed secret = %q, want 64 hex characters", seed)
 	}
@@ -144,15 +145,15 @@ func TestABootstrapKeepsThePurgeSeedItMintedFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	name := h.clients.PurgeSeedSecret(environment.TierProduction, cloudflareKind)
-	first, _ := h.secrets.latest(t, name)
+	first, _ := h.secrets.Latest(t, name)
 
 	if err := h.adopt(fullOffers("c3")); err != nil {
 		t.Fatal(err)
 	}
-	if again, _ := h.secrets.latest(t, name); again != first {
+	if again, _ := h.secrets.Latest(t, name); again != first {
 		t.Errorf("a later bootstrap changed the seed from %q to %q, orphaning every live deployment's purge secret", first, again)
 	}
-	if got := h.secrets.enabledVersions(name); len(got) != 1 {
+	if got := h.secrets.EnabledVersions(name); len(got) != 1 {
 		t.Errorf("the seed has enabled versions %v, want only the first", got)
 	}
 }
@@ -164,12 +165,12 @@ func TestABootstrapReofferedWithoutCredentialsKeepsTheStoredOnes(t *testing.T) {
 		t.Fatal(err)
 	}
 	before, _ := h.record(t)
-	added := h.secrets.versionsAdded()
+	added := h.secrets.VersionsAdded()
 
 	if err := h.adopt(fullOffers("")); err != nil {
 		t.Fatalf("second adopt = %v", err)
 	}
-	if got := h.secrets.versionsAdded(); got != added {
+	if got := h.secrets.VersionsAdded(); got != added {
 		t.Errorf("a re-offer that changed nothing added %d secret versions", got-added)
 	}
 	if after, _ := h.record(t); after.ReleasesStore != before.ReleasesStore {
@@ -179,7 +180,7 @@ func TestABootstrapReofferedWithoutCredentialsKeepsTheStoredOnes(t *testing.T) {
 	if err := h.adopt(fullOffers("c9")); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := h.secrets.versionsAdded(), added+1; got != want {
+	if got, want := h.secrets.VersionsAdded(), added+1; got != want {
 		t.Errorf("a new credential added %d versions, want 1", got-added)
 	}
 	if got, want := h.credentials(t), `{"releasesStore":"c9"}`; got != want {
@@ -229,7 +230,7 @@ func TestAFrontThatOffersNothingLeavesNoRecord(t *testing.T) {
 	if _, found := h.record(t); found {
 		t.Error("a front that offered nothing left a record")
 	}
-	if h.secrets.versionsAdded() != 0 || h.secrets.has(h.clients.EdgeCredentialsSecret(environment.TierProduction, cloudflareKind)) {
+	if h.secrets.VersionsAdded() != 0 || h.secrets.Has(h.clients.EdgeCredentialsSecret(environment.TierProduction, cloudflareKind)) {
 		t.Error("a front that offered nothing left a secret")
 	}
 }

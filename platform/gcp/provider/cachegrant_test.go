@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
@@ -20,7 +21,7 @@ func cachedAt(prefix string) provider.StackSpec {
 	return spec
 }
 
-func cacheBindingsOf(server *iamServer) []string {
+func cacheBindingsOf(server *googletest.IAM) []string {
 	var bound []string
 	for _, binding := range projectBindingsOf(server) {
 		if strings.HasPrefix(binding, grants.ObjectsRole+" ") {
@@ -33,7 +34,7 @@ func cacheBindingsOf(server *iamServer) []string {
 func TestAnAppsAccountMayUseObjectsUnderItsOwnCachePrefixAndNoOther(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	c := server.open(t)
+	c := server.Open(t)
 	member := "serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 
 	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
@@ -44,7 +45,7 @@ func TestAnAppsAccountMayUseObjectsUnderItsOwnCachePrefixAndNoOther(t *testing.T
 	if got := cacheBindingsOf(server); !slices.Equal(got, []string{want}) {
 		t.Errorf("the project's storage bindings = %q, want exactly %q", got, want)
 	}
-	for _, binding := range server.project.Bindings {
+	for _, binding := range server.Project.Bindings {
 		if binding.Role == grants.ObjectsRole && (binding.Condition == nil || binding.Condition.Title != "ocel cache of shop/web") {
 			t.Errorf("the cache binding's condition = %+v, want the title %q", binding.Condition, "ocel cache of shop/web")
 		}
@@ -53,15 +54,15 @@ func TestAnAppsAccountMayUseObjectsUnderItsOwnCachePrefixAndNoOther(t *testing.T
 
 func TestTheCacheGrantPrefixIsTheOneTheRuntimeWritesUnder(t *testing.T) {
 	t.Parallel()
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	env := envOf(server.created[0].Template.Containers[0])
+	env := envOf(server.Created[0].Template.Containers[0])
 
 	var expressions []string
-	for _, binding := range server.identities().project.Bindings {
+	for _, binding := range server.Identities().Project.Bindings {
 		if binding.Role == grants.ObjectsRole {
 			expressions = append(expressions, binding.Condition.Expression)
 		}
@@ -82,16 +83,16 @@ func TestTheCacheGrantPrefixIsTheOneTheRuntimeWritesUnder(t *testing.T) {
 func TestARedeployOfAnAppWritesNoPolicy(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	c := server.open(t)
+	c := server.Open(t)
 	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
 		t.Fatal(err)
 	}
-	before := server.projectWrites
+	before := server.ProjectWrites
 
 	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
 		t.Fatalf("second applyAppGrants() = %v", err)
 	}
-	if got := server.projectWrites - before; got != 0 {
+	if got := server.ProjectWrites - before; got != 0 {
 		t.Errorf("a redeploy wrote the project policy %d times, want 0", got)
 	}
 }
@@ -111,18 +112,18 @@ func TestACachePolicyChangedUnderTheGrantIsReadAgainAndWritten(t *testing.T) {
 
 func TestAnAppWithoutISRIsGrantedNoCache(t *testing.T) {
 	t.Parallel()
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	spec := functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	if got := cacheBindingsOf(server.identities()); len(got) != 0 {
+	if got := cacheBindingsOf(server.Identities()); len(got) != 0 {
 		t.Errorf("an app without ISR holds the storage bindings %q, want none", got)
 	}
 }
 
-func tagRecordBindingsOf(server *iamServer) []string {
+func tagRecordBindingsOf(server *googletest.IAM) []string {
 	var bound []string
 	for _, binding := range projectBindingsOf(server) {
 		if strings.HasPrefix(binding, tagRecordsRole+" ") && strings.Contains(binding, "-tags") {
@@ -135,7 +136,7 @@ func tagRecordBindingsOf(server *iamServer) []string {
 func TestANextAppsAccountMayUseItsTiersTagRecordsAndNoOtherDatabase(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	c := server.open(t)
+	c := server.Open(t)
 	account := c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 
 	if err := applyAppGrants(t, c, routedNextSpec()); err != nil {
@@ -146,7 +147,7 @@ func TestANextAppsAccountMayUseItsTiersTagRecordsAndNoOtherDatabase(t *testing.T
 	if got := tagRecordBindingsOf(server); !slices.Equal(got, []string{want}) {
 		t.Errorf("the project's tag record bindings = %q, want exactly %q", got, want)
 	}
-	for _, binding := range server.project.Bindings {
+	for _, binding := range server.Project.Bindings {
 		if binding.Role == tagRecordsRole && strings.Contains(binding.Condition.Expression, "-tags") &&
 			binding.Condition.Title != "ocel ocel production tag records" {
 			t.Errorf("the tag records binding's condition = %+v, want the title %q", binding.Condition, "ocel ocel production tag records")
@@ -157,7 +158,7 @@ func TestANextAppsAccountMayUseItsTiersTagRecordsAndNoOtherDatabase(t *testing.T
 func TestAnAppWithoutAnIncrementalCacheIsGrantedNoTagRecords(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	c := server.open(t)
+	c := server.Open(t)
 
 	if err := applyAppGrants(t, c, nextSpec()); err != nil {
 		t.Fatalf("applyAppGrants() = %v", err)
@@ -170,32 +171,32 @@ func TestAnAppWithoutAnIncrementalCacheIsGrantedNoTagRecords(t *testing.T) {
 func TestARedeployOfANextAppWritesNoTagRecordsPolicy(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
-	c := server.open(t)
+	c := server.Open(t)
 	if err := applyAppGrants(t, c, routedNextSpec()); err != nil {
 		t.Fatal(err)
 	}
-	before := server.projectWrites
+	before := server.ProjectWrites
 
 	if err := applyAppGrants(t, c, routedNextSpec()); err != nil {
 		t.Fatalf("second applyAppGrants() = %v", err)
 	}
-	if got := server.projectWrites - before; got != 0 {
+	if got := server.ProjectWrites - before; got != 0 {
 		t.Errorf("a redeploy wrote the project policy %d times, want 0", got)
 	}
 }
 
 func TestANextContainersAccountMayUseItsOwnCachePrefixAndTagRecords(t *testing.T) {
 	t.Parallel()
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	env := envOf(server.created[0].Template.Containers[0])
-	account := "serviceAccount:" + server.created[0].Template.ServiceAccount
+	env := envOf(server.Created[0].Template.Containers[0])
+	account := "serviceAccount:" + server.Created[0].Template.ServiceAccount
 
 	var expressions []string
-	for _, binding := range server.identities().project.Bindings {
+	for _, binding := range server.Identities().Project.Bindings {
 		if binding.Role == grants.ObjectsRole && slices.Contains(binding.Members, account) {
 			expressions = append(expressions, binding.Condition.Expression)
 		}
@@ -211,7 +212,7 @@ func TestANextContainersAccountMayUseItsOwnCachePrefixAndTagRecords(t *testing.T
 	if !strings.HasPrefix(env["OCEL_ISR_OBJECT_PREFIX"]+"/", granted) {
 		t.Errorf("the grant over %q is not a prefix of OCEL_ISR_OBJECT_PREFIX %q", granted, env["OCEL_ISR_OBJECT_PREFIX"])
 	}
-	if got := tagRecordBindingsOf(server.identities()); len(got) != 1 || !strings.Contains(got[0], account) {
+	if got := tagRecordBindingsOf(server.Identities()); len(got) != 1 || !strings.Contains(got[0], account) {
 		t.Errorf("the project's tag record bindings = %q, want the one of %s", got, account)
 	}
 }

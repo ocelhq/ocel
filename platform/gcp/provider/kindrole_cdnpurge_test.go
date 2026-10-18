@@ -1,0 +1,193 @@
+package gcp
+
+import (
+	"errors"
+	"net/http"
+	"regexp"
+	"slices"
+	"strings"
+	"testing"
+
+	"google.golang.org/api/iam/v1"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+)
+
+const cdnPurgeRoleEndpoint = "/v1/projects/acme-prod/roles/ocel_cdn_purge"
+
+func currentCDNPurgeRole() *iam.Role {
+	return &iam.Role{
+		Name:                "projects/acme-prod/roles/ocel_cdn_purge",
+		IncludedPermissions: []string{"compute.urlMaps.invalidateCache"},
+		Stage:               "GA",
+		Etag:                "BwXhoLA=",
+	}
+}
+
+func TestTheCDNPurgeRoleHoldsOnlyThePermissionToClearCloudCDN(t *testing.T) {
+	t.Parallel()
+
+	names := names.New("ocel", "acme-prod")
+
+	role := bootstrap.NewCDNPurgeRole(names)
+
+	if want := []string{"compute.urlMaps.invalidateCache"}; !slices.Equal(role.Permissions, want) {
+		t.Errorf("cdnPurgeRole permissions = %v, want %v: a Next app holding more could rewrite the url map it only clears", role.Permissions, want)
+	}
+	if role.ID != "ocel_cdn_purge" {
+		t.Errorf("cdnPurgeRole id = %q, want ocel_cdn_purge", role.ID)
+	}
+}
+
+func TestTheCDNPurgeRoleIDFitsTheLongestNamespaceAnAccountAllows(t *testing.T) {
+	t.Parallel()
+
+	width := names.MaxAccountID - 1 - names.AccountHashLen
+	namespace := strings.Repeat("a-", width/2) + strings.Repeat("b", width%2)
+	names := names.New(provider.Namespace(namespace), "acme-prod")
+
+	id := names.CDNPurgeRole()
+
+	if !regexp.MustCompile(`^[a-zA-Z0-9_.]{3,64}$`).MatchString(id) {
+		t.Errorf("CDNPurgeRole() = %q, want 3 to 64 letters, digits, underscores and periods", id)
+	}
+	if got := names.CDNPurgeRolePath(); got != "projects/acme-prod/roles/"+id {
+		t.Errorf("CDNPurgeRolePath() = %q, want it under the project", got)
+	}
+}
+
+func TestABootstrapCreatesTheCDNPurgeRoleOnceAndReusesIt(t *testing.T) {
+	t.Parallel()
+	server := &roleServer{endpoint: cdnPurgeRoleEndpoint}
+	b := server.bootstrap(t)
+	ctx := t.Context()
+	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_cdn_purge"}
+
+	found, err := b.PresenceOf(ctx, environment.TierProduction, target)
+	if err != nil || found.Present {
+		t.Fatalf("presenceOf() = %+v, %v, want an absent role", found, err)
+	}
+	role, ok := bootstrap.FindCustomRole(b.Clients.Names, target.Name)
+	if !ok {
+		t.Fatalf("findCustomRole(%s) found nothing", target.Name)
+	}
+	if err := b.MakeRole(ctx, role); err != nil {
+		t.Fatalf("makeRole() = %v", err)
+	}
+	asked := server.created
+	if asked == nil || asked.RoleId != "ocel_cdn_purge" || asked.Role.Stage != "GA" ||
+		!slices.Equal(asked.Role.IncludedPermissions, []string{"compute.urlMaps.invalidateCache"}) {
+		t.Fatalf("the role was created as %+v, want id ocel_cdn_purge, stage GA and the one permission", asked)
+	}
+	if asked.Role.Title != "ocel cache purge (ocel)" {
+		t.Errorf("the role is titled %q, want %q", asked.Role.Title, "ocel cache purge (ocel)")
+	}
+
+	found, err = b.PresenceOf(ctx, environment.TierProduction, target)
+	if err != nil || !found.Present || found.Mends != "" {
+		t.Fatalf("presenceOf() = %+v, %v, want a present role with nothing to mend", found, err)
+	}
+	if err := b.MakeRole(ctx, role); err != nil {
+		t.Fatalf("makeRole() again = %v", err)
+	}
+	if !slices.Equal(server.writes, []string{"create"}) {
+		t.Errorf("the runs wrote %v, want one create", server.writes)
+	}
+}
+
+func TestACDNPurgeRoleWithOtherPermissionsIsPutBackToClearingCloudCDN(t *testing.T) {
+	t.Parallel()
+	server := &roleServer{endpoint: cdnPurgeRoleEndpoint, role: currentCDNPurgeRole()}
+	server.role.IncludedPermissions = append(server.role.IncludedPermissions, "compute.urlMaps.update")
+	b := server.bootstrap(t)
+	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_cdn_purge"}
+
+	found, err := b.PresenceOf(t.Context(), environment.TierProduction, target)
+	want := bootstrap.NewCDNPurgeRole(b.Clients.Names).DriftReason
+	if err != nil || !found.Present || found.Mends != want {
+		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, want)
+	}
+	if err := b.MakeRole(t.Context(), bootstrap.NewCDNPurgeRole(b.Clients.Names)); err != nil {
+		t.Fatalf("makeRole() = %v", err)
+	}
+	if !slices.Equal(server.writes, []string{"patch"}) || !slices.Equal(server.patched.IncludedPermissions, []string{"compute.urlMaps.invalidateCache"}) {
+		t.Errorf("makeRole() wrote %v and sent %+v, want one patch back to the one permission", server.writes, server.patched)
+	}
+}
+
+func TestADeletedCachePurgeRoleIsUndeleted(t *testing.T) {
+	t.Parallel()
+	server := &roleServer{endpoint: cdnPurgeRoleEndpoint, role: currentCDNPurgeRole()}
+	server.role.Deleted = true
+	b := server.bootstrap(t)
+	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_cdn_purge"}
+
+	found, err := b.PresenceOf(t.Context(), environment.TierProduction, target)
+	if err != nil || !found.Present || found.Mends != bootstrap.ReasonRoleDeleted {
+		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, bootstrap.ReasonRoleDeleted)
+	}
+	if err := b.MakeRole(t.Context(), bootstrap.NewCDNPurgeRole(b.Clients.Names)); err != nil {
+		t.Fatalf("makeRole() = %v", err)
+	}
+	if !slices.Equal(server.writes, []string{"undelete"}) {
+		t.Errorf("makeRole() wrote %v, want one undelete", server.writes)
+	}
+}
+
+func TestACachePurgeRoleDeletedTooLongAgoIsRefusedNamingTheWait(t *testing.T) {
+	t.Parallel()
+	deleted := currentCDNPurgeRole()
+	deleted.Deleted = true
+	server := &roleServer{endpoint: cdnPurgeRoleEndpoint, role: deleted, undeleteCode: http.StatusBadRequest}
+	b := server.bootstrap(t)
+
+	err := b.MakeRole(t.Context(), bootstrap.NewCDNPurgeRole(b.Clients.Names))
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("makeRole() = %v, want a %s refusal", err, refusal.CodeNotReady)
+	}
+	for _, want := range []string{"projects/acme-prod/roles/ocel_cdn_purge", "44 days", "OCEL_NAMESPACE"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal %q does not contain %q", err, want)
+		}
+	}
+}
+
+func TestEveryBootstrapItemRoleIsAKnownCustomRole(t *testing.T) {
+	t.Parallel()
+	names := names.New("ocel", "acme-prod")
+
+	var roles int
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for _, each := range bootstrap.StackResources(names, tier, false) {
+			if each.Kind != bootstrap.KindRole {
+				continue
+			}
+			roles++
+			if _, known := bootstrap.FindCustomRole(names, each.Name); !known {
+				t.Errorf("the %s bootstrap lists custom role %q, which findCustomRole cannot make", tier, each.Name)
+			}
+		}
+	}
+	if roles == 0 {
+		t.Error("no bootstrap item is a custom role, want at least the app accounts role")
+	}
+}
+
+func TestAnUnknownCustomRoleIsRefusedByName(t *testing.T) {
+	t.Parallel()
+	b := (&roleServer{}).bootstrap(t)
+	read := bootstrap.Survey{Tier: environment.TierProduction, Names: b.Clients.Names}
+
+	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_other"}
+	err := target.KindOps().Make(t.Context(), b, read, target)
+
+	if err == nil || !strings.Contains(err.Error(), "no custom role is named ocel_other") {
+		t.Errorf("make(unknown role) = %v, want it to say no custom role is named ocel_other", err)
+	}
+}

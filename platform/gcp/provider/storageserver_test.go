@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	raw "google.golang.org/api/storage/v1"
 )
 
@@ -69,17 +70,17 @@ func (s *storageServer) serve() http.HandlerFunc {
 }
 
 func (s *storageServer) create(w http.ResponseWriter, r *http.Request) {
-	bucket := readBody[raw.Bucket](w, r)
+	bucket := googletest.ReadBody[raw.Bucket](w, r)
 	if bucket == nil {
 		return
 	}
 	if s.takenElsewhere {
-		conflicted(w, "Your previous request to create the named bucket succeeded and you already own it.")
+		googletest.Conflicted(w, "Your previous request to create the named bucket succeeded and you already own it.")
 		return
 	}
 	s.created = append(s.created, bucket)
 	s.buckets[bucket.Name] = bucket
-	writeBody(w, bucket)
+	googletest.WriteBody(w, bucket)
 }
 
 func (s *storageServer) bucket(w http.ResponseWriter, r *http.Request, name string) {
@@ -90,9 +91,9 @@ func (s *storageServer) bucket(w http.ResponseWriter, r *http.Request, name stri
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeBody(w, current)
+		googletest.WriteBody(w, current)
 	case http.MethodPatch:
-		patch := readBody[raw.Bucket](w, r)
+		patch := googletest.ReadBody[raw.Bucket](w, r)
 		if patch == nil {
 			return
 		}
@@ -106,10 +107,10 @@ func (s *storageServer) bucket(w http.ResponseWriter, r *http.Request, name stri
 		if patch.Lifecycle != nil {
 			current.Lifecycle = patch.Lifecycle
 		}
-		writeBody(w, current)
+		googletest.WriteBody(w, current)
 	case http.MethodDelete:
 		if len(s.objects[name]) > 0 {
-			conflicted(w, "The bucket you tried to delete is not empty.")
+			googletest.Conflicted(w, "The bucket you tried to delete is not empty.")
 			return
 		}
 		s.deleted = append(s.deleted, name)
@@ -132,9 +133,9 @@ func (s *storageServer) policy(w http.ResponseWriter, r *http.Request, name stri
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeBody(w, current)
+		googletest.WriteBody(w, current)
 	case http.MethodPut:
-		asked := readBody[raw.Policy](w, r)
+		asked := googletest.ReadBody[raw.Policy](w, r)
 		if asked == nil {
 			return
 		}
@@ -147,7 +148,7 @@ func (s *storageServer) policy(w http.ResponseWriter, r *http.Request, name stri
 		s.setters = append(s.setters, asked)
 		asked.Etag = "CAI" + strconv.Itoa(len(s.setters))
 		s.policies[name] = asked
-		writeBody(w, asked)
+		googletest.WriteBody(w, asked)
 	}
 }
 
@@ -160,7 +161,7 @@ func (s *storageServer) list(w http.ResponseWriter, bucket string) {
 	for _, name := range s.objects[bucket] {
 		listed.Items = append(listed.Items, &raw.Object{Name: name, Bucket: bucket})
 	}
-	writeBody(w, listed)
+	googletest.WriteBody(w, listed)
 }
 
 func missingObject(w http.ResponseWriter) {

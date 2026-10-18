@@ -18,12 +18,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/realtime"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
 type realtimeHarness struct {
-	run     *runServer
-	secrets *secretServer
+	run     *googletest.Run
+	secrets *googletest.Secrets
 	env     realtimeEnvironment
 
 	mu          sync.Mutex
@@ -34,8 +35,8 @@ type realtimeHarness struct {
 
 func newRealtimeHarness(t *testing.T) *realtimeHarness {
 	t.Helper()
-	h := &realtimeHarness{run: &runServer{}, secrets: newSecretServer()}
-	serveRun := h.run.serve(t)
+	h := &realtimeHarness{run: &googletest.Run{}, secrets: googletest.NewSecrets()}
+	serveRun := h.run.Serve(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			h.mu.Lock()
@@ -43,7 +44,7 @@ func newRealtimeHarness(t *testing.T) *realtimeHarness {
 			h.mu.Unlock()
 		}
 		if strings.HasPrefix(r.URL.Path, "/v1/projects/") && strings.Contains(r.URL.Path, "/secrets") {
-			h.secrets.serve(t, w, r)
+			h.secrets.Serve(t, w, r)
 			return
 		}
 		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/serviceAccounts/") {
@@ -57,7 +58,7 @@ func newRealtimeHarness(t *testing.T) *realtimeHarness {
 	h.env = realtimeEnvironment{
 		clients:        p.resolved,
 		records:        fake.NewKeyValues(),
-		ref:            productionRef(t),
+		ref:            googletest.ProductionRef(t),
 		deployAndRoute: p.services().DeployAndRoute,
 		tearDown:       p.services().TearDown,
 		pushBinary: func(_ context.Context, _ environment.Tier, _, ref string, binary []byte, _ string) error {
@@ -113,7 +114,7 @@ func (h *realtimeHarness) remove(t *testing.T, binding provider.Binding) {
 
 func (h *realtimeHarness) keys(t *testing.T) map[string]string {
 	t.Helper()
-	raw, found := h.secrets.latest(t, h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"))
+	raw, found := h.secrets.Latest(t, h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"))
 	if !found {
 		t.Fatal("the keys secret holds no version")
 	}
@@ -142,7 +143,7 @@ func TestARealtimeIsBoundToItsEnvironmentsGatewayByTheHostCloudRunGaveIt(t *test
 	if binding.Type != provider.BindingRealtime || binding.Name != "realtime--app" || binding.Resource != "app" {
 		t.Errorf("the binding is %s %q of %q, want the realtime the app declared", binding.Type, binding.Name, binding.Resource)
 	}
-	service := h.run.serving()
+	service := h.run.Serving()
 	if service == nil {
 		t.Fatal("no gateway service was created")
 	}
@@ -173,13 +174,13 @@ func TestADeployThatChangesNoRealtimeWritesNothing(t *testing.T) {
 
 	h := newRealtimeHarness(t)
 	h.provision(t, "app")
-	versions, releases := h.secrets.versionsAdded(), len(h.run.releases())
+	versions, releases := h.secrets.VersionsAdded(), len(h.run.Releases())
 	h.provision(t, "app")
 
-	if got := h.secrets.versionsAdded(); got != versions {
+	if got := h.secrets.VersionsAdded(); got != versions {
 		t.Errorf("a deploy changing nothing added %d secret versions", got-versions)
 	}
-	if got := len(h.run.releases()); got != releases {
+	if got := len(h.run.Releases()); got != releases {
 		t.Errorf("a deploy changing nothing released the gateway %d times", got-releases)
 	}
 	if got := h.pushes(); len(got) != 1 {
@@ -198,10 +199,10 @@ func TestRemovingARealtimeStopsTrustingItAndDeletesItsSigningKey(t *testing.T) {
 	if got := h.keys(t); len(got) != 1 || got["app"] != app.Properties[provider.PropertyVerifyKey] {
 		t.Errorf("the keys are %v once chat is removed, want app's alone", got)
 	}
-	if h.secrets.has(h.env.clients.RealtimeSigningSecret("shop", "prod", "chat")) {
+	if h.secrets.Has(h.env.clients.RealtimeSigningSecret("shop", "prod", "chat")) {
 		t.Error("chat's signing key outlived it")
 	}
-	if h.run.serving() == nil {
+	if h.run.Serving() == nil {
 		t.Error("the gateway was taken down while app still uses it")
 	}
 }
@@ -212,11 +213,11 @@ func TestRemovingTheLastRealtimeTakesTheGatewayAndItsKeysAway(t *testing.T) {
 	h := newRealtimeHarness(t)
 	h.remove(t, h.provision(t, "app"))
 
-	if h.run.serving() != nil {
+	if h.run.Serving() != nil {
 		t.Error("the gateway outlived the last realtime it served")
 	}
 	for _, secret := range []string{h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"), h.env.clients.RealtimeSigningSecret("shop", "prod", "app")} {
-		if h.secrets.has(secret) {
+		if h.secrets.Has(secret) {
 			t.Errorf("secret %s outlived the last realtime", secret)
 		}
 	}
@@ -230,7 +231,7 @@ func TestAnEmulatedEnvironmentHandsItsGatewayEveryKeyInItsEnvironment(t *testing
 	app := h.provision(t, "app")
 
 	var keys map[string]string
-	if err := json.Unmarshal([]byte(envOf(h.run.serving().Template.Containers[0])[gatewayenv.KeysVar]), &keys); err != nil {
+	if err := json.Unmarshal([]byte(envOf(h.run.Serving().Template.Containers[0])[gatewayenv.KeysVar]), &keys); err != nil {
 		t.Fatalf("the gateway's %s is no JSON object: %v", gatewayenv.KeysVar, err)
 	}
 	if len(keys) != 1 || keys["app"] != app.Properties[provider.PropertyVerifyKey] {
@@ -270,7 +271,7 @@ func TestAMissingRealtimePlansACreate(t *testing.T) {
 	if err != nil || action != provider.ActionCreate {
 		t.Errorf("plan() = %s, %v, want %s", action, err, provider.ActionCreate)
 	}
-	if h.secrets.has(h.env.clients.RealtimeSigningSecret("shop", "prod", "app")) {
+	if h.secrets.Has(h.env.clients.RealtimeSigningSecret("shop", "prod", "app")) {
 		t.Error("plan() minted a signing key, want a plan that only reads")
 	}
 }
@@ -293,9 +294,9 @@ func TestARealtimeWhoseGatewayDriftedPlansAnUpdate(t *testing.T) {
 
 	h := newRealtimeHarness(t)
 	h.provision(t, "app")
-	h.run.mu.Lock()
-	h.run.service.Template.MaxInstanceRequestConcurrency = 80
-	h.run.mu.Unlock()
+	h.run.Mu.Lock()
+	h.run.Service.Template.MaxInstanceRequestConcurrency = 80
+	h.run.Mu.Unlock()
 
 	action, reason, err := h.plan(t, "app")
 	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "released again") {
@@ -308,9 +309,9 @@ func TestARealtimeWhoseGatewayIsGonePlansAnUpdate(t *testing.T) {
 
 	h := newRealtimeHarness(t)
 	h.provision(t, "app")
-	h.run.mu.Lock()
-	h.run.service = nil
-	h.run.mu.Unlock()
+	h.run.Mu.Lock()
+	h.run.Service = nil
+	h.run.Mu.Unlock()
 
 	action, reason, err := h.plan(t, "app")
 	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "is created") {

@@ -6,35 +6,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
-	var parts []string
-	for _, resource := range pre.Resources {
-		switch resource.Type {
-		case provider.BindingBucket:
-			if resource.Bucket != nil && resource.Bucket.Public {
-				return refusal.Refuse(refusal.CodeInvalid,
-					"bucket %s asks to be public, and this provider creates its buckets under public access prevention, which refuses any grant to allUsers: "+
-						"serve the objects through your app or a signed url instead, or drop `public` from %s",
-					resource.Name, resource.Name)
-			}
-		case provider.BindingPostgres:
-			if _, err := readPostgres(resource); err != nil {
-				return err
-			}
-			parts = appendMissing(parts, []string{networkPart})
-		case provider.BindingKV:
-			if _, err := readKVStore(resource); err != nil {
-				return err
-			}
-			parts = appendMissing(parts, []string{networkPart})
-		case provider.BindingTopic, provider.BindingTask:
-			parts = appendMissing(parts, []string{tasksPart})
-		}
+	parts, err := p.components().Preflight(pre.Resources)
+	if err != nil {
+		return err
 	}
 	if slices.ContainsFunc(pre.Uses, func(uses buildoutput.Uses) bool { return uses.Revalidation }) {
 		parts = append(parts, tagDatabasePart)
@@ -62,7 +41,7 @@ func (p *Provider) leaveALB(ctx context.Context, pre provider.DeployPreflight) e
 	if err != nil {
 		return err
 	}
-	return b.releaseALB(ctx, pre.Deploy.Tier, pre.Deploy.Slug, false, pre.Progress)
+	return releaseALB(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, false, pre.Progress)
 }
 
 func (p *Provider) addParts(ctx context.Context, pre provider.DeployPreflight, names []string) error {
@@ -73,33 +52,5 @@ func (p *Provider) addParts(ctx context.Context, pre provider.DeployPreflight, n
 	if err != nil {
 		return err
 	}
-	return b.addParts(ctx, pre, names)
-}
-
-func (b bootstrap) addParts(ctx context.Context, pre provider.DeployPreflight, names []string) error {
-	tier := pre.Deploy.Tier
-	for _, want := range b.listDeployedParts(tier) {
-		if !slices.Contains(names, want.name) {
-			continue
-		}
-		if !pre.Dry {
-			if want.name == albPart {
-				if err := b.claimALB(ctx, tier, pre.Deploy.Slug); err != nil {
-					return err
-				}
-			}
-			if err := b.ensurePart(ctx, tier, pre.Deploy.Slug, want); err != nil {
-				return err
-			}
-			continue
-		}
-		group, planned, err := b.planPart(ctx, tier, want)
-		if err != nil {
-			return err
-		}
-		if planned && pre.AddToPlan != nil {
-			pre.AddToPlan(group)
-		}
-	}
-	return nil
+	return b.AddParts(ctx, pre, names)
 }

@@ -17,11 +17,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 )
 
 const (
@@ -40,10 +43,10 @@ const (
 
 func tagIndexes() []*firestoreadmin.GoogleFirestoreAdminV1Index {
 	return []*firestoreadmin.GoogleFirestoreAdminV1Index{{
-		QueryScope: collectionScoped,
+		QueryScope: task.CollectionScoped,
 		Fields: []*firestoreadmin.GoogleFirestoreAdminV1IndexField{
-			{FieldPath: tagPrefixField, Order: ascending},
-			{FieldPath: tagWrittenAtField, Order: ascending},
+			{FieldPath: tagPrefixField, Order: task.Ascending},
+			{FieldPath: tagWrittenAtField, Order: task.Ascending},
 		},
 	}}
 }
@@ -55,28 +58,28 @@ func unindexedTagFields() []string {
 func tagDatabaseCondition(c *gcloud.Clients, tier environment.Tier) *policy.Condition {
 	return &policy.Condition{
 		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " tag records",
-		Expression: fmt.Sprintf("resource.name == %q", databasePath(c, c.TagDatabase(tier))),
+		Expression: fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.TagDatabase(tier))),
 	}
 }
 
-func (b bootstrap) tagDatabasePart(tier environment.Tier) part {
+func newTagDatabasePart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 	var resources []provider.PartResource
-	if !b.clients.Emulated() {
-		resources = append(resources, provider.PartResource{Kind: string(KindDatabase), ID: b.clients.TagDatabase(tier)})
+	if !b.Clients.Emulated() {
+		resources = append(resources, provider.PartResource{Kind: string(bootstrap.KindDatabase), ID: b.Clients.TagDatabase(tier)})
 	}
-	return part{
-		name:      tagDatabasePart,
-		summary:   tagDatabaseSummary,
-		resources: resources,
-		shape:     tagDatabaseShape(b.clients.Names, tier, b.clients.Region),
-		make:      func(ctx context.Context) error { return b.makeTagDatabase(ctx, tier) },
-		users:     func(ctx context.Context) ([]string, error) { return b.listTagDatabaseUsers(ctx, tier) },
-		remove:    func(ctx context.Context) error { return b.removeTagDatabase(ctx, tier) },
+	return bootstrap.Part{
+		Name:      tagDatabasePart,
+		Summary:   tagDatabaseSummary,
+		Resources: resources,
+		Shape:     tagDatabaseShape(b.Clients.Names, tier, b.Clients.Region),
+		Make:      func(ctx context.Context) error { return makeTagDatabase(ctx, b, tier) },
+		Users:     func(ctx context.Context) ([]string, error) { return listTagDatabaseUsers(ctx, b, tier) },
+		Remove:    func(ctx context.Context) error { return removeTagDatabase(ctx, b, tier) },
 	}
 }
 
-func (b bootstrap) listTagDatabaseUsers(ctx context.Context, tier environment.Tier) ([]string, error) {
-	users, err := stackrecords.ListPartUsers(ctx, b.records, tier)
+func listTagDatabaseUsers(ctx context.Context, b bootstrap.Engine, tier environment.Tier) ([]string, error) {
+	users, err := stackrecords.ListPartUsers(ctx, b.Records, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -84,32 +87,32 @@ func (b bootstrap) listTagDatabaseUsers(ctx context.Context, tier environment.Ti
 }
 
 func tagDatabaseShape(names names.Names, tier environment.Tier, region string) []pricing.Shaped {
-	return []pricing.Shaped{{Name: names.TagDatabase(tier), Type: tfFirestoreDatabase, Properties: map[string]any{"location_id": region, "type": nativeFirestore}}}
+	return []pricing.Shaped{{Name: names.TagDatabase(tier), Type: cost.FirestoreDatabaseType, Properties: map[string]any{"location_id": region, "type": bootstrap.NativeFirestore}}}
 }
 
-func (b bootstrap) makeTagDatabase(ctx context.Context, tier environment.Tier) error {
-	if b.clients.Emulated() {
+func makeTagDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	if b.Clients.Emulated() {
 		return nil
 	}
-	if err := b.makeDatabase(ctx, survey{Project: b.clients.Project(), Region: b.clients.Region}, b.clients.TagDatabase(tier)); err != nil {
+	if err := b.MakeDatabase(ctx, bootstrap.Survey{Project: b.Clients.Project(), Region: b.Clients.Region}, b.Clients.TagDatabase(tier)); err != nil {
 		return err
 	}
-	return b.ensureTagIndexes(ctx, tier)
+	return ensureTagIndexes(ctx, b, tier)
 }
 
-func (b bootstrap) removeTagDatabase(ctx context.Context, tier environment.Tier) error {
-	if b.clients.Emulated() {
+func removeTagDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	if b.Clients.Emulated() {
 		return nil
 	}
-	return b.takeDatabase(ctx, b.clients.TagDatabase(tier))
+	return b.TakeDatabase(ctx, b.Clients.TagDatabase(tier))
 }
 
-func (b bootstrap) ensureTagIndexes(ctx context.Context, tier environment.Tier) error {
-	service, err := b.clients.Databases()
+func ensureTagIndexes(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	service, err := b.Clients.Databases()
 	if err != nil {
 		return err
 	}
-	database := databasePath(b.clients, b.clients.TagDatabase(tier))
+	database := bootstrap.DatabasePath(b.Clients, b.Clients.TagDatabase(tier))
 	for _, field := range unindexedTagFields() {
 		name := database + "/collectionGroups/" + tagCollection + "/fields/" + field
 		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(name,
@@ -120,7 +123,7 @@ func (b bootstrap) ensureTagIndexes(ctx context.Context, tier environment.Tier) 
 		if err != nil {
 			return fmt.Errorf("leave %s of the tag records unindexed: %w", field, err)
 		}
-		if err := b.awaited(ctx, "leaving "+field+" of the tag records unindexed", operation); err != nil {
+		if err := b.Awaited(ctx, "leaving "+field+" of the tag records unindexed", operation); err != nil {
 			return err
 		}
 	}
@@ -131,9 +134,9 @@ func (b bootstrap) ensureTagIndexes(ctx context.Context, tier environment.Tier) 
 			continue
 		}
 		if err != nil {
-			return fmt.Errorf("index the tag records of %s: %w", b.clients.TagDatabase(tier), err)
+			return fmt.Errorf("index the tag records of %s: %w", b.Clients.TagDatabase(tier), err)
 		}
-		if err := b.awaited(ctx, "building the index on the tag records of "+b.clients.TagDatabase(tier), operation); err != nil {
+		if err := b.Awaited(ctx, "building the index on the tag records of "+b.Clients.TagDatabase(tier), operation); err != nil {
 			return err
 		}
 	}

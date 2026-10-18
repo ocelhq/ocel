@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
@@ -31,11 +33,11 @@ func (p *Provider) EnsureEnvSourceSync(ctx context.Context, tier environment.Tie
 	if err != nil {
 		return err
 	}
-	return b.ensureEnvSourceSync(ctx, tier, project)
+	return ensureEnvSourceSync(ctx, b, tier, project)
 }
 
-func (b bootstrap) syncDigest(tier environment.Tier) string {
-	s := b.syncServing(tier)
+func syncDigest(b bootstrap.Engine, tier environment.Tier) string {
+	s := syncServing(b, tier)
 	env := make([]string, 0, len(s.Env))
 	for _, key := range slices.Sorted(maps.Keys(s.Env)) {
 		env = append(env, key+"="+s.Env[key])
@@ -46,105 +48,105 @@ func (b bootstrap) syncDigest(tier environment.Tier) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (b bootstrap) syncResources(tier environment.Tier) []provider.PartResource {
-	name := b.clients.EnvSourceSync(tier)
-	return []provider.PartResource{{Kind: string(KindService), ID: name}, {Kind: string(KindSchedule), ID: name}}
+func syncResources(b bootstrap.Engine, tier environment.Tier) []provider.PartResource {
+	name := b.Clients.EnvSourceSync(tier)
+	return []provider.PartResource{{Kind: string(bootstrap.KindService), ID: name}, {Kind: string(bootstrap.KindSchedule), ID: name}}
 }
 
-func (b bootstrap) ensureEnvSourceSync(ctx context.Context, tier environment.Tier, project string) error {
-	return stackrecords.EnsureBootstrapPart(ctx, b.records, tier, b.envSourceSyncWork(tier, project))
+func ensureEnvSourceSync(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string) error {
+	return stackrecords.EnsureBootstrapPart(ctx, b.Records, tier, envSourceSyncWork(b, tier, project))
 }
 
-func (b bootstrap) envSourceSyncWork(tier environment.Tier, project string) stackrecords.PartWork {
+func envSourceSyncWork(b bootstrap.Engine, tier environment.Tier, project string) stackrecords.PartWork {
 	return stackrecords.PartWork{
 		Name:      envSourceSyncPart,
-		WrittenBy: string(b.writtenBy),
-		Digest:    b.syncDigest(tier),
+		WrittenBy: string(b.WrittenBy),
+		Digest:    syncDigest(b, tier),
 		AddedBy:   project,
 		Make: func(ctx context.Context) ([]provider.PartResource, error) {
-			if err := b.mendEnvSourceSync(ctx, tier); err != nil {
+			if err := mendEnvSourceSync(ctx, b, tier); err != nil {
 				return nil, err
 			}
-			return b.syncResources(tier), nil
+			return syncResources(b, tier), nil
 		},
 	}
 }
 
-func (b bootstrap) mendEnvSourceSync(ctx context.Context, tier environment.Tier) error {
-	name := b.clients.EnvSourceSync(tier)
-	service, err := b.servicePresence(ctx, tier, name)
+func mendEnvSourceSync(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	name := b.Clients.EnvSourceSync(tier)
+	service, err := servicePresence(ctx, b, tier, name)
 	if err != nil {
 		return err
 	}
-	if !service.present || service.mends != "" {
-		if err := b.makeService(ctx, tier, name); err != nil {
+	if !service.Present || service.Mends != "" {
+		if err := makeService(ctx, b, tier, name); err != nil {
 			return err
 		}
 	}
-	schedule, err := b.schedulePresence(ctx, tier, name)
-	if err != nil || (schedule.present && schedule.mends == "") {
+	schedule, err := schedulePresence(ctx, b, tier, name)
+	if err != nil || (schedule.Present && schedule.Mends == "") {
 		return err
 	}
-	return b.makeSchedule(ctx, tier, name)
+	return makeSchedule(ctx, b, tier, name)
 }
 
 func syncShape(name, region string) []pricing.Shaped {
 	return []pricing.Shaped{
-		{Name: name, Type: tfCloudRunService, Properties: syncServiceProperties(region)},
-		{Name: name, Type: tfSchedulerJob, Properties: map[string]any{"region": region, "schedule": syncSchedule}},
+		{Name: name, Type: cost.CloudRunServiceType, Properties: syncServiceProperties(region)},
+		{Name: name, Type: cost.SchedulerJobType, Properties: map[string]any{"region": region, "schedule": syncSchedule}},
 	}
 }
 
-func (b bootstrap) envSourceSyncPart(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, b.records, tier, envSourceSyncPart)
+func describeEnvSourceSyncPart(ctx context.Context, b bootstrap.Engine, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, envSourceSyncPart)
 	if err != nil || !present {
 		return provider.BootstrapPart{}, false, err
 	}
-	users, err := envsource.ScheduledProjects(ctx, b.records, tier)
+	users, err := envsource.ScheduledProjects(ctx, b.Records, tier)
 	if err != nil {
 		return provider.BootstrapPart{}, false, err
 	}
 	return provider.BootstrapPart{
 		Name:      envSourceSyncPart,
 		Summary:   envSourceSyncSummary,
-		Current:   recorded.CurrentFor(string(b.writtenBy), b.syncDigest(tier)),
+		Current:   recorded.CurrentFor(string(b.WrittenBy), syncDigest(b, tier)),
 		Digest:    recorded.Digest,
-		Resources: b.syncResources(tier),
+		Resources: syncResources(b, tier),
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: string(Vendor), Region: b.clients.Region, Resources: syncShape(b.clients.EnvSourceSync(tier), b.clients.Region)},
+		Shape:     &provider.PartShape{Vendor: string(gcloud.Vendor), Region: b.Clients.Region, Resources: syncShape(b.Clients.EnvSourceSync(tier), b.Clients.Region)},
 	}, true, nil
 }
 
-func (b bootstrap) envSourceSyncRemovals(ctx context.Context, tier environment.Tier) ([]provider.Change, error) {
-	name := b.clients.EnvSourceSync(tier)
+func envSourceSyncRemovals(ctx context.Context, b bootstrap.Engine, tier environment.Tier) ([]provider.Change, error) {
+	name := b.Clients.EnvSourceSync(tier)
 	var changes []provider.Change
-	schedule, err := b.schedulePresence(ctx, tier, name)
+	schedule, err := schedulePresence(ctx, b, tier, name)
 	if err != nil {
 		return nil, err
 	}
-	if schedule.present {
-		changes = append(changes, provider.Change{Kind: string(KindSchedule), Name: name, Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
+	if schedule.Present {
+		changes = append(changes, provider.Change{Kind: string(bootstrap.KindSchedule), Name: name, Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
 	}
-	service, err := b.readService(ctx, name)
+	service, err := readService(ctx, b, name)
 	if err != nil {
 		return nil, err
 	}
 	if service != nil {
-		changes = append(changes, provider.Change{Kind: string(KindService), Name: name, Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
+		changes = append(changes, provider.Change{Kind: string(bootstrap.KindService), Name: name, Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
 	}
 	return changes, nil
 }
 
-func (b bootstrap) removeEnvSourceSync(ctx context.Context, tier environment.Tier, progress progress.Log) error {
-	name := b.clients.EnvSourceSync(tier)
-	if err := takeSchedule(ctx, b.clients, name); err != nil {
+func removeEnvSourceSync(ctx context.Context, b bootstrap.Engine, tier environment.Tier, progress progress.Log) error {
+	name := b.Clients.EnvSourceSync(tier)
+	if err := takeSchedule(ctx, b.Clients, name); err != nil {
 		return err
 	}
-	service, err := b.readService(ctx, name)
+	service, err := readService(ctx, b, name)
 	if err != nil || service == nil {
 		return err
 	}
-	if err := b.takeService(ctx, name); err != nil {
+	if err := takeService(ctx, b, name); err != nil {
 		return err
 	}
 	gcloud.EnsureProgress(progress).Say("Removed the env source sync " + name)
@@ -167,4 +169,11 @@ func syncServiceProperties(region string) map[string]any {
 			}},
 		},
 	}
+}
+
+func removeEnvSourceSyncPart(ctx context.Context, b bootstrap.Engine, tier environment.Tier, progress progress.Log) error {
+	if err := removeEnvSourceSync(ctx, b, tier, progress); err != nil {
+		return err
+	}
+	return stackrecords.ForgetBootstrapPart(ctx, b.Records, tier, envSourceSyncPart)
 }

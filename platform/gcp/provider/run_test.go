@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -168,12 +169,12 @@ func TestTrafficIsPinnedToOneRevisionByName(t *testing.T) {
 	}
 }
 
-func released(t *testing.T, server *runServer, s run.Serving) (string, string) {
+func released(t *testing.T, server *googletest.Run, s run.Serving) (string, string) {
 	t.Helper()
 	if s.Image == "" {
 		s.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:abc"
 	}
-	deployed, err := server.open(t).services().DeployService(context.Background(), s, nil)
+	deployed, err := providerServing(server, t).services().DeployService(context.Background(), s, nil)
 	if err != nil {
 		t.Fatalf("deployService(%s) = %v", s.Service, err)
 	}
@@ -181,7 +182,7 @@ func released(t *testing.T, server *runServer, s run.Serving) (string, string) {
 }
 
 func TestAReleaseReportsTheRevisionItCreatedSoAPromotionCanPinIt(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
 
@@ -198,10 +199,10 @@ func TestAReleaseReportsTheRevisionItCreatedSoAPromotionCanPinIt(t *testing.T) {
 }
 
 func TestAReleaseOntoADeployedServiceLeavesItsTrafficOnTheRevisionItServed(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
-	if _, err := server.open(t).services().Pin(context.Background(), first.Service, one, nil); err != nil {
+	if _, err := providerServing(server, t).services().Pin(context.Background(), first.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
@@ -209,16 +210,16 @@ func TestAReleaseOntoADeployedServiceLeavesItsTrafficOnTheRevisionItServed(t *te
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	released(t, server, second)
 
-	if service := server.serving(); !run.ServedBy(service.Traffic, one) {
+	if service := server.Serving(); !run.ServedBy(service.Traffic, one) {
 		t.Errorf("the service serves %+v after the second release, want all of it still on %s: only a promotion moves traffic, and the ledger has promoted nothing new", service.Traffic, one)
 	}
 }
 
 func TestAPinWhosePromotionWasDisplacedWhileTheServiceMovedPinsNothing(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.services().Pin(context.Background(), first.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
@@ -244,29 +245,29 @@ func TestAPinWhosePromotionWasDisplacedWhileTheServiceMovedPinsNothing(t *testin
 	if _, err := p.services().Pin(context.Background(), first.Service, two, stillActive); !errors.Is(err, displaced) {
 		t.Fatalf("Pin(%s) raced by a pin that landed after its promotion was checked = %v, want that displacement", two, err)
 	}
-	if service := server.serving(); !run.ServedBy(service.Traffic, three) {
+	if service := server.Serving(); !run.ServedBy(service.Traffic, three) {
 		t.Errorf("the service serves %+v, want all of it on %s, the pin that raced it: a pin writes on the etag it read, so a pin that landed after that read makes it read again and ask again whether its promotion is still active", service.Traffic, three)
 	}
 }
 
 func TestPinningTrafficKeepsEveryTagTheServiceCarries(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
 	second := first
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	_, two := released(t, server, second)
-	server.service.Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{
+	server.Service.Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{
 		{Type: run.TrafficByRevision, Revision: one, Percent: 100},
 		{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001"},
 		{Type: run.TrafficByRevision, Revision: two, Tag: "r00000002"},
 	}
 
-	if _, err := server.open(t).services().Pin(context.Background(), first.Service, two, nil); err != nil {
+	if _, err := providerServing(server, t).services().Pin(context.Background(), first.Service, two, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", two, err)
 	}
 
-	traffic := server.serving().Traffic
+	traffic := server.Serving().Traffic
 	if !run.ServedBy(traffic, two) {
 		t.Errorf("the service serves %+v, want all of it on %s", traffic, two)
 	}
@@ -281,14 +282,14 @@ func TestPinningTrafficKeepsEveryTagTheServiceCarries(t *testing.T) {
 }
 
 func TestTheTagOfARevisionIsReadFromTheServiceAndAnUntaggedRevisionIsRefused(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	tagged := serves("ocel-shop-prod-app")
 	tagged.Tag = "r1a2b3c4d"
 	_, one := released(t, server, tagged)
 	untagged := serves("ocel-shop-prod-app")
 	untagged.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	_, two := released(t, server, untagged)
-	p := server.open(t)
+	p := providerServing(server, t)
 
 	if tag, err := p.services().ReadTag(context.Background(), tagged.Service, one); err != nil || tag != "r1a2b3c4d" {
 		t.Errorf("ReadTag(%s) = %q, %v, want r1a2b3c4d", one, tag, err)
@@ -300,11 +301,11 @@ func TestTheTagOfARevisionIsReadFromTheServiceAndAnUntaggedRevisionIsRefused(t *
 }
 
 func TestUntaggingTakesTheTagOffItsRevisionAndLeavesTheTrafficWhereItWas(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	first := serves("ocel-shop-prod-app")
 	first.Tag = "r00000001"
 	_, one := released(t, server, first)
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.services().Pin(context.Background(), first.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
@@ -315,7 +316,7 @@ func TestUntaggingTakesTheTagOffItsRevisionAndLeavesTheTrafficWhereItWas(t *test
 		}
 	}
 
-	traffic := server.serving().Traffic
+	traffic := server.Serving().Traffic
 	if slices.ContainsFunc(traffic, func(target *runv2.GoogleCloudRunV2TrafficTarget) bool { return target.Tag == "r00000001" }) {
 		t.Errorf("the service carries %+v after the untag, want tag r00000001 gone", traffic)
 	}
@@ -325,10 +326,10 @@ func TestUntaggingTakesTheTagOffItsRevisionAndLeavesTheTrafficWhereItWas(t *test
 }
 
 func TestWhatAServicePinsIsTheRevisionTakingAllOfItsTraffic(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
-	p := server.open(t)
+	p := providerServing(server, t)
 	ctx := context.Background()
 
 	if pinned, err := p.services().ReadServing(ctx, first.Service); err != nil || pinned != one {
@@ -346,7 +347,7 @@ func TestWhatAServicePinsIsTheRevisionTakingAllOfItsTraffic(t *testing.T) {
 }
 
 func TestAReleaseOntoAServiceThatServesItsLatestRevisionKeepsServingThatRevision(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
 
@@ -354,48 +355,48 @@ func TestAReleaseOntoAServiceThatServesItsLatestRevisionKeepsServingThatRevision
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	released(t, server, second)
 
-	if service := server.serving(); !run.ServedBy(service.Traffic, one) {
+	if service := server.Serving(); !run.ServedBy(service.Traffic, one) {
 		t.Errorf("the service serves %+v after the second release, want all of it on %s, the revision it served: a service that follows its latest revision hands traffic to whatever a release creates", service.Traffic, one)
 	}
 }
 
 func TestAFunctionTheSpecGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 
 	released(t, server, run.Serving{Service: "ocel-shop-prod-fn", Compute: provider.ComputeServerless})
 
-	if desired := server.current(); desired.InvokerIamDisabled {
+	if desired := server.Current(); desired.InvokerIamDisabled {
 		t.Error("a function the plan says has no url may be invoked without an invoker check, " +
 			"and a function reached only through its app is reachable by everybody instead")
 	}
 }
 
 func TestAFunctionTheSpecGivesAURLIsReachedWithoutAnAllUsersGrant(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 
 	released(t, server, run.Serving{Service: "ocel-shop-prod-fn", Compute: provider.ComputeServerless, Public: true})
 
-	if desired := server.current(); !desired.InvokerIamDisabled {
+	if desired := server.Current(); !desired.InvokerIamDisabled {
 		t.Error("a function the plan gives a url of its own still checks its invoker, and a service nobody may invoke answers nothing")
 	}
-	if bound := server.bound(); len(bound) != 0 {
+	if bound := server.Bound(); len(bound) != 0 {
 		t.Errorf("the release wrote %d iam policies, want none: an org that restricts iam members to its own domain refuses an "+
 			"allUsers binding outright, and the service is opened by turning the invoker check off instead", len(bound))
 	}
 }
 
 func TestAContainerAppIsAlwaysOpenedToThePublic(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 
 	released(t, server, run.Serving{Service: "ocel-shop-prod-app", Compute: provider.ComputeContainer, Health: "/", Public: true})
 
-	if desired := server.current(); !desired.InvokerIamDisabled {
+	if desired := server.Current(); !desired.InvokerIamDisabled {
 		t.Error("the app's own front still checks its invoker, and nothing else sits between the internet and it")
 	}
 }
 
 func TestAReleaseOntoADeployedServiceNeverHandsTrafficBackToTheLatestRevision(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	first := run.Serving{
 		Service: "ocel-shop-prod-app",
 		Image:   "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one",
@@ -409,7 +410,7 @@ func TestAReleaseOntoADeployedServiceNeverHandsTrafficBackToTheLatestRevision(t 
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	released(t, server, second)
 
-	for _, patched := range server.releases() {
+	for _, patched := range server.Releases() {
 		if len(patched.Traffic) == 0 {
 			t.Fatal("a patch named no traffic, and Cloud Run replaces the body it is handed: " +
 				"the allocation this release pinned would go back to the latest revision, which is whatever ran last")
@@ -421,7 +422,7 @@ func TestAReleaseOntoADeployedServiceNeverHandsTrafficBackToTheLatestRevision(t 
 }
 
 func TestPinningTrafficLeavesWhoMayReachTheServiceAsTheReleaseSetIt(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	behind := run.Serving{
 		Service: "ocel-shop-prod-web",
 		Compute: provider.ComputeServerless,
@@ -432,7 +433,7 @@ func TestPinningTrafficLeavesWhoMayReachTheServiceAsTheReleaseSetIt(t *testing.T
 	behind.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	released(t, server, behind)
 
-	service := server.serving()
+	service := server.Serving()
 	if service.Ingress != run.IngressLoadBalancer {
 		t.Errorf("the service takes %q after its traffic was pinned, want %q: a patch replaces what it is handed, so pinning traffic alone must say it changes the traffic alone",
 			service.Ingress, run.IngressLoadBalancer)
@@ -453,41 +454,41 @@ func serves(service string) run.Serving {
 }
 
 func TestAServiceChangedUnderAReleaseIsReadAgainAndPatchedAgain(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	released(t, server, serves("ocel-shop-prod-app"))
 
-	server.patchConflicts = 1
+	server.PatchConflicts = 1
 	again := serves("ocel-shop-prod-app")
 	again.Image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-two"
 	released(t, server, again)
 
-	service := server.serving()
+	service := server.Serving()
 	if got := service.Template.Containers[0].Image; !strings.HasSuffix(got, "sha256-two") {
 		t.Errorf("the service runs %q, want the image the second release named: a 409 says the read the write was built on is stale", got)
 	}
 }
 
 func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	released(t, server, serves("ocel-shop-prod-app"))
 
-	server.patchConflicts = run.ReleaseAttempts + 1
-	before := server.tries()
-	_, err := server.open(t).services().DeployService(context.Background(), serves("ocel-shop-prod-app"), nil)
+	server.PatchConflicts = run.ReleaseAttempts + 1
+	before := server.Tries()
+	_, err := providerServing(server, t).services().DeployService(context.Background(), serves("ocel-shop-prod-app"), nil)
 	if err == nil {
 		t.Fatal("deployService() over a service that never stops changing = nil, want the release refused")
 	}
 	if !strings.Contains(err.Error(), "ocel-shop-prod-app") {
 		t.Errorf("deployService() = %v, want the service it was releasing named", err)
 	}
-	if patched := server.tries(); patched-before != run.ReleaseAttempts {
+	if patched := server.Tries(); patched-before != run.ReleaseAttempts {
 		t.Errorf("the release patched %d times, want %d: a retry that never gives up keeps a deploy open", patched-before, run.ReleaseAttempts)
 	}
 }
 
 func TestARunSaysWhichCloudRunServiceItCreatesReleasesAndDeletesAndInWhichRegion(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	progress := &fake.Log{}
 	ctx := context.Background()
 
@@ -512,8 +513,8 @@ func TestARunSaysWhichCloudRunServiceItCreatesReleasesAndDeletesAndInWhichRegion
 }
 
 func TestAServiceNoPromotionPinsServesEachRevisionItsReleaseMakes(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	ctx := context.Background()
 	first, again := serves("ocel-connector"), serves("ocel-connector")
 	again.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
@@ -526,7 +527,7 @@ func TestAServiceNoPromotionPinsServesEachRevisionItsReleaseMakes(t *testing.T) 
 		t.Fatalf("deployAndRoute() again = %v", err)
 	}
 
-	if served := run.ServedRevision(server.serving()); served != ran.Revision || served == "" {
+	if served := run.ServedRevision(server.Serving()); served != ran.Revision || served == "" {
 		t.Errorf("the service serves %q, want %q, the revision the second release made", served, ran.Revision)
 	}
 }
@@ -538,37 +539,37 @@ func promotable(service string) run.Serving {
 }
 
 func TestABrandNewAppServiceAnswersNobodyUntilItsFirstPromotion(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
 
-	if server.serving().InvokerIamDisabled {
+	if server.Serving().InvokerIamDisabled {
 		t.Fatal("a service its first release created answers anyone before a promotion pinned it, and the ledger names nothing it serves")
 	}
-	if _, err := server.open(t).services().Pin(context.Background(), app.Service, one, nil); err != nil {
+	if _, err := providerServing(server, t).services().Pin(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
-	if !server.serving().InvokerIamDisabled {
+	if !server.Serving().InvokerIamDisabled {
 		t.Error("the service still checks its invoker once its first promotion pinned it, and every visitor to a public app would be refused")
 	}
 
 	second := app
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	released(t, server, second)
-	if !server.serving().InvokerIamDisabled {
+	if !server.Serving().InvokerIamDisabled {
 		t.Error("a later release closed the service its promotion opened, and every visitor would be refused until the next promotion")
 	}
 }
 
 func TestClosingAServiceAnotherPromotionRepinnedSinceLeavesItOpen(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.services().Pin(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
-	writes := len(server.patched)
+	writes := len(server.Patched)
 	repinned := errors.New("another promotion pinned this service since")
 
 	err := p.services().Close(context.Background(), app.Service, func(context.Context) error { return repinned })
@@ -576,19 +577,19 @@ func TestClosingAServiceAnotherPromotionRepinnedSinceLeavesItOpen(t *testing.T) 
 	if !errors.Is(err, repinned) {
 		t.Fatalf("Close() = %v, want the error that says the promotion is no longer the one pinned", err)
 	}
-	if !server.serving().InvokerIamDisabled {
+	if !server.Serving().InvokerIamDisabled {
 		t.Error("the service was closed although another promotion pinned it since the check")
 	}
-	if got := len(server.patched); got != writes {
+	if got := len(server.Patched); got != writes {
 		t.Errorf("%d patches landed after the Close, want none", got-writes)
 	}
 }
 
 func TestClosingAPromotedServiceTurnsItsInvokerCheckBackOn(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.services().Pin(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
@@ -599,20 +600,20 @@ func TestClosingAPromotedServiceTurnsItsInvokerCheckBackOn(t *testing.T) {
 		}
 	}
 
-	if server.serving().InvokerIamDisabled {
+	if server.Serving().InvokerIamDisabled {
 		t.Error("a closed service answers anyone, and the pointer that promoted it was taken back")
 	}
-	if !run.ServedBy(server.serving().Traffic, one) {
-		t.Errorf("closing the service moved its traffic to %+v", server.serving().Traffic)
+	if !run.ServedBy(server.Serving().Traffic, one) {
+		t.Errorf("closing the service moved its traffic to %+v", server.Serving().Traffic)
 	}
 }
 
 func TestClosingAnOpenServiceNoPromotionOpenedTurnsItsInvokerCheckBackOn(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := serves("ocel-shop-prod-app")
 	app.Public = true
 	_, one := released(t, server, app)
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.services().Pin(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
@@ -621,16 +622,16 @@ func TestClosingAnOpenServiceNoPromotionOpenedTurnsItsInvokerCheckBackOn(t *test
 		t.Fatalf("Close() = %v", err)
 	}
 
-	if server.serving().InvokerIamDisabled {
+	if server.Serving().InvokerIamDisabled {
 		t.Error("a closed service answers anyone because it carries no label saying a promotion opened it, and the router says a removed pointer is served no more")
 	}
 }
 
 func TestPinReportsWhetherItOpenedTheService(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	p := server.open(t)
+	p := providerServing(server, t)
 
 	opened, err := p.services().Pin(context.Background(), app.Service, one, nil)
 	if err != nil || !opened {
@@ -643,10 +644,10 @@ func TestPinReportsWhetherItOpenedTheService(t *testing.T) {
 }
 
 func TestAPinWhoseOperationFailsStillReportsItOpenedTheService(t *testing.T) {
-	server := &runServer{failRouting: true}
+	server := &googletest.Run{FailRouting: true}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	p := server.open(t)
+	p := providerServing(server, t)
 
 	opened, err := p.services().Pin(context.Background(), app.Service, one, nil)
 
@@ -659,32 +660,32 @@ func TestAPinWhoseOperationFailsStillReportsItOpenedTheService(t *testing.T) {
 }
 
 func TestPinningBackWithoutOpeningLeavesAClosedServiceClosed(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
 	second := app
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	released(t, server, second)
-	p := server.open(t)
+	p := providerServing(server, t)
 
 	if err := p.services().Restore(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Restore(%s) = %v", one, err)
 	}
 
-	if server.serving().InvokerIamDisabled {
+	if server.Serving().InvokerIamDisabled {
 		t.Error("pinning a closed service back opened it to anyone, and a promotion putting a service back closes it first so its old revision answers nobody")
 	}
-	if !run.ServedBy(server.serving().Traffic, one) {
-		t.Errorf("the service serves %+v, want all of it on %s", server.serving().Traffic, one)
+	if !run.ServedBy(server.Serving().Traffic, one) {
+		t.Errorf("the service serves %+v, want all of it on %s", server.Serving().Traffic, one)
 	}
 }
 
 func TestARollbackIsNotRecordedOnTheRevisionTheServiceServes(t *testing.T) {
 	ctx := context.Background()
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.services().Pin(ctx, app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
@@ -701,13 +702,13 @@ func TestARollbackIsNotRecordedOnTheRevisionTheServiceServes(t *testing.T) {
 
 func TestARecordedRollbackIsReadBackUntilARevisionIsPinnedAgain(t *testing.T) {
 	ctx := context.Background()
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
 	second := app
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	_, two := released(t, server, second)
-	p := server.open(t)
+	p := providerServing(server, t)
 
 	recorded := pin.Rollback{Previous: one, Opened: true}
 	if err := p.services().RecordRollback(ctx, app.Service, two, recorded); err != nil {
@@ -734,16 +735,16 @@ func TestARecordedRollbackIsReadBackUntilARevisionIsPinnedAgain(t *testing.T) {
 
 func TestARollbackRecordThatCannotBeDecodedIsReportedRatherThanReadAsNothing(t *testing.T) {
 	ctx := context.Background()
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
 	second := app
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	_, two := released(t, server, second)
-	p := server.open(t)
-	server.mu.Lock()
-	server.service.Annotations = map[string]string{run.RollbacksAnnotation: "{not json"}
-	server.mu.Unlock()
+	p := providerServing(server, t)
+	server.Mu.Lock()
+	server.Service.Annotations = map[string]string{run.RollbacksAnnotation: "{not json"}
+	server.Mu.Unlock()
 
 	if _, found, err := p.services().ReadRollback(ctx, app.Service, one); err == nil || found {
 		t.Errorf("ReadRollback(%s) = found %v, %v, want an error: the record cannot be decoded", one, found, err)
@@ -752,22 +753,22 @@ func TestARollbackRecordThatCannotBeDecodedIsReportedRatherThanReadAsNothing(t *
 	if _, err := p.services().Pin(ctx, app.Service, two, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v, want a pin to replace a record it cannot decode", two, err)
 	}
-	server.mu.Lock()
-	recorded := server.service.Annotations[run.RollbacksAnnotation]
-	server.mu.Unlock()
+	server.Mu.Lock()
+	recorded := server.Service.Annotations[run.RollbacksAnnotation]
+	server.Mu.Unlock()
 	if recorded != "" {
 		t.Errorf("the service records %q after the pin, want the undecodable record gone", recorded)
 	}
 }
 
 func TestAPinThatFindsTheServiceOpenedOnItsRetryDoesNotClaimToHaveOpenedIt(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	server.patchConflicts = 1
-	server.onConflict = func(s *runv2.GoogleCloudRunV2Service) { s.InvokerIamDisabled = true }
+	server.PatchConflicts = 1
+	server.OnConflict = func(s *runv2.GoogleCloudRunV2Service) { s.InvokerIamDisabled = true }
 
-	opened, err := server.open(t).services().Pin(context.Background(), app.Service, one, nil)
+	opened, err := providerServing(server, t).services().Pin(context.Background(), app.Service, one, nil)
 	if err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
@@ -777,10 +778,10 @@ func TestAPinThatFindsTheServiceOpenedOnItsRetryDoesNotClaimToHaveOpenedIt(t *te
 }
 
 func TestAPinWhoseRetryFailsBeforeItsPatchLandsDoesNotClaimToHaveOpenedTheService(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	server.patchConflicts = 1
+	server.PatchConflicts = 1
 	displaced := errors.New("another promotion displaced this one")
 	checks := 0
 	stillActive := func(context.Context) error {
@@ -791,7 +792,7 @@ func TestAPinWhoseRetryFailsBeforeItsPatchLandsDoesNotClaimToHaveOpenedTheServic
 		return nil
 	}
 
-	opened, err := server.open(t).services().Pin(context.Background(), app.Service, one, stillActive)
+	opened, err := providerServing(server, t).services().Pin(context.Background(), app.Service, one, stillActive)
 
 	if !errors.Is(err, displaced) {
 		t.Fatalf("Pin(%s) = %v, want the displacement its retry found", one, err)
@@ -802,12 +803,12 @@ func TestAPinWhoseRetryFailsBeforeItsPatchLandsDoesNotClaimToHaveOpenedTheServic
 }
 
 func TestAPinThatKeepsConflictingUntilItGivesUpDoesNotClaimToHaveOpenedTheService(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	server.patchConflicts = run.ReleaseAttempts + 1
+	server.PatchConflicts = run.ReleaseAttempts + 1
 
-	opened, err := server.open(t).services().Pin(context.Background(), app.Service, one, nil)
+	opened, err := providerServing(server, t).services().Pin(context.Background(), app.Service, one, nil)
 
 	if err == nil {
 		t.Fatal("Pin = nil, want it to give up on the conflicts")
@@ -818,11 +819,11 @@ func TestAPinThatKeepsConflictingUntilItGivesUpDoesNotClaimToHaveOpenedTheServic
 }
 
 func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
-	server := &runServer{}
+	server := &googletest.Run{}
 	worker := run.Serving{Service: "ocel-shop-prod-worker", Image: "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one", Compute: provider.ComputeServerless}
 	_, one := released(t, server, worker)
 
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.services().Pin(context.Background(), worker.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
@@ -830,7 +831,7 @@ func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
 		t.Fatalf("Close() = %v", err)
 	}
 
-	if server.serving().InvokerIamDisabled {
+	if server.Serving().InvokerIamDisabled {
 		t.Error("pinning a service that only its invokers may reach opened it to anyone")
 	}
 }
@@ -841,12 +842,12 @@ func TestWarmingAPromotedRevisionAsksItsOwnUrlOnTheAppsHealthPath(t *testing.T) 
 		asked <- r.Method + " " + r.URL.Path
 	}))
 	t.Cleanup(app.Close)
-	server := &runServer{}
+	server := &googletest.Run{}
 	open := serves("ocel-shop-prod-app")
 	_, one := released(t, server, open)
-	server.service.TrafficStatuses = []*runv2.GoogleCloudRunV2TrafficTargetStatus{{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
+	server.Service.TrafficStatuses = []*runv2.GoogleCloudRunV2TrafficTargetStatus{{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
 
-	if err := server.open(t).services().Warm(context.Background(), open.Service, one, "/healthz"); err != nil {
+	if err := providerServing(server, t).services().Warm(context.Background(), open.Service, one, "/healthz"); err != nil {
 		t.Fatalf("Warm() = %v", err)
 	}
 
@@ -882,12 +883,12 @@ func TestAWarmTheServiceTurnsAwayOrFailsToServeIsReportedAndAnAnswerFromTheAppIs
 				w.WriteHeader(tc.status)
 			}))
 			t.Cleanup(app.Close)
-			server := &runServer{}
+			server := &googletest.Run{}
 			open := serves("ocel-shop-prod-app")
 			_, one := released(t, server, open)
-			server.service.TrafficStatuses = []*runv2.GoogleCloudRunV2TrafficTargetStatus{{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
+			server.Service.TrafficStatuses = []*runv2.GoogleCloudRunV2TrafficTargetStatus{{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
 
-			err := server.open(t).services().Warm(context.Background(), open.Service, one, "/healthz")
+			err := providerServing(server, t).services().Warm(context.Background(), open.Service, one, "/healthz")
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("Warm() = %v against a %d answer, want an error: %v", err, tc.status, tc.wantErr)
@@ -902,13 +903,13 @@ func TestARevisionOnlyTheLoadBalancerReachesIsNotAskedToWarm(t *testing.T) {
 		asked <- r.Method + " " + r.URL.Path
 	}))
 	t.Cleanup(app.Close)
-	server := &runServer{}
+	server := &googletest.Run{}
 	behind := serves("ocel-shop-prod-app")
 	behind.Ingress = run.IngressLoadBalancer
 	_, one := released(t, server, behind)
-	server.service.TrafficStatuses = []*runv2.GoogleCloudRunV2TrafficTargetStatus{{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
+	server.Service.TrafficStatuses = []*runv2.GoogleCloudRunV2TrafficTargetStatus{{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
 
-	if err := server.open(t).services().Warm(context.Background(), behind.Service, one, "/"); err != nil {
+	if err := providerServing(server, t).services().Warm(context.Background(), behind.Service, one, "/"); err != nil {
 		t.Fatalf("Warm() = %v", err)
 	}
 	if len(asked) != 0 {
@@ -918,24 +919,24 @@ func TestARevisionOnlyTheLoadBalancerReachesIsNotAskedToWarm(t *testing.T) {
 
 func TestAReleaseRetriedAfterAConflictKeepsOnlyTheRollbacksTheServiceRecordsOnTheRetry(t *testing.T) {
 	ctx := context.Background()
-	server := &runServer{}
+	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.services().Pin(ctx, app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 	if err := p.services().RecordRollback(ctx, app.Service, "rev-x", pin.Rollback{Previous: one}); err != nil {
 		t.Fatalf("RecordRollback(rev-x) = %v", err)
 	}
-	server.patchConflicts = 1
-	server.onConflict = func(s *runv2.GoogleCloudRunV2Service) { s.Annotations = nil }
+	server.PatchConflicts = 1
+	server.OnConflict = func(s *runv2.GoogleCloudRunV2Service) { s.Annotations = nil }
 
 	second := app
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	released(t, server, second)
 
-	if got := server.serving().Annotations[run.RollbacksAnnotation]; got != "" {
+	if got := server.Serving().Annotations[run.RollbacksAnnotation]; got != "" {
 		t.Errorf("the service records rollbacks %q after the retried release, want none: the retry read a service that recorded none", got)
 	}
 }

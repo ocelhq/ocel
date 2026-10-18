@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strconv"
 
 	"google.golang.org/api/googleapi"
@@ -37,7 +36,7 @@ const (
 	realtimeImagePath = "/realtime-gateway"
 )
 
-var realtimeImageTag = binaryImageTag(payloads.RealtimeGateway)
+var realtimeImageTag = run.BinaryImageTag(payloads.RealtimeGateway)
 
 func realtimeGatewayServing(named names.Names, ref provider.StackRef, host, image, inlineKeys string) run.Serving {
 	gateway := run.Serving{
@@ -103,8 +102,8 @@ func (r realtimeEnvironment) encodeInlineKeys(keys map[string]string) (string, e
 }
 
 func (r realtimeEnvironment) findGatewayHost(current *runv2.GoogleCloudRunV2Service) string {
-	if current != nil && hostOf(current.Uri) != "" {
-		return hostOf(current.Uri)
+	if current != nil && run.HostOf(current.Uri) != "" {
+		return run.HostOf(current.Uri)
 	}
 	return r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
 }
@@ -120,7 +119,7 @@ func (r realtimeEnvironment) compareGateway(current *runv2.GoogleCloudRunV2Servi
 		return desired, "the realtime gateway " + desired.Service + " is created", nil
 	case imageOf(current) != image:
 		return desired, "the realtime gateway " + desired.Service + " changes from image " + imageOf(current) + " to " + image, nil
-	case !sameServing(current, wanted):
+	case run.Drifted(current, wanted):
 		return desired, "the realtime gateway " + desired.Service + "'s Cloud Run settings differ from what ocel declares, so it is released again", nil
 	case !run.ServesLatest(current):
 		return desired, "the realtime gateway " + desired.Service + " does not serve its latest ready revision, so it is released again", nil
@@ -180,7 +179,7 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 		if err != nil {
 			return "", err
 		}
-		served := hostOf(ran.Url)
+		served := run.HostOf(ran.Url)
 		if served == "" {
 			return "", refusal.Refuse(refusal.CodeNotReady,
 				"Cloud Run gave the realtime gateway %s no URL, and a realtime binding names the host browsers connect to", name)
@@ -221,44 +220,6 @@ func imageOf(service *runv2.GoogleCloudRunV2Service) string {
 		return ""
 	}
 	return service.Template.Containers[0].Image
-}
-
-func sameServing(current, desired *runv2.GoogleCloudRunV2Service) bool {
-	if current.Template == nil || len(current.Template.Containers) != 1 || current.Template.Containers[0].Resources == nil {
-		return false
-	}
-	template, wanted := current.Template, desired.Template
-	container, want := template.Containers[0], wanted.Containers[0]
-	scaling := template.Scaling
-	if scaling == nil {
-		scaling = &runv2.GoogleCloudRunV2RevisionScaling{}
-	}
-	return container.Image == want.Image &&
-		template.ServiceAccount == wanted.ServiceAccount &&
-		current.Ingress == desired.Ingress &&
-		current.InvokerIamDisabled == desired.InvokerIamDisabled &&
-		container.Resources.CpuIdle == want.Resources.CpuIdle &&
-		sameLimits(container.Resources.Limits, want.Resources.Limits) &&
-		scaling.MinInstanceCount == wanted.Scaling.MinInstanceCount &&
-		scaling.MaxInstanceCount == wanted.Scaling.MaxInstanceCount &&
-		template.MaxInstanceRequestConcurrency == wanted.MaxInstanceRequestConcurrency &&
-		sameTimeout(template.Timeout, wanted.Timeout) &&
-		slices.EqualFunc(container.Env, want.Env, func(a, b *runv2.GoogleCloudRunV2EnvVar) bool {
-			return a.Name == b.Name && a.Value == b.Value
-		}) &&
-		slices.EqualFunc(template.Volumes, wanted.Volumes, sameSecretVolume) &&
-		slices.EqualFunc(container.VolumeMounts, want.VolumeMounts, func(a, b *runv2.GoogleCloudRunV2VolumeMount) bool {
-			return a.Name == b.Name && a.MountPath == b.MountPath
-		})
-}
-
-func sameSecretVolume(a, b *runv2.GoogleCloudRunV2Volume) bool {
-	if a.Name != b.Name || a.Secret == nil || b.Secret == nil || run.RevisionName(a.Secret.Secret) != run.RevisionName(b.Secret.Secret) {
-		return false
-	}
-	return slices.EqualFunc(a.Secret.Items, b.Secret.Items, func(x, y *runv2.GoogleCloudRunV2VersionToPath) bool {
-		return x.Version == y.Version && x.Path == y.Path
-	})
 }
 
 func (r realtimeEnvironment) removeGateway(ctx context.Context, progress progress.Log) error {

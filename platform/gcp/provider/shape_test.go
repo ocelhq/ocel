@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -41,8 +42,8 @@ func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 func TestTheEnvSourceSyncShapeMatchesWhatTheBootstrapDeploys(t *testing.T) {
 	t.Parallel()
 
-	b := bootstrap{clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
-	sent, err := run.ServiceOf(b.syncServing(environment.TierProduction))
+	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
+	sent, err := run.ServiceOf(syncServing(b, environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,8 +72,8 @@ func TestEveryBootstrapItemHasAShape(t *testing.T) {
 
 	names := names.New("ocel", "acme-prod")
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		for _, item := range bootstrapItems(names, tier, false) {
-			if _, shaped := item.shape("europe-west1"); !shaped {
+		for _, item := range bootstrap.Resources(names, tier, false) {
+			if _, shaped := item.Shape("europe-west1"); !shaped {
 				t.Errorf("%s provisions a %s the shape has no name for", tier, item.ID())
 			}
 		}

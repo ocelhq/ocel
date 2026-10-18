@@ -17,7 +17,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
 )
 
 const (
@@ -67,8 +69,8 @@ func TestLiveCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() against the emulator = %v, want an identity: the project the run targets answers there", err)
 	}
-	if principal.Vendor != gcp.Vendor || principal.Account != liveProject() {
-		t.Errorf("Whoami() = %+v, want %s naming project %s", principal, gcp.Vendor, liveProject())
+	if principal.Vendor != gcloud.Vendor || principal.Account != liveProject() {
+		t.Errorf("Whoami() = %+v, want %s naming project %s", principal, gcloud.Vendor, liveProject())
 	}
 }
 
@@ -82,7 +84,7 @@ func TestLiveStacks(t *testing.T) {
 		bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart, gcp.NetworkPart)
 	}
 
-	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues(), gcp.RootRealtime, gcp.RootPostgres)
+	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues(), gcp.RootRealtime, postgres.RootPostgres)
 }
 
 func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {

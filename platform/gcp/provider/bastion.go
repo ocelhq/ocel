@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	"slices"
 
 	"google.golang.org/api/googleapi"
 	runv2 "google.golang.org/api/run/v2"
@@ -15,10 +14,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/kv"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
 )
 
 const (
@@ -30,7 +33,7 @@ const (
 	bastionCreateTries  = 2
 )
 
-var bastionImageTag = binaryImageTag(payloads.Bastion)
+var bastionImageTag = run.BinaryImageTag(payloads.Bastion)
 
 type bastion struct {
 	clients        *gcloud.Clients
@@ -52,8 +55,8 @@ func (b bastion) audience(tier environment.Tier) string {
 }
 
 func bastionDestinations() []relay.Destination {
-	network := netip.MustParsePrefix(networkSubnetRange)
-	return []relay.Destination{{Network: network, Port: postgresPort}, {Network: network, Port: defaultValkeyPort}}
+	network := netip.MustParsePrefix(network.SubnetRange)
+	return []relay.Destination{{Network: network, Port: postgres.Port}, {Network: network, Port: kv.Port}}
 }
 
 func (b bastion) serving(tier environment.Tier, image string) run.Serving {
@@ -125,7 +128,7 @@ func (b bastion) provisionService(ctx context.Context, tier environment.Tier, pr
 	if err != nil {
 		return "", err
 	}
-	if current != nil && sameBastion(current, wanted) && run.ServesLatest(current) {
+	if current != nil && !run.Drifted(current, wanted) && run.ServesLatest(current) {
 		return current.Uri, nil
 	}
 	if current == nil {
@@ -157,25 +160,8 @@ func (b bastion) ensureAccount(ctx context.Context, tier environment.Tier) error
 		return err
 	}
 	return gcloud.UntilVisible(ctx, func() error {
-		return gcloud.WrapAccountGrantError(gcloud.BindAccountRole(ctx, b.clients, account, runAsRole, gcloud.MemberOf(principal), true), b.clients.AppAccountsRolePath())
+		return gcloud.WrapAccountGrantError(gcloud.BindAccountRole(ctx, b.clients, account, bootstrap.RunAsRole, gcloud.MemberOf(principal), true), b.clients.AppAccountsRolePath())
 	})
-}
-
-func sameBastion(current, desired *runv2.GoogleCloudRunV2Service) bool {
-	return sameServing(current, desired) &&
-		current.IapEnabled == desired.IapEnabled &&
-		slices.Equal(current.CustomAudiences, desired.CustomAudiences) &&
-		sameVPCAccess(current.Template.VpcAccess, desired.Template.VpcAccess)
-}
-
-func sameVPCAccess(current, desired *runv2.GoogleCloudRunV2VpcAccess) bool {
-	if current == nil || desired == nil {
-		return current == desired
-	}
-	return current.Egress == desired.Egress &&
-		slices.EqualFunc(current.NetworkInterfaces, desired.NetworkInterfaces, func(a, b *runv2.GoogleCloudRunV2NetworkInterface) bool {
-			return run.RevisionName(a.Network) == run.RevisionName(b.Network) && run.RevisionName(a.Subnetwork) == run.RevisionName(b.Subnetwork)
-		})
 }
 
 func (b bastion) remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {

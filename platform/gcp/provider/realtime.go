@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -16,6 +17,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/component"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
@@ -39,24 +43,50 @@ type realtimeEnvironment struct {
 	tearDown       func(ctx context.Context, service string, progress progress.Log) error
 }
 
-func (p *Provider) openRealtime(ctx context.Context, ref provider.StackRef) (realtimeEnvironment, error) {
+type Realtime struct {
+	openClients func(ctx context.Context) (*gcloud.Clients, error)
+	records     records.Store
+	services    *run.Services
+	pushBinary  func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
+	emulated    bool
+}
+
+func newRealtime(
+	openClients func(ctx context.Context) (*gcloud.Clients, error),
+	store records.Store,
+	services *run.Services,
+	pushBinary func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error,
+	emulated bool,
+) *Realtime {
+	return &Realtime{openClients: openClients, records: store, services: services, pushBinary: pushBinary, emulated: emulated}
+}
+
+func (p *Realtime) Component() component.Component {
+	return component.Component{
+		Types: []provider.BindingType{provider.BindingRealtime},
+		Hooks: resources.ResourceHooks{Plan: p.PlanRealtime, Provision: p.ProvisionRealtime, Remove: p.RemoveRealtime},
+		Shape: shapeRealtime,
+	}
+}
+
+func (p *Realtime) openRealtime(ctx context.Context, ref provider.StackRef) (realtimeEnvironment, error) {
 	opened, err := p.openClients(ctx)
 	if err != nil {
 		return realtimeEnvironment{}, err
 	}
 	return realtimeEnvironment{
 		clients: opened,
-		records: p.KeyValues(),
+		records: p.records,
 		ref:     ref,
 		// HACK: floci-gcp runs no secret volume, so an emulated gateway takes its keys from its environment and a change of keys rolls a revision; drop keysInEnv once floci-gcp mounts secret volumes (#1605).
-		keysInEnv:      p.emulated(),
+		keysInEnv:      p.emulated,
 		pushBinary:     p.pushBinary,
-		deployAndRoute: p.services().DeployAndRoute,
-		tearDown:       p.services().TearDown,
+		deployAndRoute: p.services.DeployAndRoute,
+		tearDown:       p.services.TearDown,
 	}, nil
 }
 
-func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
+func (p *Realtime) ProvisionRealtime(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
 	environment, err := p.openRealtime(ctx, in.Ref)
 	if err != nil {
 		return provider.Binding{}, err
@@ -64,7 +94,7 @@ func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.Provision
 	return environment.provision(ctx, in.Resource, progress)
 }
 
-func (p *Provider) PlanRealtime(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
+func (p *Realtime) PlanRealtime(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
 	environment, err := p.openRealtime(ctx, in.Ref)
 	if err != nil {
 		return "", "", err
@@ -142,7 +172,7 @@ func encodeNamespaceRecord(verifyKey string) ([]byte, error) {
 	return json.Marshal(realtimeNamespace{VerifyKey: verifyKey})
 }
 
-func (p *Provider) RemoveRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+func (p *Realtime) RemoveRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	environment, err := p.openRealtime(ctx, ref)
 	if err != nil {
 		return err
@@ -273,4 +303,30 @@ func (r realtimeEnvironment) place(ctx context.Context, keys map[string]string, 
 	}
 	gcloud.EnsureProgress(progress).Debug("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", ") + " from the gateway " + gateway)
 	return r.serveGateway(ctx, keys, progress)
+}
+
+func shapeRealtime(shape component.Shape, declared []provider.Resource) error {
+	tree, names, req, region, environment := shape.Tree, shape.Names, shape.Request, shape.Region, shape.Environment
+	secret, _ := bootstrap.Resource{Kind: bootstrap.KindSecret}.Shape(region)
+	for _, resource := range declared {
+		namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
+		tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace), region, secret.Properties)
+	}
+	tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env), region, secret.Properties)
+	tree.Add(environment, shape.Vendor, cost.CloudRunServiceType, names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env), region, map[string]any{
+		"location":      region,
+		"ingress":       run.IngressEverywhere,
+		"holds_sockets": true,
+		"template": map[string]any{
+			"scaling":                          map[string]any{"min_instance_count": 0, "max_instance_count": realtimeGatewayInstances},
+			"max_instance_request_concurrency": realtimeGatewayConcurrency,
+			"containers": []any{map[string]any{
+				"resources": map[string]any{
+					"cpu_idle": true,
+					"limits":   map[string]any{"cpu": realtimeGatewayCPU, "memory": strconv.Itoa(realtimeGatewayMemoryMiB) + "Mi"},
+				},
+			}},
+		},
+	})
+	return nil
 }

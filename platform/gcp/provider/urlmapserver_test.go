@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"google.golang.org/api/compute/v1"
 )
 
@@ -37,11 +39,11 @@ func (s *urlMapServer) serve(t *testing.T) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/global/operations/"):
-			writeBody(w, &compute.Operation{Name: "op", Status: operationDone})
+			googletest.WriteBody(w, &compute.Operation{Name: "op", Status: gcloud.OperationDone})
 		case r.Method == http.MethodGet && s.fullURLs:
-			writeBody(w, withFullURLs(t, s.urlMap))
+			googletest.WriteBody(w, withFullURLs(t, s.urlMap))
 		case r.Method == http.MethodGet:
-			writeBody(w, s.urlMap)
+			googletest.WriteBody(w, s.urlMap)
 		case r.Method == http.MethodPatch:
 			s.patch(w, r)
 		default:
@@ -71,11 +73,11 @@ func (s *urlMapServer) patch(w http.ResponseWriter, r *http.Request) {
 	if s.conflicts > 0 {
 		s.conflicts--
 		s.urlMap.Fingerprint = strconv.Itoa(s.tries)
-		conflicted(w, "the url map changed under this write")
+		googletest.Conflicted(w, "the url map changed under this write")
 		return
 	}
 	if desired.Fingerprint != s.urlMap.Fingerprint {
-		conflicted(w, "the url map fingerprint is stale")
+		googletest.Conflicted(w, "the url map fingerprint is stale")
 		return
 	}
 	if _, sent := said["hostRules"]; sent {
@@ -85,7 +87,7 @@ func (s *urlMapServer) patch(w http.ResponseWriter, r *http.Request) {
 		s.urlMap.PathMatchers = desired.PathMatchers
 	}
 	s.urlMap.Fingerprint = strconv.Itoa(s.tries)
-	writeBody(w, &compute.Operation{Name: "op", Status: operationDone})
+	googletest.WriteBody(w, &compute.Operation{Name: "op", Status: gcloud.OperationDone})
 }
 
 func (s *urlMapServer) current() *compute.UrlMap {

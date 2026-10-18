@@ -19,7 +19,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -130,12 +132,12 @@ type recordedApp struct {
 	stack   naming.StackName
 }
 
-func sweepingFor(t *testing.T, s *serviceAccountListing, stacks ...recordedApp) (bootstrap, *fake.Log) {
+func sweepingFor(t *testing.T, s *serviceAccountListing, stacks ...recordedApp) (bootstrap.Engine, *fake.Log) {
 	t.Helper()
-	return sweepingWith(t, s, &iamServer{}, stacks...)
+	return sweepingWith(t, s, &googletest.IAM{}, stacks...)
 }
 
-func sweepingWith(t *testing.T, s *serviceAccountListing, server *iamServer, stacks ...recordedApp) (bootstrap, *fake.Log) {
+func sweepingWith(t *testing.T, s *serviceAccountListing, server *googletest.IAM, stacks ...recordedApp) (bootstrap.Engine, *fake.Log) {
 	t.Helper()
 	records := fake.NewKeyValues()
 	for _, recorded := range stacks {
@@ -143,7 +145,7 @@ func sweepingWith(t *testing.T, s *serviceAccountListing, server *iamServer, sta
 			t.Fatalf("record %s: %v", recorded.stack, err)
 		}
 	}
-	return bootstrap{clients: server.serve(t, s.handler(t)), records: records}, &fake.Log{}
+	return composed(bootstrap.Engine{Clients: server.Serve(t, s.handler(t)), Records: records}), &fake.Log{}
 }
 
 const sweptEnv = "pr-8"
@@ -168,7 +170,7 @@ func TestABootstrapDeletesTheAccountOfAnAppNoEnvironmentOfItsTierRuns(t *testing
 	server := listing(unused)
 	b, log := sweepingFor(t, server)
 
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); !slices.Equal(got, []string{unused.id}) {
@@ -185,7 +187,7 @@ func TestABootstrapKeepsTheAccountOfAnAppItsEnvironmentStillRuns(t *testing.T) {
 	server := listing(running)
 	b, log := sweepingFor(t, server, recordedApp{environment.TierPreview, "shop", stackOf("pr-8", "web", "r1")})
 
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); len(got) != 0 {
@@ -202,7 +204,7 @@ func TestABootstrapDeletesTheAccountOfAnEnvironmentGoneThoughAnotherEnvironmentR
 	server := listing(gone)
 	b, log := sweepingFor(t, server, recordedApp{environment.TierPreview, "shop", stackOf("pr-9", "web", "r1")})
 
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); !slices.Equal(got, []string{gone.id}) {
@@ -218,7 +220,7 @@ func TestABootstrapDeletesTheAccountOfAnAppWhoseProjectOnlyHoldsOtherAppsAndInfr
 		recordedApp{environment.TierPreview, "shop", naming.InfraStack("pr-8")},
 		recordedApp{environment.TierPreview, "shop", stackOf("pr-8", "api", "r1")})
 
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); !slices.Equal(got, []string{unused.id}) {
@@ -229,17 +231,17 @@ func TestABootstrapDeletesTheAccountOfAnAppWhoseProjectOnlyHoldsOtherAppsAndInfr
 func TestABootstrapKeepsEveryTierAccountWhateverItsDescriptionSays(t *testing.T) {
 	t.Parallel()
 	names := sweepNamed()
-	held := bootstrap{clients: names}
+	held := composed(bootstrap.Engine{Clients: names})
 	forged := appAccountDescription(environment.TierPreview, "shop", sweptEnv, "web")
 	var accounts []listedAccount
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
 		for _, id := range []string{names.PushAccount(tier), names.RealtimeAccount(tier), names.EnvSourceSyncAccount(tier)} {
-			purpose, err := held.purposeOf(tier, id)
+			purpose, err := held.PurposeOf(tier, id)
 			if err != nil {
 				t.Fatalf("purposeOf(%s, %s) = %v", tier, id, err)
 			}
 			accounts = append(accounts,
-				listedAccount{id: id, description: purpose.description},
+				listedAccount{id: id, description: purpose.Description},
 				listedAccount{id: id, description: forged})
 		}
 	}
@@ -249,7 +251,7 @@ func TestABootstrapKeepsEveryTierAccountWhateverItsDescriptionSays(t *testing.T)
 	server := listing(accounts...)
 	b, log := sweepingFor(t, server)
 
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); len(got) != 0 {
@@ -268,7 +270,7 @@ func TestABootstrapKeepsAccountsOfAnotherTierAnotherNamespaceOrAnotherMaker(t *t
 	server := listing(otherTier, otherNamespace, forged, otherProject)
 	b, log := sweepingFor(t, server)
 
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); len(got) != 0 {
@@ -286,7 +288,7 @@ func TestABootstrapFindsAnUnusedAppAccountOnALaterPageOfTheListing(t *testing.T)
 	}}
 	b, log := sweepingFor(t, server)
 
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); !slices.Equal(got, []string{unused.id}) {
@@ -306,7 +308,7 @@ func TestABootstrapThatCannotDeleteOneAccountStillDeletesTheOthersAndSaysWhichFa
 	server.refusing = map[string]int{first.id: http.StatusForbidden}
 	b, log := sweepingFor(t, server)
 
-	err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log)
+	err := deleteUnusedAccounts(context.Background(), b, sweepRequest(environment.TierPreview), log)
 	if err == nil || !strings.Contains(err.Error(), first.id) {
 		t.Fatalf("deleteUnusedAccounts() = %v, want an error naming %s", err, first.id)
 	}
@@ -327,10 +329,10 @@ func TestAnAppAccountIsReadBackFromTheDescriptionItWasCreatedWith(t *testing.T) 
 	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
-	if len(server.created) == 0 {
+	if len(server.Created) == 0 {
 		t.Fatal("ensureAppAccount created no account")
 	}
-	made := server.created[0]
+	made := server.Created[0]
 
 	got, ok := readAppAccount(c.Names, &iam.ServiceAccount{Email: made.AccountId + "@acme-prod" + names.AccountDomain, Description: made.ServiceAccount.Description})
 	want := appAccount{id: made.AccountId, tier: spec.Ref.Tier, project: spec.Ref.Project, env: spec.Ref.Name.Env, app: spec.App.App}
@@ -341,7 +343,7 @@ func TestAnAppAccountIsReadBackFromTheDescriptionItWasCreatedWith(t *testing.T) 
 
 func TestABootstrapChecksItMayListServiceAccounts(t *testing.T) {
 	t.Parallel()
-	permissions := permissionsFor(nil)
+	permissions := bootstrap.PermissionsFor(nil)
 	for _, want := range []string{"iam.serviceAccounts.list", "iam.serviceAccounts.delete"} {
 		if !slices.Contains(permissions, want) {
 			t.Errorf("permissionsFor(nil) lacks %s", want)
@@ -379,10 +381,10 @@ func TestABootstrapReadsAProjectsRecordsOnceToChooseAndOnceMoreBeforeEachDelete(
 		appAccountOf(names, tier, "shop", "cron"),
 	)
 	b, log := sweepingFor(t, server, recordedApp{tier, "shop", stackOf("pr-8", "web", "r1")}, recordedApp{tier, "shop", stackOf("pr-8", "api", "r1")})
-	records := &countingRecords{Store: b.records}
-	b.records = records
+	records := &countingRecords{Store: b.Records}
+	b.Records = records
 
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(tier), log); err != nil {
+	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(tier), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got, want := server.deletes(), []string{names.AppAccount(tier, "shop", sweptEnv, "worker"), names.AppAccount(tier, "shop", sweptEnv, "cron")}; !slices.Equal(got, want) {
@@ -399,17 +401,17 @@ func TestABootstrapKeepsTheAccountOfAnAppDeployedWhileItSweeps(t *testing.T) {
 	tier := environment.TierPreview
 	server := listing(appAccountOf(names, tier, "shop", "web"))
 	b, log := sweepingFor(t, server)
-	records := &countingRecords{Store: b.records}
+	records := &countingRecords{Store: b.Records}
 	records.after = func(listed int) {
 		if listed == 1 {
-			if err := stackrecords.Write(context.Background(), b.records, tier, "shop", stackOf(sweptEnv, "web", "r2"), stackrecords.Stack{}); err != nil {
+			if err := stackrecords.Write(context.Background(), b.Records, tier, "shop", stackOf(sweptEnv, "web", "r2"), stackrecords.Stack{}); err != nil {
 				t.Errorf("record the concurrent deploy: %v", err)
 			}
 		}
 	}
-	b.records = records
+	b.Records = records
 
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(tier), log); err != nil {
+	if err := deleteUnusedAccounts(context.Background(), b, sweepRequest(tier), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
 	if got := server.deletes(); len(got) != 0 {

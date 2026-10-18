@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -73,7 +74,7 @@ func (i pluginImages) Delete(ctx context.Context, tier environment.Tier) error {
 	if err != nil {
 		return fmt.Errorf("delete the %s repository: %w", repository, err)
 	}
-	return bootstrap{clients: c}.repositoryAwaited(ctx, "deleting the "+repository+" repository", deleting)
+	return bootstrap.Engine{Clients: c}.RepositoryAwaited(ctx, "deleting the "+repository+" repository", deleting)
 }
 
 func ensurePluginRepository(ctx context.Context, c *gcloud.Clients, service *artifactregistry.Service, name, path string) error {
@@ -94,5 +95,5 @@ func ensurePluginRepository(ctx context.Context, c *gcloud.Clients, service *art
 	if err != nil {
 		return fmt.Errorf("create the %s repository: %w", name, err)
 	}
-	return bootstrap{clients: c}.repositoryAwaited(ctx, "creating the "+name+" repository", creating)
+	return bootstrap.Engine{Clients: c}.RepositoryAwaited(ctx, "creating the "+name+" repository", creating)
 }

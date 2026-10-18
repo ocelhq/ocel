@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 )
 
 func declaringAStore(memory int64) provider.DeployPreflight {
@@ -170,7 +171,7 @@ func TestTheFirstDeployDeclaringADatabaseAddsThePrivateNetworkAsAPartItRecords(t
 	if got := server.wrote(); !slices.Equal(got, want) {
 		t.Errorf("the first deploy declaring a database wrote %v, want %v", got, want)
 	}
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), environment.TierProduction, networkPart)
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), environment.TierProduction, network.PartName)
 	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" || len(recorded.Resources) != 4 {
 		t.Errorf("the part record = %+v, %t, %v, want it ready, added by shop, holding the network, subnetwork and both policies", recorded, present, err)
 	}
@@ -197,7 +198,7 @@ func TestADryDeployDeclaringADatabasePlansThePrivateNetworkAndMakesNothing(t *te
 	if len(server.wrote()) != 0 {
 		t.Errorf("a dry deploy wrote %v, want nothing", server.wrote())
 	}
-	if len(planned) != 1 || planned[0].Part != networkPart || planned[0].Action != provider.ActionCreate || len(planned[0].Changes) != 4 {
-		t.Errorf("a dry deploy planned %+v, want the %s part created with its four resources", planned, networkPart)
+	if len(planned) != 1 || planned[0].Part != network.PartName || planned[0].Action != provider.ActionCreate || len(planned[0].Changes) != 4 {
+		t.Errorf("a dry deploy planned %+v, want the %s part created with its four resources", planned, network.PartName)
 	}
 }

@@ -201,6 +201,7 @@ func ServiceOf(s Serving) (*run.GoogleCloudRunV2Service, error) {
 		}
 		service.Labels[OpensOnPromotionLabel] = opensToEveryone
 	}
+	stampServing(service)
 	return service, nil
 }
 

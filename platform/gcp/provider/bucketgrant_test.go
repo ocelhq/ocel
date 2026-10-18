@@ -16,15 +16,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
-func servingAccountsAndBuckets(t *testing.T) (*Provider, *gcloud.Clients, *iamServer, *storageServer) {
+func servingAccountsAndBuckets(t *testing.T) (*Provider, *gcloud.Clients, *googletest.IAM, *storageServer) {
 	t.Helper()
 	accounts := appAccountsOnly()
-	accounts.accountPolicies = map[string]*iam.Policy{}
+	accounts.AccountPolicies = map[string]*iam.Policy{}
 	buckets := &storageServer{buckets: map[string]*raw.Bucket{}, policies: map[string]*raw.Policy{}, objects: map[string][]string{}}
-	rest := accounts.rest(t)
-	c := accounts.serve(t, func(w http.ResponseWriter, r *http.Request) {
+	rest := accounts.Rest(t)
+	c := accounts.Serve(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/storage/v1/") {
 			buckets.serve()(w, r)
 			return
@@ -114,7 +116,7 @@ func TestAnAppBindingNoBucketHoldsNoBucketGrantAndCannotSignAsItself(t *testing.
 		t.Errorf("an app binding no bucket holds %v on one", got)
 	}
 	for _, held := range holdings(accounts, c, "serviceAccount:"+account) {
-		if strings.Contains(held, tokenCreatorRole) {
+		if strings.Contains(held, grants.TokenCreatorRole) {
 			t.Errorf("an app binding no bucket holds %q, and it signs no bucket url", held)
 		}
 	}
@@ -132,7 +134,7 @@ func TestAnAppBindingABucketMaySignAsItsOwnAccount(t *testing.T) {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 
-	want := "own account " + tokenCreatorRole
+	want := "own account " + grants.TokenCreatorRole
 	if got := holdings(accounts, c, "serviceAccount:"+account); !slices.Contains(got, want) {
 		t.Errorf("the account holds %q, want %q: a signed url is signed through IAM as the account itself", got, want)
 	}

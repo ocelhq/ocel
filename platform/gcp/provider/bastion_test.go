@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
@@ -121,7 +122,7 @@ func TestEachTierHasItsOwnBastionAndAccount(t *testing.T) {
 }
 
 type bastionHarness struct {
-	run     *runServer
+	run     *googletest.Run
 	b       bastion
 	relay   *httptest.Server
 	allowed []string
@@ -135,10 +136,10 @@ type bastionHarness struct {
 
 func newBastionHarness(t *testing.T, relayAllows ...string) *bastionHarness {
 	t.Helper()
-	h := &bastionHarness{run: &runServer{}, allowed: relayAllows}
-	h.run.identities().accounts = map[string]bool{}
-	h.run.identities().accountPolicies = map[string]*iam.Policy{}
-	p := h.run.open(t)
+	h := &bastionHarness{run: &googletest.Run{}, allowed: relayAllows}
+	h.run.Identities().Accounts = map[string]bool{}
+	h.run.Identities().AccountPolicies = map[string]*iam.Policy{}
+	p := providerServing(h.run, t)
 	relaying := relay.NewHandler(destinationsOf(t, relayAllows...))
 	h.relay = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if h.gone.Load() {
@@ -201,14 +202,14 @@ func TestTheFirstForwardCreatesTheBastionItsAccountAndTheInvokerGrantAndLaterOne
 	h := newBastionHarness(t, target)
 
 	h.forward(t, target)
-	before := len(h.run.releases())
+	before := len(h.run.Releases())
 	h.forward(t, target)
 
-	service := h.run.serving()
+	service := h.run.Serving()
 	if service == nil || !strings.HasSuffix(service.Name, "/"+bastionNames().Bastion(environment.TierProduction)) {
 		t.Fatalf("the bastion service is %+v, want the production tier's", service)
 	}
-	if got := len(h.run.created); got != 1 {
+	if got := len(h.run.Created); got != 1 {
 		t.Errorf("the bastion was created %d times, want once", got)
 	}
 	h.mu.Lock()
@@ -219,13 +220,13 @@ func TestTheFirstForwardCreatesTheBastionItsAccountAndTheInvokerGrantAndLaterOne
 			t.Errorf("an identity token was minted for %q, which the bastion's audiences %v do not name, so Cloud Run would refuse it", audience, service.CustomAudiences)
 		}
 	}
-	if got := len(h.run.releases()) - before; got != 0 {
+	if got := len(h.run.Releases()) - before; got != 0 {
 		t.Errorf("the second forward released the bastion %d times, want it reused as it is", got)
 	}
 	if got := h.pushes(); len(got) != 1 {
 		t.Errorf("the bastion image was pushed %d times, want once: the service already runs it", len(got))
 	}
-	created := h.run.identities().created
+	created := h.run.Identities().Created
 	if len(created) != 1 || created[0].AccountId != bastionNames().BastionAccount(environment.TierProduction) {
 		t.Errorf("service accounts created = %+v, want the production bastion's alone", created)
 	}
@@ -268,7 +269,7 @@ func TestTheDeployIdentityAloneMayInvokeTheBastion(t *testing.T) {
 
 	h.forward(t, target)
 
-	policies := h.run.bound()
+	policies := h.run.Bound()
 	if len(policies) == 0 {
 		t.Fatal("no policy was set on the bastion, so nothing may invoke it")
 	}
@@ -290,11 +291,11 @@ func TestAForwardToAnotherEnvironmentsTargetReusesTheBastionAsItIs(t *testing.T)
 	first, second := echoTarget(t), echoTarget(t)
 	h := newBastionHarness(t, first, second)
 	h.forward(t, first)
-	before := len(h.run.releases())
+	before := len(h.run.Releases())
 
 	h.forward(t, second)
 
-	if got := len(h.run.releases()) - before; got != 0 {
+	if got := len(h.run.Releases()) - before; got != 0 {
 		t.Errorf("a forward to another target released the bastion %d times, want none: forwards of one tier never rewrite what another relies on", got)
 	}
 	if got := h.pushes(); len(got) != 1 {
@@ -307,13 +308,13 @@ func TestABastionRunningAnOlderRelayIsReleasedAgainAndServesTheNewRevision(t *te
 	target := echoTarget(t)
 	h := newBastionHarness(t, target)
 	h.forward(t, target)
-	h.run.mu.Lock()
-	h.run.service.Template.Containers[0].Image += "-older"
-	h.run.mu.Unlock()
+	h.run.Mu.Lock()
+	h.run.Service.Template.Containers[0].Image += "-older"
+	h.run.Mu.Unlock()
 
 	h.forward(t, target)
 
-	service := h.run.serving()
+	service := h.run.Serving()
 	if served, latest := run.ServedRevision(service), run.RevisionName(service.LatestReadyRevision); served != latest {
 		t.Errorf("the bastion serves %q, want %q, the revision its release made: an upgraded relay otherwise never carries a byte", served, latest)
 	}
@@ -327,13 +328,13 @@ func TestABastionWhoseLatestRevisionServesNoTrafficIsRoutedToItOnTheNextForward(
 	target := echoTarget(t)
 	h := newBastionHarness(t, target)
 	h.forward(t, target)
-	h.run.mu.Lock()
-	h.run.service.Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{{Type: run.TrafficByRevision, Revision: "an-older-revision", Percent: 100}}
-	h.run.mu.Unlock()
+	h.run.Mu.Lock()
+	h.run.Service.Traffic = []*runv2.GoogleCloudRunV2TrafficTarget{{Type: run.TrafficByRevision, Revision: "an-older-revision", Percent: 100}}
+	h.run.Mu.Unlock()
 
 	h.forward(t, target)
 
-	service := h.run.serving()
+	service := h.run.Serving()
 	if served, latest := run.ServedRevision(service), run.RevisionName(service.LatestReadyRevision); served != latest {
 		t.Errorf("the bastion serves %q, want %q: a release that came ready and was never routed is routed on the next forward", served, latest)
 	}
@@ -400,7 +401,7 @@ func TestAUsersOwnLoginIsRefusedBeforeAnythingIsCreated(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), errTestUserLogin.Error()) {
 		t.Fatalf("forwardPorts() = %v, want the message the identity proof gave", err)
 	}
-	if h.run.serving() != nil || len(h.pushes()) != 0 || len(h.run.identities().created) != 0 {
+	if h.run.Serving() != nil || len(h.pushes()) != 0 || len(h.run.Identities().Created) != 0 {
 		t.Error("a bastion, an image or an account was created for a credential that cannot mint an identity token")
 	}
 }
@@ -430,10 +431,10 @@ func TestTakingTheBastionDownDeletesItsServiceAndItsAccount(t *testing.T) {
 		t.Fatalf("remove() = %v", err)
 	}
 
-	if h.run.serving() != nil {
+	if h.run.Serving() != nil {
 		t.Error("the bastion service outlived its tier")
 	}
-	deleted := h.run.identities().deletedAccounts
+	deleted := h.run.Identities().DeletedAccounts
 	if len(deleted) != 1 || !strings.Contains(deleted[0], bastionNames().BastionAccount(environment.TierProduction)) {
 		t.Errorf("deleted accounts = %v, want the production bastion's", deleted)
 	}
@@ -447,7 +448,7 @@ func TestTakingDownATierThatNeverForwardedAPortDeletesNothingAndFailsNothing(t *
 		t.Fatalf("remove() = %v", err)
 	}
 
-	if len(h.run.identities().deletedAccounts) != 0 {
+	if len(h.run.Identities().DeletedAccounts) != 0 {
 		t.Error("an account was deleted for a bastion never made")
 	}
 }

@@ -3,10 +3,6 @@ package gcp
 import (
 	"context"
 	"fmt"
-	"maps"
-	"math/big"
-	"slices"
-	"strings"
 	"time"
 
 	"google.golang.org/api/cloudscheduler/v1"
@@ -17,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -59,7 +56,7 @@ const (
 
 var syncKeyRoles = []string{syncSealingRole, syncOpeningRole}
 
-var syncImageTag = binaryImageTag(payloads.EnvSourceSync)
+var syncImageTag = run.BinaryImageTag(payloads.EnvSourceSync)
 
 func syncImageRef(c *gcloud.Clients, tier environment.Tier) string {
 	return c.RepositoryPath(c.Region, tier) + "/" + syncImageName + ":" + syncImageTag()
@@ -69,66 +66,66 @@ func syncMember(c *gcloud.Clients, tier environment.Tier) string {
 	return "serviceAccount:" + c.EnvSourceSyncAccountEmail(tier)
 }
 
-func (b bootstrap) syncPurpose(tier environment.Tier) accountPurpose {
-	return accountPurpose{
-		displayName: "ocel env source sync (" + b.clients.Namespace().String() + ", " + string(tier) + ")",
-		description: "the identity the ocel env source sync of the " + string(tier) + " tier runs as, and the one Cloud Scheduler calls it as",
-		ungranted:   reasonUnwritable,
-		grant:       b.grantSyncWrites,
-		forget:      b.forgetSyncWrites,
-		granted:     b.syncWritesGranted,
+func syncPurpose(b bootstrap.Engine, tier environment.Tier) bootstrap.AccountPurpose {
+	return bootstrap.AccountPurpose{
+		DisplayName: "ocel env source sync (" + b.Clients.Namespace().String() + ", " + string(tier) + ")",
+		Description: "the identity the ocel env source sync of the " + string(tier) + " tier runs as, and the one Cloud Scheduler calls it as",
+		Ungranted:   reasonUnwritable,
+		Grant:       grantSyncWrites,
+		Forget:      forgetSyncWrites,
+		Granted:     syncWritesGranted,
 	}
 }
 
-func (b bootstrap) grantSyncWrites(ctx context.Context, tier environment.Tier) error {
-	member := syncMember(b.clients, tier)
-	if err := gcloud.BindProjectRole(ctx, b.clients, member, syncRecordsRole, tierRecordsCondition(b.clients, tier), true); err != nil {
+func grantSyncWrites(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	member := syncMember(b.Clients, tier)
+	if err := gcloud.BindProjectRole(ctx, b.Clients, member, syncRecordsRole, tierRecordsCondition(b.Clients, tier), true); err != nil {
 		return fmt.Errorf("let %s read and write the %s tier's records: %w", member, tier, err)
 	}
-	if _, err := gcloud.BindKeyRoles(ctx, b.clients, tier, member, syncKeyRoles, syncKeyRoles); err != nil {
+	if _, err := gcloud.BindKeyRoles(ctx, b.Clients, tier, member, syncKeyRoles, syncKeyRoles); err != nil {
 		return fmt.Errorf("let %s seal and open values under the %s key: %w", member, tier, err)
 	}
-	if _, err := bindProjectKeyRoles(ctx, b.clients, tier, member, syncKeyRoles, syncKeyRoles); err != nil {
+	if _, err := bindProjectKeyRoles(ctx, b.Clients, tier, member, syncKeyRoles, syncKeyRoles); err != nil {
 		return fmt.Errorf("let %s seal and open values under the %s tier's project keys: %w", member, tier, err)
 	}
 	return nil
 }
 
-func (b bootstrap) forgetSyncWrites(ctx context.Context, tier environment.Tier) error {
-	member := syncMember(b.clients, tier)
+func forgetSyncWrites(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	member := syncMember(b.Clients, tier)
 	return everyStep(
 		func() error {
-			return gcloud.BindProjectRole(ctx, b.clients, member, syncRecordsRole, tierRecordsCondition(b.clients, tier), false)
+			return gcloud.BindProjectRole(ctx, b.Clients, member, syncRecordsRole, tierRecordsCondition(b.Clients, tier), false)
 		},
 		func() error {
-			_, err := gcloud.BindKeyRoles(ctx, b.clients, tier, member, syncKeyRoles, nil)
+			_, err := gcloud.BindKeyRoles(ctx, b.Clients, tier, member, syncKeyRoles, nil)
 			return err
 		},
 		func() error {
-			_, err := bindProjectKeyRoles(ctx, b.clients, tier, member, syncKeyRoles, nil)
+			_, err := bindProjectKeyRoles(ctx, b.Clients, tier, member, syncKeyRoles, nil)
 			return err
 		},
 	)
 }
 
-func (b bootstrap) syncWritesGranted(ctx context.Context, tier environment.Tier) (bool, error) {
-	member := syncMember(b.clients, tier)
-	records, err := gcloud.ProjectRoleGranted(ctx, b.clients, member, syncRecordsRole, tierRecordsCondition(b.clients, tier))
+func syncWritesGranted(ctx context.Context, b bootstrap.Engine, tier environment.Tier) (bool, error) {
+	member := syncMember(b.Clients, tier)
+	records, err := gcloud.ProjectRoleGranted(ctx, b.Clients, member, syncRecordsRole, tierRecordsCondition(b.Clients, tier))
 	if err != nil || !records {
 		return false, err
 	}
-	keyed, err := gcloud.KeyRolesGranted(ctx, b.clients, tier, member, syncKeyRoles)
+	keyed, err := gcloud.KeyRolesGranted(ctx, b.Clients, tier, member, syncKeyRoles)
 	if err != nil || !keyed {
 		return false, err
 	}
-	return projectKeyRolesGranted(ctx, b.clients, tier, member, syncKeyRoles)
+	return projectKeyRolesGranted(ctx, b.Clients, tier, member, syncKeyRoles)
 }
 
-func (b bootstrap) syncServing(tier environment.Tier) run.Serving {
+func syncServing(b bootstrap.Engine, tier environment.Tier) run.Serving {
 	return run.Serving{
-		Service:     b.clients.EnvSourceSync(tier),
-		Image:       syncImageRef(b.clients, tier),
-		Account:     b.clients.EnvSourceSyncAccountEmail(tier),
+		Service:     b.Clients.EnvSourceSync(tier),
+		Image:       syncImageRef(b.Clients, tier),
+		Account:     b.Clients.EnvSourceSyncAccountEmail(tier),
 		Compute:     provider.ComputeServerless,
 		CPU:         syncCPU,
 		Memory:      syncMemoryMiB,
@@ -138,56 +135,21 @@ func (b bootstrap) syncServing(tier environment.Tier) run.Serving {
 		Timeout:     syncTimeout,
 		Ingress:     run.IngressInternal,
 		Env: map[string]string{
-			provider.NamespaceEnvVar: string(b.clients.Namespace()),
-			ports.ProjectEnvVar:      b.clients.Project(),
-			ports.RegionEnvVar:       b.clients.Region,
+			provider.NamespaceEnvVar: string(b.Clients.Namespace()),
+			ports.ProjectEnvVar:      b.Clients.Project(),
+			ports.RegionEnvVar:       b.Clients.Region,
 			ports.TierEnvVar:         string(tier),
 		},
 	}
 }
 
-func sameService(current, desired *runv2.GoogleCloudRunV2Service) bool {
-	if current.Template == nil || len(current.Template.Containers) != 1 || current.Template.Containers[0].Resources == nil {
-		return false
-	}
-	template, wanted := current.Template, desired.Template
-	container, want := template.Containers[0], wanted.Containers[0]
-	scaling := template.Scaling
-	if scaling == nil {
-		scaling = &runv2.GoogleCloudRunV2RevisionScaling{}
-	}
-	return container.Image == want.Image &&
-		template.ServiceAccount == wanted.ServiceAccount &&
-		current.Ingress == desired.Ingress &&
-		!current.InvokerIamDisabled &&
-		container.Resources.CpuIdle &&
-		sameLimits(container.Resources.Limits, want.Resources.Limits) &&
-		scaling.MinInstanceCount == wanted.Scaling.MinInstanceCount &&
-		scaling.MaxInstanceCount == wanted.Scaling.MaxInstanceCount &&
-		template.MaxInstanceRequestConcurrency == wanted.MaxInstanceRequestConcurrency &&
-		template.ExecutionEnvironment == wanted.ExecutionEnvironment &&
-		sameTimeout(template.Timeout, wanted.Timeout) &&
-		slices.EqualFunc(container.Env, want.Env, func(a, b *runv2.GoogleCloudRunV2EnvVar) bool {
-			return a.Name == b.Name && a.Value == b.Value
-		})
-}
-
-func sameTimeout(current, desired string) bool {
-	got, err := time.ParseDuration(current)
-	if err != nil {
-		return false
-	}
-	want, err := time.ParseDuration(desired)
-	return err == nil && got == want
-}
-
-func (b bootstrap) readService(ctx context.Context, name string) (*runv2.GoogleCloudRunV2Service, error) {
-	services, err := b.clients.Run()
+func readService(ctx context.Context, b bootstrap.Engine, name string) (*runv2.GoogleCloudRunV2Service, error) {
+	services, err := b.Clients.Run()
 	if err != nil {
 		return nil, err
 	}
 	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*runv2.GoogleCloudRunV2Service, error) {
-		return services.Projects.Locations.Services.Get(b.clients.ServicePath(name)).Context(ctx).Do(call...)
+		return services.Projects.Locations.Services.Get(b.Clients.ServicePath(name)).Context(ctx).Do(call...)
 	})
 	if gcloud.Absent(err) {
 		return nil, nil
@@ -198,68 +160,68 @@ func (b bootstrap) readService(ctx context.Context, name string) (*runv2.GoogleC
 	return found, nil
 }
 
-func (b bootstrap) servicePresence(ctx context.Context, tier environment.Tier, name string) (presence, error) {
-	current, err := b.readService(ctx, name)
+func servicePresence(ctx context.Context, b bootstrap.Engine, tier environment.Tier, name string) (bootstrap.Presence, error) {
+	current, err := readService(ctx, b, name)
 	if err != nil || current == nil {
-		return presence{}, err
+		return bootstrap.Presence{}, err
 	}
-	desired, err := run.ServiceOf(b.syncServing(tier))
+	desired, err := run.ServiceOf(syncServing(b, tier))
 	if err != nil {
-		return presence{}, err
+		return bootstrap.Presence{}, err
 	}
-	if !sameService(current, desired) || !run.ServesLatest(current) {
-		return presence{present: true, mends: reasonServiceChanged}, nil
+	if run.Drifted(current, desired) || !run.ServesLatest(current) {
+		return bootstrap.Presence{Present: true, Mends: reasonServiceChanged}, nil
 	}
-	callable, err := b.onlySyncCalls(ctx, tier, name)
+	callable, err := onlySyncCalls(ctx, b, tier, name)
 	if err != nil {
-		return presence{}, err
+		return bootstrap.Presence{}, err
 	}
 	if !callable {
-		return presence{present: true, mends: reasonCallersChanged}, nil
+		return bootstrap.Presence{Present: true, Mends: reasonCallersChanged}, nil
 	}
-	return presence{present: true}, nil
+	return bootstrap.Presence{Present: true}, nil
 }
 
-func (b bootstrap) makeService(ctx context.Context, tier environment.Tier, name string) error {
-	if b.pushBinary == nil || b.deployAndRoute == nil {
+func makeService(ctx context.Context, b bootstrap.Engine, tier environment.Tier, name string) error {
+	if b.PushBinary == nil || b.DeployAndRoute == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %s service runs an image, and this bootstrap was opened with nowhere to push one or nothing to deploy it with", name)
 	}
-	if err := b.pushBinary(ctx, tier, syncImageName, syncImageRef(b.clients, tier), payloads.EnvSourceSync(), syncImagePath); err != nil {
+	if err := b.PushBinary(ctx, tier, syncImageName, syncImageRef(b.Clients, tier), payloads.EnvSourceSync(), syncImagePath); err != nil {
 		return err
 	}
-	if _, err := b.deployAndRoute(ctx, b.syncServing(tier), nil); err != nil {
+	if _, err := b.DeployAndRoute(ctx, syncServing(b, tier), nil); err != nil {
 		return err
 	}
-	return b.letSyncCall(ctx, tier, name)
+	return letSyncCall(ctx, b, tier, name)
 }
 
-func (b bootstrap) takeService(ctx context.Context, name string) error {
-	if b.tearDown == nil {
+func takeService(ctx context.Context, b bootstrap.Engine, name string) error {
+	if b.TearDown == nil {
 		return refusal.Refuse(refusal.CodeInvalid, "this bootstrap was opened with nothing to take the %s service down with", name)
 	}
-	return b.tearDown(ctx, name, nil)
+	return b.TearDown(ctx, name, nil)
 }
 
-func (b bootstrap) onlySyncCalls(ctx context.Context, tier environment.Tier, name string) (bool, error) {
-	bindings, err := policy.Read(ctx, gcloud.RunServicePolicy(b.clients, name))
+func onlySyncCalls(ctx context.Context, b bootstrap.Engine, tier environment.Tier, name string) (bool, error) {
+	bindings, err := policy.Read(ctx, gcloud.RunServicePolicy(b.Clients, name))
 	if err != nil {
 		return false, err
 	}
-	_, changed := policy.OnlyMember(syncInvokerRole, syncMember(b.clients, tier))(bindings)
+	_, changed := policy.OnlyMember(syncInvokerRole, syncMember(b.Clients, tier))(bindings)
 	return !changed, nil
 }
 
-func (b bootstrap) letSyncCall(ctx context.Context, tier environment.Tier, name string) error {
-	_, err := policy.Edit(ctx, gcloud.RunServicePolicy(b.clients, name), policy.OnlyMember(syncInvokerRole, syncMember(b.clients, tier)))
+func letSyncCall(ctx context.Context, b bootstrap.Engine, tier environment.Tier, name string) error {
+	_, err := policy.Edit(ctx, gcloud.RunServicePolicy(b.Clients, name), policy.OnlyMember(syncInvokerRole, syncMember(b.Clients, tier)))
 	return err
 }
 
 func schedulePath(c *gcloud.Clients, name string) string { return c.Location() + "/jobs/" + name }
 
-func (b bootstrap) syncSchedule(tier environment.Tier, name, uri string) *cloudscheduler.Job {
+func syncJob(b bootstrap.Engine, tier environment.Tier, name, uri string) *cloudscheduler.Job {
 	return &cloudscheduler.Job{
-		Name:        schedulePath(b.clients, name),
+		Name:        schedulePath(b.Clients, name),
 		Description: "calls the ocel env source sync of the " + string(tier) + " tier",
 		Schedule:    syncSchedule,
 		TimeZone:    scheduleTimeZone,
@@ -267,7 +229,7 @@ func (b bootstrap) syncSchedule(tier environment.Tier, name, uri string) *clouds
 			Uri:        uri + "/",
 			HttpMethod: syncScheduleMethod,
 			OidcToken: &cloudscheduler.OidcToken{
-				ServiceAccountEmail: b.clients.EnvSourceSyncAccountEmail(tier),
+				ServiceAccountEmail: b.Clients.EnvSourceSyncAccountEmail(tier),
 				Audience:            uri,
 			},
 		},
@@ -293,33 +255,33 @@ func sameSchedule(current, desired *cloudscheduler.Job, emulated bool) bool {
 		(current.RetryConfig == nil || current.RetryConfig.RetryCount == 0)
 }
 
-func (b bootstrap) schedulePresence(ctx context.Context, tier environment.Tier, name string) (presence, error) {
-	service, err := b.clients.Scheduler()
+func schedulePresence(ctx context.Context, b bootstrap.Engine, tier environment.Tier, name string) (bootstrap.Presence, error) {
+	service, err := b.Clients.Scheduler()
 	if err != nil {
-		return presence{}, err
+		return bootstrap.Presence{}, err
 	}
-	current, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Get(schedulePath(b.clients, name)).Context(ctx).Do)
+	current, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Get(schedulePath(b.Clients, name)).Context(ctx).Do)
 	if gcloud.Absent(err) {
-		return presence{}, nil
+		return bootstrap.Presence{}, nil
 	}
 	if err != nil {
-		return presence{}, fmt.Errorf("read the Cloud Scheduler job %s: %w", name, err)
+		return bootstrap.Presence{}, fmt.Errorf("read the Cloud Scheduler job %s: %w", name, err)
 	}
-	called, err := b.readService(ctx, name)
+	called, err := readService(ctx, b, name)
 	if err != nil {
-		return presence{}, err
+		return bootstrap.Presence{}, err
 	}
-	if called == nil || !sameSchedule(current, b.syncSchedule(tier, name, called.Uri), b.clients.Emulated()) {
-		return presence{present: true, mends: reasonScheduleChanged}, nil
+	if called == nil || !sameSchedule(current, syncJob(b, tier, name, called.Uri), b.Clients.Emulated()) {
+		return bootstrap.Presence{Present: true, Mends: reasonScheduleChanged}, nil
 	}
 	if current.State != scheduleEnabled {
-		return presence{present: true, mends: reasonScheduleStopped}, nil
+		return bootstrap.Presence{Present: true, Mends: reasonScheduleStopped}, nil
 	}
-	return presence{present: true}, nil
+	return bootstrap.Presence{Present: true}, nil
 }
 
-func (b bootstrap) makeSchedule(ctx context.Context, tier environment.Tier, name string) error {
-	called, err := b.readService(ctx, name)
+func makeSchedule(ctx context.Context, b bootstrap.Engine, tier environment.Tier, name string) error {
+	called, err := readService(ctx, b, name)
 	if err != nil {
 		return err
 	}
@@ -327,7 +289,7 @@ func (b bootstrap) makeSchedule(ctx context.Context, tier environment.Tier, name
 		return refusal.Refuse(refusal.CodeNotReady,
 			"the Cloud Scheduler job %s calls the Cloud Run service of the same name, and that service has no URL yet", name)
 	}
-	return putSchedule(ctx, b.clients, name, b.syncSchedule(tier, name, called.Uri))
+	return putSchedule(ctx, b.Clients, name, syncJob(b, tier, name, called.Uri))
 }
 
 func putSchedule(ctx context.Context, c *gcloud.Clients, name string, desired *cloudscheduler.Job) error {
@@ -374,42 +336,4 @@ func takeSchedule(ctx context.Context, c *gcloud.Clients, name string) error {
 		return fmt.Errorf("delete the Cloud Scheduler job %s: %w", name, err)
 	}
 	return nil
-}
-
-var quantitySuffixes = []struct {
-	suffix string
-	scale  *big.Rat
-}{
-	{"Ki", new(big.Rat).SetInt64(1 << 10)},
-	{"Mi", new(big.Rat).SetInt64(1 << 20)},
-	{"Gi", new(big.Rat).SetInt64(1 << 30)},
-	{"Ti", new(big.Rat).SetInt64(1 << 40)},
-	{"m", big.NewRat(1, 1000)},
-	{"k", new(big.Rat).SetInt64(1e3)},
-	{"M", new(big.Rat).SetInt64(1e6)},
-	{"G", new(big.Rat).SetInt64(1e9)},
-	{"T", new(big.Rat).SetInt64(1e12)},
-}
-
-func quantity(written string) (*big.Rat, bool) {
-	scale := big.NewRat(1, 1)
-	for _, each := range quantitySuffixes {
-		if number, cut := strings.CutSuffix(written, each.suffix); cut {
-			written, scale = number, each.scale
-			break
-		}
-	}
-	amount, ok := new(big.Rat).SetString(written)
-	if !ok {
-		return nil, false
-	}
-	return amount.Mul(amount, scale), true
-}
-
-func sameLimits(current, desired map[string]string) bool {
-	return maps.EqualFunc(current, desired, func(a, b string) bool {
-		got, readable := quantity(a)
-		want, wanted := quantity(b)
-		return readable && wanted && got.Cmp(want) == 0
-	})
 }

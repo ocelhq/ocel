@@ -10,11 +10,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 func TestANextServiceBehindAnEdgeThatPurgesByTagKeepsItsCacheTags(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	front, err := p.Edges().Open(alb.Kind, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -26,14 +27,14 @@ func TestANextServiceBehindAnEdgeThatPurgesByTagKeepsItsCacheTags(t *testing.T) 
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got := envOf(server.created[0].Template.Containers[0])[edge.CacheTagPurgeVar]; got != "1" {
+	if got := envOf(server.Created[0].Template.Containers[0])[edge.CacheTagPurgeVar]; got != "1" {
 		t.Errorf("the Next service reads %s=%q, want 1: the alb clears a replaced release by its tag", edge.CacheTagPurgeVar, got)
 	}
 }
 
 func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsRelease(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	front, err := p.Edges().Open(alb.Kind, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +50,7 @@ func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsRelease(t *testing.
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	env := envOf(server.created[0].Template.Containers[0])
+	env := envOf(server.Created[0].Template.Containers[0])
 	if env[edge.ReleaseTokenVar] != token.String() {
 		t.Errorf("the service reads %s=%q, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], token)
 	}
@@ -59,14 +60,14 @@ func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsRelease(t *testing.
 }
 
 func TestANextServiceBehindAnEdgeThatPurgesNothingByTagKeepsNoCacheTags(t *testing.T) {
-	none, err := (&runServer{}).open(t).Edges().Open(edge.None, nil)
+	none, err := providerServing((&googletest.Run{}), t).Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for name, front := range map[string]edge.Edge{"no edge": nil, "cloud run": none} {
 		t.Run(name, func(t *testing.T) {
-			server := &runServer{}
-			p := server.open(t)
+			server := &googletest.Run{}
+			p := providerServing(server, t)
 			publishGateOn(t, p, environment.TierProduction, nil)
 			spec := routedNextSpec()
 			spec.Edge = front
@@ -75,7 +76,7 @@ func TestANextServiceBehindAnEdgeThatPurgesNothingByTagKeepsNoCacheTags(t *testi
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
 
-			if got, set := envOf(server.created[0].Template.Containers[0])[edge.CacheTagPurgeVar]; set {
+			if got, set := envOf(server.Created[0].Template.Containers[0])[edge.CacheTagPurgeVar]; set {
 				t.Errorf("the Next service reads %s=%q, want it unset: nothing in front of it clears by tag", edge.CacheTagPurgeVar, got)
 			}
 		})
@@ -83,8 +84,8 @@ func TestANextServiceBehindAnEdgeThatPurgesNothingByTagKeepsNoCacheTags(t *testi
 }
 
 func TestANextServiceBehindAnEdgeThatCachesResponsesIsToldItsEdgeStoresWhateverItsHeadersAllow(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	front, err := p.Edges().Open(alb.Kind, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -96,20 +97,20 @@ func TestANextServiceBehindAnEdgeThatCachesResponsesIsToldItsEdgeStoresWhateverI
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got := envOf(server.created[0].Template.Containers[0])[edge.EdgeCacheVar]; got != string(edge.EdgeCacheAll) {
+	if got := envOf(server.Created[0].Template.Containers[0])[edge.EdgeCacheVar]; got != string(edge.EdgeCacheAll) {
 		t.Errorf("the Next service reads %s=%q, want all: Cloud CDN stores whatever the response headers allow", edge.EdgeCacheVar, got)
 	}
 }
 
 func TestANextServiceBehindNoCachingEdgeIsToldNoEdgeStoresIt(t *testing.T) {
-	none, err := (&runServer{}).open(t).Edges().Open(edge.None, nil)
+	none, err := providerServing((&googletest.Run{}), t).Edges().Open(edge.None, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for name, front := range map[string]edge.Edge{"no edge": nil, "cloud run": none} {
 		t.Run(name, func(t *testing.T) {
-			server := &runServer{}
-			p := server.open(t)
+			server := &googletest.Run{}
+			p := providerServing(server, t)
 			publishGateOn(t, p, environment.TierProduction, nil)
 			spec := routedNextSpec()
 			spec.Edge = front
@@ -118,7 +119,7 @@ func TestANextServiceBehindNoCachingEdgeIsToldNoEdgeStoresIt(t *testing.T) {
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
 
-			if got, set := envOf(server.created[0].Template.Containers[0])[edge.EdgeCacheVar]; set {
+			if got, set := envOf(server.Created[0].Template.Containers[0])[edge.EdgeCacheVar]; set {
 				t.Errorf("the Next service reads %s=%q, want it unset: nothing in front of it stores a response", edge.EdgeCacheVar, got)
 			}
 		})
@@ -126,8 +127,8 @@ func TestANextServiceBehindNoCachingEdgeIsToldNoEdgeStoresIt(t *testing.T) {
 }
 
 func TestANodeServiceWithAnOcelRouteTableIsToldWhereItsImageHoldsIt(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 	spec := nextSpec()
 	spec.App.Framework = buildoutput.FrameworkNode
 	spec.App.Functions[0].Framework.Name = buildoutput.FrameworkNode
@@ -137,7 +138,7 @@ func TestANodeServiceWithAnOcelRouteTableIsToldWhereItsImageHoldsIt(t *testing.T
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got, want := envOf(server.created[0].Template.Containers[0])[edge.OcelRouteTableVar], "/ocel/app/"+edge.OcelRouteTableFile; got != want {
+	if got, want := envOf(server.Created[0].Template.Containers[0])[edge.OcelRouteTableVar], "/ocel/app/"+edge.OcelRouteTableFile; got != want {
 		t.Errorf("the service reads %s=%q, want %q", edge.OcelRouteTableVar, got, want)
 	}
 }

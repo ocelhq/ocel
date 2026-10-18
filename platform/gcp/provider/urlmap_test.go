@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 const tierRoutes = "ocel-alb-production-routes"
@@ -150,7 +151,7 @@ func quoting(t *testing.T, quotas []*compute.Quota) *Provider {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		writeBody(w, &compute.Project{Name: "acme-prod", Quotas: quotas})
+		googletest.WriteBody(w, &compute.Project{Name: "acme-prod", Quotas: quotas})
 	}))
 	t.Cleanup(served.Close)
 	return pushing(t, served.URL)

@@ -65,11 +65,11 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 	names := taskNamesOf(t, ref)
 	orders := provider.Resource{Name: "topic-orders", Declared: "orders", Type: provider.BindingTopic, Topic: ordersSpec("ship", "bill")}
 
-	binding, err := p.ProvisionTopic(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
+	binding, err := p.TopicHooks().Provision(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
 	if err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
-	t.Cleanup(func() { _ = p.RemoveTopic(ctx, ref, binding, nil) })
+	t.Cleanup(func() { _ = p.TopicHooks().Remove(ctx, ref, binding, nil) })
 	if binding.Type != provider.BindingTopic || binding.Name != "topic-orders" || binding.Resource != "orders" {
 		t.Errorf("ProvisionTopic() = %+v, want the topic binding named for its resource, of the topic an app reaches by its declared name", binding)
 	}
@@ -101,7 +101,7 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 		t.Fatal(err)
 	}
 	orders.Topic = ordersSpec("ship")
-	binding, err = p.ProvisionTopic(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
+	binding, err = p.TopicHooks().Provision(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
 	if err != nil {
 		t.Fatalf("ProvisionTopic() without bill = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 		t.Errorf("the Pub/Sub topic %s went with its dropped consumer bill", names.Topic("orders"))
 	}
 
-	if err := p.RemoveTopic(ctx, ref, binding, nil); err != nil {
+	if err := p.TopicHooks().Remove(ctx, ref, binding, nil); err != nil {
 		t.Fatalf("RemoveTopic() = %v", err)
 	}
 	if topicExists(t, names.Topic("orders")) {
@@ -126,11 +126,11 @@ func TestLiveATopicWhoseOrderingChangedIsRefusedNamingTheConsumerItKeeps(t *test
 	ordered.Ordered = true
 	orders := provider.Resource{Name: "topic-orders", Declared: "orders", Type: provider.BindingTopic, Topic: ordered}
 
-	binding, err := p.ProvisionTopic(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
+	binding, err := p.TopicHooks().Provision(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
 	if err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
-	t.Cleanup(func() { _ = p.RemoveTopic(ctx, ref, binding, nil) })
+	t.Cleanup(func() { _ = p.TopicHooks().Remove(ctx, ref, binding, nil) })
 	if err := stackrecords.Write(ctx, p.KeyValues(), ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 		Kind: provider.StackInfra, Bindings: []provider.Binding{binding},
 	}); err != nil {
@@ -138,7 +138,7 @@ func TestLiveATopicWhoseOrderingChangedIsRefusedNamingTheConsumerItKeeps(t *test
 	}
 
 	orders.Topic = ordersSpec("ship")
-	_, err = p.ProvisionTopic(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
+	_, err = p.TopicHooks().Provision(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
 	if err == nil || !strings.Contains(err.Error(), "ship") {
 		t.Fatalf("ProvisionTopic() after orders stopped being ordered = %v, want it refused naming the consumer it keeps", err)
 	}
@@ -150,11 +150,11 @@ func TestLiveATopicDeclaredWithNoConfigIsAPubSubTopicAlone(t *testing.T) {
 	ctx := context.Background()
 	ref := infraRef(t)
 
-	binding, err := p.ProvisionTopic(ctx, resources.ProvisionRequest{Ref: ref, Resource: provider.Resource{Name: "c-topic", Type: provider.BindingTopic}}, nil)
+	binding, err := p.TopicHooks().Provision(ctx, resources.ProvisionRequest{Ref: ref, Resource: provider.Resource{Name: "c-topic", Type: provider.BindingTopic}}, nil)
 	if err != nil {
 		t.Fatalf("ProvisionTopic() of a topic with no config = %v", err)
 	}
-	t.Cleanup(func() { _ = p.RemoveTopic(ctx, ref, binding, nil) })
+	t.Cleanup(func() { _ = p.TopicHooks().Remove(ctx, ref, binding, nil) })
 	if !topicExists(t, taskNamesOf(t, ref).Topic("c-topic")) {
 		t.Error("a topic declared with no config made no Pub/Sub topic")
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 func TestTheOptionsAreAProjectAndARegionAndNothingElse(t *testing.T) {
@@ -18,8 +19,8 @@ func TestTheOptionsAreAProjectAndARegionAndNothingElse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() = %v, want a provider", err)
 	}
-	if p.Facts().Vendor != gcp.Vendor {
-		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, gcp.Vendor)
+	if p.Facts().Vendor != gcloud.Vendor {
+		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, gcloud.Vendor)
 	}
 }
 

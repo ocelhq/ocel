@@ -190,13 +190,13 @@ func (p *Provider) runOperation(
 		return fmt.Errorf("ask Compute Engine to %s: %w", doing, err)
 	}
 	finished, err := gcloud.Until(ctx, "Compute Engine to "+doing, func() (*compute.Operation, error) {
-		if started.Status == operationDone {
+		if started.Status == gcloud.OperationDone {
 			return started, nil
 		}
 		return googleretry.Attempted(ctx, func(opt ...googleapi.CallOption) (*compute.Operation, error) {
 			return engine.GlobalOperations.Get(clients.Project(), started.Name).Context(ctx).Do(opt...)
 		})
-	}, func(op *compute.Operation) bool { return op != nil && op.Status == operationDone })
+	}, func(op *compute.Operation) bool { return op != nil && op.Status == gcloud.OperationDone })
 	if err != nil {
 		return err
 	}
@@ -206,8 +206,6 @@ func (p *Provider) runOperation(
 	}
 	return nil
 }
-
-const operationDone = "DONE"
 
 const globalExternalManagedBackendServices = "GLOBAL_EXTERNAL_MANAGED_BACKEND_SERVICES"
 

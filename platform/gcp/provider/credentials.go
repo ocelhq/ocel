@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -44,7 +45,7 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 		return provider.Principal{}, err
 	}
 	principal := provider.Principal{
-		Vendor:   Vendor,
+		Vendor:   gcloud.Vendor,
 		Account:  project,
 		Name:     gcloud.EmulatorPrincipal,
 		Location: c.Region,
@@ -88,14 +89,14 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, _ environment.T
 			return edge.CredentialDocument{}, err
 		}
 		names := names.New(c.Namespace, project)
-		roles := slices.Clone(rolesFor(purpose))
+		roles := slices.Clone(bootstrap.RolesFor(purpose))
 		if purpose == edge.PurposeDeploy {
-			roles = append(roles, realtimeSecretsGrant(names), gateSecretsGrant(names), grants.AppGrantsGrant(names), names.AppAccountsRolePath(), appBucketsGrant(names), databasesGrant(names), projectPermissionsGrant(), partsGrant(names), partDatabasesGrant(names), projectRecordsGrant(names, c.Region))
-			roles = append(roles, queueGrants(names, c.Region)...)
-			roles = append(roles, untaggingGrants(names, c.Region)...)
+			roles = append(roles, bootstrap.RealtimeSecretsGrant(names), bootstrap.GateSecretsGrant(names), grants.AppGrantsGrant(names), names.AppAccountsRolePath(), bootstrap.AppBucketsGrant(names), bootstrap.DatabasesGrant(names), bootstrap.ProjectPermissionsGrant(), bootstrap.PartsGrant(names), bootstrap.PartDatabasesGrant(names), projectRecordsGrant(names, c.Region))
+			roles = append(roles, bootstrap.QueueGrants(names, c.Region)...)
+			roles = append(roles, bootstrap.UntaggingGrants(names, c.Region)...)
 		}
 		heading := fmt.Sprintf("the roles a %s credential is granted on project %s, where %s is the number `gcloud projects describe %s --format='value(projectNumber)'` prints",
-			purpose, project, projectNumberHole, project)
+			purpose, project, bootstrap.ProjectNumberHole, project)
 		return edge.CredentialDocument{
 			Heading:  heading,
 			Document: strings.Join(roles, "\n"),

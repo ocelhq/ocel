@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
@@ -134,7 +135,7 @@ func plannedAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.
 		keyAction, keyReason = provider.ActionKeep, provider.ReasonCurrent
 	}
 	return []provider.Change{
-		{Kind: string(KindServiceAccount), Name: account, Action: accountAction, Reason: accountReason},
+		{Kind: string(bootstrap.KindServiceAccount), Name: account, Action: accountAction, Reason: accountReason},
 		{Kind: assetStoreKeyKind, Name: c.AssetReaderAccountEmail(tier), Action: keyAction, Reason: keyReason},
 	}, nil
 }
@@ -149,7 +150,7 @@ func plannedAssetStoreRemoval(ctx context.Context, c *gcloud.Clients, tier envir
 			planned[i].Action, planned[i].Reason = provider.ActionDelete, assetReaderDescription
 			continue
 		}
-		planned[i].Action, planned[i].Reason = provider.ActionKeep, reasonAbsent
+		planned[i].Action, planned[i].Reason = provider.ActionKeep, bootstrap.ReasonAbsent
 	}
 	return planned, nil
 }

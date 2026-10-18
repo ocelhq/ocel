@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
 )
 
@@ -46,8 +47,8 @@ func TestForwardingNoBindingTouchesNoCloud(t *testing.T) {
 
 func TestABindingThatNamesNoHostAndPortIsRefusedBeforeAnyBastionIsMade(t *testing.T) {
 	t.Parallel()
-	server := &runServer{}
-	p := server.open(t)
+	server := &googletest.Run{}
+	p := providerServing(server, t)
 
 	forwards, err := p.ForwardPorts(context.Background(), provider.PortForwardRequest{
 		Tier:     "production",
@@ -57,7 +58,7 @@ func TestABindingThatNamesNoHostAndPortIsRefusedBeforeAnyBastionIsMade(t *testin
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid || len(forwards) != 0 {
 		t.Fatalf("ForwardPorts() = %v, %v, want an invalid refusal naming the binding", forwards, err)
 	}
-	if server.serving() != nil {
+	if server.Serving() != nil {
 		t.Error("a bastion was made for a binding no port can be forwarded to")
 	}
 }

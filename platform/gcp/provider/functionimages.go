@@ -19,12 +19,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
 const (
-	nodeImage   = "gcr.io/distroless/nodejs24-debian12@sha256:61f4f4341db81820c24ce771b83d202eb6452076f58628cd536cc7d94a10978b"
-	staticImage = "gcr.io/distroless/static-debian12@sha256:d75cdd72874d4790092fcb1b058493ecf6bb5bf2b2b897045b00ff01d91843f2"
+	nodeImage = "gcr.io/distroless/nodejs24-debian12@sha256:61f4f4341db81820c24ce771b83d202eb6452076f58628cd536cc7d94a10978b"
+
 	pythonImage = "gcr.io/distroless/python3-debian13@sha256:f2b206661cee3edb44f132d7f054a9ced96f671d8a973de0db750895c9acb2fb"
 )
 
@@ -42,9 +43,9 @@ func functionBases() map[string]base {
 		buildoutput.FrameworkNode:      {ref: nodeImage, bins: []string{nodeBinDir}},
 		buildoutput.FrameworkNext:      {ref: nodeImage, bins: []string{nodeBinDir}},
 		buildoutput.FrameworkSvelteKit: {ref: nodeImage, bins: []string{nodeBinDir}},
-		buildoutput.FrameworkGo:        {ref: staticImage},
+		buildoutput.FrameworkGo:        {ref: run.StaticImage},
 		buildoutput.FrameworkPython:    {ref: pythonImage},
-		buildoutput.FrameworkRust:      {ref: staticImage},
+		buildoutput.FrameworkRust:      {ref: run.StaticImage},
 	}
 }
 

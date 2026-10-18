@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -114,4 +115,9 @@ func TestARealDeployPushesToTheRegistryItResolved(t *testing.T) {
 	if p.Hooks().OpenRegistryImages != nil {
 		t.Error("the provider sets an OpenRegistryImages hook, and Artifact Registry takes its push from providerserver's own registry store")
 	}
+}
+
+func providerServing(s *googletest.Run, t *testing.T) *Provider {
+	t.Helper()
+	return pushing(t, s.Identities().Serve(t, s.Serve(t)).Endpoint)
 }

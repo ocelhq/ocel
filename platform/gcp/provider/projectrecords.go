@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
@@ -29,25 +30,6 @@ const (
 	databaseQuotaMessage   = "maximum number of databases"
 	projectDatabasesFilter = "databases/"
 )
-
-var projectRecordsPermissions = []string{
-	"datastore.databases.create",
-	"datastore.databases.get",
-	"datastore.databases.getMetadata",
-	"datastore.operations.get",
-	"cloudkms.cryptoKeys.create",
-	"cloudkms.cryptoKeys.get",
-}
-
-func newProjectRecordsRole(names names.Names) customRole {
-	return customRole{
-		id:          names.ProjectRecordsRole(),
-		title:       "ocel project records (" + string(names.Namespace()) + ")",
-		description: "lets a deploy make the Firestore database and the key a project's values are kept and sealed in, granted on the condition it names them, and nothing else",
-		permissions: projectRecordsPermissions,
-		driftReason: "it holds other permissions than a deploy needs to make a project's records database and key",
-	}
-}
 
 func projectRecordsCondition(names names.Names, region string) string {
 	ring := "projects/" + names.Project() + "/locations/" + region + "/keyRings/" + names.KeyRing()
@@ -67,7 +49,7 @@ func projectRecordsGrant(names names.Names, region string) string {
 func projectDatabaseCondition(c *gcloud.Clients, tier environment.Tier, project string) *policy.Condition {
 	return &policy.Condition{
 		Title:      "ocel " + project + " " + string(tier) + " records",
-		Expression: fmt.Sprintf("resource.name == %q", databasePath(c, c.ProjectDatabase(tier, project))),
+		Expression: fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.ProjectDatabase(tier, project))),
 	}
 }
 
@@ -82,7 +64,7 @@ func tierRecordsCondition(c *gcloud.Clients, tier environment.Tier) *policy.Cond
 	return &policy.Condition{
 		Title: "ocel " + string(c.Namespace()) + " " + string(tier) + " records",
 		Expression: fmt.Sprintf("resource.name == %q || resource.name.startsWith(%q)",
-			databasePath(c, c.Database()), databasePath(c, c.ProjectDatabasePrefix(tier))),
+			bootstrap.DatabasePath(c, c.Database()), bootstrap.DatabasePath(c, c.ProjectDatabasePrefix(tier))),
 	}
 }
 
@@ -97,7 +79,7 @@ func ensureProjectDatabase(ctx context.Context, c *gcloud.Clients, tier environm
 	if c.Emulated() {
 		return nil
 	}
-	err := bootstrap{clients: c}.makeDatabase(ctx, survey{Project: c.Project(), Region: c.Region}, c.ProjectDatabase(tier, project))
+	err := bootstrap.Engine{Clients: c}.MakeDatabase(ctx, bootstrap.Survey{Project: c.Project(), Region: c.Region}, c.ProjectDatabase(tier, project))
 	if googleretry.AnsweredCode(err) == http.StatusTooManyRequests || err != nil && strings.Contains(strings.ToLower(err.Error()), databaseQuotaMessage) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"project %s has as many Firestore databases as Firestore allows, and every Ocel project keeps its values in one of its own per tier.\n"+
@@ -181,38 +163,38 @@ func projectKeyRolesGranted(ctx context.Context, c *gcloud.Clients, tier environ
 	return true, nil
 }
 
-func (b bootstrap) takeProjectRecords(ctx context.Context, tier environment.Tier) error {
-	if b.clients.Emulated() {
+func takeProjectRecords(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	if b.Clients.Emulated() {
 		return nil
 	}
-	service, err := b.clients.Databases()
+	service, err := b.Clients.Databases()
 	if err != nil {
 		return err
 	}
-	listed, err := googleretry.Attempted(ctx, service.Projects.Databases.List("projects/"+b.clients.Project()).Context(ctx).Do)
+	listed, err := googleretry.Attempted(ctx, service.Projects.Databases.List("projects/"+b.Clients.Project()).Context(ctx).Do)
 	if err != nil {
-		return fmt.Errorf("list the Firestore databases of project %s: %w", b.clients.Project(), err)
+		return fmt.Errorf("list the Firestore databases of project %s: %w", b.Clients.Project(), err)
 	}
-	prefix := b.clients.ProjectDatabasePrefix(tier)
+	prefix := b.Clients.ProjectDatabasePrefix(tier)
 	for _, database := range listed.Databases {
 		_, id, _ := strings.Cut(database.Name, projectDatabasesFilter)
 		if !strings.HasPrefix(id, prefix) {
 			continue
 		}
-		if err := b.takeDatabase(ctx, id); err != nil {
+		if err := b.TakeDatabase(ctx, id); err != nil {
 			return err
 		}
 	}
-	return b.takeProjectKeys(ctx, tier)
+	return takeProjectKeys(ctx, b, tier)
 }
 
-func (b bootstrap) takeProjectKeys(ctx context.Context, tier environment.Tier) error {
-	client, err := b.clients.KMS()
+func takeProjectKeys(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	client, err := b.Clients.KMS()
 	if err != nil {
 		return err
 	}
-	keys := client.ListCryptoKeys(ctx, &kmspb.ListCryptoKeysRequest{Parent: gcloud.KeyRingPath(b.clients)})
-	prefix := gcloud.KeyRingPath(b.clients) + "/cryptoKeys/" + ports.ProjectKeyPrefix(tier)
+	keys := client.ListCryptoKeys(ctx, &kmspb.ListCryptoKeysRequest{Parent: gcloud.KeyRingPath(b.Clients)})
+	prefix := gcloud.KeyRingPath(b.Clients) + "/cryptoKeys/" + ports.ProjectKeyPrefix(tier)
 	var named []string
 	for {
 		key, err := keys.Next()
@@ -220,14 +202,14 @@ func (b bootstrap) takeProjectKeys(ctx context.Context, tier environment.Tier) e
 			if status.Code(err) == codes.NotFound || errors.Is(err, iterator.Done) {
 				break
 			}
-			return fmt.Errorf("list the keys of the %s ring: %w", b.clients.KeyRing(), err)
+			return fmt.Errorf("list the keys of the %s ring: %w", b.Clients.KeyRing(), err)
 		}
 		if strings.HasPrefix(key.GetName(), prefix) {
-			named = append(named, strings.TrimPrefix(key.GetName(), gcloud.KeyRingPath(b.clients)+"/cryptoKeys/"))
+			named = append(named, strings.TrimPrefix(key.GetName(), gcloud.KeyRingPath(b.Clients)+"/cryptoKeys/"))
 		}
 	}
 	for _, name := range named {
-		if _, err := b.takeKey(ctx, name); err != nil {
+		if _, err := b.TakeKey(ctx, name); err != nil {
 			return err
 		}
 	}

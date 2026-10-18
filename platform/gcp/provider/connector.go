@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -21,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
@@ -69,7 +69,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	if deployed == nil {
 		return described, nil
 	}
-	described.Hostname = hostOf(deployed.Uri)
+	described.Hostname = run.HostOf(deployed.Uri)
 	described.Installed = &provider.InstalledConnector{
 		Version:   connectorVersionOf(deployed),
 		PublicKey: connectorPublicKeyOf(deployed),
@@ -232,7 +232,7 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install includes no connector binary to put in an image")
 	}
-	base, err := p.based(ctx, staticImage)
+	base, err := p.based(ctx, run.StaticImage)
 	if err != nil {
 		return "", err
 	}
@@ -318,9 +318,9 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 }
 
 func connectorRecordsCondition(c *gcloud.Clients) *policy.Condition {
-	clauses := []string{fmt.Sprintf("resource.name == %q", databasePath(c, c.Database()))}
+	clauses := []string{fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.Database()))}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		clauses = append(clauses, fmt.Sprintf("resource.name.startsWith(%q)", databasePath(c, c.ProjectDatabasePrefix(tier))))
+		clauses = append(clauses, fmt.Sprintf("resource.name.startsWith(%q)", bootstrap.DatabasePath(c, c.ProjectDatabasePrefix(tier))))
 	}
 	return &policy.Condition{Title: "ocel " + string(c.Namespace()) + " records", Expression: strings.Join(clauses, " || ")}
 }
@@ -388,15 +388,4 @@ func (p *Provider) takeConnectorImages(ctx context.Context, progress progress.Lo
 	}
 	gcloud.EnsureProgress(progress).Say("Deleted the connector's images from repository " + clients.Repository(environment.TierProduction))
 	return nil
-}
-
-func hostOf(uri string) string {
-	if uri == "" {
-		return ""
-	}
-	parsed, err := url.Parse(uri)
-	if err != nil {
-		return ""
-	}
-	return parsed.Host
 }

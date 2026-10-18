@@ -9,25 +9,27 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
 type assetStoreHarness struct {
-	iam     *iamServer
-	secrets *secretServer
+	iam     *googletest.IAM
+	secrets *googletest.Secrets
 	hmac    *hmacServer
 	clients *gcloud.Clients
 }
 
 func newAssetStoreHarness(t *testing.T) *assetStoreHarness {
 	t.Helper()
-	h := &assetStoreHarness{iam: appAccountsOnly(), secrets: newSecretServer(), hmac: &hmacServer{}}
-	rest := h.iam.rest(t)
-	h.clients = h.iam.serve(t, func(w http.ResponseWriter, r *http.Request) {
+	h := &assetStoreHarness{iam: appAccountsOnly(), secrets: googletest.NewSecrets(), hmac: &hmacServer{}}
+	rest := h.iam.Rest(t)
+	h.clients = h.iam.Serve(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "/secrets"):
-			h.secrets.serve(t, w, r)
+			h.secrets.Serve(t, w, r)
 		case strings.Contains(r.URL.Path, "/hmacKeys"):
 			h.hmac.serve(t, w, r)
 		default:
@@ -70,8 +72,8 @@ func TestBootstrappingAnEdgeThatRunsCodeMintsAnAccountThatReadsTheAssetsStoreAnd
 	h.raise(t)
 
 	account := h.clients.AssetReaderAccount(environment.TierProduction)
-	if len(h.iam.created) != 1 || h.iam.created[0].AccountId != account {
-		t.Fatalf("the bootstrap created %v, want the one account %s", h.iam.created, account)
+	if len(h.iam.Created) != 1 || h.iam.Created[0].AccountId != account {
+		t.Fatalf("the bootstrap created %v, want the one account %s", h.iam.Created, account)
 	}
 	want := grants.AssetsRole + " serviceAccount:" + h.clients.AssetReaderAccountEmail(environment.TierProduction) +
 		` resource.name.startsWith("projects/_/buckets/` + h.clients.Bucket(environment.TierProduction) + `/objects/assets/")`
@@ -243,8 +245,8 @@ func TestTakingTheAssetStoreDownDeletesItsKeyItsGrantAndItsAccount(t *testing.T)
 	if got := h.assetBindings(); len(got) != 0 {
 		t.Errorf("the project's asset bindings = %q, want none", got)
 	}
-	if len(h.iam.deletedAccounts) != 1 || !strings.HasSuffix(h.iam.deletedAccounts[0], h.clients.AssetReaderAccountEmail(environment.TierProduction)) {
-		t.Errorf("the deleted accounts = %v, want the asset reader", h.iam.deletedAccounts)
+	if len(h.iam.DeletedAccounts) != 1 || !strings.HasSuffix(h.iam.DeletedAccounts[0], h.clients.AssetReaderAccountEmail(environment.TierProduction)) {
+		t.Errorf("the deleted accounts = %v, want the asset reader", h.iam.DeletedAccounts)
 	}
 }
 
@@ -288,26 +290,26 @@ func TestAnEdgeThatRunsCodePlansTheAccountAndKeyItsBootstrapRaises(t *testing.T)
 
 func TestACloudflareBootstrapChecksTheHMACKeyPermissionsAndAPlainOneDoesNot(t *testing.T) {
 	t.Parallel()
-	for _, permission := range assetStorePermissions {
-		if !slices.Contains(permissionsFor([]string{cloudflareOriginPart}), permission) {
-			t.Errorf("a %q bootstrap does not check %s, and the apply would fail when it mints the asset reader's key", cloudflareOriginPart, permission)
+	for _, permission := range bootstrap.AssetStorePermissions {
+		if !slices.Contains(bootstrap.PermissionsFor([]string{bootstrap.CloudflareOriginPart}), permission) {
+			t.Errorf("a %q bootstrap does not check %s, and the apply would fail when it mints the asset reader's key", bootstrap.CloudflareOriginPart, permission)
 		}
-		if slices.Contains(permissionsFor(nil), permission) {
+		if slices.Contains(bootstrap.PermissionsFor(nil), permission) {
 			t.Errorf("a bootstrap that raises no Cloudflare front checks %s, and would refuse a credential for a key it never mints", permission)
 		}
 	}
 }
 
-func frontWithAssetReader(h *assetStoreHarness) (bootstrap, *frontRegistry) {
+func frontWithAssetReader(h *assetStoreHarness) (bootstrap.Engine, *frontRegistry) {
 	registry := &frontRegistry{front: &countingFront{runsCode: true}}
-	return bootstrap{fronts: registry, clients: h.clients, records: fake.NewKeyValues()}, registry
+	return composed(bootstrap.Engine{Edges: registry, Clients: h.clients, Records: fake.NewKeyValues()}), registry
 }
 
 func TestRaisingAFrontThatRunsCodeRaisesItsAssetReaderAndDroppingItTakesTheReaderDown(t *testing.T) {
 	t.Parallel()
 	h := newAssetStoreHarness(t)
 	b, registry := frontWithAssetReader(h)
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{cloudflareOriginPart}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{bootstrap.CloudflareOriginPart}}
 	recorded := func() edgeCredentials {
 		credentials, err := readEdgeCredentials(t.Context(), h.clients, environment.TierProduction, registry.front.Kind())
 		if err != nil {
@@ -316,18 +318,18 @@ func TestRaisingAFrontThatRunsCodeRaisesItsAssetReaderAndDroppingItTakesTheReade
 		return credentials
 	}
 
-	if err := b.raiseFronts(t.Context(), req, nil); err != nil {
+	if err := b.RaiseFronts(t.Context(), req, nil); err != nil {
 		t.Fatalf("raiseFronts() = %v", err)
 	}
 	if len(h.hmac.active()) != 1 || recorded().AssetStoreAccessKeyID == "" {
 		t.Fatalf("raising the front left the active keys %v and credential %+v, want one key recorded", h.hmac.active(), recorded())
 	}
 
-	if err := b.tearFronts(t.Context(), environment.TierProduction, []string{cloudflareOriginPart}); err != nil {
+	if err := b.TearFronts(t.Context(), environment.TierProduction, []string{bootstrap.CloudflareOriginPart}); err != nil {
 		t.Fatalf("tearFronts() = %v", err)
 	}
-	if len(h.hmac.keys) != 0 || len(h.iam.deletedAccounts) != 1 {
-		t.Errorf("tearing the front down left the keys %v and deleted the accounts %v, want no key and the asset reader deleted", h.hmac.keys, h.iam.deletedAccounts)
+	if len(h.hmac.keys) != 0 || len(h.iam.DeletedAccounts) != 1 {
+		t.Errorf("tearing the front down left the keys %v and deleted the accounts %v, want no key and the asset reader deleted", h.hmac.keys, h.iam.DeletedAccounts)
 	}
 	if got := recorded(); got != (edgeCredentials{}) {
 		t.Errorf("tearing the front down left the credentials %+v, want none", got)
@@ -339,14 +341,14 @@ func TestRaisingAFrontThatRunsNoCodeRaisesNoAssetReader(t *testing.T) {
 	h := newAssetStoreHarness(t)
 	b, registry := frontWithAssetReader(h)
 	registry.front.runsCode = false
-	req := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{cloudflareOriginPart}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{bootstrap.CloudflareOriginPart}}
 
-	if err := b.raiseFronts(t.Context(), req, nil); err != nil {
+	if err := b.RaiseFronts(t.Context(), req, nil); err != nil {
 		t.Fatalf("raiseFronts() = %v", err)
 	}
 
-	if h.hmac.created != 0 || len(h.iam.created) != 0 {
-		t.Errorf("a front that runs no code minted %d keys and created %v", h.hmac.created, h.iam.created)
+	if h.hmac.created != 0 || len(h.iam.Created) != 0 {
+		t.Errorf("a front that runs no code minted %d keys and created %v", h.hmac.created, h.iam.Created)
 	}
 }
 
@@ -355,7 +357,7 @@ func TestAPlanOfAFrontThatRunsCodeNamesItsAssetReader(t *testing.T) {
 	h := newAssetStoreHarness(t)
 	b, _ := frontWithAssetReader(h)
 
-	groups, err := b.plannedFronts(t.Context(), environment.TierProduction, []string{cloudflareOriginPart})
+	groups, err := b.PlannedFronts(t.Context(), environment.TierProduction, []string{bootstrap.CloudflareOriginPart})
 	if err != nil {
 		t.Fatalf("plannedFronts() = %v", err)
 	}
@@ -363,7 +365,7 @@ func TestAPlanOfAFrontThatRunsCodeNamesItsAssetReader(t *testing.T) {
 		t.Fatalf("the plan = %+v, want one edge group that creates the reader's account and key", groups)
 	}
 
-	removed, err := b.removedFronts(t.Context(), environment.TierProduction, []string{cloudflareOriginPart})
+	removed, err := b.RemovedFronts(t.Context(), environment.TierProduction, []string{bootstrap.CloudflareOriginPart})
 	if err != nil {
 		t.Fatalf("removedFronts() = %v", err)
 	}

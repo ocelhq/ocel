@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 type reachedProject struct {
@@ -36,8 +37,8 @@ func TestWhoamiNamesTheProviderTheIdentityCameFrom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() = %v, want an identity", err)
 	}
-	if principal.Vendor != gcp.Vendor {
-		t.Errorf("Whoami().Provider = %q, want %q: the CLI renders a credential section per provider and drops the ones naming none", principal.Vendor, gcp.Vendor)
+	if principal.Vendor != gcloud.Vendor {
+		t.Errorf("Whoami().Provider = %q, want %q: the CLI renders a credential section per provider and drops the ones naming none", principal.Vendor, gcloud.Vendor)
 	}
 }
 

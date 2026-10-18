@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	cloudscheduler "google.golang.org/api/cloudscheduler/v1"
 )
 
@@ -47,11 +48,11 @@ func (s *topicsServer) serve(w http.ResponseWriter, r *http.Request) {
 		var job cloudscheduler.Job
 		_ = json.Unmarshal(body, &job)
 		if s.jobs[job.Name] != nil {
-			conflicted(w, "the job exists")
+			googletest.Conflicted(w, "the job exists")
 			return
 		}
 		s.jobs[job.Name] = &job
-		writeBody(w, &job)
+		googletest.WriteBody(w, &job)
 	case strings.Contains(name, "/jobs/"):
 		s.serveJob(w, r, name)
 	default:
@@ -63,11 +64,11 @@ func (s *topicsServer) serveHeld(w http.ResponseWriter, r *http.Request, held ma
 	switch r.Method {
 	case http.MethodPut:
 		if held[name] {
-			conflicted(w, "Resource already exists in the project")
+			googletest.Conflicted(w, "Resource already exists in the project")
 			return
 		}
 		held[name] = true
-		writeBody(w, map[string]string{"name": name})
+		googletest.WriteBody(w, map[string]string{"name": name})
 	case http.MethodGet, http.MethodDelete:
 		if !held[name] {
 			w.WriteHeader(http.StatusNotFound)
@@ -77,7 +78,7 @@ func (s *topicsServer) serveHeld(w http.ResponseWriter, r *http.Request, held ma
 		if r.Method == http.MethodDelete {
 			delete(held, name)
 		}
-		writeBody(w, map[string]string{"name": name})
+		googletest.WriteBody(w, map[string]string{"name": name})
 	default:
 		w.WriteHeader(http.StatusNotImplemented)
 	}
@@ -92,17 +93,17 @@ func (s *topicsServer) serveJob(w http.ResponseWriter, r *http.Request, name str
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeBody(w, current)
+		googletest.WriteBody(w, current)
 	case http.MethodPatch:
 		body, _ := io.ReadAll(r.Body)
 		var job cloudscheduler.Job
 		_ = json.Unmarshal(body, &job)
 		job.Name = name
 		s.jobs[name] = &job
-		writeBody(w, &job)
+		googletest.WriteBody(w, &job)
 	case http.MethodDelete:
 		delete(s.jobs, name)
-		writeBody(w, map[string]string{})
+		googletest.WriteBody(w, map[string]string{})
 	default:
 		w.WriteHeader(http.StatusNotImplemented)
 	}

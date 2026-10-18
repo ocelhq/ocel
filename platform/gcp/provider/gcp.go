@@ -20,13 +20,12 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
-
-const Vendor provider.Vendor = "gcp"
 
 type Provider struct {
 	options     Options
@@ -46,7 +45,7 @@ type Provider struct {
 	mu            sync.Mutex
 	resolved      *gcloud.Clients
 	regionChecked bool
-	surveyed      surveys
+	surveyed      bootstrap.Surveys
 
 	bases  map[string]base
 	pull   func(ctx context.Context, ref string) (v1.Image, error)
@@ -56,7 +55,7 @@ type Provider struct {
 }
 
 func New(_ context.Context, settings provider.Settings) (provider.Provider, error) {
-	decoded, err := provider.Decode[Options](Vendor, settings.Options)
+	decoded, err := provider.Decode[Options](gcloud.Vendor, settings.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +104,7 @@ func NewProvider(options Options) (*Provider, error) {
 
 func (p *Provider) Facts() provider.Facts {
 	return provider.Facts{
-		Vendor:   Vendor,
+		Vendor:   gcloud.Vendor,
 		Bindings: resources.ServedBindingTypes(p.resourceHooks()),
 		Computes: []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
 		Edges:    slices.Clone(supportedEdges),
@@ -139,25 +138,25 @@ func (p *Provider) Hooks() provider.Hooks {
 }
 
 func (p *Provider) resourceHooks() resources.Hooks {
-	return resources.Hooks{
-		Postgres:       &resources.ResourceHooks{Plan: p.PlanPostgres, Provision: p.ProvisionPostgres, Remove: p.RemovePostgres},
-		Bucket:         &resources.ResourceHooks{Plan: p.PlanBucket, Provision: p.ProvisionBucket, Remove: p.RemoveBucket},
-		KV:             &resources.ResourceHooks{Plan: p.PlanKV, Provision: p.ProvisionKV, Remove: p.RemoveKV},
-		Topic:          &resources.ResourceHooks{Plan: p.PlanTopic, Provision: p.ProvisionTopic, Remove: p.RemoveTopic},
-		Realtime:       &resources.ResourceHooks{Plan: p.PlanRealtime, Provision: p.ProvisionRealtime, Remove: p.RemoveRealtime},
-		RecordsWorkers: true,
-		Functions: &resources.FunctionHooks{
-			Provision: p.ProvisionFunctions,
-			Remove:    p.RemoveFunctions,
-			Shared:    &resources.SharedHooks[provider.Function]{Name: p.NameFunctions, RemoveRevisions: p.RemoveFunctionRevisions},
-		},
-		Containers: &resources.ContainerHooks{
-			Provision: p.ProvisionContainers,
-			Remove:    p.RemoveContainers,
-			Shared:    &resources.SharedHooks[provider.AppContainer]{Name: p.NameContainers, RemoveRevisions: p.RemoveContainerRevisions},
-		},
-		Retention: &resources.ImageRetentionHooks{Reconcile: p.services().ReconcileImages},
+	hooks := p.components().Hooks()
+
+	return p.computeHooks(hooks)
+}
+
+func (p *Provider) computeHooks(hooks resources.Hooks) resources.Hooks {
+	hooks.RecordsWorkers = true
+	hooks.Functions = &resources.FunctionHooks{
+		Provision: p.ProvisionFunctions,
+		Remove:    p.RemoveFunctions,
+		Shared:    &resources.SharedHooks[provider.Function]{Name: p.NameFunctions, RemoveRevisions: p.RemoveFunctionRevisions},
 	}
+	hooks.Containers = &resources.ContainerHooks{
+		Provision: p.ProvisionContainers,
+		Remove:    p.RemoveContainers,
+		Shared:    &resources.SharedHooks[provider.AppContainer]{Name: p.NameContainers, RemoveRevisions: p.RemoveContainerRevisions},
+	}
+	hooks.Retention = &resources.ImageRetentionHooks{Reconcile: p.services().ReconcileImages}
+	return hooks
 }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {

@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
@@ -36,14 +37,14 @@ func functionStackDeclaring(tier environment.Tier, env string, values provider.A
 	}
 }
 
-func functionRevisionEnv(t *testing.T, server *runServer, spec provider.StackSpec) (*Provider, map[string]string) {
+func functionRevisionEnv(t *testing.T, server *googletest.Run, spec provider.StackSpec) (*Provider, map[string]string) {
 	t.Helper()
-	p := server.open(t)
+	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 	env := map[string]string{}
-	for _, entry := range server.current().Template.Containers[0].Env {
+	for _, entry := range server.Current().Template.Containers[0].Env {
 		env[entry.Name] = entry.Value
 	}
 	return p, env
@@ -51,7 +52,7 @@ func functionRevisionEnv(t *testing.T, server *runServer, spec provider.StackSpe
 
 func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
-	p, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{
+	p, env := functionRevisionEnv(t, &googletest.Run{}, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{
 		Secrets:      []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
@@ -85,7 +86,7 @@ func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *tes
 
 func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{
+	_, env := functionRevisionEnv(t, &googletest.Run{}, functionStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{
 		Secrets: []provider.SecretRef{{Key: "MARK"}},
 	}))
 
@@ -100,7 +101,7 @@ func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 func TestAFunctionWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{
+	_, env := functionRevisionEnv(t, &googletest.Run{}, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{
 		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
 
