@@ -16,6 +16,10 @@ export { type Deployment, deployment } from "./deployment.js";
 export { EnvDefinitionError, EnvEdgeError, EnvValueError } from "./errors.js";
 export { EnvScopeError } from "./scope.js";
 
+/**
+ * Declares the app's environment variables and returns them typed, each read on access
+ * from the values delivered to this process.
+ */
 export function defineEnv<const TDefinitions extends EnvDefinitions>(
   definitions: TDefinitions,
 ): Env<TDefinitions> {

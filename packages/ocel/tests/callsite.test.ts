@@ -83,19 +83,4 @@ describe("declarationSite", () => {
       ["session", `${here}:${line + 4}`],
     ]);
   });
-
-  it("names both lines when two entries of a kv store overlap", () => {
-    const line = Number(new Error().stack?.split("\n")[1]?.match(/:(\d+):\d+\)?$/)?.[1]);
-    const here = fileURLToPath(import.meta.url);
-    expect(() =>
-      kv("callsite-overlap", {
-        entries: {
-          session: kv.text("session/:id"),
-          current: kv.text("session/current"),
-        },
-      }),
-    ).toThrow(
-      `declared at ${here}:${line + 6} has pattern "session/current", which overlaps pattern "session/:id" of entry "session" declared at ${here}:${line + 5}`,
-    );
-  });
 });

@@ -65,11 +65,6 @@ export function parseChannelPattern(written: string): ChannelPattern {
   return { written, segments };
 }
 
-/** Whether `name` can begin every channel of a realtime resource. */
-export function isChannelNamespace(name: string): boolean {
-  return channelSegment.test(name);
-}
-
 /** The names of the `:parameter` segments of `pattern`, in order. */
 export function listPatternParameters(pattern: ChannelPattern): string[] {
   return pattern.segments.flatMap((s) => ("parameter" in s ? [s.parameter] : []));

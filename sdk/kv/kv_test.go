@@ -109,50 +109,6 @@ func TestKVLeavesVersionEvictionAndMemoryToTheProvider(t *testing.T) {
 	}
 }
 
-func TestOverlappingEntriesAreRefusedAtDeclarationNamingBothLines(t *testing.T) {
-	sdktest.Declarations(t)
-
-	cache := kv.New("overlap")
-	_, file, line, _ := runtime.Caller(0)
-	kv.NewText[string](cache, "session", "session/:id")
-	message := sdktest.PanicMessage(func() { kv.NewText[struct{}](cache, "current", "session/current") })
-
-	for _, said := range []string{`"current"`, `"session/current"`, "overlaps", `"session/:id"`, `"session"`, fmt.Sprintf("%s:%d", file, line+1), fmt.Sprintf("%s:%d", file, line+2)} {
-		if !strings.Contains(message, said) {
-			t.Errorf("panic = %q, want it to say %q", message, said)
-		}
-	}
-}
-
-func TestAnEntryIsRefusedWhenItsNameIsTaken(t *testing.T) {
-	cache := kv.New("taken")
-	kv.NewText[string](cache, "session", "session/:id")
-
-	if message := sdktest.PanicMessage(func() { kv.NewText[string](cache, "session", "sessions/:id") }); !strings.Contains(message, `"session" is declared already`) {
-		t.Errorf("panic = %q, want the second session refused", message)
-	}
-	if message := sdktest.PanicMessage(func() { kv.NewText[string](cache, "client", "clients/:id") }); !strings.Contains(message, "reserved") {
-		t.Errorf("panic = %q, want client refused as reserved", message)
-	}
-}
-
-func TestAnEntryNameEverySDKCannotHoldIsRefusedAtDeclaration(t *testing.T) {
-	cache := kv.New("names")
-
-	for _, name := range []string{"", "1st", "_hidden", "has-dash", "has.dot", "ümlaut", "a" + strings.Repeat("b", 63)} {
-		message := sdktest.PanicMessage(func() { kv.NewText[string](cache, name, "p/:id") })
-		if !strings.Contains(message, fmt.Sprintf("entry name %q is no name every SDK can hold: it starts with a letter and goes on in letters, digits and _, at most 63 characters", name)) {
-			t.Errorf("NewText(%q) panic = %q, want the name refused by its grammar", name, message)
-		}
-	}
-	if message := sdktest.PanicMessage(func() { kv.NewText[string](cache, "a"+strings.Repeat("b", 62), "q/:id") }); message != "" {
-		t.Errorf("NewText(a 63-character name) panic = %q, want it accepted", message)
-	}
-	if message := sdktest.PanicMessage(func() { kv.NewText[string](cache, "Recent_2", "r/:id") }); message != "" {
-		t.Errorf("NewText(Recent_2) panic = %q, want it accepted", message)
-	}
-}
-
 func TestATTLWrittenWithoutItsUnitIsRefusedNamingTheUnit(t *testing.T) {
 	cache := kv.New("unitless")
 	want := "a ttl is at least 1ms, and 30ns is shorter: a TTL is a time.Duration, so write it with its unit, such as 30*time.Second"
@@ -164,21 +120,6 @@ func TestATTLWrittenWithoutItsUnitIsRefusedNamingTheUnit(t *testing.T) {
 	sessions := kv.NewText[string](cache, "token", "token/:id")
 	if err := sessions.Set(context.Background(), "a", "x", kv.TTL(30)); err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("TTL(30) on a write err = %v, want it to say %q", err, want)
-	}
-}
-
-func TestAMalformedPatternIsRefusedAtDeclaration(t *testing.T) {
-	cache := kv.New("malformed")
-
-	for pattern, says := range map[string]string{
-		"session/{id}":    "hash tag",
-		"session/:id/:id": "twice",
-		"session/":        "empty segment",
-		"session:id":      "literal",
-	} {
-		if message := sdktest.PanicMessage(func() { kv.NewText[string](cache, "e", pattern) }); !strings.Contains(message, says) {
-			t.Errorf("NewText(%q) panic = %q, want it to say %q", pattern, message, says)
-		}
 	}
 }
 

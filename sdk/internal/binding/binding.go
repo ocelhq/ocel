@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"ocel.dev"
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
+	"ocel.dev/internal/wire"
 )
 
 func formatKey(name string, typ bindingsv1.BindingType) string {
@@ -49,7 +50,7 @@ func ReadDelivered(key string) (string, bool) {
 }
 
 func readLiveFile(key string) (string, bool) {
-	dir := os.Getenv(LiveDirEnv)
+	dir := os.Getenv(wire.LiveDirEnv)
 	if dir == "" {
 		return "", false
 	}

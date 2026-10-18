@@ -10,16 +10,20 @@ type UploadArgs<B, K extends UploaderName<B>> = {
   files: BrowserFile[];
 } & (InputOf<B, K> extends undefined ? { input?: undefined } : { input: InputOf<B, K> });
 
+/** A file the browser hands over, such as a `File` from an input. */
 export interface BrowserFile {
+  /** The file's name. */
   name: string;
+  /** The file's length in bytes. */
   size: number;
+  /** The file's media type. */
   type: string;
 }
 
 interface FetchResponse {
   ok: boolean;
   status: number;
-  json(): Promise<any>;
+  json(): Promise<unknown>;
 }
 
 type FetchLike = (
@@ -31,20 +35,31 @@ type FetchLike = (
   },
 ) => Promise<FetchResponse>;
 
+/** Where the upload client reaches the route handler, and how long it waits. */
 export interface UploadClientOptions {
+  /** The URL the route handler is mounted at. */
   url: string;
+  /** The wait between checks that an upload finished, doubling up to 15 seconds; without it, 1 second. */
   pollIntervalMs?: number;
+  /** How long to wait for an upload to finish before it counts as expired; without it, 15 minutes. */
   maxPollMs?: number;
+  /** The fetch to send requests with; without it, the global `fetch`. */
   fetch?: FetchLike;
 }
 
+/** A file an upload stored. */
 export interface UploadResultFile {
+  /** The key the file is stored under in the bucket. */
   key: string;
+  /** The name the browser gave the file. */
   name: string;
 }
 
+/** What an upload reports as it ends. */
 export interface UploadCallbacks {
+  /** Called once every file is stored. */
   onClientUploadComplete?: (result: { files: UploadResultFile[] }) => void;
+  /** Called with the error an upload fails with, before `upload` rejects with it. */
   onError?: (error: Error) => void;
 }
 
@@ -89,6 +104,11 @@ async function pollUntilTerminal(
   }
 }
 
+/**
+ * The browser client of a bucket's route handler: `upload(name, { files, input })` sends
+ * `files` through the uploader `name` of bucket type `B`, and resolves with where each was
+ * stored once all are.
+ */
 export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>>(
   options: UploadClientOptions,
 ) {

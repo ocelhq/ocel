@@ -13,6 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"ocel.dev"
 	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
+	"ocel.dev/internal/declaration"
 	taskv1 "ocel.dev/internal/proto/app/task/v1"
 	"ocel.dev/internal/proto/app/task/v1/taskv1connect"
 )
@@ -230,7 +232,7 @@ func Reschedule(ctx context.Context, id string, due time.Time) (*Run, error) {
 }
 
 func newClient(access string) (taskv1connect.TaskServiceClient, error) {
-	if binding.Discovering() {
+	if declaration.Discovering() {
 		return nil, &ocel.UnprovisionedError{Resource: "runs", Access: access}
 	}
 	address, authorized, err := binding.ReadRuntimeConnection()
@@ -247,17 +249,17 @@ func decodeRun(wire *taskv1.Run) (*Run, error) {
 	run := &Run{
 		ID:         wire.GetId(),
 		Task:       wire.GetTask(),
-		Payload:    binding.ReadJSON(wire.GetPayload()),
-		Output:     binding.ReadJSON(wire.GetOutput()),
-		Metadata:   binding.ReadJSON(wire.GetMetadata()),
+		Payload:    codec.ReadJSON(wire.GetPayload()),
+		Output:     codec.ReadJSON(wire.GetOutput()),
+		Metadata:   codec.ReadJSON(wire.GetMetadata()),
 		Error:      wire.GetError(),
 		Attempts:   int(wire.GetAttempts()),
 		Tags:       wire.GetTags(),
-		CreatedAt:  binding.DecodeTimestamp(wire.GetCreatedAt()),
-		DueAt:      binding.DecodeTimestamp(wire.GetDueAt()),
-		StartedAt:  binding.DecodeTimestamp(wire.GetStartedAt()),
-		FinishedAt: binding.DecodeTimestamp(wire.GetFinishedAt()),
-		ExpiresAt:  binding.DecodeTimestamp(wire.GetExpiresAt()),
+		CreatedAt:  codec.DecodeTimestamp(wire.GetCreatedAt()),
+		DueAt:      codec.DecodeTimestamp(wire.GetDueAt()),
+		StartedAt:  codec.DecodeTimestamp(wire.GetStartedAt()),
+		FinishedAt: codec.DecodeTimestamp(wire.GetFinishedAt()),
+		ExpiresAt:  codec.DecodeTimestamp(wire.GetExpiresAt()),
 	}
 	if status := wire.GetStatus(); status != taskv1.RunStatus_RUN_STATUS_UNSPECIFIED {
 		run.Status = Status(strings.TrimPrefix(status.String(), "RUN_STATUS_"))

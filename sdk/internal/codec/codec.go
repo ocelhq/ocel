@@ -1,4 +1,4 @@
-package binding
+package codec
 
 import (
 	"bytes"
@@ -49,8 +49,8 @@ func unescapeSeparators(encoded []byte) []byte {
 	return out
 }
 
-func EncodePayload(payload any) ([]byte, error) {
-	body, err := EncodeJSON(payload)
+func EncodePayload(value any) ([]byte, error) {
+	body, err := EncodeJSON(value)
 	if err != nil {
 		return nil, fmt.Errorf("the payload does not encode as JSON: %w", err)
 	}

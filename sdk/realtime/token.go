@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
@@ -28,11 +28,11 @@ func signToken(signingKey []byte, header, claims any) (string, error) {
 	if len(signingKey) != ed25519.SeedSize {
 		return "", fmt.Errorf("the realtime signing key is %d bytes, and an Ed25519 seed is %d", len(signingKey), ed25519.SeedSize)
 	}
-	encodedHeader, err := binding.EncodeJSON(header)
+	encodedHeader, err := codec.EncodeJSON(header)
 	if err != nil {
 		return "", err
 	}
-	encodedClaims, err := binding.EncodeJSON(claims)
+	encodedClaims, err := codec.EncodeJSON(claims)
 	if err != nil {
 		return "", err
 	}

@@ -1,4 +1,4 @@
-package binding
+package declaration
 
 import "runtime/debug"
 

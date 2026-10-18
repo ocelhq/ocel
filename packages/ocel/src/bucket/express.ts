@@ -18,6 +18,11 @@ export type {
   Uploader,
 } from "./types.js";
 
+/**
+ * Declares a browser-upload flow: `auth` decides from the Express request who may upload
+ * and returns the metadata the upload carries, and `upload` bounds what is accepted and
+ * where it is stored.
+ */
 export function uploader<
   TInput extends StandardSchemaV1 | undefined = undefined,
   TMetadata = unknown,
@@ -36,6 +41,7 @@ async function sendResponse(res: ExpressResponse, webRes: Response): Promise<voi
   res.end(Buffer.from(await webRes.arrayBuffer()));
 }
 
+/** The Express handler, mounted for both GET and POST on one path, that serves `bucket`'s uploaders to the browser upload client. */
 export function createRouteHandler(bucket: Bucket): RequestHandler {
   const { GET, POST } = coreCreateRouteHandler(bucket);
   return (req, res, next) => {

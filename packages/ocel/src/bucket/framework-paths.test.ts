@@ -16,8 +16,7 @@ vi.mock("./bucket.js", async (importOriginal) => ({
 
 const { bucket } = await import("./bucket.js");
 
-import type { BucketServiceClient } from "./bucket-client.js";
-import type { BucketContext } from "./bucket-context.js";
+import type { BucketContext, BucketServiceClient } from "./bucket-context.js";
 import { createRouteHandler as expressRouteHandler } from "./express.js";
 import { createRouteHandler as honoRouteHandler, uploader as honoUploader } from "./hono.js";
 import { decodeMetadata } from "./metadata.js";

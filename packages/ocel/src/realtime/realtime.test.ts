@@ -113,17 +113,6 @@ describe("realtime discovery declare", () => {
     expect(request.config.value.tokenTtl).toEqual({ seconds: 30n, nanos: 0 });
   });
 
-  it.each([
-    ["5s", "outside 10s to 300s"],
-    ["301s", "outside 10s to 300s"],
-  ] as const)("refuses a token ttl of %s", (tokenTtl, reason) => {
-    expect(() => realtime("bad-ttl", { tokenTtl, channels: {} })).toThrow(reason);
-  });
-
-  it("refuses a name that cannot begin a channel", () => {
-    expect(() => realtime("my_app", { channels: {} })).toThrow('realtime("my_app")');
-  });
-
   it("refuses a pattern its grammar does not allow, naming the resource", () => {
     expect(() =>
       realtime("app", {

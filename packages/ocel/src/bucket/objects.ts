@@ -4,6 +4,7 @@ import {
   type ObjectInfo as WireObjectInfo,
 } from "../gen/proto/app/bucket/v1/bucket_pb.js";
 import { RuntimeCallError } from "../runtime/errors.js";
+import type { Bucket } from "./bucket.js";
 import type { BucketContext } from "./bucket-context.js";
 import { ObjectNotFoundError, PreconditionFailedError } from "./errors.js";
 
@@ -114,30 +115,10 @@ export interface SignedUpload {
   fields: Record<string, string>;
 }
 
-/** The object operations a bucket handle exposes. */
-export interface BucketObjects {
-  /** Writes `body` under `key`, in one request or in parts, and returns the info of the version this write stored. */
-  put(key: string, body: PutBody, options?: PutOptions): Promise<ObjectInfo>;
-  /**
-   * Reads the object under `key`, or `undefined` when the bucket has none. Throws
-   * `PreconditionFailedError` when the object keeps changing while it is read.
-   */
-  get(key: string, options?: GetOptions): Promise<ObjectBody | undefined>;
-  /** What the bucket knows about `key`, or `undefined` when it has none. */
-  head(key: string): Promise<ObjectInfo | undefined>;
-  /** Removes one key or many; a key that is not there is not an error. */
-  delete(key: string | string[]): Promise<void>;
-  /** The objects under a prefix. */
-  list(options?: ListOptions): ObjectListing;
-  /** Copies `source` to `destination` within the bucket. */
-  copy(source: string, destination: string): Promise<ObjectInfo>;
-  /** A url that reads `key` without a credential, for as long as it is valid. */
-  signedUrl(key: string, options?: SignedUrlOptions): Promise<string>;
-  /** A target that writes `key` without a credential, for as long as it is valid. */
-  signedUpload(key: string, options?: SignedUploadOptions): Promise<SignedUpload>;
-  /** The object's address on a bucket declared `public: true`. */
-  publicUrl(key: string): string;
-}
+type ObjectOperations = Pick<
+  Bucket,
+  "put" | "get" | "head" | "delete" | "list" | "copy" | "signedUrl" | "signedUpload"
+> & { publicUrl(key: string): string };
 
 const singleRequestCeiling = 16 * 1024 * 1024;
 const partSize = 8 * 1024 * 1024;
@@ -247,11 +228,10 @@ function concat(chunks: Uint8Array[], length: number): Uint8Array {
   return out;
 }
 
-/** Builds the object operations against a resolved runtime context. */
 export function createObjects(deps: {
   runtime: (access: string) => BucketContext;
   fetch?: FetchLike;
-}): BucketObjects {
+}): ObjectOperations {
   const send: FetchLike = deps.fetch ?? ((...args) => globalThis.fetch(...args));
 
   const sign = async (

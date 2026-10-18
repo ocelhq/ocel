@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
 )
 
 type answer struct {
@@ -28,7 +28,7 @@ func newRetryAnswer(err error) answer {
 }
 
 func newAbortAnswer(reason string) answer {
-	body, _ := binding.EncodeJSON(map[string]map[string]string{"abort": {"reason": reason}})
+	body, _ := codec.EncodeJSON(map[string]map[string]string{"abort": {"reason": reason}})
 	return answer{status: http.StatusUnprocessableEntity, contentType: "application/json", body: body}
 }
 

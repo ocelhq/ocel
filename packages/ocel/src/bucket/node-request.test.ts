@@ -9,8 +9,7 @@ vi.mock("../runtime/rpc", () => ({
 
 const { bucket } = await import("./bucket.js");
 
-import type { BucketServiceClient } from "./bucket-client.js";
-import type { BucketContext } from "./bucket-context.js";
+import type { BucketContext, BucketServiceClient } from "./bucket-context.js";
 import { routeHandlerOver } from "./route.js";
 import { uploader } from "./uploader.js";
 

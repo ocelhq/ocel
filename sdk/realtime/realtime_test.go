@@ -104,8 +104,6 @@ func TestARealtimeDeclarationOutsideTheContractIsRefusedSayingWhy(t *testing.T) 
 
 	resource := realtime.New("refusals", realtime.Authorize(authorizeByHeader))
 	for reason, declare := range map[string]func(){
-		"outside 10s to 5m0s": func() { realtime.New("short", realtime.TokenTTL(5*time.Second)) },
-		"channel namespace":   func() { realtime.New("my_app") },
 		"twice": func() {
 			realtime.NewChannel[orderEvent, struct{}](resource, "a/:x/:x", realtime.ChannelSubscribePublic())
 		},

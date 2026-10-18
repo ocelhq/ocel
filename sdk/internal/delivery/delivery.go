@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"google.golang.org/protobuf/encoding/protojson"
-	"ocel.dev/internal/binding"
+	"ocel.dev/internal/codec"
 	topicv1 "ocel.dev/internal/proto/app/topic/v1"
 	"ocel.dev/runs"
 )
@@ -93,7 +93,7 @@ func decodeEnvelope(raw []byte) (*topicv1.Envelope, error) {
 func NewSingleServeFunc[P, R any](w Work[P, R]) ServeFunc {
 	return func(ctx context.Context, envelope *topicv1.Envelope, wrap Middleware) answer {
 		var payload P
-		if err := binding.DecodePayload(envelope.GetPayload(), &payload); err != nil {
+		if err := codec.DecodePayload(envelope.GetPayload(), &payload); err != nil {
 			return newAbortAnswer(err.Error())
 		}
 		return w.serve(ctx, payload, wrap)
@@ -111,7 +111,7 @@ func NewBatchServeFunc[P, R any](w Work[[]P, R]) ServeFunc {
 		}
 		payloads := make([]P, len(raws))
 		for i, raw := range raws {
-			if err := binding.DecodePayload(raw, &payloads[i]); err != nil {
+			if err := codec.DecodePayload(raw, &payloads[i]); err != nil {
 				return newAbortAnswer(err.Error())
 			}
 		}
@@ -137,13 +137,13 @@ func newRunContext(r *Route, envelope *topicv1.Envelope) runs.Context {
 		Topic:   envelope.GetTopic(),
 		ID:      id,
 		Attempt: runs.Attempt{Number: 1, Of: 1},
-		Message: runs.Message{ID: message.GetId(), PublishedAt: binding.DecodeTimestamp(message.GetPublishedAt())},
+		Message: runs.Message{ID: message.GetId(), PublishedAt: codec.DecodeTimestamp(message.GetPublishedAt())},
 	}
 	if attempt != nil {
 		run.Attempt = runs.Attempt{
 			Number:           int(attempt.GetNumber()),
 			Of:               int(attempt.GetOf()),
-			FirstAttemptedAt: binding.DecodeTimestamp(attempt.GetFirstAttemptedAt()),
+			FirstAttemptedAt: codec.DecodeTimestamp(attempt.GetFirstAttemptedAt()),
 		}
 	}
 	return run

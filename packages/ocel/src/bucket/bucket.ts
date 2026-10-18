@@ -2,7 +2,6 @@ import { lazyBinding } from "../binding/binding.js";
 import { declare } from "../declaration/declare.js";
 import { type BucketContext, openBucketContext } from "./bucket-context.js";
 import {
-  type BucketObjects,
   createObjects,
   type GetOptions,
   type ListOptions,
@@ -45,8 +44,6 @@ export class Bucket<
   TUploaders extends Record<string, AnyUploader> = Record<string, AnyUploader>,
   TPublic extends boolean = boolean,
 > {
-  private objects: BucketObjects;
-
   constructor(
     /** The name this bucket was declared under. */
     readonly name: string,
@@ -59,56 +56,48 @@ export class Bucket<
   ) {
     const context = lazyBinding(`bucket("${name}")`, name, "bucket", openBucketContext);
     contexts.set(this, context);
-    this.objects = createObjects({ runtime: context });
+    const objects = createObjects({ runtime: context });
+    this.put = objects.put;
+    this.get = objects.get;
+    this.head = objects.head;
+    this.delete = objects.delete;
+    this.list = objects.list;
+    this.copy = objects.copy;
+    this.signedUrl = objects.signedUrl;
+    this.signedUpload = objects.signedUpload;
+    this.publicUrl = objects.publicUrl as typeof this.publicUrl;
     declare(name, { case: "bucket", value: { allowedOrigins, public: isPublic } });
   }
 
   /** Writes `body` under `key`, in one request or in parts, and returns the info of the version this write stored. */
-  put(key: string, body: PutBody, options?: PutOptions): Promise<ObjectInfo> {
-    return this.objects.put(key, body, options);
-  }
+  readonly put: (key: string, body: PutBody, options?: PutOptions) => Promise<ObjectInfo>;
 
   /**
    * Reads the object under `key`, or `undefined` when the bucket has none. Throws
    * `PreconditionFailedError` when the object keeps changing while it is read.
    */
-  get(key: string, options?: GetOptions): Promise<ObjectBody | undefined> {
-    return this.objects.get(key, options);
-  }
+  readonly get: (key: string, options?: GetOptions) => Promise<ObjectBody | undefined>;
 
   /** What the bucket knows about `key`, or `undefined` when it has none. */
-  head(key: string): Promise<ObjectInfo | undefined> {
-    return this.objects.head(key);
-  }
+  readonly head: (key: string) => Promise<ObjectInfo | undefined>;
 
   /** Removes one key or many; a key that is not there is not an error. */
-  delete(key: string | string[]): Promise<void> {
-    return this.objects.delete(key);
-  }
+  readonly delete: (key: string | string[]) => Promise<void>;
 
   /** The objects under a prefix, walked as an async iterable or one page at a time. */
-  list(options?: ListOptions): ObjectListing {
-    return this.objects.list(options);
-  }
+  readonly list: (options?: ListOptions) => ObjectListing;
 
   /** Copies `source` to `destination` within the bucket. */
-  copy(source: string, destination: string): Promise<ObjectInfo> {
-    return this.objects.copy(source, destination);
-  }
+  readonly copy: (source: string, destination: string) => Promise<ObjectInfo>;
 
   /** A url that reads `key` without a credential, for as long as it is valid. */
-  signedUrl(key: string, options?: SignedUrlOptions): Promise<string> {
-    return this.objects.signedUrl(key, options);
-  }
+  readonly signedUrl: (key: string, options?: SignedUrlOptions) => Promise<string>;
 
   /** A target that writes `key` without a credential, for as long as it is valid. */
-  signedUpload(key: string, options?: SignedUploadOptions): Promise<SignedUpload> {
-    return this.objects.signedUpload(key, options);
-  }
+  readonly signedUpload: (key: string, options?: SignedUploadOptions) => Promise<SignedUpload>;
 
   /** The object's address on a bucket declared `public: true`. */
-  publicUrl: TPublic extends true ? (key: string) => string : never = ((key: string) =>
-    this.objects.publicUrl(key)) as TPublic extends true ? (key: string) => string : never;
+  readonly publicUrl: TPublic extends true ? (key: string) => string : never;
 }
 
 /** Declares a bucket, and hands back the handle its objects are reached through. */

@@ -1,4 +1,4 @@
-package binding
+package declaration
 
 import (
 	"context"
@@ -11,20 +11,19 @@ import (
 	"connectrpc.com/connect"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 	"ocel.dev/internal/proto/app/resources/v1/resourcesv1connect"
+	"ocel.dev/internal/wire"
 )
 
-const (
-	discoveryPhase = "discovery"
-)
+const discoveryPhase = "discovery"
 
 func Discovering() bool {
-	return os.Getenv(PhaseEnv) == discoveryPhase
+	return os.Getenv(wire.PhaseEnv) == discoveryPhase
 }
 
 func resources() resourcesv1connect.ResourceServiceClient {
 	return resourcesv1connect.NewResourceServiceClient(
 		http.DefaultClient,
-		os.Getenv(DevServerEnv),
+		os.Getenv(wire.DevServerEnv),
 		connect.WithProtoJSON(),
 		connect.WithInterceptors(authorizing),
 	)
@@ -32,8 +31,8 @@ func resources() resourcesv1connect.ResourceServiceClient {
 
 var authorizing = connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", Bearer(os.Getenv(DevServerTokenEnv)))
-		req.Header().Set(sdkVersionHeader, "go/"+Version)
+		req.Header().Set("Authorization", "Bearer "+os.Getenv(wire.DevServerTokenEnv))
+		req.Header().Set(wire.SDKVersionHeader, "go/"+Version)
 		return next(ctx, req)
 	}
 })

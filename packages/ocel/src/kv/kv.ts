@@ -17,7 +17,6 @@ import {
   shapes,
 } from "./entries.js";
 import { newRedis } from "./ioredis.js";
-import { patternsOverlap } from "./pattern.js";
 
 /** The policy a store evicts keys by once it reaches its memory. */
 export type Eviction =
@@ -45,30 +44,20 @@ export interface KVOptions<TEntries extends KVEntries> {
   /** The memory the store holds, which eviction acts at; without it, the provider's default. */
   memory?: KVMemory;
   /**
-   * The typed entries the store holds, each a member of the store under its name: a letter,
-   * then letters, digits and _, at most 63 characters. `client`, `connectionString`,
-   * `connection_string`, `then` and `constructor` are members a store has in some SDK, and
-   * are refused.
+   * The typed entries the store holds, each a member of the store under its name. The deploy
+   * refuses a name some SDK cannot hold or already gives a member of its own.
    */
-  entries?: TEntries & { [Name in keyof TEntries]: Name extends ReservedName ? never : unknown };
+  entries?: TEntries & {
+    [Name in keyof TEntries]: Name extends keyof StoreMembers ? never : unknown;
+  };
 }
-
-const reservedNames = [
-  "client",
-  "connectionString",
-  "connection_string",
-  "then",
-  "constructor",
-] as const;
-
-type ReservedName = (typeof reservedNames)[number];
-
-const entryName = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
 
 /** A declared store: its entries as members, beside the client that reaches the rest. */
 export type KVStore<TEntries extends KVEntries> = {
   readonly [Name in keyof TEntries]: EntryOf<TEntries[Name]>;
-} & {
+} & StoreMembers;
+
+interface StoreMembers {
   /**
    * The ioredis client connected to the store, opened on first use and shared after. Over
    * TLS it trusts only the store's own certificate authority when the provider names one.
@@ -77,7 +66,7 @@ export type KVStore<TEntries extends KVEntries> = {
   readonly client: Redis;
   /** The store's URL, `redis://` or `rediss://` when it requires TLS, for tools that take one. */
   readonly connectionString: string;
-};
+}
 
 function declareStore<TEntries extends KVEntries = Record<never, never>>(
   name: string,
@@ -86,7 +75,6 @@ function declareStore<TEntries extends KVEntries = Record<never, never>>(
   const entries = Object.entries(options.entries ?? {}).map(
     ([entry, declaration]): [string, DeclaredEntry] => [entry, readDeclaredEntry(declaration)],
   );
-  refuseEntries(name, entries);
 
   declare(name, {
     case: "kv",
@@ -118,28 +106,6 @@ function declareStore<TEntries extends KVEntries = Record<never, never>>(
     connectionString: { get: () => readConnectionString("connectionString") },
   });
   return store as KVStore<TEntries>;
-}
-
-function refuseEntries(store: string, entries: [string, DeclaredEntry][]) {
-  for (const [i, [name, declaration]] of entries.entries()) {
-    if ((reservedNames as readonly string[]).includes(name)) {
-      throw new Error(
-        `kv("${store}"): entry name "${name}" is reserved, since a store already has a member of that name in some SDK: name the entry otherwise`,
-      );
-    }
-    if (!entryName.test(name)) {
-      throw new Error(
-        `kv("${store}"): entry name "${name}" is no name every SDK can hold: it starts with a letter and goes on in letters, digits and _, at most 63 characters`,
-      );
-    }
-    for (const [prior, priorDeclaration] of entries.slice(0, i)) {
-      if (patternsOverlap(priorDeclaration.parsed, declaration.parsed)) {
-        throw new Error(
-          `kv("${store}"): entry "${name}" declared at ${declaration.source || "an unknown line"} has pattern "${declaration.pattern}", which overlaps pattern "${priorDeclaration.pattern}" of entry "${prior}" declared at ${priorDeclaration.source || "an unknown line"}: some key would match both, so neither entry could tell its keys from the other's`,
-        );
-      }
-    }
-  }
 }
 
 function clientOptions(store: string, properties: KvProperties) {
