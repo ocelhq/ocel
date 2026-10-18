@@ -87,7 +87,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environmen
 	if err != nil {
 		return edge.CredentialDocument{}, err
 	}
-	return edge.CredentialDocument{Heading: fmt.Sprintf("%s for the %s tier", credentialHeading, tier), Document: document}, nil
+	return edge.CredentialDocument{Heading: fmt.Sprintf("%s for the %s tier, one managed policy per entry", credentialHeading, tier), Document: document}, nil
 }
 
 func refuseCallerIdentity(err error) error {

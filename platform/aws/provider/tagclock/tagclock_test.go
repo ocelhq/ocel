@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -15,15 +16,35 @@ import (
 )
 
 type recordingDynamo struct {
-	rows     []map[string]ddbtypes.AttributeValue
-	pageSize int
-	queries  []*dynamodb.QueryInput
-	deleted  []map[string]ddbtypes.AttributeValue
+	rows        []map[string]ddbtypes.AttributeValue
+	pageSize    int
+	queries     []*dynamodb.QueryInput
+	deleted     []map[string]ddbtypes.AttributeValue
+	batches     []int
+	unprocessed int
 }
 
-func (d *recordingDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
-	d.deleted = append(d.deleted, in.Key)
-	return &dynamodb.DeleteItemOutput{}, nil
+func (d *recordingDynamo) BatchWriteItem(_ context.Context, in *dynamodb.BatchWriteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
+	var requests []ddbtypes.WriteRequest
+	for _, table := range in.RequestItems {
+		requests = append(requests, table...)
+	}
+	d.batches = append(d.batches, len(requests))
+	out := &dynamodb.BatchWriteItemOutput{}
+	for _, request := range requests {
+		if d.unprocessed > 0 {
+			d.unprocessed--
+			if out.UnprocessedItems == nil {
+				out.UnprocessedItems = map[string][]ddbtypes.WriteRequest{}
+			}
+			for table := range in.RequestItems {
+				out.UnprocessedItems[table] = append(out.UnprocessedItems[table], request)
+			}
+			continue
+		}
+		d.deleted = append(d.deleted, request.DeleteRequest.Key)
+	}
+	return out, nil
 }
 
 func (d *recordingDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
@@ -146,5 +167,59 @@ func TestSweepTakesEveryTagRowTheStackWrote(t *testing.T) {
 	}
 	if len(ddb.queries) != 2 {
 		t.Fatalf("issued %d queries, want the tag rows paged to the end", len(ddb.queries))
+	}
+}
+
+func TestSweepDeletesTwentyFiveRowsACall(t *testing.T) {
+	t.Parallel()
+
+	stack := naming.AppStack("prod", "web", release(t, "rcafef00d"))
+	ddb := &recordingDynamo{}
+	for i := range 60 {
+		ddb.rows = append(ddb.rows, tagRow("shop", stack, fmt.Sprintf("tag-%02d", i)))
+	}
+	table := &Table{Dynamo: ddb, Table: "state", wait: func(context.Context, time.Duration) error { return nil }}
+
+	if err := table.Sweep(context.Background(), "shop", stack); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if want := []int{25, 25, 10}; !reflect.DeepEqual(ddb.batches, want) {
+		t.Errorf("batches = %v, want %v: BatchWriteItem takes 25 deletes a call where DeleteItem takes one", ddb.batches, want)
+	}
+	if len(ddb.deleted) != 60 {
+		t.Errorf("deleted %d rows, want all 60", len(ddb.deleted))
+	}
+}
+
+func TestSweepResendsWhatABatchLeftUnprocessed(t *testing.T) {
+	t.Parallel()
+
+	stack := naming.AppStack("prod", "web", release(t, "rcafef00d"))
+	ddb := &recordingDynamo{unprocessed: 3, rows: []map[string]ddbtypes.AttributeValue{
+		tagRow("shop", stack, "a"), tagRow("shop", stack, "b"), tagRow("shop", stack, "c"), tagRow("shop", stack, "d"),
+	}}
+	var waits []time.Duration
+	table := &Table{Dynamo: ddb, Table: "state", wait: func(_ context.Context, d time.Duration) error { waits = append(waits, d); return nil }}
+
+	if err := table.Sweep(context.Background(), "shop", stack); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if len(ddb.deleted) != 4 {
+		t.Errorf("deleted %d rows, want the 3 left unprocessed sent again", len(ddb.deleted))
+	}
+	if len(waits) == 0 {
+		t.Error("resent at once, want a backoff before resending what DynamoDB throttled")
+	}
+}
+
+func TestSweepGivesUpOnRowsDynamoDBNeverProcesses(t *testing.T) {
+	t.Parallel()
+
+	stack := naming.AppStack("prod", "web", release(t, "rcafef00d"))
+	ddb := &recordingDynamo{unprocessed: 1 << 20, rows: []map[string]ddbtypes.AttributeValue{tagRow("shop", stack, "a")}}
+	table := &Table{Dynamo: ddb, Table: "state", wait: func(context.Context, time.Duration) error { return nil }}
+
+	if err := table.Sweep(context.Background(), "shop", stack); err == nil {
+		t.Error("Sweep = nil, want it to fail once its retries run out rather than loop forever")
 	}
 }

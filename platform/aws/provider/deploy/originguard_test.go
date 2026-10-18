@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -11,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -19,6 +21,19 @@ const testOriginSecret = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
 const functionURLToken = "aws:lambda/functionUrl:FunctionUrl"
 
 const lambdaPermissionToken = "aws:lambda/permission:Permission"
+
+func publicPermissionID(stack naming.StackName, logical string, permission functionurl.Permission) string {
+	return naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, logical).Name, "url", strings.ToLower(permission.Verb()))
+}
+
+func hasPublicPermission(rec *inputRecorder, stack naming.StackName, logical string) bool {
+	for _, permission := range functionurl.Public() {
+		if len(rec.inputs(lambdaPermissionToken, publicPermissionID(stack, logical, permission))) != 0 {
+			return true
+		}
+	}
+	return false
+}
 
 func TestAnEntryDeployedDuringARotationIsHandedTheSecretItReplacedToo(t *testing.T) {
 	t.Parallel()
@@ -105,16 +120,30 @@ func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := registerRoutedGuarded(t, cloudfront.Kind, stack)
 
-	if auth := functionURLAuthOf(t, rec, "fn--web--entry", stack); auth != functionURLAuthNone {
-		t.Errorf("entry Function URL auth = %q, want %q so a browser POST needs no signature", auth, functionURLAuthNone)
+	if auth := functionURLAuthOf(t, rec, "fn--web--entry", stack); auth != functionurl.AuthNone {
+		t.Errorf("entry Function URL auth = %q, want %q so a browser POST needs no signature", auth, functionurl.AuthNone)
 	}
-	name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, "fn--web--entry").Name, "url", "invoke")
-	permission := rec.inputs(lambdaPermissionToken, name)
-	if len(permission) == 0 {
-		t.Fatal("the unsigned entry URL has no invoke permission, so every request answers 403")
-	}
-	if got := permission["functionUrlAuthType"]; !got.IsString() || got.StringValue() != functionURLAuthNone {
-		t.Errorf("permission functionUrlAuthType = %v, want it scoped to the unsigned URL alone", got)
+	for _, want := range functionurl.Public() {
+		permission := rec.inputs(lambdaPermissionToken, publicPermissionID(stack, "fn--web--entry", want))
+		if len(permission) == 0 {
+			t.Fatalf("the unsigned entry URL has no %s permission, so every request answers 403", want.Action)
+		}
+		if got := permission["action"]; !got.IsString() || got.StringValue() != want.Action {
+			t.Errorf("permission action = %v, want %s", got, want.Action)
+		}
+		if got := permission["principal"]; !got.IsString() || got.StringValue() != "*" {
+			t.Errorf("%s principal = %v, want anyone, whom the origin secret then sorts", want.Action, got)
+		}
+		if want.URLAuthType != "" {
+			if got := permission["functionUrlAuthType"]; !got.IsString() || got.StringValue() != want.URLAuthType {
+				t.Errorf("%s functionUrlAuthType = %v, want it scoped to the unsigned URL alone", want.Action, got)
+			}
+		}
+		if want.ViaURL {
+			if got := permission["invokedViaFunctionUrl"]; !got.IsBool() || !got.BoolValue() {
+				t.Errorf("%s invokedViaFunctionUrl = %v, want it held to calls through the URL", want.Action, got)
+			}
+		}
 	}
 
 	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(maxLambdaBaseNameLen))
@@ -132,12 +161,13 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := registerRoutedGuarded(t, cloudfront.Kind, stack)
 
-	if auth := functionURLAuthOf(t, rec, "fn--web--admin", stack); auth != functionURLAuthIAM {
-		t.Errorf("sibling Function URL auth = %q, want %q; only the entry answers the internet", auth, functionURLAuthIAM)
+	if auth := functionURLAuthOf(t, rec, "fn--web--admin", stack); auth != functionurl.AuthIAM {
+		t.Errorf("sibling Function URL auth = %q, want %q; only the entry answers the internet", auth, functionurl.AuthIAM)
 	}
-	name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, "fn--web--admin").Name, "url", "invoke")
-	if len(rec.inputs(lambdaPermissionToken, name)) != 0 {
-		t.Error("a sibling has an unsigned invoke permission, want the front door opened once")
+	for _, permission := range functionurl.Public() {
+		if len(rec.inputs(lambdaPermissionToken, publicPermissionID(stack, "fn--web--admin", permission))) != 0 {
+			t.Errorf("a sibling has a public %s permission, want the front door opened once", permission.Action)
+		}
 	}
 	sibling := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen))
 	if _, wired := sibling[edge.OriginSecretVar]; wired {
@@ -155,11 +185,10 @@ func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 	rec := registerRoutedGuarded(t, cloudflare.Kind, stack)
 
 	for _, logical := range []string{"fn--web--entry", "fn--web--admin"} {
-		if auth := functionURLAuthOf(t, rec, logical, stack); auth != functionURLAuthIAM {
-			t.Errorf("%s Function URL auth = %q, want %q behind the Cloudflare worker", logical, auth, functionURLAuthIAM)
+		if auth := functionURLAuthOf(t, rec, logical, stack); auth != functionurl.AuthIAM {
+			t.Errorf("%s Function URL auth = %q, want %q behind the Cloudflare worker", logical, auth, functionurl.AuthIAM)
 		}
-		name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, logical).Name, "url", "invoke")
-		if len(rec.inputs(lambdaPermissionToken, name)) != 0 {
+		if hasPublicPermission(rec, stack, logical) {
 			t.Errorf("%s has a public invoke permission behind the Cloudflare worker", logical)
 		}
 		env := functionEnvOf(t, rec, functionCoordinate("shop", stack, logical).PhysicalName(maxLambdaBaseNameLen))
@@ -176,11 +205,10 @@ func TestNoneModeReachesItsEntryOverASignedURL(t *testing.T) {
 	rec := registerRoutedGuarded(t, apigateway.Kind, stack)
 
 	for _, logical := range []string{"fn--web--entry", "fn--web--admin"} {
-		if auth := functionURLAuthOf(t, rec, logical, stack); auth != functionURLAuthIAM {
-			t.Errorf("%s Function URL auth = %q, want %q; none mode adds no resource policy to a release function", logical, auth, functionURLAuthIAM)
+		if auth := functionURLAuthOf(t, rec, logical, stack); auth != functionurl.AuthIAM {
+			t.Errorf("%s Function URL auth = %q, want %q; none mode adds no resource policy to a release function", logical, auth, functionurl.AuthIAM)
 		}
-		name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, logical).Name, "url", "invoke")
-		if len(rec.inputs(lambdaPermissionToken, name)) != 0 {
+		if hasPublicPermission(rec, stack, logical) {
 			t.Errorf("%s has a public invoke permission; none mode signs every integration", logical)
 		}
 		env := functionEnvOf(t, rec, functionCoordinate("shop", stack, logical).PhysicalName(maxLambdaBaseNameLen))
@@ -211,8 +239,8 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 
 	name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, "fn--api--entry").Name, "url")
 	value := rec.inputs(functionURLToken, name)["authorizationType"]
-	if !value.IsString() || value.StringValue() != functionURLAuthNone {
-		t.Errorf("entry Function URL auth = %v, want %q for the sole function of an app whose origin dispatches no path", value, functionURLAuthNone)
+	if !value.IsString() || value.StringValue() != functionurl.AuthNone {
+		t.Errorf("entry Function URL auth = %v, want %q for the sole function of an app whose origin dispatches no path", value, functionurl.AuthNone)
 	}
 	env := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--api--entry").PhysicalName(maxLambdaBaseNameLen))
 	if env[edge.OriginSecretVar] != testOriginSecret {

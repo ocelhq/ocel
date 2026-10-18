@@ -348,6 +348,8 @@ export type ProviderDescriptor =
     };
 
 export interface AwsProviderOptions {
+  /** What a deploy does with the V8 compile cache it warms for each node function. */
+  bytecode?: AwsBytecodeOptions;
   /** Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again. */
   certificates?: Record<string, string>;
   /** How ocel logs --tail reads this account's logs. */
@@ -395,6 +397,12 @@ export interface AwsProviderOptions {
   edge?: AwsEdgeDescriptor;
   /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
   dns?: AwsDNSDescriptor;
+}
+
+/** What a deploy does with the V8 compile cache it warms for each node function. */
+export interface AwsBytecodeOptions {
+  /** Fold each function's warmed compile cache into its own code package, so a cold start loads it with the code rather than fetching it from S3. Off, a cold start fetches it. */
+  embed?: boolean;
 }
 
 /** How ocel logs --tail reads this account's logs. */

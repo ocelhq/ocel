@@ -243,6 +243,31 @@ func TestThePlanOfAnAppWhoseFunctionNetworkExistsShowsNoNewOne(t *testing.T) {
 	}
 }
 
+func TestADeployWhoseWorkersFailLetsGoOfNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stacks, engine, _ := functionNetworkStacks(t, "web")
+	if _, err := stacks.Provision(ctx, usingPostgres(t, "web"), progress.Discard()); err != nil {
+		t.Fatalf("Provision(web) = %v", err)
+	}
+
+	web := usingPostgresWithWorkers(t)
+	web.App.Grants = nil
+	engine.upErr = func(stack string) error {
+		if stack == workersStack("prod", "web").String() {
+			return errors.New("the workers stack failed")
+		}
+		return nil
+	}
+	if _, err := stacks.Provision(ctx, web, progress.Discard()); err == nil {
+		t.Fatal("Provision(web) = nil, want the workers' failure")
+	}
+	if ran := engine.operations(); slices.Contains(ran, "destroy "+networkStackName()) {
+		t.Errorf("operations = %v, want the function network kept: a deploy that failed lets go of nothing it held", ran)
+	}
+}
+
 func usingPostgresWithWorkers(t *testing.T) provider.StackSpec {
 	t.Helper()
 	web := usingPostgres(t, "web")

@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -12,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
@@ -56,6 +54,8 @@ type Config struct {
 	VariablesReferenced map[variablestore.Coordinate]string
 
 	RuntimeLayers map[string]string
+
+	BytecodeEmbed bool
 
 	ArtifactRoot   string
 	ArtifactBucket string
@@ -108,46 +108,6 @@ type Propagation interface {
 	Await(ctx context.Context, dnsRecords []edge.Record, say func(string)) error
 }
 
-func collectPostgresBinding(ctx context.Context, secrets SecretsAPI, name string, fields map[string]any) (*bindingsv1.Binding, error) {
-	host, err := requireStringField(fields, name, outputKeyHost)
-	if err != nil {
-		return nil, err
-	}
-	database, err := requireStringField(fields, name, outputKeyDatabase)
-	if err != nil {
-		return nil, err
-	}
-	username, err := requireStringField(fields, name, outputKeyUsername)
-	if err != nil {
-		return nil, err
-	}
-	secretARN, err := requireStringField(fields, name, outputKeySecretARN)
-	if err != nil {
-		return nil, err
-	}
-
-	port := PostgresPort
-	if p, ok := fields[outputKeyPort].(float64); ok {
-		port = int(p)
-	}
-
-	password, err := resolveManagedPassword(ctx, secrets, secretARN)
-	if err != nil {
-		return nil, fmt.Errorf("resolve master password for %s: %w", name, err)
-	}
-
-	return &bindingsv1.Binding{
-		Name: name,
-		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
-			Host:     host,
-			Port:     int32(port),
-			Database: database,
-			Username: username,
-			Password: password,
-		}},
-	}, nil
-}
-
 func requireOutputFields(outputs auto.OutputMap, name string) (map[string]any, error) {
 	raw, produced := outputs[name]
 	if !produced {
@@ -166,27 +126,4 @@ func requireStringField(fields map[string]any, name, key string) (string, error)
 		return "", fmt.Errorf("output %q for %s is missing or not a non-empty string", key, name)
 	}
 	return v, nil
-}
-
-func resolveManagedPassword(ctx context.Context, secrets SecretsAPI, secretARN string) (string, error) {
-	if secretARN == "" {
-		return "", fmt.Errorf("empty master-user secret ARN")
-	}
-	if secrets == nil {
-		return "", fmt.Errorf("no Secrets Manager client configured")
-	}
-	out, err := secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: &secretARN})
-	if err != nil {
-		return "", err
-	}
-	if out.SecretString == nil {
-		return "", fmt.Errorf("secret %s has no string value", secretARN)
-	}
-	var parsed struct {
-		Password string `json:"password"`
-	}
-	if err := json.Unmarshal([]byte(*out.SecretString), &parsed); err != nil {
-		return "", fmt.Errorf("parse managed secret: %w", err)
-	}
-	return parsed.Password, nil
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 )
 
 type appFunction struct {
@@ -60,7 +61,7 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 			rootFunction = &fn
 			continue
 		}
-		ref, err := a.declare(ctx, fn, a.Env, nil, functionURLAuthIAM)
+		ref, err := a.declare(ctx, fn, a.Env, nil, functionurl.AuthIAM)
 		if err != nil {
 			return err
 		}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +31,7 @@ const (
 	FunctionNetworkSlug = "ocel-function-network"
 
 	FunctionNetworkPart    = "function-network"
-	FunctionNetworkSummary = "two private subnets of the default VPC, a NAT gateway and its elastic IP, and S3 and DynamoDB gateway endpoints, " +
+	FunctionNetworkSummary = "two private subnets of the default VPC, a NAT gateway and elastic IP for each (one shared in preview), and S3 and DynamoDB gateway endpoints, " +
 		"which every serverless app in the tier that reaches a postgres or kv Ocel provisions runs its functions in"
 
 	outputKeyPrivateSubnets   = "privateSubnets"
@@ -182,14 +183,28 @@ func provisionFunctionNetwork(ctx context.Context, owner *release, spec provider
 	return decodeFunctionNetwork(work.outputs)
 }
 
-func listFunctionNetworkResources(tier environment.Tier, network functionNetwork) []provider.PartResource {
-	resources := []provider.PartResource{
-		{Kind: "AWS::EC2::NatGateway", ID: functionNetworkName(tier, "nat")},
-		{Kind: "AWS::EC2::EIP", ID: functionNetworkName(tier, "nat")},
-		{Kind: "AWS::EC2::RouteTable", ID: functionNetworkName(tier, "private")},
+func natGateways(tier environment.Tier) int {
+	if tier == environment.TierProduction {
+		return functionNetworkZones
 	}
-	for _, subnet := range network.Subnets {
-		resources = append(resources, provider.PartResource{Kind: "AWS::EC2::Subnet", ID: subnet})
+	return 1
+}
+
+func natName(tier environment.Tier, n int) string {
+	return functionNetworkName(tier, "nat", strconv.Itoa(n+1))
+}
+
+func listFunctionNetworkResources(tier environment.Tier, network functionNetwork) []provider.PartResource {
+	var resources []provider.PartResource
+	for n := range natGateways(tier) {
+		resources = append(resources,
+			provider.PartResource{Kind: "AWS::EC2::NatGateway", ID: natName(tier, n)},
+			provider.PartResource{Kind: "AWS::EC2::EIP", ID: natName(tier, n)})
+	}
+	for i, subnet := range network.Subnets {
+		resources = append(resources,
+			provider.PartResource{Kind: "AWS::EC2::RouteTable", ID: functionNetworkName(tier, "private", strconv.Itoa(i+1))},
+			provider.PartResource{Kind: "AWS::EC2::Subnet", ID: subnet})
 	}
 	for _, service := range functionNetworkEndpointServices {
 		resources = append(resources, provider.PartResource{Kind: "AWS::EC2::VPCEndpoint", ID: functionNetworkName(tier, service)})
@@ -212,7 +227,7 @@ func ReadFunctionNetworkPart(ctx context.Context, store keyvalue.Store, region s
 		Current:   recorded.State == stackrecords.PartReady,
 		Resources: recorded.Resources,
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: vendor, Region: region, Resources: ShapeFunctionNetwork()},
+		Shape:     &provider.PartShape{Vendor: vendor, Region: region, Resources: ShapeFunctionNetwork(tier)},
 
 		RetiresWithLastUser: true,
 	}, true, nil
@@ -242,9 +257,9 @@ type vpcSubnet struct {
 }
 
 type functionSubnets struct {
-	PublicID string
-	Zones    []string
-	Blocks   []string
+	Public []string
+	Zones  []string
+	Blocks []string
 }
 
 func planFunctionSubnets(primary string, existing []vpcSubnet, own string) (functionSubnets, error) {
@@ -272,16 +287,18 @@ func planFunctionSubnets(primary string, existing []vpcSubnet, own string) (func
 		return 0
 	})
 	zones := make([]string, 0, functionNetworkZones)
+	public := make([]string, 0, functionNetworkZones)
 	for _, subnet := range defaults {
 		if len(zones) < functionNetworkZones && !slices.Contains(zones, subnet.Zone) {
 			zones = append(zones, subnet.Zone)
+			public = append(public, subnet.ID)
 		}
 	}
 	blocks, err := pickPrivateBlocks(primary, taken, len(zones))
 	if err != nil {
 		return functionSubnets{}, err
 	}
-	return functionSubnets{PublicID: defaults[0].ID, Zones: zones, Blocks: blocks}, nil
+	return functionSubnets{Public: public, Zones: zones, Blocks: blocks}, nil
 }
 
 func describeVPCSubnets(ctx context.Context, client awsec2.DescribeSubnetsAPIClient, vpcID string) ([]vpcSubnet, error) {
@@ -335,38 +352,44 @@ func (w *functionNetworkWork) run(ctx *pulumi.Context) error {
 	}
 	slowDelete := pulumi.Timeouts(&pulumi.CustomTimeouts{Delete: functionNetworkDeleteWait})
 
-	address, err := ec2.NewEip(ctx, naming.ResourceID(naming.KindService, "nat", "eip"), &ec2.EipArgs{
-		Domain: pulumi.String("vpc"),
-		Tags:   tagsFor(functionNetworkName(tier, "nat")),
-	})
-	if err != nil {
-		return err
-	}
-	gateway, err := ec2.NewNatGateway(ctx, naming.ResourceID(naming.KindService, "nat"), &ec2.NatGatewayArgs{
-		AllocationId: address.ID(),
-		SubnetId:     pulumi.String(placed.PublicID),
-		Tags:         tagsFor(functionNetworkName(tier, "nat")),
-	})
-	if err != nil {
-		return err
-	}
-	routes, err := ec2.NewRouteTable(ctx, naming.ResourceID(naming.KindService, "private", "routes"), &ec2.RouteTableArgs{
-		VpcId: pulumi.String(vpc.Id),
-		Tags:  tagsFor(functionNetworkName(tier, "private")),
-	})
-	if err != nil {
-		return err
-	}
-	if _, err := ec2.NewRoute(ctx, naming.ResourceID(naming.KindService, "private", "route"), &ec2.RouteArgs{
-		RouteTableId:         routes.ID(),
-		DestinationCidrBlock: pulumi.String(functionNetworkAnyIPv4),
-		NatGatewayId:         gateway.ID(),
-	}); err != nil {
-		return err
+	gateways := make([]*ec2.NatGateway, 0, natGateways(tier))
+	for n := range min(natGateways(tier), len(placed.Public)) {
+		address, err := ec2.NewEip(ctx, naming.ResourceID(naming.KindService, "nat", strconv.Itoa(n+1), "eip"), &ec2.EipArgs{
+			Domain: pulumi.String("vpc"),
+			Tags:   tagsFor(natName(tier, n)),
+		})
+		if err != nil {
+			return err
+		}
+		gateway, err := ec2.NewNatGateway(ctx, naming.ResourceID(naming.KindService, "nat", strconv.Itoa(n+1)), &ec2.NatGatewayArgs{
+			AllocationId: address.ID(),
+			SubnetId:     pulumi.String(placed.Public[n]),
+			Tags:         tagsFor(natName(tier, n)),
+		})
+		if err != nil {
+			return err
+		}
+		gateways = append(gateways, gateway)
 	}
 
 	subnetIDs := make(pulumi.StringArray, 0, len(placed.Zones))
+	routeTables := make(pulumi.StringArray, 0, len(placed.Zones))
 	for i, zone := range placed.Zones {
+		routes, err := ec2.NewRouteTable(ctx, naming.ResourceID(naming.KindService, "private", zone, "routes"), &ec2.RouteTableArgs{
+			VpcId: pulumi.String(vpc.Id),
+			Tags:  tagsFor(functionNetworkName(tier, "private", strconv.Itoa(i+1))),
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := ec2.NewRoute(ctx, naming.ResourceID(naming.KindService, "private", zone, "route"), &ec2.RouteArgs{
+			RouteTableId:         routes.ID(),
+			DestinationCidrBlock: pulumi.String(functionNetworkAnyIPv4),
+			NatGatewayId:         gateways[min(i, len(gateways)-1)].ID(),
+		}); err != nil {
+			return err
+		}
+		routeTables = append(routeTables, routes.ID())
 		subnet, err := ec2.NewSubnet(ctx, naming.ResourceID(naming.KindService, "private", zone, "subnet"), &ec2.SubnetArgs{
 			VpcId:               pulumi.String(vpc.Id),
 			CidrBlock:           pulumi.String(placed.Blocks[i]),
@@ -391,7 +414,7 @@ func (w *functionNetworkWork) run(ctx *pulumi.Context) error {
 			VpcId:           pulumi.String(vpc.Id),
 			ServiceName:     pulumi.String("com.amazonaws." + w.region + "." + service),
 			VpcEndpointType: pulumi.String(functionNetworkEndpointType),
-			RouteTableIds:   pulumi.StringArray{routes.ID()},
+			RouteTableIds:   routeTables,
 			Tags:            tagsFor(functionNetworkName(tier, service)),
 		}); err != nil {
 			return err

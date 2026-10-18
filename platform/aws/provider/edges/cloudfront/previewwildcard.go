@@ -52,7 +52,7 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	wildcardFront, err := reconcileWildcardDistribution(ctx, c, distribution, wildcard, spec.Certificate)
+	wildcardFront, err := reconcileWildcardDistribution(ctx, c, wildcardRecords(c, deployed), distribution, wildcard, spec.Certificate)
 	if err != nil {
 		return "", err
 	}
@@ -62,27 +62,24 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	return wildcardFront.domainName, nil
 }
 
-func reconcileWildcardDistribution(ctx context.Context, c Clients, spec distributionSpec, wildcard, certificate string) (front, error) {
-	existing, found, err := findDistribution(ctx, c, spec.name)
+func wildcardRecords(c Clients, deployed bootstrap.Deployed) distributionRecords {
+	return distributionRecords{
+		keyValues: awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(deployed.StateTable)},
+		tier:      environment.TierPreview,
+	}
+}
+
+func reconcileWildcardDistribution(ctx context.Context, c Clients, records distributionRecords, spec distributionSpec, wildcard, certificate string) (front, error) {
+	existing, found, err := records.find(ctx, spec.name)
 	if err != nil {
 		return front{}, err
 	}
 	if !found {
-		created, createErr := createDistribution(ctx, c, spec, []string{wildcard}, certificate)
-		if createErr == nil {
-			return created, nil
+		raised, adopted, err := raiseRecordedDistribution(ctx, c, records, spec, []string{wildcard}, certificate)
+		if err != nil || !adopted {
+			return raised, err
 		}
-		if !distributionTaken(createErr) {
-			return front{}, createErr
-		}
-		raced, racedFound, findErr := findDistribution(ctx, c, spec.name)
-		if findErr != nil {
-			return front{}, findErr
-		}
-		if !racedFound {
-			return front{}, createErr
-		}
-		existing = raced
+		existing = raised
 	}
 	if err := convergeWildcard(ctx, c, spec, existing.id, wildcard, certificate); err != nil {
 		return front{}, err
@@ -157,7 +154,8 @@ func (p *cloudFront) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 	if err != nil {
 		return err
 	}
-	existing, found, err := findDistribution(ctx, c, previewWildcardName(baseDomain))
+	name := previewWildcardName(baseDomain)
+	existing, found, err := findDistribution(ctx, c, name)
 	if err != nil {
 		return err
 	}
@@ -173,7 +171,7 @@ func (p *cloudFront) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 	if found {
 		if err := p.deleteDistribution(ctx, c, kindWildcardDistribution, existing.id); err != nil {
 			errs = append(errs, err)
-		} else if err := p.forgetPreviewWildcardTarget(ctx, c, existing.id); err != nil {
+		} else if err := p.forgetPreviewWildcardTarget(ctx, c, name, existing.id); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -213,7 +211,7 @@ func resolverNamespaceOf(config *cftypes.DistributionConfig) string {
 	return ""
 }
 
-func (p *cloudFront) forgetPreviewWildcardTarget(ctx context.Context, c Clients, distribution string) error {
+func (p *cloudFront) forgetPreviewWildcardTarget(ctx context.Context, c Clients, name, distribution string) error {
 	deployed, err := p.bootstrap(ctx, c, environment.TierPreview)
 	if err != nil {
 		return err
@@ -221,7 +219,10 @@ func (p *cloudFront) forgetPreviewWildcardTarget(ctx context.Context, c Clients,
 	if !deployed.Present {
 		return nil
 	}
-	return wildcardInvalidationTargets(c, environment.TierPreview, deployed).remove(ctx, distribution)
+	if err := wildcardInvalidationTargets(c, environment.TierPreview, deployed).remove(ctx, distribution); err != nil {
+		return err
+	}
+	return wildcardRecords(c, deployed).forget(ctx, name)
 }
 
 func sweepPreviewRoutes(ctx context.Context, c Clients, ns bootstrap.Namespace, baseDomain string) error {

@@ -4,6 +4,7 @@ import (
 	"maps"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 )
 
 type originGuard struct {
@@ -32,7 +33,7 @@ func (f *originGuard) rootFunctionEnv(base map[string]string) map[string]string 
 
 func (f *originGuard) rootFunctionURLAuth() string {
 	if f == nil {
-		return functionURLAuthIAM
+		return functionurl.AuthIAM
 	}
-	return functionURLAuthNone
+	return functionurl.AuthNone
 }

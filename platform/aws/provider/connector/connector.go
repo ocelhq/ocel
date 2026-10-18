@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -343,7 +344,7 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, k
 	rendered, err := json.MarshalIndent(map[string]any{
 		"AWSTemplateFormatVersion": "2010-09-09",
 		"Description":              "Ocel connector - the function the console reads this account's variables through, the role it runs under and the url it answers on. It is separate from every bootstrap stack and has no deploy rights.",
-		"Resources": map[string]any{
+		"Resources": withURLPermissions(map[string]any{
 			"CodeBucket": codeBucketResource(),
 			"ConnectorRole": map[string]any{
 				"Type": "AWS::IAM::Role",
@@ -394,17 +395,8 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, k
 					"Description": "The address the console dials. Its auth is the token the connector checks itself, so a caller with no token reaches a refusal rather than a signed request it could never make.",
 				},
 				"Properties": map[string]any{
-					"AuthType":          "NONE",
+					"AuthType":          functionurl.AuthNone,
 					"TargetFunctionArn": map[string]any{"Fn::GetAtt": []string{"ConnectorFunction", "Arn"}},
-				},
-			},
-			"ConnectorUrlReachable": map[string]any{
-				"Type": "AWS::Lambda::Permission",
-				"Properties": map[string]any{
-					"Action":              "lambda:InvokeFunctionUrl",
-					"FunctionName":        map[string]any{"Fn::GetAtt": []string{"ConnectorFunction", "Arn"}},
-					"FunctionUrlAuthType": "NONE",
-					"Principal":           "*",
 				},
 			},
 			"ConnectorHeartbeat": map[string]any{
@@ -431,7 +423,7 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, k
 					"SourceArn":    map[string]any{"Fn::GetAtt": []string{"ConnectorHeartbeat", "Arn"}},
 				},
 			},
-		},
+		}),
 		"Outputs": map[string]any{
 			outputBucket: map[string]any{
 				"Description": "S3 bucket this stack stages the connector's code in. Nothing else writes to it.",
@@ -455,6 +447,28 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, k
 		return "", fmt.Errorf("render the connector template: %w", err)
 	}
 	return string(rendered), nil
+}
+
+func urlPermissionID(permission functionurl.Permission) string {
+	return "ConnectorUrl" + permission.Verb()
+}
+
+func withURLPermissions(resources map[string]any) map[string]any {
+	for _, permission := range functionurl.Public() {
+		properties := map[string]any{
+			"Action":       permission.Action,
+			"FunctionName": map[string]any{"Fn::GetAtt": []string{"ConnectorFunction", "Arn"}},
+			"Principal":    "*",
+		}
+		if permission.URLAuthType != "" {
+			properties["FunctionUrlAuthType"] = permission.URLAuthType
+		}
+		if permission.ViaURL {
+			properties["InvokedViaFunctionUrl"] = true
+		}
+		resources[urlPermissionID(permission)] = map[string]any{"Type": "AWS::Lambda::Permission", "Properties": properties}
+	}
+	return resources
 }
 
 func codeBucketResource() map[string]any {

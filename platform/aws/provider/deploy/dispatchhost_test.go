@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -449,8 +450,8 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 
 	var reachesSibling, reachesOptimizer bool
 	for _, statement := range statements {
-		if !slices.Contains(statement.Action, "lambda:InvokeFunctionUrl") || len(statement.Action) != 1 {
-			t.Errorf("statement grants %v, want the Function URL invoke alone", statement.Action)
+		if want := functionurl.InvokerActions(); !slices.Equal(statement.Action, want) {
+			t.Errorf("statement grants %v, want %v: since October 2025 a signed URL call lacking either answers 403", statement.Action, want)
 		}
 		if strings.Contains(string(statement.Resource), `"*"`) {
 			t.Errorf("statement reaches %s, want every resource named", statement.Resource)

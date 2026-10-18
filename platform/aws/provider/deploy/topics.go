@@ -21,10 +21,12 @@ const (
 	workerCeiling          = 15 * time.Minute
 	containerWorkerCeiling = 12 * time.Hour
 	workerSettleMargin     = 30 * time.Second
-	queueRetentionSecs     = 14 * 24 * 60 * 60
-	snsServicePrincipal    = "sns.amazonaws.com"
-	outputKeyTopicQueues   = "queues"
-	outputKeyTopicARN      = "topic"
+
+	eventSourceVisibilityFactor = 6
+	queueRetentionSecs          = 14 * 24 * 60 * 60
+	snsServicePrincipal         = "sns.amazonaws.com"
+	outputKeyTopicQueues        = "queues"
+	outputKeyTopicARN           = "topic"
 )
 
 var WorkerCeilings = []provider.WorkerCeiling{
@@ -96,8 +98,8 @@ func workerTimeout(topics []deployedTopic, worker string) time.Duration {
 	return min(longest+workerSettleMargin, workerCeiling)
 }
 
-func queueVisibilitySeconds(topics []deployedTopic, worker string) int {
-	return int((workerTimeout(topics, worker) + workerSettleMargin) / time.Second)
+func queueVisibilitySeconds(topics []deployedTopic, queue consumerQueue) int {
+	return eventSourceVisibilityFactor*int(workerTimeout(topics, queue.consumer.Worker)/time.Second) + batchingWindowSeconds(queue)
 }
 
 func snsTopicARN(region, account, name string) string {
@@ -154,7 +156,7 @@ func queueTopology(cfg Config, project, env string, topics []deployedTopic, work
 	return topology, nil
 }
 
-func registerTopic(ctx *pulumi.Context, topic deployedTopic, visibility func(worker string) int, tags pulumi.StringMap) error {
+func registerTopic(ctx *pulumi.Context, topic deployedTopic, visibility func(queue consumerQueue) int, tags pulumi.StringMap) error {
 	at := topic.resource.Name
 	var snsTopic *sns.Topic
 	if topic.sns != "" {
@@ -188,7 +190,7 @@ func registerTopic(ctx *pulumi.Context, topic deployedTopic, visibility func(wor
 			Name:                      pulumi.String(queue.name),
 			FifoQueue:                 pulumi.Bool(queue.fifo),
 			ContentBasedDeduplication: pulumi.Bool(queue.fifo && topic.isTask() && topic.declared.Cron != ""),
-			VisibilityTimeoutSeconds:  pulumi.Int(visibility(queue.consumer.Worker)),
+			VisibilityTimeoutSeconds:  pulumi.Int(visibility(queue)),
 			MessageRetentionSeconds:   pulumi.Int(queueRetentionSecs),
 			RedrivePolicy:             redrive,
 			Tags:                      tags,

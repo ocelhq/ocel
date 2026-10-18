@@ -96,6 +96,15 @@ var bootstrapOnlyActions = []string{
 
 func parsePolicy(t *testing.T, document string) parsedPolicy {
 	t.Helper()
+	if strings.HasPrefix(strings.TrimSpace(document), "[") {
+		var joined parsedPolicy
+		for _, printed := range printedPolicies(t, document) {
+			part := parsePolicy(t, string(printed.PolicyDocument))
+			joined.Version = part.Version
+			joined.Statement = append(joined.Statement, part.Statement...)
+		}
+		return joined
+	}
 	var policy parsedPolicy
 	if err := json.Unmarshal([]byte(document), &policy); err != nil {
 		t.Fatalf("parse policy: %v\n%s", err, document)

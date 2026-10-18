@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -23,6 +24,7 @@ import (
 
 type storeSource struct {
 	reader   variablestore.EnvironmentReader
+	secrets  SecretsAPI
 	cells    []variablestore.Cell
 	bindings []live.Binding
 
@@ -42,7 +44,11 @@ func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 	for _, lag := range f.unreportedGrantLag(records) {
 		fmt.Fprintln(os.Stderr, "ocel: "+lag)
 	}
-	return merged(resolved, f.bindings, records), nil
+	values := merged(resolved, f.bindings, records)
+	if err := currentPasswords(ctx, f.secrets, f.bindings, values); err != nil {
+		return nil, err
+	}
+	return values, nil
 }
 
 func (f *storeSource) unreportedGrantLag(records []variablestore.StoredBinding) []string {
@@ -140,6 +146,7 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 			Scope:       variablestore.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,
 		},
+		secrets:  secretsmanager.NewFromConfig(cfg),
 		cells:    manifestCells(manifest),
 		bindings: manifest.Bindings,
 	}, live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil), nil

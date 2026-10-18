@@ -160,31 +160,57 @@ func TestTheFunctionNetworkKeepsItsSubnetsWhenItRunsAgain(t *testing.T) {
 	}
 }
 
-func TestTheFunctionNetworkRoutesOutboundThroughOneNATGatewayInADefaultSubnet(t *testing.T) {
+func TestTheProductionFunctionNetworkRoutesEachZoneThroughANATGatewayOfItsOwn(t *testing.T) {
 	t.Parallel()
 
 	cloud := runFunctionNetwork(t, environment.TierProduction, &functionNetworkCloud{})
 
 	gateways := cloud.registered("aws:ec2/natGateway:NatGateway")
+	if len(gateways) != 2 {
+		t.Fatalf("declared %d NAT gateways, want one per zone: a single gateway takes both subnets offline with its zone", len(gateways))
+	}
+	if got := len(cloud.registered("aws:ec2/eip:Eip")); got != 2 {
+		t.Errorf("declared %d elastic IPs, want one for each NAT gateway", got)
+	}
+	var placed []string
+	for _, gateway := range gateways {
+		placed = append(placed, cloud.inputs("aws:ec2/natGateway:NatGateway", gateway)["subnetId"].StringValue())
+	}
+	slices.Sort(placed)
+	if want := []string{"subnet-default-a", "subnet-default-b"}; !slices.Equal(placed, want) {
+		t.Errorf("NAT gateways sit in %v, want the default subnet of each zone the private subnets use %v", placed, want)
+	}
+	requireDefaultRoutes(t, cloud, 2)
+}
+
+func TestAPreviewFunctionNetworkRoutesBothZonesThroughOneNATGateway(t *testing.T) {
+	t.Parallel()
+
+	cloud := runFunctionNetwork(t, environment.TierPreview, &functionNetworkCloud{})
+
+	gateways := cloud.registered("aws:ec2/natGateway:NatGateway")
 	if len(gateways) != 1 {
-		t.Fatalf("declared %d NAT gateways, want one for the tier", len(gateways))
+		t.Fatalf("declared %d NAT gateways, want one: a preview trades its zone redundancy for half the gateway bill", len(gateways))
 	}
-	if got := len(cloud.registered("aws:ec2/eip:Eip")); got != 1 {
-		t.Errorf("declared %d elastic IPs, want the one the NAT gateway holds", got)
-	}
-	nat := cloud.inputs("aws:ec2/natGateway:NatGateway", gateways[0])
-	if nat["subnetId"].StringValue() != "subnet-default-a" {
+	if nat := cloud.inputs("aws:ec2/natGateway:NatGateway", gateways[0]); nat["subnetId"].StringValue() != "subnet-default-a" {
 		t.Errorf("NAT gateway sits in %q, want the default subnet of the first zone: only a public subnet reaches the internet gateway", nat["subnetId"].StringValue())
 	}
+	requireDefaultRoutes(t, cloud, 2)
+}
+
+func requireDefaultRoutes(t *testing.T, cloud *functionNetworkCloud, subnets int) {
+	t.Helper()
 	routes := cloud.registered("aws:ec2/route:Route")
-	if len(routes) != 1 {
-		t.Fatalf("declared %d routes, want the one default route", len(routes))
+	if len(routes) != subnets {
+		t.Fatalf("declared %d routes, want a default route for each private subnet", len(routes))
 	}
-	route := cloud.inputs("aws:ec2/route:Route", routes[0])
-	if route["destinationCidrBlock"].StringValue() != "0.0.0.0/0" || route["natGatewayId"].StringValue() == "" {
-		t.Errorf("route = %v, want 0.0.0.0/0 through the NAT gateway", route)
+	for _, name := range routes {
+		route := cloud.inputs("aws:ec2/route:Route", name)
+		if route["destinationCidrBlock"].StringValue() != "0.0.0.0/0" || route["natGatewayId"].StringValue() == "" {
+			t.Errorf("route = %v, want 0.0.0.0/0 through a NAT gateway", route)
+		}
 	}
-	if got := len(cloud.registered("aws:ec2/routeTableAssociation:RouteTableAssociation")); got != 2 {
+	if got := len(cloud.registered("aws:ec2/routeTableAssociation:RouteTableAssociation")); got != subnets {
 		t.Errorf("declared %d route table associations, want one per private subnet", got)
 	}
 }
@@ -200,8 +226,8 @@ func TestTheFunctionNetworkReachesS3AndDynamoDBThroughFreeGatewayEndpoints(t *te
 		if endpoint["vpcEndpointType"].StringValue() != "Gateway" {
 			t.Errorf("endpoint %s is a %q, want a gateway endpoint: an interface endpoint bills by the hour", name, endpoint["vpcEndpointType"].StringValue())
 		}
-		if len(stringsAt(endpoint, "routeTableIds")) != 1 {
-			t.Errorf("endpoint %s is attached to %v, want the private route table", name, stringsAt(endpoint, "routeTableIds"))
+		if len(stringsAt(endpoint, "routeTableIds")) != 2 {
+			t.Errorf("endpoint %s is attached to %v, want the route table of each private subnet", name, stringsAt(endpoint, "routeTableIds"))
 		}
 		services = append(services, endpoint["serviceName"].StringValue())
 	}

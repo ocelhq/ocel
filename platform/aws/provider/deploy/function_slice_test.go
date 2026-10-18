@@ -20,6 +20,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -513,26 +514,18 @@ func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *tes
 	}
 }
 
-func TestBytecodeCacheEnabled(t *testing.T) {
-	t.Run("off with no override", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "")
-		if bytecodeCacheEnabled() {
-			t.Error("bytecodeCacheEnabled() = true with no override, want false")
-		}
-	})
+func TestTheBytecodeCacheFollowsTheSpecWhateverTheOperatorsShell(t *testing.T) {
+	for _, shell := range []string{"", "0", "1"} {
+		t.Run("OCEL_BYTECODE_CACHE="+shell, func(t *testing.T) {
+			t.Setenv("OCEL_BYTECODE_CACHE", shell)
+			cache := bytecodeConfig{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"}
 
-	t.Run("on with OCEL_BYTECODE_CACHE=1", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "1")
-		if !bytecodeCacheEnabled() {
-			t.Error("bytecodeCacheEnabled() = false with OCEL_BYTECODE_CACHE=1, want true")
-		}
-	})
-
-	for _, v := range []string{"true", "on", "yes", "TRUE"} {
-		t.Run("only \"1\" enables, not "+v, func(t *testing.T) {
-			t.Setenv(bytecodeCacheEnv, v)
-			if bytecodeCacheEnabled() {
-				t.Errorf("bytecodeCacheEnabled() = true with OCEL_BYTECODE_CACHE=%q, want false (only \"1\" enables)", v)
+			env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, nil, &cache)
+			if env["OCEL_BYTECODE_PREFIX"] != cache.Prefix || env["OCEL_BYTECODE_BUCKET"] != cache.Bucket {
+				t.Errorf("env = %v, want the cache the spec names, the same from every shell", env)
+			}
+			if targets := warmTargets(nextManifest(), map[string]*bytecodeConfig{"web": &cache}, map[string]string{"web_index": "fn"}); len(targets) != 1 {
+				t.Errorf("warmTargets = %+v, want the function the spec gives a cache warmed from every shell", targets)
 			}
 		})
 	}
@@ -552,7 +545,6 @@ func isrCacheFor(t *testing.T, env, project, app, buildID string) isrConfig {
 
 func TestISREnv(t *testing.T) {
 	t.Run("says nothing about the bytecode cache", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "1")
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 		env := cfg.env()
 		for _, key := range []string{"OCEL_BYTECODE_PREFIX", "OCEL_BYTECODE_BUCKET"} {
@@ -989,7 +981,7 @@ func TestFunctionLogGroup(t *testing.T) {
 		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
 			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
-			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionURLAuthIAM, "")
+			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionurl.AuthIAM, "")
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
@@ -1044,7 +1036,7 @@ func TestAFunctionsEnvironmentIsSealedUnderTheTierVariablesKey(t *testing.T) {
 				}
 				_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
 					"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
-					nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionURLAuthIAM, tc.key)
+					nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionurl.AuthIAM, tc.key)
 				return err
 			}
 			if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {

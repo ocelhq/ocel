@@ -3,6 +3,7 @@ package deploy
 import (
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -15,7 +16,7 @@ func TestAServerlessAppUsingProvisionedPostgresIsBilledForTheTiersNATGateway(t *
 	for _, r := range set.GetResources() {
 		scopes[r.GetType()+":"+r.GetName()] = r.GetScope()
 	}
-	for _, key := range []string{"aws_nat_gateway:" + FunctionNetworkSlug, "aws_eip:" + FunctionNetworkSlug} {
+	for _, key := range []string{"aws_nat_gateway:" + FunctionNetworkSlug + "-1", "aws_eip:" + FunctionNetworkSlug + "-2"} {
 		if scopes[key] != "project:shop/shared:production" {
 			t.Errorf("%s is in scope %q, want the tier's shared scope: one gateway serves every app in it", key, scopes[key])
 		}
@@ -35,9 +36,9 @@ func TestOnlyAServerlessAppReachingAVPCOnlyResourceOcelProvisionsPaysForTheNATGa
 		want   int
 	}{
 		{"no app uses anything", nil, 0},
-		{"a serverless app uses postgres", []provider.AppUsage{{App: "web", Resources: []provider.Resource{postgres}}}, 1},
-		{"a serverless app uses kv", []provider.AppUsage{{App: "web", Resources: []provider.Resource{cache}}}, 1},
-		{"two serverless apps share the one gateway", []provider.AppUsage{{App: "web", Resources: []provider.Resource{postgres}}, {App: "other", Resources: []provider.Resource{cache}}}, 1},
+		{"a serverless app uses postgres", []provider.AppUsage{{App: "web", Resources: []provider.Resource{postgres}}}, 2},
+		{"a serverless app uses kv", []provider.AppUsage{{App: "web", Resources: []provider.Resource{cache}}}, 2},
+		{"two serverless apps share the gateways", []provider.AppUsage{{App: "web", Resources: []provider.Resource{postgres}}, {App: "other", Resources: []provider.Resource{cache}}}, 2},
 		{"a serverless app uses only a bucket", []provider.AppUsage{{App: "web", Resources: []provider.Resource{bucket}}}, 0},
 		{"a container app uses postgres", []provider.AppUsage{{App: "api", Resources: []provider.Resource{postgres}}}, 0},
 		{"a serverless app uses postgres another project provisions", []provider.AppUsage{{App: "web", Resources: []provider.Resource{consumed}}}, 0},
@@ -55,5 +56,16 @@ func TestOnlyAServerlessAppReachingAVPCOnlyResourceOcelProvisionsPaysForTheNATGa
 				t.Errorf("shaped %d NAT gateways and %d elastic IPs, want %d of each", counts["aws_nat_gateway"], counts["aws_eip"], tc.want)
 			}
 		})
+	}
+}
+
+func TestAPreviewServerlessAppReachingPostgresIsBilledForOneNATGateway(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	req.Deploy.Tier = environment.TierPreview
+	counts := countTypes(shaped(t, nil, req))
+	if counts["aws_nat_gateway"] != 1 || counts["aws_eip"] != 1 {
+		t.Errorf("shaped %d NAT gateways and %d elastic IPs, want the one pair a preview tier keeps", counts["aws_nat_gateway"], counts["aws_eip"])
 	}
 }

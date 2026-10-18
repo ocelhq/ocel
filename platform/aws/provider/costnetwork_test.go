@@ -28,8 +28,8 @@ func TestAServerlessAppUsingPostgresPutsANATGatewayInTheTiersSharedCost(t *testi
 	set := shapedWithUsage(t, "web")
 
 	counts := typeCounts(set)
-	if counts["aws_nat_gateway"] != 1 || counts["aws_eip"] != 1 {
-		t.Fatalf("shaped %d NAT gateways and %d elastic IPs, want the one pair a serverless app that reaches the database makes the tier pay for", counts["aws_nat_gateway"], counts["aws_eip"])
+	if counts["aws_nat_gateway"] != 2 || counts["aws_eip"] != 2 {
+		t.Fatalf("shaped %d NAT gateways and %d elastic IPs, want the pair per zone a serverless app that reaches the database makes the production tier pay for", counts["aws_nat_gateway"], counts["aws_eip"])
 	}
 	for _, r := range set.GetResources() {
 		if r.GetType() == "aws_nat_gateway" && r.GetScope() != "project:shop/shared:production" {

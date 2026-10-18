@@ -2160,6 +2160,18 @@
             "aws": {
               "additionalProperties": false,
               "properties": {
+                "bytecode": {
+                  "additionalProperties": false,
+                  "description": "What a deploy does with the V8 compile cache it warms for each node function.",
+                  "properties": {
+                    "embed": {
+                      "description": "Fold each function's warmed compile cache into its own code package, so a cold start loads it with the code rather than fetching it from S3. Off, a cold start fetches it.",
+                      "type": "boolean"
+                    }
+                  },
+                  "title": "AwsBytecodeOptions",
+                  "type": "object"
+                },
                 "certificates": {
                   "additionalProperties": {
                     "type": "string"

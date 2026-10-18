@@ -6,9 +6,24 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
+
+const PostgresPasswordGrant = "master password"
+
+func PostgresPasswordSecret(binding *bindingsv1.Binding) string {
+	if binding.GetPostgres() == nil {
+		return ""
+	}
+	for _, grant := range binding.GetGrants() {
+		if grant.GetLabel() == PostgresPasswordGrant && len(grant.GetResources()) == 1 {
+			return grant.GetResources()[0]
+		}
+	}
+	return ""
+}
 
 const FilePath = buildoutput.StateDir + "/variables.live.json"
 
