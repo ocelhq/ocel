@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,87 +20,13 @@ import (
 
 const nodeWorkerEntryFile = "worker.mjs"
 
-const goWorkerMain = `package main
+const importsMarker = "ocel: imports"
 
-import (
-	"cmp"
-	"log"
-	"net"
-	"net/http"
-	"os"
+//go:embed worker_main.go.tmpl
+var goWorkerMain string
 
-	"ocel.dev/worker"
-%s)
-
-func main() {
-	name := os.Getenv("` + processenv.WorkerEnvVar + `")
-	if name == "" {
-		log.Fatal("ocel: ` + processenv.WorkerEnvVar + ` names no worker, so this worker entry has nothing to serve")
-	}
-	address := net.JoinHostPort(cmp.Or(os.Getenv("HOST"), "127.0.0.1"), os.Getenv("PORT"))
-	log.Fatal(http.ListenAndServe(address, worker.Handler(name)))
-}
-`
-
-const pythonWorkerServer = `import asyncio
-import concurrent.futures
-import os
-import select
-import socket
-import sys
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from importlib import import_module
-
-sys.path.insert(0, os.getcwd())
-%s
-from ocel.worker import deliver
-
-worker = os.environ.get("` + processenv.WorkerEnvVar + `")
-if not worker:
-    sys.exit("ocel: ` + processenv.WorkerEnvVar + ` names no worker, so this worker entry has nothing to serve")
-
-loop = asyncio.new_event_loop()
-threading.Thread(target=loop.run_forever, daemon=True).start()
-
-
-class Delivery(BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
-
-    def do_POST(self):
-        body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
-        run = asyncio.run_coroutine_threadsafe(deliver(worker, body), loop)
-        if not self.answered_before_hang_up(run):
-            run.cancel()
-            self.close_connection = True
-            return
-        status, answer = run.result()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json" if status in (200, 422) else "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(answer)))
-        self.end_headers()
-        self.wfile.write(answer)
-
-    def answered_before_hang_up(self, run):
-        while not run.done():
-            readable, _, _ = select.select([self.connection], [], [], 0.25)
-            if not readable:
-                continue
-            try:
-                sent = self.connection.recv(1, socket.MSG_PEEK)
-            except OSError:
-                return False
-            if not sent:
-                return False
-            concurrent.futures.wait([run])
-        return True
-
-    def log_message(self, format, *args):
-        pass
-
-
-ThreadingHTTPServer((os.environ.get("HOST") or "127.0.0.1", int(os.environ["PORT"])), Delivery).serve_forever()
-`
+//go:embed worker.py
+var pythonWorkerServer string
 
 type workerCommand func(ctx context.Context, configDir string, roots []Root, served Root, run *workdir.Run) (*exec.Cmd, error)
 
@@ -255,13 +182,13 @@ func writeGoWorkerEntry(configDir string, roots []Root, moduleRoot string) (stri
 			return "", err
 		}
 		if rootModule == moduleRoot {
-			fmt.Fprintf(&imports, "\n\t_ %q\n", pkg)
+			fmt.Fprintf(&imports, "_ %q\n\t", pkg)
 		}
 	}
 	if imports.Len() == 0 {
 		return "", nil
 	}
-	return writeGoEntry(moduleRoot, "worker", fmt.Sprintf(goWorkerMain, imports.String()))
+	return writeGoEntry(moduleRoot, "worker", strings.Replace(goWorkerMain, "// "+importsMarker+"\n", strings.TrimSuffix(imports.String(), "\t"), 1))
 }
 
 func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, _ *workdir.Run) (*exec.Cmd, error) {
@@ -305,7 +232,7 @@ func RenderPythonWorkerEntry(packages []PythonPackage) string {
 	for _, pkg := range packages {
 		fmt.Fprintf(&imports, "import_module(%s)\n", strconv.Quote(pkg.Name))
 	}
-	return fmt.Sprintf(pythonWorkerServer, imports.String())
+	return strings.Replace(pythonWorkerServer, "# "+importsMarker+"\n", imports.String(), 1)
 }
 
 func WorkerRoot(configDir string, roots []Root, worker string, sources []string) (Root, error) {

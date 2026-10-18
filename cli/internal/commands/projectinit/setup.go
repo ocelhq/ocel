@@ -9,8 +9,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
@@ -25,7 +25,7 @@ func NewSetup(dependencies Dependencies) prerequisite.Setup {
 			opts := initOptions{configPath: dependencies.ConfigPath()}
 			var answered bool
 			err := span.Ask(func() (err error) {
-				answered, err = askProvider(ctx, terminal.NewPrompt(policy.Out, policy.In), project.DeriveSlug(filepath.Base(absent.StartDir)), &opts)
+				answered, err = askProvider(ctx, prompt.New(policy.Out, policy.In), project.DeriveSlug(filepath.Base(absent.StartDir)), &opts)
 				return err
 			})
 			if err != nil {
@@ -40,18 +40,18 @@ func NewSetup(dependencies Dependencies) prerequisite.Setup {
 	}
 }
 
-func askProvider(ctx context.Context, prompt terminal.Prompt, slug string, opts *initOptions) (bool, error) {
+func askProvider(ctx context.Context, user prompt.Prompt, slug string, opts *initOptions) (bool, error) {
 	ids := configdoc.ProviderIDs()
-	options := make([]terminal.Option, 0, len(ids))
+	options := make([]prompt.Option, 0, len(ids))
 	for _, id := range ids {
-		options = append(options, terminal.Option{Name: id})
+		options = append(options, prompt.Option{Name: id})
 	}
-	provider, answered, err := prompt.Select(ctx, fmt.Sprintf("Where should %s deploy?", slug), options)
+	provider, answered, err := user.Select(ctx, fmt.Sprintf("Where should %s deploy?", slug), options)
 	if err != nil || !answered {
 		return false, err
 	}
 	opts.provider = provider
-	settings, answered, err := askMissingOptions(ctx, prompt, provider, opts.settings)
+	settings, answered, err := askMissingOptions(ctx, user, provider, opts.settings)
 	opts.settings = settings
 	return answered, err
 }

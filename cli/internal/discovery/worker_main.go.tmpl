@@ -1,0 +1,21 @@
+package main
+
+import (
+	"cmp"
+	"log"
+	"net"
+	"net/http"
+	"os"
+
+	"ocel.dev/worker"
+	// ocel: imports
+)
+
+func main() {
+	name := os.Getenv("OCEL_WORKER")
+	if name == "" {
+		log.Fatal("ocel: OCEL_WORKER names no worker, so this worker entry has nothing to serve")
+	}
+	address := net.JoinHostPort(cmp.Or(os.Getenv("HOST"), "127.0.0.1"), os.Getenv("PORT"))
+	log.Fatal(http.ListenAndServe(address, worker.Handler(name)))
+}

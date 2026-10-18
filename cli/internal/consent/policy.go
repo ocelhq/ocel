@@ -6,8 +6,8 @@ import (
 	"io"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 )
 
@@ -71,8 +71,8 @@ func (p Policy) Confirm(ctx context.Context, span *run.Span, guard Guard) (bool,
 		span.Assume(string(guard.ID), guard.assumption())
 		return true, nil
 	}
-	return p.ask(span, func(prompt terminal.Prompt) (bool, error) {
-		return prompt.Confirm(ctx, guard.Question)
+	return p.ask(span, func(user prompt.Prompt) (bool, error) {
+		return user.Confirm(ctx, guard.Question)
 	})
 }
 
@@ -81,23 +81,23 @@ func (p Policy) Offer(ctx context.Context, span *run.Span, question string) (boo
 		return true, nil
 	}
 	return span.Confirm(func() (bool, error) {
-		return terminal.NewPrompt(p.Out, p.In).Confirm(ctx, question)
+		return prompt.New(p.Out, p.In).Confirm(ctx, question)
 	})
 }
 
 func (p Policy) ConfirmPlan(ctx context.Context, span *run.Span, shown *planv1.ChangePlan, question string) (bool, error) {
-	return p.confirmPlan(span, shown, func(prompt terminal.Prompt) (bool, error) {
-		return prompt.Confirm(ctx, question)
+	return p.confirmPlan(span, shown, func(user prompt.Prompt) (bool, error) {
+		return user.Confirm(ctx, question)
 	})
 }
 
 func (p Policy) ConfirmPlanByName(ctx context.Context, span *run.Span, shown *planv1.ChangePlan, label, name string) (bool, error) {
-	return p.confirmPlan(span, shown, func(prompt terminal.Prompt) (bool, error) {
-		return prompt.Phrase(ctx, label, name)
+	return p.confirmPlan(span, shown, func(user prompt.Prompt) (bool, error) {
+		return user.Phrase(ctx, label, name)
 	})
 }
 
-func (p Policy) confirmPlan(span *run.Span, shown *planv1.ChangePlan, ask func(terminal.Prompt) (bool, error)) (bool, error) {
+func (p Policy) confirmPlan(span *run.Span, shown *planv1.ChangePlan, ask func(prompt.Prompt) (bool, error)) (bool, error) {
 	if nothingToChange(shown) || p.Yes {
 		return true, nil
 	}
@@ -111,9 +111,9 @@ func nothingToChange(shown *planv1.ChangePlan) bool {
 	return len(shown.GetGroups()) > 0 && !Mutates(shown)
 }
 
-func (p Policy) ask(span *run.Span, ask func(terminal.Prompt) (bool, error)) (bool, error) {
+func (p Policy) ask(span *run.Span, ask func(prompt.Prompt) (bool, error)) (bool, error) {
 	granted, err := span.Confirm(func() (bool, error) {
-		return ask(terminal.NewPrompt(p.Out, p.In))
+		return ask(prompt.New(p.Out, p.In))
 	})
 	if err != nil || granted {
 		return granted, err

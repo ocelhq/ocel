@@ -16,7 +16,7 @@ import (
 	"github.com/creack/pty"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -252,7 +252,7 @@ func TestQuestionsBuiltOverAPipeNeverPromptIntoABuffer(t *testing.T) {
 
 	fake := newQuestionFake(t, "unknown-host-key")
 	var log bytes.Buffer
-	questions := Questions{Prompt: terminal.NewPrompt(&log, strings.NewReader("y\n")), Out: &log}
+	questions := Questions{Prompt: prompt.New(&log, strings.NewReader("y\n")), Out: &log}
 
 	if err := fake.call(t, questions); err == nil {
 		t.Fatal("call error = nil, want a refusal when neither end is a terminal")
@@ -287,7 +287,7 @@ func TestAQuestionThatLandsWhereNobodyCanReadItIsNeverAsked(t *testing.T) {
 	}
 
 	var log bytes.Buffer
-	questions := Questions{Prompt: terminal.NewPrompt(&log, tty), Out: &log}
+	questions := Questions{Prompt: prompt.New(&log, tty), Out: &log}
 
 	if err := fake.call(t, questions); err == nil {
 		t.Fatal("call error = nil, want a refusal when the question would go to a redirected stream")
@@ -320,10 +320,10 @@ func TestAPromptThatFailsStillIncludesTheRefusal(t *testing.T) {
 	t.Parallel()
 
 	fake := newQuestionFake(t, "unknown-host-key")
-	asker := &scriptedPrompt{attended: true, err: terminal.ErrStdinBusy}
+	asker := &scriptedPrompt{attended: true, err: prompt.ErrStdinBusy}
 
 	err := fake.call(t, answering(asker, io.Discard))
-	if !errors.Is(err, terminal.ErrStdinBusy) {
+	if !errors.Is(err, prompt.ErrStdinBusy) {
 		t.Errorf("err = %v, want it to include the prompt's own failure", err)
 	}
 	if !strings.Contains(err.Error(), "ssh-keyscan") {

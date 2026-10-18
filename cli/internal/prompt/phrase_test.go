@@ -1,4 +1,4 @@
-package terminal
+package prompt
 
 import (
 	"bytes"
@@ -35,7 +35,7 @@ func TestConfirmPhrase(t *testing.T) {
 			t.Parallel()
 
 			var stdout bytes.Buffer
-			got, err := NewPrompt(&stdout, strings.NewReader(tc.input)).Phrase(context.Background(), tc.label, tc.phrase)
+			got, err := New(&stdout, strings.NewReader(tc.input)).Phrase(context.Background(), tc.label, tc.phrase)
 			if err != nil {
 				t.Fatalf("Phrase() error = %v", err)
 			}

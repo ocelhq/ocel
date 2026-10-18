@@ -1,4 +1,4 @@
-package terminal
+package prompt
 
 import (
 	"bytes"
@@ -33,7 +33,7 @@ func TestConfirmYNCancelledContextReturnsPromptly(t *testing.T) {
 	var got bool
 	var err error
 	go func() {
-		got, err = NewPrompt(&stdout, reader).Confirm(ctx, "Proceed?")
+		got, err = New(&stdout, reader).Confirm(ctx, "Proceed?")
 		close(done)
 	}()
 
@@ -64,7 +64,7 @@ func TestConfirmYNCancelledDuringReadDoesNotReportDecline(t *testing.T) {
 		err     error
 	}, 1)
 	go func() {
-		proceed, err := NewPrompt(&stdout, reader).Confirm(ctx, "Proceed?")
+		proceed, err := New(&stdout, reader).Confirm(ctx, "Proceed?")
 		resultCh <- struct {
 			proceed bool
 			err     error
@@ -87,7 +87,7 @@ func TestConfirmYNStillReadsARealAnswer(t *testing.T) {
 	t.Parallel()
 
 	var stdout bytes.Buffer
-	got, err := NewPrompt(&stdout, strings.NewReader("y\n")).Confirm(context.Background(), "Proceed?")
+	got, err := New(&stdout, strings.NewReader("y\n")).Confirm(context.Background(), "Proceed?")
 	if err != nil {
 		t.Fatalf("Confirm() error = %v", err)
 	}
@@ -108,7 +108,7 @@ func TestReadLineSecondCallWhileFirstStillAbandonedReturnsPromptly(t *testing.T)
 		err  error
 	}, 1)
 	go func() {
-		line, err := NewPrompt(io.Discard, os.Stdin).readLine(context.Background())
+		line, err := New(io.Discard, os.Stdin).readLine(context.Background())
 		done <- struct {
 			line string
 			err  error
@@ -134,7 +134,7 @@ func TestReadLineCancelledContextReturnsPromptly(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		if _, err := NewPrompt(io.Discard, reader).readLine(ctx); err == nil {
+		if _, err := New(io.Discard, reader).readLine(ctx); err == nil {
 			t.Error("readLine() error = nil, want the context's cancellation error")
 		}
 		close(done)

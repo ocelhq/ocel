@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/skill"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -106,7 +107,7 @@ func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug st
 	if len(findMissingOptions(resolved.provider, resolved.settings)) > 0 && dependencies.CanAsk(stdin) {
 		var answered bool
 		err := dependencies.Events.Preamble(ctx).Ask(func() (err error) {
-			resolved.settings, answered, err = askMissingOptions(ctx, terminal.NewPrompt(prompts, stdin), resolved.provider, resolved.settings)
+			resolved.settings, answered, err = askMissingOptions(ctx, prompt.New(prompts, stdin), resolved.provider, resolved.settings)
 			return err
 		})
 		if err != nil {

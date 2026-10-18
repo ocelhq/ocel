@@ -359,3 +359,15 @@ func TestTheGeneratedPythonWorkerCancelsARunWhoseCallerHungUp(t *testing.T) {
 		t.Errorf("cancelled = %q, want %q: a run whose caller hung up is cancelled and its on_cancel hook run", cancelled, want)
 	}
 }
+
+func TestTheWorkerProgramsReadTheWorkerTheCLINamesAndImportWhatTheyAreGiven(t *testing.T) {
+	for name, program := range map[string]string{"worker_main.go.tmpl": goWorkerMain, "worker.py": pythonWorkerServer} {
+		if !strings.Contains(program, `"`+processenv.WorkerEnvVar+`"`) {
+			t.Errorf("%s does not read %s, the variable the CLI names the worker in", name, processenv.WorkerEnvVar)
+		}
+	}
+	rendered := RenderPythonWorkerEntry([]PythonPackage{{Name: "shop"}})
+	if !strings.Contains(rendered, `import_module("shop")`) || strings.Contains(rendered, importsMarker) {
+		t.Errorf("rendered Python worker =\n%s\nwant the package imported in place of the marker", rendered)
+	}
+}

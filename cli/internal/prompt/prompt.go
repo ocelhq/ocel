@@ -1,4 +1,4 @@
-package terminal
+package prompt
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"charm.land/huh/v2"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
 var promptTheme = huh.ThemeFunc(huh.ThemeDracula)
@@ -17,8 +18,8 @@ type Prompt struct {
 	attended bool
 }
 
-func NewPrompt(out io.Writer, in io.Reader) Prompt {
-	return Prompt{out: out, in: in, attended: IsTerminal(in) && IsTerminal(out)}
+func New(out io.Writer, in io.Reader) Prompt {
+	return Prompt{out: out, in: in, attended: terminal.IsTerminal(in) && terminal.IsTerminal(out)}
 }
 
 func (p Prompt) Attended() bool { return p.attended }
