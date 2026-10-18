@@ -99,3 +99,18 @@ func TestRunsAreListedByTheStatusTheyReadAsRatherThanTheOneLastStored(t *testing
 		}
 	}
 }
+
+func TestACancelOutlastsItsRunGoingStaleNineWritesRunning(t *testing.T) {
+	t.Parallel()
+
+	p, raced := aRacedEngine(t, aTaskNamed("resize", 3, false), http.StatusOK)
+	ctx := context.Background()
+	id := p.trigger(t, "resize", nil)
+	raced.goStale(0, staleWritesRunning, 0, nil)
+	if _, err := p.engine.Tasks().CancelRun(ctx, &taskv1.CancelRunRequest{Id: id}); err != nil {
+		t.Fatalf("CancelRun: %v", err)
+	}
+	if run, err := p.store.ReadRun(ctx, "resize", id); err != nil || run.Status != provider.RunCanceled {
+		t.Errorf("the run reads %s (%v), want it canceled", run.Status, err)
+	}
+}

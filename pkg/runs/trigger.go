@@ -192,32 +192,39 @@ func (e *Engine) send(ctx context.Context, run Run) error {
 
 func (e *Engine) debounce(ctx context.Context, deployed deployedConsumer, key, execution string, due time.Time) (string, error) {
 	record := NewRecordNamingRun(provider.RecordDebounce, deployed.topicName, key, execution, due)
-	for range maxRaces {
+	var pending string
+	err := records.RetryWhileStale(ctx, func() (bool, error) {
+		pending = ""
 		held, created, err := e.cfg.Store.EnsureRecord(ctx, record)
 		if err != nil || created {
-			return "", err
+			return false, err
 		}
-		pending, err := ReadRecordedRun(held)
-		if err != nil {
-			return "", err
+		if pending, err = ReadRecordedRun(held); err != nil {
+			return false, err
 		}
 		_, err = e.reschedule(ctx, deployed, pending, due, true)
 		switch code := connect.CodeOf(err); {
 		case err == nil:
 			refreshed := NewRecordNamingRun(record.Purpose, record.Topic, record.Key, pending, due)
 			if err := e.cfg.Store.ReplaceRecord(ctx, refreshed, held.Value); err != nil && !errors.Is(err, records.ErrStale) {
-				return "", err
+				return false, err
 			}
-			return pending, nil
+			return false, nil
 		case code == connect.CodeFailedPrecondition || code == connect.CodeNotFound:
-			if err := e.cfg.Store.ReplaceRecord(ctx, record, held.Value); !errors.Is(err, records.ErrStale) {
-				return "", err
-			}
+			pending = ""
+			err := e.cfg.Store.ReplaceRecord(ctx, record, held.Value)
+			return errors.Is(err, records.ErrStale), err
 		default:
-			return "", err
+			return false, err
 		}
+	})
+	if errors.Is(err, records.ErrContended) {
+		return "", connect.NewError(connect.CodeAborted, fmt.Errorf("the debounce key %q of %s changed under every try to take it", key, deployed.topicName))
 	}
-	return "", connect.NewError(connect.CodeAborted, fmt.Errorf("the debounce key %q of %s changed under each of %d tries to take it", key, deployed.topicName, maxRaces))
+	if err != nil {
+		return "", err
+	}
+	return pending, nil
 }
 
 func refuseMissingRun(id string) error {
@@ -251,10 +258,11 @@ func (e *Engine) reschedule(ctx context.Context, deployed deployedConsumer, exec
 	if err != nil {
 		return Run{}, err
 	}
-	for range maxRaces {
+	var written Run
+	err = records.RetryWhileStale(ctx, func() (bool, error) {
 		now := time.Now()
 		if status := statusAt(run, now, true); status != provider.RunDelayed {
-			return Run{}, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is %s, and only a delayed run can be rescheduled", execution, status))
+			return false, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is %s, and only a delayed run can be rescheduled", execution, status))
 		}
 		moved := run
 		moved.DueAt, moved.Delivery, moved.Held, moved.Status = due, NewMessageID(now), "", provider.RunDelayed
@@ -264,26 +272,33 @@ func (e *Engine) reschedule(ctx context.Context, deployed deployedConsumer, exec
 		if shiftExpiry && !run.ExpiresAt.IsZero() {
 			moved.ExpiresAt = run.ExpiresAt.Add(due.Sub(run.DueAt))
 		}
-		written, err := e.write(ctx, moved)
+		var err error
+		written, err = e.write(ctx, moved)
 		if errors.Is(err, records.ErrStale) {
 			if run, err = e.reread(ctx, run); err != nil {
-				return Run{}, refuseGone(execution, err)
+				return false, refuseGone(execution, err)
 			}
-			continue
+			return true, nil
 		}
 		if err != nil {
-			return Run{}, err
+			return false, err
 		}
 		if err := e.cfg.Queue.Send(ctx, messageOf(written)); err != nil {
 			restored := written
 			restored.DueAt, restored.Delivery, restored.Held, restored.Status, restored.ExpiresAt = run.DueAt, run.Delivery, run.Held, run.Status, run.ExpiresAt
 			_, restoreErr := e.write(context.WithoutCancel(ctx), restored)
-			return Run{}, errors.Join(err, restoreErr)
+			return false, errors.Join(err, restoreErr)
 		}
 		e.release(ctx, run)
-		return written, nil
+		return false, nil
+	})
+	if errors.Is(err, records.ErrContended) {
+		return Run{}, connect.NewError(connect.CodeAborted, fmt.Errorf("run %q changed under every try to reschedule it", execution))
 	}
-	return Run{}, connect.NewError(connect.CodeAborted, fmt.Errorf("run %q changed under each of %d tries to reschedule it", execution, maxRaces))
+	if err != nil {
+		return Run{}, err
+	}
+	return written, nil
 }
 
 func (e *Engine) release(ctx context.Context, run Run) {

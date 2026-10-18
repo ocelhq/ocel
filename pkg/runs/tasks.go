@@ -152,27 +152,34 @@ func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*ta
 
 func (e *Engine) cancel(ctx context.Context, run Run, reason string) (Run, error) {
 	execution := run.Execution
-	for range maxRaces {
+	err := records.RetryWhileStale(ctx, func() (bool, error) {
 		if !IsUnfinished(run.Status) {
-			return run, nil
+			return false, nil
 		}
 		canceled := run
 		canceled.cancel(reason, time.Now())
 		written, err := e.write(ctx, canceled)
 		if errors.Is(err, records.ErrStale) {
 			if run, err = e.reread(ctx, run); err != nil {
-				return Run{}, refuseGone(execution, err)
+				return false, refuseGone(execution, err)
 			}
-			continue
+			return true, nil
 		}
 		if err != nil {
-			return Run{}, err
+			return false, err
 		}
 		e.stopInFlight(execution)
 		e.release(ctx, run)
-		return written, nil
+		run = written
+		return false, nil
+	})
+	if errors.Is(err, records.ErrContended) {
+		return Run{}, connect.NewError(connect.CodeAborted, fmt.Errorf("run %q changed under every try to cancel it", execution))
 	}
-	return Run{}, connect.NewError(connect.CodeAborted, fmt.Errorf("run %q changed under each of %d tries to cancel it", execution, maxRaces))
+	if err != nil {
+		return Run{}, err
+	}
+	return run, nil
 }
 
 func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunRequest) (*taskv1.RescheduleRunResponse, error) {

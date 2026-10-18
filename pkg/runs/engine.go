@@ -16,7 +16,6 @@ const (
 
 	dueSlack    = 250 * time.Millisecond
 	retainedFor = 5 * time.Second
-	maxRaces    = 8
 )
 
 type Worker struct {
