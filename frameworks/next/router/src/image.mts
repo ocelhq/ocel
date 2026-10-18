@@ -40,6 +40,7 @@ export interface ImageDeps {
   assetHashes?: Record<string, string>;
   imageCache?: ImageCache;
   route?: (request: Request) => Promise<Response>;
+  maxRequestBytes?: number;
 }
 
 const DUMMY_ORIGIN = "http://n";
@@ -154,9 +155,11 @@ export async function serveImage(request: Request, url: URL, deps: ImageDeps): P
   };
   const route = isRouteSource(params, deps) ? deps.route : undefined;
   if (route) {
-    const routeImage = await readRouteImage(route, request, params.href, deps.config);
-    if (!routeImage) return withStatus(errorResponse(400, UPSTREAM_INVALID_MESSAGE), "BYPASS");
-    payload.routeImage = routeImage;
+    const read = await readRouteImage(route, request, params.href, deps);
+    if (!read.ok) return withStatus(errorResponse(read.status, read.message), "BYPASS");
+    payload.routeImage = read.image;
+    const refusal = refuseOversizeRequest(payload, params.href, deps.maxRequestBytes);
+    if (refusal) return withStatus(errorResponse(refusal.status, refusal.message), "BYPASS");
   }
   const origin = async () => servedImage(await deps.origin(payload), deps.config.minimumCacheTTL);
 
@@ -177,12 +180,51 @@ function isRouteSource(params: ImageRequestParams, deps: ImageDeps): boolean {
   return path === undefined || deps.assetHashes?.[path] === undefined;
 }
 
+interface ImageRefusal {
+  status: number;
+  message: string;
+}
+
+type RouteImageRead = { ok: true; image: RouteImage } | ({ ok: false } & ImageRefusal);
+
+const PAYLOAD_TOO_LARGE = 413;
+
+const UPSTREAM_INVALID: ImageRefusal = { status: 400, message: UPSTREAM_INVALID_MESSAGE };
+
+const UPSTREAM_TOO_LARGE: ImageRefusal = {
+  status: PAYLOAD_TOO_LARGE,
+  message: UPSTREAM_INVALID_MESSAGE,
+};
+
+function newRequestTooLarge(maxRequestBytes: number): ImageRefusal {
+  return {
+    status: PAYLOAD_TOO_LARGE,
+    message: `"url" parameter is valid but upstream response is too large for the image optimizer, which accepts requests of at most ${maxRequestBytes} bytes`,
+  };
+}
+
+interface RouteBodyLimit {
+  bytes: number;
+  refusal: ImageRefusal;
+}
+
+function newRouteBodyLimit(deps: ImageDeps): RouteBodyLimit {
+  const { maximumResponseBody } = deps.config;
+  if (deps.maxRequestBytes === undefined) {
+    return { bytes: maximumResponseBody, refusal: UPSTREAM_TOO_LARGE };
+  }
+  const encodable = Math.floor((deps.maxRequestBytes * 3) / 4);
+  return encodable < maximumResponseBody
+    ? { bytes: encodable, refusal: newRequestTooLarge(deps.maxRequestBytes) }
+    : { bytes: maximumResponseBody, refusal: UPSTREAM_TOO_LARGE };
+}
+
 async function readRouteImage(
   route: (request: Request) => Promise<Response>,
   request: Request,
   href: string,
-  config: ImageConfig,
-): Promise<RouteImage | undefined> {
+  deps: ImageDeps,
+): Promise<RouteImageRead> {
   const routed = new Request(new URL(href, request.url), {
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   });
@@ -191,22 +233,40 @@ async function readRouteImage(
     if (response.status !== 200) {
       await response.body?.cancel();
       console.error(`ocel image: route ${href} answered ${response.status}`);
-      return undefined;
+      return { ok: false, ...UPSTREAM_INVALID };
     }
-    const bytes = await readCapped(response, config.maximumResponseBody);
+    const limit = newRouteBodyLimit(deps);
+    const bytes = await readCapped(response, limit.bytes);
     if (!bytes) {
-      console.error(`ocel image: route ${href} answered over ${config.maximumResponseBody} bytes`);
-      return undefined;
+      console.error(`ocel image: route ${href} answered over ${limit.bytes} bytes`);
+      return { ok: false, ...limit.refusal };
     }
     return {
-      base64: encodeBase64(bytes),
-      cacheControl: response.headers.get("cache-control"),
-      etag: response.headers.get("etag"),
+      ok: true,
+      image: {
+        base64: encodeBase64(bytes),
+        cacheControl: response.headers.get("cache-control"),
+        etag: response.headers.get("etag"),
+      },
     };
   } catch (error) {
     console.error(`ocel image: route ${href} failed`, error);
-    return undefined;
+    return { ok: false, ...UPSTREAM_INVALID };
   }
+}
+
+function refuseOversizeRequest(
+  payload: ImageOriginRequest,
+  href: string,
+  maxRequestBytes: number | undefined,
+): ImageRefusal | undefined {
+  if (maxRequestBytes === undefined) return undefined;
+  const bytes = new TextEncoder().encode(JSON.stringify(payload)).byteLength;
+  if (bytes <= maxRequestBytes) return undefined;
+  console.error(
+    `ocel image: route ${href} encodes to a ${bytes}-byte request, over the image optimizer's ${maxRequestBytes}`,
+  );
+  return newRequestTooLarge(maxRequestBytes);
 }
 
 async function readCapped(response: Response, limit: number): Promise<Uint8Array | undefined> {

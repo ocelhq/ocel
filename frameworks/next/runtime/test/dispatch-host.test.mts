@@ -365,3 +365,59 @@ test("a dispatch host carries the throttle check its host's access names", async
 
   expect(built.isOriginThrottle).toBe(isOriginThrottle);
 });
+
+test("a route image is refused under the image request limit its host's access names", async () => {
+  const { writeFile, mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "ocel-dispatch-image-limit-"));
+  const path = join(dir, "next-route-table.json");
+  await writeFile(
+    path,
+    JSON.stringify({
+      ...manifest,
+      pathnames: [...manifest.pathnames, "/api/og"],
+      dispatch: {
+        ...manifest.dispatch,
+        "/api/og": { kind: "function", id: LOCAL_BUNDLE, entryKey: "/api/og" },
+      },
+      images: {
+        path: "/_next/image",
+        deviceSizes: [64],
+        imageSizes: [],
+        formats: ["image/webp"],
+        domains: [],
+        remotePatterns: [],
+        minimumCacheTTL: 60,
+        maximumRedirects: 3,
+        maximumResponseBody: 1024,
+        dangerouslyAllowSVG: false,
+        dangerouslyAllowLocalIP: false,
+        contentSecurityPolicy: "",
+        contentDispositionType: "inline",
+        configHash: "c".repeat(64),
+      },
+      assetHashes: {},
+    }),
+  );
+  const asked: string[] = [];
+  const built = readDispatchHost({ OCEL_NEXT_ROUTE_TABLE: path }, localOrigin, {
+    originFetch: fetch,
+    imageOrigin: async (payload) => {
+      asked.push(payload.url);
+      return new Response("resized", { headers: { "content-type": "image/webp" } });
+    },
+    maxImageRequestBytes: 100,
+  });
+
+  const response = await dispatchRequest(
+    new Request("https://app.example/_next/image?url=%2Fapi%2Fog&w=64&q=75", {
+      headers: { accept: "image/webp" },
+    }),
+    built,
+    () => {},
+  );
+
+  expect(response.status).toBe(413);
+  expect(asked).toEqual([]);
+});

@@ -208,3 +208,75 @@ test("a sibling call with no credentials fails loudly", async () => {
 
   await expect(originFetch(`${SIBLING_URL}/sibling`)).rejects.toThrow(/credentials/);
 });
+
+test("a route image is optimized only while its request fits a Lambda invoke payload", async () => {
+  const lambdaInvokePayloadBytes = 6 * 1024 * 1024;
+  const routes = http.createServer((req, res) => {
+    const bytes = Number(new URL(req.url ?? "/", "http://n").searchParams.get("bytes"));
+    res.writeHead(200, { "content-type": "image/png" });
+    res.end(Buffer.alloc(bytes));
+  });
+  await new Promise<void>((resolve) => routes.listen({ host: "127.0.0.1", port: 0 }, resolve));
+  const { port } = routes.address() as { port: number };
+  const routesOrigin = `http://127.0.0.1:${port}`;
+  const optimized: number[] = [];
+  const originFetch = (async (input: Request | string, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url.startsWith(routesOrigin)) return fetch(request);
+    optimized.push((await request.arrayBuffer()).byteLength);
+    return new Response("resized", { headers: { "content-type": "image/webp" } });
+  }) as unknown as typeof fetch;
+  const access = awsDispatchAccess({ ...credentials, AWS_REGION: "us-east-1" });
+  const imaged: DispatchHost = {
+    ...host(),
+    localOrigin: routesOrigin,
+    manifest: {
+      ...manifest,
+      pathnames: ["/api/og"],
+      dispatch: { "/api/og": { kind: "function", id: LOCAL_BUNDLE, entryKey: "/api/og" } },
+      images: {
+        path: "/_next/image",
+        deviceSizes: [64],
+        imageSizes: [],
+        formats: ["image/webp"],
+        domains: [],
+        remotePatterns: [],
+        minimumCacheTTL: 60,
+        maximumRedirects: 3,
+        maximumResponseBody: 50_000_000,
+        dangerouslyAllowSVG: false,
+        dangerouslyAllowLocalIP: false,
+        contentSecurityPolicy: "",
+        contentDispositionType: "inline",
+        configHash: "c".repeat(64),
+      },
+      assetHashes: {},
+    },
+    imageOptimizerUrl: "https://optimizer.lambda-url.us-east-1.on.aws",
+    originFetch,
+    maxImageRequestBytes: access.maxImageRequestBytes,
+  };
+  const image = (bytes: number) =>
+    dispatchRequest(
+      new Request(
+        `https://app.example/_next/image?url=${encodeURIComponent(`/api/og?bytes=${bytes}`)}&w=64&q=75`,
+        { headers: { accept: "image/webp" } },
+      ),
+      imaged,
+      () => {},
+    );
+
+  try {
+    const fits = await image(4 * 1024 * 1024);
+    const over = await image(5 * 1024 * 1024);
+
+    expect(fits.status).toBe(200);
+    expect(over.status).toBe(413);
+    expect(await over.text()).toMatch(`at most ${access.maxImageRequestBytes} bytes`);
+    expect(optimized).toHaveLength(1);
+    expect(optimized[0]).toBeLessThanOrEqual(access.maxImageRequestBytes!);
+    expect(access.maxImageRequestBytes).toBeLessThan(lambdaInvokePayloadBytes);
+  } finally {
+    await new Promise<void>((resolve) => routes.close(() => resolve()));
+  }
+});
