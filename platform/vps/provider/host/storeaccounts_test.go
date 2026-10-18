@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/provider/enginetest"
+	"github.com/ocelhq/ocel/pkg/enginetest"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 

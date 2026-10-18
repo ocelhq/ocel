@@ -15,3 +15,5 @@ var DigestArtifact = digestArtifact
 var PackArtifact = packArtifact
 
 var FunctionRepository = functionRepository
+
+var ServeOn = serve

@@ -373,7 +373,7 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 		r.reclaimOwnRelease(ctx)
 		return nil, err
 	}
-	result, err := r.promote(ctx)
+	result, err := r.promote(leased)
 	if err != nil {
 		r.reclaimOwnRelease(ctx)
 	}
@@ -1158,7 +1158,7 @@ func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1
 				Bindings:       result.Bindings,
 				Resources:      holds,
 				ResourceDigest: digestResources(declared),
-				WrittenBy:      provider.WrittenByVersion(""),
+				WrittenBy:      r.readiness.WrittenBy,
 			})
 		})
 	})
@@ -1296,7 +1296,7 @@ func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry,
 		Functions:    result.Functions,
 		Containers:   result.Containers,
 		Image:        images.ImageRef(entry.App),
-		WrittenBy:    provider.WrittenByVersion(""),
+		WrittenBy:    r.readiness.WrittenBy,
 	})
 }
 
@@ -1753,14 +1753,14 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			dropped, err := r.promoteApps(ctx, promoteRequest{pointer: r.spec.Pointer, hosts: r.aliases, superseded: superseded, previous: previous, replaces: r.replaces, promotion: promotion, confirm: r.hold.confirm}, r.readAppRouter, progress)
 			if err != nil {
 				r.restoreInlineBindings(ctx, progress)
-				return errors.Join(err, r.restoreAliases(ctx, previous), r.reclaimDropped(ctx, r.images, r.spec.Pointer, dropped, progress))
+				return errors.Join(err, r.restoreAliasesUnlessPromoted(ctx, promotion.PromotionID, previous), r.reclaimDropped(ctx, r.images, r.spec.Pointer, dropped, progress))
 			}
 			if err := r.serveDeployment(ctx, r.spec.Pointer, promotion, r.readAppRouter, progress); err != nil {
 				progress.Warn(fmt.Sprintf("Promotion %s serves on %s, but not on its own deployment hostname: %v",
 					promotion.PromotionID, joinNames(edge.ListPreviewHostnames(r.aliases)), err))
 				r.deployment = nil
 			}
-			if err := r.checkpoint(ctx); err != nil {
+			if err := r.checkpointPromoted(ctx); err != nil {
 				return err
 			}
 			if err := r.reclaimDropped(ctx, r.images, r.spec.Pointer, dropped, progress); err != nil {
@@ -1770,19 +1770,31 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 				progress.Warn(unretiredWarning(promotion.PromotionID, err))
 			}
 			r.pruneInlineBindings(ctx, progress)
-			if r.spec.Tier != environment.TierPreview {
-				return nil
-			}
-			if err := stackrecords.ForgetSuperseded(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, superseded); err != nil {
-				return err
-			}
-			return stackrecords.RecordEnvironmentMeta(ctx, r.provider.KeyValues(),
-				r.spec.Tier, r.spec.Slug, r.spec.Env, r.aliasToken, r.spec.Label, r.lifecycle)
+			return r.recordPromotedEnvironment(ctx, superseded)
 		})
 	}); err != nil {
 		return nil, err
 	}
 	return r.result(promotion, propagation)
+}
+
+func (r *deployRun) checkpointPromoted(ctx context.Context) error {
+	ctx, stop := newRecordContext(ctx)
+	defer stop()
+	return r.checkpoint(ctx)
+}
+
+func (r *deployRun) recordPromotedEnvironment(ctx context.Context, superseded []edge.PreviewHost) error {
+	if r.spec.Tier != environment.TierPreview {
+		return nil
+	}
+	ctx, stop := newRecordContext(ctx)
+	defer stop()
+	if err := stackrecords.ForgetSuperseded(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, superseded); err != nil {
+		return err
+	}
+	return stackrecords.RecordEnvironmentMeta(ctx, r.provider.KeyValues(),
+		r.spec.Tier, r.spec.Slug, r.spec.Env, r.aliasToken, r.spec.Label, r.lifecycle)
 }
 
 func (r *deployRun) recordAliases(ctx context.Context) (previous, superseded []edge.PreviewHost, err error) {
@@ -1792,8 +1804,17 @@ func (r *deployRun) recordAliases(ctx context.Context) (previous, superseded []e
 	return stackrecords.RecordAliases(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, r.aliasToken, r.aliases)
 }
 
-func (r *deployRun) restoreAliases(ctx context.Context, previous []edge.PreviewHost) error {
+func (r *deployRun) restoreAliasesUnlessPromoted(ctx context.Context, promotionID string, previous []edge.PreviewHost) error {
 	if r.spec.Tier != environment.TierPreview {
+		return nil
+	}
+	ctx, stop := newRecordContext(ctx)
+	defer stop()
+	active, err := r.ledger.ActivePromotionID(ctx, r.spec.Pointer)
+	if err != nil {
+		return err
+	}
+	if active == promotionID {
 		return nil
 	}
 	return stackrecords.RestoreAliases(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, r.aliasToken, r.aliases, previous)

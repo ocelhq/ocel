@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
-	"github.com/ocelhq/ocel/pkg/provider/enginetest"
+	"github.com/ocelhq/ocel/pkg/enginetest"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"

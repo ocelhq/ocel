@@ -100,7 +100,7 @@ const repo = "github.com/ocelhq/ocel/"
 
 var providerTestSupport = []string{
 	repo + "pkg/provider/fake",
-	repo + "pkg/provider/enginetest",
+	repo + "pkg/enginetest",
 	repo + "pkg/provider/providerserver",
 }
 

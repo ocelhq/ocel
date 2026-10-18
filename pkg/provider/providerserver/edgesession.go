@@ -22,7 +22,7 @@ import (
 type edgeStateStore struct {
 	keyValues keyvalue.Store
 	name      keyvalue.Key
-	recorded  stackrecords.EdgeState
+	recorded  []byte
 }
 
 func (s *edgeStateStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
@@ -30,13 +30,11 @@ func (s *edgeStateStore) read(ctx context.Context) (stackrecords.EdgeState, erro
 	if err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
-	if s.recorded, err = decodeEdgeState(entry.Value); err != nil {
-		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
-	}
 	state, err := decodeEdgeState(entry.Value)
 	if err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
+	s.recorded = entry.Value
 	return state, nil
 }
 
@@ -45,19 +43,23 @@ func (s *edgeStateStore) write(ctx context.Context, state stackrecords.EdgeState
 	if err != nil {
 		return fmt.Errorf("record %s: %w", s.name, err)
 	}
+	base, err := decodeEdgeState(s.recorded)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", s.name, err)
+	}
 	err = keyvalue.Change(ctx, s.keyValues, s.name, func(entry keyvalue.Entry) ([]byte, bool, error) {
 		current, err := decodeEdgeState(entry.Value)
 		if err != nil {
 			return nil, false, fmt.Errorf("read %s: %w", s.name, err)
 		}
-		value, err := json.Marshal(mergeEdgeState(s.recorded, state, current))
+		value, err := json.Marshal(mergeEdgeState(base, state, current))
 		return value, !bytes.Equal(value, entry.Value), err
 	})
 	if err != nil {
 		return err
 	}
-	s.recorded, err = decodeEdgeState(written)
-	return err
+	s.recorded = written
+	return nil
 }
 
 func decodeEdgeState(value []byte) (stackrecords.EdgeState, error) {

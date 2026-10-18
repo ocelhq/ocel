@@ -60,6 +60,8 @@ func (h *handlers) EnsurePreviewAlias(ctx context.Context, req *contractv1.Ensur
 }
 
 func (h *handlers) ForgetPreviewAlias(ctx context.Context, req *contractv1.ForgetPreviewAliasRequest) (*contractv1.ForgetPreviewAliasResponse, error) {
+	ctx, stop := newCleanupCallContext(ctx)
+	defer stop()
 	p, err := h.session.use()
 	if err != nil {
 		return nil, err

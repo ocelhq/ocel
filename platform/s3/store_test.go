@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/provider/enginetest"
+	"github.com/ocelhq/ocel/pkg/enginetest"
 )
 
 func TestEnsureBucketCreatesABucketOnceAndSetUploadOriginsLetsOnlyTheLatestOriginsUpload(t *testing.T) {

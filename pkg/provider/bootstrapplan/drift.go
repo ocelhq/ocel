@@ -1,6 +1,7 @@
 package bootstrapplan
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -16,32 +17,59 @@ func RefuseUnconsentedChanges(shown, fresh provider.Plan) error {
 		}
 	}
 
-	var grown []string
+	var drift unconsentedDrift
 	for _, group := range fresh.Groups {
 		if len(group.Changes) == 0 {
-			grown = appendGrown(grown, group.Name, rows[group.Name], group.Action)
+			drift.note(group.Name, rows[group.Name], group.Action)
 			continue
 		}
 		for _, change := range group.Changes {
-			grown = appendGrown(grown, change.Name, rows[rowKey(group, change)], change.Action)
+			drift.note(change.Name, rows[rowKey(group, change)], change.Action)
 		}
 	}
-	if len(grown) == 0 {
-		return nil
-	}
-	return refusal.Refuse(refusal.CodeInvalid,
-		"%s needed no change when the plan was drawn and now does, so this apply would do work nobody consented to.\n"+
-			"Draw the plan again and consent to what it shows now",
-		strings.Join(grown, ", "))
+	return drift.refuse()
 }
 
 func rowKey(group provider.ChangeGroup, change provider.Change) string {
 	return group.Name + "/" + change.Kind + "/" + change.Name
 }
 
-func appendGrown(grown []string, name string, shown, current provider.ChangeAction) []string {
-	if !current.Writes() || (shown != "" && shown.Writes()) {
-		return grown
+type unconsentedDrift struct {
+	grown, destroying []string
+}
+
+func (d *unconsentedDrift) note(name string, shown, current provider.ChangeAction) {
+	switch {
+	case !current.Writes():
+	case shown == "" || !shown.Writes():
+		d.grown = append(d.grown, name)
+	case destroys(current) && current != shown:
+		d.destroying = append(d.destroying, fmt.Sprintf("%s (shown as %s, now %s)", name, shown, current))
 	}
-	return append(grown, name)
+}
+
+func (d unconsentedDrift) refuse() error {
+	var moved []string
+	if len(d.grown) > 0 {
+		moved = append(moved, strings.Join(d.grown, ", ")+" needed no change when the plan was drawn and now does")
+	}
+	if len(d.destroying) > 0 {
+		moved = append(moved, strings.Join(d.destroying, ", ")+" would now be taken down in a way the plan never showed")
+	}
+	if len(moved) == 0 {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"%s, so this apply would do work nobody consented to.\n"+
+			"Draw the plan again and consent to what it shows now",
+		strings.Join(moved, "; "))
+}
+
+func destroys(action provider.ChangeAction) bool {
+	switch action {
+	case provider.ActionDelete, provider.ActionReplace, provider.ActionDisableThenDelete:
+		return true
+	default:
+		return false
+	}
 }

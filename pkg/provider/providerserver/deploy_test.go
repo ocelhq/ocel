@@ -30,6 +30,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -1490,6 +1491,106 @@ func TestAPreviewWhoseAliasMoveFailsIsListedOnTheAliasStillServedAndRemoveWithdr
 	}
 	if served := plane.ListServedHostnames(); len(served) != 0 {
 		t.Errorf("after the preview was removed %v are still served, want every alias it published or tried to", served)
+	}
+}
+
+func TestAPreviewWhosePointerMoveFailsAfterItLandsKeepsItsLedgerAndAliasesOnThePromotionItReplaced(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+
+	first, _ := deploy(t, client, previewRequest())
+	if !first.GetSuccess() {
+		t.Fatalf("Deploy() = %q", first.GetError())
+	}
+	moved := previewRequest()
+	moved.Manifest.Domains[0].Hostnames = []string{"*.moved.example"}
+	plane.FailNextPointerMoveAfterItLands(errors.New("the data plane timed out answering the write"))
+	if failed, _ := deploy(t, client, moved); failed.GetSuccess() {
+		t.Fatal("Deploy() succeeded through a failed pointer move")
+	}
+
+	active, err := ledger.New(vendor.KeyValues(), environment.TierPreview, "shop").ActivePromotionID(context.Background(), "pr-7")
+	if err != nil || active != first.GetPromotionId() {
+		t.Errorf("the ledger names %q, %v after the move failed, want %s, the promotion the failed deploy replaced", active, err, first.GetPromotionId())
+	}
+	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.GetEnvironments(); len(got) != 1 || !slices.Equal(got[0].GetAliasUrls(), servedURLs(first)) {
+		t.Errorf("ListEnvironments = %v after the move failed, want pr-7 listed on %v, the alias of the promotion the ledger names", got, servedURLs(first))
+	}
+	if pointer, _ := plane.FindServingPointer(strings.TrimPrefix(servedURLs(first)[0], "https://")); pointer != "pr-7" {
+		t.Errorf("the alias %s is served by %q after the move failed, want pr-7", servedURLs(first)[0], pointer)
+	}
+}
+
+func TestAPreviewWhosePromotionCannotBeTakenBackListsTheAliasesOfThePromotionTheLedgerStillNames(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+	store := vendor.KeyValues().(*fake.KeyValues)
+
+	first, _ := deploy(t, client, previewRequest())
+	if !first.GetSuccess() {
+		t.Fatalf("Deploy() = %q", first.GetError())
+	}
+	pointer := ledger.Partition(environment.TierPreview, "shop").Key("pointers", "pr-7")
+	var movesEveryWrite func()
+	movesEveryWrite = func() {
+		store.MoveBeforeNextWrite(pointer)
+		store.BeforeNextWrite(pointer, movesEveryWrite)
+	}
+	moved := previewRequest()
+	moved.Manifest.Domains[0].Hostnames = []string{"*.moved.example"}
+	plane.BeforeNextPointerMove(func() { store.BeforeNextWrite(pointer, movesEveryWrite) })
+	plane.FailNextPointerMoveAfterItLands(errors.New("the data plane timed out answering the write"))
+	if failed, _ := deploy(t, client, moved); failed.GetSuccess() {
+		t.Fatal("Deploy() succeeded through a failed pointer move")
+	}
+
+	active, err := ledger.New(vendor.KeyValues(), environment.TierPreview, "shop").ActivePromotionID(context.Background(), "pr-7")
+	if err != nil || active == first.GetPromotionId() {
+		t.Fatalf("the ledger names %q, %v, want the failed deploy's promotion still named: its take-back could not write", active, err)
+	}
+	var served []string
+	for _, hostname := range plane.ListServedHostnames() {
+		if at, _ := plane.FindServingPointer(hostname); at == "pr-7" {
+			served = append(served, "https://"+hostname)
+		}
+	}
+	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.GetEnvironments(); len(got) != 1 || !slices.Equal(got[0].GetAliasUrls(), served) {
+		t.Errorf("ListEnvironments = %v, want pr-7 listed on %v, the aliases of the promotion the ledger still names", got, served)
+	}
+}
+
+func TestADeployRecordsEachStackItProvisionsAsWrittenByTheReleaseServingTheSession(t *testing.T) {
+	builtProject(t)
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrappedOverRPC(t, client)
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	stacks, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stacks) == 0 {
+		t.Fatal("the deploy recorded no stack, so the writer it recorded proves nothing")
+	}
+	for _, stack := range stacks {
+		if stack.WrittenBy != "1.2.3" {
+			t.Errorf("stack %s records writer %q, want 1.2.3, the release serving the session", stack.Name, stack.WrittenBy)
+		}
 	}
 }
 

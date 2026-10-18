@@ -73,19 +73,25 @@ func promote(ctx context.Context, l projectLedger, req promoteRequest, routers [
 	}
 	for i, routed := range routers {
 		err := routed.stack.MovePointer(ctx, moves[i], progress)
+		if err == nil {
+			continue
+		}
+		moved := routers[:i+1]
 		var unserved router.Unserved
 		if errors.As(err, &unserved) {
-			return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, routers[:i]))
+			moved = routers[:i]
 		}
-		if err != nil {
-			return dropped, err
-		}
+		return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, moved))
 	}
 	return dropped, nil
 }
 
+func newRecordContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), unpromoteWindow)
+}
+
 func unpromote(ctx context.Context, l projectLedger, pointer, promotionID string, moved []appRouter) error {
-	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), unpromoteWindow)
+	ctx, stop := newRecordContext(ctx)
 	defer stop()
 	if err := l.Unpromote(ctx, promotionID, pointer); err != nil {
 		return fmt.Errorf("the ledger still names promotion %s on %s, which not every router serves: %w", promotionID, router.ResolvePointer(pointer), err)
@@ -100,7 +106,10 @@ func unpromote(ctx context.Context, l projectLedger, pointer, promotionID string
 }
 
 func restore(ctx context.Context, l projectLedger, pointer string, routed appRouter) error {
-	for range restoreAttempts {
+	for retry := range restoreAttempts {
+		if err := l.WaitToRetry(ctx, retry); err != nil {
+			return err
+		}
 		active, found, err := l.ReadActive(ctx, pointer)
 		if err != nil {
 			return err

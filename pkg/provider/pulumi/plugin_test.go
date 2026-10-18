@@ -16,7 +16,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 )
 
-type pushCounter struct{ created atomic.Int64 }
+type pushCounter struct {
+	created  atomic.Int64
+	vanished atomic.Bool
+}
 
 type pushArgs struct {
 	Set string `pulumi:"set"`
@@ -37,6 +40,13 @@ func (r *pushResource) Create(_ context.Context, req infer.CreateRequest[pushArg
 	}
 	r.counter.created.Add(1)
 	return infer.CreateResponse[pushState]{ID: req.Inputs.Set, Output: pushState{pushArgs: req.Inputs, Pushed: true}}, nil
+}
+
+func (r *pushResource) Read(_ context.Context, req infer.ReadRequest[pushArgs, pushState]) (infer.ReadResponse[pushArgs, pushState], error) {
+	if r.counter.vanished.Load() {
+		return infer.ReadResponse[pushArgs, pushState]{}, nil
+	}
+	return infer.ReadResponse[pushArgs, pushState](req), nil
 }
 
 type pushing struct{}
@@ -177,4 +187,63 @@ func changedRows(plan provider.Plan) int {
 		rows += len(group.Changes)
 	}
 	return rows
+}
+
+func refreshingProbe(t *testing.T, counter *pushCounter) (*pulumi.Automation, provider.StackRef) {
+	t.Helper()
+	automation := pulumi.New(pulumi.Config{
+		Backend: pulumi.Backend{URL: "file://" + t.TempDir(), Passphrase: "a-passphrase", Project: "ocel-plugin-probe"},
+		Program: pushing{}.Run,
+		Plugins: []pulumi.Plugin{probePlugin(t, counter)},
+		Refresh: func(provider.StackRef, pulumi.Operation) bool { return true },
+	})
+	ref := provider.StackRef{Project: "probe", Tier: environment.TierProduction, Name: naming.InfraStack("prod")}
+	if _, err := automation.Run(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := automation.Destroy(context.Background(), ref, nil); err != nil {
+			t.Errorf("Destroy() = %v", err)
+		}
+	})
+	return automation, ref
+}
+
+func TestARefreshingPreviewOfAStackWhoseResourceVanishedPlansItCreatedAgain(t *testing.T) {
+	if testing.Short() {
+		t.Skip("this drives the real engine, which installs and runs the pinned Pulumi runtime")
+	}
+	counter := &pushCounter{}
+	automation, ref := refreshingProbe(t, counter)
+	counter.vanished.Store(true)
+
+	planned, err := automation.Preview(context.Background(), provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, nil)
+	if err != nil {
+		t.Fatalf("Preview() = %v", err)
+	}
+	want := provider.Change{Kind: "probe:index:Push", Name: "assets", Action: provider.ActionCreate}
+	if len(planned.Groups) != 1 || !slices.Contains(planned.Groups[0].Changes, want) {
+		t.Errorf("Preview() of a refreshing stack whose resource vanished = %+v, want %+v: the plan reads the state the run refreshes", planned.Groups, want)
+	}
+}
+
+func TestARefreshingPreviewDestroyOfAStackWhoseResourceVanishedPlansNothingToTakeDown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("this drives the real engine, which installs and runs the pinned Pulumi runtime")
+	}
+	counter := &pushCounter{}
+	automation, ref := refreshingProbe(t, counter)
+	counter.vanished.Store(true)
+
+	planned, err := automation.PreviewDestroy(context.Background(), ref, nil)
+	if err != nil {
+		t.Fatalf("PreviewDestroy() = %v", err)
+	}
+	for _, group := range planned.Groups {
+		for _, change := range group.Changes {
+			if change.Name == "assets" && change.Action == provider.ActionDelete {
+				t.Errorf("PreviewDestroy() of a refreshing stack whose resource vanished takes down %+v, want nothing: the teardown it plans refreshes that resource away", change)
+			}
+		}
+	}
 }

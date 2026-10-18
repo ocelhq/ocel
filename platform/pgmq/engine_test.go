@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ocelhq/ocel/pkg/provider/enginetest"
+	"github.com/ocelhq/ocel/pkg/enginetest"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }

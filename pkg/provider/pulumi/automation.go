@@ -183,8 +183,9 @@ func (a *Automation) refreshes(ref provider.StackRef, op Operation) bool {
 
 func (a *Automation) env() (map[string]string, error) {
 	env := map[string]string{
-		passphraseEnvVar:           a.config.Backend.Passphrase,
-		backendEnvVar:              a.config.Backend.URL,
+		passphraseEnvVar: a.config.Backend.Passphrase,
+		backendEnvVar:    a.config.Backend.URL,
+		// TODO: revisit: checkpoints are skipped for speed, so a run interrupted before it closes can lose the state of what it created.
 		"PULUMI_SKIP_CHECKPOINTS":  "true",
 		"PULUMI_SKIP_UPDATE_CHECK": "true",
 	}
@@ -219,7 +220,10 @@ func (a *Automation) setup(ctx context.Context, spec provider.StackSpec, op Oper
 	if setup.Config, err = a.StackConfig(ctx, spec); err != nil {
 		return WorkspaceSpec{}, err
 	}
-	setup.Secrets = a.secrets(spec, setup.Config)
+	if err := refuseSecretConfig(setup.Config, setup.Stack); err != nil {
+		return WorkspaceSpec{}, err
+	}
+	setup.Secrets = a.secrets(spec)
 	if a.config.Engine == nil {
 		command, err := pinned.install(ctx, progress)
 		if err != nil {
@@ -402,7 +406,11 @@ func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation
 
 	engineEvents := make(chan events.EngineEvent, 256)
 	rows := drainRows(engineEvents)
-	_, err = stack.Preview(ctx, optpreview.EventStreams(engineEvents), optpreview.Parallel(setup.Parallel))
+	opts := []optpreview.Option{optpreview.EventStreams(engineEvents), optpreview.Parallel(setup.Parallel)}
+	if setup.Refresh {
+		opts = append(opts, optpreview.Refresh())
+	}
+	_, err = stack.Preview(ctx, opts...)
 	return awaitPlan(rows, setup, err)
 }
 
@@ -417,7 +425,11 @@ func previewDestroy(ctx context.Context, setup WorkspaceSpec) ([]provider.Change
 
 	engineEvents := make(chan events.EngineEvent, 256)
 	rows := drainRows(engineEvents)
-	_, err = stack.PreviewDestroy(ctx, optdestroy.EventStreams(engineEvents), optdestroy.Parallel(setup.Parallel))
+	opts := []optdestroy.Option{optdestroy.EventStreams(engineEvents), optdestroy.Parallel(setup.Parallel)}
+	if setup.Refresh {
+		opts = append(opts, optdestroy.Refresh())
+	}
+	_, err = stack.PreviewDestroy(ctx, opts...)
 	return awaitPlan(rows, setup, err)
 }
 
@@ -592,8 +604,17 @@ func applyConfig(ctx context.Context, stack auto.Stack, values auto.ConfigMap) e
 	return nil
 }
 
-func (a *Automation) secrets(spec provider.StackSpec, config auto.ConfigMap) []string {
-	secrets := append(secretValues(config), a.config.Backend.Passphrase)
+func refuseSecretConfig(values auto.ConfigMap, stack string) error {
+	for _, name := range slices.Sorted(maps.Keys(values)) {
+		if values[name].Secret {
+			return fmt.Errorf("configure %s: %s is marked secret, and this engine writes stack config as plaintext; hand the value to the program instead", stack, name)
+		}
+	}
+	return nil
+}
+
+func (a *Automation) secrets(spec provider.StackSpec) []string {
+	secrets := []string{a.config.Backend.Passphrase}
 	if spec.App != nil {
 		secrets = append(secrets, slices.Collect(maps.Values(spec.App.Values.Sensitive))...)
 	}
@@ -624,20 +645,7 @@ func maskSecrets(text string, secrets []string) string {
 	return text
 }
 
-func secretValues(values auto.ConfigMap) []string {
-	var secrets []string
-	for _, value := range values {
-		if value.Secret && value.Value != "" {
-			secrets = append(secrets, value.Value)
-		}
-	}
-	return secrets
-}
-
 func configValue(value auto.ConfigValue) config.Value {
-	if value.Secret {
-		return config.NewSecureValue(value.Value)
-	}
 	if structured(value.Value) {
 		return config.NewObjectValue(value.Value)
 	}

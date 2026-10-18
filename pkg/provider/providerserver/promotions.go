@@ -91,15 +91,18 @@ func (h *handlers) rollBack(ctx context.Context, hold *environmentHold, req *con
 			Releases:    target.Releases,
 			Propagation: &propagation,
 		}
-		dropped, err := session.promoteApps(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted, confirm: hold.confirm}, session.readAppRouter, log)
-		images := removalImages(ctx, session.provider, req.GetProjectRegistry(), log)
+		dropped, err := session.promoteApps(leased, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted, confirm: hold.confirm}, session.readAppRouter, log)
+		images := removalImages(leased, session.provider, req.GetProjectRegistry(), log)
 		if err != nil {
-			return errors.Join(err, session.reclaimDropped(ctx, images, "", dropped, log))
+			return errors.Join(err, session.reclaimDropped(leased, images, "", dropped, log))
 		}
-		if err := session.checkpoint(ctx); err != nil {
+		recording, stop := newRecordContext(leased)
+		err = session.checkpoint(recording)
+		stop()
+		if err != nil {
 			return err
 		}
-		if err := session.reclaimDropped(ctx, images, "", dropped, log); err != nil {
+		if err := session.reclaimDropped(leased, images, "", dropped, log); err != nil {
 			log.Warn(unreclaimedWarning(promoted.PromotionID, err))
 		}
 		return nil

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"time"
@@ -19,16 +20,38 @@ import (
 
 const (
 	casAttempts     = 8
+	casMinDelay     = 25 * time.Millisecond
+	casMaxDelay     = time.Second
 	unpromoteWindow = 60 * time.Second
 )
 
 type Ledger struct {
 	keyValues keyvalue.Store
 	partition keyvalue.Partition
+	wait      func(ctx context.Context, d time.Duration) error
 }
 
 func New(store keyvalue.Store, tier environment.Tier, slug string) *Ledger {
-	return &Ledger{keyValues: store, partition: Partition(tier, slug)}
+	return &Ledger{keyValues: store, partition: Partition(tier, slug), wait: sleep}
+}
+
+func sleep(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func (l *Ledger) WaitToRetry(ctx context.Context, retry int) error {
+	if retry == 0 {
+		return nil
+	}
+	ceiling := min(casMinDelay<<(retry-1), casMaxDelay)
+	return l.wait(ctx, ceiling/2+time.Duration(rand.Float64()*float64(ceiling/2)))
 }
 
 func Partition(tier environment.Tier, slug string) keyvalue.Partition {
@@ -65,7 +88,10 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.ReleaseRecord) err
 	if err != nil {
 		return fmt.Errorf("encode the release record for %s: %w", record.App, err)
 	}
-	for range casAttempts {
+	for retry := range casAttempts {
+		if err := l.WaitToRetry(ctx, retry); err != nil {
+			return err
+		}
 		stored, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(record.App, record.Release))
 		if err != nil {
 			return fmt.Errorf("read the release record for %s: %w", record.App, err)
@@ -157,7 +183,10 @@ func (l *Ledger) read(ctx context.Context, name string) (Pointer, keyvalue.Entry
 }
 
 func (l *Ledger) change(ctx context.Context, name string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (Pointer, []RecordedPromotion, error) {
-	for range casAttempts {
+	for retry := range casAttempts {
+		if err := l.WaitToRetry(ctx, retry); err != nil {
+			return Pointer{}, nil, err
+		}
 		current, stored, err := l.read(ctx, name)
 		if err != nil {
 			return Pointer{}, nil, err
@@ -382,7 +411,10 @@ func (l *Ledger) RewriteRecords(ctx context.Context, promotion router.Promotion)
 }
 
 func (l *Ledger) rewriteRecord(ctx context.Context, promotionID, app, release string) error {
-	for range casAttempts {
+	for retry := range casAttempts {
+		if err := l.WaitToRetry(ctx, retry); err != nil {
+			return err
+		}
 		stored, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.releaseKey(app, release))
 		if err != nil {
 			return fmt.Errorf("read the release record %s/%s: %w", app, release, err)

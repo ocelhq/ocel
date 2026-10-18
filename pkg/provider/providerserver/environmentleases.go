@@ -401,6 +401,8 @@ func (h *handlers) RenewDeployLease(ctx context.Context, req *contractv1.RenewDe
 }
 
 func (h *handlers) AbandonDeploy(ctx context.Context, req *contractv1.AbandonDeployRequest) (*contractv1.AbandonDeployResponse, error) {
+	ctx, stop := newCleanupCallContext(ctx)
+	defer stop()
 	p, scope, err := h.readLeaseScope(req.GetSlug(), req.GetEnvironment())
 	if err != nil {
 		return nil, err

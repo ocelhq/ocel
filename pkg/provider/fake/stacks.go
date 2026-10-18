@@ -24,14 +24,15 @@ type Stacks struct {
 	journal    *Journal
 	refusal    error
 
-	mu            sync.Mutex
-	stacks        map[string]provider.StackResult
-	provisioned   []provider.StackSpec
-	taken         []string
-	destroyedWith []provider.ImageStore
-	entered       func(provider.StackSpec) error
-	destroying    func(provider.StackRef) error
-	teardown      func(provider.StackRef) provider.Plan
+	mu             sync.Mutex
+	stacks         map[string]provider.StackResult
+	provisioned    []provider.StackSpec
+	taken          []string
+	destroyedWith  []provider.ImageStore
+	leasedDestroys []string
+	entered        func(provider.StackSpec) error
+	destroying     func(provider.StackRef) error
+	teardown       func(provider.StackRef) provider.Plan
 
 	routeTables          map[string][]byte
 	withholdsRouteTables bool
@@ -163,10 +164,19 @@ func (r *Stacks) DestroyedWith() []provider.ImageStore {
 	return slices.Clone(r.destroyedWith)
 }
 
-func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
+func (r *Stacks) ListDestroysUnderLease() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.leasedDestroys)
+}
+
+func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	destroying := r.destroying
+	if provider.HasLease(ctx, ref) {
+		r.leasedDestroys = append(r.leasedDestroys, ref.Name.String())
+	}
 	r.mu.Unlock()
 	if destroying != nil {
 		if err := destroying(ref); err != nil {
