@@ -221,3 +221,15 @@ func TestTheDigestKeyIsBoundAsItsTiersEnvSourceDigestKey(t *testing.T) {
 		t.Fatalf("EnsureDigestKey() = %v, want the key sealed as the production env source digest key to open: every value an env source copied is versioned under it", err)
 	}
 }
+
+func TestADigestKeySixWritersRaceToTheEntryIsStillMinted(t *testing.T) {
+	t.Parallel()
+	store := variablestore.Store{
+		KeyValues: &racedWrites{Store: fake.NewKeyValues(), root: envsource.RootDigestKey, left: racingWriters},
+		Cipher:    fake.NewCipher(),
+	}
+
+	if _, err := envsource.EnsureDigestKey(context.Background(), store, environment.TierProduction); err != nil {
+		t.Fatalf("EnsureDigestKey() raced by %d writers = %v, want the key minted: parallel deploys of one tier race to it", racingWriters, err)
+	}
+}

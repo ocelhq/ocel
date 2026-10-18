@@ -33,6 +33,8 @@ var ErrStale = errors.New("the entry moved since it was read")
 
 var ErrNotFound = errors.New("no such entry")
 
+var ErrContended = errors.New("the entry was rewritten under every attempt to read and write it")
+
 type Root string
 
 type Partition struct {
@@ -234,25 +236,35 @@ func Change(ctx context.Context, store Store, key Key, change func(recorded Entr
 }
 
 func untilCurrent(ctx context.Context, store Store, key Key, act string, apply func(recorded Entry, found bool) (stale bool, err error)) error {
-	for attempt := range currentAttempts {
-		if err := waitForRacingWriter(ctx, attempt); err != nil {
-			return err
-		}
+	err := RetryWhileStale(ctx, func() (bool, error) {
 		recorded, err := store.Read(ctx, key)
 		found := err == nil
 		if errors.Is(err, ErrNotFound) {
 			recorded, err = Entry{}, nil
 		}
 		if err != nil {
-			return fmt.Errorf("read %s: %w", key, err)
+			return false, fmt.Errorf("read %s: %w", key, err)
 		}
 		recorded.Key = key
-		if stale, err := apply(recorded, found); !stale {
+		return apply(recorded, found)
+	})
+	if errors.Is(err, ErrContended) {
+		return fmt.Errorf("%s was rewritten between every read of it and the %s that followed, %d times over. "+
+			"Something is still writing that entry: %w", key, act, currentAttempts, err)
+	}
+	return err
+}
+
+func RetryWhileStale(ctx context.Context, attempt func() (stale bool, err error)) error {
+	for n := range currentAttempts {
+		if err := waitForRacingWriter(ctx, n); err != nil {
+			return err
+		}
+		if stale, err := attempt(); !stale {
 			return err
 		}
 	}
-	return fmt.Errorf("%s was rewritten between every read of it and the %s that followed, %d times over. "+
-		"Something is still writing that entry", key, act, currentAttempts)
+	return ErrContended
 }
 
 const currentAttempts = 10

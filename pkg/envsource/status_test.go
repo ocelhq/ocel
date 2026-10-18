@@ -248,3 +248,39 @@ func TestAStatusRewrittenUnderEveryAttemptToRecordItIsAnError(t *testing.T) {
 		t.Fatal("CopyProject() whose status was rewritten under every attempt = nil, want the lost status reported")
 	}
 }
+
+const racingWriters = 6
+
+type racedWrites struct {
+	records.Store
+
+	mu   sync.Mutex
+	root records.Root
+	left int
+}
+
+func (r *racedWrites) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
+	r.mu.Lock()
+	raced := entry.Key.Partition.Root == r.root && r.left > 0
+	if raced {
+		r.left--
+	}
+	r.mu.Unlock()
+	if raced {
+		return "", records.ErrStale
+	}
+	return r.Store.Write(ctx, entry)
+}
+
+func TestAStatusSixWritersRaceToTheEntryIsStillRecorded(t *testing.T) {
+	t.Parallel()
+	sync, store, infisical, host, _ := syncFixture(t)
+	infisical.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	registration := infisicalRegistration("shop", host, cloudIdentity, "")
+	register(t, store, registration)
+	sync.Store.KeyValues = &racedWrites{Store: store.KeyValues, root: envsource.RootStatus, left: racingWriters}
+
+	if _, err := sync.CopyProject(context.Background(), registration); err != nil {
+		t.Fatalf("CopyProject() whose status %d writers raced = %v, want the sync's outcome recorded", racingWriters, err)
+	}
+}

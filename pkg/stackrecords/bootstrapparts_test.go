@@ -3,12 +3,14 @@ package stackrecords_test
 import (
 	"context"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -199,5 +201,37 @@ func TestReleasingAClaimForgetsItButLeavesAPartAnotherRunMadeReady(t *testing.T)
 	}
 	if read, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, "containers"); err != nil || !present || read.State != stackrecords.PartReady {
 		t.Errorf("ReadBootstrapPart() = %+v, %v, %v, want the ready part kept", read, present, err)
+	}
+}
+
+const racingWriters = 6
+
+type racedWrites struct {
+	records.Store
+
+	mu   sync.Mutex
+	left int
+}
+
+func (r *racedWrites) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
+	r.mu.Lock()
+	raced := r.left > 0
+	if raced {
+		r.left--
+	}
+	r.mu.Unlock()
+	if raced {
+		return "", records.ErrStale
+	}
+	return r.Store.Write(ctx, entry)
+}
+
+func TestAPartSixWritersRaceToClaimAndForgetIsStillClaimed(t *testing.T) {
+	t.Parallel()
+	store := &racedWrites{Store: fake.NewKeyValues(), left: racingWriters}
+
+	_, claimed, err := stackrecords.ClaimBootstrapPart(context.Background(), store, environment.TierProduction, "containers", claimOf("web"))
+	if err != nil || !claimed {
+		t.Fatalf("ClaimBootstrapPart() raced by %d writers = %v, %v, want the part claimed: parallel bootstraps of one tier race to it", racingWriters, claimed, err)
 	}
 }

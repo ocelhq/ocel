@@ -222,3 +222,13 @@ func TestRegistrationsSkipsOneThatNoLongerDecodesAndReportsIt(t *testing.T) {
 		t.Fatalf("Registrations() = %+v, want admin alone", all)
 	}
 }
+
+func TestARegistrationSixWritersRaceToTheEntryIsStillRecorded(t *testing.T) {
+	t.Parallel()
+	store, _ := storeFixture()
+	store.KeyValues = &racedWrites{Store: store.KeyValues, root: envsource.RootRegistrations, left: racingWriters}
+
+	if _, err := envsource.Register(context.Background(), store, environment.TierProduction, infisicalRegistration("shop", "https://infisical.example.com", cloudIdentity, "")); err != nil {
+		t.Fatalf("Register() raced by %d writers = %v, want the registration recorded: parallel deploys of one project race to it", racingWriters, err)
+	}
+}

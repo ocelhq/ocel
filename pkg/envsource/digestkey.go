@@ -20,10 +20,9 @@ import (
 )
 
 const (
-	digestKeyBytes    = 32
-	digestBytes       = 16
-	digestKeyAttempts = 3
-	digestKeyName     = "digestkey"
+	digestKeyBytes = 32
+	digestBytes    = 16
+	digestKeyName  = "digestkey"
 )
 
 type DigestKey struct {
@@ -43,36 +42,32 @@ func newDigestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
 }
 
 func EnsureDigestKey(ctx context.Context, store variablestore.Store, tier environment.Tier) (DigestKey, error) {
-	for range digestKeyAttempts {
-		recorded, err := records.ReadOrEmpty(ctx, store.KeyValues, digestKeyAt(tier))
-		if err != nil {
-			return DigestKey{}, err
-		}
+	var key DigestKey
+	err := records.Change(ctx, store.KeyValues, digestKeyAt(tier), func(recorded records.Entry) ([]byte, bool, error) {
 		if len(recorded.Value) > 0 {
-			return openDigestKey(ctx, store.Cipher, tier, recorded)
+			opened, err := openDigestKey(ctx, store.Cipher, tier, recorded)
+			key = opened
+			return nil, false, err
 		}
 		secret := make([]byte, digestKeyBytes)
 		if _, err := rand.Read(secret); err != nil {
-			return DigestKey{}, err
+			return nil, false, err
 		}
 		sealed, err := store.Cipher.Seal(ctx, tier, newDigestKeyAssociatedData(tier), secret)
 		if err != nil {
-			return DigestKey{}, fmt.Errorf("seal the %s env source digest key: %w", tier, err)
+			return nil, false, fmt.Errorf("seal the %s env source digest key: %w", tier, err)
 		}
-		recorded.Value, err = json.Marshal(sealedDigestKey{Sealed: sealed})
-		if err != nil {
-			return DigestKey{}, err
-		}
-		_, err = store.KeyValues.Write(ctx, recorded)
-		if errors.Is(err, records.ErrStale) {
-			continue
-		}
-		if err != nil {
-			return DigestKey{}, err
-		}
-		return DigestKey{secret: secret}, nil
+		value, err := json.Marshal(sealedDigestKey{Sealed: sealed})
+		key = DigestKey{secret: secret}
+		return value, true, err
+	})
+	if errors.Is(err, records.ErrContended) {
+		return DigestKey{}, fmt.Errorf("the %s env source digest key was rewritten under every attempt to read it", tier)
 	}
-	return DigestKey{}, fmt.Errorf("the %s env source digest key was rewritten under every attempt to read it", tier)
+	if err != nil {
+		return DigestKey{}, err
+	}
+	return key, nil
 }
 
 func ForgetDigestKey(ctx context.Context, store records.Store, tier environment.Tier) error {
