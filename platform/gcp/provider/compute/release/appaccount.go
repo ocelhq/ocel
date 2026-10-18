@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
@@ -51,14 +50,7 @@ func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Regist
 			grants.OnProject(grants.RecordsRole, member, variables.ProjectDatabaseCondition(c, spec.Ref.Tier, project)),
 			grants.OnProject(grants.OpeningRole, member, variables.ProjectKeyCondition(c, spec.Ref.Tier, project)))
 	}
-	if topic.ReachesTopics(spec.App) {
-		tasks, err := topic.Grants(ctx, c, spec, account, member, declared)
-		if err != nil {
-			return nil, err
-		}
-		granted = append(granted, tasks...)
-	}
-	held, err := registry.Grants(ctx, component.App{Clients: c, Spec: spec, Account: account, Member: member})
+	held, err := registry.Grants(ctx, component.App{Clients: c, Spec: spec, Account: account, Member: member, Topics: declared})
 	if err != nil {
 		return nil, err
 	}

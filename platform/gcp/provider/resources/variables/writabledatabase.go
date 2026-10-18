@@ -155,6 +155,10 @@ func fieldPath(database string, field LayoutField) string {
 }
 
 func TakeProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, log progress.Log) error {
+	return takeWritableDatabase(ctx, b, storesOf(b), tier, project, log)
+}
+
+func takeWritableDatabase(ctx context.Context, b bootstrap.Engine, stores projectStores, tier environment.Tier, project string, log progress.Log) error {
 	recorded, err := records.ReadOrEmpty(ctx, b.Records, writableDatabaseKey(tier, project))
 	if err != nil || len(recorded.Value) == 0 {
 		return err
@@ -162,7 +166,7 @@ func TakeProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, tier e
 	database := b.Clients.ProjectWritableDatabase(tier, project)
 	if !b.Clients.Emulated() {
 		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Deleting Firestore database %s, which kept the runs and tag records of %s in %s", database, project, tier))
-		if err := b.TakeDatabase(ctx, database); err != nil {
+		if err := stores.takeDatabase(ctx, database); err != nil {
 			return gcloud.ExplainMissingGrant(err, ProjectRecordsGrant(b.Clients.Names, b.Clients.Region))
 		}
 	}

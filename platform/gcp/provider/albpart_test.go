@@ -258,7 +258,7 @@ func failingALBTeardown(t *testing.T) (bootstrap.Engine, *countingFront) {
 		t.Fatal(err)
 	}
 	front.refusal = errors.New("google refused to delete the url map")
-	if err := removePartUser(ctx, b, environment.TierProduction, "shop", nil); err == nil {
+	if err := releaseALB(ctx, b, environment.TierProduction, "shop", nil); err == nil {
 		t.Fatal("removePartUser() with a failing teardown = nil, want the failure")
 	}
 	front.refusal = nil
@@ -319,7 +319,7 @@ func TestRemovingTheLastProjectAgainRetriesALoadBalancerTeardownThatFailed(t *te
 	ctx := context.Background()
 	tier := environment.TierProduction
 
-	if err := removePartUser(ctx, b, tier, "shop", nil); err != nil {
+	if err := releaseALB(ctx, b, tier, "shop", nil); err != nil {
 		t.Fatalf("removePartUser() again = %v", err)
 	}
 	if users, _ := albpart.ListUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {
@@ -405,7 +405,7 @@ func TestRemovingAProjectWhoseOnlyALBDeployFailedTakesItsLoadBalancerDown(t *tes
 		t.Fatal(err)
 	}
 
-	if err := removePartUser(ctx, b, tier, "shop", nil); err != nil {
+	if err := releaseALB(ctx, b, tier, "shop", nil); err != nil {
 		t.Fatalf("removePartUser() = %v", err)
 	}
 	if users, _ := albpart.ListUsers(ctx, b, tier); !slices.Equal(front.torn, []environment.Tier{tier}) || len(users) != 0 {

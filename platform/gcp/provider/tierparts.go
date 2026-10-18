@@ -3,14 +3,12 @@ package gcp
 import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bastion"
+	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/realtime"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 )
 
 func tierParts() []bootstrap.RemovablePart {
@@ -22,12 +20,8 @@ func tierParts() []bootstrap.RemovablePart {
 	}
 }
 
-func tierAccounts() []bootstrap.Account {
-	return []bootstrap.Account{
-		envsource.Account,
-		{Name: names.Names.PushAccount, Purpose: task.PushPurpose},
-		{Name: names.Names.RealtimeAccount, Purpose: realtime.Purpose},
-	}
+func tierAccounts(registry component.Registry) []bootstrap.Account {
+	return append([]bootstrap.Account{envsource.Account}, registry.Accounts()...)
 }
 
 func tierFronts() bootstrap.FrontParts { return cloudflareorigin.FrontParts }

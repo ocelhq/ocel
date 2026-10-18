@@ -232,6 +232,35 @@ func TestStoppingTheGatewayClosesItsBus(t *testing.T) {
 	}
 }
 
+type closeWatchingBus struct {
+	*gateway.MemoryBus
+	closing chan error
+}
+
+func (b *closeWatchingBus) Close(ctx context.Context) error {
+	b.closing <- ctx.Err()
+	return nil
+}
+
+func TestStoppingTheGatewayClosesItsBusWithoutWaitingForASocketThatNeverAnswersTheClose(t *testing.T) {
+	t.Parallel()
+
+	key := newKey(t)
+	bus := &closeWatchingBus{MemoryBus: gateway.NewMemoryBus(), closing: make(chan error, 1)}
+	address, stop := startGatewayOn(t, map[string]ed25519.PrivateKey{"app": key}, bus)
+	connect(t, address, mint(t, key, "app", token.Connect, "/app", "u1"))
+
+	go func() { _ = stop() }()
+	select {
+	case err := <-bus.closing:
+		if err != nil {
+			t.Errorf("the bus was closed on a context already %v, want time left to delete its subscription", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("the bus was not closed while a socket held out against the close handshake, and its subscription is stranded once the stop window runs out")
+	}
+}
+
 func TestStoppingTheGatewayClosesItsSocketsGoingAway(t *testing.T) {
 	t.Parallel()
 

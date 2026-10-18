@@ -63,12 +63,16 @@ func ProjectKeyCondition(c *gcloud.Clients, tier environment.Tier, project strin
 	}
 }
 
-func TierRecordsCondition(c *gcloud.Clients, tier environment.Tier) *policy.Condition {
-	return &policy.Condition{
-		Title: "ocel " + string(c.Namespace()) + " " + string(tier) + " records",
-		Expression: fmt.Sprintf("resource.name == %q || resource.name.startsWith(%q)",
-			bootstrap.DatabasePath(c, c.Database()), bootstrap.DatabasePath(c, c.ProjectDatabasePrefix(tier))),
+func RecordsCondition(c *gcloud.Clients, tiers ...environment.Tier) *policy.Condition {
+	clauses := []string{fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.Database()))}
+	for _, tier := range tiers {
+		clauses = append(clauses, fmt.Sprintf("resource.name.startsWith(%q)", bootstrap.DatabasePath(c, c.ProjectDatabasePrefix(tier))))
 	}
+	title := "ocel " + string(c.Namespace()) + " records"
+	if len(tiers) == 1 {
+		title = "ocel " + string(c.Namespace()) + " " + string(tiers[0]) + " records"
+	}
+	return &policy.Condition{Title: title, Expression: strings.Join(clauses, " || ")}
 }
 
 func projectKeysCondition(c *gcloud.Clients, tier environment.Tier) *policy.Condition {

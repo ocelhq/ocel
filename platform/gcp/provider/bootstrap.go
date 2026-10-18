@@ -6,9 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
@@ -41,7 +39,7 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, err
 		WrittenBy:      g.p.writtenBy,
 		Surveyed:       &g.p.surveyed,
 		Removable:      tierParts(),
-		Accounts:       tierAccounts(),
+		Accounts:       tierAccounts(g.p.components()),
 		FrontParts:     tierFronts(),
 		TakeRecords:    variables.TakeProjectRecords,
 		SweepAccounts:  release.DeleteUnusedAccounts,
@@ -107,13 +105,5 @@ func (p *Provider) removePartUser(ctx context.Context, tier environment.Tier, pr
 	if err := variables.TakeProjectWritableDatabase(ctx, b, tier, project, progress); err != nil {
 		return err
 	}
-	consumer, err := records.ReadOrEmpty(ctx, p.KeyValues(), albpart.ConsumerAt(tier, project))
-	if err != nil || len(consumer.Value) == 0 {
-		return err
-	}
-	return removePartUser(ctx, b, tier, project, progress)
-}
-
-func removePartUser(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, progress progress.Log) error {
-	return albpart.Release(ctx, b, tier, project, true, progress)
+	return releaseALB(ctx, b, tier, project, progress)
 }

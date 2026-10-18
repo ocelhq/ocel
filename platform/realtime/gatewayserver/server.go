@@ -148,7 +148,9 @@ func serve(ctx context.Context, listener net.Listener, cfg config, bus Bus) erro
 	}
 	grace, cancel := context.WithTimeout(context.WithoutCancel(ctx), stopGrace)
 	defer cancel()
-	stopped := errors.Join(server.Shutdown(grace), realtime.Close(grace), bus.Close(grace))
+	busClosed := make(chan error, 1)
+	go func() { busClosed <- bus.Close(grace) }()
+	stopped := errors.Join(server.Shutdown(grace), realtime.Close(grace), <-busClosed)
 	if failed != nil && !errors.Is(failed, http.ErrServerClosed) {
 		return errors.Join(failed, stopped)
 	}
