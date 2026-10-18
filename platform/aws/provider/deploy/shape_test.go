@@ -19,7 +19,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
+	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 var pulumiTokens = map[string]string{
@@ -143,7 +150,7 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 		}
 	}
 	cfg, appSpec := appStackSpec(t)
-	appWork, err := releasing(t, cfg).appWork(appSpec, nil, nil, appBundle{}, stagedOf(appSpec))
+	appWork, err := releasing(t, cfg).appWork(appSpec, nil, nil, variables.Bundle{}, stagedOf(appSpec))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,11 +167,11 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 	topicsRelease := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
 	req := shapeRequest(t)
 	run("topics", func(pctx *pulumi.Context) error {
-		return topicsRelease.declareTopics(pctx, "shop", "prod", req.Resources)
+		return declareTopicsAndTasks(pctx, topicsRelease, "shop", "prod", req.Resources)
 	})
 	hosted := &workersWork{
-		project: "shop", stack: workersStack("prod", "web"), topics: topicsOf("shop", "prod", req.Resources), workers: req.Deploy.Apps[0].Workers,
-		args: functionArgs{Runtime: defaultFunctionRuntime, Arch: "arm64", MemorySizeMB: 1024}, role: executionRole{App: "web", Boundary: testBoundaryARN, Path: testAppRolePath},
+		project: "shop", stack: workersStack("prod", "web"), topics: topic.Of("shop", "prod", req.Resources), workers: req.Deploy.Apps[0].Workers,
+		args: functionArgs{Runtime: defaultFunctionRuntime, Arch: "arm64", MemorySizeMB: 1024}, role: executionRole{App: "web", Boundary: componenttest.BoundaryARN, Path: componenttest.AppRolePath},
 		region: "us-east-1", account: mockAccount, table: testStateTableARN, prefix: naming.TaskKeyPrefix("shop", "prod"), group: queues.ScheduleGroupName("shop", "prod"),
 	}
 	run("workers", hosted.run)
@@ -185,20 +192,27 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 	}
 	run("container-workers", containerWorkers.run)
 	run(naming.InfraApp, func(pctx *pulumi.Context) error {
-		if err := registerPostgres(pctx, "shop", "prod", "main", translatePostgres(nil), "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
-			return err
+		registry := awsresources.Registry(awsresources.Clients{
+			Artifacts:   component.Artifacts{Objects: &fakeArtifactStore{exists: map[string]bool{}}, Bucket: "ocel-artifacts"},
+			KVTokens:    kv.Tokens{Parameters: newFakeParameters(), Root: "/ocel/kv"},
+			SigningKeys: realtime.Keys{SigningKeys: newFakeSigningKeys(), Root: "/ocel/realtime"},
+		})
+		at := component.Stack{
+			Project: "shop", Env: "prod", StateTable: "ocel-state", StateTableARN: testStateTableARN,
+			AppBoundaryARN: containerCfg.AppBoundaryARN, AppRolePath: containerCfg.AppRolePath,
+			Network:    component.Network{VPCID: "vpc-1", VPCCIDR: "10.0.0.0/16", SubnetIDs: []string{"subnet-a"}},
+			Transforms: (*transformPatches)(nil),
+			Resources:  req.Resources,
 		}
-		store, err := translateKV("cache", nil)
-		if err != nil {
-			return err
+		for _, declaring := range registry.Components() {
+			if slices.Contains(declaring.Types, provider.BindingTopic) || slices.Contains(declaring.Types, provider.BindingTask) {
+				continue
+			}
+			if err := declaring.Declare(pctx, at, declaring.Declared(req.Resources)); err != nil {
+				return err
+			}
 		}
-		if err := registerKV(pctx, "shop", "prod", "cache", store, "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
-			return err
-		}
-		if err := registerRealtime(pctx, "shop", "prod", testRealtimeArgs()); err != nil {
-			return err
-		}
-		return registerBucket(pctx, "shop", "prod", "uploads", translateBucket(nil), "ocel-state", containerCfg.AppBoundaryARN, containerCfg.AppRolePath, newSessionScope("shop", "prod", "arn"), testUploadCompleter())
+		return nil
 	})
 
 	return rec
@@ -279,8 +293,8 @@ func TestEveryRoleTheProgramsMintSitsUnderTheTiersAppRolePath(t *testing.T) {
 	}
 	for _, name := range roles {
 		path := rec.recorded["aws:iam/role:Role::"+name]["path"]
-		if !path.IsString() || path.StringValue() != testAppRolePath {
-			t.Errorf("role %s has path %v, want %q: a credential passes an app role only under its own tier's path", name, path, testAppRolePath)
+		if !path.IsString() || path.StringValue() != componenttest.AppRolePath {
+			t.Errorf("role %s has path %v, want %q: a credential passes an app role only under its own tier's path", name, path, componenttest.AppRolePath)
 		}
 	}
 }

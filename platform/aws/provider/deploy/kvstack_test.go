@@ -7,6 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
+
+	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -14,19 +19,20 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 const conformanceKVTokenRoot = "/ocel/kv"
 
 func conformanceKVToken(name string) string {
-	return kvTokenParameter(conformanceKVTokenRoot, "conformance", "conformance", name)
+	return kv.TokenParameter(conformanceKVTokenRoot, "conformance", "conformance", name)
 }
 
 func kvOutput(name string) auto.OutputValue {
 	return auto.OutputValue{Value: map[string]any{
-		outputKeyHost:               "master.ocel-app-conformance-" + name + ".abc123.euw1.cache.amazonaws.com",
-		outputKeyPort:               float64(6379),
-		outputKeyAuthTokenParameter: conformanceKVToken(name),
+		component.OutputKeyHost:        "master.ocel-app-conformance-" + name + ".abc123.euw1.cache.amazonaws.com",
+		component.OutputKeyPort:        float64(6379),
+		kv.OutputKeyAuthTokenParameter: conformanceKVToken(name),
 	}}
 }
 
@@ -75,7 +81,7 @@ func TestAStoreRemovedFromTheStackHasItsTokenDeletedOnceTheDeployLands(t *testin
 	engine := &mockedEngine{outputs: auto.OutputMap{
 		"c-kv":     kvOutput("c-kv"),
 		"c-kept":   kvOutput("c-kept"),
-		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "conformance-uploads"}},
+		"c-bucket": auto.OutputValue{Value: map[string]any{bucket.OutputKeyBucket: "conformance-uploads"}},
 	}}
 	if _, err := kvStacks(engine, params).Provision(context.Background(), provider.StackSpec{
 		Ref:      conformanceInfra,
@@ -123,7 +129,7 @@ func TestDestroyingAStackDeletesTheTokensOfItsStores(t *testing.T) {
 	params.values[conformanceKVToken("c-kv")] = "the-token"
 	engine := &mockedEngine{outputs: auto.OutputMap{
 		"c-kv":     kvOutput("c-kv"),
-		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "conformance-uploads"}},
+		"c-bucket": auto.OutputValue{Value: map[string]any{bucket.OutputKeyBucket: "conformance-uploads"}},
 	}}
 	if err := kvStacks(engine, params).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
@@ -139,11 +145,11 @@ func TestATokenLeftByAFailedFirstDeployIsDeletedByTheNextDeployThatDropsTheStore
 	params := newFakeParameters()
 	params.values[conformanceKVToken("c-kv")] = "minted-before-the-deploy-failed"
 	params.values[conformanceKVToken("c-kept")] = "the-kept-token"
-	otherEnv := kvTokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
+	otherEnv := kv.TokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
 	params.values[otherEnv] = "another-environments-token"
 	engine := &mockedEngine{outputs: auto.OutputMap{
 		"c-kept":   kvOutput("c-kept"),
-		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "conformance-uploads"}},
+		"c-bucket": auto.OutputValue{Value: map[string]any{bucket.OutputKeyBucket: "conformance-uploads"}},
 	}}
 	if _, err := kvStacks(engine, params).Provision(context.Background(), provider.StackSpec{
 		Ref:      conformanceInfra,
@@ -173,7 +179,7 @@ func TestDestroyingAStackDeletesEveryTokenUnderItsEnvironmentAndNoOther(t *testi
 		want = append(want, name)
 	}
 	slices.Sort(want)
-	otherEnv := kvTokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
+	otherEnv := kv.TokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
 	params.values[otherEnv] = "another-environments-token"
 	engine := &mockedEngine{outputs: auto.OutputMap{}}
 	if err := kvStacks(engine, params).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {
@@ -213,7 +219,7 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 			"multiAzEnabled":           false,
 		}
 	}}
-	transformed, err := transformStackSpec(context.Background(), pass, provider.StackSpec{
+	transformed, err := transformStackSpec(context.Background(), pass, awsresources.Registry(awsresources.Clients{}), provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
 		Recorded:  true,
@@ -224,7 +230,7 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 	}
 
 	rendered := sdk.Map{}
-	for field, value := range registeredKV(t, "shop").inputsOf(t, tokenElastiCacheReplicationGroup, "kv-cache").Mappable() {
+	for field, value := range registeredKV(t, "shop").InputsOf(t, component.TokenElastiCacheReplicationGroup, "kv-cache").Mappable() {
 		switch scalar := value.(type) {
 		case string:
 			rendered[field] = sdk.String(scalar)
@@ -234,8 +240,8 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 			rendered[field] = sdk.Bool(scalar)
 		}
 	}
-	transformed.claimed = map[resourceRef]bool{}
-	merged, claimed := transformed.claim(resourceRef{Token: tokenElastiCacheReplicationGroup, Name: "kv-c-kv"}, rendered)
+	transformed.claimed = map[component.ResourceRef]bool{}
+	merged, claimed := transformed.claim(component.ResourceRef{Token: component.TokenElastiCacheReplicationGroup, Name: "kv-c-kv"}, rendered)
 	if !claimed {
 		t.Fatal("the patch reached no replication group ocel constructs")
 	}

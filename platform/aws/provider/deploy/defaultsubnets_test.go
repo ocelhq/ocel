@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 )
 
 type subnetLookups struct {
@@ -42,7 +43,7 @@ func (s *subnetLookups) filtered() [][]string {
 func TestTheContainerInfraLooksOnlyInTheDefaultSubnetsOfTheDefaultVPC(t *testing.T) {
 	t.Parallel()
 
-	work := &containerInfraWork{tier: environment.TierProduction, boundary: testBoundaryARN, tags: containerInfraTags(environment.TierProduction)}
+	work := &containerInfraWork{tier: environment.TierProduction, boundary: componenttest.BoundaryARN, tags: containerInfraTags(environment.TierProduction)}
 	lookups := &subnetLookups{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", lookups)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)

@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 const (
@@ -170,7 +171,7 @@ func provisionFunctionNetwork(ctx context.Context, owner *release, ref provider.
 	}); err != nil {
 		return functionNetwork{}, err
 	}
-	outputs, err := owner.automation.Run(ctx, ref, stackProgram{run: work.run, tags: work.tags}, provider.Lease{}, progress)
+	outputs, err := owner.automation.Run(ctx, ref, component.Program{Run: work.run, Tags: work.tags}, provider.Lease{}, progress)
 	if err != nil {
 		return functionNetwork{}, fmt.Errorf("provision the shared function network for the %s tier: %w", tier, err)
 	}
@@ -448,10 +449,10 @@ func decodeFunctionNetwork(outputs auto.OutputMap) (functionNetwork, error) {
 	}
 	var network functionNetwork
 	var err error
-	if network.SecurityGroup, err = requireStringField(fields, FunctionNetworkSlug, outputKeyFunctionSecurity); err != nil {
+	if network.SecurityGroup, err = component.RequireStringField(fields, FunctionNetworkSlug, outputKeyFunctionSecurity); err != nil {
 		return functionNetwork{}, err
 	}
-	encoded, err := requireStringField(fields, FunctionNetworkSlug, outputKeyPrivateSubnets)
+	encoded, err := component.RequireStringField(fields, FunctionNetworkSlug, outputKeyPrivateSubnets)
 	if err != nil {
 		return functionNetwork{}, err
 	}

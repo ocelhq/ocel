@@ -55,7 +55,7 @@ func newAPIHosts(read func(ctx context.Context, apiID string) (string, error)) *
 	return &apiHosts{read: read, found: map[string]string{}}
 }
 
-func (h *apiHosts) find(ctx context.Context, apiID string) (string, error) {
+func (h *apiHosts) load(ctx context.Context, apiID string) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if host, found := h.found[apiID]; found {
@@ -97,7 +97,7 @@ func (a *authorizer) verify(ctx context.Context, req authorizationRequest) error
 	default:
 		return fmt.Errorf("operation %q is the app role's alone", req.RequestContext.Operation)
 	}
-	host, err := a.hosts.find(ctx, req.RequestContext.APIID)
+	host, err := a.hosts.load(ctx, req.RequestContext.APIID)
 	if err != nil {
 		return fmt.Errorf("read the host of api %s: %w", req.RequestContext.APIID, err)
 	}

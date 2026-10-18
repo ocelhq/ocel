@@ -13,7 +13,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
-	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -25,6 +25,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -35,7 +37,6 @@ const (
 	ContainersPart    = "containers"
 	ContainersSummary = "the load balancer and cluster every container app in the tier runs behind"
 
-	ecsTasksPrincipal         = "ecs-tasks.amazonaws.com"
 	ecsTaskExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 	containerLogRetentionDays = 14
 	originListenerPort        = 80
@@ -200,7 +201,7 @@ func provisionContainerInfra(ctx context.Context, owner *release, ref provider.S
 	}); err != nil {
 		return containerInfra{}, err
 	}
-	outputs, err := owner.automation.Run(ctx, ref, stackProgram{run: work.run, tags: work.tags}, provider.Lease{}, progress)
+	outputs, err := owner.automation.Run(ctx, ref, component.Program{Run: work.run, Tags: work.tags}, provider.Lease{}, progress)
 	if err != nil {
 		return containerInfra{}, fmt.Errorf("provision the shared container infrastructure for the %s tier: %w", tier, err)
 	}
@@ -283,7 +284,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
 	}
-	subnetIDs, err := lookupDefaultSubnets(ctx, vpc.Id)
+	subnetIDs, err := component.LookupDefaultSubnets(ctx, vpc.Id)
 	if err != nil {
 		return err
 	}
@@ -406,10 +407,10 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 
-	execution, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, "execution"), &iam.RoleArgs{
+	execution, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRole, "execution"), &awsiam.RoleArgs{
 		NamePrefix:          pulumi.String(containerInfraName(tier, "exec") + naming.WordSeparator),
 		Description:         pulumi.String("Ocel: the role ECS pulls every container app's image and ships its logs with in the " + string(tier) + " tier"),
-		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
+		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.ECSTasksPrincipal)),
 		PermissionsBoundary: pulumi.String(w.boundary),
 		Path:                pulumi.String(w.rolePath),
 		Tags:                tags,
@@ -417,7 +418,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, "execution", "policy", "ecs"), &iam.RolePolicyAttachmentArgs{
+	if _, err := awsiam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, "execution", "policy", "ecs"), &awsiam.RolePolicyAttachmentArgs{
 		Role:      execution.Name,
 		PolicyArn: pulumi.String(ecsTaskExecutionPolicyARN),
 	}); err != nil {
@@ -476,14 +477,14 @@ func decodeContainerInfra(outputs auto.OutputMap) (containerInfra, error) {
 		outputKeyExecutionRole: &infra.ExecutionRole,
 		outputKeyLogGroup:      &infra.LogGroup,
 	} {
-		if *into, err = requireStringField(fields, ContainersSlug, key); err != nil {
+		if *into, err = component.RequireStringField(fields, ContainersSlug, key); err != nil {
 			return containerInfra{}, err
 		}
 	}
 	infra.PublicListener, _ = fields[outputKeyPublicListener].(string)
 	infra.PublicHost, _ = fields[outputKeyPublicHost].(string)
 	infra.PublicRanges, _ = fields[outputKeyPublicRanges].(string)
-	encoded, err := requireStringField(fields, ContainersSlug, outputKeySubnets)
+	encoded, err := component.RequireStringField(fields, ContainersSlug, outputKeySubnets)
 	if err != nil {
 		return containerInfra{}, err
 	}

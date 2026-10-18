@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket/dataplane"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
@@ -29,7 +29,7 @@ func main() {
 	lambda.Start(completer.Handle)
 }
 
-func newUploadCompleter(ctx context.Context, getenv func(string) string) (*bucket.UploadCompleter, error) {
+func newUploadCompleter(ctx context.Context, getenv func(string) string) (*dataplane.UploadCompleter, error) {
 	table := getenv(stateTableEnvVar)
 	if table == "" {
 		return nil, fmt.Errorf("%s is not set, so the sessions this bucket's uploads complete have nowhere to be read from", stateTableEnvVar)
@@ -42,7 +42,7 @@ func newUploadCompleter(ctx context.Context, getenv func(string) string) (*bucke
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
-	return bucket.NewUploadCompleter(bucket.UploadCompleterConfig{
+	return dataplane.NewUploadCompleter(dataplane.UploadCompleterConfig{
 		DDB:              dynamodb.NewFromConfig(cfg),
 		Tagger:           s3.NewFromConfig(cfg),
 		Table:            table,

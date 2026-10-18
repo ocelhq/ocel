@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 func TestTheVariablesKeyStackMakesNoEnvSourceSync(t *testing.T) {
@@ -60,8 +61,8 @@ func TestTheDeployCredentialMakesMovesForwardAndRemovesItsTiersEnvSourceSync(t *
 			{"iam:CreateRole", roleARN(names.Role), creating},
 			{"iam:CreateRole", roleARN(names.ScheduleRole), creating},
 			{"iam:PutRolePolicy", roleARN(names.Role), made},
-			{"iam:PassRole", roleARN(names.Role), requestContext{"iam:PassedToService": LambdaServicePrincipal}},
-			{"iam:PassRole", roleARN(names.ScheduleRole), requestContext{"iam:PassedToService": schedulerServicePrincipal}},
+			{"iam:PassRole", roleARN(names.Role), requestContext{"iam:PassedToService": iam.LambdaPrincipal}},
+			{"iam:PassRole", roleARN(names.ScheduleRole), requestContext{"iam:PassedToService": iam.SchedulerPrincipal}},
 			{"iam:DeleteRolePolicy", roleARN(names.Role), made},
 			{"iam:ListRolePolicies", roleARN(names.Role), made},
 			{"iam:DeleteRole", roleARN(names.ScheduleRole), made},

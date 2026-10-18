@@ -1,0 +1,353 @@
+package bucket
+
+import (
+	"encoding/json"
+	"reflect"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+)
+
+func testUploadCompleter() payloads.Placement {
+	return payloads.Placement{
+		Bucket: "ocel-artifacts",
+		Key:    payloads.Key(UploadCompleterKeyPrefix, "d0d0"),
+		SHA256: "d0d0",
+	}
+}
+
+func TestBucketComponentTags(t *testing.T) {
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		err := register(ctx, "shop", "prod", "bucket--uploads", translate(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", componenttest.AppRolePath, NewSessions("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		return err
+	})
+
+	cases := []struct {
+		typeToken string
+		name      string
+		want      string
+	}{
+		{"aws:s3/bucketV2:BucketV2", "bucket-uploads", naming.KindBucket.Component()},
+		{"aws:iam/role:Role", "bucket-uploads-upload-completer-role", naming.KindRole.Component()},
+		{"aws:lambda/function:Function", "bucket-uploads-upload-completer", naming.KindUploadCompleter.Component()},
+	}
+	for _, tc := range cases {
+		if got := rec.Component(t, tc.typeToken, tc.name); got != tc.want {
+			t.Errorf("%s on %s = %q, want %q", component.TagComponent, tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestBucketUploadCompleterDescriptionFitsLambda(t *testing.T) {
+	long := strings.Repeat("storefront-", 40)
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		return register(ctx, long, "prod", "bucket--uploads", translate(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", componenttest.AppRolePath, NewSessions(long, "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+	})
+
+	got := rec.InputsOf(t, "aws:lambda/function:Function", "bucket-uploads-upload-completer")["description"].StringValue()
+	if len(got) != component.MaxDescriptionLen {
+		t.Errorf("upload completer description is %d chars, want it clamped to the %d Lambda accepts", len(got), component.MaxDescriptionLen)
+	}
+}
+
+func TestBucketResourceIDs(t *testing.T) {
+	t.Parallel()
+
+	at := component.ResourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
+
+	cases := map[string]string{
+		"bucket-uploads":                              naming.ResourceID(at.Kind, at.Name),
+		"bucket-uploads-public-access-block":          naming.ResourceID(at.Kind, at.Name, "public-access-block"),
+		"bucket-uploads-cors":                         naming.ResourceID(at.Kind, at.Name, "cors"),
+		"bucket-uploads-upload-completer":             naming.ResourceID(at.Kind, at.Name, "upload-completer"),
+		"bucket-uploads-upload-completer-permission":  naming.ResourceID(at.Kind, at.Name, "upload-completer-permission"),
+		"bucket-uploads-notification":                 naming.ResourceID(at.Kind, at.Name, "notification"),
+		"bucket-uploads-upload-completer-logs-policy": naming.ResourceID(at.Kind, at.Name, "upload-completer-logs-policy"),
+	}
+	for want, got := range cases {
+		if got != want {
+			t.Errorf("resource id = %q, want %q", got, want)
+		}
+		if strings.Contains(got, "_") {
+			t.Errorf("resource id %q mixes alphabets; the deploy log is kebab throughout", got)
+		}
+	}
+}
+
+func TestBucketPhysicalPrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("includes the app scope, project, env and resource", func(t *testing.T) {
+		t.Parallel()
+
+		at := component.ResourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
+		if got, want := component.AppPhysicalPrefix(at, maxS3BucketPrefixLen), "ocel-app-shop-prod-uploads-"; got != want {
+			t.Errorf("appPhysicalPrefix() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("the bucket is created under the scope the deploy credential is allowed to reach", func(t *testing.T) {
+		t.Parallel()
+
+		rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+			return register(ctx, "shop", "prod", "bucket--uploads", translate(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", componenttest.AppRolePath, NewSessions("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		})
+		prefix := rec.InputsOf(t, "aws:s3/bucketV2:BucketV2", "bucket-uploads")["bucketPrefix"].StringValue()
+		if !strings.HasPrefix(prefix, awsports.AppScope+naming.WordSeparator) {
+			t.Errorf("bucket prefix = %q, want it under %s-, the only bucket names the deploy credential may create or delete", prefix, awsports.AppScope)
+		}
+	})
+
+	t.Run("fits the name AWS appends to", func(t *testing.T) {
+		t.Parallel()
+
+		at := component.ResourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "bucket--"+strings.Repeat("u", 30), naming.KindBucket)
+		got := component.AppPhysicalPrefix(at, maxS3BucketPrefixLen)
+		if len(got) > maxS3BucketPrefixLen {
+			t.Errorf("appPhysicalPrefix() = %q, length %d, want <= %d", got, len(got), maxS3BucketPrefixLen)
+		}
+		if len(got)+s3AutonameSuffixLen > maxS3BucketNameLen {
+			t.Errorf("appPhysicalPrefix() length %d leaves no room for the %d-character suffix within %d", len(got), s3AutonameSuffixLen, maxS3BucketNameLen)
+		}
+		for _, r := range got {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+				t.Fatalf("appPhysicalPrefix() = %q, contains %q, which S3 rejects", got, r)
+			}
+		}
+		if first := got[0]; (first < 'a' || first > 'z') && (first < '0' || first > '9') {
+			t.Errorf("appPhysicalPrefix() = %q, want a letter or digit first", got)
+		}
+	})
+
+	t.Run("two long names sharing a prefix stay distinct", func(t *testing.T) {
+		t.Parallel()
+
+		shared := strings.Repeat("uploads-", 6)
+		a := component.AppPhysicalPrefix(component.ResourceCoordinate("shop", "prod", "bucket--"+shared+"alpha", naming.KindBucket), maxS3BucketPrefixLen)
+		b := component.AppPhysicalPrefix(component.ResourceCoordinate("shop", "prod", "bucket--"+shared+"beta", naming.KindBucket), maxS3BucketPrefixLen)
+		if a == b {
+			t.Errorf("appPhysicalPrefix() collided: both %q", a)
+		}
+	})
+}
+
+func TestResourceCoordinate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("takes the local name from the logical name's fields", func(t *testing.T) {
+		t.Parallel()
+
+		at := component.ResourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
+		if at.Name != "uploads" {
+			t.Errorf("Name = %q, want %q", at.Name, "uploads")
+		}
+		if at.App != naming.InfraApp {
+			t.Errorf("App = %q, want %q — resources live on the environment's infra stack", at.App, naming.InfraApp)
+		}
+	})
+
+	t.Run("an unqualified logical name is its own local name", func(t *testing.T) {
+		t.Parallel()
+
+		at := component.ResourceCoordinate("shop", "prod", "uploads", naming.KindBucket)
+		if at.Name != "uploads" {
+			t.Errorf("Name = %q, want %q", at.Name, "uploads")
+		}
+	})
+}
+
+func TestBucketDescriptions(t *testing.T) {
+	t.Parallel()
+
+	at := component.ResourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
+	got := at.Description("upload completer for the " + at.Name + " bucket")
+	if !strings.HasPrefix(got, "shop / prod / infra") {
+		t.Errorf("Description() = %q, want it to open with the coordinate", got)
+	}
+	if !strings.Contains(got, "uploads") {
+		t.Errorf("Description() = %q, want it to name the bucket", got)
+	}
+}
+
+func TestTranslateBucket(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CORS from allowed origins", func(t *testing.T) {
+		t.Parallel()
+
+		origins := []string{"https://app.example.com", "https://www.example.com"}
+		got := translate(&provider.BucketSpec{AllowedOrigins: origins})
+
+		if !reflect.DeepEqual(got.AllowedOrigins, origins) {
+			t.Errorf("AllowedOrigins = %v, want %v (passed through for the upload completer allowlist)", got.AllowedOrigins, origins)
+		}
+		if !reflect.DeepEqual(got.CORS.AllowedOrigins, origins) {
+			t.Errorf("CORS.AllowedOrigins = %v, want the app's declared origins %v", got.CORS.AllowedOrigins, origins)
+		}
+		if !slices.Contains(got.CORS.AllowedMethods, "PUT") {
+			t.Errorf("CORS.AllowedMethods = %v, want it to permit browser PUT", got.CORS.AllowedMethods)
+		}
+		if len(got.CORS.AllowedHeaders) == 0 {
+			t.Error("CORS.AllowedHeaders is empty; the presigned PUT's signed headers need a preflight allow")
+		}
+		if got.CORS.MaxAgeSeconds != bucketCORSMaxAgeSeconds {
+			t.Errorf("CORS.MaxAgeSeconds = %d, want %d", got.CORS.MaxAgeSeconds, bucketCORSMaxAgeSeconds)
+		}
+	})
+
+	t.Run("notification and lambda args", func(t *testing.T) {
+		t.Parallel()
+
+		got := translate(&provider.BucketSpec{})
+
+		if !reflect.DeepEqual(got.NotificationEvents, []string{"s3:ObjectCreated:*"}) {
+			t.Errorf("NotificationEvents = %v, want [s3:ObjectCreated:*]", got.NotificationEvents)
+		}
+		if got.UploadCompleterRuntime != uploadCompleterRuntime {
+			t.Errorf("UploadCompleterRuntime = %q, want %q (Go custom runtime)", got.UploadCompleterRuntime, uploadCompleterRuntime)
+		}
+		if got.UploadCompleterHandler != uploadCompleterHandler {
+			t.Errorf("UploadCompleterHandler = %q, want %q", got.UploadCompleterHandler, uploadCompleterHandler)
+		}
+		if got.UploadCompleterTimeoutSeconds != uploadCompleterTimeoutSeconds {
+			t.Errorf("UploadCompleterTimeoutSeconds = %d, want %d", got.UploadCompleterTimeoutSeconds, uploadCompleterTimeoutSeconds)
+		}
+	})
+
+	t.Run("IAM args", func(t *testing.T) {
+		t.Parallel()
+
+		got := translate(&provider.BucketSpec{})
+
+		if !slices.Contains(got.UploadCompleterS3Actions, "s3:GetObjectTagging") {
+			t.Errorf("UploadCompleterS3Actions = %v, want it to include s3:GetObjectTagging", got.UploadCompleterS3Actions)
+		}
+		if slices.Contains(got.UploadCompleterS3Actions, "s3:PutObject") {
+			t.Errorf("UploadCompleterS3Actions = %v, must not grant s3:PutObject (least privilege)", got.UploadCompleterS3Actions)
+		}
+		if !slices.Contains(got.UploadCompleterSessionActions, "dynamodb:UpdateItem") {
+			t.Errorf("UploadCompleterSessionActions = %v, want it to include dynamodb:UpdateItem (transition)", got.UploadCompleterSessionActions)
+		}
+	})
+
+	t.Run("empty origins yield empty CORS origins", func(t *testing.T) {
+		t.Parallel()
+
+		got := translate(&provider.BucketSpec{})
+		if len(got.CORS.AllowedOrigins) != 0 {
+			t.Errorf("CORS.AllowedOrigins = %v, want empty for a bucket with no declared origins", got.CORS.AllowedOrigins)
+		}
+	})
+}
+
+func TestSessionStatement(t *testing.T) {
+	t.Parallel()
+
+	const tableARN = "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-state"
+
+	t.Run("reaches only the app's own session keys", func(t *testing.T) {
+		t.Parallel()
+
+		sessions := NewSessions("shop", "prod", tableARN)
+		stmt := sessionStatement([]string{"dynamodb:Query"}, sessions)
+		doc, err := iam.InlinePolicy(stmt.Actions, []string{tableARN}, stmt.Condition)
+		if err != nil {
+			t.Fatalf("inlinePolicy: %v", err)
+		}
+
+		var parsed struct {
+			Statement []struct {
+				Condition map[string]map[string][]string
+			}
+		}
+		if err := json.Unmarshal([]byte(doc), &parsed); err != nil {
+			t.Fatalf("unmarshal policy: %v", err)
+		}
+		keys := parsed.Statement[0].Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
+		if !reflect.DeepEqual(keys, []string{sessions.KeyPrefix + "*"}) {
+			t.Fatalf("LeadingKeys = %v, want %q — a role must reach neither the stack index nor another deploy's sessions", keys, sessions.KeyPrefix+"*")
+		}
+	})
+
+	t.Run("an unconditioned statement has no condition", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := iam.InlinePolicy([]string{"s3:PutObject"}, []string{"arn:aws:s3:::b/*"}, nil)
+		if err != nil {
+			t.Fatalf("inlinePolicy: %v", err)
+		}
+		if strings.Contains(doc, "Condition") {
+			t.Errorf("policy = %s, want no empty Condition block", doc)
+		}
+	})
+}
+
+func TestBucketCORSFollowsTheDeclaredOrigins(t *testing.T) {
+	const corsToken = "aws:s3/bucketCorsConfigurationV2:BucketCorsConfigurationV2"
+
+	registered := func(t *testing.T, spec *provider.BucketSpec) bool {
+		t.Helper()
+		rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+			return register(ctx, "shop", "prod", "bucket--uploads", translate(spec), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", componenttest.AppRolePath, NewSessions("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		})
+		return rec.IsRegistered(corsToken, "bucket-uploads-cors")
+	}
+
+	t.Run("a bucket declaring no origins gets no CORS configuration", func(t *testing.T) {
+		if registered(t, &provider.BucketSpec{}) {
+			t.Error("a CORS configuration with no allowed origins was registered; S3 rejects one, so the deploy fails on every account")
+		}
+	})
+
+	t.Run("a bucket declaring origins gets one", func(t *testing.T) {
+		if !registered(t, &provider.BucketSpec{AllowedOrigins: []string{"https://app.example.com"}}) {
+			t.Error("no CORS configuration was registered for a bucket that declares an allowed origin")
+		}
+	})
+}
+
+func TestBucketUploadCompleterLogGroup(t *testing.T) {
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		return register(ctx, "shop", "prod", "bucket--uploads", translate(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", componenttest.AppRolePath, NewSessions("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+	})
+
+	group := rec.InputsOf(t, "aws:cloudwatch/logGroup:LogGroup", "bucket-uploads-upload-completer-logs")
+	want := component.LambdaLogGroupPrefixFor("shop-prod-uploads-upload-completer")
+	if got := group["namePrefix"]; !got.IsString() || got.StringValue() != want {
+		t.Errorf("the upload completer's log group namePrefix = %v, want %q", got, want)
+	}
+	if got, ok := group["name"]; ok {
+		t.Errorf("the upload completer's log group fixes its name to %v, so two stacks sharing a base collide on CreateLogGroup", got)
+	}
+	retention, ok := group["retentionInDays"]
+	if !ok || !retention.IsNumber() || retention.NumberValue() <= 0 {
+		t.Errorf("the upload completer's log group retentionInDays = %v, want a finite retention rather than events kept forever", retention)
+	}
+
+	logging := rec.InputsOf(t, "aws:lambda/function:Function", "bucket-uploads-upload-completer")["loggingConfig"]
+	if !logging.IsObject() || !strings.HasPrefix(logging.ObjectValue()["logGroup"].StringValue(), want) {
+		t.Errorf("the upload completer's loggingConfig = %v, want it pointed at the group the deploy owns under %q", logging, want)
+	}
+}
+
+func TestABucketWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
+	t.Parallel()
+
+	program := func(ctx *pulumi.Context) error {
+		return register(ctx, "shop", "prod", "bucket--uploads", translate(&provider.BucketSpec{}), "ocel-state", "", componenttest.AppRolePath, NewSessions("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+	}
+	err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--infra", &componenttest.Recorder{}))
+	if err == nil || !strings.Contains(err.Error(), "boundary") {
+		t.Fatalf("register with no boundary = %v, want a refusal naming the boundary", err)
+	}
+}

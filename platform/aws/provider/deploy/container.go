@@ -11,7 +11,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
@@ -19,7 +23,7 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/appautoscaling"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
-	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -34,7 +38,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
-	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
+	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 )
 
 const rootHealthPath = "/"
@@ -136,7 +140,7 @@ func ContainerArch(app, declared string) (string, error) {
 	return runs, nil
 }
 
-func (w *containerWork) readsLive() bool { return w.values.ValuesTableARN != "" }
+func (w *containerWork) readsLive() bool { return w.values.Variables.TableARN != "" }
 
 type containerDefinition struct {
 	Name         string            `json:"name"`
@@ -203,8 +207,8 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	}
 	tasksPolicyDoc := ""
 	if reachesTasks(app) {
-		topics := topicsOf(project, stack.Env, app.Topics)
-		topology, err := queueTopology(r.cfg, project, stack.Env, topics, containerWorkers(r.cfg.Tier, project, stack.Env, app.DeploymentWorkers))
+		topics := topic.Of(project, stack.Env, app.Topics)
+		topology, err := topic.QueueTopology(r.cfg.stateTable(), project, stack.Env, topics, containerWorkers(r.cfg.Tier, project, stack.Env, app.DeploymentWorkers))
 		if err != nil {
 			return nil, err
 		}
@@ -215,16 +219,16 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		if len(rendered) > 0 {
 			env[queues.EnvVar] = string(rendered)
 		}
-		if tasksPolicyDoc, err = tasksPolicy(r.cfg, project, stack.Env, topics, containerServiceARNs(r.cfg, project, stack.Env, app.DeploymentWorkers)); err != nil {
+		if tasksPolicyDoc, err = topic.TasksPolicy(r.cfg.stateTable(), project, stack.Env, topics, containerServiceARNs(r.cfg, project, stack.Env, app.DeploymentWorkers)); err != nil {
 			return nil, err
 		}
 	}
-	values := executionRole{App: app.App, VariablesKeyARN: r.cfg.VariablesKeyARN}
-	if bundle.hasLive() {
-		values.ValuesTableARN = r.cfg.VariablesTableARN
-		values.VariablesReferenced = bundle.Referenced
-		values.Slug = r.cfg.Slug
-		values.VariablesTier = string(r.cfg.Tier)
+	values := executionRole{App: app.App, Variables: variables.Reader{KeyARN: r.cfg.VariablesKeyARN}}
+	if bundle.HasLive() {
+		values.Variables.TableARN = r.cfg.VariablesTableARN
+		values.Variables.Referenced = bundle.Referenced
+		values.Variables.Slug = r.cfg.Slug
+		values.Variables.Tier = string(r.cfg.Tier)
 	}
 	return &containerWork{
 		app:         app.App,
@@ -360,7 +364,7 @@ func containerEnv(app string, values provider.AppValues, front *originGuard, man
 	env[containerPortEnv] = containerPort
 	front.front(env)
 	if len(manifest) > 0 {
-		env[variables.EnvVar] = string(manifest)
+		env[livefile.EnvVar] = string(manifest)
 	}
 	return env, nil
 }
@@ -384,7 +388,7 @@ func serviceCoordinate(project string, stack naming.StackName) naming.Coordinate
 }
 
 func (w *containerWork) physical() string {
-	return w.service.PhysicalName(maxLambdaNameLen)
+	return w.service.PhysicalName(component.MaxLambdaNameLen)
 }
 
 func (w *containerWork) definition() (string, error) {
@@ -416,7 +420,7 @@ func (w *containerWork) definition() (string, error) {
 
 func (w *containerWork) run(ctx *pulumi.Context) error {
 	physical := w.physical()
-	tags := resourceTags(naming.KindService, "", w.taggedWith(w.transformed.tagsFor(transformTypeContainer, w.app)))
+	tags := component.Tags(naming.KindService, "", w.taggedWith(w.transformed.TagsFor(transformTypeContainer, w.app)))
 
 	if err := w.transformed.install(ctx); err != nil {
 		return err
@@ -604,21 +608,21 @@ func (w *containerWork) taggedWith(extra map[string]string) map[string]string {
 	return tags
 }
 
-func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resource, error) {
-	role, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &iam.RoleArgs{
-		NamePrefix:          pulumi.String(rolePrefix(w.role)),
-		Description:         describe(w.role, "task role for this app's container"),
-		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
+func (w *containerWork) taskRole(ctx *pulumi.Context) (*awsiam.Role, []pulumi.Resource, error) {
+	role, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &awsiam.RoleArgs{
+		NamePrefix:          pulumi.String(component.RolePrefix(w.role)),
+		Description:         component.Describe(w.role, "task role for this app's container"),
+		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.ECSTasksPrincipal)),
 		PermissionsBoundary: pulumi.String(w.boundary),
 		Path:                pulumi.String(w.rolePath),
-		Tags:                resourceTags(naming.KindRole, "", w.taggedWith(w.transformed.tagsFor(transformTypeContainer, w.app))),
+		Tags:                component.Tags(naming.KindRole, "", w.taggedWith(w.transformed.TagsFor(transformTypeContainer, w.app))),
 	})
 	if err != nil {
 		return nil, nil, err
 	}
 	granted := make([]pulumi.Resource, 0, len(w.policies))
 	for _, binding := range w.policies {
-		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &iam.RolePolicyArgs{
+		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &awsiam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(binding.Policy),
 		})
@@ -628,7 +632,7 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		granted = append(granted, policy)
 	}
 	if w.tasksPolicy != "" {
-		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "tasks"), &iam.RolePolicyArgs{
+		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "tasks"), &awsiam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(w.tasksPolicy),
 		})
@@ -638,11 +642,11 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		granted = append(granted, policy)
 	}
 	if w.readsLive() {
-		rendered, err := variablesReadPolicy(w.values)
+		rendered, err := variables.ReadPolicy(w.values.Variables)
 		if err != nil {
 			return nil, nil, err
 		}
-		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "variables", "read"), &iam.RolePolicyArgs{
+		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "variables", "read"), &awsiam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(rendered),
 		})
@@ -663,7 +667,7 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, spec); err != nil {
+	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, r.registry, spec); err != nil {
 		return provider.StackResult{}, err
 	}
 	if err := spec.Images.PushMissing(ctx, progress); err != nil {
@@ -765,7 +769,7 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, spec); err != nil {
+	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, r.registry, spec); err != nil {
 		return provider.Plan{}, err
 	}
 	if err := r.placeRule(ctx, work); err != nil {
@@ -786,8 +790,8 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	return previewed, nil
 }
 
-func (r *release) containerProgram(spec provider.StackSpec, work *containerWork) stackProgram {
-	return stackProgram{run: work.run, tags: spec.Tags, secrets: r.appSecrets(spec)}
+func (r *release) containerProgram(spec provider.StackSpec, work *containerWork) component.Program {
+	return component.Program{Run: work.run, Tags: spec.Tags, Secrets: r.appSecrets(spec)}
 }
 
 func unpreviewedStack(ref provider.StackRef) provider.ChangeGroup {
@@ -804,15 +808,15 @@ func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (
 	if work.workerApp {
 		return provider.StackResult{}, nil
 	}
-	fields, err := requireOutputFields(outputs, work.app)
+	fields, err := component.RequireOutputFields(outputs, work.app)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	url, err := requireStringField(fields, work.app, outputKeyContainerURL)
+	url, err := component.RequireStringField(fields, work.app, outputKeyContainerURL)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	physical, err := requireStringField(fields, work.app, outputKeyContainerPhysical)
+	physical, err := component.RequireStringField(fields, work.app, outputKeyContainerPhysical)
 	if err != nil {
 		return provider.StackResult{}, err
 	}

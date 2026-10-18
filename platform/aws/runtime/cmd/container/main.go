@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
-	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
+	variables "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
 )
 

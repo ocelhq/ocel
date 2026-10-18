@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"unicode"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 type printedPolicy struct {
@@ -40,13 +42,13 @@ func TestEveryCredentialFitsTheManagedPoliciesIAMAccepts(t *testing.T) {
 			t.Errorf("%s prints no policy", name)
 			continue
 		}
-		if len(policies) > managedPoliciesPerPrincipal {
-			t.Errorf("%s needs %d managed policies, and IAM attaches %d to a role or user by default", name, len(policies), managedPoliciesPerPrincipal)
+		if len(policies) > iam.ManagedPoliciesPerPrincipal {
+			t.Errorf("%s needs %d managed policies, and IAM attaches %d to a role or user by default", name, len(policies), iam.ManagedPoliciesPerPrincipal)
 		}
 		seen := map[string]bool{}
 		for _, policy := range policies {
-			if size := iamCharacters(policy.PolicyDocument); size > managedPolicyChars {
-				t.Errorf("%s policy %s is %d characters, and IAM refuses a managed policy over %d", name, policy.PolicyName, size, managedPolicyChars)
+			if size := iamCharacters(policy.PolicyDocument); size > iam.ManagedPolicyChars {
+				t.Errorf("%s policy %s is %d characters, and IAM refuses a managed policy over %d", name, policy.PolicyName, size, iam.ManagedPolicyChars)
 			}
 			if policy.PolicyName == "" || seen[policy.PolicyName] {
 				t.Errorf("%s names a policy %q, want every policy named apart", name, policy.PolicyName)
@@ -63,7 +65,7 @@ func TestSplittingACredentialKeepsEveryStatement(t *testing.T) {
 	t.Parallel()
 
 	grants := deployGrants(defaultNamespace.ScopedARNs("production"), "")
-	whole, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": PolicyStatements(grants)})
+	whole, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": iam.Statements(grants)})
 	if err != nil {
 		t.Fatal(err)
 	}

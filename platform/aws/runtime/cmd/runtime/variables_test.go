@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/variables/baked"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables/baked"
 )
 
 func sealedTaskRoot(t *testing.T, key []byte, values map[string]string) string {

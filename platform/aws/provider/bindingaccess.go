@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -17,8 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/valkey"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
-	"github.com/ocelhq/ocel/platform/aws/provider/bucket"
-	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket/dataplane"
 )
 
 func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
@@ -40,7 +41,7 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	reconciled, err := bastion.Reconcile(ctx, clients, bastion.Spec{
 		Tier:     req.Tier,
 		Boundary: deployed.AppBoundaryARN,
-		Ports:    []int{deploy.PostgresPort, valkey.Port},
+		Ports:    []int{postgres.Port, valkey.Port},
 	})
 	if err != nil {
 		return nil, err
@@ -107,7 +108,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 		served := make([]bindingproxy.Grant, 0, len(grants))
 		for _, grant := range grants {
 			buckets := buildproxy.ListBucketNames(grant)
-			served = append(served, bindingproxy.Grant{Grantee: grant.Grantee, Services: bindingproxy.Services{Buckets: bucket.New(bucket.Config{
+			served = append(served, bindingproxy.Grant{Grantee: grant.Grantee, Services: bindingproxy.Services{Buckets: dataplane.New(dataplane.Config{
 				DDB:              table,
 				Presigner:        presigner,
 				Objects:          objects,

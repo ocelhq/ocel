@@ -1,0 +1,299 @@
+package variables
+
+import (
+	"bytes"
+	"encoding/json"
+	"slices"
+	"strings"
+	"testing"
+
+	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables/baked"
+)
+
+func TestRenderAppBundle(t *testing.T) {
+	t.Run("live values are pinned by coordinate and never baked", func(t *testing.T) {
+		t.Parallel()
+		app := &contractv1.ManifestApp{
+			Name: "web",
+			Variables: []*contractv1.ManifestVariable{
+				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+				variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
+				scopedVariable("SESSION_SECRET", "/web", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+				scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+			},
+		}
+
+		bundle, err := renderAppBundle(liveStore(), "shop", app, nil)
+		if err != nil {
+			t.Fatalf("renderAppBundle: %v", err)
+		}
+
+		manifest, err := livefile.Parse(bundle.Live)
+		if err != nil {
+			t.Fatalf("parse the live manifest: %v", err)
+		}
+		if manifest.Slug != "shop" || manifest.Table != valuesTable || manifest.KeyARN != productionVariablesKeyARN || manifest.Tier != variablesTier {
+			t.Errorf("manifest = %+v, want the bootstrap's own store", manifest)
+		}
+		want := []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
+		got := slices.Clone(manifest.Keys)
+		slices.SortFunc(got, func(a, b live.Key) int { return strings.Compare(a.Key, b.Key) })
+		if !slices.Equal(got, want) {
+			t.Errorf("manifest keys = %+v, want %+v", got, want)
+		}
+
+		key := decodeEnvelope(t, bundle.Envelope)
+		values, err := baked.Open(key, bundle.Ciphertext)
+		if err != nil {
+			t.Fatalf("open the sealed bundle: %v", err)
+		}
+		if _, ok := values["SESSION_SECRET"]; ok {
+			t.Error("a live value was baked into the bundle")
+		}
+		if got := values["STRIPE_API_KEY"]; got != "sk-live" {
+			t.Errorf("STRIPE_API_KEY = %q, want the sensitive value still baked", got)
+		}
+	})
+
+	t.Run("a preview pins its own environment and production pins none", func(t *testing.T) {
+		t.Parallel()
+		app := &contractv1.ManifestApp{
+			Name:      "web",
+			Variables: []*contractv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
+		}
+
+		production := liveStore()
+		production.Tier, production.Env = environment.TierProduction, stackrecords.ProductionEnv
+
+		for _, tc := range []struct {
+			name string
+			cfg  Store
+			want string
+		}{
+			{name: "a preview", cfg: previewOf(liveStore(), "pr-42"), want: "pr-42"},
+			{name: "production", cfg: production},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				bundle, err := renderAppBundle(tc.cfg, "shop", app, nil)
+				if err != nil {
+					t.Fatalf("renderAppBundle: %v", err)
+				}
+				manifest, err := livefile.Parse(bundle.Live)
+				if err != nil {
+					t.Fatalf("parse the live manifest: %v", err)
+				}
+				if manifest.Environment != tc.want {
+					t.Errorf("environment = %q, want %q", manifest.Environment, tc.want)
+				}
+			})
+		}
+	})
+
+	t.Run("a live value needs the bootstrap's store", func(t *testing.T) {
+		t.Parallel()
+		app := &contractv1.ManifestApp{
+			Name:      "web",
+			Variables: []*contractv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
+		}
+
+		if _, err := renderAppBundle(Store{KeyARN: productionVariablesKeyARN}, "shop", app, nil); err == nil {
+			t.Fatal("renderAppBundle accepted a live value with no store to read it from")
+		}
+	})
+
+	t.Run("an app with no live values ships no manifest", func(t *testing.T) {
+		t.Parallel()
+		app := &contractv1.ManifestApp{
+			Name:      "web",
+			Variables: []*contractv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
+		}
+
+		bundle, err := renderAppBundle(liveStore(), "shop", app, nil)
+		if err != nil {
+			t.Fatalf("renderAppBundle: %v", err)
+		}
+		if len(bundle.Live) != 0 {
+			t.Errorf("Live = %q, want nothing", bundle.Live)
+		}
+		if _, ok := bundle.Overlay()[livefile.FilePath]; ok {
+			t.Error("an app with no live values still includes a live manifest file")
+		}
+	})
+
+	t.Run("references only the owners of its own live values", func(t *testing.T) {
+		t.Parallel()
+		store := previewOf(liveStore(), "pr-42")
+		store.Referenced = map[variablestore.Coordinate]string{
+			{Cell: variablestore.Cell{Key: "DB_PASSWORD"}}:                                          "platform",
+			{Cell: variablestore.Cell{Folder: "/web", Key: "SESSION_SECRET"}, Environment: "pr-42"}: "identity",
+			{Cell: variablestore.Cell{Key: "ADMIN_TOKEN"}}:                                          "ops",
+			{Cell: variablestore.Cell{Key: "POSTHOG_ID"}}:                                           "analytics",
+		}
+
+		app := &contractv1.ManifestApp{
+			Name: "web",
+			Variables: []*contractv1.ManifestVariable{
+				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+				scopedVariable("SESSION_SECRET", "/web", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+				scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+			},
+		}
+		bundle, err := renderAppBundle(store, "shop", app, nil)
+		if err != nil {
+			t.Fatalf("renderAppBundle: %v", err)
+		}
+		if want := []string{"identity", "platform"}; !slices.Equal(bundle.Referenced, want) {
+			t.Errorf("Referenced = %v, want %v: the owners behind this app's live cells, at its own environment and tier-wide", bundle.Referenced, want)
+		}
+
+	})
+}
+
+func TestAppBundle(t *testing.T) {
+	t.Run("overlays the live manifest beside the ciphertext", func(t *testing.T) {
+		t.Parallel()
+		bundle := Bundle{Envelope: "e", Ciphertext: []byte("sealed"), Live: []byte(`{"slug":"shop"}`)}
+
+		overlay := bundle.Overlay()
+		if len(overlay) != 2 {
+			t.Fatalf("overlay = %v, want the ciphertext and the live manifest", overlay)
+		}
+		if got := overlay[baked.FilePath]; !bytes.Equal(got, []byte("sealed")) {
+			t.Errorf("overlay[%q] = %q, want the sealed bytes", baked.FilePath, got)
+		}
+		if got := overlay[livefile.FilePath]; !bytes.Equal(got, []byte(`{"slug":"shop"}`)) {
+			t.Errorf("overlay[%q] = %q, want the live manifest", livefile.FilePath, got)
+		}
+	})
+
+	t.Run("a live-only app still packages its manifest", func(t *testing.T) {
+		t.Parallel()
+		manifest := &contractv1.Manifest{
+			Slug: "shop",
+			Apps: []*contractv1.ManifestApp{{
+				Name:      "web",
+				Variables: []*contractv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
+			}},
+		}
+
+		bundles, err := renderAppBundles(liveStore(), manifest)
+		if err != nil {
+			t.Fatalf("renderAppBundles: %v", err)
+		}
+		bundle, ok := bundles["web"]
+		if !ok {
+			t.Fatal("an app whose only variables are live gained no bundle at all")
+		}
+		if bundle.Envelope != "" || len(bundle.Ciphertext) != 0 {
+			t.Errorf("bundle = %+v, want no sealed half", bundle)
+		}
+		if _, ok := bundle.Overlay()[livefile.FilePath]; !ok {
+			t.Error("the live manifest is not in the package")
+		}
+		if len(bundle.Env()) != 0 {
+			t.Errorf("env = %v, want a live value to cost the function configuration nothing", bundle.Env())
+		}
+	})
+}
+
+func TestTheVariablesReadPolicyScopesTheTableToTheProjectsPartition(t *testing.T) {
+	t.Run("scopes the table grant to the project's own partition", func(t *testing.T) {
+		t.Parallel()
+		raw, err := ReadPolicy(Reader{KeyARN: productionVariablesKeyARN, TableARN: valuesTableARN, Slug: "shop", Tier: variablesTier})
+		if err != nil {
+			t.Fatalf("variablesReadPolicy: %v", err)
+		}
+
+		var doc struct {
+			Statement []struct {
+				Effect    string   `json:"Effect"`
+				Action    []string `json:"Action"`
+				Resource  string   `json:"Resource"`
+				Condition map[string]map[string][]string
+			}
+		}
+		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+			t.Fatalf("policy is not valid JSON: %v", err)
+		}
+		if len(doc.Statement) != 2 {
+			t.Fatalf("got %d statements, want the decrypt grant and the table read", len(doc.Statement))
+		}
+
+		table := doc.Statement[1]
+		if table.Resource != valuesTableARN {
+			t.Errorf("Resource = %q, want the table the values live in", table.Resource)
+		}
+		if want := []string{"dynamodb:Query"}; !slices.Equal(table.Action, want) {
+			t.Errorf("Action = %v, want %v", table.Action, want)
+		}
+		leading := table.Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"]
+		if want := []string{partitionOf(t, "shop")}; !slices.Equal(leading, want) {
+			t.Errorf("LeadingKeys = %v, want %v", leading, want)
+		}
+
+		kms := doc.Statement[0]
+		if want := []string{"kms:Decrypt"}; !slices.Equal(kms.Action, want) || kms.Resource != productionVariablesKeyARN {
+			t.Errorf("statement 0 = %+v, want the unchanged decrypt grant", kms)
+		}
+	})
+
+	t.Run("without a table is the decrypt grant alone", func(t *testing.T) {
+		t.Parallel()
+		raw, err := ReadPolicy(Reader{KeyARN: productionVariablesKeyARN})
+		if err != nil {
+			t.Fatalf("variablesReadPolicy: %v", err)
+		}
+		if strings.Contains(raw, "dynamodb") {
+			t.Errorf("policy = %s, want no table grant at all", raw)
+		}
+	})
+
+	t.Run("without a key is the table grant alone", func(t *testing.T) {
+		t.Parallel()
+		raw, err := ReadPolicy(Reader{TableARN: valuesTableARN, Slug: "shop", Tier: variablesTier})
+		if err != nil {
+			t.Fatalf("variablesReadPolicy: %v", err)
+		}
+		if strings.Contains(raw, "kms") {
+			t.Errorf("policy = %s, want no decrypt grant when this bootstrap made no key", raw)
+		}
+		if strings.Contains(raw, `"Resource":""`) {
+			t.Errorf("policy = %s, want no statement over an empty resource", raw)
+		}
+	})
+
+	t.Run("reaches the partitions of the projects this one references", func(t *testing.T) {
+		t.Parallel()
+		raw, err := ReadPolicy(Reader{KeyARN: productionVariablesKeyARN, TableARN: valuesTableARN, Slug: "shop", Tier: variablesTier, Referenced: []string{"platform", "shop", "billing"}})
+		if err != nil {
+			t.Fatalf("variablesReadPolicy: %v", err)
+		}
+
+		var doc struct {
+			Statement []struct {
+				Condition map[string]map[string][]string
+			}
+		}
+		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+			t.Fatalf("policy is not valid JSON: %v", err)
+		}
+
+		leading := doc.Statement[1].Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"]
+		want := []string{
+			partitionOf(t, "shop"),
+			partitionOf(t, "platform"),
+			partitionOf(t, "billing"),
+		}
+		if !slices.Equal(leading, want) {
+			t.Errorf("LeadingKeys = %v, want %v (its own partition once, plus each project it references)", leading, want)
+		}
+	})
+}

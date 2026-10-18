@@ -6,10 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 )
 
@@ -35,7 +39,7 @@ func TestFunctionCoordinate(t *testing.T) {
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--api-users")
 
-		got := coord.PhysicalName(maxLambdaBaseNameLen)
+		got := coord.PhysicalName(component.MaxLambdaBaseNameLen)
 		if want := "shop-prod-web-api-users-r3f8a1c90"; got != want {
 			t.Fatalf("PhysicalName = %q, want %q", got, want)
 		}
@@ -52,9 +56,9 @@ func TestFunctionCoordinate(t *testing.T) {
 		route := strings.Repeat("very-long-route-segment-", 6)
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--"+route)
 
-		got := coord.PhysicalName(maxLambdaBaseNameLen)
-		if len(got)+lambdaAutonameSuffixLen > maxLambdaNameLen {
-			t.Fatalf("PhysicalName = %q (%d chars) leaves no room for the %d-character suffix within %d", got, len(got), lambdaAutonameSuffixLen, maxLambdaNameLen)
+		got := coord.PhysicalName(component.MaxLambdaBaseNameLen)
+		if len(got)+component.LambdaAutonameSuffixLen > component.MaxLambdaNameLen {
+			t.Fatalf("PhysicalName = %q (%d chars) leaves no room for the %d-character suffix within %d", got, len(got), component.LambdaAutonameSuffixLen, component.MaxLambdaNameLen)
 		}
 		if !strings.HasPrefix(got, "shop-prod-web-") {
 			t.Errorf("PhysicalName = %q, want the project, env and app kept intact", got)
@@ -69,7 +73,7 @@ func TestFunctionCoordinate(t *testing.T) {
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--index")
 
-		if got, want := coord.PhysicalName(maxLambdaBaseNameLen), "shop-prod-web-index-r3f8a1c90"; got != want {
+		if got, want := coord.PhysicalName(component.MaxLambdaBaseNameLen), "shop-prod-web-index-r3f8a1c90"; got != want {
 			t.Errorf("function resource id = %q, want %q", got, want)
 		}
 		if got, want := naming.ResourceID(naming.KindFunction, coord.Name, "url"), "fn-index-url"; got != want {
@@ -82,7 +86,7 @@ func TestFunctionCoordinate(t *testing.T) {
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--bundle-0")
 
-		got := string(describe(coord, "bundle bundle-0"))
+		got := string(component.Describe(coord, "bundle bundle-0"))
 		if want := "shop / prod / web - bundle bundle-0 - release r3f8a1c90"; got != want {
 			t.Fatalf("description = %q, want %q", got, want)
 		}
@@ -93,9 +97,9 @@ func TestFunctionCoordinate(t *testing.T) {
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--index")
 
-		got := string(describe(coord, "bundle "+strings.Repeat("segment-", 60)))
-		if len(got) > maxDescriptionLen {
-			t.Errorf("description is %d chars, over the %d-character limit", len(got), maxDescriptionLen)
+		got := string(component.Describe(coord, "bundle "+strings.Repeat("segment-", 60)))
+		if len(got) > component.MaxDescriptionLen {
+			t.Errorf("description is %d chars, over the %d-character limit", len(got), component.MaxDescriptionLen)
 		}
 	})
 }
@@ -105,7 +109,7 @@ func TestRoleCoordinate(t *testing.T) {
 
 	coord := roleCoordinate("shop", testStack(t, "prod", "web"))
 
-	if got, want := rolePrefix(coord), "shop-prod-web-app-role-r3f8a1c90-"; got != want {
+	if got, want := component.RolePrefix(coord), "shop-prod-web-app-role-r3f8a1c90-"; got != want {
 		t.Errorf("rolePrefix = %q, want %q", got, want)
 	}
 	if got, want := naming.ResourceID(naming.KindRole, roleLocalName), "role-app"; got != want {
@@ -123,7 +127,7 @@ func TestRoleCoordinate(t *testing.T) {
 			t.Errorf("resource id = %q, want %q", got, tc.want)
 		}
 	}
-	if got, want := string(describe(coord, "execution role for this app's functions")),
+	if got, want := string(component.Describe(coord, "execution role for this app's functions")),
 		"shop / prod / web - execution role for this app's functions - release r3f8a1c90"; got != want {
 		t.Errorf("description = %q, want %q", got, want)
 	}
@@ -134,9 +138,9 @@ func TestRolePrefixLeavesRoomForTheSuffix(t *testing.T) {
 
 	long := roleCoordinate(strings.Repeat("p", 30), naming.AppStack(strings.Repeat("e", 30), strings.Repeat("a", 30), fixedRelease(t)))
 
-	got := rolePrefix(long)
-	if len(got)+iamAutonameSuffixLen > maxRoleNameLen {
-		t.Errorf("rolePrefix = %q (%d chars) leaves no room for the %d-character suffix within %d", got, len(got), iamAutonameSuffixLen, maxRoleNameLen)
+	got := component.RolePrefix(long)
+	if len(got)+component.IAMAutonameSuffixLen > component.MaxRoleNameLen {
+		t.Errorf("rolePrefix = %q (%d chars) leaves no room for the %d-character suffix within %d", got, len(got), component.IAMAutonameSuffixLen, component.MaxRoleNameLen)
 	}
 	if !strings.HasSuffix(got, naming.WordSeparator) {
 		t.Errorf("rolePrefix = %q, want it to end on the word separator", got)
@@ -149,7 +153,7 @@ func TestResourceTags(t *testing.T) {
 	t.Run("a function is tagged with its component and bundle", func(t *testing.T) {
 		t.Parallel()
 
-		tags := resourceTags(naming.KindFunction, "bundle-0", nil)
+		tags := component.Tags(naming.KindFunction, "bundle-0", nil)
 		want := pulumi.StringMap{"ocel:component": pulumi.String("function"), "ocel:bundle": pulumi.String("bundle-0")}
 		if !maps.Equal(tags, want) {
 			t.Errorf("tags = %v, want %v", tags, want)
@@ -159,40 +163,40 @@ func TestResourceTags(t *testing.T) {
 	t.Run("transform tags join the tags ocel writes itself", func(t *testing.T) {
 		t.Parallel()
 
-		tags := resourceTags(naming.KindFunction, "bundle-0", map[string]string{"acme:team": "platform"})
+		tags := component.Tags(naming.KindFunction, "bundle-0", map[string]string{"acme:team": "platform"})
 
 		if got := tags["acme:team"]; got != pulumi.String("platform") {
 			t.Errorf("acme:team = %v, want the transform's value", got)
 		}
-		if got := tags[tagComponent]; got != pulumi.String(naming.KindFunction.Component()) {
-			t.Errorf("%s = %v, want ocel's own component tag", tagComponent, got)
+		if got := tags[component.TagComponent]; got != pulumi.String(naming.KindFunction.Component()) {
+			t.Errorf("%s = %v, want ocel's own component tag", component.TagComponent, got)
 		}
-		if got := tags[tagBundle]; got != pulumi.String("bundle-0") {
-			t.Errorf("%s = %v, want ocel's own bundle tag", tagBundle, got)
+		if got := tags[component.TagBundle]; got != pulumi.String("bundle-0") {
+			t.Errorf("%s = %v, want ocel's own bundle tag", component.TagBundle, got)
 		}
 	})
 
 	t.Run("a transform cannot displace a tag ocel writes itself", func(t *testing.T) {
 		t.Parallel()
 
-		tags := resourceTags(naming.KindFunction, "bundle-0", map[string]string{
-			tagComponent: "mine",
-			tagBundle:    "mine",
+		tags := component.Tags(naming.KindFunction, "bundle-0", map[string]string{
+			component.TagComponent: "mine",
+			component.TagBundle:    "mine",
 		})
 
-		if got := tags[tagComponent]; got != pulumi.String(naming.KindFunction.Component()) {
-			t.Errorf("%s = %v, want ocel's own value kept", tagComponent, got)
+		if got := tags[component.TagComponent]; got != pulumi.String(naming.KindFunction.Component()) {
+			t.Errorf("%s = %v, want ocel's own value kept", component.TagComponent, got)
 		}
-		if got := tags[tagBundle]; got != pulumi.String("bundle-0") {
-			t.Errorf("%s = %v, want ocel's own value kept", tagBundle, got)
+		if got := tags[component.TagBundle]; got != pulumi.String("bundle-0") {
+			t.Errorf("%s = %v, want ocel's own value kept", component.TagBundle, got)
 		}
 	})
 
 	t.Run("a role has no bundle", func(t *testing.T) {
 		t.Parallel()
 
-		tags := resourceTags(naming.KindRole, "", nil)
-		want := pulumi.StringMap{tagComponent: pulumi.String("role")}
+		tags := component.Tags(naming.KindRole, "", nil)
+		want := pulumi.StringMap{component.TagComponent: pulumi.String("role")}
 		if !maps.Equal(tags, want) {
 			t.Errorf("tags = %v, want %v", tags, want)
 		}
@@ -203,11 +207,11 @@ func TestResourceTags(t *testing.T) {
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--bundle-0")
 		all := coord.Tags(naming.TagValues{Bundle: "bundle-0"})
-		if got, want := all[tagComponent], "function"; got != want {
-			t.Errorf("Tags[%s] = %q, want %q", tagComponent, got, want)
+		if got, want := all[component.TagComponent], "function"; got != want {
+			t.Errorf("Tags[%s] = %q, want %q", component.TagComponent, got, want)
 		}
-		if got, want := all[tagBundle], "bundle-0"; got != want {
-			t.Errorf("Tags[%s] = %q, want %q", tagBundle, got, want)
+		if got, want := all[component.TagBundle], "bundle-0"; got != want {
+			t.Errorf("Tags[%s] = %q, want %q", component.TagBundle, got, want)
 		}
 	})
 }
@@ -218,7 +222,7 @@ func TestAFunctionNamesTheBundleItWasBuiltFromNotARoute(t *testing.T) {
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "web")
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -305,6 +309,52 @@ func TestFunctionEnv(t *testing.T) {
 
 		if got := slices.Sorted(maps.Keys(base)); !slices.Equal(got, []string{"OCEL_RESOURCE_BUCKET_uploads"}) {
 			t.Errorf("base keys = %v, want only OCEL_RESOURCE_BUCKET_uploads", got)
+		}
+	})
+}
+
+func TestAppExecutionRole(t *testing.T) {
+	t.Parallel()
+
+	t.Run("is granted the bootstrap's variables key", func(t *testing.T) {
+		t.Parallel()
+
+		caches := map[string]*isrConfig{"web": {Prefix: "prod/proj/web/WEB1"}}
+
+		role := appExecutionRole(Config{VariablesKeyARN: productionVariablesKeyARN}, "web", caches, nil, variables.Bundle{}, nil, nil, false, nil)
+		if role.Variables.KeyARN != productionVariablesKeyARN {
+			t.Errorf("VariablesKeyARN = %q, want the bootstrap's own key", role.Variables.KeyARN)
+		}
+		if role.Cache != caches["web"] {
+			t.Errorf("Cache = %+v, want the app's own cache", role.Cache)
+		}
+
+		preview := appExecutionRole(Config{VariablesKeyARN: previewVariablesKeyARN}, "api", caches, nil, variables.Bundle{}, nil, nil, false, nil)
+		if preview.Variables.KeyARN != previewVariablesKeyARN {
+			t.Errorf("VariablesKeyARN = %q, want the preview bootstrap's key", preview.Variables.KeyARN)
+		}
+		if preview.Cache != nil {
+			t.Errorf("Cache = %+v, want none for an app that keeps no cache", preview.Cache)
+		}
+	})
+}
+
+func TestAFunctionsEnvCountsResourcesVariablesAndTheRuntimeTogether(t *testing.T) {
+	t.Run("accounts resources, variables and the runtime together", func(t *testing.T) {
+		base := map[string]string{
+			"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://x"}`,
+			"POSTHOG_ID":                  "ph-123",
+		}
+
+		env := functionEnv(base, functionArgs{Handler: "src/server.js"}, &isrConfig{Prefix: "prod/proj/web/B1"}, nil)
+
+		for _, key := range []string{"OCEL_RESOURCE_POSTGRES_main", "POSTHOG_ID", "OCEL_HANDLER", "AWS_LAMBDA_EXEC_WRAPPER", "OCEL_ISR_PREFIX"} {
+			if _, ok := env[key]; !ok {
+				t.Errorf("env is missing %s; the budget would be charged against less than is deployed", key)
+			}
+		}
+		if _, ok := base["OCEL_HANDLER"]; ok {
+			t.Error("functionEnv mutated the shared base env")
 		}
 	})
 }

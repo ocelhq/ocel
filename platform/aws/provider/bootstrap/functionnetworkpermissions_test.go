@@ -1,6 +1,10 @@
 package bootstrap
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+)
 
 func TestTheDeployCredentialBuildsAndTearsDownTheFunctionNetworkOnlyWhereOcelTaggedIt(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
@@ -55,7 +59,7 @@ func TestTheDeployCredentialBuildsAndTearsDownTheFunctionNetworkOnlyWhereOcelTag
 		"ec2:DescribeVpcEndpoints",
 	}
 	for _, action := range reads {
-		if !grants[grant{action: action, resource: UnscopedResource, condition: unscoped}] {
+		if !grants[grant{action: action, resource: iam.AnyResource, condition: unscoped}] {
 			t.Errorf("the deploy credential does not grant %s, so the engine cannot read back what it built", action)
 		}
 	}

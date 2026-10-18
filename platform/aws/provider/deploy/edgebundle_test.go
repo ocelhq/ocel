@@ -11,6 +11,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 func edgeAppTree(t *testing.T) string {
@@ -174,7 +175,7 @@ func edgeVariablesManifest(variables ...*contractv1.ManifestVariable) *contractv
 
 func edgeBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuilds {
 	t.Helper()
-	bundles := map[string]appBundle{}
+	bundles := map[string]variables.Bundle{}
 	for _, app := range manifest.GetApps() {
 		sensitive := map[string]string{}
 		var keys []live.Key
@@ -186,7 +187,7 @@ func edgeBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuil
 				keys = append(keys, live.Key{Key: v.GetKey(), Folder: v.GetFolder()})
 			}
 		}
-		bundle, err := sealAppBundle(liveConfig(), manifest.GetSlug(), app.GetName(), sensitive, keys, nil)
+		bundle, err := variables.Seal(liveConfig().variableStore(), manifest.GetSlug(), app.GetName(), sensitive, keys, nil)
 		if err != nil {
 			t.Fatalf("sealAppBundle(%s): %v", app.GetName(), err)
 		}
@@ -318,7 +319,7 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 	t.Run("an over-budget edge environment fails the deploy with no edge key", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod"}
-		manifest := edgeVariablesManifest(variable("BIG_ONE", strings.Repeat("a", functionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+		manifest := edgeVariablesManifest(variable("BIG_ONE", strings.Repeat("a", variables.FunctionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		app := manifest.GetApps()[0]
 
 		err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), edgeBuilds(t, cfg, manifest).baked[app.GetName()])
@@ -333,10 +334,10 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 	t.Run("an app with no edge output is left alone", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: t.TempDir(), Env: "prod"}
-		manifest := edgeVariablesManifest(variable("BIG_ONE", strings.Repeat("a", functionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+		manifest := edgeVariablesManifest(variable("BIG_ONE", strings.Repeat("a", variables.FunctionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		app := manifest.GetApps()[0]
-		if err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), appBundle{}); err != nil {
+		if err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), variables.Bundle{}); err != nil {
 			t.Errorf("checkAppEdgeVariables = %v, want an app that ships no edge worker accepted", err)
 		}
 	})

@@ -10,6 +10,10 @@ import (
 	"sync"
 	"testing"
 
+	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -20,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -218,13 +223,13 @@ func (standInCloud) Call(sdk.MockCallArgs) (resource.PropertyMap, error) {
 func provisionedOutputs() auto.OutputMap {
 	return auto.OutputMap{
 		"c-postgres": auto.OutputValue{Value: map[string]any{
-			outputKeyHost:      "shop-prod.cluster.eu-west-1.rds.amazonaws.com",
-			outputKeyPort:      float64(5432),
-			outputKeyDatabase:  "shop",
-			outputKeyUsername:  "ocel",
-			outputKeySecretARN: "arn:aws:secretsmanager:eu-west-1:111122223333:secret:shop",
+			component.OutputKeyHost:     "shop-prod.cluster.eu-west-1.rds.amazonaws.com",
+			component.OutputKeyPort:     float64(5432),
+			postgres.OutputKeyDatabase:  "shop",
+			postgres.OutputKeyUsername:  "ocel",
+			postgres.OutputKeySecretARN: "arn:aws:secretsmanager:eu-west-1:111122223333:secret:shop",
 		}},
-		"c-bucket":   auto.OutputValue{Value: map[string]any{outputKeyBucket: "shop-prod-uploads"}},
+		"c-bucket":   auto.OutputValue{Value: map[string]any{bucket.OutputKeyBucket: "shop-prod-uploads"}},
 		"c-kv":       kvOutput("c-kv"),
 		"c-realtime": realtimeOutput("c-realtime"),
 	}
@@ -352,7 +357,7 @@ func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ environment.Tier, p
 func TestStacksRunTheConformancePortTier(t *testing.T) {
 	store := newShippedArtifacts()
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store, state: newEngineState()}
-	conformance.RunStacks(t, provider.Facts{Bindings: Serves(), StoresArtifacts: true}, conformingStacks(engine), store, nil)
+	conformance.RunStacks(t, provider.Facts{Bindings: awsresources.Types(), StoresArtifacts: true}, conformingStacks(engine), store, nil)
 }
 
 func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *testing.T) {
@@ -431,7 +436,7 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 		t.Fatalf("Provision() = %v", err)
 	}
 
-	at := payloads.At("ocel-artifacts", uploadCompleterKeyPrefix, payloads.UploadCompleter())
+	at := payloads.At("ocel-artifacts", bucket.UploadCompleterKeyPrefix, payloads.UploadCompleter())
 	if !slices.Contains(uploader.puts, at.Key) {
 		t.Errorf("uploaded %v, want the upload completer placed at %s", uploader.puts, at.Key)
 	}

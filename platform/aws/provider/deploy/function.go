@@ -8,15 +8,17 @@ import (
 	"strings"
 	"time"
 
-	cloudwatch "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
-	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 const (
@@ -39,29 +41,9 @@ const (
 
 	MaxFunctionBytes = 200 << 20
 
-	tagComponent = "ocel:component"
-	tagBundle    = "ocel:bundle"
-	tagResource  = "ocel:resource"
-
 	tagImageOptimizer = "image-optimizer"
 
 	roleLocalName = "app"
-
-	lambdaServicePrincipal = "lambda.amazonaws.com"
-
-	maxDescriptionLen = 256
-
-	maxRoleNameLen       = 64
-	iamAutonameSuffixLen = 26
-	maxRolePrefixLen     = maxRoleNameLen - iamAutonameSuffixLen
-
-	maxLambdaNameLen        = 64
-	lambdaAutonameSuffixLen = 8
-	maxLambdaBaseNameLen    = maxLambdaNameLen - lambdaAutonameSuffixLen
-
-	lambdaLogGroupPrefix   = "/aws/lambda/"
-	lambdaLogFormat        = "Text"
-	lambdaLogRetentionDays = 14
 
 	functionURLInvokeModeStream = "RESPONSE_STREAM"
 
@@ -182,7 +164,7 @@ func renderDispatchInvokePolicy(siblings []string, account string, optimizer boo
 			"Resource": fmt.Sprintf("arn:aws:lambda:*:%s:function:*", account),
 			"Condition": map[string]any{
 				"StringEquals": map[string]any{
-					"aws:ResourceTag/" + tagComponent: tagImageOptimizer,
+					"aws:ResourceTag/" + component.TagComponent: tagImageOptimizer,
 				},
 			},
 		})
@@ -195,14 +177,6 @@ func renderDispatchInvokePolicy(siblings []string, account string, optimizer boo
 		return "", fmt.Errorf("render dispatch invoke policy: %w", err)
 	}
 	return string(out), nil
-}
-
-func accountOfARN(arn string) string {
-	parts := strings.Split(arn, ":")
-	if len(parts) < 5 {
-		return ""
-	}
-	return parts[4]
 }
 
 func isrPolicy(c isrConfig) (string, error) {
@@ -271,95 +245,63 @@ func logicalLocalName(logicalName string) string {
 	return fields[len(fields)-1]
 }
 
-func resourceTags(kind naming.Kind, bundle string, extra map[string]string) pulumi.StringMap {
-	tags := pulumi.StringMap{}
-	for key, value := range extra {
-		tags[key] = pulumi.String(value)
-	}
-	tags[tagComponent] = pulumi.String(kind.Component())
-	if bundle != "" {
-		tags[tagBundle] = pulumi.String(bundle)
-	}
-	return tags
-}
-
-func describe(c naming.Coordinate, detail string) pulumi.String {
-	return capDescription(c.Description(detail+" - release "+c.Release.String()), maxDescriptionLen)
-}
-
-func capDescription(described string, limit int) pulumi.String {
-	if len(described) > limit {
-		described = strings.ToValidUTF8(described[:limit], "")
-	}
-	return pulumi.String(described)
-}
-
 func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)
 }
 
 type executionRole struct {
-	App             string
-	Tags            map[string]string
-	Cache           *isrConfig
-	Bytecode        *bytecodeConfig
-	VariablesKeyARN string
-	Boundary        string
-	Path            string
-	VPCAccess       bool
-	Dispatch        *dispatchHost
-
-	ValuesTableARN      string
-	Slug                string
-	VariablesTier       string
-	VariablesReferenced []string
+	App       string
+	Tags      map[string]string
+	Cache     *isrConfig
+	Bytecode  *bytecodeConfig
+	Variables variables.Reader
+	Boundary  string
+	Path      string
+	VPCAccess bool
+	Dispatch  *dispatchHost
 
 	BindingPolicies []bindingPolicy
 
 	TasksPolicy string
 }
 
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, dispatch *dispatchHost) executionRole {
-	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VariablesKeyARN: cfg.VariablesKeyARN, Boundary: cfg.AppBoundaryARN, Path: cfg.AppRolePath, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
-	if bundle.hasLive() {
-		role.ValuesTableARN = cfg.VariablesTableARN
-		role.VariablesReferenced = bundle.Referenced
-		role.Slug = cfg.Slug
-		role.VariablesTier = string(cfg.Tier)
+func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle variables.Bundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, dispatch *dispatchHost) executionRole {
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], Variables: variables.Reader{KeyARN: cfg.VariablesKeyARN}, Boundary: cfg.AppBoundaryARN, Path: cfg.AppRolePath, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
+	if bundle.HasLive() {
+		role.Variables.TableARN = cfg.VariablesTableARN
+		role.Variables.Referenced = bundle.Referenced
+		role.Variables.Slug = cfg.Slug
+		role.Variables.Tier = string(cfg.Tier)
 	}
 	return role
 }
 
-func rolePrefix(coord naming.Coordinate) string {
-	return coord.PhysicalName(maxRolePrefixLen-len(naming.WordSeparator)) + naming.WordSeparator
-}
-
-func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRole) (*iam.Role, error) {
+func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRole) (*awsiam.Role, error) {
 	if r.Boundary == "" {
 		return nil, fmt.Errorf("mint the execution role for %s: this deploy resolved no app boundary, and a role made without one is capped by nothing", r.App)
 	}
 	id := naming.ResourceID(naming.KindRole, roleLocalName)
-	role, err := iam.NewRole(ctx, id, &iam.RoleArgs{
-		NamePrefix:          pulumi.String(rolePrefix(coord)),
-		Description:         describe(coord, "execution role for this app's functions"),
-		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(lambdaServicePrincipal)),
+	role, err := awsiam.NewRole(ctx, id, &awsiam.RoleArgs{
+		NamePrefix:          pulumi.String(component.RolePrefix(coord)),
+		Description:         component.Describe(coord, "execution role for this app's functions"),
+		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.LambdaPrincipal)),
 		PermissionsBoundary: pulumi.String(r.Boundary),
 		Path:                pulumi.String(r.Path),
-		Tags:                resourceTags(coord.Kind, "", r.Tags),
+		Tags:                component.Tags(coord.Kind, "", r.Tags),
 	})
 	if err != nil {
 		return nil, err
 	}
-	if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "logs"), &iam.RolePolicyAttachmentArgs{
+	if _, err := awsiam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "logs"), &awsiam.RolePolicyAttachmentArgs{
 		Role:      role.Name,
-		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
+		PolicyArn: pulumi.String(iam.LambdaBasicExecutionPolicyARN),
 	}); err != nil {
 		return nil, err
 	}
 	if r.VPCAccess {
-		if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "vpc"), &iam.RolePolicyAttachmentArgs{
+		if _, err := awsiam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "vpc"), &awsiam.RolePolicyAttachmentArgs{
 			Role:      role.Name,
-			PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"),
+			PolicyArn: pulumi.String(iam.LambdaVPCAccessPolicyARN),
 		}); err != nil {
 			return nil, err
 		}
@@ -369,7 +311,7 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		if err != nil {
 			return nil, err
 		}
-		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "isr", "cache"), &iam.RolePolicyArgs{
+		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "isr", "cache"), &awsiam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(policy),
 		}); err != nil {
@@ -381,7 +323,7 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		if err != nil {
 			return nil, err
 		}
-		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "bytecode", "cache"), &iam.RolePolicyArgs{
+		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "bytecode", "cache"), &awsiam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(policy),
 		}); err != nil {
@@ -393,7 +335,7 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		if err != nil {
 			return nil, err
 		}
-		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "asset", "read"), &iam.RolePolicyArgs{
+		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "asset", "read"), &awsiam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(policy),
 		}); err != nil {
@@ -401,7 +343,7 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		}
 	}
 	for _, binding := range r.BindingPolicies {
-		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &iam.RolePolicyArgs{
+		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &awsiam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(binding.Policy),
 		}); err != nil {
@@ -409,18 +351,18 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		}
 	}
 	if r.TasksPolicy != "" {
-		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "tasks"), &iam.RolePolicyArgs{
+		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "tasks"), &awsiam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(r.TasksPolicy),
 		}); err != nil {
 			return nil, err
 		}
 	}
-	variablesPolicy, err := variablesReadPolicy(r)
+	variablesPolicy, err := variables.ReadPolicy(r.Variables)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "variables", "read"), &iam.RolePolicyArgs{
+	if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "variables", "read"), &awsiam.RolePolicyArgs{
 		Role:   role.Name,
 		Policy: pulumi.String(variablesPolicy),
 	}); err != nil {
@@ -452,25 +394,6 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, byte
 	return env
 }
 
-func lambdaLogGroupPrefixFor(base string) string {
-	return lambdaLogGroupPrefix + base + naming.WordSeparator
-}
-
-func newLambdaLogGroup(ctx *pulumi.Context, id, base string, kind naming.Kind, bundle string, tags map[string]string, opts ...pulumi.ResourceOption) (*cloudwatch.LogGroup, error) {
-	return cloudwatch.NewLogGroup(ctx, id, &cloudwatch.LogGroupArgs{
-		NamePrefix:      pulumi.String(lambdaLogGroupPrefixFor(base)),
-		RetentionInDays: pulumi.Int(lambdaLogRetentionDays),
-		Tags:            resourceTags(kind, bundle, tags),
-	}, opts...)
-}
-
-func lambdaLogging(group *cloudwatch.LogGroup) lambda.FunctionLoggingConfigPtrInput {
-	return &lambda.FunctionLoggingConfigArgs{
-		LogFormat: pulumi.String(lambdaLogFormat),
-		LogGroup:  group.Name,
-	}
-}
-
 func runtimeLayerInput(arn string) pulumi.StringArrayInput {
 	if arn == awsports.RuntimeLayerToPublish {
 		return pulumi.StringArray{pulumi.UnsafeUnknownOutput(nil).ApplyT(func(any) string { return "" }).(pulumi.StringOutput)}
@@ -489,18 +412,18 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		env[key] = value
 	}
 
-	resourceName := coord.PhysicalName(maxLambdaBaseNameLen)
+	resourceName := coord.PhysicalName(component.MaxLambdaBaseNameLen)
 	if bundle == "" {
 		bundle = naming.PathSeparator + coord.Name
 	}
 
-	logs, err := newLambdaLogGroup(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "logs"), resourceName, coord.Kind, bundle, args.Tags, opts...)
+	logs, err := component.NewLambdaLogGroup(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "logs"), resourceName, coord.Kind, bundle, args.Tags, opts...)
 	if err != nil {
 		return none, err
 	}
 
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
-		Description: describe(coord, "bundle "+bundle),
+		Description: component.Describe(coord, "bundle "+bundle),
 		Runtime:     pulumi.String(args.Runtime),
 		Handler:     pulumi.String(lambdaHandler(args)),
 		Role:        roleArn,
@@ -511,10 +434,10 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
 		},
-		KmsKeyArn:     optionalARN(kmsKeyARN),
-		LoggingConfig: lambdaLogging(logs),
+		KmsKeyArn:     component.OptionalARN(kmsKeyARN),
+		LoggingConfig: component.LambdaLogging(logs),
 
-		Tags: resourceTags(coord.Kind, bundle, args.Tags),
+		Tags: component.Tags(coord.Kind, bundle, args.Tags),
 
 		Architectures: pulumi.StringArray{pulumi.String(args.Arch)},
 

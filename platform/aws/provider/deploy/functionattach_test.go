@@ -7,6 +7,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 func TestOnlyProvisionedPostgresAndKVNeedTheFunctionNetwork(t *testing.T) {
@@ -56,7 +58,7 @@ func TestAnAppAttachedToTheFunctionNetworkPlacesEveryFunctionInItsPrivateSubnets
 
 	cfg, spec := appStackSpec(t)
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingPostgres, Name: "db--main"}}
-	work, err := releasing(t, cfg).appWork(spec, nil, attachedNetwork(), appBundle{}, stagedOf(spec))
+	work, err := releasing(t, cfg).appWork(spec, nil, attachedNetwork(), variables.Bundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -76,7 +78,7 @@ func TestAnAppAttachedToTheFunctionNetworkPlacesEveryFunctionInItsPrivateSubnets
 			t.Errorf("%s runs in security groups %v, want the function network's", name, got)
 		}
 	}
-	if !slices.Contains(rec.attached, "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole") {
+	if !slices.Contains(rec.attached, iam.LambdaVPCAccessPolicyARN) {
 		t.Errorf("attached %v, want the policy that lets Lambda manage network interfaces: without it the function cannot be created in a VPC", rec.attached)
 	}
 }
@@ -86,7 +88,7 @@ func TestAnAppThatReachesNoVPCOnlyResourceStaysOutsideTheVPC(t *testing.T) {
 
 	cfg, spec := appStackSpec(t)
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingBucket, Name: "bucket--uploads"}}
-	work, err := releasing(t, cfg).appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
+	work, err := releasing(t, cfg).appWork(spec, nil, nil, variables.Bundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -98,7 +100,7 @@ func TestAnAppThatReachesNoVPCOnlyResourceStaysOutsideTheVPC(t *testing.T) {
 			t.Errorf("%s was placed in a VPC, want it outside: a function in a VPC loses its internet access", name)
 		}
 	}
-	if slices.Contains(rec.attached, "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole") {
+	if slices.Contains(rec.attached, iam.LambdaVPCAccessPolicyARN) {
 		t.Errorf("attached %v, want no VPC access policy", rec.attached)
 	}
 }
@@ -109,7 +111,7 @@ func TestATransformThatPlacesAFunctionInAVPCKeepsItOutOfTheFunctionNetwork(t *te
 	cfg, spec := appStackSpec(t)
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingPostgres, Name: "db--main"}}
 	transformed := &transformPatches{vpcBound: map[string]bool{"fn--web--admin": true}}
-	work, err := releasing(t, cfg).appWork(spec, transformed, attachedNetwork(), appBundle{}, stagedOf(spec))
+	work, err := releasing(t, cfg).appWork(spec, transformed, attachedNetwork(), variables.Bundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -132,7 +134,7 @@ func TestTheWorkersOfAnAttachedAppRunInThePrivateSubnetsToo(t *testing.T) {
 
 	release, spec, _, _ := newReleaseHostingWorkers(t, "media")
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingKV, Name: "kv--cache"}}
-	work, err := release.appWork(spec, nil, attachedNetwork(), appBundle{}, stagedOf(spec))
+	work, err := release.appWork(spec, nil, attachedNetwork(), variables.Bundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -154,7 +156,7 @@ func TestTheWorkersOfAnAttachedAppRunInThePrivateSubnetsToo(t *testing.T) {
 	if got := stringsAt(placed, "subnetIds"); !slices.Equal(got, attachedNetwork().Subnets) {
 		t.Errorf("the worker runs in subnets %v, want the function network's private subnets", got)
 	}
-	if !slices.Contains(rec.attached, "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole") {
+	if !slices.Contains(rec.attached, iam.LambdaVPCAccessPolicyARN) {
 		t.Errorf("attached %v, want the worker role to manage network interfaces", rec.attached)
 	}
 }

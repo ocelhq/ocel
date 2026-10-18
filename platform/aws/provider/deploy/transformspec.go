@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 //go:generate go generate -C ../../../../pkg/provider/transform ./...
@@ -28,7 +29,7 @@ func NodePass(root string, modules []string) transform.NodePass {
 	}
 }
 
-func transformStackSpec(ctx context.Context, pass transform.Pass, spec provider.StackSpec) (*transformPatches, error) {
+func transformStackSpec(ctx context.Context, pass transform.Pass, registry component.Registry, spec provider.StackSpec) (*transformPatches, error) {
 	if pass == nil {
 		return nil, nil
 	}
@@ -51,17 +52,14 @@ func transformStackSpec(ctx context.Context, pass transform.Pass, spec provider.
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: transformTypeFunction, Name: spec.Name, App: app.App,
 			})
-			candidates = append(candidates, transformCandidate{
-				key:   resourceKey{Type: transformTypeFunction, Name: spec.Name},
-				names: functionResourceNames(project, stack, spec.Name),
-			})
+			candidates = append(candidates, functionCandidate(project, stack, spec.Name))
 		}
 	} else {
 		for _, resource := range spec.Resources {
 			if resource.Binding != "" {
 				continue
 			}
-			if shown, candidate, patchable := newInfraTransformCandidate(project, stack.Env, resource); patchable {
+			if shown, candidate, patchable := newInfraTransformCandidate(registry, project, stack.Env, resource); patchable {
 				req.Resources = append(req.Resources, shown)
 				candidates = append(candidates, candidate)
 			}
@@ -82,6 +80,16 @@ func transformStackSpec(ctx context.Context, pass transform.Pass, spec provider.
 		return nil, err
 	}
 	return indexPatches(candidates, results)
+}
+
+func functionCandidate(project string, stack naming.StackName, name string) transformCandidate {
+	return transformCandidate{
+		key:   resourceKey{Type: transformTypeFunction, Name: name},
+		names: functionResourceNames(project, stack, name),
+		check: func(name string, patches map[string]map[string]any) error {
+			return checkVPCConfig(name, patches["lambda"])
+		},
+	}
 }
 
 func translateFunctionSpec(appFramework string, spec provider.FunctionSpec) (functionArgs, error) {
@@ -273,19 +281,12 @@ func resolveSpecBindings(ctx context.Context, bindings provider.Bindings, names 
 	return records, nil
 }
 
-func newInfraTransformCandidate(project, env string, resource provider.Resource) (transform.Resource, transformCandidate, bool) {
-	var kind string
-	var names map[string]resourceRef
-	switch resource.Type {
-	case provider.BindingPostgres:
-		kind, names = transformTypePostgres, postgresResourceNames(project, env, resource.Name)
-	case provider.BindingBucket:
-		kind, names = transformTypeBucket, bucketResourceNames(project, env, resource.Name)
-	case provider.BindingKV:
-		kind, names = transformTypeKV, kvResourceNames(project, env, resource.Name)
-	default:
+func newInfraTransformCandidate(registry component.Registry, project, env string, resource provider.Resource) (transform.Resource, transformCandidate, bool) {
+	transformed, served := registry.For(resource.Type)
+	if !served || transformed.Transform == nil {
 		return transform.Resource{}, transformCandidate{}, false
 	}
-	key := resourceKey{Type: kind, Name: resource.Name}
-	return transform.Resource{Type: kind, Name: resource.Name}, transformCandidate{key: key, names: names}, true
+	target := transformed.Transform(project, env, resource.Name)
+	key := resourceKey{Type: target.Kind, Name: resource.Name}
+	return transform.Resource{Type: target.Kind, Name: resource.Name}, transformCandidate{key: key, names: target.Names, check: target.Check}, true
 }

@@ -7,6 +7,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
@@ -15,14 +18,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 func TestTearingDownProductionPlansItsPostgresClusterAsDisableThenDelete(t *testing.T) {
 	t.Parallel()
 
 	engine := &mockedEngine{outputs: auto.OutputMap{}, previewed: []provider.Change{
-		{Kind: tokenRDSCluster, Name: "c-postgres"},
-		{Kind: tokenRDSClusterMember, Name: "c-postgres-instance"},
+		{Kind: component.TokenRDSCluster, Name: "c-postgres"},
+		{Kind: component.TokenRDSClusterMember, Name: "c-postgres-instance"},
 	}}
 	plan, err := conformingStacks(engine).PlanDestroy(context.Background(), conformanceInfra, nil)
 	if err != nil {
@@ -34,10 +38,10 @@ func TestTearingDownProductionPlansItsPostgresClusterAsDisableThenDelete(t *test
 			actions[change.Kind] = change.Action
 		}
 	}
-	if got := actions[tokenRDSCluster]; got != provider.ActionDisableThenDelete {
+	if got := actions[component.TokenRDSCluster]; got != provider.ActionDisableThenDelete {
 		t.Errorf("the plan does %q to the production cluster, want %q: the teardown disables its deletion protection first", got, provider.ActionDisableThenDelete)
 	}
-	if got := actions[tokenRDSClusterMember]; got != provider.ActionDelete {
+	if got := actions[component.TokenRDSClusterMember]; got != provider.ActionDelete {
 		t.Errorf("the plan does %q to the cluster's instance, want %q", got, provider.ActionDelete)
 	}
 }
@@ -45,7 +49,7 @@ func TestTearingDownProductionPlansItsPostgresClusterAsDisableThenDelete(t *test
 func TestTearingDownAPreviewPlansItsPostgresClusterAsAPlainDelete(t *testing.T) {
 	t.Parallel()
 
-	engine := &mockedEngine{outputs: auto.OutputMap{}, previewed: []provider.Change{{Kind: tokenRDSCluster, Name: "c-postgres"}}}
+	engine := &mockedEngine{outputs: auto.OutputMap{}, previewed: []provider.Change{{Kind: component.TokenRDSCluster, Name: "c-postgres"}}}
 	ref := provider.StackRef{Project: "conformance", Tier: environment.TierPreview, Name: naming.InfraStack("pr-7")}
 	plan, err := conformingStacks(engine).PlanDestroy(context.Background(), ref, nil)
 	if err != nil {
@@ -83,12 +87,12 @@ func (f *fakeClusters) ModifyDBCluster(_ context.Context, in *rds.ModifyDBCluste
 
 func postgresOutputOf(cluster string) auto.OutputValue {
 	return auto.OutputValue{Value: map[string]any{
-		outputKeyHost:              cluster + ".cluster-abc.eu-west-1.rds.amazonaws.com",
-		outputKeyPort:              float64(5432),
-		outputKeyDatabase:          "ocel",
-		outputKeyUsername:          "ocel",
-		outputKeySecretARN:         "arn:aws:secretsmanager:eu-west-1:111122223333:secret:" + cluster,
-		outputKeyClusterIdentifier: cluster,
+		component.OutputKeyHost:             cluster + ".cluster-abc.eu-west-1.rds.amazonaws.com",
+		component.OutputKeyPort:             float64(5432),
+		postgres.OutputKeyDatabase:          "ocel",
+		postgres.OutputKeyUsername:          "ocel",
+		postgres.OutputKeySecretARN:         "arn:aws:secretsmanager:eu-west-1:111122223333:secret:" + cluster,
+		postgres.OutputKeyClusterIdentifier: cluster,
 	}}
 }
 
@@ -104,7 +108,7 @@ func TestDestroyingProductionDisablesEachPostgresClustersDeletionProtectionBefor
 	engine := &mockedEngine{outputs: auto.OutputMap{
 		"c-postgres": postgresOutputOf("ocel-app-conformance-main-abc"),
 		"c-reports":  postgresOutputOf("ocel-app-conformance-reports-def"),
-		"c-bucket":   auto.OutputValue{Value: map[string]any{outputKeyBucket: "shop-prod-uploads"}},
+		"c-bucket":   auto.OutputValue{Value: map[string]any{bucket.OutputKeyBucket: "shop-prod-uploads"}},
 	}}
 	clusters := &fakeClusters{engine: engine}
 	if err := clustersStacks(engine, clusters).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {

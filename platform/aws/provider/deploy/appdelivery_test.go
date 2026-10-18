@@ -9,6 +9,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
@@ -26,7 +28,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if err := os.WriteFile(bundlePath, []byte(`{"version":1}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	bundle := appBundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
+	bundle := variables.Bundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
 	spec.App.EdgeRouteTable = edgeRouteTable(appCoordinate(spec).RouteTableKey("ab"))
 
 	release := releasing(t, cfg)
@@ -68,7 +70,7 @@ func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 
 	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
+	work, err := release.appWork(spec, nil, nil, variables.Bundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -97,7 +99,7 @@ func TestAReleaseNamesEverySecretItsProgramsCarrySoTheEngineCanMaskThem(t *testi
 	cfg.PurgeSeed = "a-seed"
 
 	release := releasing(t, cfg)
-	got := release.secrets(stackProgram{secrets: release.appSecrets(spec)})
+	got := release.secrets(component.Program{Secrets: release.appSecrets(spec)})
 	for _, want := range []string{"origin-now", "origin-before", "a-seed", edge.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Prefix)} {
 		if !slices.Contains(got, want) {
 			t.Errorf("the release names %d secrets and not %q, want every secret its programs carry", len(got), want)

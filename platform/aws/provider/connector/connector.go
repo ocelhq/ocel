@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -356,11 +357,11 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, bundle Bundle, k
 						"Version": "2012-10-17",
 						"Statement": []map[string]any{{
 							"Effect":    "Allow",
-							"Principal": map[string]any{"Service": bootstrap.LambdaServicePrincipal},
+							"Principal": map[string]any{"Service": iam.LambdaPrincipal},
 							"Action":    "sts:AssumeRole",
 						}},
 					},
-					"ManagedPolicyArns": []string{bootstrap.LambdaBasicExecutionPolicyARN},
+					"ManagedPolicyArns": []string{iam.LambdaBasicExecutionPolicyARN},
 					"Policies": []map[string]any{{
 						"PolicyName":     ns.PolicyName("connector"),
 						"PolicyDocument": map[string]any{"Version": "2012-10-17", "Statement": statements(ns, keys)},
@@ -500,9 +501,9 @@ func codeBucketResource() map[string]any {
 	}
 }
 
-func grants(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
+func grants(ns bootstrap.Namespace, keys []string) []iam.Statement {
 	production, preview := ns.ScopedARNs(environment.TierProduction), ns.ScopedARNs(environment.TierPreview)
-	return []bootstrap.GrantStatement{
+	return []iam.Statement{
 		{
 			Actions: []string{
 				"dynamodb:DeleteItem",
@@ -530,11 +531,11 @@ func grants(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
 		},
 		{
 			Actions:   []string{"sts:GetCallerIdentity"},
-			Resources: []string{bootstrap.UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 	}
 }
 
 func statements(ns bootstrap.Namespace, keys []string) []map[string]any {
-	return bootstrap.PolicyStatements(grants(ns, keys))
+	return iam.Statements(grants(ns, keys))
 }

@@ -22,8 +22,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 )
 
 func TestOnlyAWorkerOnContainerComputeNamesTheServiceASenderWakes(t *testing.T) {
@@ -225,7 +228,7 @@ func TestAContainerWorkersBacklogAlarmWatchesTheVisibleMessagesOfEveryQueueItSer
 	for i := range 11 {
 		spec.App.Topics = append(spec.App.Topics, taskResource("job-"+strconv.Itoa(i), provider.ConsumerSpec{Worker: "media"}))
 	}
-	hosted.topics = topicsOf("shop", "prod", spec.App.Topics)
+	hosted.topics = topic.Of("shop", "prod", spec.App.Topics)
 	rec := programRecorded(t, hosted)
 
 	alarms := rec.registered("aws:cloudwatch/metricAlarm:MetricAlarm")
@@ -272,7 +275,7 @@ func TestAContainerWorkersTaskRoleReachesOnlyTheQueuesItServesAndItsOwnService(t
 	rec := programRecorded(t, hosted)
 
 	role := recordedOf(t, rec, "aws:iam/role:Role")
-	if role["permissionsBoundary"].StringValue() != testBoundaryARN || !strings.Contains(role["assumeRolePolicy"].StringValue(), ecsTasksPrincipal) {
+	if role["permissionsBoundary"].StringValue() != componenttest.BoundaryARN || !strings.Contains(role["assumeRolePolicy"].StringValue(), iam.ECSTasksPrincipal) {
 		t.Errorf("role = %v, want an ECS task role under the app boundary", role)
 	}
 	var policies []string
@@ -281,7 +284,7 @@ func TestAContainerWorkersTaskRoleReachesOnlyTheQueuesItServesAndItsOwnService(t
 	}
 	all := strings.Join(policies, "\n")
 	for _, want := range []string{
-		sqsQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "resize", "resize", false)),
+		topic.SQSQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "resize", "resize", false)),
 		"sqs:ReceiveMessage",
 		"sqs:ChangeMessageVisibility",
 		"sqs:GetQueueAttributes",
@@ -759,7 +762,7 @@ func TestACronTaskOnAContainerWorkerIsScheduledOntoItsQueueByARoleThatMaySendThe
 	_, _, hosted := hostingContainerWorkersBeside(t, []provider.Resource{nightly}, mediaOnContainers)
 	rec := programRecorded(t, hosted)
 
-	queue := "arn:aws:sqs:us-east-1:" + mockAccount + ":" + topicsOf("shop", "prod", []provider.Resource{nightly})[0].queues[0].name
+	queue := "arn:aws:sqs:us-east-1:" + mockAccount + ":" + topic.Of("shop", "prod", []provider.Resource{nightly})[0].Queues[0].Name
 	schedules := rec.registered("aws:scheduler/schedule:Schedule")
 	if len(schedules) != 1 {
 		t.Fatalf("declared %d schedules, want one for the nightly task", len(schedules))
@@ -818,7 +821,7 @@ func TestAnOrderedCronTaskOnAContainerWorkerIsScheduledIntoOneMessageGroupOfAQue
 	declared := &inputRecorder{}
 	opened := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error {
-		return opened.declareTopics(pctx, "shop", "prod", []provider.Resource{nightly})
+		return declareTopicsAndTasks(pctx, opened, "shop", "prod", []provider.Resource{nightly})
 	}, pulumi.WithMocks("shop", "prod--infra", declared)); err != nil {
 		t.Fatalf("declare the topics: %v", err)
 	}

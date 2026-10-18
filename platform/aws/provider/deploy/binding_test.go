@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"encoding/json"
 	"slices"
 	"testing"
 
@@ -68,31 +67,4 @@ func publishedRecords(t *testing.T, bindings []live.Binding) (map[string]string,
 		records = append(records, variablestore.StoredBinding{Name: l.Name, Value: pair.Value})
 	}
 	return live.MergeBindings(nil, bindings, records), nil
-}
-
-func TestVariablesReadPolicyReachesOneValuePartitionPerProject(t *testing.T) {
-	t.Parallel()
-	raw, err := variablesReadPolicy(executionRole{
-		VariablesKeyARN: productionVariablesKeyARN,
-		ValuesTableARN:  valuesTableARN,
-		Slug:            "shop",
-		VariablesTier:   variablesTier,
-	})
-	if err != nil {
-		t.Fatalf("variablesReadPolicy: %v", err)
-	}
-
-	var doc struct {
-		Statement []struct {
-			Condition map[string]map[string][]string
-		}
-	}
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
-		t.Fatalf("policy is not valid JSON: %v", err)
-	}
-
-	leading := doc.Statement[1].Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"]
-	if want := []string{partitionOf(t, "shop")}; !slices.Equal(leading, want) {
-		t.Errorf("LeadingKeys = %v, want %v — a project's values and its bindings share one partition, and a role reaches its own", leading, want)
-	}
 }
