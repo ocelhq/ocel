@@ -1,8 +1,7 @@
-import { createExecutionContext, env } from "cloudflare:test";
+import { createExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../src/env";
 import type { PurgeQueue } from "../src/purge-queue";
-import { openPurgeQueue } from "../src/purge-request";
 import type { TagTimes } from "../src/purge-times";
 import { REGENERATION_HOLD_MS, Serve } from "../src/serve";
 import {

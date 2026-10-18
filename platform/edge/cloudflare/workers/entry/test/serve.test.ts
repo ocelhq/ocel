@@ -663,10 +663,9 @@ describe("Serve fetching from the origin", () => {
         exports: {
           PurgeQueue: {
             getByName: () => ({
-              raise: async (mode: string, tags: { tag: string }[]) => {
+              raise: async (_scope: unknown, mode: string, tags: { tag: string }[]) => {
                 raised.push({ mode, tags });
               },
-              record: async () => {},
             }),
           },
         },
@@ -701,7 +700,7 @@ describe("Serve fetching from the origin", () => {
       expect(response.headers.get("cloudflare-cdn-cache-control")).toContain("max-age=15");
     });
 
-    it("purges the announced tags behind the response, and queues what the cache cannot take", async () => {
+    it("raises the announced tags on the purge queue behind the response", async () => {
       const raised: { mode: string; tags: { tag: string }[] }[] = [];
       const { serve, settled } = serveRaising(raised);
 

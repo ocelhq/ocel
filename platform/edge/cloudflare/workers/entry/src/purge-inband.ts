@@ -1,47 +1,28 @@
-import type { PurgeGroup, PurgeMode } from "@platform/edge-contract/purge";
-import { type PurgeOutcome, type RaisedTag, TAGS_PER_CALL } from "./purge-backlog";
+import type { PurgeGroup } from "@platform/edge-contract/purge";
+import type { PurgeQueuePort } from "./purge-request";
+import type { ReleaseScope } from "./purge-times";
 
 export interface InBandPurgePorts {
-  cache: { purge(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> };
-  queue: { raise(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
-  times: { record(mode: PurgeMode, tags: RaisedTag[]): Promise<void> };
+  queue: Pick<PurgeQueuePort, "raise">;
+  scope: ReleaseScope;
   now(): number;
-}
-
-async function purgeChunk(mode: PurgeMode, tags: string[], ports: InBandPurgePorts): Promise<void> {
-  const raisedAt = ports.now();
-  let recorded = false;
-  try {
-    await ports.times.record(
-      mode,
-      tags.map((tag) => ({ tag, raisedAt })),
-    );
-    recorded = true;
-  } catch (error) {
-    console.error(`ocel: the purge queue kept no time for ${tags.length} tag(s)`, error);
-  }
-  if (recorded) {
-    try {
-      if ((await ports.cache.purge(mode, tags)).ok) return;
-    } catch {}
-  }
-  try {
-    await ports.queue.raise(
-      mode,
-      tags.map((tag) => ({ tag, raisedAt })),
-    );
-  } catch (error) {
-    console.error(`ocel: neither the cache nor the purge queue took ${tags.length} tag(s)`, error);
-  }
 }
 
 export async function purgeInBand(
   groups: readonly PurgeGroup[],
   ports: InBandPurgePorts,
 ): Promise<void> {
+  const raisedAt = ports.now();
   for (const { mode, tags } of groups) {
-    for (let i = 0; i < tags.length; i += TAGS_PER_CALL) {
-      await purgeChunk(mode, tags.slice(i, i + TAGS_PER_CALL), ports);
+    if (tags.length === 0) continue;
+    try {
+      await ports.queue.raise(
+        ports.scope,
+        mode,
+        tags.map((tag) => ({ tag, raisedAt })),
+      );
+    } catch (error) {
+      console.error(`ocel: the purge queue did not take ${tags.length} tag(s)`, error);
     }
   }
 }

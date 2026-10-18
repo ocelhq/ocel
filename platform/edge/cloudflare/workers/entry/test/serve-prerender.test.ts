@@ -1,6 +1,5 @@
-import { baseDeps } from "@framework/next-router/test-support/dispatch-scenario";
 import { describe, expect, it, vi } from "vitest";
-import { dispatchResult, type RouteDeps } from "../src/index";
+import type { ServeFetch } from "../src/index";
 import {
   buildEdgeUrl,
   RENDER_RELEASE_HEADER,
@@ -9,6 +8,12 @@ import {
   SERVE_REFUSED_HEADER,
   SERVE_UNSHARED_HEADER,
 } from "../src/serve-key";
+import {
+  EMPTY_ROUTES,
+  heldPurgeQueue,
+  servedNextRelease,
+  UNTOKENED_ISR_PREFIX,
+} from "./next-release";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
 type Target = Record<string, unknown>;
@@ -26,17 +31,19 @@ function recorder(answer: () => Response = () => new Response("from-origin")) {
   return { requests, fetch };
 }
 
-function deps(
+function blogRelease(
   served: FakeServing,
-  over: { target?: Target; origin?: ReturnType<typeof recorder> } = {},
-): RouteDeps {
+  over: {
+    target?: Target;
+    origin?: ReturnType<typeof recorder>;
+    queue?: ReturnType<typeof heldPurgeQueue>["queue"];
+    pending?: Promise<unknown>[];
+    isrPrefix?: string;
+  } = {},
+): ServeFetch {
   const origin = over.origin ?? recorder();
-  return baseDeps({
-    manifest: {
-      buildId: "t",
-      basePath: "",
-      pathnames: [],
-      routes: {},
+  return servedNextRelease({
+    table: {
       dispatch: {
         "/blog": {
           kind: "prerender",
@@ -44,21 +51,31 @@ function deps(
           config: { allowHeader: ["host"], bypassToken: "TOKEN" },
           allowQuery: ["page"],
           ...over.target,
-        },
+        } as never,
       },
     },
-    functionUrls: { "/blog": "https://fn.example.com" },
+    record: {
+      functionUrls: { "/blog": "https://fn.example.com" },
+      ...(over.isrPrefix && { isrPrefix: over.isrPrefix }),
+    },
     fetch: origin.fetch,
-    serving: served.serving,
+    serve: served.serving.serve,
+    serving: {
+      ...(over.queue && { queue: over.queue }),
+      ...(over.pending && { waitUntil: (promise) => void over.pending?.push(promise) }),
+    },
   });
 }
 
-const get = (path: string, deps: RouteDeps, init?: RequestInit) =>
-  dispatchResult(
-    { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
-    new Request(`https://Shop.Example.com${path}`, init),
-    deps,
-  );
+const get = (path: string, serve: ServeFetch, init?: RequestInit) =>
+  serve(new Request(`https://Shop.Example.com${path}`, init));
+
+function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  return Promise.race([
+    promise.then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), ms)),
+  ]);
+}
 
 function cached(status: string, extra: Record<string, string> = {}) {
   return () =>
@@ -77,7 +94,7 @@ describe("a prerender served through Serve", () => {
   it("fetches the origin URL through Serve keyed by the public host, the app and the release token", async () => {
     const served = fakeServing();
 
-    await get("/blog", deps(served));
+    await get("/blog", blogRelease(served));
 
     expect(served.calls).toHaveLength(1);
     expect(served.calls[0].props).toEqual({ kind: "origin" });
@@ -93,7 +110,7 @@ describe("a prerender served through Serve", () => {
   it("tells the origin the request is for the edge cache, so it shapes the response", async () => {
     const served = fakeServing();
 
-    await get("/blog", deps(served));
+    await get("/blog", blogRelease(served));
 
     expect(served.calls[0].request.headers.get("x-ocel-edge-cache")).toBe("1");
   });
@@ -101,7 +118,7 @@ describe("a prerender served through Serve", () => {
   it("keys a visitor's own x-ocel-edge-cache out of what the origin is sent on a bypass", async () => {
     const origin = recorder();
 
-    await get("/blog", deps(fakeServing(), { origin, target: actionTarget }), {
+    await get("/blog", blogRelease(fakeServing(), { origin, target: actionTarget }), {
       method: "POST",
       body: "x",
       headers: { "next-action": "1", "x-ocel-edge-cache": "1" },
@@ -113,7 +130,7 @@ describe("a prerender served through Serve", () => {
   it("hands Serve neither the visitor's cookie nor their authorization", async () => {
     const served = fakeServing();
 
-    await get("/blog", deps(served), {
+    await get("/blog", blogRelease(served), {
       headers: { cookie: "session=1", authorization: "Bearer t" },
     });
 
@@ -125,7 +142,7 @@ describe("a prerender served through Serve", () => {
   it("tells Serve the release whose functions the origin must be one of", async () => {
     const served = fakeServing();
 
-    await get("/blog", deps(served));
+    await get("/blog", blogRelease(served));
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null"),
@@ -136,7 +153,7 @@ describe("a prerender served through Serve", () => {
     const served = fakeServing();
     const target = { fallback: { initialRevalidate: 30, initialExpiration: 300 } };
 
-    await get("/blog", deps(served, { target }));
+    await get("/blog", blogRelease(served, { target }));
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry,
@@ -153,7 +170,7 @@ describe("a prerender served through Serve", () => {
     const served = fakeServing();
     const target = { fallback: { initialRevalidate: false } };
 
-    await get("/blog", deps(served, { target }));
+    await get("/blog", blogRelease(served, { target }));
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry,
@@ -169,7 +186,7 @@ describe("a prerender served through Serve", () => {
     async (_, allowQuery, search, pathDeterminesQuery) => {
       const served = fakeServing();
 
-      await get("/blog?utm=x&nxtPid=a", deps(served, { target: { allowQuery } }));
+      await get("/blog?utm=x&nxtPid=a", blogRelease(served, { target: { allowQuery } }));
 
       const sent = served.calls[0].request;
       expect(new URL(sent.url).search).toBe(search);
@@ -187,7 +204,7 @@ describe("a prerender served through Serve", () => {
       const served = fakeServing();
       const target = { config: { renderingMode: "PARTIALLY_STATIC" }, allowQuery: [] };
 
-      await get("/blog?nxtPid=a", deps(served, { target }), { headers });
+      await get("/blog?nxtPid=a", blogRelease(served, { target }), { headers });
 
       const sent = served.calls[0].request;
       expect(decodeURIComponent(sent.url)).toContain(variant);
@@ -207,7 +224,9 @@ describe("a prerender served through Serve", () => {
     );
     const origin = recorder(() => new Response("from-origin"));
 
-    const res = await get("/blog", deps(served, { origin }), { headers: { cookie: "session=1" } });
+    const res = await get("/blog", blogRelease(served, { origin }), {
+      headers: { cookie: "session=1" },
+    });
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("from-origin");
@@ -219,8 +238,8 @@ describe("a prerender served through Serve", () => {
   it("keys two requests that differ only in a query the route ignores to one URL", async () => {
     const served = fakeServing();
 
-    await get("/blog?ref=a&page=2", deps(served));
-    await get("/blog?page=2&utm=b", deps(served));
+    await get("/blog?ref=a&page=2", blogRelease(served));
+    await get("/blog?page=2&utm=b", blogRelease(served));
 
     expect(served.calls.map(({ originUrl }) => originUrl)).toEqual([
       "https://fn.example.com/blog?page=2",
@@ -232,8 +251,8 @@ describe("a prerender served through Serve", () => {
   it("keys an RSC request apart from the document by variant", async () => {
     const served = fakeServing();
 
-    await get("/blog", deps(served));
-    await get("/blog", deps(served), { headers: { rsc: "1" } });
+    await get("/blog", blogRelease(served));
+    await get("/blog", blogRelease(served), { headers: { rsc: "1" } });
 
     expect(served.calls.map(({ coordinates }) => coordinates.variant)).toEqual(["", ".rsc"]);
     expect(served.calls[0].request.url).not.toBe(served.calls[1].request.url);
@@ -249,7 +268,7 @@ describe("a prerender served through Serve", () => {
     ["EXPIRED", "MISS"],
     ["DYNAMIC", "MISS"],
   ])("reports Workers Cache status %s as the %s tier", async (status, tier) => {
-    const res = await get("/blog", deps(fakeServing(cached(status))));
+    const res = await get("/blog", blogRelease(fakeServing(cached(status))));
 
     expect(res.headers.get("x-ocel-cache")).toBe(tier);
   });
@@ -262,7 +281,7 @@ describe("a prerender served through Serve", () => {
     async (source, tier) => {
       const res = await get(
         "/blog",
-        deps(fakeServing(cached("MISS", { "x-ocel-entry-source": source }))),
+        blogRelease(fakeServing(cached("MISS", { "x-ocel-entry-source": source }))),
       );
 
       expect(res.headers.get("x-ocel-cache")).toBe(tier);
@@ -273,20 +292,20 @@ describe("a prerender served through Serve", () => {
   it("reports a hit by Workers Cache's status, whatever source filled it", async () => {
     const res = await get(
       "/blog",
-      deps(fakeServing(cached("UPDATING", { "x-ocel-entry-source": "store" }))),
+      blogRelease(fakeServing(cached("UPDATING", { "x-ocel-entry-source": "store" }))),
     );
 
     expect(res.headers.get("x-ocel-cache")).toBe("STALE");
   });
 
   it("reports a Serve response with no cache status as a miss", async () => {
-    const res = await get("/blog", deps(fakeServing(() => new Response("page"))));
+    const res = await get("/blog", blogRelease(fakeServing(() => new Response("page"))));
 
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
   });
 
   it("keeps the cache's own headers off the visitor's response", async () => {
-    const res = await get("/blog", deps(fakeServing(cached("HIT"))));
+    const res = await get("/blog", blogRelease(fakeServing(cached("HIT"))));
 
     expect(res.headers.has("cache-tag")).toBe(false);
     expect(res.headers.has("cloudflare-cdn-cache-control")).toBe(false);
@@ -297,7 +316,7 @@ describe("a prerender served through Serve", () => {
   it("gives the visitor back the Vary the origin sent, which Serve moved to x-ocel-vary", async () => {
     const res = await get(
       "/blog",
-      deps(fakeServing(cached("HIT", { "x-ocel-vary": "rsc, next-router-state-tree" }))),
+      blogRelease(fakeServing(cached("HIT", { "x-ocel-vary": "rsc, next-router-state-tree" }))),
     );
 
     expect(res.headers.get("vary")).toBe("rsc, next-router-state-tree");
@@ -305,7 +324,10 @@ describe("a prerender served through Serve", () => {
   });
 
   it("reports a stored page's x-nextjs-cache as the tier that served it", async () => {
-    const res = await get("/blog", deps(fakeServing(cached("HIT", { "x-nextjs-cache": "MISS" }))));
+    const res = await get(
+      "/blog",
+      blogRelease(fakeServing(cached("HIT", { "x-nextjs-cache": "MISS" }))),
+    );
 
     expect(res.headers.get("x-nextjs-cache")).toBe("HIT");
   });
@@ -314,7 +336,7 @@ describe("a prerender served through Serve", () => {
     const served = fakeServing(cached("HIT", { etag: '"e1"' }));
     const origin = recorder();
 
-    const res = await get("/blog", deps(served, { origin }), { method: "HEAD" });
+    const res = await get("/blog", blogRelease(served, { origin }), { method: "HEAD" });
 
     expect(origin.requests).toHaveLength(0);
     expect(served.calls).toHaveLength(1);
@@ -331,7 +353,7 @@ describe("a prerender served through Serve", () => {
     );
     const origin = recorder();
 
-    await get("/blog", deps(served, { origin }), { method: "HEAD" });
+    await get("/blog", blogRelease(served, { origin }), { method: "HEAD" });
 
     expect(origin.requests).toHaveLength(1);
     expect(origin.requests[0].method).toBe("HEAD");
@@ -345,7 +367,7 @@ describe("a prerender whose Serve call answers a redirect or fails", () => {
         () => new Response(null, { status, headers: { location: "/elsewhere" } }),
       );
 
-      const res = await get("/blog", deps(served));
+      const res = await get("/blog", blogRelease(served));
 
       expect(res.status).toBe(status);
       expect(res.headers.get("location")).toBe("/elsewhere");
@@ -359,7 +381,7 @@ describe("a prerender whose Serve call answers a redirect or fails", () => {
     const origin = recorder();
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const res = await get("/blog", deps(served, { origin }));
+    const res = await get("/blog", blogRelease(served, { origin }));
 
     expect(await res.text()).toBe("from-origin");
     expect(origin.requests).toHaveLength(1);
@@ -377,7 +399,7 @@ describe("a prerender that must not be stored", () => {
   ): Promise<{ res: Response; served: FakeServing; origin: ReturnType<typeof recorder> }> {
     const served = fakeServing();
     const origin = recorder();
-    const res = await get(path, deps(served, { origin, target }), init);
+    const res = await get(path, blogRelease(served, { origin, target }), init);
     expect(served.calls).toHaveLength(0);
     return { res, served, origin };
   }
@@ -442,7 +464,7 @@ describe("the document of a PPR route", () => {
   it("asks Serve for the route's static shell, keyed apart from its document and RSC", async () => {
     const served = fakeServing(framedShell());
 
-    await get("/blog", deps(served, { target: pprTarget }));
+    await get("/blog", blogRelease(served, { target: pprTarget }));
 
     expect(served.calls).toHaveLength(1);
     expect(served.calls[0].coordinates.variant).toBe(".ppr-shell");
@@ -455,7 +477,7 @@ describe("the document of a PPR route", () => {
     const served = fakeServing(framedShell());
     const origin = recorder(() => new Response("<p>dynamic</p>"));
 
-    const res = await get("/blog", deps(served, { origin, target: pprTarget }), {
+    const res = await get("/blog", blogRelease(served, { origin, target: pprTarget }), {
       headers: { cookie: "session=1" },
     });
 
@@ -477,7 +499,7 @@ describe("the document of a PPR route", () => {
     const served = fakeServing(framedShell());
     const origin = recorder(() => new Response("<p>dynamic</p>"));
 
-    const res = await get("/blog", deps(served, { origin, target: pprTarget }), {
+    const res = await get("/blog", blogRelease(served, { origin, target: pprTarget }), {
       method: "HEAD",
     });
 
@@ -497,7 +519,7 @@ describe("the document of a PPR route", () => {
 
     await get(
       "/blog",
-      deps(served, {
+      blogRelease(served, {
         origin,
         target: { ...pprTarget, pprChain: { headers: { "next-resume": "1", "x-chain": "on" } } },
       }),
@@ -510,7 +532,7 @@ describe("the document of a PPR route", () => {
     const served = fakeServing(framedShell());
     const origin = recorder(() => new Response("boom", { status: 500 }));
 
-    const res = await get("/blog", deps(served, { origin, target: pprTarget }));
+    const res = await get("/blog", blogRelease(served, { origin, target: pprTarget }));
 
     expect(await res.text()).toBe("<html>shell");
   });
@@ -524,7 +546,7 @@ describe("the document of a PPR route", () => {
     });
     const origin = recorder(() => new Response("<html>whole page"));
 
-    const res = await get("/blog", deps(served, { origin, target: pprTarget }), {
+    const res = await get("/blog", blogRelease(served, { origin, target: pprTarget }), {
       headers: { cookie: "session=1" },
     });
 
@@ -548,7 +570,7 @@ describe("the document of a PPR route", () => {
     );
     const origin = recorder(() => new Response("<html>whole page"));
 
-    const res = await get("/blog", deps(served, { origin, target: pprTarget }), {
+    const res = await get("/blog", blogRelease(served, { origin, target: pprTarget }), {
       headers: { cookie: "session=1" },
     });
 
@@ -567,7 +589,7 @@ describe("the document of a PPR route", () => {
     const served = fakeServing(cached("HIT"));
     const origin = recorder();
 
-    const res = await get("/blog", deps(served, { origin, target: pprTarget }));
+    const res = await get("/blog", blogRelease(served, { origin, target: pprTarget }));
 
     expect(await res.text()).toBe("page");
     expect(res.headers.get("x-ocel-cache")).toBe("HIT");
@@ -581,39 +603,37 @@ describe("the document of a PPR route whose param was not prerendered", () => {
     allowQuery: ["page"],
   };
 
-  function depsFor(served: FakeServing, over: { target?: Target } = {}): RouteDeps {
-    return baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
+  function paramRelease(served: FakeServing, over: { target?: Target } = {}): ServeFetch {
+    return servedNextRelease({
+      table: {
+        pathnames: ["/blog/[id]"],
+        routes: {
+          ...EMPTY_ROUTES,
+          dynamicRoutes: [
+            {
+              sourceRegex: "^/blog/(?<nxtPid>[^/]+?)(?:/)?$",
+              destination: "/blog/[id]?nxtPid=$nxtPid",
+            },
+          ],
+        },
         dispatch: {
-          "/blog/[id]": { kind: "prerender", id: "/blog", ...over.target },
+          "/blog/[id]": { kind: "prerender", id: "/blog", ...over.target } as never,
         },
       },
-      functionUrls: { "/blog": "https://fn.example.com" },
+      record: { functionUrls: { "/blog": "https://fn.example.com" } },
       fetch: recorder().fetch,
-      serving: served.serving,
+      serve: served.serving.serve,
     });
   }
 
-  const getParam = (id: string, deps: RouteDeps) =>
-    dispatchResult(
-      {
-        resolvedPathname: "/blog/[id]",
-        routePath: `/blog/${id}`,
-        invocationTarget: { pathname: `/blog/${id}` },
-      },
-      new Request(`https://shop.example.com/blog/${id}?utm=x`),
-      deps,
-    );
+  const getParam = (id: string, serve: ServeFetch) =>
+    serve(new Request(`https://shop.example.com/blog/${id}?utm=x`));
 
   it("asks Serve for one shell shared by every param value", async () => {
     const served = fakeServing();
 
-    await getParam("1", depsFor(served, { target: fallbackTarget }));
-    await getParam("2", depsFor(served, { target: fallbackTarget }));
+    await getParam("1", paramRelease(served, { target: fallbackTarget }));
+    await getParam("2", paramRelease(served, { target: fallbackTarget }));
 
     expect(new URL(served.calls[0].request.url).pathname.endsWith("/blog/[id]")).toBe(true);
     expect(served.calls[1].request.url).toBe(served.calls[0].request.url);
@@ -622,7 +642,7 @@ describe("the document of a PPR route whose param was not prerendered", () => {
   it("marks the call as the shared shell, which Serve fills only from the store", async () => {
     const served = fakeServing();
 
-    await getParam("42", depsFor(served, { target: fallbackTarget }));
+    await getParam("42", paramRelease(served, { target: fallbackTarget }));
 
     const release = JSON.parse(
       served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null",
@@ -638,7 +658,7 @@ describe("the document of a PPR route whose param was not prerendered", () => {
         : new Response("shell of 42", { headers: { "cf-cache-status": "MISS" } }),
     );
 
-    const response = await getParam("42", depsFor(served, { target: fallbackTarget }));
+    const response = await getParam("42", paramRelease(served, { target: fallbackTarget }));
 
     expect(served.calls).toHaveLength(2);
     expect(new URL(served.calls[1].request.url).pathname.endsWith("/blog/42")).toBe(true);
@@ -658,7 +678,7 @@ describe("the document of a PPR route whose param was not prerendered", () => {
   it("names the shared shell as the entry to answer from", async () => {
     const served = fakeServing();
 
-    await getParam("42", depsFor(served, { target: fallbackTarget }));
+    await getParam("42", paramRelease(served, { target: fallbackTarget }));
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null").entry,
@@ -669,8 +689,8 @@ describe("the document of a PPR route whose param was not prerendered", () => {
     const served = fakeServing();
     const target = { config: { renderingMode: "PARTIALLY_STATIC" } };
 
-    await getParam("1", depsFor(served, { target }));
-    await getParam("2", depsFor(served, { target }));
+    await getParam("1", paramRelease(served, { target }));
+    await getParam("2", paramRelease(served, { target }));
 
     expect(served.calls[1].request.url).not.toBe(served.calls[0].request.url);
   });
@@ -683,7 +703,7 @@ describe("an edge-runtime prerender", () => {
     const served = fakeServing();
     const origin = recorder();
 
-    await get("/blog?page=2&utm=x", deps(served, { origin, target: edgeTarget }));
+    await get("/blog?page=2&utm=x", blogRelease(served, { origin, target: edgeTarget }));
 
     expect(origin.requests).toHaveLength(0);
     expect(served.calls).toHaveLength(1);
@@ -702,7 +722,7 @@ describe("an edge-runtime prerender", () => {
   it("tells Serve the release to render it from and the route's tags", async () => {
     const served = fakeServing();
 
-    await get("/blog", deps(served, { target: edgeTarget }));
+    await get("/blog", blogRelease(served, { target: edgeTarget }));
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null"),
@@ -716,21 +736,25 @@ describe("an edge-runtime prerender", () => {
   it("keys its RSC variant apart from its document", async () => {
     const served = fakeServing();
 
-    await get("/blog", deps(served, { target: edgeTarget }));
-    await get("/blog", deps(served, { target: edgeTarget }), { headers: { rsc: "1" } });
+    await get("/blog", blogRelease(served, { target: edgeTarget }));
+    await get("/blog", blogRelease(served, { target: edgeTarget }), { headers: { rsc: "1" } });
 
     expect(served.calls.map(({ coordinates }) => coordinates.variant)).toEqual(["", ".rsc"]);
     expect(served.calls[0].request.url).not.toBe(served.calls[1].request.url);
   });
 });
 
-describe("a prerender with no Serve to go through", () => {
+describe("a prerender of a release whose ISR prefix names no release token", () => {
   it("renders at the origin and stores nothing", async () => {
     const origin = recorder();
-    const routeDeps = { ...deps(fakeServing(), { origin }), serving: undefined };
+    const served = fakeServing();
 
-    const res = await get("/blog", routeDeps);
+    const res = await get(
+      "/blog",
+      blogRelease(served, { origin, isrPrefix: UNTOKENED_ISR_PREFIX }),
+    );
 
+    expect(served.calls).toHaveLength(0);
     expect(await res.text()).toBe("from-origin");
     expect(origin.requests).toHaveLength(1);
   });
@@ -743,7 +767,7 @@ describe("an on-demand revalidation with the bypass token", () => {
     const served = fakeServing();
     const origin = recorder();
 
-    const res = await get("/blog", deps(served, { origin }), onDemand);
+    const res = await get("/blog", blogRelease(served, { origin }), onDemand);
 
     expect(served.calls).toHaveLength(0);
     expect(origin.requests[0].headers.get("x-prerender-revalidate")).toBe("TOKEN");
@@ -751,69 +775,92 @@ describe("an on-demand revalidation with the bypass token", () => {
   });
 
   it("then purges the path's tag in the release, and waits for it", async () => {
-    const served = fakeServing();
+    const held = heldPurgeQueue();
 
-    await get("/blog", deps(served), onDemand);
+    const answered = get("/blog", blogRelease(fakeServing(), { queue: held.queue }), onDemand);
 
-    expect(served.purges).toEqual([
-      { groups: [{ mode: "purge", tags: ["r0a1b2c3d|path:/blog"] }], awaited: true },
-    ]);
+    expect(await settlesWithin(answered, 50)).toBe(false);
+    expect(held.raised).toEqual([{ mode: "purge", tags: ["r0a1b2c3d|path:/blog"] }]);
+    held.release();
+    await answered;
   });
 
   it("purges nothing when the render failed", async () => {
-    const served = fakeServing();
+    const held = heldPurgeQueue();
+    held.release();
+    const pending: Promise<unknown>[] = [];
     const origin = recorder(() => new Response("boom", { status: 500 }));
 
-    await get("/blog", deps(served, { origin }), onDemand);
+    await get(
+      "/blog",
+      blogRelease(fakeServing(), { origin, queue: held.queue, pending }),
+      onDemand,
+    );
+    await Promise.all(pending);
 
-    expect(served.purges).toEqual([]);
+    expect(held.raised).toEqual([]);
   });
 
   it("does not run for a visitor who sent no token", async () => {
-    const served = fakeServing();
+    const held = heldPurgeQueue();
+    held.release();
+    const pending: Promise<unknown>[] = [];
 
-    await get("/blog", deps(served), { headers: { "x-prerender-revalidate": "WRONG" } });
+    await get("/blog", blogRelease(fakeServing(), { queue: held.queue, pending }), {
+      headers: { "x-prerender-revalidate": "WRONG" },
+    });
+    await Promise.all(pending);
 
-    expect(served.purges).toEqual([]);
+    expect(held.raised).toEqual([]);
   });
 });
 
 describe("an origin response announcing a purge", () => {
-  function acting(headers: Record<string, string>, served: FakeServing) {
+  function acting(
+    headers: Record<string, string>,
+    held: ReturnType<typeof heldPurgeQueue>,
+    pending: Promise<unknown>[] = [],
+  ) {
     const origin = recorder(
       () =>
         new Response("done", {
           headers: { "x-ocel-purge": "invalidate r0a1b2c3d|a purge r0a1b2c3d|b", ...headers },
         }),
     );
-    return deps(served, { origin, target: actionTarget });
+    return blogRelease(fakeServing(), {
+      origin,
+      target: actionTarget,
+      queue: held.queue,
+      pending,
+    });
   }
 
-  const post = (routeDeps: RouteDeps) =>
-    get("/blog", routeDeps, { method: "POST", body: "x", headers: { "next-action": "1" } });
+  const post = (serve: ServeFetch) =>
+    get("/blog", serve, { method: "POST", body: "x", headers: { "next-action": "1" } });
 
   it("hands the gateway's serving the groups, unawaited for a route handler", async () => {
-    const served = fakeServing();
+    const held = heldPurgeQueue();
+    const pending: Promise<unknown>[] = [];
+    const answered = post(acting({}, held, pending));
 
-    const res = await post(acting({}, served));
+    expect(await settlesWithin(answered, 1_000)).toBe(true);
+    held.release();
+    await Promise.all(pending);
 
-    expect(served.purges).toEqual([
-      {
-        groups: [
-          { mode: "invalidate", tags: ["r0a1b2c3d|a"] },
-          { mode: "purge", tags: ["r0a1b2c3d|b"] },
-        ],
-        awaited: false,
-      },
+    expect(held.raised).toEqual([
+      { mode: "invalidate", tags: ["r0a1b2c3d|a"] },
+      { mode: "purge", tags: ["r0a1b2c3d|b"] },
     ]);
-    expect(res.headers.has("x-ocel-purge")).toBe(false);
+    expect((await answered).headers.has("x-ocel-purge")).toBe(false);
   });
 
   it("has the gateway await the purge for a Server Action that revalidated", async () => {
-    const served = fakeServing();
+    const held = heldPurgeQueue();
 
-    await post(acting({ "x-action-revalidated": "[[],0,0]" }, served));
+    const answered = post(acting({ "x-action-revalidated": "[[],0,0]" }, held));
 
-    expect(served.purges.map(({ awaited }) => awaited)).toEqual([true]);
+    expect(await settlesWithin(answered, 50)).toBe(false);
+    held.release();
+    await answered;
   });
 });

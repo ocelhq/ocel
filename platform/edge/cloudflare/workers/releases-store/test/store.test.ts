@@ -2,7 +2,7 @@ import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import type { PointerMove, ReleaseRecord } from "../src/store";
-import { ensureSchema, SCHEMA_VERSION } from "../src/store";
+import { ensureSchema } from "../src/store";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
@@ -299,6 +299,95 @@ describe("removePointer", () => {
   });
 });
 
+describe("the builds a pointer served before", () => {
+  const build = (n: number, over: Partial<ReleaseRecord> = {}) =>
+    makeRecord({
+      release: `deploy-${n}`,
+      buildId: `build-${n}`,
+      assetPrefix: `prod/p1/web/r${n}/assets`,
+      ...over,
+    });
+
+  async function promote(store: ReturnType<typeof storeStub>, records: ReleaseRecord[], n: number) {
+    await store.movePointer(
+      makePointerMove({
+        promotionId: `promo-${n}`,
+        replaces: n === 1 ? undefined : `promo-${n - 1}`,
+        records,
+      }),
+    );
+  }
+
+  it("serves a record naming the asset prefix of each build its app served on the pointer before", async () => {
+    const store = storeStub();
+    await promote(store, [build(1)], 1);
+    await promote(store, [build(2)], 2);
+    await promote(store, [build(3)], 3);
+
+    const served = await store.readPointerRecord("web");
+
+    expect(served).toMatchObject({
+      kind: "record",
+      record: {
+        buildId: "build-3",
+        buildAssets: { "build-1": "prod/p1/web/r1/assets", "build-2": "prod/p1/web/r2/assets" },
+      },
+    });
+  });
+
+  it("names no build of another app or another pointer", async () => {
+    const store = storeStub();
+    await promote(
+      store,
+      [build(1), build(1, { app: "admin", assetPrefix: "prod/p1/admin/r1/assets" })],
+      1,
+    );
+    await store.movePointer(
+      makePointerMove({ pointer: "pr-42", promotionId: "promo-pr", records: [build(9)] }),
+    );
+    await promote(store, [build(2)], 2);
+
+    const served = await store.readPointerRecord("web");
+
+    expect(served).toMatchObject({
+      kind: "record",
+      record: { buildAssets: { "build-1": "prod/p1/web/r1/assets" } },
+    });
+  });
+
+  it("names no more than the twenty builds served most recently", async () => {
+    const store = storeStub();
+    for (let n = 1; n <= 23; n++) await promote(store, [build(n)], n);
+
+    const served = await store.readPointerRecord("web");
+    const named = served.kind === "record" ? Object.keys(served.record.buildAssets ?? {}) : [];
+
+    expect(named).toHaveLength(19);
+    expect(named).not.toContain("build-3");
+    expect(named).toContain("build-4");
+  });
+
+  it("forgets the builds of a pointer it removes", async () => {
+    const store = storeStub();
+    const preview = (n: number, replaces?: string) =>
+      makePointerMove({
+        pointer: "pr-42",
+        promotionId: `promo-pr-${n}`,
+        replaces,
+        records: [build(n)],
+        labels: [{ label: "pr-42-aaaa", app: "web" }],
+      });
+    await store.movePointer(preview(1));
+    await store.removePointer("pr-42");
+    await store.movePointer(preview(2));
+
+    const served = await store.readLabelRecord("pr-42-aaaa");
+
+    expect(served).toMatchObject({ kind: "record", record: { buildId: "build-2" } });
+    expect(served.kind === "record" && served.record.buildAssets).toBeFalsy();
+  });
+});
+
 describe("apps", () => {
   it("names every app ever moved, even one no pointer serves any more", async () => {
     const store = storeStub();
@@ -325,11 +414,11 @@ describe("version stamp", () => {
 });
 
 describe("initialize / authorized", () => {
-  it("seeds ownership and authenticates against the stored secret", async () => {
+  it("seeds the secret and authenticates against it", async () => {
     const store = storeStub();
     expect(await store.authorized("s3cret")).toBe(false);
 
-    expect(await store.initialize("owner-1", "s3cret", false)).toBe("adopted");
+    expect(await store.initialize("s3cret")).toBe("adopted");
 
     expect(await store.authorized("s3cret")).toBe(true);
     expect(await store.authorized("wrong")).toBe(false);
@@ -337,39 +426,19 @@ describe("initialize / authorized", () => {
 
   it("keeps the existing identity instead of re-seeding, and hands nothing back", async () => {
     const store = storeStub();
-    await store.initialize("owner-1", "s3cret", false);
+    await store.initialize("s3cret");
 
-    expect(await store.initialize("owner-2", "other", false)).toBe("refused");
+    expect(await store.initialize("other")).toBe("refused");
 
     expect(await store.authorized("s3cret")).toBe(true);
     expect(await store.authorized("other")).toBe(false);
   });
-
-  it("refuses a matching owner token too", async () => {
-    const store = storeStub();
-    await store.initialize("owner-1", "old", false);
-
-    expect(await store.initialize("owner-1", "new", false)).toBe("refused");
-
-    expect(await store.authorized("old")).toBe(true);
-    expect(await store.authorized("new")).toBe(false);
-  });
-
-  it("adopts the presented identity when force is set", async () => {
-    const store = storeStub();
-    await store.initialize("owner-1", "s3cret", false);
-
-    expect(await store.initialize("owner-2", "other", true)).toBe("adopted");
-
-    expect(await store.authorized("other")).toBe(true);
-    expect(await store.authorized("s3cret")).toBe(false);
-  });
 });
 
 describe("destroy", () => {
-  it("clears what it serves, ownership and secret, and frees the slug", async () => {
+  it("clears what it serves and its secret, and frees the slug", async () => {
     const store = storeStub();
-    await store.initialize("owner-1", "s3cret", false);
+    await store.initialize("s3cret");
     await store.movePointer(makePointerMove());
 
     await store.destroy();
@@ -379,112 +448,35 @@ describe("destroy", () => {
     expect(await store.listApps()).toEqual([]);
     expect(await store.authorized("s3cret")).toBe(false);
 
-    await store.initialize("owner-2", "fresh", false);
+    await store.initialize("fresh");
     expect(await store.authorized("fresh")).toBe(true);
   });
 });
 
 describe("ensureSchema", () => {
-  it("drops a superseded schema's tables and keeps the store's identity", async () => {
-    const stub = env.RELEASES_DO.get(env.RELEASES_DO.idFromName("legacy"));
-    await runInDurableObject(stub, (_instance, ctx) => {
-      const storage = ctx.storage;
-      for (const table of ["records", "promotions", "pointers", "served", "apps"]) {
-        storage.sql.exec(`DROP TABLE IF EXISTS ${table}`);
-      }
-      storage.sql.exec(
-        `CREATE TABLE records (
-           app TEXT NOT NULL,
-           identity TEXT NOT NULL,
-           data TEXT NOT NULL,
-           PRIMARY KEY (app, identity)
-         );
-         CREATE TABLE promotions (
-           promotion_id TEXT PRIMARY KEY,
-           ts INTEGER NOT NULL,
-           builds TEXT NOT NULL,
-           seq INTEGER NOT NULL,
-           tag TEXT,
-           pointer TEXT NOT NULL DEFAULT '@production'
-         );
-         CREATE TABLE pointers (
-           name TEXT PRIMARY KEY,
-           promotion_id TEXT NOT NULL
-         );`,
-      );
-      storage.sql.exec(
-        `INSERT INTO records (app, identity, data) VALUES (?, ?, ?)`,
-        "web",
-        "deploy-1",
-        JSON.stringify(makeRecord()),
-      );
-      storage.sql.exec(
-        `INSERT INTO pointers (name, promotion_id) VALUES (?, ?)`,
-        "@production",
-        "promo-1",
-      );
-      storage.sql.exec(
-        `INSERT INTO meta (key, value) VALUES (?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        "secret",
-        "s3cret",
-      );
-      storage.sql.exec(
-        `INSERT INTO meta (key, value) VALUES (?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        "schemaVersion",
-        "2",
-      );
-
-      ensureSchema(storage);
-
-      const tables = storage.sql
-        .exec<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
-        .toArray()
-        .map((t) => t.name);
-      expect(tables).not.toContain("records");
-      expect(tables).not.toContain("promotions");
-      const count = (table: string) =>
-        storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).one().n;
-      expect(count("pointers")).toBe(0);
-      expect(count("served")).toBe(0);
-
-      const meta = (key: string) =>
-        storage.sql
-          .exec<{ value: string }>(`SELECT value FROM meta WHERE key = ?`, key)
-          .toArray()[0]?.value;
-      expect(meta("secret")).toBe("s3cret");
-      expect(meta("schemaVersion")).toBe(String(SCHEMA_VERSION));
-    });
-  });
-
-  it("adds the labels table to a store that predates it and keeps the pointers it serves", async () => {
+  it("keeps every pointer it serves whatever schema version the store recorded", async () => {
     const store = storeStub();
-    await store.initialize("owner-1", "s3cret", false);
+    await store.initialize("s3cret");
     await store.movePointer(makePointerMove());
 
     await runInDurableObject(storeStub(), (_instance, ctx) => {
-      ctx.storage.sql.exec(`DROP TABLE labels`);
       ctx.storage.sql.exec(
-        `UPDATE meta SET value = '${SCHEMA_VERSION}' WHERE key = 'schemaVersion'`,
+        `INSERT INTO meta (key, value) VALUES ('schemaVersion', '1')
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       );
       ensureSchema(ctx.storage);
-      const tables = ctx.storage.sql
-        .exec<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
-        .toArray()
-        .map((t) => t.name);
-      expect(tables).toContain("labels");
     });
 
     expect(await store.readPointerRecord("web")).toMatchObject({
       kind: "record",
       release: "deploy-1",
     });
+    expect(await store.authorized("s3cret")).toBe(true);
   });
 
   it("leaves a current schema's rows alone", async () => {
     const store = storeStub();
-    await store.initialize("owner-1", "s3cret", false);
+    await store.initialize("s3cret");
     await store.movePointer(makePointerMove());
 
     await runInDurableObject(storeStub(), (_instance, ctx) => {

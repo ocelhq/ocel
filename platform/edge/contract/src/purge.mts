@@ -1,5 +1,3 @@
-import { createHmac } from "node:crypto";
-
 import { storedCacheTags } from "./cache-tags.mjs";
 
 export const purgePath = "/.ocel/purge";
@@ -112,8 +110,45 @@ export function readReleaseToken(isrPrefix: string): string | undefined {
   return segments[3];
 }
 
-export function derivePurgeSecret(seed: string, isrPrefix: string): string {
-  return createHmac("sha256", seed).update(isrPrefix).digest("hex");
+const encoder = new TextEncoder();
+
+function importHmacKey(secret: string, usage: "sign" | "verify") {
+  return crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    [usage],
+  );
+}
+
+function encodeHex(bytes: ArrayBuffer): string {
+  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function decodeHex(hex: string): Uint8Array | undefined {
+  if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) return undefined;
+  return Uint8Array.from(hex.match(/../g)!, (pair) => Number.parseInt(pair, 16));
+}
+
+export async function signPurge(secret: string, body: string): Promise<string> {
+  const key = await importHmacKey(secret, "sign");
+  return encodeHex(await crypto.subtle.sign("HMAC", key, encoder.encode(body)));
+}
+
+export async function verifyPurge(
+  secret: string,
+  body: Uint8Array,
+  signature: string,
+): Promise<boolean> {
+  const expected = decodeHex(signature);
+  if (!expected) return false;
+  const key = await importHmacKey(secret, "verify");
+  return crypto.subtle.verify("HMAC", key, expected, body);
+}
+
+export function derivePurgeSecret(seed: string, isrPrefix: string): Promise<string> {
+  return signPurge(seed, isrPrefix);
 }
 
 function isRetryable(status: number): boolean {
@@ -123,7 +158,7 @@ function isRetryable(status: number): boolean {
 async function post(sender: PurgeSender, url: string, secret: string, body: string): Promise<void> {
   const pause = sender.sleep ?? ((ms: number) => new Promise((done) => setTimeout(done, ms)));
   const random = sender.random ?? Math.random;
-  const signature = createHmac("sha256", secret).update(body).digest("hex");
+  const signature = await signPurge(secret, body);
   let last = "";
   let status: number | undefined;
   for (let attempt = 0; attempt < attempts; attempt++) {

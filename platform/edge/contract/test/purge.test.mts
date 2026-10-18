@@ -14,7 +14,9 @@ import {
   readPurge,
   readPurgeEntry,
   readReleaseToken,
+  signPurge,
   tagsPerPurgeRequest,
+  verifyPurge,
 } from "../src/purge.mjs";
 
 const URL = "https://acme-prod.sub.workers.dev/.ocel/purge";
@@ -58,17 +60,46 @@ beforeEach(() => {
 });
 
 describe("derivePurgeSecret", () => {
-  it("is the HMAC of the release's ISR prefix under the seed, in hex", () => {
+  it("is the HMAC of the release's ISR prefix under the seed, in hex", async () => {
     const expected = createHmac("sha256", SEED).update(PREFIX).digest("hex");
 
-    expect(derivePurgeSecret(SEED, PREFIX)).toBe(expected);
+    expect(await derivePurgeSecret(SEED, PREFIX)).toBe(expected);
   });
 
-  it("differs per prefix and per seed", () => {
-    expect(derivePurgeSecret(SEED, PREFIX)).not.toBe(
-      derivePurgeSecret(SEED, "prod/acme/web/r9/isr"),
+  it("differs per prefix and per seed", async () => {
+    const secret = await derivePurgeSecret(SEED, PREFIX);
+    expect(secret).not.toBe(await derivePurgeSecret(SEED, "prod/acme/web/r9/isr"));
+    expect(secret).not.toBe(await derivePurgeSecret("seed-2", PREFIX));
+  });
+});
+
+describe("signPurge and verifyPurge", () => {
+  const body = JSON.stringify({ isrPrefix: PREFIX, mode: "purge", tags: [] });
+  const bytes = new TextEncoder().encode(body);
+
+  it("signs a body with the HMAC of it under the secret, in hex", async () => {
+    expect(await signPurge("secret", body)).toBe(
+      createHmac("sha256", "secret").update(body).digest("hex"),
     );
-    expect(derivePurgeSecret(SEED, PREFIX)).not.toBe(derivePurgeSecret("seed-2", PREFIX));
+  });
+
+  it("verifies the signature signPurge wrote over the same body", async () => {
+    expect(await verifyPurge("secret", bytes, await signPurge("secret", body))).toBe(true);
+  });
+
+  it("refuses a signature under another secret or over another body", async () => {
+    const signature = await signPurge("secret", body);
+
+    expect(await verifyPurge("other", bytes, signature)).toBe(false);
+    expect(await verifyPurge("secret", new TextEncoder().encode(`${body} `), signature)).toBe(
+      false,
+    );
+  });
+
+  it("refuses a signature that is not hex", async () => {
+    expect(await verifyPurge("secret", bytes, "")).toBe(false);
+    expect(await verifyPurge("secret", bytes, "abc")).toBe(false);
+    expect(await verifyPurge("secret", bytes, "zz")).toBe(false);
   });
 });
 
@@ -133,8 +164,8 @@ describe("purgeHeaderFor", () => {
   });
 });
 
-describe("postPurge", () => {
-  const secret = derivePurgeSecret(SEED, PREFIX);
+describe("postPurge", async () => {
+  const secret = await derivePurgeSecret(SEED, PREFIX);
 
   it("posts the release's ISR prefix, the mode and each tag with its raisedAt, signed over the body", async () => {
     await postPurge(sender(), URL, secret, PREFIX, [

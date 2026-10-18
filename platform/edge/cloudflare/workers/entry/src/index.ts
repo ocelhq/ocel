@@ -1,11 +1,5 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
-import {
-  type RouteDeps as DispatchDeps,
-  serve as dispatch,
-  dispatchResult as dispatchRouteResult,
-  type HostRequestExtras,
-  type RouteResult,
-} from "@framework/next-router";
+import { serve as dispatch, type HostRequestExtras, type RouteDeps } from "@framework/next-router";
 import type { AssetStoreDeps } from "@framework/next-router/assets";
 import {
   deploymentImageOrigin,
@@ -14,6 +8,7 @@ import {
 } from "@framework/next-router/image";
 import type { CompiledRouteTable } from "@platform/edge-contract/ocel-route-table";
 import { readReleaseToken } from "@platform/edge-contract/purge";
+import { readAssetPrefix } from "./build-assets";
 import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
 import {
@@ -23,6 +18,7 @@ import {
   ownBundleKey,
 } from "./edge";
 import type { Env } from "./env";
+import { openPurgeQueue } from "./exports";
 import {
   gateRequest,
   gateUnreadableResponse,
@@ -38,15 +34,13 @@ import {
   answerPurgeOnWorker,
   isControlHost,
   isPurgeRequest,
-  openInBandQueue,
-  openPurgeQueue,
   respondOnControlHost,
 } from "./purge-request";
 import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
 import { ownRouteTableKey, readRouteTable, readStoredOcelRouteTable } from "./route-table";
 import { readsObjects } from "./serve";
 import { serveNodeOrigin } from "./serve-node";
-import { type ServeFactory, serveObjects } from "./serve-objects";
+import { serveObjects } from "./serve-objects";
 import { type Serving, servePrerender } from "./serve-prerender";
 import { newServing, type ServingPorts } from "./serving";
 
@@ -65,91 +59,69 @@ function withRouterHeader(response: Response): Response {
   return marked;
 }
 
-export interface RouteDeps
-  extends Omit<DispatchDeps, "prerender" | "imageCache" | "onPurge" | "hostRequestInit"> {
-  serving?: Serving;
-  imageOptimizerUrl?: string;
-}
-
 function hostRequestInit(request: Request): HostRequestExtras {
   return { cf: request.cf };
 }
 
-function bound(deps: RouteDeps): DispatchDeps {
-  const { serving, imageOptimizerUrl, ...rest } = deps;
-  return {
-    ...rest,
-    hostRequestInit,
-    imageCache:
-      serving && imageOptimizerUrl
-        ? workersCacheImage({ serving, app: deps.app, optimizerUrl: imageOptimizerUrl })
-        : undefined,
-    prerender: serving ? servePrerender({ serving, app: deps.app }) : undefined,
-    onPurge: serving?.purge,
-  };
-}
-
-export async function serve(request: Request, deps: RouteDeps): Promise<Response> {
-  return withRouterHeader(await dispatch(request, bound(deps)));
-}
-
-export function dispatchResult(
-  result: RouteResult,
-  request: Request,
-  deps: RouteDeps,
-): Promise<Response> {
-  return dispatchRouteResult(result, request, bound(deps));
-}
-
-export type ResolveBase = Omit<
-  RouteDeps,
-  "manifest" | "functionUrls" | "serving" | "assetStore" | "edge" | "slug" | "app" | "appBuildId"
-> & {
-  serving?: ServingPorts;
+export type ResolveBase = Pick<RouteDeps, "fetch" | "originFetch" | "imageOrigin"> & {
+  imageOptimizerUrl?: string;
+  serving: ServingPorts;
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
   imagesAtDeployment?: boolean;
   routeTableStore?: EdgeObjectStore;
-  edgeRuntime?: EdgeRuntime;
+  edgeRuntime: EdgeRuntime;
 };
 
 export type ServeFetch = (request: Request) => Promise<Response>;
 
-interface ServedRelease {
+interface OriginRelease {
+  kind: "origin";
   record: ReleaseRecord;
-  routeTable?: NextRouteTable;
   routes?: CompiledRouteTable;
 }
 
-interface ServeRuntime {
-  serve: (served: ServedRelease, releases: ReleaseLookup, base: ResolveBase) => ServeFetch;
-  routeDeps?: (served: ServedRelease, releases: ReleaseLookup, base: ResolveBase) => RouteDeps;
+interface RoutedRelease {
+  kind: "routed";
+  record: ReleaseRecord;
+  routeTable: NextRouteTable;
+  store: EdgeObjectStore;
 }
 
-const routedRuntime: ServeRuntime = {
-  serve: (served, releases, base) => {
-    const deps = bound(routedDeps(served, releases, base));
-    return async (request) => withRouterHeader(await dispatch(request, deps));
-  },
-  routeDeps: routedDeps,
-};
+type ServedRelease = OriginRelease | RoutedRelease;
 
-const originRuntime: ServeRuntime = {
-  serve: ({ record, routes }, releases, base) => {
-    const app = releases.app ?? record.app;
-    const forward = nodeOrigin({
-      app,
-      functionUrls: record.functionUrls,
-      originFetch: base.originFetch,
-    });
-    const serving = newReleaseServing(base.serving, record, releases, app);
-    const urls = Object.values(record.functionUrls);
-    if (!serving || urls.length !== 1) return forward;
-    return serveNodeOrigin({ serving, app, origin: urls[0], routes, forward });
-  },
-};
+function serveOrigin(
+  { record, routes }: OriginRelease,
+  releases: ReleaseLookup,
+  base: ResolveBase,
+): ServeFetch {
+  const app = releases.app ?? record.app;
+  const forward = nodeOrigin({
+    app,
+    functionUrls: record.functionUrls,
+    originFetch: base.originFetch,
+  });
+  const serving = newReleaseServing(base.serving, record, releases, app);
+  const urls = Object.values(record.functionUrls);
+  if (!serving || urls.length !== 1) return forward;
+  return serveNodeOrigin({ serving, app, origin: urls[0], routes, forward });
+}
 
-function runtimeFor(record: ReleaseRecord): ServeRuntime {
-  return record.routeTable?.format === "next" ? routedRuntime : originRuntime;
+function serveRelease(
+  served: ServedRelease,
+  releases: ReleaseLookup,
+  base: ResolveBase,
+): ServeFetch {
+  if (served.kind === "origin") return serveOrigin(served, releases, base);
+  const deps = routedDeps(served, releases, base);
+  return (request) => {
+    const assetPrefix = readAssetPrefix(request, served.record);
+    return dispatch(
+      request,
+      assetPrefix === deps.assetStore.assetPrefix
+        ? deps
+        : { ...deps, assetStore: { ...deps.assetStore, assetPrefix } },
+    );
+  };
 }
 
 async function resolveServedRelease(
@@ -160,7 +132,7 @@ async function resolveServedRelease(
   if (resolution.kind === "not-found") return deploymentNotFoundResponse();
   if (resolution.kind === "unavailable") return unavailableResponse();
   const { record } = resolution;
-  if (!record.routeTable) return { record };
+  if (!record.routeTable) return { kind: "origin", record };
 
   const { key } = record.routeTable;
   const refuse = (reason: unknown) => {
@@ -170,14 +142,15 @@ async function resolveServedRelease(
     );
     return unavailableResponse();
   };
-  if (!base.routeTableStore) return refuse("no cache store is bound to read it from");
+  const store = base.routeTableStore;
+  if (!store) return refuse("no cache store is bound to read it from");
   if (!ownRouteTableKey(key, releases.slug)) {
     return refuse(`the key lies outside the route tables of ${releases.slug}`);
   }
   try {
     return record.routeTable.format === "ocel"
-      ? { record, routes: await readStoredOcelRouteTable(base.routeTableStore, key) }
-      : { record, routeTable: await readRouteTable(base.routeTableStore, key) };
+      ? { kind: "origin", record, routes: await readStoredOcelRouteTable(store, key) }
+      : { kind: "routed", record, routeTable: await readRouteTable(store, key), store };
   } catch (error) {
     return refuse(error);
   }
@@ -190,31 +163,18 @@ export async function resolveServe(
   const served = await resolveServedRelease(releases, base);
   if (served instanceof Response) return served;
 
-  const serving = runtimeFor(served.record).serve(served, releases, base);
+  const serving = serveRelease(served, releases, base);
   return async (request) => withRouterHeader(await serving(request));
 }
 
-export async function resolveRouteDeps(
-  releases: ReleaseLookup,
-  base: ResolveBase,
-): Promise<RouteDeps | Response> {
-  const served = await resolveServedRelease(releases, base);
-  if (served instanceof Response) return served;
-
-  const runtime = runtimeFor(served.record);
-  if (!runtime.routeDeps) return unroutedFrameworkResponse(served.record.framework);
-
-  return runtime.routeDeps(served, releases, base);
-}
-
 function newReleaseServing(
-  base: ServingPorts | undefined,
+  base: ServingPorts,
   record: ReleaseRecord,
   releases: ReleaseLookup,
   app: string,
 ): Serving | undefined {
   const release = readReleaseToken(record.isrPrefix);
-  if (!base || release === undefined) return undefined;
+  if (release === undefined) return undefined;
   return newServing(base, {
     host: releases.host.toLowerCase(),
     app,
@@ -234,46 +194,43 @@ function deploymentOptimizerUrl(entryUrl: string | undefined): string | undefine
 }
 
 function routedDeps(
-  { record, routeTable: manifest }: ServedRelease,
+  { record, routeTable: manifest, store }: RoutedRelease,
   releases: ReleaseLookup,
   base: ResolveBase,
 ): RouteDeps {
-  const { edgeRuntime, imagesAtDeployment, routeTableStore, serving, ...rest } = base;
   const { edgeWorkers } = record;
-  if (!manifest) {
-    throw new Error(`release ${record.release} has no route table to route with`);
-  }
   const app = releases.app ?? record.app;
   if (edgeWorkers && !ownBundleKey(edgeWorkers.bundleKey, releases.slug, app)) {
     throw new Error(
       `release ${record.release} of ${releases.slug}/${app} names an edge bundle outside its own prefix`,
     );
   }
+  const rootUrl = record.functionUrls[manifest.rootFunction];
+  const serving = newReleaseServing(base.serving, record, releases, app);
+  const optimizerUrl =
+    base.imageOptimizerUrl ??
+    (base.imagesAtDeployment ? deploymentOptimizerUrl(rootUrl) : undefined);
   return {
-    ...rest,
+    fetch: base.fetch,
+    originFetch: base.originFetch,
+    hostRequestInit,
     imageOrigin:
-      rest.imageOrigin ??
-      (imagesAtDeployment
-        ? deploymentImageOrigin(
-            record.functionUrls[manifest.rootFunction],
-            rest.originFetch ?? rest.fetch ?? fetch,
-          )
+      base.imageOrigin ??
+      (base.imagesAtDeployment
+        ? deploymentImageOrigin(rootUrl, base.originFetch ?? base.fetch ?? fetch)
         : undefined),
-    imageOptimizerUrl:
-      rest.imageOptimizerUrl ??
-      (imagesAtDeployment
-        ? deploymentOptimizerUrl(record.functionUrls[manifest.rootFunction])
-        : undefined),
+    imageCache:
+      serving && optimizerUrl ? workersCacheImage({ serving, app, optimizerUrl }) : undefined,
+    prerender: serving ? servePrerender({ serving, app }) : undefined,
+    onPurge: serving?.purge,
     slug: releases.slug,
     app,
     appBuildId: record.buildId,
-    edge:
-      edgeRuntime && edgeWorkers
-        ? createReleaseEdgeInvoker(edgeRuntime, { ...record, edgeWorkers })
-        : undefined,
+    edge: edgeWorkers
+      ? createReleaseEdgeInvoker(base.edgeRuntime, store, { ...record, edgeWorkers })
+      : undefined,
     manifest,
     functionUrls: record.functionUrls,
-    serving: newReleaseServing(serving, record, releases, app),
     assetStore: {
       ...base.assetStore,
       assetPrefix: record.assetPrefix,
@@ -297,16 +254,6 @@ function deploymentNotFoundResponse(): Response {
     status: 404,
     headers: {
       "content-type": "text/html; charset=utf-8",
-      [ROUTER_HEADER]: ROUTER_KIND,
-    },
-  });
-}
-
-function unroutedFrameworkResponse(framework: string): Response {
-  return new Response(`the "${framework}" framework is served without edge routing.`, {
-    status: 501,
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
       [ROUTER_HEADER]: ROUTER_KIND,
     },
   });
@@ -368,8 +315,8 @@ export default {
     if (gated instanceof Response) return withRouterHeader(gated);
     const { request: visitor, responseHeaders: gateHeaders } = gated;
 
-    const serve = ctx.exports?.Serve as ServeFactory | undefined;
-    const objects = serve && readsObjects(env) ? serveObjects(serve, host) : undefined;
+    const serve = ctx.exports.Serve;
+    const objects = readsObjects(env) ? serveObjects(serve, host) : undefined;
     const originFetch = originFetchFor(env);
 
     const serveRequest = await resolveServe(releases, {
@@ -385,22 +332,14 @@ export default {
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
-      serving: serve
-        ? {
-            serve,
-            queue: { raise: (mode, tags) => openInBandQueue(ctx.exports).raise(mode, tags) },
-            times: { record: (mode, tags) => openPurgeQueue(ctx.exports).record(mode, tags) },
-            waitUntil: (promise) => ctx.waitUntil(promise),
-          }
-        : undefined,
-      edgeRuntime:
-        env.LOADER && objects
-          ? {
-              loader: env.LOADER,
-              store: objects,
-              envelopeKey: env.OCEL_ENVELOPE_KEY,
-            }
-          : undefined,
+      serving: {
+        serve,
+        queue: {
+          raise: (scope, mode, tags) => openPurgeQueue(ctx.exports).raise(scope, mode, tags),
+        },
+        waitUntil: (promise) => ctx.waitUntil(promise),
+      },
+      edgeRuntime: { loader: env.LOADER, envelopeKey: env.OCEL_ENVELOPE_KEY },
     });
     if (serveRequest instanceof Response) return withGateHeaders(serveRequest, gateHeaders);
 

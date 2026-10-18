@@ -15,6 +15,7 @@ import {
   withGlobalFetch,
 } from "./origin-deps";
 import { routeTableKey } from "./route-table-store";
+import { contextWithExports, serveAnswering } from "./worker-context";
 
 const PREVIEW_KEY = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0";
 const GATE_KEY = "gate-key-for-p1";
@@ -352,17 +353,15 @@ describe("the gate on a project's production worker", () => {
 
   function cachedServe() {
     const asked: string[] = [];
-    const serve = () => ({
-      fetch: async (request: Request) => {
+    const ctx = contextWithExports({
+      Serve: serveAnswering((request) => {
         const key = decodeURIComponent(new URL(request.url).pathname.slice(1));
         asked.push(key);
         return key === routeTableKey()
           ? new Response(JSON.stringify(table))
           : new Response(CACHED, { headers: { "cache-control": "public, max-age=31536000" } });
-      },
+      }),
     });
-    const ctx = createExecutionContext();
-    Object.defineProperty(ctx, "exports", { value: { Serve: serve } });
     return { asked, ctx };
   }
 

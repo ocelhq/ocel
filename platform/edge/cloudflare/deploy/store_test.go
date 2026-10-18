@@ -19,7 +19,6 @@ import (
 
 const (
 	storeBootstrapCredential = "bootstrap-cred"
-	storeOwnerToken          = "owner-token"
 )
 
 type labelTarget struct{ pointer, app string }
@@ -34,7 +33,6 @@ type fakeStore struct {
 	version  *string
 	gate     *gate.Gate
 	gateless bool
-	owner    string
 	live     string
 }
 
@@ -90,11 +88,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		served:   map[string]map[string]router.ReleaseRecord{},
 		apps:     map[string]bool{},
 		labels:   map[string]labelTarget{},
-		owner:    storeOwnerToken,
 		live:     secret,
-	}
-	if secret == "" {
-		f.owner = ""
 	}
 	named := func(pointer string) string {
 		if pointer == "" {
@@ -122,19 +116,17 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 			return
 		}
 		var body struct {
-			OwnerToken string `json:"ownerToken"`
-			Secret     string `json:"secret"`
-			Force      bool   `json:"force"`
+			Secret string `json:"secret"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.OwnerToken == "" || body.Secret == "" {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Secret == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if f.owner != "" && !body.Force {
+		if f.live != "" {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		f.owner, f.live = body.OwnerToken, body.Secret
+		f.live = body.Secret
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("GET /{slug}/pointer", authed(func(w http.ResponseWriter, r *http.Request) {
@@ -233,7 +225,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		f.labels = map[string]labelTarget{}
 		f.version = nil
 		f.gate = nil
-		f.owner, f.live = "", ""
+		f.live = ""
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	srv := httptest.NewServer(mux)
@@ -254,11 +246,10 @@ func stackOn(p *cloudflare, state edge.StackState) *stack {
 
 func testState(endpoint, secret string) edge.StackState {
 	return edge.StackState{
-		Slug:       "acme-web",
-		Endpoint:   endpoint,
-		Secret:     secret,
-		OwnerToken: storeOwnerToken,
-		Tier:       environment.TierProduction,
+		Slug:     "acme-web",
+		Endpoint: endpoint,
+		Secret:   secret,
+		Tier:     environment.TierProduction,
 	}
 }
 

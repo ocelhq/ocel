@@ -43,11 +43,7 @@ function servedBy(harness: HarnessEnv): Pick<Env, "RELEASES" | "OCEL_SLUG"> {
 
 async function readEntry(request: Request, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
-  const serve = (
-    ctx.exports as unknown as {
-      Serve(options: { props: unknown }): { fetch(request: Request): Promise<Response> };
-    }
-  ).Serve({ props: ORIGIN_PURGE_SCOPE });
+  const serve = ctx.exports.Serve({ props: ORIGIN_PURGE_SCOPE });
   const res = await serve.fetch(
     new Request(`https://serve.ocel.invalid/${url.pathname.slice(ENTRY_PATH.length)}`),
   );

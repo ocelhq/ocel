@@ -1,8 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 
-import { bearer } from "@platform/cf-auth";
-
-import { authorized } from "./auth";
+import { authorized, bearer } from "./auth";
 import type { Env } from "./env";
 import { ReleasesStore } from "./releases-do";
 import type { PointerMove, PointerRecordResult, ServedRecordResult } from "./store";
@@ -34,20 +32,10 @@ export default class extends WorkerEntrypoint<Env> {
       if (!(await authorized(request, this.env.BOOTSTRAP_SECRET))) {
         return new Response("Unauthorized", { status: 401 });
       }
-      const body = await readJson<{
-        ownerToken: string;
-        secret: string;
-        force?: boolean;
-      }>(request);
-      if (!body?.ownerToken || !body.secret) {
-        return new Response("Bad Request", { status: 400 });
-      }
-      const outcome = await store.initialize(body.ownerToken, body.secret, body.force ?? false);
-      if (outcome === "refused") {
-        return new Response(
-          `project ${slug} already has an identity; initialize with force to replace it`,
-          { status: 409 },
-        );
+      const body = await readJson<{ secret: string }>(request);
+      if (!body?.secret) return new Response("Bad Request", { status: 400 });
+      if ((await store.initialize(body.secret)) === "refused") {
+        return new Response(`project ${slug} already has an identity`, { status: 409 });
       }
       return new Response(null, { status: 204 });
     }

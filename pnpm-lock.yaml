@@ -923,18 +923,6 @@ importers:
         specifier: workspace:*
         version: link:../../workers/releases-store
 
-  platform/edge/cloudflare/lib/auth:
-    devDependencies:
-      '@types/node':
-        specifier: ^24
-        version: 24.13.2
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.7
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
-
   platform/edge/cloudflare/workers/entry:
     dependencies:
       '@framework/next-cache':
@@ -973,10 +961,6 @@ importers:
         version: 4.110.0
 
   platform/edge/cloudflare/workers/releases-store:
-    dependencies:
-      '@platform/cf-auth':
-        specifier: workspace:*
-        version: link:../../lib/auth
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.12.4

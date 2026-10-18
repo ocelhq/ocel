@@ -1,4 +1,3 @@
-import { createExecutionContext } from "cloudflare:test";
 import {
   derivePurgeSecret,
   type PurgeMode,
@@ -11,10 +10,11 @@ import worker, { type Env } from "../src/index";
 import type { RaisedTag } from "../src/purge-backlog";
 import type { PointerRecordResult, ReleasesBinding } from "../src/releases";
 import { makeRecord } from "./origin-deps";
+import { contextWithExports, purgeQueuesAnswering } from "./worker-context";
 
 const SEED = "seed-1";
 const ISR_PREFIX = "production/p1/web/r0a1b2c3d/isr";
-const SECRET = derivePurgeSecret(SEED, ISR_PREFIX);
+const SECRET = await derivePurgeSecret(SEED, ISR_PREFIX);
 const WORKERS_DEV = "https://web.acct.workers.dev";
 
 async function sign(body: string): Promise<string> {
@@ -80,15 +80,12 @@ function binding(): ReleasesBinding {
 }
 
 function contextWithQueue() {
-  const ctx = createExecutionContext();
-  const queues = {
-    getByName: (name: string) => ({
-      raise: async (mode: PurgeMode, tags: RaisedTag[]) => void raised.push({ name, mode, tags }),
-      record: async () => {},
-    }),
-  };
-  Object.defineProperty(ctx, "exports", { value: { PurgeQueue: queues, Serve: () => ({}) } });
-  return ctx;
+  return contextWithExports({
+    PurgeQueue: purgeQueuesAnswering((name) => ({
+      raise: async (_scope, mode: PurgeMode, tags: RaisedTag[]) =>
+        void raised.push({ name, mode, tags }),
+    })),
+  });
 }
 
 function envWith(over: Partial<Env> = {}): Env {

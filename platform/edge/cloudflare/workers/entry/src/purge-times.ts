@@ -1,8 +1,6 @@
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { RaisedTag } from "./purge-backlog";
 
-export const TAG_TIMES_RETENTION_MS = 86_400_000;
-
 export interface TagTime {
   purgedAt?: number;
   invalidatedAt?: number;
@@ -10,13 +8,28 @@ export interface TagTime {
 
 export type TagTimes = Record<string, TagTime>;
 
+export interface ReleaseScope {
+  slug: string;
+  isrPrefix: string;
+}
+
+export interface RecordedRelease extends ReleaseScope {
+  release: string;
+}
+
 export interface TagTimesStore {
-  record(mode: PurgeMode, tags: readonly RaisedTag[]): void;
+  record(release: RecordedRelease, mode: PurgeMode, tags: readonly RaisedTag[]): void;
   read(tags: readonly string[]): TagTimes;
-  forgetBefore(at: number): void;
+  readReleasesCheckedBefore(at: number, limit: number): RecordedRelease[];
+  markChecked(release: string, at: number): void;
+  retire(release: string): void;
 }
 
 const TAGS_PER_QUERY = 100;
+
+function releaseTagRange(release: string): [string, string] {
+  return [`${release}|`, `${release}}`];
+}
 
 export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore {
   const { sql } = storage;
@@ -26,23 +39,39 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
        purged_at INTEGER,
        invalidated_at INTEGER
      );
-     CREATE INDEX IF NOT EXISTS tag_times_by_age
-       ON tag_times (MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0)));`,
+     CREATE TABLE IF NOT EXISTS recorded_releases (
+       release TEXT PRIMARY KEY,
+       slug TEXT NOT NULL,
+       isr_prefix TEXT NOT NULL,
+       checked_at INTEGER NOT NULL
+     );
+     CREATE INDEX IF NOT EXISTS recorded_releases_by_check
+       ON recorded_releases (checked_at);`,
   );
 
+  const raiseTime = (column: string, tag: string, at: number) =>
+    sql.exec(
+      `INSERT INTO tag_times (tag, ${column}) VALUES (?, ?)
+       ON CONFLICT(tag) DO UPDATE SET
+         ${column} = MAX(COALESCE(tag_times.${column}, 0), excluded.${column})`,
+      tag,
+      at,
+    );
+
   return {
-    record(mode, tags) {
+    record(release, mode, tags) {
       const column = mode === "purge" ? "purged_at" : "invalidated_at";
       storage.transactionSync(() => {
-        for (const { tag, raisedAt } of tags) {
-          sql.exec(
-            `INSERT INTO tag_times (tag, ${column}) VALUES (?, ?)
-             ON CONFLICT(tag) DO UPDATE SET
-               ${column} = MAX(COALESCE(tag_times.${column}, 0), excluded.${column})`,
-            tag,
-            raisedAt,
-          );
-        }
+        sql.exec(
+          `INSERT INTO recorded_releases (release, slug, isr_prefix, checked_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(release) DO NOTHING`,
+          release.release,
+          release.slug,
+          release.isrPrefix,
+          Date.now(),
+        );
+        for (const { tag, raisedAt } of tags) raiseTime(column, tag, raisedAt);
       });
     },
     read(tags) {
@@ -65,12 +94,35 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
       }
       return times;
     },
-    forgetBefore(at) {
-      sql.exec(
-        `DELETE FROM tag_times
-         WHERE MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0)) < ?`,
-        at,
-      );
+    readReleasesCheckedBefore(at, limit) {
+      return sql
+        .exec<{ release: string; slug: string; isr_prefix: string }>(
+          `SELECT release, slug, isr_prefix FROM recorded_releases
+           WHERE checked_at < ? ORDER BY checked_at LIMIT ?`,
+          at,
+          limit,
+        )
+        .toArray()
+        .map((row) => ({ release: row.release, slug: row.slug, isrPrefix: row.isr_prefix }));
+    },
+    markChecked(release, at) {
+      sql.exec(`UPDATE recorded_releases SET checked_at = ? WHERE release = ?`, at, release);
+    },
+    retire(release) {
+      const [from, to] = releaseTagRange(release);
+      storage.transactionSync(() => {
+        const latest = sql
+          .exec<{ at: number | null }>(
+            `SELECT MAX(MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0))) AS at
+             FROM tag_times WHERE tag >= ? AND tag < ?`,
+            from,
+            to,
+          )
+          .toArray()[0]?.at;
+        sql.exec(`DELETE FROM tag_times WHERE tag >= ? AND tag < ?`, from, to);
+        sql.exec(`DELETE FROM recorded_releases WHERE release = ?`, release);
+        if (latest) raiseTime("purged_at", release, latest);
+      });
     },
   };
 }

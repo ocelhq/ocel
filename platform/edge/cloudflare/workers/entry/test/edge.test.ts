@@ -1,5 +1,4 @@
 import { env } from "cloudflare:test";
-import type { AssetBucket } from "@framework/next-router/assets";
 import { describe, expect, it } from "vitest";
 import {
   createEdgeInvoker,
@@ -9,80 +8,14 @@ import {
   type EdgeVariables,
   ownBundleKey,
 } from "../src/edge";
-import { dispatchResult, type RouteDeps, serve } from "../src/index";
-import { fakeServing } from "./serving-deps";
-
-declare module "cloudflare:test" {
-  interface ProvidedEnv {
-    LOADER: WorkerLoader;
-    RELEASES: Fetcher;
-  }
-}
-
-interface EdgeEntry {
-  chunks: string[];
-  handlerExport: string;
-}
-
-function shimFor(
-  entries: Record<string, EdgeEntry>,
-  assetIdByName: Record<string, string> = {},
-): string {
-  return `import { AsyncLocalStorage } from "node:async_hooks"
-
-const ENTRIES = ${JSON.stringify(entries)}
-const ASSETS = ${JSON.stringify(assetIdByName)}
-
-const ocelFetch = globalThis.fetch
-
-const ocelAssetId = (url) => {
-  if (typeof url !== "string" || !url.startsWith("blob:")) return undefined
-  const name = url.slice(5)
-  if (Object.hasOwn(ASSETS, name)) return ASSETS[name]
-  let decoded
-  try {
-    decoded = decodeURIComponent(name)
-  } catch {
-    return undefined
-  }
-  return Object.hasOwn(ASSETS, decoded) ? ASSETS[decoded] : undefined
-}
-
-globalThis.fetch = (input, init) => {
-  const url =
-    typeof input === "string" ? input : input instanceof URL ? input.href : input?.url
-  const id = ocelAssetId(url)
-  if (id === undefined) return ocelFetch(input, init)
-  return import("./" + id).then((m) => new Response(m.default))
-}
-
-export default {
-  async fetch(request, env, ctx) {
-    globalThis.AsyncLocalStorage ??= AsyncLocalStorage
-    globalThis.process ??= { env: {} }
-    Object.assign(globalThis.process.env, env)
-    const k = ctx.props.entryKey
-    globalThis.__OCEL_EDGE_ENTRY = k
-    const e = ENTRIES[k]
-    if (!e) return new Response(\`unknown edge entry \${k}\`, { status: 500 })
-    for (const id of e.chunks) await import("./" + id)
-    const entry = await globalThis._ENTRIES[k]
-    const handler = entry[e.handlerExport]
-    return handler(request, {
-      waitUntil: (p) => ctx.waitUntil(p),
-      signal: request.signal,
-      requestMeta: {},
-    })
-  },
-}
-`;
-}
-
-function chunkFor(entryKey: string, handler: string): string {
-  return `globalThis._ENTRIES ??= {}
-globalThis._ENTRIES[${JSON.stringify(entryKey)}] = { handler: ${handler} }
-`;
-}
+import type { ServeFetch } from "../src/index";
+import { chunkFor, countingLoader, edgeBundle, shimFor } from "./edge-bundle";
+import {
+  EMPTY_ROUTES,
+  type NextRelease,
+  servedNextRelease,
+  UNTOKENED_ISR_PREFIX,
+} from "./next-release";
 
 function nodeRequireChunkFor(entryKey: string): string {
   return `const { Buffer } = require("node:buffer")
@@ -100,10 +33,6 @@ function storedJson(json: string) {
   };
 }
 
-function base64Of(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes));
-}
-
 let bundles = 0;
 
 function invokerFor(
@@ -111,37 +40,8 @@ function invokerFor(
   chunkSource: (entryKey: string, handler: string) => string = chunkFor,
   id?: string,
   scope?: string,
-  assetBytes: Record<string, Uint8Array> = {},
 ): EdgeInvoker {
-  const chunks: Record<string, string> = {};
-  const entries: Record<string, EdgeEntry> = {};
-  let next = 0;
-  for (const [entryKey, handler] of Object.entries(handlers)) {
-    const id = `c/${next++}.js`;
-    chunks[id] = chunkSource(entryKey, handler);
-    entries[entryKey] = { chunks: [id], handlerExport: "handler" };
-  }
-
-  const assets: Record<string, string> = {};
-  const assetIdByName: Record<string, string> = {};
-  let nextAsset = 0;
-  for (const [name, bytes] of Object.entries(assetBytes)) {
-    const id = `a/${nextAsset++}.bin`;
-    assets[id] = base64Of(bytes);
-    assetIdByName[name] = id;
-  }
-
-  const json = JSON.stringify({
-    version: 2,
-    mainModule: "main.js",
-    shim: shimFor(entries, assetIdByName),
-    chunks,
-    wasm: {},
-    assets,
-    env: { __NEXT_BUILD_ID: "t" },
-    entries,
-  });
-
+  const json = edgeBundle(handlers, { chunkSource });
   const seq = bundles++;
   const bundleKey = `edge/${seq}/bundle.json`;
   const store: EdgeObjectStore = {
@@ -162,137 +62,52 @@ function invokerFor(
   );
 }
 
-function futureBundleInvoker(): EdgeInvoker {
+function missingBundle(): NextRelease["record"] {
   const seq = bundles++;
-  const bundleKey = `edge/${seq}/bundle.json`;
-  const json = JSON.stringify({
-    version: 3,
-    mainModule: "main.js",
-    shim: shimFor({}),
-    chunks: {},
-    entries: {},
-  });
-  return createEdgeInvoker(
-    env.LOADER,
-    { bundleKey, id: `edge-future-${seq}`, compatDate: "2026-03-10" },
-    {
-      async get(key) {
-        return key === bundleKey ? storedJson(json) : null;
-      },
-    },
-  );
-}
-
-function missingBundleInvoker(): EdgeInvoker {
-  const seq = bundles++;
-  return createEdgeInvoker(
-    env.LOADER,
-    {
-      bundleKey: `edge/${seq}/gone.json`,
+  return {
+    edgeWorkers: {
+      bundleKey: `prod/p1/web/gone-${seq}/edge/bundle.json`,
       id: `edge-missing-${seq}`,
       compatDate: "2026-03-10",
     },
-    {
-      async get() {
-        return null;
-      },
-    },
-  );
+  };
 }
 
 const MIDDLEWARE_KEY = "middleware_middleware";
 
-function middlewareInvoker(handler: string): EdgeInvoker {
-  return invokerFor({ [MIDDLEWARE_KEY]: handler });
+function middlewareBundle(handler: string): string {
+  return edgeBundle({ [MIDDLEWARE_KEY]: handler });
 }
 
-function counted(edge: EdgeInvoker): { edge: EdgeInvoker; calls: () => number } {
-  let calls = 0;
-  return {
-    edge: (entryKey, request) => {
-      calls++;
-      return edge(entryKey, request);
-    },
-    calls: () => calls,
-  };
-}
+const PASSTHROUGH = middlewareBundle(
+  `async () => new Response(null, { headers: { "x-middleware-next": "1", "x-mw-ran": "1" } })`,
+);
 
-function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
-  const store: AssetBucket = {
-    async get(key) {
-      const body = files[key];
-      if (body === undefined) return null;
-      return { body: new Blob([body]).stream() };
-    },
-  };
-  return {
-    store,
-    assetPrefix: "",
-    cache: { match: async () => undefined, put: async () => {} },
-    waitUntil: () => {},
-  };
-}
-
-const emptyRoutes = {
-  beforeMiddleware: [],
-  beforeFiles: [],
-  afterFiles: [],
-  dynamicRoutes: [],
-  onMatch: [],
-  fallback: [],
-};
-
-function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
-  return {
-    manifest: {
-      buildId: "t",
-      basePath: "",
-      pathnames: [],
-      routes: emptyRoutes,
-      dispatch: {},
-    },
-    functionUrls: {},
-    slug: "p1",
-    appBuildId: "d1",
-    app: "web",
-    assetStore: assetStoreServing({}),
-    ...overrides,
-  } as RouteDeps;
-}
-
-function staticDeps(middleware: unknown, overrides: Partial<RouteDeps> = {}): RouteDeps {
-  return deps({
-    manifest: {
-      buildId: "t",
-      basePath: "",
+function staticRelease(middleware: unknown, over: NextRelease = {}): ServeFetch {
+  return servedNextRelease({
+    edgeBundle: PASSTHROUGH,
+    ...over,
+    table: {
       pathnames: ["/static.txt"],
-      routes: emptyRoutes,
       dispatch: { "/static.txt": { kind: "static" } },
-      middleware,
+      middleware: middleware as never,
     },
-    assetStore: assetStoreServing({ "/static.txt": "the-file" }),
-    ...overrides,
-  } as Partial<RouteDeps>);
+    assets: { "/static.txt": "the-file" },
+  });
 }
 
-const passthrough = () =>
-  counted(
-    middlewareInvoker(
-      `async () => new Response(null, { headers: { "x-middleware-next": "1", "x-mw-ran": "1" } })`,
-    ),
-  );
+const staticFile = () => new Request("https://app.example/static.txt");
 
 async function gated(
   matchers: unknown,
   init?: RequestInit,
 ): Promise<{ res: Response; calls: number }> {
-  const { edge, calls } = passthrough();
+  const { loader, invocations } = countingLoader();
   const middleware = { entryKey: MIDDLEWARE_KEY, ...(matchers !== undefined && { matchers }) };
-  const res = await serve(
+  const res = await staticRelease(middleware, { loader })(
     new Request("https://app.example/static.txt", init),
-    staticDeps(middleware, { edge }),
   );
-  return { res, calls: calls() };
+  return { res, calls: invocations.length };
 }
 
 describe("ownBundleKey", () => {
@@ -369,7 +184,7 @@ describe("middleware matchers", () => {
 describe("middleware matchers under i18n", () => {
   const I18N = { locales: ["en", "fr"], defaultLocale: "en" };
 
-  function localeDeps(matchers: unknown, edge?: EdgeInvoker): RouteDeps {
+  function localeRelease(matchers: unknown, loader?: WorkerLoader): ServeFetch {
     const pathnames = [
       "/en/foo",
       "/fr/foo",
@@ -378,17 +193,14 @@ describe("middleware matchers under i18n", () => {
       "/_next/data/t/en/foo.json",
       "/_next/data/t/fr/foo.json",
     ];
-    return deps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
+    return servedNextRelease({
+      table: {
         i18n: I18N,
         pathnames,
-        routes: emptyRoutes,
         dispatch: Object.fromEntries(pathnames.map((path) => [path, { kind: "static" }])),
-        middleware: { entryKey: MIDDLEWARE_KEY, matchers },
+        middleware: { entryKey: MIDDLEWARE_KEY, matchers } as never,
       },
-      assetStore: assetStoreServing({
+      assets: {
         "/en/foo.html": "the en page",
         "/fr/foo.html": "the fr page",
         "/en/bar.html": "the en bar page",
@@ -396,41 +208,41 @@ describe("middleware matchers under i18n", () => {
         "/_next/data/t/en/foo.json": '{"at":"en/foo"}',
         "/_next/data/t/fr/foo.json": '{"at":"fr/foo"}',
         "/en/404.html": "not found",
-      }),
-      edge: edge ?? passthrough().edge,
-    } as Partial<RouteDeps>);
+      },
+      edgeBundle: PASSTHROUGH,
+      loader,
+    });
   }
 
   it("matches an unprefixed default-locale path against a mandatory locale group", async () => {
-    const { edge, calls } = passthrough();
-    const res = await serve(
-      new Request("https://app.example/foo"),
-      localeDeps([{ sourceRegex: "^/(?:en|fr)/foo$" }], edge),
-    );
+    const { loader, invocations } = countingLoader();
+    const res = await localeRelease(
+      [{ sourceRegex: "^/(?:en|fr)/foo$" }],
+      loader,
+    )(new Request("https://app.example/foo"));
 
     expect(res.headers.get("x-mw-ran")).toBe("1");
-    expect(calls()).toBe(1);
+    expect(invocations).toHaveLength(1);
     expect(await res.text()).toBe("the en page");
   });
 
   it("still leaves a genuinely unmatched path alone", async () => {
-    const { edge, calls } = passthrough();
-    const res = await serve(
-      new Request("https://app.example/bar"),
-      localeDeps([{ sourceRegex: "^/(?:en|fr)/foo$" }], edge),
-    );
+    const { loader, invocations } = countingLoader();
+    const res = await localeRelease(
+      [{ sourceRegex: "^/(?:en|fr)/foo$" }],
+      loader,
+    )(new Request("https://app.example/bar"));
 
     expect(res.headers.get("x-mw-ran")).toBe(null);
-    expect(calls()).toBe(0);
+    expect(invocations).toHaveLength(0);
     expect(await res.text()).toBe("the en bar page");
   });
 
   it("resolves a _next/data page URL with no locale of its own", async () => {
-    const res = await serve(
+    const res = await localeRelease(undefined)(
       new Request("https://app.example/_next/data/t/foo.json", {
         headers: { "x-nextjs-data": "1" },
       }),
-      localeDeps(undefined),
     );
 
     expect(res.status).toBe(200);
@@ -440,18 +252,16 @@ describe("middleware matchers under i18n", () => {
 });
 
 describe("middleware responses", () => {
+  const answering = (handler: string) =>
+    staticRelease({ entryKey: MIDDLEWARE_KEY }, { edgeBundle: middlewareBundle(handler) });
+
   it("returns the middleware's own body and status when it answers the request", async () => {
-    const edge = middlewareInvoker(
+    const res = await answering(
       `async () => new Response(JSON.stringify({ error: "nope" }), {
          status: 401,
          headers: { "content-type": "application/json" },
        })`,
-    );
-
-    const res = await serve(
-      new Request("https://app.example/static.txt"),
-      staticDeps({ entryKey: MIDDLEWARE_KEY }, { edge }),
-    );
+    )(staticFile());
 
     expect(res.status).toBe(401);
     expect(res.headers.get("content-type")).toBe("application/json");
@@ -459,17 +269,12 @@ describe("middleware responses", () => {
   });
 
   it("strips the x-middleware-* control headers off a middleware response", async () => {
-    const edge = middlewareInvoker(
+    const res = await answering(
       `async () => new Response("denied", {
          status: 403,
          headers: { "x-middleware-set-cookie": "sid=1", "x-keep": "1" },
        })`,
-    );
-
-    const res = await serve(
-      new Request("https://app.example/static.txt"),
-      staticDeps({ entryKey: MIDDLEWARE_KEY }, { edge }),
-    );
+    )(staticFile());
 
     expect(res.status).toBe(403);
     expect(res.headers.get("x-middleware-set-cookie")).toBe(null);
@@ -477,18 +282,32 @@ describe("middleware responses", () => {
   });
 
   it.each([204, 304])("returns a middleware's %i, which has no body at all", async (status) => {
-    const edge = middlewareInvoker(`async () => new Response(null, { status: ${status} })`);
-
-    const res = await serve(
-      new Request("https://app.example/static.txt"),
-      staticDeps({ entryKey: MIDDLEWARE_KEY }, { edge }),
+    const res = await answering(`async () => new Response(null, { status: ${status} })`)(
+      staticFile(),
     );
 
     expect(res.status).toBe(status);
   });
 
+  function functionRelease(
+    path: string,
+    handler: string,
+    fetch: typeof globalThis.fetch,
+  ): ServeFetch {
+    return servedNextRelease({
+      table: {
+        dispatch: { [path]: { kind: "function", id: path } },
+        middleware: { entryKey: MIDDLEWARE_KEY },
+      },
+      record: { functionUrls: { [path]: "https://fn.example.com" } },
+      edgeBundle: middlewareBundle(handler),
+      fetch,
+    });
+  }
+
   it("keeps the x-middleware-* control headers off a rewritten response", async () => {
-    const edge = middlewareInvoker(
+    const res = await functionRelease(
+      "/dest",
       `async () => new Response(null, {
          headers: {
            "x-middleware-rewrite": "/dest",
@@ -496,24 +315,8 @@ describe("middleware responses", () => {
            "x-keep": "1",
          },
        })`,
-    );
-
-    const res = await serve(
-      new Request("https://app.example/from"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/dest"],
-          routes: emptyRoutes,
-          dispatch: { "/dest": { kind: "function", id: "/dest" } },
-          middleware: { entryKey: MIDDLEWARE_KEY },
-        },
-        functionUrls: { "/dest": "https://fn.example.com" },
-        edge,
-        fetch: (async () => new Response("origin")) as unknown as typeof fetch,
-      } as Partial<RouteDeps>),
-    );
+      (async () => new Response("origin")) as unknown as typeof fetch,
+    )(new Request("https://app.example/from"));
 
     expect(await res.text()).toBe("origin");
     expect(res.headers.get("x-keep")).toBe("1");
@@ -521,17 +324,12 @@ describe("middleware responses", () => {
   });
 
   it("redirects with the middleware's Set-Cookie intact", async () => {
-    const edge = middlewareInvoker(
+    const res = await answering(
       `async () => new Response(null, {
          status: 307,
          headers: { location: "/login", "set-cookie": "sid=abc; Path=/" },
        })`,
-    );
-
-    const res = await serve(
-      new Request("https://app.example/static.txt"),
-      staticDeps({ entryKey: MIDDLEWARE_KEY }, { edge }),
-    );
+    )(staticFile());
 
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe("/login");
@@ -540,7 +338,9 @@ describe("middleware responses", () => {
 
   it("forwards a middleware request-header override to the origin", async () => {
     let captured: Request | undefined;
-    const edge = middlewareInvoker(
+
+    await functionRelease(
+      "/api/me",
       `async () => new Response(null, {
          headers: {
            "x-middleware-next": "1",
@@ -548,60 +348,32 @@ describe("middleware responses", () => {
            "x-middleware-request-x-user": "alice",
          },
        })`,
-    );
-
-    await serve(
-      new Request("https://app.example/api/me"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/api/me"],
-          routes: emptyRoutes,
-          dispatch: { "/api/me": { kind: "function", id: "/api/me" } },
-          middleware: { entryKey: MIDDLEWARE_KEY },
-        },
-        functionUrls: { "/api/me": "https://fn.example.com" },
-        edge,
-        fetch: (async (req: Request) => {
-          captured = req;
-          return new Response("ok");
-        }) as unknown as typeof fetch,
-      } as Partial<RouteDeps>),
-    );
+      (async (req: Request) => {
+        captured = req;
+        return new Response("ok");
+      }) as unknown as typeof fetch,
+    )(new Request("https://app.example/api/me"));
 
     expect(captured?.headers.get("x-user")).toBe("alice");
   });
 
   it("leaves the origin a readable body after middleware consumed one", async () => {
     let captured: Request | undefined;
-    const edge = middlewareInvoker(
+
+    const res = await functionRelease(
+      "/api/me",
       `async (request) => new Response(null, {
          headers: { "x-middleware-next": "1", "x-mw-body": await request.text() },
        })`,
-    );
-
-    const res = await serve(
+      (async (req: Request) => {
+        captured = req;
+        return new Response("ok");
+      }) as unknown as typeof fetch,
+    )(
       new Request("https://app.example/api/me", {
         method: "POST",
         body: "hello=world",
       }),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/api/me"],
-          routes: emptyRoutes,
-          dispatch: { "/api/me": { kind: "function", id: "/api/me" } },
-          middleware: { entryKey: MIDDLEWARE_KEY },
-        },
-        functionUrls: { "/api/me": "https://fn.example.com" },
-        edge,
-        fetch: (async (req: Request) => {
-          captured = req;
-          return new Response("ok");
-        }) as unknown as typeof fetch,
-      } as Partial<RouteDeps>),
     );
 
     expect(res.headers.get("x-mw-body")).toBe("hello=world");
@@ -611,27 +383,21 @@ describe("middleware responses", () => {
 
 describe("resolvedHeaders", () => {
   it("applies a next.config headers() rule to the served response", async () => {
-    const res = await serve(
-      new Request("https://app.example/static.txt"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/static.txt"],
-          routes: {
-            ...emptyRoutes,
-            onMatch: [
-              {
-                sourceRegex: "^/static\\.txt$",
-                headers: { "x-frame-options": "DENY" },
-              },
-            ],
-          },
-          dispatch: { "/static.txt": { kind: "static" } },
+    const res = await servedNextRelease({
+      table: {
+        routes: {
+          ...EMPTY_ROUTES,
+          onMatch: [
+            {
+              sourceRegex: "^/static\\.txt$",
+              headers: { "x-frame-options": "DENY" },
+            },
+          ],
         },
-        assetStore: assetStoreServing({ "/static.txt": "the-file" }),
-      } as Partial<RouteDeps>),
-    );
+        dispatch: { "/static.txt": { kind: "static" } },
+      },
+      assets: { "/static.txt": "the-file" },
+    })(staticFile());
 
     expect(res.headers.get("x-frame-options")).toBe("DENY");
     expect(await res.text()).toBe("the-file");
@@ -639,27 +405,21 @@ describe("resolvedHeaders", () => {
 });
 
 describe("edge dispatch", () => {
-  it("invokes an edge route's entry through the loader", async () => {
-    const edge = invokerFor({
-      "middleware_app/edge": `async (request) =>
-         new Response("from-edge:" + new URL(request.url).pathname + ":" + process.env.__NEXT_BUILD_ID)`,
-    });
+  const EDGE_KEY = "middleware_app/edge";
 
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge,
-      } as Partial<RouteDeps>),
+  const edgeRoute = (over: NextRelease) =>
+    servedNextRelease({
+      ...over,
+      table: { dispatch: { "/edge": { kind: "edge", entryKey: EDGE_KEY } } },
+    })(new Request("https://app.example/edge"));
+
+  const servedBy = (handler: string, options: Parameters<typeof edgeBundle>[1] = {}) =>
+    edgeRoute({ edgeBundle: edgeBundle({ [EDGE_KEY]: handler }, options) });
+
+  it("invokes an edge route's entry through the loader", async () => {
+    const res = await servedBy(
+      `async (request) =>
+         new Response("from-edge:" + new URL(request.url).pathname + ":" + process.env.__NEXT_BUILD_ID)`,
     );
 
     expect(res.status).toBe(200);
@@ -667,35 +427,15 @@ describe("edge dispatch", () => {
   });
 
   it("invokes an entry whose chunk requires a Node builtin", async () => {
-    const edge = invokerFor({ "middleware_app/edge": "" }, (entryKey) =>
-      nodeRequireChunkFor(entryKey),
-    );
-
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge,
-      } as Partial<RouteDeps>),
-    );
+    const res = await servedBy("", { chunkSource: (entryKey) => nodeRequireChunkFor(entryKey) });
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("required");
   });
 
   it("invokes an entry whose chunk reads the AsyncLocalStorage global", async () => {
-    const edge = invokerFor(
-      { "middleware_app/edge": "" },
-      (entryKey) => `if (typeof AsyncLocalStorage !== "function") {
+    const res = await servedBy("", {
+      chunkSource: (entryKey) => `if (typeof AsyncLocalStorage !== "function") {
   throw new Error("Invariant: AsyncLocalStorage accessed in runtime where it is not available")
 }
 const store = new AsyncLocalStorage()
@@ -704,89 +444,32 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   handler: async () => store.run("scoped", () => new Response(store.getStore())),
 }
 `,
-    );
-
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge,
-      } as Partial<RouteDeps>),
-    );
+    });
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("scoped");
   });
 
   it("publishes the entry key on a global before an entry's chunks evaluate", async () => {
-    const edge = invokerFor(
-      { "middleware_app/edge": "" },
-      (entryKey) => `const seenAtModuleScope = globalThis.__OCEL_EDGE_ENTRY
+    const res = await servedBy("", {
+      chunkSource: (entryKey) => `const seenAtModuleScope = globalThis.__OCEL_EDGE_ENTRY
 globalThis._ENTRIES ??= {}
 globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   handler: async () => new Response(String(seenAtModuleScope)),
 }
 `,
-    );
-
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge,
-      } as Partial<RouteDeps>),
-    );
+    });
 
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe("middleware_app/edge");
+    expect(await res.text()).toBe(EDGE_KEY);
   });
 
   it("answers a blob: fetch from the bundle's assets, byte for byte", async () => {
     const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]);
-    const edge = invokerFor(
-      {
-        "middleware_app/edge": `async () =>
-           new Response(await (await fetch(new URL("blob:server/edge/assets/pic.png"))).arrayBuffer())`,
-      },
-      undefined,
-      undefined,
-      undefined,
-      { "server/edge/assets/pic.png": bytes },
-    );
-
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge,
-      } as Partial<RouteDeps>),
+    const res = await servedBy(
+      `async () =>
+         new Response(await (await fetch(new URL("blob:server/edge/assets/pic.png"))).arrayBuffer())`,
+      { assets: { "server/edge/assets/pic.png": bytes } },
     );
 
     expect(res.status).toBe(200);
@@ -794,72 +477,28 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   });
 
   it("hands a fetch the asset table does not name to the platform", async () => {
-    const edge = invokerFor(
-      {
-        "middleware_app/edge": `async () => {
-           const res = await fetch("data:text/plain,from-the-platform")
-           return new Response(res.status + ":" + (await res.text()))
-         }`,
-      },
-      undefined,
-      undefined,
-      undefined,
-      { "server/edge/assets/pic.png": new Uint8Array([1, 2, 3]) },
-    );
-
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge,
-      } as Partial<RouteDeps>),
+    const res = await servedBy(
+      `async () => {
+         const res = await fetch("data:text/plain,from-the-platform")
+         return new Response(res.status + ":" + (await res.text()))
+       }`,
+      { assets: { "server/edge/assets/pic.png": new Uint8Array([1, 2, 3]) } },
     );
 
     expect(await res.text()).toBe("200:from-the-platform");
   });
 
   it("hands an unknown blob: name to the platform, which rejects it", async () => {
-    const edge = invokerFor(
-      {
-        "middleware_app/edge": `async () => {
-           try {
-             await fetch("blob:server/edge/assets/absent.png")
-             return new Response("answered-from-table")
-           } catch (e) {
-             return new Response(e.name + "|" + e.message)
-           }
-         }`,
-      },
-      undefined,
-      undefined,
-      undefined,
-      { "server/edge/assets/pic.png": new Uint8Array([1, 2, 3]) },
-    );
-
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge,
-      } as Partial<RouteDeps>),
+    const res = await servedBy(
+      `async () => {
+         try {
+           await fetch("blob:server/edge/assets/absent.png")
+           return new Response("answered-from-table")
+         } catch (e) {
+           return new Response(e.name + "|" + e.message)
+         }
+       }`,
+      { assets: { "server/edge/assets/pic.png": new Uint8Array([1, 2, 3]) } },
     );
 
     expect(await res.text()).toBe(
@@ -869,32 +508,10 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 
   it("resolves an asset whose name the URL constructor percent-encodes", async () => {
     const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-    const edge = invokerFor(
-      {
-        "middleware_app/edge": `async () =>
-           new Response(await (await fetch(new URL("blob:server/edge/assets/caf\u00e9.png"))).arrayBuffer())`,
-      },
-      undefined,
-      undefined,
-      undefined,
-      { "server/edge/assets/caf\u00e9.png": bytes },
-    );
-
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge,
-      } as Partial<RouteDeps>),
+    const res = await servedBy(
+      `async () =>
+         new Response(await (await fetch(new URL("blob:server/edge/assets/café.png"))).arrayBuffer())`,
+      { assets: { "server/edge/assets/café.png": bytes } },
     );
 
     expect(res.status).toBe(200);
@@ -902,112 +519,68 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   });
 
   it("serves an entry from a bundle containing an asset that is not valid UTF-8", async () => {
-    const edge = invokerFor(
-      {
-        "middleware_app/other": `async () => new Response("other-entry")`,
-        "middleware_app/edge": `async () => new Response("edge-entry")`,
-      },
-      undefined,
-      undefined,
-      undefined,
-      {
-        "server/edge/assets/pic.png": new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]),
-      },
-    );
-
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
+    const res = await edgeRoute({
+      edgeBundle: edgeBundle(
+        {
+          "middleware_app/other": `async () => new Response("other-entry")`,
+          [EDGE_KEY]: `async () => new Response("edge-entry")`,
+        },
+        {
+          assets: {
+            "server/edge/assets/pic.png": new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]),
           },
         },
-        edge,
-      } as Partial<RouteDeps>),
-    );
+      ),
+    });
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("edge-entry");
   });
 
   it("returns 500 when the bundle cannot be read", async () => {
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge: missingBundleInvoker(),
-      } as Partial<RouteDeps>),
-    );
+    const res = await edgeRoute({ record: missingBundle() });
 
     expect(res.status).toBe(500);
   });
 
   it("returns 500 for a bundle whose version this worker cannot read", async () => {
-    const res = await dispatchResult(
-      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
-      new Request("https://app.example/edge"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/edge"],
-          routes: emptyRoutes,
-          dispatch: {
-            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
-          },
-        },
-        edge: futureBundleInvoker(),
-      } as Partial<RouteDeps>),
-    );
+    const res = await edgeRoute({ edgeBundle: edgeBundle({}, { version: 3 }) });
 
     expect(res.status).toBe(500);
   });
 
   it("returns 500 rather than routing on when middleware cannot be invoked", async () => {
-    const res = await serve(
-      new Request("https://app.example/static.txt"),
-      staticDeps({ entryKey: MIDDLEWARE_KEY }, { edge: missingBundleInvoker() }),
-    );
+    const res = await staticRelease(
+      { entryKey: MIDDLEWARE_KEY },
+      { record: missingBundle() },
+    )(staticFile());
 
     expect(res.status).toBe(500);
     expect(await res.text()).not.toContain("the-file");
   });
 
   it("returns 500 when middleware itself throws", async () => {
-    const edge = middlewareInvoker(`async () => { throw new Error("boom") }`);
-
-    const res = await serve(
-      new Request("https://app.example/static.txt"),
-      staticDeps({ entryKey: MIDDLEWARE_KEY }, { edge }),
-    );
+    const res = await staticRelease(
+      { entryKey: MIDDLEWARE_KEY },
+      { edgeBundle: middlewareBundle(`async () => { throw new Error("boom") }`) },
+    )(staticFile());
 
     expect(res.status).toBe(500);
   });
 });
 
 describe("edge-parented prerenders", () => {
-  function prerenderDeps(edge: EdgeInvoker): RouteDeps {
-    return deps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: ["/edge-blog"],
-        routes: emptyRoutes,
+  const renderer = edgeBundle({
+    "middleware_app/edge-blog": `async () =>
+       new Response("<html>rendered-on-edge</html>", {
+         status: 200,
+         headers: { "cache-control": "s-maxage=60" },
+       })`,
+  });
+
+  it("invokes the edge entry with no Function URL bound when its release names no token to cache it under", async () => {
+    const res = await servedNextRelease({
+      table: {
         dispatch: {
           "/edge-blog": {
             kind: "prerender",
@@ -1018,53 +591,18 @@ describe("edge-parented prerenders", () => {
           },
         },
       },
-      functionUrls: {},
-      edge,
-      serving: fakeServing().serving,
-    } as Partial<RouteDeps>);
-  }
-
-  const dispatchBlog = (deps: RouteDeps) =>
-    dispatchResult(
-      {
-        resolvedPathname: "/edge-blog",
-        invocationTarget: { pathname: "/edge-blog" },
-      },
-      new Request("https://app.example/edge-blog"),
-      deps,
-    );
-
-  const renderer = () =>
-    invokerFor({
-      "middleware_app/edge-blog": `async () =>
-         new Response("<html>rendered-on-edge</html>", {
-           status: 200,
-           headers: { "cache-control": "s-maxage=60" },
-         })`,
-    });
-
-  it("invokes the edge entry with no Function URL bound when no Serve is bound to cache it", async () => {
-    const deps = { ...prerenderDeps(renderer()), serving: undefined };
-
-    const res = await dispatchBlog(deps);
+      record: { isrPrefix: UNTOKENED_ISR_PREFIX },
+      edgeBundle: renderer,
+    })(new Request("https://app.example/edge-blog"));
 
     expect(await res.text()).toBe("<html>rendered-on-edge</html>");
   });
 
   it("still 502s a prerender with neither a Function URL nor an edge entry", async () => {
-    const res = await dispatchResult(
-      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
-      new Request("https://app.example/blog"),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
-          pathnames: ["/blog"],
-          routes: emptyRoutes,
-          dispatch: { "/blog": { kind: "prerender", id: "/blog", config: {} } },
-        },
-      } as Partial<RouteDeps>),
-    );
+    const res = await servedNextRelease({
+      table: { dispatch: { "/blog": { kind: "prerender", id: "/blog", config: {} } } },
+      record: { isrPrefix: UNTOKENED_ISR_PREFIX },
+    })(new Request("https://app.example/blog"));
 
     expect(res.status).toBe(502);
   });
@@ -1119,8 +657,17 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 describe("the URL middleware is handed", () => {
   const PAGE = "/send-url";
 
+  interface EdgeScenario {
+    bundle: string;
+    loader?: WorkerLoader;
+  }
+
+  const middlewareAnswering = (handler: string): EdgeScenario => ({
+    bundle: middlewareBundle(handler),
+  });
+
   const echo = () =>
-    middlewareInvoker(
+    middlewareAnswering(
       `async (request) => new Response(null, {
          headers: {
            "x-middleware-next": "1",
@@ -1129,40 +676,46 @@ describe("the URL middleware is handed", () => {
        })`,
     );
 
+  function counted(edge: EdgeScenario): { edge: EdgeScenario; calls: () => number } {
+    const { loader, invocations } = countingLoader();
+    return { edge: { ...edge, loader }, calls: () => invocations.length };
+  }
+
+  const serve = (request: Request, release: ServeFetch) => release(request);
+
   interface Scenario {
     trailingSlash?: boolean;
     skipTrailingSlashRedirect?: boolean;
     skipMiddlewareUrlNormalize?: boolean;
     matchers?: unknown;
-    edge?: EdgeInvoker;
+    edge?: EdgeScenario;
   }
 
-  function pageDeps(scenario: Scenario): RouteDeps {
+  function pageRelease(scenario: Scenario): ServeFetch {
     const dataPaths = [`/_next/data/t${PAGE}.json`, "/_next/data/t/index.json"];
     const pathnames = [PAGE, "/", ...dataPaths];
-    return deps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
+    const edge = scenario.edge ?? echo();
+    return servedNextRelease({
+      table: {
         trailingSlash: scenario.trailingSlash,
         skipTrailingSlashRedirect: scenario.skipTrailingSlashRedirect,
         skipMiddlewareUrlNormalize: scenario.skipMiddlewareUrlNormalize,
         pathnames,
-        routes: emptyRoutes,
         dispatch: Object.fromEntries(pathnames.map((path) => [path, { kind: "static" }])),
         middleware: {
           entryKey: MIDDLEWARE_KEY,
-          ...(scenario.matchers !== undefined && { matchers: scenario.matchers }),
+          ...(scenario.matchers !== undefined && { matchers: scenario.matchers as never }),
         },
       },
-      assetStore: assetStoreServing({
+      assets: {
         [`${PAGE}.html`]: "the page",
         "/.html": "the root",
         "/404.html": "not found",
         ...Object.fromEntries(dataPaths.map((path) => [path, `{"at":"${path}"}`])),
-      }),
-      edge: scenario.edge ?? echo(),
-    } as Partial<RouteDeps>);
+      },
+      edgeBundle: edge.bundle,
+      loader: edge.loader,
+    });
   }
 
   function get(path: string, headers: Record<string, string> = {}) {
@@ -1170,7 +723,7 @@ describe("the URL middleware is handed", () => {
   }
 
   it("hands middleware the slashed pathname under trailingSlash: true", async () => {
-    const res = await serve(get(`${PAGE}/`), pageDeps({ trailingSlash: true }));
+    const res = await serve(get(`${PAGE}/`), pageRelease({ trailingSlash: true }));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("req-url-path")).toBe(`${PAGE}/`);
@@ -1178,7 +731,7 @@ describe("the URL middleware is handed", () => {
   });
 
   it("hands middleware the bare pathname under trailingSlash: false", async () => {
-    const res = await serve(get(PAGE), pageDeps({}));
+    const res = await serve(get(PAGE), pageRelease({}));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("req-url-path")).toBe(PAGE);
@@ -1194,7 +747,7 @@ describe("the URL middleware is handed", () => {
       async (trailingSlash, expected) => {
         const res = await serve(
           get(`/_next/data/t${PAGE}.json`, { "x-nextjs-data": "1" }),
-          pageDeps({ trailingSlash }),
+          pageRelease({ trailingSlash }),
         );
 
         expect(res.headers.get("req-url-path")).toBe(expected);
@@ -1208,7 +761,7 @@ describe("the URL middleware is handed", () => {
       async (trailingSlash) => {
         const res = await serve(
           get("/_next/data/t/index.json", { "x-nextjs-data": "1" }),
-          pageDeps({ trailingSlash }),
+          pageRelease({ trailingSlash }),
         );
 
         expect(res.headers.get("req-url-path")).toBe("/");
@@ -1222,7 +775,7 @@ describe("the URL middleware is handed", () => {
       const { edge, calls } = counted(echo());
       const res = await serve(
         get(`${PAGE}/`),
-        pageDeps({ trailingSlash: true, matchers: [{ sourceRegex: "^/send-url/$" }], edge }),
+        pageRelease({ trailingSlash: true, matchers: [{ sourceRegex: "^/send-url/$" }], edge }),
       );
 
       expect(calls()).toBe(1);
@@ -1233,7 +786,7 @@ describe("the URL middleware is handed", () => {
       const { edge, calls } = counted(echo());
       await serve(
         get(`${PAGE}/`),
-        pageDeps({
+        pageRelease({
           trailingSlash: true,
           matchers: [{ sourceRegex: "^/send-url(?:\\/(?=$))?$" }],
           edge,
@@ -1247,7 +800,7 @@ describe("the URL middleware is handed", () => {
       const { edge, calls } = counted(echo());
       const res = await serve(
         get(`${PAGE}/`),
-        pageDeps({ trailingSlash: true, matchers: [{ sourceRegex: "^/other$" }], edge }),
+        pageRelease({ trailingSlash: true, matchers: [{ sourceRegex: "^/other$" }], edge }),
       );
 
       expect(calls()).toBe(0);
@@ -1256,28 +809,25 @@ describe("the URL middleware is handed", () => {
   });
 
   it("routes a canonical rewrite destination on its routing form, forwarding it slashed", async () => {
-    const edge = middlewareInvoker(
+    const edge = middlewareAnswering(
       `async () => new Response(null, { headers: { "x-middleware-rewrite": "/b/" } })`,
     );
 
     const res = await serve(
       get(`${PAGE}/`),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
+      servedNextRelease({
+        table: {
           trailingSlash: true,
           pathnames: [PAGE, "/b"],
-          routes: emptyRoutes,
           dispatch: { [PAGE]: { kind: "static" }, "/b": { kind: "function", id: "/b" } },
           middleware: { entryKey: MIDDLEWARE_KEY },
         },
-        assetStore: assetStoreServing({ [`${PAGE}.html`]: "the page", "/404.html": "not found" }),
-        functionUrls: { "/b": "https://fn.example.com" },
-        edge,
+        assets: { [`${PAGE}.html`]: "the page", "/404.html": "not found" },
+        record: { functionUrls: { "/b": "https://fn.example.com" } },
+        edgeBundle: edge.bundle,
         fetch: (async (input: Request) =>
           new Response(new URL(input.url).pathname)) as unknown as typeof fetch,
-      } as Partial<RouteDeps>),
+      }),
     );
 
     expect(res.status).toBe(200);
@@ -1286,7 +836,7 @@ describe("the URL middleware is handed", () => {
   });
 
   it("forwards a rewrite to another origin byte-verbatim", async () => {
-    const edge = middlewareInvoker(
+    const edge = middlewareAnswering(
       `async () => new Response(null, {
          headers: { "x-middleware-rewrite": "https://ext.example.com/b/?q=1" },
        })`,
@@ -1295,23 +845,20 @@ describe("the URL middleware is handed", () => {
 
     const res = await serve(
       get(`${PAGE}/`),
-      deps({
-        manifest: {
-          buildId: "t",
-          basePath: "",
+      servedNextRelease({
+        table: {
           trailingSlash: true,
           pathnames: [PAGE],
-          routes: emptyRoutes,
           dispatch: { [PAGE]: { kind: "static" } },
           middleware: { entryKey: MIDDLEWARE_KEY },
         },
-        assetStore: assetStoreServing({ [`${PAGE}.html`]: "the page" }),
-        edge,
+        assets: { [`${PAGE}.html`]: "the page" },
+        edgeBundle: edge.bundle,
         fetch: (async (input: Request) => {
           forwarded = input.url;
           return new Response("from ext");
         }) as unknown as typeof fetch,
-      } as Partial<RouteDeps>),
+      }),
     );
 
     expect(forwarded).toBe("https://ext.example.com/b/?q=1");
@@ -1321,14 +868,14 @@ describe("the URL middleware is handed", () => {
   it.each([`/b/`, "/b"])(
     "leaves a middleware redirect to %s exactly as authored",
     async (location) => {
-      const edge = middlewareInvoker(
+      const edge = middlewareAnswering(
         `async () => new Response(null, {
            status: 307,
            headers: { location: "${location}" },
          })`,
       );
 
-      const res = await serve(get(`${PAGE}/`), pageDeps({ trailingSlash: true, edge }));
+      const res = await serve(get(`${PAGE}/`), pageRelease({ trailingSlash: true, edge }));
 
       expect(res.status).toBe(307);
       expect(res.headers.get("location")).toBe(location);
@@ -1338,7 +885,7 @@ describe("the URL middleware is handed", () => {
   describe("a request about to be redirected", () => {
     it("never reaches middleware", async () => {
       const { edge, calls } = counted(echo());
-      const res = await serve(get(PAGE), pageDeps({ trailingSlash: true, edge }));
+      const res = await serve(get(PAGE), pageRelease({ trailingSlash: true, edge }));
 
       expect(res.status).toBe(308);
       expect(res.headers.get("location")).toBe(`${PAGE}/`);
@@ -1347,9 +894,9 @@ describe("the URL middleware is handed", () => {
 
     it("is not answered by a middleware that would have taken it", async () => {
       const { edge, calls } = counted(
-        middlewareInvoker(`async () => new Response("from middleware", { status: 200 })`),
+        middlewareAnswering(`async () => new Response("from middleware", { status: 200 })`),
       );
-      const res = await serve(get(PAGE), pageDeps({ trailingSlash: true, edge }));
+      const res = await serve(get(PAGE), pageRelease({ trailingSlash: true, edge }));
 
       expect(res.status).toBe(308);
       expect(calls()).toBe(0);
@@ -1365,7 +912,7 @@ describe("the URL middleware is handed", () => {
     ])("under trailingSlash: %s, shows middleware %s as requested", async (trailingSlash, path) => {
       const res = await serve(
         get(path),
-        pageDeps({ trailingSlash, skipTrailingSlashRedirect: true }),
+        pageRelease({ trailingSlash, skipTrailingSlashRedirect: true }),
       );
 
       expect(res.status).toBe(200);
@@ -1376,7 +923,7 @@ describe("the URL middleware is handed", () => {
     it("still shows a data request as its page", async () => {
       const res = await serve(
         get(`/_next/data/t${PAGE}.json`, { "x-nextjs-data": "1" }),
-        pageDeps({ trailingSlash: true, skipTrailingSlashRedirect: true }),
+        pageRelease({ trailingSlash: true, skipTrailingSlashRedirect: true }),
       );
 
       expect(res.headers.get("req-url-path")).toBe(`${PAGE}/`);
@@ -1387,7 +934,7 @@ describe("the URL middleware is handed", () => {
     it("shows middleware the canonical form the client sent", async () => {
       const res = await serve(
         get(`${PAGE}/`),
-        pageDeps({ trailingSlash: true, skipMiddlewareUrlNormalize: true }),
+        pageRelease({ trailingSlash: true, skipMiddlewareUrlNormalize: true }),
       );
 
       expect(res.status).toBe(200);
@@ -1397,7 +944,7 @@ describe("the URL middleware is handed", () => {
     it("shows middleware a slash-free form the 308 no longer takes away", async () => {
       const res = await serve(
         get(PAGE),
-        pageDeps({
+        pageRelease({
           trailingSlash: true,
           skipMiddlewareUrlNormalize: true,
           skipTrailingSlashRedirect: true,
@@ -1414,7 +961,7 @@ describe("the URL middleware is handed", () => {
         const path = `/_next/data/t${PAGE}.json`;
         const res = await serve(
           get(path, { "x-nextjs-data": "1" }),
-          pageDeps({ trailingSlash, skipMiddlewareUrlNormalize: true }),
+          pageRelease({ trailingSlash, skipMiddlewareUrlNormalize: true }),
         );
 
         expect(res.headers.get("req-url-path")).toBe(path);

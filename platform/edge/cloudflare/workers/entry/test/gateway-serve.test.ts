@@ -1,4 +1,3 @@
-import { createExecutionContext } from "cloudflare:test";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
@@ -10,6 +9,7 @@ import {
 } from "../src/serve-key";
 import { answerEveryRecordWith, capturing, withGlobalFetch } from "./origin-deps";
 import { routeTableKey } from "./route-table-store";
+import { contextWithExports, serveAnswering } from "./worker-context";
 
 const record = {
   app: "web",
@@ -35,16 +35,14 @@ const env: Env = {
 function ctxWithServe(answer: (key: string) => Response) {
   const asked: { key: string; props: ServeProps }[] = [];
   const headers: Headers[] = [];
-  const serve = ({ props }: { props: ServeProps }) => ({
-    fetch: async (request: Request) => {
+  const ctx = contextWithExports({
+    Serve: serveAnswering((request, props) => {
       const key = decodeURIComponent(new URL(request.url).pathname.slice(1));
       asked.push({ key, props });
       headers.push(request.headers);
       return answer(key);
-    },
+    }),
   });
-  const ctx = createExecutionContext();
-  Object.defineProperty(ctx, "exports", { value: { Serve: serve } });
   return { asked, headers, ctx };
 }
 
@@ -220,9 +218,7 @@ describe("the gateway serving a prerender", () => {
       },
       purge: async () => ({ ok: true }),
     });
-    const ctx = createExecutionContext();
-    Object.defineProperty(ctx, "exports", { value: { Serve: serve } });
-    return { origin, ctx };
+    return { origin, ctx: contextWithExports({ Serve: serve }) };
   }
 
   it("serves the prerender through Serve, keyed by the release token of its ISR prefix", async () => {

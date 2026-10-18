@@ -17,6 +17,7 @@ export interface ReleaseRecord {
   edgeWorkers?: EdgeWorkers;
   releaseFingerprint?: string;
   variables?: VariableRecord[];
+  buildAssets?: Record<string, string>;
 }
 
 export interface VariableRecord {
@@ -48,24 +49,12 @@ export interface ServedLabel {
 
 export type PointerMoveOutcome = "moved" | "stale";
 
-export const SCHEMA_VERSION = 4;
-
 const DEFAULT_POINTER = "@production";
 const VERSION_KEY = "versionStamp";
 const GATE_KEY = "gate";
-const OWNER_KEY = "ownerToken";
 const SECRET_KEY = "secret";
-const SCHEMA_KEY = "schemaVersion";
 
-function dropSupersededSchema(store: SqlStore): void {
-  const recorded = store.sql
-    .exec<{ value: string }>(`SELECT value FROM meta WHERE key = ?`, SCHEMA_KEY)
-    .toArray()[0]?.value;
-  if (recorded === String(SCHEMA_VERSION)) return;
-  for (const table of ["records", "promotions", "pointers", "served", "apps", "labels"]) {
-    store.sql.exec(`DROP TABLE IF EXISTS ${table}`);
-  }
-}
+export const KEPT_BUILDS_PER_APP = 20;
 
 export function ensureSchema(store: SqlStore): void {
   store.sql.exec(
@@ -74,7 +63,6 @@ export function ensureSchema(store: SqlStore): void {
        value TEXT NOT NULL
      );`,
   );
-  dropSupersededSchema(store);
   store.sql.exec(
     `CREATE TABLE IF NOT EXISTS pointers (
        name TEXT PRIMARY KEY,
@@ -95,9 +83,16 @@ export function ensureSchema(store: SqlStore): void {
        pointer TEXT NOT NULL,
        app TEXT NOT NULL
      );
-     CREATE INDEX IF NOT EXISTS labels_pointer ON labels (pointer);`,
+     CREATE INDEX IF NOT EXISTS labels_pointer ON labels (pointer);
+     CREATE TABLE IF NOT EXISTS builds (
+       pointer TEXT NOT NULL,
+       app TEXT NOT NULL,
+       build_id TEXT NOT NULL,
+       asset_prefix TEXT NOT NULL,
+       seq INTEGER NOT NULL,
+       PRIMARY KEY (pointer, app, build_id)
+     );`,
   );
-  setMeta(store, SCHEMA_KEY, String(SCHEMA_VERSION));
 }
 
 function getMeta(store: SqlStore, key: string): string | undefined {
@@ -137,7 +132,7 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
         pointer,
         record.app,
         record.release,
-        JSON.stringify(record),
+        JSON.stringify(withBuildAssets(record, recordBuild(store, pointer, record))),
       );
       store.sql.exec(`INSERT OR IGNORE INTO apps (app) VALUES (?)`, record.app);
     }
@@ -161,8 +156,54 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
   });
 }
 
+function recordBuild(
+  store: SqlStore,
+  pointer: string,
+  record: ReleaseRecord,
+): Record<string, string> {
+  store.sql.exec(
+    `INSERT INTO builds (pointer, app, build_id, asset_prefix, seq)
+     VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM builds))
+     ON CONFLICT(pointer, app, build_id) DO UPDATE SET
+       asset_prefix = excluded.asset_prefix, seq = excluded.seq`,
+    pointer,
+    record.app,
+    record.buildId,
+    record.assetPrefix,
+  );
+  store.sql.exec(
+    `DELETE FROM builds WHERE pointer = ? AND app = ? AND build_id NOT IN (
+       SELECT build_id FROM builds WHERE pointer = ? AND app = ? ORDER BY seq DESC LIMIT ?
+     )`,
+    pointer,
+    record.app,
+    pointer,
+    record.app,
+    KEPT_BUILDS_PER_APP,
+  );
+  const rows = store.sql
+    .exec<{ build_id: string; asset_prefix: string }>(
+      `SELECT build_id, asset_prefix FROM builds
+       WHERE pointer = ? AND app = ? AND build_id != ? ORDER BY seq`,
+      pointer,
+      record.app,
+      record.buildId,
+    )
+    .toArray();
+  return Object.fromEntries(rows.map((row) => [row.build_id, row.asset_prefix]));
+}
+
+function withBuildAssets(
+  record: ReleaseRecord,
+  buildAssets: Record<string, string>,
+): ReleaseRecord {
+  const { buildAssets: _, ...rest } = record;
+  return Object.keys(buildAssets).length === 0 ? rest : { ...rest, buildAssets };
+}
+
 export function removePointer(store: SqlStore, pointer: string): void {
   store.transactionSync(() => {
+    store.sql.exec(`DELETE FROM builds WHERE pointer = ?`, pointer);
     store.sql.exec(`DELETE FROM served WHERE pointer = ?`, pointer);
     store.sql.exec(`DELETE FROM pointers WHERE name = ?`, pointer);
     store.sql.exec(`DELETE FROM labels WHERE pointer = ?`, pointer);
@@ -247,22 +288,12 @@ export function readServedRecord(store: SqlStore, isrPrefix: string): ServedReco
 
 export type Initialization = "adopted" | "refused";
 
-export function initialize(
-  store: SqlStore,
-  ownerToken: string,
-  secret: string,
-  force: boolean,
-): Initialization {
+export function initialize(store: SqlStore, secret: string): Initialization {
   return store.transactionSync(() => {
-    if (isIdentityRecorded(store) && !force) return "refused";
-    setMeta(store, OWNER_KEY, ownerToken);
+    if (readSecret(store) !== undefined) return "refused";
     setMeta(store, SECRET_KEY, secret);
     return "adopted";
   });
-}
-
-function isIdentityRecorded(store: SqlStore): boolean {
-  return getMeta(store, OWNER_KEY) !== undefined && getMeta(store, SECRET_KEY) !== undefined;
 }
 
 export function readSecret(store: SqlStore): string | undefined {

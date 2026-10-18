@@ -1,86 +1,73 @@
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import { describe, expect, it } from "vitest";
-import type { PurgeOutcome, RaisedTag } from "../src/purge-backlog";
-import { buildOriginCall, type ServeProps } from "../src/serve-key";
+import type { RaisedTag } from "../src/purge-backlog";
+import type { ReleaseScope } from "../src/purge-times";
 import { newServing, type ServingPorts } from "../src/serving";
 
-function base(over: { purge?: () => Promise<PurgeOutcome> } = {}) {
+function base(over: { raise?: () => Promise<void> } = {}) {
   const pending: Promise<unknown>[] = [];
-  const stubs: ServeProps[] = [];
-  const purged: { mode: PurgeMode; tags: string[] }[] = [];
-  const raised: { mode: PurgeMode; tags: RaisedTag[] }[] = [];
-  const recorded: { mode: PurgeMode; tags: RaisedTag[] }[] = [];
+  const raised: { scope: ReleaseScope; mode: PurgeMode; tags: RaisedTag[] }[] = [];
   const serving: ServingPorts = {
-    serve: ({ props }) => {
-      stubs.push(props);
-      return {
-        fetch: async () => new Response(),
-        purge: async (mode, tags) => {
-          purged.push({ mode, tags });
-          return over.purge ? over.purge() : { ok: true };
-        },
-      };
-    },
+    serve: () => ({
+      fetch: async () => new Response(),
+      purge: async () => ({ ok: true }),
+    }),
     queue: {
-      raise: async (mode, tags) => {
-        raised.push({ mode, tags });
-      },
-    },
-    times: {
-      record: async (mode, tags) => {
-        recorded.push({ mode, tags });
+      raise: async (scope, mode, tags) => {
+        raised.push({ scope, mode, tags });
+        await over.raise?.();
       },
     },
     waitUntil: (promise) => void pending.push(promise),
     now: () => 9_000,
   };
-  return { serving, pending, stubs, purged, raised, recorded };
+  return { serving, pending, raised };
 }
 
-const scope = { host: "shop.example.com", app: "web", release: "r0a1b2c3d" };
+const scope = {
+  host: "shop.example.com",
+  app: "web",
+  release: "r0a1b2c3d",
+  slug: "p1",
+  isrPrefix: "production/p1/web/r0a1b2c3d/isr",
+};
 const groups = [{ mode: "purge" as const, tags: ["r0a1b2c3d|a"] }];
 
 describe("the serving of one release", () => {
-  it("records the time of an in-band purge before the purge is awaited", async () => {
-    const { serving, recorded } = base();
-
-    await newServing(serving, { ...scope, slug: "p1", isrPrefix: "p" }).purge(groups, true);
-
-    expect(recorded).toEqual([{ mode: "purge", tags: [{ tag: "r0a1b2c3d|a", raisedAt: 9_000 }] }]);
-  });
-
-  it("purges through a Serve stub with the props every page is stored under", async () => {
-    const { serving, stubs, purged } = base();
+  it("raises an in-band purge on the purge queue for its own release, at the time it was announced", async () => {
+    const { serving, raised } = base();
 
     await newServing(serving, scope).purge(groups, true);
 
-    expect(stubs).toEqual([
-      buildOriginCall("https://fn.example/blog", { ...scope, variant: ".rsc" }).props,
+    expect(raised).toEqual([
+      {
+        scope: { slug: "p1", isrPrefix: "production/p1/web/r0a1b2c3d/isr" },
+        mode: "purge",
+        tags: [{ tag: "r0a1b2c3d|a", raisedAt: 9_000 }],
+      },
     ]);
-    expect(purged).toEqual([{ mode: "purge", tags: ["r0a1b2c3d|a"] }]);
   });
 
   it("returns before an unawaited purge lands, and keeps it alive past the response", async () => {
-    let finish: (outcome: PurgeOutcome) => void = () => {};
-    const { serving, pending, purged } = base({
-      purge: () => new Promise<PurgeOutcome>((resolve) => (finish = resolve)),
+    let finish: () => void = () => {};
+    const { serving, pending, raised } = base({
+      raise: () => new Promise<void>((resolve) => (finish = resolve)),
     });
 
     await newServing(serving, scope).purge(groups, false);
 
     expect(pending).toHaveLength(1);
-    finish({ ok: true });
+    finish();
     await Promise.all(pending);
-    expect(purged).toHaveLength(1);
+    expect(raised).toHaveLength(1);
   });
 
   it("waits for an awaited purge to land before it returns", async () => {
     let landed = false;
     const { serving } = base({
-      purge: async () => {
+      raise: async () => {
         await new Promise((done) => setTimeout(done, 10));
         landed = true;
-        return { ok: true };
       },
     });
 
@@ -90,21 +77,11 @@ describe("the serving of one release", () => {
   });
 
   it("stops waiting for an awaited purge that outlasts its bound, and lets it finish behind the response", async () => {
-    const { serving, pending } = base({ purge: () => new Promise<PurgeOutcome>(() => {}) });
+    const { serving, pending } = base({ raise: () => new Promise<void>(() => {}) });
     const bound = { ...serving, awaitedPurgeMs: 20 };
 
     await newServing(bound, scope).purge(groups, true);
 
     expect(pending).toHaveLength(1);
-  });
-
-  it("raises the tags on the purge queue at the time the cache refused them", async () => {
-    const { serving, raised } = base({
-      purge: async () => ({ ok: false, codes: [1134], message: "limit" }),
-    });
-
-    await newServing(serving, scope).purge(groups, true);
-
-    expect(raised).toEqual([{ mode: "purge", tags: [{ tag: "r0a1b2c3d|a", raisedAt: 9_000 }] }]);
   });
 });
