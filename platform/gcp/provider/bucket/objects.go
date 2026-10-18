@@ -39,7 +39,7 @@ var _ s3store.ObjectAPI = objects{}
 
 func formatGeneration(generation int64) string { return strconv.FormatInt(generation, 10) }
 
-func etagOf(generation int64) string { return `"` + formatGeneration(generation) + `"` }
+func etagOf(generation int64) string { return formatGeneration(generation) }
 
 func generationOf(etag string) (int64, error) {
 	generation, err := strconv.ParseInt(strings.Trim(strings.TrimSpace(etag), `"`), 10, 64)
@@ -92,7 +92,15 @@ func timeOf(stamp string) *time.Time {
 }
 
 func (o objects) HeadObject(ctx context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
-	object, err := asked(ctx, o.service.Objects.Get(aws.ToString(in.Bucket), aws.ToString(in.Key)).Projection(noACL).Context(ctx).Do)
+	get := o.service.Objects.Get(aws.ToString(in.Bucket), aws.ToString(in.Key)).Projection(noACL)
+	if in.IfMatch != nil {
+		generation, err := generationOf(aws.ToString(in.IfMatch))
+		if err != nil {
+			return nil, err
+		}
+		get = get.IfGenerationMatch(generation)
+	}
+	object, err := asked(ctx, get.Context(ctx).Do)
 	if err != nil {
 		return nil, err
 	}
@@ -252,10 +260,27 @@ func (o objects) CompleteMultipartUpload(ctx context.Context, in *s3.CompleteMul
 	if in.MultipartUpload != nil {
 		parts = in.MultipartUpload.Parts
 	}
-	if err := o.multipart.assemble(ctx, aws.ToString(in.Bucket), aws.ToString(in.Key), aws.ToString(in.UploadId), parts, match); err != nil {
+	done, err := o.multipart.assemble(ctx, aws.ToString(in.Bucket), aws.ToString(in.Key), aws.ToString(in.UploadId), parts, match)
+	if err != nil {
 		return nil, err
 	}
-	return &s3.CompleteMultipartUploadOutput{}, nil
+	if done.generation == 0 {
+		if done.generation, err = o.readAssembledGeneration(ctx, aws.ToString(in.Bucket), aws.ToString(in.Key), done.crc32c); err != nil {
+			return nil, err
+		}
+	}
+	return &s3.CompleteMultipartUploadOutput{ETag: aws.String(etagOf(done.generation))}, nil
+}
+
+func (o objects) readAssembledGeneration(ctx context.Context, bucket, key, crc32c string) (int64, error) {
+	object, err := asked(ctx, o.service.Objects.Get(bucket, key).Projection(noACL).Context(ctx).Do)
+	if err != nil {
+		return 0, err
+	}
+	if crc32c == "" || object.Crc32c != crc32c {
+		return 0, fmt.Errorf("assemble %s: Cloud Storage answered with no generation, and the object read back is not the one assembled, so another write replaced it first", key)
+	}
+	return object.Generation, nil
 }
 
 func (o objects) AbortMultipartUpload(ctx context.Context, in *s3.AbortMultipartUploadInput, _ ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error) {

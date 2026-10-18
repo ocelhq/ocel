@@ -64,7 +64,6 @@ const (
 	PropertyTLSCA         = "tlsCa"
 	PropertyTLSServerName = "tlsServerName"
 	PropertyCAPEM         = "caPem"
-	PropertyTransport     = "transport"
 	PropertyURL           = "url"
 	PropertySigningKey    = "signingKey"
 	PropertyVerifyKey     = "verifyKey"
@@ -106,7 +105,7 @@ func RequiredProperties(t BindingType) []string {
 	case BindingKV:
 		return []string{PropertyHost, PropertyPort, PropertyPassword}
 	case BindingRealtime:
-		return []string{PropertyTransport, PropertyURL, PropertyHost, PropertySigningKey, PropertyVerifyKey}
+		return []string{PropertyURL, PropertyHost, PropertySigningKey, PropertyVerifyKey}
 	}
 	return nil
 }

@@ -40,7 +40,7 @@ from ocel.gen.app.resources.v1.resources_pb import (
     ResourceIdentifier,
     ResourceType,
 )
-from ocel.gen.common.bindings.v1.bindings_pb import RealtimeProperties, RealtimeTransport
+from ocel.gen.common.bindings.v1.bindings_pb import RealtimeProperties
 
 _MIN_TOKEN_TTL_SECONDS = 10
 _MAX_TOKEN_TTL_SECONDS = 300
@@ -127,12 +127,6 @@ type ASGIApplication = Callable[
 
 type WSGIApplication = Callable[[dict[str, object], StartResponse], Iterable[bytes]]
 """A WSGI application, as :meth:`Realtime.wsgi` returns it."""
-
-
-@dataclass(frozen=True)
-class _Transport:
-    name: Literal["appsync-events", "ocel-gateway"]
-    answered_host: str | None = None
 
 
 async def _await_if_awaitable[T](value: T | Awaitable[T]) -> T:
@@ -453,16 +447,6 @@ class Realtime[A]:
             ttl_seconds=self._ttl_seconds,
         )
 
-    def _resolve_transport(self, properties: RealtimeProperties) -> _Transport:
-        if properties.transport == RealtimeTransport.APPSYNC_EVENTS:
-            return _Transport("appsync-events", properties.host)
-        if properties.transport == RealtimeTransport.OCEL_GATEWAY:
-            return _Transport("ocel-gateway")
-        raise OcelError(
-            f'realtime "{self.name}": the binding names transport {properties.transport}, '
-            "which this SDK does not speak"
-        )
-
     def _build_request(self, channel: str, envelope: bytes) -> PublishRequest:
         return PublishRequest(realtime=self.name, channel=channel, event=envelope.decode())
 
@@ -558,7 +542,6 @@ class Realtime[A]:
         self, request: RealtimeRequest, connect: bool, ops: list[object]
     ) -> dict[str, object]:
         properties = self._read_properties("handler")
-        transport = self._resolve_transport(properties)
         auth: A | None = None
         if self._authorize is not None:
             auth = await _await_if_awaitable(self._authorize(request))
@@ -582,11 +565,9 @@ class Realtime[A]:
         )
 
         answer: dict[str, object] = {
-            "transport": transport.name,
             "url": _resolve_socket_url(properties.url, request),
+            "host": properties.host,
         }
-        if transport.answered_host is not None:
-            answer["host"] = transport.answered_host
         if connect:
             answer["connect"] = self._mint_token(
                 properties, _read_subject(auth), "connect", f"/{self.name}"
@@ -642,7 +623,8 @@ class Realtime[A]:
     def asgi(self, *, allowed_origins: Iterable[str] = ()) -> ASGIApplication:
         """An ASGI application serving the resource to browsers, mounted at any path: one
         batched POST of ``{ connect?, ops: [{ op, pattern, params?, body? }] }``, at most 50
-        ops, answered with the transport, its url, a connect token when asked, a grant with a
+        ops, answered with the socket url and the host its authorization names, a connect token
+        when asked, a grant with a
         token for each op its rule allows and a denial with a code for each it does not. It
         takes POST with application/json alone, serves its own origin and those in
         ``allowed_origins`` (the only ones it sends CORS headers to), answers

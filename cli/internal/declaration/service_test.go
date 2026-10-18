@@ -3,8 +3,10 @@ package declaration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -139,16 +141,16 @@ func TestServiceListsEveryDeclarationItKept(t *testing.T) {
 		s := NewService(nil)
 		declarePostgres(t, s, "main")
 
-		s.ForgetResources()
+		s.ForgetDeclarations()
 
 		if got := s.Resources(); len(got) != 0 {
-			t.Fatalf("Resources() after ForgetResources = %+v, want empty", got)
+			t.Fatalf("Resources() after ForgetDeclarations = %+v, want empty", got)
 		}
 
 		declarePostgres(t, s, "second")
 		got := s.Resources()
 		if len(got) != 1 || got[0].Name != "second" || got[0].Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
-			t.Fatalf("Resources() after ForgetResources and a declaration = %+v, want only the postgres second", got)
+			t.Fatalf("Resources() after ForgetDeclarations and a declaration = %+v, want only the postgres second", got)
 		}
 	})
 
@@ -157,11 +159,11 @@ func TestServiceListsEveryDeclarationItKept(t *testing.T) {
 
 		s := NewService(nil)
 		var wg sync.WaitGroup
-		for range 50 {
+		for i := range 50 {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				declarePostgres(t, s, "r")
+				declarePostgres(t, s, fmt.Sprintf("r%d", i))
 			}()
 		}
 		wg.Wait()
@@ -231,7 +233,7 @@ func TestARealtimeDeclarationResentFromItsLineReplacesTheOneBefore(t *testing.T)
 	}
 }
 
-func TestANonKVDeclarationRepeatedFromOneLineKeepsBothForTheManifestToRefuse(t *testing.T) {
+func TestTheSameDeclarationSentTwiceIsKeptOnce(t *testing.T) {
 	t.Parallel()
 
 	s := NewService(nil)
@@ -246,8 +248,122 @@ func TestANonKVDeclarationRepeatedFromOneLineKeepsBothForTheManifestToRefuse(t *
 		}
 	}
 
+	if got := s.Resources(); len(got) != 1 {
+		t.Errorf("Resources() = %+v, want one postgres: a module imported under two names sends the same request twice", got)
+	}
+}
+
+func TestADifferentDeclarationFromTheSameLineIsKeptBesideTheFirstForTheManifestToRefuse(t *testing.T) {
+	t.Parallel()
+
+	s := NewService(nil)
+	for _, version := range []string{"16", "17"} {
+		_, err := s.Declare(context.Background(), &resourcesv1.DeclareRequest{
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+			Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{Version: version}},
+			Source:   "/app/db.go:4",
+		})
+		if err != nil {
+			t.Fatalf("Declare: %v", err)
+		}
+	}
+
 	if got := s.Resources(); len(got) != 2 {
 		t.Errorf("Resources() = %+v, want both postgres declarations kept", got)
+	}
+}
+
+func TestAKVSeriesResentByASecondImportKeepsTheStoreItGrewTo(t *testing.T) {
+	t.Parallel()
+
+	s := NewService(nil)
+	store := func(entries ...string) *resourcesv1.DeclareRequest {
+		config := &resourcesv1.KvConfig{}
+		for _, entry := range entries {
+			config.Entries = append(config.Entries, &resourcesv1.KvEntry{Name: entry, Pattern: entry + "/:id", Shape: resourcesv1.KvShape_KV_SHAPE_TEXT})
+		}
+		return &resourcesv1.DeclareRequest{
+			Resource: &resourcesv1.ResourceIdentifier{Name: "cache", Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV},
+			Config:   &resourcesv1.DeclareRequest_Kv{Kv: config},
+			Source:   "/app/cache.py:10",
+		}
+	}
+	for range 2 {
+		for _, req := range []*resourcesv1.DeclareRequest{store(), store("visits"), store("visits", "names")} {
+			if _, err := s.Declare(context.Background(), req); err != nil {
+				t.Fatalf("Declare: %v", err)
+			}
+		}
+	}
+
+	if got := s.Resources(); len(got) != 1 || len(got[0].KV.GetEntries()) != 2 {
+		t.Errorf("Resources() = %+v, want the store once with both entries", got)
+	}
+}
+
+func TestTheSameEnvDeclarationSentTwiceIsAnsweredTheSameAndClaimedOnce(t *testing.T) {
+	t.Parallel()
+
+	declarations := variables.NewDeclarations(emptyValues{}, variables.Scope{})
+	s := NewService(declarations)
+	req := &resourcesv1.DeclareEnvRequest{
+		Groups: []*resourcesv1.GroupDefinition{{Key: "github", Required: true}},
+		Definitions: []*resourcesv1.VariableDefinition{{
+			Key: "GITHUB_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Group: "github", Source: "/app/env.py:3",
+		}},
+	}
+	for range 2 {
+		if _, err := s.DeclareEnv(context.Background(), req); err != nil {
+			t.Fatalf("DeclareEnv: %v", err)
+		}
+	}
+
+	if got := declarations.Definitions(); len(got) != 1 {
+		t.Errorf("Definitions() = %v, want GITHUB_ID once", got)
+	}
+}
+
+func TestAKeyDeclaredInTwoFilesIsRefusedNamingBoth(t *testing.T) {
+	t.Parallel()
+
+	s := NewService(variables.NewDeclarations(emptyValues{}, variables.Scope{}))
+	declare := func(source string) error {
+		_, err := s.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{{
+			Key: "API_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Source: source,
+		}}})
+		return err
+	}
+	if err := declare("/app/a.go:3"); err != nil {
+		t.Fatalf("DeclareEnv: %v", err)
+	}
+	if err := declare("/app/a.go:9"); err != nil {
+		t.Fatalf("DeclareEnv from the same file again: %v, want it kept: a key may be declared twice in its one file", err)
+	}
+
+	err := declare("/app/b.go:5")
+	if err == nil || !strings.Contains(err.Error(), "/app/a.go") || !strings.Contains(err.Error(), "/app/b.go") {
+		t.Errorf("DeclareEnv from a second file = %v, want it refused naming both files", err)
+	}
+}
+
+func TestAReportedProblemSentTwiceIsReportedOnce(t *testing.T) {
+	t.Parallel()
+
+	declarations := variables.NewDeclarations(emptyValues{}, variables.Scope{})
+	s := NewService(declarations)
+	_, _ = s.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{{
+		Key: "PORT", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true, Source: "/app/env.go:3",
+	}}})
+	problem := &resourcesv1.VariableProblem{Key: "PORT", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "is not a number"}
+	for range 2 {
+		if _, err := s.ReportEnvProblems(context.Background(), &resourcesv1.ReportEnvProblemsRequest{Problems: []*resourcesv1.VariableProblem{problem}}); err != nil {
+			t.Fatalf("ReportEnvProblems: %v", err)
+		}
+	}
+
+	var missing *variables.MissingError
+	if err := declarations.RefuseIncomplete(); !errors.As(err, &missing) || len(missing.Problems) != 1 {
+		t.Errorf("RefuseIncomplete() = %v, want the one invalid PORT", err)
 	}
 }
 

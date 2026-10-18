@@ -135,55 +135,6 @@ func (PostgresTlsMode) EnumDescriptor() ([]byte, []int) {
 	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{1}
 }
 
-type RealtimeTransport int32
-
-const (
-	RealtimeTransport_REALTIME_TRANSPORT_UNSPECIFIED    RealtimeTransport = 0
-	RealtimeTransport_REALTIME_TRANSPORT_APPSYNC_EVENTS RealtimeTransport = 1
-	RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY   RealtimeTransport = 2
-)
-
-// Enum value maps for RealtimeTransport.
-var (
-	RealtimeTransport_name = map[int32]string{
-		0: "REALTIME_TRANSPORT_UNSPECIFIED",
-		1: "REALTIME_TRANSPORT_APPSYNC_EVENTS",
-		2: "REALTIME_TRANSPORT_OCEL_GATEWAY",
-	}
-	RealtimeTransport_value = map[string]int32{
-		"REALTIME_TRANSPORT_UNSPECIFIED":    0,
-		"REALTIME_TRANSPORT_APPSYNC_EVENTS": 1,
-		"REALTIME_TRANSPORT_OCEL_GATEWAY":   2,
-	}
-)
-
-func (x RealtimeTransport) Enum() *RealtimeTransport {
-	p := new(RealtimeTransport)
-	*p = x
-	return p
-}
-
-func (x RealtimeTransport) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (RealtimeTransport) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_bindings_v1_bindings_proto_enumTypes[2].Descriptor()
-}
-
-func (RealtimeTransport) Type() protoreflect.EnumType {
-	return &file_common_bindings_v1_bindings_proto_enumTypes[2]
-}
-
-func (x RealtimeTransport) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use RealtimeTransport.Descriptor instead.
-func (RealtimeTransport) EnumDescriptor() ([]byte, []int) {
-	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{2}
-}
-
 type Binding struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -752,7 +703,6 @@ func (x *KvProperties) GetTlsServerName() string {
 
 type RealtimeProperties struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Transport     RealtimeTransport      `protobuf:"varint,1,opt,name=transport,proto3,enum=common.bindings.v1.RealtimeTransport" json:"transport,omitempty"`
 	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
 	Host          string                 `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
 	SigningKey    []byte                 `protobuf:"bytes,4,opt,name=signing_key,json=signingKey,proto3" json:"signing_key,omitempty"`
@@ -789,13 +739,6 @@ func (x *RealtimeProperties) ProtoReflect() protoreflect.Message {
 // Deprecated: Use RealtimeProperties.ProtoReflect.Descriptor instead.
 func (*RealtimeProperties) Descriptor() ([]byte, []int) {
 	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *RealtimeProperties) GetTransport() RealtimeTransport {
-	if x != nil {
-		return x.Transport
-	}
-	return RealtimeTransport_REALTIME_TRANSPORT_UNSPECIFIED
 }
 
 func (x *RealtimeProperties) GetUrl() string {
@@ -1003,9 +946,8 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\bpassword\x18\x04 \x01(\tB\x03\x80\x01\x01R\bpassword\x12\x10\n" +
 	"\x03tls\x18\x05 \x01(\bR\x03tls\x12\x15\n" +
 	"\x06ca_pem\x18\x06 \x01(\tR\x05caPem\x12&\n" +
-	"\x0ftls_server_name\x18\a \x01(\tR\rtlsServerName\"\xc4\x01\n" +
-	"\x12RealtimeProperties\x12C\n" +
-	"\ttransport\x18\x01 \x01(\x0e2%.common.bindings.v1.RealtimeTransportR\ttransport\x12\x10\n" +
+	"\x0ftls_server_name\x18\a \x01(\tR\rtlsServerName\"\x7f\n" +
+	"\x12RealtimeProperties\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +
 	"\x04host\x18\x03 \x01(\tR\x04host\x12$\n" +
 	"\vsigning_key\x18\x04 \x01(\fB\x03\x80\x01\x01R\n" +
@@ -1035,11 +977,7 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x0fPostgresTlsMode\x12!\n" +
 	"\x1dPOSTGRES_TLS_MODE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19POSTGRES_TLS_MODE_REQUIRE\x10\x01\x12!\n" +
-	"\x1dPOSTGRES_TLS_MODE_VERIFY_FULL\x10\x02*\x83\x01\n" +
-	"\x11RealtimeTransport\x12\"\n" +
-	"\x1eREALTIME_TRANSPORT_UNSPECIFIED\x10\x00\x12%\n" +
-	"!REALTIME_TRANSPORT_APPSYNC_EVENTS\x10\x01\x12#\n" +
-	"\x1fREALTIME_TRANSPORT_OCEL_GATEWAY\x10\x02B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3"
+	"\x1dPOSTGRES_TLS_MODE_VERIFY_FULL\x10\x02B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3"
 
 var (
 	file_common_bindings_v1_bindings_proto_rawDescOnce sync.Once
@@ -1053,40 +991,38 @@ func file_common_bindings_v1_bindings_proto_rawDescGZIP() []byte {
 	return file_common_bindings_v1_bindings_proto_rawDescData
 }
 
-var file_common_bindings_v1_bindings_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_common_bindings_v1_bindings_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_common_bindings_v1_bindings_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_common_bindings_v1_bindings_proto_goTypes = []any{
 	(BindingType)(0),           // 0: common.bindings.v1.BindingType
 	(PostgresTlsMode)(0),       // 1: common.bindings.v1.PostgresTlsMode
-	(RealtimeTransport)(0),     // 2: common.bindings.v1.RealtimeTransport
-	(*Binding)(nil),            // 3: common.bindings.v1.Binding
-	(*PostgresProperties)(nil), // 4: common.bindings.v1.PostgresProperties
-	(*BucketProperties)(nil),   // 5: common.bindings.v1.BucketProperties
-	(*TopicProperties)(nil),    // 6: common.bindings.v1.TopicProperties
-	(*TaskProperties)(nil),     // 7: common.bindings.v1.TaskProperties
-	(*KvProperties)(nil),       // 8: common.bindings.v1.KvProperties
-	(*RealtimeProperties)(nil), // 9: common.bindings.v1.RealtimeProperties
-	(*Grant)(nil),              // 10: common.bindings.v1.Grant
-	(*GrantCondition)(nil),     // 11: common.bindings.v1.GrantCondition
-	(*structpb.Struct)(nil),    // 12: google.protobuf.Struct
+	(*Binding)(nil),            // 2: common.bindings.v1.Binding
+	(*PostgresProperties)(nil), // 3: common.bindings.v1.PostgresProperties
+	(*BucketProperties)(nil),   // 4: common.bindings.v1.BucketProperties
+	(*TopicProperties)(nil),    // 5: common.bindings.v1.TopicProperties
+	(*TaskProperties)(nil),     // 6: common.bindings.v1.TaskProperties
+	(*KvProperties)(nil),       // 7: common.bindings.v1.KvProperties
+	(*RealtimeProperties)(nil), // 8: common.bindings.v1.RealtimeProperties
+	(*Grant)(nil),              // 9: common.bindings.v1.Grant
+	(*GrantCondition)(nil),     // 10: common.bindings.v1.GrantCondition
+	(*structpb.Struct)(nil),    // 11: google.protobuf.Struct
 }
 var file_common_bindings_v1_bindings_proto_depIdxs = []int32{
-	4,  // 0: common.bindings.v1.Binding.postgres:type_name -> common.bindings.v1.PostgresProperties
-	5,  // 1: common.bindings.v1.Binding.bucket:type_name -> common.bindings.v1.BucketProperties
-	12, // 2: common.bindings.v1.Binding.custom:type_name -> google.protobuf.Struct
-	6,  // 3: common.bindings.v1.Binding.topic:type_name -> common.bindings.v1.TopicProperties
-	7,  // 4: common.bindings.v1.Binding.task:type_name -> common.bindings.v1.TaskProperties
-	8,  // 5: common.bindings.v1.Binding.kv:type_name -> common.bindings.v1.KvProperties
-	9,  // 6: common.bindings.v1.Binding.realtime:type_name -> common.bindings.v1.RealtimeProperties
-	10, // 7: common.bindings.v1.Binding.grants:type_name -> common.bindings.v1.Grant
+	3,  // 0: common.bindings.v1.Binding.postgres:type_name -> common.bindings.v1.PostgresProperties
+	4,  // 1: common.bindings.v1.Binding.bucket:type_name -> common.bindings.v1.BucketProperties
+	11, // 2: common.bindings.v1.Binding.custom:type_name -> google.protobuf.Struct
+	5,  // 3: common.bindings.v1.Binding.topic:type_name -> common.bindings.v1.TopicProperties
+	6,  // 4: common.bindings.v1.Binding.task:type_name -> common.bindings.v1.TaskProperties
+	7,  // 5: common.bindings.v1.Binding.kv:type_name -> common.bindings.v1.KvProperties
+	8,  // 6: common.bindings.v1.Binding.realtime:type_name -> common.bindings.v1.RealtimeProperties
+	9,  // 7: common.bindings.v1.Binding.grants:type_name -> common.bindings.v1.Grant
 	1,  // 8: common.bindings.v1.PostgresProperties.tls_mode:type_name -> common.bindings.v1.PostgresTlsMode
-	2,  // 9: common.bindings.v1.RealtimeProperties.transport:type_name -> common.bindings.v1.RealtimeTransport
-	11, // 10: common.bindings.v1.Grant.conditions:type_name -> common.bindings.v1.GrantCondition
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	10, // 9: common.bindings.v1.Grant.conditions:type_name -> common.bindings.v1.GrantCondition
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_common_bindings_v1_bindings_proto_init() }
@@ -1108,7 +1044,7 @@ func file_common_bindings_v1_bindings_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_bindings_v1_bindings_proto_rawDesc), len(file_common_bindings_v1_bindings_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      2,
 			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,

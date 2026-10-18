@@ -73,9 +73,6 @@ func isThrottle(err error) bool {
 func NewAppSyncTransport(cfg Config) proxy.Transport {
 	signer := v4.NewSigner()
 	return func(ctx context.Context, properties *bindingsv1.RealtimeProperties, req *realtimev1.PublishRequest) error {
-		if err := proxy.RefuseOtherTransport(properties, bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_APPSYNC_EVENTS); err != nil {
-			return err
-		}
 		failed := func(code connect.Code, err error) error {
 			return connect.NewError(code, fmt.Errorf("publish on %s: %w", req.GetChannel(), err))
 		}

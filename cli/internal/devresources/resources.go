@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/postgres"
 	"github.com/ocelhq/ocel/cli/internal/devresources/queue"
 	"github.com/ocelhq/ocel/cli/internal/devresources/realtime"
+	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -62,6 +63,7 @@ func openUsersLock(stateDir string) (*flock.Flock, error) {
 
 type Resources struct {
 	project  string
+	cfg      *project.Project
 	announce func(line string)
 
 	backends []*Backend
@@ -83,7 +85,7 @@ func New(projectName string, opts Options) *Resources {
 	if opts.Project == nil {
 		opts.Project = &project.Project{}
 	}
-	r := &Resources{project: projectName, announce: opts.Announce, printed: map[string]struct{}{}}
+	r := &Resources{project: projectName, cfg: opts.Project, announce: opts.Announce, printed: map[string]struct{}{}}
 	open := opts.Open
 	opts.Open = func(ctx context.Context) (docker.Engine, error) {
 		r.mu.Lock()
@@ -149,6 +151,9 @@ func (r *Resources) backendOf(kind resourcesv1.ResourceType) (*Backend, bool) {
 }
 
 func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resource) ([]binding.Resolved, error) {
+	if err := manifest.RefuseDeclarations(r.cfg, resources); err != nil {
+		return nil, err
+	}
 	byBackend := map[*Backend][]declaration.Resource{}
 	for _, resource := range resources {
 		backend, served := r.backendOf(resource.Type)

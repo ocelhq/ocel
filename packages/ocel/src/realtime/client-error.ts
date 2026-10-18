@@ -1,7 +1,7 @@
 import type { RealtimeDenial } from "./handler.js";
 
 /**
- * Why the realtime handler or the transport refused an operation, or why it could not be
+ * Why the realtime handler or the socket refused an operation, or why it could not be
  * attempted: one of the handler's denial codes, or one the client names itself.
  *
  * - `headers-failed`: the `headers` function threw.
@@ -11,8 +11,7 @@ import type { RealtimeDenial } from "./handler.js";
  * - `invalid-grant`: the handler granted a subscribe without the token it takes.
  * - `connection-failed`: the socket could not be opened, or was not accepted in time.
  * - `connection-lost`: the open socket dropped or went silent.
- * - `subscribe-refused`: the transport refused a subscription the handler granted.
- * - `unsupported-transport`: the handler named a transport this client does not speak.
+ * - `subscribe-refused`: the socket refused a subscription the handler granted.
  * - `closed`: the client was closed.
  */
 export type RealtimeErrorCode =
@@ -24,7 +23,6 @@ export type RealtimeErrorCode =
   | "connection-failed"
   | "connection-lost"
   | "subscribe-refused"
-  | "unsupported-transport"
   | "closed";
 
 /** An operation the realtime client could not complete. */

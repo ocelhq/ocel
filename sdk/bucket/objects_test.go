@@ -467,3 +467,65 @@ func lastSigned(t *testing.T, fake *fakeStore) *bucketv1.SignRequest {
 	}
 	return fake.signed[len(fake.signed)-1]
 }
+
+func TestAWriterAnswersTheEtagOfItsOwnWriteThoughAnotherWriteReplacesTheObjectAtOnce(t *testing.T) {
+	for name, size := range map[string]int{"one request": 5, "parts": 25} {
+		t.Run(name, func(t *testing.T) {
+			fake := newFakeStore()
+			fake.overwrittenAfterWrite = true
+			store := bucketFixture(t, fake)
+			store.Thresholds(16, 10)
+
+			w := store.NewWriter(t.Context(), "doc.txt", bucket.ContentType("text/plain"), bucket.Metadata(map[string]string{"owner": "ada"}))
+			if _, err := w.Write(bytes.Repeat([]byte("a"), size)); err != nil {
+				t.Fatalf("Write() error = %v", err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatalf("Close() error = %v", err)
+			}
+
+			got := w.Attrs()
+			if got.ETag != "etag-1" || got.Key != "doc.txt" || got.Size != int64(size) || got.ContentType != "text/plain" || got.Metadata["owner"] != "ada" {
+				t.Errorf("Attrs() = %+v, want etag-1, the write's own version, with what it wrote", got)
+			}
+			if fake.heads != 0 {
+				t.Errorf("the write made %d Head calls, want none: its answer is its own", fake.heads)
+			}
+		})
+	}
+}
+
+func TestAReaderNeverAnswersOneVersionsAttrsWithAnothersBytes(t *testing.T) {
+	fake := newFakeStore()
+	store := bucketFixture(t, fake)
+	if err := store.WriteAll(t.Context(), "doc.txt", []byte("first")); err != nil {
+		t.Fatalf("WriteAll() error = %v", err)
+	}
+	fake.replacedBeforeReads = 1
+
+	reader, err := store.NewReader(t.Context(), "doc.txt")
+	if err != nil {
+		t.Fatalf("NewReader() error = %v", err)
+	}
+	defer reader.Close()
+	got, _ := io.ReadAll(reader)
+
+	if reader.Attrs().ETag != "etag-2" || string(got) != "replaced between head and read" {
+		t.Errorf("read %q with attrs %+v, want the replacing version's bytes and its own etag", got, reader.Attrs())
+	}
+}
+
+func TestAReaderRefusesAnObjectReplacedOnEveryAttempt(t *testing.T) {
+	fake := newFakeStore()
+	store := bucketFixture(t, fake)
+	if err := store.WriteAll(t.Context(), "doc.txt", []byte("first")); err != nil {
+		t.Fatalf("WriteAll() error = %v", err)
+	}
+	fake.replacedBeforeReads = 100
+
+	_, err := store.NewReader(t.Context(), "doc.txt")
+
+	if !errors.Is(err, bucket.ErrPreconditionFailed) {
+		t.Errorf("NewReader() error = %v, want bucket.ErrPreconditionFailed: no attempt read the version its head named", err)
+	}
+}

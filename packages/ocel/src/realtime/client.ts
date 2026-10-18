@@ -1,6 +1,6 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { RealtimeError, type RealtimeErrorCode } from "./client-error.js";
-import { loadTransport, type TransportConnection } from "./client-transport.js";
+import type { EventSocket } from "./client-event-socket.js";
 import type { RealtimeBatchAnswer } from "./handler.js";
 import type { ChannelShape } from "./realtime.js";
 
@@ -253,7 +253,7 @@ export function createRealtimeClient<T>(
   let isPumping = false;
   let isClosed = false;
   let hasDropped = false;
-  let connection: TransportConnection | undefined;
+  let connection: EventSocket | undefined;
   let failedAttempts = 0;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let nextId = 0;
@@ -424,15 +424,15 @@ export function createRealtimeClient<T>(
   const connect = async (
     answer: RealtimeBatchAnswer,
     granted: GrantedSubscribe[],
-  ): Promise<TransportConnection | undefined> => {
+  ): Promise<EventSocket | undefined> => {
     if (!answer.connect) {
       scheduleRetry();
       return undefined;
     }
-    let opened: TransportConnection;
+    let opened: EventSocket;
     try {
-      const transport = await loadTransport(answer.transport);
-      opened = await transport.connect(
+      const { openEventSocket } = await import("./client-event-socket.js");
+      opened = await openEventSocket(
         { url: answer.url, host: answer.host, token: answer.connect.token },
         onDrop,
       );
@@ -454,7 +454,7 @@ export function createRealtimeClient<T>(
   };
 
   const subscribeGranted = async (
-    opened: TransportConnection,
+    opened: EventSocket,
     { subscription, wire, token }: GrantedSubscribe,
   ) => {
     if (!isLive(subscription)) return;

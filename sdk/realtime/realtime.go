@@ -146,25 +146,15 @@ func (d *Realtime) findChannel(pattern string) *declaredChannel {
 	return nil
 }
 
-type realtimeBinding struct {
-	properties *bindingsv1.RealtimeProperties
-	transport  realtimeTransport
-}
-
-func (d *Realtime) readBinding(access string) (realtimeBinding, error) {
+func (d *Realtime) readBinding(access string) (*bindingsv1.RealtimeProperties, error) {
 	if binding.Discovering() {
-		return realtimeBinding{}, &ocel.UnprovisionedError{Resource: fmt.Sprintf("realtime(%q)", d.name), Access: access}
+		return nil, &ocel.UnprovisionedError{Resource: fmt.Sprintf("realtime(%q)", d.name), Access: access}
 	}
 	delivered, err := binding.Read(d.name, bindingsv1.BindingType_BINDING_TYPE_REALTIME)
 	if err != nil {
-		return realtimeBinding{}, err
+		return nil, err
 	}
-	properties := delivered.GetRealtime()
-	transport, err := findTransport(properties.GetTransport())
-	if err != nil {
-		return realtimeBinding{}, fmt.Errorf("ocel: realtime %q: %w", d.name, err)
-	}
-	return realtimeBinding{properties: properties, transport: transport}, nil
+	return delivered.GetRealtime(), nil
 }
 
 func (d *Realtime) connect(access string) (realtimev1connect.RealtimeServiceClient, error) {

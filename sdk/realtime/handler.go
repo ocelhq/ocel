@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"ocel.dev/internal/binding"
+	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
 const (
@@ -68,7 +69,7 @@ type handler struct {
 
 // Handler serves the resource to browsers, mounted at any path: one batched POST of
 // { connect?, ops: [{ op, pattern, params, body? }] }, at most 50 ops, answered with
-// the transport, its url, a connect token when asked, a grant with a token for each op
+// the socket url and the host its authorization names, a connect token when asked, a grant with a token for each op
 // its rule allows and a denial with a code for each it does not. A browser publish runs
 // the channel's publish rule and is published from the server, one publish at a time
 // in the order the batch lists them. It takes POST with application/json alone, serves
@@ -106,12 +107,11 @@ type denial struct {
 }
 
 type realtimeAnswer struct {
-	Transport string       `json:"transport"`
-	URL       string       `json:"url"`
-	Host      string       `json:"host,omitempty"`
-	Connect   *mintedToken `json:"connect,omitempty"`
-	Grants    []grant      `json:"grants"`
-	Denied    []denial     `json:"denied"`
+	URL     string       `json:"url"`
+	Host    string       `json:"host"`
+	Connect *mintedToken `json:"connect,omitempty"`
+	Grants  []grant      `json:"grants"`
+	Denied  []denial     `json:"denied"`
 }
 
 type realtimeOutcome struct {
@@ -124,7 +124,7 @@ type call struct {
 	realtime *Realtime
 	request  *http.Request
 	body     []byte
-	binding  realtimeBinding
+	binding  *bindingsv1.RealtimeProperties
 	auth     any
 	subject  string
 }
@@ -388,10 +388,7 @@ func (d *Realtime) readOp(raw json.RawMessage) (realtimeOp, denialCode) {
 }
 
 func (c *call) answerBatch(batch realtimeBatch) (realtimeAnswer, error) {
-	answer := realtimeAnswer{Transport: c.binding.transport.name, URL: resolveSocketURL(c.binding.properties.GetUrl(), c.request), Grants: []grant{}, Denied: []denial{}}
-	if c.binding.transport.answersHost {
-		answer.Host = c.binding.properties.GetHost()
-	}
+	answer := realtimeAnswer{URL: resolveSocketURL(c.binding.GetUrl(), c.request), Host: c.binding.GetHost(), Grants: []grant{}, Denied: []denial{}}
 	if batch.connect {
 		token, err := c.realtime.mintToken(c.binding, c.subject, realtimeConnect, "/"+c.realtime.name)
 		if err != nil {

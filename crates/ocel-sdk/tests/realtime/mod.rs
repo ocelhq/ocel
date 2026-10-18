@@ -49,7 +49,6 @@ impl FakeRuntime {
 
     pub fn binding(&self) -> String {
         let mut binding = read_fixture();
-        binding["realtime"]["transport"] = "REALTIME_TRANSPORT_OCEL_GATEWAY".into();
         binding["realtime"]["host"] = "realtime.shop.example".into();
         binding["realtime"]["url"] = "wss://realtime.shop.example/event/realtime".into();
         binding.to_string()

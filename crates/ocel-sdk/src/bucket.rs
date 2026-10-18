@@ -31,6 +31,7 @@ pub(crate) const KIND: &str = "bucket";
 const SINGLE_REQUEST_CEILING: usize = 16 << 20;
 const PART_SIZE: usize = 8 << 20;
 const PARTS_IN_FLIGHT: usize = 4;
+const READ_ATTEMPTS: usize = 3;
 
 type Body = <HttpClient as ClientTransport>::ResponseBody;
 type Client = BucketServiceClient<HttpClient>;
@@ -51,7 +52,9 @@ pub struct Object {
     pub etag: String,
     /// The media type the object was written with.
     pub content_type: String,
-    /// When the object last took its current bytes, as the store reports it.
+    /// When the object last took its current bytes, as the store reports it. It is `None`
+    /// on what a write answers, which is composed from the write itself rather than read
+    /// back from the store.
     pub uploaded_at: Option<SystemTime>,
     /// The user metadata written alongside the object.
     pub metadata: BTreeMap<String, String>,
@@ -156,7 +159,10 @@ impl Bucket {
     }
 
     /// Write `body` as the whole object under `key`. The returned builder describes and
-    /// conditions the write, and awaiting it performs one.
+    /// conditions the write, and awaiting it performs one and answers the info of the
+    /// version this write stored, even when another write replaces it at once: its etag is
+    /// the one the store answered this write with, so it is safe to pass to
+    /// [`Put::if_match`]. Its `uploaded_at` is `None`.
     pub fn put(&self, key: &str, body: impl Into<Payload>) -> Put<'_> {
         Put {
             bucket: self,
@@ -167,7 +173,10 @@ impl Bucket {
     }
 
     /// Read the object under `key`. The returned builder bounds the read, and awaiting it
-    /// opens one, failing with [`Error::NotFound`] when the bucket has no such object.
+    /// opens one, failing with [`Error::NotFound`] when the bucket has no such object. The
+    /// info beside the bytes always describes the version the bytes are from: a read that
+    /// finds the object replaced under it tries again, and fails with [`Error::Changed`]
+    /// when that happens three times in a row.
     pub fn get(&self, key: &str) -> Get<'_> {
         Get {
             bucket: self,
@@ -417,7 +426,8 @@ pub struct Put<'a> {
 }
 
 impl Put<'_> {
-    /// The media type the object is written under.
+    /// The media type the object is written under. Left out, it is
+    /// `application/octet-stream`.
     pub fn content_type(mut self, media_type: &str) -> Self {
         self.options.content_type = media_type.to_string();
         self
@@ -506,39 +516,51 @@ impl<'a> IntoFuture for Get<'a> {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
             let Get { bucket, key, range } = self;
-            let info = bucket.head(&key).await?.ok_or_else(|| Error::NotFound {
-                key: key.to_string(),
-            })?;
-            let target = bucket
-                .sign(
-                    "get",
-                    SignOptions {
-                        key: &key,
-                        operation: SignedOperation::Get,
-                        audience: SignedAudience::Internal,
-                        expires_in: None,
-                        constraints: None,
-                    },
-                )
-                .await?;
-            let mut request = build_signed_request(&target, "GET");
-            if let Some(range) = &range {
-                request = request.header("range", range);
+            let mut signed = None;
+            for _ in 0..READ_ATTEMPTS {
+                let info = bucket.head(&key).await?.ok_or_else(|| Error::NotFound {
+                    key: key.to_string(),
+                })?;
+                let target = match &signed {
+                    Some(target) => target,
+                    None => signed.insert(
+                        bucket
+                            .sign(
+                                "get",
+                                SignOptions {
+                                    key: &key,
+                                    operation: SignedOperation::Get,
+                                    audience: SignedAudience::Internal,
+                                    expires_in: None,
+                                    constraints: None,
+                                },
+                            )
+                            .await?,
+                    ),
+                };
+                let mut request = build_signed_request(target, "GET");
+                if let Some(range) = &range {
+                    request = request.header("range", range);
+                }
+                let response =
+                    send_request(bucket.ensure_connection("get")?, request, Bytes::new()).await?;
+                check_status(&key, response.status().as_u16())?;
+                if answered_etag(&response, &target.etag_header).as_ref() != Some(&info.etag) {
+                    continue;
+                }
+                return Ok(GetResult {
+                    info,
+                    key,
+                    body: response.into_body(),
+                });
             }
-            let response =
-                send_request(bucket.ensure_connection("get")?, request, Bytes::new()).await?;
-            check_status(&key, response.status().as_u16())?;
-            Ok(GetResult {
-                info,
-                key,
-                body: response.into_body(),
-            })
+            Err(Error::Changed { key })
         })
     }
 }
 
-/// An open read of one object: its bytes, and what the bucket knew about it when the read
-/// opened.
+/// An open read of one object: its bytes, and what the bucket knows about the version they
+/// are from.
 pub struct GetResult {
     info: Object,
     key: String,
@@ -546,7 +568,7 @@ pub struct GetResult {
 }
 
 impl GetResult {
-    /// What the bucket knew about the whole object when the read opened, whatever range
+    /// What the bucket knows about the whole version these bytes are from, whatever range
     /// this read covers.
     pub fn info(&self) -> &Object {
         &self.info
@@ -807,6 +829,18 @@ async fn send_request(
             code: Code::Unavailable,
             said: err.to_string(),
         })
+}
+
+fn answered_etag(response: &http::Response<Body>, header: &str) -> Option<String> {
+    if header.is_empty() {
+        return None;
+    }
+    response
+        .headers()
+        .get(header)
+        .and_then(|value| value.to_str().ok())
+        .filter(|etag| !etag.is_empty())
+        .map(str::to_string)
 }
 
 fn check_status(key: &str, status: u16) -> Result<(), Error> {

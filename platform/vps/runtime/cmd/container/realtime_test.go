@@ -27,7 +27,6 @@ import (
 func serveRealtimeProxy(t *testing.T, key ed25519.PrivateKey, gatewayPublishURL string) realtimev1connect.RealtimeServiceClient {
 	t.Helper()
 	record, err := protojson.Marshal(&bindingsv1.Binding{Name: "realtime--app", Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
-		Transport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY,
 		Url:        "wss://shop.example/event/realtime",
 		Host:       "shop.example",
 		SigningKey: key.Seed(),

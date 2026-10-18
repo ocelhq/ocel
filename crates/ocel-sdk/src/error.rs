@@ -142,6 +142,15 @@ pub enum Error {
         key: String,
     },
 
+    /// Another write replaced the object between learning what it was and reading its
+    /// bytes, on every attempt a read made, so no read answered one version's bytes beside
+    /// that same version's info.
+    #[error("the object under '{key}' changed while it was read")]
+    Changed {
+        /// The key whose object kept changing.
+        key: String,
+    },
+
     /// The store, or the runtime in front of it, refused an operation on an object or
     /// could not be reached.
     #[error("'{key}' was refused by the store: {said}")]

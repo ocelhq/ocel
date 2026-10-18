@@ -161,7 +161,6 @@ func collectRealtimeBinding(ctx context.Context, keys SigningKeysAPI, name strin
 	return &bindingsv1.Binding{
 		Name: name,
 		Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
-			Transport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_APPSYNC_EVENTS,
 			Url:        "wss://" + values[outputKeyRealtimeHost] + realtimeSocketPath,
 			Host:       values[outputKeyHost],
 			SigningKey: seed,

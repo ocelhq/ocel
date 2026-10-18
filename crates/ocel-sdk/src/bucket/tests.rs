@@ -49,10 +49,7 @@ async fn an_object_comes_back_as_it_was_written() {
     assert_eq!(written.size, 9);
     assert_eq!(written.content_type, "image/png");
     assert_eq!(written.metadata["owner"], "ada");
-    assert_eq!(
-        written.uploaded_at,
-        Some(UNIX_EPOCH + Duration::from_secs(UPLOADED_AT as u64))
-    );
+    assert_eq!(written.uploaded_at, None);
     assert_eq!(
         harness
             .fake
@@ -69,7 +66,199 @@ async fn an_object_comes_back_as_it_was_written() {
         .await
         .expect("the read");
     assert_eq!(read.info().etag, written.etag);
+    assert_eq!(
+        read.info().uploaded_at,
+        Some(UNIX_EPOCH + Duration::from_secs(UPLOADED_AT as u64))
+    );
     assert_eq!(&read.bytes().await.expect("the bytes")[..], b"the bytes");
+}
+
+#[tokio::test]
+async fn a_put_returns_the_etag_of_its_own_write_though_another_write_replaces_the_object_at_once()
+{
+    let harness = harness("");
+    harness
+        .fake
+        .store
+        .rival_lands_after_write
+        .store(true, Ordering::SeqCst);
+
+    let written = harness
+        .bucket
+        .put("contended.txt", "mine")
+        .content_type("text/markdown")
+        .metadata([("owner", "ada")])
+        .await
+        .expect("the write");
+
+    assert_eq!(
+        harness.fake.store.etags_written("contended.txt"),
+        [written.etag.as_str()]
+    );
+    assert_eq!(written.key, "contended.txt");
+    assert_eq!(written.size, 4);
+    assert_eq!(written.content_type, "text/markdown");
+    assert_eq!(written.metadata["owner"], "ada");
+    assert_eq!(written.uploaded_at, None);
+}
+
+#[tokio::test]
+async fn a_multipart_put_returns_the_etag_of_its_own_write_though_another_write_replaces_the_object_at_once(
+) {
+    let harness = harness("");
+    let bucket = harness.bucket.clone().with_thresholds(8, 4);
+    harness
+        .fake
+        .store
+        .rival_lands_after_write
+        .store(true, Ordering::SeqCst);
+
+    let written = bucket
+        .put("contended.bin", vec![b'x'; 26])
+        .content_type("application/x-tar")
+        .metadata([("owner", "ada")])
+        .await
+        .expect("the write");
+
+    assert_eq!(
+        harness.fake.store.etags_written("contended.bin"),
+        [written.etag.as_str()]
+    );
+    assert_eq!(written.key, "contended.bin");
+    assert_eq!(written.size, 26);
+    assert_eq!(written.content_type, "application/x-tar");
+    assert_eq!(written.metadata["owner"], "ada");
+    assert_eq!(written.uploaded_at, None);
+}
+
+#[tokio::test]
+async fn a_put_makes_no_head_call() {
+    let harness = harness("");
+    harness
+        .bucket
+        .put("small.txt", "x")
+        .await
+        .expect("the write");
+    harness
+        .bucket
+        .clone()
+        .with_thresholds(8, 4)
+        .put("large.bin", vec![b'x'; 26])
+        .await
+        .expect("the multipart write");
+    let mut writer = harness
+        .bucket
+        .clone()
+        .with_thresholds(8, 4)
+        .writer("streamed.bin")
+        .await
+        .expect("a writer");
+    writer.write_all(&[b'x'; 26]).await.expect("the write");
+    writer.shutdown().await.expect("the shutdown");
+
+    assert_eq!(harness.fake.store.heads.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn a_put_with_no_media_type_is_written_as_octet_stream() {
+    let harness = harness("");
+    let written = harness
+        .bucket
+        .put("untyped.bin", "x")
+        .await
+        .expect("the write");
+
+    assert_eq!(written.content_type, "application/octet-stream");
+    assert_eq!(
+        harness
+            .fake
+            .store
+            .object("untyped.bin")
+            .expect("the stored object")
+            .content_type,
+        "application/octet-stream"
+    );
+}
+
+#[tokio::test]
+async fn a_write_the_store_answers_without_its_etag_fails_naming_the_key() {
+    let harness = harness("");
+    harness
+        .fake
+        .store
+        .withhold_etag
+        .store(true, Ordering::SeqCst);
+
+    let err = harness
+        .bucket
+        .put("unanswered.txt", "x")
+        .await
+        .expect_err("the store kept the etag back");
+    assert_eq!(
+        err.to_string(),
+        "'unanswered.txt' was refused by the store: the store answered the write of unanswered.txt without its etag"
+    );
+
+    let err = harness
+        .bucket
+        .clone()
+        .with_thresholds(8, 4)
+        .put("unanswered.bin", vec![b'x'; 26])
+        .await
+        .expect_err("the store kept the etag back");
+    assert_eq!(
+        err.to_string(),
+        "'unanswered.bin' was refused by the store: the store answered the write of unanswered.bin without its etag"
+    );
+}
+
+#[tokio::test]
+async fn a_get_never_answers_one_versions_info_with_another_versions_bytes() {
+    let harness = harness("");
+    harness
+        .bucket
+        .put("moving.txt", "the first bytes")
+        .await
+        .expect("the write");
+    harness.fake.store.replace_before_reads(1);
+
+    let read = harness.bucket.get("moving.txt").await.expect("the read");
+    let replaced = harness
+        .fake
+        .store
+        .object("moving.txt")
+        .expect("the stored object");
+    assert_eq!(read.info().etag, replaced.etag);
+    assert_eq!(read.info().size, replaced.body.len() as u64);
+    assert_eq!(&read.bytes().await.expect("the bytes")[..], replaced.body);
+
+    harness.fake.store.replace_before_reads(1);
+    let ranged = harness
+        .bucket
+        .get("moving.txt")
+        .range(0..3)
+        .await
+        .expect("the ranged read");
+    let replaced = harness
+        .fake
+        .store
+        .object("moving.txt")
+        .expect("the stored object");
+    assert_eq!(ranged.info().etag, replaced.etag);
+    assert_eq!(
+        &ranged.bytes().await.expect("the bytes")[..],
+        &replaced.body[..3]
+    );
+
+    harness.fake.store.replace_before_reads(usize::MAX);
+    let Err(err) = harness.bucket.get("moving.txt").await else {
+        panic!("a read of an object replaced under every attempt answered");
+    };
+    assert!(matches!(err, Error::Changed { .. }), "error = {err}");
+    assert_eq!(
+        err.to_string(),
+        "the object under 'moving.txt' changed while it was read"
+    );
 }
 
 #[tokio::test]

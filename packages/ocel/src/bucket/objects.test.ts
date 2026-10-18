@@ -13,13 +13,25 @@ function fakeRuntime() {
   const store = new Map<string, StoredObject>();
   const multiparts = new Map<string, Uint8Array[]>();
   const signed = new Map<string, { key: string; kind: "get" | "put"; part?: number }>();
+  const etagHeader = "ETag";
+  const races = { afterWrite: false, beforeRead: 0, etagless: false };
   let nextUrl = 0;
+  let nextVersion = 0;
 
   const url = (key: string, kind: "get" | "put", part?: number) => {
     const at = `https://store.test/signed/${nextUrl++}`;
     signed.set(at, { key, kind, part });
     return at;
   };
+
+  const write = (key: string, body: Uint8Array, contentType: string) => {
+    const etag = `"v${++nextVersion}"`;
+    store.set(key, { body, contentType, etag });
+    return etag;
+  };
+
+  const anotherWriterLands = (key: string) =>
+    write(key, new TextEncoder().encode("another writer's bytes"), "text/plain");
 
   const info = (key: string) => {
     const stored = store.get(key);
@@ -69,6 +81,7 @@ function fakeRuntime() {
         method: operation === 1 ? "GET" : "PUT",
         headers: {},
         fields: {},
+        etagHeader: operation === 1 || operation === 2 ? etagHeader : "",
       },
     })),
     createMultipart: vi.fn(async ({ key }: { key: string }) => {
@@ -92,9 +105,10 @@ function fakeRuntime() {
         body.set(part, at);
         at += part.byteLength;
       }
-      store.set(key, { body, contentType: "application/octet-stream", etag: `"${key}"` });
+      const etag = write(key, body, "application/octet-stream");
       multiparts.delete(uploadId);
-      return { object: info(key) };
+      if (races.afterWrite) anotherWriterLands(key);
+      return { etag: races.etagless ? "" : etag };
     }),
     abortMultipart: vi.fn(async ({ uploadId }: { uploadId: string }) => {
       multiparts.delete(uploadId);
@@ -102,30 +116,46 @@ function fakeRuntime() {
     }),
   };
 
-  const fetchImpl = vi.fn(async (input: string, init?: { method?: string; body?: unknown }) => {
-    const target = signed.get(String(input));
-    if (!target) return new Response("no such signed url", { status: 403 });
-    if (target.kind === "put") {
-      const bytes = new Uint8Array(await new Response(init?.body as never).arrayBuffer());
-      if (target.part !== undefined) {
-        const parts = multiparts.get(`mpu-${target.key}`);
-        if (!parts) return new Response("gone", { status: 404 });
-        parts[target.part - 1] = bytes;
-        return new Response(null, { status: 200, headers: { etag: `"p${target.part}"` } });
+  const fetchImpl = vi.fn(
+    async (
+      input: string,
+      init?: { method?: string; body?: unknown; headers?: Record<string, string> },
+    ) => {
+      const target = signed.get(String(input));
+      if (!target) return new Response("no such signed url", { status: 403 });
+      if (target.kind === "put") {
+        const bytes = new Uint8Array(await new Response(init?.body as never).arrayBuffer());
+        if (target.part !== undefined) {
+          const parts = multiparts.get(`mpu-${target.key}`);
+          if (!parts) return new Response("gone", { status: 404 });
+          parts[target.part - 1] = bytes;
+          return new Response(null, { status: 200, headers: { etag: `"p${target.part}"` } });
+        }
+        const etag = write(target.key, bytes, init?.headers?.["content-type"] ?? "");
+        if (races.afterWrite) anotherWriterLands(target.key);
+        return new Response(null, {
+          status: 200,
+          headers: races.etagless ? {} : { [etagHeader]: etag },
+        });
       }
-      store.set(target.key, {
-        body: bytes,
-        contentType: "application/octet-stream",
-        etag: `"${target.key}"`,
+      if (races.beforeRead > 0) {
+        races.beforeRead -= 1;
+        anotherWriterLands(target.key);
+      }
+      const stored = store.get(target.key);
+      if (!stored) return new Response(null, { status: 404 });
+      const range = /^bytes=(\d+)-(\d*)$/.exec(init?.headers?.range ?? "");
+      const body = range
+        ? stored.body.subarray(Number(range[1]), range[2] ? Number(range[2]) + 1 : undefined)
+        : stored.body;
+      return new Response(body, {
+        status: range ? 206 : 200,
+        headers: { [etagHeader]: stored.etag },
       });
-      return new Response(null, { status: 200, headers: { etag: `"${target.key}"` } });
-    }
-    const stored = store.get(target.key);
-    if (!stored) return new Response(null, { status: 404 });
-    return new Response(stored.body, { status: 200 });
-  });
+    },
+  );
 
-  return { store, client, fetchImpl, signed };
+  return { store, client, fetchImpl, signed, races };
 }
 
 function objectsUnderTest(overrides: { publicBaseUrl?: string } = {}) {
@@ -157,7 +187,7 @@ describe("put", () => {
     const { objects, store, client } = objectsUnderTest();
     client.completeMultipart.mockImplementation((async ({ parts }: { parts: unknown[] }) => {
       if (parts.length === 0) throw Object.assign(new Error("parts: min_items 1"), { code: 3 });
-      return { object: undefined };
+      return { etag: "" };
     }) as never);
 
     const info = await objects.put(
@@ -240,6 +270,84 @@ describe("put", () => {
       PreconditionFailedError,
     );
   });
+
+  it("returns the etag of its own write, though another write replaces the object at once", async () => {
+    const { objects, store, races } = objectsUnderTest();
+    races.afterWrite = true;
+
+    const info = await objects.put("a.txt", "hello");
+
+    expect(info.etag).toBe('"v1"');
+    expect(store.get("a.txt")?.etag).toBe('"v2"');
+  });
+
+  it("returns the etag of its own multipart write, though another write replaces the object at once", async () => {
+    const { objects, store, races } = objectsUnderTest();
+    races.afterWrite = true;
+    const big = new Uint8Array(20 * 1024 * 1024).fill(7);
+
+    const info = await objects.put("big.bin", big);
+
+    expect(info.etag).toBe('"v1"');
+    expect(info.size).toBe(big.byteLength);
+    expect(store.get("big.bin")?.etag).toBe('"v2"');
+  });
+
+  it("makes no Head call", async () => {
+    const { objects, client } = objectsUnderTest();
+
+    await objects.put("a.txt", "hello");
+    await objects.put("big.bin", new Uint8Array(20 * 1024 * 1024));
+
+    expect(client.head).not.toHaveBeenCalled();
+  });
+
+  it("returns the info of the version this write stored, with no upload time", async () => {
+    const { objects } = objectsUnderTest();
+
+    const info = await objects.put("a.txt", "hello", {
+      contentType: "text/plain",
+      metadata: { owner: "ada" },
+    });
+
+    expect(info).toEqual({
+      key: "a.txt",
+      size: 5,
+      etag: '"v1"',
+      contentType: "text/plain",
+      uploadedAt: undefined,
+      metadata: { owner: "ada" },
+    });
+  });
+
+  it("writes application/octet-stream when the caller names no content type", async () => {
+    const { objects, store, client } = objectsUnderTest();
+
+    const small = await objects.put("a.bin", "hello");
+    const big = await objects.put("big.bin", new Uint8Array(20 * 1024 * 1024));
+
+    expect(small.contentType).toBe("application/octet-stream");
+    expect(store.get("a.bin")?.contentType).toBe("application/octet-stream");
+    expect(client.sign.mock.calls[0]?.[0]).toMatchObject({
+      constraints: { contentType: "application/octet-stream" },
+    });
+    expect(big.contentType).toBe("application/octet-stream");
+    expect(client.createMultipart.mock.calls[0]?.[0]).toMatchObject({
+      contentType: "application/octet-stream",
+    });
+  });
+
+  it("refuses a write the store answered without its etag", async () => {
+    const { objects, races } = objectsUnderTest();
+    races.etagless = true;
+
+    await expect(objects.put("a.txt", "hello")).rejects.toThrow(
+      'the store answered the write of "a.txt" without its etag',
+    );
+    await expect(objects.put("big.bin", new Uint8Array(20 * 1024 * 1024))).rejects.toThrow(
+      'the store answered the write of "big.bin" without its etag',
+    );
+  });
 });
 
 describe("get", () => {
@@ -259,6 +367,41 @@ describe("get", () => {
     const { objects } = objectsUnderTest();
 
     expect(await objects.get("gone.txt")).toBeUndefined();
+  });
+
+  it("never answers one version's info with another version's bytes", async () => {
+    const { objects, races } = objectsUnderTest();
+    await objects.put("a.txt", "hello");
+    races.beforeRead = 1;
+
+    const read = await objects.get("a.txt");
+
+    expect(await read?.text()).toBe("another writer's bytes");
+    expect(read?.info.etag).toBe('"v2"');
+    expect(read?.info.size).toBe("another writer's bytes".length);
+  });
+
+  it("reads a range of the version its info describes", async () => {
+    const { objects, races } = objectsUnderTest();
+    await objects.put("a.txt", "hello");
+    races.beforeRead = 1;
+
+    const read = await objects.get("a.txt", { range: { offset: 0, length: 7 } });
+
+    expect(await read?.text()).toBe("another");
+    expect(read?.info.etag).toBe('"v2"');
+  });
+
+  it("gives up on an object that changes under every read", async () => {
+    const { objects, client, races } = objectsUnderTest();
+    await objects.put("a.txt", "hello");
+    races.beforeRead = Number.POSITIVE_INFINITY;
+
+    const reading = objects.get("a.txt");
+
+    await expect(reading).rejects.toBeInstanceOf(PreconditionFailedError);
+    await expect(reading).rejects.toThrow('"a.txt" changed while it was read');
+    expect(client.head).toHaveBeenCalledTimes(3);
   });
 });
 

@@ -22,12 +22,13 @@ func (r *Reader) Read(p []byte) (int, error) { return r.body.Read(p) }
 // Close releases the connection the object is streaming over.
 func (r *Reader) Close() error { return r.body.Close() }
 
-// Attrs is what the bucket knew about the object when the read opened. It
+// Attrs is what the bucket knows about the version this reader streams. It
 // describes the whole object, not the range this reader streams.
 func (r *Reader) Attrs() *Object { return r.attrs }
 
 // NewReader opens the object under key for reading. It reports
-// [ErrObjectNotFound] when the bucket has none.
+// [ErrObjectNotFound] when the bucket has none, and [ErrPreconditionFailed]
+// when other writes keep replacing it before its bytes can be read.
 func (b *Bucket) NewReader(ctx context.Context, key string) (*Reader, error) {
 	return b.newReader(ctx, "NewReader", key, 0, -1)
 }
@@ -51,6 +52,16 @@ func (b *Bucket) ReadAll(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (b *Bucket) newReader(ctx context.Context, access, key string, offset, length int64) (*Reader, error) {
+	for range readAttempts {
+		reader, err := b.openVersion(ctx, access, key, offset, length)
+		if reader != nil || err != nil {
+			return reader, err
+		}
+	}
+	return nil, fmt.Errorf("%w: %q changed while it was read", ErrPreconditionFailed, key)
+}
+
+func (b *Bucket) openVersion(ctx context.Context, access, key string, offset, length int64) (*Reader, error) {
 	attrs, err := b.head(ctx, access, key)
 	if err != nil {
 		return nil, err
@@ -86,6 +97,10 @@ func (b *Bucket) newReader(ctx context.Context, access, key string, offset, leng
 			return nil, known
 		}
 		return nil, fmt.Errorf("reading %q was refused (%d)", key, res.StatusCode)
+	}
+	if res.Header.Get(target.GetEtagHeader()) != attrs.ETag {
+		res.Body.Close()
+		return nil, nil
 	}
 	return &Reader{body: res.Body, attrs: attrs}, nil
 }

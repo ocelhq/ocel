@@ -27,6 +27,7 @@ from ocel.gen.app.bucket.v1.bucket_pb import (
 )
 
 TOKEN = "letmein"
+ETAG_HEADER = "X-Fake-Version"
 
 _UPLOADED_AT = Timestamp(seconds=1_700_000_000, nanos=0)
 
@@ -40,7 +41,11 @@ class Stored:
 
     @property
     def etag(self):
-        return f'"{hashlib.md5(self.data).hexdigest()}"'
+        return etag_of(self.data)
+
+
+def etag_of(data):
+    return f'"{hashlib.md5(data).hexdigest()}"'
 
 
 class Store:
@@ -54,6 +59,25 @@ class Store:
         self.listed: list[tuple] = []
         self.authorizations: list[str | None] = []
         self.refusal: ConnectError | None = None
+        self.heads: list[str] = []
+        self.withhold_etag = False
+        self.lands_after_each_write: bytes | None = None
+        self.replace_before_reads = 0
+        self.replacements = 0
+
+    def land(self, key: str, stored: Stored) -> str:
+        self.objects[key] = stored
+        etag = stored.etag
+        if self.lands_after_each_write is not None:
+            self.objects[key] = Stored(self.lands_after_each_write, "text/plain", {})
+        return "" if self.withhold_etag else etag
+
+    def replace_before_read(self, key: str) -> None:
+        if self.replace_before_reads == 0 or key not in self.objects:
+            return
+        self.replace_before_reads -= 1
+        self.replacements += 1
+        self.objects[key] = Stored(f"replacement {self.replacements}".encode(), "text/plain", {})
 
     def info(self, key: str) -> ObjectInfo:
         stored = self.objects[key]
@@ -77,6 +101,7 @@ class Service:
 
     def head(self, request, ctx):
         self._seen(ctx)
+        self.store.heads.append(request.key)
         if request.key not in self.store.objects:
             return HeadResponse()
         return HeadResponse(object=self.store.info(request.key))
@@ -139,7 +164,9 @@ class Service:
             for name, value in constraints.metadata.items():
                 headers[f"x-amz-meta-{name}"] = value
         return SignResponse(
-            target=PresignedTarget(url=url, key=request.key, method=method, headers=headers)
+            target=PresignedTarget(
+                url=url, key=request.key, method=method, headers=headers, etag_header=ETAG_HEADER
+            )
         )
 
     def create_multipart(self, request, ctx):
@@ -172,10 +199,8 @@ class Service:
         upload = self.store.uploads.pop(request.upload_id)
         data = b"".join(upload["parts"][part.part_number] for part in request.parts)
         self._refuse_unmet(request.key, request.if_none_match, request.if_match)
-        self.store.objects[request.key] = Stored(
-            data, upload["content_type"], upload["metadata"], upload["cache_control"]
-        )
-        return CompleteMultipartResponse(object=self.store.info(request.key))
+        stored = Stored(data, upload["content_type"], upload["metadata"], upload["cache_control"])
+        return CompleteMultipartResponse(etag=self.store.land(request.key, stored))
 
     def abort_multipart(self, request, ctx):
         self._seen(ctx)
@@ -267,6 +292,8 @@ class Bucket:
         body = _body(environ)
         if "max" in query and len(body) > int(query["max"][0]):
             return _status("413 Content Too Large", start_response)
+        if "type" in query and environ.get("CONTENT_TYPE") != query["type"][0]:
+            return _status("403 Forbidden", start_response)
         metadata = {
             name[len("HTTP_X_AMZ_META_") :].lower().replace("_", "-"): value
             for name, value in environ.items()
@@ -278,11 +305,12 @@ class Bucket:
             metadata,
             environ.get("HTTP_CACHE_CONTROL", ""),
         )
-        self.store.objects[key] = stored
-        start_response("200 OK", [("etag", stored.etag), ("content-length", "0")])
+        etag = self.store.land(key, stored)
+        start_response("200 OK", _answer_etag(etag, [("content-length", "0")]))
         return [b""]
 
     def _read(self, key, environ, start_response):
+        self.store.replace_before_read(key)
         stored = self.store.objects.get(key)
         if stored is None:
             return _status("404 Not Found", start_response)
@@ -297,13 +325,19 @@ class Bucket:
             status = "206 Partial Content"
         start_response(
             status,
-            [
-                ("content-type", stored.content_type or "application/octet-stream"),
-                ("content-length", str(len(data))),
-                ("etag", stored.etag),
-            ],
+            _answer_etag(
+                "" if self.store.withhold_etag else stored.etag,
+                [
+                    ("content-type", stored.content_type or "application/octet-stream"),
+                    ("content-length", str(len(data))),
+                ],
+            ),
         )
         return [data]
+
+
+def _answer_etag(etag, headers):
+    return [*headers, (ETAG_HEADER.lower(), etag)] if etag else headers
 
 
 def _status(status, start_response):

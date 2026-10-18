@@ -136,7 +136,6 @@ func TestARealtimeBindingReadBackFromItsRecordIsTheSameRecord(t *testing.T) {
 	t.Parallel()
 
 	record := &bindingsv1.Binding{Name: "realtime--app", Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
-		Transport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY,
 		Url:        "wss://realtime.shop.example/ws",
 		Host:       "realtime.shop.example",
 		SigningKey: []byte{0x00, 0x01, 0xfe, 0xff},
@@ -152,14 +151,13 @@ func TestARealtimeBindingReadBackFromItsRecordIsTheSameRecord(t *testing.T) {
 	}
 	if !proto.Equal(message, record) {
 		got := message.GetRealtime()
-		t.Errorf("BindingMessage(BindingOf(record)) = %s over %s at %s (%s, verify key %x), want the realtime record it was read from",
-			message.GetName(), got.GetTransport(), got.GetUrl(), got.GetHost(), got.GetVerifyKey())
+		t.Errorf("BindingMessage(BindingOf(record)) = %s at %s (%s, verify key %x), want the realtime record it was read from",
+			message.GetName(), got.GetUrl(), got.GetHost(), got.GetVerifyKey())
 	}
 }
 
 func realtimeProperties(without string) map[string]string {
 	properties := map[string]string{
-		provider.PropertyTransport:  "REALTIME_TRANSPORT_OCEL_GATEWAY",
 		provider.PropertyURL:        "wss://realtime.shop.example/ws",
 		provider.PropertyHost:       "realtime.shop.example",
 		provider.PropertySigningKey: "AAH+/w==",
@@ -172,22 +170,11 @@ func realtimeProperties(without string) map[string]string {
 func TestARealtimeBindingMissingWhatAnAppMintsOrConnectsWithIsRefused(t *testing.T) {
 	t.Parallel()
 
-	for _, missing := range []string{provider.PropertyTransport, provider.PropertyURL, provider.PropertyHost, provider.PropertySigningKey, provider.PropertyVerifyKey} {
+	for _, missing := range []string{provider.PropertyURL, provider.PropertyHost, provider.PropertySigningKey, provider.PropertyVerifyKey} {
 		_, err := provider.BindingMessage(provider.Binding{Type: provider.BindingRealtime, Name: "realtime--app", Properties: realtimeProperties(missing)})
 		if err == nil || !strings.Contains(err.Error(), missing) {
 			t.Errorf("BindingMessage() without %s = %v, want it refused naming %s", missing, err, missing)
 		}
-	}
-}
-
-func TestARealtimeBindingOnATransportNoClientSpeaksIsRefused(t *testing.T) {
-	t.Parallel()
-
-	properties := realtimeProperties("")
-	properties[provider.PropertyTransport] = "carrier-pigeon"
-	_, err := provider.BindingMessage(provider.Binding{Type: provider.BindingRealtime, Name: "realtime--app", Properties: properties})
-	if err == nil || !strings.Contains(err.Error(), "carrier-pigeon") {
-		t.Errorf("BindingMessage() = %v, want a transport no client speaks refused by name", err)
 	}
 }
 

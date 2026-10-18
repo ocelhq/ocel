@@ -40,6 +40,16 @@ func AssembleInfra(input InfraInput) (*contractv1.Manifest, error) {
 	}, nil
 }
 
+func RefuseDeclarations(cfg *project.Project, resources []declaration.Resource) error {
+	declarations := declaredResources(cfg.Dir, resources)
+	topics, _, err := placeConsumers(appsOf(cfg.Apps, nil, nil), declarations, nil)
+	if err != nil {
+		return err
+	}
+	_, _, err = manifestResources(declarations, topics, map[string]string{})
+	return err
+}
+
 func servedDomains(cfg *project.Project) project.Domains {
 	domains := project.Domains{Preview: cfg.Domains.Preview, Production: slices.Clone(cfg.Domains.Production)}
 	for _, app := range cfg.Apps {

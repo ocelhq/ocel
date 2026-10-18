@@ -5,11 +5,11 @@ from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import IO, TYPE_CHECKING, BinaryIO, cast
+from typing import IO, BinaryIO, Protocol, TypeVar, cast
 from urllib.parse import quote
 
 from protobuf import Oneof
-from pyqwest import Client, Response, SyncClient, SyncResponse
+from pyqwest import Client, Headers, Response, SyncClient, SyncResponse
 
 from ocel._binding import read_bucket_binding, refuse_unprovisioned
 from ocel._declare import declare, is_discovering
@@ -49,16 +49,28 @@ from ocel.gen.app.resources.v1.resources_pb import (
 )
 from ocel.gen.common.bindings.v1.bindings_pb import BucketProperties
 
-if TYPE_CHECKING:
-    pass
-
 _KIND = "bucket"
 _SINGLE_REQUEST_LIMIT_BYTES = 16 << 20
 _PART_SIZE_BYTES = 8 << 20
 _PARTS_IN_FLIGHT = 4
+_READ_ATTEMPTS = 3
+_DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
 _Session = Session[BucketServiceClient]
 _Body = bytes | str | BinaryIO | os.PathLike[str]
+
+
+class _Answered(Protocol):
+    @property
+    def status(self) -> int: ...
+
+    @property
+    def headers(self) -> Headers: ...
+
+
+_Stream = TypeVar("_Stream")
+_Answer = TypeVar("_Answer", bound=_Answered)
+T = TypeVar("T")
 
 
 class ObjectNotFound(OcelError, FileNotFoundError):
@@ -78,13 +90,15 @@ class ObjectNotFound(OcelError, FileNotFoundError):
 
 class PreconditionFailed(OcelError):
     """Raised when a write set ``if_not_exists`` or ``if_match`` and the object did not
-    meet it."""
+    meet it, or when the object changed under every attempt to read one version of it."""
 
-    #: The key whose current state refused the write.
+    #: The key whose current state refused the write or the read.
     key: str
 
-    def __init__(self, key: str):
-        super().__init__(f'the object under "{key}" did not meet the condition this write set')
+    def __init__(self, key: str, message: str | None = None):
+        super().__init__(
+            message or f'the object under "{key}" did not meet the condition this write set'
+        )
         self.key = key
 
 
@@ -100,7 +114,8 @@ class ObjectInfo:
     etag: str
     #: The media type the object was written with.
     content_type: str
-    #: When the object last took its current bytes, as the store reports it.
+    #: When the object last took its current bytes, as the store reports it. It is
+    #: ``None`` on the info a write returns, which describes the write itself.
     uploaded_at: datetime | None = None
     #: The user metadata written alongside the object.
     metadata: Mapping[str, str] = field(default_factory=dict[str, str])
@@ -158,8 +173,11 @@ class Bucket:
         if_not_exists: bool = False,
         if_match: str | None = None,
     ) -> ObjectInfo:
-        """Write ``data`` as the whole object under ``key`` and return the object that
-        landed. A body larger than one request can send is written in parts. With
+        """Write ``data`` as the whole object under ``key`` and return the info of the
+        version this write stored: its etag is the one the store answered this write with,
+        even when another write replaces the object at once, and its ``uploaded_at`` is
+        ``None``. A body larger than one request can send is written in parts. The object
+        takes ``content_type``, or ``application/octet-stream`` when none is given. With
         ``if_not_exists`` the write goes through only while the bucket has nothing under
         the key, and with ``if_match`` only while the object under it has that etag;
         either unmet raises :class:`PreconditionFailed`."""
@@ -185,28 +203,36 @@ class Bucket:
 
     def get(self, key: str, *, range: tuple[int, int | None] | None = None) -> "ObjectBody":
         """Read the object under ``key``, or the ``(offset, length)`` byte range of it that
-        ``range`` names, with a ``length`` of ``None`` reading to the end. Raises
-        :class:`ObjectNotFound` when the bucket has none."""
-        info, target = self._runtime.run("get", partial(self._prepare_read, key=key))
-        stream = self._http.stream("GET", target.url, _build_read_headers(target, range))
-        response = stream.__enter__()
-        if response.status >= 300:
-            stream.__exit__(None, None, None)
-            raise _refuse_read(key, response.status)
+        ``range`` names, with a ``length`` of ``None`` reading to the end. The body's info
+        describes the version its bytes come from: a read the object changes under is
+        tried again, and raises :class:`PreconditionFailed` when it changes under every
+        attempt. Raises :class:`ObjectNotFound` when the bucket has none."""
+        info, stream, response = self._runtime.run(
+            "get",
+            lambda session: self._read(
+                session,
+                key=key,
+                byte_range=range,
+                send=partial(_send_read, self._http),
+                release=_release_read,
+            ),
+        )
         return ObjectBody(info, stream, response)
 
     async def get_async(
         self, key: str, *, range: tuple[int, int | None] | None = None
     ) -> "AsyncObjectBody":
         """What :meth:`get` does, awaited."""
-        info, target = await self._runtime.run_async(
-            "get_async", partial(self._prepare_read, key=key)
+        info, stream, response = await self._runtime.run_async(
+            "get_async",
+            lambda session: self._read(
+                session,
+                key=key,
+                byte_range=range,
+                send=partial(_send_read_async, self._http_async),
+                release=_release_read_async,
+            ),
         )
-        stream = self._http_async.stream("GET", target.url, _build_read_headers(target, range))
-        response = await stream.__aenter__()
-        if response.status >= 300:
-            await stream.__aexit__(None, None, None)
-            raise _refuse_read(key, response.status)
         return AsyncObjectBody(info, stream, response)
 
     def open(self, key: str, mode: str = "rb", **write_options: object) -> IO[bytes]:
@@ -382,20 +408,31 @@ class Bucket:
             await session.offload(chunks.close)
             await writer.abort()
             raise
-        await writer.close()
-        landed = await self._head(session, key=key)
-        if landed is None:
-            raise ObjectNotFound(key)
-        return landed
+        return await writer.land()
 
-    async def _prepare_read(
-        self, session: _Session, *, key: str
-    ) -> tuple[ObjectInfo, PresignedTarget]:
-        info = await self._head(session, key=key)
-        if info is None:
-            raise ObjectNotFound(key)
-        target = await self._sign(session, key, SignedOperation.GET, SignedAudience.INTERNAL)
-        return info, target
+    async def _read(
+        self,
+        session: _Session,
+        *,
+        key: str,
+        byte_range: tuple[int, int | None] | None,
+        send: Callable[[PresignedTarget, dict[str, str]], Operation[tuple[_Stream, _Answer]]],
+        release: Callable[[_Stream], Operation[None]],
+    ) -> tuple[ObjectInfo, _Stream, _Answer]:
+        for _ in range(_READ_ATTEMPTS):
+            info = await self._head(session, key=key)
+            if info is None:
+                raise ObjectNotFound(key)
+            target = await self._sign(session, key, SignedOperation.GET, SignedAudience.INTERNAL)
+            stream, answer = await send(target, _build_read_headers(target, byte_range))
+            if answer.status >= 300:
+                await release(stream)
+                raise _refuse_read(key, answer.status)
+            etag = _read_etag(answer.headers, target)
+            if etag and etag == info.etag:
+                return info, stream, answer
+            await release(stream)
+        raise PreconditionFailed(key, f'the object under "{key}" changed while it was read')
 
     async def _head(self, session: _Session, *, key: str) -> ObjectInfo | None:
         request = HeadRequest(bucket=self._read_properties().bucket, key=key)
@@ -627,6 +664,10 @@ class _WriteOptions:
     def if_none_match(self) -> str:
         return "*" if self.if_not_exists else ""
 
+    @property
+    def written_content_type(self) -> str:
+        return self.content_type or _DEFAULT_CONTENT_TYPE
+
     @classmethod
     def take(cls, opener: str, given: dict[str, object]) -> "_WriteOptions":
         options = cls()
@@ -650,31 +691,49 @@ class Writer:
         self._completed: list[CompletedPart] = []
         self._upload_id = ""
         self._next = 1
+        self._written = 0
         self._closed = False
 
     async def write(self, data: bytes) -> None:
-        if self._closed:
-            raise ValueError(f'the writer for "{self._key}" is closed')
+        self._refuse_closed()
         self._buffered += data
+        self._written += len(data)
         await self._run_or_discard(self._drain_buffer(False))
 
     async def close(self) -> None:
-        if self._closed:
-            return
+        if not self._closed:
+            await self.land()
+
+    async def land(self) -> ObjectInfo:
+        self._refuse_closed()
         self._closed = True
         if not self._upload_id and len(self._buffered) <= self._store._single_request_limit_bytes:
-            await self._run_or_discard(self._put_whole_object())
-            return
-        await self._run_or_discard(self._drain_buffer(True))
-        await self._run_or_discard(self._complete_upload())
+            etag = await self._run_or_discard(self._put_whole_object())
+        else:
+            await self._run_or_discard(self._drain_buffer(True))
+            etag = await self._run_or_discard(self._complete_upload())
+        if not etag:
+            raise OcelError(f'the store answered the write of "{self._key}" without its etag')
+        options = self._options
+        return ObjectInfo(
+            key=self._key,
+            size=self._written,
+            etag=etag,
+            content_type=options.written_content_type,
+            metadata=dict(options.metadata or {}),
+        )
 
     async def abort(self) -> None:
         self._closed = True
         await self._discard_upload()
 
-    async def _run_or_discard(self, work: Operation[None]) -> None:
+    def _refuse_closed(self) -> None:
+        if self._closed:
+            raise ValueError(f'the writer for "{self._key}" is closed')
+
+    async def _run_or_discard(self, work: Operation[T]) -> T:
         try:
-            await work
+            return await work
         except BaseException:
             await self._discard_upload()
             raise
@@ -712,7 +771,7 @@ class Writer:
                 CreateMultipartRequest(
                     bucket=self._bucket,
                     key=self._key,
-                    content_type=options.content_type or "",
+                    content_type=options.written_content_type,
                     cache_control=options.cache_control or "",
                     metadata=dict(options.metadata or {}),
                 )
@@ -757,11 +816,11 @@ class Writer:
             raise OcelError(f'part {number} of "{self._key}" was refused ({response.status})')
         return CompletedPart(part_number=number, etag=response.headers.get("etag", ""))
 
-    async def _complete_upload(self) -> None:
+    async def _complete_upload(self) -> str:
         self._completed.sort(key=lambda part: part.part_number)
         upload_id, self._upload_id = self._upload_id, ""
         try:
-            await self._session.client.complete_multipart(
+            response = await self._session.client.complete_multipart(
                 CompleteMultipartRequest(
                     bucket=self._bucket,
                     key=self._key,
@@ -774,8 +833,9 @@ class Writer:
         except RuntimeRefusedError as refused:
             self._upload_id = upload_id
             raise _refine_refusal(self._key, refused) from None
+        return response.etag
 
-    async def _put_whole_object(self) -> None:
+    async def _put_whole_object(self) -> str:
         options = self._options
         target = await self._store._sign(
             self._session,
@@ -783,7 +843,7 @@ class Writer:
             SignedOperation.PUT,
             SignedAudience.INTERNAL,
             SignConstraints(
-                content_type=options.content_type or "",
+                content_type=options.written_content_type,
                 if_none_match=options.if_none_match,
                 if_match=options.if_match or "",
                 cache_control=options.cache_control or "",
@@ -800,12 +860,38 @@ class Writer:
             raise _refuse_status(self._key, response.status) or OcelError(
                 f'writing "{self._key}" was refused ({response.status})'
             )
+        return _read_etag(response.headers, target)
+
+
+async def _send_read(
+    http: SyncClient, target: PresignedTarget, headers: dict[str, str]
+) -> tuple[AbstractContextManager[SyncResponse], SyncResponse]:
+    stream = http.stream("GET", target.url, headers)
+    return stream, stream.__enter__()
+
+
+async def _release_read(stream: AbstractContextManager[SyncResponse]) -> None:
+    stream.__exit__(None, None, None)
+
+
+async def _send_read_async(
+    http: Client, target: PresignedTarget, headers: dict[str, str]
+) -> tuple[AbstractAsyncContextManager[Response], Response]:
+    stream = http.stream("GET", target.url, headers)
+    return stream, await stream.__aenter__()
+
+
+async def _release_read_async(stream: AbstractAsyncContextManager[Response]) -> None:
+    await stream.__aexit__(None, None, None)
+
+
+def _read_etag(headers: Headers, target: PresignedTarget) -> str:
+    return headers.get(target.etag_header, "") if target.etag_header else ""
 
 
 def _build_put_headers(target: PresignedTarget, options: _WriteOptions) -> dict[str, str]:
     headers = dict(target.headers)
-    if options.content_type:
-        headers["content-type"] = options.content_type
+    headers["content-type"] = options.written_content_type
     if options.cache_control:
         headers["cache-control"] = options.cache_control
     if options.if_none_match:

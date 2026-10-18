@@ -10,13 +10,19 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
-/** Thrown when a write set `ifNoneMatch` or `ifMatch` and the object did not meet it. */
+/**
+ * Thrown when a write set `ifNoneMatch` or `ifMatch` and the object did not meet it, or when
+ * the object kept changing while `get` read it.
+ */
 export class PreconditionFailedError extends Error {
-  /** The key whose current state refused the write. */
+  /** The key whose current state refused the operation. */
   readonly key: string;
 
-  constructor(key: string, options?: ErrorOptions) {
-    super(`the object under "${key}" did not meet the condition this write set`, options);
+  constructor(key: string, options?: ErrorOptions & { message?: string }) {
+    super(
+      options?.message ?? `the object under "${key}" did not meet the condition this write set`,
+      options,
+    );
     this.name = "PreconditionFailedError";
     this.key = key;
   }

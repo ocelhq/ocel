@@ -157,7 +157,6 @@ async fn deliver_appsync() -> MutexGuard<'static, ()> {
 #[tokio::test]
 async fn the_handler_answers_a_socket_path_on_the_origin_the_request_reached_it_at() {
     let mut binding = read_fixture();
-    binding["realtime"]["transport"] = "REALTIME_TRANSPORT_OCEL_GATEWAY".into();
     binding["realtime"]["url"] = "/.well-known/ocel-realtime".into();
     binding["realtime"]["host"] = "gateway:8080".into();
     let _env = deliver(&binding.to_string()).await;
@@ -185,14 +184,13 @@ async fn the_handler_answers_a_socket_path_on_the_origin_the_request_reached_it_
 }
 
 #[tokio::test]
-async fn the_handler_names_the_transport_and_mints_a_connect_token_when_asked() {
+async fn the_handler_names_the_socket_and_mints_a_connect_token_when_asked() {
     let _env = deliver_appsync().await;
     let rt = build(Arc::default());
 
     let res = post(&rt, json!({ "connect": true, "ops": [] }), &[]).await;
 
     let fixture = read_fixture();
-    assert_eq!(res["transport"], "appsync-events");
     assert_eq!(res["url"], fixture["realtime"]["url"]);
     assert_eq!(res["host"], fixture["realtime"]["host"]);
     let claims = read_claims(res["connect"]["token"].as_str().unwrap());
@@ -490,8 +488,7 @@ async fn a_relayed_publish_runs_the_publish_rule_then_publishes_from_the_server(
     )
     .await;
 
-    assert_eq!(res["transport"], "ocel-gateway");
-    assert!(res.get("host").is_none());
+    assert_eq!(res["host"], "realtime.shop.example");
     assert_eq!(res["grants"], json!([{ "i": 0, "wire": "/app/rooms/r1" }]));
     assert_eq!(
         seen.lock().unwrap().publishes[0],
@@ -800,16 +797,16 @@ async fn an_authorize_that_panics_answers_500_uncacheable() {
 
 #[tokio::test]
 async fn a_binding_the_handler_cannot_use_answers_500_uncacheable() {
-    let unknown = deliver_binding_with("transport", json!("REALTIME_TRANSPORT_UNSPECIFIED"));
-    let _env = deliver(&unknown).await;
+    let unusable = deliver_binding_with("signingKey", json!("AAAAAAA="));
+    let _env = deliver(&unusable).await;
     let rt = build(Arc::default());
     let ops = r#"{"connect":true,"ops":[{"op":"subscribe","pattern":"status"}]}"#;
 
-    let unknown_transport = call(&rt, "POST", &[], ops).await;
+    let unusable_key = call(&rt, "POST", &[], ops).await;
     std::env::remove_var("OCEL_RESOURCE_REALTIME_app");
     let missing = call(&rt, "POST", &[], ops).await;
 
-    for answered in [unknown_transport, missing] {
+    for answered in [unusable_key, missing] {
         assert_eq!(answered.status, 500, "{}", answered.body);
         assert_eq!(answered.headers["cache-control"], "no-store");
     }

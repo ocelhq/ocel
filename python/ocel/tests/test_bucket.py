@@ -11,6 +11,7 @@ from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 
 from ocel import (
+    ObjectInfo,
     ObjectNotFound,
     OcelError,
     PreconditionFailed,
@@ -358,6 +359,145 @@ def test_a_write_in_parts_that_must_not_replace_is_refused(uploads):
     with pytest.raises(PreconditionFailed):
         store.put("a.txt", b"0123456789abcde", if_not_exists=True)
     assert uploads.store.objects["a.txt"].data == b"first"
+
+
+def test_a_put_returns_the_etag_of_its_own_write_though_another_write_replaces_the_object_at_once(
+    uploads,
+):
+    uploads.store.lands_after_each_write = b"theirs"
+
+    landed = bucket("uploads").put(
+        "a.txt", b"mine", content_type="text/plain", metadata={"by": "me"}
+    )
+
+    assert landed == ObjectInfo(
+        key="a.txt",
+        size=4,
+        etag=fakebucket.etag_of(b"mine"),
+        content_type="text/plain",
+        uploaded_at=None,
+        metadata={"by": "me"},
+    )
+    uploads.store.lands_after_each_write = None
+    with pytest.raises(PreconditionFailed):
+        bucket("uploads").put("a.txt", b"mine again", if_match=landed.etag)
+    assert uploads.store.objects["a.txt"].data == b"theirs"
+
+
+def test_a_put_in_parts_returns_the_etag_of_its_own_write_though_another_replaces_it_at_once(
+    uploads,
+):
+    uploads.store.lands_after_each_write = b"theirs"
+    store = bucket("uploads")
+    store._single_request_limit_bytes = 8
+    store._part_size_bytes = 4
+
+    landed = store.put("a.txt", b"0123456789abcde", content_type="text/plain")
+
+    assert landed == ObjectInfo(
+        key="a.txt",
+        size=15,
+        etag=fakebucket.etag_of(b"0123456789abcde"),
+        content_type="text/plain",
+        uploaded_at=None,
+        metadata={},
+    )
+    assert uploads.store.objects["a.txt"].data == b"theirs"
+
+
+@pytest.mark.asyncio
+async def test_an_async_put_returns_the_etag_of_its_own_write_though_another_replaces_it_at_once(
+    uploads,
+):
+    uploads.store.lands_after_each_write = b"theirs"
+
+    landed = await bucket("uploads").put_async("a.txt", b"mine")
+
+    assert landed.etag == fakebucket.etag_of(b"mine")
+    assert landed.size == 4
+
+
+@pytest.mark.parametrize("single_request_limit_bytes", [16, 8])
+def test_a_put_makes_no_head_call(uploads, single_request_limit_bytes):
+    store = bucket("uploads")
+    store._single_request_limit_bytes = single_request_limit_bytes
+    store._part_size_bytes = 4
+
+    store.put("a.txt", b"0123456789abcde")
+    with store.open("b.txt", "wb") as handle:
+        handle.write(b"0123456789abcde")
+
+    assert uploads.store.heads == []
+
+
+def test_a_put_with_no_media_type_writes_and_answers_application_octet_stream(uploads):
+    landed = bucket("uploads").put("a.bin", b"\x00\x01")
+
+    assert landed.content_type == "application/octet-stream"
+    assert uploads.store.objects["a.bin"].content_type == "application/octet-stream"
+
+
+@pytest.mark.parametrize("single_request_limit_bytes", [16, 8])
+def test_a_write_the_store_answers_without_its_etag_fails_naming_the_key(
+    uploads, single_request_limit_bytes
+):
+    uploads.store.withhold_etag = True
+    store = bucket("uploads")
+    store._single_request_limit_bytes = single_request_limit_bytes
+    store._part_size_bytes = 4
+
+    with pytest.raises(OcelError) as raised:
+        store.put("a.txt", b"0123456789abcde")
+    assert str(raised.value) == 'the store answered the write of "a.txt" without its etag'
+
+
+def test_a_get_never_answers_one_versions_info_with_another_versions_bytes(uploads):
+    uploads.store.objects["a.txt"] = fakebucket.Stored(b"first", "text/plain", {})
+    uploads.store.replace_before_reads = 1
+
+    read = bucket("uploads").get("a.txt")
+
+    assert read.bytes() == b"replacement 1"
+    assert read.info.etag == fakebucket.etag_of(b"replacement 1")
+    assert read.info.size == len(b"replacement 1")
+
+
+@pytest.mark.asyncio
+async def test_an_async_get_never_answers_one_versions_info_with_another_versions_bytes(uploads):
+    uploads.store.objects["a.txt"] = fakebucket.Stored(b"first", "text/plain", {})
+    uploads.store.replace_before_reads = 1
+
+    read = await bucket("uploads").get_async("a.txt", range=(0, 11))
+
+    assert await read.bytes() == b"replacement"
+    assert read.info.etag == fakebucket.etag_of(b"replacement 1")
+
+
+@pytest.mark.parametrize(
+    "read",
+    [
+        lambda store: store.get("a.txt"),
+        lambda store: store.get("a.txt", range=(0, 2)),
+        lambda store: asyncio.run(store.get_async("a.txt")),
+    ],
+)
+def test_a_get_of_an_object_replaced_under_every_read_fails_after_three_attempts(uploads, read):
+    uploads.store.objects["a.txt"] = fakebucket.Stored(b"first", "text/plain", {})
+    uploads.store.replace_before_reads = 99
+
+    with pytest.raises(PreconditionFailed) as raised:
+        read(bucket("uploads"))
+    assert str(raised.value) == 'the object under "a.txt" changed while it was read'
+    assert raised.value.key == "a.txt"
+    assert uploads.store.heads == ["a.txt"] * 3
+
+
+def test_a_get_the_store_answers_without_its_etag_fails_as_changed(uploads):
+    uploads.store.objects["a.txt"] = fakebucket.Stored(b"first", "text/plain", {})
+    uploads.store.withhold_etag = True
+
+    with pytest.raises(PreconditionFailed):
+        bucket("uploads").get("a.txt")
 
 
 def test_a_signed_url_is_signed_for_someone_outside_the_runtime(uploads):

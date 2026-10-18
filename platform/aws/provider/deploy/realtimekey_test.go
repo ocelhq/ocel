@@ -235,7 +235,6 @@ func TestARealtimeBindingCarriesTheAPIsSocketHostKeysAndTwoScopedGrants(t *testi
 	}
 	collected := bindingOf(provider.BindingRealtime, binding)
 	for property, want := range map[string]string{
-		provider.PropertyTransport:  "REALTIME_TRANSPORT_APPSYNC_EVENTS",
 		provider.PropertyURL:        "wss://abc.appsync-realtime-api.eu-west-1.amazonaws.com/event/realtime",
 		provider.PropertyHost:       "abc.appsync-api.eu-west-1.amazonaws.com",
 		provider.PropertySigningKey: base64.StdEncoding.EncodeToString(seed),

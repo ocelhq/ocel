@@ -3,7 +3,6 @@ package proxy_test
 import (
 	"context"
 	"crypto/ed25519"
-	"errors"
 	"io"
 	"log"
 	"net"
@@ -46,7 +45,6 @@ func bindRealtime(t *testing.T, properties *bindingsv1.RealtimeProperties) recor
 
 func gatewayProperties(key ed25519.PrivateKey) *bindingsv1.RealtimeProperties {
 	return &bindingsv1.RealtimeProperties{
-		Transport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY,
 		Url:        "wss://realtime.shop.example/event/realtime",
 		Host:       "realtime.shop.example",
 		SigningKey: key.Seed(),
@@ -137,18 +135,6 @@ func TestAPublishOnAResourceThisRuntimeHasNoBindingForIsAFailedPrecondition(t *t
 	err := publish(proxy.NewService(records{}, proxy.NewGatewayTransport(http.DefaultClient, "http://127.0.0.1:1/publish")))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("Publish() = %v, want a failed precondition: nothing was bound to publish to", err)
-	}
-}
-
-func TestAGatewayRuntimeRefusesABindingOverAnotherTransport(t *testing.T) {
-	t.Parallel()
-
-	properties := gatewayProperties(newKey(t))
-	properties.Transport = bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_APPSYNC_EVENTS
-	err := publish(proxy.NewService(bindRealtime(t, properties), proxy.NewGatewayTransport(http.DefaultClient, "http://127.0.0.1:1/publish")))
-	var refused *connect.Error
-	if !errors.As(err, &refused) || refused.Code() != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "APPSYNC") {
-		t.Errorf("Publish() = %v, want a failed precondition naming the transport this runtime does not publish to", err)
 	}
 }
 

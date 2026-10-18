@@ -244,7 +244,7 @@ export async function serveFakeGateway({
     },
     binding: JSON.stringify({
       name: "realtime--app",
-      realtime: { ...fixture.realtime, transport: "REALTIME_TRANSPORT_OCEL_GATEWAY", url, host },
+      realtime: { ...fixture.realtime, url, host },
     }),
     close: () =>
       new Promise<void>((resolve, reject) => {

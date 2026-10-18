@@ -22,6 +22,7 @@ import (
 )
 
 const (
+	etagHeader  = "x-object-version"
 	storeToken  = "runtime-token"
 	storeBucket = "project-env-avatars"
 	publicBase  = "https://cdn.example.com"
@@ -53,9 +54,19 @@ type fakeStore struct {
 	externalRefusal string
 	refusePart      int32
 
+	overwrittenAfterWrite bool
+	replacedBeforeReads   int
+
 	signed  []*bucketv1.SignRequest
+	heads   int
 	created []string
 	aborted []string
+}
+
+func (s *fakeStore) overwriteIfAsked(key string) {
+	if s.overwrittenAfterWrite {
+		s.put(key, []byte("another writer's"), "text/plain", nil)
+	}
 }
 
 func newFakeStore() *fakeStore {
@@ -92,6 +103,7 @@ func (s *fakeStore) put(key string, data []byte, contentType string, metadata ma
 func (s *fakeStore) Head(_ context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.heads++
 	obj, ok := s.objects[req.GetKey()]
 	if !ok {
 		return &bucketv1.HeadResponse{}, nil
@@ -153,9 +165,10 @@ func (s *fakeStore) Sign(_ context.Context, req *bucketv1.SignRequest) (*bucketv
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(s.externalRefusal))
 	}
 	target := &bucketv1.PresignedTarget{
-		Url:     s.base + "/o/" + req.GetKey(),
-		Key:     req.GetKey(),
-		Headers: map[string]string{"x-signed-by": "fake"},
+		Url:        s.base + "/o/" + req.GetKey(),
+		Key:        req.GetKey(),
+		Headers:    map[string]string{"x-signed-by": "fake"},
+		EtagHeader: etagHeader,
 	}
 	switch req.GetOperation() {
 	case bucketv1.SignedOperation_SIGNED_OPERATION_PUT:
@@ -228,7 +241,8 @@ func (s *fakeStore) CompleteMultipart(_ context.Context, req *bucketv1.CompleteM
 	}
 	delete(s.uploads, req.GetUploadId())
 	stored := s.put(staged.key, joined, staged.contentType, staged.metadata)
-	return &bucketv1.CompleteMultipartResponse{Object: s.info(staged.key, stored)}, nil
+	s.overwriteIfAsked(staged.key)
+	return &bucketv1.CompleteMultipartResponse{Etag: stored.etag}, nil
 }
 
 func (s *fakeStore) AbortMultipart(_ context.Context, req *bucketv1.AbortMultipartRequest) (*bucketv1.AbortMultipartResponse, error) {
@@ -267,6 +281,10 @@ func (s *fakeStore) object(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no such key", http.StatusNotFound)
 			return
 		}
+		if s.replacedBeforeReads > 0 {
+			s.replacedBeforeReads--
+			obj = s.put(key, []byte("replaced between head and read"), "text/plain", nil)
+		}
 		data := obj.data
 		status := http.StatusOK
 		if span := r.Header.Get("Range"); span != "" {
@@ -279,6 +297,7 @@ func (s *fakeStore) object(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusPartialContent
 		}
 		w.Header().Set("Content-Type", obj.contentType)
+		w.Header().Set(etagHeader, obj.etag)
 		w.WriteHeader(status)
 		_, _ = w.Write(data)
 	case http.MethodPut:
@@ -303,7 +322,8 @@ func (s *fakeStore) object(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		stored := s.put(key, body, r.Header.Get("Content-Type"), metadata)
-		w.Header().Set("ETag", stored.etag)
+		s.overwriteIfAsked(key)
+		w.Header().Set(etagHeader, stored.etag)
 		w.WriteHeader(http.StatusOK)
 	default:
 		http.Error(w, "unsupported", http.StatusMethodNotAllowed)

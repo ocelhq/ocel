@@ -134,9 +134,6 @@ func TestTheBindingCarriesAGatewayOnLoopbackThatAcceptsTheTokensItsKeySigns(t *t
 	t.Parallel()
 
 	bound := resolveOne(t, newBackend(t), "app")
-	if bound.GetTransport() != bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY {
-		t.Errorf("transport = %s, want the Ocel gateway", bound.GetTransport())
-	}
 	if !strings.HasPrefix(bound.GetUrl(), "ws://127.0.0.1:") || !strings.HasPrefix(bound.GetHost(), "127.0.0.1:") {
 		t.Fatalf("url %q host %q, want the gateway on loopback", bound.GetUrl(), bound.GetHost())
 	}

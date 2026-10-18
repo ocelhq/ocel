@@ -17,15 +17,15 @@ export interface ObjectInfo {
   etag: string;
   /** The media type the object was written with. */
   contentType: string;
-  /** When the object last took its current bytes, where the store reports it. */
+  /** When the object last took its current bytes, where the store reports it; absent on what `put` returns. */
   uploadedAt: Date | undefined;
   /** The user metadata written alongside the object. */
   metadata: Record<string, string>;
 }
 
-/** An object's bytes, with the info that came back beside them. */
+/** An object's bytes, with the info of the version they came from. */
 export interface ObjectBody {
-  /** What the bucket knows about the object. */
+  /** What the bucket knows about the version `body` holds. */
   info: ObjectInfo;
   /** The bytes, as a stream that may be read once. */
   body: ReadableStream<Uint8Array>;
@@ -42,7 +42,7 @@ export type PutBody = string | Uint8Array | Blob | ReadableStream<Uint8Array>;
 
 /** How a write is conditioned and described. */
 export interface PutOptions {
-  /** The media type to store the object under. */
+  /** The media type to store the object under, `application/octet-stream` when omitted. */
   contentType?: string;
   /** The cache-control the store should serve the object with. */
   cacheControl?: string;
@@ -116,9 +116,12 @@ export interface SignedUpload {
 
 /** The object operations a bucket handle exposes. */
 export interface BucketObjects {
-  /** Writes `body` under `key`, in one request or in parts, and returns the stored object. */
+  /** Writes `body` under `key`, in one request or in parts, and returns the info of the version this write stored. */
   put(key: string, body: PutBody, options?: PutOptions): Promise<ObjectInfo>;
-  /** Reads the object under `key`, or `undefined` when the bucket has none. */
+  /**
+   * Reads the object under `key`, or `undefined` when the bucket has none. Throws
+   * `PreconditionFailedError` when the object keeps changing while it is read.
+   */
   get(key: string, options?: GetOptions): Promise<ObjectBody | undefined>;
   /** What the bucket knows about `key`, or `undefined` when it has none. */
   head(key: string): Promise<ObjectInfo | undefined>;
@@ -139,8 +142,14 @@ export interface BucketObjects {
 const singleRequestCeiling = 16 * 1024 * 1024;
 const partSize = 8 * 1024 * 1024;
 const partsInFlight = 4;
+const readAttempts = 3;
+const defaultContentType = "application/octet-stream";
 
 type FetchLike = typeof globalThis.fetch;
+
+function etagless(key: string): Error {
+  return new Error(`the store answered the write of "${key}" without its etag`);
+}
 
 function info(wire: WireObjectInfo | undefined, key: string): ObjectInfo {
   return {
@@ -288,17 +297,18 @@ export function createObjects(deps: {
     ctx: BucketContext,
     key: string,
     bytes: Uint8Array,
+    contentType: string,
     options: PutOptions,
-  ) => {
+  ): Promise<string> => {
     const target = await sign(ctx, key, SignedOperation.PUT, SignedAudience.INTERNAL, {
-      contentType: options.contentType,
+      contentType,
       ifNoneMatch: options.ifNoneMatch,
       ifMatch: options.ifMatch,
       cacheControl: options.cacheControl,
       metadata: options.metadata,
     });
     const headers: Record<string, string> = { ...target.headers };
-    if (options.contentType) headers["content-type"] = options.contentType;
+    headers["content-type"] = contentType;
     if (options.cacheControl) headers["cache-control"] = options.cacheControl;
     if (options.ifNoneMatch) headers["if-none-match"] = options.ifNoneMatch;
     if (options.ifMatch) headers["if-match"] = options.ifMatch;
@@ -311,18 +321,22 @@ export function createObjects(deps: {
     if (!res.ok) {
       throw refused(key, res.status) ?? new Error(`writing "${key}" was refused (${res.status})`);
     }
+    const etag = target.etagHeader ? res.headers.get(target.etagHeader) : null;
+    if (!etag) throw etagless(key);
+    return etag;
   };
 
   const putMultipart = async (
     { client, bucket }: BucketContext,
     key: string,
     parts: AsyncGenerator<Uint8Array>,
+    contentType: string,
     options: PutOptions,
-  ) => {
+  ): Promise<{ etag: string; size: number }> => {
     const { uploadId } = await client.createMultipart({
       bucket,
       key,
-      contentType: options.contentType ?? "",
+      contentType,
       cacheControl: options.cacheControl ?? "",
       metadata: options.metadata ?? {},
     });
@@ -332,6 +346,8 @@ export function createObjects(deps: {
     const giveUp = () => inFlight.abort();
     options.signal?.addEventListener("abort", giveUp);
     let next = 1;
+    let size = 0;
+    let etag: string;
     try {
       for (;;) {
         const batch: { partNumber: number; bytes: Uint8Array }[] = [];
@@ -364,6 +380,7 @@ export function createObjects(deps: {
             if (!res.ok) {
               throw new Error(`part ${part.partNumber} of "${key}" was refused (${res.status})`);
             }
+            size += part.bytes.byteLength;
             completed.push({
               partNumber: part.partNumber,
               etag: res.headers.get("etag") ?? "",
@@ -373,14 +390,14 @@ export function createObjects(deps: {
       }
 
       completed.sort((a, b) => a.partNumber - b.partNumber);
-      await client.completeMultipart({
+      ({ etag } = await client.completeMultipart({
         bucket,
         key,
         uploadId,
         parts: completed,
         ifNoneMatch: options.ifNoneMatch ?? "",
         ifMatch: options.ifMatch ?? "",
-      });
+      }));
     } catch (error) {
       inFlight.abort();
       await parts.return(undefined).catch(() => {});
@@ -389,6 +406,8 @@ export function createObjects(deps: {
     } finally {
       options.signal?.removeEventListener("abort", giveUp);
     }
+    if (!etag) throw etagless(key);
+    return { etag, size };
   };
 
   const headIn = async (
@@ -402,53 +421,76 @@ export function createObjects(deps: {
   return {
     async put(key, body, options = {}) {
       const ctx = deps.runtime("put");
+      const contentType = options.contentType || defaultContentType;
+      const written = (etag: string, size: number): ObjectInfo => ({
+        key,
+        size,
+        etag,
+        contentType,
+        uploadedAt: undefined,
+        metadata: options.metadata ?? {},
+      });
+      const single = async (bytes: Uint8Array) =>
+        written(await putSingle(ctx, key, bytes, contentType, options), bytes.byteLength);
+
       const source = await sized(body);
       if (source.bytes && source.bytes.byteLength <= singleRequestCeiling) {
-        await putSingle(ctx, key, source.bytes, options);
-      } else {
-        const stream =
-          source.stream ??
-          new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(source.bytes as Uint8Array);
-              controller.close();
-            },
-          });
-        const parts = chunked(stream, partSize);
-        const first = await parts.next();
-        const second = first.done ? first : await parts.next();
-        if (second.done) {
-          await putSingle(ctx, key, first.done ? new Uint8Array(0) : first.value, options);
-        } else {
-          await putMultipart(ctx, key, prepended([first.value, second.value], parts), options);
-        }
+        return single(source.bytes);
       }
-      const stored = await headIn(ctx, key);
-      if (!stored) throw new ObjectNotFoundError(key);
-      return stored;
+      const stream =
+        source.stream ??
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(source.bytes as Uint8Array);
+            controller.close();
+          },
+        });
+      const parts = chunked(stream, partSize);
+      const first = await parts.next();
+      const second = first.done ? first : await parts.next();
+      if (second.done) return single(first.done ? new Uint8Array(0) : first.value);
+      const { etag, size } = await putMultipart(
+        ctx,
+        key,
+        prepended([first.value, second.value], parts),
+        contentType,
+        options,
+      );
+      return written(etag, size);
     },
 
     async get(key, options = {}) {
       const ctx = deps.runtime("get");
-      const stored = await headIn(ctx, key);
-      if (!stored) return undefined;
-      const target = await sign(ctx, key, SignedOperation.GET, SignedAudience.INTERNAL);
       const headers: Record<string, string> = {};
       if (options.range) {
         const { offset, length } = options.range;
         headers.range = `bytes=${offset}-${length === undefined ? "" : offset + length - 1}`;
       }
-      const res = await send(target.url, { headers });
-      if (res.status === 404) return undefined;
-      if (!res.ok) throw new Error(`reading "${key}" was refused (${res.status})`);
-      const body = res.body as ReadableStream<Uint8Array>;
-      return {
-        info: stored,
-        body,
-        text: () => new Response(body).text(),
-        json: <T>() => new Response(body).json() as Promise<T>,
-        bytes: async () => new Uint8Array(await new Response(body).arrayBuffer()),
-      };
+      let target: Awaited<ReturnType<typeof sign>> | undefined;
+      for (let attempt = 0; attempt < readAttempts; attempt++) {
+        const stored = await headIn(ctx, key);
+        if (!stored) return undefined;
+        target ??= await sign(ctx, key, SignedOperation.GET, SignedAudience.INTERNAL);
+        const res = await send(target.url, { headers });
+        if (res.status === 404) return undefined;
+        if (!res.ok) throw new Error(`reading "${key}" was refused (${res.status})`);
+        const etag = target.etagHeader ? res.headers.get(target.etagHeader) : null;
+        if (!etag || etag !== stored.etag) {
+          await res.body?.cancel().catch(() => {});
+          continue;
+        }
+        const body = res.body as ReadableStream<Uint8Array>;
+        return {
+          info: stored,
+          body,
+          text: () => new Response(body).text(),
+          json: <T>() => new Response(body).json() as Promise<T>,
+          bytes: async () => new Uint8Array(await new Response(body).arrayBuffer()),
+        };
+      }
+      throw new PreconditionFailedError(key, {
+        message: `the object under "${key}" changed while it was read`,
+      });
     },
 
     async head(key) {

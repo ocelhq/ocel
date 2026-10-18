@@ -34,7 +34,7 @@ describe("a browser bundle of the realtime client", () => {
     }
   }, 30_000);
 
-  it("loads the gateway's socket in its own chunk, fetched only when the handler names it", async () => {
+  it("loads the socket in its own chunk, fetched only when the client connects", async () => {
     const chunks = await bundleForBrowser();
 
     expect(chunks.find((chunk) => chunk.isEntry)?.code).not.toContain("connection_init");

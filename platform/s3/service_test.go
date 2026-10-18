@@ -42,6 +42,14 @@ type fakeStore struct {
 	objects map[string]map[string]stored
 	next    int
 	clock   func() time.Time
+
+	overwrittenAfterWrite bool
+}
+
+func (f *fakeStore) overwriteIfAsked(bucket, key string) {
+	if f.overwrittenAfterWrite {
+		f.put(bucket, key, []byte("another writer's"), "text/plain")
+	}
 }
 
 func newFakeStore() *fakeStore {
@@ -68,6 +76,9 @@ func (f *fakeStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...f
 	object, ok := f.objects[aws.ToString(in.Bucket)][aws.ToString(in.Key)]
 	if !ok {
 		return nil, &s3types.NotFound{}
+	}
+	if in.IfMatch != nil && aws.ToString(in.IfMatch) != object.etag {
+		return nil, &apiError{code: "PreconditionFailed"}
 	}
 	return &s3.HeadObjectOutput{
 		ContentLength: aws.Int64(int64(len(object.body))),
@@ -162,8 +173,9 @@ func (f *fakeStore) CopyObject(_ context.Context, in *s3.CopyObjectInput, _ ...f
 	if !ok {
 		return nil, &s3types.NoSuchKey{}
 	}
-	f.put(aws.ToString(in.Bucket), aws.ToString(in.Key), object.body, object.contentType)
-	return &s3.CopyObjectOutput{}, nil
+	etag := f.put(aws.ToString(in.Bucket), aws.ToString(in.Key), object.body, object.contentType)
+	f.overwriteIfAsked(aws.ToString(in.Bucket), aws.ToString(in.Key))
+	return &s3.CopyObjectOutput{CopyObjectResult: &s3types.CopyObjectResult{ETag: aws.String(etag)}}, nil
 }
 
 func (f *fakeStore) CreateMultipartUpload(_ context.Context, in *s3.CreateMultipartUploadInput, _ ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error) {
@@ -177,8 +189,9 @@ func (f *fakeStore) ListMultipartUploads(_ context.Context, _ *s3.ListMultipartU
 func (f *fakeStore) CompleteMultipartUpload(_ context.Context, in *s3.CompleteMultipartUploadInput, _ ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.put(aws.ToString(in.Bucket), aws.ToString(in.Key), []byte("assembled"), "application/octet-stream")
-	return &s3.CompleteMultipartUploadOutput{}, nil
+	etag := f.put(aws.ToString(in.Bucket), aws.ToString(in.Key), []byte("assembled"), "application/octet-stream")
+	f.overwriteIfAsked(aws.ToString(in.Bucket), aws.ToString(in.Key))
+	return &s3.CompleteMultipartUploadOutput{ETag: aws.String(etag)}, nil
 }
 
 func (f *fakeStore) AbortMultipartUpload(_ context.Context, in *s3.AbortMultipartUploadInput, _ ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error) {

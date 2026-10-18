@@ -342,8 +342,12 @@ func TestAMultipartUploadIsOpenedSignedPartByPartAndAssembled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompleteMultipart() = %v", err)
 	}
-	if done.GetObject().GetContentType() != "video/mp4" || done.GetObject().GetMetadata()["owner"] != "ada" {
-		t.Errorf("CompleteMultipart() = %v, want the assembled object with the type and metadata it was opened with", done.GetObject())
+	assembled := h.server.object(uploads, "video.mp4")
+	if done.GetEtag() != formatGeneration(assembled.generation) {
+		t.Errorf("CompleteMultipart() etag = %q, want the generation %d the assembly wrote", done.GetEtag(), assembled.generation)
+	}
+	if assembled.contentType != "video/mp4" || assembled.metadata["owner"] != "ada" {
+		t.Errorf("the assembled object is %+v, want the type and metadata it was opened with", assembled)
 	}
 
 	again, err := h.handler.CreateMultipart(context.Background(), &bucketv1.CreateMultipartRequest{Bucket: uploads, Key: "drop.mp4"})
@@ -437,4 +441,42 @@ func TestTheAccountAnAppSignsAsIsAskedAgainAfterTheMetadataServerFailedAndKeptOn
 	if got := asked.Load(); got != 2 {
 		t.Errorf("the metadata server was asked %d times, want 2: once for the failure, once for the account, which is then kept", got)
 	}
+}
+
+func TestAnAssemblyCloudStorageAnswersWithoutAGenerationIsNamedByTheObjectWhoseChecksumMatches(t *testing.T) {
+	h := serving(t)
+	h.server.assemblyAnswersNoGeneration = true
+
+	done := assemble(t, h, "video.mp4")
+
+	if want := formatGeneration(h.server.object(uploads, "video.mp4").generation); done.GetEtag() != want {
+		t.Errorf("CompleteMultipart() etag = %q, want %s, the generation of the object the assembly wrote", done.GetEtag(), want)
+	}
+}
+
+func TestAnAssemblyAnotherWriteReplacesAtOnceAnswersTheAssemblysOwnGeneration(t *testing.T) {
+	h := serving(t)
+	h.server.overwrittenAfterAssembly = true
+
+	done := assemble(t, h, "video.mp4")
+
+	if latest := formatGeneration(h.server.object(uploads, "video.mp4").generation); done.GetEtag() == latest || done.GetEtag() == "" {
+		t.Errorf("CompleteMultipart() etag = %q, want the assembly's own generation, not the later writer's %s", done.GetEtag(), latest)
+	}
+}
+
+func assemble(t *testing.T, h *harness, key string) *bucketv1.CompleteMultipartResponse {
+	t.Helper()
+	opened, err := h.handler.CreateMultipart(context.Background(), &bucketv1.CreateMultipartRequest{Bucket: uploads, Key: key})
+	if err != nil {
+		t.Fatalf("CreateMultipart() = %v", err)
+	}
+	done, err := h.handler.CompleteMultipart(context.Background(), &bucketv1.CompleteMultipartRequest{
+		Bucket: uploads, Key: key, UploadId: opened.GetUploadId(),
+		Parts: []*bucketv1.CompletedPart{{PartNumber: 1, Etag: `"a"`}},
+	})
+	if err != nil {
+		t.Fatalf("CompleteMultipart() = %v", err)
+	}
+	return done
 }

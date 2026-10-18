@@ -443,8 +443,8 @@ describe("a realtime client recovering a subscription", () => {
   it("reports a subscribe the handler granted without a token as a non-retriable error", async () => {
     await replaceApp(() =>
       Response.json({
-        transport: "ocel-gateway",
         url: gateway.url,
+        host: gateway.host,
         grants: [{ i: 0, wire: "/app/status" }],
         denied: [],
       }),
@@ -672,7 +672,7 @@ describe("a realtime client on AppSync Events", () => {
 
     await waitFor(() => errors.length === 1, "the refusal");
     expect(errors[0]).toMatchObject({ code: "subscribe-refused", retriable: false });
-    expect(errors[0]?.message).toContain("AppSync refused the subscription");
+    expect(errors[0]?.message).toContain("the realtime socket refused the subscription");
     expect(live.state).toBe("connected");
     live.close();
   });
@@ -707,7 +707,7 @@ describe("a realtime client on AppSync Events", () => {
 
     await waitFor(() => errors.length === 1, "the drop");
     expect(errors[0]).toMatchObject({ code: "connection-lost", retriable: true });
-    expect(errors[0]?.message).toContain("AppSync sent nothing for 200ms");
+    expect(errors[0]?.message).toContain("the realtime socket sent nothing for 200ms");
     await waitFor(() => appsync.connects.length === 2, "the reconnect");
   });
 

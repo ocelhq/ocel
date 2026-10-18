@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 pub(super) const TOKEN: &str = "opensesame";
 pub(super) const UPLOADED_AT: i64 = 1_700_000_000;
 const METADATA_HEADER: &str = "x-fake-meta-";
+const ETAG_HEADER: &str = "X-Fake-Version";
 const TRANSPORT_HEADERS: [&str; 6] = [
     "host",
     "content-length",
@@ -34,13 +35,24 @@ pub(super) struct Stored {
 }
 
 #[derive(Default)]
+struct Pending {
+    described: Stored,
+    parts: BTreeMap<i32, Vec<u8>>,
+}
+
+#[derive(Default)]
 pub(super) struct Store {
     objects: Mutex<BTreeMap<String, Stored>>,
-    uploads: Mutex<BTreeMap<String, BTreeMap<i32, Vec<u8>>>>,
+    uploads: Mutex<BTreeMap<String, Pending>>,
     signed_writes: Mutex<Vec<SignConstraints>>,
     pub(super) aborted: Mutex<Vec<String>>,
     pub(super) refuse_parts: AtomicBool,
     pub(super) refuse_complete: AtomicBool,
+    pub(super) withhold_etag: AtomicBool,
+    pub(super) rival_lands_after_write: AtomicBool,
+    replace_before_reads: Mutex<usize>,
+    pub(super) heads: AtomicUsize,
+    written: Mutex<Vec<(String, String)>>,
     versions: AtomicUsize,
     parts_at_once: AtomicUsize,
     pub(super) most_parts_at_once: AtomicUsize,
@@ -56,6 +68,16 @@ impl Store {
             .lock()
             .expect("the objects")
             .insert(key.to_string(), stored);
+    }
+
+    pub(super) fn etags_written(&self, key: &str) -> Vec<String> {
+        self.written
+            .lock()
+            .expect("the writes")
+            .iter()
+            .filter(|(written, _)| written == key)
+            .map(|(_, etag)| etag.clone())
+            .collect()
     }
 
     fn record_signed_write(&self, constraints: SignConstraints) -> usize {
@@ -75,6 +97,45 @@ impl Store {
 
     fn tag(&self) -> String {
         format!("\"v{}\"", self.versions.fetch_add(1, Ordering::SeqCst))
+    }
+
+    fn write(&self, key: &str, stored: Stored) -> String {
+        let etag = stored.etag.clone();
+        self.written
+            .lock()
+            .expect("the writes")
+            .push((key.to_string(), etag.clone()));
+        self.insert(key, stored);
+        if self.rival_lands_after_write.load(Ordering::SeqCst) {
+            self.replace(key);
+        }
+        match self.withhold_etag.load(Ordering::SeqCst) {
+            true => String::new(),
+            false => etag,
+        }
+    }
+
+    fn replace(&self, key: &str) {
+        let rival = Stored {
+            body: b"a rival's bytes".to_vec(),
+            content_type: "text/plain".to_string(),
+            etag: self.tag(),
+            ..Default::default()
+        };
+        self.insert(key, rival);
+    }
+
+    pub(super) fn replace_before_reads(&self, reads: usize) {
+        *self.replace_before_reads.lock().expect("the reads") = reads;
+    }
+
+    fn replaces_before_this_read(&self) -> bool {
+        let mut left = self.replace_before_reads.lock().expect("the reads");
+        let Some(fewer) = left.checked_sub(1) else {
+            return false;
+        };
+        *left = fewer;
+        true
     }
 }
 
@@ -213,6 +274,9 @@ fn object(stream: &mut TcpStream, store: &Store, key: &str, received: &Received)
         .collect();
 
     if received.method == "GET" {
+        if store.replaces_before_this_read() {
+            store.replace(key);
+        }
         let Some(stored) = store.object(key) else {
             answer(stream, 404, "text/plain", Vec::new(), &[]);
             return;
@@ -221,7 +285,13 @@ fn object(stream: &mut TcpStream, store: &Store, key: &str, received: &Received)
             Some(range) => (206, sliced(&stored.body, range)),
             None => (200, stored.body.clone()),
         };
-        answer(stream, status, &stored.content_type, body, &[]);
+        answer(
+            stream,
+            status,
+            &stored.content_type,
+            body,
+            &[(ETAG_HEADER, stored.etag.clone())],
+        );
         return;
     }
 
@@ -243,6 +313,7 @@ fn object(stream: &mut TcpStream, store: &Store, key: &str, received: &Received)
             .expect("the uploads")
             .entry((*upload).to_string())
             .or_default()
+            .parts
             .insert(number, received.body.clone());
         answer(
             stream,
@@ -283,14 +354,13 @@ fn object(stream: &mut TcpStream, store: &Store, key: &str, received: &Received)
         answer(stream, 412, "text/plain", Vec::new(), &[]);
         return;
     }
-    let etag = store.tag();
-    store.insert(
+    let etag = store.write(
         key,
         Stored {
             body: received.body.clone(),
             content_type: constraints.content_type.clone(),
             cache_control: constraints.cache_control.clone(),
-            etag: etag.clone(),
+            etag: store.tag(),
             metadata: constraints
                 .metadata
                 .iter()
@@ -298,7 +368,11 @@ fn object(stream: &mut TcpStream, store: &Store, key: &str, received: &Received)
                 .collect(),
         },
     );
-    answer(stream, 200, "text/plain", Vec::new(), &[("etag", etag)]);
+    let answered = match etag.is_empty() {
+        true => Vec::new(),
+        false => vec![(ETAG_HEADER, etag)],
+    };
+    answer(stream, 200, "text/plain", Vec::new(), &answered);
 }
 
 fn signed_headers(constraints: &SignConstraints) -> BTreeMap<String, String> {
@@ -375,6 +449,7 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
     let body = received.body.as_slice();
     Some(match method {
         "Head" => {
+            store.heads.fetch_add(1, Ordering::SeqCst);
             let request: HeadRequest = decode(body, json);
             encode(
                 &HeadResponse {
@@ -439,6 +514,7 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
             let mut target = PresignedTarget {
                 url: format!("{base}/o/{}", request.key),
                 key: request.key.clone(),
+                etag_header: ETAG_HEADER.to_string(),
                 method: match operation {
                     Some(SignedOperation::Get) => "GET",
                     Some(SignedOperation::PostUpload) => "POST",
@@ -464,11 +540,18 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
         "CreateMultipart" => {
             let request: CreateMultipartRequest = decode(body, json);
             let id = format!("upload-for-{}", request.key);
-            store
-                .uploads
-                .lock()
-                .expect("the uploads")
-                .insert(id.clone(), BTreeMap::new());
+            store.uploads.lock().expect("the uploads").insert(
+                id.clone(),
+                Pending {
+                    described: Stored {
+                        content_type: request.content_type,
+                        cache_control: request.cache_control,
+                        metadata: request.metadata.into_iter().collect(),
+                        ..Default::default()
+                    },
+                    parts: BTreeMap::new(),
+                },
+            );
             encode(
                 &CreateMultipartResponse {
                     upload_id: id,
@@ -503,24 +586,26 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
                 return None;
             }
             let request: CompleteMultipartRequest = decode(body, json);
-            let parts = store
+            let pending = store
                 .uploads
                 .lock()
                 .expect("the uploads")
                 .remove(&request.upload_id)?;
             let mut whole = Vec::new();
             for number in request.parts.iter().map(|part| part.part_number) {
-                whole.extend_from_slice(parts.get(&number)?);
+                whole.extend_from_slice(pending.parts.get(&number)?);
             }
-            let completed = Stored {
-                body: whole,
-                etag: store.tag(),
-                ..Default::default()
-            };
-            store.insert(&request.key, completed.clone());
+            let etag = store.write(
+                &request.key,
+                Stored {
+                    body: whole,
+                    etag: store.tag(),
+                    ..pending.described
+                },
+            );
             encode(
                 &CompleteMultipartResponse {
-                    object: info(&request.key, &completed).into(),
+                    etag,
                     ..Default::default()
                 },
                 json,

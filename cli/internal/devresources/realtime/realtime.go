@@ -67,7 +67,6 @@ func (b *Backend) Resolve(_ context.Context, _ string, resources []declaration.R
 		bound, err := binding.Encode(resource.Type, &bindingsv1.Binding{
 			Name: resource.Name,
 			Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
-				Transport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY,
 				Url:        "ws://" + b.host + gatewayenv.SocketPath,
 				Host:       b.host,
 				SigningKey: key.Seed(),

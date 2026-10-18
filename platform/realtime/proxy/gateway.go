@@ -36,9 +36,6 @@ const (
 func NewGatewayTransport(client *http.Client, publishURL string) Transport {
 	address, malformed := url.Parse(publishURL)
 	return func(ctx context.Context, properties *bindingsv1.RealtimeProperties, req *realtimev1.PublishRequest) error {
-		if err := RefuseOtherTransport(properties, bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY); err != nil {
-			return err
-		}
 		if malformed != nil || address.Host == "" {
 			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this runtime's gateway publish address %q is no URL with a host", publishURL))
 		}

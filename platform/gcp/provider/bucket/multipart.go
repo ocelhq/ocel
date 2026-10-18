@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -38,6 +39,16 @@ type completedPart struct {
 	ETag       string `xml:"ETag"`
 }
 
+type answer struct {
+	body   []byte
+	header http.Header
+}
+
+type assembled struct {
+	generation int64
+	crc32c     string
+}
+
 type answeredError struct {
 	Code    string `xml:"Code"`
 	Message string `xml:"Message"`
@@ -59,39 +70,51 @@ func (m multipart) open(ctx context.Context, bucket, key, contentType, cacheCont
 	for name, value := range metadata {
 		header.Set(metadataHeader+name, value)
 	}
-	answer, err := m.ask(ctx, http.MethodPost, m.objectURL(bucket, key, url.Values{"uploads": {""}}), header, nil)
+	answered, err := m.ask(ctx, http.MethodPost, m.objectURL(bucket, key, url.Values{"uploads": {""}}), header, nil)
 	if err != nil {
 		return "", err
 	}
 	var opened initiatedUpload
-	if err := xml.Unmarshal(answer, &opened); err != nil || opened.UploadID == "" {
-		return "", fmt.Errorf("open a multipart upload of %s: the answer names no upload id: %s", key, answer)
+	if err := xml.Unmarshal(answered.body, &opened); err != nil || opened.UploadID == "" {
+		return "", fmt.Errorf("open a multipart upload of %s: the answer names no upload id: %s", key, answered.body)
 	}
 	return opened.UploadID, nil
 }
 
-func (m multipart) assemble(ctx context.Context, bucket, key, uploadID string, parts []s3types.CompletedPart, generationMatch string) error {
+func (m multipart) assemble(ctx context.Context, bucket, key, uploadID string, parts []s3types.CompletedPart, generationMatch string) (assembled, error) {
 	listed := completedUpload{}
 	for _, part := range parts {
 		listed.Parts = append(listed.Parts, completedPart{PartNumber: aws.ToInt32(part.PartNumber), ETag: aws.ToString(part.ETag)})
 	}
 	body, err := xml.Marshal(listed)
 	if err != nil {
-		return err
+		return assembled{}, err
 	}
 	header := http.Header{"Content-Type": {"application/xml"}}
 	if generationMatch != "" {
 		header.Set("x-goog-if-generation-match", generationMatch)
 	}
-	answer, err := m.ask(ctx, http.MethodPost, m.objectURL(bucket, key, url.Values{"uploadId": {uploadID}}), header, body)
+	answered, err := m.ask(ctx, http.MethodPost, m.objectURL(bucket, key, url.Values{"uploadId": {uploadID}}), header, body)
 	if err != nil {
-		return err
+		return assembled{}, err
 	}
 	var refused answeredError
-	if xml.Unmarshal(answer, &refused) == nil && refused.Code != "" {
-		return &smithy.GenericAPIError{Code: refused.Code, Message: refused.Message}
+	if xml.Unmarshal(answered.body, &refused) == nil && refused.Code != "" {
+		return assembled{}, &smithy.GenericAPIError{Code: refused.Code, Message: refused.Message}
 	}
-	return nil
+	generation, _ := strconv.ParseInt(answered.header.Get(generationAnswer), 10, 64)
+	return assembled{generation: generation, crc32c: readCRC32C(answered.header)}, nil
+}
+
+func readCRC32C(header http.Header) string {
+	for _, hashes := range header.Values("X-Goog-Hash") {
+		for hash := range strings.SplitSeq(hashes, ",") {
+			if value, found := strings.CutPrefix(strings.TrimSpace(hash), "crc32c="); found {
+				return value
+			}
+		}
+	}
+	return ""
 }
 
 func (m multipart) abort(ctx context.Context, bucket, key, uploadID string) error {
@@ -99,30 +122,30 @@ func (m multipart) abort(ctx context.Context, bucket, key, uploadID string) erro
 	return err
 }
 
-func (m multipart) ask(ctx context.Context, method, target string, header http.Header, body []byte) ([]byte, error) {
-	answer, _, err := googleretry.Asked(ctx, func() ([]byte, int, error) {
+func (m multipart) ask(ctx context.Context, method, target string, header http.Header, body []byte) (answer, error) {
+	answered, _, err := googleretry.Asked(ctx, func() (answer, int, error) {
 		req, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
 		if err != nil {
-			return nil, http.StatusBadRequest, err
+			return answer{}, http.StatusBadRequest, err
 		}
 		for name, values := range header {
 			req.Header[name] = values
 		}
 		resp, err := m.client.Do(req)
 		if err != nil {
-			return nil, 0, err
+			return answer{}, 0, err
 		}
 		defer resp.Body.Close()
-		answer, err := io.ReadAll(io.LimitReader(resp.Body, answerReadCapBytes))
+		read, err := io.ReadAll(io.LimitReader(resp.Body, answerReadCapBytes))
 		if err != nil {
-			return nil, resp.StatusCode, err
+			return answer{}, resp.StatusCode, err
 		}
 		if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
-			return answer, resp.StatusCode, nil
+			return answer{body: read, header: resp.Header}, resp.StatusCode, nil
 		}
-		return nil, resp.StatusCode, refusedAnswer(resp.StatusCode, answer)
+		return answer{}, resp.StatusCode, refusedAnswer(resp.StatusCode, read)
 	})
-	return answer, err
+	return answered, err
 }
 
 func refusedAnswer(status int, answer []byte) error {

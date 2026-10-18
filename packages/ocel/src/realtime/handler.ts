@@ -7,7 +7,6 @@ import {
   readRuntime,
 } from "./realtime.js";
 import { mintToken, type Token } from "./token.js";
-import { resolveTransport, type Transport } from "./transport.js";
 import { encodeWireChannel, type WireRefusal } from "./wire.js";
 
 /** How a realtime handler serves browsers. */
@@ -57,14 +56,13 @@ type Denial = { i: number; code: RealtimeDenial };
 type Outcome = { grant: Grant } | { denied: Denial };
 
 /**
- * What the realtime handler answers a batch with: the transport and socket URL, a connect
- * token when the batch asked to connect, and for each operation, by its index `i`, either a
+ * What the realtime handler answers a batch with: the socket URL and the host its
+ * authorization names, a connect token when the batch asked to connect, and for each operation, by its index `i`, either a
  * grant carrying its wire channel (and a subscribe token for a subscribe) or a denial.
  */
 export interface RealtimeBatchAnswer {
-  transport: Transport["name"];
   url: string;
-  host?: string;
+  host: string;
   connect?: Token;
   grants: Grant[];
   denied: Denial[];
@@ -77,7 +75,6 @@ interface BatchRequest {
   auth: unknown;
   subject: string;
   properties: ReturnType<RealtimeRuntime["properties"]>;
-  transport: Transport;
 }
 
 function respond(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -316,7 +313,6 @@ async function serveBatch(
   }
 
   const properties = runtime.properties("handler");
-  const transport = resolveTransport(properties, runtime.name);
   let auth: unknown = null;
   if (runtime.authorize) {
     try {
@@ -332,7 +328,6 @@ async function serveBatch(
     auth,
     subject: readSubject(auth),
     properties,
-    transport,
   };
 
   const connect = parsed.connect
@@ -340,9 +335,8 @@ async function serveBatch(
     : undefined;
   const outcomes = await evaluateOperations(batch, parsed.operations);
   const answer: RealtimeBatchAnswer = {
-    transport: transport.name,
     url: resolveSocketURL(properties.url, request),
-    ...(transport.host === undefined ? {} : { host: transport.host }),
+    host: properties.host,
     ...(connect === undefined ? {} : { connect }),
     grants: outcomes.flatMap((outcome) => ("grant" in outcome ? [outcome.grant] : [])),
     denied: outcomes.flatMap((outcome) => ("denied" in outcome ? [outcome.denied] : [])),
