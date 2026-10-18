@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -93,7 +94,9 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 	if err != nil {
 		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
 	}
-	fronting, err := serveProxy(ctx, values, pinned, "127.0.0.1:"+strconv.Itoa(internal))
+	upstream := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(internal)}
+	engine := engineOf(pinned, worker, upstream.String())
+	fronting, err := serveProxy(ctx, values, pinned, "127.0.0.1:"+strconv.Itoa(internal), engine)
 	if err != nil {
 		return fatal(err.Error())
 	}
@@ -112,7 +115,6 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 	}
 
 	listening := child.WatchListening("127.0.0.1:"+strconv.Itoa(internal), nil)
-	upstream := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(internal)}
 	front := originguard.Handler(originguard.Options{
 		Upstream:   upstream,
 		Guard:      guard,
@@ -121,7 +123,7 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 		ProbeToken: probeToken,
 	})
 	if worker != "" {
-		if front, err = workerFront(pinned, worker, upstream.String()); err != nil {
+		if front, err = workerFront(engine, worker); err != nil {
 			_ = proc.Stop(stopGrace)
 			return fatal(err.Error())
 		}
@@ -194,7 +196,7 @@ func readManifest(raw string) (variables.Manifest, error) {
 	return manifest, nil
 }
 
-func serveProxy(ctx context.Context, values *live.Values, manifest variables.Manifest, app string) (bindingproxy.Served, error) {
+func serveProxy(ctx context.Context, values *live.Values, manifest variables.Manifest, app string, engine *runs.Engine) (bindingproxy.Served, error) {
 	var services bindingproxy.Services
 	if values != nil && bindsBuckets(values) {
 		store, err := bucket.Open(ctx, manifest.Endpoint)
@@ -205,9 +207,8 @@ func serveProxy(ctx context.Context, values *live.Values, manifest variables.Man
 			return bindingproxy.Served{}, err
 		}
 	}
-	if manifest.Tasks != nil {
-		deployment := deploymentOf(manifest)
-		services.Tasks, services.Topics = deployment.Tasks(), deployment.Topics()
+	if engine != nil {
+		services.Tasks, services.Topics = engine.Tasks(), engine.Topics()
 	}
 	if values != nil && manifest.RealtimePublishURL != "" {
 		services.Realtime = realtimeproxy.NewService(values, realtimeproxy.NewGatewayTransport(http.DefaultClient, manifest.RealtimePublishURL))

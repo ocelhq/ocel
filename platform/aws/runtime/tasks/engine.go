@@ -2,11 +2,12 @@ package tasks
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
@@ -15,15 +16,10 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
-type queueService interface {
-	GetQueueUrl(ctx context.Context, in *sqs.GetQueueUrlInput, optFns ...func(*sqs.Options)) (*sqs.GetQueueUrlOutput, error)
-	SendMessage(ctx context.Context, in *sqs.SendMessageInput, optFns ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
-	ChangeMessageVisibility(ctx context.Context, in *sqs.ChangeMessageVisibilityInput, optFns ...func(*sqs.Options)) (*sqs.ChangeMessageVisibilityOutput, error)
-}
-
-type topicService interface {
-	Publish(ctx context.Context, in *sns.PublishInput, optFns ...func(*sns.Options)) (*sns.PublishOutput, error)
-}
+const (
+	cancelPoll       = 500 * time.Millisecond
+	inFlightPerQueue = 10
+)
 
 type Config struct {
 	Topology queues.Topology
@@ -38,121 +34,62 @@ type Config struct {
 }
 
 type Engine struct {
-	cfg   Config
-	store store
+	runs   *runs.Engine
+	queue  *Queue
+	worker string
+}
 
-	mu    sync.Mutex
-	urls  map[string]string
-	woken map[string]time.Time
-	holds map[string]time.Time
-
-	runLeases  map[string]runLease
-	slotLeases map[string]slotLease
-
-	pollsItsQueues bool
+func NewAWS(cfg aws.Config, topology queues.Topology, worker, workerURL string) *Engine {
+	return New(Config{
+		Topology:  topology,
+		Table:     dynamodb.NewFromConfig(cfg),
+		Queues:    sqs.NewFromConfig(cfg),
+		Topics:    sns.NewFromConfig(cfg),
+		Services:  ecs.NewFromConfig(cfg),
+		Worker:    worker,
+		WorkerURL: workerURL,
+	})
 }
 
 func New(cfg Config) *Engine {
-	if cfg.Client == nil {
-		cfg.Client = http.DefaultClient
+	topology := cfg.Topology
+	return newEngine(cfg, NewStore(cfg.Table, topology.Table, topology.KeyPrefix), NewSlots(cfg.Table, topology.Table, topology.KeyPrefix))
+}
+
+func newEngine(cfg Config, store runs.Store, slots runs.Slots) *Engine {
+	queue := NewQueue(cfg.Topology, cfg.Queues, cfg.Topics, cfg.Services)
+	return &Engine{
+		runs: runs.New(runs.Config{
+			Store:       store,
+			Queue:       queue,
+			Slots:       slots,
+			Deployment:  deploymentOf(cfg),
+			CancelPoll:  cancelPoll,
+			InFlight:    inFlightPerQueue,
+			MaxReceives: queues.MaxReceiveCount,
+		}),
+		queue:  queue,
+		worker: cfg.Worker,
 	}
-	var topics []string
+}
+
+func deploymentOf(cfg Config) runs.Deployment {
+	deployment := runs.Deployment{Topics: map[string]*provider.TopicSpec{}, Workers: map[string]runs.Worker{}}
 	for name, topic := range cfg.Topology.Topics {
 		if topic.Declared != nil {
-			topics = append(topics, name)
+			deployment.Topics[name] = topic.Declared
 		}
 	}
-	return &Engine{
-		cfg:   cfg,
-		store: store{db: cfg.Table, table: cfg.Topology.Table, prefix: cfg.Topology.KeyPrefix, topics: topics},
-		urls:  map[string]string{},
-		woken: map[string]time.Time{},
-		holds: map[string]time.Time{},
-
-		runLeases:  map[string]runLease{},
-		slotLeases: map[string]slotLease{},
+	if cfg.Worker != "" {
+		deployment.Workers[cfg.Worker] = runs.Worker{URL: cfg.WorkerURL, Client: cfg.Client, Concurrency: cfg.Topology.Workers[cfg.Worker].Concurrency}
 	}
+	return deployment
 }
 
-type deployedConsumer struct {
-	topicName string
-	topic     *provider.TopicSpec
-	consumer  provider.ConsumerSpec
-	queue     string
-}
+func (e *Engine) Tasks() runs.Tasks { return e.runs.Tasks() }
 
-func (d deployedConsumer) fifo() bool { return queues.IsFIFO(d.queue) }
+func (e *Engine) Topics() runs.Topics { return e.runs.Topics() }
 
-func (d deployedConsumer) isTask() bool { return runs.IsTask(d.topic) }
-
-func (d deployedConsumer) retry() provider.RetryPolicy {
-	return d.consumer.Retry
-}
-
-func (e *Engine) topic(name string) (queues.Topic, bool) {
-	topic, found := e.cfg.Topology.Topics[name]
-	return topic, found && topic.Declared != nil
-}
-
-func (e *Engine) consumer(topicName, consumerName string) (deployedConsumer, bool) {
-	topic, found := e.topic(topicName)
-	if !found {
-		return deployedConsumer{}, false
-	}
-	for _, consumer := range topic.Declared.Consumers {
-		if consumer.Name == consumerName {
-			return deployedConsumer{topicName: topicName, topic: topic.Declared, consumer: consumer, queue: topic.Queues[consumerName]}, true
-		}
-	}
-	return deployedConsumer{}, false
-}
-
-func (e *Engine) consumerOnQueue(queue string) (deployedConsumer, bool) {
-	for name, topic := range e.cfg.Topology.Topics {
-		for consumer, held := range topic.Queues {
-			if held == queue {
-				return e.consumer(name, consumer)
-			}
-		}
-	}
-	return deployedConsumer{}, false
-}
-
-func (e *Engine) taskConsumer(name string) (deployedConsumer, bool) {
-	topic, found := e.topic(name)
-	if !found || !runs.IsTask(topic.Declared) {
-		return deployedConsumer{}, false
-	}
-	return e.consumer(name, topic.Declared.Consumers[0].Name)
-}
-
-func (e *Engine) queueURL(ctx context.Context, queue string) (string, error) {
-	e.mu.Lock()
-	url, found := e.urls[queue]
-	e.mu.Unlock()
-	if found {
-		return url, nil
-	}
-	out, err := e.cfg.Queues.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{QueueName: &queue})
-	if err != nil {
-		return "", fmt.Errorf("find queue %s: %w", queue, err)
-	}
-	e.mu.Lock()
-	e.urls[queue] = *out.QueueUrl
-	e.mu.Unlock()
-	return *out.QueueUrl, nil
-}
-
-func (e *Engine) recordHold(receiptHandle string, until time.Time) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.holds[receiptHandle] = until
-}
-
-func (e *Engine) takeHold(receiptHandle string) (time.Time, bool) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	until, held := e.holds[receiptHandle]
-	delete(e.holds, receiptHandle)
-	return until, held
+func (e *Engine) FireCron(ctx context.Context, task string, scheduled time.Time) error {
+	return e.runs.FireCron(ctx, task, scheduled)
 }

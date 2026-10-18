@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
@@ -39,10 +40,20 @@ func deploymentOf(manifest variables.Manifest) topics.Deployment {
 	}
 }
 
-func workerFront(manifest variables.Manifest, worker, upstream string) (http.Handler, error) {
+func engineOf(manifest variables.Manifest, worker, upstream string) *runs.Engine {
 	if manifest.Tasks == nil {
+		return nil
+	}
+	workers := map[string]runs.Worker{}
+	if worker != "" {
+		workers[worker] = runs.Worker{URL: upstream}
+	}
+	return deploymentOf(manifest).Engine(workers)
+}
+
+func workerFront(engine *runs.Engine, worker string) (http.Handler, error) {
+	if engine == nil {
 		return nil, fmt.Errorf("this revision runs worker %s, and its deploy pinned no topic or task for it to consume", worker)
 	}
-	deployment := deploymentOf(manifest)
-	return topics.Deliveries{Store: deployment.Store(), Topics: deployment.Declared, Worker: upstream}, nil
+	return topics.Deliveries{Engine: engine}, nil
 }

@@ -46,7 +46,7 @@ func serveRealtimeProxy(t *testing.T, key ed25519.PrivateKey, publishURL string)
 	if err := values.Join(values.Prefetch(context.Background())); err != nil {
 		t.Fatalf("Prefetch() = %v", err)
 	}
-	served, err := serveProxy(context.Background(), values, variables.Manifest{Bindings: bindings, RealtimePublishURL: publishURL}, "127.0.0.1:1")
+	served, err := serveProxy(context.Background(), values, variables.Manifest{Bindings: bindings, RealtimePublishURL: publishURL}, "127.0.0.1:1", nil)
 	if err != nil {
 		t.Fatalf("serveProxy() = %v", err)
 	}

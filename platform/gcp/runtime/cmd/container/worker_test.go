@@ -102,7 +102,7 @@ func TestLiveAWorkerAnswersEachPushByRunningItsConsumerAndRecordingTheRun(t *tes
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	run, err := store.ReadRun(context.Background(), "01K0000000000000000000000A-resize")
+	run, err := store.ReadRun(context.Background(), "resize", "01K0000000000000000000000A-resize")
 	if err != nil {
 		t.Fatalf("ReadRun() = %v, want the run the push started", err)
 	}
@@ -134,7 +134,7 @@ func TestLiveAnAppPinnedTasksTriggersThemThroughItsBindingProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Trigger() through the proxy = %v", err)
 	}
-	run, err := store.ReadRun(context.Background(), resp.GetId())
+	run, err := store.ReadRun(context.Background(), "resize", resp.GetId())
 	if err != nil || len(run.Payload) == 0 {
 		t.Errorf("ReadRun(%s) = %+v, %v, want the run the trigger recorded", resp.GetId(), run, err)
 	}

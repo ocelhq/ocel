@@ -124,7 +124,7 @@ func TestServeNamesItsAddressAndTokenForACallerThatDeliversThemItself(t *testing
 	}
 }
 
-func TestServedGrantsReportNothingWhenClosedOnPurpose(t *testing.T) {
+func TestServedReportsNothingWhenClosedOnPurpose(t *testing.T) {
 	t.Parallel()
 
 	var reported []error

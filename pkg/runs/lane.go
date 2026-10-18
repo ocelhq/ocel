@@ -20,15 +20,7 @@ func LaneOf(lane topicv1.Lane) provider.Lane {
 	return provider.LaneDefault
 }
 
-func LaneFor(reads []provider.Lane, lane topicv1.Lane) provider.Lane {
-	asked := LaneOf(lane)
-	if lane == topicv1.Lane_LANE_UNSPECIFIED || (len(reads) > 0 && !slices.Contains(reads, asked)) {
-		return provider.LaneDefault
-	}
-	return asked
-}
-
-func laneFor(reads []provider.Lane, asked provider.Lane) provider.Lane {
+func LaneFor(reads []provider.Lane, asked provider.Lane) provider.Lane {
 	if asked == "" || (len(reads) > 0 && !slices.Contains(reads, asked)) {
 		return provider.LaneDefault
 	}

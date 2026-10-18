@@ -170,7 +170,7 @@ func runOfMessage(deployed deployedConsumer, msg Message, now time.Time) Run {
 		Message:     msg.ID,
 		PublishedAt: msg.PublishedAt,
 		Key:         msg.Key,
-		Lane:        laneFor(deployed.consumer.Lanes, msg.Lane),
+		Lane:        LaneFor(deployed.consumer.Lanes, msg.Lane),
 		Delivery:    msg.Delivery,
 		CreatedAt:   msg.PublishedAt,
 		DueAt:       msg.DueAt,

@@ -255,23 +255,16 @@ func runIndexes() []*firestoreadmin.GoogleFirestoreAdminV1Index {
 		}
 		return &firestoreadmin.GoogleFirestoreAdminV1IndexField{FieldPath: path, Order: order}
 	}
-	newest := field("createdAt", descending)
-	filters := [][]*firestoreadmin.GoogleFirestoreAdminV1IndexField{
-		{field("topic", ascending)},
-		{field("status", ascending)},
-		{field("tags", contains)},
-		{field("topic", ascending), field("status", ascending)},
-		{field("topic", ascending), field("tags", contains)},
-		{field("status", ascending), field("tags", contains)},
-		{field("topic", ascending), field("status", ascending), field("tags", contains)},
+	var indexes []*firestoreadmin.GoogleFirestoreAdminV1Index
+	for _, consumer := range [][]*firestoreadmin.GoogleFirestoreAdminV1IndexField{nil, {field("consumer", ascending)}} {
+		for _, status := range [][]*firestoreadmin.GoogleFirestoreAdminV1IndexField{nil, {field("status", ascending)}} {
+			for _, tags := range [][]*firestoreadmin.GoogleFirestoreAdminV1IndexField{nil, {field("tags", contains)}} {
+				fields := slices.Concat([]*firestoreadmin.GoogleFirestoreAdminV1IndexField{field("topic", ascending)}, consumer, status, tags)
+				indexes = append(indexes, &firestoreadmin.GoogleFirestoreAdminV1Index{QueryScope: collectionScoped, Fields: append(fields, field("createdAt", descending))})
+			}
+		}
 	}
-	indexes := make([]*firestoreadmin.GoogleFirestoreAdminV1Index, 0, len(filters)+1)
-	for _, filter := range filters {
-		indexes = append(indexes, &firestoreadmin.GoogleFirestoreAdminV1Index{QueryScope: collectionScoped, Fields: append(slices.Clone(filter), newest)})
-	}
-	return append(indexes, &firestoreadmin.GoogleFirestoreAdminV1Index{QueryScope: collectionScoped, Fields: []*firestoreadmin.GoogleFirestoreAdminV1IndexField{
-		field("topic", ascending), field("consumer", ascending), field("status", ascending), field("finishedAt", ascending),
-	}})
+	return indexes
 }
 
 func (b bootstrap) ensureRunIndexes(ctx context.Context, tier environment.Tier) error {

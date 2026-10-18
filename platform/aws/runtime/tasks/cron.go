@@ -1,12 +1,8 @@
 package tasks
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"time"
-
-	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 )
 
 type cronMarker struct {
@@ -28,18 +24,4 @@ func (m cronMarker) scheduledAt() time.Time {
 		return time.Now()
 	}
 	return scheduled
-}
-
-func (e *Engine) FireCron(ctx context.Context, task string, scheduled time.Time) error {
-	deployed, found := e.taskConsumer(task)
-	if !found {
-		return fmt.Errorf("no task named %q is deployed to run on its schedule", task)
-	}
-	stamp := scheduled.UTC().Truncate(time.Minute).Format(time.RFC3339)
-	payload, err := json.Marshal(map[string]string{"timestamp": stamp})
-	if err != nil {
-		return err
-	}
-	_, err = e.Tasks().trigger(ctx, deployed, payload, &taskv1.TriggerOptions{IdempotencyKey: "cron-" + stamp})
-	return err
 }

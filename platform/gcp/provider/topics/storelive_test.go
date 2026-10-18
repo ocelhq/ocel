@@ -4,6 +4,8 @@ package topics_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -11,8 +13,11 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/taskstoretest"
+	"github.com/ocelhq/ocel/pkg/runs"
+	"github.com/ocelhq/ocel/pkg/runs/runsconformance"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -40,9 +45,9 @@ func liveClients(t *testing.T) *ports.Clients {
 	return &ports.Clients{Namespace: "ocel", Project: project, Region: region, Endpoint: endpoint}
 }
 
-func TestLiveFirestoreStoreKeepsRunsAndRecordsAsEveryTaskStoreMust(t *testing.T) {
+func TestLiveFirestoreStoreKeepsRunsAndRecordsAsEveryRunStoreMust(t *testing.T) {
 	clients := liveClients(t)
-	taskstoretest.Run(t, func(t *testing.T) provider.TaskStore {
+	runsconformance.Store(t, func(t *testing.T) runs.Store {
 		return topics.Store{Clients: clients, Scope: scopeOf(t)}
 	})
 }
@@ -52,7 +57,8 @@ func TestLiveATiersRunsAreKeptInItsOwnTaskDatabaseApartFromTheNamespaceRecords(t
 	scope := scopeOf(t)
 	store := topics.Store{Clients: clients, Scope: scope}
 	ctx := context.Background()
-	if _, err := store.WriteRun(ctx, provider.Run{Execution: "kept", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, CreatedAt: time.Now()}); err != nil {
+	now := time.Now()
+	if _, err := store.CreateRun(ctx, runs.Run{Execution: "kept", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, CreatedAt: now, DueAt: now}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,12 +79,37 @@ func TestLiveATiersRunsAreKeptInItsOwnTaskDatabaseApartFromTheNamespaceRecords(t
 	}
 }
 
+func TestLiveAnUnfinishedRunIsPurgedAMonthAfterItWasDue(t *testing.T) {
+	clients := liveClients(t)
+	scope := scopeOf(t)
+	store := topics.Store{Clients: clients, Scope: scope}
+	ctx := context.Background()
+	due := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)
+	if _, err := store.CreateRun(ctx, runs.Run{Execution: "pending", Topic: "resize", Consumer: "gone", Status: provider.RunDelayed, CreatedAt: time.Now(), DueAt: due}); err != nil {
+		t.Fatal(err)
+	}
+	client, err := clients.TaskFirestore(scope.Tier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := client.Doc("taskstores/" + string(scope.Tier) + "~" + scope.Slug + "~" + scope.Environment + "/runs/pending").Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	purgeAt, err := snapshot.DataAt("purgeAt")
+	if at, ok := purgeAt.(time.Time); err != nil || !ok || !at.Equal(due.Add(topics.RunRetention)) {
+		t.Errorf("the delayed run is purged at %v (%v), want %v so a run no consumer settles is not kept forever", purgeAt, err, due.Add(topics.RunRetention))
+	}
+}
+
 func TestLiveAListingByManyTagsReadsABoundedPageAndCarriesOnFromItsCursor(t *testing.T) {
 	store := topics.Store{Clients: liveClients(t), Scope: scopeOf(t)}
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Millisecond)
-	wanted := provider.Run{Execution: "wanted", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, Tags: []string{"eu", "big"}, CreatedAt: base.Add(-time.Hour)}
-	if _, err := store.WriteRun(ctx, wanted); err != nil {
+	tagged := func(execution string, created time.Time, tags ...string) runs.Run {
+		return runs.Run{Execution: execution, Topic: "resize", Consumer: "resize", Status: provider.RunQueued, Payload: json.RawMessage(`{}`), Tags: tags, CreatedAt: created, DueAt: created}
+	}
+	if _, err := store.CreateRun(ctx, tagged("wanted", base.Add(-time.Hour), "eu", "big")); err != nil {
 		t.Fatal(err)
 	}
 	const others = 1000
@@ -87,8 +118,7 @@ func TestLiveAListingByManyTagsReadsABoundedPageAndCarriesOnFromItsCursor(t *tes
 	for range 16 {
 		wg.Go(func() {
 			for i := range work {
-				run := provider.Run{Execution: fmt.Sprintf("other-%04d", i), Topic: "resize", Consumer: "resize", Status: provider.RunQueued, Tags: []string{"eu"}, CreatedAt: base.Add(time.Duration(i) * time.Millisecond)}
-				if _, err := store.WriteRun(ctx, run); err != nil {
+				if _, err := store.CreateRun(ctx, tagged(fmt.Sprintf("other-%04d", i), base.Add(time.Duration(i)*time.Millisecond), "eu")); err != nil {
 					t.Error(err)
 				}
 			}
@@ -100,7 +130,7 @@ func TestLiveAListingByManyTagsReadsABoundedPageAndCarriesOnFromItsCursor(t *tes
 	close(work)
 	wg.Wait()
 
-	filter := provider.RunFilter{Topic: "resize", Tags: []string{"eu", "big"}, Limit: 10}
+	filter := runs.RunFilter{Topics: []string{"resize"}, Tags: []string{"eu", "big"}, Limit: 10}
 	first, err := store.ListRuns(ctx, filter)
 	if err != nil {
 		t.Fatal(err)
@@ -115,5 +145,17 @@ func TestLiveAListingByManyTagsReadsABoundedPageAndCarriesOnFromItsCursor(t *tes
 	}
 	if len(next.Runs) != 1 || next.Runs[0].Execution != "wanted" || next.NextCursor != "" {
 		t.Errorf("the page after the cursor holds %v with cursor %q, want only the run holding both tags and no cursor", next.Runs, next.NextCursor)
+	}
+}
+
+func TestLiveARunOfAnotherTopicUnderTheSameExecutionIsNotFound(t *testing.T) {
+	store := topics.Store{Clients: liveClients(t), Scope: scopeOf(t)}
+	ctx := context.Background()
+	now := time.Now()
+	if _, err := store.CreateRun(ctx, runs.Run{Execution: "shared", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, CreatedAt: now, DueAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReadRun(ctx, "thumbnail", "shared"); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("ReadRun of another topic's run = %v, want ErrNotFound", err)
 	}
 }

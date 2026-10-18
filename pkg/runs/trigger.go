@@ -115,7 +115,7 @@ func newTaskRun(deployed deployedConsumer, messageID string, now time.Time, req 
 		Message:     messageID,
 		PublishedAt: now,
 		Key:         req.key,
-		Lane:        laneFor(deployed.consumer.Lanes, req.lane),
+		Lane:        LaneFor(deployed.consumer.Lanes, req.lane),
 		Delivery:    NewMessageID(now),
 		CreatedAt:   now,
 		DueAt:       req.dueAt,

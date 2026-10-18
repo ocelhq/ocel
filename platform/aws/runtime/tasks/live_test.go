@@ -4,21 +4,12 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/runs"
-
-	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -27,14 +18,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
-	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
+	"github.com/ocelhq/ocel/pkg/runs/runsconformance"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
 const liveRegion = "us-east-1"
 
 type emulator struct {
-	aws aws.Config
 	db  *dynamodb.Client
 	sqs *sqs.Client
 	sns *sns.Client
@@ -51,7 +43,7 @@ func live(t *testing.T) emulator {
 		Credentials:  credentials.NewStaticCredentialsProvider("test", "test", ""),
 		BaseEndpoint: aws.String(endpoint),
 	}
-	return emulator{aws: cfg, db: dynamodb.NewFromConfig(cfg), sqs: sqs.NewFromConfig(cfg), sns: sns.NewFromConfig(cfg)}
+	return emulator{db: dynamodb.NewFromConfig(cfg), sqs: sqs.NewFromConfig(cfg), sns: sns.NewFromConfig(cfg)}
 }
 
 func uniqueName(t *testing.T) string {
@@ -92,268 +84,131 @@ func (em emulator) table(t *testing.T) string {
 	return name
 }
 
-func (em emulator) queue(t *testing.T, name string) string {
+func livePrefix(t *testing.T) string {
+	return "PROJECT#live#ENV#" + uniqueName(t) + "#TASKS#"
+}
+
+func (em emulator) queue(t *testing.T, name string) (string, string) {
 	t.Helper()
+	ctx := context.Background()
 	attributes := map[string]string{"VisibilityTimeout": "30"}
 	if queues.IsFIFO(name) {
 		attributes["FifoQueue"] = "true"
-		attributes["ContentBasedDeduplication"] = "true"
 	}
-	out, err := em.sqs.CreateQueue(context.Background(), &sqs.CreateQueueInput{QueueName: aws.String(name), Attributes: attributes})
+	out, err := em.sqs.CreateQueue(ctx, &sqs.CreateQueueInput{QueueName: aws.String(name), Attributes: attributes})
 	if err != nil {
 		t.Fatalf("create queue %s: %v", name, err)
 	}
 	t.Cleanup(func() { _, _ = em.sqs.DeleteQueue(context.Background(), &sqs.DeleteQueueInput{QueueUrl: out.QueueUrl}) })
-	return *out.QueueUrl
-}
-
-func (em emulator) queueARN(t *testing.T, url string) string {
-	t.Helper()
-	out, err := em.sqs.GetQueueAttributes(context.Background(), &sqs.GetQueueAttributesInput{QueueUrl: aws.String(url), AttributeNames: []sqstypes.QueueAttributeName{sqstypes.QueueAttributeNameQueueArn}})
+	read, err := em.sqs.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{QueueUrl: out.QueueUrl, AttributeNames: []sqstypes.QueueAttributeName{sqstypes.QueueAttributeNameQueueArn}})
 	if err != nil {
-		t.Fatalf("read queue %s: %v", url, err)
+		t.Fatalf("read queue %s: %v", name, err)
 	}
-	return out.Attributes[string(sqstypes.QueueAttributeNameQueueArn)]
+	return aws.ToString(out.QueueUrl), read.Attributes[string(sqstypes.QueueAttributeNameQueueArn)]
 }
 
-type deployment struct {
-	em       emulator
-	topology queues.Topology
-	urls     map[string]string
-	arns     map[string]string
-}
-
-func (em emulator) deploy(t *testing.T, topics map[string]*provider.TopicSpec, workers map[string]queues.Worker) *deployment {
+func (em emulator) deploy(t *testing.T, declared map[string]*provider.TopicSpec) queues.Topology {
 	t.Helper()
 	ctx := context.Background()
-	d := &deployment{em: em, urls: map[string]string{}, arns: map[string]string{}, topology: queues.Topology{
-		Table:     em.table(t),
-		KeyPrefix: "PROJECT#live#ENV#" + uniqueName(t) + "#TASKS#",
-		Topics:    map[string]queues.Topic{},
-		Workers:   workers,
-	}}
+	topology := queues.Topology{Table: em.table(t), KeyPrefix: livePrefix(t), Topics: map[string]queues.Topic{}}
 	suffix := uniqueName(t)
-	for name, declared := range topics {
-		topic := queues.Topic{Declared: declared, Queues: map[string]string{}}
-		if !runs.IsTask(declared) {
-			topicName := "t-" + name + "-" + suffix
-			if declared.Ordered {
-				topicName += ".fifo"
-			}
+	fifo := func(name string, ordered bool) string {
+		if ordered {
+			return name + ".fifo"
+		}
+		return name
+	}
+	for name, spec := range declared {
+		topic := queues.Topic{Declared: spec, Queues: map[string]string{}}
+		if !runs.IsTask(spec) {
 			attributes := map[string]string{}
-			if declared.Ordered {
+			if spec.Ordered {
 				attributes["FifoTopic"] = "true"
 			}
-			out, err := em.sns.CreateTopic(ctx, &sns.CreateTopicInput{Name: aws.String(topicName), Attributes: attributes})
+			out, err := em.sns.CreateTopic(ctx, &sns.CreateTopicInput{Name: aws.String(fifo("t-"+name+"-"+suffix, spec.Ordered)), Attributes: attributes})
 			if err != nil {
-				t.Fatalf("create topic %s: %v", topicName, err)
+				t.Fatalf("create topic %s: %v", name, err)
 			}
-			topic.SNS = *out.TopicArn
+			topic.SNS = aws.ToString(out.TopicArn)
 			t.Cleanup(func() { _, _ = em.sns.DeleteTopic(context.Background(), &sns.DeleteTopicInput{TopicArn: out.TopicArn}) })
 		}
-		for _, consumer := range declared.Consumers {
-			queue := "q-" + name + "-" + consumer.Name + "-" + suffix
-			if declared.Ordered {
-				queue += ".fifo"
-			}
-			url := em.queue(t, queue)
+		for _, consumer := range spec.Consumers {
+			queue := fifo("q-"+name+"-"+consumer.Name+"-"+suffix, spec.Ordered)
+			_, arn := em.queue(t, queue)
 			topic.Queues[consumer.Name] = queue
-			d.urls[queue] = url
-			d.arns[queue] = em.queueARN(t, url)
-			if topic.SNS != "" {
-				if _, err := em.sns.Subscribe(ctx, &sns.SubscribeInput{
-					TopicArn:   aws.String(topic.SNS),
-					Protocol:   aws.String("sqs"),
-					Endpoint:   aws.String(d.arns[queue]),
-					Attributes: map[string]string{"RawMessageDelivery": "true"},
-				}); err != nil {
-					t.Fatalf("subscribe %s to %s: %v", queue, topic.SNS, err)
-				}
+			if topic.SNS == "" {
+				continue
+			}
+			if _, err := em.sns.Subscribe(ctx, &sns.SubscribeInput{
+				TopicArn:   aws.String(topic.SNS),
+				Protocol:   aws.String("sqs"),
+				Endpoint:   aws.String(arn),
+				Attributes: map[string]string{"RawMessageDelivery": "true"},
+			}); err != nil {
+				t.Fatalf("subscribe %s to %s: %v", queue, topic.SNS, err)
 			}
 		}
-		d.topology.Topics[name] = topic
+		topology.Topics[name] = topic
 	}
-	return d
+	return topology
 }
 
-func (d *deployment) engine(worker *fakeWorker) *Engine {
-	cfg := Config{Topology: d.topology, Table: d.em.db, Queues: d.em.sqs, Topics: d.em.sns}
-	if worker != nil {
-		cfg.WorkerURL = worker.server.URL
-	}
-	return New(cfg)
-}
-
-type unsendable struct{ queueService }
-
-func (unsendable) SendMessage(context.Context, *sqs.SendMessageInput, ...func(*sqs.Options)) (*sqs.SendMessageOutput, error) {
-	return nil, fmt.Errorf("the queue refused the message")
-}
-
-func (d *deployment) engineThatCannotSend() *Engine {
-	return New(Config{Topology: d.topology, Table: d.em.db, Queues: unsendable{d.em.sqs}, Topics: d.em.sns})
-}
-
-func (d *deployment) queueOf(topic, consumer string) string {
-	return d.topology.Topics[topic].Queues[consumer]
-}
-
-func (d *deployment) receive(t *testing.T, topic, consumer string, within time.Duration) events.SQSMessage {
-	t.Helper()
-	queue := d.queueOf(topic, consumer)
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) {
-		out, err := d.em.sqs.ReceiveMessage(context.Background(), &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(d.urls[queue]),
-			MaxNumberOfMessages: 1,
-			WaitTimeSeconds:     1,
-			VisibilityTimeout:   30,
-		})
-		if err != nil {
-			t.Fatalf("receive from %s: %v", queue, err)
-		}
-		if len(out.Messages) == 1 {
-			msg := out.Messages[0]
-			return events.SQSMessage{MessageId: *msg.MessageId, ReceiptHandle: *msg.ReceiptHandle, Body: *msg.Body, EventSourceARN: d.arns[queue], EventSource: "aws:sqs"}
-		}
-	}
-	t.Fatalf("no message reached %s within %v", queue, within)
-	return events.SQSMessage{}
-}
-
-func (d *deployment) receiveBatch(t *testing.T, topic, consumer string, n int, within time.Duration) []events.SQSMessage {
-	t.Helper()
-	queue := d.queueOf(topic, consumer)
-	deadline := time.Now().Add(within)
-	var records []events.SQSMessage
-	for len(records) < n && time.Now().Before(deadline) {
-		out, err := d.em.sqs.ReceiveMessage(context.Background(), &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(d.urls[queue]),
-			MaxNumberOfMessages: int32(n - len(records)),
-			WaitTimeSeconds:     1,
-			VisibilityTimeout:   30,
-		})
-		if err != nil {
-			t.Fatalf("receive from %s: %v", queue, err)
-		}
-		for _, msg := range out.Messages {
-			records = append(records, events.SQSMessage{MessageId: *msg.MessageId, ReceiptHandle: *msg.ReceiptHandle, Body: *msg.Body, EventSourceARN: d.arns[queue], EventSource: "aws:sqs"})
-		}
-	}
-	if len(records) < n {
-		t.Fatalf("%d of %d messages reached %s within %v", len(records), n, queue, within)
-	}
-	return records
-}
-
-func (d *deployment) quiet(t *testing.T, topic, consumer string, within time.Duration) {
-	t.Helper()
-	queue := d.queueOf(topic, consumer)
-	out, err := d.em.sqs.ReceiveMessage(context.Background(), &sqs.ReceiveMessageInput{
-		QueueUrl:            aws.String(d.urls[queue]),
-		MaxNumberOfMessages: 1,
-		WaitTimeSeconds:     int32(within / time.Second),
+func TestTheDynamoDBStoreKeepsRunsAndRecordsAsEveryRunStoreMust(t *testing.T) {
+	runsconformance.Store(t, func(t *testing.T) runs.Store {
+		em := live(t)
+		return NewStore(em.db, em.table(t), livePrefix(t))
 	})
-	if err != nil {
-		t.Fatalf("receive from %s: %v", queue, err)
-	}
-	if len(out.Messages) > 0 {
-		t.Fatalf("%s holds %s, want it empty", queue, *out.Messages[0].Body)
-	}
 }
 
-func (d *deployment) acknowledge(t *testing.T, topic, consumer string, record events.SQSMessage) {
-	t.Helper()
-	if _, err := d.em.sqs.DeleteMessage(context.Background(), &sqs.DeleteMessageInput{QueueUrl: aws.String(d.urls[d.queueOf(topic, consumer)]), ReceiptHandle: aws.String(record.ReceiptHandle)}); err != nil {
-		t.Fatalf("delete a delivered message: %v", err)
-	}
-}
-
-func deliver(t *testing.T, d *deployment, e *Engine, topic, consumer string, records ...events.SQSMessage) []string {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	resp := e.Deliver(ctx, events.SQSEvent{Records: records})
-	failed := map[string]bool{}
-	var ids []string
-	for _, failure := range resp.BatchItemFailures {
-		failed[failure.ItemIdentifier] = true
-		ids = append(ids, failure.ItemIdentifier)
-	}
-	for _, record := range records {
-		if !failed[record.MessageId] {
-			d.acknowledge(t, topic, consumer, record)
+func TestTheEngineOverSQSAndSNSKeepsEveryRunSemantic(t *testing.T) {
+	runsconformance.Engine(t, func(t *testing.T, topics map[string]*provider.TopicSpec) runsconformance.Wiring {
+		em := live(t)
+		topology := em.deploy(t, topics)
+		queue := NewQueue(topology, em.sqs, em.sns, nil)
+		return runsconformance.Wiring{
+			Store: NewStore(em.db, topology.Table, topology.KeyPrefix),
+			Queue: queue,
+			Receiver: NewReceiver(queue, em.sqs, func(_ context.Context, task string, _ time.Time) error {
+				return fmt.Errorf("no schedule fires %s here", task)
+			}),
 		}
+	})
+}
+
+func TestLiveASlotSetHandsOutNoMoreThanItsLimitUntilOneIsReleased(t *testing.T) {
+	ctx := context.Background()
+	em := live(t)
+	slots := NewSlots(em.db, em.table(t), livePrefix(t))
+	set := runs.SlotSet{Name: "consumer#emails#send", Limit: 2}
+	until := time.Now().Add(time.Minute)
+
+	first, ok, err := slots.Take(ctx, set, "a", until)
+	if err != nil || !ok {
+		t.Fatalf("Take a = %v, %v, want a slot", ok, err)
 	}
-	return ids
-}
-
-type answer struct {
-	status int
-	body   string
-	hold   time.Duration
-}
-
-type delivered struct {
-	envelope *topicv1.Envelope
-	body     []byte
-}
-
-type fakeWorker struct {
-	server  *httptest.Server
-	respond func(*topicv1.Envelope) answer
-
-	mu       sync.Mutex
-	received []delivered
-	aborted  int
-}
-
-func newFakeWorker(t *testing.T, respond func(*topicv1.Envelope) answer) *fakeWorker {
-	t.Helper()
-	w := &fakeWorker{respond: respond}
-	w.server = httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		body, _ := io.ReadAll(req.Body)
-		envelope, err := runs.DecodeEnvelope(body)
-		if err != nil {
-			http.Error(rw, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.mu.Lock()
-		w.received = append(w.received, delivered{envelope: envelope, body: body})
-		w.mu.Unlock()
-		reply := w.respond(envelope)
-		if reply.hold > 0 {
-			select {
-			case <-req.Context().Done():
-				w.mu.Lock()
-				w.aborted++
-				w.mu.Unlock()
-				return
-			case <-time.After(reply.hold):
-			}
-		}
-		rw.WriteHeader(reply.status)
-		_, _ = rw.Write([]byte(reply.body))
-	}))
-	t.Cleanup(w.server.Close)
-	return w
-}
-
-func (w *fakeWorker) deliveries() []delivered {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return append([]delivered(nil), w.received...)
-}
-
-func succeeding(*topicv1.Envelope) answer {
-	return answer{status: http.StatusOK, body: `{"done":true}`}
-}
-
-func rawField(t *testing.T, body []byte, name string) string {
-	t.Helper()
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(body, &fields); err != nil {
-		t.Fatalf("%s is not a JSON object: %v", body, err)
+	if _, ok, err := slots.Take(ctx, set, "b", until); err != nil || !ok {
+		t.Fatalf("Take b = %v, %v, want the second slot", ok, err)
 	}
-	return string(fields[name])
+	if _, ok, err := slots.Take(ctx, set, "c", until); err != nil || ok {
+		t.Fatalf("Take c = %v, %v, want none while both are held", ok, err)
+	}
+	if err := slots.Renew(ctx, first, until.Add(time.Minute)); err != nil {
+		t.Fatalf("Renew: %v", err)
+	}
+	if err := slots.Release(ctx, first); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if _, ok, err := slots.Take(ctx, set, "c", until); err != nil || !ok {
+		t.Errorf("Take c after a released = %v, %v, want the freed slot", ok, err)
+	}
+	expired, ok, err := slots.Take(ctx, runs.SlotSet{Name: "worker#media", Limit: 1}, "d", time.Now().Add(-time.Second))
+	if err != nil || !ok {
+		t.Fatalf("Take d = %v, %v", ok, err)
+	}
+	if _, ok, err := slots.Take(ctx, expired.Set, "e", until); err != nil || !ok {
+		t.Errorf("Take e over a lease that ran out = %v, %v, want the slot", ok, err)
+	}
+	if err := slots.Release(ctx, expired); err != nil {
+		t.Errorf("Release by a holder that lost the slot = %v, want nothing done and no error", err)
+	}
 }

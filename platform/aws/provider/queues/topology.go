@@ -3,6 +3,7 @@ package queues
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -16,6 +17,8 @@ const (
 	WorkerConcurrencyEnv = "OCEL_WORKER_CONCURRENCY"
 
 	MaxReceiveCount = 1000
+
+	MessageRetention = 14 * 24 * time.Hour
 )
 
 type Topology struct {
