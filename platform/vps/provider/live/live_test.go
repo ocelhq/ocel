@@ -14,9 +14,13 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func complete() Manifest {
@@ -186,7 +190,7 @@ func TestTheBoxCipherReadsTheTierKeyWhereBootstrapMintsIt(t *testing.T) {
 	}
 }
 
-func writeEntry(t *testing.T, root string, key keyvalue.Key, value string) {
+func writeEntry(t *testing.T, root string, key records.Key, value string) {
 	t.Helper()
 	path, err := PathOf(key)
 	if err != nil {
@@ -201,7 +205,7 @@ func writeEntry(t *testing.T, root string, key keyvalue.Key, value string) {
 	}
 }
 
-var shop = keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootValues, Path: []string{"shop"}}
+var shop = records.Partition{Tier: environment.TierProduction, Root: variablestore.RootValues, Path: []string{"shop"}}
 
 func TestTheEntriesAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T) {
 	t.Parallel()
@@ -216,8 +220,8 @@ func TestTheEntriesAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T)
 	if err != nil || string(read.Value) != `"one"` || read.Revision == "" {
 		t.Fatalf("Read() = %+v, %v", read, err)
 	}
-	if _, err := store.Read(context.Background(), shop.Key("cells", "/", "MISSING", "*")); !errors.Is(err, keyvalue.ErrNotFound) {
-		t.Errorf("Read() of nothing = %v, want %v", err, keyvalue.ErrNotFound)
+	if _, err := store.Read(context.Background(), shop.Key("cells", "/", "MISSING", "*")); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("Read() of nothing = %v, want %v", err, records.ErrNotFound)
 	}
 	listed, err := store.List(context.Background(), shop, "cells")
 	if err != nil || len(listed) != 2 {
@@ -228,7 +232,7 @@ func TestTheEntriesAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T)
 			t.Errorf("List() named %s, which nothing wrote", entry.Key)
 		}
 	}
-	other := keyvalue.Partition{Tier: shop.Tier, Root: shop.Root, Path: []string{"other"}}
+	other := records.Partition{Tier: shop.Tier, Root: shop.Root, Path: []string{"other"}}
 	empty, err := store.List(context.Background(), other, "cells")
 	if err != nil || len(empty) != 0 {
 		t.Errorf("List() in another project = %v, %v, want nothing", empty, err)
@@ -243,10 +247,10 @@ func TestTheEntriesAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T)
 
 func TestAKeyRoundTripsThroughThePathAFileAnswersTo(t *testing.T) {
 	t.Parallel()
-	for _, key := range []keyvalue.Key{
-		{Partition: keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootConformance, Path: []string{"TestOne/sub"}}, Path: []string{"leaf"}},
+	for _, key := range []records.Key{
+		{Partition: records.Partition{Tier: environment.TierProduction, Root: conformance.Root, Path: []string{"TestOne/sub"}}, Path: []string{"leaf"}},
 		shop.Key("cells", "/apps/web", "DATABASE_URL"),
-		{Partition: keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootLedger, Path: []string{"a+b"}}, Path: []string{".hidden", ".."}},
+		{Partition: records.Partition{Tier: environment.TierProduction, Root: ledger.Root, Path: []string{"a+b"}}, Path: []string{".hidden", ".."}},
 	} {
 		path, err := PathOf(key)
 		if err != nil {
@@ -268,11 +272,11 @@ func TestAKeyRoundTripsThroughThePathAFileAnswersTo(t *testing.T) {
 
 func TestTwoPartitionsNeverShareADirectory(t *testing.T) {
 	t.Parallel()
-	one, err := PartitionDir(keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootStacks, Path: []string{"a+b"}})
+	one, err := PartitionDir(records.Partition{Tier: environment.TierProduction, Root: stackrecords.RootStacks, Path: []string{"a+b"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	two, err := PartitionDir(keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootStacks, Path: []string{"a", "b"}})
+	two, err := PartitionDir(records.Partition{Tier: environment.TierProduction, Root: stackrecords.RootStacks, Path: []string{"a", "b"}})
 	if err != nil {
 		t.Fatal(err)
 	}

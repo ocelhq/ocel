@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -187,7 +187,7 @@ func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd str
 	}
 	binding := published.GetBinding()
 	owner := opts.ownerOrDefault()
-	if owner == naming.InlineRecordOwner {
+	if owner == bindings.InlineRecordOwner {
 		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
 	}
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings set", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
@@ -309,7 +309,7 @@ func mismatchedValue(field protoreflect.FieldDescriptor, value any, at string) s
 }
 
 func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd, name string, opts bindingsOptions, stdout io.Writer) error {
-	if naming.IsInlineRecord(name) {
+	if bindings.IsInlineRecord(name) {
 		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
 	}
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings rm", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
@@ -429,7 +429,7 @@ func renderBindings(stdout io.Writer, bindings []*variablestorev1.BindingSummary
 }
 
 func bindingTypeName(t bindingsv1.BindingType) string {
-	return strings.ToLower(naming.EnvFragment(t))
+	return strings.ToLower(bindings.EnvFragment(t))
 }
 
 func sourceOrDash(source string) string {

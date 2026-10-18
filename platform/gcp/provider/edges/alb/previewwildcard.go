@@ -8,9 +8,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -21,12 +21,12 @@ type previewEntry struct {
 	Shielded    bool   `json:"shielded,omitempty"`
 }
 
-func (e *Edge) previewKey() keyvalue.Key {
+func (e *Edge) previewKey() records.Key {
 	return stackrecords.EdgeStacksPartition(environment.TierPreview).Key(string(Kind), "preview-wildcard")
 }
 
 func (e *Edge) recordedPreview(ctx context.Context) (previewEntry, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
+	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
 	if err != nil {
 		return previewEntry{}, fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
@@ -41,7 +41,7 @@ func (e *Edge) recordedPreview(ctx context.Context) (previewEntry, error) {
 }
 
 func (e *Edge) rememberPreview(ctx context.Context, preview previewEntry) error {
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
+	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
 	if err != nil {
 		return fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
@@ -103,7 +103,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 			return err
 		}
 	}
-	if err := keyvalue.Forget(ctx, e.deps.KeyValues, e.previewKey()); err != nil {
+	if err := records.Forget(ctx, e.deps.KeyValues, e.previewKey()); err != nil {
 		return fmt.Errorf("release which wildcard the %s edge served previews on: %w", Kind, err)
 	}
 	return e.releaseFront(ctx, environment.TierPreview, wildcard)

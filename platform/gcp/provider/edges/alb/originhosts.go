@@ -9,8 +9,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -38,7 +38,7 @@ type originHostRecord struct {
 	Routed   bool   `json:"routed"`
 }
 
-func (e *Edge) originHostKey(tier environment.Tier, hostname string) keyvalue.Key {
+func (e *Edge) originHostKey(tier environment.Tier, hostname string) records.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(Kind), "origin-hosts", hostname)
 }
 
@@ -46,11 +46,11 @@ type originRevisionRecord struct {
 	Hostname string `json:"hostname"`
 }
 
-func (e *Edge) originRevisionPartition(tier environment.Tier) keyvalue.Partition {
+func (e *Edge) originRevisionPartition(tier environment.Tier) records.Partition {
 	return stackrecords.EdgeStacksPartition(tier)
 }
 
-func (e *Edge) originRevisionKey(tier environment.Tier, service, revision string) keyvalue.Key {
+func (e *Edge) originRevisionKey(tier environment.Tier, service, revision string) records.Key {
 	return e.originRevisionPartition(tier).Key(string(Kind), "origin-revisions", service, revision)
 }
 
@@ -70,7 +70,7 @@ func (e *Edge) RouteOriginHost(ctx context.Context, host OriginHost) error {
 		return err
 	}
 	record := originHostRecord{Slug: host.Slug, Service: host.Service, Tag: host.Tag, Revision: host.Revision, Backend: backendName(host.Slug, host.Tier, host.Hostname)}
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.originHostKey(host.Tier, host.Hostname))
+	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.originHostKey(host.Tier, host.Hostname))
 	if err != nil {
 		return fmt.Errorf("read whether %s is routed on the %s edge: %w", host.Hostname, Kind, err)
 	}
@@ -109,7 +109,7 @@ func (e *Edge) RouteOriginHost(ctx context.Context, host OriginHost) error {
 }
 
 func (e *Edge) writeOriginRevisionRecord(ctx context.Context, host OriginHost) error {
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.originRevisionKey(host.Tier, host.Service, host.Revision))
+	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.originRevisionKey(host.Tier, host.Service, host.Revision))
 	if err != nil {
 		return fmt.Errorf("read which hostname revision %s answers on in the %s edge: %w", host.Revision, Kind, err)
 	}
@@ -122,7 +122,7 @@ func (e *Edge) writeOriginRevisionRecord(ctx context.Context, host OriginHost) e
 	return nil
 }
 
-func (e *Edge) writeOriginHostRecord(ctx context.Context, entry keyvalue.Entry, record originHostRecord) (keyvalue.Entry, error) {
+func (e *Edge) writeOriginHostRecord(ctx context.Context, entry records.Entry, record originHostRecord) (records.Entry, error) {
 	var err error
 	if entry.Value, err = json.Marshal(record); err != nil {
 		return entry, err
@@ -155,14 +155,14 @@ func (e *Edge) UnrouteOriginHosts(ctx context.Context, tier environment.Tier, se
 			errs = append(errs, err)
 			continue
 		} else if superseded {
-			errs = append(errs, keyvalue.Forget(ctx, e.deps.KeyValues, entry.Key))
+			errs = append(errs, records.Forget(ctx, e.deps.KeyValues, entry.Key))
 			continue
 		}
 		if err := e.UnrouteOriginHost(ctx, tier, record.Hostname); err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		errs = append(errs, keyvalue.Forget(ctx, e.deps.KeyValues, entry.Key))
+		errs = append(errs, records.Forget(ctx, e.deps.KeyValues, entry.Key))
 	}
 	return errors.Join(errs...)
 }
@@ -172,7 +172,7 @@ func (e *Edge) isOriginHostServedByAnotherRevision(ctx context.Context, tier env
 		return false, nil
 	}
 	entry, err := e.deps.KeyValues.Read(ctx, e.originHostKey(tier, hostname))
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {
@@ -188,7 +188,7 @@ func (e *Edge) isOriginHostServedByAnotherRevision(ctx context.Context, tier env
 func (e *Edge) UnrouteOriginHost(ctx context.Context, tier environment.Tier, hostname string) error {
 	entry, err := e.deps.KeyValues.Read(ctx, e.originHostKey(tier, hostname))
 	if err != nil {
-		if errors.Is(err, keyvalue.ErrNotFound) {
+		if errors.Is(err, records.ErrNotFound) {
 			return nil
 		}
 		return fmt.Errorf("read whether %s is routed on the %s edge: %w", hostname, Kind, err)
@@ -209,7 +209,7 @@ func (e *Edge) UnrouteOriginHost(ctx context.Context, tier environment.Tier, hos
 	if err := e.deps.Stacks.Destroy(ctx, Target{Tier: tier, Slug: record.Slug, Origin: hostname}, progress.Discard()); err != nil {
 		return err
 	}
-	return keyvalue.Forget(ctx, e.deps.KeyValues, e.originHostKey(tier, hostname))
+	return records.Forget(ctx, e.deps.KeyValues, e.originHostKey(tier, hostname))
 }
 
 func originHostProgram(region string, host OriginHost, record originHostRecord) Program {

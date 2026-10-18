@@ -13,13 +13,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -54,7 +54,7 @@ func seedStack(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug 
 		t.Fatal(err)
 	}
 	name := stackrecords.EdgeStackKey(tier, slug)
-	recorded, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
+	recorded, err := records.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func seedStack(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug 
 
 func readStack(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) stackrecords.EdgeState {
 	t.Helper()
-	recorded, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.EdgeStackKey(tier, slug))
+	recorded, err := records.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.EdgeStackKey(tier, slug))
 	if err != nil {
 		t.Fatal(err)
 	}

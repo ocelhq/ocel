@@ -9,22 +9,23 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 func heldStage(t *testing.T, w *world, holder string, until time.Time) {
 	t.Helper()
 	store := awsports.KeyValues{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
-	partition := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootRouters, Path: []string{string(Kind), conformanceSlug}}
+	partition := records.Partition{Tier: environment.TierProduction, Root: stackrecords.RootRouters, Path: []string{string(Kind), conformanceSlug}}
 	value, err := json.Marshal(leaseRecord{Holder: holder, Until: until.Unix()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Write(context.Background(), keyvalue.Entry{Key: partition.Key("stage", router.DefaultPointer), Value: value}); err != nil {
+	if _, err := store.Write(context.Background(), records.Entry{Key: partition.Key("stage", router.DefaultPointer), Value: value}); err != nil {
 		t.Fatalf("hold the stage: %v", err)
 	}
 }
@@ -32,8 +33,8 @@ func heldStage(t *testing.T, w *world, holder string, until time.Time) {
 func takeStage(t *testing.T, w *world, holder string, until time.Time) {
 	t.Helper()
 	store := awsports.KeyValues{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
-	partition := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootRouters, Path: []string{string(Kind), conformanceSlug}}
-	held, err := keyvalue.ReadOrEmpty(context.Background(), store, partition.Key("stage", router.DefaultPointer))
+	partition := records.Partition{Tier: environment.TierProduction, Root: stackrecords.RootRouters, Path: []string{string(Kind), conformanceSlug}}
+	held, err := records.ReadOrEmpty(context.Background(), store, partition.Key("stage", router.DefaultPointer))
 	if err != nil {
 		t.Fatalf("read who holds the stage: %v", err)
 	}
@@ -48,8 +49,8 @@ func takeStage(t *testing.T, w *world, holder string, until time.Time) {
 func stageHolder(t *testing.T, w *world) string {
 	t.Helper()
 	store := awsports.KeyValues{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
-	partition := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootRouters, Path: []string{string(Kind), conformanceSlug}}
-	held, err := keyvalue.ReadOrEmpty(context.Background(), store, partition.Key("stage", router.DefaultPointer))
+	partition := records.Partition{Tier: environment.TierProduction, Root: stackrecords.RootRouters, Path: []string{string(Kind), conformanceSlug}}
+	held, err := records.ReadOrEmpty(context.Background(), store, partition.Key("stage", router.DefaultPointer))
 	if err != nil {
 		t.Fatalf("read who holds the stage: %v", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
@@ -13,7 +13,7 @@ import (
 const boxVendor = provider.Vendor("vps")
 
 func proxied(kind provider.BindingType) bool {
-	return naming.Proxied(provider.ProtoBindingType(kind))
+	return bindings.Proxied(provider.ProtoBindingType(kind))
 }
 
 func reachableResources() []provider.Resource {

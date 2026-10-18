@@ -15,10 +15,10 @@ import (
 	"google.golang.org/api/iam/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -532,13 +532,13 @@ func TestABootstrapChecksItMayListServiceAccounts(t *testing.T) {
 }
 
 type countingRecords struct {
-	keyvalue.Store
+	records.Store
 	mu    sync.Mutex
 	lists int
 	after func(listed int)
 }
 
-func (c *countingRecords) List(ctx context.Context, in keyvalue.Partition, extra ...string) ([]keyvalue.Entry, error) {
+func (c *countingRecords) List(ctx context.Context, in records.Partition, extra ...string) ([]records.Entry, error) {
 	entries, err := c.Store.List(ctx, in, extra...)
 	c.mu.Lock()
 	c.lists++

@@ -12,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -47,7 +46,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	title := progress.Attaching.Title(namedList("production hostname", "production hostnames", requestedHosts(req)))
-	root := RootSpan(naming.SpanEdge, req.GetSlug(), title, progressv1.Phase_PHASE_PROVISION)
+	root := RootSpan(SpanEdge, req.GetSlug(), title, progressv1.Phase_PHASE_PROVISION)
 	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
@@ -384,7 +383,7 @@ func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameR
 	if req.GetHost() != "" {
 		title = progress.Detaching.Title(req.GetHost() + " from production")
 	}
-	root := RootSpan(naming.SpanEdge, req.GetSlug(), title, progressv1.Phase_PHASE_DESTROY)
+	root := RootSpan(SpanEdge, req.GetSlug(), title, progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {

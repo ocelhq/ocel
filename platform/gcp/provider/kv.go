@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/valkey"
 )
 
 const (
@@ -62,18 +62,18 @@ func readKVStore(resource provider.Resource) (kvStore, error) {
 		spec = *resource.KV
 	}
 	if spec.MemoryBytes == 0 {
-		spec.MemoryBytes, _ = kvstore.ParseMemory(kvstore.DefaultMemory)
+		spec.MemoryBytes, _ = valkey.ParseMemory(valkey.DefaultMemory)
 	}
-	version := cmp.Or(spec.Version, kvstore.DefaultVersion)
+	version := cmp.Or(spec.Version, valkey.DefaultVersion)
 	engine, known := engineVersions[version]
 	if !known {
 		return kvStore{}, refusal.Refuse(refusal.CodeInvalid,
 			"kv %s asks for version %q, and Memorystore runs a store at version 8 or 9", resource.Name, version)
 	}
-	if spec.MemoryBytes > kvstore.MaxMemoryBytes {
+	if spec.MemoryBytes > valkey.MaxMemoryBytes {
 		return kvStore{}, refusal.Refuse(refusal.CodeInvalid,
 			"kv %s declares %d bytes of memory, and a store holds at most %dgb, on one Memorystore node: declare %dgb or less",
-			resource.Name, spec.MemoryBytes, kvstore.MaxMemoryBytes>>30, kvstore.MaxMemoryBytes>>30)
+			resource.Name, spec.MemoryBytes, valkey.MaxMemoryBytes>>30, valkey.MaxMemoryBytes>>30)
 	}
 	at := slices.IndexFunc(memorystoreNodes, func(node memorystoreNode) bool { return node.keyspaceBytes >= spec.MemoryBytes })
 	return kvStore{version: engine, node: memorystoreNodes[at], memoryBytes: spec.MemoryBytes, eviction: cmp.Or(spec.Eviction, defaultEviction)}, nil

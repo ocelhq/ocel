@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -27,11 +27,11 @@ func newFixtureKeyCipher(t *testing.T) *fake.Cipher {
 
 var shop = variablestore.ValuesPartition(variablestore.Scope{Project: "shop", Tier: environment.TierProduction})
 
-func newKeyValuesHolding(t *testing.T, rows map[string]keyvalue.Key) *fake.KeyValues {
+func newKeyValuesHolding(t *testing.T, rows map[string]records.Key) *fake.KeyValues {
 	t.Helper()
 	store := fake.NewKeyValues()
 	for body, name := range rows {
-		if _, err := store.Write(context.Background(), keyvalue.Entry{Key: name, Value: []byte(body)}); err != nil {
+		if _, err := store.Write(context.Background(), records.Entry{Key: name, Value: []byte(body)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -42,7 +42,7 @@ func TestACellsValueIsBoundToItsProjectClassEnvironmentFolderEmptyBindingAndKeyI
 	t.Parallel()
 
 	store := variablestore.Store{
-		KeyValues: newKeyValuesHolding(t, map[string]keyvalue.Key{
+		KeyValues: newKeyValuesHolding(t, map[string]records.Key{
 			`{"version":1,"updatedAt":1790580978,"size":14,"sealed":"+VgAViEpXXIk4f9gdIkzfy1DSDSCljR35ULyG/f4QqTpm7DEoFaNMcm+"}`: shop.Key("cells", "/web", "STRIPE_API_KEY", "staging"),
 		}),
 		Cipher: newFixtureKeyCipher(t),
@@ -60,7 +60,7 @@ func TestABindingsValueIsBoundToTheRootFolderItsNameAndThePropertiesKey(t *testi
 	t.Parallel()
 
 	store := variablestore.Store{
-		KeyValues: newKeyValuesHolding(t, map[string]keyvalue.Key{
+		KeyValues: newKeyValuesHolding(t, map[string]records.Key{
 			`{"version":1,"updatedAt":1790580978,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`:               shop.Key("bindings", "orders", "records", "*"),
 			`{"version":1,"sealed":"kH20mriYvg2PFri7a1XPVAmM0y9YqXkDfsjQMCWX6gyemVuOD8Ro1RkBDEdPnJpRyqOs/YGNHQ=="}`: shop.Key("bindings", "orders", "values", "*"),
 		}),

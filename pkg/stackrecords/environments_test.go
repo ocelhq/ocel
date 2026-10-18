@@ -8,8 +8,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -78,7 +78,7 @@ func TestEnsureLifecycleIsRefusedWhenThePreviewWasGivenAnotherAliasToken(t *test
 
 const claimedToken = "aaaaaaaaaaaaaaaa"
 
-func claimPreview(t *testing.T, store keyvalue.Store) {
+func claimPreview(t *testing.T, store records.Store) {
 	t.Helper()
 	if err := stackrecords.EnsureLifecycle(context.Background(), store, environment.TierPreview, "shop", "pr-12", stackrecords.LifecycleEphemeral, claimedToken); err != nil {
 		t.Fatalf("EnsureLifecycle: %v", err)
@@ -90,7 +90,7 @@ func TestRecordAliasesIsRefusedAndRecordsNothingWhenThePreviewWasRemovedAfterIts
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	claimPreview(t, store)
-	if err := keyvalue.Forget(ctx, store, stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-12")); err != nil {
+	if err := records.Forget(ctx, store, stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-12")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -101,7 +101,7 @@ func TestRecordAliasesIsRefusedAndRecordsNothingWhenThePreviewWasRemovedAfterIts
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Errorf("RecordAliases = %v, want a busy refusal: pr-12 was removed after its deploy claimed it", err)
 	}
-	if _, err := store.Read(ctx, stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-12")); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := store.Read(ctx, stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-12")); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading pr-12 after the refusal = %v, want it still removed", err)
 	}
 }

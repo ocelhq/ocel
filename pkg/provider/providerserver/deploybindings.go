@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -58,7 +58,7 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 }
 
 func proxied(kind provider.BindingType) bool {
-	return naming.Proxied(provider.ProtoBindingType(kind))
+	return bindings.Proxied(provider.ProtoBindingType(kind))
 }
 
 func RefuseMismatchedBinding(binding provider.Binding, declaredName string, declared provider.BindingType) error {

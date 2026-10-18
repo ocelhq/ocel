@@ -10,23 +10,23 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type edgeStateStore struct {
-	keyValues keyvalue.Store
-	name      keyvalue.Key
+	keyValues records.Store
+	name      records.Key
 	recorded  []byte
 }
 
 func (s *edgeStateStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, s.keyValues, s.name)
+	entry, err := records.ReadOrEmpty(ctx, s.keyValues, s.name)
 	if err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
@@ -47,7 +47,7 @@ func (s *edgeStateStore) write(ctx context.Context, state stackrecords.EdgeState
 	if err != nil {
 		return fmt.Errorf("read %s: %w", s.name, err)
 	}
-	err = keyvalue.Change(ctx, s.keyValues, s.name, func(entry keyvalue.Entry) ([]byte, bool, error) {
+	err = records.Change(ctx, s.keyValues, s.name, func(entry records.Entry) ([]byte, bool, error) {
 		current, err := decodeEdgeState(entry.Value)
 		if err != nil {
 			return nil, false, fmt.Errorf("read %s: %w", s.name, err)

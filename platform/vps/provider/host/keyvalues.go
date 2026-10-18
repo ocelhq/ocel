@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
@@ -35,9 +35,9 @@ func (s sshKeyValues) Run(ctx context.Context, tier environment.Tier, stdin io.R
 	case 0:
 		return result.Stdout, nil
 	case boxstore.ExitNotFound:
-		return "", keyvalue.ErrNotFound
+		return "", records.ErrNotFound
 	case boxstore.ExitStale:
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	default:
 		return "", unelevated(refused, s.host.refuse("keyvalues "+argv[0], result, elevation))
 	}

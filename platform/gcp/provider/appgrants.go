@@ -8,7 +8,8 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -99,12 +100,12 @@ func targetsOf(grants []appGrant) []grantTarget {
 	return targets
 }
 
-func appGrantsKey(tier environment.Tier, account string) keyvalue.Key {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}.Key(appGrantsRecord, account)
+func appGrantsKey(tier environment.Tier, account string) records.Key {
+	return records.Partition{Tier: tier, Root: stackrecords.RootBootstrap}.Key(appGrantsRecord, account)
 }
 
-func readAppGrants(ctx context.Context, records keyvalue.Store, tier environment.Tier, account string) ([]appGrant, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, records, appGrantsKey(tier, account))
+func readAppGrants(ctx context.Context, store records.Store, tier environment.Tier, account string) ([]appGrant, error) {
+	recorded, err := records.ReadOrEmpty(ctx, store, appGrantsKey(tier, account))
 	if err != nil || len(recorded.Value) == 0 {
 		return nil, err
 	}
@@ -115,12 +116,12 @@ func readAppGrants(ctx context.Context, records keyvalue.Store, tier environment
 	return grants, nil
 }
 
-func recordAppGrants(ctx context.Context, records keyvalue.Store, tier environment.Tier, account string, grants []appGrant) error {
+func recordAppGrants(ctx context.Context, store records.Store, tier environment.Tier, account string, grants []appGrant) error {
 	encoded, err := json.Marshal(grants)
 	if err != nil {
 		return err
 	}
-	return keyvalue.Change(ctx, records, appGrantsKey(tier, account), func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	return records.Change(ctx, store, appGrantsKey(tier, account), func(recorded records.Entry) ([]byte, bool, error) {
 		return encoded, string(recorded.Value) != string(encoded), nil
 	})
 }
@@ -216,15 +217,15 @@ func (p *Provider) reconcileAppGrants(ctx context.Context, c *clients, tier envi
 	return recordAppGrants(ctx, p.KeyValues(), tier, account, want)
 }
 
-func revokeAppGrants(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, account string) (bool, error) {
-	recorded, err := readAppGrants(ctx, records, tier, account)
+func revokeAppGrants(ctx context.Context, c *clients, store records.Store, tier environment.Tier, account string) (bool, error) {
+	recorded, err := readAppGrants(ctx, store, tier, account)
 	if err != nil {
 		return false, err
 	}
 	if err := c.applyGrants(ctx, tier, nil, recorded); err != nil {
 		return false, err
 	}
-	return len(recorded) > 0, keyvalue.Forget(ctx, records, appGrantsKey(tier, account))
+	return len(recorded) > 0, records.Forget(ctx, store, appGrantsKey(tier, account))
 }
 
 func ignoreAbsentPolicy(err error) error {

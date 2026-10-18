@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -25,7 +25,7 @@ func TestAPartIsUsedByTheRecordedProjectsWhoseLastDeployNeededIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, project := range []string{"web", "docs"} {
-		if _, err := store.Write(ctx, keyvalue.Entry{Key: stackrecords.ProjectKey(tier, project), Value: []byte(`{}`)}); err != nil {
+		if _, err := store.Write(ctx, records.Entry{Key: stackrecords.ProjectKey(tier, project), Value: []byte(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 	}

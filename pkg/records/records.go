@@ -1,4 +1,4 @@
-package keyvalue
+package records
 
 import (
 	"context"
@@ -35,31 +35,6 @@ var ErrNotFound = errors.New("no such entry")
 
 type Root string
 
-const (
-	RootProjects           Root = "projects"
-	RootStacks             Root = "stacks"
-	RootEnvironments       Root = "environments"
-	RootEnvironmentLeases  Root = "environmentleases"
-	RootProjectLeases      Root = "projectleases"
-	RootBootstrap          Root = "bootstrap"
-	RootEdgeStacks         Root = "edgestacks"
-	RootWildcard           Root = "wildcard"
-	RootLedger             Root = "ledger"
-	RootRouters            Root = "routers"
-	RootValues             Root = "values"
-	RootValueRefs          Root = "valuerefs"
-	RootConformance        Root = "conformance"
-	RootEnvSources         Root = "envsources"
-	RootEnvSourceStatus    Root = "envsourcestatus"
-	RootEnvSourceDigestKey Root = "envsourcedigestkey"
-	RootSharedPhysicals    Root = "sharedphysicals"
-	RootQueues             Root = "queues"
-	RootRealtime           Root = "realtime"
-	RootPostgres           Root = "postgres"
-)
-
-var variableRoots = []Root{RootValues, RootValueRefs, RootEnvSources, RootEnvSourceStatus, RootEnvSourceDigestKey}
-
 type Partition struct {
 	Tier environment.Tier
 	Root Root
@@ -73,8 +48,6 @@ func (p Partition) Key(path ...string) Key {
 func (p Partition) Segments() []string {
 	return append([]string{string(p.Root)}, p.Path...)
 }
-
-func (p Partition) HoldsVariables() bool { return slices.Contains(variableRoots, p.Root) }
 
 func (p Partition) String() string {
 	return string(p.Tier) + ":" + JoinSegments(p.Segments(), "/", "|")

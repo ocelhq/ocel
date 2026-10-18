@@ -11,17 +11,17 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type Backend struct {
-	KeyValues     keyvalue.Store
+	KeyValues     records.Store
 	Cipher        seal.Cipher
 	ProveIdentity func(ctx context.Context, audience string) (envsource.IdentityProof, error)
 

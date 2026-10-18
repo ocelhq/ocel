@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -65,7 +65,7 @@ func readableBindings(bound []project.Binding, published []*variablestorev1.Bind
 			continue
 		}
 		for _, binding := range keyed {
-			put(naming.ResourceTypeName(binding.Type), binding.Name, record.GetProperties())
+			put(bindings.ResourceTypeName(binding.Type), binding.Name, record.GetProperties())
 		}
 	}
 	return out
@@ -85,9 +85,9 @@ func tsProperties(shapes []*variablestorev1.PropertyShape) string {
 func tsType(shape *variablestorev1.PropertyShape) string {
 	scalar := "unknown"
 	switch shape.GetJsonType() {
-	case naming.JSONTypeString, naming.JSONTypeNumber, naming.JSONTypeBoolean:
+	case bindings.JSONTypeString, bindings.JSONTypeNumber, bindings.JSONTypeBoolean:
 		scalar = shape.GetJsonType()
-	case naming.JSONTypeObject:
+	case bindings.JSONTypeObject:
 		scalar = "Record<string, unknown>"
 	}
 	if shape.GetList() {

@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
-	"github.com/ocelhq/ocel/pkg/kvstore"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/valkey"
 )
 
 type declaredEntry struct {
@@ -31,17 +31,17 @@ func declaredEntries(configDir string, config *resourcesv1.KvConfig, storeSource
 func refuseKVStore(d declaredResource) error {
 	config := d.KV
 	if version := config.GetVersion(); version != "" {
-		if err := kvstore.RefuseVersion(version); err != nil {
+		if err := valkey.RefuseVersion(version); err != nil {
 			return refuse(d, "%s", err)
 		}
 	}
 	if eviction := config.GetEviction(); eviction != "" {
-		if err := kvstore.RefuseEviction(eviction); err != nil {
+		if err := valkey.RefuseEviction(eviction); err != nil {
 			return refuse(d, "%s", err)
 		}
 	}
 	if memory := config.GetMemory(); memory != "" {
-		if _, err := kvstore.ParseMemory(memory); err != nil {
+		if _, err := valkey.ParseMemory(memory); err != nil {
 			return refuse(d, "%s", err)
 		}
 	}
@@ -51,17 +51,17 @@ func refuseKVStore(d declaredResource) error {
 func refuseKVEntries(d declaredResource) error {
 	type parsedEntry struct {
 		entry   declaredEntry
-		pattern kvstore.Pattern
+		pattern valkey.Pattern
 	}
 	parsed := make([]parsedEntry, 0, len(d.KVEntries))
 	for _, entry := range d.KVEntries {
-		if err := kvstore.RefuseEntryName(entry.Name); err != nil {
+		if err := valkey.RefuseEntryName(entry.Name); err != nil {
 			return refuseEntry(d, entry, "%s", err)
 		}
 		if entry.Shape == resourcesv1.KvShape_KV_SHAPE_UNSPECIFIED {
 			return refuseEntry(d, entry, "declares no shape: it is text, counter, json, list or set")
 		}
-		pattern, err := kvstore.ParsePattern(entry.Pattern)
+		pattern, err := valkey.ParsePattern(entry.Pattern)
 		if err != nil {
 			return refuseEntry(d, entry, "%s", err)
 		}

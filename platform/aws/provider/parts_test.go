@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/cloudfrontpart"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -103,7 +103,7 @@ func TestThePreviewWildcardUsesThePartItsEdgeServesItThrough(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := store.Write(context.Background(), keyvalue.Entry{Key: stackrecords.WildcardKey(environment.TierPreview), Value: recorded}); err != nil {
+		if _, err := store.Write(context.Background(), records.Entry{Key: stackrecords.WildcardKey(environment.TierPreview), Value: recorded}); err != nil {
 			t.Fatal(err)
 		}
 

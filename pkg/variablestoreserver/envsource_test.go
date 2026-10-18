@@ -15,11 +15,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
@@ -395,7 +395,7 @@ func registeredThenUndecodable(t *testing.T) (variablestorev1connect.VariableSto
 		t.Fatal(err)
 	}
 	store := provider.KeyValues()
-	recorded, err := store.List(ctx, keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootEnvSources})
+	recorded, err := store.List(ctx, records.Partition{Tier: environment.TierProduction, Root: envsource.RootRegistrations})
 	if err != nil || len(recorded) != 1 {
 		t.Fatalf("registrations = %v, %v, want the one the deploy made", recorded, err)
 	}

@@ -12,8 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 const recordPurgeDelay = time.Hour
@@ -88,7 +88,7 @@ func (s Store) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord
 		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":held": &ddbtypes.AttributeValueMemberS{Value: string(held)}},
 	})
 	if isConditionFailed(err) {
-		return fmt.Errorf("the %s key %q of %s: %w", record.Purpose, record.Key, record.Topic, keyvalue.ErrStale)
+		return fmt.Errorf("the %s key %q of %s: %w", record.Purpose, record.Key, record.Topic, records.ErrStale)
 	}
 	if err != nil {
 		return fmt.Errorf("replace the %s key %q of %s: %w", record.Purpose, record.Key, record.Topic, err)

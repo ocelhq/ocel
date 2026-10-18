@@ -25,10 +25,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -149,7 +149,7 @@ type bootstrap struct {
 	clients   *clients
 	fronts    provider.Edges
 	stores    memorystore
-	records   keyvalue.Store
+	records   records.Store
 	writtenBy provider.WrittenBy
 	surveyed  *surveys
 

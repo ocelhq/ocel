@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -36,9 +36,9 @@ func (LocalTransport) Run(ctx context.Context, tier environment.Tier, stdin io.R
 	case code == 0:
 		return stdout, nil
 	case code == ExitNotFound:
-		return "", keyvalue.ErrNotFound
+		return "", records.ErrNotFound
 	case code == ExitStale:
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	default:
 		return "", refusal.Refuse(refusal.CodeDenied, "keyvalues %s on this host: %s", argv[0], describeFailure(stderr, code))
 	}

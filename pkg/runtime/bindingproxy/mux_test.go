@@ -9,8 +9,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/localrpc"
-	"github.com/ocelhq/ocel/pkg/naming"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/realtime/v1/realtimev1connect"
@@ -183,7 +183,7 @@ func TestTheProxyAnswersForEveryBindingTypeAnAppReachesThroughIt(t *testing.T) {
 	})
 	for wire := range bindingsv1.BindingType_name {
 		kind := bindingsv1.BindingType(wire)
-		if !naming.Proxied(kind) {
+		if !bindings.Proxied(kind) {
 			continue
 		}
 		service, known := services[kind]

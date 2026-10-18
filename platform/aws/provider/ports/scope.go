@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -37,12 +37,12 @@ func PublicBalancerName(tier environment.Tier) string {
 	return naming.Join(naming.WordSeparator, "ocel", "public", string(tier))
 }
 
-func ContainerFrontKey(tier environment.Tier) keyvalue.Key {
+func ContainerFrontKey(tier environment.Tier) records.Key {
 	return stackrecords.StacksPartition(tier, ContainersSlug).Key(containerFrontSegment)
 }
 
-func ReadContainerFront(ctx context.Context, store keyvalue.Store, tier environment.Tier) (ContainerFront, bool, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, store, ContainerFrontKey(tier))
+func ReadContainerFront(ctx context.Context, store records.Store, tier environment.Tier) (ContainerFront, bool, error) {
+	entry, err := records.ReadOrEmpty(ctx, store, ContainerFrontKey(tier))
 	if err != nil {
 		return ContainerFront{}, false, err
 	}
@@ -59,8 +59,8 @@ func ReadContainerFront(ctx context.Context, store keyvalue.Store, tier environm
 	return front, true, nil
 }
 
-func WriteContainerFront(ctx context.Context, store keyvalue.Store, tier environment.Tier, front ContainerFront) error {
-	current, err := keyvalue.ReadOrEmpty(ctx, store, ContainerFrontKey(tier))
+func WriteContainerFront(ctx context.Context, store records.Store, tier environment.Tier, front ContainerFront) error {
+	current, err := records.ReadOrEmpty(ctx, store, ContainerFrontKey(tier))
 	if err != nil {
 		return err
 	}

@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -115,19 +115,19 @@ func sortedCertificates(certificates []string) []string {
 	return slices.Compact(slices.Sorted(slices.Values(certificates)))
 }
 
-func (e *Edge) trustKey(tier environment.Tier) keyvalue.Key {
+func (e *Edge) trustKey(tier environment.Tier) records.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(Kind), "client-certificates")
 }
 
-func (e *Edge) readTrust(ctx context.Context, tier environment.Tier) (keyvalue.Entry, trustRecord, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.trustKey(tier))
+func (e *Edge) readTrust(ctx context.Context, tier environment.Tier) (records.Entry, trustRecord, error) {
+	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.trustKey(tier))
 	if err != nil {
-		return keyvalue.Entry{}, trustRecord{}, fmt.Errorf("read which client certificates the %s load balancer of tier %s trusts: %w", Kind, tier, err)
+		return records.Entry{}, trustRecord{}, fmt.Errorf("read which client certificates the %s load balancer of tier %s trusts: %w", Kind, tier, err)
 	}
 	var read trustRecord
 	if len(entry.Value) > 0 {
 		if err := json.Unmarshal(entry.Value, &read); err != nil {
-			return keyvalue.Entry{}, trustRecord{}, fmt.Errorf("decode which client certificates the %s load balancer of tier %s trusts: %w", Kind, tier, err)
+			return records.Entry{}, trustRecord{}, fmt.Errorf("decode which client certificates the %s load balancer of tier %s trusts: %w", Kind, tier, err)
 		}
 	}
 	return entry, read, nil
@@ -150,7 +150,7 @@ func (e *Edge) changeTrust(ctx context.Context, tier environment.Tier, change fu
 			return trustRecord{}, err
 		}
 		_, err = e.deps.KeyValues.Write(ctx, entry)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -163,13 +163,13 @@ func (e *Edge) changeTrust(ctx context.Context, tier environment.Tier, change fu
 
 func (e *Edge) forgetTrust(ctx context.Context, tier environment.Tier) error {
 	entry, err := e.deps.KeyValues.Read(ctx, e.trustKey(tier))
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return nil
 	}
 	if err == nil {
 		err = e.deps.KeyValues.Remove(ctx, entry.Key, entry.Revision)
 	}
-	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+	if err != nil && !errors.Is(err, records.ErrNotFound) {
 		return fmt.Errorf("forget which client certificates the %s load balancer of tier %s trusted: %w", Kind, tier, err)
 	}
 	return nil

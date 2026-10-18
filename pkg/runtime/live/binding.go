@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -72,7 +72,7 @@ func (l Binding) conform(raw string) error {
 	if err := protojson.Unmarshal([]byte(raw), binding); err != nil {
 		return fmt.Errorf("%w: binding %s published something under %s that is not a binding record at all, and this deployment was built to read a %s", ErrDrift, l.Name, l.Key, l.Type)
 	}
-	published := naming.BindingTypeOf(binding)
+	published := bindings.TypeOf(binding)
 	if published == bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED {
 		return fmt.Errorf("%w: binding %s published a record under %s that has no properties, and this deployment was built to read a %s", ErrDrift, l.Name, l.Key, l.Type)
 	}

@@ -1,4 +1,4 @@
-package keyvalue_test
+package records_test
 
 import (
 	"os/exec"

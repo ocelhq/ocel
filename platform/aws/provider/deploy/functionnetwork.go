@@ -19,10 +19,10 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -206,7 +206,7 @@ func listFunctionNetworkResources(tier environment.Tier, network functionNetwork
 	return append(resources, provider.PartResource{Kind: "AWS::EC2::SecurityGroup", ID: network.SecurityGroup})
 }
 
-func ReadFunctionNetworkPart(ctx context.Context, store keyvalue.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+func ReadFunctionNetworkPart(ctx context.Context, store records.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
 	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, tier, FunctionNetworkPart)
 	if err != nil || !present {
 		return provider.BootstrapPart{}, false, err
@@ -238,7 +238,7 @@ func RefuseFunctionNetworkInUse(tier environment.Tier, users []string) error {
 		strings.Join(users, ", "), tier)
 }
 
-func (r *Stacks) releaseFunctionNetwork(ctx context.Context, store keyvalue.Store, ref provider.StackRef, progress progress.Log) error {
+func (r *Stacks) releaseFunctionNetwork(ctx context.Context, store records.Store, ref provider.StackRef, progress progress.Log) error {
 	return r.releaseShared(ctx, functionNetworkShare, store, ref, progress)
 }
 

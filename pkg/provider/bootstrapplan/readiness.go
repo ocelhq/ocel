@@ -11,16 +11,16 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type Readiness struct {
 	Bootstrap provider.Bootstrap
-	KeyValues keyvalue.Store
+	KeyValues records.Store
 	WrittenBy provider.WrittenBy
 	Edge      edge.Kind
 	Statuses  *Statuses
@@ -323,7 +323,7 @@ func (r Readiness) Remove(ctx context.Context, shown provider.Plan, tier environ
 		return err
 	}
 	if tier == environment.TierPreview {
-		return keyvalue.Forget(ctx, r.KeyValues, stackrecords.NewPreviewKeyRecordKey())
+		return records.Forget(ctx, r.KeyValues, stackrecords.NewPreviewKeyRecordKey())
 	}
 	return nil
 }
@@ -449,7 +449,7 @@ func (r Readiness) Users(ctx context.Context, tier environment.Tier) (Users, err
 	slices.Sort(projects)
 	users := Users{Projects: slices.Compact(projects)}
 
-	wildcard, err := keyvalue.ReadOrEmpty(ctx, r.KeyValues, stackrecords.WildcardKey(tier))
+	wildcard, err := records.ReadOrEmpty(ctx, r.KeyValues, stackrecords.WildcardKey(tier))
 	if err != nil {
 		return Users{}, fmt.Errorf("read the %s preview wildcard: %w", tier, err)
 	}

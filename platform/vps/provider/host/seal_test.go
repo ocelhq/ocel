@@ -17,10 +17,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -280,7 +280,7 @@ func TestABindingValueTheSealHelperSealedUnderItsNameOpensThroughTheBoxCipher(t 
 		"records": `{"version":1,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`,
 		"values":  `{"version":1,"sealed":"CX0mtCiLOU33J+IBAIofm6utJftVMG2ehAO1QnHkyAdwJtmaBxEIsCZIQtFxqRz0OdtdvSg0/g=="}`,
 	} {
-		if _, err := rows.Write(context.Background(), keyvalue.Entry{
+		if _, err := rows.Write(context.Background(), records.Entry{
 			Key:   variablestore.ValuesPartition(scope).Key("bindings", "orders", name, "*"),
 			Value: []byte(body),
 		}); err != nil {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
@@ -207,11 +207,11 @@ func TestAnInlineBucketIsRefusedWhereNoStoreCouldBeReached(t *testing.T) {
 }
 
 func TestAnInlineBindingIsBoundUnderANameNoPublisherOwns(t *testing.T) {
-	_, err := loadJSON(t, `{"slug":"shop","bindings":{"postgres":{"orders":"@`+naming.InlineRecordPrefix+`postgres.orders"}}}`)
+	_, err := loadJSON(t, `{"slug":"shop","bindings":{"postgres":{"orders":"@`+bindings.InlineRecordPrefix+`postgres.orders"}}}`)
 	if err == nil {
 		t.Fatal("resolved a binding to a record name reserved for inline bindings")
 	}
-	if !strings.Contains(err.Error(), naming.InlineRecordPrefix) {
+	if !strings.Contains(err.Error(), bindings.InlineRecordPrefix) {
 		t.Errorf("error %q does not name the reserved prefix", err)
 	}
 }

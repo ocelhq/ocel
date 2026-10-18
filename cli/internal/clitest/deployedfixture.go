@@ -8,10 +8,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -22,7 +22,7 @@ func RecordEdgeStack(t *testing.T, project FakeProject, tier environment.Tier, k
 	ctx := context.Background()
 	store := project.Provider.KeyValues()
 	name := stackrecords.EdgeStackKey(tier, FixtureSlug)
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	recorded, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
 	}

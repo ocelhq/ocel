@@ -8,7 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
@@ -31,15 +31,15 @@ type gatePublication struct {
 	Confirmed bool          `json:"confirmed,omitempty"`
 }
 
-func gatePartition(tier environment.Tier) keyvalue.Partition {
+func gatePartition(tier environment.Tier) records.Partition {
 	return stackrecords.EdgeStacksPartition(tier)
 }
 
-func gateRecordKey(tier environment.Tier, slug string) keyvalue.Key {
+func gateRecordKey(tier environment.Tier, slug string) records.Key {
 	return gatePartition(tier).Key(string(Kind), gateRecordsSegment, slug)
 }
 
-func gatePublicationKey(tier environment.Tier) keyvalue.Key {
+func gatePublicationKey(tier environment.Tier) records.Key {
 	return gatePartition(tier).Key(string(Kind), gatePublicationName)
 }
 
@@ -83,17 +83,17 @@ func (e *Edge) readGateRecord(ctx context.Context, tier environment.Tier, slug s
 	return record, found, err
 }
 
-func (e *Edge) readGateRecordEntry(ctx context.Context, tier environment.Tier, slug string) (keyvalue.Entry, gateRecord, bool, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, gateRecordKey(tier, slug))
+func (e *Edge) readGateRecordEntry(ctx context.Context, tier environment.Tier, slug string) (records.Entry, gateRecord, bool, error) {
+	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, gateRecordKey(tier, slug))
 	if err != nil {
-		return keyvalue.Entry{}, gateRecord{}, false, fmt.Errorf("read the %s gate of %s on the %s edge: %w", tier, slug, Kind, err)
+		return records.Entry{}, gateRecord{}, false, fmt.Errorf("read the %s gate of %s on the %s edge: %w", tier, slug, Kind, err)
 	}
 	if len(entry.Value) == 0 {
 		return entry, gateRecord{}, false, nil
 	}
 	var record gateRecord
 	if err := e.openRecord(ctx, tier, gateRecordData(tier, slug), entry.Value, &record); err != nil {
-		return keyvalue.Entry{}, gateRecord{}, false, err
+		return records.Entry{}, gateRecord{}, false, err
 	}
 	return entry, record, true, nil
 }
@@ -109,7 +109,7 @@ func (e *Edge) changeGateRecord(ctx context.Context, tier environment.Tier, slug
 		case !keep && !found:
 			return false, nil
 		case !keep:
-			return true, keyvalue.Forget(ctx, e.deps.KeyValues, entry.Key)
+			return true, records.Forget(ctx, e.deps.KeyValues, entry.Key)
 		case found && sameGateRecord(recorded, next):
 			return false, nil
 		}
@@ -120,7 +120,7 @@ func (e *Edge) changeGateRecord(ctx context.Context, tier environment.Tier, slug
 		if err == nil {
 			return true, nil
 		}
-		if !errors.Is(err, keyvalue.ErrStale) {
+		if !errors.Is(err, records.ErrStale) {
 			return false, fmt.Errorf("record the %s gate of %s on the %s edge: %w", tier, slug, Kind, err)
 		}
 	}
@@ -133,7 +133,7 @@ func sameGateRecord(a, b gateRecord) bool {
 	return string(left) == string(right)
 }
 
-func (e *Edge) listGateEntries(ctx context.Context, tier environment.Tier) ([]keyvalue.Entry, error) {
+func (e *Edge) listGateEntries(ctx context.Context, tier environment.Tier) ([]records.Entry, error) {
 	entries, err := e.deps.KeyValues.List(ctx, gatePartition(tier), string(Kind), gateRecordsSegment)
 	if err != nil {
 		return nil, fmt.Errorf("list the %s gates the %s edge runs: %w", tier, Kind, err)
@@ -167,31 +167,31 @@ func (e *Edge) readGatePublication(ctx context.Context, tier environment.Tier) (
 	return publication, found, err
 }
 
-func (e *Edge) readGatePublicationEntry(ctx context.Context, tier environment.Tier) (keyvalue.Entry, gatePublication, bool, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, gatePublicationKey(tier))
+func (e *Edge) readGatePublicationEntry(ctx context.Context, tier environment.Tier) (records.Entry, gatePublication, bool, error) {
+	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, gatePublicationKey(tier))
 	if err != nil {
-		return keyvalue.Entry{}, gatePublication{}, false, fmt.Errorf("read what the gate plugin of the %s edge's %s load balancer runs: %w", Kind, tier, err)
+		return records.Entry{}, gatePublication{}, false, fmt.Errorf("read what the gate plugin of the %s edge's %s load balancer runs: %w", Kind, tier, err)
 	}
 	if len(entry.Value) == 0 {
 		return entry, gatePublication{}, false, nil
 	}
 	var publication gatePublication
 	if err := e.openRecord(ctx, tier, gatePublicationData(tier), entry.Value, &publication); err != nil {
-		return keyvalue.Entry{}, gatePublication{}, false, err
+		return records.Entry{}, gatePublication{}, false, err
 	}
 	return entry, publication, true, nil
 }
 
-func (e *Edge) writeGatePublication(ctx context.Context, tier environment.Tier, entry keyvalue.Entry, publication gatePublication) (keyvalue.Entry, error) {
+func (e *Edge) writeGatePublication(ctx context.Context, tier environment.Tier, entry records.Entry, publication gatePublication) (records.Entry, error) {
 	var err error
 	if entry.Value, err = e.sealRecord(ctx, tier, gatePublicationData(tier), publication); err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	if entry.Revision, err = e.deps.KeyValues.Write(ctx, entry); err != nil {
-		if errors.Is(err, keyvalue.ErrStale) {
-			return keyvalue.Entry{}, err
+		if errors.Is(err, records.ErrStale) {
+			return records.Entry{}, err
 		}
-		return keyvalue.Entry{}, fmt.Errorf("record what the gate plugin of the %s edge's %s load balancer runs: %w", Kind, tier, err)
+		return records.Entry{}, fmt.Errorf("record what the gate plugin of the %s edge's %s load balancer runs: %w", Kind, tier, err)
 	}
 	return entry, nil
 }
@@ -202,9 +202,9 @@ func (e *Edge) forgetGates(ctx context.Context, tier environment.Tier) error {
 		return err
 	}
 	for _, entry := range entries {
-		if err := keyvalue.Forget(ctx, e.deps.KeyValues, entry.Key); err != nil {
+		if err := records.Forget(ctx, e.deps.KeyValues, entry.Key); err != nil {
 			return fmt.Errorf("forget the %s gate %s on the %s edge: %w", tier, entry.Key, Kind, err)
 		}
 	}
-	return keyvalue.Forget(ctx, e.deps.KeyValues, gatePublicationKey(tier))
+	return records.Forget(ctx, e.deps.KeyValues, gatePublicationKey(tier))
 }

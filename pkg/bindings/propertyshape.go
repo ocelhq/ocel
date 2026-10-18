@@ -1,4 +1,4 @@
-package naming
+package bindings
 
 import (
 	"maps"
@@ -33,7 +33,7 @@ func PropertyShapeMessages(shapes []PropertyShape) []*variablestorev1.PropertySh
 	return out
 }
 
-func BindingPropertyShapes(l *bindingsv1.Binding) []PropertyShape {
+func PropertyShapes(l *bindingsv1.Binding) []PropertyShape {
 	if custom := l.GetCustom(); custom != nil {
 		fields := custom.GetFields()
 		out := make([]PropertyShape, 0, len(fields))

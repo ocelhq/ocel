@@ -12,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -21,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -48,7 +48,7 @@ func seedWildcard(t *testing.T, vendor *fake.Provider, wildcard stackrecords.Wil
 		t.Fatal(err)
 	}
 	name := stackrecords.WildcardKey(environment.TierPreview)
-	entry, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
+	entry, err := records.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func seedWildcard(t *testing.T, vendor *fake.Provider, wildcard stackrecords.Wil
 
 func readRecordedWildcard(t *testing.T, vendor *fake.Provider) stackrecords.Wildcard {
 	t.Helper()
-	entry, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.WildcardKey(environment.TierPreview))
+	entry, err := records.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.WildcardKey(environment.TierPreview))
 	if err != nil {
 		t.Fatal(err)
 	}

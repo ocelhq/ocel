@@ -14,8 +14,8 @@ import (
 
 	"cloud.google.com/go/firestore"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/pkg/runs/runsconformance"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -155,7 +155,7 @@ func TestLiveARunOfAnotherTopicUnderTheSameExecutionIsNotFound(t *testing.T) {
 	if _, err := store.CreateRun(ctx, runs.Run{Execution: "shared", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, CreatedAt: now, DueAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ReadRun(ctx, "thumbnail", "shared"); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := store.ReadRun(ctx, "thumbnail", "shared"); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("ReadRun of another topic's run = %v, want ErrNotFound", err)
 	}
 }

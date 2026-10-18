@@ -11,9 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -129,7 +129,7 @@ func (p *Provider) Artifacts() provider.ArtifactStore {
 	return awsports.Artifacts{S3: s3.NewFromConfig(p.aws), Stores: p}
 }
 
-func (p *Provider) KeyValues() keyvalue.Store {
+func (p *Provider) KeyValues() records.Store {
 	return awsports.KeyValues{Dynamo: dynamodb.NewFromConfig(p.aws), Tables: p}
 }
 

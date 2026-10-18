@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -22,7 +22,7 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheEntriesARootBootstrapWrote(t *te
 	name := stackrecords.ProjectKey(environment.TierProduction, "keyvalues-induction")
 	ctx := context.Background()
 
-	entry, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	entry, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		t.Fatalf("read %s as %s = %v, want the tier a bootstrap wrote as root readable by the login every deploy runs as: the whole deploy path reads before it writes, so a tier this login cannot open is a box nothing can deploy to",
 			name, deployLogin, err)

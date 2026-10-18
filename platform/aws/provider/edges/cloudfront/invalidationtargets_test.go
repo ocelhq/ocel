@@ -6,19 +6,19 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type contendedKeyValues struct {
-	keyvalue.Store
+	records.Store
 	beaten int
 }
 
-func (c *contendedKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (c *contendedKeyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	if c.beaten > 0 {
 		c.beaten--
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	return c.Store.Write(ctx, entry)
 }
@@ -64,7 +64,7 @@ func TestAnInvalidationTargetIsRemovedWithoutTouchingTheOthers(t *testing.T) {
 		t.Fatalf("remove(E2) = %v", err)
 	}
 
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, targets.partition.Key("invalidation"))
+	recorded, err := records.ReadOrEmpty(ctx, store, targets.partition.Key("invalidation"))
 	if err != nil {
 		t.Fatal(err)
 	}

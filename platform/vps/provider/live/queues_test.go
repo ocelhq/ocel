@@ -6,18 +6,18 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func written(t *testing.T, store keyvalue.Store, key keyvalue.Key, value any) {
+func written(t *testing.T, store records.Store, key records.Key, value any) {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Write(context.Background(), keyvalue.Entry{Key: key, Value: raw}); err != nil {
+	if _, err := store.Write(context.Background(), records.Entry{Key: key, Value: raw}); err != nil {
 		t.Fatal(err)
 	}
 }

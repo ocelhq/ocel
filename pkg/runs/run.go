@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type Run struct {
@@ -35,7 +35,7 @@ type Run struct {
 	FinishedAt time.Time
 	ExpiresAt  time.Time
 
-	Revision keyvalue.Revision
+	Revision records.Revision
 }
 
 type RunFilter struct {

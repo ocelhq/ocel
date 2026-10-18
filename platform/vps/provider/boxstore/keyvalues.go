@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -61,24 +61,24 @@ func (s *KeyValues) run(ctx context.Context, tier environment.Tier, unprovisione
 	return s.over.Run(ctx, tier, stdin, argv...)
 }
 
-func (s *KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s *KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	path, err := live.PathOf(key)
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
-	rendered, err := s.run(ctx, key.Partition.Tier, keyvalue.ErrNotFound, nil, "read", path)
+	rendered, err := s.run(ctx, key.Partition.Tier, records.ErrNotFound, nil, "read", path)
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	revision, value, split := strings.Cut(strings.TrimRight(rendered, "\n"), "\t")
 	if !split {
-		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeDenied,
+		return records.Entry{}, refusal.Refuse(refusal.CodeDenied,
 			"the key-value helper answered a read with %q", rendered)
 	}
 	return entryOf(key, revision, value)
 }
 
-func (s *KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s *KeyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	path, line, err := encodeEntry(entry)
 	if err != nil {
 		return "", err
@@ -91,7 +91,7 @@ func (s *KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.R
 	return parseRevision(rendered)
 }
 
-func (s *KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
+func (s *KeyValues) WritePair(ctx context.Context, first, second records.Entry) error {
 	one, firstLine, err := encodeEntry(first)
 	if err != nil {
 		return err
@@ -123,12 +123,12 @@ func (s *KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry)
 	return err
 }
 
-func (s *KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (s *KeyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
 	path, err := live.PathOf(key)
 	if err != nil {
 		return err
 	}
-	rendered, err := s.run(ctx, key.Partition.Tier, keyvalue.ErrNotFound, nil, "remove", path, string(expected))
+	rendered, err := s.run(ctx, key.Partition.Tier, records.ErrNotFound, nil, "remove", path, string(expected))
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (s *KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyva
 	return nil
 }
 
-func (s *KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s *KeyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	dir, err := live.PartitionDir(in)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func (s *KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...st
 	if err != nil {
 		return nil, err
 	}
-	var found []keyvalue.Entry
+	var found []records.Entry
 	for _, line := range strings.Split(strings.TrimSpace(rendered), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -182,8 +182,8 @@ func (s *KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...st
 	return found, nil
 }
 
-func encodeEntry(entry keyvalue.Entry) (string, []byte, error) {
-	if err := keyvalue.RefuseUnwritable(entry); err != nil {
+func encodeEntry(entry records.Entry) (string, []byte, error) {
+	if err := records.RefuseUnwritable(entry); err != nil {
 		return "", nil, err
 	}
 	path, err := live.PathOf(entry.Key)
@@ -197,24 +197,24 @@ func encodeEntry(entry keyvalue.Entry) (string, []byte, error) {
 	return path, append(line.Bytes(), '\n'), nil
 }
 
-func entryOf(key keyvalue.Key, revision, value string) (keyvalue.Entry, error) {
+func entryOf(key records.Key, revision, value string) (records.Entry, error) {
 	if !json.Valid([]byte(value)) {
-		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s is not an entry ocel wrote", key)
+		return records.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s is not an entry ocel wrote", key)
 	}
 	parsed, err := parseRevision(revision)
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
-	return keyvalue.Entry{Key: key, Value: []byte(value), Revision: parsed}, nil
+	return records.Entry{Key: key, Value: []byte(value), Revision: parsed}, nil
 }
 
-func parseRevision(rendered string) (keyvalue.Revision, error) {
+func parseRevision(rendered string) (records.Revision, error) {
 	revision := strings.TrimSpace(rendered)
 	if len(revision) != revisionWidth || strings.Trim(revision, revisionHex) != "" {
 		return "", refusal.Refuse(refusal.CodeDenied,
 			"the key-value helper answered %q, not a revision", rendered)
 	}
-	return keyvalue.Revision(revision), nil
+	return records.Revision(revision), nil
 }
 
-var _ keyvalue.Store = (*KeyValues)(nil)
+var _ records.Store = (*KeyValues)(nil)

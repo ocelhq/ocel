@@ -5,8 +5,8 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -58,21 +58,21 @@ func liveKeys(values provider.AppValues) []live.Key {
 }
 
 func liveBindings(values provider.AppValues) []live.Binding {
-	bindings := make([]live.Binding, 0, len(values.Bindings))
+	declared := make([]live.Binding, 0, len(values.Bindings))
 	for _, binding := range values.Bindings {
 		kind := provider.ProtoBindingType(binding.Type)
 		resource := binding.Resource
 		if resource == "" {
 			resource = binding.Name
 		}
-		bindings = append(bindings, live.Binding{
+		declared = append(declared, live.Binding{
 			Name:    binding.Name,
-			Key:     naming.ResourceEnvName(kind, resource),
+			Key:     bindings.ResourceEnvName(kind, resource),
 			Type:    kind,
 			Granted: binding.Version,
 		})
 	}
-	return bindings
+	return declared
 }
 
 const (

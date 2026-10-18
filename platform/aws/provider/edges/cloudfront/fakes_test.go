@@ -27,10 +27,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -84,7 +84,7 @@ type fakeParts struct {
 	ensured []string
 }
 
-func (w *world) records() keyvalue.Store {
+func (w *world) records() records.Store {
 	return awsports.KeyValues{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
 }
 
@@ -121,7 +121,7 @@ func (w *world) ledgerItems() int {
 	for key := range w.dynamo.items {
 		recorded := false
 		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-			recorded = recorded || strings.HasPrefix(key, awsports.PartitionKey(keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}))
+			recorded = recorded || strings.HasPrefix(key, awsports.PartitionKey(records.Partition{Tier: tier, Root: stackrecords.RootBootstrap}))
 		}
 		if !recorded {
 			n++
@@ -176,7 +176,7 @@ func (w *world) clients() Clients {
 	}
 }
 
-func (w *world) invalidationTargets(in keyvalue.Partition) []string {
+func (w *world) invalidationTargets(in records.Partition) []string {
 	value, _ := w.dynamo.items[awsports.PartitionKey(in)+"\x00invalidation#"]["value"].(*ddbtypes.AttributeValueMemberS)
 	if value == nil {
 		return nil

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
 
@@ -31,18 +31,18 @@ func NewStore() *Store {
 	return &Store{runs: map[runKey]runs.Run{}, records: map[recordKey]provider.ExpiringRecord{}}
 }
 
-func (s *Store) CreateRun(_ context.Context, run runs.Run) (keyvalue.Revision, error) {
+func (s *Store) CreateRun(_ context.Context, run runs.Run) (records.Revision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := runKey{run.Topic, run.Execution}
 	if _, found := s.runs[key]; found {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	return s.put(key, run)
 }
 
-func (s *Store) put(key runKey, run runs.Run) (keyvalue.Revision, error) {
-	revision, err := keyvalue.NewRevision()
+func (s *Store) put(key runKey, run runs.Run) (records.Revision, error) {
+	revision, err := records.NewRevision()
 	if err != nil {
 		return "", err
 	}
@@ -57,19 +57,19 @@ func (s *Store) ReadRun(_ context.Context, topic, execution string) (runs.Run, e
 	defer s.mu.Unlock()
 	run, found := s.runs[runKey{topic, execution}]
 	if !found {
-		return runs.Run{}, keyvalue.ErrNotFound
+		return runs.Run{}, records.ErrNotFound
 	}
 	run.Tags = slices.Clone(run.Tags)
 	return run, nil
 }
 
-func (s *Store) WriteRun(_ context.Context, run runs.Run) (keyvalue.Revision, error) {
+func (s *Store) WriteRun(_ context.Context, run runs.Run) (records.Revision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := runKey{run.Topic, run.Execution}
 	stored, found := s.runs[key]
 	if !found || run.Revision == "" || stored.Revision != run.Revision {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	return s.put(key, run)
 }
@@ -80,7 +80,7 @@ func (s *Store) DeleteRun(_ context.Context, run runs.Run) error {
 	key := runKey{run.Topic, run.Execution}
 	stored, found := s.runs[key]
 	if !found || stored.Revision != run.Revision {
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	delete(s.runs, key)
 	return nil
@@ -170,7 +170,7 @@ func (s *Store) ReplaceRecord(_ context.Context, record provider.ExpiringRecord,
 	defer s.mu.Unlock()
 	key := recordKey{record.Purpose, record.Topic, record.Key}
 	if current, found := s.records[key]; !found || !bytes.Equal(current.Value, held) {
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	s.records[key] = record
 	return nil

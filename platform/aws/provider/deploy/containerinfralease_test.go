@@ -11,21 +11,21 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type interceptedRecords struct {
-	keyvalue.Store
-	afterList func(under keyvalue.Key)
+	records.Store
+	afterList func(under records.Key)
 }
 
-func (r *interceptedRecords) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (r *interceptedRecords) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	listed, err := r.Store.List(ctx, in, under...)
 	if r.afterList != nil {
 		r.afterList(in.Key(under...))
@@ -33,12 +33,12 @@ func (r *interceptedRecords) List(ctx context.Context, in keyvalue.Partition, un
 	return listed, err
 }
 
-func listConsumers(ctx context.Context, store keyvalue.Store) ([]keyvalue.Entry, error) {
+func listConsumers(ctx context.Context, store records.Store) ([]records.Entry, error) {
 	consumers := containerShare.consumersPrefix(environment.TierProduction)
 	return store.List(ctx, consumers.Partition, consumers.Path...)
 }
 
-func containerStacks(t *testing.T, store keyvalue.Store) (*Stacks, *mockedEngine, provider.StackSpec) {
+func containerStacks(t *testing.T, store records.Store) (*Stacks, *mockedEngine, provider.StackSpec) {
 	t.Helper()
 	cfg, spec := containerStackSpec(t)
 	cfg.KeyValues = store
@@ -68,7 +68,7 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 	other, _, blog := containerStacks(t, shared)
 	blog.Ref = provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	claimed := false
-	store.afterList = func(under keyvalue.Key) {
+	store.afterList = func(under records.Key) {
 		if claimed || under.String() != containerShare.consumersPrefix(environment.TierProduction).String() {
 			return
 		}
@@ -107,7 +107,7 @@ func TestAContainerDeployIsRefusedWhileTheContainerInfraIsGoingDown(t *testing.T
 	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	leased, err := keyvalue.ReadOrEmpty(ctx, shared, containerShare.leaseAt(environment.TierProduction))
+	leased, err := records.ReadOrEmpty(ctx, shared, containerShare.leaseAt(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestAContainerDeployTakesOverATakedownLeaseACrashedRunLeftBehind(t *testing
 	if _, err := stacks.Provision(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	leased, err := keyvalue.ReadOrEmpty(ctx, shared, containerShare.leaseAt(environment.TierProduction))
+	leased, err := records.ReadOrEmpty(ctx, shared, containerShare.leaseAt(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}

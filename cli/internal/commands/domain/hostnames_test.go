@@ -15,12 +15,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -71,7 +71,7 @@ func recordWildcard(t *testing.T, project clitest.FakeProject, wildcard stackrec
 	t.Helper()
 	ctx := context.Background()
 	name := stackrecords.WildcardKey(environment.TierPreview)
-	recorded, err := keyvalue.ReadOrEmpty(ctx, project.Provider.KeyValues(), name)
+	recorded, err := records.ReadOrEmpty(ctx, project.Provider.KeyValues(), name)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,8 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/pkg/kvstore"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/valkey"
 )
 
 const (
@@ -143,7 +143,7 @@ func collectKVBinding(ctx context.Context, params ParametersAPI, name string, fi
 	if err != nil {
 		return nil, err
 	}
-	port := kvstore.ValkeyPort
+	port := valkey.Port
 	if recorded, ok := fields[outputKeyPort].(float64); ok {
 		port = int(recorded)
 	}

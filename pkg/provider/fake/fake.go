@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
 
@@ -149,7 +149,7 @@ func (p *Provider) Stacks() provider.Stacks {
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return p.artifacts }
 
-func (p *Provider) KeyValues() keyvalue.Store { return p.keyValues }
+func (p *Provider) KeyValues() records.Store { return p.keyValues }
 
 func (p *Provider) Cipher() seal.Cipher { return p.cipher }
 

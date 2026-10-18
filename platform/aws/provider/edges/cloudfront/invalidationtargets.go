@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const (
@@ -20,8 +21,8 @@ const (
 	invalidationRetryCeiling = 2 * time.Second
 )
 
-func newInvalidationPartition(tier environment.Tier, slug string) keyvalue.Partition {
-	partition := keyvalue.Partition{Tier: tier, Root: keyvalue.RootRouters, Path: []string{string(Kind)}}
+func newInvalidationPartition(tier environment.Tier, slug string) records.Partition {
+	partition := records.Partition{Tier: tier, Root: stackrecords.RootRouters, Path: []string{string(Kind)}}
 	if slug != "" {
 		partition.Path = append(partition.Path, naming.Sanitize(slug))
 	}
@@ -29,8 +30,8 @@ func newInvalidationPartition(tier environment.Tier, slug string) keyvalue.Parti
 }
 
 type invalidationTargets struct {
-	keyValues keyvalue.Store
-	partition keyvalue.Partition
+	keyValues records.Store
+	partition records.Partition
 	wait      func(context.Context, time.Duration) error
 }
 
@@ -61,7 +62,7 @@ func (t invalidationTargets) rewrite(ctx context.Context, distribution string, c
 				return err
 			}
 		}
-		recorded, err := keyvalue.ReadOrEmpty(ctx, t.keyValues, at)
+		recorded, err := records.ReadOrEmpty(ctx, t.keyValues, at)
 		if err != nil {
 			return fmt.Errorf("read the invalidation targets for %s: %w", t.partition, err)
 		}
@@ -77,7 +78,7 @@ func (t invalidationTargets) rewrite(ctx context.Context, distribution string, c
 			return nil
 		}
 		if err := t.write(ctx, recorded, changed); err != nil {
-			if errors.Is(err, keyvalue.ErrStale) {
+			if errors.Is(err, records.ErrStale) {
 				continue
 			}
 			return fmt.Errorf("record the invalidation targets for %s: %w", t.partition, err)
@@ -95,7 +96,7 @@ func (t invalidationTargets) backoff(ctx context.Context, attempt int) error {
 	return waitFor(ctx, delay)
 }
 
-func (t invalidationTargets) write(ctx context.Context, recorded keyvalue.Entry, targets []string) error {
+func (t invalidationTargets) write(ctx context.Context, recorded records.Entry, targets []string) error {
 	if len(targets) == 0 {
 		return t.keyValues.Remove(ctx, recorded.Key, recorded.Revision)
 	}

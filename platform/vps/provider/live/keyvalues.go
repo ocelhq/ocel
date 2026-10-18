@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -32,29 +32,29 @@ var errReadOnly = errors.New("the box's entries are read-only here")
 
 type KeyValues struct{ Root string }
 
-func (s KeyValues) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s KeyValues) Read(_ context.Context, key records.Key) (records.Entry, error) {
 	path, err := PathOf(key)
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	raw, err := os.ReadFile(filepath.Join(KeyValuesDir(s.Root, key.Partition.Tier), path+EntrySuffix))
 	if errors.Is(err, fs.ErrNotExist) {
-		return keyvalue.Entry{}, keyvalue.ErrNotFound
+		return records.Entry{}, records.ErrNotFound
 	}
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	return entryOf(key, raw)
 }
 
-func (s KeyValues) List(_ context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s KeyValues) List(_ context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	dir, err := PartitionDir(in)
 	if err != nil {
 		return nil, err
 	}
 	partition := filepath.Join(KeyValuesDir(s.Root, in.Tier), dir)
 	beneath := partition
-	var found []keyvalue.Entry
+	var found []records.Entry
 	if len(under) > 0 {
 		prefix, err := encodePath(under)
 		if err != nil {
@@ -92,49 +92,49 @@ func (s KeyValues) List(_ context.Context, in keyvalue.Partition, under ...strin
 	return found, nil
 }
 
-func (s KeyValues) entryAt(in keyvalue.Partition, partition, path string) (keyvalue.Entry, error) {
+func (s KeyValues) entryAt(in records.Partition, partition, path string) (records.Entry, error) {
 	relative, err := filepath.Rel(partition, strings.TrimSuffix(path, EntrySuffix))
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	key, err := KeyOf(in, filepath.ToSlash(relative))
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	return entryOf(key, raw)
 }
 
-func (KeyValues) Write(context.Context, keyvalue.Entry) (keyvalue.Revision, error) {
+func (KeyValues) Write(context.Context, records.Entry) (records.Revision, error) {
 	return "", errReadOnly
 }
 
-func (KeyValues) WritePair(context.Context, keyvalue.Entry, keyvalue.Entry) error {
+func (KeyValues) WritePair(context.Context, records.Entry, records.Entry) error {
 	return errReadOnly
 }
 
-func (KeyValues) Remove(context.Context, keyvalue.Key, keyvalue.Revision) error {
+func (KeyValues) Remove(context.Context, records.Key, records.Revision) error {
 	return errReadOnly
 }
 
 type entryFile struct {
-	Revision keyvalue.Revision `json:"revision"`
-	Value    json.RawMessage   `json:"value"`
+	Revision records.Revision `json:"revision"`
+	Value    json.RawMessage  `json:"value"`
 }
 
-func entryOf(key keyvalue.Key, raw []byte) (keyvalue.Entry, error) {
+func entryOf(key records.Key, raw []byte) (records.Entry, error) {
 	var file entryFile
 	if err := json.Unmarshal(raw, &file); err != nil || file.Revision == "" || len(file.Value) == 0 {
-		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s is not an entry ocel wrote", key)
+		return records.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s is not an entry ocel wrote", key)
 	}
-	return keyvalue.Entry{Key: key, Value: file.Value, Revision: file.Revision}, nil
+	return records.Entry{Key: key, Value: file.Value, Revision: file.Revision}, nil
 }
 
-func PartitionDir(in keyvalue.Partition) (string, error) {
-	if err := keyvalue.RefuseMalformedPartition(in); err != nil {
+func PartitionDir(in records.Partition) (string, error) {
+	if err := records.RefuseMalformedPartition(in); err != nil {
 		return "", err
 	}
 	segments := in.Segments()
@@ -144,8 +144,8 @@ func PartitionDir(in keyvalue.Partition) (string, error) {
 	return strings.Join(segments, segmentSeparator), nil
 }
 
-func PathOf(key keyvalue.Key) (string, error) {
-	if err := keyvalue.RefuseMalformedKey(key); err != nil {
+func PathOf(key records.Key) (string, error) {
+	if err := records.RefuseMalformedKey(key); err != nil {
 		return "", err
 	}
 	dir, err := PartitionDir(key.Partition)
@@ -171,7 +171,7 @@ func encodePath(path []string) (string, error) {
 }
 
 func encodeSegment(segment string) string {
-	escaped := keyvalue.EscapeSegment(segment, isPlain)
+	escaped := records.EscapeSegment(segment, isPlain)
 	if strings.HasPrefix(escaped, ".") {
 		return "%2E" + escaped[1:]
 	}
@@ -187,16 +187,16 @@ func isPlain(c byte) bool {
 	}
 }
 
-func KeyOf(in keyvalue.Partition, encoded string) (keyvalue.Key, error) {
+func KeyOf(in records.Partition, encoded string) (records.Key, error) {
 	var path []string
 	for _, segment := range strings.Split(encoded, "/") {
-		decoded, err := keyvalue.UnescapeSegment(segment)
+		decoded, err := records.UnescapeSegment(segment)
 		if err != nil {
-			return keyvalue.Key{}, err
+			return records.Key{}, err
 		}
 		path = append(path, decoded)
 	}
 	return in.Key(path...), nil
 }
 
-var _ keyvalue.Store = KeyValues{}
+var _ records.Store = KeyValues{}

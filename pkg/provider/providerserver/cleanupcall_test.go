@@ -11,29 +11,29 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type stallingStore struct {
-	keyvalue.Store
+	records.Store
 	armed   atomic.Bool
 	entered chan struct{}
 	release chan struct{}
 }
 
-func (s *stallingStore) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s *stallingStore) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if s.armed.CompareAndSwap(true, false) {
 		close(s.entered)
 		select {
 		case <-s.release:
 		case <-ctx.Done():
-			return keyvalue.Entry{}, ctx.Err()
+			return records.Entry{}, ctx.Err()
 		}
 	}
 	return s.Store.Read(ctx, key)
@@ -44,7 +44,7 @@ type stallingProvider struct {
 	store *stallingStore
 }
 
-func (p stallingProvider) KeyValues() keyvalue.Store { return p.store }
+func (p stallingProvider) KeyValues() records.Store { return p.store }
 
 type shuttingDownServer struct {
 	client   contractv1connect.ProviderServiceClient
@@ -123,7 +123,7 @@ func TestAForgetPreviewAliasInFlightWhenTheProviderShutsDownStillForgetsTheAlias
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := served.vendor.KeyValues().Write(context.Background(), keyvalue.Entry{Key: stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7"), Value: unclaimed}); err != nil {
+	if _, err := served.vendor.KeyValues().Write(context.Background(), records.Entry{Key: stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7"), Value: unclaimed}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,7 +137,7 @@ func TestAForgetPreviewAliasInFlightWhenTheProviderShutsDownStillForgetsTheAlias
 	if err != nil {
 		t.Fatalf("ForgetPreviewAlias() in flight as the provider shut down = %v, want it to finish within the shutdown window", err)
 	}
-	if _, err := served.vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7")); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := served.vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7")); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading pr-7 after its alias was forgotten = %v, want it gone", err)
 	}
 }

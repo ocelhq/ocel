@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -27,7 +27,7 @@ func TestEveryBindableResourceTypeHasABackend(t *testing.T) {
 	interrupt()
 	for number := range resourcesv1.ResourceType_name {
 		kind := resourcesv1.ResourceType(number)
-		if _, bindable := naming.BindableAs(kind); !bindable {
+		if _, bindable := bindings.BindableAs(kind); !bindable {
 			continue
 		}
 		stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})

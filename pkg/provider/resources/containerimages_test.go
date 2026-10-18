@@ -7,12 +7,12 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -219,23 +219,23 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 
 type unreadable struct{ *fake.KeyValues }
 
-func (unreadable) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
-	return keyvalue.Entry{}, errors.New("this login reads no key values in the tier")
+func (unreadable) Read(context.Context, records.Key) (records.Entry, error) {
+	return records.Entry{}, errors.New("this login reads no key values in the tier")
 }
 
 func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) {
 	t.Parallel()
 
-	for name, breaking := range map[string]func() (keyvalue.Store, provider.StackSpec){
-		"the record cannot be read": func() (keyvalue.Store, provider.StackSpec) {
+	for name, breaking := range map[string]func() (records.Store, provider.StackSpec){
+		"the record cannot be read": func() (records.Store, provider.StackSpec) {
 			return unreadable{fake.NewKeyValues()}, containerSpec()
 		},
-		"a resource names a primitive this provider never serves": func() (keyvalue.Store, provider.StackSpec) {
+		"a resource names a primitive this provider never serves": func() (records.Store, provider.StackSpec) {
 			spec := containerSpec()
 			spec.Resources = []provider.Resource{{Name: "ledger", Type: provider.BindingPostgres}}
 			return fake.NewKeyValues(), spec
 		},
-		"the app names a compute nothing provisions": func() (keyvalue.Store, provider.StackSpec) {
+		"the app names a compute nothing provisions": func() (records.Store, provider.StackSpec) {
 			spec := containerSpec()
 			spec.App.Compute = provider.Compute("steam")
 			return fake.NewKeyValues(), spec
@@ -487,12 +487,12 @@ func TestAReleaseOfAProviderThatReconcilesNothingStillProvisions(t *testing.T) {
 }
 
 type interleavedEntries struct {
-	keyvalue.Store
+	records.Store
 	tier    environment.Tier
 	between func()
 }
 
-func (i *interleavedEntries) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (i *interleavedEntries) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	entries, err := i.Store.List(ctx, in, under...)
 	if run := i.between; run != nil && in.Tier == i.tier {
 		i.between = nil
@@ -503,7 +503,7 @@ func (i *interleavedEntries) List(ctx context.Context, in keyvalue.Partition, un
 
 type claimedImages struct {
 	*buckets
-	store     keyvalue.Store
+	store     records.Store
 	reclaimed []string
 }
 
@@ -547,7 +547,7 @@ func TestTwoPreviewsSharingAnImageTornDownTogetherLeaveNoImageBehind(t *testing.
 			t.Fatal(err)
 		}
 	}
-	destroy := func(store keyvalue.Store, ref provider.StackRef, own *claimedImages) {
+	destroy := func(store records.Store, ref provider.StackRef, own *claimedImages) {
 		if err := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks()).Destroy(ctx, provider.StackDestroy{Ref: ref}, nil); err != nil {
 			t.Errorf("Destroy(%s) = %v", ref.Name, err)
 		}

@@ -15,8 +15,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -122,68 +122,68 @@ const fixtureStateTable = "ocel-state-table"
 
 type fakeRecords struct {
 	mu     sync.Mutex
-	rows   map[string]keyvalue.Entry
+	rows   map[string]records.Entry
 	rev    int
 	writes int
 	tables []string
 }
 
 func newFakeRecords() *fakeRecords {
-	return &fakeRecords{rows: map[string]keyvalue.Entry{}}
+	return &fakeRecords{rows: map[string]records.Entry{}}
 }
 
-func (f *fakeRecords) in(table string) keyvalue.Store {
+func (f *fakeRecords) in(table string) records.Store {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.tables = append(f.tables, table)
 	return f
 }
 
-func (f *fakeRecords) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (f *fakeRecords) Read(_ context.Context, key records.Key) (records.Entry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	recorded, ok := f.rows[key.String()]
 	if !ok {
-		return keyvalue.Entry{}, keyvalue.ErrNotFound
+		return records.Entry{}, records.ErrNotFound
 	}
 	return recorded, nil
 }
 
-func (f *fakeRecords) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (f *fakeRecords) Write(_ context.Context, entry records.Entry) (records.Revision, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := keyvalue.RefuseUnwritable(entry); err != nil {
+	if err := records.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
 	f.writes++
 	if f.rows[entry.Key.String()].Revision != entry.Revision {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	f.rev++
-	entry.Revision = keyvalue.Revision(fmt.Sprint(f.rev))
+	entry.Revision = records.Revision(fmt.Sprint(f.rev))
 	f.rows[entry.Key.String()] = entry
 	return entry.Revision, nil
 }
 
-func (f *fakeRecords) WritePair(context.Context, keyvalue.Entry, keyvalue.Entry) error {
+func (f *fakeRecords) WritePair(context.Context, records.Entry, records.Entry) error {
 	return fmt.Errorf("fakeRecords: no runtime layer write spans two entries")
 }
 
-func (f *fakeRecords) Remove(_ context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (f *fakeRecords) Remove(_ context.Context, key records.Key, expected records.Revision) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	recorded, ok := f.rows[key.String()]
 	if !ok {
-		return keyvalue.ErrNotFound
+		return records.ErrNotFound
 	}
 	if recorded.Revision != expected {
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	delete(f.rows, key.String())
 	return nil
 }
 
-func (f *fakeRecords) List(context.Context, keyvalue.Partition, ...string) ([]keyvalue.Entry, error) {
+func (f *fakeRecords) List(context.Context, records.Partition, ...string) ([]records.Entry, error) {
 	return nil, fmt.Errorf("fakeRecords: the runtime layers are reached by key, never listed")
 }
 

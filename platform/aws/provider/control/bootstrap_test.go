@@ -24,10 +24,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -647,23 +647,23 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 
 type emptyRecords struct{}
 
-func noRecords(string) keyvalue.Store { return emptyRecords{} }
+func noRecords(string) records.Store { return emptyRecords{} }
 
-func (emptyRecords) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
-	return keyvalue.Entry{}, keyvalue.ErrNotFound
+func (emptyRecords) Read(context.Context, records.Key) (records.Entry, error) {
+	return records.Entry{}, records.ErrNotFound
 }
 
-func (emptyRecords) Write(context.Context, keyvalue.Entry) (keyvalue.Revision, error) {
+func (emptyRecords) Write(context.Context, records.Entry) (records.Revision, error) {
 	return "1", nil
 }
 
-func (emptyRecords) WritePair(context.Context, keyvalue.Entry, keyvalue.Entry) error { return nil }
+func (emptyRecords) WritePair(context.Context, records.Entry, records.Entry) error { return nil }
 
-func (emptyRecords) Remove(context.Context, keyvalue.Key, keyvalue.Revision) error {
-	return keyvalue.ErrNotFound
+func (emptyRecords) Remove(context.Context, records.Key, records.Revision) error {
+	return records.ErrNotFound
 }
 
-func (emptyRecords) List(context.Context, keyvalue.Partition, ...string) ([]keyvalue.Entry, error) {
+func (emptyRecords) List(context.Context, records.Partition, ...string) ([]records.Entry, error) {
 	return nil, nil
 }
 

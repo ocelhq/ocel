@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -118,11 +118,11 @@ func TestRestoringARegistrationLeavesOneAnotherDeployRegisteredSince(t *testing.
 	}
 }
 
-func recordUndecodable(t *testing.T, store keyvalue.Store, tier environment.Tier, project string) {
+func recordUndecodable(t *testing.T, store records.Store, tier environment.Tier, project string) {
 	t.Helper()
 	ctx := context.Background()
-	key := keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvSources}.Key(project)
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, key)
+	key := records.Partition{Tier: tier, Root: envsource.RootRegistrations}.Key(project)
+	recorded, err := records.ReadOrEmpty(ctx, store, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,13 +141,13 @@ func recordUndecodable(t *testing.T, store keyvalue.Store, tier environment.Tier
 	}
 }
 
-func statusEntries(t *testing.T, store keyvalue.Store, tier environment.Tier) []keyvalue.Key {
+func statusEntries(t *testing.T, store records.Store, tier environment.Tier) []records.Key {
 	t.Helper()
-	listed, err := store.List(context.Background(), keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvSourceStatus})
+	listed, err := store.List(context.Background(), records.Partition{Tier: tier, Root: envsource.RootStatus})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var keys []keyvalue.Key
+	var keys []records.Key
 	for _, entry := range listed {
 		keys = append(keys, entry.Key)
 	}

@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -110,11 +110,11 @@ func (h *Service) ListBindings(ctx context.Context, req *variablestorev1.ListBin
 		}
 		resp.Bindings = append(resp.Bindings, &variablestorev1.BindingSummary{
 			Name:       published.Name,
-			Type:       naming.BindingTypeOf(record.GetBinding()),
+			Type:       bindings.TypeOf(record.GetBinding()),
 			Source:     record.GetBinding().GetSource(),
 			Owner:      published.Owner,
 			Version:    uint64(published.Version),
-			Properties: naming.PropertyShapeMessages(shapes),
+			Properties: bindings.PropertyShapeMessages(shapes),
 		})
 	}
 	return resp, nil
@@ -170,7 +170,7 @@ func BindingPair(owner string, published *variablestorev1.PublishedBinding) (var
 	if err != nil {
 		return variablestore.BindingWrite{}, fmt.Errorf("render binding %s's record: %w", name, err)
 	}
-	shapes, err := json.Marshal(naming.BindingPropertyShapes(published.GetBinding()))
+	shapes, err := json.Marshal(bindings.PropertyShapes(published.GetBinding()))
 	if err != nil {
 		return variablestore.BindingWrite{}, fmt.Errorf("render binding %s's shape: %w", name, err)
 	}
@@ -189,11 +189,11 @@ func redacted(published *variablestorev1.PublishedBinding) *variablestorev1.Publ
 	return out
 }
 
-func DecodeShapes(raw []byte) ([]naming.PropertyShape, error) {
+func DecodeShapes(raw []byte) ([]bindings.PropertyShape, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
-	var shapes []naming.PropertyShape
+	var shapes []bindings.PropertyShape
 	if err := json.Unmarshal(raw, &shapes); err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func RefuseUnsourced(publisher string, binding *bindingsv1.Binding) error {
 	if binding.GetSource() != "" {
 		return nil
 	}
-	if naming.BindingTypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_CUSTOM {
+	if bindings.TypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_CUSTOM {
 		return unsourcedCustom(binding)
 	}
 	return fmt.Errorf(
@@ -231,12 +231,12 @@ func ValidatePublisher(publisher string) error {
 }
 
 func ValidateInlineClaim(publisher, name string) error {
-	reserved := naming.IsInlineRecord(name)
+	reserved := bindings.IsInlineRecord(name)
 	switch {
-	case reserved && publisher != naming.InlineRecordOwner:
-		return fmt.Errorf("binding name %q starts %q, which names the record ocel keeps for a binding written inline in the config; publish yours under another name", name, naming.InlineRecordPrefix)
-	case !reserved && publisher == naming.InlineRecordOwner:
-		return fmt.Errorf("publisher name %q writes only the records inline bindings keep, named %q<type>.<name>", publisher, naming.InlineRecordPrefix)
+	case reserved && publisher != bindings.InlineRecordOwner:
+		return fmt.Errorf("binding name %q starts %q, which names the record ocel keeps for a binding written inline in the config; publish yours under another name", name, bindings.InlineRecordPrefix)
+	case !reserved && publisher == bindings.InlineRecordOwner:
+		return fmt.Errorf("publisher name %q writes only the records inline bindings keep, named %q<type>.<name>", publisher, bindings.InlineRecordPrefix)
 	}
 	return nil
 }
@@ -246,10 +246,10 @@ func VerifyBinding(published *variablestorev1.PublishedBinding) error {
 	if binding.GetName() == "" {
 		return fmt.Errorf("a binding has no name; the name is what a consuming app binds to: %w", ErrUnreadableRecord)
 	}
-	if naming.BindingTypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED {
+	if bindings.TypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED {
 		return fmt.Errorf("binding %s has no properties, so it has no type a consumer can resolve it against: %w", binding.GetName(), ErrUnreadableRecord)
 	}
-	if naming.BindingTypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_CUSTOM {
+	if bindings.TypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_CUSTOM {
 		if binding.GetSource() == "" {
 			return unsourcedCustom(binding)
 		}

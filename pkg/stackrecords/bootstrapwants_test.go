@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -132,7 +132,7 @@ type listingStore struct {
 	listed [][]string
 }
 
-func (s *listingStore) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s *listingStore) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	s.listed = append(s.listed, slices.Clone(under))
 	return s.KeyValues.List(ctx, in, under...)
 }

@@ -8,8 +8,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -45,7 +45,7 @@ func (o *openedPreviewKeys) keep(sealed []byte, key edge.PreviewKey) {
 
 func ensurePreviewKey(ctx context.Context, p provider.Provider, opened *openedPreviewKeys) (edge.PreviewKey, error) {
 	var key edge.PreviewKey
-	err := keyvalue.Change(ctx, p.KeyValues(), stackrecords.NewPreviewKeyRecordKey(), func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	err := records.Change(ctx, p.KeyValues(), stackrecords.NewPreviewKeyRecordKey(), func(recorded records.Entry) ([]byte, bool, error) {
 		recordedKey, err := openRecordedPreviewKey(ctx, p, opened, recorded)
 		if err != nil || recordedKey != "" {
 			key = recordedKey
@@ -72,14 +72,14 @@ func ensurePreviewKey(ctx context.Context, p provider.Provider, opened *openedPr
 }
 
 func openPreviewKey(ctx context.Context, p provider.Provider, opened *openedPreviewKeys) (edge.PreviewKey, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, p.KeyValues(), stackrecords.NewPreviewKeyRecordKey())
+	recorded, err := records.ReadOrEmpty(ctx, p.KeyValues(), stackrecords.NewPreviewKeyRecordKey())
 	if err != nil {
 		return "", fmt.Errorf("read the key that signs preview hostnames: %w", err)
 	}
 	return openRecordedPreviewKey(ctx, p, opened, recorded)
 }
 
-func openRecordedPreviewKey(ctx context.Context, p provider.Provider, opened *openedPreviewKeys, recorded keyvalue.Entry) (edge.PreviewKey, error) {
+func openRecordedPreviewKey(ctx context.Context, p provider.Provider, opened *openedPreviewKeys, recorded records.Entry) (edge.PreviewKey, error) {
 	if len(recorded.Value) == 0 {
 		return "", nil
 	}

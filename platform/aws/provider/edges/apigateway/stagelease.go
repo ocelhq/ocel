@@ -8,10 +8,11 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -24,8 +25,8 @@ const (
 )
 
 type stageLease struct {
-	keyValues keyvalue.Store
-	key       keyvalue.Key
+	keyValues records.Store
+	key       records.Key
 	pointer   string
 	holder    string
 	now       func() time.Time
@@ -37,15 +38,15 @@ type leaseRecord struct {
 	Until  int64  `json:"until"`
 }
 
-func (s *stack) stagePartition() keyvalue.Partition {
-	return keyvalue.Partition{
+func (s *stack) stagePartition() records.Partition {
+	return records.Partition{
 		Tier: s.tier(),
-		Root: keyvalue.RootRouters,
+		Root: stackrecords.RootRouters,
 		Path: []string{string(Kind), naming.Sanitize(s.slug())},
 	}
 }
 
-func (s *stack) stateKeyValues(c Clients) keyvalue.Store {
+func (s *stack) stateKeyValues(c Clients) records.Store {
 	return awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(s.own.StateTable)}
 }
 
@@ -62,7 +63,7 @@ func (s *stack) newStageLease(c Clients, pointer, holder string) stageLease {
 
 type heldLease struct {
 	lease    stageLease
-	revision keyvalue.Revision
+	revision records.Revision
 }
 
 func (l stageLease) hold(ctx context.Context, work func(held *heldLease) error) error {
@@ -73,7 +74,7 @@ func (l stageLease) hold(ctx context.Context, work func(held *heldLease) error) 
 	held := &heldLease{lease: l, revision: revision}
 	worked := work(held)
 	released := l.keyValues.Remove(context.WithoutCancel(ctx), l.key, held.revision)
-	if errors.Is(released, keyvalue.ErrNotFound) || errors.Is(released, keyvalue.ErrStale) {
+	if errors.Is(released, records.ErrNotFound) || errors.Is(released, records.ErrStale) {
 		released = nil
 	}
 	return errors.Join(worked, released)
@@ -86,8 +87,8 @@ func (h *heldLease) renew(ctx context.Context) (context.Context, context.CancelF
 	if err != nil {
 		return nil, nil, err
 	}
-	revision, err := l.keyValues.Write(ctx, keyvalue.Entry{Key: l.key, Value: encoded, Revision: h.revision})
-	if errors.Is(err, keyvalue.ErrStale) || errors.Is(err, keyvalue.ErrNotFound) {
+	revision, err := l.keyValues.Write(ctx, records.Entry{Key: l.key, Value: encoded, Revision: h.revision})
+	if errors.Is(err, records.ErrStale) || errors.Is(err, records.ErrNotFound) {
 		return nil, nil, refusal.Refuse(refusal.CodeBusy,
 			"this promote held the %s stage of %s past its %s term, and another promote has since taken it, so this one stopped rather than move the stage under it. Promote again once the other one has finished",
 			stageName, l.pointer, leaseTerm)
@@ -100,14 +101,14 @@ func (h *heldLease) renew(ctx context.Context) (context.Context, context.CancelF
 	return bounded, stop, nil
 }
 
-func (l stageLease) acquire(ctx context.Context) (keyvalue.Revision, error) {
+func (l stageLease) acquire(ctx context.Context) (records.Revision, error) {
 	for attempt := range leaseAttempts {
 		if attempt > 0 {
 			if err := l.wait(ctx, leaseDelay(attempt-1)); err != nil {
 				return "", err
 			}
 		}
-		recorded, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.key)
+		recorded, err := records.ReadOrEmpty(ctx, l.keyValues, l.key)
 		if err != nil {
 			return "", fmt.Errorf("read who is moving the %s stage: %w", stageName, err)
 		}
@@ -124,7 +125,7 @@ func (l stageLease) acquire(ctx context.Context) (keyvalue.Revision, error) {
 			return "", err
 		}
 		revision, err := l.keyValues.Write(ctx, recorded)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -152,7 +153,7 @@ func (s *stack) forgetStageLeases(ctx context.Context, c Clients) error {
 		return fmt.Errorf("read the leases on %s's stages: %w", s.slug(), err)
 	}
 	for _, entry := range held {
-		if err := keyvalue.Forget(ctx, keyValues, entry.Key); err != nil {
+		if err := records.Forget(ctx, keyValues, entry.Key); err != nil {
 			return fmt.Errorf("let go of %s: %w", entry.Key, err)
 		}
 	}

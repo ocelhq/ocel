@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 var errRunGone = errors.New("the run this message names no longer exists")
@@ -142,7 +142,7 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 func (e *Engine) arrive(ctx context.Context, deployed deployedConsumer, msg Message) (Run, error) {
 	execution := msg.executionFor(deployed.consumer.Name)
 	run, err := e.cfg.Store.ReadRun(ctx, deployed.topicName, execution)
-	if err == nil || !errors.Is(err, keyvalue.ErrNotFound) {
+	if err == nil || !errors.Is(err, records.ErrNotFound) {
 		return run, err
 	}
 	if msg.Execution != "" {
@@ -150,7 +150,7 @@ func (e *Engine) arrive(ctx context.Context, deployed deployedConsumer, msg Mess
 	}
 	created := runOfMessage(deployed, msg, time.Now()).truncated()
 	revision, err := e.cfg.Store.CreateRun(ctx, created)
-	if errors.Is(err, keyvalue.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return e.cfg.Store.ReadRun(ctx, deployed.topicName, execution)
 	}
 	if err != nil {
@@ -216,7 +216,7 @@ func (e *Engine) admit(ctx context.Context, deployed deployedConsumer, rcv Recei
 			changed.settle(provider.RunFailed, nil, exhaustedReason(run), rcv.Message.Payload, now)
 		}
 		written, err := e.write(ctx, changed)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			if run, err = e.reread(ctx, run); err != nil {
 				return run, e.retainOn(err), false
 			}
@@ -241,7 +241,7 @@ func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, rcv Recei
 		if err == nil {
 			return written, Disposition{}, true
 		}
-		if !errors.Is(err, keyvalue.ErrStale) {
+		if !errors.Is(err, records.ErrStale) {
 			return run, e.retainOn(err), false
 		}
 		if run, err = e.reread(ctx, run); err != nil {
@@ -263,7 +263,7 @@ func (e *Engine) redeliverUnlessUndeliverable(ctx context.Context, run Run, rcv 
 	failed := run
 	failed.settle(provider.RunFailed, nil, fmt.Sprintf("its message was delivered %d times without the run starting, the most its queue allows before dead-lettering it", rcv.Receives), rcv.Message.Payload, time.Now())
 	if _, err := e.write(context.WithoutCancel(ctx), failed); err != nil {
-		if !errors.Is(err, keyvalue.ErrStale) {
+		if !errors.Is(err, records.ErrStale) {
 			slog.Warn("fail a run its queue is about to dead-letter", "execution", run.Execution, "error", err)
 		}
 		return redeliverAfter(wait)
@@ -288,7 +288,7 @@ func (e *Engine) write(ctx context.Context, run Run) (Run, error) {
 
 func (e *Engine) reread(ctx context.Context, run Run) (Run, error) {
 	fresh, err := e.cfg.Store.ReadRun(ctx, run.Topic, run.Execution)
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return run, errRunGone
 	}
 	return fresh, err
@@ -365,7 +365,7 @@ func (e *Engine) renewLease(ctx context.Context, c *claim) bool {
 			c.run = written
 			return true
 		}
-		if !errors.Is(err, keyvalue.ErrStale) {
+		if !errors.Is(err, records.ErrStale) {
 			if ctx.Err() == nil {
 				slog.Warn("renew the lease of a run being worked", "execution", c.run.Execution, "error", err)
 			}
@@ -411,7 +411,7 @@ func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, c claim,
 		changed := current
 		changed.apply(v, c.rcv.Message.Payload, time.Now())
 		_, err := e.write(ctx, changed)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			fresh, err := e.reread(ctx, current)
 			if err != nil || !fresh.owns(c.run) {
 				return done

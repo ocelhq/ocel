@@ -11,13 +11,15 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
+
+const RootRealtime records.Root = "realtime"
 
 const realtimeServeRuns = 3
 
@@ -27,7 +29,7 @@ type realtimeNamespace struct {
 
 type realtimeEnvironment struct {
 	clients        *clients
-	records        keyvalue.Store
+	records        records.Store
 	ref            provider.StackRef
 	keysInEnv      bool
 	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
@@ -90,7 +92,7 @@ func (r realtimeEnvironment) plan(ctx context.Context, resource provider.Resourc
 		return "", "", err
 	}
 	var differences []string
-	recorded, err := keyvalue.ReadOrEmpty(ctx, r.records, r.namespaceKey(namespace))
+	recorded, err := records.ReadOrEmpty(ctx, r.records, r.namespaceKey(namespace))
 	if err != nil {
 		return "", "", err
 	}
@@ -161,8 +163,8 @@ func realtimeNamespaceOf(declared, name string) string {
 	return name
 }
 
-func (r realtimeEnvironment) namespaceKey(namespace string) keyvalue.Key {
-	return keyvalue.Partition{Tier: r.ref.Tier, Root: keyvalue.RootRealtime}.Key(r.ref.Project, r.ref.Name.Env, namespace)
+func (r realtimeEnvironment) namespaceKey(namespace string) records.Key {
+	return records.Partition{Tier: r.ref.Tier, Root: RootRealtime}.Key(r.ref.Project, r.ref.Name.Env, namespace)
 }
 
 func (r realtimeEnvironment) provision(ctx context.Context, resource provider.Resource, progress progress.Log) (provider.Binding, error) {
@@ -179,7 +181,7 @@ func (r realtimeEnvironment) provision(ctx context.Context, resource provider.Re
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	if err := keyvalue.Change(ctx, r.records, r.namespaceKey(namespace), func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	if err := records.Change(ctx, r.records, r.namespaceKey(namespace), func(recorded records.Entry) ([]byte, bool, error) {
 		return record, string(recorded.Value) != string(record), nil
 	}); err != nil {
 		return provider.Binding{}, err
@@ -203,7 +205,7 @@ func (r realtimeEnvironment) provision(ctx context.Context, resource provider.Re
 
 func (r realtimeEnvironment) remove(ctx context.Context, binding provider.Binding, progress progress.Log) error {
 	namespace := realtimeNamespaceOf(binding.Resource, binding.Name)
-	if err := keyvalue.Forget(ctx, r.records, r.namespaceKey(namespace)); err != nil {
+	if err := records.Forget(ctx, r.records, r.namespaceKey(namespace)); err != nil {
 		return err
 	}
 	if _, err := r.serve(ctx, progress); err != nil {
@@ -214,7 +216,7 @@ func (r realtimeEnvironment) remove(ctx context.Context, binding provider.Bindin
 
 func (r realtimeEnvironment) readKeys(ctx context.Context) (map[string]string, error) {
 	under := []string{r.ref.Project, r.ref.Name.Env}
-	entries, err := r.records.List(ctx, keyvalue.Partition{Tier: r.ref.Tier, Root: keyvalue.RootRealtime}, under...)
+	entries, err := r.records.List(ctx, records.Partition{Tier: r.ref.Tier, Root: RootRealtime}, under...)
 	if err != nil {
 		return nil, err
 	}

@@ -8,8 +8,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -126,7 +126,7 @@ func tagDatabaseUsers(t *testing.T, p *Provider) []string {
 func TestTheTagDatabaseIsUsedByTheProjectsWhoseLastDeployRevalidated(t *testing.T) {
 	p, _ := deployingNetworks(t)
 	ctx := context.Background()
-	if _, err := p.KeyValues().Write(ctx, keyvalue.Entry{Key: stackrecords.ProjectKey(environment.TierProduction, "shop"), Value: []byte(`{}`)}); err != nil {
+	if _, err := p.KeyValues().Write(ctx, records.Entry{Key: stackrecords.ProjectKey(environment.TierProduction, "shop"), Value: []byte(`{}`)}); err != nil {
 		t.Fatal(err)
 	}
 

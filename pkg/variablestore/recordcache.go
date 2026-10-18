@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type recordCache struct {
 	store  Store
 	scope  Scope
-	byName map[string]keyvalue.Entry
+	byName map[string]records.Entry
 }
 
 func (s Store) newRecordCache(scope Scope) *recordCache {
-	return &recordCache{store: s, scope: scope, byName: map[string]keyvalue.Entry{}}
+	return &recordCache{store: s, scope: scope, byName: map[string]records.Entry{}}
 }
 
 func (p *recordCache) named(ctx context.Context, names []string) error {
@@ -28,7 +28,7 @@ func (p *recordCache) all(ctx context.Context) error {
 	return p.load(ctx, bindingsPrefix(p.scope))
 }
 
-func (p *recordCache) load(ctx context.Context, under keyvalue.Key) error {
+func (p *recordCache) load(ctx context.Context, under records.Key) error {
 	stored, err := p.store.listUnder(ctx, under)
 	if err != nil {
 		return fmt.Errorf("read %s's published bindings: %w", p.scope.Project, err)
@@ -39,4 +39,4 @@ func (p *recordCache) load(ctx context.Context, under keyvalue.Key) error {
 	return nil
 }
 
-func (p *recordCache) at(name keyvalue.Key) keyvalue.Entry { return p.byName[name.String()] }
+func (p *recordCache) at(name records.Key) records.Entry { return p.byName[name.String()] }

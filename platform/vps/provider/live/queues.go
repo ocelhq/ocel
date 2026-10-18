@@ -6,9 +6,11 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
+
+const RootQueues records.Root = "queues"
 
 const (
 	QueueDatabaseName = "ocel"
@@ -45,27 +47,27 @@ type Queue struct {
 	Workers  map[string]QueueWorker
 }
 
-func QueuePartition(tier environment.Tier) keyvalue.Partition {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootQueues}
+func QueuePartition(tier environment.Tier) records.Partition {
+	return records.Partition{Tier: tier, Root: RootQueues}
 }
 
-func QueueDatabaseKey(tier environment.Tier, project, env string) keyvalue.Key {
+func QueueDatabaseKey(tier environment.Tier, project, env string) records.Key {
 	return QueuePartition(tier).Key(project, env, queueDatabaseEntry)
 }
 
-func QueueTopicKey(tier environment.Tier, project, env, topic string) keyvalue.Key {
+func QueueTopicKey(tier environment.Tier, project, env, topic string) records.Key {
 	return QueuePartition(tier).Key(project, env, queueTopicsEntry, topic)
 }
 
-func QueueWorkerKey(tier environment.Tier, project, env, worker string) keyvalue.Key {
+func QueueWorkerKey(tier environment.Tier, project, env, worker string) records.Key {
 	return QueuePartition(tier).Key(project, env, queueWorkersEntry, worker)
 }
 
-func QueueTopicsUnder(tier environment.Tier, project, env string) (keyvalue.Partition, []string) {
+func QueueTopicsUnder(tier environment.Tier, project, env string) (records.Partition, []string) {
 	return QueuePartition(tier), []string{project, env, queueTopicsEntry}
 }
 
-func QueueWorkersUnder(tier environment.Tier, project, env string) (keyvalue.Partition, []string) {
+func QueueWorkersUnder(tier environment.Tier, project, env string) (records.Partition, []string) {
 	return QueuePartition(tier), []string{project, env, queueWorkersEntry}
 }
 
@@ -85,7 +87,7 @@ func QueueRoleSQL() string {
 
 type queueKey struct{ project, env string }
 
-func ReadQueues(ctx context.Context, store keyvalue.Store, tier environment.Tier) ([]Queue, error) {
+func ReadQueues(ctx context.Context, store records.Store, tier environment.Tier) ([]Queue, error) {
 	entries, err := store.List(ctx, QueuePartition(tier))
 	if err != nil {
 		return nil, err

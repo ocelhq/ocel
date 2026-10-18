@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type ownerIndex struct {
@@ -106,7 +106,7 @@ func (s Store) unclaim(ctx context.Context, scope Scope, owner, environment stri
 func (s Store) reindex(ctx context.Context, scope Scope, owner, environment string, apply func([]string) []string) error {
 	at := bindingOwnerKey(scope, owner, environment)
 	for range bindingAttempts {
-		recorded, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, at)
+		recorded, err := records.ReadOrEmpty(ctx, s.KeyValues, at)
 		if err != nil {
 			return fmt.Errorf("read %s's published bindings: %w", owner, err)
 		}
@@ -124,10 +124,10 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 
 		if len(kept) == 0 {
 			if err := s.KeyValues.Remove(ctx, at, recorded.Revision); err != nil {
-				if errors.Is(err, keyvalue.ErrStale) {
+				if errors.Is(err, records.ErrStale) {
 					continue
 				}
-				if !errors.Is(err, keyvalue.ErrNotFound) {
+				if !errors.Is(err, records.ErrNotFound) {
 					return fmt.Errorf("record %s's published bindings: %w", owner, err)
 				}
 			}
@@ -139,7 +139,7 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 		}
 		recorded.Value = encoded
 		if _, err := s.KeyValues.Write(ctx, recorded); err != nil {
-			if errors.Is(err, keyvalue.ErrStale) {
+			if errors.Is(err, records.ErrStale) {
 				continue
 			}
 			return fmt.Errorf("record %s's published bindings: %w", owner, err)

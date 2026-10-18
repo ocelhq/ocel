@@ -10,9 +10,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -79,7 +79,7 @@ func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(
 func TestDeployStateStaysInTheStateTable(t *testing.T) {
 	store, ddb := newSplitRecords()
 
-	if _, err := store.Write(context.Background(), keyvalue.Entry{
+	if _, err := store.Write(context.Background(), records.Entry{
 		Key:   stackrecords.StackKey(environment.TierProduction, "shop", naming.InfraStack("shop")),
 		Value: []byte("{}"),
 	}); err != nil {

@@ -5,7 +5,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/kvstore"
+	"github.com/ocelhq/ocel/pkg/valkey"
 )
 
 var valkeyImages = map[string]string{
@@ -14,7 +14,7 @@ var valkeyImages = map[string]string{
 }
 
 func Valkey(version string) (string, bool) {
-	image, pinned := valkeyImages[cmp.Or(version, kvstore.DefaultVersion)]
+	image, pinned := valkeyImages[cmp.Or(version, valkey.DefaultVersion)]
 	return image, pinned
 }
 

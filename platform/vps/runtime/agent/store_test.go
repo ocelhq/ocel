@@ -18,9 +18,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -30,42 +30,42 @@ import (
 
 type memKeyValues struct {
 	mu      sync.Mutex
-	entries map[string]keyvalue.Entry
+	entries map[string]records.Entry
 }
 
-func (m *memKeyValues) Read(_ context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
+func (m *memKeyValues) Read(_ context.Context, name records.Key) (records.Entry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	stored, ok := m.entries[name.String()]
 	if !ok {
-		return keyvalue.Entry{}, keyvalue.ErrNotFound
+		return records.Entry{}, records.ErrNotFound
 	}
 	return stored, nil
 }
 
-func (m *memKeyValues) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (m *memKeyValues) Write(_ context.Context, entry records.Entry) (records.Revision, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.put(entry)
 }
 
-func (m *memKeyValues) put(entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (m *memKeyValues) put(entry records.Entry) (records.Revision, error) {
 	if m.entries == nil {
-		m.entries = map[string]keyvalue.Entry{}
+		m.entries = map[string]records.Entry{}
 	}
 	if stored, ok := m.entries[entry.Key.String()]; ok && stored.Revision != entry.Revision {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	minted := make([]byte, 16)
 	if _, err := rand.Read(minted); err != nil {
 		return "", err
 	}
-	entry.Revision = keyvalue.Revision(hex.EncodeToString(minted))
+	entry.Revision = records.Revision(hex.EncodeToString(minted))
 	m.entries[entry.Key.String()] = entry
 	return entry.Revision, nil
 }
 
-func (m *memKeyValues) WritePair(_ context.Context, first, second keyvalue.Entry) error {
+func (m *memKeyValues) WritePair(_ context.Context, first, second records.Entry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, err := m.put(first); err != nil {
@@ -75,17 +75,17 @@ func (m *memKeyValues) WritePair(_ context.Context, first, second keyvalue.Entry
 	return err
 }
 
-func (m *memKeyValues) Remove(_ context.Context, name keyvalue.Key, _ keyvalue.Revision) error {
+func (m *memKeyValues) Remove(_ context.Context, name records.Key, _ records.Revision) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.entries, name.String())
 	return nil
 }
 
-func (m *memKeyValues) List(_ context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (m *memKeyValues) List(_ context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var out []keyvalue.Entry
+	var out []records.Entry
 	for _, entry := range m.entries {
 		if entry.Key.Partition.String() != in.String() || len(entry.Key.Path) < len(under) || !slices.Equal(entry.Key.Path[:len(under)], under) {
 			continue

@@ -10,10 +10,10 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
@@ -37,7 +37,7 @@ type Provider struct {
 
 	writtenBy provider.WrittenBy
 
-	records keyvalue.Store
+	records records.Store
 
 	originRoutes originRouting
 
@@ -171,7 +171,7 @@ func (p *Provider) Stacks() provider.Stacks {
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return artifacts{p: p} }
 
-func (p *Provider) KeyValues() keyvalue.Store {
+func (p *Provider) KeyValues() records.Store {
 	if p.records != nil {
 		return p.records
 	}

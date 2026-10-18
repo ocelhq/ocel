@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
@@ -36,8 +36,8 @@ type sealedDigestKey struct {
 	Sealed []byte `json:"sealed"`
 }
 
-func digestKeyAt(tier environment.Tier) keyvalue.Key {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvSourceDigestKey}.Key(digestKeyName)
+func digestKeyAt(tier environment.Tier) records.Key {
+	return records.Partition{Tier: tier, Root: RootDigestKey}.Key(digestKeyName)
 }
 
 func newDigestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
@@ -53,7 +53,7 @@ func newDigestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
 
 func EnsureDigestKey(ctx context.Context, store variablestore.Store, tier environment.Tier) (DigestKey, error) {
 	for range digestKeyAttempts {
-		recorded, err := keyvalue.ReadOrEmpty(ctx, store.KeyValues, digestKeyAt(tier))
+		recorded, err := records.ReadOrEmpty(ctx, store.KeyValues, digestKeyAt(tier))
 		if err != nil {
 			return DigestKey{}, err
 		}
@@ -73,7 +73,7 @@ func EnsureDigestKey(ctx context.Context, store variablestore.Store, tier enviro
 			return DigestKey{}, err
 		}
 		_, err = store.KeyValues.Write(ctx, recorded)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -84,11 +84,11 @@ func EnsureDigestKey(ctx context.Context, store variablestore.Store, tier enviro
 	return DigestKey{}, fmt.Errorf("the %s env source digest key was rewritten under every attempt to read it", tier)
 }
 
-func ForgetDigestKey(ctx context.Context, store keyvalue.Store, tier environment.Tier) error {
-	return keyvalue.Forget(ctx, store, digestKeyAt(tier))
+func ForgetDigestKey(ctx context.Context, store records.Store, tier environment.Tier) error {
+	return records.Forget(ctx, store, digestKeyAt(tier))
 }
 
-func openDigestKey(ctx context.Context, cipher seal.Cipher, tier environment.Tier, recorded keyvalue.Entry) (DigestKey, error) {
+func openDigestKey(ctx context.Context, cipher seal.Cipher, tier environment.Tier, recorded records.Entry) (DigestKey, error) {
 	var kept sealedDigestKey
 	if err := json.Unmarshal(recorded.Value, &kept); err != nil {
 		return DigestKey{}, fmt.Errorf("read %s: %w", recorded.Key, err)

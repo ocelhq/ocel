@@ -14,13 +14,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type store struct {
-	rows         map[string]keyvalue.Entry
+	rows         map[string]records.Entry
 	rev          int
 	reads        map[string]int
 	writes       map[string]int
@@ -30,26 +30,26 @@ type store struct {
 }
 
 func newStore() *store {
-	return &store{rows: map[string]keyvalue.Entry{}, reads: map[string]int{}, writes: map[string]int{}}
+	return &store{rows: map[string]records.Entry{}, reads: map[string]int{}, writes: map[string]int{}}
 }
 
-func (s *store) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s *store) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if err := ctx.Err(); err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	s.reads[key.String()]++
 	recorded, ok := s.rows[key.String()]
 	if !ok {
-		return keyvalue.Entry{}, keyvalue.ErrNotFound
+		return records.Entry{}, records.ErrNotFound
 	}
 	return recorded, nil
 }
 
-func (s *store) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s *store) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := keyvalue.RefuseUnwritable(entry); err != nil {
+	if err := records.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
 	if before := s.beforeWrite; before != nil {
@@ -58,17 +58,17 @@ func (s *store) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revis
 	}
 	s.writes[entry.Key.String()]++
 	if recorded := s.rows[entry.Key.String()]; recorded.Revision != entry.Revision {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	s.rev++
-	entry.Revision = keyvalue.Revision(strconv.Itoa(s.rev))
+	entry.Revision = records.Revision(strconv.Itoa(s.rev))
 	s.rows[entry.Key.String()] = entry
 	return entry.Revision, nil
 }
 
-func (s *store) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
+func (s *store) WritePair(ctx context.Context, first, second records.Entry) error {
 	if recorded := s.rows[second.Key.String()]; recorded.Revision != second.Revision {
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	if _, err := s.Write(ctx, first); err != nil {
 		return err
@@ -77,7 +77,7 @@ func (s *store) WritePair(ctx context.Context, first, second keyvalue.Entry) err
 	return err
 }
 
-func (s *store) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (s *store) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -87,21 +87,21 @@ func (s *store) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.
 	}
 	recorded, ok := s.rows[key.String()]
 	if !ok {
-		return keyvalue.ErrNotFound
+		return records.ErrNotFound
 	}
 	if recorded.Revision != expected {
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	delete(s.rows, key.String())
 	return nil
 }
 
-func (s *store) List(_ context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s *store) List(_ context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	if before := s.beforeList; before != nil {
 		s.beforeList = nil
 		before()
 	}
-	var out []keyvalue.Entry
+	var out []records.Entry
 	for _, entry := range s.rows {
 		if entry.Key.Partition.String() != in.String() || len(entry.Key.Path) < len(under) || !slices.Equal(entry.Key.Path[:len(under)], under) {
 			continue
@@ -376,7 +376,7 @@ func TestRewritingARecordAReclaimRemovedIsRefusedBusy(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promotion := staged(t, l, "p1")
-	if err := keyvalue.Forget(ctx, l.keyValues, l.releaseKey("web", "web-p1")); err != nil {
+	if err := records.Forget(ctx, l.keyValues, l.releaseKey("web", "web-p1")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -792,7 +792,7 @@ func TestAPointerThatKeepsMovingIsRetriedAfterAJitteredDelayThatGrowsToItsCeilin
 	moving = func(key string) {
 		if row, ok := store.rows[key]; ok {
 			store.rev++
-			row.Revision = keyvalue.Revision(strconv.Itoa(store.rev))
+			row.Revision = records.Revision(strconv.Itoa(store.rev))
 			store.rows[key] = row
 		}
 		store.beforeWrite = moving

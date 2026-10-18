@@ -9,10 +9,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -30,7 +30,7 @@ type Config struct {
 	SigningKeyRoot string
 
 	Tags      TagClock
-	KeyValues keyvalue.Store
+	KeyValues records.Store
 	WrittenBy provider.WrittenBy
 	Rules     RulesAPI
 	Subnets   awsec2.DescribeSubnetsAPIClient

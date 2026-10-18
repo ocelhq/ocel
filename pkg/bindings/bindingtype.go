@@ -1,4 +1,4 @@
-package naming
+package bindings
 
 import (
 	"encoding/base64"
@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -13,13 +14,13 @@ import (
 
 const bindingTypePrefix = "BINDING_TYPE_"
 
-var bindingKinds = map[bindingsv1.BindingType]Kind{
-	bindingsv1.BindingType_BINDING_TYPE_POSTGRES: KindDatabase,
-	bindingsv1.BindingType_BINDING_TYPE_BUCKET:   KindBucket,
-	bindingsv1.BindingType_BINDING_TYPE_TOPIC:    KindTopic,
-	bindingsv1.BindingType_BINDING_TYPE_TASK:     KindTopic,
-	bindingsv1.BindingType_BINDING_TYPE_KV:       KindKV,
-	bindingsv1.BindingType_BINDING_TYPE_REALTIME: KindRealtime,
+var bindingKinds = map[bindingsv1.BindingType]naming.Kind{
+	bindingsv1.BindingType_BINDING_TYPE_POSTGRES: naming.KindDatabase,
+	bindingsv1.BindingType_BINDING_TYPE_BUCKET:   naming.KindBucket,
+	bindingsv1.BindingType_BINDING_TYPE_TOPIC:    naming.KindTopic,
+	bindingsv1.BindingType_BINDING_TYPE_TASK:     naming.KindTopic,
+	bindingsv1.BindingType_BINDING_TYPE_KV:       naming.KindKV,
+	bindingsv1.BindingType_BINDING_TYPE_REALTIME: naming.KindRealtime,
 }
 
 var proxiedTypes = map[bindingsv1.BindingType]bool{
@@ -33,11 +34,11 @@ func Proxied(t bindingsv1.BindingType) bool {
 	return proxiedTypes[t]
 }
 
-func BindingTypes() []bindingsv1.BindingType {
+func Types() []bindingsv1.BindingType {
 	return slices.Sorted(maps.Keys(bindingKinds))
 }
 
-func KindOf(t bindingsv1.BindingType) (Kind, bool) {
+func KindOf(t bindingsv1.BindingType) (naming.Kind, bool) {
 	kind, ok := bindingKinds[t]
 	return kind, ok
 }
@@ -46,7 +47,7 @@ func EnvFragment(t bindingsv1.BindingType) string {
 	return strings.TrimPrefix(t.String(), bindingTypePrefix)
 }
 
-func BindingTypeOf(l *bindingsv1.Binding) bindingsv1.BindingType {
+func TypeOf(l *bindingsv1.Binding) bindingsv1.BindingType {
 	switch l.GetProperties().(type) {
 	case *bindingsv1.Binding_Postgres:
 		return bindingsv1.BindingType_BINDING_TYPE_POSTGRES
@@ -75,7 +76,7 @@ func bindingProperties(l *bindingsv1.Binding) protoreflect.Message {
 	return m.Get(fd).Message()
 }
 
-func BindingProperty(l *bindingsv1.Binding, name string) (any, bool) {
+func Property(l *bindingsv1.Binding, name string) (any, bool) {
 	if custom := l.GetCustom(); custom != nil {
 		value, ok := custom.GetFields()[name]
 		if !ok {
@@ -94,7 +95,7 @@ func BindingProperty(l *bindingsv1.Binding, name string) (any, bool) {
 	return propertyValue(fd, properties.Get(fd)), true
 }
 
-func BindingPropertyNames(l *bindingsv1.Binding) []string {
+func PropertyNames(l *bindingsv1.Binding) []string {
 	if custom := l.GetCustom(); custom != nil {
 		return slices.Sorted(maps.Keys(custom.GetFields()))
 	}

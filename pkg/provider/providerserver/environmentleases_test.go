@@ -12,12 +12,12 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -47,16 +47,16 @@ func refusedBusy(t *testing.T, result *progressv1.OperationResult, what string) 
 func readEnvironmentLease(t *testing.T, vendor *fake.Provider) (held bool) {
 	t.Helper()
 	_, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv))
-	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+	if err != nil && !errors.Is(err, records.ErrNotFound) {
 		t.Fatalf("reading the deploy lease = %v", err)
 	}
 	return err == nil
 }
 
-func recordLease(t *testing.T, store keyvalue.Store, tier environment.Tier, env, token string) {
+func recordLease(t *testing.T, store records.Store, tier environment.Tier, env, token string) {
 	t.Helper()
 	ctx := context.Background()
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.EnvironmentLeaseKey(tier, "shop", env))
+	recorded, err := records.ReadOrEmpty(ctx, store, stackrecords.EnvironmentLeaseKey(tier, "shop", env))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,21 +68,21 @@ func recordLease(t *testing.T, store keyvalue.Store, tier environment.Tier, env,
 	}
 }
 
-func takeLeaseOver(t *testing.T, store keyvalue.Store, token string) {
+func takeLeaseOver(t *testing.T, store records.Store, token string) {
 	t.Helper()
 	recordLease(t, store, environment.TierProduction, stackrecords.ProductionEnv, token)
 }
 
-func takeLeaseAsDeploy(store keyvalue.Store, tier environment.Tier, env string) error {
+func takeLeaseAsDeploy(store records.Store, tier environment.Tier, env string) error {
 	_, err := stackrecords.TakeEnvironmentLease(context.Background(), store, tier, "shop", env,
 		otherEnvironmentLease, stackrecords.LeaseDeploy, stackrecords.LeaseTerms{TTL: time.Minute, Now: time.Now})
 	return err
 }
 
-func isLeaseHeld(t *testing.T, store keyvalue.Store, tier environment.Tier, env string) bool {
+func isLeaseHeld(t *testing.T, store records.Store, tier environment.Tier, env string) bool {
 	t.Helper()
 	_, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(tier, "shop", env))
-	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+	if err != nil && !errors.Is(err, records.ErrNotFound) {
 		t.Fatalf("reading the lease on %s = %v", env, err)
 	}
 	return err == nil
@@ -334,7 +334,7 @@ func renewDeployLease(client contractv1connect.ProviderServiceClient, token stri
 	return err
 }
 
-func readLeaseRevision(t *testing.T, vendor *fake.Provider) keyvalue.Revision {
+func readLeaseRevision(t *testing.T, vendor *fake.Provider) records.Revision {
 	t.Helper()
 	recorded, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentLeaseKey(environment.TierProduction, "shop", stackrecords.ProductionEnv))
 	if err != nil {
@@ -389,10 +389,10 @@ func TestAbandonDeployReportsALeaseItCouldNotFree(t *testing.T) {
 	}
 }
 
-func routeAnotherApp(store keyvalue.Store, tier environment.Tier, app string) error {
+func routeAnotherApp(store records.Store, tier environment.Tier, app string) error {
 	ctx := context.Background()
 	name := stackrecords.EdgeStackKey(tier, "shop")
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	recorded, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return err
 	}
@@ -408,7 +408,7 @@ func routeAnotherApp(store keyvalue.Store, tier environment.Tier, app string) er
 	return err
 }
 
-func readRoutedApps(t *testing.T, store keyvalue.Store, tier environment.Tier) map[string]router.Kind {
+func readRoutedApps(t *testing.T, store records.Store, tier environment.Tier) map[string]router.Kind {
 	t.Helper()
 	recorded, err := store.Read(context.Background(), stackrecords.EdgeStackKey(tier, "shop"))
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -28,7 +28,7 @@ func fixtureDir(t *testing.T) string {
 }
 
 func fixtureFile(typ bindingsv1.BindingType) string {
-	return strings.ToLower(naming.EnvFragment(typ)) + ".json"
+	return strings.ToLower(bindings.EnvFragment(typ)) + ".json"
 }
 
 func fixtureBytes(t *testing.T, typ bindingsv1.BindingType) []byte {
@@ -95,9 +95,9 @@ func TestBindingFixtureExistsPerBindingType(t *testing.T) {
 	}
 
 	var want []string
-	for _, typ := range naming.BindingTypes() {
+	for _, typ := range bindings.Types() {
 		want = append(want, fixtureFile(typ))
-		if got := naming.BindingTypeOf(bindingFixture(t, typ)); got != typ {
+		if got := bindings.TypeOf(bindingFixture(t, typ)); got != typ {
 			t.Errorf("fixture %s declares a %s, want %s", fixtureFile(typ), got, typ)
 		}
 	}

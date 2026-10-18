@@ -20,10 +20,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/pgmq"
@@ -52,7 +52,7 @@ type Mounts interface {
 }
 
 type Engines struct {
-	Records     keyvalue.Store
+	Records     records.Store
 	Tiers       []environment.Tier
 	Cipher      Cipher
 	Addresses   Addresses

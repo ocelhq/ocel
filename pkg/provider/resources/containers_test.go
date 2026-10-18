@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -55,7 +55,7 @@ func containerApp(app string) *provider.AppSpec {
 	}
 }
 
-func recordContainers(t *testing.T, store keyvalue.Store, ref provider.StackRef, names ...string) {
+func recordContainers(t *testing.T, store records.Store, ref provider.StackRef, names ...string) {
 	t.Helper()
 
 	stack := stackrecords.Stack{Kind: provider.StackApp}

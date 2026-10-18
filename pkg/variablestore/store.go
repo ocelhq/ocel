@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
 
@@ -34,7 +34,7 @@ var (
 )
 
 type Store struct {
-	KeyValues keyvalue.Store
+	KeyValues records.Store
 	Cipher    seal.Cipher
 	Now       func() time.Time
 }
@@ -118,7 +118,7 @@ func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext 
 	return s.commit(ctx, scope, at, recorded, current, expected, storedValue{Sealed: sealed, Size: int64(len(plaintext)), Provenance: from})
 }
 
-func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, recorded keyvalue.Entry, current storedValue, expected *int64, next storedValue) (Metadata, error) {
+func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, recorded records.Entry, current storedValue, expected *int64, next storedValue) (Metadata, error) {
 	if expected != nil && *expected != current.live() {
 		return Metadata{}, ErrStaleVersion
 	}
@@ -132,7 +132,7 @@ func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, recorded 
 	}
 	recorded.Value = encoded
 	if _, err := s.KeyValues.Write(ctx, recorded); err != nil {
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			return Metadata{}, ErrStaleVersion
 		}
 		return Metadata{}, fmt.Errorf("write %s: %w", at.Key, err)
@@ -148,16 +148,16 @@ func (s Store) remember(ctx context.Context, scope Scope, at Coordinate, written
 	if err != nil {
 		return fmt.Errorf("encode version %d of %s: %w", written.Version, at, err)
 	}
-	recorded, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, versionKey(scope, at, written.Version))
+	recorded, err := records.ReadOrEmpty(ctx, s.KeyValues, versionKey(scope, at, written.Version))
 	if err != nil {
 		return err
 	}
 	recorded.Value = entry
-	if _, err := s.KeyValues.Write(ctx, recorded); err != nil && !errors.Is(err, keyvalue.ErrStale) {
+	if _, err := s.KeyValues.Write(ctx, recorded); err != nil && !errors.Is(err, records.ErrStale) {
 		return fmt.Errorf("record version %d of %s: %w", written.Version, at, err)
 	}
 	if pruned := written.Version - historyWindow; pruned > 0 {
-		if err := keyvalue.Forget(ctx, s.KeyValues, versionKey(scope, at, pruned)); err != nil {
+		if err := records.Forget(ctx, s.KeyValues, versionKey(scope, at, pruned)); err != nil {
 			return fmt.Errorf("drop version %d of %s: %w", pruned, at, err)
 		}
 	}
@@ -416,7 +416,7 @@ func (s Store) remove(ctx context.Context, scope Scope, at Coordinate, from Prov
 	}
 	recorded.Value = encoded
 	if _, err := s.KeyValues.Write(ctx, recorded); err != nil {
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			return false, ErrStaleVersion
 		}
 		return false, fmt.Errorf("delete %s: %w", at.Key, err)
@@ -460,7 +460,7 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 		return 0, fmt.Errorf("read %s's values: %w", scope.Project, err)
 	}
 	for _, entry := range recorded {
-		if err := keyvalue.Forget(ctx, s.KeyValues, entry.Key); err != nil {
+		if err := records.Forget(ctx, s.KeyValues, entry.Key); err != nil {
 			return 0, fmt.Errorf("remove %s's stored values: %w", scope.Project, err)
 		}
 	}
@@ -469,24 +469,24 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 		return 0, fmt.Errorf("read what references %s: %w", scope.Project, err)
 	}
 	for _, entry := range refs {
-		if err := keyvalue.Forget(ctx, s.KeyValues, entry.Key); err != nil {
+		if err := records.Forget(ctx, s.KeyValues, entry.Key); err != nil {
 			return 0, fmt.Errorf("remove what references %s: %w", scope.Project, err)
 		}
 	}
 	return len(recorded), nil
 }
 
-func (s Store) cellAt(ctx context.Context, scope Scope, at Coordinate) (keyvalue.Entry, storedValue, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, CellKey(scope, at))
+func (s Store) cellAt(ctx context.Context, scope Scope, at Coordinate) (records.Entry, storedValue, error) {
+	recorded, err := records.ReadOrEmpty(ctx, s.KeyValues, CellKey(scope, at))
 	if err != nil {
-		return keyvalue.Entry{}, storedValue{}, fmt.Errorf("read %s: %w", at, err)
+		return records.Entry{}, storedValue{}, fmt.Errorf("read %s: %w", at, err)
 	}
 	if len(recorded.Value) == 0 {
 		return recorded, storedValue{}, nil
 	}
 	var stored storedValue
 	if err := json.Unmarshal(recorded.Value, &stored); err != nil {
-		return keyvalue.Entry{}, storedValue{}, fmt.Errorf("read %s: %w", at, err)
+		return records.Entry{}, storedValue{}, fmt.Errorf("read %s: %w", at, err)
 	}
 	return recorded, stored, nil
 }

@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
 
@@ -33,7 +33,7 @@ const runColumns = `execution, topic, consumer, status, payload, output, error, 
 	message_id, published_at, key, lane, delivery, held, lease_until,
 	created_at, due_at, started_at, finished_at, expires_at, revision`
 
-func runValues(run runs.Run, revision keyvalue.Revision) []any {
+func runValues(run runs.Run, revision records.Revision) []any {
 	return []any{
 		run.Execution, run.Topic, run.Consumer, string(run.Status), jsonOrNull(run.Payload), jsonOrNull(run.Output), run.Error,
 		run.Attempts, run.MaxAttempts, orEmpty(run.Tags), jsonOrNull(run.Metadata),
@@ -53,7 +53,7 @@ func scanRun(row pgx.Row) (runs.Run, error) {
 		&run.CreatedAt, &due, &started, &finished, &expires, &revision); err != nil {
 		return runs.Run{}, err
 	}
-	run.Status, run.Lane, run.Revision = provider.RunStatus(status), provider.Lane(lane), keyvalue.Revision(revision)
+	run.Status, run.Lane, run.Revision = provider.RunStatus(status), provider.Lane(lane), records.Revision(revision)
 	run.Payload, run.Output, run.Metadata = compactJSON(payload), compactJSON(output), compactJSON(metadata)
 	run.PublishedAt, run.LeaseUntil = timeOf(published), timeOf(lease)
 	run.DueAt, run.StartedAt, run.FinishedAt, run.ExpiresAt = timeOf(due), timeOf(started), timeOf(finished), timeOf(expires)
@@ -68,8 +68,8 @@ func placeholders(n, from int) string {
 	return strings.Join(marks, ", ")
 }
 
-func (s store) CreateRun(ctx context.Context, run runs.Run) (keyvalue.Revision, error) {
-	revision, err := keyvalue.NewRevision()
+func (s store) CreateRun(ctx context.Context, run runs.Run) (records.Revision, error) {
+	revision, err := records.NewRevision()
 	if err != nil {
 		return "", err
 	}
@@ -79,7 +79,7 @@ func (s store) CreateRun(ctx context.Context, run runs.Run) (keyvalue.Revision, 
 		return "", fmt.Errorf("record run %s: %w", run.Execution, err)
 	}
 	if tag.RowsAffected() == 0 {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	return revision, nil
 }
@@ -87,7 +87,7 @@ func (s store) CreateRun(ctx context.Context, run runs.Run) (keyvalue.Revision, 
 func (s store) ReadRun(ctx context.Context, topic, execution string) (runs.Run, error) {
 	run, err := scanRun(s.db.QueryRow(ctx, `SELECT `+runColumns+` FROM ocel.runs WHERE execution = $1 AND topic = $2`, execution, topic))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return runs.Run{}, keyvalue.ErrNotFound
+		return runs.Run{}, records.ErrNotFound
 	}
 	if err != nil {
 		return runs.Run{}, fmt.Errorf("read run %s: %w", execution, err)
@@ -95,11 +95,11 @@ func (s store) ReadRun(ctx context.Context, topic, execution string) (runs.Run, 
 	return run, nil
 }
 
-func (s store) WriteRun(ctx context.Context, run runs.Run) (keyvalue.Revision, error) {
+func (s store) WriteRun(ctx context.Context, run runs.Run) (records.Revision, error) {
 	if run.Revision == "" {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
-	revision, err := keyvalue.NewRevision()
+	revision, err := records.NewRevision()
 	if err != nil {
 		return "", err
 	}
@@ -115,7 +115,7 @@ func (s store) WriteRun(ctx context.Context, run runs.Run) (keyvalue.Revision, e
 		return "", fmt.Errorf("write run %s: %w", run.Execution, err)
 	}
 	if tag.RowsAffected() == 0 {
-		return "", keyvalue.ErrStale
+		return "", records.ErrStale
 	}
 	return revision, nil
 }
@@ -126,7 +126,7 @@ func (s store) DeleteRun(ctx context.Context, run runs.Run) error {
 		return fmt.Errorf("delete run %s: %w", run.Execution, err)
 	}
 	if tag.RowsAffected() == 0 {
-		return keyvalue.ErrStale
+		return records.ErrStale
 	}
 	return nil
 }
@@ -232,7 +232,7 @@ func (s store) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord
 		return fmt.Errorf("replace the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, keyvalue.ErrStale)
+		return fmt.Errorf("the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, records.ErrStale)
 	}
 	return nil
 }

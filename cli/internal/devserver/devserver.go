@@ -12,8 +12,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/localrpc"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
 
@@ -110,7 +110,7 @@ func (s *Server) ScopedFolders() map[string][]string {
 func (s *Server) ResourceKinds() []string {
 	kinds := []string{}
 	for _, resource := range s.declarations.Resources() {
-		if kind := naming.ResourceTypeName(resource.Type); !slices.Contains(kinds, kind) {
+		if kind := bindings.ResourceTypeName(resource.Type); !slices.Contains(kinds, kind) {
 			kinds = append(kinds, kind)
 		}
 	}

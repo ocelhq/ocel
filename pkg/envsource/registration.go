@@ -10,8 +10,14 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+)
+
+const (
+	RootRegistrations records.Root = "envsources"
+	RootStatus        records.Root = "envsourcestatus"
+	RootDigestKey     records.Root = "envsourcedigestkey"
 )
 
 const registerAttempts = 5
@@ -55,11 +61,11 @@ func (r Registration) Credentials() []variablestore.Cell {
 	return out
 }
 
-func registrationsPartition(tier environment.Tier) keyvalue.Partition {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvSources}
+func registrationsPartition(tier environment.Tier) records.Partition {
+	return records.Partition{Tier: tier, Root: RootRegistrations}
 }
 
-func registrationKey(tier environment.Tier, project string) keyvalue.Key {
+func registrationKey(tier environment.Tier, project string) records.Key {
 	return registrationsPartition(tier).Key(project)
 }
 
@@ -76,7 +82,7 @@ func Register(ctx context.Context, store variablestore.Store, tier environment.T
 	}
 	name := registrationKey(tier, registration.Project)
 	for range registerAttempts {
-		recorded, err := keyvalue.ReadOrEmpty(ctx, store.KeyValues, name)
+		recorded, err := records.ReadOrEmpty(ctx, store.KeyValues, name)
 		if err != nil {
 			return Registration{}, err
 		}
@@ -86,7 +92,7 @@ func Register(ctx context.Context, store variablestore.Store, tier environment.T
 		}
 		recorded.Value = encoded
 		_, err = store.KeyValues.Write(ctx, recorded)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -100,7 +106,7 @@ func Register(ctx context.Context, store variablestore.Store, tier environment.T
 func RestoreRegistration(ctx context.Context, store variablestore.Store, tier environment.Tier, replacing Registration, previous *Registration) error {
 	name := registrationKey(tier, replacing.Project)
 	recorded, err := store.KeyValues.Read(ctx, name)
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
@@ -112,7 +118,7 @@ func RestoreRegistration(ctx context.Context, store variablestore.Store, tier en
 	}
 	if previous == nil {
 		err := store.KeyValues.Remove(ctx, name, recorded.Revision)
-		if errors.Is(err, keyvalue.ErrStale) || errors.Is(err, keyvalue.ErrNotFound) {
+		if errors.Is(err, records.ErrStale) || errors.Is(err, records.ErrNotFound) {
 			return nil
 		}
 		if err != nil {
@@ -124,7 +130,7 @@ func RestoreRegistration(ctx context.Context, store variablestore.Store, tier en
 		return err
 	}
 	_, err = store.KeyValues.Write(ctx, recorded)
-	if errors.Is(err, keyvalue.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return nil
 	}
 	if err != nil {
@@ -135,7 +141,7 @@ func RestoreRegistration(ctx context.Context, store variablestore.Store, tier en
 
 func rekey(ctx context.Context, store variablestore.Store, tier environment.Tier, project string) error {
 	recorded, err := store.KeyValues.Read(ctx, registrationKey(tier, project))
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
@@ -158,7 +164,7 @@ func rekey(ctx context.Context, store variablestore.Store, tier environment.Tier
 		return err
 	}
 	_, err = store.KeyValues.Write(ctx, recorded)
-	if errors.Is(err, keyvalue.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return nil
 	}
 	if err != nil {
@@ -167,7 +173,7 @@ func rekey(ctx context.Context, store variablestore.Store, tier environment.Tier
 	return moveSharer(ctx, store.KeyValues, tier, project, previous, key)
 }
 
-func registrationOf(recorded keyvalue.Entry) (Registration, error) {
+func registrationOf(recorded records.Entry) (Registration, error) {
 	if len(recorded.Value) == 0 {
 		return Registration{}, nil
 	}
@@ -187,9 +193,9 @@ func registrationOf(recorded keyvalue.Entry) (Registration, error) {
 	return out, nil
 }
 
-func Registered(ctx context.Context, store keyvalue.Store, tier environment.Tier, project string) (Registration, bool, error) {
+func Registered(ctx context.Context, store records.Store, tier environment.Tier, project string) (Registration, bool, error) {
 	recorded, err := store.Read(ctx, registrationKey(tier, project))
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return Registration{}, false, nil
 	}
 	if err != nil {
@@ -202,7 +208,7 @@ func Registered(ctx context.Context, store keyvalue.Store, tier environment.Tier
 	return out, true, err
 }
 
-func Registrations(ctx context.Context, store keyvalue.Store, tier environment.Tier) ([]Registration, error) {
+func Registrations(ctx context.Context, store records.Store, tier environment.Tier) ([]Registration, error) {
 	recorded, err := store.List(ctx, registrationsPartition(tier))
 	if err != nil {
 		return nil, fmt.Errorf("read the %s env source registrations: %w", tier, err)
@@ -224,7 +230,7 @@ func Registrations(ctx context.Context, store keyvalue.Store, tier environment.T
 	return out, errors.Join(undecodable...)
 }
 
-func ScheduledProjects(ctx context.Context, store keyvalue.Store, tier environment.Tier) ([]string, error) {
+func ScheduledProjects(ctx context.Context, store records.Store, tier environment.Tier) ([]string, error) {
 	registrations, err := Registrations(ctx, store, tier)
 	if registrations == nil {
 		return nil, err

@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
-func databaseOf(t *testing.T, store KeyValues, in keyvalue.Partition) string {
+func databaseOf(t *testing.T, store KeyValues, in records.Partition) string {
 	t.Helper()
 	_, collection, err := store.open(in)
 	if err != nil {
@@ -25,7 +26,7 @@ func TestAProjectsValuesAreKeptInADatabaseOfTheProjectsOwn(t *testing.T) {
 	store := KeyValues{Clients: &Clients{Namespace: "ocel", Project: "acme", Region: "us-central1", Endpoint: "http://127.0.0.1:1"}}
 	shop := variablestore.ValuesPartition(variablestore.Scope{Project: "shop", Tier: environment.TierPreview})
 	blog := variablestore.ValuesPartition(variablestore.Scope{Project: "blog", Tier: environment.TierPreview})
-	stacks := keyvalue.Partition{Tier: environment.TierPreview, Root: keyvalue.RootStacks, Path: []string{"shop"}}
+	stacks := records.Partition{Tier: environment.TierPreview, Root: stackrecords.RootStacks, Path: []string{"shop"}}
 
 	if got, want := databaseOf(t, store, shop), ProjectDatabase("ocel", environment.TierPreview, "shop"); got != want {
 		t.Errorf("shop's values are kept in %q, want %q", got, want)

@@ -12,13 +12,13 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -155,7 +155,7 @@ func TestADigestTheRegistryAlreadyHasIsNotPushedAgain(t *testing.T) {
 
 type recordReadingStacks struct {
 	provider.Stacks
-	store keyvalue.Store
+	store records.Store
 
 	mu    sync.Mutex
 	named []string

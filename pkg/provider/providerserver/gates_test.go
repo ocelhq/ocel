@@ -17,8 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -43,9 +43,9 @@ func seedGates(t *testing.T, vendor *fake.Provider, records map[string]stackreco
 	seedGatesIn(t, vendor, environment.TierPreview, records)
 }
 
-func seedGatesIn(t *testing.T, vendor *fake.Provider, tier environment.Tier, records map[string]stackrecords.GateRecord) {
+func seedGatesIn(t *testing.T, vendor *fake.Provider, tier environment.Tier, gates map[string]stackrecords.GateRecord) {
 	t.Helper()
-	plaintext, err := json.Marshal(records)
+	plaintext, err := json.Marshal(gates)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func seedGatesIn(t *testing.T, vendor *fake.Provider, tier environment.Tier, rec
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry, err := keyvalue.ReadOrEmpty(t.Context(), vendor.KeyValues(), stackrecords.NewGatesRecordKey(tier))
+	entry, err := records.ReadOrEmpty(t.Context(), vendor.KeyValues(), stackrecords.NewGatesRecordKey(tier))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,10 +13,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
@@ -324,10 +324,10 @@ func (m *machine) RemoveShield(_ context.Context, hostname, owner string) error 
 
 type boxEdge struct {
 	*box.Edge
-	keyValues keyvalue.Store
+	keyValues records.Store
 }
 
-func edgeOver(m *machine, store keyvalue.Store) boxEdge {
+func edgeOver(m *machine, store records.Store) boxEdge {
 	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope, m.findTunnelHooks, m.readGate), keyValues: store}
 }
 

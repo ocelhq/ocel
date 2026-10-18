@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -270,7 +270,7 @@ func TestAClaimWrittenLongerAgoThanTheLeaseIsTakenOverWithoutWaiting(t *testing.
 	t.Parallel()
 	store := fake.NewKeyValues()
 	claimed := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
-	if _, err := store.Write(context.Background(), keyvalue.Entry{
+	if _, err := store.Write(context.Background(), records.Entry{
 		Key:   stackrecords.BootstrapPartKey(environment.TierProduction, "env-source-sync"),
 		Value: []byte(`{"state":"creating","written_by":"1.2.0","added_by":"web","added_at":"` + claimed + `","claimed_at":"` + claimed + `"}`),
 	}); err != nil {
@@ -288,23 +288,23 @@ func TestAClaimWrittenLongerAgoThanTheLeaseIsTakenOverWithoutWaiting(t *testing.
 	}
 }
 
-type cancelRefusing struct{ keyvalue.Store }
+type cancelRefusing struct{ records.Store }
 
-func (s cancelRefusing) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s cancelRefusing) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if err := ctx.Err(); err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	return s.Store.Read(ctx, key)
 }
 
-func (s cancelRefusing) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s cancelRefusing) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 	return s.Store.Write(ctx, entry)
 }
 
-func (s cancelRefusing) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (s cancelRefusing) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

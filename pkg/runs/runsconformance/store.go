@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
 
@@ -94,12 +94,12 @@ func Store(t *testing.T, open func(t *testing.T) runs.Store) {
 		}
 		stale := record
 		stale.Value = json.RawMessage(`"c"`)
-		if err := store.ReplaceRecord(ctx, stale, record.Value); !errors.Is(err, keyvalue.ErrStale) {
+		if err := store.ReplaceRecord(ctx, stale, record.Value); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("ReplaceRecord over a value the record no longer holds = %v, want ErrStale", err)
 		}
 		missing := record
 		missing.Key = "user-never"
-		if err := store.ReplaceRecord(ctx, missing, record.Value); !errors.Is(err, keyvalue.ErrStale) {
+		if err := store.ReplaceRecord(ctx, missing, record.Value); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("ReplaceRecord of a key no record holds = %v, want ErrStale", err)
 		}
 		if err := store.DeleteRecord(ctx, record); err != nil {
@@ -141,7 +141,7 @@ func Store(t *testing.T, open func(t *testing.T) runs.Store) {
 				winner = i
 			case err == nil:
 				t.Fatalf("takers %d and %d both replaced the record", winner, i)
-			case !errors.Is(err, keyvalue.ErrStale):
+			case !errors.Is(err, records.ErrStale):
 				t.Fatalf("ReplaceRecord by taker %d: %v", i, err)
 			}
 		}
@@ -162,10 +162,10 @@ func Store(t *testing.T, open func(t *testing.T) runs.Store) {
 		if err != nil {
 			t.Fatalf("CreateRun of a new run: %v", err)
 		}
-		if _, err := store.CreateRun(ctx, run); !errors.Is(err, keyvalue.ErrStale) {
+		if _, err := store.CreateRun(ctx, run); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("CreateRun of a run that exists = %v, want ErrStale", err)
 		}
-		if _, err := store.WriteRun(ctx, run); !errors.Is(err, keyvalue.ErrStale) {
+		if _, err := store.WriteRun(ctx, run); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("WriteRun with no revision = %v, want ErrStale", err)
 		}
 
@@ -185,7 +185,7 @@ func Store(t *testing.T, open func(t *testing.T) runs.Store) {
 		if second == first {
 			t.Error("WriteRun kept the revision, so a writer holding the old one could overwrite this")
 		}
-		if _, err := store.WriteRun(ctx, read); !errors.Is(err, keyvalue.ErrStale) {
+		if _, err := store.WriteRun(ctx, read); !errors.Is(err, records.ErrStale) {
 			t.Errorf("WriteRun at a revision that moved = %v, want ErrStale", err)
 		}
 
@@ -205,14 +205,14 @@ func Store(t *testing.T, open func(t *testing.T) runs.Store) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := store.DeleteRun(ctx, run); !errors.Is(err, keyvalue.ErrStale) {
+		if err := store.DeleteRun(ctx, run); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("DeleteRun with no revision = %v, want ErrStale", err)
 		}
 		run.Revision = revision
 		if err := store.DeleteRun(ctx, run); err != nil {
 			t.Fatalf("DeleteRun at the revision created: %v", err)
 		}
-		if _, err := store.ReadRun(ctx, run.Topic, run.Execution); !errors.Is(err, keyvalue.ErrNotFound) {
+		if _, err := store.ReadRun(ctx, run.Topic, run.Execution); !errors.Is(err, records.ErrNotFound) {
 			t.Errorf("ReadRun after DeleteRun = %v, want ErrNotFound", err)
 		}
 	})
@@ -262,7 +262,7 @@ func Store(t *testing.T, open func(t *testing.T) runs.Store) {
 	})
 
 	t.Run("reading a run no one wrote is not found", func(t *testing.T) {
-		if _, err := open(t).ReadRun(ctx, "resize", "nothing"); !errors.Is(err, keyvalue.ErrNotFound) {
+		if _, err := open(t).ReadRun(ctx, "resize", "nothing"); !errors.Is(err, records.ErrNotFound) {
 			t.Errorf("ReadRun = %v, want ErrNotFound", err)
 		}
 	})

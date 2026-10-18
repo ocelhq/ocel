@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -29,7 +29,7 @@ type Provider struct {
 	options   Options
 	project   string
 	host      *host.Host
-	keyValues keyvalue.Store
+	keyValues records.Store
 	cipher    *boxstore.Cipher
 
 	transform transform.Pass
@@ -132,7 +132,7 @@ func (p *Provider) Stacks() provider.Stacks {
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return resources.NoArtifacts{} }
 
-func (p *Provider) KeyValues() keyvalue.Store { return p.keyValues }
+func (p *Provider) KeyValues() records.Store { return p.keyValues }
 
 func (p *Provider) Cipher() seal.Cipher { return p.cipher }
 

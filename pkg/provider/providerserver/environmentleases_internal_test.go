@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -84,7 +84,7 @@ func newTimedLeases() (*environmentLeases, *leaseTimers) {
 }
 
 type unwritableKeyValues struct {
-	keyvalue.Store
+	records.Store
 
 	mu      sync.Mutex
 	refused bool
@@ -96,7 +96,7 @@ func (s *unwritableKeyValues) refuseWrites(refused bool) {
 	s.refused = refused
 }
 
-func (s *unwritableKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s *unwritableKeyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	s.mu.Lock()
 	refused := s.refused
 	s.mu.Unlock()
@@ -106,8 +106,8 @@ func (s *unwritableKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (
 	return s.Store.Write(ctx, entry)
 }
 
-func takeAs(ctx context.Context, store keyvalue.Store, token string) error {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, stackrecords.EnvironmentLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env))
+func takeAs(ctx context.Context, store records.Store, token string) error {
+	recorded, err := records.ReadOrEmpty(ctx, store, stackrecords.EnvironmentLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env))
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func takeAs(ctx context.Context, store keyvalue.Store, token string) error {
 	return err
 }
 
-func readLeaseRevision(t *testing.T, store keyvalue.Store) keyvalue.Revision {
+func readLeaseRevision(t *testing.T, store records.Store) records.Revision {
 	t.Helper()
 	recorded, err := store.Read(context.Background(), stackrecords.EnvironmentLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env))
 	if err != nil {
@@ -239,7 +239,7 @@ func TestAHolderWhoseLeaseWasTakenOverHasItsWorkStoppedAndNeverTakesItBack(t *te
 		t.Fatal(err)
 	}
 	<-hold.done
-	if _, err := store.Read(ctx, stackrecords.EnvironmentLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env)); !errors.Is(err, keyvalue.ErrNotFound) {
+	if _, err := store.Read(ctx, stackrecords.EnvironmentLeaseKey(shopProduction.tier, shopProduction.slug, shopProduction.env)); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading the lease after the deploy that took it over freed it = %v, want none: the holder that lost it must not take it back", err)
 	}
 }
@@ -351,15 +351,15 @@ func previewScopes(n int) []leaseSubject {
 	return scopes
 }
 
-func previewLeaseKey(scope leaseSubject) keyvalue.Key {
+func previewLeaseKey(scope leaseSubject) records.Key {
 	env := scope.(environmentScope)
 	return stackrecords.EnvironmentLeaseKey(env.tier, env.slug, env.env)
 }
 
-func recordRivalLease(t *testing.T, store keyvalue.Store, scope leaseSubject, expiresAt time.Time) {
+func recordRivalLease(t *testing.T, store records.Store, scope leaseSubject, expiresAt time.Time) {
 	t.Helper()
 	ctx := context.Background()
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, previewLeaseKey(scope))
+	recorded, err := records.ReadOrEmpty(ctx, store, previewLeaseKey(scope))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,9 +371,9 @@ func recordRivalLease(t *testing.T, store keyvalue.Store, scope leaseSubject, ex
 	}
 }
 
-func readLeaseToken(t *testing.T, store keyvalue.Store, scope leaseSubject) string {
+func readLeaseToken(t *testing.T, store records.Store, scope leaseSubject) string {
 	t.Helper()
-	recorded, err := keyvalue.ReadOrEmpty(context.Background(), store, previewLeaseKey(scope))
+	recorded, err := records.ReadOrEmpty(context.Background(), store, previewLeaseKey(scope))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -387,20 +387,20 @@ func readLeaseToken(t *testing.T, store keyvalue.Store, scope leaseSubject) stri
 }
 
 type renewingKeyValues struct {
-	keyvalue.Store
+	records.Store
 
 	mu      sync.Mutex
 	renewed string
 	reads   int
 }
 
-func (s *renewingKeyValues) renewOnRead(key keyvalue.Key, read int) {
+func (s *renewingKeyValues) renewOnRead(key records.Key, read int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.renewed, s.reads = key.String(), read
 }
 
-func (s *renewingKeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s *renewingKeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	s.mu.Lock()
 	renew := false
 	if key.String() == s.renewed && s.reads > 0 {
@@ -411,13 +411,13 @@ func (s *renewingKeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalu
 	if renew {
 		recorded, err := s.Store.Read(ctx, key)
 		if err != nil {
-			return keyvalue.Entry{}, err
+			return records.Entry{}, err
 		}
 		if recorded.Value, err = json.Marshal(stackrecords.EnvironmentLease{Token: rivalLease, Holder: stackrecords.LeaseDeploy, ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
-			return keyvalue.Entry{}, err
+			return records.Entry{}, err
 		}
 		if _, err := s.Write(ctx, recorded); err != nil {
-			return keyvalue.Entry{}, err
+			return records.Entry{}, err
 		}
 	}
 	return s.Store.Read(ctx, key)

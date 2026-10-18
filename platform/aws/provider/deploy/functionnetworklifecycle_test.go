@@ -9,17 +9,17 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 )
 
-func functionNetworkStacks(t *testing.T, apps ...string) (*Stacks, *mockedEngine, keyvalue.Store) {
+func functionNetworkStacks(t *testing.T, apps ...string) (*Stacks, *mockedEngine, records.Store) {
 	t.Helper()
 	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = siblingAppRoot(t, apps...)
@@ -183,7 +183,7 @@ func TestAnAppIsRefusedWhileTheFunctionNetworkIsGoingDown(t *testing.T) {
 
 	ctx := context.Background()
 	stacks, _, store := functionNetworkStacks(t, "web")
-	leased, err := keyvalue.ReadOrEmpty(ctx, store, functionNetworkShare.leaseAt(environment.TierProduction))
+	leased, err := records.ReadOrEmpty(ctx, store, functionNetworkShare.leaseAt(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,10 +16,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/pgmq"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -112,7 +112,7 @@ func (o *engines) open(_ context.Context, cfg pgmq.Config) (queues.Engine, error
 	return e, nil
 }
 
-func record(t *testing.T, store keyvalue.Store, key keyvalue.Key, value any) {
+func record(t *testing.T, store records.Store, key records.Key, value any) {
 	t.Helper()
 	raw, ok := value.([]byte)
 	if !ok {
@@ -121,14 +121,14 @@ func record(t *testing.T, store keyvalue.Store, key keyvalue.Key, value any) {
 			t.Fatal(err)
 		}
 	}
-	if err := keyvalue.Change(context.Background(), store, key, func(keyvalue.Entry) ([]byte, bool, error) { return raw, true, nil }); err != nil {
+	if err := records.Change(context.Background(), store, key, func(records.Entry) ([]byte, bool, error) { return raw, true, nil }); err != nil {
 		t.Fatal(err)
 	}
 }
 
 const queueSockets = "/var/lib/docker/volumes/shop-prod-infra-ocel-queue-sockets/_data"
 
-func aQueue(t *testing.T, store keyvalue.Store) {
+func aQueue(t *testing.T, store records.Store) {
 	t.Helper()
 	record(t, store, live.QueueDatabaseKey(tier, "shop", "prod"), live.QueueDatabase{
 		Container: "shop-prod-infra-ocel-queue", Stack: "prod--infra",
@@ -140,7 +140,7 @@ func aQueue(t *testing.T, store keyvalue.Store) {
 	record(t, store, live.QueueWorkerKey(tier, "shop", "prod", "ledger"), live.QueueWorker{App: "web", Stack: "prod--web--r1", Container: "shop-ledger"})
 }
 
-func aHost(store keyvalue.Store, opened *engines) *queues.Engines {
+func aHost(store records.Store, opened *engines) *queues.Engines {
 	return &queues.Engines{
 		IsAnswering: func(context.Context, string) bool { return true },
 		Records:     store,
@@ -246,7 +246,7 @@ func TestAQueueNoLongerRecordedIsClosedAndServedNoMore(t *testing.T) {
 	if err := host.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := keyvalue.Forget(ctx, store, live.QueueDatabaseKey(tier, "shop", "prod")); err != nil {
+	if err := records.Forget(ctx, store, live.QueueDatabaseKey(tier, "shop", "prod")); err != nil {
 		t.Fatal(err)
 	}
 	if err := host.Reconcile(ctx); err != nil {
@@ -329,7 +329,7 @@ func TestAWorkerContainerStartedAgainUnderARetiredNameIsAskedAgainBeforeItIsDeli
 	if err := host.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := keyvalue.Forget(ctx, store, live.QueueWorkerKey(tier, "shop", "prod", "worker")); err != nil {
+	if err := records.Forget(ctx, store, live.QueueWorkerKey(tier, "shop", "prod", "worker")); err != nil {
 		t.Fatal(err)
 	}
 	if err := host.Reconcile(ctx); err != nil {

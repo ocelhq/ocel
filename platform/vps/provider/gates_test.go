@@ -8,9 +8,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -19,7 +19,7 @@ import (
 
 var gateTiers = []environment.Tier{environment.TierPreview, environment.TierProduction}
 
-func recordGates(t *testing.T, store keyvalue.Store, cipher *fake.Cipher, tier environment.Tier, gates map[string]gate.Gate) {
+func recordGates(t *testing.T, store records.Store, cipher *fake.Cipher, tier environment.Tier, gates map[string]gate.Gate) {
 	t.Helper()
 	err := stackrecords.ChangeGates(context.Background(), store, cipher, tier, func(records map[string]stackrecords.GateRecord) error {
 		for slug, held := range gates {
@@ -32,7 +32,7 @@ func recordGates(t *testing.T, store keyvalue.Store, cipher *fake.Cipher, tier e
 	}
 }
 
-func recordedGates(t *testing.T, tier environment.Tier, gates map[string]gate.Gate) (keyvalue.Store, *fake.Cipher) {
+func recordedGates(t *testing.T, tier environment.Tier, gates map[string]gate.Gate) (records.Store, *fake.Cipher) {
 	t.Helper()
 	store, cipher := fake.NewKeyValues(), fake.NewCipher()
 	recordGates(t, store, cipher, tier, gates)

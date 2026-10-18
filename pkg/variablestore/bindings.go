@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 const (
@@ -193,7 +193,7 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner st
 	if write.Expected != nil && record.Version != *write.Expected {
 		return 0, changedRefusal(name, *write.Expected, record.Version)
 	}
-	recordedValue, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, bindingValueAt(scope, name, environment))
+	recordedValue, err := records.ReadOrEmpty(ctx, s.KeyValues, bindingValueAt(scope, name, environment))
 	if err != nil {
 		return 0, fmt.Errorf("read binding %s's value: %w", name, err)
 	}
@@ -223,7 +223,7 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner st
 }
 
 func (s Store) racedPair(err error, name string) error {
-	if errors.Is(err, keyvalue.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return fmt.Errorf(
 			"binding %s was rewritten while this publish was writing it: another deploy of the same environment is racing this one — run them one after the other: %w",
 			name, ErrTornPair)
@@ -304,11 +304,11 @@ func (s Store) RemoveBindings(ctx context.Context, scope Scope, environment stri
 		}
 	}
 	if err := forEachConcurrently(ctx, len(dropping), func(ctx context.Context, i int) error {
-		for _, name := range []keyvalue.Key{
+		for _, name := range []records.Key{
 			bindingRecordAt(scope, dropping[i], environment),
 			bindingValueAt(scope, dropping[i], environment),
 		} {
-			if err := keyvalue.Forget(ctx, s.KeyValues, name); err != nil {
+			if err := records.Forget(ctx, s.KeyValues, name); err != nil {
 				return fmt.Errorf("remove %s: %w", name, err)
 			}
 		}
@@ -354,7 +354,7 @@ func (s Store) removeUnchanged(ctx context.Context, scope Scope, environment, na
 	if record.Version == 0 || record.Version != expected {
 		return false, nil
 	}
-	recordedValue, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, bindingValueAt(scope, name, environment))
+	recordedValue, err := records.ReadOrEmpty(ctx, s.KeyValues, bindingValueAt(scope, name, environment))
 	if err != nil {
 		return false, fmt.Errorf("read binding %s's value: %w", name, err)
 	}
@@ -363,17 +363,17 @@ func (s Store) removeUnchanged(ctx context.Context, scope Scope, environment, na
 		return false, err
 	}
 	err = s.KeyValues.Remove(ctx, recorded.Key, recorded.Revision)
-	if errors.Is(err, keyvalue.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return false, s.claim(ctx, scope, owner, environment, name)
 	}
-	if err != nil && !errors.Is(err, keyvalue.ErrNotFound) {
+	if err != nil && !errors.Is(err, records.ErrNotFound) {
 		return false, fmt.Errorf("remove %s: %w", recorded.Key, err)
 	}
 	if recordedValue.Revision == "" {
 		return true, nil
 	}
 	err = s.KeyValues.Remove(ctx, recordedValue.Key, recordedValue.Revision)
-	if err != nil && !errors.Is(err, keyvalue.ErrStale) && !errors.Is(err, keyvalue.ErrNotFound) {
+	if err != nil && !errors.Is(err, records.ErrStale) && !errors.Is(err, records.ErrNotFound) {
 		return false, fmt.Errorf("remove %s: %w", recordedValue.Key, err)
 	}
 	return true, nil
@@ -549,19 +549,19 @@ func describeEnvironment(environment string) string {
 	return environment
 }
 
-func (s Store) bindingRecordAt(ctx context.Context, scope Scope, environment, name string) (keyvalue.Entry, bindingRecord, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, bindingRecordAt(scope, name, environment))
+func (s Store) bindingRecordAt(ctx context.Context, scope Scope, environment, name string) (records.Entry, bindingRecord, error) {
+	recorded, err := records.ReadOrEmpty(ctx, s.KeyValues, bindingRecordAt(scope, name, environment))
 	if err != nil {
-		return keyvalue.Entry{}, bindingRecord{}, fmt.Errorf("read binding %s's record: %w", name, err)
+		return records.Entry{}, bindingRecord{}, fmt.Errorf("read binding %s's record: %w", name, err)
 	}
 	record, err := decodeBindingRecord(name, recorded)
 	if err != nil {
-		return keyvalue.Entry{}, bindingRecord{}, err
+		return records.Entry{}, bindingRecord{}, err
 	}
 	return recorded, record, nil
 }
 
-func decodeBindingRecord(name string, recorded keyvalue.Entry) (bindingRecord, error) {
+func decodeBindingRecord(name string, recorded records.Entry) (bindingRecord, error) {
 	if len(recorded.Value) == 0 {
 		return bindingRecord{}, nil
 	}
@@ -572,7 +572,7 @@ func decodeBindingRecord(name string, recorded keyvalue.Entry) (bindingRecord, e
 	return record, nil
 }
 
-func decodeBindingValue(name string, recorded keyvalue.Entry) (bindingValue, error) {
+func decodeBindingValue(name string, recorded records.Entry) (bindingValue, error) {
 	if len(recorded.Value) == 0 {
 		return bindingValue{}, nil
 	}

@@ -13,9 +13,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -34,12 +34,12 @@ type OriginWildcardSpec struct {
 	ClientCAs   []string
 }
 
-func (e *Edge) originWildcardKey(tier environment.Tier) keyvalue.Key {
+func (e *Edge) originWildcardKey(tier environment.Tier) records.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(Kind), "origin-wildcard")
 }
 
 func (e *Edge) readOriginWildcard(ctx context.Context, tier environment.Tier) (originWildcardEntry, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.originWildcardKey(tier))
+	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.originWildcardKey(tier))
 	if err != nil {
 		return originWildcardEntry{}, fmt.Errorf("read which origin wildcard the %s load balancer of tier %s serves: %w", Kind, tier, err)
 	}
@@ -54,7 +54,7 @@ func (e *Edge) readOriginWildcard(ctx context.Context, tier environment.Tier) (o
 }
 
 func (e *Edge) writeOriginWildcard(ctx context.Context, tier environment.Tier, recorded originWildcardEntry) error {
-	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.originWildcardKey(tier))
+	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.originWildcardKey(tier))
 	if err != nil {
 		return fmt.Errorf("read which origin wildcard the %s load balancer of tier %s serves: %w", Kind, tier, err)
 	}
@@ -165,7 +165,7 @@ func (e *Edge) DestroyOriginWildcard(ctx context.Context, tier environment.Tier)
 	if err := e.withdrawClaims(ctx, tier, "*."+recorded.BaseDomain); err != nil {
 		return err
 	}
-	if err := keyvalue.Forget(ctx, e.deps.KeyValues, e.originWildcardKey(tier)); err != nil {
+	if err := records.Forget(ctx, e.deps.KeyValues, e.originWildcardKey(tier)); err != nil {
 		return fmt.Errorf("release which origin wildcard the %s load balancer of tier %s served: %w", Kind, tier, err)
 	}
 	return nil

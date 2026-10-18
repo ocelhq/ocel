@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -34,13 +34,13 @@ func readInlineBindings(req *contractv1.DeployRequest) ([]inlineBinding, error) 
 	inline := make([]inlineBinding, 0, len(req.GetInlineBindings()))
 	for _, record := range req.GetInlineBindings() {
 		name := record.GetName()
-		if err := variablestoreserver.ValidateInlineClaim(naming.InlineRecordOwner, name); err != nil {
+		if err := variablestoreserver.ValidateInlineClaim(bindings.InlineRecordOwner, name); err != nil {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 		}
 		if err := variablestoreserver.VerifyBinding(&variablestorev1.PublishedBinding{Binding: record}); err != nil {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 		}
-		if err := variablestoreserver.RefuseUnsourced(naming.InlineRecordOwner, record); err != nil {
+		if err := variablestoreserver.RefuseUnsourced(bindings.InlineRecordOwner, record); err != nil {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 		}
 		bound := slices.IndexFunc(resources, func(resource provider.Resource) bool { return resource.Binding == name })
@@ -50,7 +50,7 @@ func readInlineBindings(req *contractv1.DeployRequest) ([]inlineBinding, error) 
 		}
 		inline = append(inline, inlineBinding{
 			record:   record,
-			site:     "bindings." + strings.TrimPrefix(name, naming.InlineRecordPrefix),
+			site:     "bindings." + strings.TrimPrefix(name, bindings.InlineRecordPrefix),
 			resource: resources[bound],
 		})
 	}
@@ -171,7 +171,7 @@ func (r *deployRun) readInlineRecords(ctx context.Context) error {
 	carried := make([]provider.Binding, 0, len(r.inline))
 	for _, bound := range r.inline {
 		name := bound.record.GetName()
-		pair, err := variablestoreserver.BindingPair(naming.InlineRecordOwner, &variablestorev1.PublishedBinding{Binding: bound.record})
+		pair, err := variablestoreserver.BindingPair(bindings.InlineRecordOwner, &variablestorev1.PublishedBinding{Binding: bound.record})
 		if err != nil {
 			return err
 		}
@@ -203,7 +203,7 @@ func (r *deployRun) publishInlineBindings(ctx context.Context) error {
 		name := bound.record.GetName()
 		expected := r.inlineRecords.versions[name]
 		write := variablestore.NamedBindingWrite{Name: name, Write: r.inlineRecords.writes[name], Expected: &expected}
-		versions, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.spec), naming.InlineRecordOwner, []variablestore.NamedBindingWrite{write})
+		versions, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.spec), bindings.InlineRecordOwner, []variablestore.NamedBindingWrite{write})
 		if err != nil {
 			return fmt.Errorf("publish the records %s's inline bindings keep: %w", r.scope.Project, err)
 		}
@@ -241,7 +241,7 @@ func (r *deployRun) restoreInlineBindings(ctx context.Context, progress progress
 			Write:    variablestore.BindingWrite{Record: previous.Record, Shapes: previous.Shapes, Value: previous.Value, Owner: previous.Owner},
 			Expected: &written,
 		}
-		if _, err := r.values.SetBindings(ctx, r.scope, environment, naming.InlineRecordOwner, []variablestore.NamedBindingWrite{write}); err != nil && !errors.Is(err, variablestore.ErrBindingChanged) {
+		if _, err := r.values.SetBindings(ctx, r.scope, environment, bindings.InlineRecordOwner, []variablestore.NamedBindingWrite{write}); err != nil && !errors.Is(err, variablestore.ErrBindingChanged) {
 			errs = append(errs, err)
 		}
 	}
@@ -281,7 +281,7 @@ func (r *deployRun) inlineRecordVersions(ctx context.Context) (map[string]int64,
 	}
 	versions := map[string]int64{}
 	for _, record := range listed {
-		if record.Owner == naming.InlineRecordOwner && record.Environment == environment && naming.IsInlineRecord(record.Name) {
+		if record.Owner == bindings.InlineRecordOwner && record.Environment == environment && bindings.IsInlineRecord(record.Name) {
 			versions[record.Name] = record.Version
 		}
 	}

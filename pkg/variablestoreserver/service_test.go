@@ -10,8 +10,8 @@ import (
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -19,6 +19,7 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
@@ -418,7 +419,7 @@ func TestABindingNamesAnEnvironmentOnlyInPreview(t *testing.T) {
 func deployPreview(t *testing.T, provider *fake.Provider, preview string) {
 	t.Helper()
 	name := stackrecords.StackKey(environment.TierPreview, slug, naming.InfraStack(preview))
-	if _, err := provider.KeyValues().Write(context.Background(), keyvalue.Entry{Key: name, Value: []byte("{}")}); err != nil {
+	if _, err := provider.KeyValues().Write(context.Background(), records.Entry{Key: name, Value: []byte("{}")}); err != nil {
 		t.Fatalf("record a deployed preview environment: %v", err)
 	}
 }
@@ -433,18 +434,18 @@ func TestTheRecordsInlineBindingsKeepAreWrittenByThemAlone(t *testing.T) {
 			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Url: "postgres://u:p@db/shop"}},
 		}}
 	}
-	inline := naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders")
+	inline := bindings.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders")
 
 	for name, req := range map[string]*variablestorev1.SetBindingRequest{
 		"a publisher writing a reserved name":       {Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Published: record(inline), Owner: "terraform"},
-		"the inline owner writing an ordinary name": {Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Published: record("orders"), Owner: naming.InlineRecordOwner},
+		"the inline owner writing an ordinary name": {Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Published: record("orders"), Owner: bindings.InlineRecordOwner},
 	} {
 		if _, err := variables.SetBinding(ctx, req); connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Errorf("%s: code = %v, want %v", name, connect.CodeOf(err), connect.CodeInvalidArgument)
 		}
 	}
 
-	if _, err := variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Published: record(inline), Owner: naming.InlineRecordOwner}); err != nil {
+	if _, err := variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Published: record(inline), Owner: bindings.InlineRecordOwner}); err != nil {
 		t.Fatalf("the inline owner writing its own record: %v", err)
 	}
 }

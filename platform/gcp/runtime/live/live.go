@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -56,7 +56,7 @@ func FromManifest(raw []byte) (*live.Values, error) {
 	return Over(manifest, ports.KeyValues{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }
 
-func Over(manifest variables.Manifest, store keyvalue.Store, cipher seal.Cipher) *live.Values {
+func Over(manifest variables.Manifest, store records.Store, cipher seal.Cipher) *live.Values {
 	return live.New(&storeSource{
 		reader: variablestore.EnvironmentReader{
 			KeyValues:   store,

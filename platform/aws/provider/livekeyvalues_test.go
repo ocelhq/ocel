@@ -13,9 +13,9 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/records"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -39,9 +39,9 @@ func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {
 
 	conformance.RunStore(t, store)
 
-	in := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootConformance, Path: []string{"console"}}
+	in := records.Partition{Tier: environment.TierProduction, Root: conformance.Root, Path: []string{"console"}}
 	written := json.RawMessage(`{"parts":["cache"]}`)
-	if _, err := store.Write(ctx, keyvalue.Entry{Key: in.Key("shop"), Value: written}); err != nil {
+	if _, err := store.Write(ctx, records.Entry{Key: in.Key("shop"), Value: written}); err != nil {
 		t.Fatalf("Write() = %v", err)
 	}
 	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, environment.TierProduction)

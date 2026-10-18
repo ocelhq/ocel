@@ -9,8 +9,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -58,16 +58,16 @@ func (m EnvironmentMeta) RefuseOtherLifecycle(env string, lifecycle Lifecycle) e
 		env, m.Lifecycle, lifecycle, redeploy, env)
 }
 
-func ReadEnvironmentMeta(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env string) (EnvironmentMeta, error) {
+func ReadEnvironmentMeta(ctx context.Context, store records.Store, tier environment.Tier, slug, env string) (EnvironmentMeta, error) {
 	name := EnvironmentKey(tier, slug, env)
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	recorded, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return EnvironmentMeta{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	return decodeEnvironmentMeta(name, recorded)
 }
 
-func decodeEnvironmentMeta(name keyvalue.Key, recorded keyvalue.Entry) (EnvironmentMeta, error) {
+func decodeEnvironmentMeta(name records.Key, recorded records.Entry) (EnvironmentMeta, error) {
 	var meta EnvironmentMeta
 	if len(recorded.Value) > 0 {
 		if err := json.Unmarshal(recorded.Value, &meta); err != nil {
@@ -77,7 +77,7 @@ func decodeEnvironmentMeta(name keyvalue.Key, recorded keyvalue.Entry) (Environm
 	return meta, nil
 }
 
-func EnsureLifecycle(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env string, lifecycle Lifecycle, aliasToken string) error {
+func EnsureLifecycle(ctx context.Context, store records.Store, tier environment.Tier, slug, env string, lifecycle Lifecycle, aliasToken string) error {
 	_, err := changeEnvironmentMeta(ctx, store, EnvironmentKey(tier, slug, env), false, func(meta EnvironmentMeta) (EnvironmentMeta, bool, error) {
 		if err := meta.RefuseOtherLifecycle(env, lifecycle); err != nil {
 			return meta, false, err
@@ -92,7 +92,7 @@ func EnsureLifecycle(ctx context.Context, store keyvalue.Store, tier environment
 	return err
 }
 
-func EnsureAliasToken(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string) (string, error) {
+func EnsureAliasToken(ctx context.Context, store records.Store, tier environment.Tier, slug, env, token string) (string, error) {
 	meta, err := changeEnvironmentMeta(ctx, store, EnvironmentKey(tier, slug, env), false, func(meta EnvironmentMeta) (EnvironmentMeta, bool, error) {
 		if meta.AliasToken != "" {
 			return meta, false, nil
@@ -103,7 +103,7 @@ func EnsureAliasToken(ctx context.Context, store keyvalue.Store, tier environmen
 	return meta.AliasToken, err
 }
 
-func RecordBuiltAliasToken(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string) error {
+func RecordBuiltAliasToken(ctx context.Context, store records.Store, tier environment.Tier, slug, env, token string) error {
 	_, err := changeEnvironmentMeta(ctx, store, EnvironmentKey(tier, slug, env), false, func(meta EnvironmentMeta) (EnvironmentMeta, bool, error) {
 		if err := meta.refuseOtherAliasToken(env, token); err != nil {
 			return meta, false, err
@@ -124,15 +124,15 @@ func (m EnvironmentMeta) refuseOtherAliasToken(env, token string) error {
 		env)
 }
 
-func ForgetUnclaimedAlias(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, token string) error {
+func ForgetUnclaimedAlias(ctx context.Context, store records.Store, tier environment.Tier, slug, env, token string) error {
 	name := EnvironmentKey(tier, slug, env)
-	return keyvalue.ForgetMatching(ctx, store, name, func(recorded keyvalue.Entry) (bool, error) {
+	return records.ForgetMatching(ctx, store, name, func(recorded records.Entry) (bool, error) {
 		meta, err := decodeEnvironmentMeta(name, recorded)
 		return err == nil && meta.Lifecycle == "" && meta.AliasToken == token, err
 	})
 }
 
-func changeClaimedEnvironmentMeta(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, aliasToken string, change func(EnvironmentMeta) (EnvironmentMeta, bool, error)) (EnvironmentMeta, error) {
+func changeClaimedEnvironmentMeta(ctx context.Context, store records.Store, tier environment.Tier, slug, env, aliasToken string, change func(EnvironmentMeta) (EnvironmentMeta, bool, error)) (EnvironmentMeta, error) {
 	return changeEnvironmentMeta(ctx, store, EnvironmentKey(tier, slug, env), true, func(meta EnvironmentMeta) (EnvironmentMeta, bool, error) {
 		if meta.AliasToken != aliasToken {
 			return meta, false, refusal.Refuse(refusal.CodeBusy,
@@ -143,10 +143,10 @@ func changeClaimedEnvironmentMeta(ctx context.Context, store keyvalue.Store, tie
 	})
 }
 
-func changeEnvironmentMeta(ctx context.Context, store keyvalue.Store, name keyvalue.Key, claimed bool, change func(EnvironmentMeta) (EnvironmentMeta, bool, error)) (EnvironmentMeta, error) {
+func changeEnvironmentMeta(ctx context.Context, store records.Store, name records.Key, claimed bool, change func(EnvironmentMeta) (EnvironmentMeta, bool, error)) (EnvironmentMeta, error) {
 	var next EnvironmentMeta
 	existed := claimed
-	err := keyvalue.Change(ctx, store, name, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	err := records.Change(ctx, store, name, func(recorded records.Entry) ([]byte, bool, error) {
 		if existed && recorded.Revision == "" {
 			return nil, false, refusal.Refuse(refusal.CodeBusy,
 				"preview %s was removed while this deploy ran, so ocel did not record it again: deploy it again to recreate it",
@@ -170,7 +170,7 @@ func changeEnvironmentMeta(ctx context.Context, store keyvalue.Store, name keyva
 	return next, err
 }
 
-func RecordEnvironmentMeta(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, aliasToken, label string, lifecycle Lifecycle) error {
+func RecordEnvironmentMeta(ctx context.Context, store records.Store, tier environment.Tier, slug, env, aliasToken, label string, lifecycle Lifecycle) error {
 	_, err := changeClaimedEnvironmentMeta(ctx, store, tier, slug, env, aliasToken, func(meta EnvironmentMeta) (EnvironmentMeta, bool, error) {
 		if err := meta.RefuseOtherLifecycle(env, lifecycle); err != nil {
 			return meta, false, err
@@ -187,7 +187,7 @@ func RecordEnvironmentMeta(ctx context.Context, store keyvalue.Store, tier envir
 	return err
 }
 
-func RecordAliases(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, aliasToken string, aliases []edge.PreviewHost) (previous, superseded []edge.PreviewHost, err error) {
+func RecordAliases(ctx context.Context, store records.Store, tier environment.Tier, slug, env, aliasToken string, aliases []edge.PreviewHost) (previous, superseded []edge.PreviewHost, err error) {
 	meta, err := changeClaimedEnvironmentMeta(ctx, store, tier, slug, env, aliasToken, func(meta EnvironmentMeta) (EnvironmentMeta, bool, error) {
 		previous = meta.Aliases
 		return replaceAliases(meta, aliases)
@@ -195,7 +195,7 @@ func RecordAliases(ctx context.Context, store keyvalue.Store, tier environment.T
 	return previous, meta.Superseded, err
 }
 
-func RestoreAliases(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, aliasToken string, recorded, previous []edge.PreviewHost) error {
+func RestoreAliases(ctx context.Context, store records.Store, tier environment.Tier, slug, env, aliasToken string, recorded, previous []edge.PreviewHost) error {
 	_, err := changeClaimedEnvironmentMeta(ctx, store, tier, slug, env, aliasToken, func(meta EnvironmentMeta) (EnvironmentMeta, bool, error) {
 		if slices.Equal(meta.Aliases, recorded) {
 			return replaceAliases(meta, previous)
@@ -222,7 +222,7 @@ func replaceAliases(meta EnvironmentMeta, aliases []edge.PreviewHost) (Environme
 	return meta, true, nil
 }
 
-func ForgetSuperseded(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env string, withdrawn []edge.PreviewHost) error {
+func ForgetSuperseded(ctx context.Context, store records.Store, tier environment.Tier, slug, env string, withdrawn []edge.PreviewHost) error {
 	if len(withdrawn) == 0 {
 		return nil
 	}
@@ -235,7 +235,7 @@ func ForgetSuperseded(ctx context.Context, store keyvalue.Store, tier environmen
 	return err
 }
 
-func EnvironmentMetas(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) (map[string]EnvironmentMeta, error) {
+func EnvironmentMetas(ctx context.Context, store records.Store, tier environment.Tier, slug string) (map[string]EnvironmentMeta, error) {
 	recorded, err := store.List(ctx, EnvironmentsPartition(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
@@ -251,7 +251,7 @@ func EnvironmentMetas(ctx context.Context, store keyvalue.Store, tier environmen
 	return meta, nil
 }
 
-func StackNames(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) ([]naming.StackName, error) {
+func StackNames(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]naming.StackName, error) {
 	recorded, err := store.List(ctx, StacksPartition(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
@@ -267,7 +267,7 @@ func StackNames(ctx context.Context, store keyvalue.Store, tier environment.Tier
 	return names, nil
 }
 
-func PreviewEnvironments(ctx context.Context, store keyvalue.Store, slug string) ([]Environment, error) {
+func PreviewEnvironments(ctx context.Context, store records.Store, slug string) ([]Environment, error) {
 	stacks, err := StackNames(ctx, store, environment.TierPreview, slug)
 	if err != nil {
 		return nil, err

@@ -10,12 +10,12 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/lease"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -39,15 +39,15 @@ func newEnvironmentScope(spec provider.DeploySpec) environmentScope {
 	return environmentScope{tier: spec.Tier, slug: spec.Slug, env: spec.Env}
 }
 
-func (s environmentScope) take(ctx context.Context, store keyvalue.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) (bool, error) {
+func (s environmentScope) take(ctx context.Context, store records.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) (bool, error) {
 	return stackrecords.TakeEnvironmentLease(ctx, store, s.tier, s.slug, s.env, token, holder, terms)
 }
 
-func (s environmentScope) renew(ctx context.Context, store keyvalue.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) error {
+func (s environmentScope) renew(ctx context.Context, store records.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) error {
 	return stackrecords.RenewEnvironmentLease(ctx, store, s.tier, s.slug, s.env, token, holder, terms)
 }
 
-func (s environmentScope) forget(ctx context.Context, store keyvalue.Store, token string) error {
+func (s environmentScope) forget(ctx context.Context, store records.Store, token string) error {
 	return stackrecords.ForgetEnvironmentLease(ctx, store, s.tier, s.slug, s.env, token)
 }
 
@@ -62,15 +62,15 @@ type projectScope struct {
 	slug string
 }
 
-func (s projectScope) take(ctx context.Context, store keyvalue.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) (bool, error) {
+func (s projectScope) take(ctx context.Context, store records.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) (bool, error) {
 	return stackrecords.TakeProjectLease(ctx, store, s.tier, s.slug, token, holder, terms)
 }
 
-func (s projectScope) renew(ctx context.Context, store keyvalue.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) error {
+func (s projectScope) renew(ctx context.Context, store records.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) error {
 	return stackrecords.RenewProjectLease(ctx, store, s.tier, s.slug, token, holder, terms)
 }
 
-func (s projectScope) forget(ctx context.Context, store keyvalue.Store, token string) error {
+func (s projectScope) forget(ctx context.Context, store records.Store, token string) error {
 	return stackrecords.ForgetProjectLease(ctx, store, s.tier, s.slug, token)
 }
 
@@ -79,9 +79,9 @@ func (s projectScope) describe() string { return s.slug + " in " + string(s.tier
 func (s projectScope) lease() provider.Lease { return provider.Lease{Tier: s.tier, Project: s.slug} }
 
 type leaseSubject interface {
-	take(ctx context.Context, store keyvalue.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) (bool, error)
-	renew(ctx context.Context, store keyvalue.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) error
-	forget(ctx context.Context, store keyvalue.Store, token string) error
+	take(ctx context.Context, store records.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) (bool, error)
+	renew(ctx context.Context, store records.Store, token string, holder stackrecords.LeaseHolder, terms stackrecords.LeaseTerms) error
+	forget(ctx context.Context, store records.Store, token string) error
 	describe() string
 	lease() provider.Lease
 }
@@ -119,7 +119,7 @@ func (l *environmentLeases) wait(ctx context.Context, d time.Duration) error {
 
 type environmentHold struct {
 	leases *environmentLeases
-	store  keyvalue.Store
+	store  records.Store
 	scope  leaseSubject
 	token  string
 	holder stackrecords.LeaseHolder
@@ -136,7 +136,7 @@ type environmentHold struct {
 	lostWith error
 }
 
-func (l *environmentLeases) take(ctx context.Context, store keyvalue.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder) (*environmentHold, error) {
+func (l *environmentLeases) take(ctx context.Context, store records.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder) (*environmentHold, error) {
 	held, err := scope.take(ctx, store, token, holder, l.terms())
 	if err != nil {
 		return nil, err
@@ -144,7 +144,7 @@ func (l *environmentLeases) take(ctx context.Context, store keyvalue.Store, scop
 	return l.startHold(ctx, store, scope, token, holder, held), nil
 }
 
-func (l *environmentLeases) takeUnderNewToken(ctx context.Context, store keyvalue.Store, scope leaseSubject, holder stackrecords.LeaseHolder) (*environmentHold, error) {
+func (l *environmentLeases) takeUnderNewToken(ctx context.Context, store records.Store, scope leaseSubject, holder stackrecords.LeaseHolder) (*environmentHold, error) {
 	token, err := lease.NewToken()
 	if err != nil {
 		return nil, err
@@ -152,14 +152,14 @@ func (l *environmentLeases) takeUnderNewToken(ctx context.Context, store keyvalu
 	return l.take(ctx, store, scope, token, holder)
 }
 
-func (l *environmentLeases) keep(ctx context.Context, store keyvalue.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder) (*environmentHold, error) {
+func (l *environmentLeases) keep(ctx context.Context, store records.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder) (*environmentHold, error) {
 	if err := scope.renew(ctx, store, token, holder, l.terms()); err != nil {
 		return nil, err
 	}
 	return l.startHold(ctx, store, scope, token, holder, true), nil
 }
 
-func (l *environmentLeases) startHold(ctx context.Context, store keyvalue.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder, held bool) *environmentHold {
+func (l *environmentLeases) startHold(ctx context.Context, store records.Store, scope leaseSubject, token string, holder stackrecords.LeaseHolder, held bool) *environmentHold {
 	leased, cancel := context.WithCancelCause(ctx)
 	h := &environmentHold{
 		leases: l, store: store, scope: scope, token: token, holder: holder, held: held,
@@ -309,7 +309,7 @@ type environmentHolds struct {
 	cancel context.CancelCauseFunc
 }
 
-func (l *environmentLeases) takeEach(ctx context.Context, store keyvalue.Store, token string, scopes []leaseSubject, holder stackrecords.LeaseHolder) (environmentHolds, error) {
+func (l *environmentLeases) takeEach(ctx context.Context, store records.Store, token string, scopes []leaseSubject, holder stackrecords.LeaseHolder) (environmentHolds, error) {
 	leased, cancel := context.WithCancelCause(ctx)
 	holds := environmentHolds{held: make([]*environmentHold, len(scopes)), leased: leased, cancel: cancel}
 	bounded := newBoundedStore(store, environmentLeaseConcurrency)
@@ -419,11 +419,11 @@ func (h *handlers) AbandonDeploy(ctx context.Context, req *contractv1.AbandonDep
 }
 
 type boundedStore struct {
-	keyvalue.Store
+	records.Store
 	slots chan struct{}
 }
 
-func newBoundedStore(store keyvalue.Store, calls int) *boundedStore {
+func newBoundedStore(store records.Store, calls int) *boundedStore {
 	return &boundedStore{Store: store, slots: make(chan struct{}, calls)}
 }
 
@@ -436,15 +436,15 @@ func (s *boundedStore) acquire(ctx context.Context) error {
 	}
 }
 
-func (s *boundedStore) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+func (s *boundedStore) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if err := s.acquire(ctx); err != nil {
-		return keyvalue.Entry{}, err
+		return records.Entry{}, err
 	}
 	defer func() { <-s.slots }()
 	return s.Store.Read(ctx, key)
 }
 
-func (s *boundedStore) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (s *boundedStore) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	if err := s.acquire(ctx); err != nil {
 		return "", err
 	}
@@ -452,7 +452,7 @@ func (s *boundedStore) Write(ctx context.Context, entry keyvalue.Entry) (keyvalu
 	return s.Store.Write(ctx, entry)
 }
 
-func (s *boundedStore) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
+func (s *boundedStore) WritePair(ctx context.Context, first, second records.Entry) error {
 	if err := s.acquire(ctx); err != nil {
 		return err
 	}
@@ -460,7 +460,7 @@ func (s *boundedStore) WritePair(ctx context.Context, first, second keyvalue.Ent
 	return s.Store.WritePair(ctx, first, second)
 }
 
-func (s *boundedStore) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+func (s *boundedStore) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
 	if err := s.acquire(ctx); err != nil {
 		return err
 	}
@@ -468,7 +468,7 @@ func (s *boundedStore) Remove(ctx context.Context, key keyvalue.Key, expected ke
 	return s.Store.Remove(ctx, key, expected)
 }
 
-func (s *boundedStore) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s *boundedStore) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	if err := s.acquire(ctx); err != nil {
 		return nil, err
 	}

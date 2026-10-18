@@ -17,15 +17,17 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
+
+const RootPostgres records.Root = "postgres"
 
 const (
 	cloudSQLEdition        = "ENTERPRISE"
@@ -158,7 +160,7 @@ func (s postgresSpec) shapeProperties(region string, tier environment.Tier) map[
 type postgresInstances struct {
 	clients *clients
 	sql     *sqladmin.Service
-	records keyvalue.Store
+	records records.Store
 	cipher  seal.Cipher
 	ref     provider.StackRef
 }
@@ -563,8 +565,8 @@ type recordedPassword struct {
 	plain  string
 }
 
-func (i postgresInstances) passwordKey(database string) keyvalue.Key {
-	return keyvalue.Partition{Tier: i.ref.Tier, Root: keyvalue.RootPostgres}.Key(i.ref.Project, i.ref.Name.Env, database)
+func (i postgresInstances) passwordKey(database string) records.Key {
+	return records.Partition{Tier: i.ref.Tier, Root: RootPostgres}.Key(i.ref.Project, i.ref.Name.Env, database)
 }
 
 func (i postgresInstances) passwordBound(database string) seal.AssociatedData {
@@ -580,7 +582,7 @@ func (i postgresInstances) passwordBound(database string) seal.AssociatedData {
 
 func (i postgresInstances) ensurePassword(ctx context.Context, database string) (recordedPassword, error) {
 	key := i.passwordKey(database)
-	err := keyvalue.Change(ctx, i.records, key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
+	err := records.Change(ctx, i.records, key, func(recorded records.Entry) ([]byte, bool, error) {
 		if len(recorded.Value) > 0 {
 			return nil, false, nil
 		}
@@ -603,7 +605,7 @@ func (i postgresInstances) ensurePassword(ctx context.Context, database string) 
 		return recordedPassword{}, err
 	}
 	if !found {
-		return recordedPassword{}, fmt.Errorf("read the password recorded for postgres %s: %w", database, keyvalue.ErrNotFound)
+		return recordedPassword{}, fmt.Errorf("read the password recorded for postgres %s: %w", database, records.ErrNotFound)
 	}
 	opened, err := i.cipher.Open(ctx, i.ref.Tier, i.passwordBound(database), recorded.Sealed)
 	if err != nil {
@@ -614,7 +616,7 @@ func (i postgresInstances) ensurePassword(ctx context.Context, database string) 
 }
 
 func (i postgresInstances) readRecordedPassword(ctx context.Context, database string) (recordedPassword, bool, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, i.records, i.passwordKey(database))
+	entry, err := records.ReadOrEmpty(ctx, i.records, i.passwordKey(database))
 	if err != nil {
 		return recordedPassword{}, false, fmt.Errorf("read the password recorded for postgres %s: %w", database, err)
 	}
@@ -629,7 +631,7 @@ func (i postgresInstances) readRecordedPassword(ctx context.Context, database st
 }
 
 func (i postgresInstances) recordPasswordSet(ctx context.Context, database, instance string) error {
-	return keyvalue.Change(ctx, i.records, i.passwordKey(database), func(entry keyvalue.Entry) ([]byte, bool, error) {
+	return records.Change(ctx, i.records, i.passwordKey(database), func(entry records.Entry) ([]byte, bool, error) {
 		var recorded recordedPassword
 		if err := json.Unmarshal(entry.Value, &recorded); err != nil {
 			return nil, false, fmt.Errorf("read the password recorded for postgres %s: %w", database, err)
@@ -661,7 +663,7 @@ func (i postgresInstances) remove(ctx context.Context, binding provider.Binding,
 			}
 		}
 	}
-	return keyvalue.Forget(ctx, i.records, i.passwordKey(binding.Name))
+	return records.Forget(ctx, i.records, i.passwordKey(binding.Name))
 }
 
 func (i postgresInstances) unprotect(ctx context.Context, database string, current *sqladmin.DatabaseInstance) error {

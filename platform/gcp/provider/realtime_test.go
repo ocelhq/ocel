@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/realtime"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
@@ -244,7 +244,7 @@ func (h *realtimeHarness) plan(t *testing.T, name string) (provider.ChangeAction
 	written, pushed := len(h.writes), len(h.pushed)
 	h.mu.Unlock()
 	key := h.env.namespaceKey(name)
-	before, _ := keyvalue.ReadOrEmpty(context.Background(), h.env.records, key)
+	before, _ := records.ReadOrEmpty(context.Background(), h.env.records, key)
 
 	action, reason, err := h.env.plan(context.Background(), aRealtime(name))
 
@@ -256,7 +256,7 @@ func (h *realtimeHarness) plan(t *testing.T, name string) (provider.ChangeAction
 		t.Errorf("plan(%s) pushed the gateway image %q, want a plan that only reads", name, got)
 	}
 	h.mu.Unlock()
-	if after, _ := keyvalue.ReadOrEmpty(context.Background(), h.env.records, key); string(after.Value) != string(before.Value) {
+	if after, _ := records.ReadOrEmpty(context.Background(), h.env.records, key); string(after.Value) != string(before.Value) {
 		t.Errorf("plan(%s) changed the realtime's record, want a plan that only reads", name)
 	}
 	return action, reason, err
@@ -323,7 +323,7 @@ func TestARealtimeWhoseRecordWasLostPlansAnUpdate(t *testing.T) {
 
 	h := newRealtimeHarness(t)
 	h.provision(t, "app")
-	if err := keyvalue.Forget(context.Background(), h.env.records, h.env.namespaceKey("app")); err != nil {
+	if err := records.Forget(context.Background(), h.env.records, h.env.namespaceKey("app")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -342,7 +342,7 @@ func TestARealtimeWhoseKeysChangedPlansAnUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := keyvalue.Change(context.Background(), h.env.records, h.env.namespaceKey("chat"), func(keyvalue.Entry) ([]byte, bool, error) {
+	if err := records.Change(context.Background(), h.env.records, h.env.namespaceKey("chat"), func(records.Entry) ([]byte, bool, error) {
 		return stale, true, nil
 	}); err != nil {
 		t.Fatal(err)

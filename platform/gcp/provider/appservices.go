@@ -6,9 +6,9 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -65,8 +65,8 @@ func runsAppElsewhere(recorded []stackrecords.NamedStack, ref provider.StackRef)
 	})
 }
 
-func stackKeepsRunning(ctx context.Context, records keyvalue.Store, ref provider.StackRef, goingFunctions, goingContainers []string) (bool, error) {
-	recorded, found, err := stackrecords.Read(ctx, records, ref.Tier, ref.Project, ref.Name)
+func stackKeepsRunning(ctx context.Context, store records.Store, ref provider.StackRef, goingFunctions, goingContainers []string) (bool, error) {
+	recorded, found, err := stackrecords.Read(ctx, store, ref.Tier, ref.Project, ref.Name)
 	if err != nil || !found {
 		return false, err
 	}

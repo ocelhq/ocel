@@ -11,6 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -112,7 +113,7 @@ func plannedBindings(published []*variablestorev1.PublishedBinding) []provider.B
 	for _, record := range published {
 		binding := record.GetBinding()
 		planned := provider.Binding{Type: provider.BindingCustom, Name: binding.GetName(), Grants: provider.GrantsOf(record.GetGrants())}
-		switch naming.BindingTypeOf(binding) {
+		switch bindings.TypeOf(binding) {
 		case bindingsv1.BindingType_BINDING_TYPE_BUCKET:
 			planned.Type = provider.BindingBucket
 		case bindingsv1.BindingType_BINDING_TYPE_POSTGRES:

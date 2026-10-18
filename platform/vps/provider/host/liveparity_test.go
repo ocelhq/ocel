@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -50,9 +51,9 @@ func TestWhatTheKeyValueHelperWritesTheBoxReadsNatively(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
-	shop := keyvalue.Partition{Tier: helperTier, Root: keyvalue.RootValues, Path: []string{"shop"}}
+	shop := records.Partition{Tier: helperTier, Root: variablestore.RootValues, Path: []string{"shop"}}
 	var names []string
-	for _, key := range []keyvalue.Key{shop.Key("cells", "/", "DATABASE_URL", "*"), shop.Key("cells", "/", "SESSION", "pr-7")} {
+	for _, key := range []records.Key{shop.Key("cells", "/", "DATABASE_URL", "*"), shop.Key("cells", "/", "SESSION", "pr-7")} {
 		name, err := live.PathOf(key)
 		if err != nil {
 			t.Fatal(err)

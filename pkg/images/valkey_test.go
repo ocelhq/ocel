@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/kvstore"
+	"github.com/ocelhq/ocel/pkg/valkey"
 )
 
 func TestEveryValkeyVersionAStoreRunsIsPinnedByDigest(t *testing.T) {
@@ -15,7 +15,7 @@ func TestEveryValkeyVersionAStoreRunsIsPinnedByDigest(t *testing.T) {
 		t.Fatalf("ValkeyVersions() = %v, want %v", got, want)
 	}
 	for _, version := range ValkeyVersions() {
-		if err := kvstore.RefuseVersion(version); err != nil {
+		if err := valkey.RefuseVersion(version); err != nil {
 			t.Errorf("Valkey(%q) is pinned, and the build refuses a store declaring it: %v", version, err)
 		}
 		image, pinned := Valkey(version)
@@ -36,8 +36,8 @@ func TestAnEmptyValkeyVersionRunsTheDefaultMajor(t *testing.T) {
 	t.Parallel()
 
 	image, pinned := Valkey("")
-	if !pinned || !strings.HasPrefix(image, "valkey/valkey:"+kvstore.DefaultVersion+".") {
-		t.Errorf("Valkey(\"\") = %q (pinned %v), want the default major %s", image, pinned, kvstore.DefaultVersion)
+	if !pinned || !strings.HasPrefix(image, "valkey/valkey:"+valkey.DefaultVersion+".") {
+		t.Errorf("Valkey(\"\") = %q (pinned %v), want the default major %s", image, pinned, valkey.DefaultVersion)
 	}
 }
 

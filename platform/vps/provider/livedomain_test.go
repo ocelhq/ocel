@@ -15,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -23,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -61,7 +61,7 @@ func recorded(t *testing.T, p *vps.Provider, slug string, state edge.StackState)
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	entry, err := keyvalue.ReadOrEmpty(ctx, p.KeyValues(), stackrecords.EdgeStackKey(environment.TierProduction, slug))
+	entry, err := records.ReadOrEmpty(ctx, p.KeyValues(), stackrecords.EdgeStackKey(environment.TierProduction, slug))
 	if err != nil {
 		t.Fatalf("read the edge stack record current on this box: %v", err)
 	}

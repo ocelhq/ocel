@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
 
@@ -30,31 +30,31 @@ func (r GateRecord) GateInForce() *gate.Gate {
 	return &gate
 }
 
-func ReadGates(ctx context.Context, store keyvalue.Store, cipher seal.Cipher, tier environment.Tier) (map[string]GateRecord, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, store, NewGatesRecordKey(tier))
+func ReadGates(ctx context.Context, store records.Store, cipher seal.Cipher, tier environment.Tier) (map[string]GateRecord, error) {
+	recorded, err := records.ReadOrEmpty(ctx, store, NewGatesRecordKey(tier))
 	if err != nil {
 		return nil, fmt.Errorf("read the %s gate keys: %w", tier, err)
 	}
 	return openGates(ctx, cipher, tier, recorded)
 }
 
-func ChangeGates(ctx context.Context, store keyvalue.Store, cipher seal.Cipher, tier environment.Tier, apply func(records map[string]GateRecord) error) error {
-	return keyvalue.Change(ctx, store, NewGatesRecordKey(tier), func(recorded keyvalue.Entry) ([]byte, bool, error) {
-		records, err := openGates(ctx, cipher, tier, recorded)
+func ChangeGates(ctx context.Context, store records.Store, cipher seal.Cipher, tier environment.Tier, apply func(gates map[string]GateRecord) error) error {
+	return records.Change(ctx, store, NewGatesRecordKey(tier), func(recorded records.Entry) ([]byte, bool, error) {
+		gates, err := openGates(ctx, cipher, tier, recorded)
 		if err != nil {
 			return nil, false, err
 		}
-		if records == nil {
-			records = map[string]GateRecord{}
+		if gates == nil {
+			gates = map[string]GateRecord{}
 		}
-		before := cloneRecords(records)
-		if err := apply(records); err != nil {
+		before := cloneRecords(gates)
+		if err := apply(gates); err != nil {
 			return nil, false, err
 		}
-		if reflect.DeepEqual(before, records) {
+		if reflect.DeepEqual(before, gates) {
 			return nil, false, nil
 		}
-		value, err := sealGates(ctx, cipher, tier, records)
+		value, err := sealGates(ctx, cipher, tier, gates)
 		if err != nil {
 			return nil, false, err
 		}
@@ -72,7 +72,7 @@ func cloneRecords(records map[string]GateRecord) map[string]GateRecord {
 	return cloned
 }
 
-func openGates(ctx context.Context, cipher seal.Cipher, tier environment.Tier, recorded keyvalue.Entry) (map[string]GateRecord, error) {
+func openGates(ctx context.Context, cipher seal.Cipher, tier environment.Tier, recorded records.Entry) (map[string]GateRecord, error) {
 	if len(recorded.Value) == 0 {
 		return nil, nil
 	}
@@ -84,11 +84,11 @@ func openGates(ctx context.Context, cipher seal.Cipher, tier environment.Tier, r
 	if err != nil {
 		return nil, fmt.Errorf("open the %s gate keys: %w", tier, err)
 	}
-	var records map[string]GateRecord
-	if err := json.Unmarshal(plaintext, &records); err != nil {
+	var gates map[string]GateRecord
+	if err := json.Unmarshal(plaintext, &gates); err != nil {
 		return nil, fmt.Errorf("read the %s gate keys: %w", tier, err)
 	}
-	return records, nil
+	return gates, nil
 }
 
 func sealGates(ctx context.Context, cipher seal.Cipher, tier environment.Tier, records map[string]GateRecord) ([]byte, error) {

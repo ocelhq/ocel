@@ -10,11 +10,11 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -147,7 +147,7 @@ func TestRemovingTheContainersPartIsRefusedWhileAContainerAppRunsInItAndTakesItD
 		t.Fatalf("a refused removal tore down %v, want nothing", torn)
 	}
 
-	if err := keyvalue.Forget(ctx, cfg.KeyValues, containerShare.consumerAt(spec.Ref)); err != nil {
+	if err := records.Forget(ctx, cfg.KeyValues, containerShare.consumerAt(spec.Ref)); err != nil {
 		t.Fatal(err)
 	}
 	if err := stacks.RemoveContainerInfrastructure(ctx, tier, progress.Discard()); err != nil {

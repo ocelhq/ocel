@@ -11,10 +11,10 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/elasticache"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/valkey"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -76,7 +76,7 @@ func translateKV(name string, spec *provider.KVSpec) (kvArgs, error) {
 	if spec != nil {
 		declared = *spec
 	}
-	major := cmp.Or(declared.Version, kvstore.DefaultVersion)
+	major := cmp.Or(declared.Version, valkey.DefaultVersion)
 	version, runs := kvEngineVersions[major]
 	if !runs {
 		return kvArgs{}, refusal.Refuse(refusal.CodeInvalid,
@@ -84,7 +84,7 @@ func translateKV(name string, spec *provider.KVSpec) (kvArgs, error) {
 	}
 	memoryBytes := declared.MemoryBytes
 	if memoryBytes == 0 {
-		memoryBytes, _ = kvstore.ParseMemory(kvstore.DefaultMemory)
+		memoryBytes, _ = valkey.ParseMemory(valkey.DefaultMemory)
 	}
 	node, reservePercent, fits := pickKVNode(memoryBytes)
 	if !fits {
@@ -98,7 +98,7 @@ func translateKV(name string, spec *provider.KVSpec) (kvArgs, error) {
 		NodeType:                 node,
 		ReservedMemoryPercent:    reservePercent,
 		MaxMemoryPolicy:          cmp.Or(declared.Eviction, kvDefaultMaxMemoryPolicy),
-		Port:                     kvstore.ValkeyPort,
+		Port:                     valkey.Port,
 		NumCacheClusters:         kvNodeCount,
 		AutomaticFailoverEnabled: true,
 		MultiAZEnabled:           true,

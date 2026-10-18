@@ -21,11 +21,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -276,7 +276,7 @@ func recordProjects(t *testing.T, fixture clitest.FakeProject, tier environment.
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := fixture.Provider.KeyValues().Write(context.Background(), keyvalue.Entry{Key: stackrecords.ProjectKey(tier, slug), Value: body}); err != nil {
+		if _, err := fixture.Provider.KeyValues().Write(context.Background(), records.Entry{Key: stackrecords.ProjectKey(tier, slug), Value: body}); err != nil {
 			t.Fatalf("record project %s: %v", slug, err)
 		}
 	}

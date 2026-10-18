@@ -12,8 +12,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -26,7 +26,7 @@ const (
 type offersHarness struct {
 	secrets *secretServer
 	clients *clients
-	records keyvalue.Store
+	records records.Store
 	log     *fake.Log
 }
 
@@ -58,7 +58,7 @@ func (h *offersHarness) adoptIn(tier environment.Tier, offers []edge.Offer) erro
 func (h *offersHarness) record(t *testing.T) (adoptedEdge, bool) {
 	t.Helper()
 	entry, err := h.records.Read(context.Background(), adoptedEdgeKey(environment.TierProduction, cloudflareKind))
-	if errors.Is(err, keyvalue.ErrNotFound) {
+	if errors.Is(err, records.ErrNotFound) {
 		return adoptedEdge{}, false
 	}
 	if err != nil {

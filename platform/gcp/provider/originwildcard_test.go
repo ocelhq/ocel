@@ -11,10 +11,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -105,7 +105,7 @@ type wildcardHarness struct {
 	certificates *issuingCertificates
 	dns          *recordingDNS
 	balancer     *shieldedBalancer
-	records      keyvalue.Store
+	records      records.Store
 	adopted      error
 }
 
@@ -259,7 +259,7 @@ func TestTheOriginWildcardIsNotTakenDownWhileAProjectIsServedBehindTheWorker(t *
 		t.Fatal(err)
 	}
 	state := stackrecords.EdgeState{Kind: cloudflare.Kind}
-	entry, err := keyvalue.ReadOrEmpty(ctx, h.records, stackrecords.EdgeStackKey(environment.TierProduction, "shop"))
+	entry, err := records.ReadOrEmpty(ctx, h.records, stackrecords.EdgeStackKey(environment.TierProduction, "shop"))
 	if err != nil {
 		t.Fatal(err)
 	}

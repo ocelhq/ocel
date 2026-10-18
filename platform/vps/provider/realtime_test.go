@@ -16,13 +16,13 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/realtime"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -317,17 +317,17 @@ func TestAnAppBindingNoRealtimeIsHandedNoGateway(t *testing.T) {
 }
 
 type deployArrivingMidRun struct {
-	keyvalue.Store
+	records.Store
 	once   sync.Once
 	always bool
 	arrive func(context.Context)
 }
 
-func (s *deployArrivingMidRun) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s *deployArrivingMidRun) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	listed, err := s.Store.List(ctx, in, under...)
-	if in.Root == keyvalue.RootRealtime && s.always {
+	if in.Root == live.RootRealtime && s.always {
 		s.arrive(ctx)
-	} else if in.Root == keyvalue.RootRealtime {
+	} else if in.Root == live.RootRealtime {
 		s.once.Do(func() { s.arrive(ctx) })
 	}
 	return listed, err
@@ -346,7 +346,7 @@ func TestAGatewayWhoseRealtimeKeepsChangingUnderItIsRefusedAsBusy(t *testing.T) 
 	p.Recording(&deployArrivingMidRun{Store: store, always: true, arrive: func(ctx context.Context) {
 		arrived++
 		key := live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, fmt.Sprintf("chat%d", arrived))
-		if _, err := store.Write(ctx, keyvalue.Entry{Key: key, Value: record}); err != nil {
+		if _, err := store.Write(ctx, records.Entry{Key: key, Value: record}); err != nil {
 			t.Errorf("record chat%d: %v", arrived, err)
 		}
 	}})
@@ -370,7 +370,7 @@ func TestARealtimeAnotherDeployRecordsWhileTheGatewayRestartsIsVerifiedByTheGate
 	}
 	p.Recording(&deployArrivingMidRun{Store: store, arrive: func(ctx context.Context) {
 		key := live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, "chat")
-		if _, err := store.Write(ctx, keyvalue.Entry{Key: key, Value: chat}); err != nil {
+		if _, err := store.Write(ctx, records.Entry{Key: key, Value: chat}); err != nil {
 			t.Errorf("record chat: %v", err)
 		}
 	}})

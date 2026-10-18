@@ -14,10 +14,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -95,10 +96,10 @@ type RuntimeLayerRequest struct {
 	StateTable     string
 }
 
-type RecordStore func(stateTable string) keyvalue.Store
+type RecordStore func(stateTable string) records.Store
 
 func DynamoRecords(dynamo awsports.DynamoAPI) RecordStore {
-	return func(stateTable string) keyvalue.Store {
+	return func(stateTable string) records.Store {
 		return awsports.KeyValues{Dynamo: dynamo, Tables: awsports.Table(stateTable)}
 	}
 }
@@ -107,11 +108,11 @@ type recordedRuntimeLayers struct {
 	Layers []string `json:"layers"`
 }
 
-func runtimeLayersKey(tier environment.Tier) keyvalue.Key {
-	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}.Key(runtimeLayersRecord)
+func runtimeLayersKey(tier environment.Tier) records.Key {
+	return records.Partition{Tier: tier, Root: stackrecords.RootBootstrap}.Key(runtimeLayersRecord)
 }
 
-func decodeRecordedRuntimeLayers(entry keyvalue.Entry) ([]string, error) {
+func decodeRecordedRuntimeLayers(entry records.Entry) ([]string, error) {
 	if len(entry.Value) == 0 {
 		return nil, nil
 	}
@@ -122,16 +123,16 @@ func decodeRecordedRuntimeLayers(entry keyvalue.Entry) ([]string, error) {
 	return recorded.Layers, nil
 }
 
-func readRecordedRuntimeLayers(ctx context.Context, records keyvalue.Store, tier environment.Tier) ([]string, error) {
-	entry, err := keyvalue.ReadOrEmpty(ctx, records, runtimeLayersKey(tier))
+func readRecordedRuntimeLayers(ctx context.Context, store records.Store, tier environment.Tier) ([]string, error) {
+	entry, err := records.ReadOrEmpty(ctx, store, runtimeLayersKey(tier))
 	if err != nil {
 		return nil, err
 	}
 	return decodeRecordedRuntimeLayers(entry)
 }
 
-func recordRuntimeLayer(ctx context.Context, records keyvalue.Store, tier environment.Tier, name string) error {
-	return keyvalue.Change(ctx, records, runtimeLayersKey(tier), func(entry keyvalue.Entry) ([]byte, bool, error) {
+func recordRuntimeLayer(ctx context.Context, store records.Store, tier environment.Tier, name string) error {
+	return records.Change(ctx, store, runtimeLayersKey(tier), func(entry records.Entry) ([]byte, bool, error) {
 		names, err := decodeRecordedRuntimeLayers(entry)
 		if err != nil || slices.Contains(names, name) {
 			return nil, false, err
@@ -286,8 +287,8 @@ type runtimeLayerVersion struct {
 
 func (v runtimeLayerVersion) String() string { return fmt.Sprintf("%s:%d", v.name, v.version) }
 
-func runtimeLayerVersions(ctx context.Context, layers LayerVersionsAPI, records keyvalue.Store, tier environment.Tier) ([]runtimeLayerVersion, error) {
-	names, err := readRecordedRuntimeLayers(ctx, records, tier)
+func runtimeLayerVersions(ctx context.Context, layers LayerVersionsAPI, store records.Store, tier environment.Tier) ([]runtimeLayerVersion, error) {
+	names, err := readRecordedRuntimeLayers(ctx, store, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -313,8 +314,8 @@ func runtimeLayerVersions(ctx context.Context, layers LayerVersionsAPI, records 
 	return versions, nil
 }
 
-func ReadRuntimeLayersPart(ctx context.Context, layers LayerVersionsAPI, records keyvalue.Store, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-	versions, err := runtimeLayerVersions(ctx, layers, records, tier)
+func ReadRuntimeLayersPart(ctx context.Context, layers LayerVersionsAPI, store records.Store, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+	versions, err := runtimeLayerVersions(ctx, layers, store, tier)
 	if err != nil || len(versions) == 0 {
 		return provider.BootstrapPart{}, false, err
 	}
@@ -331,9 +332,9 @@ func ReadRuntimeLayersPart(ctx context.Context, layers LayerVersionsAPI, records
 	}, true, nil
 }
 
-func removeRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, records keyvalue.Store, ns Namespace, tier environment.Tier) (provider.ChangeGroup, bool) {
+func removeRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, store records.Store, ns Namespace, tier environment.Tier) (provider.ChangeGroup, bool) {
 	group := provider.ChangeGroup{Kind: runtimeLayerGroupKind, Name: runtimeLayerGroupName(ns, tier), Action: provider.ActionDelete}
-	versions, err := runtimeLayerVersions(ctx, layers, records, tier)
+	versions, err := runtimeLayerVersions(ctx, layers, store, tier)
 	if err != nil {
 		group.Reason = provider.WithDetailUnavailable("")
 		return group, true
@@ -344,8 +345,8 @@ func removeRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, records k
 	return group, len(versions) > 0
 }
 
-func deleteRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, records keyvalue.Store, tier environment.Tier, progress progress.Log) error {
-	versions, err := runtimeLayerVersions(ctx, layers, records, tier)
+func deleteRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, store records.Store, tier environment.Tier, progress progress.Log) error {
+	versions, err := runtimeLayerVersions(ctx, layers, store, tier)
 	if err != nil {
 		return err
 	}
@@ -359,7 +360,7 @@ func deleteRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, records k
 		}
 		progress.Say("Removed Lambda layer version " + version.String())
 	}
-	return keyvalue.Forget(ctx, records, runtimeLayersKey(tier))
+	return records.Forget(ctx, store, runtimeLayersKey(tier))
 }
 
 func shapedRuntimeLayers() []pricing.Shaped {

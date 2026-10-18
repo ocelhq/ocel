@@ -8,7 +8,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -67,7 +66,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		if req.GetDry() {
 			return okResult(), nil
 		}
-		root := RootSpan(naming.SpanEnvironment, string(tier), bootstrapTitle(progress.Updating, plan), progressv1.Phase_PHASE_PROVISION)
+		root := RootSpan(SpanEnvironment, string(tier), bootstrapTitle(progress.Updating, plan), progressv1.Phase_PHASE_PROVISION)
 		err = inSpan(sender, root,
 			func(_ *eventStream, progress progress.Log) error {
 				return readiness.Apply(ctx, plan, tier, intent, progress)
@@ -259,7 +258,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	}
 
 	shown, shownErr := PlanFromProto(req.GetConsented())
-	root := RootSpan(naming.SpanEnvironment, string(tier), bootstrapTitle(progress.Removing, shown), progressv1.Phase_PHASE_DESTROY)
+	root := RootSpan(SpanEnvironment, string(tier), bootstrapTitle(progress.Removing, shown), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
 		if shownErr != nil {
 			return shownErr

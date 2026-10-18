@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -94,7 +95,7 @@ func findTopicTaskOrWorker(manifest *contractv1.Manifest) (string, bool) {
 	for _, resource := range manifest.GetResources() {
 		switch typ := resource.GetResource().GetType(); typ {
 		case resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC, resourcesv1.ResourceType_RESOURCE_TYPE_TASK:
-			return fmt.Sprintf("%s %q", naming.ResourceTypeName(typ), resource.GetResource().GetName()), true
+			return fmt.Sprintf("%s %q", bindings.ResourceTypeName(typ), resource.GetResource().GetName()), true
 		}
 	}
 	if workers := manifest.GetWorkers(); len(workers) > 0 {

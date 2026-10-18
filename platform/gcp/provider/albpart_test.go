@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -122,7 +122,7 @@ func TestADeployBehindTheALBWhileItIsBeingTakenDownIsRefusedAsBusy(t *testing.T)
 	b, _ := frontingALB(t)
 	ctx := context.Background()
 	tier := environment.TierProduction
-	if _, err := writeALBLease(ctx, b.records, keyvalue.Entry{Key: albLeaseAt(tier)}, albLease{Retiring: true, RetiringSince: time.Now()}); err != nil {
+	if _, err := writeALBLease(ctx, b.records, records.Entry{Key: albLeaseAt(tier)}, albLease{Retiring: true, RetiringSince: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -171,8 +171,8 @@ func TestADeployMayAddAndRetireTheALBsGateRepositoryAndTheBaseKeepsTheCDNPurgeRo
 }
 
 type listingTogether struct {
-	keyvalue.Store
-	under   keyvalue.Key
+	records.Store
+	under   records.Key
 	parties int
 
 	mu      sync.Mutex
@@ -180,7 +180,7 @@ type listingTogether struct {
 	all     chan struct{}
 }
 
-func (s *listingTogether) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+func (s *listingTogether) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	listed, err := s.Store.List(ctx, in, under...)
 	if reflect.DeepEqual(in, s.under.Partition) && slices.Equal(under, s.under.Path) {
 		s.mu.Lock()
@@ -356,7 +356,7 @@ func TestADeployBehindTheALBTakesOverARetireThatOutlivedItsTimeLimit(t *testing.
 	b, front := frontingALB(t)
 	ctx := context.Background()
 	stale := albLease{Retiring: true, RetiringSince: time.Now().Add(-2 * albRetireLimit)}
-	if _, err := writeALBLease(ctx, b.records, keyvalue.Entry{Key: albLeaseAt(environment.TierProduction)}, stale); err != nil {
+	if _, err := writeALBLease(ctx, b.records, records.Entry{Key: albLeaseAt(environment.TierProduction)}, stale); err != nil {
 		t.Fatal(err)
 	}
 

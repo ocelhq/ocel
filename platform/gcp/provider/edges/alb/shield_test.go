@@ -19,7 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -305,8 +305,8 @@ func TestTakingTheShieldedLoadBalancerDownForgetsWhichCertificatesItTrusted(t *t
 	if err := shielded.Teardown(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	if _, err := balancer.deps.KeyValues.Read(context.Background(), balancer.trustKey(environment.TierProduction)); !errors.Is(err, keyvalue.ErrNotFound) {
-		t.Errorf("reading the trust record after teardown = %v, want %v: a teardown reclaims what its load balancer wrote", err, keyvalue.ErrNotFound)
+	if _, err := balancer.deps.KeyValues.Read(context.Background(), balancer.trustKey(environment.TierProduction)); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("reading the trust record after teardown = %v, want %v: a teardown reclaims what its load balancer wrote", err, records.ErrNotFound)
 	}
 }
 

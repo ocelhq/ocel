@@ -9,9 +9,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/valkey"
 )
 
 const (
@@ -57,12 +57,12 @@ func TestAStoreGetsTheCheapestNodeThatHoldsItsMemoryWithTheReserveThatNodeKeeps(
 func TestEveryNodeInTheLadderHoldsWhatTheContractAllows(t *testing.T) {
 	t.Parallel()
 
-	for _, memory := range []int64{kvstore.MinMemoryBytes, kvstore.MaxMemoryBytes} {
+	for _, memory := range []int64{valkey.MinMemoryBytes, valkey.MaxMemoryBytes} {
 		if _, err := translateKV("cache", &provider.KVSpec{MemoryBytes: memory}); err != nil {
 			t.Errorf("translateKV(%d bytes) = %v, want a node for every size a store may declare", memory, err)
 		}
 	}
-	if _, err := translateKV("cache", &provider.KVSpec{MemoryBytes: kvstore.MaxMemoryBytes * 2}); err == nil {
+	if _, err := translateKV("cache", &provider.KVSpec{MemoryBytes: valkey.MaxMemoryBytes * 2}); err == nil {
 		t.Error("translateKV(64gb) found a node, want it refused: no node in the ladder holds it")
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/userconfig"
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/progressproto"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -132,7 +132,7 @@ func (d *deployMetrics) buildCompletion(err error) telemetry.DeployCompletion {
 func countResourceKinds(manifest *contractv1.Manifest) map[string]int {
 	counts := map[string]int{}
 	for _, resource := range manifest.GetResources() {
-		counts[naming.ResourceTypeName(resource.GetResource().GetType())]++
+		counts[bindings.ResourceTypeName(resource.GetResource().GetType())]++
 	}
 	return counts
 }

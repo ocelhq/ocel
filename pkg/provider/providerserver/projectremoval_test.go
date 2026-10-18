@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -21,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
@@ -351,7 +351,7 @@ func TestRemoveProjectLeavesNothingInTheProjectsValuesOrReferencesPartitions(t *
 		variablestore.Target{Project: "shop", Cell: region.Cell}); err != nil {
 		t.Fatal(err)
 	}
-	partitions := map[string]keyvalue.Partition{
+	partitions := map[string]records.Partition{
 		"values":     variablestore.ValuesPartition(shop),
 		"references": variablestore.ReferencesPartition(shop),
 	}

@@ -13,13 +13,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -369,7 +369,7 @@ func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, tier e
 	return claims, nil
 }
 
-func boundHere(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) ([]string, error) {
+func boundHere(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}
@@ -384,7 +384,7 @@ func listOtherSlugsIfUnrecorded(ctx context.Context, readiness bootstrapplan.Rea
 	if slug == "" {
 		return nil, nil
 	}
-	own, err := keyvalue.ReadOrEmpty(ctx, readiness.KeyValues, stackrecords.ProjectKey(tier, slug))
+	own, err := records.ReadOrEmpty(ctx, readiness.KeyValues, stackrecords.ProjectKey(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's record: %w", slug, err)
 	}

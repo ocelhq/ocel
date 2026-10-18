@@ -9,11 +9,12 @@ import (
 	"cloud.google.com/go/firestore"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 const (
@@ -63,8 +64,8 @@ func (c *Clients) ProjectFirestore(tier environment.Tier, project string) (*fire
 	})
 }
 
-func ProjectOfRecords(in keyvalue.Partition) (string, bool) {
-	if in.Root != keyvalue.RootValues || len(in.Path) == 0 {
+func ProjectOfRecords(in records.Partition) (string, bool) {
+	if in.Root != variablestore.RootValues || len(in.Path) == 0 {
 		return "", false
 	}
 	return in.Path[0], true

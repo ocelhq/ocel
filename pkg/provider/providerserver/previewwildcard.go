@@ -12,14 +12,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -27,7 +26,7 @@ import (
 
 type wildcards struct {
 	provider       provider.Provider
-	keyValues      keyvalue.Store
+	keyValues      records.Store
 	recorded       stackrecords.Wildcard
 	sel            *contractv1.EdgeSelection
 	progressStream *eventStream
@@ -75,7 +74,7 @@ func (w *wildcards) save(ctx context.Context) error {
 			return fmt.Errorf("record %s: %w", name, err)
 		}
 		_, err = w.keyValues.Write(ctx, entry)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -86,23 +85,23 @@ func (w *wildcards) save(ctx context.Context) error {
 	return fmt.Errorf("record %s: it changed under every one of %d attempts", name, reservationAttempts)
 }
 
-func (w *wildcards) readStored(ctx context.Context) (keyvalue.Entry, stackrecords.Wildcard, error) {
+func (w *wildcards) readStored(ctx context.Context) (records.Entry, stackrecords.Wildcard, error) {
 	name := stackrecords.WildcardKey(environment.TierPreview)
-	entry, err := keyvalue.ReadOrEmpty(ctx, w.keyValues, name)
+	entry, err := records.ReadOrEmpty(ctx, w.keyValues, name)
 	if err != nil {
-		return keyvalue.Entry{}, stackrecords.Wildcard{}, fmt.Errorf("read %s: %w", name, err)
+		return records.Entry{}, stackrecords.Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	var stored stackrecords.Wildcard
 	if len(entry.Value) > 0 {
 		if err := json.Unmarshal(entry.Value, &stored); err != nil {
-			return keyvalue.Entry{}, stackrecords.Wildcard{}, fmt.Errorf("read %s: %w", name, err)
+			return records.Entry{}, stackrecords.Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 		}
 	}
 	return entry, stored, nil
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	root := RootSpan(naming.SpanEdge, string(environment.TierPreview),
+	root := RootSpan(SpanEdge, string(environment.TierPreview),
 		progress.Serving.Title("every project's previews on "+edge.PreviewWildcard(req.GetBaseDomain())), progressv1.Phase_PHASE_PROVISION)
 	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
@@ -274,7 +273,7 @@ func (w *wildcards) swapOriginCertificate(ctx context.Context, from, to string, 
 			return fmt.Errorf("record %s: %w", name, err)
 		}
 		_, err = w.keyValues.Write(ctx, entry)
-		if errors.Is(err, keyvalue.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -566,7 +565,7 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	root := RootSpan(naming.SpanEdge, string(environment.TierPreview), progress.Releasing.Title("the global preview domain"), progressv1.Phase_PHASE_DESTROY)
+	root := RootSpan(SpanEdge, string(environment.TierPreview), progress.Releasing.Title("the global preview domain"), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
@@ -611,5 +610,5 @@ func (w *wildcards) release(ctx context.Context, progress progress.Log) error {
 			return err
 		}
 	}
-	return keyvalue.Forget(ctx, w.keyValues, stackrecords.WildcardKey(environment.TierPreview))
+	return records.Forget(ctx, w.keyValues, stackrecords.WildcardKey(environment.TierPreview))
 }

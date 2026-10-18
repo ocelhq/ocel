@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/lease"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -22,6 +21,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -256,7 +256,7 @@ func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 }
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	root := RootSpan(naming.SpanEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
+	root := RootSpan(SpanEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
 		if req.GetSlug() == "" {
 			return errUnnamedProject
@@ -587,15 +587,15 @@ func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress prog
 		return err
 	}
 	for _, recorded := range environments {
-		if err := keyvalue.Forget(ctx, r.provider.KeyValues(), recorded.Key); err != nil {
+		if err := records.Forget(ctx, r.provider.KeyValues(), recorded.Key); err != nil {
 			return err
 		}
 	}
-	if err := keyvalue.Forget(ctx, r.provider.KeyValues(), stackrecords.EdgeStackKey(r.tier, r.slug)); err != nil {
+	if err := records.Forget(ctx, r.provider.KeyValues(), stackrecords.EdgeStackKey(r.tier, r.slug)); err != nil {
 		return err
 	}
 	if err := stackrecords.ForgetProjectWants(ctx, r.provider.KeyValues(), r.tier, r.slug); err != nil {
 		return err
 	}
-	return keyvalue.Forget(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.tier, r.slug))
+	return records.Forget(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.tier, r.slug))
 }

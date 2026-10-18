@@ -7,9 +7,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
@@ -25,7 +25,7 @@ type forgetting struct {
 	provider.Bootstrap
 	forget    func()
 	key       func(context.Context, environment.Tier) (string, error)
-	keyValues keyvalue.Store
+	keyValues records.Store
 	region    string
 
 	envSourceSync func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)

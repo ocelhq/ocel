@@ -15,8 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -513,11 +513,11 @@ func TestTwoProjectsGatesDeployedAtOnceAreBothInThePluginAtTheEnd(t *testing.T) 
 }
 
 type watchedKeyValues struct {
-	keyvalue.Store
-	onWrite func(key keyvalue.Key)
+	records.Store
+	onWrite func(key records.Key)
 }
 
-func (w watchedKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+func (w watchedKeyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	revision, err := w.Store.Write(ctx, entry)
 	w.onWrite(entry.Key)
 	return revision, err
@@ -531,7 +531,7 @@ func TestAPublicationThatLostARaceRecordsThePluginVersionThatIsRunning(t *testin
 	var shopPublishing atomic.Bool
 	shopWrote, blogWrote, blogUp := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var closeShopWrote, closeBlogWrote sync.Once
-	balancer.deps.KeyValues = watchedKeyValues{Store: balancer.deps.KeyValues, onWrite: func(key keyvalue.Key) {
+	balancer.deps.KeyValues = watchedKeyValues{Store: balancer.deps.KeyValues, onWrite: func(key records.Key) {
 		if key.String() != gatePublicationKey(environment.TierPreview).String() || !shopPublishing.Load() {
 			return
 		}
@@ -917,7 +917,7 @@ func TestAProjectsProductionAndPreviewGatesNeverShareAPluginOrARecord(t *testing
 	if !strings.Contains(preview, shopGate.Key) || strings.Contains(preview, productionGate.Key) {
 		t.Errorf("the preview plugin runs\n%s\nwant the preview key alone", preview)
 	}
-	entry, err := keyvalue.ReadOrEmpty(ctx, balancer.deps.KeyValues, gateRecordKey(environment.TierProduction, "shop"))
+	entry, err := records.ReadOrEmpty(ctx, balancer.deps.KeyValues, gateRecordKey(environment.TierProduction, "shop"))
 	if err != nil || len(entry.Value) == 0 {
 		t.Fatalf("the production gate record = %v, %v, want it kept", entry, err)
 	}
@@ -983,7 +983,7 @@ func TestDestroyingAProtectedProductionProjectRemovesItsGateFromTheProductionPlu
 	}
 }
 
-func recordSealedFor(t *testing.T, balancer *Edge, key keyvalue.Key, bound seal.AssociatedData, record any) {
+func recordSealedFor(t *testing.T, balancer *Edge, key records.Key, bound seal.AssociatedData, record any) {
 	t.Helper()
 	plaintext, err := json.Marshal(record)
 	if err != nil {
@@ -997,7 +997,7 @@ func recordSealedFor(t *testing.T, balancer *Edge, key keyvalue.Key, bound seal.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := balancer.deps.KeyValues.Write(context.Background(), keyvalue.Entry{Key: key, Value: value}); err != nil {
+	if _, err := balancer.deps.KeyValues.Write(context.Background(), records.Entry{Key: key, Value: value}); err != nil {
 		t.Fatal(err)
 	}
 }
