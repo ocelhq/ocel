@@ -31,16 +31,17 @@ type Deployment struct {
 }
 
 type Config struct {
-	Store         Store
-	Queue         Queue
-	Slots         Slots
-	Deployment    Deployment
-	Lease         time.Duration
-	ShutdownGrace time.Duration
-	InFlight      int
-	CancelPoll    time.Duration
-	MaxReceives   int
-	ReportAttempt func(Attempt)
+	Store           Store
+	Queue           Queue
+	Slots           Slots
+	Deployment      Deployment
+	Lease           time.Duration
+	ShutdownGrace   time.Duration
+	InFlight        int
+	CancelPoll      time.Duration
+	MaxReceives     int
+	MaxOrderedDelay time.Duration
+	ReportAttempt   func(Attempt)
 }
 
 type Engine struct {

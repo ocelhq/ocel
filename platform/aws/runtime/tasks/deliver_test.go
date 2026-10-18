@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -69,6 +70,29 @@ func kept(resp events.SQSEventResponse) map[string]bool {
 		ids[failure.ItemIdentifier] = true
 	}
 	return ids
+}
+
+func TestARunOfAnOrderedTaskDueAfterItsFIFOQueueWouldDropTheMessageIsRefusedWithNothingSent(t *testing.T) {
+	t.Parallel()
+
+	l := newLambda(t, answering(t, answerAlways(http.StatusOK)), map[string]queues.Topic{
+		"ledger": aTask("ledger", retrying(3), true),
+		"audit":  aTask("audit", retrying(3), false),
+	})
+	pastRetention := timestamppb.New(time.Now().Add(queues.MessageRetention))
+	_, err := l.engine.Tasks().Trigger(context.Background(), &taskv1.TriggerRequest{Task: "ledger", Payload: []byte(`{}`), Options: &taskv1.TriggerOptions{DueAt: pastRetention}})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("a trigger of an ordered task due %v out = %v, want it refused as an invalid argument", queues.MessageRetention, err)
+	}
+	if sent := l.sqs.sentMessages(); len(sent) != 0 {
+		t.Fatalf("a refused trigger sent %d messages, want none", len(sent))
+	}
+	if _, err := l.engine.Tasks().Trigger(context.Background(), &taskv1.TriggerRequest{Task: "ledger", Payload: []byte(`{}`), Options: &taskv1.TriggerOptions{DueAt: timestamppb.New(time.Now().Add(maxOrderedDelay - time.Minute))}}); err != nil {
+		t.Errorf("a trigger of an ordered task due inside its queue's retention: %v", err)
+	}
+	if _, err := l.engine.Tasks().Trigger(context.Background(), &taskv1.TriggerRequest{Task: "audit", Payload: []byte(`{}`), Options: &taskv1.TriggerOptions{DueAt: pastRetention}}); err != nil {
+		t.Errorf("a trigger of a standard task due past its queue's retention, which sends it again: %v", err)
+	}
 }
 
 func TestARecordWhoseRunCompletesIsAcknowledgedWithItsVisibilityLeftAlone(t *testing.T) {

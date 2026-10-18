@@ -29,7 +29,6 @@ type deployMode interface {
 
 	edge(ctx context.Context, r *deployRun, progress progress.Log) error
 	infra(ctx context.Context, r *deployRun, stack provider.StackSpec, held infraHeld, progress progress.Log) error
-	discoveredHealthPath(ctx context.Context, r *deployRun, entry provider.AppEntry) (string, error)
 	app(ctx context.Context, r *deployRun, slot int, release appStack, progress progress.Log) (appProvisioned, error)
 	hostnames(ctx context.Context, r *deployRun) error
 	promote(ctx context.Context, r *deployRun) (*progressv1.OperationEvent, error)
@@ -105,10 +104,6 @@ func (p *planned) infra(ctx context.Context, r *deployRun, stack provider.StackS
 	p.drawn.infra = drawn
 	p.drawn.parameters, err = r.planValuesGroup(ctx)
 	return err
-}
-
-func (*planned) discoveredHealthPath(context.Context, *deployRun, provider.AppEntry) (string, error) {
-	return "", nil
 }
 
 func (p *planned) app(ctx context.Context, r *deployRun, slot int, release appStack, progress progress.Log) (appProvisioned, error) {
@@ -190,10 +185,6 @@ func (a applied) infra(ctx context.Context, r *deployRun, stack provider.StackSp
 		return err
 	}
 	return r.provisionInfraStack(ctx, stack, held, progress)
-}
-
-func (applied) discoveredHealthPath(ctx context.Context, r *deployRun, entry provider.AppEntry) (string, error) {
-	return r.readDiscoveredHealthPath(ctx, entry)
 }
 
 func (a applied) app(ctx context.Context, r *deployRun, _ int, release appStack, progress progress.Log) (appProvisioned, error) {

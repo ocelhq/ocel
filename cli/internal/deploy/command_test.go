@@ -3,6 +3,7 @@ package deploy_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -69,13 +70,49 @@ func TestPreviewPruneTakesItsNameOnTheCommandLine(t *testing.T) {
 	dependencies := deploy.PreviewDependencies("feature/login", "")
 	deploy.PreviewUpNamed(t, fixture, dependencies, "staging")
 
-	out, err := runPreviewCommand(t, fixture, dependencies, "", "prune", "staging", "--keep", "5")
+	out, err := runPreviewCommand(t, fixture, dependencies, "", "prune", "staging", "--keep", "5", "--yes")
 	if err != nil {
 		t.Fatalf("ocel preview prune staging err = %v; out=%s", err, out)
 	}
 	requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
 	if len(requests) != 1 || requests[0].GetEnvironment().GetIdentity() != "staging" || requests[0].GetKeepN() != 5 {
 		t.Errorf("the CLI pruned %d environments, want staging pruned down to 5", len(requests))
+	}
+}
+
+func TestPreviewPruneAsksBeforeItDeletesDeploymentsAndYesConsentsInAdvance(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		terminal bool
+		stdin    string
+		args     []string
+		wantErr  string
+		pruned   int
+	}{
+		{name: "without a terminal or --yes it refuses and prunes nothing", args: []string{"prune", "staging"}, wantErr: "pass --yes"},
+		{name: "--yes prunes without asking", args: []string{"prune", "staging", "--yes"}, pruned: 1},
+		{name: "a confirmed prompt prunes", terminal: true, stdin: "y\n", args: []string{"prune", "staging"}, pruned: 1},
+		{name: "a declined prompt prunes nothing", terminal: true, stdin: "n\n", args: []string{"prune", "staging"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := deploy.SetUpPreviewProject(t)
+			dependencies := deploy.PreviewDependencies("feature/login", "")
+			deploy.PreviewUpNamed(t, fixture, dependencies, "staging")
+			dependencies.StdinIsTerminal = func(io.Reader) bool { return tc.terminal }
+
+			out, err := runPreviewCommand(t, fixture, dependencies, tc.stdin, tc.args...)
+
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("ocel preview %v err = %v; out=%s", tc.args, err, out)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("ocel preview %v err = %v, want a refusal naming %q", tc.args, err, tc.wantErr)
+			}
+			requests := clitest.RequestsTo[*contractv1.RemoveStalePromotionsRequest](t, fixture.Requests, contractv1connect.ProviderServiceRemoveStalePromotionsProcedure)
+			if len(requests) != tc.pruned {
+				t.Errorf("ocel preview %v sent %d prune requests, want %d; out=%s", tc.args, len(requests), tc.pruned, out)
+			}
+		})
 	}
 }
 

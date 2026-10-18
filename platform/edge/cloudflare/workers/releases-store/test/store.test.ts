@@ -1,7 +1,7 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import type { PointerMove, StoredRecord } from "../src/store";
+import type { KeptRelease, PointerMove, StoredRecord } from "../src/store";
 import { ensureSchema } from "../src/store";
 
 declare module "cloudflare:test" {
@@ -381,15 +381,25 @@ describe("the builds a pointer served before", () => {
       release: `deploy-${n}`,
       buildId: `build-${n}`,
       assetPrefix: `prod/p1/web/r${n}/assets`,
+      isrPrefix: `prod/p1/web/r${n}/isr`,
       ...over,
     });
 
-  async function promote(store: ReturnType<typeof storeStub>, records: StoredRecord[], n: number) {
+  const keptThrough = (n: number): KeptRelease[] =>
+    Array.from({ length: n }, (_, i) => ({ app: "web", releaseToken: `r${i + 1}` }));
+
+  async function promote(
+    store: ReturnType<typeof storeStub>,
+    records: StoredRecord[],
+    n: number,
+    kept: KeptRelease[] = keptThrough(n),
+  ) {
     await store.movePointer(
       makePointerMove({
         promotionId: `promo-${n}`,
         replaces: n === 1 ? undefined : `promo-${n - 1}`,
         records,
+        kept,
       }),
     );
   }
@@ -431,16 +441,30 @@ describe("the builds a pointer served before", () => {
     });
   });
 
-  it("names no more than the twenty builds served most recently", async () => {
+  it("names the build of every release the ledger still keeps on the pointer, however many builds came after it", async () => {
     const store = storeStub();
     for (let n = 1; n <= 23; n++) await promote(store, [build(n)], n);
 
     const served = await store.readPointerRecord("web");
     const named = served.kind === "record" ? Object.keys(served.record.buildAssets ?? {}) : [];
 
-    expect(named).toHaveLength(19);
-    expect(named).not.toContain("build-3");
-    expect(named).toContain("build-4");
+    expect(named).toHaveLength(22);
+    expect(named).toContain("build-1");
+  });
+
+  it("names no build of a release the ledger no longer keeps on the pointer", async () => {
+    const store = storeStub();
+    await promote(store, [build(1)], 1);
+    await promote(store, [build(2)], 2);
+    await promote(store, [build(3)], 3, keptThrough(3).slice(1));
+
+    const served = await store.readPointerRecord("web");
+
+    expect(served).toMatchObject({
+      kind: "record",
+      record: { buildAssets: { "build-2": "prod/p1/web/r2/assets" } },
+    });
+    expect(served.kind === "record" && served.record.buildAssets).not.toHaveProperty("build-1");
   });
 
   it("forgets the builds of a pointer it removes", async () => {

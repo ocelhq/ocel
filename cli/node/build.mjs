@@ -38,6 +38,11 @@ await bundle(join(platformDir, "src/discovery/runtime.ts"), join(dist, "discover
   format: "esm",
 });
 
+await bundle(join(platformDir, "src/worker/server.ts"), join(dist, "worker/server.mjs"), {
+  target: "node",
+  format: "esm",
+});
+
 await bundle(
   join(root, "frameworks/next/adapter/src/next-adapter.mts"),
   join(dist, "next-adapter/next-adapter.mjs"),

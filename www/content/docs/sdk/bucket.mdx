@@ -124,7 +124,7 @@ for entry in uploads.list(prefix="reports/"):
 uploads.delete("reports/q3.pdf", "reports/q2.pdf")
 ```
 
-- `uploads.open(key, "rb")` opens an object as a binary file.
+- `uploads.open(key, "rb")` opens an object as a binary file, and `uploads.open(key, "wb")` writes one that lands when the handle closes.
 - Every method that reaches the store has an `_async` twin (`public_url` does not).
 - A missing key raises `ocel.ObjectNotFound`.
 
@@ -169,7 +169,7 @@ resources.uploads.delete("reports/q3.pdf").await?;
 
 An unmet condition refuses the write.
 
-What a write returns describes the version that write stored: its etag is the write's own, even when another write replaces the object a moment later, so passing it back as the `ifMatch` of the next write never overwrites a version you did not read. Go returns it from `Writer.Attrs()` once `Close` succeeds. Its upload time is unset; `head` reports it.
+What a write returns describes the version that write stored: its etag is the write's own, even when another write replaces the object a moment later, so passing it back as the `ifMatch` of the next write never overwrites a version you did not read. Go returns it from `Writer.Attrs()` once `Close` succeeds, and Python from the `info` of a `"wb"` handle once it closes. Its upload time is unset; `head` reports it.
 
 A read pairs bytes and info from one version. When the object is replaced between the two, the SDK reads again, and after three attempts it fails as an unmet condition does (Rust: `Error::Changed`). A write that names no content type is stored as `application/octet-stream`.
 

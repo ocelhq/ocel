@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -202,7 +203,7 @@ func listPreviews(ctx context.Context, dependencies Dependencies, cfg *project.P
 	return previews, err
 }
 
-func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name string, keep int) error {
+func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name string, keep int, yes bool, stdout io.Writer, stdin io.Reader) error {
 	env, err := resolvePreviewEnvironment(dependencies, cwd, name, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED)
 	if err != nil {
 		return err
@@ -213,13 +214,29 @@ func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name stri
 		return err
 	}
 
-	return dependencies.WithProvider(ctx, cfg, "ocel preview prune", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW}, func(ctx context.Context, p commands.ProviderRun) error {
+	policy := consent.NewPlanPolicy("ocel preview prune", yes, dependencies.CanAsk(stdin), stdout, stdin)
+	if err := policy.Refuse(); err != nil {
+		return err
+	}
+
+	return dependencies.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW}, func(ctx context.Context, p commands.ProviderRun) error {
+		p.Check.End(nil)
+		plan := p.Run.Phase(progressv1.Phase_PHASE_PLAN)
+		plan.Say(fmt.Sprintf("This will delete every deployment of preview %s but the newest %d and the live one; none of them can be rolled back to afterwards", env.GetIdentity(), keep))
 		registry, warning := readiness.RemovalRegistry(cfg)
 		if warning != "" {
-			p.Check.Warn(warning)
+			plan.Warn(warning)
 		}
-		p.Check.End(nil)
-		run, provider := p.Run, p.Provider
+		granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Delete the older deployments of preview %s?", env.GetIdentity()))
+		plan.End(err)
+		if err != nil {
+			return err
+		}
+		if !granted {
+			p.Run.Succeed(fmt.Sprintf("Nothing deleted: preview %s keeps every deployment", env.GetIdentity()))
+			return nil
+		}
+
 		req := &contractv1.RemoveStalePromotionsRequest{
 			Slug:            cfg.Slug,
 			KeepN:           int32(keep),
@@ -227,10 +244,10 @@ func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name stri
 			Edge:            cfg.EdgeSelection(),
 			ProjectRegistry: registry,
 		}
-		if _, err := providerprocess.Stream(ctx, provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
+		if _, err := providerprocess.Stream(ctx, p.Provider, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 			return err
 		}
-		run.Succeed(fmt.Sprintf("Pruned the promotions of preview %s down to the newest %d", env.GetIdentity(), keep))
+		p.Run.Succeed(fmt.Sprintf("Pruned the promotions of preview %s down to the newest %d", env.GetIdentity(), keep))
 		return nil
 	})
 }

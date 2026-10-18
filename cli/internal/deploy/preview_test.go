@@ -631,10 +631,10 @@ func prunedEnvironments(t *testing.T, fixture clitest.FakeProject) []*environmen
 
 func previewPrune(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewPruneOptions) {
 	t.Helper()
-	opts.keep = prunedKeep
+	opts.keep, opts.yes = prunedKeep, true
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	if err := runPreviewPrune(context.Background(), dependencies, fixture.Root, opts); err != nil {
+	if err := runPreviewPrune(context.Background(), dependencies, fixture.Root, opts, &stdout, strings.NewReader("")); err != nil {
 		t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 }

@@ -5,7 +5,7 @@ from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import IO, BinaryIO, Protocol, TypeVar, cast
+from typing import IO, BinaryIO, Literal, Protocol, TypeVar, cast, overload
 from urllib.parse import quote
 
 from protobuf import Oneof
@@ -235,23 +235,39 @@ class Bucket:
         )
         return AsyncObjectBody(info, stream, response)
 
-    def open(self, key: str, mode: str = "rb", **write_options: object) -> IO[bytes]:
+    @overload
+    def open(self, key: str, mode: Literal["rb"] = "rb") -> IO[bytes]: ...
+
+    @overload
+    def open(self, key: str, mode: Literal["wb"], **write_options: object) -> WriteStream: ...
+
+    def open(self, key: str, mode: str = "rb", **write_options: object) -> IO[bytes] | WriteStream:
         """Open the object under ``key`` as a binary file. ``"rb"`` reads it and ``"wb"``
         writes it, taking the keyword options :meth:`put` takes and landing the object when
-        the handle closes."""
+        the handle closes. A ``"wb"`` handle's :attr:`WriteStream.info` then describes the
+        object it wrote, as :meth:`put` returns it."""
         if mode == "rb":
             return cast(IO[bytes], ReadStream(self.get(key)))
         if mode == "wb":
             options = _WriteOptions.take("open", write_options)
             writer = Writer(self, self._runtime.session("put", True), key, options)
-            return cast(IO[bytes], WriteStream(writer))
+            return WriteStream(writer)
         raise ValueError(f"a bucket object opens as 'rb' or 'wb', not {mode!r}")
+
+    @overload
+    def open_async(self, key: str, mode: Literal["rb"] = "rb") -> AsyncReadStream: ...
+
+    @overload
+    def open_async(
+        self, key: str, mode: Literal["wb"], **write_options: object
+    ) -> AsyncWriteStream: ...
 
     def open_async(
         self, key: str, mode: str = "rb", **write_options: object
-    ) -> "AsyncReadStream | AsyncWriteStream":
+    ) -> AsyncReadStream | AsyncWriteStream:
         """What :meth:`open` does, as an async context manager whose ``read`` and ``write``
-        are awaited."""
+        are awaited. A ``"wb"`` handle's :attr:`AsyncWriteStream.info` describes the object
+        it wrote once the block ends."""
         if mode == "rb":
             return AsyncReadStream(self, key)
         if mode == "wb":
@@ -693,6 +709,7 @@ class Writer:
         self._next = 1
         self._written = 0
         self._closed = False
+        self.info: ObjectInfo | None = None
 
     async def write(self, data: bytes) -> None:
         self._refuse_closed()
@@ -715,13 +732,14 @@ class Writer:
         if not etag:
             raise OcelError(f'the store answered the write of "{self._key}" without its etag')
         options = self._options
-        return ObjectInfo(
+        self.info = ObjectInfo(
             key=self._key,
             size=self._written,
             etag=etag,
             content_type=options.written_content_type,
             metadata=dict(options.metadata or {}),
         )
+        return self.info
 
     async def abort(self) -> None:
         self._closed = True

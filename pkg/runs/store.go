@@ -2,6 +2,7 @@ package runs
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -16,6 +17,6 @@ type Store interface {
 	CountRuns(ctx context.Context, filter RunFilter) (int64, error)
 
 	EnsureRecord(ctx context.Context, record provider.ExpiringRecord) (provider.ExpiringRecord, bool, error)
-	WriteRecord(ctx context.Context, record provider.ExpiringRecord) error
+	ReplaceRecord(ctx context.Context, record provider.ExpiringRecord, held json.RawMessage) error
 	DeleteRecord(ctx context.Context, record provider.ExpiringRecord) error
 }

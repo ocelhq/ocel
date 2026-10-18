@@ -40,8 +40,6 @@ const VERSION_KEY = "versionStamp";
 const GATE_KEY = "gate";
 const SECRET_KEY = "secret";
 
-export const KEPT_BUILDS_PER_APP = 20;
-
 export function ensureSchema(store: SqlStore): void {
   store.sql.exec(
     `CREATE TABLE IF NOT EXISTS meta (
@@ -75,6 +73,7 @@ export function ensureSchema(store: SqlStore): void {
        app TEXT NOT NULL,
        build_id TEXT NOT NULL,
        asset_prefix TEXT NOT NULL,
+       release_token TEXT NOT NULL,
        seq INTEGER NOT NULL,
        PRIMARY KEY (pointer, app, build_id)
      );
@@ -122,6 +121,15 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
     }
     const changed = move.records.find((record) => servesDifferentCore(store, record));
     if (changed) return { kind: "different-record", app: changed.app, release: changed.release };
+    store.sql.exec(`DELETE FROM kept WHERE pointer = ?`, pointer);
+    for (const kept of move.kept) {
+      store.sql.exec(
+        `INSERT OR IGNORE INTO kept (pointer, app, release_token) VALUES (?, ?, ?)`,
+        pointer,
+        kept.app,
+        kept.releaseToken,
+      );
+    }
     store.sql.exec(`DELETE FROM served WHERE pointer = ?`, pointer);
     for (const record of move.records) {
       store.sql.exec(
@@ -141,15 +149,6 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
         served.label,
         pointer,
         served.app,
-      );
-    }
-    store.sql.exec(`DELETE FROM kept WHERE pointer = ?`, pointer);
-    for (const kept of move.kept) {
-      store.sql.exec(
-        `INSERT OR IGNORE INTO kept (pointer, app, release_token) VALUES (?, ?, ?)`,
-        pointer,
-        kept.app,
-        kept.releaseToken,
       );
     }
     store.sql.exec(
@@ -188,24 +187,23 @@ function recordBuild(
   record: StoredRecord,
 ): Record<string, string> {
   store.sql.exec(
-    `INSERT INTO builds (pointer, app, build_id, asset_prefix, seq)
-     VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM builds))
+    `INSERT INTO builds (pointer, app, build_id, asset_prefix, release_token, seq)
+     VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM builds))
      ON CONFLICT(pointer, app, build_id) DO UPDATE SET
-       asset_prefix = excluded.asset_prefix, seq = excluded.seq`,
+       asset_prefix = excluded.asset_prefix, release_token = excluded.release_token, seq = excluded.seq`,
     pointer,
     record.app,
     record.buildId,
     record.assetPrefix,
+    readReleaseToken(record.isrPrefix) ?? "",
   );
   store.sql.exec(
-    `DELETE FROM builds WHERE pointer = ? AND app = ? AND build_id NOT IN (
-       SELECT build_id FROM builds WHERE pointer = ? AND app = ? ORDER BY seq DESC LIMIT ?
+    `DELETE FROM builds WHERE pointer = ? AND app = ? AND NOT EXISTS (
+       SELECT 1 FROM kept WHERE kept.pointer = builds.pointer AND kept.app = builds.app
+         AND kept.release_token = builds.release_token
      )`,
     pointer,
     record.app,
-    pointer,
-    record.app,
-    KEPT_BUILDS_PER_APP,
   );
   const rows = store.sql
     .exec<{ build_id: string; asset_prefix: string }>(

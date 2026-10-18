@@ -660,10 +660,6 @@ func ownedSpec(slug string, desired ...string) routeSpec {
 	return routeSpec{desired: desired, owns: projectOwnsScript(defaultNamespace, slug)}
 }
 
-func requiredRecordSpec(record string, desired ...string) routeSpec {
-	return routeSpec{desired: desired, requiredRecord: record}
-}
-
 func assertSet(t *testing.T, what string, got, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
@@ -931,43 +927,9 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:        "ocel-preview",
-			spec:          requiredRecordSpec("*.preview.app.com", "pr-2-abc1234567.preview.app.com"),
+			spec:          routeSpec{desired: []string{"pr-2-abc1234567.preview.app.com"}},
 			createdRoutes: []string{"pr-2-abc1234567.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
-		},
-		{
-			name: "a required record present is not this deploy's to plant",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
-				},
-			},
-			script:        "ocel-preview",
-			spec:          requiredRecordSpec("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
-			createdRoutes: []string{"pr-1-abc1234567.preview.app.com/*"},
-			warnings:      []string{"Advanced Certificate"},
-		},
-		{
-			name:    "a required record missing fails and names the record to add",
-			mock:    &cfMock{zoneID: "zone1", zoneName: "app.com"},
-			script:  "ocel-preview",
-			spec:    requiredRecordSpec("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
-			wantErr: []string{"*.preview.app.com"},
-		},
-		{
-			name: "a required record left unproxied fails and says so",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": false},
-				},
-			},
-			script:  "ocel-preview",
-			spec:    requiredRecordSpec("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
-			wantErr: []string{"proxied", "*.preview.app.com"},
 		},
 		{
 			name: "a leftover custom domain is detached before the route is attached",
@@ -1120,13 +1082,6 @@ func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 			name:       "many hostnames share one zone and route list",
 			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com"},
 			spec:       prunedSpec("app.com", "www.app.com", "api.app.com"),
-			zoneLists:  1,
-			routeLists: 1,
-		},
-		{
-			name:       "a required record costs no extra list",
-			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com", existingRecords: []map[string]any{{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true}}},
-			spec:       requiredRecordSpec("*.preview.app.com", "pr-1.preview.app.com", "pr-2.preview.app.com"),
 			zoneLists:  1,
 			routeLists: 1,
 		},

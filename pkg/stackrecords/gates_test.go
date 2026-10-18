@@ -140,7 +140,7 @@ func TestChangeGatesWithNoRecordThatChangesNothingWritesNothing(t *testing.T) {
 	}
 }
 
-func TestReadGateIsTheGateOfAnEnabledRecordAndNoneOfADisabledOrMissingOne(t *testing.T) {
+func TestTheGateInForceIsTheGateOfAnEnabledRecordAndNoneOfADisabledOrMissingOne(t *testing.T) {
 	t.Parallel()
 	store, cipher := fake.NewKeyValues(), fake.NewCipher()
 	shop := gate.Gate{Key: "k", PasswordHash: "hash", BypassSecrets: []string{}, AllowOptions: []string{}}
@@ -149,10 +149,13 @@ func TestReadGateIsTheGateOfAnEnabledRecordAndNoneOfADisabledOrMissingOne(t *tes
 		"blog": {Gate: gate.Gate{Key: "j"}, Password: "pw"},
 	})
 
+	records, err := stackrecords.ReadGates(context.Background(), store, cipher, environment.TierPreview)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for slug, want := range map[string]*gate.Gate{"shop": &shop, "blog": nil, "docs": nil} {
-		got, err := stackrecords.ReadGate(context.Background(), store, cipher, environment.TierPreview, slug)
-		if err != nil || !reflect.DeepEqual(got, want) {
-			t.Errorf("ReadGate(%s) = %+v, %v, want %+v", slug, got, err, want)
+		if got := records[slug].GateInForce(); !reflect.DeepEqual(got, want) {
+			t.Errorf("GateInForce(%s) = %+v, want %+v", slug, got, want)
 		}
 	}
 }
@@ -201,10 +204,10 @@ func TestAGateRecordedForOneTierIsNeverReadForTheOther(t *testing.T) {
 	}
 
 	production, err := stackrecords.ReadGates(context.Background(), store, cipher, environment.TierProduction)
-	held, heldErr := stackrecords.ReadGate(context.Background(), store, cipher, environment.TierProduction, "shop")
+	held := production["shop"].GateInForce()
 
-	if err != nil || heldErr != nil || len(production) != 0 || held != nil {
-		t.Errorf("production reads %+v and gate %+v (%v, %v), want none: a preview password must never open production", production, held, err, heldErr)
+	if err != nil || len(production) != 0 || held != nil {
+		t.Errorf("production reads %+v and gate %+v (%v), want none: a preview password must never open production", production, held, err)
 	}
 }
 

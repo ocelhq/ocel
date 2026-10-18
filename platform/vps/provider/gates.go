@@ -13,6 +13,10 @@ import (
 
 func newRecordedGate(store keyvalue.Store, cipher seal.Cipher) box.RecordedGate {
 	return func(ctx context.Context, tier environment.Tier, project string) (*gate.Gate, error) {
-		return stackrecords.ReadGate(ctx, store, cipher, tier, project)
+		records, err := stackrecords.ReadGates(ctx, store, cipher, tier)
+		if err != nil {
+			return nil, err
+		}
+		return records[project].GateInForce(), nil
 	}
 }

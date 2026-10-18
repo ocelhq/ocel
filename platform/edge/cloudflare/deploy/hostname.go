@@ -24,7 +24,6 @@ type routeSpec struct {
 	servedElsewhere []string
 	prune           bool
 	pruneStem       string
-	requiredRecord  string
 	owns            func(script string) bool
 }
 
@@ -51,12 +50,6 @@ func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, spec 
 
 	if err := p.detachCustomDomains(ctx, up.accountID, up.scriptName); err != nil {
 		return err
-	}
-
-	if spec.requiredRecord != "" && len(spec.desired) > 0 {
-		if err := p.verifyProxiedRecord(ctx, up.accountID, spec.requiredRecord); err != nil {
-			return err
-		}
 	}
 
 	wanted := make(map[string]bool, len(spec.desired)+len(spec.bound))
@@ -223,24 +216,6 @@ func (p *cloudflare) repointHeldRoute(ctx context.Context, snap *routeSnapshot, 
 		return true, nil
 	}
 	return false, nil
-}
-
-func (p *cloudflare) verifyProxiedRecord(ctx context.Context, accountID, name string) error {
-	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(name))
-	if err != nil {
-		return err
-	}
-	haveAddress, haveProxied, err := p.addressRecordsAt(ctx, zoneID, name)
-	if err != nil {
-		return err
-	}
-	switch {
-	case !haveAddress:
-		return fmt.Errorf("no DNS record for %q, which the hostnames this deploy serves resolve through — add a proxied (orange cloud) record at %q in Cloudflare and re-run", name, name)
-	case !haveProxied:
-		return fmt.Errorf("the DNS record for %q is not proxied through Cloudflare, so no worker route under it can ever fire — set %q to proxied (orange cloud) and re-run", name, name)
-	}
-	return nil
 }
 
 func (p *cloudflare) addressRecordsAt(ctx context.Context, zoneID, hostname string) (haveAddress, haveProxied bool, err error) {

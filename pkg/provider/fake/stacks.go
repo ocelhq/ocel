@@ -32,6 +32,7 @@ type Stacks struct {
 	stacks         map[string]provider.StackResult
 	resources      map[string][]provider.Resource
 	provisioned    []provider.StackSpec
+	planned        []provider.StackSpec
 	taken          []string
 	destroyedWith  []provider.ImageStore
 	leasedDestroys []string
@@ -91,7 +92,16 @@ func (r *Stacks) Provisioned() []provider.StackSpec {
 	return slices.Clone(r.provisioned)
 }
 
+func (r *Stacks) Planned() []provider.StackSpec {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.planned)
+}
+
 func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ progress.Log) (provider.Plan, error) {
+	r.mu.Lock()
+	r.planned = append(r.planned, spec)
+	r.mu.Unlock()
 	if err := refuseUnknownPrimitives(spec); err != nil {
 		return provider.Plan{}, err
 	}

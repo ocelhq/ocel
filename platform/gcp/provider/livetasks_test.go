@@ -7,7 +7,6 @@ import (
 	"os"
 	"slices"
 	"strconv"
-	"strings"
 	"testing"
 
 	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
@@ -56,24 +55,6 @@ func accountGrants(t *testing.T, email, role, member string) bool {
 	}
 	return slices.ContainsFunc(policy.Bindings, func(binding *iam.Binding) bool {
 		return binding.Role == role && slices.Contains(binding.Members, member)
-	})
-}
-
-func projectGrants(t *testing.T, role, member, database string) bool {
-	t.Helper()
-	service, err := cloudresourcemanager.NewService(context.Background(), ports.EmulatorREST(endpoint())...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, err := service.Projects.GetIamPolicy(liveProject(), &cloudresourcemanager.GetIamPolicyRequest{
-		Options: &cloudresourcemanager.GetPolicyOptions{RequestedPolicyVersion: 3},
-	}).Context(context.Background()).Do()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return slices.ContainsFunc(policy.Bindings, func(binding *cloudresourcemanager.Binding) bool {
-		return binding.Role == role && slices.Contains(binding.Members, member) &&
-			binding.Condition != nil && strings.Contains(binding.Condition.Expression, "/databases/"+database)
 	})
 }
 

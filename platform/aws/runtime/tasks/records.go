@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -74,13 +75,23 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 	return record, false, nil
 }
 
-func (s Store) WriteRecord(ctx context.Context, record provider.ExpiringRecord) error {
+func (s Store) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord, held json.RawMessage) error {
 	encoded, err := attributevalue.MarshalMap(s.recordItemOf(record))
 	if err != nil {
 		return err
 	}
-	if _, err := s.db.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(s.table), Item: encoded}); err != nil {
-		return fmt.Errorf("record the %s key %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
+	_, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:                 aws.String(s.table),
+		Item:                      encoded,
+		ConditionExpression:       aws.String("#value = :held"),
+		ExpressionAttributeNames:  map[string]string{"#value": "value"},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":held": &ddbtypes.AttributeValueMemberS{Value: string(held)}},
+	})
+	if isConditionFailed(err) {
+		return fmt.Errorf("the %s key %q of %s: %w", record.Purpose, record.Key, record.Topic, keyvalue.ErrStale)
+	}
+	if err != nil {
+		return fmt.Errorf("replace the %s key %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
 	}
 	return nil
 }

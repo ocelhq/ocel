@@ -195,8 +195,12 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		regexp.MustCompile(`\b` + name + `\s+folder\b`),
 		regexp.MustCompile(`\bfrom\s+` + name + `\s+import\b`),
 	}
+	userDocs := map[string]bool{
+		"www/content/docs/configuration.mdx": true,
+		"packages/ocel/README.md":            true,
+	}
 	allowed := func(rel string) bool {
-		if rel == "www/content/docs/configuration.mdx" || rel == "console/github/src/server.ts" || strings.HasPrefix(rel, DefaultRootDirName+"/") || strings.HasPrefix(rel, "packages/ocel/tests/fixtures/"+DefaultRootDirName+"/") {
+		if userDocs[rel] || rel == "console/github/src/server.ts" || strings.HasPrefix(rel, DefaultRootDirName+"/") || strings.HasPrefix(rel, "packages/ocel/tests/fixtures/"+DefaultRootDirName+"/") {
 			return true
 		}
 		for _, root := range append(fixtureRoots, "cli/testdata/rust-workspace") {
