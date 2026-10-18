@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -70,8 +70,8 @@ func TestAServerlessAppUsingAKVStoreIsNotRefusedByPreflight(t *testing.T) {
 	t.Parallel()
 
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction}, func() (bootstrap.TierParams, error) {
-		return bootstrap.TierParams{}, nil
+	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction}, func() (account.TierParams, error) {
+		return account.TierParams{}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +96,8 @@ func TestAContainerAppSendingToATaskOrTopicPassesPreflight(t *testing.T) {
 	t.Parallel()
 
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction}, func() (bootstrap.TierParams, error) {
-		return bootstrap.TierParams{}, nil
+	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction}, func() (account.TierParams, error) {
+		return account.TierParams{}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -144,10 +144,10 @@ func TestTheArchitectureContainersAreBuiltForIsOneTheProviderShipsARuntimeFor(t 
 
 func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}, func() (bootstrap.TierParams, error) {
-		return bootstrap.TierParams{
-			EdgeCredentials: bootstrap.EdgeCredentials{AccessKeyID: "AKOLD", CreatedAt: time.Now().Add(-2 * bootstrap.EdgeKeyMaxAge)},
-			OriginSecret:    bootstrap.OriginSecret{Current: "s1", CreatedAt: time.Now().Add(-2 * bootstrap.OriginSecretMaxAge)},
+	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}, func() (account.TierParams, error) {
+		return account.TierParams{
+			EdgeCredentials: account.EdgeCredentials{AccessKeyID: "AKOLD", CreatedAt: time.Now().Add(-2 * account.EdgeKeyMaxAge)},
+			OriginSecret:    account.OriginSecret{Current: "s1", CreatedAt: time.Now().Add(-2 * account.OriginSecretMaxAge)},
 		}, nil
 	}); err != nil {
 		t.Fatal(err)

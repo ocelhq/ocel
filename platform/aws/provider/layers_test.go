@@ -13,13 +13,14 @@ var layerFences = []struct {
 	forbidden []string
 	why       string
 }{
-	{"./iam/...", []string{"component", "resources", "compute", "tier", "site", "deploy", "bootstrap", "control", "ports"}, "iam renders policies for every layer above it and may reach none of them"},
-	{"./component/...", []string{"resources", "compute", "tier", "site", "deploy", "bootstrap", "control"}, "component is the seam the components implement"},
-	{"./resources/...", []string{"compute", "tier", "site", "deploy", "bootstrap", "control"}, "a resource component is declared by the infra stack alone"},
-	{"./site/...", []string{"compute", "tier", "deploy", "bootstrap", "control"}, "site uploads what a release serves"},
-	{"./compute/...", []string{"deploy", "bootstrap", "control"}, "compute declares an app's code; deploy orchestrates it"},
+	{"./iam/...", []string{"component", "resources", "compute", "tier", "site", "deploy", "account", "control"}, "iam renders policies for every layer above it and may reach none of them"},
+	{"./ports/...", []string{"iam", "component", "resources", "compute", "tier", "site", "deploy", "account", "control"}, "ports names what every layer shares and reaches none of them"},
+	{"./component/...", []string{"resources", "compute", "tier", "site", "deploy", "account", "control"}, "component is the seam the components implement"},
+	{"./resources/...", []string{"compute", "tier", "site", "deploy", "account", "control"}, "a resource component is declared by the infra stack alone"},
+	{"./site/...", []string{"compute", "tier", "deploy", "account", "control"}, "site uploads what a release serves"},
+	{"./compute/...", []string{"deploy", "account", "control"}, "compute declares an app's code; deploy orchestrates it"},
 	{"./tier/...", []string{"compute", "deploy", "control"}, "a tier part is shared by every deploy and owned by none"},
-	{"./deploy/...", []string{"bootstrap", "control"}, "deploy runs stacks and reads the bootstrap through its config"},
+	{"./deploy/...", []string{"account", "control"}, "deploy runs stacks and reads the bootstrap through its config"},
 }
 
 func TestEachLayerReachesOnlyTheLayersBelowIt(t *testing.T) {

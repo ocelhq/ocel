@@ -18,7 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 const (
@@ -138,7 +138,7 @@ func (w routeStore) write(ctx context.Context, written []kvstypes.PutKeyRequestL
 
 func routeKey(hostname string) string { return strings.ToLower(hostname) }
 
-func routeOwner(ctx context.Context, c Clients, ns bootstrap.Namespace, tier environment.Tier, hostname string) (string, bool, error) {
+func routeOwner(ctx context.Context, c Clients, ns account.Namespace, tier environment.Tier, hostname string) (string, bool, error) {
 	store, err := c.CloudFront.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{
 		Name: aws.String(ns.EdgeRoutesStoreName(tier)),
 	})

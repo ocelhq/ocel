@@ -36,6 +36,7 @@ func New(artifacts component.Artifacts, keys Keys) component.Component {
 		WidestGrants: func(_ component.Stack, declared provider.Resource) []*variablestorev1.Grant {
 			return realtimeGrants(widestEventAPIARN, declared.Declared)
 		},
+		Credential: credential,
 		Sweep: func(ctx context.Context, at component.Stack, kept []provider.Resource) error {
 			return sweep(ctx, at, kept, keys)
 		},

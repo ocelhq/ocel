@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T) {
@@ -22,7 +22,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 	if err := boot.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, tier)
+	deployed, err := account.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 	if !changeFor(leaving, "StateBucket").Slow {
 		t.Error("PlanRemove() takes the state bucket without warning it is slow, and a destroy that seems hung is one a user interrupts half way")
 	}
-	dropping := groupNamed(t, removal, "aws/"+bootstrap.ParamGroupName)
+	dropping := groupNamed(t, removal, "aws/"+account.ParamGroupName)
 	passphrase := changeFor(dropping, passphraseParam)
 	if passphrase.Action != provider.ActionDelete {
 		t.Errorf("PlanRemove() plans the passphrase as %q, want the last tier on this account to take it", passphrase.Action)
@@ -116,7 +116,7 @@ func TestLiveDestroyingOneTierLeavesTheSiblingAndItsPassphraseInPlace(t *testing
 	if err != nil {
 		t.Fatalf("PlanRemove(%s) = %v", production, err)
 	}
-	params := groupNamed(t, beside, "aws/"+bootstrap.ParamGroupName)
+	params := groupNamed(t, beside, "aws/"+account.ParamGroupName)
 	if own := changeFor(params, passphraseParam); own.Action != provider.ActionDelete {
 		t.Errorf("destroying %s plans its own passphrase as %q, want it taken with the tier", production, own.Action)
 	}
@@ -157,7 +157,7 @@ func TestLiveDestroyingOneTierLeavesTheSiblingAndItsPassphraseInPlace(t *testing
 	if err != nil {
 		t.Fatalf("PlanRemove(%s) = %v", preview, err)
 	}
-	alone := changeFor(groupNamed(t, last, "aws/"+bootstrap.ParamGroupName), previewPassphrase)
+	alone := changeFor(groupNamed(t, last, "aws/"+account.ParamGroupName), previewPassphrase)
 	if alone.Action != provider.ActionDelete {
 		t.Errorf("destroying the last tier plans the passphrase as %q, and a secret nothing decrypts with is one nobody rotates", alone.Action)
 	}

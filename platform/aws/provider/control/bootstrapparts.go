@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 const baseSummary = "the permissions, buckets, tables and secrets every deploy in this tier runs on"
@@ -20,16 +20,16 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 	if !read.Deployed.Present {
 		return nil, nil
 	}
-	var options []bootstrap.ShapeOption
+	var options []account.ShapeOption
 	if b.VariablesKey != "" {
-		options = append(options, bootstrap.WithVariablesKey(b.VariablesKey))
+		options = append(options, account.WithVariablesKey(b.VariablesKey))
 	}
-	shapes, err := bootstrap.ShapeParts(b.Namespace, described.Tier, read.Deployed.Parts.Names(), options...)
+	shapes, err := account.ShapeParts(b.Namespace, described.Tier, read.Deployed.Parts.Names(), options...)
 	if err != nil {
 		return nil, err
 	}
 	summaries := map[string]string{provider.BasePart: baseSummary}
-	for _, part := range bootstrap.Parts() {
+	for _, part := range account.Parts() {
 		summaries[part.Name] = part.Summary
 	}
 

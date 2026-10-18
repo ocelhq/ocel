@@ -22,8 +22,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -45,11 +45,11 @@ func (p *Provider) tierParts(records tier.Records) tier.Parts {
 	namespace := string(p.namespace)
 	region := p.aws.Region
 	var parts tier.Parts
-	for _, offered := range bootstrap.Parts() {
+	for _, offered := range account.Parts() {
 		parts = append(parts, tier.Stacked(offered))
 	}
 	return append(parts,
-		control.RuntimeLayersPart(lambda.NewFromConfig(p.aws), bootstrap.DynamoRecords(dynamodb.NewFromConfig(p.aws)), region, p.readBootstrap),
+		control.RuntimeLayersPart(lambda.NewFromConfig(p.aws), account.DynamoRecords(dynamodb.NewFromConfig(p.aws)), region, p.readBootstrap),
 		bastion.NewPart(bastion.NewClients(p.aws), region),
 		vpcclients.NewPart(records, ec2.NewFromConfig(p.aws), namespace),
 		containers.NewPart(p.stacks.Containers(), records.KeyValues, region),
@@ -89,11 +89,11 @@ func (p *Provider) tagInvalidatorSpec(ctx context.Context, tier environment.Tier
 	if err := p.requireBootstrapped(deployed, tier); err != nil {
 		return taginvalidator.Spec{}, err
 	}
-	account, err := p.accountID(ctx)
+	accountID, err := p.accountID(ctx)
 	if err != nil {
 		return taginvalidator.Spec{}, err
 	}
-	seed, err := bootstrap.PurgeSeedParamFor(p.namespace, tier, bootstrap.KindCloudflare)
+	seed, err := account.PurgeSeedParamFor(p.namespace, tier, account.KindCloudflare)
 	if err != nil {
 		return taginvalidator.Spec{}, err
 	}
@@ -101,7 +101,7 @@ func (p *Provider) tagInvalidatorSpec(ctx context.Context, tier environment.Tier
 		Namespace:  string(p.namespace),
 		Tier:       tier,
 		Region:     p.aws.Region,
-		Account:    account,
+		Account:    accountID,
 		Role:       deployed.TagInvalidatorRoleARN,
 		StateTable: deployed.StateTable,
 		StreamARN:  deployed.StateTableStreamARN,

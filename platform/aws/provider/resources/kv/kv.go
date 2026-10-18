@@ -43,6 +43,7 @@ func New(tokens Tokens) component.Component {
 			}
 			return &variablestorev1.PublishedBinding{Binding: binding}, nil
 		},
+		Credential: credential,
 		Sweep: func(ctx context.Context, at component.Stack, kept []provider.Resource) error {
 			return sweep(ctx, at, kept, tokens)
 		},

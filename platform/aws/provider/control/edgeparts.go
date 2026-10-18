@@ -7,12 +7,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
-func (b Bootstrap) edgeBootstrapStacks(ctx context.Context, tier environment.Tier, deployed bootstrap.Deployed) ([]provider.BootstrapStack, error) {
+func (b Bootstrap) edgeBootstrapStacks(ctx context.Context, tier environment.Tier, deployed account.Deployed) ([]provider.BootstrapStack, error) {
 	var stacks []provider.BootstrapStack
-	for _, kind := range bootstrap.EdgeKindsFor(deployed.Parts.Names()) {
+	for _, kind := range account.EdgeKindsFor(deployed.Parts.Names()) {
 		front, err := b.open(kind)
 		if err != nil {
 			return nil, err
@@ -21,7 +21,7 @@ func (b Bootstrap) edgeBootstrapStacks(ctx context.Context, tier environment.Tie
 		if describe == nil {
 			continue
 		}
-		fronting := bootstrapplan.PartFrontingEdge(bootstrap.Parts(), kind)
+		fronting := bootstrapplan.PartFrontingEdge(account.Parts(), kind)
 		parts, err := describe(ctx, tier)
 		if err != nil {
 			stacks = append(stacks, provider.BootstrapStack{

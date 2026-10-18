@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -75,7 +75,7 @@ func run(addr, region, config, keyParameter string) error {
 	}
 
 	bootstraps := &bootstrapCache{
-		namespace: bootstrap.Namespace(ns),
+		namespace: account.Namespace(ns),
 		stacks:    cloudformation.NewFromConfig(cfg),
 		now:       time.Now,
 		read:      map[environment.Tier]cachedBootstrap{},

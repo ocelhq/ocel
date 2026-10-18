@@ -35,7 +35,7 @@ func writeRESP(conn net.Conn, args ...string) {
 	_, _ = conn.Write([]byte(command.String()))
 }
 
-func (a account) commandStore(t *testing.T, binding provider.Binding, token string, command string) string {
+func (a liveAccount) commandStore(t *testing.T, binding provider.Binding, token string, command string) string {
 	t.Helper()
 	props := binding.Properties
 	address := net.JoinHostPort(props[provider.PropertyHost], props[provider.PropertyPort])

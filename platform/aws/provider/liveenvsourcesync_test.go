@@ -72,7 +72,7 @@ func TestLiveTheFirstScheduledEnvSourceAddsAnEnvSourceSyncAndRemovingTheTierRemo
 
 const handEditedTimeout = 300
 
-func (a account) stackResources(t *testing.T, stack string) map[string]string {
+func (a liveAccount) stackResources(t *testing.T, stack string) map[string]string {
 	t.Helper()
 	out, err := cloudformation.NewFromConfig(a.aws).DescribeStackResources(context.Background(),
 		&cloudformation.DescribeStackResourcesInput{StackName: awssdk.String(stack)})
@@ -86,7 +86,7 @@ func (a account) stackResources(t *testing.T, stack string) map[string]string {
 	return physical
 }
 
-func (a account) functionExists(name string) bool {
+func (a liveAccount) functionExists(name string) bool {
 	_, err := lambda.NewFromConfig(a.aws).GetFunction(context.Background(), &lambda.GetFunctionInput{FunctionName: awssdk.String(name)})
 	return err == nil
 }

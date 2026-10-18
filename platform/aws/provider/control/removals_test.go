@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
@@ -43,11 +43,11 @@ func removingBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 	if err != nil {
 		t.Fatalf("StackNameFor(%s): %v", tier, err)
 	}
-	edgeStack := defaultNamespace.PartStackName(bootstrap.CloudflareEdgePart, tier)
+	edgeStack := defaultNamespace.PartStackName(account.CloudflareEdgePart, tier)
 	variablesKeyStack := defaultNamespace.PartStackName(provider.VariablesKeyPart, tier)
 	cfn := b.CFN.(*teardownCFN)
-	cfn.present[edgeStack] = bootstrap.Deployed{Present: true}
-	cfn.present[variablesKeyStack] = bootstrap.Deployed{Present: true}
+	cfn.present[edgeStack] = account.Deployed{Present: true}
+	cfn.present[variablesKeyStack] = account.Deployed{Present: true}
 	cfn.resources = map[string][]cfntypes.StackResourceSummary{
 		stackName: {
 			summary("StateBucket", "AWS::S3::Bucket"),
@@ -105,12 +105,12 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 		t.Fatalf("PlanRemove: %v", err)
 	}
 
-	planned := groupNamed(plan, "aws/"+defaultNamespace.PartStackName(bootstrap.CloudflareEdgePart, environment.TierProduction))
+	planned := groupNamed(plan, "aws/"+defaultNamespace.PartStackName(account.CloudflareEdgePart, environment.TierProduction))
 	core := groupNamed(plan, "aws/"+coreStackName)
 	if planned == nil || core == nil {
 		t.Fatalf("plan groups = %s, want the edge part stack and the core it depends on", groupNames(plan))
 	}
-	if planned.Part != bootstrap.CloudflareEdgePart {
+	if planned.Part != account.CloudflareEdgePart {
 		t.Errorf("the part group's part = %q, want it tagged with the part it provisions", planned.Part)
 	}
 	if plan.Groups[0].Kind != provider.StackGroupKind || plan.Groups[0].Name == core.Name {
@@ -137,7 +137,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 		t.Errorf("the state table row reads %q; a row says nothing unless it records a decision", row.Reason)
 	}
 
-	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
+	params := groupNamed(plan, "aws/"+account.ParamGroupName)
 	if params == nil || params.Action != provider.ActionDelete {
 		t.Fatalf("plan groups = %s, want the parameters this bootstrap stores", groupNames(plan))
 	}
@@ -158,7 +158,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	if front == nil || front.Kind != edge.EdgeGroupKind || front.Action != provider.ActionDelete {
 		t.Fatalf("plan groups = %s, want the edge under its own vendor", groupNames(plan))
 	}
-	if front.Part != bootstrap.CloudflareEdgePart {
+	if front.Part != account.CloudflareEdgePart {
 		t.Errorf("the edge group's part = %q, want the one it fronts through", front.Part)
 	}
 	if len(front.Changes) != 2 {
@@ -174,13 +174,13 @@ func TestPlanRemovalOfOneTierDeletesItsOwnPassphraseAndReadsNoStackOfTheOther(t 
 
 	b := removingBootstrapper(t, environment.TierPreview)
 	stacks := b.CFN.(*teardownCFN)
-	stacks.present[coreStackName] = bootstrap.Deployed{Present: true}
+	stacks.present[coreStackName] = account.Deployed{Present: true}
 
 	plan, err := b.PlanRemove(context.Background(), environment.TierPreview)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
-	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
+	params := groupNamed(plan, "aws/"+account.ParamGroupName)
 	own := changeNamed(params, defaultNamespace.PassphraseParamFor(environment.TierPreview))
 	if own == nil || own.Action != provider.ActionDelete {
 		t.Errorf("the preview passphrase row = %+v, want it deleted with the preview bootstrap", own)
@@ -206,7 +206,7 @@ func TestPlanRemovalOfAnAbsentBootstrapStillPlansWhatItLeftBehind(t *testing.T) 
 	if groupNamed(plan, "aws/"+coreStackName) != nil {
 		t.Errorf("plan groups = %s, want no stack planned where none exists", groupNames(plan))
 	}
-	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
+	params := groupNamed(plan, "aws/"+account.ParamGroupName)
 	if changeNamed(params, edgeParam(t, environment.TierProduction, "/credentials")) == nil {
 		t.Errorf("plan groups = %s, want the parameters the bootstrap left behind still planned", groupNames(plan))
 	}
@@ -265,7 +265,7 @@ func TestPlanRemovalNamesEveryInstalledEdgeByItsOwnKind(t *testing.T) {
 	}
 
 	other := groupNamed(plan, string(cloudflareKind)+"/edge")
-	if other == nil || other.Part != bootstrap.CloudflareEdgePart {
+	if other == nil || other.Part != account.CloudflareEdgePart {
 		t.Fatalf("plan groups = %s, want the installed edge too, under its own kind and part", groupNames(plan))
 	}
 	if changeNamed(other, "ocel-releases-store/BOOTSTRAP_SECRET") == nil {
@@ -332,8 +332,8 @@ func TestRemoveTearsDownAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 func severed(t *testing.T, b Bootstrap, tier environment.Tier) {
 	t.Helper()
 
-	b.CFN.(*teardownCFN).present[defaultNamespace.PartStackName(bootstrap.CloudflareEdgePart, tier)] =
-		bootstrap.Deployed{Present: true}
+	b.CFN.(*teardownCFN).present[defaultNamespace.PartStackName(account.CloudflareEdgePart, tier)] =
+		account.Deployed{Present: true}
 	prefix, err := defaultNamespace.EdgeParamPrefix(tier, cloudflareKind)
 	if err != nil {
 		t.Fatalf("EdgeParamPrefix(%s): %v", tier, err)

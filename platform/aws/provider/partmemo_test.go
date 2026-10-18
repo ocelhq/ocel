@@ -14,7 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 )
@@ -59,8 +59,8 @@ func TestADeployReadsACurrentPartRecordOnceHoweverManyStepsNeedIt(t *testing.T) 
 	cfg := aws.Config{Region: "eu-west-2", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", ""), BaseEndpoint: aws.String(table.serve(t))}
 	p := NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace)
 	p.writtenBy = "1.0.0"
-	if _, err := p.deployed.resolve(production, func() (bootstrap.Reading, error) {
-		return bootstrap.Reading{Deployed: bootstrap.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts", StateTable: "state-table", VariablesTable: "variables", AssetBucket: "assets", AppBoundaryARN: "arn:aws:iam::111122223333:policy/boundary"}}, nil
+	if _, err := p.deployed.resolve(production, func() (account.Reading, error) {
+		return account.Reading{Deployed: account.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts", StateTable: "state-table", VariablesTable: "variables", AssetBucket: "assets", AppBoundaryARN: "arn:aws:iam::111122223333:policy/boundary"}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}

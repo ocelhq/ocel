@@ -25,9 +25,10 @@ func TableOf(at component.Stack) StateTable {
 
 func New() component.Component {
 	return component.Component{
-		Types:   []provider.BindingType{provider.BindingTopic},
-		Declare: Declare,
-		Collect: Collect,
+		Types:      []provider.BindingType{provider.BindingTopic},
+		Declare:    Declare,
+		Collect:    Collect,
+		Credential: credential,
 		Shape: func(cost component.CostTree, scope string, at component.Stack, declared []provider.Resource) error {
 			Shape(cost, scope, Of(at.Project, at.Env, declared))
 			return nil

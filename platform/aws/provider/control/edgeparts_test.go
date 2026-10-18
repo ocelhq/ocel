@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 type describingEdge struct {
@@ -39,7 +39,7 @@ func bootstrapperWithEdge(t *testing.T, front edge.Edge) Bootstrap {
 	if err != nil {
 		t.Fatalf("StackNameFor: %v", err)
 	}
-	stacks.present[defaultNamespace.PartStackName(bootstrap.CloudflareEdgePart, environment.TierProduction)] = stacks.present[core]
+	stacks.present[defaultNamespace.PartStackName(account.CloudflareEdgePart, environment.TierProduction)] = stacks.present[core]
 	b.Edge, b.Edges, b.Kinds = front, registryOf(front), kindsOf(front)
 	return b
 }
@@ -58,8 +58,8 @@ func TestAnAWSBootstrapStatusListsTheEdgesBootstrapPartsUnderItsPart(t *testing.
 		t.Fatalf("Describe: %v", err)
 	}
 	want := []provider.BootstrapStack{
-		{Name: "cloudflare/ocel-releases-store/BOOTSTRAP_SECRET", Part: bootstrap.CloudflareEdgePart, Present: true, DigestCurrent: true},
-		{Name: "cloudflare/ocel-sample-worker", Part: bootstrap.CloudflareEdgePart, Present: true, DigestCurrent: false},
+		{Name: "cloudflare/ocel-releases-store/BOOTSTRAP_SECRET", Part: account.CloudflareEdgePart, Present: true, DigestCurrent: true},
+		{Name: "cloudflare/ocel-sample-worker", Part: account.CloudflareEdgePart, Present: true, DigestCurrent: false},
 	}
 	var got []provider.BootstrapStack
 	for _, stack := range described.Stacks {
@@ -84,7 +84,7 @@ func TestAnAWSBootstrapStatusReportsAnUndescribableEdgeAsUnreadableRatherThanFai
 	if err != nil {
 		t.Fatalf("Describe = %v, want the status to survive an edge it cannot read", err)
 	}
-	want := provider.BootstrapStack{Name: "cloudflare/bootstrap", Part: bootstrap.CloudflareEdgePart, Present: true, ReadError: "CLOUDFLARE_API_TOKEN is not set"}
+	want := provider.BootstrapStack{Name: "cloudflare/bootstrap", Part: account.CloudflareEdgePart, Present: true, ReadError: "CLOUDFLARE_API_TOKEN is not set"}
 	var got []provider.BootstrapStack
 	for _, stack := range described.Stacks {
 		if strings.HasPrefix(stack.Name, string(cloudflareKind)+"/") {
@@ -102,7 +102,7 @@ func TestAnAWSBootstrapPlanIsUnchangedByTheEdgesBootstrapParts(t *testing.T) {
 	planned := []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-sample-worker", Action: edge.PlanKeep}}
 	req := provider.BootstrapRequest{
 		Tier:  environment.TierProduction,
-		Parts: []string{bootstrap.CloudflareEdgePart},
+		Parts: []string{account.CloudflareEdgePart},
 	}
 	planWith := func(front edge.Edge) provider.Plan {
 		t.Helper()

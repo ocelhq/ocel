@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/cost"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -21,15 +21,15 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Tier))
 	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
-	var options []bootstrap.ShapeOption
+	var options []account.ShapeOption
 	if p.options.VariablesKey != "" {
-		options = append(options, bootstrap.WithVariablesKey(p.options.VariablesKey))
+		options = append(options, account.WithVariablesKey(p.options.VariablesKey))
 	}
 	shaped := req.Parts
 	if !slices.Contains(shaped, provider.VariablesKeyPart) {
 		shaped = append(slices.Clone(shaped), provider.VariablesKeyPart)
 	}
-	bootstrapShape, err := bootstrap.Shape(p.namespace, req.Deploy.Tier, shaped, options...)
+	bootstrapShape, err := account.Shape(p.namespace, req.Deploy.Tier, shaped, options...)
 	if err != nil {
 		return nil, err
 	}

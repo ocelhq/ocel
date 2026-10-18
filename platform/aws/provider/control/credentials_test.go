@@ -2,6 +2,8 @@ package control
 
 import (
 	"context"
+	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 type callerIdentity struct {
@@ -108,5 +111,52 @@ func TestPermissionsRefuseATierNoBootstrapServes(t *testing.T) {
 
 	if _, err := (Credentials{Namespace: "acme"}).Permissions(edge.PurposeDeploy, "staging"); err == nil {
 		t.Error("Permissions(deploy, staging) rendered a document, want a refusal")
+	}
+}
+
+func canonicalStatements(t *testing.T, statements any) []string {
+	t.Helper()
+	raw, err := json.Marshal(statements)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed []any
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, 0, len(parsed))
+	for _, statement := range parsed {
+		encoded, err := json.Marshal(statement)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, string(encoded))
+	}
+	slices.Sort(out)
+	return out
+}
+
+func TestSplittingACredentialKeepsEveryStatement(t *testing.T) {
+	t.Parallel()
+
+	whole := canonicalStatements(t, iam.Statements(deployStatements(scopeOf(defaultNamespace, environment.TierProduction, ""))))
+	document, err := DeployCredentialPermissions(defaultNamespace, environment.TierProduction, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policies []struct {
+		PolicyDocument struct {
+			Statement []any `json:"Statement"`
+		} `json:"PolicyDocument"`
+	}
+	if err := json.Unmarshal([]byte(document), &policies); err != nil {
+		t.Fatal(err)
+	}
+	var printed []any
+	for _, policy := range policies {
+		printed = append(printed, policy.PolicyDocument.Statement...)
+	}
+	if split := canonicalStatements(t, printed); !slices.Equal(split, whole) {
+		t.Errorf("the split credential prints %d statements, want exactly the %d of the whole, none lost and none added", len(split), len(whole))
 	}
 }

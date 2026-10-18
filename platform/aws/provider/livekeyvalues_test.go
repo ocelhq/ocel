@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/records"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -44,7 +44,7 @@ func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {
 	if _, err := store.Write(ctx, records.Entry{Key: in.Key("shop"), Value: written}); err != nil {
 		t.Fatalf("Write() = %v", err)
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, environment.TierProduction)
+	deployed, err := account.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("reading back what the bootstrap deployed = %v", err)
 	}

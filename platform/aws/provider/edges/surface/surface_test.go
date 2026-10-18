@@ -7,13 +7,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
 )
 
 const commentLimit = 128
 
-var longest = bootstrap.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
+var longest = account.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
 
 func TestNameContainsTheNamespaceTheSlugAndTheTier(t *testing.T) {
 	if got, want := surface.Name("ocel", "shop", environment.TierProduction), "ocel--shop--production"; got != want {

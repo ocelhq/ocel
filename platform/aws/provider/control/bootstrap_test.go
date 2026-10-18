@@ -28,8 +28,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
@@ -41,7 +41,7 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 	if err != nil {
 		t.Fatalf("StackNameFor(%s): %v", tier, err)
 	}
-	params, err := bootstrap.TierParamNames(defaultNamespace, tier)
+	params, err := account.TierParamNames(defaultNamespace, tier)
 	if err != nil {
 		t.Fatalf("TierParamNames(%s): %v", tier, err)
 	}
@@ -54,7 +54,7 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 	for _, name := range params {
 		stored[name] = "{}"
 	}
-	deployed := bootstrap.Deployed{
+	deployed := account.Deployed{
 		Present:        true,
 		StateBucket:    "ocel-state",
 		ArtifactBucket: "ocel-artifacts",
@@ -64,7 +64,7 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 	}
 	front := &teardownEdge{}
 	return Bootstrap{
-		CFN:     &teardownCFN{present: map[string]bootstrap.Deployed{stackName: deployed}},
+		CFN:     &teardownCFN{present: map[string]account.Deployed{stackName: deployed}},
 		SSM:     &teardownSSM{params: stored},
 		IAM:     &teardownIAM{keys: map[string][]string{userName: {"AKIAOLD"}}},
 		Layers:  noLayers{},
@@ -149,7 +149,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Tier:  environment.TierProduction,
-		Parts: []string{bootstrap.CloudflareEdgePart},
+		Parts: []string{account.CloudflareEdgePart},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -169,14 +169,14 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 		t.Errorf("the runtime group is %q, want %q", got, want)
 	}
 	params := plan.Groups[3]
-	if params.Kind != provider.ParameterGroupKind || params.Name != "aws/"+bootstrap.ParamGroupName {
+	if params.Kind != provider.ParameterGroupKind || params.Name != "aws/"+account.ParamGroupName {
 		t.Errorf("the parameters group = %+v, want it named under the account that stores them", params)
 	}
 	edgeGroup := plan.Groups[4]
 	if edgeGroup.Kind != edge.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
 		t.Errorf("the edge group = %+v, want the edge named under its own vendor", edgeGroup)
 	}
-	if edgeGroup.Part != bootstrap.CloudflareEdgePart {
+	if edgeGroup.Part != account.CloudflareEdgePart {
 		t.Errorf("the edge group's part = %q, want the one the edge participates through", edgeGroup.Part)
 	}
 	if edgeGroup.Action != provider.ActionUpdate {
@@ -202,7 +202,7 @@ func TestPlanShowsTheEdgeGoingWhenThePartItFrontsThroughIsDropped(t *testing.T) 
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Tier:   environment.TierProduction,
-		Remove: []string{bootstrap.CloudflareEdgePart},
+		Remove: []string{account.CloudflareEdgePart},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -243,7 +243,7 @@ func TestPlanShowsAnEdgePartArrivingBehindAnotherFront(t *testing.T) {
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Tier:  environment.TierProduction,
-		Parts: []string{bootstrap.CloudflareEdgePart},
+		Parts: []string{account.CloudflareEdgePart},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -270,7 +270,7 @@ func TestPlanShowsAnEdgePartGoingBehindAnotherFront(t *testing.T) {
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Tier:   environment.TierProduction,
-		Remove: []string{bootstrap.CloudflareEdgePart},
+		Remove: []string{account.CloudflareEdgePart},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -294,7 +294,7 @@ func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Tier:  environment.TierProduction,
-		Parts: []string{bootstrap.CloudflareEdgePart},
+		Parts: []string{account.CloudflareEdgePart},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
@@ -313,7 +313,7 @@ func TestPlanPassesTheEdgesRefusalOut(t *testing.T) {
 
 	_, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Tier:  environment.TierProduction,
-		Parts: []string{bootstrap.CloudflareEdgePart},
+		Parts: []string{account.CloudflareEdgePart},
 	})
 	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_ACCOUNT_ID") {
 		t.Fatalf("Plan error = %v, want the edge's own account error passed through whole", err)
@@ -322,7 +322,7 @@ func TestPlanPassesTheEdgesRefusalOut(t *testing.T) {
 
 func planningBootstrapper(front edge.Edge) Bootstrap {
 	return Bootstrap{
-		CFN:     &teardownCFN{present: map[string]bootstrap.Deployed{}},
+		CFN:     &teardownCFN{present: map[string]account.Deployed{}},
 		SSM:     &teardownSSM{params: map[string]string{}},
 		IAM:     &teardownIAM{keys: map[string][]string{}},
 		Layers:  noLayers{},
@@ -375,7 +375,7 @@ func TestPlanAsksTheEdgeWhatItHandsThisAccountToStore(t *testing.T) {
 	front := &adoptingEdge{refusal: errors.New("CLOUDFLARE_API_TOKEN was rejected")}
 	_, err := planningBootstrapper(front).Plan(context.Background(), provider.BootstrapRequest{
 		Tier:  environment.TierProduction,
-		Parts: []string{bootstrap.CloudflareEdgePart},
+		Parts: []string{account.CloudflareEdgePart},
 	})
 	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_API_TOKEN was rejected") {
 		t.Fatalf("Plan error = %v, want the edge's refusal to say what it hands this account", err)
@@ -430,7 +430,7 @@ func TestRemoveOfOneTierTakesItsOwnPassphraseAndLeavesTheOtherTiers(t *testing.T
 	t.Parallel()
 
 	b := installedBootstrapper(t, environment.TierPreview)
-	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
+	b.CFN.(*teardownCFN).present[coreStackName] = account.Deployed{Present: true}
 	stored := b.SSM.(*teardownSSM).params
 	stored[passphraseParam] = "pp-production"
 
@@ -471,7 +471,7 @@ func (e *teardownEdge) Teardown(_ context.Context, tier environment.Tier) error 
 type teardownCFN struct {
 	cfn.API
 
-	present   map[string]bootstrap.Deployed
+	present   map[string]account.Deployed
 	resources map[string][]cfntypes.StackResourceSummary
 	listing   error
 	tags      map[string][]cfntypes.Tag
@@ -619,12 +619,12 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	}}
 	b := planningBootstrapper(front)
 	cfn := b.CFN.(*teardownCFN)
-	remembered := map[environment.Tier]bootstrap.Reading{}
-	b.Read = func(ctx context.Context, tier environment.Tier) (bootstrap.Reading, error) {
+	remembered := map[environment.Tier]account.Reading{}
+	b.Read = func(ctx context.Context, tier environment.Tier) (account.Reading, error) {
 		if read, ok := remembered[tier]; ok {
 			return read, nil
 		}
-		read, err := bootstrap.Read(ctx, cfn, b.Namespace, tier)
+		read, err := account.Read(ctx, cfn, b.Namespace, tier)
 		if err == nil {
 			remembered[tier] = read
 		}

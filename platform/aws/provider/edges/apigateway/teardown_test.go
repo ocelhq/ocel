@@ -219,3 +219,40 @@ func TestDestroyListsAsMuchHoweverManyRestAPIsOtherProjectsHold(t *testing.T) {
 		t.Errorf("Destroy lists %d times beside no other project's REST APIs and %d times beside 20 of them; its listing must be bounded by its own project", alone, among)
 	}
 }
+
+func TestTeardownLeavesTheCoreStacksResourcesToCloudFormation(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
+			t.Parallel()
+
+			w := newWorld()
+			e := w.edge()
+			if _, err := e.Bootstrap(ctx, tier); err != nil {
+				t.Fatalf("Bootstrap: %v", err)
+			}
+			w.gateway.calls = nil
+
+			if err := e.Teardown(ctx, tier); err != nil {
+				t.Fatalf("Teardown: %v", err)
+			}
+			if got := w.gateway.mutations(); len(got) != 0 {
+				t.Errorf("teardown called %v, want nothing; the role and the 404 responder go down with the core stack", got)
+			}
+		})
+	}
+
+	t.Run("an unknown tier is refused rather than reported done", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld()
+		if err := w.edge().Teardown(ctx, environment.Tier("staging")); err == nil {
+			t.Fatal("Teardown(staging) reported success having removed nothing")
+		}
+		if len(w.gateway.calls) != 0 {
+			t.Errorf("an unknown tier called %v, want nothing", w.gateway.calls)
+		}
+	})
+}

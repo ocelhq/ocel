@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -27,7 +27,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-var defaultNamespace = bootstrap.Namespace(provider.DefaultNamespace)
+var defaultNamespace = account.Namespace(provider.DefaultNamespace)
 
 func TestStateBackendURLIncludesTheEndpointTheAccountIsReachedOn(t *testing.T) {
 	t.Setenv("AWS_ENDPOINT_URL", "")
@@ -148,13 +148,13 @@ func forgetOf(t *testing.T, p *Provider) func() {
 
 func primed(t *testing.T, p *Provider, table string) {
 	t.Helper()
-	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
-		return bootstrap.Reading{Deployed: bootstrap.Deployed{StateTable: table}}, nil
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
+		return account.Reading{Deployed: account.Deployed{StateTable: table}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: edges.DefaultKind}, func() (bootstrap.TierParams, error) {
-		return bootstrap.TierParams{Passphrase: table}, nil
+	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: edges.DefaultKind}, func() (account.TierParams, error) {
+		return account.TierParams{Passphrase: table}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -162,14 +162,14 @@ func primed(t *testing.T, p *Provider, table string) {
 
 func resolvedAfter(t *testing.T, p *Provider) (string, string) {
 	t.Helper()
-	deployed, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
-		return bootstrap.Reading{Deployed: bootstrap.Deployed{StateTable: "after"}}, nil
+	deployed, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
+		return account.Reading{Deployed: account.Deployed{StateTable: "after"}}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	params, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: edges.DefaultKind}, func() (bootstrap.TierParams, error) {
-		return bootstrap.TierParams{Passphrase: "after"}, nil
+	params, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: edges.DefaultKind}, func() (account.TierParams, error) {
+		return account.TierParams{Passphrase: "after"}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -281,8 +281,8 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 
 func TestDescribingTheBootstrapReadsTheAccountTheProviderAlreadyRead(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
-		return bootstrap.Reading{Deployed: bootstrap.Deployed{Present: true, Parts: bootstrap.PartSet{}}}, nil
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
+		return account.Reading{Deployed: account.Deployed{Present: true, Parts: account.PartSet{}}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -342,8 +342,8 @@ func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 func TestTierParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	wanted := tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}
-	if _, err := p.params.resolve(wanted, func() (bootstrap.TierParams, error) {
-		return bootstrap.TierParams{Passphrase: string(cloudflare.Kind)}, nil
+	if _, err := p.params.resolve(wanted, func() (account.TierParams, error) {
+		return account.TierParams{Passphrase: string(cloudflare.Kind)}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -367,8 +367,8 @@ func TestTierParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	refused := refusal.Refuse(refusal.CodeNotReady, "/ocel/origin/secret contains something other than the origin secret bootstrap writes")
-	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}, func() (bootstrap.TierParams, error) {
-		return bootstrap.TierParams{OriginSecretErr: refused}, nil
+	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}, func() (account.TierParams, error) {
+		return account.TierParams{OriginSecretErr: refused}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -384,12 +384,12 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 
 func TestBucketsAreTheTiersArtifactAndAssetBucketsWhateverEdgesAreInstalled(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Reading, error) {
-		return bootstrap.Reading{Deployed: bootstrap.Deployed{
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
+		return account.Reading{Deployed: account.Deployed{
 			ArtifactBucket: "functions",
 			AssetBucket:    "assets",
-			Parts: bootstrap.PartSet{
-				bootstrap.CloudflareEdgePart: true,
+			Parts: account.PartSet{
+				account.CloudflareEdgePart: true,
 			},
 		}}, nil
 	}); err != nil {
@@ -407,7 +407,7 @@ func TestBucketsAreTheTiersArtifactAndAssetBucketsWhateverEdgesAreInstalled(t *t
 
 func TestBootstrapReadyWithoutAVariablesKey(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	deployed := bootstrap.Deployed{
+	deployed := account.Deployed{
 		StateBucket:    "state",
 		ArtifactBucket: "artifacts",
 		AssetBucket:    "assets",

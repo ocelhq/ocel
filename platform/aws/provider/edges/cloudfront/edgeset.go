@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	cloudfrontpart "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
 )
@@ -32,11 +32,11 @@ func edgeSetFrom(set cloudfrontpart.Set) edgeSet {
 	}
 }
 
-func partRecords(c Clients, deployed bootstrap.Deployed) records.Store {
+func partRecords(c Clients, deployed account.Deployed) records.Store {
 	return awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(deployed.StateTable)}
 }
 
-func (p *cloudFront) readEdgeSet(ctx context.Context, c Clients, deployed bootstrap.Deployed, tier environment.Tier) (edgeSet, error) {
+func (p *cloudFront) readEdgeSet(ctx context.Context, c Clients, deployed account.Deployed, tier environment.Tier) (edgeSet, error) {
 	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, partRecords(c, deployed), tier, cloudfrontpart.Part)
 	if err != nil {
 		return edgeSet{}, err

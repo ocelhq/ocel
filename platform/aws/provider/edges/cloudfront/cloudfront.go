@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
@@ -74,7 +74,7 @@ type Clients struct {
 }
 
 type cloudFront struct {
-	ns         bootstrap.Namespace
+	ns         account.Namespace
 	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
 	open       func(context.Context) (Clients, error)
 	options    Options
@@ -84,13 +84,13 @@ type cloudFront struct {
 	clients *Clients
 }
 
-func New(ns bootstrap.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error), options Options) edge.Edge {
+func New(ns account.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error), options Options) edge.Edge {
 	front := newCloudFront(ns, open, options)
 	front.ensurePart = ensurePart
 	return front
 }
 
-func newCloudFront(ns bootstrap.Namespace, open func(context.Context) (Clients, error), options Options) *cloudFront {
+func newCloudFront(ns account.Namespace, open func(context.Context) (Clients, error), options Options) *cloudFront {
 	return &cloudFront{ns: ns, open: open, options: options, pacing: NewRollout()}
 }
 
@@ -228,14 +228,14 @@ func knownTier(tier environment.Tier) error {
 	return nil
 }
 
-func (p *cloudFront) bootstrap(ctx context.Context, c Clients, tier environment.Tier) (bootstrap.Deployed, error) {
+func (p *cloudFront) bootstrap(ctx context.Context, c Clients, tier environment.Tier) (account.Deployed, error) {
 	if err := knownTier(tier); err != nil {
-		return bootstrap.Deployed{}, err
+		return account.Deployed{}, err
 	}
 	if tier == environment.TierPreview {
-		return bootstrap.CheckDeployedPreview(ctx, c.CFN, p.ns)
+		return account.CheckDeployedPreview(ctx, c.CFN, p.ns)
 	}
-	return bootstrap.CheckDeployed(ctx, c.CFN, p.ns)
+	return account.CheckDeployed(ctx, c.CFN, p.ns)
 }
 
 func (p *cloudFront) Bootstrap(_ context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
@@ -363,7 +363,7 @@ func (p *cloudFront) DomainOwner(ctx context.Context, hostname string) (string, 
 	return "", nil
 }
 
-func distributionName(ns bootstrap.Namespace, slug string, tier environment.Tier) string {
+func distributionName(ns account.Namespace, slug string, tier environment.Tier) string {
 	return surface.Fitted(maxDistributionNameLen, ns, slug, tier)
 }
 

@@ -10,7 +10,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 type countingStacks struct {
@@ -36,7 +36,7 @@ func TestTheConnectorRereadsTheBootstrapOnceItsMemoAges(t *testing.T) {
 	stacks := &countingStacks{}
 	clock := time.Unix(1_000_000, 0)
 	bootstraps := &bootstrapCache{
-		namespace: bootstrap.Namespace("ocel"),
+		namespace: account.Namespace("ocel"),
 		stacks:    stacks,
 		now:       func() time.Time { return clock },
 		read:      map[environment.Tier]cachedBootstrap{},

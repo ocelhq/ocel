@@ -14,6 +14,7 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 type Component struct {
@@ -24,6 +25,7 @@ type Component struct {
 	Collect func(ctx context.Context, at Stack, declared provider.Resource, outputs auto.OutputMap) (*variablestorev1.PublishedBinding, error)
 
 	WidestGrants func(at Stack, declared provider.Resource) []*variablestorev1.Grant
+	Credential   func(scope iam.Scope) []iam.Statement
 	Sweep        func(ctx context.Context, at Stack, kept []provider.Resource) error
 	Teardown     *Teardown
 	Transform    func(project, env, name string) Transformable

@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	cloudfrontpart "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
@@ -297,7 +297,7 @@ func TestTheCloudFrontEdgeRunsNoCode(t *testing.T) {
 func TestTheEdgeKindNeedsNoBootstrapPart(t *testing.T) {
 	t.Parallel()
 
-	if got := bootstrapplan.PartFrontingEdge(bootstrap.Parts(), Kind); got != "" {
+	if got := bootstrapplan.PartFrontingEdge(account.Parts(), Kind); got != "" {
 		t.Errorf("bootstrapping with the %q edge raises the %q part, want none: the first deploy through it adds the %s part", Kind, got, cloudfrontpart.Part)
 	}
 }
@@ -576,7 +576,7 @@ func TestPromote(t *testing.T) {
 
 		w := newWorld()
 		rotatedAt := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
-		w.ssm.secret = bootstrap.OriginSecret{Current: fakeSecret, CreatedAt: rotatedAt, Previous: "3f7a9c1e5b2d84600f1a2b3c4d5e6f70-old", RotatedAt: rotatedAt}
+		w.ssm.secret = account.OriginSecret{Current: fakeSecret, CreatedAt: rotatedAt, Previous: "3f7a9c1e5b2d84600f1a2b3c4d5e6f70-old", RotatedAt: rotatedAt}
 		stack := reconciled(t, w)
 		bound(t, stack)
 		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)

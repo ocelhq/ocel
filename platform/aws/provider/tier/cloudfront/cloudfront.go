@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 )
 
@@ -46,7 +46,7 @@ const (
 )
 
 type Spec struct {
-	Namespace bootstrap.Namespace
+	Namespace account.Namespace
 	Tier      environment.Tier
 }
 
@@ -59,7 +59,7 @@ type Names struct {
 	AssetAccess   string
 }
 
-func NamesFor(ns bootstrap.Namespace, tier environment.Tier) Names {
+func NamesFor(ns account.Namespace, tier environment.Tier) Names {
 	return Names{
 		RoutesStore:   ns.EdgeRoutesStoreName(tier),
 		Resolver:      ns.EdgeResolverName(tier),
@@ -128,7 +128,7 @@ func Digest(spec Spec) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func Shape(ns bootstrap.Namespace, tier environment.Tier) []pricing.Shaped {
+func Shape(ns account.Namespace, tier environment.Tier) []pricing.Shaped {
 	names := NamesFor(ns, tier)
 	return []pricing.Shaped{
 		{Name: names.RoutesStore, Type: "aws_cloudfront_key_value_store", Properties: map[string]any{}},

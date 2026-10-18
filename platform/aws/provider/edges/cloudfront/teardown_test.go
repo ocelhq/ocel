@@ -14,14 +14,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
 )
 
 func TestADistributionNameFitsTheCommentWithoutLosingTheFieldsTheGateReads(t *testing.T) {
 	t.Parallel()
 
-	ns := bootstrap.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
+	ns := account.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
 	slug := strings.Repeat("s", 120)
 
 	name := distributionName(ns, slug, environment.TierProduction)
@@ -39,7 +39,7 @@ func TestADistributionNameFitsTheCommentWithoutLosingTheFieldsTheGateReads(t *te
 func TestTheCommentOnADistributionIsTheOwnerAProjectClaims(t *testing.T) {
 	t.Parallel()
 
-	ns := bootstrap.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
+	ns := account.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
 	slug := strings.Repeat("s", 120)
 	p := &cloudFront{ns: ns}
 
