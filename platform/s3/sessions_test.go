@@ -2,7 +2,9 @@ package s3
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -70,4 +72,119 @@ func TestAnUploadSessionAnswersOnlyACallerGrantedItsBucket(t *testing.T) {
 			t.Fatalf("VerifyUploadSignature = %+v, want invalid with no metadata", got)
 		}
 	})
+}
+
+func sessionsInSequence(h *harness) {
+	opened := 0
+	h.svc.newID = func() string {
+		opened++
+		return fmt.Sprintf("sess_%d", opened)
+	}
+	h.svc.sweeping = func(run func()) { run() }
+}
+
+func TestASessionLongPastItsExpiryIsDeletedWhenTheNextUploadOpens(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, nil)
+	sessionsInSequence(h)
+	ctx := context.Background()
+
+	h.presign(t, "a.png", 3, "image/png")
+	h.store.put("store", "a.png", []byte("abc"), "image/png")
+	if _, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: "sess_1"}); err != nil {
+		t.Fatalf("CompleteUpload: %v", err)
+	}
+	h.now = h.now.Add(5 * time.Hour)
+	h.presign(t, "b.png", 3, "image/png")
+
+	if _, kept := h.store.objects["store"][SessionKeyPrefix+"sess_1"]; kept {
+		t.Error("a session settled five hours ago is still in the store, so every upload ever made leaves a record behind")
+	}
+	if _, opened := h.store.objects["store"][SessionKeyPrefix+"sess_2"]; !opened {
+		t.Error("the session just opened was deleted with the old one")
+	}
+	if _, present := h.store.objects["store"]["a.png"]; !present {
+		t.Error("deleting a settled session took the upload it confirmed with it")
+	}
+}
+
+func TestASessionStillWithinReachOfItsClientIsKept(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, nil)
+	sessionsInSequence(h)
+	ctx := context.Background()
+
+	h.presign(t, "a.png", 3, "image/png")
+	h.store.put("store", "a.png", []byte("abc"), "image/png")
+	if _, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: "sess_1"}); err != nil {
+		t.Fatalf("CompleteUpload: %v", err)
+	}
+	h.now = h.now.Add(time.Hour)
+	h.presign(t, "b.png", 3, "image/png")
+
+	resp, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: "sess_1"})
+	if err != nil {
+		t.Fatalf("a client polling the session it finished an hour ago was answered %v", err)
+	}
+	if resp.GetState() != bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED {
+		t.Fatalf("state = %v, want SUCCEEDED", resp.GetState())
+	}
+}
+
+func TestAnAbandonedSessionIsExpiredBeforeItsRecordIsDeleted(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, nil)
+	sessionsInSequence(h)
+
+	h.presign(t, "a.png", 3, "image/png")
+	h.store.put("store", "a.png", []byte("abc"), "image/png")
+	h.now = h.now.Add(5 * time.Hour)
+	h.presign(t, "b.png", 3, "image/png")
+
+	if _, kept := h.store.objects["store"][SessionKeyPrefix+"sess_1"]; kept {
+		t.Error("a session nobody came back to is still in the store")
+	}
+	if _, present := h.store.objects["store"]["a.png"]; present {
+		t.Error("the upload of a session nobody confirmed outlived the session, and nothing will ever claim it")
+	}
+	if len(h.poster.posts) != 0 {
+		t.Errorf("the app was told about an upload its client never confirmed: %+v", h.poster.posts)
+	}
+}
+
+func TestASessionOfABucketThisAppWasNotGrantedIsLeftForItsOwner(t *testing.T) {
+	t.Parallel()
+	owner := newHarness(t, func(cfg *Config) {
+		cfg.Sessions = "shared/build"
+		cfg.Granted = []string{"mine"}
+	})
+	sessionsInSequence(owner)
+	ctx := context.Background()
+	if _, err := owner.svc.PresignUpload(ctx, &bucketv1.PresignUploadRequest{
+		Bucket: "mine",
+		Files:  []*bucketv1.PresignFile{{Key: "a.png", Name: "a.png", Size: 3, MimeType: "image/png"}},
+	}); err != nil {
+		t.Fatalf("PresignUpload: %v", err)
+	}
+
+	other := New(Config{
+		Objects:  owner.store,
+		Internal: presigner(),
+		External: func(context.Context) (PresignAPI, string) { return externalPresigner(), "https://storage.example.com" },
+		Sessions: "shared/build",
+		Granted:  []string{"theirs"},
+	})
+	other.now = func() time.Time { return owner.now.Add(5 * time.Hour) }
+	other.newID = func() string { return "sess_theirs" }
+	other.sweeping = func(run func()) { run() }
+	if _, err := other.PresignUpload(ctx, &bucketv1.PresignUploadRequest{
+		Bucket: "theirs",
+		Files:  []*bucketv1.PresignFile{{Key: "b.png", Name: "b.png", Size: 3, MimeType: "image/png"}},
+	}); err != nil {
+		t.Fatalf("PresignUpload: %v", err)
+	}
+
+	if _, kept := owner.store.objects["shared"]["build/"+SessionKeyPrefix+"sess_1"]; !kept {
+		t.Error("another grant's sweep deleted a session it could not read")
+	}
 }

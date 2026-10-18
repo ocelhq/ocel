@@ -22,13 +22,14 @@ const listPageSize = 1000
 func missing(err error) bool {
 	var notFound *s3types.NotFound
 	var noSuchKey *s3types.NoSuchKey
-	if errors.As(err, &notFound) || errors.As(err, &noSuchKey) {
+	var noSuchUpload *s3types.NoSuchUpload
+	if errors.As(err, &notFound) || errors.As(err, &noSuchKey) || errors.As(err, &noSuchUpload) {
 		return true
 	}
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) {
 		switch apiErr.ErrorCode() {
-		case "NotFound", "NoSuchKey", "404":
+		case "NotFound", "NoSuchKey", "NoSuchUpload", "404":
 			return true
 		}
 	}
@@ -119,28 +120,33 @@ func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv
 	if req.GetCursor() != "" {
 		in.ContinuationToken = aws.String(req.GetCursor())
 	}
-	out, err := s.cfg.Objects.ListObjectsV2(ctx, in)
-	if err != nil {
-		return nil, storeError("list "+req.GetPrefix(), err)
+	resp := &bucketv1.ListResponse{}
+	for {
+		out, err := s.cfg.Objects.ListObjectsV2(ctx, in)
+		if err != nil {
+			return nil, storeError("list "+req.GetPrefix(), err)
+		}
+		for _, obj := range out.Contents {
+			key := granted.strip(aws.ToString(obj.Key))
+			if strings.HasPrefix(key, ReservedKeyPrefix) {
+				continue
+			}
+			info := &bucketv1.ObjectInfo{
+				Key:  key,
+				Size: aws.ToInt64(obj.Size),
+				Etag: aws.ToString(obj.ETag),
+			}
+			if obj.LastModified != nil {
+				info.UploadedAt = timestamppb.New(*obj.LastModified)
+			}
+			resp.Objects = append(resp.Objects, info)
+		}
+		resp.NextCursor = aws.ToString(out.NextContinuationToken)
+		if len(resp.Objects) > 0 || resp.NextCursor == "" {
+			return resp, nil
+		}
+		in.ContinuationToken = out.NextContinuationToken
 	}
-
-	resp := &bucketv1.ListResponse{NextCursor: aws.ToString(out.NextContinuationToken)}
-	for _, obj := range out.Contents {
-		key := granted.strip(aws.ToString(obj.Key))
-		if strings.HasPrefix(key, ReservedKeyPrefix) {
-			continue
-		}
-		info := &bucketv1.ObjectInfo{
-			Key:  key,
-			Size: aws.ToInt64(obj.Size),
-			Etag: aws.ToString(obj.ETag),
-		}
-		if obj.LastModified != nil {
-			info.UploadedAt = timestamppb.New(*obj.LastModified)
-		}
-		resp.Objects = append(resp.Objects, info)
-	}
-	return resp, nil
 }
 
 func (s *Service) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*bucketv1.DeleteResponse, error) {

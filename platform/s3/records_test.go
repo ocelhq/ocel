@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -181,6 +182,7 @@ type heardRequest struct {
 type listeningStore struct {
 	mu    sync.Mutex
 	heard []heardRequest
+	swept []heardRequest
 }
 
 func (l *listeningStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -199,7 +201,11 @@ func (l *listeningStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	l.mu.Lock()
-	l.heard = append(l.heard, heard)
+	if strings.HasSuffix(r.URL.Query().Get("prefix"), SessionKeyPrefix) {
+		l.swept = append(l.swept, heard)
+	} else {
+		l.heard = append(l.heard, heard)
+	}
 	l.mu.Unlock()
 	switch {
 	case r.Method == http.MethodHead:
@@ -212,6 +218,24 @@ func (l *listeningStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
 		_, _ = w.Write([]byte(`<DeleteResult></DeleteResult>`))
 	}
+}
+
+func (l *listeningStore) sweptAs(t *testing.T, credential string) heardRequest {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		l.mu.Lock()
+		for _, sweep := range l.swept {
+			if sweep.credential == credential {
+				l.mu.Unlock()
+				return sweep
+			}
+		}
+		l.mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("no session sweep was made as %s", credential)
+	return heardRequest{}
 }
 
 func (l *listeningStore) take() []heardRequest {
@@ -316,6 +340,9 @@ func TestTwoBindingsOnOneStoreBucketAreEachServedUnderTheirOwnPrefixAndKeyPair(t
 			heardUnder("PresignUpload")
 			_, _ = handler.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: session})
 			heardUnder("CompleteUpload")
+			if sweep := store.sweptAs(t, tc.keyID); !strings.HasPrefix(sweep.reach, tc.prefix) {
+				t.Errorf("the session sweep reached %s, want it under %s", sweep.reach, tc.prefix)
+			}
 		})
 	}
 }

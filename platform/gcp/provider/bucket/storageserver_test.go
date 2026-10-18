@@ -70,7 +70,7 @@ func (s *storageServer) store(bucket, key string, body []byte, contentType strin
 	}
 	s.generation++
 	object := &storedObject{body: body, contentType: contentType, metadata: metadata, generation: 1_700_000_000_000_000 + s.generation,
-		created: time.Date(2026, 10, 5, 12, 0, int(s.generation), 0, time.UTC)}
+		created: time.Now().UTC().Truncate(time.Second).Add(time.Duration(s.generation) * time.Millisecond)}
 	s.objects[bucket][key] = object
 	return object
 }

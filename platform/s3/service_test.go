@@ -34,12 +34,14 @@ type stored struct {
 	body        []byte
 	contentType string
 	etag        string
+	modified    time.Time
 }
 
 type fakeStore struct {
 	mu      sync.Mutex
 	objects map[string]map[string]stored
 	next    int
+	clock   func() time.Time
 }
 
 func newFakeStore() *fakeStore {
@@ -52,7 +54,11 @@ func (f *fakeStore) put(bucket, key string, body []byte, contentType string) str
 	}
 	f.next++
 	etag := `"v` + string(rune('0'+f.next%10)) + key + `"`
-	f.objects[bucket][key] = stored{body: body, contentType: contentType, etag: etag}
+	modified := time.Now()
+	if f.clock != nil {
+		modified = f.clock()
+	}
+	f.objects[bucket][key] = stored{body: body, contentType: contentType, etag: etag, modified: modified}
 	return etag
 }
 
@@ -67,7 +73,7 @@ func (f *fakeStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...f
 		ContentLength: aws.Int64(int64(len(object.body))),
 		ContentType:   aws.String(object.contentType),
 		ETag:          aws.String(object.etag),
-		LastModified:  aws.Time(time.Unix(1_700_000_000, 0).UTC()),
+		LastModified:  aws.Time(object.modified),
 	}, nil
 }
 
@@ -126,9 +132,10 @@ func (f *fakeStore) ListObjectsV2(_ context.Context, in *s3.ListObjectsV2Input, 
 	for _, key := range keys {
 		object := f.objects[aws.ToString(in.Bucket)][key]
 		out.Contents = append(out.Contents, s3types.Object{
-			Key:  aws.String(key),
-			Size: aws.Int64(int64(len(object.body))),
-			ETag: aws.String(object.etag),
+			Key:          aws.String(key),
+			Size:         aws.Int64(int64(len(object.body))),
+			ETag:         aws.String(object.etag),
+			LastModified: aws.Time(object.modified),
 		})
 	}
 	return out, nil
@@ -238,7 +245,9 @@ func newHarness(t *testing.T, tweak func(*Config)) *harness {
 		tweak(&cfg)
 	}
 	h := &harness{store: store, poster: poster, now: time.Unix(1_000_000, 0)}
+	store.clock = func() time.Time { return h.now }
 	h.svc = New(cfg)
+	h.svc.sweeping = func(run func()) { run() }
 	h.svc.now = func() time.Time { return h.now }
 	h.svc.newID = func() string { return "sess_fixed" }
 	h.svc.newSecret = func() string { return "test-secret" }
@@ -339,7 +348,7 @@ func TestCompleteUploadConfirmsWhatTheStoreActuallyContains(t *testing.T) {
 		}
 	})
 
-	t.Run("an object that is not the one signed for is deleted and the session fails", func(t *testing.T) {
+	t.Run("an object written since the session opened that is not the one signed for fails the session and stays", func(t *testing.T) {
 		t.Parallel()
 		h := newHarness(t, nil)
 		h.presign(t, "a.png", 3, "image/png")
@@ -352,11 +361,50 @@ func TestCompleteUploadConfirmsWhatTheStoreActuallyContains(t *testing.T) {
 		if resp.GetState() != bucketv1.UploadState_UPLOAD_STATE_EXPIRED || resp.GetError() == "" {
 			t.Fatalf("resp = %+v, want the session refused with a reason", resp)
 		}
-		if _, present := h.store.objects["store"]["a.png"]; present {
-			t.Fatal("the object nobody signed for is still in the store")
+		if _, present := h.store.objects["store"]["a.png"]; !present {
+			t.Fatal("the session deleted an object the store would never have taken from its signed upload, so someone else wrote it")
 		}
 		if len(h.poster.posts) != 0 {
 			t.Fatalf("the app was told about an object it never authorised: %+v", h.poster.posts)
+		}
+	})
+
+	t.Run("an object already under the key when the session opened leaves the session pending and the app untold", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t, nil)
+		h.store.put("store", "a.png", []byte("abc"), "image/png")
+		h.now = h.now.Add(time.Minute)
+		h.presign(t, "a.png", 3, "image/png")
+
+		resp, err := h.svc.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: "sess_fixed"})
+		if err != nil {
+			t.Fatalf("CompleteUpload: %v", err)
+		}
+		if resp.GetState() != bucketv1.UploadState_UPLOAD_STATE_PENDING {
+			t.Fatalf("state = %v, want PENDING: the object under the key predates the session, so its upload has not landed", resp.GetState())
+		}
+		if len(h.poster.posts) != 0 {
+			t.Fatalf("the app was told about an upload that never happened: %+v", h.poster.posts)
+		}
+	})
+
+	t.Run("an expired session leaves an object it never wrote in place", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t, nil)
+		h.store.put("store", "a.png", []byte("abc"), "image/png")
+		h.now = h.now.Add(time.Minute)
+		h.presign(t, "a.png", 3, "image/png")
+		h.now = h.now.Add(3 * time.Hour)
+
+		resp, err := h.svc.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: "sess_fixed"})
+		if err != nil {
+			t.Fatalf("CompleteUpload: %v", err)
+		}
+		if resp.GetState() != bucketv1.UploadState_UPLOAD_STATE_EXPIRED {
+			t.Fatalf("state = %v, want EXPIRED", resp.GetState())
+		}
+		if _, present := h.store.objects["store"]["a.png"]; !present {
+			t.Fatal("an abandoned overwrite deleted the object that was there before it")
 		}
 	})
 
@@ -513,10 +561,12 @@ func TestAStoreWithNoRoomSignsNoWrite(t *testing.T) {
 	t.Parallel()
 
 	full := newHarness(t, func(cfg *Config) {
-		cfg.Volume = func() (uint64, uint64, error) { return 200 << 20, 100 << 30, nil }
+		cfg.RefuseWrite = func(context.Context) error {
+			return connect.NewError(connect.CodeResourceExhausted, errors.New("the store volume has 200 MiB free, below the 10240 MiB floor"))
+		}
 	})
 	roomy := newHarness(t, func(cfg *Config) {
-		cfg.Volume = func() (uint64, uint64, error) { return 50 << 30, 100 << 30, nil }
+		cfg.RefuseWrite = func(context.Context) error { return nil }
 	})
 
 	write := &bucketv1.SignRequest{
