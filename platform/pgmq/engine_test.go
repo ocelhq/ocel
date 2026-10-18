@@ -21,6 +21,10 @@ func aDatabase(t *testing.T) Config {
 	sum := sha256.Sum256([]byte(t.Name()))
 	database := "test_" + hex.EncodeToString(sum[:8])
 	server.Claim(t, database)
+	admin := connectTo(t, Config{ServerURL: server.URL})
+	if _, err := admin.Exec(context.Background(), "DROP DATABASE IF EXISTS "+pgx.Identifier{database}.Sanitize()+" WITH (FORCE)"); err != nil {
+		t.Fatalf("drop what an earlier run of %s left in %s: %v", t.Name(), database, err)
+	}
 	return Config{ServerURL: server.URL, Database: database}
 }
 
