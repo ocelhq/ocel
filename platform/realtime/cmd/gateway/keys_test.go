@@ -33,7 +33,7 @@ func TestAKeysFileSlowToReadHoldsUpNoOtherLookup(t *testing.T) {
 	found := make(chan bool, 2)
 	for range 2 {
 		go func() {
-			_, known := keys.find("app")
+			_, known := keys.rereadIfStaleAndFind("app")
 			found <- known
 		}()
 	}

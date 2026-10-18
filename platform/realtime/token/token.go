@@ -20,6 +20,8 @@ const (
 
 const Algorithm = "EdDSA"
 
+const ServerSubject = "server"
+
 type Header struct {
 	Algorithm string `json:"alg"`
 	Type      string `json:"typ"`
@@ -84,10 +86,12 @@ func (r *Refusal) Error() string {
 
 func refuse(reason Reason) error { return &Refusal{Reason: reason} }
 
-func Verify(raw string, key ed25519.PublicKey, now time.Time, want Expected) (Claims, error) {
-	parts, err := splitToken(raw)
-	if err != nil {
-		return Claims{}, err
+type Keys func(namespace string) (ed25519.PublicKey, bool)
+
+func Verify(raw string, keys Keys, now time.Time, want Expected) (Claims, error) {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 {
+		return Claims{}, refuse(ReasonMalformed)
 	}
 	var header Header
 	if err := decodeSegment(parts[0], &header); err != nil {
@@ -96,24 +100,28 @@ func Verify(raw string, key ed25519.PublicKey, now time.Time, want Expected) (Cl
 	if header.Algorithm != Algorithm {
 		return Claims{}, refuse(ReasonAlgorithm)
 	}
+	var claims Claims
+	if err := decodeSegment(parts[1], &claims); err != nil {
+		return Claims{}, refuse(ReasonMalformed)
+	}
+	key, known := keys(claims.Ocel.Namespace)
+	if !known {
+		return Claims{}, refuse(ReasonNamespace)
+	}
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil || len(key) != ed25519.PublicKeySize || !ed25519.Verify(key, []byte(parts[0]+"."+parts[1]), signature) {
 		return Claims{}, refuse(ReasonSignature)
-	}
-	claims, err := decodeClaims(parts[1])
-	if err != nil {
-		return Claims{}, err
 	}
 	switch {
 	case now.Unix() >= claims.ExpiresAt:
 		return Claims{}, refuse(ReasonExpired)
 	case claims.Audience != want.Audience:
 		return Claims{}, refuse(ReasonAudience)
-	case claims.Ocel.Namespace != want.Namespace:
+	case want.Namespace != "" && claims.Ocel.Namespace != want.Namespace:
 		return Claims{}, refuse(ReasonNamespace)
 	case claims.Ocel.Operation != want.Operation:
 		return Claims{}, refuse(ReasonOperation)
-	case claims.Ocel.Channel != want.Channel:
+	case claims.Ocel.Channel != want.channelIn(claims.Ocel.Namespace):
 		return Claims{}, refuse(ReasonChannel)
 	case want.Subject != "" && claims.Subject != want.Subject:
 		return Claims{}, refuse(ReasonSubject)
@@ -121,32 +129,11 @@ func Verify(raw string, key ed25519.PublicKey, now time.Time, want Expected) (Cl
 	return claims, nil
 }
 
-func ReadUnverifiedNamespace(raw string) (string, error) {
-	parts, err := splitToken(raw)
-	if err != nil {
-		return "", err
+func (w Expected) channelIn(namespace string) string {
+	if w.Operation == Connect {
+		return "/" + namespace
 	}
-	claims, err := decodeClaims(parts[1])
-	if err != nil {
-		return "", err
-	}
-	return claims.Ocel.Namespace, nil
-}
-
-func splitToken(raw string) ([]string, error) {
-	parts := strings.Split(raw, ".")
-	if len(parts) != 3 {
-		return nil, refuse(ReasonMalformed)
-	}
-	return parts, nil
-}
-
-func decodeClaims(segment string) (Claims, error) {
-	var claims Claims
-	if err := decodeSegment(segment, &claims); err != nil {
-		return Claims{}, refuse(ReasonMalformed)
-	}
-	return claims, nil
+	return w.Channel
 }
 
 func Sign(key ed25519.PrivateKey, claims Claims) (string, error) {

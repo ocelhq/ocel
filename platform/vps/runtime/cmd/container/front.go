@@ -7,7 +7,7 @@ import (
 	"net/url"
 
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	"github.com/ocelhq/ocel/platform/realtime/gateway"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -23,7 +23,7 @@ func newFront(manifest boxlive.Manifest, opts originguard.Options) (http.Handler
 	socket := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(target)
-			r.Out.URL.Path, r.Out.URL.RawPath = gateway.SocketPath, ""
+			r.Out.URL.Path, r.Out.URL.RawPath = gatewayenv.SocketPath, ""
 			r.Out.Header.Del("Origin")
 			r.Out.Header.Del(originguard.OriginSecretHeader)
 		},

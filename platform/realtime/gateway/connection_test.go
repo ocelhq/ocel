@@ -20,9 +20,9 @@ func TestASubscriptionIsConfirmedOnlyOnceItReceivesWhatIsPublished(t *testing.T)
 	}
 	now := time.Unix(1_790_000_000, 0)
 	g := New(Config{
-		Host: "realtime.shop.example",
-		Keys: func(namespace string) (ed25519.PublicKey, bool) { return public, namespace == "app" },
-		Now:  func() time.Time { return now },
+		Host:  "realtime.shop.example",
+		Keys:  func(namespace string) (ed25519.PublicKey, bool) { return public, namespace == "app" },
+		Clock: stoppedClock{at: now},
 	})
 	c := &connection{g: g, namespace: "app", queue: newQueue(DefaultQueueBudgetBytes), subscriptions: map[string]func(){}}
 	channel := "/app/orders/o-1"
@@ -62,3 +62,23 @@ func TestASubscriptionIsConfirmedOnlyOnceItReceivesWhatIsPublished(t *testing.T)
 		t.Fatalf("frames = %+v, want subscribe_success for s-1 then its data", got)
 	}
 }
+
+func TestAGatewayGivenNoSocketCapHoldsAtMostTheDefault(t *testing.T) {
+	t.Parallel()
+
+	g := New(Config{})
+	for i := range DefaultMaxSockets {
+		if err := g.trackSocket(); err != nil {
+			t.Fatalf("socket %d = %v, want it held", i+1, err)
+		}
+	}
+	if err := g.trackSocket(); err == nil {
+		t.Fatalf("socket %d = nil, want it refused past the default cap", DefaultMaxSockets+1)
+	}
+}
+
+type stoppedClock struct{ at time.Time }
+
+func (c stoppedClock) Now() time.Time { return c.at }
+
+func (stoppedClock) AfterFunc(time.Duration, func()) func() bool { return func() bool { return true } }

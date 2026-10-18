@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -28,6 +29,7 @@ type connection struct {
 	g         *Gateway
 	conn      *websocket.Conn
 	namespace string
+	expiresAt time.Time
 	queue     *queue
 
 	subscriptions map[string]func()
@@ -52,22 +54,33 @@ func (g *Gateway) serveSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	conn.SetReadLimit(maxClientFrameBytes)
 
-	namespace, err := g.verifyConnect(r)
+	connectToken, err := readConnectToken(r)
 	if err != nil {
-		g.refuseConnection(conn, err)
+		g.refuseConnection(conn, errorUnauthorized, err)
 		return
 	}
+	claims, err := g.verify(connectToken, token.Expected{Operation: token.Connect})
+	if err != nil {
+		g.refuseConnection(conn, errorUnauthorized, err)
+		return
+	}
+	if err := g.trackToken(connectToken); err != nil {
+		g.refuseConnection(conn, errorLimitExceeded, err)
+		return
+	}
+	defer g.releaseToken(connectToken)
 	c := &connection{
 		g:             g,
 		conn:          conn,
-		namespace:     namespace,
+		namespace:     claims.Ocel.Namespace,
+		expiresAt:     time.Unix(claims.ExpiresAt, 0),
 		queue:         newQueue(g.cfg.QueueBudgetBytes),
 		subscriptions: map[string]func(){},
 	}
 	c.serve()
 }
 
-func (g *Gateway) verifyConnect(r *http.Request) (string, error) {
+func readConnectToken(r *http.Request) (string, error) {
 	var auth authorization
 	for _, offered := range offeredSubprotocols(r) {
 		encoded, isAuthorization := strings.CutPrefix(offered, authorizationPrefix)
@@ -82,14 +95,7 @@ func (g *Gateway) verifyConnect(r *http.Request) (string, error) {
 	if auth.Token == "" {
 		return "", errors.New("the connection carries no Authorization in its " + authorizationPrefix + " subprotocol")
 	}
-	namespace, err := token.ReadUnverifiedNamespace(auth.Token)
-	if err != nil {
-		return "", err
-	}
-	if _, err := g.verify(auth.Token, token.Expected{Namespace: namespace, Operation: token.Connect, Channel: "/" + namespace}); err != nil {
-		return "", err
-	}
-	return namespace, nil
+	return auth.Token, nil
 }
 
 func offeredSubprotocols(r *http.Request) []string {
@@ -103,19 +109,15 @@ func offeredSubprotocols(r *http.Request) []string {
 }
 
 func (g *Gateway) verify(raw string, want token.Expected) (token.Claims, error) {
-	key, known := g.cfg.Keys(want.Namespace)
-	if !known {
-		return token.Claims{}, &token.Refusal{Reason: token.ReasonNamespace}
-	}
 	want.Audience = g.cfg.Host
-	return token.Verify(raw, key, g.cfg.Now(), want)
+	return token.Verify(raw, g.cfg.Keys, g.cfg.Clock.Now(), want)
 }
 
-func (g *Gateway) refuseConnection(conn *websocket.Conn, reason error) {
+func (g *Gateway) refuseConnection(conn *websocket.Conn, kind errorType, reason error) {
 	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
-	_ = writeJSON(ctx, conn, newErrorFrame(frameConnectionError, "", errorUnauthorized, reason.Error()))
-	_ = conn.Close(websocket.StatusPolicyViolation, "unauthorized")
+	_ = writeJSON(ctx, conn, newErrorFrame(frameConnectionError, "", kind, reason.Error()))
+	_ = conn.Close(websocket.StatusPolicyViolation, string(kind))
 }
 
 func (c *connection) serve() {
@@ -125,27 +127,61 @@ func (c *connection) serve() {
 		_ = c.conn.Close(websocket.StatusGoingAway, "the realtime gateway is shutting down")
 	})
 	defer stopWatchingShutdown()
-	written := make(chan struct{})
-	go func() {
-		defer close(written)
+	expired := make(chan struct{})
+	stopWatchingExpiry := c.g.cfg.Clock.AfterFunc(c.expiresAt.Sub(c.g.cfg.Clock.Now()), func() { close(expired) })
+	defer stopWatchingExpiry()
+	var running sync.WaitGroup
+	running.Go(func() {
 		defer cancel()
-		c.write(ctx)
-	}()
+		c.write(ctx, expired)
+	})
+	running.Go(func() { c.ping(ctx) })
 	c.read(ctx)
 	cancel()
-	<-written
+	running.Wait()
 	for _, unsubscribe := range c.subscriptions {
 		unsubscribe()
 	}
 	_ = c.conn.CloseNow()
 }
 
-func (c *connection) write(ctx context.Context) {
+func (c *connection) ping(ctx context.Context) {
+	for c.wait(ctx, c.g.cfg.PingInterval) {
+		pong, cancel := context.WithCancel(ctx)
+		stopWaitingForPong := c.g.cfg.Clock.AfterFunc(c.g.cfg.PongTimeout, cancel)
+		err := c.conn.Ping(pong)
+		stopWaitingForPong()
+		cancel()
+		if err != nil {
+			if ctx.Err() == nil {
+				_ = c.conn.CloseNow()
+			}
+			return
+		}
+	}
+}
+
+func (c *connection) wait(ctx context.Context, d time.Duration) bool {
+	elapsed := make(chan struct{})
+	stop := c.g.cfg.Clock.AfterFunc(d, func() { close(elapsed) })
+	defer stop()
+	select {
+	case <-elapsed:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (c *connection) write(ctx context.Context, expired <-chan struct{}) {
 	keepAlive := time.NewTicker(c.g.cfg.KeepAlive)
 	defer keepAlive.Stop()
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-expired:
+			_ = c.conn.Close(websocket.StatusPolicyViolation, "the connection's token has expired")
 			return
 		case <-c.queue.Overflowed():
 			_ = c.conn.Close(websocket.StatusTryAgainLater, "the connection fell behind its events")

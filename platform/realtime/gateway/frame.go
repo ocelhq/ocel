@@ -27,6 +27,7 @@ const (
 	errorLimitExceeded        errorType = "LimitExceededException"
 	errorUnknownOperation     errorType = "UnknownOperationError"
 	errorUnsupportedOperation errorType = "UnsupportedOperation"
+	errorServiceUnavailable   errorType = "ServiceUnavailableException"
 )
 
 type clientFrame struct {

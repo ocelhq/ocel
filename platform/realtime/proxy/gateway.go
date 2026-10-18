@@ -24,8 +24,7 @@ import (
 )
 
 const (
-	serverTokenTTL     = 60 * time.Second
-	serverTokenSubject = "server"
+	serverTokenTTL = 60 * time.Second
 
 	maxGatewayRetries      = 5
 	firstGatewayRetryDelay = 100 * time.Millisecond
@@ -128,7 +127,7 @@ func mintServerToken(seed []byte, audience string, req *realtimev1.PublishReques
 		ExpiresAt: issuedAt.Add(serverTokenTTL).Unix(),
 		Issuer:    "ocel:rt:" + req.GetRealtime(),
 		ID:        base64.RawURLEncoding.EncodeToString(id),
-		Subject:   serverTokenSubject,
+		Subject:   token.ServerSubject,
 		Ocel:      token.Grant{Channel: req.GetChannel(), Namespace: req.GetRealtime(), Operation: token.Publish},
 	})
 }

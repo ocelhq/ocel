@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/realtime/v1/realtimev1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	"github.com/ocelhq/ocel/platform/realtime/proxy"
 )
 
@@ -67,7 +68,7 @@ func (b *Backend) Resolve(_ context.Context, _ string, resources []declaration.R
 			Name: resource.Name,
 			Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
 				Transport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY,
-				Url:        "ws://" + b.host + gateway.SocketPath,
+				Url:        "ws://" + b.host + gatewayenv.SocketPath,
 				Host:       b.host,
 				SigningKey: key.Seed(),
 				VerifyKey:  key.Public().(ed25519.PublicKey),
@@ -95,7 +96,7 @@ func (b *Backend) listen() error {
 		Keys:           b.verifyKey,
 		AllowedOrigins: b.appOrigins,
 	})
-	b.publisher = proxy.NewService(readRecord(b.readRecord), proxy.NewGatewayTransport(http.DefaultClient, "http://"+b.host+gateway.PublishPath))
+	b.publisher = proxy.NewService(readRecord(b.readRecord), proxy.NewGatewayTransport(http.DefaultClient, "http://"+b.host+gatewayenv.PublishPath))
 	server := &http.Server{Handler: b.gateway}
 	b.server = server
 	go func() { _ = server.Serve(listener) }()

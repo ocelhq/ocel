@@ -110,7 +110,7 @@ func readKeySet(getenv func(string) string, now func() time.Time) (*keySet, erro
 func serve(ctx context.Context, listener net.Listener, cfg config) error {
 	realtime := gateway.New(gateway.Config{
 		Host:            cfg.host,
-		Keys:            cfg.keys.find,
+		Keys:            cfg.keys.rereadIfStaleAndFind,
 		AllowsAnyOrigin: cfg.allowsAnyOrigin,
 		MaxSockets:      cfg.maxSockets,
 	})

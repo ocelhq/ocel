@@ -45,30 +45,36 @@ func newKeysFileSet(path string, now func() time.Time) (*keySet, error) {
 	return s, nil
 }
 
-func (s *keySet) find(namespace string) (ed25519.PublicKey, bool) {
-	keys := *s.keys.Load()
-	if s.path != "" {
-		_, known := keys[namespace]
-		age := time.Duration(s.now().UnixNano() - s.readAt.Load())
-		stale := age >= keysFileMaxAge || (!known && age >= unknownNamespaceReread)
-		if stale && s.rereading.CompareAndSwap(false, true) {
-			keys = s.reread(keys)
-			s.rereading.Store(false)
-		}
+func (s *keySet) rereadIfStaleAndFind(namespace string) (ed25519.PublicKey, bool) {
+	if s.isStale(namespace) && s.rereading.CompareAndSwap(false, true) {
+		s.reread()
+		s.rereading.Store(false)
 	}
-	key, known := keys[namespace]
+	return s.find(namespace)
+}
+
+func (s *keySet) find(namespace string) (ed25519.PublicKey, bool) {
+	key, known := (*s.keys.Load())[namespace]
 	return key, known
 }
 
-func (s *keySet) reread(current map[string]ed25519.PublicKey) map[string]ed25519.PublicKey {
+func (s *keySet) isStale(namespace string) bool {
+	if s.path == "" {
+		return false
+	}
+	_, known := s.find(namespace)
+	age := time.Duration(s.now().UnixNano() - s.readAt.Load())
+	return age >= keysFileMaxAge || (!known && age >= unknownNamespaceReread)
+}
+
+func (s *keySet) reread() {
 	s.readAt.Store(s.now().UnixNano())
 	keys, err := s.readFile()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "keep the realtime keys last read: %v\n", err)
-		return current
+		return
 	}
 	s.keys.Store(&keys)
-	return keys
 }
 
 func (s *keySet) readFile() (map[string]ed25519.PublicKey, error) {
