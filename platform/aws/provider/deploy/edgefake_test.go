@@ -63,9 +63,7 @@ func (f *recordingEdge) Facts() edge.Facts {
 	declared := f.declared().Facts()
 	return edge.Facts{
 		Supported:             declared.Supported,
-		Compatibility:         edge.Compatibility{Date: "2025-01-01", Flags: []string{"nodejs_compat"}},
 		RunsCode:              true,
-		Entry:                 edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
 		ServesUnbound:         declared.ServesUnbound,
 		ProxiesRecords:        declared.ProxiesRecords,
 		ProxiedRecordNote:     declared.ProxiedRecordNote,
@@ -224,7 +222,7 @@ func TestTheOriginsFakeEdgesBehaveAsEveryEdgeMust(t *testing.T) {
 						Version: "v1",
 						Tier:    environment.TierProduction,
 						Slug:    "conformance",
-						Program: &edge.ProgramSpec{Name: "root", StoreEndpoint: fakeStoreEndpoint},
+						Program: &edge.Program{ReleasesStore: edge.ReleasesStore{Endpoint: fakeStoreEndpoint}},
 					}
 				},
 				Hostname: "shop.example.com",
@@ -293,7 +291,5 @@ type codelessEdge struct{ edge.Edge }
 func (u codelessEdge) Facts() edge.Facts {
 	facts := u.Edge.Facts()
 	facts.RunsCode = false
-	facts.Entry = edge.WorkerModule{}
-	facts.Compatibility = edge.Compatibility{}
 	return facts
 }

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { type PurgeMode, readReleaseToken } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
 import { PurgeBacklog, type PurgeOutcome, type PurgePort, type RaisedTag } from "./purge-backlog";
+import { readPurgeBudget } from "./purge-budget";
 import { newSqliteBacklogStore } from "./purge-sqlite-store";
 import {
   newSqliteTagTimes,
@@ -60,6 +61,7 @@ export class PurgeQueue extends DurableObject<Env> {
       serve: { purgeTags: (mode, tags) => this.serve.purgeTags(mode, tags) },
       now: () => Date.now(),
       random: Math.random,
+      budget: readPurgeBudget(env.OCEL_PURGE_BUDGET),
     });
   }
 

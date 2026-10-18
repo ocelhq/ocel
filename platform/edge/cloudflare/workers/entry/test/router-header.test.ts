@@ -1,21 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { resolveServe, type ServeFetch } from "../src/index";
-import type { PointerRecordResult, ReleaseRecord, ReleasesBinding } from "../src/releases";
+import type { PointerRecordResult, ReleasesBinding, StoredRecord } from "../src/releases";
 import { servedNextRelease } from "./next-release";
 import { answerEveryRecordWith } from "./origin-deps";
 import { resolveBase } from "./resolve-base";
 
 const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
 
-const originRecord: ReleaseRecord = {
+const originRecord: StoredRecord = {
   app: "api",
   framework: "node",
   buildId: "0123456789abcdef",
-  routeTable: null,
+  rootFunction: "api",
   functionUrls: { api: FN_URL },
   assetPrefix: "",
   isrPrefix: "",
   createdAt: 1_000,
+  edge: {},
 };
 
 function bindingReturning(result: PointerRecordResult): ReleasesBinding {

@@ -1,16 +1,20 @@
 import {
   type CacheDirectives,
   isStoredLifetime,
+  listSharedPolicyHeaders,
   readCacheDirectives,
   readDirectiveSeconds,
   readExpiresSeconds,
   readSharedLifetime,
   refusesSharedStore,
-  sharedPolicyHeaders,
 } from "@platform/edge-contract/cache-control";
 import { buildPathCacheTag } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
+
+export const CLOUDFLARE_CACHE_CONTROL = "cloudflare-cdn-cache-control";
+
+const POLICY_HEADERS = listSharedPolicyHeaders(CLOUDFLARE_CACHE_CONTROL);
 
 export const NOT_STORED = "private, no-store";
 
@@ -51,9 +55,9 @@ function variesOffKey(headers: Headers): boolean {
 
 function notStored(response: Response, options: CacheOptions): Response {
   const headers = new Headers(response.headers);
-  headers.delete("cloudflare-cdn-cache-control");
+  headers.delete(CLOUDFLARE_CACHE_CONTROL);
   headers.delete("cdn-cache-control");
-  if (options.honoursAppCacheHeaders) headers.set("cloudflare-cdn-cache-control", "no-store");
+  if (options.honoursAppCacheHeaders) headers.set(CLOUDFLARE_CACHE_CONTROL, "no-store");
   else headers.set("cache-control", NOT_STORED);
   headers.delete("cache-tag");
   headers.delete(edgeCacheTagHeader);
@@ -71,7 +75,7 @@ export function withholdFromEdge(response: Response): Response {
 }
 
 function edgePolicy(headers: Headers): { source: string; directives: CacheDirectives } | undefined {
-  for (const name of sharedPolicyHeaders) {
+  for (const name of POLICY_HEADERS) {
     const value = headers.get(name);
     if (value !== null) return { source: name, directives: readCacheDirectives(value) };
   }
@@ -135,7 +139,7 @@ export function forCache(
 
   const headers = new Headers(response.headers);
   headers.set(
-    "cloudflare-cdn-cache-control",
+    CLOUDFLARE_CACHE_CONTROL,
     [
       `max-age=${lifetime}`,
       ...(staleWhileRevalidate ? [`stale-while-revalidate=${staleWhileRevalidate}`] : []),

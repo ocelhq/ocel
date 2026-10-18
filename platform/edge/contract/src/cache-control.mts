@@ -4,11 +4,13 @@ export interface HeaderLookup {
   get(name: string): string | null;
 }
 
-export const sharedPolicyHeaders = [
-  "cloudflare-cdn-cache-control",
-  "cdn-cache-control",
-  "cache-control",
-] as const;
+const standardPolicyHeaders = ["cdn-cache-control", "cache-control"];
+
+export function listSharedPolicyHeaders(edgeHeader: string | undefined): string[] {
+  return [
+    ...new Set([...(edgeHeader ? [edgeHeader.toLowerCase()] : []), ...standardPolicyHeaders]),
+  ];
+}
 
 export function readCacheDirectives(header: string | null | undefined): CacheDirectives {
   const directives = new Map<string, string | true>();
@@ -73,8 +75,12 @@ function isStoredUnder(directives: CacheDirectives, expiresSeconds?: number): bo
   );
 }
 
-export function isStoredBySomeEdge(headers: HeaderLookup, now: number): boolean {
-  return sharedPolicyHeaders.some((name) => {
+export function isStoredBySomeEdge(
+  headers: HeaderLookup,
+  now: number,
+  edgeHeader: string | undefined,
+): boolean {
+  return listSharedPolicyHeaders(edgeHeader).some((name) => {
     const header = headers.get(name);
     if (name === "cache-control") {
       return isStoredUnder(readCacheDirectives(header), readExpiresSeconds(headers, now));

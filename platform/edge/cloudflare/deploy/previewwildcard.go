@@ -36,8 +36,9 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 		return "", errors.New("the shared preview entry worker needs a base domain to serve")
 	}
 
-	if spec.Program == nil {
-		return "", errors.New("the Cloudflare edge runs the preview entry worker; this wildcard has no program")
+	program, err := p.buildEntryProgram(environment.TierPreview, "", spec.Program)
+	if err != nil {
+		return "", err
 	}
 	if err := p.refuseBootstrapBehind(ctx, accountID, environment.TierPreview, bootstrapCaller{worker: "the shared preview entry worker", retry: "run this again"}); err != nil {
 		return "", err
@@ -45,7 +46,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	up := upload{
 		accountID:  accountID,
 		scriptName: previewEntryScript,
-		worker:     previewEntryWorker(spec),
+		worker:     bindCodeLoader(program.worker),
 	}
 	if err := p.putWorkerScript(ctx, up, "shared preview entry worker"); err != nil {
 		return "", err
@@ -128,8 +129,4 @@ func (p *cloudflare) stripPreviewWildcardRoute(ctx context.Context, accountID st
 		snap.detached(zoneID, route.ID)
 	}
 	return nil
-}
-
-func previewEntryWorker(spec edge.PreviewWildcardSpec) edge.Worker {
-	return bindCodeLoader(spec.Program.Worker)
 }

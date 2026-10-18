@@ -1,7 +1,3 @@
-const maxTagBytes = 1024;
-const maxTags = 1000;
-const maxTagsBytes = 16 * 1024;
-
 const encoder = new TextEncoder();
 
 const softTagPrefix = "_N_T_/";
@@ -13,6 +9,12 @@ const maxStoredTagLength = 256;
 const pathTagPrefix = "path:";
 
 const pathBase = "http://path.invalid";
+
+export interface CacheTagLimits {
+  tagBytes: number;
+  tags: number;
+  headerBytes: number;
+}
 
 export interface BoundCacheTags {
   tags: string[];
@@ -38,7 +40,7 @@ function sanitize(tag: string): string {
   return out;
 }
 
-export function boundCacheTags(raw: readonly string[]): BoundCacheTags {
+export function boundCacheTags(raw: readonly string[], limits: CacheTagLimits): BoundCacheTags {
   const tags: string[] = [];
   const seen = new Set<string>();
   let dropped = 0;
@@ -49,12 +51,12 @@ export function boundCacheTags(raw: readonly string[]): BoundCacheTags {
     const tag = sanitize(part);
     if (seen.has(tag)) continue;
     const size = encoder.encode(tag).length;
-    if (!tag || size > maxTagBytes) {
+    if (!tag || size > limits.tagBytes) {
       dropped++;
       continue;
     }
     const cost = size + (tags.length > 0 ? 1 : 0);
-    if (full || tags.length >= maxTags || bytes + cost > maxTagsBytes) {
+    if (full || tags.length >= limits.tags || bytes + cost > limits.headerBytes) {
       full = true;
       dropped++;
       continue;

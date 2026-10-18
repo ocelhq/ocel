@@ -3,6 +3,7 @@ package providerserver
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -22,7 +23,13 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 	if err != nil {
 		return nil, err
 	}
-	return &contractv1.ConfigureResponse{Facts: factsProto(p)}, nil
+	front, err := h.edgeFor(p, req.GetEdge())
+	if err != nil {
+		return nil, err
+	}
+	facts := factsProto(p)
+	facts.Edge = edgeFactsProto(front.Facts())
+	return &contractv1.ConfigureResponse{Facts: facts}, nil
 }
 
 func factsProto(p provider.Provider) *contractv1.ProviderFacts {
@@ -33,5 +40,17 @@ func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 		WorkerCeilings:   provider.WorkerCeilingMessages(facts.WorkerCeilings),
 		MaxFunctionBytes: facts.MaxFunctionBytes,
 		ForwardsPorts:    p.Hooks().BindingAccess != nil,
+	}
+}
+
+func edgeFactsProto(facts edge.Facts) *contractv1.EdgeFacts {
+	limits := facts.CacheTagLimits
+	return &contractv1.EdgeFacts{
+		RunsCode: facts.RunsCode,
+		CacheTagLimits: &contractv1.CacheTagLimits{
+			TagBytes:    int64(limits.TagBytes),
+			Tags:        int64(limits.Tags),
+			HeaderBytes: int64(limits.HeaderBytes),
+		},
 	}
 }

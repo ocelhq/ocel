@@ -31,8 +31,14 @@ let backlog: PurgeBacklog;
 
 const raised = (tag: string, raisedAt = now): RaisedTag => ({ tag, raisedAt });
 
-function newBacklog(random: () => number): PurgeBacklog {
-  return new PurgeBacklog({ store, serve, now: () => now, random, warn: () => {} });
+const workersCacheBudget = { purgesPerMinute: 5, tagsPerPurge: 100 };
+
+function newBacklog(
+  random: () => number,
+  budget = workersCacheBudget,
+  warn: (message: string) => void = () => {},
+): PurgeBacklog {
+  return new PurgeBacklog({ store, serve, now: () => now, random, warn, budget });
 }
 
 beforeEach(() => {
@@ -61,6 +67,24 @@ describe("the purge backlog coalescing raises", () => {
 
     expect(serve.calls.map((call) => call.tags.length)).toEqual([100, 100, 50]);
     expect(serve.calls.flatMap((call) => call.tags)).toEqual(tags.map((t) => t.tag));
+  });
+
+  it("sends at most the tags a purge the budget allows, and the rest on the next flushes", async () => {
+    backlog = newBacklog(() => 1, { purgesPerMinute: 5, tagsPerPurge: 2 });
+    backlog.raise(
+      "purge",
+      ["r1|a", "r1|b", "r1|c", "r1|d", "r1|e"].map((tag) => raised(tag)),
+    );
+
+    await backlog.flush();
+    await backlog.flush();
+    await backlog.flush();
+
+    expect(serve.calls.map((call) => call.tags)).toEqual([
+      ["r1|a", "r1|b"],
+      ["r1|c", "r1|d"],
+      ["r1|e"],
+    ]);
   });
 
   it("purges before it invalidates, one mode a call", async () => {
@@ -267,6 +291,22 @@ describe("the purge backlog backing off error 1134", () => {
     const next = await backlog.flush();
 
     expect(next! - now).toBe(2_000);
+  });
+
+  it("names the account's purge budget when Cloudflare answers its limit", async () => {
+    const warned: string[] = [];
+    backlog = newBacklog(
+      () => 1,
+      workersCacheBudget,
+      (message) => warned.push(message),
+    );
+    serve.refusals.push(rateLimited);
+    backlog.raise("purge", [raised("r1|a")]);
+
+    await backlog.flush();
+
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toContain("the account's purge limit of 5 purges a minute");
   });
 
   it("backs off on any refusal, not only 1134", async () => {

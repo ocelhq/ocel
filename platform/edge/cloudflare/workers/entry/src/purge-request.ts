@@ -12,13 +12,14 @@ import type { Env } from "./env";
 import { type EntryExports, openPurgeQueue } from "./exports";
 import type { RaisedTag } from "./purge-backlog";
 import type { ReleaseScope, TagTimes } from "./purge-times";
+import type { ServedRecord } from "./served-record";
 
 const PURGE_PROJECT_PARAM = "project";
 
 export const maxPurgeBodyBytes = 512 * 1024;
 
 export type ServedLookup =
-  | { kind: "record"; record: { purgeSecret?: string } }
+  | { kind: "record"; record: Pick<ServedRecord, "edge"> }
   | { kind: "not-served" };
 
 export interface PurgeGatewayPorts {
@@ -120,7 +121,7 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
   }
   if (served.kind === "not-served") return reply(204);
 
-  const { purgeSecret } = served.record;
+  const { purgeSecret } = served.record.edge;
   const signature = request.headers.get(purgeSignatureHeader);
   if (!purgeSecret || !signature || !(await verifyPurge(purgeSecret, bytes, signature))) {
     return reply(401, "unauthorized");

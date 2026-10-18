@@ -1591,8 +1591,7 @@ func TestAPromotionPassesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(t
 		Image:        imageFor("web", "b1"),
 		Physical:     "shop-web-1111",
 		HealthPath:   "/healthz",
-		Variables:    []router.VariableRecord{{Key: "API_TOKEN"}, {Key: "DATABASE_URL"}},
-		Env:          map[string]string{"orders": "postgres"},
+		Variables:    []router.VariableRecord{{Key: "API_TOKEN"}, {Key: "DATABASE_URL"}, {Key: "orders"}},
 	}); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}

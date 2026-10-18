@@ -343,7 +343,7 @@ func deployedCertificate(settings *workers.ScriptScriptAndVersionSettingGetRespo
 		return ""
 	}
 	for _, deployed := range settings.Bindings {
-		if string(deployed.Type) == "mtls_certificate" && deployed.Name == edge.OriginClientCertificateBinding {
+		if string(deployed.Type) == "mtls_certificate" && deployed.Name == originClientCertificateBinding {
 			return deployed.CertificateID
 		}
 	}

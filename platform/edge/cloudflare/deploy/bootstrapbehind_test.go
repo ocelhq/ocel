@@ -42,10 +42,6 @@ func installBootstrap(t *testing.T, m *cfMock, tier environment.Tier) {
 
 func productionEntrySpec(endpoint string) edge.StackSpec {
 	spec := testSpec(endpoint, "v1")
-	program := *spec.Program
-	program.Name = "ocel-acme-web"
-	program.Worker = testStoreWorker()
-	spec.Program = &program
 	return spec
 }
 
@@ -158,8 +154,8 @@ func TestADeployOntoACurrentBootstrapUploadsItsEntryWorker(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 
-	if !slices.Contains(m.putScripts, spec.Program.Name) {
-		t.Errorf("uploaded %v, want %q among them", m.putScripts, spec.Program.Name)
+	if name := entryOf(t, spec).name; !slices.Contains(m.putScripts, name) {
+		t.Errorf("uploaded %v, want %q among them", m.putScripts, name)
 	}
 }
 

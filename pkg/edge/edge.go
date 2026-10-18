@@ -43,20 +43,9 @@ func ValidNeed(need Need) bool {
 	return slices.Contains(AllNeeds(), need)
 }
 
-type Compatibility struct {
-	Date  string
-	Flags []string
-}
-
-func (c Compatibility) IsZero() bool {
-	return c.Date == "" && len(c.Flags) == 0
-}
-
 type Facts struct {
 	Supported             []Need
-	Compatibility         Compatibility
 	RunsCode              bool
-	Entry                 WorkerModule
 	ServesUnbound         bool
 	ProxiesRecords        bool
 	ProxiedRecordNote     string
@@ -65,6 +54,9 @@ type Facts struct {
 	OriginFacingRanges    []string
 	InvalidatesByCacheTag bool
 	CachesResponses       bool
+	CacheControlHeader    string
+	CacheTagLimits        CacheTagLimits
+	PurgeBudget           PurgeBudget
 	Gates                 bool
 	GatesAtOrigin         bool
 	CredentialScope       string
@@ -172,32 +164,4 @@ const (
 type CredentialDocument struct {
 	Heading  string
 	Document string
-}
-
-type Worker struct {
-	Main          WorkerModule
-	Modules       []WorkerModule
-	Variables     map[string]string
-	Secrets       map[string]string
-	AssetBinding  string
-	LoaderBinding string
-	Assets        []StaticAsset
-	Services      map[string]string
-
-	ClientCertificates map[string]string
-
-	CachedEntrypoints []string
-
-	DurableObjects []string
-}
-
-type WorkerModule struct {
-	Name        string
-	ContentType string
-	Content     []byte
-}
-
-type StaticAsset struct {
-	Path    string
-	Content []byte
 }

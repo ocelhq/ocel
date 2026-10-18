@@ -1,8 +1,8 @@
 import { createExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
-import type { PointerRecordResult, ReleaseRecord, ReleasesBinding } from "../src/releases";
-import { capturing, FN_URL, makeRecord, withGlobalFetch } from "./origin-deps";
+import type { PointerRecordResult, ReleasesBinding, StoredRecord } from "../src/releases";
+import { awsOrigin, capturing, FN_URL, makeRecord, withGlobalFetch } from "./origin-deps";
 
 type PointerArgs = Parameters<ReleasesBinding["readPointerRecord"]>[0];
 type LabelArgs = Parameters<ReleasesBinding["readLabelRecord"]>[0];
@@ -30,7 +30,7 @@ function createRecordingBinding(result: PointerRecordResult): Recording {
   return binding;
 }
 
-function createRecordBinding(record: ReleaseRecord): Recording {
+function createRecordBinding(record: StoredRecord): Recording {
   return createRecordingBinding({ kind: "record", release: record.release, record });
 }
 
@@ -38,8 +38,7 @@ function makeEnv(binding: ReleasesBinding, over: Partial<Env> = {}): Env {
   return {
     RELEASES: binding,
     OCEL_SLUG: "p1",
-    OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-    OCEL_EDGE_SECRET_KEY: "secretkey",
+    OCEL_ORIGIN: awsOrigin(),
     ...over,
   };
 }

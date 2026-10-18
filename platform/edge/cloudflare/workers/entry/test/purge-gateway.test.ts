@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
 import type { RaisedTag } from "../src/purge-backlog";
 import type { PointerRecordResult, ReleasesBinding } from "../src/releases";
-import { makeRecord } from "./origin-deps";
+import { awsOrigin, makeRecord } from "./origin-deps";
 import { contextWithExports, purgeQueuesAnswering } from "./worker-context";
 
 const SEED = "seed-1";
@@ -70,7 +70,7 @@ function binding(): ReleasesBinding {
               app: "web",
               release: "build-1~fp1",
               isrPrefix: ISR_PREFIX,
-              purgeSecret: SECRET,
+              edge: { purgeSecret: SECRET },
             }),
           }
         : { kind: "not-served" };
@@ -89,7 +89,7 @@ function contextWithQueue() {
 }
 
 function envWith(over: Partial<Env> = {}): Env {
-  return { RELEASES: binding(), OCEL_SLUG: "p1", ...over };
+  return { RELEASES: binding(), OCEL_SLUG: "p1", OCEL_ORIGIN: awsOrigin(), ...over };
 }
 
 beforeEach(() => {

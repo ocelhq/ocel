@@ -1,7 +1,7 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import type { PointerMove, ReleaseRecord } from "../src/store";
+import type { PointerMove, StoredRecord } from "../src/store";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
@@ -16,17 +16,18 @@ function storeStub() {
   return env.RELEASES_DO.get(env.RELEASES_DO.idFromName(`served-record-${stores++}`));
 }
 
-function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
+function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
   return {
     app: "web",
     framework: "next",
     release: "build-1~fp1",
     buildId: "build-1",
-    routeTable: { format: "next", table: { pathnames: [] } },
+    rootFunction: "/",
+    routeTable: { format: "next", key: "prod/p1/web/route-table.json" },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "production/p1/web/r0a1b2c3d/assets",
     isrPrefix: WEB_PREFIX,
-    purgeSecret: "purge-secret",
+    edge: { purgeSecret: "purge-secret" },
     createdAt: 1_000,
     ...over,
   };
@@ -60,7 +61,7 @@ describe("readServedRecord", () => {
     const api = makeRecord({
       app: "api",
       isrPrefix: "production/p1/api/r0a1b2c3d/isr",
-      purgeSecret: "api-secret",
+      edge: { purgeSecret: "api-secret" },
     });
     await store.movePointer(makePointerMove({ records: [api, makeRecord()] }));
 

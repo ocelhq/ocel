@@ -154,7 +154,7 @@ describe("the /_next/image route through Workers Cache", () => {
       record: { isrPrefix: ISR_PREFIX },
       serve: fake.serving.serve,
       base: {
-        imageOptimizerUrl: optimizerUrl ?? undefined,
+        images: optimizerUrl === null ? undefined : { optimizerUrl },
         imageOrigin: async () => {
           originCalls++;
           return new Response("from the optimizer", {
@@ -317,7 +317,7 @@ describe("the /_next/image route through Workers Cache", () => {
       await imageRelease({
         record: { isrPrefix: ISR_PREFIX, buildId },
         serve: fake.serving.serve,
-        base: { imageOptimizerUrl: OPTIMIZER },
+        base: { images: { optimizerUrl: OPTIMIZER } },
       })(new Request(IMAGE));
       return fake.calls[0].request.url;
     };

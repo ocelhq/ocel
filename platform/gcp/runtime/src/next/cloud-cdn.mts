@@ -28,8 +28,15 @@ export function trimVaryForCloudCdn(vary: string | null): string | null {
 
 export const cloudCdnShapedTagsPerObject = cloudCdnTagLimits.perObject - 1;
 
-export function isWithheldFromCloudCdn(headers: HeaderLookup, now: number): boolean {
-  return !isImmutable(headers.get("cache-control")) && isStoredBySomeEdge(headers, now);
+export function isWithheldFromCloudCdn(
+  headers: HeaderLookup,
+  now: number,
+  edgeCacheControlHeader: string | undefined,
+): boolean {
+  return (
+    !isImmutable(headers.get("cache-control")) &&
+    isStoredBySomeEdge(headers, now, edgeCacheControlHeader)
+  );
 }
 
 function readWriteHeadHeader(headers: unknown, name: string): string | null {
@@ -64,7 +71,10 @@ function withoutWriteHeadCacheControl(headers: unknown): unknown {
   return headers;
 }
 
-export function withholdResponsesFromCloudCdn(prototype: http.ServerResponse): void {
+export function withholdResponsesFromCloudCdn(
+  prototype: http.ServerResponse,
+  edgeCacheControlHeader: string | undefined,
+): void {
   const writeHead = prototype.writeHead;
   prototype.writeHead = function (this: http.ServerResponse, ...args: any[]) {
     if (!this.headersSent) {
@@ -76,7 +86,7 @@ export function withholdResponsesFromCloudCdn(prototype: http.ServerResponse): v
           return value === undefined || value === null ? null : String(value);
         },
       };
-      if (isWithheldFromCloudCdn(headers, Date.now())) {
+      if (isWithheldFromCloudCdn(headers, Date.now(), edgeCacheControlHeader)) {
         this.setHeader("cache-control", uncacheable);
         if (passed !== undefined) args[headersAt] = withoutWriteHeadCacheControl(passed);
       }

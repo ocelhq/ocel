@@ -12,7 +12,7 @@ type PreviewWildcardSpec struct {
 	Certificate string
 	Say         func(string)
 	Warn        func(string)
-	Program     *ProgramSpec
+	Program     *Program
 	Origin      *Origin
 }
 

@@ -61,7 +61,7 @@ func TestTheCloudflareProxyBehavesAsEveryEdgeMust(t *testing.T) {
 
 func TestTheCloudflareProxyRunsNoCodeAndProxiesTheRecordsItWrites(t *testing.T) {
 	facts := proxyZoneMock().proxy(t).Facts()
-	if facts.RunsCode || !facts.Compatibility.IsZero() {
+	if facts.RunsCode {
 		t.Errorf("Facts() = %+v, want no code run: the proxy forwards to an origin and runs no worker", facts)
 	}
 	if !facts.ProxiesRecords || facts.ServesUnbound {

@@ -4,24 +4,26 @@ import {
   type PointerRecordResult,
   RECORD_CACHE_MAX,
   type ReleaseLookup,
-  type ReleaseRecord,
   type ReleasesBinding,
   resolveRelease,
+  type StoredRecord,
 } from "../src/releases";
 import { answerEveryRecordWith } from "./origin-deps";
 import { routeTableKey } from "./route-table-store";
 
-function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
+function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
   return {
     app: "web",
     framework: "next",
     release: "deploy-1",
     buildId: "deploy-1",
+    rootFunction: "/",
     routeTable: { format: "next", key: routeTableKey() },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
     isrPrefix: "prod/p1/web/build-1",
     createdAt: 1_000,
+    edge: {},
     ...over,
   };
 }
@@ -35,7 +37,7 @@ type CountingBinding = ReleasesBinding & {
 
 function createCountingBinding(opts: {
   pointerRelease: Record<string, string | undefined>;
-  records: Record<string, ReleaseRecord>;
+  records: Record<string, StoredRecord>;
 }): CountingBinding {
   const answer = (
     binding: CountingBinding,
@@ -310,7 +312,7 @@ describe("resolveRelease", () => {
   });
 
   it("keeps caches independent across projects sharing one binding", async () => {
-    const records: Record<string, ReleaseRecord> = {
+    const records: Record<string, StoredRecord> = {
       acme: makeRecord({ isrPrefix: "prev/acme/web/build-1" }),
       globex: makeRecord({ isrPrefix: "prev/globex/web/build-1" }),
     };

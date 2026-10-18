@@ -16,7 +16,7 @@ import {
   SERVE_UNSHARED_HEADER,
   type ServeProps,
 } from "../src/serve-key";
-import { FN_URL, withGlobalFetch } from "./origin-deps";
+import { awsOrigin, FN_URL, storeOrigin, withGlobalFetch } from "./origin-deps";
 import { expectedSignature, sentSignature } from "./sigv4";
 
 const key = "prod/shop/web/r1a2b3c4d/assets/_next/static/app.js";
@@ -28,10 +28,7 @@ const props: ServeProps = {
 };
 
 const s3Env: Partial<Env> = {
-  OCEL_ASSET_BUCKET: "assets-bucket",
-  OCEL_AWS_REGION: "us-east-1",
-  OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-  OCEL_EDGE_SECRET_KEY: "secretkey",
+  OCEL_ORIGIN: awsOrigin({ bucket: "assets-bucket", region: "us-east-1" }),
 };
 
 function serveWith(over: Partial<Env>, forProps: ServeProps = props): Serve {
@@ -151,17 +148,6 @@ describe("Serve reading an object from the asset bucket", () => {
     expect(response.status).toBe(404);
   });
 
-  it("reads nothing when the bucket is bound without the edge's key", async () => {
-    const s3 = s3Answering(() => new Response("bytes"));
-
-    const response = await withGlobalFetch(s3.fetch, () =>
-      serveWith({ OCEL_ASSET_BUCKET: "assets-bucket", OCEL_AWS_REGION: "us-east-1" }).fetch(get()),
-    );
-
-    expect(s3.calls).toHaveLength(0);
-    expect(response.status).toBe(503);
-  });
-
   it("answers only GET and HEAD", async () => {
     const response = await serveWith(s3Env).fetch(
       new Request(buildObjectCall("h", key).url, { method: "POST", body: "x" }),
@@ -172,11 +158,10 @@ describe("Serve reading an object from the asset bucket", () => {
 
 describe("Serve reading an object from a bucket an HMAC key reads", () => {
   const hmacEnv: Partial<Env> = {
-    OCEL_ASSET_STORE_ENDPOINT: "https://objects.example.com/",
-    OCEL_ASSET_STORE_BUCKET: "ocel-acme-production",
-    OCEL_ASSET_STORE_PREFIX: "assets/",
-    OCEL_ASSET_STORE_ACCESS_KEY_ID: "GOOG1EXAMPLEACCESSID",
-    OCEL_ASSET_STORE_SECRET_KEY: "examplesecret/key+",
+    ...storeOrigin({
+      url: "https://objects.example.com/ocel-acme-production",
+      secretAccessKey: "examplesecret/key+",
+    }),
   };
   const routeTable = "prod/shop/web/r1a2b3c4d/route-table/ab.json";
 
@@ -267,22 +252,11 @@ describe("Serve reading an object from a bucket an HMAC key reads", () => {
       logged.mockRestore();
     }
   });
-
-  it("reads nothing when the origin names no endpoint", async () => {
-    const gcs = s3Answering(() => new Response("bytes"));
-
-    const response = await withGlobalFetch(gcs.fetch, () =>
-      serveWith({ ...hmacEnv, OCEL_ASSET_STORE_ENDPOINT: undefined }).fetch(get()),
-    );
-
-    expect(gcs.calls).toHaveLength(0);
-    expect(response.status).toBe(503);
-  });
 });
 
 describe("Serve reading an object where the origin has no asset bucket", () => {
   it("is unavailable, and never stored, when there is nowhere to read from", async () => {
-    const response = await serveWith({}).fetch(get());
+    const response = await serveWith({ OCEL_ORIGIN: awsOrigin() }).fetch(get());
 
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
@@ -308,10 +282,10 @@ describe("Serve fetching from the origin", () => {
     assetPrefix: "prod/p1/web/r1a2b3c4d/assets",
     isrPrefix,
     createdAt: 1,
+    edge: {},
   };
   const originEnv = {
-    OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-    OCEL_EDGE_SECRET_KEY: "secretkey",
+    OCEL_ORIGIN: awsOrigin(),
     RELEASES: servedRecords(originRecord),
   } as unknown as Partial<Env>;
 
@@ -728,8 +702,10 @@ describe("Serve rendering an edge-runtime prerender", () => {
     assetPrefix: "prod/p1/web/r1a2b3c4d/assets",
     isrPrefix,
     createdAt: 1,
-    purgeSecret: "s3cr3t",
-    edgeWorkers: { bundleKey, id: "w1", compatDate: "2026-03-10" },
+    edge: {
+      purgeSecret: "s3cr3t",
+      code: { bundleKey, loaderId: "w1", compatDate: "2026-03-10", compatFlags: [] },
+    },
   };
 
   function edgeServe(answer: () => Response, record: object | null = edgeRecord) {

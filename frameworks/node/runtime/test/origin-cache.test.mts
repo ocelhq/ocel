@@ -21,6 +21,7 @@ const routes = writeRouteTable(newRouteTable());
 
 const behindCloudflare = {
   OCEL_EDGE_CACHE: "marked",
+  OCEL_EDGE_CACHE_CONTROL_HEADER: "cloudflare-cdn-cache-control",
   OCEL_CACHE_TAG_PURGE: "1",
   OCEL_RELEASE_TOKEN: "r0a1b2c3d",
   OCEL_ROUTE_TABLE: routes,
@@ -664,7 +665,18 @@ describe("a response of a route that caches nothing, which names a lifetime the 
     expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|path:/account");
   });
 
-  test("is tagged for a Cloudflare-CDN-Cache-Control lifetime", async () => {
+  test("is tagged for a lifetime in the cache-control header its own edge reads", async () => {
+    const get = await serve(behindCloudflare, (_req, res) => {
+      res.writeHead(200, { "cloudflare-cdn-cache-control": "max-age=60" });
+      res.end("page");
+    });
+
+    const res = await get("/account", { headers: asked });
+
+    expect(res.headers.get("x-ocel-cache-tag")).toBe("r0a1b2c3d|path:/account");
+  });
+
+  test("is not tagged for a lifetime only another edge's cache-control header names", async () => {
     const get = await serve(behindCloudFront, (_req, res) => {
       res.writeHead(200, { "cloudflare-cdn-cache-control": "max-age=60" });
       res.end("page");
@@ -672,7 +684,7 @@ describe("a response of a route that caches nothing, which names a lifetime the 
 
     const res = await get("/account");
 
-    expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|path:/account");
+    expect(res.headers.has("cache-tag")).toBe(false);
   });
 
   test.each([

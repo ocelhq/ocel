@@ -128,7 +128,8 @@ describe("buildNext", () => {
     "OCEL_APP_NAME",
     "OCEL_OUTPUT_DIR",
     "OCEL_APP_FOLDER",
-    "OCEL_EDGE_KIND",
+    "OCEL_EDGE_RUNS_CODE",
+    "OCEL_EDGE_TAG_LIMITS",
     "OCEL_ALLOW_DEGRADED",
     "OCEL_MAX_FUNCTION_BYTES",
     "OCEL_PUBLIC_KEYS",
@@ -155,17 +156,27 @@ describe("buildNext", () => {
     expect(admin.OCEL_APP_FOLDER).toBe("/admin");
   });
 
-  it("passes the edge kind and the waived needs into the build", async () => {
+  it("passes the edge's facts and the waived needs into the build", async () => {
     const env = await envOf(
-      app({ edgeKind: "cloudfront", allowDegraded: ["edge-middleware", "edge-runtime"] }),
+      app({
+        edgeRunsCode: true,
+        edgeCacheTagLimits: { tagBytes: 1024, tags: 1000, headerBytes: 16384 },
+        allowDegraded: ["edge-middleware", "edge-runtime"],
+      }),
     );
-    expect(env.OCEL_EDGE_KIND).toBe("cloudfront");
+    expect(env.OCEL_EDGE_RUNS_CODE).toBe("1");
+    expect(JSON.parse(env.OCEL_EDGE_TAG_LIMITS!)).toEqual({
+      tagBytes: 1024,
+      tags: 1000,
+      headerBytes: 16384,
+    });
     expect(env.OCEL_ALLOW_DEGRADED).toBe("edge-middleware,edge-runtime");
   });
 
-  it("waives nothing when the build request names no edge", async () => {
+  it("says the edge runs no code and bounds no tags, and waives nothing, when the request states none", async () => {
     const env = await envOf(app());
-    expect(env.OCEL_EDGE_KIND).toBe("");
+    expect(env.OCEL_EDGE_RUNS_CODE).toBe("");
+    expect(env.OCEL_EDGE_TAG_LIMITS).toBe("");
     expect(env.OCEL_ALLOW_DEGRADED).toBe("");
   });
 

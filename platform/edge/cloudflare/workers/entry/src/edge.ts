@@ -1,4 +1,5 @@
 import { type EdgeBundle, edgeBundleVersion } from "@platform/edge-contract/edge-bundle";
+import type { ServedCode, ServedRecord } from "./served-record";
 import { renderWorkersShim, WORKERS_SHIM_MODULE } from "./workers-shim";
 
 export interface EdgeStoredObject {
@@ -8,13 +9,6 @@ export interface EdgeStoredObject {
 
 export interface EdgeObjectStore {
   get(key: string): Promise<EdgeStoredObject | null>;
-}
-
-export interface EdgeWorkers {
-  bundleKey: string;
-  id: string;
-  compatDate: string;
-  compatFlags?: string[];
 }
 
 const SEALED_FILE = "sealed.bin";
@@ -54,23 +48,16 @@ export interface EdgeRuntime {
   envelopeKey?: string;
 }
 
-export interface EdgeRelease {
-  edgeWorkers: EdgeWorkers;
-  isrPrefix: string;
-  env?: Record<string, string>;
-  envelope?: string;
-  releaseFingerprint?: string;
-}
-
 export function createReleaseEdgeInvoker(
   runtime: EdgeRuntime,
   store: EdgeObjectStore,
-  record: EdgeRelease,
+  record: Pick<ServedRecord, "isrPrefix" | "releaseFingerprint" | "edge">,
+  code: ServedCode,
 ): EdgeInvoker {
-  return createEdgeInvoker(runtime.loader, record.edgeWorkers, store, {
+  return createEdgeInvoker(runtime.loader, code, store, {
     scope: record.isrPrefix,
-    env: record.env,
-    envelope: record.envelope,
+    env: record.edge.env,
+    envelope: record.edge.envelope,
     envelopeKey: runtime.envelopeKey,
     releaseFingerprint: record.releaseFingerprint,
   });
@@ -78,20 +65,20 @@ export function createReleaseEdgeInvoker(
 
 export function createEdgeInvoker(
   loader: WorkerLoader,
-  workers: EdgeWorkers,
+  code: ServedCode,
   store: EdgeObjectStore,
   variables?: EdgeVariables,
 ): EdgeInvoker {
   const envelope = variables?.envelope;
-  const sealedKey = siblingKey(workers.bundleKey, SEALED_FILE);
+  const sealedKey = siblingKey(code.bundleKey, SEALED_FILE);
 
   const load = async (): Promise<WorkerLoaderWorkerCode> => {
     const [object, sealed] = await Promise.all([
-      store.get(workers.bundleKey),
+      store.get(code.bundleKey),
       envelope ? store.get(sealedKey) : null,
     ]);
     if (!object) {
-      throw new Error(`ocel: no edge bundle at ${workers.bundleKey}`);
+      throw new Error(`ocel: no edge bundle at ${code.bundleKey}`);
     }
     if (envelope && !sealed) {
       throw new Error(`ocel: no sealed edge variables at ${sealedKey}`);
@@ -99,7 +86,7 @@ export function createEdgeInvoker(
     const bundle = JSON.parse(await object.text()) as EdgeBundle;
     if (bundle.version !== edgeBundleVersion) {
       throw new Error(
-        `ocel: edge bundle at ${workers.bundleKey} is version ${bundle.version}, which this worker cannot read`,
+        `ocel: edge bundle at ${code.bundleKey} is version ${bundle.version}, which this worker cannot read`,
       );
     }
 
@@ -115,8 +102,8 @@ export function createEdgeInvoker(
     }
 
     return {
-      compatibilityDate: workers.compatDate,
-      compatibilityFlags: workers.compatFlags,
+      compatibilityDate: code.compatDate,
+      compatibilityFlags: code.compatFlags,
       mainModule: WORKERS_SHIM_MODULE,
       modules,
       env: {
@@ -134,7 +121,7 @@ export function createEdgeInvoker(
 
   const idFor = (kind: EdgeEntryKind) =>
     `edge:${JSON.stringify([
-      workers.id,
+      code.loaderId,
       variables?.scope ?? null,
       variables?.releaseFingerprint ?? null,
       kind,

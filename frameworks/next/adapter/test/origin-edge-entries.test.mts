@@ -24,7 +24,7 @@ async function started(server: Promise<RunningServer>): Promise<RunningServer> {
   return ready;
 }
 
-test("compiles waived edge middleware into a Node entry on a non-programmable edge", async () => {
+test("compiles waived edge middleware into a Node entry on an edge that runs no code", async () => {
   const app = await buildOriginEdgeApp({
     allowDegraded: "edge-middleware,edge-runtime",
   });
@@ -209,9 +209,9 @@ test("warns that revalidate is inert for a prerender a waived edge route parents
   expect(inert[0]).toContain("/edge-page");
 });
 
-test("keeps the edge bundle and the edge middleware entry on a programmable edge", async () => {
+test("keeps the edge bundle and the edge middleware entry on an edge that runs code", async () => {
   const app = await buildOriginEdgeApp({
-    edgeKind: "cloudflare",
+    edgeRunsCode: true,
     allowDegraded: "edge-middleware,edge-runtime",
   });
 

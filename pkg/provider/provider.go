@@ -50,17 +50,8 @@ type Facts struct {
 }
 
 type EdgeProgramRequest struct {
-	Tier              environment.Tier
-	Kind              edge.Kind
-	Slug              string
-	Env               string
-	PreviewBaseDomain string
-	PreviewKey        edge.PreviewKey
-	Entry             edge.WorkerModule
-}
-
-type EdgeProgram struct {
-	Spec *edge.ProgramSpec
+	Tier environment.Tier
+	Kind edge.Kind
 }
 
 type DeployPreflight struct {

@@ -1,5 +1,9 @@
 import { expect, test } from "vitest";
-import { isStoredBySomeEdge, readCacheDirectives } from "../src/cache-control.mjs";
+import {
+  isStoredBySomeEdge,
+  listSharedPolicyHeaders,
+  readCacheDirectives,
+} from "../src/cache-control.mjs";
 
 const now = Date.parse("Mon, 12 Oct 2026 12:00:00 GMT");
 
@@ -25,11 +29,6 @@ test.each([
   ["a private response", { "cache-control": "private, max-age=60" }, false],
   ["a no-store response", { "cache-control": "no-store, s-maxage=60" }, false],
   ["a max-age in CDN-Cache-Control", { "cdn-cache-control": "max-age=60" }, true],
-  [
-    "a max-age in Cloudflare-CDN-Cache-Control",
-    { "cloudflare-cdn-cache-control": "max-age=60" },
-    true,
-  ],
   ["no cache headers at all", {}, false],
   ["a future Expires and no Cache-Control", { expires: "Mon, 12 Oct 2026 12:01:00 GMT" }, true],
   [
@@ -55,5 +54,29 @@ test.each([
     true,
   ],
 ] as const)("whether an edge stores a response with %s is %s", (_name, headers, stored) => {
-  expect(isStoredBySomeEdge(new Headers(headers), now)).toBe(stored);
+  expect(isStoredBySomeEdge(new Headers(headers), now, undefined)).toBe(stored);
+});
+
+test("an edge stores a response for a lifetime in the cache-control header it names as its own", () => {
+  const headers = new Headers({ "cloudflare-cdn-cache-control": "max-age=60" });
+  expect(isStoredBySomeEdge(headers, now, "cloudflare-cdn-cache-control")).toBe(true);
+});
+
+test("no edge stores a response for a lifetime only another edge's header names", () => {
+  const headers = new Headers({ "cloudflare-cdn-cache-control": "max-age=60" });
+  expect(isStoredBySomeEdge(headers, now, undefined)).toBe(false);
+  expect(isStoredBySomeEdge(headers, now, "cdn-cache-control")).toBe(false);
+});
+
+test("an edge's own header goes first, then CDN-Cache-Control, then Cache-Control", () => {
+  expect(listSharedPolicyHeaders("Cloudflare-CDN-Cache-Control")).toEqual([
+    "cloudflare-cdn-cache-control",
+    "cdn-cache-control",
+    "cache-control",
+  ]);
+  expect(listSharedPolicyHeaders("cdn-cache-control")).toEqual([
+    "cdn-cache-control",
+    "cache-control",
+  ]);
+  expect(listSharedPolicyHeaders(undefined)).toEqual(["cdn-cache-control", "cache-control"]);
 });

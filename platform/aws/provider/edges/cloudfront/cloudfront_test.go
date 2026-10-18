@@ -289,8 +289,8 @@ func assertSet(t *testing.T, what string, got, want []string) {
 func TestTheCloudFrontEdgeRunsNoCode(t *testing.T) {
 	t.Parallel()
 
-	if !newWorld().edge().Facts().Compatibility.IsZero() {
-		t.Error("the cloudfront edge names a compatibility, but it declares only edge caching and streaming; nothing of the app's code runs at this edge")
+	if newWorld().edge().Facts().RunsCode {
+		t.Error("the cloudfront edge says it runs code, but it declares only edge caching and streaming; nothing of the app's code runs at this edge")
 	}
 }
 

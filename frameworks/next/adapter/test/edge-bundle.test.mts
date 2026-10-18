@@ -210,7 +210,7 @@ async function synthEdgeProject() {
   };
 
   vi.stubEnv("OCEL_OUTPUT_DIR", join(projectDir, ".ocel/output"));
-  vi.stubEnv("OCEL_EDGE_KIND", "cloudflare");
+  vi.stubEnv("OCEL_EDGE_RUNS_CODE", "1");
 
   return { projectDir, args, middlewareManifest, tracedAssets };
 }

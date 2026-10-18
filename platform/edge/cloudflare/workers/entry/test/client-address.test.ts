@@ -3,7 +3,13 @@ import { CLIENT_ADDRESS_HEADER } from "@platform/edge-contract/client-address";
 import { describe, expect, it } from "vitest";
 import { withClientAddress } from "../src/client-address";
 import worker, { type Env } from "../src/index";
-import { answerEveryRecordWith, capturing, makeRecord, withGlobalFetch } from "./origin-deps";
+import {
+  answerEveryRecordWith,
+  awsOrigin,
+  capturing,
+  makeRecord,
+  withGlobalFetch,
+} from "./origin-deps";
 
 const binding = answerEveryRecordWith(async () => {
   const record = makeRecord();
@@ -13,8 +19,7 @@ const binding = answerEveryRecordWith(async () => {
 const env: Env = {
   RELEASES: binding,
   OCEL_SLUG: "p1",
-  OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-  OCEL_EDGE_SECRET_KEY: "secretkey",
+  OCEL_ORIGIN: awsOrigin(),
 };
 
 async function carried(headers: Record<string, string>): Promise<Headers> {

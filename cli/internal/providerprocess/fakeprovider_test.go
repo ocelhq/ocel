@@ -213,6 +213,8 @@ func (s *fakeProviderServer) Configure(_ context.Context, req *contractv1.Config
 		}
 	case "refuse-config":
 		return nil, provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "this account is not bootstrapped for previews"))
+	case "edge-facts":
+		return &contractv1.ConfigureResponse{Facts: &contractv1.ProviderFacts{Edge: &contractv1.EdgeFacts{RunsCode: req.GetEdge().GetKind() == "relay"}}}, nil
 	}
 	return &contractv1.ConfigureResponse{}, nil
 }

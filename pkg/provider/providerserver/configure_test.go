@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -190,5 +193,61 @@ func TestConfigureRefusesAProjectDirectoryThatIsNotAbsolute(t *testing.T) {
 				t.Error("the provider was built for a project directory the server refused")
 			}
 		})
+	}
+}
+
+func TestConfigureStatesTheFactsOfTheEdgeTheProjectSelects(t *testing.T) {
+	for _, testCase := range []struct {
+		name       string
+		selection  *contractv1.EdgeSelection
+		wantCode   bool
+		wantLimits *contractv1.CacheTagLimits
+	}{
+		{"the provider's default edge, when the project names none", nil, true, &contractv1.CacheTagLimits{TagBytes: 64, Tags: 8, HeaderBytes: 256}},
+		{"the edge the project names", &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}, false, &contractv1.CacheTagLimits{}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			vendor := fake.NewProvider(fake.Options{})
+			vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).LimitsCacheTags(edge.CacheTagLimits{TagBytes: 64, Tags: 8, HeaderBytes: 256})
+			server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
+				Version: "test",
+				New: func(context.Context, provider.Settings) (provider.Provider, error) {
+					return vendor, nil
+				},
+			}))
+			t.Cleanup(server.Close)
+			client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+
+			req := configureInWorkingDir(t)
+			req.Edge = testCase.selection
+			configured, err := client.Configure(context.Background(), req)
+			if err != nil {
+				t.Fatalf("Configure() error = %v", err)
+			}
+			got := configured.GetFacts().GetEdge()
+			if got.GetRunsCode() != testCase.wantCode {
+				t.Errorf("Configure() edge facts run code = %v, want %v", got.GetRunsCode(), testCase.wantCode)
+			}
+			if !proto.Equal(got.GetCacheTagLimits(), testCase.wantLimits) {
+				t.Errorf("Configure() edge cache tag limits = %v, want %v", got.GetCacheTagLimits(), testCase.wantLimits)
+			}
+		})
+	}
+}
+
+func TestConfigureRefusesAnEdgeTheProviderCannotOpen(t *testing.T) {
+	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
+		Version: "test",
+		New: func(context.Context, provider.Settings) (provider.Provider, error) {
+			return fake.NewProvider(fake.Options{}), nil
+		},
+	}))
+	t.Cleanup(server.Close)
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+
+	req := configureInWorkingDir(t)
+	req.Edge = &contractv1.EdgeSelection{Kind: "elsewhere"}
+	if _, err := client.Configure(context.Background(), req); err == nil || !strings.Contains(err.Error(), "elsewhere") {
+		t.Fatalf("Configure() error = %v, want an edge the provider does not serve refused", err)
 	}
 }

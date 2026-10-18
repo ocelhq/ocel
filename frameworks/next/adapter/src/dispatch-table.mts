@@ -115,7 +115,7 @@ function prerenderDispatchOf(
   return ctx.outputs.prerenders.map((p) => {
     const routeKey = p.pathname;
     const allowQuery = p.config?.allowQuery;
-    const tags = cacheTags(p, plan.programmableEdge);
+    const tags = cacheTags(p, plan.edgeCacheTagLimits);
     const entryKey = functions.entryKeyByRouteId.get(p.parentOutputId);
     const edgeEntryKey = functions.edgeEntryByOutputId.get(p.parentOutputId);
     if (entryKey === undefined && edgeEntryKey === undefined) {

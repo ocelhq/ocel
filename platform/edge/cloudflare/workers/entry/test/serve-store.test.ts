@@ -11,7 +11,7 @@ import {
   SERVE_NO_SHELL_HEADER,
   SERVE_UNSHARED_HEADER,
 } from "../src/serve-key";
-import { FN_URL, withGlobalFetch } from "./origin-deps";
+import { awsOrigin, certificateBinding, FN_URL, storeOrigin, withGlobalFetch } from "./origin-deps";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -21,13 +21,26 @@ declare module "cloudflare:test" {
 
 const BUCKET_HOST = "assets-bucket.s3.us-east-1.amazonaws.com";
 
+const CERTIFIED_STORE = "https://objects.example.com/ocel-acme-production";
+
+const CERTIFIED_ENTRIES = `${CERTIFIED_STORE}/entries/`;
+
 const objects = new Map<string, string>();
+
+function storedKey(url: string): string | undefined {
+  const { host, pathname } = new URL(url);
+  if (host === BUCKET_HOST) return decodeURIComponent(pathname.slice(1));
+  if (url.startsWith(CERTIFIED_ENTRIES)) {
+    return decodeURIComponent(url.slice(CERTIFIED_ENTRIES.length));
+  }
+  return undefined;
+}
 
 function viaBucket(next: typeof fetch): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const { host, pathname } = new URL(new Request(input as RequestInfo, init).url);
-    if (host !== BUCKET_HOST) return next(input, init);
-    const body = objects.get(decodeURIComponent(pathname.slice(1)));
+    const key = storedKey(new Request(input as RequestInfo, init).url);
+    if (key === undefined) return next(input, init);
+    const body = objects.get(key);
     return body === undefined ? new Response("<Error/>", { status: 404 }) : new Response(body);
   }) as typeof fetch;
 }
@@ -45,6 +58,7 @@ const record = {
   assetPrefix: "prod/p1/web/r1a2b3c4d/assets",
   isrPrefix,
   createdAt: 1,
+  edge: {},
 };
 
 const storedEntry = () => ({
@@ -77,6 +91,7 @@ function harness(
     call?: Record<string, unknown>;
     queues?: unknown;
     origin?: () => Promise<Response>;
+    env?: Partial<Env>;
   } = {},
 ): Harness {
   const pending: Promise<unknown>[] = [];
@@ -111,10 +126,8 @@ function harness(
       RELEASES: {
         readServedRecord: async () => ({ kind: "record", record }),
       },
-      OCEL_ASSET_BUCKET: "assets-bucket",
-      OCEL_AWS_REGION: "us-east-1",
-      OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-      OCEL_EDGE_SECRET_KEY: "secretkey",
+      OCEL_ORIGIN: awsOrigin({ bucket: "assets-bucket", region: "us-east-1" }),
+      ...options.env,
     } as unknown as Env,
   );
   const headerValue = JSON.stringify({
@@ -186,6 +199,23 @@ describe("Serve answering a miss from the durable store", () => {
       /^max-age=0, stale-while-revalidate=\d+/,
     );
     expect(response.headers.get("etag")).not.toBeNull();
+    expect(h.originCalls).toEqual([]);
+  });
+
+  it("answers the stored page from under the entries prefix of a store an origin reached by client certificate holds", async () => {
+    await seed(storedEntry());
+    const { binding, sent } = certificateBinding();
+    const h = harness({
+      env: {
+        ...storeOrigin({ url: CERTIFIED_STORE, holdsEntries: true, entriesPrefix: "entries/" }),
+        OCEL_ORIGIN_CLIENT_CERTIFICATE: binding,
+      },
+    }) as Used;
+
+    const response = await h.fetchOrigin(() => h.serve.fetch(h.request()));
+
+    expect(await response.text()).toBe("<html>from the store</html>");
+    expect(sent).toEqual([]);
     expect(h.originCalls).toEqual([]);
   });
 

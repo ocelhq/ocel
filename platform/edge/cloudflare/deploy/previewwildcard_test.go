@@ -48,7 +48,7 @@ func previewWildcardSpec() edge.PreviewWildcardSpec {
 	return edge.PreviewWildcardSpec{
 		Version:    "v1",
 		BaseDomain: "preview.app.com",
-		Program:    &edge.ProgramSpec{Worker: edge.Worker{Main: mainModule()}},
+		Program:    previewProgrammed(),
 	}
 }
 
@@ -102,8 +102,10 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 
 		meta := uploadedMetadata(t, m, previewEntryScript)
 		for _, typ := range []string{"secret_text", "plain_text"} {
-			if got := bindingsByType(meta, typ); len(got) != 0 {
-				t.Errorf("%s bindings = %v, want none: the shared entry serves no single project", typ, got)
+			for _, binding := range bindingsByType(meta, typ) {
+				if name := binding["name"]; name == genericSlugBinding || name == envelopeKeyBinding {
+					t.Errorf("%s binding %v names a project's own value, want none: the shared entry serves no single project", typ, binding)
+				}
 			}
 		}
 

@@ -28,13 +28,28 @@ type nodeAppBuild struct {
 	Folder        string            `json:"folder,omitempty"`
 	Env           map[string]string `json:"env,omitempty"`
 	Unset         []string          `json:"unset,omitempty"`
-	EdgeKind      string            `json:"edgeKind,omitempty"`
 	AllowDegraded []string          `json:"allowDegraded,omitempty"`
 	PublicKeys    []string          `json:"publicKeys,omitempty"`
 	Entrypoint    string            `json:"entrypoint,omitempty"`
 	FunctionDir   string            `json:"functionDir,omitempty"`
 
+	EdgeRunsCode       bool                `json:"edgeRunsCode,omitempty"`
+	EdgeCacheTagLimits *nodeCacheTagLimits `json:"edgeCacheTagLimits,omitempty"`
+
 	MaxFunctionBytes int64 `json:"maxFunctionBytes,omitempty"`
+}
+
+type nodeCacheTagLimits struct {
+	TagBytes    int64 `json:"tagBytes"`
+	Tags        int64 `json:"tags"`
+	HeaderBytes int64 `json:"headerBytes"`
+}
+
+func newNodeCacheTagLimits(limits CacheTagLimits) *nodeCacheTagLimits {
+	if limits == (CacheTagLimits{}) {
+		return nil
+	}
+	return &nodeCacheTagLimits{TagBytes: limits.TagBytes, Tags: limits.Tags, HeaderBytes: limits.HeaderBytes}
 }
 
 const summaryLines = 2

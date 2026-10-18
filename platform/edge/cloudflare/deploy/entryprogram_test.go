@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
 	"strings"
@@ -11,346 +12,229 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func programmed(slug string, tier environment.Tier) EntryProgram {
-	return EntryProgram{
-		Tier:      tier,
-		Entry:     edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
-		Namespace: defaultNamespace,
-		Slug:      slug,
-		Env:       "prod",
-		Origin: OriginBindings{
-			Variables: map[string]string{"OCEL_ORIGIN_ONLY": "v"},
-			Secrets:   map[string]string{"OCEL_ORIGIN_KEY": "s"},
-		},
-		StoreScriptName:          "ocel-releases-store-preview",
-		StoreEndpoint:            "https://store.example",
-		StoreBootstrapCredential: "store-cred",
-	}
-}
-
 const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
 
-func TestEveryEntryWorkerCachesItsServeEntrypointAndNothingElse(t *testing.T) {
-	shared := programmed("", environment.TierPreview)
-	shared.PreviewBaseDomain = "preview.acme.com"
-	shared.PreviewKey = previewKey
-	for name, entry := range map[string]EntryProgram{
-		"the shared preview entry": shared,
-		"a project's preview":      programmed("acme", environment.TierPreview),
-		"a project's production":   programmed("acme", environment.TierProduction),
-	} {
-		t.Run(name, func(t *testing.T) {
-			built, err := entry.Build()
-			if err != nil {
-				t.Fatalf("Build: %v", err)
-			}
-			if got := built.Spec.Worker.CachedEntrypoints; !slices.Equal(got, []string{"Serve"}) {
-				t.Errorf("CachedEntrypoints = %v, want only Serve", got)
-			}
-		})
+func signedReach() edge.OriginReach {
+	return edge.OriginReach{
+		Reach:    edge.Reach{Kind: edge.ReachSigV4, Service: "lambda", Region: "eu-west-2", AccessKeyID: "AKIA", SecretAccessKey: "s"},
+		Store:    &edge.OriginStore{URL: "https://assets.s3.eu-west-2.amazonaws.com", Region: "eu-west-2", HoldsEntries: true, AccessKeyID: "AKIA", SecretAccessKey: "s"},
+		Throttle: edge.Throttle{Status: 429, Header: "x-amzn-errortype"},
 	}
 }
 
-func TestEveryEntryWorkerQueuesItsPurgesInADurableObject(t *testing.T) {
-	shared := programmed("", environment.TierPreview)
-	shared.PreviewBaseDomain = "preview.acme.com"
-	shared.PreviewKey = previewKey
-	for name, entry := range map[string]EntryProgram{
-		"the shared preview entry": shared,
-		"a project's preview":      programmed("acme", environment.TierPreview),
-		"a project's production":   programmed("acme", environment.TierProduction),
-	} {
+func certifiedReach() edge.OriginReach {
+	return edge.OriginReach{
+		Reach:    edge.Reach{Kind: edge.ReachClientCertificate, Certificate: "c1"},
+		Throttle: edge.Throttle{Status: 429, BodyContains: "no available instance"},
+	}
+}
+
+func programmed() *edge.Program {
+	return &edge.Program{
+		Origin: signedReach(),
+		ReleasesStore: edge.ReleasesStore{
+			Name:                "ocel-releases-store-preview",
+			Endpoint:            "https://store.example",
+			BootstrapCredential: "store-cred",
+		},
+		Env: "prod",
+	}
+}
+
+func previewProgrammed() *edge.Program {
+	program := programmed()
+	program.PreviewBaseDomain = "preview.acme.com"
+	program.PreviewKey = previewKey
+	return program
+}
+
+func buildEntry(t *testing.T, tier environment.Tier, slug string, program *edge.Program) entryProgram {
+	t.Helper()
+	built, err := newCloudflare(defaultNamespace, Options{}).buildEntryProgram(tier, slug, program)
+	if err != nil {
+		t.Fatalf("buildEntryProgram: %v", err)
+	}
+	return built
+}
+
+func everyEntry(t *testing.T) map[string]entryProgram {
+	t.Helper()
+	return map[string]entryProgram{
+		"the shared preview entry": buildEntry(t, environment.TierPreview, "", previewProgrammed()),
+		"a project's preview":      buildEntry(t, environment.TierPreview, "acme", programmed()),
+		"a project's production":   buildEntry(t, environment.TierProduction, "acme", programmed()),
+	}
+}
+
+func TestEveryEntryWorkerCachesItsServeEntrypointAndQueuesPurgesInADurableObject(t *testing.T) {
+	for name, built := range everyEntry(t) {
 		t.Run(name, func(t *testing.T) {
-			built, err := entry.Build()
-			if err != nil {
-				t.Fatalf("Build: %v", err)
+			if got := built.worker.CachedEntrypoints; !slices.Equal(got, []string{"Serve"}) {
+				t.Errorf("CachedEntrypoints = %v, want only Serve", got)
 			}
-			if got := built.Spec.Worker.DurableObjects; !slices.Equal(got, []string{"PurgeQueue"}) {
+			if got := built.worker.DurableObjects; !slices.Equal(got, []string{"PurgeQueue"}) {
 				t.Errorf("DurableObjects = %v, want only PurgeQueue", got)
 			}
 		})
 	}
 }
 
-func TestTheSharedPreviewEntryProgramBindsTheStoreWorkerAndTheBaseDomain(t *testing.T) {
-	entry := programmed("", environment.TierPreview)
-	entry.PreviewBaseDomain = "preview.acme.com"
-	entry.PreviewKey = previewKey
+func TestEveryEntryWorkerRunsTheEntryBundleAndHoldsTheOriginsReachAsOneSecret(t *testing.T) {
+	for name, built := range everyEntry(t) {
+		t.Run(name, func(t *testing.T) {
+			if string(built.worker.Main.Content) != string(entryBundle) {
+				t.Error("Main is not the entry bundle this edge was built with")
+			}
+			var reach edge.OriginReach
+			if err := json.Unmarshal([]byte(built.worker.Secrets[edge.OriginReachVar]), &reach); err != nil {
+				t.Fatalf("Secrets[%s] = %q: %v", edge.OriginReachVar, built.worker.Secrets[edge.OriginReachVar], err)
+			}
+			if reach.Reach != signedReach().Reach || *reach.Store != *signedReach().Store {
+				t.Errorf("the reach the worker holds = %+v, want the one the origin wrote", reach)
+			}
+			for name, value := range built.worker.Variables {
+				if strings.Contains(value, "AKIA") || strings.Contains(value, "secretAccessKey") {
+					t.Errorf("Variables[%s] holds the origin's key in the clear", name)
+				}
+			}
+		})
+	}
+}
 
-	built, err := entry.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
+func TestTheSharedPreviewEntryProgramBindsTheStoreWorkerAndTheBaseDomain(t *testing.T) {
+	built := buildEntry(t, environment.TierPreview, "", previewProgrammed())
+
+	if built.name != previewEntryScript {
+		t.Errorf("name = %q, want %q", built.name, previewEntryScript)
 	}
-	worker := built.Spec.Worker
-	if string(worker.Main.Content) != "export default {}" {
-		t.Errorf("Main = %q, want the generic bundle for the edge", worker.Main.Content)
-	}
-	if worker.Services[genericStoreBinding] != entry.StoreScriptName {
-		t.Errorf("Services = %v, want the preview store bound", worker.Services)
+	if built.worker.Services[genericStoreBinding] != "ocel-releases-store-preview" {
+		t.Errorf("Services = %v, want the preview store bound", built.worker.Services)
 	}
 	for name, want := range map[string]string{
 		envPreview:           "1",
 		envPreviewGlobal:     "1",
 		envPreviewBaseDomain: "preview.acme.com",
-		"OCEL_ORIGIN_ONLY":   "v",
 	} {
-		if worker.Variables[name] != want {
-			t.Errorf("Variables[%s] = %q, want %q", name, worker.Variables[name], want)
+		if built.worker.Variables[name] != want {
+			t.Errorf("Variables[%s] = %q, want %q", name, built.worker.Variables[name], want)
 		}
 	}
-	if worker.Secrets["OCEL_ORIGIN_KEY"] != "s" {
-		t.Errorf("Secrets[OCEL_ORIGIN_KEY] missing, want the origin's secret delivered as a secret")
-	}
-	if worker.Secrets[edge.PreviewKeyVar] != string(previewKey) {
+	if built.worker.Secrets[edge.PreviewKeyVar] != string(previewKey) {
 		t.Errorf("Secrets[%s] missing, want the key that signs preview hostnames delivered as a secret", edge.PreviewKeyVar)
-	}
-	if built.Spec.Name != "" {
-		t.Errorf("Name = %q, want empty: the edge names the shared entry itself", built.Spec.Name)
 	}
 }
 
 func TestEntryProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
-	entry := programmed("", environment.TierPreview)
-	entry.PreviewBaseDomain = "preview.acme.com"
-	entry.PreviewKey = previewKey
-	entry.StoreScriptName = ""
+	program := previewProgrammed()
+	program.ReleasesStore.Name = ""
 
-	_, err := entry.Build()
-	if err == nil {
-		t.Fatal("Build succeeded, want a preview entry with no releases-store worker refused")
-	}
-	if !strings.Contains(err.Error(), provider.BootstrapCommand(environment.TierPreview)) {
-		t.Errorf("error = %q, want it to name the bootstrap that provisions the store", err)
+	_, err := newCloudflare(defaultNamespace, Options{}).buildEntryProgram(environment.TierPreview, "", program)
+	if err == nil || !strings.Contains(err.Error(), provider.BootstrapCommand(environment.TierPreview)) {
+		t.Fatalf("buildEntryProgram = %v, want a refusal naming the bootstrap that provisions the store", err)
 	}
 }
 
 func TestEntryProgramRefusesAWorkerThatVerifiesPreviewLabelsWithNoKey(t *testing.T) {
-	for name, program := range map[string]EntryProgram{
-		"the shared preview entry":            programmed("", environment.TierPreview),
-		"a project on its own preview domain": programmed("proj", environment.TierPreview),
-	} {
+	for name, slug := range map[string]string{"the shared preview entry": "", "a project on its own preview domain": "proj"} {
 		t.Run(name, func(t *testing.T) {
-			program.PreviewBaseDomain = "preview.acme.com"
-			if _, err := program.Build(); err == nil {
-				t.Fatal("Build succeeded, want a worker that can verify no preview hostname refused")
+			program := previewProgrammed()
+			program.PreviewKey = ""
+			if _, err := newCloudflare(defaultNamespace, Options{}).buildEntryProgram(environment.TierPreview, slug, program); err == nil {
+				t.Fatal("buildEntryProgram succeeded, want a worker that can verify no preview hostname refused")
 			}
 		})
 	}
 }
 
 func TestAPreviewProjectEntryProgramNamesItsWorkerAndReadsTheStoreOverItsEndpoint(t *testing.T) {
-	project := programmed("proj", environment.TierPreview)
-	project.PreviewBaseDomain = "preview.acme.com"
-	project.PreviewKey = previewKey
+	built := buildEntry(t, environment.TierPreview, "proj", previewProgrammed())
 
-	built, err := project.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
+	if built.name != previewWorkerName(defaultNamespace, "proj") || built.pruneWorkerStem != previewWorkerStem(defaultNamespace, "proj") {
+		t.Errorf("name = %q, stem = %q, want the project's preview worker named so the edge can sweep it", built.name, built.pruneWorkerStem)
 	}
-	if built.Spec.Name != previewWorkerName(defaultNamespace, "proj") {
-		t.Errorf("Name = %q, want %q", built.Spec.Name, previewWorkerName(defaultNamespace, "proj"))
+	if built.worker.Variables[envPreview] != "1" || built.worker.Variables[envPreviewBaseDomain] != "preview.acme.com" {
+		t.Errorf("Variables = %v, want the preview base domain", built.worker.Variables)
 	}
-	if built.Spec.PruneWorkerStem != previewWorkerStem(defaultNamespace, "proj") {
-		t.Errorf("PruneWorkerStem = %q, want %q", built.Spec.PruneWorkerStem, previewWorkerStem(defaultNamespace, "proj"))
+	if built.worker.Secrets[edge.PreviewKeyVar] != string(previewKey) {
+		t.Errorf("Secrets[%s] missing, want the preview key", edge.PreviewKeyVar)
 	}
-	if built.Spec.RequiredRecord != "" {
-		t.Errorf("RequiredRecord = %q, want empty: ocel plants the records for the domains it serves", built.Spec.RequiredRecord)
+	if _, bound := built.worker.Services[genericStoreBinding]; bound {
+		t.Errorf("Services = %v, want no store binding: a project worker reads the store over its endpoint", built.worker.Services)
 	}
-	for name, want := range map[string]string{
-		envPreview:           "1",
-		envPreviewBaseDomain: "preview.acme.com",
-	} {
-		if built.Spec.Worker.Variables[name] != want {
-			t.Errorf("Variables[%s] = %q, want %q", name, built.Spec.Worker.Variables[name], want)
-		}
-	}
-	for name, want := range map[string]string{
-		edge.PreviewKeyVar: string(previewKey),
-		"OCEL_ORIGIN_KEY":  "s",
-	} {
-		if built.Spec.Worker.Secrets[name] != want {
-			t.Errorf("Secrets[%s] = %q, want %q", name, built.Spec.Worker.Secrets[name], want)
-		}
-	}
-	if _, bound := built.Spec.Worker.Services[genericStoreBinding]; bound {
-		t.Errorf("Services = %v, want no store binding: a project worker reads the store over its endpoint", built.Spec.Worker.Services)
-	}
-	if built.Spec.StoreEndpoint != project.StoreEndpoint || built.Spec.BootstrapCredential != project.StoreBootstrapCredential {
-		t.Errorf("store = %q/%q, want %q/%q",
-			built.Spec.StoreEndpoint, built.Spec.BootstrapCredential, project.StoreEndpoint, project.StoreBootstrapCredential)
+	if built.store.Endpoint != "https://store.example" || built.store.BootstrapCredential != "store-cred" {
+		t.Errorf("store = %+v, want the one the origin adopted", built.store)
 	}
 }
 
-func TestEntryProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
-	project := programmed("proj", environment.TierPreview)
+func TestEntryProgramForAPreviewProjectOnTheSharedWildcardCarriesNoBaseDomain(t *testing.T) {
+	built := buildEntry(t, environment.TierPreview, "proj", programmed())
 
-	built, err := project.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
+	if _, set := built.worker.Variables[envPreviewBaseDomain]; set {
+		t.Errorf("Variables has %s, want none: the shared preview entry has the base domain, not the project's worker", envPreviewBaseDomain)
 	}
-	if _, set := built.Spec.Worker.Variables[envPreviewBaseDomain]; set {
-		t.Errorf("Variables has %s = %q, want none: the shared preview entry has the base domain, not the project's worker",
-			envPreviewBaseDomain, built.Spec.Worker.Variables[envPreviewBaseDomain])
-	}
-	if built.Spec.Worker.Variables[envPreview] != "1" {
-		t.Errorf("Variables[%s] = %q, want 1", envPreview, built.Spec.Worker.Variables[envPreview])
-	}
-	if built.Spec.Name != previewWorkerName(defaultNamespace, "proj") || built.Spec.PruneWorkerStem != previewWorkerStem(defaultNamespace, "proj") {
-		t.Errorf("name = %q, stem = %q, want the project's preview worker named so the edge can sweep it",
-			built.Spec.Name, built.Spec.PruneWorkerStem)
+	if built.worker.Variables[envPreview] != "1" {
+		t.Errorf("Variables[%s] = %q, want 1", envPreview, built.worker.Variables[envPreview])
 	}
 }
 
 func TestAProductionProjectEntryProgramSweepsItsOwnScriptAndCarriesNoPreviewConfig(t *testing.T) {
-	built, err := programmed("proj", environment.TierProduction).Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
+	built := buildEntry(t, environment.TierProduction, "proj", programmed())
+
+	if built.name != rootWorkerName(defaultNamespace, "proj", "prod") {
+		t.Errorf("name = %q, want %q", built.name, rootWorkerName(defaultNamespace, "proj", "prod"))
 	}
-	if built.Spec.Name != rootWorkerName(defaultNamespace, "proj", "prod") {
-		t.Errorf("Name = %q, want %q", built.Spec.Name, rootWorkerName(defaultNamespace, "proj", "prod"))
-	}
-	if built.Spec.PruneWorkerStem != "" {
-		t.Errorf("PruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", built.Spec.PruneWorkerStem)
+	if built.pruneWorkerStem != "" {
+		t.Errorf("pruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", built.pruneWorkerStem)
 	}
 	for _, unwanted := range []string{envPreview, envPreviewGlobal, envPreviewBaseDomain} {
-		if _, set := built.Spec.Worker.Variables[unwanted]; set {
+		if _, set := built.worker.Variables[unwanted]; set {
 			t.Errorf("Variables has %s, which belongs to a preview", unwanted)
 		}
 	}
-	if _, set := built.Spec.Worker.Secrets[edge.PreviewKeyVar]; set {
+	if _, set := built.worker.Secrets[edge.PreviewKeyVar]; set {
 		t.Errorf("Secrets has %s, which belongs to a preview", edge.PreviewKeyVar)
 	}
 }
 
-func TestEntryProgramRunsTheEntryModuleTheEdgeNames(t *testing.T) {
-	program := programmed("shop", environment.TierProduction)
+func TestAnEntryWorkerReachingItsOriginByClientCertificateBindsItForMutualTLS(t *testing.T) {
+	program := programmed()
+	program.Origin = certifiedReach()
 
-	built, err := program.Build()
-	if err != nil {
-		t.Fatalf("Build() = %v", err)
-	}
-	if main := built.Spec.Worker.Main; main.Name != program.Entry.Name || string(main.Content) != string(program.Entry.Content) {
-		t.Errorf("Worker.Main = %q %q, want the edge's entry %q %q", main.Name, main.Content, program.Entry.Name, program.Entry.Content)
+	built := buildEntry(t, environment.TierProduction, "shop", program)
+	want := map[string]string{originClientCertificateBinding: "c1"}
+	if !maps.Equal(built.worker.ClientCertificates, want) {
+		t.Errorf("ClientCertificates = %v, want %v", built.worker.ClientCertificates, want)
 	}
 }
 
-func TestEntryProgramRefusesAnEdgeThatNamesNoEntryModule(t *testing.T) {
-	program := programmed("shop", environment.TierProduction)
-	program.Entry = edge.WorkerModule{}
-
-	if _, err := program.Build(); err == nil || !strings.Contains(err.Error(), string(Kind)) {
-		t.Fatalf("Build() = %v, want a refusal naming the edge", err)
+func TestAnEntryWorkerReachingItsOriginBySigningBindsNoClientCertificate(t *testing.T) {
+	built := buildEntry(t, environment.TierProduction, "shop", programmed())
+	if built.worker.ClientCertificates != nil {
+		t.Errorf("ClientCertificates = %v, want nil", built.worker.ClientCertificates)
 	}
 }
 
-func TestEntryProgramPassesTheOriginsBindingsThroughUnchanged(t *testing.T) {
-	program := programmed("shop", environment.TierProduction)
-	program.Origin = OriginBindings{
-		Variables: map[string]string{"A": "1", "B": "2"},
-		Secrets:   map[string]string{"S": "x", "T": "y"},
-	}
+func TestAnEntryWorkerRefusesAnOriginReachedTwoWays(t *testing.T) {
+	program := programmed()
+	program.Origin.Reach.Certificate = "c1"
 
-	built, err := program.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if !maps.Equal(built.Spec.Worker.Variables, program.Origin.Variables) {
-		t.Errorf("Variables = %v, want %v", built.Spec.Worker.Variables, program.Origin.Variables)
-	}
-	if !maps.Equal(built.Spec.Worker.Secrets, program.Origin.Secrets) {
-		t.Errorf("Secrets = %v, want %v", built.Spec.Worker.Secrets, program.Origin.Secrets)
+	_, err := newCloudflare(defaultNamespace, Options{}).buildEntryProgram(environment.TierProduction, "shop", program)
+	if err == nil || !strings.Contains(err.Error(), "one way") {
+		t.Fatalf("buildEntryProgram = %v, want a refusal of an origin reached both by signing and by a certificate", err)
 	}
 }
 
-func TestEntryProgramLeavesTheCallersBindingsUntouched(t *testing.T) {
-	program := programmed("", environment.TierPreview)
-	program.PreviewBaseDomain = "preview.acme.com"
-	program.PreviewKey = previewKey
-	variables := maps.Clone(program.Origin.Variables)
-	secrets := maps.Clone(program.Origin.Secrets)
-
-	if _, err := program.Build(); err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if !maps.Equal(program.Origin.Variables, variables) {
-		t.Errorf("Origin.Variables = %v, want %v", program.Origin.Variables, variables)
-	}
-	if !maps.Equal(program.Origin.Secrets, secrets) {
-		t.Errorf("Origin.Secrets = %v, want %v", program.Origin.Secrets, secrets)
-	}
-}
-
-func TestEntryProgramWithNoOriginSecretsCarriesNoSecrets(t *testing.T) {
-	program := programmed("shop", environment.TierProduction)
-	program.Origin = OriginBindings{}
-
-	built, err := program.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if built.Spec.Worker.Secrets != nil {
-		t.Errorf("Secrets = %v, want nil", built.Spec.Worker.Secrets)
-	}
-	if built.Spec.Worker.Variables == nil || len(built.Spec.Worker.Variables) != 0 {
-		t.Errorf("Variables = %#v, want non-nil and empty", built.Spec.Worker.Variables)
-	}
-}
-
-func TestAnEntryWorkerGivenAnOriginClientCertificateBindsItForMutualTLS(t *testing.T) {
-	program := programmed("shop", environment.TierProduction)
-	program.Origin = OriginBindings{ClientCertificate: "c1"}
-
-	built, err := program.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	want := map[string]string{edge.OriginClientCertificateBinding: "c1"}
-	if !maps.Equal(built.Spec.Worker.ClientCertificates, want) {
-		t.Errorf("ClientCertificates = %v, want %v", built.Spec.Worker.ClientCertificates, want)
-	}
-}
-
-func TestAnEntryWorkerRefusesAnOriginThatHandsBothAWSKeysAndAClientCertificate(t *testing.T) {
-	program := programmed("shop", environment.TierProduction)
-	program.Origin = OriginBindings{
-		ClientCertificate: "c1",
-		Variables:         map[string]string{edge.EdgeAccessKeyIDVar: "AKIA"},
-		Secrets:           map[string]string{edge.EdgeSecretKeyVar: "s"},
-	}
-
-	if _, err := program.Build(); err == nil || !strings.Contains(err.Error(), "client certificate") {
-		t.Fatalf("Build() = %v, want a refusal naming the client certificate", err)
-	}
-}
-
-func TestAnEntryWorkerWithNoOriginClientCertificateCarriesNone(t *testing.T) {
-	program := programmed("shop", environment.TierProduction)
-	program.Origin = OriginBindings{}
-
-	built, err := program.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if built.Spec.Worker.ClientCertificates != nil {
-		t.Errorf("ClientCertificates = %v, want nil", built.Spec.Worker.ClientCertificates)
+func TestAnEntryWorkerRefusesAStackHandedNoProgram(t *testing.T) {
+	_, err := newCloudflare(defaultNamespace, Options{}).buildEntryProgram(environment.TierProduction, "shop", nil)
+	if err == nil || !strings.Contains(err.Error(), string(Kind)) {
+		t.Fatalf("buildEntryProgram = %v, want a refusal naming the edge", err)
 	}
 }
 
 func TestNoWorkerReceivesGateKeys(t *testing.T) {
-	shared := programmed("", environment.TierPreview)
-	shared.PreviewBaseDomain = "preview.acme.com"
-	shared.PreviewKey = previewKey
-	for name, entry := range map[string]EntryProgram{
-		"the shared preview entry": shared,
-		"a project's preview":      programmed("acme", environment.TierPreview),
-		"a project's production":   programmed("acme", environment.TierProduction),
-	} {
+	for name, built := range everyEntry(t) {
 		t.Run(name, func(t *testing.T) {
-			built, err := entry.Build()
-			if err != nil {
-				t.Fatalf("Build: %v", err)
-			}
-			for secret := range built.Spec.Worker.Secrets {
+			for secret := range built.worker.Secrets {
 				if strings.Contains(strings.ToUpper(secret), "GATE") {
 					t.Errorf("Secrets carries %s, want none: the gate is published to the releases store, where a rotation takes effect without a deploy", secret)
 				}

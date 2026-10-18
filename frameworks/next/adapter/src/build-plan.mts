@@ -1,7 +1,8 @@
 import { join, sep } from "node:path";
 import type { CompiledImageConfig } from "@framework/next-protocol/image";
+import type { CacheTagLimits } from "@platform/edge-contract/cache-tags";
 import type { AdapterOutput, NextAdapter } from "next";
-import { isProgrammableEdge, readWaivedNeeds } from "./build-env.mjs";
+import { readEdgeCacheTagLimits, readEdgeRunsCode, readWaivedNeeds } from "./build-env.mjs";
 import { groupPrerenders, type PrerenderGroup } from "./cache-seed.mjs";
 import { compileImageConfig } from "./image-config.mjs";
 import { clientAssetSuffix } from "./launcher.mjs";
@@ -25,7 +26,8 @@ export interface NextDataStaticFile {
 export interface BuildPlan {
   basePath: string;
   pagesDistDir: string;
-  programmableEdge: boolean;
+  edgeRunsCode: boolean;
+  edgeCacheTagLimits: CacheTagLimits | undefined;
   allRoutes: FunctionRoute[];
   functionRoutes: FunctionRoute[];
   edgeRoutes: FunctionRoute[];
@@ -56,9 +58,9 @@ export function planBuild(ctx: BuildContext): BuildPlan {
 
   const { middleware } = outputs;
   const nodeMiddleware = middleware?.runtime === "nodejs" ? middleware : undefined;
-  const programmableEdge = isProgrammableEdge(process.env.OCEL_EDGE_KIND);
+  const edgeRunsCode = readEdgeRunsCode();
   const waived = readWaivedNeeds();
-  const compileEdgeOnOrigin = (need: string) => !programmableEdge && waived.has(need);
+  const compileEdgeOnOrigin = (need: string) => !edgeRunsCode && waived.has(need);
   const edgeMiddleware = middleware?.runtime === "edge" ? middleware : undefined;
   const originEdgeMiddleware = compileEdgeOnOrigin("edge-middleware") ? edgeMiddleware : undefined;
 
@@ -79,7 +81,8 @@ export function planBuild(ctx: BuildContext): BuildPlan {
   return {
     basePath,
     pagesDistDir,
-    programmableEdge,
+    edgeRunsCode,
+    edgeCacheTagLimits: readEdgeCacheTagLimits(),
     allRoutes,
     functionRoutes: allRoutes.filter((r) => r.runtime === "nodejs"),
     edgeRoutes,

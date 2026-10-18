@@ -36,17 +36,7 @@ type StackSpec struct {
 	Gate            *gate.Gate
 	Say             func(string)
 	Warn            func(string)
-	Program         *ProgramSpec
-}
-
-type ProgramSpec struct {
-	Name                string
-	Worker              Worker
-	StoreScriptName     string
-	StoreEndpoint       string
-	BootstrapCredential string
-	PruneWorkerStem     string
-	RequiredRecord      string
+	Program         *Program
 }
 
 type StackState struct {

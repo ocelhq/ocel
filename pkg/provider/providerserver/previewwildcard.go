@@ -223,15 +223,15 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 		if err != nil {
 			return "", err
 		}
-		program, err := edgeProgramFor(ctx, w.provider, front, provider.EdgeProgramRequest{
-			Tier:              environment.TierPreview,
-			PreviewBaseDomain: base,
-			PreviewKey:        key,
+		program, err := edgeProgramFor(ctx, w.provider, front, edgeProgramScope{
+			tier:              environment.TierPreview,
+			previewBaseDomain: base,
+			previewKey:        key,
 		})
 		if err != nil {
 			return "", err
 		}
-		spec.Program = program.Spec
+		spec.Program = program
 	}
 	published, err := front.ReconcilePreviewWildcard(ctx, spec)
 	if err != nil {

@@ -35,7 +35,7 @@ function writeHosting(
 }
 
 function edgeBundleSources(plan: BuildPlan) {
-  if (!plan.programmableEdge) return [];
+  if (!plan.edgeRunsCode) return [];
   return [...plan.edgeRoutes, ...(plan.edgeMiddleware ? [plan.edgeMiddleware] : [])];
 }
 

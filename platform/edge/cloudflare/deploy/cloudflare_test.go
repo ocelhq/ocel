@@ -16,11 +16,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-func mainModule() edge.WorkerModule {
-	return edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")}
+func testModule() workerModule {
+	return workerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")}
 }
 
-func metadataFromMultipart(t *testing.T, worker edge.Worker, assetsJWT string) map[string]any {
+func metadataFromMultipart(t *testing.T, worker workerScript, assetsJWT string) map[string]any {
 	t.Helper()
 	body, contentType, err := buildScriptMultipart(worker, assetsJWT)
 	if err != nil {
@@ -70,7 +70,7 @@ func hasAssetBinding(meta map[string]any) bool {
 
 func TestObservability(t *testing.T) {
 	t.Run("a worker reports logs and traces by default", func(t *testing.T) {
-		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule()}, "")
+		meta := metadataFromMultipart(t, workerScript{Main: testModule()}, "")
 		obs, ok := meta["observability"].(map[string]any)
 		if !ok {
 			t.Fatalf("metadata has no observability object: %v", meta["observability"])
@@ -91,7 +91,7 @@ func TestObservability(t *testing.T) {
 	t.Run("switching it off strips every sampling knob", func(t *testing.T) {
 		t.Setenv(envObservability, "off")
 
-		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule()}, "")
+		meta := metadataFromMultipart(t, workerScript{Main: testModule()}, "")
 		obs, ok := meta["observability"].(map[string]any)
 		if !ok {
 			t.Fatalf("metadata has no observability object: %v", meta["observability"])
@@ -110,49 +110,49 @@ func TestObservability(t *testing.T) {
 func TestScriptBindings(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
-		worker edge.Worker
+		worker workerScript
 		typ    string
 		want   []map[string]string
 	}{
 		{
 			name:   "a secret becomes a secret_text binding containing its value",
-			worker: edge.Worker{Main: mainModule(), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "shh"}},
+			worker: workerScript{Main: testModule(), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "shh"}},
 			typ:    "secret_text",
 			want:   []map[string]string{{"name": "OCEL_EDGE_SECRET_KEY", "text": "shh"}},
 		},
 		{
 			name:   "a var becomes a plain_text binding",
-			worker: edge.Worker{Main: mainModule(), Variables: map[string]string{"OCEL_EDGE_ACCESS_KEY_ID": "AKIA"}},
+			worker: workerScript{Main: testModule(), Variables: map[string]string{"OCEL_EDGE_ACCESS_KEY_ID": "AKIA"}},
 			typ:    "plain_text",
 			want:   []map[string]string{{"name": "OCEL_EDGE_ACCESS_KEY_ID", "text": "AKIA"}},
 		},
 		{
 			name:   "a secret is never also emitted as plain text",
-			worker: edge.Worker{Main: mainModule(), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "shh"}},
+			worker: workerScript{Main: testModule(), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "shh"}},
 			typ:    "plain_text",
 			want:   nil,
 		},
 		{
 			name:   "a service maps to a service binding",
-			worker: edge.Worker{Main: mainModule(), Services: map[string]string{"RELEASES": "ocel-proj-store"}},
+			worker: workerScript{Main: testModule(), Services: map[string]string{"RELEASES": "ocel-proj-store"}},
 			typ:    "service",
 			want:   []map[string]string{{"name": "RELEASES", "service": "ocel-proj-store"}},
 		},
 		{
 			name:   "a client certificate becomes an mtls_certificate binding naming its certificate id",
-			worker: edge.Worker{Main: mainModule(), ClientCertificates: map[string]string{"OCEL_ORIGIN_CLIENT_CERTIFICATE": "c1"}},
+			worker: workerScript{Main: testModule(), ClientCertificates: map[string]string{"OCEL_ORIGIN_CLIENT_CERTIFICATE": "c1"}},
 			typ:    "mtls_certificate",
 			want:   []map[string]string{{"name": "OCEL_ORIGIN_CLIENT_CERTIFICATE", "certificate_id": "c1"}},
 		},
 		{
 			name:   "a loader binding maps to a worker_loader binding",
-			worker: edge.Worker{Main: mainModule(), LoaderBinding: "LOADER"},
+			worker: workerScript{Main: testModule(), LoaderBinding: "LOADER"},
 			typ:    "worker_loader",
 			want:   []map[string]string{{"name": "LOADER"}},
 		},
 		{
 			name:   "no loader binding emits no worker_loader binding",
-			worker: edge.Worker{Main: mainModule()},
+			worker: workerScript{Main: testModule()},
 			typ:    "worker_loader",
 			want:   nil,
 		},
@@ -173,8 +173,8 @@ func TestScriptBindings(t *testing.T) {
 	}
 
 	t.Run("a worker with only variables emits no other binding", func(t *testing.T) {
-		meta := metadataFromMultipart(t, edge.Worker{
-			Main:      mainModule(),
+		meta := metadataFromMultipart(t, workerScript{
+			Main:      testModule(),
 			Variables: map[string]string{"FUNCTION_URLS": "{}"},
 		}, "")
 		for _, typ := range []string{"worker_loader", "service", "secret_text", "assets"} {
@@ -190,11 +190,11 @@ func TestScriptBindings(t *testing.T) {
 
 func TestBuildScriptMultipart(t *testing.T) {
 	t.Run("the assets binding and metadata are gated on a completion JWT", func(t *testing.T) {
-		worker := edge.Worker{
+		worker := workerScript{
 			AssetBinding: "ASSETS",
-			Main:         mainModule(),
+			Main:         testModule(),
 			Variables:    map[string]string{"FUNCTION_URLS": "{}"},
-			Assets:       []edge.StaticAsset{{Path: "/a.svg", Content: []byte("a")}},
+			Assets:       []workerAsset{{Path: "/a.svg", Content: []byte("a")}},
 		}
 
 		noJWT := metadataFromMultipart(t, worker, "")
@@ -215,9 +215,9 @@ func TestBuildScriptMultipart(t *testing.T) {
 	})
 
 	t.Run("the main module and its siblings are uploaded as their own parts", func(t *testing.T) {
-		worker := edge.Worker{
-			Main:    mainModule(),
-			Modules: []edge.WorkerModule{{Name: "next-route-table.json", ContentType: "text/plain", Content: []byte(`{"buildId":"b"}`)}},
+		worker := workerScript{
+			Main:    testModule(),
+			Modules: []workerModule{{Name: "next-route-table.json", ContentType: "text/plain", Content: []byte(`{"buildId":"b"}`)}},
 		}
 
 		body, contentType, err := buildScriptMultipart(worker, "")
@@ -254,7 +254,7 @@ func TestBuildScriptMultipart(t *testing.T) {
 
 func TestBindCodeLoader(t *testing.T) {
 	t.Run("a bundle with no loader still gets the binding beside its store", func(t *testing.T) {
-		composed := bindCodeLoader(withService(edge.Worker{Main: mainModule()}, "RELEASES", "ocel-proj-store"))
+		composed := bindCodeLoader(withService(workerScript{Main: testModule()}, "RELEASES", "ocel-proj-store"))
 		meta := metadataFromMultipart(t, composed, "")
 
 		loaders := bindingsByType(meta, "worker_loader")
@@ -276,7 +276,7 @@ func TestBuildAssetBatch(t *testing.T) {
 	t.Run("each file part is named and typed by its content hash", func(t *testing.T) {
 		t.Parallel()
 
-		assets := map[string]edge.StaticAsset{
+		assets := map[string]workerAsset{
 			"hash-svg": {Path: "/next.svg", Content: []byte("<svg/>")},
 		}
 		body, contentType, err := buildAssetBatch([]string{"hash-svg"}, assets)
@@ -319,10 +319,10 @@ func TestBuildAssetBatch(t *testing.T) {
 			"/font.woff2":               "font/woff2",
 			"/LICENSE":                  "application/octet-stream",
 		}
-		assets := map[string]edge.StaticAsset{}
+		assets := map[string]workerAsset{}
 		var bucket []string
 		for p := range want {
-			assets[p] = edge.StaticAsset{Path: p, Content: []byte("x")}
+			assets[p] = workerAsset{Path: p, Content: []byte("x")}
 			bucket = append(bucket, p)
 		}
 		body, contentType, err := buildAssetBatch(bucket, assets)
@@ -360,7 +360,7 @@ func TestHashAsset(t *testing.T) {
 	t.Run("matches the algorithm wrangler uploads under", func(t *testing.T) {
 		t.Parallel()
 
-		got := hashAsset(edge.StaticAsset{Path: "/greeting.txt", Content: []byte("hello")})
+		got := hashAsset(workerAsset{Path: "/greeting.txt", Content: []byte("hello")})
 		if want := "129d0bf9c674d4cc340cf5f8feeb9f36"; got != want {
 			t.Fatalf("hashAsset = %q, want %q", got, want)
 		}
@@ -369,7 +369,7 @@ func TestHashAsset(t *testing.T) {
 	t.Run("an extensionless path still hashes to 32 hex chars", func(t *testing.T) {
 		t.Parallel()
 
-		if len(hashAsset(edge.StaticAsset{Path: "/noext", Content: []byte("anything")})) != 32 {
+		if len(hashAsset(workerAsset{Path: "/noext", Content: []byte("anything")})) != 32 {
 			t.Errorf("hash must be 32 hex chars")
 		}
 	})
@@ -490,25 +490,6 @@ func TestTeardown(t *testing.T) {
 	})
 }
 
-func TestCompatibility(t *testing.T) {
-	t.Parallel()
-
-	t.Run("reports the compat settings the uploaded script has", func(t *testing.T) {
-		t.Parallel()
-
-		compatibility := New("ocel", Options{}).Facts().Compatibility
-		if compatibility.IsZero() {
-			t.Fatal("the cloudflare edge names no compatibility, so the code it runs has nothing to load under")
-		}
-		if compatibility.Date != compatDate {
-			t.Errorf("Facts().Compatibility.Date = %q, want %q", compatibility.Date, compatDate)
-		}
-		if !slices.Equal(compatibility.Flags, compatFlags) {
-			t.Errorf("Facts().Compatibility.Flags = %v, want %v", compatibility.Flags, compatFlags)
-		}
-	})
-}
-
 func TestCloudflareCachesResponses(t *testing.T) {
 	t.Parallel()
 
@@ -527,7 +508,7 @@ func TestCloudflareInvalidatesByCacheTag(t *testing.T) {
 
 func TestAWorkerUploadDeclaresTheDurableObjectsItNames(t *testing.T) {
 	t.Run("a durable object export keeps its state in SQLite", func(t *testing.T) {
-		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), DurableObjects: []string{"PurgeQueue"}}, "")
+		meta := metadataFromMultipart(t, workerScript{Main: testModule(), DurableObjects: []string{"PurgeQueue"}}, "")
 
 		exports, _ := meta["exports"].(map[string]any)
 		queue, _ := exports["PurgeQueue"].(map[string]any)
@@ -537,7 +518,7 @@ func TestAWorkerUploadDeclaresTheDurableObjectsItNames(t *testing.T) {
 	})
 
 	t.Run("beside a cached entrypoint it leaves that entrypoint as it was", func(t *testing.T) {
-		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), CachedEntrypoints: []string{"Serve"}, DurableObjects: []string{"PurgeQueue"}}, "")
+		meta := metadataFromMultipart(t, workerScript{Main: testModule(), CachedEntrypoints: []string{"Serve"}, DurableObjects: []string{"PurgeQueue"}}, "")
 
 		exports, _ := meta["exports"].(map[string]any)
 		serve, _ := exports["Serve"].(map[string]any)
@@ -551,7 +532,7 @@ func TestAWorkerUploadDeclaresTheDurableObjectsItNames(t *testing.T) {
 	})
 
 	t.Run("a worker with only a durable object does not turn caching off", func(t *testing.T) {
-		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), DurableObjects: []string{"PurgeQueue"}}, "")
+		meta := metadataFromMultipart(t, workerScript{Main: testModule(), DurableObjects: []string{"PurgeQueue"}}, "")
 
 		if _, ok := meta["cache_options"]; ok {
 			t.Errorf("cache_options = %v, want none: nothing here caches", meta["cache_options"])
@@ -561,7 +542,7 @@ func TestAWorkerUploadDeclaresTheDurableObjectsItNames(t *testing.T) {
 
 func TestAWorkerUploadCachesOnlyTheEntrypointsItNames(t *testing.T) {
 	t.Run("a worker naming a cached entrypoint turns the worker's cache off and that entrypoint's on", func(t *testing.T) {
-		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), CachedEntrypoints: []string{"Serve"}}, "")
+		meta := metadataFromMultipart(t, workerScript{Main: testModule(), CachedEntrypoints: []string{"Serve"}}, "")
 
 		cache, _ := meta["cache_options"].(map[string]any)
 		if cache["enabled"] != false || cache["cross_version_cache"] != true {
@@ -576,7 +557,7 @@ func TestAWorkerUploadCachesOnlyTheEntrypointsItNames(t *testing.T) {
 	})
 
 	t.Run("a worker naming none carries no cache configuration", func(t *testing.T) {
-		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule()}, "")
+		meta := metadataFromMultipart(t, workerScript{Main: testModule()}, "")
 
 		for _, key := range []string{"cache_options", "exports"} {
 			if _, ok := meta[key]; ok {
@@ -586,7 +567,7 @@ func TestAWorkerUploadCachesOnlyTheEntrypointsItNames(t *testing.T) {
 	})
 
 	t.Run("the compatibility date already enables ctx.exports, so no flag asks for it again", func(t *testing.T) {
-		meta := metadataFromMultipart(t, edge.Worker{Main: mainModule(), CachedEntrypoints: []string{"Serve"}}, "")
+		meta := metadataFromMultipart(t, workerScript{Main: testModule(), CachedEntrypoints: []string{"Serve"}}, "")
 
 		flags, _ := meta["compatibility_flags"].([]any)
 		if slices.Contains(flags, any("enable_ctx_exports")) {

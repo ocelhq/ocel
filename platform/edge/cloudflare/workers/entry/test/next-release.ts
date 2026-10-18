@@ -3,7 +3,7 @@ import type { AssetBucket } from "@framework/next-router/assets";
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import type { RaisedTag } from "../src/purge-backlog";
-import type { ReleaseRecord } from "../src/releases";
+import type { StoredRecord } from "../src/releases";
 import type { ServeFactory } from "../src/serve-objects";
 import type { ServingPorts } from "../src/serving";
 import { answerEveryRecordWith } from "./origin-deps";
@@ -27,7 +27,7 @@ export const EMPTY_ROUTES = {
 
 export interface NextRelease {
   table?: Partial<NextRouteTable>;
-  record?: Partial<ReleaseRecord>;
+  record?: Partial<StoredRecord>;
   assets?: Record<string, string>;
   edgeBundle?: string;
   serve?: ServeFactory;
@@ -39,17 +39,19 @@ export interface NextRelease {
 
 let edgeBundles = 0;
 
-function nextRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
+function nextRecord(over: Partial<StoredRecord> = {}): StoredRecord {
   return {
     app: "web",
     framework: "next",
     release: "deploy-1",
     buildId: "d1",
+    rootFunction: "",
     routeTable: { format: "next", key: routeTableKey() },
     functionUrls: {},
     assetPrefix: "",
     isrPrefix: ISR_PREFIX,
     createdAt: 1_000,
+    edge: {},
     ...over,
   };
 }
@@ -82,16 +84,13 @@ export function servedNextRelease(release: NextRelease = {}): ServeFetch {
   const objects: Record<string, NextRouteTable | string> = {
     [routeTableKey()]: nextTable(release.table),
   };
-  const bundled: Partial<ReleaseRecord> = {};
+  const bundled: Partial<StoredRecord> = {};
   if (release.edgeBundle !== undefined) {
     const id = `edge-${edgeBundles++}`;
     const bundleKey = `prod/p1/web/${id}/edge/bundle.json`;
     objects[bundleKey] = release.edgeBundle;
-    bundled.edgeWorkers = {
-      bundleKey,
-      id,
-      compatDate: "2026-03-10",
-      compatFlags: ["nodejs_compat"],
+    bundled.edge = {
+      code: { bundleKey, loaderId: id, compatDate: "2026-03-10", compatFlags: ["nodejs_compat"] },
     };
   }
   const record = nextRecord({ ...bundled, ...release.record });

@@ -54,7 +54,7 @@ function invokerFor(
     env.LOADER,
     {
       bundleKey,
-      id: id ?? `edge-${seq}`,
+      loaderId: id ?? `edge-${seq}`,
       compatDate: "2026-03-10",
       compatFlags: ["nodejs_compat"],
     },
@@ -66,10 +66,13 @@ function invokerFor(
 function missingBundle(): NextRelease["record"] {
   const seq = bundles++;
   return {
-    edgeWorkers: {
-      bundleKey: `prod/p1/web/gone-${seq}/edge/bundle.json`,
-      id: `edge-missing-${seq}`,
-      compatDate: "2026-03-10",
+    edge: {
+      code: {
+        bundleKey: `prod/p1/web/gone-${seq}/edge/bundle.json`,
+        loaderId: `edge-missing-${seq}`,
+        compatDate: "2026-03-10",
+        compatFlags: [],
+      },
     },
   };
 }
@@ -1063,7 +1066,7 @@ describe("the variables a deployment declares", () => {
       env.LOADER,
       {
         bundleKey,
-        id: bundle.id ?? `variables-${seq}`,
+        loaderId: bundle.id ?? `variables-${seq}`,
         compatDate: "2026-03-10",
         compatFlags: ["nodejs_compat"],
       },

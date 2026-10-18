@@ -9,9 +9,11 @@ import worker, { type Env } from "../src/index";
 import type { ReleasesBinding } from "../src/releases";
 import {
   answerEveryRecordWith,
+  awsOrigin,
   capturing,
   FN_URL,
   makeRecord,
+  storeOrigin,
   withGlobalFetch,
 } from "./origin-deps";
 import { routeTableKey } from "./route-table-store";
@@ -50,8 +52,7 @@ async function gateRecord(over: Record<string, unknown> = {}) {
 async function projectEnv(over: Partial<Env> = {}): Promise<Env> {
   return {
     RELEASES: bindingHolding({ p1: JSON.stringify(await gateRecord()) }),
-    OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-    OCEL_EDGE_SECRET_KEY: "secretkey",
+    OCEL_ORIGIN: awsOrigin(),
     OCEL_SLUG: "p1",
     OCEL_PREVIEW: "1",
     OCEL_PREVIEW_BASE_DOMAIN: "myapp.com",
@@ -63,8 +64,7 @@ async function projectEnv(over: Partial<Env> = {}): Promise<Env> {
 async function globalEnv(over: Partial<Env> = {}): Promise<Env> {
   return {
     RELEASES: bindingHolding({ shop: JSON.stringify(await gateRecord()) }),
-    OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-    OCEL_EDGE_SECRET_KEY: "secretkey",
+    OCEL_ORIGIN: awsOrigin(),
     OCEL_SLUG: "",
     OCEL_PREVIEW: "1",
     OCEL_PREVIEW_GLOBAL: "1",
@@ -326,8 +326,7 @@ describe("the gate on a project's production worker", () => {
   async function productionEnv(over: Partial<Env> = {}): Promise<Env> {
     return {
       RELEASES: bindingHolding({ p1: JSON.stringify(await gateRecord()) }),
-      OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
-      OCEL_EDGE_SECRET_KEY: "secretkey",
+      OCEL_ORIGIN: awsOrigin(),
       OCEL_SLUG: "p1",
       ...over,
     };
@@ -343,11 +342,7 @@ describe("the gate on a project's production worker", () => {
           record: nextRecord,
         }),
       },
-      OCEL_ASSET_STORE_ENDPOINT: "https://objects.example.com",
-      OCEL_ASSET_STORE_BUCKET: "ocel-acme-production",
-      OCEL_ASSET_STORE_PREFIX: "assets/",
-      OCEL_ASSET_STORE_ACCESS_KEY_ID: "GOOG1EXAMPLEACCESSID",
-      OCEL_ASSET_STORE_SECRET_KEY: "examplesecret",
+      ...storeOrigin({ url: "https://objects.example.com/ocel-acme-production" }),
     });
   }
 

@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -134,7 +133,7 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 		AssetPrefix:          coordinate.AssetKey(""),
 		IsrPrefix:            withoutSlash(coordinate.ISRPrefix()),
 		Prerenders:           facts.Prerenders,
-		PurgeSecret:          result.PurgeSecret,
+		Secrets:              router.ReleaseSecrets{PurgeSecret: result.PurgeSecret},
 		CreatedAt:            time.Now().Unix(),
 		ReleaseFingerprint:   entry.Release.Fingerprint(),
 		Variables:            declaredVariables(entry.Manifest.GetFramework().GetName(), values),
@@ -147,21 +146,17 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 		return err
 	}
 	if code != nil {
-		record.EdgeWorkers = code
-		record.Envelope = result.Envelope
+		record.EdgeBundle = code
+		record.Secrets.Envelope = result.Envelope
 		if env := variableEnv(values); len(env) > 0 {
-			record.Env = env
+			record.Secrets.Env = env
 		}
 	}
 	return r.ledger.putStaged(ctx, record)
 }
 
-func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResult) (*router.Code, error) {
-	if result.EdgeBundleKey == "" {
-		return nil, nil
-	}
-	compatibility := r.front.Facts().Compatibility
-	if compatibility.IsZero() {
+func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResult) (*router.EdgeBundle, error) {
+	if result.EdgeBundleKey == "" || !r.front.Facts().RunsCode {
 		return nil, nil
 	}
 	bundle, err := os.ReadFile(filepath.Join(buildoutput.AppRoot(r.artifactRoot, entry.App), filepath.FromSlash(edge.AppBundleFile)))
@@ -173,12 +168,8 @@ func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResul
 	if err != nil {
 		return nil, fmt.Errorf("read the edge bundle %s runs: %w", entry.App, err)
 	}
-	return &router.Code{
-		BundleKey:   result.EdgeBundleKey,
-		ID:          loaderID(bundle, compatibility.Date, compatibility.Flags),
-		CompatDate:  compatibility.Date,
-		CompatFlags: compatibility.Flags,
-	}, nil
+	digest := sha256.Sum256(bundle)
+	return &router.EdgeBundle{Key: result.EdgeBundleKey, Digest: hex.EncodeToString(digest[:])}, nil
 }
 
 func variableEnv(values provider.AppValues) map[string]string {
@@ -188,14 +179,6 @@ func variableEnv(values provider.AppValues) map[string]string {
 		env[processenv.AppFolderEnvVar] = values.Folder
 	}
 	return env
-}
-
-func loaderID(bundle []byte, compatDate string, compatFlags []string) string {
-	sum := sha256.New()
-	sum.Write(bundle)
-	sum.Write([]byte(compatDate))
-	sum.Write([]byte(strings.Join(compatFlags, ",")))
-	return hex.EncodeToString(sum.Sum(nil))
 }
 
 func revisionsOf(result provider.StackResult, app string, logical []string) map[string]string {

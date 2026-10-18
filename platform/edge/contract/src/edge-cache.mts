@@ -2,6 +2,12 @@ export const releaseTokenVar = "OCEL_RELEASE_TOKEN";
 
 export const edgeCacheVar = "OCEL_EDGE_CACHE";
 
+export const edgeCacheControlHeaderVar = "OCEL_EDGE_CACHE_CONTROL_HEADER";
+
+export function readEdgeCacheControlHeader(env: NodeJS.ProcessEnv): string | undefined {
+  return env[edgeCacheControlHeaderVar] || undefined;
+}
+
 export type EdgeCacheMode = "marked" | "all";
 
 export function readEdgeCacheMode(env: NodeJS.ProcessEnv): EdgeCacheMode | undefined {

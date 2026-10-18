@@ -11,7 +11,7 @@ import adapter from "../src/next-adapter.mjs";
 import { defaultImages, writePrerenderManifest } from "./fixtures.mjs";
 
 export interface OriginEdgeAppOptions {
-  edgeKind?: string;
+  edgeRunsCode?: boolean;
   allowDegraded?: string;
   middlewareEntryKey?: string;
   middlewareHandler?: string;
@@ -214,7 +214,7 @@ export async function buildOriginEdgeApp(
 
   const outputDir = join(projectDir, ".ocel/output");
   vi.stubEnv("OCEL_OUTPUT_DIR", outputDir);
-  vi.stubEnv("OCEL_EDGE_KIND", options.edgeKind ?? "cloudfront");
+  vi.stubEnv("OCEL_EDGE_RUNS_CODE", options.edgeRunsCode ? "1" : "");
   vi.stubEnv("OCEL_ALLOW_DEGRADED", options.allowDegraded ?? "");
 
   await adapter.onBuildComplete!(args as never);

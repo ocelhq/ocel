@@ -28,6 +28,7 @@ func newLaunchSpec(ctx context.Context, cfg *project.Project, pinning executable
 	return LaunchSpec{
 		BinaryPath:     binary,
 		ProviderConfig: providerConfig,
+		Edge:           cfg.EdgeSelection(),
 		ProviderName:   declared.ID,
 	}, nil
 }

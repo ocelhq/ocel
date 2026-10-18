@@ -136,9 +136,10 @@ func TestUsePreviewWildcardHandsTheSharedEntryNoGate(t *testing.T) {
 	}
 
 	for _, spec := range vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Specs() {
-		for name := range spec.Program.Worker.Secrets {
-			if strings.Contains(strings.ToUpper(name), "GATE") {
-				t.Errorf("the shared entry carries Secrets[%s], want no gate: each project's gate is published to where its worker reads it", name)
+		shown := fmt.Sprintf("%+v", spec)
+		for slug, record := range recordedGates {
+			if strings.Contains(shown, record.Gate.Key) {
+				t.Errorf("the shared entry's spec carries %s's gate key, want no gate: each project's gate is published to where its worker reads it", slug)
 			}
 		}
 	}

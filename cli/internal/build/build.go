@@ -224,9 +224,11 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				BuildID:       buildIDs[a.Name],
 				Folder:        a.Folder,
 				Env:           env.set,
-				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 				PublicKeys:    variables[a.Name].PublicKeys,
+
+				EdgeRunsCode:       host.EdgeRunsCode,
+				EdgeCacheTagLimits: newNodeCacheTagLimits(host.EdgeCacheTagLimits),
 
 				MaxFunctionBytes: host.MaxFunctionBytes,
 			})

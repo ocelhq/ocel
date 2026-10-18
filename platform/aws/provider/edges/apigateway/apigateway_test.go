@@ -168,8 +168,8 @@ func assertSet(t *testing.T, what string, got, want []string) {
 func TestTheAPIGatewayEdgeRunsNoCode(t *testing.T) {
 	t.Parallel()
 
-	if !newWorld().edge().Facts().Compatibility.IsZero() {
-		t.Error("the api-gateway edge names a compatibility, but it declares only streaming; nothing of the app's code runs at this edge")
+	if newWorld().edge().Facts().RunsCode {
+		t.Error("the api-gateway edge says it runs code, but it declares only streaming; nothing of the app's code runs at this edge")
 	}
 }
 

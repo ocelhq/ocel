@@ -107,12 +107,13 @@ func requireAccountID(doing string) (string, error) {
 func (p *cloudflare) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:             edge.AllNeeds(),
-		Compatibility:         edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
 		RunsCode:              true,
 		CachesResponses:       true,
+		CacheControlHeader:    "cloudflare-cdn-cache-control",
+		CacheTagLimits:        edge.CacheTagLimits{TagBytes: 1024, Tags: 1000, HeaderBytes: 16 * 1024},
+		PurgeBudget:           workersCachePurgeBudget,
 		InvalidatesByCacheTag: true,
 		Gates:                 true,
-		Entry:                 workerModule(entryBundle),
 		ServesUnbound:         true,
 		ProxiesRecords:        true,
 		ProxiedRecordNote:     "Turn the Cloudflare proxy (orange cloud) on for these records: each value is a placeholder Cloudflare answers behind.",
@@ -253,7 +254,7 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 
 type bootstrapWorker struct {
 	scriptName string
-	worker     edge.Worker
+	worker     workerScript
 	do         durableObjectWorker
 	what       string
 	offer      edge.OfferKind
@@ -271,7 +272,7 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 	if err != nil {
 		return nil, err
 	}
-	storeWorker := edge.Worker{Main: workerModule(releasesStoreBundle)}
+	storeWorker := workerScript{Main: mainModule(releasesStoreBundle)}
 
 	return []bootstrapWorker{
 		{
@@ -353,8 +354,8 @@ var (
 	releasesStoreBundle = bundles.ReleasesStore()
 )
 
-func workerModule(content []byte) edge.WorkerModule {
-	return edge.WorkerModule{
+func mainModule(content []byte) workerModule {
+	return workerModule{
 		Name:        "index.js",
 		ContentType: "application/javascript+module",
 		Content:     content,
@@ -364,7 +365,7 @@ func workerModule(content []byte) edge.WorkerModule {
 type upload struct {
 	accountID  string
 	scriptName string
-	worker     edge.Worker
+	worker     workerScript
 }
 
 func (p *cloudflare) uploadAssets(ctx context.Context, up upload) (string, error) {
@@ -373,7 +374,7 @@ func (p *cloudflare) uploadAssets(ctx context.Context, up upload) (string, error
 	}
 
 	manifest := make(map[string]workers.ScriptAssetUploadNewParamsManifest, len(up.worker.Assets))
-	assetByHash := make(map[string]edge.StaticAsset, len(up.worker.Assets))
+	assetByHash := make(map[string]workerAsset, len(up.worker.Assets))
 	for _, a := range up.worker.Assets {
 		hash := hashAsset(a)
 		manifest[a.Path] = workers.ScriptAssetUploadNewParamsManifest{
@@ -428,13 +429,13 @@ func (p *cloudflare) uploadAssets(ctx context.Context, up upload) (string, error
 	return completionJWT, nil
 }
 
-func hashAsset(a edge.StaticAsset) string {
+func hashAsset(a workerAsset) string {
 	ext := strings.TrimPrefix(path.Ext(a.Path), ".")
 	sum := sha256.Sum256([]byte(base64.StdEncoding.EncodeToString(a.Content) + ext))
 	return hex.EncodeToString(sum[:])[:32]
 }
 
-func buildAssetBatch(bucket []string, assetByHash map[string]edge.StaticAsset) ([]byte, string, error) {
+func buildAssetBatch(bucket []string, assetByHash map[string]workerAsset) ([]byte, string, error) {
 	buf := &bytes.Buffer{}
 	w := multipart.NewWriter(buf)
 	for _, hash := range bucket {
@@ -463,7 +464,7 @@ func (p *cloudflare) putScript(ctx context.Context, up upload, assetsJWT string)
 	return err
 }
 
-func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string, error) {
+func buildScriptMultipart(worker workerScript, assetsJWT string) ([]byte, string, error) {
 	includeAssets := assetsJWT != ""
 	metadata := map[string]any{
 		"main_module":         worker.Main.Name,
@@ -495,7 +496,7 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 	if err := writePart(w, "metadata", "", "application/json", metadataJSON); err != nil {
 		return nil, "", err
 	}
-	for _, mod := range append([]edge.WorkerModule{worker.Main}, worker.Modules...) {
+	for _, mod := range append([]workerModule{worker.Main}, worker.Modules...) {
 		if err := writePart(w, mod.Name, mod.Name, mod.ContentType, mod.Content); err != nil {
 			return nil, "", err
 		}
@@ -506,7 +507,7 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
-func buildWorkerExports(worker edge.Worker) map[string]any {
+func buildWorkerExports(worker workerScript) map[string]any {
 	exports := make(map[string]any, len(worker.CachedEntrypoints)+len(worker.DurableObjects))
 	for _, name := range worker.CachedEntrypoints {
 		exports[name] = map[string]any{"type": "worker", "cache": map[string]any{"enabled": true}}
@@ -519,12 +520,12 @@ func buildWorkerExports(worker edge.Worker) map[string]any {
 
 const codeLoaderBinding = "LOADER"
 
-func bindCodeLoader(worker edge.Worker) edge.Worker {
+func bindCodeLoader(worker workerScript) workerScript {
 	worker.LoaderBinding = codeLoaderBinding
 	return worker
 }
 
-func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
+func scriptBindings(worker workerScript, includeAssets bool) []map[string]any {
 	bindings := []map[string]any{}
 	if includeAssets && worker.AssetBinding != "" {
 		bindings = append(bindings, map[string]any{

@@ -78,11 +78,13 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 			"github.com/ocelhq/ocel/pkg/progress",
 			"github.com/ocelhq/ocel/pkg/refusal",
 			"github.com/ocelhq/ocel/pkg/router",
+			"github.com/ocelhq/ocel/pkg/typescript",
 		}},
 		{name: "runs", pattern: "./runs/...", open: buildsOnProvider("runs")},
 		{name: "seal", pattern: "./seal/...", open: []string{"github.com/ocelhq/ocel/pkg/environment", "github.com/ocelhq/ocel/pkg/seal"}},
 		{name: "stackrecords", pattern: "./stackrecords/...", open: providerBuildsOn},
 		{name: "topiclimits", pattern: "./topiclimits/...", open: providerBuildsOn},
+		{name: "typescript", pattern: "./typescript/...", open: []string{"github.com/ocelhq/ocel/pkg/typescript"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
