@@ -44,8 +44,8 @@ func (f *socketSource) Fetch(ctx context.Context) (map[string]string, error) {
 	return answer.Values, nil
 }
 
-func (f *socketSource) FreeSpace() (uint64, uint64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), live.FetchBudget)
+func (f *socketSource) FreeSpace(ctx context.Context) (uint64, uint64, error) {
+	ctx, cancel := context.WithTimeout(ctx, live.FetchBudget)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, AgentURL+variables.SpacePath, nil)
 	if err != nil {
@@ -68,10 +68,6 @@ func (f *socketSource) FreeSpace() (uint64, uint64, error) {
 		return 0, 0, fmt.Errorf("decode the box's volume size: %w", err)
 	}
 	return space.Free, space.Total, nil
-}
-
-func FreeSpace(socket string) func() (uint64, uint64, error) {
-	return over(socket).FreeSpace
 }
 
 func FromManifest(raw []byte, socket string) (*live.Values, error) {

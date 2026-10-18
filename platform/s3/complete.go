@@ -85,44 +85,20 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 
 	files := make([]sessionFile, len(sess.Files))
 	copy(files, sess.Files)
-	var rejected []string
-	failure := ""
-
 	for i, file := range files {
 		if file.State == stateSucceeded {
 			continue
 		}
-		out, err := s.cfg.Objects.HeadObject(ctx, &s3.HeadObjectInput{
-			Bucket: aws.String(granted.bucket),
-			Key:    aws.String(granted.key(file.Key)),
-		})
-		if missing(err) {
-			continue
-		}
+		landed, err := s.landingOf(ctx, granted, sess, file)
 		if err != nil {
-			return nil, storeError("head "+file.Key, err)
-		}
-		if aws.ToInt64(out.ContentLength) != file.Size || aws.ToString(out.ContentType) != file.MimeType {
-			rejected = append(rejected, file.Key)
-			failure = fmt.Sprintf("the object uploaded for %q does not match what was signed", file.Key)
-			continue
-		}
-		files[i].State = stateSucceeded
-	}
-
-	if len(rejected) > 0 {
-		if err := s.remove(ctx, granted, rejected); err != nil {
 			return nil, err
 		}
-		sess.Files = files
-		sess.Error = failure
-		for i := range sess.Files {
-			sess.Files[i].State = stateExpired
+		switch landed {
+		case landedOther:
+			return s.failSession(ctx, sess, granted, fmt.Sprintf("the object uploaded for %q does not match what was signed", file.Key), nil)
+		case landedAsSigned:
+			files[i].State = stateSucceeded
 		}
-		if err := s.close(ctx, &sess); err != nil {
-			return nil, err
-		}
-		return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_EXPIRED, Error: failure}, nil
 	}
 
 	sess.Files = files
@@ -145,7 +121,7 @@ func (s *Service) finish(ctx context.Context, sess session) (*bucketv1.CompleteU
 	if len(claimed) == 0 {
 		return succeeded, nil
 	}
-	if err := s.close(ctx, &sess); err != nil {
+	if err := s.writeSession(ctx, &sess); err != nil {
 		if errors.Is(err, errSessionMoved) {
 			return succeeded, nil
 		}
@@ -169,37 +145,85 @@ func (s *Service) disown(ctx context.Context, sess session, lost []sessionFile) 
 			}
 		}
 	}
-	if err := s.close(ctx, &sess); err != nil && !errors.Is(err, errSessionMoved) {
+	if err := s.writeSession(ctx, &sess); err != nil && !errors.Is(err, errSessionMoved) {
 		return err
 	}
 	return nil
 }
 
 func (s *Service) expire(ctx context.Context, sess session, granted scope) (*bucketv1.CompleteUploadResponse, error) {
-	var unconfirmed []string
+	var written []string
 	for _, file := range sess.Files {
-		if file.State != stateSucceeded {
-			unconfirmed = append(unconfirmed, file.Key)
+		if file.State == stateSucceeded {
+			continue
+		}
+		landed, err := s.landingOf(ctx, granted, sess, file)
+		if err != nil {
+			return nil, err
+		}
+		if landed == landedAsSigned {
+			written = append(written, file.Key)
 		}
 	}
-	if err := s.remove(ctx, granted, unconfirmed); err != nil {
-		return nil, err
-	}
+	return s.failSession(ctx, sess, granted, "upload expired", written)
+}
+
+func (s *Service) failSession(ctx context.Context, sess session, granted scope, reason string, written []string) (*bucketv1.CompleteUploadResponse, error) {
 	for i := range sess.Files {
 		sess.Files[i].State = stateExpired
 	}
-	sess.Error = "upload expired"
-	if err := s.close(ctx, &sess); err != nil && !errors.Is(err, errSessionMoved) {
+	sess.Error = reason
+	err := s.writeSession(ctx, &sess)
+	if errors.Is(err, errSessionMoved) {
+		return s.settledAnswer(ctx, sess.SessionID)
+	}
+	if err != nil {
 		return nil, err
 	}
-	return &bucketv1.CompleteUploadResponse{
-		State: bucketv1.UploadState_UPLOAD_STATE_EXPIRED,
-		Error: "upload expired",
-	}, nil
+	if err := s.remove(ctx, granted, written); err != nil {
+		return nil, err
+	}
+	return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_EXPIRED, Error: reason}, nil
 }
 
-func (s *Service) close(ctx context.Context, sess *session) error {
-	return s.writeSession(ctx, sess)
+func (s *Service) settledAnswer(ctx context.Context, id string) (*bucketv1.CompleteUploadResponse, error) {
+	sess, _, err := s.readGrantedSession(ctx, id)
+	if errors.Is(err, errSessionNotFound) {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("session not found"))
+	}
+	if err != nil {
+		return nil, err
+	}
+	state, reason := s.stateOf(sess)
+	return &bucketv1.CompleteUploadResponse{State: toProtoState(state), Error: reason}, nil
+}
+
+type landing int
+
+const (
+	notLanded landing = iota
+	landedAsSigned
+	landedOther
+)
+
+func (s *Service) landingOf(ctx context.Context, granted scope, sess session, file sessionFile) (landing, error) {
+	out, err := s.cfg.Objects.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(granted.bucket),
+		Key:    aws.String(granted.key(file.Key)),
+	})
+	if missing(err) {
+		return notLanded, nil
+	}
+	if err != nil {
+		return notLanded, storeError("head "+file.Key, err)
+	}
+	if out.LastModified == nil || out.LastModified.Unix() < sess.CreatedAt {
+		return notLanded, nil
+	}
+	if aws.ToInt64(out.ContentLength) != file.Size || aws.ToString(out.ContentType) != file.MimeType {
+		return landedOther, nil
+	}
+	return landedAsSigned, nil
 }
 
 func (s *Service) notify(ctx context.Context, sess session, files []sessionFile) (int, error) {

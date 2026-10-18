@@ -261,7 +261,7 @@ func newBuckets(manifest boxlive.Manifest, values *live.Values, socket, app stri
 		Granted:      manifest.Store.Granted,
 	}
 	if manifest.Store.Volume != "" {
-		cfg.Volume = source.FreeSpace(socket)
+		cfg.RefuseWrite = source.RefuseFullVolume(socket)
 	}
 	return s3store.NewDispatch(s3store.New(cfg), values, cfg.Callbacks), nil
 }

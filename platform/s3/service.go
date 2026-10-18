@@ -26,6 +26,8 @@ const (
 	maxPresignTTL = 7 * 24 * time.Hour
 	sessionTTL    = 2 * time.Hour
 
+	sessionRecordLifetime = 2 * sessionTTL
+
 	ReservedKeyPrefix = statedir.Name + "/"
 
 	SessionKeyPrefix = ReservedKeyPrefix + "sessions/"
@@ -55,15 +57,13 @@ type Poster interface {
 	Post(ctx context.Context, url string, body []byte) error
 }
 
-type FreeSpace func() (free uint64, total uint64, err error)
-
 type Config struct {
 	Tag          string
 	Objects      ObjectAPI
 	Internal     PresignAPI
 	External     func(context.Context) (PresignAPI, string)
 	Callbacks    Poster
-	Volume       FreeSpace
+	RefuseWrite  func(context.Context) error
 	PostPolicies bool
 	SweepUploads bool
 	Sessions     string
@@ -199,28 +199,15 @@ func (s *Service) signer(ctx context.Context, audience bucketv1.SignedAudience) 
 	return s.cfg.Internal, nil
 }
 
-const minimumFreeBytes = 1 << 30
-
-func (s *Service) roomToWrite() error {
-	if s.cfg.Volume == nil {
+func (s *Service) refuseWrite(ctx context.Context) error {
+	if s.cfg.RefuseWrite == nil {
 		return nil
 	}
-	free, total, err := s.cfg.Volume()
-	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("read the store volume's free space: %w", err))
-	}
-	floor := uint64(minimumFreeBytes)
-	if tenth := total / 10; tenth > floor {
-		floor = tenth
-	}
-	if free < floor {
-		return connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("the store volume has %d MiB free, below the %d MiB floor", free>>20, floor>>20))
-	}
-	return nil
+	return s.cfg.RefuseWrite(ctx)
 }
 
 func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {
-	if err := s.roomToWrite(); err != nil {
+	if err := s.refuseWrite(ctx); err != nil {
 		return nil, err
 	}
 	signer, err := s.signer(ctx, bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL)
@@ -269,6 +256,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUpload
 	if err := s.createSession(ctx, sess); err != nil {
 		return nil, err
 	}
+	s.inBackground("sessions", s.sweepSessions)
 	return &bucketv1.PresignUploadResponse{SessionId: sessionID, Files: targets}, nil
 }
 

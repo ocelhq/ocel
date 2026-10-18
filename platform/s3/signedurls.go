@@ -65,7 +65,7 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		}}, nil
 
 	case bucketv1.SignedOperation_SIGNED_OPERATION_PUT:
-		if err := s.roomToWrite(); err != nil {
+		if err := s.refuseWrite(ctx); err != nil {
 			return nil, err
 		}
 		if err := withinMetadataCap(c.GetMetadata()); err != nil {
@@ -96,7 +96,7 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		}}, nil
 
 	case bucketv1.SignedOperation_SIGNED_OPERATION_POST_UPLOAD:
-		if err := s.roomToWrite(); err != nil {
+		if err := s.refuseWrite(ctx); err != nil {
 			return nil, err
 		}
 		if err := withinMetadataCap(c.GetMetadata()); err != nil {
@@ -162,7 +162,7 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 }
 
 func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMultipartRequest) (*bucketv1.CreateMultipartResponse, error) {
-	if err := s.roomToWrite(); err != nil {
+	if err := s.refuseWrite(ctx); err != nil {
 		return nil, err
 	}
 	if err := withinMetadataCap(req.GetMetadata()); err != nil {
@@ -192,7 +192,7 @@ func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMulti
 }
 
 func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest) (*bucketv1.SignPartsResponse, error) {
-	if err := s.roomToWrite(); err != nil {
+	if err := s.refuseWrite(ctx); err != nil {
 		return nil, err
 	}
 	signer, err := s.signer(ctx, req.GetAudience())
