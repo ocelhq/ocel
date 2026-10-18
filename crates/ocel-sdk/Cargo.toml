@@ -18,7 +18,7 @@ name = "ocel"
 [features]
 postgres = ["dep:sqlx"]
 schemars = ["dep:schemars"]
-kv = ["dep:redis", "dep:rustls"]
+kv = ["dep:redis"]
 axum = ["dep:axum"]
 realtime = ["dep:base64", "dep:boon", "dep:ring"]
 
@@ -36,11 +36,12 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 http = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["client", "http1", "server"] }
-hyper-util = { version = "0.1", features = ["tokio"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "tls12"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 inventory = "0.3"
 redis = { version = "1.7", default-features = false, features = ["tokio-comp", "tokio-rustls-comp"], optional = true }
 ring = { version = "0.17", optional = true }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 schemars = { version = "1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
@@ -48,6 +49,7 @@ thiserror = "2"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "tls-rustls"], optional = true }
 tokio = { version = "1", default-features = false, features = ["io-util", "net", "rt", "rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "0.7", default-features = false, features = ["io"] }
+webpki-roots = "1"
 
 [dev-dependencies]
 schemars = "1"

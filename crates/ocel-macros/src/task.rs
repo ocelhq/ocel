@@ -330,7 +330,7 @@ pub(crate) fn expand_task(attribute: TokenStream, function: ItemFn) -> syn::Resu
             }
 
             #krate::inventory::submit! {
-                #krate::Handler::Run {
+                #krate::RunRegistration {
                     kind: #krate::RunKind::Task,
                     topic: #name,
                     name: #name,
@@ -475,7 +475,7 @@ fn expand_topic_consumer(
             }
 
             #krate::inventory::submit! {
-                #krate::Handler::Run {
+                #krate::RunRegistration {
                     kind: #krate::RunKind::Consumer,
                     topic: __OCEL_TOPIC.name(),
                     name: #name,

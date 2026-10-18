@@ -32,24 +32,26 @@ pub enum Outcome {
 pub type DeliveryFn = fn(Delivery) -> BoxFuture<'static, Outcome>;
 
 #[doc(hidden)]
-pub enum Handler {
-    Run {
-        kind: RunKind,
-        topic: &'static str,
-        name: &'static str,
-        worker: &'static str,
-        batch: bool,
-        deliver: DeliveryFn,
-    },
-    Worker {
-        name: &'static str,
-        concurrency: i32,
-        on_start: Option<OnStart>,
-        middleware: Option<WorkerMiddleware>,
-    },
+pub struct RunRegistration {
+    pub kind: RunKind,
+    pub topic: &'static str,
+    pub name: &'static str,
+    pub worker: &'static str,
+    pub batch: bool,
+    pub deliver: DeliveryFn,
 }
 
-inventory::collect!(Handler);
+inventory::collect!(RunRegistration);
+
+#[doc(hidden)]
+pub struct WorkerRegistration {
+    pub name: &'static str,
+    pub concurrency: i32,
+    pub on_start: Option<OnStart>,
+    pub middleware: Option<WorkerMiddleware>,
+}
+
+inventory::collect!(WorkerRegistration);
 
 type StepFuture<'a, T> = BoxFuture<'a, Result<T, RunError>>;
 type RunStep<P, R> = for<'a> fn(P, &'a Run) -> StepFuture<'a, R>;
@@ -236,14 +238,6 @@ fn report_hook_failure(run: &Run, hook: &str, result: Result<(), RunError>) {
     }
 }
 
-struct Registration {
-    kind: RunKind,
-    name: &'static str,
-    worker: &'static str,
-    batch: bool,
-    deliver: DeliveryFn,
-}
-
 #[derive(Default)]
 struct WorkerSetup {
     slots: Option<Arc<Semaphore>>,
@@ -268,7 +262,7 @@ impl WorkerSetup {
 
 #[derive(Default)]
 struct Registry {
-    registrations: HashMap<(String, String), Registration>,
+    runs: HashMap<(&'static str, &'static str), &'static RunRegistration>,
     workers: HashMap<String, WorkerSetup>,
     undeclared_worker: WorkerSetup,
 }
@@ -276,45 +270,20 @@ struct Registry {
 impl Registry {
     fn new() -> Self {
         let mut registry = Self::default();
-        for handler in inventory::iter::<Handler> {
-            match *handler {
-                Handler::Run {
-                    kind,
-                    topic,
-                    name,
-                    worker,
-                    batch,
-                    deliver,
-                } => {
-                    registry.registrations.insert(
-                        (topic.to_string(), name.to_string()),
-                        Registration {
-                            kind,
-                            name,
-                            worker: resolve_worker_name(worker),
-                            batch,
-                            deliver,
-                        },
-                    );
-                }
-                Handler::Worker {
-                    name,
-                    concurrency,
-                    on_start,
-                    middleware,
-                } => {
-                    registry.workers.insert(
-                        name.to_string(),
-                        WorkerSetup {
-                            slots: (concurrency > 0)
-                                .then(|| Arc::new(Semaphore::new(concurrency as usize))),
-                            on_start,
-                            started: OnceCell::new(),
-                            middleware,
-                        },
-                    );
-                }
-            }
+        for run in inventory::iter::<RunRegistration> {
+            registry.runs.insert((run.topic, run.name), run);
+        }
+        for worker in inventory::iter::<WorkerRegistration> {
+            registry.workers.insert(
+                worker.name.to_string(),
+                WorkerSetup {
+                    slots: (worker.concurrency > 0)
+                        .then(|| Arc::new(Semaphore::new(worker.concurrency as usize))),
+                    on_start: worker.on_start,
+                    started: OnceCell::new(),
+                    middleware: worker.middleware,
+                },
+            );
         }
         registry
     }
@@ -349,8 +318,8 @@ pub async fn deliver(worker: &str, body: &[u8]) -> (u16, Vec<u8>) {
     };
     let envelope = &received.envelope;
     let registry = ensure_registry();
-    let key = (envelope.topic.clone(), envelope.consumer.clone());
-    let Some(registration) = registry.registrations.get(&key) else {
+    let key = (envelope.topic.as_str(), envelope.consumer.as_str());
+    let Some(&registration) = registry.runs.get(&key) else {
         return answer_text(
             404,
             format!(
@@ -359,12 +328,13 @@ pub async fn deliver(worker: &str, body: &[u8]) -> (u16, Vec<u8>) {
             ),
         );
     };
-    if registration.worker != worker {
+    let registered_worker = resolve_worker_name(registration.worker);
+    if registered_worker != worker {
         return answer_text(
             404,
             format!(
-                "consumer '{}' of topic '{}' runs on worker '{}', and this is worker '{worker}'",
-                key.1, key.0, registration.worker
+                "consumer '{}' of topic '{}' runs on worker '{registered_worker}', and this is worker '{worker}'",
+                key.1, key.0
             ),
         );
     }
@@ -450,7 +420,7 @@ fn split_envelope(body: &[u8]) -> Result<ReceivedEnvelope, serde_json::Error> {
     })
 }
 
-fn join_payload_text(registration: &Registration, received: ReceivedEnvelope) -> String {
+fn join_payload_text(registration: &RunRegistration, received: ReceivedEnvelope) -> String {
     match (registration.batch, received.message_payloads.is_empty()) {
         (true, false) => {
             let texts: Vec<&str> = received
@@ -469,7 +439,7 @@ fn read_payload_text(payload: &Option<Box<RawValue>>) -> &str {
     payload.as_deref().map_or("null", RawValue::get)
 }
 
-fn read_run(registration: &Registration, envelope: &Envelope) -> Run {
+fn read_run(registration: &RunRegistration, envelope: &Envelope) -> Run {
     let first = envelope.messages.first();
     let (id, message) = match first {
         Some(delivery) => (
