@@ -68,8 +68,8 @@ describe("the binding conformance fixtures", () => {
       port: want.port,
       database: want.database,
       user: want.username,
-      password: want.password,
     });
+    expect((pool.options.password as () => string)()).toBe(want.password);
     expect(pool.connectionString).toBe(
       `postgres://${want.username}:${want.password}@${want.host}:${want.port}/${want.database}?sslmode=verify-full`,
     );

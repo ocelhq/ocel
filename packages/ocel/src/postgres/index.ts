@@ -1,5 +1,5 @@
 import { Pool, type PoolConfig } from "pg";
-import { lazyBinding } from "../binding/binding.js";
+import { getConfig, lazyBinding } from "../binding/binding.js";
 import { declare } from "../declaration/declare.js";
 import {
   type PostgresProperties,
@@ -28,6 +28,8 @@ export interface PostgresOptions {
  * `prefer` when neither names one, so the connection is encrypted whenever the
  * server accepts TLS. A record's CA is trusted and its tls server name verified,
  * url or not, as a record pointing at a port forward needs.
+ * Without a url, each new connection presents the record's current password,
+ * so a rotated password reaches an open pool.
  * `connectionString` is the same connection as a URL, for tools that take one.
  */
 export function postgres(id: string, options: PostgresOptions = {}): PgReturn {
@@ -38,7 +40,7 @@ export function postgres(id: string, options: PostgresOptions = {}): PgReturn {
     id,
     "postgres",
     (properties): PgReturn =>
-      Object.assign(new Pool(poolConfig(properties)), {
+      Object.assign(new Pool(poolConfig(properties, () => getConfig(id, "postgres").password)), {
         connectionString: connectionStringOf(properties),
       }),
   );
@@ -76,13 +78,13 @@ export function postgres(id: string, options: PostgresOptions = {}): PgReturn {
   return proxy;
 }
 
-function poolConfig(properties: PostgresProperties): PoolConfig {
+function poolConfig(properties: PostgresProperties, password: () => string): PoolConfig {
   const policy = tlsPolicyOf(properties);
   const negotiated = { ssl: false, stream: () => new PostgresSocket(policy) };
   if (properties.url) {
     return { connectionString: withoutTlsParams(properties.url), ...negotiated };
   }
-  const { host, port, database, username, password } = properties;
+  const { host, port, database, username } = properties;
   return { host, port, database, user: username, password, ...negotiated };
 }
 

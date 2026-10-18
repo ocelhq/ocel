@@ -17,7 +17,7 @@ vi.mock("node:module", () => {
 
 const run = vi.mocked(spawnSync);
 
-const target = { project: "/repo/app", tier: "production" } as const;
+const target = { project: ".", tier: "production" } as const;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -27,7 +27,7 @@ beforeEach(() => {
 
 describe("reaching the ocel CLI", () => {
   it("runs the ocel the project itself resolves", () => {
-    runBindings(["ls"], target);
+    runBindings(["ls"], target, "/repo/app");
 
     expect(run).toHaveBeenCalledWith(
       process.execPath,
@@ -41,7 +41,7 @@ describe("reaching the ocel CLI", () => {
       throw new Error("Cannot find module 'ocel/package.json'");
     });
 
-    expect(() => runBindings(["ls"], target)).toThrow(
+    expect(() => runBindings(["ls"], target, "/repo/app")).toThrow(
       "@ocel/sst runs the ocel CLI in /repo/app, and ocel is not installed there. Add ocel to that project's dependencies.",
     );
   });
@@ -49,11 +49,11 @@ describe("reaching the ocel CLI", () => {
   it("says so when the CLI dies without a word", () => {
     run.mockReturnValue({ status: 3, stderr: "  \n" } as never);
 
-    expect(() => runBindings(["ls"], target)).toThrow(/exited 3 without saying why/);
+    expect(() => runBindings(["ls"], target, "/repo/app")).toThrow(/exited 3 without saying why/);
   });
 
   it("refuses a target no binding could be published to before spawning anything", () => {
-    expect(() => runBindings(["ls"], { ...target, project: "" })).toThrow(
+    expect(() => runBindings(["ls"], { ...target, project: "" }, "/repo/app")).toThrow(
       /an ocel project is required/,
     );
     expect(run).not.toHaveBeenCalled();

@@ -10,6 +10,8 @@ vi.mock("../runtime/rpc", () => ({
 
 const { postgres, connectionStringFor, UnprovisionedResourceError } = await import("./index.js");
 
+const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
+
 describe("postgres()", () => {
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
@@ -41,11 +43,43 @@ describe("postgres()", () => {
       port: 6543,
       database: "orders",
       user: "app user",
-      password: "p@ss:word/with#odd?chars",
     });
+    expect((pool.options.password as () => string)()).toBe("p@ss:word/with#odd?chars");
     expect(pool.connectionString).toBe(
       "postgres://app%20user:p%40ss%3Aword%2Fwith%23odd%3Fchars@orders.internal:6543/orders",
     );
+  });
+
+  it("presents the password of the binding's latest generation on each new connection", async () => {
+    const live = globalThis as Record<symbol, unknown>;
+    const publish = (generation: number, password: string) => {
+      live[LIVE_VALUES] = {
+        generation,
+        values: {
+          OCEL_RESOURCE_POSTGRES_orders: JSON.stringify({
+            name: "orders",
+            postgres: { host: "db", port: 5432, database: "d", username: "u", password },
+          }),
+        },
+      };
+    };
+    try {
+      publish(1, "first");
+      const pool = postgres("orders");
+      const presented = async () => {
+        const { password } = new Client(pool.options) as unknown as {
+          password: string | (() => string | Promise<string>);
+        };
+        return typeof password === "function" ? await password() : password;
+      };
+      expect(await presented()).toBe("first");
+
+      publish(2, "rotated");
+
+      expect(await presented()).toBe("rotated");
+    } finally {
+      delete live[LIVE_VALUES];
+    }
   });
 
   it("connects through a record's url verbatim when it has one", () => {

@@ -1,14 +1,16 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { checkTarget, runBindings, type Target } from "./cli.js";
 import { publishedCustom } from "./custom.js";
 import type { Grant, SSTInclude } from "./grants.js";
 import { type DescribedPostgres, publishedPostgres } from "./postgres.js";
 
-/** An SST component, as SST already describes itself to its own binding consumers. */
+/** An SST component, as SST links it to its own consumers: its properties and the permissions it includes. */
 export interface SSTPostgresBindable {
-  getSSTBinding(): {
+  getSSTLink(): {
     properties: Record<string, unknown>;
-    include?: SSTInclude[];
+    include?: { type: string; [key: string]: unknown }[];
   };
 }
 
@@ -39,6 +41,7 @@ export interface BindOptions {
 interface BindingInputs extends Target {
   name: string;
   owner: string;
+  directory: string;
 }
 
 interface PostgresInputs extends BindingInputs, DescribedPostgres {}
@@ -73,7 +76,12 @@ function bindingProvider<I extends BindingInputs>(
   });
 
   const set = (inputs: I) =>
-    runBindings(["set", "--owner", inputs.owner], inputs, `${JSON.stringify(recordFor(inputs))}\n`);
+    runBindings(
+      ["set", "--owner", inputs.owner],
+      inputs,
+      inputs.directory,
+      `${JSON.stringify(recordFor(inputs))}\n`,
+    );
 
   return {
     async create(inputs: I) {
@@ -96,7 +104,7 @@ function bindingProvider<I extends BindingInputs>(
     },
 
     async delete(_id: string, props: BindingState) {
-      runBindings(["rm", props.name], props);
+      runBindings(["rm", props.name], props, path.resolve(configRoot(), props.project));
     },
   };
 }
@@ -122,8 +130,8 @@ export const customProvider = bindingProvider<CustomInputs>(
  * The name is this app's own, published for an ocel app's config to bind a
  * declared resource to — `postgres("sst-pg-orders", …)` here, and
  * `"bindings": { "postgres": { "orders": "@sst-pg-orders" } }` in `ocel.json` —
- * and the resource is either an SST component, whose own binding description is
- * passed through, or the postgres fields written out by hand. `tier` defaults to production, `environment` names one preview
+ * and the resource is either an SST component, whose own link is passed
+ * through with the permissions it includes, or the postgres fields written out by hand. `tier` defaults to production, `environment` names one preview
  * environment, and `project` is the directory containing `ocel.json`, which is
  * the SST config root unless it is given.
  */
@@ -133,16 +141,12 @@ export function postgres(
   opts?: BindOptions,
 ): void {
   const util = host();
-  const target: Target = {
-    project: opts?.project ?? configRoot(),
-    tier: opts?.tier ?? "production",
-    environment: opts?.environment,
-  };
-  checkTarget(target);
+  const { target, directory } = targetFor(opts);
 
   const logical = `ocel-binding-${name}`;
   new util.dynamic.Resource(postgresProvider, logical, {
     ...target,
+    directory,
     name,
     owner: ownerFor(util, logical),
     ...describe(resource),
@@ -171,20 +175,28 @@ export type CustomProperties = Record<string, Input<unknown>>;
  */
 export function custom(name: string, properties: CustomProperties, opts?: BindOptions): void {
   const util = host();
-  const target: Target = {
-    project: opts?.project ?? configRoot(),
-    tier: opts?.tier ?? "production",
-    environment: opts?.environment,
-  };
-  checkTarget(target);
+  const { target, directory } = targetFor(opts);
 
   const logical = `ocel-binding-${name}`;
   new util.dynamic.Resource(customProvider, logical, {
     ...target,
+    directory,
     name,
     owner: ownerFor(util, logical),
     properties,
   });
+}
+
+function targetFor(opts: BindOptions | undefined): { target: Target; directory: string } {
+  const root = configRoot();
+  const directory = path.resolve(root, opts?.project ?? root);
+  const target: Target = {
+    project: path.relative(root, directory) || ".",
+    tier: opts?.tier ?? "production",
+    environment: opts?.environment,
+  };
+  checkTarget(target);
+  return { target, directory };
 }
 
 function idFor(inputs: BindingInputs): string {
@@ -200,11 +212,11 @@ function replacesFor(olds: BindingState, news: BindingInputs): string[] {
 const bindingFields = ["host", "port", "database", "username", "password"] as const;
 
 function describe(resource: SSTPostgresBindable | DescribedPostgresResource): DescribedPostgres {
-  if (typeof (resource as SSTPostgresBindable).getSSTBinding === "function") {
-    const described = (resource as SSTPostgresBindable).getSSTBinding();
+  if ("getSSTLink" in resource) {
+    const link = resource.getSSTLink();
     return {
-      properties: pick(described.properties),
-      include: described.include,
+      properties: pick(link.properties),
+      include: link.include as SSTInclude[] | undefined,
     };
   }
   const described = resource as DescribedPostgresResource;
@@ -252,11 +264,24 @@ function host(): DynamicHost {
 
 function configRoot(): string {
   const cli = typeof $cli === "undefined" ? undefined : $cli;
-  const root = cli?.paths?.root;
+  const root = cli?.paths?.root ?? configAbove(process.cwd());
   if (!root) {
     throw new Error(
-      "@ocel/sst publishes into the ocel project containing ocel.json, and SST named no config root here; pass `project` to say which directory contains it",
+      `@ocel/sst places an ocel project relative to the SST config root, and SST named none here, nor is there an ${sstConfig} above ${process.cwd()}; bind from inside the run() of your ${sstConfig}`,
     );
   }
   return root;
+}
+
+const sstConfig = "sst.config.ts";
+
+function configAbove(start: string): string | undefined {
+  for (let dir = start; ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, sstConfig))) {
+      return dir;
+    }
+    if (path.dirname(dir) === dir) {
+      return undefined;
+    }
+  }
 }

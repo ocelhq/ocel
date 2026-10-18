@@ -97,16 +97,14 @@ belongs to whoever published it — the URN of the resource the call creates —
 stacks publishing `orders` into one project is refused rather than silently handing
 every app bound to that name another database.
 
-## `bind.custom(name, { properties }, opts?)`
+## `bind.custom(name, properties, opts?)`
 
 Publishes values ocel neither types nor delivers, for a transform to read:
 
 ```ts
 bind.custom("network", {
-  properties: {
-    subnetIds: vpc.privateSubnetIds,
-    securityGroupIds: [securityGroup.id],
-  },
+  subnetIds: vpc.privateSubnetIds,
+  securityGroupIds: [securityGroup.id],
 });
 ```
 
@@ -114,10 +112,14 @@ A transform module in the ocel project reads them by name:
 
 ```ts
 export default defineTransform(({ bindings }) => ({
-  function: {
-    vpc: {
-      subnetIds: bindings.network.subnetIds,
-      securityGroupIds: bindings.network.securityGroupIds,
+  aws: {
+    function: {
+      lambda: {
+        vpcConfig: {
+          subnetIds: bindings.custom.network.subnetIds,
+          securityGroupIds: bindings.custom.network.securityGroupIds,
+        },
+      },
     },
   },
 }));

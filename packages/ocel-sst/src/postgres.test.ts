@@ -24,7 +24,7 @@ const fixture = JSON.parse(
 const record = fixture.binding;
 
 function sstPostgres(properties: Record<string, unknown>) {
-  return { getSSTBinding: () => ({ properties }) };
+  return { getSSTLink: () => ({ properties }) };
 }
 
 describe("the record a postgres binding publishes as", () => {
@@ -39,7 +39,7 @@ describe("the record a postgres binding publishes as", () => {
     const { tlsMode, tlsCa, ...published } = record.postgres;
 
     expect(
-      publishedPostgres(record.name, { ...resource.getSSTBinding(), grants: fixture.grants }),
+      publishedPostgres(record.name, { ...resource.getSSTLink(), grants: fixture.grants }),
     ).toEqual({ binding: { ...record, postgres: published, source }, grants: fixture.grants });
   });
 
