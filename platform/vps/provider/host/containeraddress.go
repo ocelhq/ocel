@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func (h *Host) ForwardToContainer(ctx context.Context, name, port string) (string, func(), error) {
@@ -13,30 +15,26 @@ func (h *Host) ForwardToContainer(ctx context.Context, name, port string) (strin
 	if err != nil {
 		return "", nil, err
 	}
-	live, err := h.dial(ctx)
-	if err != nil {
-		return "", nil, err
-	}
-	return live.ForwardPort(ctx, net.JoinHostPort(address, port))
+	return h.ForwardPort(ctx, net.JoinHostPort(address, port))
 }
 
 func containerAddressCommand(name string) string {
-	return "docker inspect --type container --format " + quoted("{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}") + " " + quoted(name)
+	return "docker inspect --type container --format " + shell.Quote("{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}") + " " + shell.Quote(name)
 }
 
 func (h *Host) ReadContainerAddress(ctx context.Context, name string) (string, error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return "", err
 	}
-	said, err := h.ran(ctx, "read the address of container "+name, containerAddressCommand(name), nil, elevation)
+	said, err := h.Run(ctx, elevation, "read the address of container "+name, containerAddressCommand(name), nil)
 	if err != nil {
 		return "", err
 	}
 	addresses := strings.Fields(said)
 	if len(addresses) == 0 {
 		return "", refusal.Refuse(refusal.CodeNotReady,
-			"container %s on %s holds no address on any network, so it is not running and no port can be forwarded to it", name, h.named())
+			"container %s on %s holds no address on any network, so it is not running and no port can be forwarded to it", name, h.Named())
 	}
 	return addresses[0], nil
 }

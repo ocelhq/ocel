@@ -1,0 +1,67 @@
+package boxapi
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
+)
+
+const EnvVar = "OCEL_LIVE_MANIFEST"
+
+const (
+	StoreSecretKey = "ocel.store.secretAccessKey"
+	StorePublicKey = "ocel.store.publicBaseUrl"
+)
+
+type Store struct {
+	Env          string   `json:"env"`
+	Endpoint     string   `json:"endpoint"`
+	Region       string   `json:"region"`
+	AccessKeyID  string   `json:"accessKeyId"`
+	Sessions     string   `json:"sessions,omitempty"`
+	Granted      []string `json:"granted,omitempty"`
+	PathStyle    bool     `json:"pathStyle,omitempty"`
+	SweepUploads bool     `json:"sweepUploads,omitempty"`
+	Pointer      string   `json:"pointer,omitempty"`
+	Volume       string   `json:"volume,omitempty"`
+	Sealed       string   `json:"sealed"`
+}
+
+type Manifest struct {
+	Slug               string         `json:"slug"`
+	Tier               string         `json:"tier"`
+	Environment        string         `json:"environment,omitempty"`
+	Keys               []live.Key     `json:"keys,omitempty"`
+	Bindings           []live.Binding `json:"bindings,omitempty"`
+	Store              *Store         `json:"store,omitempty"`
+	Queue              string         `json:"queue,omitempty"`
+	RealtimePublishURL string         `json:"realtimePublishUrl,omitempty"`
+}
+
+func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }
+
+func Render(m Manifest) ([]byte, error) {
+	if !m.Live() {
+		return nil, nil
+	}
+	if m.Slug == "" {
+		return nil, fmt.Errorf("the live-value manifest names %d keys but no project slug", len(m.Keys)+len(m.Bindings))
+	}
+	switch environment.Tier(m.Tier) {
+	case environment.TierProduction, environment.TierPreview:
+	default:
+		return nil, fmt.Errorf("the live-value manifest names tier %q, want %s or %s",
+			m.Tier, environment.TierProduction, environment.TierPreview)
+	}
+	return json.Marshal(m)
+}
+
+func Parse(data []byte) (Manifest, error) {
+	var m Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return Manifest{}, fmt.Errorf("decode the live-value manifest: %w", err)
+	}
+	return m, nil
+}

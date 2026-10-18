@@ -19,9 +19,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/enginetest"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
@@ -69,14 +70,14 @@ func aLiveProxy(t *testing.T) liveProxy {
 	t.Cleanup(func() { taken(t, board) })
 	dir := enginetest.BindSource(t)
 
-	arch, err := Architecture(runtime.GOARCH)
+	arch, err := ssh.Architecture(runtime.GOARCH)
 	if err != nil {
 		t.Skipf("no switchboard is built for a machine reporting %q", runtime.GOARCH)
 	}
 	proxy := liveProxy{name: name, board: board, network: network, dir: dir}
 	proxied, routing, switching := filepath.Join(dir, "proxy"), filepath.Join(dir, "routing"), filepath.Join(dir, "switchboard")
-	proxy.pins, proxy.table = filepath.Join(dir, "pins"), filepath.Join(routing, filepath.Base(live.RoutingTable))
-	proxy.binary = filepath.Join(switching, switchboard.Name)
+	proxy.pins, proxy.table = filepath.Join(dir, "pins"), filepath.Join(routing, filepath.Base(boxapi.RoutingTable))
+	proxy.binary = filepath.Join(switching, boxapi.Switchboard)
 	for _, made := range []string{proxied, filepath.Join(proxied, "data"), routing, switching, proxy.pins, filepath.Join(dir, "control"), filepath.Join(dir, "front"), filepath.Join(dir, "connector")} {
 		if err := os.MkdirAll(made, 0o755); err != nil {
 			t.Fatal(err)
@@ -89,20 +90,20 @@ func aLiveProxy(t *testing.T) liveProxy {
 	}
 	runnable(t, proxy.binary, switchboardBinary(arch), 0o755)
 	proxy.here = strings.NewReplacer(
-		switchboard.FrontDir, filepath.Join(dir, "front"),
-		switchboard.ControlDir, filepath.Join(dir, "control"),
+		boxapi.FrontDir, filepath.Join(dir, "front"),
+		boxapi.SwitchboardControlDir, filepath.Join(dir, "control"),
 		SwitchboardDir, switching,
 		ConnectorRun, filepath.Join(dir, "connector"),
 		caddy.PinsDir, proxy.pins,
 		proxyRoot, proxied,
-		live.RoutingDir, routing,
+		boxapi.RoutingDir, routing,
 		routingLock, dir,
-		quoted(caddy.Container), quoted(name),
-		quoted(SwitchboardContainer), quoted(board),
-		quoted(TunnelNetwork+":"+switchboard.TunnelListenPort), quoted("127.0.0.1:"+switchboard.TunnelListenPort),
-		quoted(TunnelNetwork), quoted(tunneling),
+		shell.Quote(caddy.Container), shell.Quote(name),
+		shell.Quote(SwitchboardContainer), shell.Quote(board),
+		shell.Quote(TunnelNetwork+":"+boxapi.TunnelListenPort), shell.Quote("127.0.0.1:"+boxapi.TunnelListenPort),
+		shell.Quote(TunnelNetwork), shell.Quote(tunneling),
 		`"`+TunnelNetwork+`"`, `"`+tunneling+`"`,
-		quoted(ProxyNetwork), quoted(network),
+		shell.Quote(ProxyNetwork), shell.Quote(network),
 		`"`+ProxyNetwork+`"`, `"`+network+`"`,
 		unprivilegedHere(t), "",
 	).Replace
@@ -126,7 +127,7 @@ func unprivilegedHere(t *testing.T) string {
 		return ""
 	}
 	t.Log("this engine refuses to exec anything under no-new-privileges, so the switchboard runs here without it")
-	return quoted("--security-opt") + " " + quoted(noNewPrivileges) + " "
+	return shell.Quote("--security-opt") + " " + shell.Quote(noNewPrivileges) + " "
 }
 
 var pinnable = sync.OnceValue(func() bool {
@@ -149,7 +150,7 @@ func taken(t *testing.T, name string) {
 
 func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 	proxy := aLiveProxy(t)
-	arch, _ := Architecture(runtime.GOARCH)
+	arch, _ := ssh.Architecture(runtime.GOARCH)
 
 	for _, target := range []struct {
 		name  string
@@ -192,7 +193,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 
 func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.T) {
 	proxy := aLiveProxy(t)
-	arch, _ := Architecture(runtime.GOARCH)
+	arch, _ := ssh.Architecture(runtime.GOARCH)
 
 	for _, target := range []struct {
 		name     string
@@ -349,7 +350,7 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 		return said
 	}
 
-	if said := ask("unclaimed.example.com"); said.StatusCode != http.StatusNotFound || said.Header.Get(router.HeaderRouter) != string(switchboard.RouterKind) {
+	if said := ask("unclaimed.example.com"); said.StatusCode != http.StatusNotFound || said.Header.Get(router.HeaderRouter) != string(boxapi.SwitchboardRouter) {
 		t.Errorf("a hostname nothing on this box claims was answered %d with %s: %q, want a 404 naming this edge",
 			said.StatusCode, router.HeaderRouter, said.Header.Get(router.HeaderRouter))
 	}
@@ -362,8 +363,8 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 		t.Errorf("the hostname %q claims was answered %d %q, want the body of the app running on %s: the switchboard is handed the directory the table is renamed into, and one handed the file keeps routing the seed",
 			surface, said.StatusCode, read, cutOver.Routes[0].Upstream)
 	}
-	if said.Header.Get(router.HeaderRouter) != string(switchboard.RouterKind) {
-		t.Errorf("the surface's own route answered %s: %q, want %q", router.HeaderRouter, said.Header.Get(router.HeaderRouter), switchboard.RouterKind)
+	if said.Header.Get(router.HeaderRouter) != string(boxapi.SwitchboardRouter) {
+		t.Errorf("the surface's own route answered %s: %q, want %q", router.HeaderRouter, said.Header.Get(router.HeaderRouter), boxapi.SwitchboardRouter)
 	}
 }
 
@@ -424,15 +425,15 @@ func TestTheFrontProxyNamesTheRouterOnItsOwnAnswerWhileTheSwitchboardIsDown(t *t
 		return said
 	}
 
-	if said := ask(); said.StatusCode != http.StatusOK || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{string(switchboard.RouterKind)}) {
-		t.Errorf("%s was answered %d naming the router %q, want 200 naming it once as %s", claimed, said.StatusCode, said.Header.Values(router.HeaderRouter), switchboard.RouterKind)
+	if said := ask(); said.StatusCode != http.StatusOK || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{string(boxapi.SwitchboardRouter)}) {
+		t.Errorf("%s was answered %d naming the router %q, want 200 naming it once as %s", claimed, said.StatusCode, said.Header.Values(router.HeaderRouter), boxapi.SwitchboardRouter)
 	}
 	if out, err := exec.Command(dockerEngine, "stop", "--time", "1", proxy.board).CombinedOutput(); err != nil {
 		t.Fatalf("stop the switchboard: %v\n%s", err, out)
 	}
-	if said := ask(); said.StatusCode != http.StatusBadGateway || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{string(switchboard.RouterKind)}) {
+	if said := ask(); said.StatusCode != http.StatusBadGateway || !slices.Equal(said.Header.Values(router.HeaderRouter), []string{string(boxapi.SwitchboardRouter)}) {
 		t.Errorf("with the switchboard down %s was answered %d naming the router %q, want caddy's own 502 naming it as %s: a bootstrap recreates the switchboard under a running caddy, and the bind's probe reads the router off every answer the box gives",
-			claimed, said.StatusCode, said.Header.Values(router.HeaderRouter), switchboard.RouterKind)
+			claimed, said.StatusCode, said.Header.Values(router.HeaderRouter), boxapi.SwitchboardRouter)
 	}
 }
 

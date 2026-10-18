@@ -11,16 +11,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func byHand(machine host.Conn) *vps.Provider {
+func byHand(machine ssh.Conn) *vps.Provider {
 	return vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Manual: &vps.Manual{}}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 }
 
@@ -51,7 +51,7 @@ func TestACertificateYourCaddyServesSaysYourCaddyRenewsIt(t *testing.T) {
 	served := selfSigned(t, []string{"shop.example.com"}, 60*24*time.Hour)
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Caddy: &vps.Caddy{Directory: "/etc/caddy/ocel.d"}}},
-		func(context.Context) (host.Conn, error) { return &box{leaf: string(served)}, nil },
+		func(context.Context) (ssh.Conn, error) { return &box{leaf: string(served)}, nil },
 	)
 	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "shop.example.com", certificateFor(t, p, "shop.example.com"))
 	if err != nil {
@@ -69,7 +69,7 @@ func TestACertificateYourTraefikServesIsRenewedThroughTheResolverThatOrderedIt(t
 	machine := &box{leaf: string(served)}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Traefik: &vps.Traefik{Directory: "/etc/traefik/dynamic", Resolver: "le"}}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	cert := certificateFor(t, p, "shop.example.com")
 	health, err := p.Certificates().Inspect(context.Background(), edge.None, "", "shop.example.com", cert)
@@ -88,7 +88,7 @@ func TestAHostnameOnABoxYourProxyFrontsIsProbedFromTheBoxItself(t *testing.T) {
 	p := byHand(machine)
 	p.System = resolvesNothing{}
 	served, err := p.ServingRouter(context.Background(), "shop.example.com")
-	if err != nil || served != switchboard.RouterKind {
+	if err != nil || served != boxapi.SwitchboardRouter {
 		t.Fatalf("Serving() = %q, %v, want the box's own probe to answer switchboard", served, err)
 	}
 	if !slices.ContainsFunc(machine.ran, func(command string) bool { return strings.Contains(command, "'probe' 'shop.example.com'") }) {

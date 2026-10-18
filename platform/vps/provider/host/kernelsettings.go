@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -29,7 +30,7 @@ func kernelWarnings(output string) []string {
 }
 
 func (h *Host) warnOfKernelSettings(ctx context.Context, progress progress.Log) {
-	output, err := h.ran(ctx, "read the kernel settings Valkey checks", kernelSettingsCommand, nil, "")
+	output, err := h.Run(ctx, ssh.Login, "read the kernel settings Valkey checks", kernelSettingsCommand, nil)
 	if err != nil {
 		return
 	}

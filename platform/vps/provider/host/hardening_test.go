@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 func capabilitiesAdded(argv []string) []string {
@@ -20,14 +22,14 @@ func TestAnAppContainerIsConfinedAndItsLogIsRotated(t *testing.T) {
 	t.Parallel()
 
 	argv := containerRun(valued(), handedTo(valued()))
-	command := words(argv)
+	command := shell.Words(argv)
 	for what, wanted := range map[string]string{
-		"every capability dropped before any is handed back": quoted("--cap-drop") + " " + quoted("ALL"),
-		"no privilege gained past what it started with":      quoted("--security-opt") + " " + quoted(noNewPrivileges),
-		"a ceiling on the processes it may fork":             quoted("--pids-limit") + " " + quoted(pidsLimit),
-		"a log driver that rotates":                          quoted("--log-driver") + " " + quoted(logDriver),
-		"a size each log file is rotated at":                 quoted("--log-opt") + " " + quoted("max-size="+logMaxSize),
-		"a count of log files kept":                          quoted("--log-opt") + " " + quoted("max-file="+logMaxFiles),
+		"every capability dropped before any is handed back": shell.Quote("--cap-drop") + " " + shell.Quote("ALL"),
+		"no privilege gained past what it started with":      shell.Quote("--security-opt") + " " + shell.Quote(noNewPrivileges),
+		"a ceiling on the processes it may fork":             shell.Quote("--pids-limit") + " " + shell.Quote(pidsLimit),
+		"a log driver that rotates":                          shell.Quote("--log-driver") + " " + shell.Quote(logDriver),
+		"a size each log file is rotated at":                 shell.Quote("--log-opt") + " " + shell.Quote("max-size="+logMaxSize),
+		"a count of log files kept":                          shell.Quote("--log-opt") + " " + shell.Quote("max-file="+logMaxFiles),
 	} {
 		if !strings.Contains(command, wanted) {
 			t.Errorf("starting a container runs %q, which includes no %s (%s)", command, what, wanted)
@@ -51,16 +53,16 @@ func TestTheProxyIsConfinedToBindingItsPortsAndItsLogIsRotated(t *testing.T) {
 	t.Parallel()
 
 	argv := frontProxy().run()
-	command := words(argv)
-	if strings.Contains(command, quoted(noNewPrivileges)) {
+	command := shell.Words(argv)
+	if strings.Contains(command, shell.Quote(noNewPrivileges)) {
 		t.Errorf("the proxy is run under %s, and its image ships cap_net_bind_service=ep as a file capability on the binary, which the kernel refuses to exec once no_new_privs is set:\n%s", noNewPrivileges, command)
 	}
 	for _, wanted := range []string{
-		quoted("--cap-drop") + " " + quoted("ALL"),
-		quoted("--pids-limit") + " " + quoted(pidsLimit),
-		quoted("--log-driver") + " " + quoted(logDriver),
-		quoted("--log-opt") + " " + quoted("max-size="+logMaxSize),
-		quoted("--log-opt") + " " + quoted("max-file="+logMaxFiles),
+		shell.Quote("--cap-drop") + " " + shell.Quote("ALL"),
+		shell.Quote("--pids-limit") + " " + shell.Quote(pidsLimit),
+		shell.Quote("--log-driver") + " " + shell.Quote(logDriver),
+		shell.Quote("--log-opt") + " " + shell.Quote("max-size="+logMaxSize),
+		shell.Quote("--log-opt") + " " + shell.Quote("max-file="+logMaxFiles),
 	} {
 		if !strings.Contains(command, wanted) {
 			t.Errorf("the proxy is run without %s:\n%s", wanted, command)

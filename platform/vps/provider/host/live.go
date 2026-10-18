@@ -6,8 +6,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -16,8 +18,8 @@ const (
 	LiveService    = "ocel-live.service"
 	liveSocketFile = "/etc/systemd/system/" + LiveSocketUnit
 	liveUnitFile   = "/etc/systemd/system/" + LiveService
-	LiveSocketDir  = live.SocketDir
-	LiveSocket     = live.SocketPath
+	LiveSocketDir  = boxapi.SocketDir
+	LiveSocket     = boxapi.SocketPath
 	liveDirTmpfs   = "rw,noexec,nosuid,size=8m"
 )
 
@@ -84,7 +86,7 @@ func ContainerArch(app, declared, runs string) (string, error) {
 }
 
 func ContainerRuntime(architecture string) ([]byte, error) {
-	named, err := Architecture(architecture)
+	named, err := ssh.Architecture(architecture)
 	if err != nil {
 		return nil, err
 	}
@@ -96,12 +98,12 @@ func (h *Host) IsAgentCurrent(ctx context.Context) (bool, error) {
 }
 
 func (h *Host) isCurrent(ctx context.Context, what string, newItem func(arch string) Item) (bool, error) {
-	arch, err := h.arch(ctx)
+	arch, err := h.Arch(ctx)
 	if err != nil {
 		return false, err
 	}
 	item := newItem(arch)
-	rendered, err := h.reach(ctx, what, survey([]Item{item}), nil)
+	rendered, err := h.Run(ctx, ssh.RootWhenAble, what, survey([]Item{item}), nil)
 	if err != nil {
 		return false, err
 	}
@@ -143,6 +145,6 @@ func liveRemovals() []removal {
 }
 
 func unitRemoval(name string) string {
-	unit := quoted(name)
+	unit := shell.Quote(name)
 	return "if systemctl cat " + unit + " >/dev/null 2>&1; then systemctl disable --now " + unit + " >/dev/null 2>&1 || true; fi"
 }

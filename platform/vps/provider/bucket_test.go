@@ -18,11 +18,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const recordedRootKey = "9a3b48264c5d6e7f8091a2b3c4d5e6f7"
@@ -234,31 +233,31 @@ func bindingBucket() provider.Binding {
 	}
 }
 
-func storeManifest(t *testing.T, machine *box, options vps.Options) variables.Manifest {
+func storeManifest(t *testing.T, machine *box, options vps.Options) boxapi.Manifest {
 	t.Helper()
 	app := anApp()
 	app.Values = provider.AppValues{Bindings: []provider.Binding{bindingBucket()}}
-	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
+	p := vps.ProviderOver(options, func(context.Context) (ssh.Conn, error) { return machine, nil })
 	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	return manifestIn(t, machine)
 }
 
-func manifestIn(t *testing.T, machine *box) variables.Manifest {
+func manifestIn(t *testing.T, machine *box) boxapi.Manifest {
 	t.Helper()
 	return manifestFed(t, machine.feeds())
 }
 
-func manifestFed(t *testing.T, fed []string) variables.Manifest {
+func manifestFed(t *testing.T, fed []string) boxapi.Manifest {
 	t.Helper()
 	for _, sent := range fed {
 		for line := range strings.SplitSeq(sent, "\n") {
-			raw, found := strings.CutPrefix(line, variables.EnvVar+"=")
+			raw, found := strings.CutPrefix(line, boxapi.EnvVar+"=")
 			if !found {
 				continue
 			}
-			parsed, err := variables.Parse([]byte(raw))
+			parsed, err := boxapi.Parse([]byte(raw))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -266,7 +265,7 @@ func manifestFed(t *testing.T, fed []string) variables.Manifest {
 		}
 	}
 	t.Fatal("nothing the deploy sent to the box contained a live manifest for the app")
-	return variables.Manifest{}
+	return boxapi.Manifest{}
 }
 
 func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing.T) {
@@ -344,7 +343,7 @@ func TestTheAssociatedDataTheRuntimeOpensTheStoreSecretUnderIsTheOneTheDeploySea
 	machine := &box{kept: sealedRootKey()}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	provisioned := aBucket(t, "uploads", false)
 	provisioned.Ref = anInfraStack(t)
@@ -361,7 +360,7 @@ func TestTheAssociatedDataTheRuntimeOpensTheStoreSecretUnderIsTheOneTheDeploySea
 	if manifest.Store == nil {
 		t.Fatal("the app binding a bucket was handed no store")
 	}
-	opened, err := variables.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env)
+	opened, err := boxapi.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,12 +448,12 @@ func TestAProvisionedStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
-	at := slices.IndexFunc(state.Routes, func(route host.AppRoute) bool { return route.App == switchboard.StoreLabel })
+	at := slices.IndexFunc(state.Routes, func(route host.AppRoute) bool { return route.App == boxapi.StoreLabel })
 	if at < 0 {
 		t.Fatalf("provisioning a store left the proxy routing %v, and nothing off the box reaches it", state.Routes)
 	}
 	route := state.Routes[at]
-	if route.Owner != variables.Surface("shop", "production") || route.Pointer != router.DefaultPointer {
+	if route.Owner != boxapi.Surface("shop", "production") || route.Pointer != router.DefaultPointer {
 		t.Errorf("the store is routed under %s/%s, want the surface and pointer its project's domains are claimed under", route.Owner, route.Pointer)
 	}
 	if !strings.HasSuffix(route.Upstream, ":9000") || !strings.Contains(route.Upstream, "store-s3") {
@@ -475,14 +474,14 @@ type heldStore struct {
 	buckets map[string]map[string][]byte
 }
 
-func (s *heldStore) answer(command, input string) (session.Result, bool) {
+func (s *heldStore) answer(command, input string) (ssh.Result, bool) {
 	if s == nil || !strings.Contains(command, "'--request'") || !strings.Contains(command, "'http://127.0.0.1:9000/") {
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if !strings.Contains(command, "said=$(") {
 		body, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(input))
 		s.call(command, body)
-		return session.Result{}, true
+		return ssh.Result{}, true
 	}
 	var said strings.Builder
 	var code string
@@ -502,7 +501,7 @@ func (s *heldStore) answer(command, input string) (session.Result, bool) {
 			said.WriteString(unquoted(strings.Fields(line)[2]) + ".body=" + base64.StdEncoding.EncodeToString(answered) + "\n")
 		}
 	}
-	return session.Result{Stdout: said.String()}, true
+	return ssh.Result{Stdout: said.String()}, true
 }
 
 func (s *heldStore) call(line string, body []byte) (string, []byte) {

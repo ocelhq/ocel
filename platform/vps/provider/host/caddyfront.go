@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 func (f Front) caddyfile(box caddyfile.Box) caddyfile.Caddyfile {
@@ -32,9 +33,9 @@ func caddyReloadSudoers() []byte {
 }
 
 func (f Front) caddyReloadCommand() string {
-	reload := words(f.caddyfile(frontBox{}).Reloading())
+	reload := shell.Words(f.caddyfile(frontBox{}).Reloading())
 	if f.Caddy.Container == "" {
 		return "if systemctl is-active --quiet caddy.service; then " + reload + "; fi"
 	}
-	return "if [ \"$(docker inspect --type container --format '{{.State.Running}}' " + quoted(f.Caddy.Container) + " 2>/dev/null)\" = true ]; then " + reload + "; fi"
+	return "if [ \"$(docker inspect --type container --format '{{.State.Running}}' " + shell.Quote(f.Caddy.Container) + " 2>/dev/null)\" = true ]; then " + reload + "; fi"
 }

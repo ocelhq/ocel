@@ -107,8 +107,8 @@ builds:
     goarch: [amd64]
 
   - id: connector-vps
-    dir: platform/vps/connector
-    main: .
+    dir: platform/vps/box
+    main: ./cmd/connector
     binary: connector-vps
     env:
       - CGO_ENABLED=0

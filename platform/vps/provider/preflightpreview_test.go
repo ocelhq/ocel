@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func newBoxServingPreviews(t *testing.T, base string) *scripted {
@@ -25,7 +26,7 @@ func newBoxServingPreviews(t *testing.T, base string) *scripted {
 
 func preflightTier(machine *scripted, options vps.Options, tier environment.Tier) error {
 	options.SSH = vps.Target{Host: "box.invalid", User: "ada"}
-	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
+	p := vps.ProviderOver(options, func(context.Context) (ssh.Conn, error) { return machine, nil })
 	p.Reaching(reachedFromOutside)
 	stack, err := naming.ParseStackName("pr-7--web--r0a1b2c3d")
 	if err != nil {

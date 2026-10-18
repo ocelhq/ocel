@@ -9,7 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 func connectorConfig() []byte {
@@ -64,7 +65,7 @@ func TestTheUnitRunsUnelevatedOverASocketAndComesBackOnABoot(t *testing.T) {
 	written := string(connectorUnit())
 	for _, want := range []string{
 		"User=" + deployUser,
-		"ExecStart=" + ConnectorBinary + " --config " + ConnectorConfig + " --listen unix://" + switchboard.ConnectorSocket,
+		"ExecStart=" + ConnectorBinary + " --config " + ConnectorConfig + " --listen unix://" + boxapi.ConnectorSocket,
 		"Restart=on-failure",
 		"WantedBy=multi-user.target",
 		"After=docker.service",
@@ -182,8 +183,8 @@ func TestTakingTheConnectorOffLeavesNoUnitBinaryOrKey(t *testing.T) {
 	t.Parallel()
 
 	written := connectorRemoval()
-	for _, want := range []string{connectorUnitFile, ConnectorBinary, connectorRoot, connectorTmpfiles, switchboard.ConnectorSocket} {
-		if !strings.Contains(written, quoted(want)) {
+	for _, want := range []string{connectorUnitFile, ConnectorBinary, connectorRoot, connectorTmpfiles, boxapi.ConnectorSocket} {
+		if !strings.Contains(written, shell.Quote(want)) {
 			t.Errorf("the removal leaves %s behind:\n%s", want, written)
 		}
 	}
@@ -224,13 +225,13 @@ func TestTheConnectorPathOnTheBoxHostnameReachesTheConnectorAheadOfEverySurface(
 		Routes:    []AppRoute{{RouteKey: keyed("web"), Upstream: "web:3000"}},
 	}
 	answer := routedBy(t, state)
-	if upstream, ok := answer("box.example.com", switchboard.ConnectorPath+"/connector.v1.Box/Describe"); !ok || upstream == "web:3000" {
+	if upstream, ok := answer("box.example.com", boxapi.ConnectorPath+"/connector.v1.Box/Describe"); !ok || upstream == "web:3000" {
 		t.Errorf("the connector path on the box hostname is answered from %q (%v), want the connector: a surface claiming this box's hostname would answer the console instead", upstream, ok)
 	}
 	if upstream, ok := answer("box.example.com", "/"); !ok || upstream != "web:3000" {
 		t.Errorf("the box hostname off the connector path is answered from %q (%v), want the surface that claims it", upstream, ok)
 	}
-	if table, err := switchboard.Read(mustWrite(t, RoutingTable{Grace: DeployWindow, Connector: "box.example.com"})); err != nil || !table.Admits("box.example.com") {
+	if table, err := boxapi.ReadTable(mustWrite(t, RoutingTable{Grace: DeployWindow, Connector: "box.example.com"})); err != nil || !table.Admits("box.example.com") {
 		t.Errorf("the switchboard refuses the front proxy a certificate for the connector hostname nothing else claims (%v), and the console dials the connector over https", err)
 	}
 
@@ -247,8 +248,8 @@ func TestABoxWithNoConnectorForwardsNothingToOne(t *testing.T) {
 	t.Parallel()
 
 	state := RoutingTable{Grace: DeployWindow, Claims: []HostClaim{{Hostname: "box.example.com", Owner: surface, Pointer: pointed}}}
-	if upstream, ok := routedBy(t, state)("box.example.com", switchboard.ConnectorPath); ok {
-		t.Errorf("a box nothing was added to still routes %s to %q", switchboard.ConnectorPath, upstream)
+	if upstream, ok := routedBy(t, state)("box.example.com", boxapi.ConnectorPath); ok {
+		t.Errorf("a box nothing was added to still routes %s to %q", boxapi.ConnectorPath, upstream)
 	}
 	read, err := ReadRoutingTable(mustWrite(t, RoutingTable{Grace: DeployWindow}))
 	if err != nil {

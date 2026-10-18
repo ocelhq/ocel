@@ -20,7 +20,7 @@
   {
     "name": "vps",
     "scope": "vps",
-    "dirs": "platform/vps/provider platform/vps/runtime platform/vps/connector",
+    "dirs": "platform/vps/provider platform/vps/box",
     "generate": "platform/vps/provider"
   },
   {

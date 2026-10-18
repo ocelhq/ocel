@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func storing() RoutingTable {
@@ -13,11 +13,11 @@ func storing() RoutingTable {
 		Grace: DrainWindow,
 		Routes: []AppRoute{
 			{RouteKey: keyed("web"), Upstream: "shop-web-1:" + containerimage.PortText},
-			{RouteKey: keyed(switchboard.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
+			{RouteKey: keyed(boxapi.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
 		},
 		Claims: []HostClaim{
 			{Hostname: "shop.example.com", Owner: surface, Pointer: pointed},
-			{Hostname: "storage.shop.example.com", Owner: surface, Pointer: pointed, App: switchboard.StoreLabel},
+			{Hostname: "storage.shop.example.com", Owner: surface, Pointer: pointed, App: boxapi.StoreLabel},
 		},
 	}
 }

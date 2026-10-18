@@ -10,15 +10,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func everything() RoutingTable {
 	table := storing()
 	table.Routes = []AppRoute{
-		{RouteKey: keyed(switchboard.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
+		{RouteKey: keyed(boxapi.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
 		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + containerimage.PortText},
 	}
 	table.Grace = 12 * time.Second
@@ -98,9 +97,9 @@ func TestATableOcelCouldNotRenderIsRefusedWhenItIsRead(t *testing.T) {
 		"a preview base of one dns label": `{"grace":"30s","preview":"internal"}`,
 	} {
 		var refused refusal.Refusal
-		if _, err := ReadRoutingTable([]byte(written)); !errors.As(err, &refused) || !strings.Contains(err.Error(), live.RoutingTable) {
+		if _, err := ReadRoutingTable([]byte(written)); !errors.As(err, &refused) || !strings.Contains(err.Error(), boxapi.RoutingTable) {
 			t.Errorf("ReadRoutingTable() over %s = %v, want a refusal naming %s: a row ocel cannot render takes every later reshape on this box with it",
-				what, err, live.RoutingTable)
+				what, err, boxapi.RoutingTable)
 		}
 	}
 }
@@ -108,11 +107,11 @@ func TestATableOcelCouldNotRenderIsRefusedWhenItIsRead(t *testing.T) {
 func TestWhatTheBoxsAgentReadsItsStoreBaseFromIsTheTableADeployWrote(t *testing.T) {
 	t.Parallel()
 
-	claims, err := live.ClaimedIn(mustWrite(t, storing()))
+	claims, err := boxapi.ClaimedIn(mustWrite(t, storing()))
 	if err != nil {
 		t.Fatalf("ClaimedIn() = %v", err)
 	}
-	if base := live.StoreBase(claims, surface, pointed); base != "https://storage.shop.example.com" {
+	if base := boxapi.StoreBase(claims, surface, pointed); base != "https://storage.shop.example.com" {
 		t.Errorf("the agent reads a store base of %q off the table a deploy wrote, want https://storage.shop.example.com", base)
 	}
 	if len(claims) != len(storing().Claims) {

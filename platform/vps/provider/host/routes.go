@@ -10,11 +10,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -29,7 +28,7 @@ type RouteKey struct {
 }
 
 func (k RouteKey) identity() string {
-	return switchboard.RouteIdentity + strings.Join([]string{k.Owner, k.Pointer, k.App}, switchboard.ClaimSeparator)
+	return boxapi.RouteIdentity + strings.Join([]string{k.Owner, k.Pointer, k.App}, boxapi.ClaimSeparator)
 }
 
 type AppRoute struct {
@@ -37,7 +36,7 @@ type AppRoute struct {
 	Upstream string `json:"upstream"`
 }
 
-type HostClaim live.Claimed
+type HostClaim boxapi.Claimed
 
 type Shield struct {
 	Hostname          string                `json:"hostname"`
@@ -165,7 +164,7 @@ func proxySpec(state RoutingTable) proxy.Spec {
 		Hostnames:   state.hostnames(),
 		PreviewBase: state.PreviewBase,
 		Upstream:    SwitchboardUpstream,
-		Router:      switchboard.RouterKind,
+		Router:      boxapi.SwitchboardRouter,
 		Permission:  SwitchboardPermission,
 	}
 }
@@ -175,7 +174,7 @@ func validTable(state RoutingTable) error {
 	if err != nil {
 		return err
 	}
-	if _, err := switchboard.Read(written); err != nil {
+	if _, err := boxapi.ReadTable(written); err != nil {
 		return refusal.Refuse(refusal.CodeInvalid, "%v", err)
 	}
 	for _, pin := range state.Pins {

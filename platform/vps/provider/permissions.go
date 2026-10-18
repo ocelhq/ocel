@@ -5,7 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const anyLogin = "<login>"
@@ -13,7 +13,7 @@ const anyLogin = "<login>"
 func bootstrapDocument(login string) string {
 	var written strings.Builder
 	written.WriteString("The login ocel bootstraps a host with needs:\n")
-	for _, need := range session.Requirements() {
+	for _, need := range ssh.Requirements() {
 		written.WriteString("\n  " + need.Name + "\n    " + need.Detail + "\n")
 	}
 	written.WriteString("\nSudo without a password is a file of its own, written with `visudo -f /etc/sudoers.d/ocel`:\n\n")

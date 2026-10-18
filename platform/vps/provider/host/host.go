@@ -3,49 +3,24 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-type Conn interface {
-	Stream(ctx context.Context, command string, stdin io.Reader) (session.Result, error)
-	RunLines(ctx context.Context, command string, each func(session.Line) error) error
-	Run(ctx context.Context, command string) (string, error)
-	Preflight(ctx context.Context) (session.Facts, error)
-	Destination() session.Destination
-	ForwardPort(ctx context.Context, remote string) (string, func(), error)
-}
-
-type Dial func(ctx context.Context) (Conn, error)
-
 type Host struct {
-	dial        Dial
+	*ssh.Box
 	deploy      Keys
 	pins        []Pin
 	proxyOption Front
 	front       proxy.Proxy
-
-	elevating   sync.Mutex
-	preflighted bool
-	floored     bool
-	refusal     error
-	login       identity
-
-	knowing  sync.Mutex
-	reported string
-
-	engining sync.Mutex
-	engined  bool
-	engine   acting
 
 	keying sync.Mutex
 	keyed  []byte
@@ -54,33 +29,19 @@ type Host struct {
 	vouched  bool
 	unusable error
 
-	mu        sync.Mutex
-	principal string
-	tiers     map[environment.Tier]bool
+	mu    sync.Mutex
+	tiers map[environment.Tier]bool
 
 	described sync.Mutex
 	readings  map[environment.Tier]Reading
 
-	sizing sizing
-
-	pause func(context.Context, time.Duration) error
+	engine *Engine
 }
 
-func New(dial Dial, deploy Keys, pins []Pin, front Front) *Host {
-	h := &Host{dial: dial, deploy: deploy, pins: pins, proxyOption: front, tiers: map[environment.Tier]bool{}, pause: waited}
+func New(box *ssh.Box, deploy Keys, pins []Pin, front Front) *Host {
+	h := &Host{Box: box, engine: NewEngine(box), deploy: deploy, pins: pins, proxyOption: front, tiers: map[environment.Tier]bool{}}
 	h.front = openFront(front, frontBox{h})
 	return h
-}
-
-func waited(ctx context.Context, delay time.Duration) error {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }
 
 func (h *Host) Pins() []Pin { return slices.Clone(h.pins) }
@@ -94,8 +55,7 @@ func (h *Host) hasStore(ctx context.Context, tier environment.Tier) (bool, error
 	if known {
 		return true, nil
 	}
-	rendered, err := h.reach(ctx, "ask where "+string(tier)+" keeps its entries",
-		"if [ -x "+quoted(boxstore.KeyValuesHelper)+" ] && [ -d "+quoted(KeyValuesDir(tier))+" ]; then echo present; fi", nil)
+	rendered, err := h.Run(ctx, ssh.RootWhenAble, "ask where "+string(tier)+" keeps its entries", "if [ -x "+shell.Quote(boxstore.KeyValuesHelper)+" ] && [ -d "+shell.Quote(KeyValuesDir(tier))+" ]; then echo present; fi", nil)
 	if err != nil || strings.TrimSpace(rendered) != "present" {
 		return false, err
 	}
@@ -111,277 +71,21 @@ func (h *Host) forgetTiers() {
 	clear(h.tiers)
 }
 
-func (h *Host) remember(principal string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.principal = principal
-}
-
-func (h *Host) named() string {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.principal == "" {
-		return "this host"
-	}
-	return h.principal
-}
-
-func (h *Host) Principal(ctx context.Context) (string, error) {
-	live, err := h.dial(ctx)
-	if err != nil {
-		return "", err
-	}
-	principal := live.Destination().Principal()
-	h.remember(principal)
-	return principal, nil
-}
-
-func (h *Host) Address(ctx context.Context) (string, error) {
-	live, err := h.dial(ctx)
-	if err != nil {
-		return "", err
-	}
-	address := live.Destination().Address
-	if address == "" {
-		return "", refusal.Refuse(refusal.CodeNotReady,
-			"%s resolves to no address", h.named())
-	}
-	return address, nil
-}
-
-func (h *Host) forgetting(ctx context.Context) (string, error) {
-	live, err := h.dial(ctx)
-	if err != nil {
-		return "", err
-	}
-	return live.Destination().Forget(), nil
-}
-
-type acting string
-
-const (
-	asLogin acting = ""
-	viaSudo acting = "sudo -n "
-)
-
-func (a acting) wrapping(command string) string {
-	if a == asLogin {
-		return command
-	}
-	return string(a) + "sh -c " + quoted(command)
-}
-
-func (a acting) invoking(argv []string) string { return a.prefixed(words(argv)) }
-
-func (a acting) prefixed(command string) string { return string(a) + command }
-
-type identity struct {
-	mu    sync.Mutex
-	known bool
-	root  bool
-}
-
-func (i *identity) remember(root bool) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	i.known, i.root = true, root
-}
-
-func (i *identity) recalled() (known, root bool) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	return i.known, i.root
-}
-
-func (h *Host) rootElevation(ctx context.Context, live Conn) (acting, error) {
-	known, root := h.login.recalled()
-	if !known {
-		rendered, err := live.Run(ctx, "id -u")
-		if err != nil {
-			return asLogin, err
-		}
-		root = strings.TrimSpace(rendered) == "0"
-		h.login.remember(root)
-	}
-	if root {
-		return asLogin, nil
-	}
-	return viaSudo, nil
-}
-
-func (h *Host) elevate(ctx context.Context) (acting, error) {
-	h.elevating.Lock()
-	defer h.elevating.Unlock()
-	if h.floored {
-		return asLogin, h.refusal
-	}
-	live, err := h.dial(ctx)
-	if err != nil {
-		return asLogin, err
-	}
-	if !h.preflighted {
-		facts, err := live.Preflight(ctx)
-		if err != nil {
-			h.floored, h.refusal = true, err
-			return asLogin, err
-		}
-		h.preflighted = true
-		h.login.remember(facts.Root)
-	}
-	return h.rootElevation(ctx, live)
-}
-
-func (h *Host) Arch(ctx context.Context) (string, error) { return h.arch(ctx) }
-
-func (h *Host) arch(ctx context.Context) (string, error) {
-	h.knowing.Lock()
-	defer h.knowing.Unlock()
-	if h.reported == "" {
-		rendered, err := h.ran(ctx, "ask this host what it runs on", "uname -m", nil, "")
-		if err != nil {
-			return "", err
-		}
-		h.reported = strings.TrimSpace(rendered)
-	}
-	return Architecture(h.reported)
-}
-
-func (h *Host) reaching(ctx context.Context) acting {
-	elevation, err := h.elevate(ctx)
-	if err != nil {
-		return asLogin
-	}
-	return elevation
-}
-
-func (h *Host) stream(ctx context.Context, command string, stdin io.Reader, elevation acting) (session.Result, error) {
-	live, err := h.dial(ctx)
-	if err != nil {
-		return session.Result{}, err
-	}
-	h.remember(live.Destination().Principal())
-	return live.Stream(ctx, elevation.wrapping(command), stdin)
-}
-
-func (h *Host) streamLines(ctx context.Context, command string, elevation acting, each func(session.Line) error) error {
-	live, err := h.dial(ctx)
-	if err != nil {
-		return err
-	}
-	h.remember(live.Destination().Principal())
-	return live.RunLines(ctx, elevation.wrapping(command), each)
-}
-
-func (h *Host) granted(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
-	live, err := h.dial(ctx)
-	if err != nil {
-		return "", err
-	}
-	h.remember(live.Destination().Principal())
-	elevation, err := h.rootElevation(ctx, live)
-	if err != nil {
-		return "", err
-	}
-	result, err := live.Stream(ctx, elevation.invoking(argv), stdin)
-	if err != nil {
-		return "", err
-	}
-	if result.Code != 0 {
-		return "", h.refuse(what, result, elevation)
-	}
-	return result.Stdout, nil
-}
-
-func words(argv []string) string {
-	written := make([]string, 0, len(argv))
-	for _, arg := range argv {
-		written = append(written, quoted(arg))
-	}
-	return strings.Join(written, " ")
-}
-
-type asking func(ctx context.Context, what, command string, stdin io.Reader) (string, error)
-
-type drawing struct {
-	ask asking
-}
-
-func (h *Host) run(ctx context.Context, what, command string, stdin io.Reader) (string, error) {
-	elevation, err := h.elevate(ctx)
-	if err != nil {
-		return "", err
-	}
-	return h.ran(ctx, what, command, stdin, elevation)
-}
-
-func (h *Host) reach(ctx context.Context, what, command string, stdin io.Reader) (string, error) {
-	return h.ran(ctx, what, command, stdin, h.reaching(ctx))
-}
-
-func (h *Host) ran(ctx context.Context, what, command string, stdin io.Reader, elevation acting) (string, error) {
-	said, _, err := h.spoke(ctx, what, command, stdin, elevation)
-	return said, err
-}
-
-func (h *Host) spoke(ctx context.Context, what, command string, stdin io.Reader, elevation acting) (string, string, error) {
-	result, err := h.stream(ctx, command, stdin, elevation)
-	if err != nil {
-		return "", "", err
-	}
-	if result.Code != 0 {
-		return "", spoken(result), h.refuse(what, result, elevation)
-	}
-	return result.Stdout, "", nil
-}
-
-const saidLines = 4
-
-func unstarted(code int) bool { return code == 126 || code == 127 }
-
-func (h *Host) refuse(what string, result session.Result, elevation acting) error {
-	failed := refusal.CodeNotReady
-	if elevation != "" && sudoRefused(result) {
-		failed = refusal.CodeDenied
-	}
-	return refusal.Refuse(failed, "%s on %s: %s", what, h.named(), spoken(result))
-}
-
-var sudoRefusals = []string{"sudo: a password is required", "is not in the sudoers file", "is not allowed to execute"}
-
-func sudoRefused(result session.Result) bool {
-	first, _, _ := strings.Cut(strings.TrimSpace(result.Stderr), "\n")
-	return result.Code == 1 && slices.ContainsFunc(sudoRefusals, func(message string) bool { return strings.Contains(first, message) })
-}
-
-func spoken(result session.Result) string {
-	said := strings.TrimSpace(result.Stderr)
-	if said == "" && unstarted(result.Code) {
-		said = strings.TrimSpace(result.Stdout)
-	}
-	if said == "" {
-		return "no reason given"
-	}
-	if lines := strings.Split(said, "\n"); len(lines) > saidLines {
-		said = strings.Join(lines[:saidLines], "\n")
-	}
-	return said
-}
-
 func (h *Host) Install(ctx context.Context, item Item) error {
-	_, err := h.run(ctx, "write "+item.ID(), item.command(), item.stdin())
+	_, err := h.Run(ctx, ssh.Root, "write "+item.ID(), item.command(), item.stdin())
 	return err
 }
 
 func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 	switch taken.kind {
 	case KindUser:
-		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, "userdel -f "+quoted(taken.path), nil)
+		_, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, "userdel -f "+shell.Quote(taken.path), nil)
 		return err == nil, err
 	case KindNetwork:
-		rendered, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
+		rendered, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return strings.TrimSpace(rendered) != networkInUse, err
 	case KindContainer, KindApps, KindResourceVolumes, KindAppNetworks:
-		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
+		_, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
 	case KindUnit:
 		if !slices.Contains([]string{LiveService, LiveSocketUnit, BackupsTimer,
@@ -389,14 +93,14 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 			return false, refusal.Refuse(refusal.CodeInvalid,
 				"%s %s is not ocel's to remove", taken.kind, taken.path)
 		}
-		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
+		_, err := h.Run(ctx, ssh.Root, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
 	case KindDir, KindFile, KindSealKey, KindProxyConfig, KindRoutingTable, KindPlaced:
 		if !strings.HasPrefix(taken.path, "/") {
 			return false, refusal.Refuse(refusal.CodeInvalid,
 				"%q is not an absolute path", taken.path)
 		}
-		rendered, err := h.run(ctx, "remove "+taken.path, taken.command(), nil)
+		rendered, err := h.Run(ctx, ssh.Root, "remove "+taken.path, taken.command(), nil)
 		if taken.kind == KindDir && taken.shared {
 			return strings.TrimSpace(rendered) != dirNonEmpty, err
 		}
@@ -416,7 +120,7 @@ type Reading struct {
 	Seal     Seal
 	Observed map[string]string
 	Front    Front
-	Engine   Engine
+	Engine   InstalledEngine
 
 	recorded    []Item
 	move        *frontMove
@@ -483,7 +187,7 @@ func (h *Host) Read(ctx context.Context, tier environment.Tier) (Reading, error)
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.read(ctx, tier, keys, drawing{ask: h.run})
+	return h.read(ctx, tier, keys, ssh.Root)
 }
 
 func (h *Host) Observe(ctx context.Context, tier environment.Tier) (Reading, error) {
@@ -491,8 +195,8 @@ func (h *Host) Observe(ctx context.Context, tier environment.Tier) (Reading, err
 	if err != nil {
 		return Reading{}, err
 	}
-	_, denied := h.elevate(ctx)
-	read, err := h.read(ctx, tier, keys, drawing{ask: h.reach})
+	denied := h.Elevation(ctx)
+	read, err := h.read(ctx, tier, keys, ssh.RootWhenAble)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -501,31 +205,31 @@ func (h *Host) Observe(ctx context.Context, tier environment.Tier) (Reading, err
 }
 
 func (h *Host) Survey(ctx context.Context, tier environment.Tier) (Reading, error) {
-	return h.observing(ctx, tier, nil, drawing{ask: h.run})
+	return h.observing(ctx, tier, nil, ssh.Root)
 }
 
-func (h *Host) observing(ctx context.Context, tier environment.Tier, keys []byte, drawn drawing) (Reading, error) {
-	arch, err := h.arch(ctx)
+func (h *Host) observing(ctx context.Context, tier environment.Tier, keys []byte, as ssh.Acting) (Reading, error) {
+	arch, err := h.Arch(ctx)
 	if err != nil {
-		arch = ArchAMD64
+		arch = ssh.AMD64
 	}
-	return h.surveyed(ctx, tier, keys, arch, drawn)
+	return h.surveyed(ctx, tier, keys, arch, as)
 }
 
-func (h *Host) observe(ctx context.Context, tier environment.Tier, keys []byte, drawn drawing) (Reading, error) {
-	arch, err := h.arch(ctx)
+func (h *Host) observe(ctx context.Context, tier environment.Tier, keys []byte, as ssh.Acting) (Reading, error) {
+	arch, err := h.Arch(ctx)
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.surveyed(ctx, tier, keys, arch, drawn)
+	return h.surveyed(ctx, tier, keys, arch, as)
 }
 
-func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte, arch string, drawn drawing) (Reading, error) {
+func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte, arch string, as ssh.Acting) (Reading, error) {
 	surveying := Items(tier, keys, arch, h.proxyOption)
 	if h.proxyOption.adopted() {
 		surveying = append(surveying, frontProxy().item(""))
 	}
-	rendered, err := drawn.ask(ctx, "survey what "+string(tier)+" has installed", survey(surveying, StampPath(tier), FrontRecordPath, imagesLock), nil)
+	rendered, err := h.Run(ctx, as, "survey what "+string(tier)+" has installed", survey(surveying, StampPath(tier), FrontRecordPath, imagesLock), nil)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -536,15 +240,15 @@ func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte,
 	return Reading{Tier: tier, Keys: keys, Arch: arch, Seal: seal, Observed: observed, Front: h.proxyOption, Engine: readEngine(rendered)}, nil
 }
 
-func (h *Host) read(ctx context.Context, tier environment.Tier, keys []byte, drawn drawing) (Reading, error) {
-	read, err := h.observe(ctx, tier, keys, drawn)
+func (h *Host) read(ctx context.Context, tier environment.Tier, keys []byte, as ssh.Acting) (Reading, error) {
+	read, err := h.observe(ctx, tier, keys, as)
 	if err != nil {
 		return Reading{}, err
 	}
 	if _, stamped := read.Observed[KindFile+" "+StampPath(tier)]; !stamped {
 		return read, nil
 	}
-	stamp, err := h.readStamp(ctx, tier, drawn.ask)
+	stamp, err := h.readStamp(ctx, tier, as)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -552,8 +256,8 @@ func (h *Host) read(ctx context.Context, tier environment.Tier, keys []byte, dra
 	return read, nil
 }
 
-func (h *Host) readStamp(ctx context.Context, tier environment.Tier, ask asking) (Stamp, error) {
-	rendered, err := ask(ctx, "read the stamp", "cat "+quoted(StampPath(tier)), nil)
+func (h *Host) readStamp(ctx context.Context, tier environment.Tier, as ssh.Acting) (Stamp, error) {
+	rendered, err := h.Run(ctx, as, "read the stamp", "cat "+shell.Quote(StampPath(tier)), nil)
 	if err != nil {
 		return Stamp{}, err
 	}
@@ -585,16 +289,16 @@ func surveying(file string, items []Item, also ...string) string {
 			probes.WriteString(probe + "\n")
 			continue
 		}
-		script.WriteString(" " + quoted(item.Name))
+		script.WriteString(" " + shell.Quote(item.Name))
 	}
 	for _, path := range also {
-		script.WriteString(" " + quoted(path))
+		script.WriteString(" " + shell.Quote(path))
 	}
 	stated, owner := `"$(stat -c %a "$p")"`, `"$(stat -c %U "$p")"`
 	script.WriteString(`; do
-if [ -h "$p" ]; then ` + reports(quoted(kindLink), `"$p"`, `0`, `''`, `"$(readlink "$p")"`) + `
-elif [ -d "$p" ]; then ` + reports(quoted(KindDir), `"$p"`, stated, owner, `''`) + `
-elif ` + file + `; then ` + reports(quoted(KindFile), `"$p"`, stated, owner, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
+if [ -h "$p" ]; then ` + reports(shell.Quote(kindLink), `"$p"`, `0`, `''`, `"$(readlink "$p")"`) + `
+elif [ -d "$p" ]; then ` + reports(shell.Quote(KindDir), `"$p"`, stated, owner, `''`) + `
+elif ` + file + `; then ` + reports(shell.Quote(KindFile), `"$p"`, stated, owner, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
 fi
 done`)
 	return probes.String() + script.String()
@@ -606,7 +310,7 @@ const (
 )
 
 func unreadable(kind, name, why string) string {
-	return reports(quoted(kindUnreadable), name, "0", quoted(kind), why)
+	return reports(shell.Quote(kindUnreadable), name, "0", shell.Quote(kind), why)
 }
 
 func column(columns []string, at int, absent string) string {

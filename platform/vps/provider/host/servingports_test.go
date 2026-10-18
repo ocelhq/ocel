@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type socketOwner struct {
@@ -42,34 +42,34 @@ func socketsSaid(owners ...socketOwner) string {
 
 func portsOwnedOn(rig *bench, published map[string]string, owners ...socketOwner) {
 	prior := rig.answer
-	rig.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (ssh.Result, bool) {
 		for port, names := range published {
 			if strings.Contains(command, "publish="+port) {
-				return session.Result{Stdout: names}, true
+				return ssh.Result{Stdout: names}, true
 			}
 		}
 		if strings.HasPrefix(command, ownersCommand) {
-			return session.Result{Stdout: socketsSaid(owners...)}, true
+			return ssh.Result{Stdout: socketsSaid(owners...)}, true
 		}
 		if prior != nil {
 			return prior(command)
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 }
 
 func freshBox() *bench {
 	fresh := machine(nil)
-	fresh.answer = func(command string) (session.Result, bool) {
-		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
+	fresh.answer = func(command string) (ssh.Result, bool) {
+		return ssh.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
 	return fresh
 }
 
 func withDocker() *bench {
 	rig := machine(map[environment.Tier][]Item{environment.TierProduction: EngineItems()})
-	rig.answer = func(command string) (session.Result, bool) {
-		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
+	rig.answer = func(command string) (ssh.Result, bool) {
+		return ssh.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
 	return rig
 }

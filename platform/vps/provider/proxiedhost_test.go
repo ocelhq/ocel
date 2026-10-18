@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 type probed struct {
@@ -31,12 +31,12 @@ func cloudflareAnswers() map[string][]string {
 func TestAHostnameCloudflareForwardsPassesWhenTheSwitchboardAnswersThroughIt(t *testing.T) {
 	t.Parallel()
 
-	check := vps.ProxiedVerdict(context.Background(), stubResolver(cloudflareAnswers()), probed{router: switchboard.RouterKind}, "shop.example.com", boxAddress)
+	check := vps.ProxiedVerdict(context.Background(), stubResolver(cloudflareAnswers()), probed{router: boxapi.SwitchboardRouter}, "shop.example.com", boxAddress)
 
 	if check.Verdict != provider.HostPass {
 		t.Fatalf("verdict = %v (%q), want a pass: the name resolves to Cloudflare, which forwards it to this box", check.Verdict, check.Finding)
 	}
-	if strings.Contains(check.Finding, string(switchboard.RouterKind)) || !strings.Contains(check.Finding, "this box") {
+	if strings.Contains(check.Finding, string(boxapi.SwitchboardRouter)) || !strings.Contains(check.Finding, "this box") {
 		t.Errorf("finding = %q, want it to say this box answered, naming no router: the router is never yours to configure", check.Finding)
 	}
 }
@@ -55,7 +55,7 @@ func TestAHostnameCloudflareForwardsFailsWhenNothingOnThisBoxAnswersThroughIt(t 
 		if check.Fix == "" || !strings.Contains(check.Fix, boxAddress) {
 			t.Errorf("fix over %s = %q, want the address the proxied record should forward to", what, check.Fix)
 		}
-		if strings.Contains(check.Finding, string(serving.router)) && serving.router != "" || strings.Contains(check.Finding, string(switchboard.RouterKind)) {
+		if strings.Contains(check.Finding, string(serving.router)) && serving.router != "" || strings.Contains(check.Finding, string(boxapi.SwitchboardRouter)) {
 			t.Errorf("finding over %s = %q, want no router named: the router is never yours to configure", what, check.Finding)
 		}
 		if serving.failure != "" && !strings.Contains(check.Finding, serving.failure) {

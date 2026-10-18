@@ -25,7 +25,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const sealTier = "production"
@@ -323,7 +324,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 	t.Parallel()
 
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})
 
 	key := written(items, KindSealKey, SealKeyPath(tier))
 	if key.Name == "" {
@@ -349,7 +350,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 func TestTheDeployLoginIsWhitelistedOnTheHelperAndTheCheckedDockerAndOnNothingBeside(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, Front{})
 
 	var lines []Item
 	for _, item := range items {
@@ -449,7 +450,7 @@ func TestWritingAKeyThatExistsReassertsItsPostureAndMintsNothing(t *testing.T) {
 
 	stubbed := t.TempDir()
 	for _, name := range []string{"chown", "chmod"} {
-		body := "#!/bin/sh\nprintf '%s\\n' \"$(basename \"$0\") $*\" >>" + quoted(filepath.Join(stubbed, "log")) + "\n"
+		body := "#!/bin/sh\nprintf '%s\\n' \"$(basename \"$0\") $*\" >>" + shell.Quote(filepath.Join(stubbed, "log")) + "\n"
 		executable(t, filepath.Join(stubbed, name), body)
 	}
 
@@ -481,11 +482,11 @@ func TestAReplacedKeyIsDriftThoughEveryPathIsStillAsItWasWritten(t *testing.T) {
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	observed := digests(Items(tier, keys, ArchAMD64, Front{}))
+	observed := digests(Items(tier, keys, ssh.AMD64, Front{}))
 	minted := Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: SealAlgorithm, CreatedAt: "2026-08-26T09:00:00Z"}
 
 	read := Reading{
-		Arch: ArchAMD64,
+		Arch: ssh.AMD64,
 		Tier: tier, Keys: keys, Present: true, Observed: observed, Seal: minted,
 		Stamp: Stamp{State: StateComplete, Digests: observed, Seal: minted},
 	}
@@ -539,9 +540,9 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t 
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := digests(Items(production, keys, ArchAMD64, Front{}))
+	installed := digests(Items(production, keys, ssh.AMD64, Front{}))
 
-	alone := removing(Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
+	alone := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	key := removalOf(alone, SealKeyPath(production))
 	if key.path == "" {
 		t.Fatalf("destroy leaves %s behind, and a key nothing takes is every sealed value still openable", SealKeyPath(production))
@@ -558,8 +559,8 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t 
 		}
 	}
 
-	beside := digests(Items(preview, keys, ArchAMD64, Front{}))
-	shared := removing(Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
+	beside := digests(Items(preview, keys, ssh.AMD64, Front{}))
+	shared := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
 	if removalOf(shared, boxstore.SealHelper).path != "" {
 		t.Errorf("destroying one tier takes %s, which an installed sibling still seals through", boxstore.SealHelper)
 	}
@@ -584,7 +585,7 @@ func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 	if argv[0] != boxstore.SealHelper {
 		t.Errorf("the provider runs %q, want the helper it installed and nothing beside", argv[0])
 	}
-	command := words(argv)
+	command := shell.Words(argv)
 	if strings.Contains(command, SealKeyPath(environment.TierProduction)) {
 		t.Errorf("the provider names the key on the command line: %q", command)
 	}
@@ -605,11 +606,11 @@ func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 		t.Fatalf("sealArgv() = %v", err)
 	}
 
-	ran := "sudo -n " + words(argv)
+	ran := "sudo -n " + shell.Words(argv)
 	if strings.Contains(ran, "sh -c") {
 		t.Fatalf("the deploy login runs %q, and the line in %s whitelists %s, not a shell", ran, sudoersSeal(environment.TierProduction), boxstore.SealHelper)
 	}
-	if want := "sudo -n " + quoted(boxstore.SealHelper) + " "; !strings.HasPrefix(ran, want) {
+	if want := "sudo -n " + shell.Quote(boxstore.SealHelper) + " "; !strings.HasPrefix(ran, want) {
 		t.Errorf("the deploy login runs %q, want it to begin %q: sudo matches the command it is handed, and nothing else runs", ran, want)
 	}
 }
@@ -685,15 +686,15 @@ func TestTheSealHelperReadsItsRootFromNoEnvironmentVariable(t *testing.T) {
 	}
 }
 
-func newSealFailingBench(helper []byte, failed session.Result) *bench {
+func newSealFailingBench(helper []byte, failed ssh.Result) *bench {
 	b := machine(map[environment.Tier][]Item{environment.TierProduction: {
 		{Kind: KindFile, Name: boxstore.SealHelper, Mode: 0o755, Owner: rootOwner, Content: helper},
 	}})
-	b.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(boxstore.SealHelper)+" "+quoted(string(environment.TierProduction))) {
+	b.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote(boxstore.SealHelper)+" "+shell.Quote(string(environment.TierProduction))) {
 			return failed, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	return b
 }
@@ -703,7 +704,7 @@ var olderHelper = []byte("#!/usr/bin/env python3\n")
 func TestASealTheBoxsOwnHelperCannotRunSaysToBootstrapWhenThatHelperIsNotThisBuilds(t *testing.T) {
 	t.Parallel()
 
-	b := newSealFailingBench(olderHelper, session.Result{Code: 2, Stderr: "seal: --class is not a coordinate flag\n"})
+	b := newSealFailingBench(olderHelper, ssh.Result{Code: 2, Stderr: "seal: --class is not a coordinate flag\n"})
 	_, err := NewCipher(b.host()).Seal(context.Background(), environment.TierProduction, bound, []byte("v"))
 
 	var refused refusal.Refusal
@@ -719,7 +720,7 @@ func TestASealTheBoxsOwnHelperCannotRunSaysToBootstrapWhenThatHelperIsNotThisBui
 func TestASealTheBoxsOwnHelperCannotRunIsReportedAsItsHelperSaidWhenThatHelperIsThisBuilds(t *testing.T) {
 	t.Parallel()
 
-	b := newSealFailingBench(sealScript, session.Result{Code: 2, Stderr: "seal: libcrypto refused the associated data\n"})
+	b := newSealFailingBench(sealScript, ssh.Result{Code: 2, Stderr: "seal: libcrypto refused the associated data\n"})
 	_, err := NewCipher(b.host()).Seal(context.Background(), environment.TierProduction, bound, []byte("v"))
 
 	if err == nil || !strings.Contains(err.Error(), "libcrypto refused the associated data") {
@@ -733,11 +734,11 @@ func TestASealTheBoxsOwnHelperCannotRunIsReportedAsItsHelperSaidWhenThatHelperIs
 func TestASealSudoRefusesStaysDeniedWhenTheBoxsHelperIsNotThisBuilds(t *testing.T) {
 	t.Parallel()
 
-	b := newSealFailingBench(olderHelper, session.Result{Code: 1, Stderr: "sudo: a password is required\n"})
+	b := newSealFailingBench(olderHelper, ssh.Result{Code: 1, Stderr: "sudo: a password is required\n"})
 	answerHelper := b.answer
-	b.answer = func(command string) (session.Result, bool) {
+	b.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "id -u") {
-			return session.Result{Stdout: "1000\n"}, true
+			return ssh.Result{Stdout: "1000\n"}, true
 		}
 		return answerHelper(command)
 	}

@@ -15,7 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func installer(t *testing.T, failures int) (string, string) {
@@ -29,12 +30,12 @@ func installerSaying(t *testing.T, failures int, said string) (string, string) {
 	attempts := filepath.Join(dir, "attempts")
 	fetched := filepath.Join(dir, "fetched")
 
-	executable(t, fetched, "#!/bin/sh\nprintf a >>"+quoted(attempts)+"\n"+said+"\n"+
-		"[ \"$(wc -c <"+quoted(attempts)+")\" -gt "+strconv.Itoa(failures)+" ] || exit 1\n")
+	executable(t, fetched, "#!/bin/sh\nprintf a >>"+shell.Quote(attempts)+"\n"+said+"\n"+
+		"[ \"$(wc -c <"+shell.Quote(attempts)+")\" -gt "+strconv.Itoa(failures)+" ] || exit 1\n")
 	executable(t, filepath.Join(dir, "curl"), `#!/bin/sh
 named=0
 for arg; do
-if [ "$named" = 1 ]; then cp `+quoted(fetched)+` "$arg"; exit 0; fi
+if [ "$named" = 1 ]; then cp `+shell.Quote(fetched)+` "$arg"; exit 0; fi
 if [ "$arg" = -o ]; then named=1; fi
 done
 exit 1
@@ -52,24 +53,24 @@ func installing(t *testing.T, dir string) (string, error) {
 	return result.Stderr, nil
 }
 
-func installedOn(dir, command string) session.Result {
+func installedOn(dir, command string) ssh.Result {
 	cmd := exec.Command("/bin/sh", "-c", command)
 	cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"))
 	var stdout, stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return session.Result{Stdout: stdout.String(), Stderr: stderr.String(), Code: cmd.ProcessState.ExitCode()}
+		return ssh.Result{Stdout: stdout.String(), Stderr: stderr.String(), Code: cmd.ProcessState.ExitCode()}
 	}
-	return session.Result{Stdout: stdout.String(), Stderr: stderr.String()}
+	return ssh.Result{Stdout: stdout.String(), Stderr: stderr.String()}
 }
 
 func installsOn(dir string, progress *fake.Log) (*bench, *[]int) {
 	box := machine(nil)
 	box.dest.User = "ada"
 	var toldBefore []int
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, dockerSource) {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
 		toldBefore = append(toldBefore, len(progress.Lines()))
 		return installedOn(dir, command), true
@@ -126,14 +127,14 @@ func TestTheWaitBetweenInstallAttemptsGrowsAndIsNotTheSameOnEveryHost(t *testing
 		if len(waits) != engineInstallTries-1 {
 			t.Fatalf("the engine step waited %v over %d attempts, want one wait between each pair", waits, engineInstallTries)
 		}
-		if floor := time.Duration(engineInstallBackoff.base) * time.Second; waits[0] < floor {
+		if floor := time.Duration(engineInstallBackoff.Base) * time.Second; waits[0] < floor {
 			t.Errorf("the first wait is %s, want at least %s: a mirror mid-sync needs longer than a round trip to finish it", waits[0], floor)
 		}
 		if waits[1] <= waits[0] {
 			t.Errorf("the second wait %s is no longer than the first %s, and a retry that does not back off hammers a mirror that is already refusing", waits[1], waits[0])
 		}
 		for _, wait := range waits {
-			if ceiling := time.Duration(engineInstallBackoff.ceiling+engineInstallBackoff.spread) * time.Second; wait > ceiling {
+			if ceiling := time.Duration(engineInstallBackoff.Ceiling+engineInstallBackoff.Spread) * time.Second; wait > ceiling {
 				t.Errorf("the engine step waited %s, past the %s ceiling: an apply that stalls unboundedly is one nobody can time out", wait, ceiling)
 			}
 		}
@@ -181,8 +182,8 @@ func TestAnInstallSudoRefusedIsNotTriedAgain(t *testing.T) {
 
 	box := machine(nil)
 	box.facts.Root, box.facts.Sudo = false, true
-	box.answer = func(command string) (session.Result, bool) {
-		return session.Result{Code: 1, Stderr: "sudo: a password is required"}, strings.Contains(command, dockerSource)
+	box.answer = func(command string) (ssh.Result, bool) {
+		return ssh.Result{Code: 1, Stderr: "sudo: a password is required"}, strings.Contains(command, dockerSource)
 	}
 	refusalOf(t, box.host().installEngine(context.Background(), progress.Discard()), refusal.CodeDenied)
 	tries := 0
@@ -213,13 +214,13 @@ echo 'E: Some index files failed to download.' >&2`)
 		t.Fatalf("the engine step succeeded on a host whose install script never succeeded:\n%s", said)
 	}
 	lines := strings.Split(strings.TrimSpace(said), "\n")
-	if len(lines) > saidLines {
-		lines = lines[:saidLines]
+	if len(lines) > ssh.SaidLines {
+		lines = lines[:ssh.SaidLines]
 	}
 	shown := strings.Join(lines, "\n")
 	for _, want := range []string{dockerSource, "E: Failed to fetch", "E: Some index files failed to download."} {
 		if !strings.Contains(shown, want) {
-			t.Errorf("the first %d lines a refusal shows are\n%s\nwant %q among them: an install that fails on a bad mirror has to say so where the user reads", saidLines, shown, want)
+			t.Errorf("the first %d lines a refusal shows are\n%s\nwant %q among them: an install that fails on a bad mirror has to say so where the user reads", ssh.SaidLines, shown, want)
 		}
 	}
 }
@@ -229,7 +230,7 @@ func TestNoInstallAttemptRunsUnderAKillThatWouldInterruptDpkg(t *testing.T) {
 
 	dir, attempts := installer(t, 0)
 	killed := filepath.Join(dir, "killed")
-	executable(t, filepath.Join(dir, "timeout"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>"+quoted(killed)+"\nexit 124\n")
+	executable(t, filepath.Join(dir, "timeout"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>"+shell.Quote(killed)+"\nexit 124\n")
 	if said, err := installing(t, dir); err != nil {
 		t.Fatalf("the engine step = %v:\n%s", err, said)
 	}
@@ -246,8 +247,8 @@ func TestTheInstallBoundsEveryWaitItCanStallOn(t *testing.T) {
 
 	configured := filepath.Join(t.TempDir(), "apt.conf")
 	fetching := filepath.Join(t.TempDir(), "curlrc")
-	dir, _ := installerSaying(t, 0, `cat "$APT_CONFIG" >`+quoted(configured)+`
-cat "$CURL_HOME/.curlrc" >`+quoted(fetching))
+	dir, _ := installerSaying(t, 0, `cat "$APT_CONFIG" >`+shell.Quote(configured)+`
+cat "$CURL_HOME/.curlrc" >`+shell.Quote(fetching))
 	if said, err := installing(t, dir); err != nil {
 		t.Fatalf("the engine step = %v:\n%s", err, said)
 	}

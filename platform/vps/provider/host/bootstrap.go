@@ -11,9 +11,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -50,7 +51,7 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 	if read, err = b.recorded(ctx, read); err != nil {
 		return provider.BootstrapDescription{}, err
 	}
-	if read.observed(KindRoutingTable, live.RoutingTable) || read.observed(KindProxyConfig, ProxyConfig) {
+	if read.observed(KindRoutingTable, boxapi.RoutingTable) || read.observed(KindProxyConfig, ProxyConfig) {
 		if read.rerendering, err = b.host.proxyInspected(ctx, read.Tier); err != nil {
 			return provider.BootstrapDescription{}, err
 		}
@@ -101,7 +102,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		return provider.Plan{}, err
 	}
 	read, _ = b.host.recallReading(req.Tier)
-	if err := read.runnableEngine(b.host.named()); err != nil {
+	if err := read.runnableEngine(b.host.Named()); err != nil {
 		return provider.Plan{}, err
 	}
 	if err := b.host.refuseServingPortsHeld(ctx, read); err != nil {
@@ -136,7 +137,7 @@ func planned(read Reading) []provider.Change {
 		}
 		switch {
 		case read.rerendering && item.Kind == KindProxyConfig:
-			change.Action, change.Reason = provider.ActionUpdate, "rendered again from "+live.RoutingTable
+			change.Action, change.Reason = provider.ActionUpdate, "rendered again from "+boxapi.RoutingTable
 		case item.Kind == KindEngine && read.current(item):
 			change.Action, change.Reason, change.Slow = provider.ActionAdopt, adoptedEngine(read.Engine.Version), false
 		case read.current(item):
@@ -202,7 +203,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := current.adopting(); err != nil {
 		return err
 	}
-	if err := current.runnableEngine(b.host.named()); err != nil {
+	if err := current.runnableEngine(b.host.Named()); err != nil {
 		return err
 	}
 	if err := b.host.refuseServingPortsHeld(ctx, current); err != nil {
@@ -391,7 +392,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	defer b.host.forgetTiers()
 	defer b.host.forgetReading(tier)
-	forget, err := b.host.forgetting(ctx)
+	forget, err := b.host.KnownHostRemoval(ctx)
 	if err != nil {
 		return err
 	}
@@ -454,37 +455,37 @@ func sharing(path, reason string) removal {
 func (r removal) command() string {
 	switch {
 	case r.kind == KindContainer:
-		return "docker rm --force " + quoted(r.path)
+		return "docker rm --force " + shell.Quote(r.path)
 	case r.kind == KindUnit:
 		return unitRemoval(r.path)
 	case r.kind == KindApps:
-		return "docker ps --all --quiet --filter " + quoted("label="+r.path) + " | xargs -r docker rm --force >/dev/null"
+		return "docker ps --all --quiet --filter " + shell.Quote("label="+r.path) + " | xargs -r docker rm --force >/dev/null"
 	case r.kind == KindResourceVolumes:
-		return "docker volume ls --quiet --filter " + quoted("label="+r.path) + " | xargs -r docker volume rm >/dev/null"
+		return "docker volume ls --quiet --filter " + shell.Quote("label="+r.path) + " | xargs -r docker volume rm >/dev/null"
 	case r.kind == KindAppNetworks:
-		return "for net in $(docker network ls --quiet --filter " + quoted("label="+r.path) + "); do\n" +
-			"docker network disconnect --force \"$net\" " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 || true\n" +
+		return "for net in $(docker network ls --quiet --filter " + shell.Quote("label="+r.path) + "); do\n" +
+			"docker network disconnect --force \"$net\" " + shell.Quote(SwitchboardContainer) + " >/dev/null 2>&1 || true\n" +
 			"docker network rm \"$net\" >/dev/null\n" +
 			"done"
 	case r.kind == KindNetwork:
-		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
-			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkInUse) + "; fi"
+		return "if ! docker network rm " + shell.Quote(r.path) + " >/dev/null 2>&1 && " +
+			"docker network inspect " + shell.Quote(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + shell.Quote(networkInUse) + "; fi"
 	case r.kind == KindPlaced:
-		unplaced := words(placementCommand(filepath.Dir(r.path), "unplace", r.path)) + " 2>/dev/null || rm -f " + quoted(r.path) + "\n"
+		unplaced := shell.Words(placementCommand(filepath.Dir(r.path), "unplace", r.path)) + " 2>/dev/null || rm -f " + shell.Quote(r.path) + "\n"
 		if r.reload != "" {
 			unplaced += r.reload + "\n"
 		}
-		placed := "if [ -e " + quoted(r.path) + " ] || [ -L " + quoted(r.path) + " ]; then\n" + unplaced + "fi"
+		placed := "if [ -e " + shell.Quote(r.path) + " ] || [ -L " + shell.Quote(r.path) + " ]; then\n" + unplaced + "fi"
 		if r.origins == "" {
 			return placed
 		}
-		return placed + "\n" + words(placementCommand(r.origins, "unplace-origins")) + " 2>/dev/null || rm -f " + quoted(r.origins) + "/" + switchboard.OriginPrefix + "*.pem"
+		return placed + "\n" + shell.Words(placementCommand(r.origins, "unplace-origins")) + " 2>/dev/null || rm -f " + shell.Quote(r.origins) + "/" + boxapi.OriginPrefix + "*.pem"
 	case r.kind == KindRoutingTable || r.kind == KindProxyConfig:
-		return routingLocked("-x") + "rm -f " + quoted(r.path)
+		return routingLocked("-x") + "rm -f " + shell.Quote(r.path)
 	case r.shared:
-		return "rmdir " + quoted(r.path) + " 2>/dev/null || printf '%s\\n' " + quoted(dirNonEmpty)
+		return "rmdir " + shell.Quote(r.path) + " 2>/dev/null || printf '%s\\n' " + shell.Quote(dirNonEmpty)
 	default:
-		return "rm -rf " + quoted(r.path)
+		return "rm -rf " + shell.Quote(r.path)
 	}
 }
 
@@ -516,8 +517,8 @@ type appsPresent struct{ containers, networks, volumes bool }
 func tierSelector(tier environment.Tier) string { return LabelTier + "=" + string(tier) }
 
 func appsProbe(tier environment.Tier) string {
-	filter := quoted("label=" + tierSelector(tier))
-	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1; then\n" +
+	filter := shell.Quote("label=" + tierSelector(tier))
+	return "if command -v " + shell.Quote(dockerEngine) + " >/dev/null 2>&1; then\n" +
 		"if [ -n \"$(docker ps --all --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo containers; fi\n" +
 		"if [ -n \"$(docker network ls --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo networks; fi\n" +
 		"if [ -n \"$(docker volume ls --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo volumes; fi\n" +
@@ -525,7 +526,7 @@ func appsProbe(tier environment.Tier) string {
 }
 
 func (h *Host) presentApps(ctx context.Context, tier environment.Tier) (appsPresent, error) {
-	said, err := h.run(ctx, "ask what "+string(tier)+" still runs", appsProbe(tier), nil)
+	said, err := h.Run(ctx, ssh.Root, "ask what "+string(tier)+" still runs", appsProbe(tier), nil)
 	if err != nil {
 		return appsPresent{}, err
 	}

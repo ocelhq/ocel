@@ -10,8 +10,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/enginetest"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func freePort(t *testing.T) int {
@@ -42,7 +43,7 @@ func (y yourNetwork) shell(script string) (string, error) {
 func onYourNetwork(t *testing.T) yourNetwork {
 	t.Helper()
 	engineOrSkip(t)
-	arch, err := Architecture(runtime.GOARCH)
+	arch, err := ssh.Architecture(runtime.GOARCH)
 	if err != nil {
 		t.Skipf("no switchboard is built for a machine reporting %q", runtime.GOARCH)
 	}
@@ -58,26 +59,26 @@ func onYourNetwork(t *testing.T) yourNetwork {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(routing, filepath.Base(live.RoutingTable)), routingTable(nil).Content, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(routing, filepath.Base(boxapi.RoutingTable)), routingTable(nil).Content, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	binary := switchboardBinary(arch)
-	runnable(t, filepath.Join(switching, switchboard.Name), binary, 0o755)
+	runnable(t, filepath.Join(switching, boxapi.Switchboard), binary, 0o755)
 	here := strings.NewReplacer(
 		unprivilegedHere(t), "",
-		switchboard.FrontDir, filepath.Join(dir, "front"),
-		switchboard.ControlDir, filepath.Join(dir, "control"),
+		boxapi.FrontDir, filepath.Join(dir, "front"),
+		boxapi.SwitchboardControlDir, filepath.Join(dir, "control"),
 		SwitchboardDir, switching,
 		ConnectorRun, filepath.Join(dir, "connector"),
-		live.RoutingDir, routing,
+		boxapi.RoutingDir, routing,
 		routingLock, dir,
-		quoted(TunnelNetwork+":"+switchboard.TunnelListenPort), quoted("127.0.0.1:"+switchboard.TunnelListenPort),
-		quoted(TunnelNetwork), quoted(tunneling),
+		shell.Quote(TunnelNetwork+":"+boxapi.TunnelListenPort), shell.Quote("127.0.0.1:"+boxapi.TunnelListenPort),
+		shell.Quote(TunnelNetwork), shell.Quote(tunneling),
 		`"`+TunnelNetwork+`"`, `"`+tunneling+`"`,
-		networkFlag+quoted(ProxyNetwork), networkFlag+quoted("name="+boxNetwork+",alias="+switchboard.Name),
-		networkFlag+quoted(yours), networkFlag+quoted("name="+yours+",alias="+switchboard.Name),
-		quoted(ProxyNetwork), quoted(boxNetwork),
-		quoted(SwitchboardContainer), quoted(board),
+		networkFlag+shell.Quote(ProxyNetwork), networkFlag+shell.Quote("name="+boxNetwork+",alias="+boxapi.Switchboard),
+		networkFlag+shell.Quote(yours), networkFlag+shell.Quote("name="+yours+",alias="+boxapi.Switchboard),
+		shell.Quote(ProxyNetwork), shell.Quote(boxNetwork),
+		shell.Quote(SwitchboardContainer), shell.Quote(board),
 		`"`+ProxyNetwork+`"`, `"`+boxNetwork+`"`,
 	).Replace
 	return yourNetwork{binary: binary, yours: yours, box: boxNetwork, board: board, here: here}
@@ -152,11 +153,11 @@ func TestASwitchboardAPruneTookIsStartedAgainOnYourProxysNetworkAndReadAsStated(
 
 	gone := board
 	gone.networks = []userNetwork{{name: y.yours + "-gone", option: "proxy.manual.network"}}
-	if said, err := y.shell(gone.restoring(containerRising)); err == nil || !strings.Contains(said, "proxy.manual.network") {
+	if said, err := y.shell(gone.restoring(containerRising, routingLocked("-x"))); err == nil || !strings.Contains(said, "proxy.manual.network") {
 		t.Errorf("starting the switchboard again onto a network this box does not have = %v, %q, want it refused naming the option that set it", err, said)
 	}
 
-	if said, err := y.shell(board.restoring(containerRising)); err != nil {
+	if said, err := y.shell(board.restoring(containerRising, routingLocked("-x"))); err != nil {
 		t.Fatalf("starting the switchboard again = %v, want it serving on %s\n%s\n%s", err, y.yours, said, logsOf(y.board))
 	}
 	if !y.stated(t, board) {

@@ -13,8 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/valkey"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -159,7 +159,7 @@ func (p *Provider) RemoveKV(ctx context.Context, ref provider.StackRef, binding 
 }
 
 func newKVSecretAssociatedData(ref provider.StackRef, resource string) (seal.AssociatedData, error) {
-	return live.NewSecretAssociatedData(ref.Project, ref.Tier, ref.Name.String(), resourceSecretFolder, resource, kvSecretName)
+	return boxapi.NewSecretAssociatedData(ref.Project, ref.Tier, ref.Name.String(), resourceSecretFolder, resource, kvSecretName)
 }
 
 func (p *Provider) kvSecret(ctx context.Context, in resources.ProvisionRequest, name string) (string, error) {

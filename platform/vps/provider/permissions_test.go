@@ -9,7 +9,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func rendered(t *testing.T, purpose edge.CredentialPurpose) edge.CredentialDocument {
@@ -39,7 +39,7 @@ func TestTheBootstrapDocumentNamesEveryRequirementPreflightChecks(t *testing.T) 
 	t.Parallel()
 
 	document := rendered(t, edge.PurposeBootstrap).Document
-	for _, need := range session.Requirements() {
+	for _, need := range ssh.Requirements() {
 		for _, want := range []string{need.Name, need.Detail} {
 			if !strings.Contains(document, want) {
 				t.Errorf("the bootstrap document does not include %q, so it says less than preflight demands:\n%s", want, document)
@@ -92,7 +92,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 
 	document := rendered(t, edge.PurposeDeploy).Document
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		for _, item := range host.Items(tier, nil, host.ArchAMD64, host.Front{}) {
+		for _, item := range host.Items(tier, nil, ssh.AMD64, host.Front{}) {
 			if item.Owner != "ocel-deploy" || item.Kind == "linux:user" {
 				continue
 			}
@@ -105,7 +105,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 
 func describedGroups(t *testing.T, tier environment.Tier) string {
 	t.Helper()
-	for _, item := range host.Items(tier, nil, host.ArchAMD64, host.Front{}) {
+	for _, item := range host.Items(tier, nil, ssh.AMD64, host.Front{}) {
 		if item.Kind != "linux:user" {
 			continue
 		}
@@ -149,7 +149,7 @@ func TestTheDeployDocumentIncludesEverySudoersLineBootstrapWrites(t *testing.T) 
 
 	document := rendered(t, edge.PurposeDeploy).Document
 	sealing := false
-	for _, item := range host.Items(environment.TierProduction, nil, host.ArchAMD64, host.Front{}) {
+	for _, item := range host.Items(environment.TierProduction, nil, ssh.AMD64, host.Front{}) {
 		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
 			continue
 		}

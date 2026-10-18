@@ -11,6 +11,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type engineReport struct {
@@ -34,19 +36,19 @@ func probedAs(t *testing.T, k kernel, container boxContainer, engine engineRepor
 	if engine.inside != nil {
 		inside = "shift 2\nfor path; do\ncase \"$path\" in\n"
 		for path, device := range engine.inside {
-			inside += quoted(path) + ") echo " + quoted(path+" "+device) + " ;;\n"
+			inside += shell.Quote(path) + ") echo " + shell.Quote(path+" "+device) + " ;;\n"
 		}
 		inside += "esac\ndone\nexit 0"
 	}
 	executable(t, filepath.Join(dir, dockerEngine), "#!/bin/sh\n"+
 		"case \"$1\" in\n"+
-		"inspect) case \"$*\" in *State.Pid*) echo 4242 ;; *) cat "+quoted(said)+" ;; esac ;;\n"+
+		"inspect) case \"$*\" in *State.Pid*) echo 4242 ;; *) cat "+shell.Quote(said)+" ;; esac ;;\n"+
 		"exec) "+inside+" ;;\n"+
 		"*) exit 1 ;;\n"+
 		"esac\n")
 	stat := "#!/bin/sh\nfor last; do :; done\ncase \"$last\" in\n"
 	for path, device := range engine.stats {
-		stat += quoted(path) + ") echo " + quoted(device) + " ;;\n"
+		stat += shell.Quote(path) + ") echo " + shell.Quote(device) + " ;;\n"
 	}
 	executable(t, filepath.Join(dir, "stat"), stat+"*) echo \"stat: cannot statx '$last': Permission denied\" >&2; exit 1 ;;\nesac\n")
 	for _, tool := range []string{"sha256sum", "cut", "cat", "sort", "grep"} {
@@ -133,7 +135,7 @@ func TestAContainerWithAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ArchAMD64, Front{})
+	items := Items(tier, keys, ssh.AMD64, Front{})
 	minted := []byte("the key this box minted for itself")
 	for _, item := range []Item{frontItem(), boardItem()} {
 		moved := bytes.Replace(item.Content, []byte(mountsFact+mountsIntact), []byte(mountsFact+mountsMoved), 1)
@@ -143,7 +145,7 @@ func TestAContainerWithAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 		observed := digests(items)
 		observed[item.ID()] = digest(KindContainer, item.Name, 0, rootOwner, contentSum(moved))
 		read := Reading{
-			Tier: tier, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
+			Tier: tier, Present: true, Keys: keys, Arch: ssh.AMD64, Observed: observed,
 			Seal: Seal{Fingerprint: contentSum(minted)},
 			Stamp: Stamp{
 				State: StateComplete,

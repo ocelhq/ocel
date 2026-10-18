@@ -10,7 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func swapping(t *testing.T, restoreFails bool) (string, int) {
@@ -148,14 +149,14 @@ func TestAnUpgradeOverAStoppedServerSaysWhichServerToStartAndWhichVersionToSetBa
 	spec := resourced()
 	spec.Volume.Generation = "17"
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, quoted(servingSelectors())):
-			return session.Result{Stdout: "exited " + spec.Image + "\n"}, true
+		case strings.Contains(command, shell.Quote(servingSelectors())):
+			return ssh.Result{Stdout: "exited " + spec.Image + "\n"}, true
 		case strings.Contains(command, LabelGeneration):
-			return session.Result{Stdout: "16\n"}, true
+			return ssh.Result{Stdout: "16\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	err := box.host().RunResource(context.Background(), spec, "secret")
 	if err == nil {
@@ -174,21 +175,21 @@ func TestAResourceWhoseSpecChangedIsReplacedOnlyOnceItsSuccessorAnswers(t *testi
 	spec := resourced()
 	spec.Ready = []string{"pg_isready"}
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(servingSelectors())) {
-			return session.Result{Stdout: "running " + spec.Image + " 000000000000\n"}, true
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote(servingSelectors())) {
+			return ssh.Result{Stdout: "running " + spec.Image + " 000000000000\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if err := box.host().RunResource(context.Background(), spec, "secret"); err != nil {
 		t.Fatalf("RunResource() = %v", err)
 	}
 	var replaced string
 	for _, command := range box.commands() {
-		if strings.Contains(command, "docker rm --force "+quoted(spec.Name)+" ") && !strings.Contains(command, "trap back EXIT") {
+		if strings.Contains(command, "docker rm --force "+shell.Quote(spec.Name)+" ") && !strings.Contains(command, "trap back EXIT") {
 			t.Fatalf("%s was removed before its successor was proven to answer, so a successor that fails leaves the resource down:\n%s", spec.Name, command)
 		}
-		if strings.Contains(command, "docker rename "+quoted(spec.Name)) {
+		if strings.Contains(command, "docker rename "+shell.Quote(spec.Name)) {
 			replaced = command
 		}
 	}
@@ -196,11 +197,11 @@ func TestAResourceWhoseSpecChangedIsReplacedOnlyOnceItsSuccessorAnswers(t *testi
 		t.Fatalf("a changed spec never set the serving %s aside, so nothing can put it back:\n%s", spec.Name, strings.Join(box.commands(), "\n"))
 	}
 	ordered(t, replaced,
-		"docker stop --time "+fmt.Sprint(resourceStopSeconds)+" "+quoted(spec.Name),
-		"docker rename "+quoted(spec.Name)+" "+quoted(spec.Name+retiredSuffix),
-		words([]string{"docker", "run", "--detach", "--name", spec.Name}),
+		"docker stop --time "+fmt.Sprint(resourceStopSeconds)+" "+shell.Quote(spec.Name),
+		"docker rename "+shell.Quote(spec.Name)+" "+shell.Quote(spec.Name+retiredSuffix),
+		shell.Words([]string{"docker", "run", "--detach", "--name", spec.Name}),
 		"pg_isready",
-		"docker rm --force "+quoted(spec.Name+retiredSuffix),
+		"docker rm --force "+shell.Quote(spec.Name+retiredSuffix),
 	)
 	if strings.Contains(replaced, "docker volume rm") {
 		t.Errorf("replacing %s on its own volume removes a volume:\n%s", spec.Name, replaced)
@@ -219,7 +220,7 @@ func TestAReplacementWhoseSuccessorNeverAnswersPutsTheServingResourceBack(t *tes
 	spec := resourced()
 	spec.Ready = []string{"pg_isready"}
 	script, _ := swapCommand(spec, spec.Volume.Generation, "0123456789ab", "/tmp/handed.env", upgradeSteps{}, "secret")
-	run := exec.Command("/bin/sh", "-c", strings.ReplaceAll(script, "+ "+fmt.Sprint(readySeconds)+"))", "+ 1))"))
+	run := exec.Command("/bin/sh", "-c", strings.ReplaceAll(script, "+ "+fmt.Sprint(shell.ReadySeconds)+"))", "+ 1))"))
 	run.Env = []string{"PATH=" + bin + ":" + os.Getenv("PATH")}
 	if err := run.Run(); err == nil {
 		t.Fatal("a replacement whose successor never answered was reported as landed")
@@ -248,7 +249,7 @@ func TestAConnectionThatDropsWhileAskingAfterAResourceRemovesNothing(t *testing.
 	box := machine(nil)
 	dropped := errors.New("ssh: connection reset by peer")
 	box.broke = func(command string) error {
-		if strings.Contains(command, quoted(servingSelectors())) {
+		if strings.Contains(command, shell.Quote(servingSelectors())) {
 			return dropped
 		}
 		return nil
@@ -256,7 +257,7 @@ func TestAConnectionThatDropsWhileAskingAfterAResourceRemovesNothing(t *testing.
 	if err := box.host().RunResource(context.Background(), spec, "secret"); !errors.Is(err, dropped) {
 		t.Fatalf("RunResource() = %v, want the dropped connection it met reading whether %s serves", err, spec.Name)
 	}
-	if at := box.took("docker rm --force " + quoted(spec.Name)); at >= 0 {
+	if at := box.took("docker rm --force " + shell.Quote(spec.Name)); at >= 0 {
 		t.Errorf("a dropped connection was read as a container to clear, and %s was removed:\n%s", spec.Name, strings.Join(box.taking(), "\n"))
 	}
 }
@@ -266,11 +267,11 @@ func TestADaemonThatCannotBeAskedAfterAResourceIsAnErrorAndNotAnAbsence(t *testi
 
 	spec := resourced()
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(servingSelectors())) {
-			return session.Result{Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock", Code: 1}, true
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote(servingSelectors())) {
+			return ssh.Result{Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock", Code: 1}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if err := box.host().RunResource(context.Background(), spec, "secret"); err == nil {
 		t.Fatal("RunResource() = nil over a daemon that could not be asked, so it went on to run a second server beside the one it could not see")
@@ -289,7 +290,7 @@ func TestAConnectionThatDropsWhileAskingAfterAnAppRemovesNothing(t *testing.T) {
 	box := machine(nil)
 	dropped := errors.New("ssh: connection reset by peer")
 	box.broke = func(command string) error {
-		if strings.Contains(command, quoted(servingSelectors())) {
+		if strings.Contains(command, shell.Quote(servingSelectors())) {
 			return dropped
 		}
 		return nil
@@ -297,7 +298,7 @@ func TestAConnectionThatDropsWhileAskingAfterAnAppRemovesNothing(t *testing.T) {
 	if _, err := box.host().RunContainer(context.Background(), spec); !errors.Is(err, dropped) {
 		t.Fatalf("RunContainer() = %v, want the dropped connection it met reading whether %s serves", err, spec.Name)
 	}
-	if at := box.took("docker rm --force " + quoted(spec.Name)); at >= 0 {
+	if at := box.took("docker rm --force " + shell.Quote(spec.Name)); at >= 0 {
 		t.Errorf("a dropped connection was read as a container to clear, and %s was removed:\n%s", spec.Name, strings.Join(box.taking(), "\n"))
 	}
 }

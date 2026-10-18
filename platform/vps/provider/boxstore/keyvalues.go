@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const (
@@ -62,7 +62,7 @@ func (s *KeyValues) run(ctx context.Context, tier environment.Tier, unprovisione
 }
 
 func (s *KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
-	path, err := live.PathOf(key)
+	path, err := boxapi.PathOf(key)
 	if err != nil {
 		return records.Entry{}, err
 	}
@@ -124,7 +124,7 @@ func (s *KeyValues) WritePair(ctx context.Context, first, second records.Entry) 
 }
 
 func (s *KeyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
-	path, err := live.PathOf(key)
+	path, err := boxapi.PathOf(key)
 	if err != nil {
 		return err
 	}
@@ -140,13 +140,13 @@ func (s *KeyValues) Remove(ctx context.Context, key records.Key, expected record
 }
 
 func (s *KeyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
-	dir, err := live.PartitionDir(in)
+	dir, err := boxapi.PartitionDir(in)
 	if err != nil {
 		return nil, err
 	}
 	argv := []string{"list", dir}
 	if len(under) > 0 {
-		prefix, err := live.PathOf(in.Key(under...))
+		prefix, err := boxapi.PathOf(in.Key(under...))
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +169,7 @@ func (s *KeyValues) List(ctx context.Context, in records.Partition, under ...str
 			return nil, refusal.Refuse(refusal.CodeDenied,
 				"the key-value helper listed a row ocel cannot read: %q", line)
 		}
-		key, err := live.KeyOf(in, columns[0])
+		key, err := boxapi.KeyOf(in, columns[0])
 		if err != nil {
 			return nil, err
 		}
@@ -186,7 +186,7 @@ func encodeEntry(entry records.Entry) (string, []byte, error) {
 	if err := records.RefuseUnwritable(entry); err != nil {
 		return "", nil, err
 	}
-	path, err := live.PathOf(entry.Key)
+	path, err := boxapi.PathOf(entry.Key)
 	if err != nil {
 		return "", nil, err
 	}

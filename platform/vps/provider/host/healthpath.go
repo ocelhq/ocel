@@ -10,7 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 var healthPathCandidates = []string{"/up", "/health", "/healthz", "/"}
@@ -35,13 +36,13 @@ func (a pathAnswer) absent() bool {
 }
 
 func (h *Host) FindHealthPath(ctx context.Context, search HealthPathSearch, progress progress.Log) (string, error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return "", err
 	}
 	progress.Say(fmt.Sprintf("Waiting up to %s for %s to answer HTTP, then probing %s in turn: %s sets no %s, so the first that answers anything but 404 or 405 is its health check",
 		search.Window, search.App, inWords(healthPathCandidates), search.App, healthKey))
-	found, err := h.stream(ctx, renderStartWatch([]string{containerOf(search.Target)}, findHealthPathCommand(search)), nil, elevation)
+	found, err := h.Stream(ctx, elevation, renderStartWatch([]string{containerOf(search.Target)}, findHealthPathCommand(search)), nil)
 	if err != nil {
 		return "", h.unfound(ctx, search, err.Error(), false, elevation)
 	}
@@ -65,7 +66,7 @@ func (h *Host) FindHealthPath(ctx context.Context, search HealthPathSearch, prog
 		}
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"find %s's health path on %s: it answered 404 or 405 on every path ocel probes, so none of them is a health check\n%s\nSet %q on %s to the path that answers 2xx when it is healthy, e.g. %s%s",
-			search.App, h.named(), strings.Join(lines, "\n"), healthKey, search.App, healthPathExample, h.abandon(ctx, search, elevation))
+			search.App, h.Named(), strings.Join(lines, "\n"), healthKey, search.App, healthPathExample, h.abandon(ctx, search, elevation))
 	}
 	verdict := strings.TrimSpace(found.Stderr)
 	if verdict == "" {
@@ -74,25 +75,25 @@ func (h *Host) FindHealthPath(ctx context.Context, search HealthPathSearch, prog
 	return "", h.unfound(ctx, search, verdict, false, elevation)
 }
 
-func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict string, crashed bool, elevation acting) error {
+func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict string, crashed bool, elevation ssh.Acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	name := containerOf(search.Target)
-	state := h.readEvidence(ctx, stateCommand(name), elevation)
+	state := h.Evidence(ctx, elevation, stateCommand(name))
 	if crashed || isUnstarted(state) {
 		return refusal.Refuse(refusal.CodeNotReady, "start %s on %s: %s%s",
-			search.App, h.named(), h.describeUnstarted(ctx, search.App, name, state, elevation), h.abandon(ctx, search, elevation))
+			search.App, h.Named(), h.describeUnstarted(ctx, search.App, name, state, elevation), h.abandon(ctx, search, elevation))
 	}
-	logs := h.readEvidence(ctx, logCommand(name), elevation)
+	logs := h.Evidence(ctx, elevation, logCommand(name))
 	if logs == "" {
 		logs = noLogOutput
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"find %s's health path on %s: %s\nstate: %s\nlogs (last %s lines): %s\nSet %q on %s to skip probing, e.g. %s%s",
-		search.App, h.named(), verdict, state, appLogTail, logs, healthKey, search.App, healthPathExample, h.abandon(ctx, search, elevation))
+		search.App, h.Named(), verdict, state, appLogTail, logs, healthKey, search.App, healthPathExample, h.abandon(ctx, search, elevation))
 }
 
-func (h *Host) abandon(ctx context.Context, search HealthPathSearch, elevation acting) string {
+func (h *Host) abandon(ctx context.Context, search HealthPathSearch, elevation ssh.Acting) string {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	return h.discard(ctx, Rollout{Apps: []AppRollout{{Target: search.Target}}}, elevation)
@@ -102,7 +103,7 @@ func readPathAnswers(said string) []pathAnswer {
 	var answers []pathAnswer
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
-		if len(fields) != 3 || fields[0] != switchboard.Answered {
+		if len(fields) != 3 || fields[0] != boxapi.Answered {
 			continue
 		}
 		status, err := strconv.Atoi(fields[2])

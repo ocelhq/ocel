@@ -3,17 +3,16 @@ package vps
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
+func (p *Provider) Session(ctx context.Context) (*ssh.Session, error) {
 	p.dial.Lock()
 	defer p.dial.Unlock()
 	if p.live != nil {
 		return p.live, nil
 	}
-	live, err := session.Open(ctx, p.options.SSH.session())
+	live, err := ssh.Open(ctx, p.options.SSH.session())
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +20,7 @@ func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
 	return p.live, nil
 }
 
-func (p *Provider) conn(ctx context.Context) (host.Conn, error) {
+func (p *Provider) conn(ctx context.Context) (ssh.Conn, error) {
 	live, err := p.Session(ctx)
 	if err != nil {
 		return nil, err

@@ -10,9 +10,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func coolifysCaddy() Front {
@@ -46,8 +47,8 @@ func TestTheSwitchboardHearsYourCaddyOnItsNetworkOnTheHTTPSListenerAlone(t *test
 	t.Parallel()
 
 	board := switchboardOf(t, coolifysCaddy())
-	if at := slices.Index(board.command, "--https-listen"); at < 0 || board.command[at+1] != "coolify:"+switchboard.HTTPSListenPort {
-		t.Errorf("the switchboard serves as %q, want --https-listen coolify:%s: your Caddy reaches it by name there", board.command, switchboard.HTTPSListenPort)
+	if at := slices.Index(board.command, "--https-listen"); at < 0 || board.command[at+1] != "coolify:"+boxapi.HTTPSListenPort {
+		t.Errorf("the switchboard serves as %q, want --https-listen coolify:%s: your Caddy reaches it by name there", board.command, boxapi.HTTPSListenPort)
 	}
 	if slices.Contains(board.command, "--relay-network") {
 		t.Errorf("the switchboard serves as %q, want nothing relayed: every tenant on coolify would choose its X-Forwarded-Host", board.command)
@@ -65,10 +66,10 @@ func TestTheSwitchboardIsPublishedOnLoopbackForACaddyOnTheHost(t *testing.T) {
 
 	board := switchboardOf(t, caddyService())
 	running := strings.Join(board.run(), " ")
-	if !strings.Contains(running, "--publish 127.0.0.1:8480:"+switchboard.HTTPSListenPort) {
+	if !strings.Contains(running, "--publish 127.0.0.1:8480:"+boxapi.HTTPSListenPort) {
 		t.Errorf("the switchboard runs as %q, want 127.0.0.1:8480 published onto its https listener", running)
 	}
-	if at := slices.Index(board.command, "--https-listen"); at < 0 || board.command[at+1] != ProxyNetwork+":"+switchboard.HTTPSListenPort {
+	if at := slices.Index(board.command, "--https-listen"); at < 0 || board.command[at+1] != ProxyNetwork+":"+boxapi.HTTPSListenPort {
 		t.Errorf("the switchboard serves as %q, want its https listener on its %s address, which the publish forwards to", board.command, ProxyNetwork)
 	}
 }
@@ -76,15 +77,15 @@ func TestTheSwitchboardIsPublishedOnLoopbackForACaddyOnTheHost(t *testing.T) {
 func TestACaddyServiceIsReloadedThroughOneSudoersLineThatBootstrapWritesAndGrants(t *testing.T) {
 	t.Parallel()
 
-	items := ProxyItems(ArchAMD64, caddyService())
+	items := ProxyItems(ssh.AMD64, caddyService())
 	line := itemAt(t, items, KindFile, sudoersCaddyReload)
 	if want := deployUser + " ALL=(root) NOPASSWD: /usr/bin/systemctl reload caddy.service\n"; string(line.Content) != want || line.Mode != 0o440 || line.Owner != rootOwner {
 		t.Errorf("%s holds %q at %04o owned by %s, want %q at 0440 owned by root", sudoersCaddyReload, line.Content, line.Mode, line.Owner, want)
 	}
-	if slices.ContainsFunc(ProxyItems(ArchAMD64, coolifysCaddy()), func(item Item) bool { return item.Name == sudoersCaddyReload }) {
+	if slices.ContainsFunc(ProxyItems(ssh.AMD64, coolifysCaddy()), func(item Item) bool { return item.Name == sudoersCaddyReload }) {
 		t.Errorf("a Caddy in a container is given %s, want no sudo: docker exec reloads it", sudoersCaddyReload)
 	}
-	granted := slices.ContainsFunc(grants(environment.TierProduction, ArchAMD64, caddyService()), func(grant Grant) bool {
+	granted := slices.ContainsFunc(grants(environment.TierProduction, ssh.AMD64, caddyService()), func(grant Grant) bool {
 		return strings.Contains(grant.Name, sudoersCaddyReload) && strings.Contains(grant.Detail, strings.TrimSpace(string(line.Content)))
 	})
 	if !granted {
@@ -104,7 +105,7 @@ func TestTheCaddyReloadLineIsGrantedOnlyWhereBootstrapWritesIt(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			for _, grant := range grants(environment.TierProduction, ArchAMD64, front) {
+			for _, grant := range grants(environment.TierProduction, ssh.AMD64, front) {
 				if strings.Contains(grant.Name, sudoersCaddyReload) {
 					t.Errorf("the grants behind %s name %q, want no %s: bootstrap writes it only for a Caddy that runs as caddy.service", name, grant.Name, sudoersCaddyReload)
 				}
@@ -149,7 +150,7 @@ func TestDestroyReloadsYourCaddyOnlyWhenOcelCaddyWasThereToTake(t *testing.T) {
 
 			dir, bin := t.TempDir(), t.TempDir()
 			ran := filepath.Join(bin, "ran")
-			docker := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + quoted(ran) + "\n[ \"$1\" = inspect ] && echo true\n[ \"$1\" = run ] && exit 1\nexit 0\n"
+			docker := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + shell.Quote(ran) + "\n[ \"$1\" = inspect ] && echo true\n[ \"$1\" = run ] && exit 1\nexit 0\n"
 			if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(docker), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -183,11 +184,11 @@ func TestBootstrapRefusesACaddyWhoseAdminEndpointIsOff(t *testing.T) {
 	t.Parallel()
 
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "/config/apps/http/servers") {
-			return session.Result{Code: 7, Stderr: "curl: (7) Failed to connect to 127.0.0.1 port 2019"}, true
+			return ssh.Result{Code: 7, Stderr: "curl: (7) Failed to connect to 127.0.0.1 port 2019"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	err := box.fronted(caddyService()).refuseServingPortsHeld(context.Background(), Reading{Tier: environment.TierProduction, Front: caddyService()})
 	if err == nil || !strings.Contains(err.Error(), "admin off") {
@@ -204,11 +205,11 @@ func TestBootstrapRefusesACaddyContainerOffTheHostsNetworkWithoutANetworkNamingI
 	filled := CaddyFront{Directory: "/etc/caddy/ocel.d", Container: "caddy"}.Filled()
 	front := Front{Caddy: &filled}
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "NetworkMode") {
-			return session.Result{Stdout: "bridge\n"}, true
+			return ssh.Result{Stdout: "bridge\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	err := box.fronted(front).refuseServingPortsHeld(context.Background(), Reading{Tier: environment.TierProduction, Front: front})
 	if err == nil || !strings.Contains(err.Error(), "proxy.caddy.network") {

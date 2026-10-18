@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
 )
 
 type edges struct{ provider *Provider }
@@ -35,7 +35,7 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 
 type boxProxy struct {
 	*cloudflare.Proxy
-	box *box.Edge
+	box *switchboard.Edge
 }
 
 func (x boxProxy) Hooks() edge.Hooks {
@@ -57,8 +57,8 @@ func (x boxProxy) Facts() edge.Facts {
 	return facts
 }
 
-func (p *Provider) box() *box.Edge {
-	return box.New(p.host, p.applyOrigins, p.options.SSH.session().Destination(), p.findTunnelHooks, newRecordedGate(p.keyValues, p.cipher))
+func (p *Provider) box() *switchboard.Edge {
+	return switchboard.New(p.host, p.applyOrigins, p.options.SSH.session().Destination(), p.findTunnelHooks, newRecordedGate(p.keyValues, p.cipher))
 }
 
 func (p *Provider) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {

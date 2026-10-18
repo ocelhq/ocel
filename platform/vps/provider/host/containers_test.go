@@ -14,8 +14,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -29,11 +30,11 @@ func aContainer() Container {
 }
 
 func imaging(b *bench, served string) {
-	b.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted(servingSelectors())) {
-			return session.Result{Stdout: served + "\n"}, true
+	b.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote(servingSelectors())) {
+			return ssh.Result{Stdout: served + "\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 }
 
@@ -50,7 +51,7 @@ func runningContainer(t *testing.T, served string) *bench {
 func ranContainer(t *testing.T, box *bench) string {
 	t.Helper()
 	for _, command := range box.commands() {
-		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
+		if strings.Contains(command, shell.Quote("run")+" "+shell.Quote("--detach")) {
 			return command
 		}
 	}
@@ -63,14 +64,14 @@ func TestAReleaseRunsOneLabelledContainerOnTheOneNetworkTargetsResolveAcross(t *
 
 	command := ranContainer(t, runningContainer(t, "false "))
 	for what, wanted := range map[string]string{
-		"the name the drain attributes its in-flight count to": quoted("--name") + " " + quoted(physical),
-		"a reboot that does not take the app down":             quoted("--restart") + " " + quoted(appRestart),
-		"the network the proxy reaches it over":                quoted("--network") + " " + quoted(live.AppNetwork(aContainer().Tier, "shop")),
-		"the app label retention reads":                        quoted("--label") + " " + quoted(LabelApp+"=web"),
-		"the project label retention reads":                    quoted("--label") + " " + quoted(LabelProject+"=shop"),
-		"the ref label retention reads":                        quoted("--label") + " " + quoted(LabelRef+"="+appImage),
-		"the port the app is told to bind":                     quoted("--env") + " " + quoted("PORT="+containerimage.PortText),
-		"the image the release names":                          quoted(appImage),
+		"the name the drain attributes its in-flight count to": shell.Quote("--name") + " " + shell.Quote(physical),
+		"a reboot that does not take the app down":             shell.Quote("--restart") + " " + shell.Quote(appRestart),
+		"the network the proxy reaches it over":                shell.Quote("--network") + " " + shell.Quote(boxapi.AppNetwork(aContainer().Tier, "shop")),
+		"the app label retention reads":                        shell.Quote("--label") + " " + shell.Quote(LabelApp+"=web"),
+		"the project label retention reads":                    shell.Quote("--label") + " " + shell.Quote(LabelProject+"=shop"),
+		"the ref label retention reads":                        shell.Quote("--label") + " " + shell.Quote(LabelRef+"="+appImage),
+		"the port the app is told to bind":                     shell.Quote("--env") + " " + shell.Quote("PORT="+containerimage.PortText),
+		"the image the release names":                          shell.Quote(appImage),
 	} {
 		if !strings.Contains(command, wanted) {
 			t.Errorf("starting a container runs %q, which contains no %s (%s)", command, what, wanted)
@@ -82,7 +83,7 @@ func TestAnAppContainerRunsItsRuntimeAsInitWhateverTheDaemonDefaults(t *testing.
 	t.Parallel()
 
 	command := ranContainer(t, runningContainer(t, "false "))
-	if !strings.Contains(command, quoted("--init=false")) {
+	if !strings.Contains(command, shell.Quote("--init=false")) {
 		t.Errorf("starting a container runs %q, which leaves init to the daemon: a daemon set to `\"init\": true` puts docker-init in front of the runtime, and the box agent answers only the container's init process", command)
 	}
 }
@@ -91,7 +92,7 @@ func TestNoPortIsPublishedForAnAppContainerAndNoListenerIsAddedAnywhere(t *testi
 	t.Parallel()
 
 	command := ranContainer(t, runningContainer(t, "false "))
-	for _, opening := range []string{quoted("--publish"), quoted("-p"), "--network host", quoted("--expose")} {
+	for _, opening := range []string{shell.Quote("--publish"), shell.Quote("-p"), "--network host", shell.Quote("--expose")} {
 		if strings.Contains(command, opening) {
 			t.Errorf("starting a container runs %q, and %q puts the app on an address the proxy is not the only way to: every probe and every request reaches it over the shared network alone",
 				command, opening)
@@ -104,7 +105,7 @@ func TestAContainerAlreadyServingTheReleasesImageIsKeptRatherThanRecreated(t *te
 
 	box := runningContainer(t, "running "+appImage+" "+handedTo(aContainer()).digest)
 	for _, command := range box.commands() {
-		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
+		if strings.Contains(command, shell.Quote("run")+" "+shell.Quote("--detach")) {
 			t.Errorf("a redeploy of a release already running ran %q, and the container serving live traffic is torn down for one that is the same", command)
 		}
 	}
@@ -145,7 +146,7 @@ func TestAContainerOfAnotherImageIsReplacedRatherThanLeftServing(t *testing.T) {
 
 	box := runningContainer(t, "running ocel/shop/web:sha256-older")
 	command := ranContainer(t, box)
-	if !strings.Contains(command, "docker rm --force "+quoted(physical)) && !strings.Contains(strings.Join(box.commands(), "\n"), "docker rm --force "+quoted(physical)) {
+	if !strings.Contains(command, "docker rm --force "+shell.Quote(physical)) && !strings.Contains(strings.Join(box.commands(), "\n"), "docker rm --force "+shell.Quote(physical)) {
 		t.Errorf("the name was reused without taking the container that owns it: %v", box.commands())
 	}
 }
@@ -230,7 +231,7 @@ func TestTheStateLineOfACrashLoopingContainerCountsItsRestarts(t *testing.T) {
 func TestWhatIsAlreadyServingIsReadFromWhereADaemonKeepsIt(t *testing.T) {
 	t.Parallel()
 
-	if !strings.Contains(servingCommand(physical), quoted(servingSelectors())) {
+	if !strings.Contains(servingCommand(physical), shell.Quote(servingSelectors())) {
 		t.Fatalf("the serving check reads %q and no longer asks the daemon for the format it reads", servingCommand(physical))
 	}
 	said := rendering(t, servingSelectors())
@@ -284,11 +285,11 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	spec := valued()
 	box := runningWith(t, spec)
 	command := ranContainer(t, box)
-	mount := quoted("--mount") + " " + quoted("type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly")
+	mount := shell.Quote("--mount") + " " + shell.Quote("type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly")
 	if !strings.Contains(command, mount) {
 		t.Errorf("starting a live container runs %q, which hands it no socket to read its values through (%s)", command, mount)
 	}
-	tmpfs := quoted("--tmpfs") + " " + quoted(containerimage.LivePath+":rw,noexec,nosuid,size=8m")
+	tmpfs := shell.Quote("--tmpfs") + " " + shell.Quote(containerimage.LivePath+":rw,noexec,nosuid,size=8m")
 	if !strings.Contains(command, tmpfs) {
 		t.Errorf("starting a live container runs %q, which gives the runtime nowhere in memory to project the values into (%s): an image built from scratch has no /tmp, and the writable layer is the box's disk", command, tmpfs)
 	}
@@ -308,7 +309,7 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	baked := spec
 	baked.Manifest = nil
 	bakedBox := runningWith(t, baked)
-	if command := ranContainer(t, bakedBox); strings.Contains(command, quoted("--mount")) || strings.Contains(command, quoted("--tmpfs")) {
+	if command := ranContainer(t, bakedBox); strings.Contains(command, shell.Quote("--mount")) || strings.Contains(command, shell.Quote("--tmpfs")) {
 		t.Errorf("a container reading nothing live runs %q and is handed the socket or the projection anyway", command)
 	}
 	if file := wrote(t, bakedBox, EnvFile(baked.Tier, baked.Name)); strings.Contains(file, "OCEL_LIVE_MANIFEST") {
@@ -335,14 +336,14 @@ func TestAChangedManifestReplacesTheContainerLikeAChangedValue(t *testing.T) {
 	}
 }
 
-func readingLogs(t *testing.T, answer session.Result) (*bench, []Line, error) {
+func readingLogs(t *testing.T, answer ssh.Result) (*bench, []Line, error) {
 	t.Helper()
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker logs") {
 			return answer, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	since := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
 	lines, err := box.host().ReadContainerLogs(context.Background(), physical, since, time.Time{}, 50, "")
@@ -352,7 +353,7 @@ func readingLogs(t *testing.T, answer session.Result) (*bench, []Line, error) {
 func TestReadContainerLogsKeepsStdoutAndStderrApartAndOrdersThemByTime(t *testing.T) {
 	t.Parallel()
 
-	box, lines, err := readingLogs(t, session.Result{
+	box, lines, err := readingLogs(t, ssh.Result{
 		Stdout: "2026-03-01T10:00:01.000000002Z listening on 3000\n2026-03-01T10:00:03Z served /\n",
 		Stderr: "2026-03-01T10:00:02.5Z warn: slow query\n",
 	})
@@ -371,7 +372,7 @@ func TestReadContainerLogsKeepsStdoutAndStderrApartAndOrdersThemByTime(t *testin
 	if strings.Contains(command, "2>&1") {
 		t.Errorf("ReadContainerLogs ran %q, and 2>&1 merges the stderr it must keep apart", command)
 	}
-	for _, wanted := range []string{"--timestamps", "--since " + quoted("2026-03-01T10:00:00Z"), "--tail 50", quoted(physical)} {
+	for _, wanted := range []string{"--timestamps", "--since " + shell.Quote("2026-03-01T10:00:00Z"), "--tail 50", shell.Quote(physical)} {
 		if !strings.Contains(command, wanted) {
 			t.Errorf("ReadContainerLogs ran %q, want it to contain %q", command, wanted)
 		}
@@ -389,7 +390,7 @@ func TestReadContainerLogsBoundsTheReadByUntilWhenGiven(t *testing.T) {
 	if _, err := box.host().ReadContainerLogs(context.Background(), physical, until.Add(-time.Hour), until, 5, ""); err != nil {
 		t.Fatalf("ReadContainerLogs() error = %v", err)
 	}
-	if command := box.commands()[box.at("docker logs")]; !strings.Contains(command, "--until "+quoted("2026-03-01T11:00:00Z")) {
+	if command := box.commands()[box.at("docker logs")]; !strings.Contains(command, "--until "+shell.Quote("2026-03-01T11:00:00Z")) {
 		t.Errorf("ReadContainerLogs ran %q, want it bounded by --until", command)
 	}
 }
@@ -404,7 +405,7 @@ func TestReadContainerLogsPassesSinceAndUntilToTheNanosecond(t *testing.T) {
 		t.Fatalf("ReadContainerLogs() error = %v", err)
 	}
 	command := box.commands()[box.at("docker logs")]
-	for _, wanted := range []string{"--since " + quoted("2026-03-01T10:00:00.500000001Z"), "--until " + quoted("2026-03-01T11:00:00.999999999Z")} {
+	for _, wanted := range []string{"--since " + shell.Quote("2026-03-01T10:00:00.500000001Z"), "--until " + shell.Quote("2026-03-01T11:00:00.999999999Z")} {
 		if !strings.Contains(command, wanted) {
 			t.Errorf("ReadContainerLogs ran %q, want it to contain %q", command, wanted)
 		}
@@ -414,11 +415,11 @@ func TestReadContainerLogsPassesSinceAndUntilToTheNanosecond(t *testing.T) {
 func readingLogsBetween(t *testing.T, stdout string, since, until time.Time, limit int, contains string) (string, []string) {
 	t.Helper()
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker logs") {
-			return session.Result{Stdout: stdout}, true
+			return ssh.Result{Stdout: stdout}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	lines, err := box.host().ReadContainerLogs(context.Background(), physical, since, until, limit, contains)
 	if err != nil {
@@ -478,7 +479,7 @@ func TestReadContainerLogsDropsLinesDockerReturnsOutsideTheWindow(t *testing.T) 
 func TestReadContainerLogsNamesAContainerThatNoLongerExists(t *testing.T) {
 	t.Parallel()
 
-	_, lines, err := readingLogs(t, session.Result{Code: 1, Stderr: "Error response from daemon: No such container: " + physical})
+	_, lines, err := readingLogs(t, ssh.Result{Code: 1, Stderr: "Error response from daemon: No such container: " + physical})
 	if !errors.Is(err, ErrContainerMissing) {
 		t.Errorf("ReadContainerLogs() error = %v, want ErrContainerMissing", err)
 	}
@@ -490,7 +491,7 @@ func TestReadContainerLogsNamesAContainerThatNoLongerExists(t *testing.T) {
 func TestReadContainerLogsRefusesAnyOtherDockerFailure(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := readingLogs(t, session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"})
+	_, _, err := readingLogs(t, ssh.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"})
 	if err == nil || errors.Is(err, ErrContainerMissing) {
 		t.Errorf("ReadContainerLogs() error = %v, want a failure that is not ErrContainerMissing", err)
 	}
@@ -503,7 +504,7 @@ func TestARetiredContainersImageIsArchivedBeforeTheContainerStops(t *testing.T) 
 		t.Fatalf("RetireContainer() = %v", err)
 	}
 
-	archived := rig.at(quoted(releasesHelper) + " " + quoted("shop/web") + " " + quoted("archive") + " " + quoted(appImage))
+	archived := rig.at(shell.Quote(releasesHelper) + " " + shell.Quote("shop/web") + " " + shell.Quote("archive") + " " + shell.Quote(appImage))
 	stopped := rig.at("docker stop ")
 	if archived < 0 {
 		t.Fatalf("the retiree's image was never archived, so a nightly prune of stopped containers and unused images leaves `ocel rollback` nothing to start:\n%s", strings.Join(rig.commands(), "\n"))
@@ -515,11 +516,11 @@ func TestARetiredContainersImageIsArchivedBeforeTheContainerStops(t *testing.T) 
 
 func TestARetiredContainerWhoseImageCouldNotBeArchivedIsLeftRunning(t *testing.T) {
 	rig := machine(nil)
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(releasesHelper)) {
-			return session.Result{Code: 1, Stderr: "write /var/lib/ocel/releases/.staging.7.tar: no space left on device"}, true
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote(releasesHelper)) {
+			return ssh.Result{Code: 1, Stderr: "write /var/lib/ocel/releases/.staging.7.tar: no space left on device"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	err := rig.host().RetireContainer(context.Background(), physical)

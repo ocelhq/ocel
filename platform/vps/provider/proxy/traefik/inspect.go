@@ -14,9 +14,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const originRenewal = "ocel renews the origin certificate the edge in front issues it, and your Traefik serves it from " + FileName
@@ -79,15 +79,15 @@ func (t Traefik) switchboardChecks(ctx context.Context) (proxy.Checks, error) {
 	if t.Network == "" {
 		return nil, nil
 	}
-	said, err := t.Box.Ran(ctx, "read which networks "+switchboard.Name+" is on", switchboardNetworks())
+	said, err := t.Box.Ran(ctx, "read which networks "+boxapi.Switchboard+" is on", switchboardNetworks())
 	if err != nil {
 		return nil, err
 	}
-	joined := provider.HostCheck{Subject: switchboard.Name + " on " + t.Network, Verdict: provider.HostPass,
-		Finding: switchboard.Name + " is on " + t.Network + ", where your Traefik reaches it by name"}
+	joined := provider.HostCheck{Subject: boxapi.Switchboard + " on " + t.Network, Verdict: provider.HostPass,
+		Finding: boxapi.Switchboard + " is on " + t.Network + ", where your Traefik reaches it by name"}
 	if !slices.Contains(strings.Fields(said), networkFact+t.Network) {
 		joined.Verdict, joined.Fix = provider.HostFail, bootstrapFix
-		joined.Finding = switchboard.Name + " is not on " + t.Network + ", so your Traefik cannot reach it by name"
+		joined.Finding = boxapi.Switchboard + " is not on " + t.Network + ", so your Traefik cannot reach it by name"
 	}
 	return proxy.Checks{joined}, nil
 }

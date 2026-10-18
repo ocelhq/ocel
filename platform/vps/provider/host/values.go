@@ -13,6 +13,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -23,13 +25,13 @@ const (
 )
 
 func sweepCommand() string {
-	return "find " + quoted(StateDir(environment.TierProduction)) + " " + quoted(StateDir(environment.TierPreview)) +
-		" -mindepth 1 -maxdepth 1 -type f -name " + quoted("*"+envFileSuffix) +
+	return "find " + shell.Quote(StateDir(environment.TierProduction)) + " " + shell.Quote(StateDir(environment.TierPreview)) +
+		" -mindepth 1 -maxdepth 1 -type f -name " + shell.Quote("*"+envFileSuffix) +
 		" -mmin +" + orphanMinutes + " -exec rm -f {} + 2>/dev/null || true"
 }
 
-func (h *Host) sweep(ctx context.Context, elevation acting) error {
-	_, err := h.ran(ctx, "sweep what an interrupted deploy left under "+stateRoot, sweepCommand(), nil, elevation)
+func (h *Host) sweep(ctx context.Context, elevation ssh.Acting) error {
+	_, err := h.Run(ctx, elevation, "sweep what an interrupted deploy left under "+stateRoot, sweepCommand(), nil)
 	return err
 }
 
@@ -78,30 +80,29 @@ func (h *Host) note(ctx context.Context, spec Container) error {
 	if err != nil {
 		return err
 	}
-	acting, err := h.reachStateRoot(ctx)
+	acting, err := ssh.Deploy, h.Assume(ctx, ssh.Deploy)
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "note the names "+spec.App+" is handed",
-		renderPipedInstall("-D -m 0600", HandedNote(spec.Tier, spec.Name)), bytes.NewReader(rendered), acting)
+	_, err = h.Run(ctx, acting, "note the names "+spec.App+" is handed", renderPipedInstall("-D -m 0600", HandedNote(spec.Tier, spec.Name)), bytes.NewReader(rendered))
 	return err
 }
 
 func renderPipedInstall(flags, path string) string {
-	return "cat | install " + flags + " /dev/stdin " + quoted(path)
+	return "cat | install " + flags + " /dev/stdin " + shell.Quote(path)
 }
 
 func handedCommand(tier environment.Tier, container string) string {
-	note := quoted(HandedNote(tier, container))
+	note := shell.Quote(HandedNote(tier, container))
 	return "if [ -f " + note + " ]; then echo " + handedKnown + "; cat " + note + "; else echo " + handedUnknown + "; fi"
 }
 
 func (h *Host) handed(ctx context.Context, spec Container) (Note, bool, error) {
-	acting, err := h.reachStateRoot(ctx)
+	acting, err := ssh.Deploy, h.Assume(ctx, ssh.Deploy)
 	if err != nil {
 		return Note{}, false, err
 	}
-	said, err := h.ran(ctx, "ask what "+spec.Name+" was handed", handedCommand(spec.Tier, spec.Name), nil, acting)
+	said, err := h.Run(ctx, acting, "ask what "+spec.Name+" was handed", handedCommand(spec.Tier, spec.Name), nil)
 	if err != nil {
 		return Note{}, false, err
 	}
@@ -183,12 +184,11 @@ func (h *Host) hand(ctx context.Context, delivery handoff, spec Container) error
 	if err != nil {
 		return err
 	}
-	acting, err := h.reachStateRoot(ctx)
+	acting, err := ssh.Deploy, h.Assume(ctx, ssh.Deploy)
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "write the values "+spec.App+" is handed",
-		renderPipedInstall("-m 0600", delivery.path), bytes.NewReader(rendered), acting)
+	_, err = h.Run(ctx, acting, "write the values "+spec.App+" is handed", renderPipedInstall("-m 0600", delivery.path), bytes.NewReader(rendered))
 	return err
 }
 
@@ -198,10 +198,10 @@ func (h *Host) forget(ctx context.Context, delivery handoff) error {
 	}
 	taking, stop := context.WithTimeout(context.WithoutCancel(ctx), forgetWindow)
 	defer stop()
-	if _, err := h.ran(taking, "take back "+delivery.path, "rm -f "+quoted(delivery.path), nil, ""); err != nil {
+	if _, err := h.Run(taking, ssh.Login, "take back "+delivery.path, "rm -f "+shell.Quote(delivery.path), nil); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"could not remove %s on %s, which has this deploy's values in plaintext: %v",
-			delivery.path, h.named(), err)
+			delivery.path, h.Named(), err)
 	}
 	return nil
 }

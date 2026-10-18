@@ -10,8 +10,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const manualRecord = `{"proxy":{"manual":{"port":8480}},"project":"shop","tier":"production"}`
@@ -34,7 +34,7 @@ func routedByHand(overrides map[string]answer) *scripted {
 func preflightingByHand(machine *scripted) error {
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Manual: &vps.Manual{}}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	p.Reaching(reachedFromOutside)
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")

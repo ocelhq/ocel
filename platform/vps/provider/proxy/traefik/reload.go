@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const reloadWait = reloadPauses * reloadInterval
@@ -96,7 +96,7 @@ func (t Traefik) probeRoute(ctx context.Context, hostname string) (bool, string,
 		return false, "", err
 	case failure != "":
 		return false, failure, nil
-	case answered != string(switchboard.RouterKind):
+	case answered != string(boxapi.SwitchboardRouter):
 		return false, fmt.Sprintf("%s answers on this box's 443 as %q, not through ocel's switchboard", hostname, answered), nil
 	default:
 		return true, "", nil
@@ -122,7 +122,7 @@ func (t Traefik) diagnose(ctx context.Context) string {
 	if err != nil {
 		return fmt.Sprintf("\nread the files beside %s: %v", t.file(), err)
 	}
-	slices.SortFunc(beside, func(a, b switchboard.SiblingFile) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(beside, func(a, b boxapi.SiblingFile) int { return strings.Compare(a.Name, b.Name) })
 	for _, file := range beside {
 		if err := parseLikeTraefik(file.Name, file.Content); err != nil && !errors.Is(err, errOnlyTraefikSees) {
 			at := filepath.Join(t.directory(), file.Name)

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func (vm machine) ssh(t *testing.T, command string) string {
@@ -124,7 +125,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if stamp.Writer != "live-suite" {
 		t.Errorf("the stamp reads writer %q, want the writer that applied it", stamp.Writer)
 	}
-	for _, item := range host.Items(tier, nil, host.ArchAMD64, host.Front{}) {
+	for _, item := range host.Items(tier, nil, ssh.AMD64, host.Front{}) {
 		if stamp.Digests[item.ID()] == "" {
 			t.Errorf("the stamp records no digest for %s, and nothing can say whether it drifted", item.ID())
 		}

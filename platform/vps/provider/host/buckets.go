@@ -20,6 +20,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type BucketSpec struct {
@@ -240,11 +242,11 @@ func curlCommand(store string, req *http.Request, call storeCall) string {
 		accepted = append(accepted, "\""+code+"\"")
 	}
 	return "set -eu\n" +
-		"answered=$(base64 -d | " + words(argv) + ") || { printf '%s\\n' " + quoted("the store "+store+" gave no answer") + " >&2; exit " + strconv.Itoa(storeBusyExit) + "; }\n" +
+		"answered=$(base64 -d | " + shell.Words(argv) + ") || { printf '%s\\n' " + shell.Quote("the store "+store+" gave no answer") + " >&2; exit " + strconv.Itoa(storeBusyExit) + "; }\n" +
 		"case \"$answered\" in\n" +
 		strings.Join(accepted, "|") + ") ;;\n" +
-		"000|429|5??) printf '%s\\n' " + quoted("the store answered ") + "\"$answered\" >&2; exit " + strconv.Itoa(storeBusyExit) + " ;;\n" +
-		"*) printf '%s\\n' " + quoted("the store answered ") + "\"$answered\" >&2; exit 1 ;;\n" +
+		"000|429|5??) printf '%s\\n' " + shell.Quote("the store answered ") + "\"$answered\" >&2; exit " + strconv.Itoa(storeBusyExit) + " ;;\n" +
+		"*) printf '%s\\n' " + shell.Quote("the store answered ") + "\"$answered\" >&2; exit 1 ;;\n" +
 		"esac"
 }
 
@@ -266,7 +268,7 @@ type BucketState struct {
 }
 
 func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketState, error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return BucketState{}, err
 	}
@@ -280,11 +282,11 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStat
 	for _, call := range calls {
 		if call.name == lifecycleCall {
 			taken, err := droveStore(spec, []storeCall{call}, now, func(what, script string) (string, error) {
-				return h.ran(ctx, what, script, nil, elevation)
+				return h.Run(ctx, elevation, what, script, nil)
 			})
 			if err != nil {
 				return BucketState{}, refusal.Refuse(refusal.CodeNotReady,
-					"could not %s on %s: %v", call.what, h.named(), err)
+					"could not %s on %s: %v", call.what, h.Named(), err)
 			}
 			current.ExpiresUploads = slices.Contains(storeTook, taken[call.name].code)
 			continue
@@ -301,7 +303,7 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStat
 }
 
 func (h *Host) ApplyOrigins(ctx context.Context, spec BucketSpec) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
@@ -342,16 +344,16 @@ func (s BucketSpec) readingCalls() []storeCall {
 }
 
 func (h *Host) PlanBucket(ctx context.Context, spec BucketSpec) (provider.ChangeAction, string, error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return "", "", err
 	}
 	answers, err := droveStore(spec, spec.readingCalls(), time.Now().UTC(), func(what, script string) (string, error) {
-		return h.ran(ctx, what, script, nil, elevation)
+		return h.Run(ctx, elevation, what, script, nil)
 	})
 	if err != nil {
 		return "", "", refusal.Refuse(refusal.CodeNotReady,
-			"could not read bucket %s on %s: %v", spec.Bucket, h.named(), err)
+			"could not read bucket %s on %s: %v", spec.Bucket, h.Named(), err)
 	}
 	return spec.planChange(answers)
 }
@@ -586,11 +588,11 @@ func (r BucketRef) spec() BucketSpec {
 }
 
 func (h *Host) RemoveBucket(ctx context.Context, ref BucketRef) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
 	return removedBucket(ref.spec(), func() time.Time { return time.Now().UTC() }, func(what, script string) (string, error) {
-		return h.ran(ctx, what, script, nil, elevation)
+		return h.Run(ctx, elevation, what, script, nil)
 	})
 }

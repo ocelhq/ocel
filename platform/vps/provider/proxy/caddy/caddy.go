@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/officialimages"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
@@ -23,7 +23,7 @@ const (
 	ConfigMount = ConfigDir + "/" + ConfigName
 	DataMount   = "/data"
 	PinsMount   = "/etc/caddy/pins"
-	PinsDir     = live.TierRoot + "/certs"
+	PinsDir     = boxapi.TierRoot + "/certs"
 	HTTPPort    = proxy.HTTPPort
 	HTTPSPort   = proxy.HTTPSPort
 )

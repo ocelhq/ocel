@@ -1,0 +1,363 @@
+package switchboard
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httputil"
+	"net/netip"
+	"os"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+)
+
+var routerHeader = http.CanonicalHeaderKey(router.HeaderRouter)
+
+const (
+	ReadHeaderTimeout = 10 * time.Second
+	idleTimeout       = 5 * time.Minute
+	dialTimeout       = 10 * time.Second
+	dialKeepAlive     = 30 * time.Second
+	idleUpstreams     = 64
+	upstreamIdle      = 90 * time.Second
+	connectorHost     = "connector"
+)
+
+var (
+	forwardedKept    = []string{"X-Forwarded-Host", "X-Forwarded-Proto"}
+	forwardedUnheard = []string{"forwarded", "x-real-ip", "true-client-ip"}
+)
+
+type Board struct {
+	table     atomic.Pointer[boxapi.Table]
+	loading   sync.Mutex
+	retiring  sync.Mutex
+	draining  map[string]int
+	relayed   []netip.Prefix
+	ledger    ledger
+	connector string
+	tcp       *http.Transport
+	socket    *http.Transport
+	server    *http.Server
+	admitter  *http.Server
+}
+
+func New(table *boxapi.Table, relayed ...netip.Prefix) *Board {
+	board := &Board{connector: boxapi.ConnectorSocket, draining: map[string]int{}, relayed: slices.Clone(relayed)}
+	board.table.Store(table)
+	dialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive}
+	board.tcp = upstreamTransport(func(ctx context.Context, network, address string) (net.Conn, error) {
+		conn, err := dialer.DialContext(ctx, network, address)
+		if err != nil {
+			return nil, err
+		}
+		return board.ledger.wired(ctx, conn)
+	})
+	board.socket = upstreamTransport(func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return dialer.DialContext(ctx, "unix", board.connector)
+	})
+	board.server = &http.Server{
+		Handler:           board,
+		ReadHeaderTimeout: ReadHeaderTimeout,
+		IdleTimeout:       idleTimeout,
+		ConnContext:       arriving,
+	}
+	board.admitter = &http.Server{Handler: board.admit(), ReadHeaderTimeout: ReadHeaderTimeout, ConnContext: arriving}
+	return board
+}
+
+func arriving(ctx context.Context, conn net.Conn) context.Context {
+	if arrived, marked := conn.(arrivedConn); marked {
+		return context.WithValue(ctx, arrivalKey{}, arrived.over)
+	}
+	return ctx
+}
+
+type arrival int
+
+const (
+	overFront arrival = iota + 1
+	overHTTPS
+	overTunnel
+)
+
+type arrivalKey struct{}
+
+func arrivedOver(r *http.Request) arrival {
+	over, _ := r.Context().Value(arrivalKey{}).(arrival)
+	return over
+}
+
+type arrivedConn struct {
+	net.Conn
+	over arrival
+}
+
+type markedListener struct {
+	net.Listener
+	over arrival
+}
+
+func (l markedListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return arrivedConn{conn, l.over}, nil
+}
+
+func upstreamTransport(dial func(ctx context.Context, network, address string) (net.Conn, error)) *http.Transport {
+	return &http.Transport{
+		DialContext:         dial,
+		DisableCompression:  true,
+		MaxIdleConnsPerHost: idleUpstreams,
+		IdleConnTimeout:     upstreamIdle,
+	}
+}
+
+func (b *Board) Serve(listener net.Listener) error {
+	err := b.server.Serve(listener)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func (b *Board) ServeFront(listener net.Listener) error {
+	return b.Serve(markedListener{listener, overFront})
+}
+
+func (b *Board) ServeHTTPS(listener net.Listener) error {
+	return b.Serve(markedListener{listener, overHTTPS})
+}
+
+func (b *Board) ServeTunnel(listener net.Listener) error {
+	return b.Serve(markedListener{listener, overTunnel})
+}
+
+func (b *Board) ServeAdmit(listener net.Listener) error {
+	err := b.admitter.Serve(markedListener{listener, overFront})
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func (b *Board) Shutdown(ctx context.Context) error {
+	err := errors.Join(b.admitter.Shutdown(ctx), b.server.Shutdown(ctx))
+	b.ledger.cutAll()
+	return err
+}
+
+func (b *Board) Close() error {
+	err := errors.Join(b.admitter.Close(), b.server.Close())
+	b.ledger.cutAll()
+	return err
+}
+
+func (b *Board) Grace() time.Duration { return b.table.Load().Grace }
+
+func (b *Board) Load(path string) error {
+	b.loading.Lock()
+	defer b.loading.Unlock()
+	document, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	table, err := boxapi.ReadTable(document)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	b.table.Store(table)
+	return nil
+}
+
+func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	named := func(header http.Header) {
+		header.Set(routerHeader, string(boxapi.SwitchboardRouter))
+		if r.URL.Path == edge.LivenessProbePath {
+			header.Set(boxapi.HeardHeader, b.heard(r))
+		}
+	}
+	throughTunnel := arrivedOver(r) == overTunnel
+	table := b.table.Load()
+	if table.IsTunneled(r.Host) != throughTunnel {
+		named(w.Header())
+		w.WriteHeader(http.StatusMisdirectedRequest)
+		return
+	}
+	if throughTunnel && table.Visitor.IsOverHTTP(r) {
+		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusPermanentRedirect)
+		return
+	}
+	forward, ctx, hangUp, ok := b.forwarding(r)
+	if !ok {
+		named(w.Header())
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	defer hangUp()
+	keepGatedPrivate, passed := answerGate(w, r, forward.Gate, named, time.Now())
+	if !passed {
+		return
+	}
+	transport, host := b.tcp, forward.Upstream
+	if forward.Upstream == boxapi.ConnectorDial {
+		transport, host = b.socket, connectorHost
+	}
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(out *httputil.ProxyRequest) {
+			out.Out.URL.Scheme = "http"
+			out.Out.URL.Host = host
+			out.Out.URL.RawQuery = out.In.URL.RawQuery
+			out.Out.Host = out.In.Host
+			if forward.Strip != "" {
+				out.Out.URL.Path = stripped(out.In.URL.Path, forward.Strip)
+				out.Out.URL.RawPath = ""
+				if boxapi.Under(out.In.URL.RawPath, forward.Strip) {
+					out.Out.URL.RawPath = stripped(out.In.URL.RawPath, forward.Strip)
+				}
+			}
+			b.forwarded(out)
+		},
+		Transport:     transport,
+		FlushInterval: -1,
+		ModifyResponse: func(answer *http.Response) error {
+			named(answer.Header)
+			keepGatedPrivate(answer.Header)
+			return nil
+		},
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+			named(w.Header())
+			keepGatedPrivate(w.Header())
+			w.WriteHeader(http.StatusBadGateway)
+		},
+	}
+	proxy.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func (b *Board) forwarding(r *http.Request) (boxapi.Forward, context.Context, func(), bool) {
+	for {
+		table := b.table.Load()
+		forward, ok := table.Forward(r.Host, r.URL.Path)
+		if !ok {
+			return boxapi.Forward{}, nil, nil, false
+		}
+		ctx, hangUp := b.ledger.take(forward.Upstream, r.Context())
+		if b.table.Load() == table {
+			return forward, ctx, hangUp, true
+		}
+		hangUp()
+	}
+}
+
+func (b *Board) cutUnrouted(address string) {
+	b.loading.Lock()
+	defer b.loading.Unlock()
+	if !b.table.Load().Routed[address] {
+		b.ledger.cut(address)
+	}
+}
+
+type hearing int
+
+const (
+	hearsNothing hearing = iota
+	hearsScheme
+	hearsClient
+	stampsHTTPS
+	hearsEdge
+)
+
+func (b *Board) hears(r *http.Request) hearing {
+	switch arrivedOver(r) {
+	case overFront:
+		return hearsClient
+	case overHTTPS:
+		return stampsHTTPS
+	case overTunnel:
+		return hearsEdge
+	}
+	peer, err := netip.ParseAddrPort(r.RemoteAddr)
+	if err == nil && slices.ContainsFunc(b.relayed, func(prefix netip.Prefix) bool { return prefix.Contains(peer.Addr().Unmap()) }) {
+		return hearsScheme
+	}
+	return hearsNothing
+}
+
+func (b *Board) heard(r *http.Request) string {
+	proto, host := "http", r.Host
+	switch b.hears(r) {
+	case stampsHTTPS, hearsEdge:
+		proto = "https"
+	case hearsScheme, hearsClient:
+		if said := r.Header.Get("X-Forwarded-Proto"); said != "" {
+			proto = said
+		}
+		if said := r.Header.Get("X-Forwarded-Host"); said != "" {
+			host = said
+		}
+	}
+	return proto + " " + r.Host + " " + host
+}
+
+func (b *Board) forwarded(out *httputil.ProxyRequest) {
+	unvouched(out.Out.Header)
+	switch b.hears(out.In) {
+	case hearsNothing:
+		out.SetXForwarded()
+		return
+	case stampsHTTPS:
+		out.SetXForwarded()
+		out.Out.Header.Set("X-Forwarded-Proto", "https")
+		return
+	case hearsEdge:
+		out.Out.Header.Set("X-Forwarded-Host", out.In.Host)
+		out.Out.Header.Set("X-Forwarded-Proto", "https")
+		if header := b.table.Load().Visitor.Address; header != "" {
+			if visitor := out.In.Header.Get(header); visitor != "" {
+				out.Out.Header.Set("X-Forwarded-For", visitor)
+			}
+		}
+		return
+	case hearsScheme:
+		out.SetXForwarded()
+	case hearsClient:
+		out.Out.Header.Set("X-Forwarded-Host", out.In.Host)
+		out.Out.Header.Set("X-Forwarded-Proto", "http")
+		if prior := out.In.Header.Values("X-Forwarded-For"); len(prior) > 0 {
+			out.Out.Header["X-Forwarded-For"] = slices.Clone(prior)
+		}
+	}
+	for _, kept := range forwardedKept {
+		if said := out.In.Header.Get(kept); said != "" {
+			out.Out.Header.Set(kept, said)
+		}
+	}
+}
+
+func unvouched(header http.Header) {
+	for name := range header {
+		spoken := strings.ReplaceAll(strings.ToLower(name), "_", "-")
+		if slices.Contains(forwardedUnheard, spoken) || strings.HasPrefix(spoken, "x-forwarded-") {
+			delete(header, name)
+		}
+	}
+}
+
+func stripped(requested, prefix string) string {
+	rest := requested[len(prefix):]
+	if !strings.HasPrefix(rest, "/") {
+		rest = "/" + rest
+	}
+	return rest
+}

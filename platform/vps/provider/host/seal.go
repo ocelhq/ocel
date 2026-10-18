@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 //go:embed seal.py
@@ -44,11 +46,11 @@ func sealSudoers(tier environment.Tier) []byte {
 }
 
 func (i Item) mint() string {
-	name := quoted(i.Name)
+	name := shell.Quote(i.Name)
 	return "if [ -e " + name + " ]; then chown " + rootOwner + ":" + rootOwner + " " + name +
 		fmt.Sprintf(" && chmod %04o ", i.Mode) + name + "; else " +
 		`command -v python3 >/dev/null 2>&1 || { echo 'the seal helper needs python3' >&2; exit 1; }
-` + quoted(boxstore.SealHelper) + " " + quoted(string(i.Tier)) + " init; fi"
+` + shell.Quote(boxstore.SealHelper) + " " + shell.Quote(string(i.Tier)) + " init; fi"
 }
 
 func NewCipher(h *Host) *boxstore.Cipher { return boxstore.NewCipher(sshSeal{host: h}) }
@@ -56,12 +58,12 @@ func NewCipher(h *Host) *boxstore.Cipher { return boxstore.NewCipher(sshSeal{hos
 type sshSeal struct{ host *Host }
 
 func (s sshSeal) Seal(ctx context.Context, what string, tier environment.Tier, argv []string, stdin io.Reader) (string, error) {
-	rendered, err := s.host.granted(ctx, what, argv, stdin)
+	rendered, err := s.host.RunArgv(ctx, ssh.Granted, what, argv, stdin)
 	var refused refusal.Refusal
 	if err == nil || !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		return rendered, err
 	}
-	installed, readErr := s.host.reach(ctx, "read the seal helper", "cat "+quoted(boxstore.SealHelper), nil)
+	installed, readErr := s.host.Run(ctx, ssh.RootWhenAble, "read the seal helper", "cat "+shell.Quote(boxstore.SealHelper), nil)
 	if readErr != nil || installed == string(sealScript) {
 		return "", err
 	}
@@ -71,10 +73,10 @@ func (s sshSeal) Seal(ctx context.Context, what string, tier environment.Tier, a
 }
 
 func sealSurvey(item Item) string {
-	name := quoted(item.Name)
-	return "if [ -h " + name + " ]; then " + reports(quoted(kindLink), name, "0", `''`, `"$(readlink `+name+`)"`) + `
+	name := shell.Quote(item.Name)
+	return "if [ -h " + name + " ]; then " + reports(shell.Quote(kindLink), name, "0", `''`, `"$(readlink `+name+`)"`) + `
 elif [ -f ` + name + " ]; then printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' " +
-		quoted(KindSealKey) + " " + name +
+		shell.Quote(KindSealKey) + " " + name +
 		` "$(stat -c %a ` + name + `)" "$(stat -c %U ` + name + `)"` +
 		` "$(sha256sum ` + name + ` | cut -d' ' -f1)"` +
 		` "$(date -u -d @"$(stat -c %Y ` + name + `)" +%Y-%m-%dT%H:%M:%SZ)"

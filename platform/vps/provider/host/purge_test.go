@@ -10,8 +10,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func TestPurgingAProjectsValuesLeavesNothingOfItOnTheBox(t *testing.T) {
@@ -63,7 +63,7 @@ func TestPurgingAProjectsValuesLeavesNothingOfItOnTheBox(t *testing.T) {
 	}
 	dirs := map[string]string{}
 	for what, partition := range partitions {
-		dir, err := live.PartitionDir(partition)
+		dir, err := boxapi.PartitionDir(partition)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/enginetest"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 type signedStore struct {
@@ -113,13 +114,13 @@ func probeScript(calls []probeCall) string {
 
 		fed := ""
 		if len(call.body) > 0 {
-			fed = "printf '%s' " + quoted(base64.StdEncoding.EncodeToString(call.body)) + " | base64 -d | "
+			fed = "printf '%s' " + shell.Quote(base64.StdEncoding.EncodeToString(call.body)) + " | base64 -d | "
 		}
-		written.WriteString("answered=$(" + fed + words(argv) +
+		written.WriteString("answered=$(" + fed + shell.Words(argv) +
 			" --output " + output + " 2>/dev/null || printf 'no-answer')\n")
-		written.WriteString("printf '%s=%s\\n' " + quoted(call.name) + " \"$answered\"\n")
+		written.WriteString("printf '%s=%s\\n' " + shell.Quote(call.name) + " \"$answered\"\n")
 		if call.capture {
-			written.WriteString("printf '%s.body=%s\\n' " + quoted(call.name) +
+			written.WriteString("printf '%s.body=%s\\n' " + shell.Quote(call.name) +
 				" \"$(base64 " + output + " 2>/dev/null | tr -d '\\n')\"\n")
 		}
 	}

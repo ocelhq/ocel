@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 const storePage = 1000
@@ -80,7 +81,7 @@ type deletion struct {
 func storeScript(store string, runs []*http.Request, calls []storeCall) string {
 	written := strings.Builder{}
 	written.WriteString("set -u\n" +
-		"docker ps --format '{{.Names}}' | grep -qx " + quoted(store) + " || exit 0\n" +
+		"docker ps --format '{{.Names}}' | grep -qx " + shell.Quote(store) + " || exit 0\n" +
 		"tmp=$(mktemp -d)\n" +
 		"trap 'rm -rf \"$tmp\"' EXIT\n")
 	for i, req := range runs {
@@ -98,12 +99,12 @@ func storeScript(store string, runs []*http.Request, calls []storeCall) string {
 
 		fed := ""
 		if len(call.body) > 0 {
-			fed = "printf '%s' " + quoted(base64.StdEncoding.EncodeToString(call.body)) + " | base64 -d | "
+			fed = "printf '%s' " + shell.Quote(base64.StdEncoding.EncodeToString(call.body)) + " | base64 -d | "
 		}
-		written.WriteString("said=$(" + fed + words(argv) + " 2>" + codeFile + " | base64 | tr -d '\\n')\n")
-		written.WriteString("printf '%s=%s\\n' " + quoted(call.name) + " \"$(cat " + codeFile + ")\"\n")
+		written.WriteString("said=$(" + fed + shell.Words(argv) + " 2>" + codeFile + " | base64 | tr -d '\\n')\n")
+		written.WriteString("printf '%s=%s\\n' " + shell.Quote(call.name) + " \"$(cat " + codeFile + ")\"\n")
 		if call.capture {
-			written.WriteString("printf '%s.body=%s\\n' " + quoted(call.name) + " \"$said\"\n")
+			written.WriteString("printf '%s.body=%s\\n' " + shell.Quote(call.name) + " \"$said\"\n")
 		}
 	}
 	return written.String()

@@ -9,15 +9,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type credentials struct{ provider *Provider }
 
 type hostSurvey interface {
-	Facts(ctx context.Context) (session.Facts, error)
-	HostKey() session.HostKey
-	Destination() session.Destination
+	Facts(ctx context.Context) (ssh.Facts, error)
+	HostKey() ssh.HostKey
+	Destination() ssh.Destination
 }
 
 func (c credentials) Whoami(ctx context.Context) (provider.Principal, error) {
@@ -49,7 +49,7 @@ func whoami(ctx context.Context, live hostSurvey) (provider.Principal, error) {
 	}, nil
 }
 
-func elevation(facts session.Facts) string {
+func elevation(facts ssh.Facts) string {
 	switch {
 	case facts.Root:
 		return "root"

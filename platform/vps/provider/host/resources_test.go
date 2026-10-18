@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func servingAs(t *testing.T, box *bench, served ResourceContainer, status string) {
@@ -19,11 +20,11 @@ func servingAs(t *testing.T, box *bench, served ResourceContainer, status string
 	if err != nil {
 		t.Fatal(err)
 	}
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(servingSelectors())) {
-			return session.Result{Stdout: status + " " + served.Image + " " + digest + "\n"}, true
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote(servingSelectors())) {
+			return ssh.Result{Stdout: status + " " + served.Image + " " + digest + "\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 }
 
@@ -126,14 +127,14 @@ func TestAResourceOnDataOfAnotherVersionPlansAReplaceNamingBothVersions(t *testi
 	spec := resourced()
 	spec.Volume.Generation = "17"
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, quoted(servingSelectors())):
-			return session.Result{Stdout: "running " + spec.Image + " 000000000000\n"}, true
+		case strings.Contains(command, shell.Quote(servingSelectors())):
+			return ssh.Result{Stdout: "running " + spec.Image + " 000000000000\n"}, true
 		case strings.Contains(command, LabelGeneration):
-			return session.Result{Stdout: "16\n"}, true
+			return ssh.Result{Stdout: "16\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	action, reason, err := box.host().PlanResource(context.Background(), spec)
 	if err != nil {
@@ -151,14 +152,14 @@ func TestPlanningAnUpgradeOverAStoppedServerIsRefusedAsRunningItWouldBe(t *testi
 	spec := resourced()
 	spec.Volume.Generation = "17"
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, quoted(servingSelectors())):
-			return session.Result{Stdout: "exited " + spec.Image + "\n"}, true
+		case strings.Contains(command, shell.Quote(servingSelectors())):
+			return ssh.Result{Stdout: "exited " + spec.Image + "\n"}, true
 		case strings.Contains(command, LabelGeneration):
-			return session.Result{Stdout: "16\n"}, true
+			return ssh.Result{Stdout: "16\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	_, _, err := box.host().PlanResource(context.Background(), spec)
 	if err == nil || !strings.Contains(err.Error(), "Run `docker start "+spec.Name+"`") {

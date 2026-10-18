@@ -17,9 +17,8 @@ use (
 	./platform/pgmq
 	./platform/realtime
 	./platform/s3
-	./platform/vps/connector
+	./platform/vps/box
 	./platform/vps/provider
-	./platform/vps/runtime
 	./scripts/flocidispatch
 	./scripts/redactvet
 	./sdk

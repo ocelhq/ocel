@@ -9,13 +9,13 @@ import (
 	"io/fs"
 	"slices"
 	"strconv"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 const (
@@ -26,8 +26,8 @@ const (
 )
 
 const (
-	tierRoot     = live.TierRoot
-	stateRoot    = live.StateRoot
+	tierRoot     = boxapi.TierRoot
+	stateRoot    = boxapi.StateRoot
 	releasesRoot = stateRoot + "/releases"
 
 	releasesHelper = boxstore.Dir + "/releases"
@@ -184,9 +184,9 @@ func (i Item) command() string {
 	case KindRoutingTable:
 		return seedingRouting(i)
 	case KindDir:
-		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
+		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, shell.Quote(i.Name))
 	default:
-		return fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
+		return fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", i.Mode, i.Owner, i.Owner, shell.Quote(i.Name))
 	}
 }
 
@@ -232,10 +232,6 @@ func digests(items []Item) map[string]string {
 		out[item.ID()] = item.Digest()
 	}
 	return out
-}
-
-func quoted(arg string) string {
-	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
 }
 
 func mode(written string) (fs.FileMode, error) {

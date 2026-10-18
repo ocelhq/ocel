@@ -16,9 +16,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func clientCertificate(t *testing.T) (string, string) {
@@ -141,7 +141,7 @@ func TestTheOriginCertificateIsPlacedBesideOcelCaddyAsOneBundleNamedForItsHostna
 		Shields:   []proxy.Shield{{Hostname: "*.preview.example.com", ClientCAs: []string{client}, OriginCertificate: origin}},
 	}
 	placed := originFile(t, front, spec)
-	if filepath.Dir(placed.Path) != "/etc/caddy/ocel.d" || !strings.HasPrefix(filepath.Base(placed.Path), switchboard.OriginPrefix+"_.preview.example.com-") ||
+	if filepath.Dir(placed.Path) != "/etc/caddy/ocel.d" || !strings.HasPrefix(filepath.Base(placed.Path), boxapi.OriginPrefix+"_.preview.example.com-") ||
 		!strings.HasSuffix(placed.Path, ".pem") || strings.HasSuffix(placed.Path, ".caddy") {
 		t.Errorf("the origin certificate is placed at %s, want a .pem named for the hostname beside %s, which your Caddy never imports", placed.Path, caddyfile.FileName)
 	}
@@ -257,7 +257,7 @@ func TestInspectPassesAShieldedHostnameYourCaddyRefusesToAClientWithNoCertificat
 	t.Parallel()
 
 	machine, front := shieldedBox(t)
-	machine.answers = map[string]router.Kind{"blog.example.com": switchboard.RouterKind, "box.example.com": switchboard.RouterKind}
+	machine.answers = map[string]router.Kind{"blog.example.com": boxapi.SwitchboardRouter, "box.example.com": boxapi.SwitchboardRouter}
 	machine.failures = map[string]string{
 		"shop.example.com": "shop.example.com at 127.0.0.1:443: remote error: tls: certificate required",
 		"pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com": "pr-1-web-abcdefghijklmnopfhzq6k4d.preview.example.com at 127.0.0.1:443: remote error: tls: certificate required",
@@ -269,7 +269,7 @@ func TestInspectPassesAShieldedHostnameYourCaddyRefusesToAClientWithNoCertificat
 		}
 	}
 
-	machine.answers["shop.example.com"] = switchboard.RouterKind
+	machine.answers["shop.example.com"] = boxapi.SwitchboardRouter
 	if check := checked(t, front)["shop.example.com"]; check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "no certificate") {
 		t.Errorf("shop.example.com = %+v, want it failed: your Caddy answers it to a client with no certificate", check)
 	}

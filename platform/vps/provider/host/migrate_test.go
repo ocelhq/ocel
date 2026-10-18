@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 type kernel struct{ knob string }
@@ -30,7 +32,7 @@ func ranWith(t *testing.T, k kernel, container boxContainer) string {
 	runs := filepath.Join(dir, "runs")
 	executable(t, filepath.Join(dir, dockerEngine), "#!/bin/sh\n"+
 		"case \"$1\" in\n"+
-		"run|create) printf '%s\\n' \"$*\" >> "+quoted(runs)+" ;;\n"+
+		"run|create) printf '%s\\n' \"$*\" >> "+shell.Quote(runs)+" ;;\n"+
 		"inspect) echo running ;;\n"+
 		"esac\nexit 0\n")
 	container.files = nil

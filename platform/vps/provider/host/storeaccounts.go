@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const adminPath = "/rustfs/admin/v3/"
@@ -170,7 +171,7 @@ func (a StoreAccount) revoking() adminCall {
 }
 
 func (h *Host) RevokeStoreAccount(ctx context.Context, account StoreAccount) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
@@ -183,7 +184,7 @@ func (h *Host) RevokeStoreAccount(ctx context.Context, account StoreAccount) err
 }
 
 func (h *Host) GrantStoreAccount(ctx context.Context, account StoreAccount) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}

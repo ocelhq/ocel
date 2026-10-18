@@ -14,11 +14,11 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type answer struct {
@@ -100,12 +100,12 @@ func TestNoTwoThingsThisBenchScriptsAreNamedByTheSameCommand(t *testing.T) {
 	}
 }
 
-func (s *scripted) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
+func (s *scripted) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Result, error) {
 	var input string
 	if stdin != nil {
 		raw, err := io.ReadAll(stdin)
 		if err != nil {
-			return session.Result{}, err
+			return ssh.Result{}, err
 		}
 		input = string(raw)
 	}
@@ -114,9 +114,9 @@ func (s *scripted) Stream(_ context.Context, command string, stdin io.Reader) (s
 	s.fed = append(s.fed, input)
 	s.mu.Unlock()
 	if said, known := s.answer(command); known {
-		return session.Result{Code: said.code, Stdout: said.stdout, Stderr: said.stderr}, nil
+		return ssh.Result{Code: said.code, Stdout: said.stdout, Stderr: said.stderr}, nil
 	}
-	return session.Result{}, nil
+	return ssh.Result{}, nil
 }
 
 func (s *scripted) Run(ctx context.Context, command string) (string, error) {
@@ -124,24 +124,24 @@ func (s *scripted) Run(ctx context.Context, command string) (string, error) {
 	return result.Stdout, err
 }
 
-func (s *scripted) RunLines(context.Context, string, func(session.Line) error) error { return nil }
+func (s *scripted) RunLines(context.Context, string, func(ssh.Line) error) error { return nil }
 
 func (s *scripted) ForwardPort(context.Context, string) (string, func(), error) {
 	return "", nil, errors.New("a scripted session forwards no port")
 }
 
-func (s *scripted) Preflight(context.Context) (session.Facts, error) {
-	return session.Facts{Root: true, Systemd: true}, nil
+func (s *scripted) Preflight(context.Context) (ssh.Facts, error) {
+	return ssh.Facts{Root: true, Systemd: true}, nil
 }
 
-func (s *scripted) Destination() session.Destination {
-	return session.Destination{Written: "box.invalid", Address: "box.invalid", Port: 22, User: host.DeployUser()}
+func (s *scripted) Destination() ssh.Destination {
+	return ssh.Destination{Written: "box.invalid", Address: "box.invalid", Port: 22, User: host.DeployUser()}
 }
 
 func preflighting(machine *scripted) error {
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	p.Reaching(reachedFromOutside)
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
@@ -160,7 +160,7 @@ func preflighting(machine *scripted) error {
 func preflightingInstances(machine *scripted, instances provider.Instances, workers ...provider.WorkerSpec) error {
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	p.Reaching(reachedFromOutside)
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
@@ -271,7 +271,7 @@ func proxyStates() map[string]map[string]answer {
 		"the switchboard is not there at all": {
 			"'upstreams'":    {code: 1, stderr: "Error: No such container: " + host.SwitchboardContainer},
 			"docker inspect": {code: 1, stdout: "Error: No such object: " + host.SwitchboardContainer},
-			"missing=":       {stdout: "missing=" + switchboard.FrontDir + "\nsum=" + boxBoardSum + "\n"},
+			"missing=":       {stdout: "missing=" + boxapi.FrontDir + "\nsum=" + boxBoardSum + "\n"},
 		},
 		"the switchboard is restarting": {
 			"'upstreams'":    {code: 1, stderr: "Error response from daemon: container is restarting"},
@@ -323,7 +323,7 @@ func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t
 		}
 	}
 	for what, wanted := range map[string][]string{
-		"the switchboard is not there at all":                                     {host.SwitchboardContainer, "bootstrap", switchboard.FrontDir},
+		"the switchboard is not there at all":                                     {host.SwitchboardContainer, "bootstrap", boxapi.FrontDir},
 		"the switchboard is restarting":                                           {host.SwitchboardContainer, "restarting"},
 		"the switchboard answers nothing over its control socket":                 {host.SwitchboardContainer, "control socket"},
 		"the front proxy is not there at all":                                     {caddy.Container, "bootstrap"},
@@ -462,7 +462,7 @@ func TestASwitchboardAPruneRemovedIsRefusedWhenWhatItMountsIsGoneToo(t *testing.
 	t.Parallel()
 
 	for what, said := range map[string]string{
-		"its front socket directory": "missing=" + switchboard.FrontDir + "\nsum=" + boxBoardSum + "\n",
+		"its front socket directory": "missing=" + boxapi.FrontDir + "\nsum=" + boxBoardSum + "\n",
 		"its binary":                 "missing=" + host.SwitchboardBinary + "\n",
 	} {
 		script := prunedBoard()

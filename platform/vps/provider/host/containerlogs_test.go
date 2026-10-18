@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 var followSince = time.Date(2026, 3, 1, 10, 0, 0, 123, time.UTC)
@@ -24,9 +25,9 @@ type followed struct {
 	err   error
 }
 
-func followOn(t *testing.T, box *bench, names []string, lines ...session.Line) followed {
+func followOn(t *testing.T, box *bench, names []string, lines ...ssh.Line) followed {
 	t.Helper()
-	box.followed = func(_ string, each func(session.Line) error) error {
+	box.followed = func(_ string, each func(ssh.Line) error) error {
 		for _, line := range lines {
 			if err := each(line); err != nil {
 				return err
@@ -62,7 +63,7 @@ func TestFollowContainerLogsFollowsEveryContainerInOneCommand(t *testing.T) {
 	if len(followers) != 1 {
 		t.Fatalf("FollowContainerLogs ran %d commands that follow logs, want one for every container: %v", len(followers), followers)
 	}
-	for _, wanted := range []string{quoted("2026-03-01T10:00:00.000000123Z"), quoted("shop-web-r1"), quoted("it's-odd")} {
+	for _, wanted := range []string{shell.Quote("2026-03-01T10:00:00.000000123Z"), shell.Quote("shop-web-r1"), shell.Quote("it's-odd")} {
 		if !strings.Contains(followers[0], wanted) {
 			t.Errorf("FollowContainerLogs ran %q, want it to pass %s", followers[0], wanted)
 		}
@@ -73,9 +74,9 @@ func TestFollowContainerLogsGivesEachLineToTheContainerItCameFromAndKeepsItsStre
 	t.Parallel()
 
 	got := followOn(t, machine(nil), []string{"web", "media"},
-		session.Line{Pipe: session.Stdout, Text: "1 2026-03-01T10:00:01.000000002Z resized"},
-		session.Line{Pipe: session.Stderr, Text: "0 2026-03-01T10:00:02Z warn: slow"},
-		session.Line{Pipe: session.Stdout, Text: "0 2026-03-01T10:00:03Z served /"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "1 2026-03-01T10:00:01.000000002Z resized"},
+		ssh.Line{Pipe: ssh.Stderr, Text: "0 2026-03-01T10:00:02Z warn: slow"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "0 2026-03-01T10:00:03Z served /"},
 	)
 	if got.err != nil {
 		t.Fatalf("FollowContainerLogs() error = %v", got.err)
@@ -94,11 +95,11 @@ func TestFollowContainerLogsDropsWhatAFollowerRepeatsAfterItsContainerRestarts(t
 	t.Parallel()
 
 	got := followOn(t, machine(nil), []string{"web"},
-		session.Line{Pipe: session.Stdout, Text: "0 2026-03-01T10:00:01Z first run"},
-		session.Line{Pipe: session.Stderr, Text: "0 2026-03-01T10:00:02Z first run warned"},
-		session.Line{Pipe: session.Stdout, Text: "0 2026-03-01T10:00:01Z first run"},
-		session.Line{Pipe: session.Stderr, Text: "0 2026-03-01T10:00:02Z first run warned"},
-		session.Line{Pipe: session.Stdout, Text: "0 2026-03-01T10:00:05Z second run"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "0 2026-03-01T10:00:01Z first run"},
+		ssh.Line{Pipe: ssh.Stderr, Text: "0 2026-03-01T10:00:02Z first run warned"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "0 2026-03-01T10:00:01Z first run"},
+		ssh.Line{Pipe: ssh.Stderr, Text: "0 2026-03-01T10:00:02Z first run warned"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "0 2026-03-01T10:00:05Z second run"},
 	)
 	var texts []string
 	for _, line := range got.lines {
@@ -113,8 +114,8 @@ func TestFollowContainerLogsDeliversNothingStampedBeforeSince(t *testing.T) {
 	t.Parallel()
 
 	got := followOn(t, machine(nil), []string{"web"},
-		session.Line{Pipe: session.Stdout, Text: "0 2026-03-01T09:59:59Z early"},
-		session.Line{Pipe: session.Stdout, Text: "0 2026-03-01T10:00:01Z on time"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "0 2026-03-01T09:59:59Z early"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "0 2026-03-01T10:00:01Z on time"},
 	)
 	if len(got.lines) != 1 || got.lines[0].line.Text != "on time" {
 		t.Errorf("FollowContainerLogs() delivered %+v, want only the line stamped from since on", got.lines)
@@ -125,9 +126,9 @@ func TestFollowContainerLogsSkipsAnOutputLineWithoutATimestamp(t *testing.T) {
 	t.Parallel()
 
 	got := followOn(t, machine(nil), []string{"web"},
-		session.Line{Pipe: session.Stdout, Text: "0 no stamp here"},
-		session.Line{Pipe: session.Stdout, Text: "untagged"},
-		session.Line{Pipe: session.Stdout, Text: "0 2026-03-01T10:00:01Z kept"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "0 no stamp here"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "untagged"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "0 2026-03-01T10:00:01Z kept"},
 	)
 	if got.err != nil || len(got.lines) != 1 || got.lines[0].line.Text != "kept" {
 		t.Errorf("FollowContainerLogs() = %+v, %v, want only the stamped line", got.lines, got.err)
@@ -138,9 +139,9 @@ func TestFollowContainerLogsReportsAContainerThatIsGoneOnceAndFollowsTheRest(t *
 	t.Parallel()
 
 	got := followOn(t, machine(nil), []string{"web", "media"},
-		session.Line{Pipe: session.Stderr, Text: "0 Error response from daemon: No such container: web"},
-		session.Line{Pipe: session.Stderr, Text: "0 Error response from daemon: No such container: web"},
-		session.Line{Pipe: session.Stdout, Text: "1 2026-03-01T10:00:01Z still here"},
+		ssh.Line{Pipe: ssh.Stderr, Text: "0 Error response from daemon: No such container: web"},
+		ssh.Line{Pipe: ssh.Stderr, Text: "0 Error response from daemon: No such container: web"},
+		ssh.Line{Pipe: ssh.Stdout, Text: "1 2026-03-01T10:00:01Z still here"},
 	)
 	if got.err != nil {
 		t.Fatalf("FollowContainerLogs() error = %v, want a container that is gone reported and the rest followed", got.err)
@@ -157,7 +158,7 @@ func TestFollowContainerLogsFailsWhenDockerCannotFollowAContainer(t *testing.T) 
 	t.Parallel()
 
 	got := followOn(t, machine(nil), []string{"web"},
-		session.Line{Pipe: session.Stderr, Text: "0 Cannot connect to the Docker daemon at unix:///var/run/docker.sock"},
+		ssh.Line{Pipe: ssh.Stderr, Text: "0 Cannot connect to the Docker daemon at unix:///var/run/docker.sock"},
 	)
 	if got.err == nil || !strings.Contains(got.err.Error(), "Cannot connect to the Docker daemon") || !strings.Contains(got.err.Error(), "web") {
 		t.Errorf("FollowContainerLogs() error = %v, want docker's own words and the container", got.err)
@@ -168,7 +169,7 @@ func TestFollowContainerLogsFailsWhenTheBoxSaysSomethingOfItsOwn(t *testing.T) {
 	t.Parallel()
 
 	got := followOn(t, machine(nil), []string{"web"},
-		session.Line{Pipe: session.Stderr, Text: "sh: awk: not found"},
+		ssh.Line{Pipe: ssh.Stderr, Text: "sh: awk: not found"},
 	)
 	if got.err == nil || !strings.Contains(got.err.Error(), "awk: not found") {
 		t.Errorf("FollowContainerLogs() error = %v, want what the box said", got.err)
@@ -179,8 +180,8 @@ func TestFollowContainerLogsStopsWhenTheCallerRefusesALine(t *testing.T) {
 	t.Parallel()
 
 	box := machine(nil)
-	box.followed = func(_ string, each func(session.Line) error) error {
-		return each(session.Line{Text: "0 2026-03-01T10:00:01Z one"})
+	box.followed = func(_ string, each func(ssh.Line) error) error {
+		return each(ssh.Line{Text: "0 2026-03-01T10:00:01Z one"})
 	}
 	stop := errors.New("the caller has had enough")
 	err := box.host().FollowContainerLogs(context.Background(), []string{"web"}, followSince, func(int, Line) error { return stop }, func(int) error { return nil })
@@ -193,12 +194,12 @@ func TestFollowContainerLogsReachesTheDaemonAsRootForALoginOutsideTheDockerGroup
 	t.Parallel()
 
 	box := machine(nil)
-	box.facts = session.Facts{Systemd: true}
-	box.answer = func(command string) (session.Result, bool) {
+	box.facts = ssh.Facts{Systemd: true}
+	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "docker") && !strings.HasPrefix(command, "sudo -n ") {
-			return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
+			return ssh.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	if got := followOn(t, box, []string{"web"}); got.err != nil {
 		t.Fatalf("FollowContainerLogs() error = %v", got.err)

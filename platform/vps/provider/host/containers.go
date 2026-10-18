@@ -16,7 +16,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -24,7 +26,7 @@ const (
 	LabelProject = "ocel.project"
 	LabelRef     = "ocel.ref"
 	LabelEnv     = "ocel.env"
-	LabelTier    = live.TierLabel
+	LabelTier    = boxapi.TierLabel
 
 	LabelResource   = "ocel.resource"
 	LabelGeneration = "ocel.generation"
@@ -44,8 +46,8 @@ func networkLabels(tier environment.Tier, project string) []string {
 }
 
 func networkCreating(tier environment.Tier, project string) string {
-	network := quoted(live.AppNetwork(tier, project))
-	create := "docker network create " + words(networkLabels(tier, project)) + " " + network
+	network := shell.Quote(boxapi.AppNetwork(tier, project))
+	create := "docker network create " + shell.Words(networkLabels(tier, project)) + " " + network
 	return "set -e\n" +
 		"if ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
 		"if ! said=$(" + create + " 2>&1 >/dev/null) && ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
@@ -56,46 +58,38 @@ func networkCreating(tier environment.Tier, project string) string {
 }
 
 func joinNetworkScript(tier environment.Tier, project string) string {
-	network := quoted(live.AppNetwork(tier, project))
+	network := shell.Quote(boxapi.AppNetwork(tier, project))
 	return networkCreating(tier, project) + "\n" +
-		"if ! docker network connect " + network + " " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 && " +
-		"! docker network inspect --format " + quoted(membersFormat) + " " + network + " | grep -qx " + quoted(SwitchboardContainer) + "; then\n" +
-		"printf '%s\\n' " + quoted(SwitchboardContainer+" could not join "+live.AppNetwork(tier, project)) + " >&2\n" +
+		"if ! docker network connect " + network + " " + shell.Quote(SwitchboardContainer) + " >/dev/null 2>&1 && " +
+		"! docker network inspect --format " + shell.Quote(membersFormat) + " " + network + " | grep -qx " + shell.Quote(SwitchboardContainer) + "; then\n" +
+		"printf '%s\\n' " + shell.Quote(SwitchboardContainer+" could not join "+boxapi.AppNetwork(tier, project)) + " >&2\n" +
 		"exit 1\n" +
 		"fi"
 }
 
 func networkForgetting(tier environment.Tier, project string) string {
-	network := quoted(live.AppNetwork(tier, project))
+	network := shell.Quote(boxapi.AppNetwork(tier, project))
 	return "if docker network inspect " + network + " >/dev/null 2>&1; then\n" +
-		"if docker network inspect --format " + quoted(membersFormat) + " " + network +
-		" | grep -qvx " + quoted(SwitchboardContainer) + "; then printf '%s\\n' " + quoted(networkInUse) + "; exit 0; fi\n" +
-		"docker network disconnect --force " + network + " " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 || true\n" +
+		"if docker network inspect --format " + shell.Quote(membersFormat) + " " + network +
+		" | grep -qvx " + shell.Quote(SwitchboardContainer) + "; then printf '%s\\n' " + shell.Quote(networkInUse) + "; exit 0; fi\n" +
+		"docker network disconnect --force " + network + " " + shell.Quote(SwitchboardContainer) + " >/dev/null 2>&1 || true\n" +
 		"docker network rm " + network + " >/dev/null\n" +
 		"fi"
 }
 
-func (h *Host) join(ctx context.Context, spec Container, elevation acting) error {
-	return h.joining(ctx, spec.App, spec.Tier, spec.Project, joinNetworkScript(spec.Tier, spec.Project), elevation)
-}
-
-func (h *Host) joining(ctx context.Context, who string, tier environment.Tier, project, command string, elevation acting) error {
-	_, said, err := h.spoke(ctx, "put "+who+" on "+live.AppNetwork(tier, project), command, nil, elevation)
+func (e *Engine) Join(ctx context.Context, who string, tier environment.Tier, project string) error {
+	_, said, err := e.box.Attempt(ctx, ssh.Docker, "put "+who+" on "+boxapi.AppNetwork(tier, project), joinNetworkScript(tier, project), nil)
 	if err != nil && strings.Contains(said, poolExhausted) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s has no subnet left for %s: %s\n"+
 				"Add `\"default-address-pools\": [{\"base\": \"10.200.0.0/16\", \"size\": 24}]` to /etc/docker/daemon.json and restart docker",
-			h.named(), live.AppNetwork(tier, project), said)
+			e.box.Named(), boxapi.AppNetwork(tier, project), said)
 	}
 	return err
 }
 
-func (h *Host) ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error {
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
-		return err
-	}
-	_, err = h.ran(ctx, "take "+live.AppNetwork(tier, project)+" down", networkForgetting(tier, project), nil, elevation)
+func (e *Engine) ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error {
+	_, err := e.box.Run(ctx, ssh.Docker, "take "+boxapi.AppNetwork(tier, project)+" down", networkForgetting(tier, project), nil)
 	return err
 }
 
@@ -167,7 +161,7 @@ func (c Container) delivered() map[string]string {
 		env[originguard.HealthPathVar] = c.HealthPath
 	}
 	if len(c.Manifest) > 0 {
-		env[live.EnvVar] = string(c.Manifest)
+		env[boxapi.EnvVar] = string(c.Manifest)
 	}
 	return env
 }
@@ -184,8 +178,8 @@ func ContainerName(stack, app, deployment, image string) string {
 const appPulls = 5
 
 func runContainerScript(spec Container, env handoff) string {
-	return imagePulled(spec.Image, appPulls, pullAttemptSeconds, pullBudgetSeconds) +
-		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(containerRun(spec, env))+" >/dev/null")
+	return imagePulled(spec.Image, appPulls, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
+		shell.Bounded(shell.DockerStepSeconds, "docker run of "+spec.Name, shell.Words(containerRun(spec, env))+" >/dev/null")
 }
 
 func containerRun(spec Container, env handoff) []string {
@@ -193,7 +187,7 @@ func containerRun(spec Container, env handoff) []string {
 		"--name", spec.Name,
 		"--restart", appRestart,
 		"--init=false",
-		"--network", live.AppNetwork(spec.Tier, spec.Project),
+		"--network", boxapi.AppNetwork(spec.Tier, spec.Project),
 		"--label", LabelTier + "=" + string(spec.Tier),
 		"--label", LabelProject + "=" + naming.Sanitize(spec.Project),
 		"--label", LabelApp + "=" + spec.App,
@@ -242,13 +236,13 @@ func startableImage(said, image string) bool {
 
 func restartCommand(said, name string) string {
 	if strings.HasPrefix(strings.TrimSpace(said), "paused") {
-		return "docker unpause " + quoted(name) + " >/dev/null"
+		return "docker unpause " + shell.Quote(name) + " >/dev/null"
 	}
-	return "docker start " + quoted(name) + " >/dev/null"
+	return "docker start " + shell.Quote(name) + " >/dev/null"
 }
 
 func servingCommand(name string) string {
-	return "if said=$(docker inspect --type container --format " + quoted(servingSelectors()) + " " + quoted(name) + " 2>&1); then printf '%s\\n' \"$said\"\n" +
+	return "if said=$(docker inspect --type container --format " + shell.Quote(servingSelectors()) + " " + shell.Quote(name) + " 2>&1); then printf '%s\\n' \"$said\"\n" +
 		"elif printf '%s' \"$said\" | grep -qi 'no such'; then :\n" +
 		"else printf '%s\\n' \"$said\" >&2; exit 1\n" +
 		"fi"
@@ -263,17 +257,17 @@ const (
 )
 
 func (h *Host) RunContainer(ctx context.Context, spec Container) (ran Run, err error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return RunKept, err
 	}
-	if spec.Limits, err = h.tierLimits(ctx, spec.Tier); err != nil {
+	if spec.Limits, err = h.engine.Limits(ctx, spec.Tier); err != nil {
 		return RunKept, err
 	}
-	if err := h.join(ctx, spec, elevation); err != nil {
+	if err := h.engine.Join(ctx, spec.App, spec.Tier, spec.Project); err != nil {
 		return RunKept, err
 	}
-	said, err := h.readServing(ctx, spec.Name, elevation)
+	said, err := h.engine.ReadServing(ctx, spec.Name)
 	if err != nil {
 		return RunKept, err
 	}
@@ -290,8 +284,7 @@ func (h *Host) RunContainer(ctx context.Context, spec Container) (ran Run, err e
 			return RunKept, nil
 		}
 		if startableImage(said, spec.Image) {
-			_, err := h.ran(ctx, "start "+spec.App+" back up as "+spec.Name,
-				restartCommand(said, spec.Name), nil, elevation)
+			_, err := h.Run(ctx, elevation, "start "+spec.App+" back up as "+spec.Name, restartCommand(said, spec.Name), nil)
 			return RunRestarted, err
 		}
 		note, known, err := h.handed(ctx, spec)
@@ -319,8 +312,7 @@ func (h *Host) RunContainer(ctx context.Context, spec Container) (ran Run, err e
 	if err != nil {
 		return RunKept, err
 	}
-	if _, err := h.ran(ctx, "clear the name "+spec.Name,
-		"docker rm --force "+quoted(spec.Name)+" >/dev/null 2>&1 || true", nil, elevation); err != nil {
+	if _, err := h.Run(ctx, elevation, "clear the name "+spec.Name, "docker rm --force "+shell.Quote(spec.Name)+" >/dev/null 2>&1 || true", nil); err != nil {
 		return RunCreated, err
 	}
 	if err := h.sweep(ctx, elevation); err != nil {
@@ -335,27 +327,25 @@ func (h *Host) RunContainer(ctx context.Context, spec Container) (ran Run, err e
 			return RunCreated, err
 		}
 	}
-	_, err = h.ran(ctx, "run "+spec.App+" as "+spec.Name,
-		runContainerScript(spec, env), nil, elevation)
+	_, err = h.Run(ctx, elevation, "run "+spec.App+" as "+spec.Name, runContainerScript(spec, env), nil)
 	return RunCreated, err
 }
 
 func (h *Host) TakeDown(ctx context.Context, tier environment.Tier, name string) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "take down "+name,
-		within(dockerStepSeconds, "docker stop "+quoted(name))+" >/dev/null 2>&1 || true\n"+
-			boundedTolerated(dockerStepSeconds, "docker rm of "+name, "docker rm --force "+quoted(name)+" >/dev/null 2>&1"), nil, elevation)
+	_, err = h.Run(ctx, elevation, "take down "+name, shell.Within(shell.DockerStepSeconds, "docker stop "+shell.Quote(name))+" >/dev/null 2>&1 || true\n"+
+		shell.BoundedTolerating(shell.DockerStepSeconds, "docker rm of "+name, "docker rm --force "+shell.Quote(name)+" >/dev/null 2>&1"), nil)
 	if err != nil {
 		return err
 	}
-	acting, err := h.reachStateRoot(ctx)
+	acting, err := ssh.Deploy, h.Assume(ctx, ssh.Deploy)
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "forget what "+name+" was handed", "rm -f "+quoted(HandedNote(tier, name)), nil, acting)
+	_, err = h.Run(ctx, acting, "forget what "+name+" was handed", "rm -f "+shell.Quote(HandedNote(tier, name)), nil)
 	return err
 }
 
@@ -364,15 +354,15 @@ func releaseSelectors() string {
 }
 
 func releaseCommand(name string) string {
-	return "docker inspect --type container --format " + quoted(releaseSelectors()) + " " + quoted(name)
+	return "docker inspect --type container --format " + shell.Quote(releaseSelectors()) + " " + shell.Quote(name)
 }
 
 func (h *Host) RetireContainer(ctx context.Context, name string) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
-	said, err := h.ran(ctx, "read which release "+name+" runs", releaseCommand(name), nil, elevation)
+	said, err := h.Run(ctx, elevation, "read which release "+name+" runs", releaseCommand(name), nil)
 	if err != nil {
 		return err
 	}
@@ -385,16 +375,16 @@ func (h *Host) RetireContainer(ctx context.Context, name string) error {
 	if err := h.archive(ctx, release[0], release[1], release[2]); err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "stop "+name, boundedStep(dockerStepSeconds, "docker stop of "+name, "docker stop "+quoted(name)+" >/dev/null"), nil, elevation)
+	_, err = h.Run(ctx, elevation, "stop "+name, shell.Bounded(shell.DockerStepSeconds, "docker stop of "+name, "docker stop "+shell.Quote(name)+" >/dev/null"), nil)
 	return err
 }
 
 func (h *Host) RemoveContainer(ctx context.Context, name string) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "remove "+name, boundedStep(dockerStepSeconds, "docker rm of "+name, "docker rm --force "+quoted(name)+" >/dev/null"), nil, elevation)
+	_, err = h.Run(ctx, elevation, "remove "+name, shell.Bounded(shell.DockerStepSeconds, "docker rm of "+name, "docker rm --force "+shell.Quote(name)+" >/dev/null"), nil)
 	return err
 }
 
@@ -407,11 +397,11 @@ func stateSelectors() []string {
 }
 
 func stateCommand(name string) string {
-	return "docker inspect --type container --format " + quoted(strings.Join(stateSelectors(), " ")) + " " + quoted(name) + " 2>&1 || true"
+	return "docker inspect --type container --format " + shell.Quote(strings.Join(stateSelectors(), " ")) + " " + shell.Quote(name) + " 2>&1 || true"
 }
 
 func logCommand(name string) string {
-	return "docker logs --timestamps --tail " + appLogTail + " " + quoted(name) + " 2>&1 || true"
+	return "docker logs --timestamps --tail " + appLogTail + " " + shell.Quote(name) + " 2>&1 || true"
 }
 
 var ErrContainerMissing = errors.New("the container does not exist")
@@ -423,11 +413,11 @@ type Line struct {
 }
 
 func (h *Host) ReadContainerLogs(ctx context.Context, name string, since, until time.Time, limit int, contains string) ([]Line, error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return nil, err
 	}
-	result, err := h.stream(ctx, logsCommand(name, since, until, limit, contains), nil, elevation)
+	result, err := h.Stream(ctx, elevation, logsCommand(name, since, until, limit, contains), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +425,7 @@ func (h *Host) ReadContainerLogs(ctx context.Context, name string, since, until 
 		if strings.Contains(strings.ToLower(result.Stderr), "no such container") {
 			return nil, ErrContainerMissing
 		}
-		return nil, h.refuse("read the logs of "+name, result, elevation)
+		return nil, h.Refuse("read the logs of "+name, result)
 	}
 	lines := slices.DeleteFunc(append(parseLogLines(result.Stdout, false), parseLogLines(result.Stderr, true)...), func(line Line) bool {
 		return line.Time.Before(since) || !until.IsZero() && line.Time.After(until) || !strings.Contains(line.Text, contains)
@@ -445,14 +435,14 @@ func (h *Host) ReadContainerLogs(ctx context.Context, name string, since, until 
 }
 
 func logsCommand(name string, since, until time.Time, limit int, contains string) string {
-	command := "docker logs --timestamps --since " + quoted(since.UTC().Format(time.RFC3339Nano))
+	command := "docker logs --timestamps --since " + shell.Quote(since.UTC().Format(time.RFC3339Nano))
 	if !until.IsZero() {
-		command += " --until " + quoted(until.UTC().Format(time.RFC3339Nano))
+		command += " --until " + shell.Quote(until.UTC().Format(time.RFC3339Nano))
 	}
 	if until.IsZero() && contains == "" {
 		command += " --tail " + strconv.Itoa(limit)
 	}
-	return command + " " + quoted(name)
+	return command + " " + shell.Quote(name)
 }
 
 func parseLogLines(output string, stderr bool) []Line {
@@ -474,23 +464,11 @@ func parseLogLine(raw string, stderr bool) (Line, bool) {
 	return Line{Time: at.UTC(), Stderr: stderr, Text: text}, true
 }
 
-func (h *Host) said(ctx context.Context, command string, elevation acting) (string, error) {
-	result, err := h.stream(ctx, command, nil, elevation)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(result.Stdout + result.Stderr), nil
-}
-
-func (h *Host) readEvidence(ctx context.Context, command string, elevation acting) string {
-	said, err := h.said(ctx, command, elevation)
-	if err != nil {
-		return "(could not be read: " + err.Error() + ")"
-	}
-	return said
-}
-
-func (h *Host) readServing(ctx context.Context, name string, elevation acting) (string, error) {
-	said, err := h.ran(ctx, "read whether "+name+" is serving", servingCommand(name), nil, elevation)
+func (e *Engine) ReadServing(ctx context.Context, name string) (string, error) {
+	said, err := e.box.Run(ctx, ssh.Docker, "read whether "+name+" is serving", servingCommand(name), nil)
 	return strings.TrimSpace(said), err
+}
+
+func (h *Host) ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error {
+	return h.engine.ForgetNetwork(ctx, tier, project)
 }

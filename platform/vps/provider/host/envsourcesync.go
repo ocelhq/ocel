@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const (
@@ -27,7 +27,7 @@ func envSourceSyncUnit() []byte {
 		"After=network-online.target",
 		"",
 		"[Service]",
-		"ExecStart=" + LiveBinary + " " + live.EnvSourceSyncCommand + " --tier %i",
+		"ExecStart=" + LiveBinary + " " + boxapi.EnvSourceSyncCommand + " --tier %i",
 		"Restart=on-failure",
 		"RestartSec=" + envSourceSyncRestartWait,
 		"NoNewPrivileges=yes",

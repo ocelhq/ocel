@@ -12,12 +12,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-func manifestAfterBucket(t *testing.T, machine *box) variables.Manifest {
+func manifestAfterBucket(t *testing.T, machine *box) boxapi.Manifest {
 	t.Helper()
 	p := over(machine)
 	binding, err := p.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard())
@@ -32,12 +32,12 @@ func manifestAfterBucket(t *testing.T, machine *box) variables.Manifest {
 	return manifestIn(t, machine)
 }
 
-func lifecycleAnswering(said string) func(string) (session.Result, bool) {
-	return func(command string) (session.Result, bool) {
+func lifecycleAnswering(said string) func(string) (ssh.Result, bool) {
+	return func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, "?lifecycle") {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
-		return session.Result{Stdout: said}, true
+		return ssh.Result{Stdout: said}, true
 	}
 }
 
@@ -199,11 +199,11 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 	stopped := over(machine)
 	binding := provisionedBucket(t, machine, stopped, "uploads")
 	withBuckets(t, stopped, stack, "uploads")
-	machine.refuses = func(command string) (session.Result, bool) {
+	machine.refuses = func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, "/kept/"+own) {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
-		return session.Result{Code: 1, Stderr: "the box went away"}, true
+		return ssh.Result{Code: 1, Stderr: "the box went away"}, true
 	}
 	if err := stopped.RemoveBucket(context.Background(), ref, binding, progress.Discard()); err == nil {
 		t.Fatal("RemoveBucket() = nil, want the failure that stops the teardown halfway")

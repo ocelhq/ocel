@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type account struct {
@@ -30,20 +32,20 @@ func stubs(t *testing.T, existing *account) string {
 		t.Helper()
 		executable(t, filepath.Join(dir, name), "#!/bin/sh\n"+body)
 	}
-	said := "printf '%s\\n' \"$(basename \"$0\") $*\" >>" + quoted(log) + "\n"
+	said := "printf '%s\\n' \"$(basename \"$0\") $*\" >>" + shell.Quote(log) + "\n"
 
 	passwd, shadow := "", ""
 	identity := "exit 1\n"
 	if existing != nil {
 		passwd = deployUser + ":x:997:997::" + existing.home + ":" + existing.shell
-		identity = "printf '%s\\n' " + quoted(existing.groups) + "\n"
+		identity = "printf '%s\\n' " + shell.Quote(existing.groups) + "\n"
 		if existing.password != "" {
 			shadow = deployUser + ":" + existing.password + ":20000:0:99999:7:::"
 		}
 	}
 	write("getent", said+`case "$1 $2" in
-'passwd `+deployUser+`') [ -n `+quoted(passwd)+` ] && printf '%s\n' `+quoted(passwd)+` || exit 2 ;;
-'shadow `+deployUser+`') [ -n `+quoted(shadow)+` ] && printf '%s\n' `+quoted(shadow)+` || exit 2 ;;
+'passwd `+deployUser+`') [ -n `+shell.Quote(passwd)+` ] && printf '%s\n' `+shell.Quote(passwd)+` || exit 2 ;;
+'shadow `+deployUser+`') [ -n `+shell.Quote(shadow)+` ] && printf '%s\n' `+shell.Quote(shadow)+` || exit 2 ;;
 *) exit 2 ;;
 esac`)
 	write("id", identity)
@@ -194,7 +196,7 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 
 	existing := decidedAccount()
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})
 	observed, _, err := readSurvey(sh(t, stubs(t, &existing), survey(items, StampPath(tier))))
 	if err != nil {
 		t.Fatal(err)
@@ -235,11 +237,11 @@ func TestEveryFactTheAccountDescriptionContainsIsOneTheWriteSets(t *testing.T) {
 	facts := described(t)
 	written := deployLogin().command()
 	for fact, flag := range map[string]string{"shell": "-s ", "home": "-d "} {
-		if !strings.Contains(written, flag+quoted(facts[fact])) {
+		if !strings.Contains(written, flag+shell.Quote(facts[fact])) {
 			t.Errorf("the account description reads %s=%s and the write never sets it:\n%s", fact, facts[fact], written)
 		}
 	}
-	if locked := facts["password"] == lockedFact; locked != strings.Contains(written, "usermod -p "+quoted(lockedPassword)) {
+	if locked := facts["password"] == lockedFact; locked != strings.Contains(written, "usermod -p "+shell.Quote(lockedPassword)) {
 		t.Errorf("the account description reads password=%s and the write locks it %v:\n%s", facts["password"], !locked, written)
 	}
 }
@@ -255,7 +257,7 @@ func TestTheGroupTheAccountDescriptionNamesIsTheGroupBothBranchesAdd(t *testing.
 			continue
 		}
 		branches++
-		if adds := group != "" && strings.Contains(line, "G "+quoted(group)); adds != (group != "") {
+		if adds := group != "" && strings.Contains(line, "G "+shell.Quote(group)); adds != (group != "") {
 			t.Errorf("the account description reads group=%s and %q adds it %v, so the document would claim a membership nothing writes", group, line, adds)
 		}
 	}

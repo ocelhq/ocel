@@ -13,8 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func hasQueue(app *provider.AppSpec) bool {
@@ -36,11 +36,11 @@ func newWorkerEnv(app *provider.AppSpec, worker, deliverySecret string) map[stri
 }
 
 func (p *Provider) openDeliverySecret(ctx context.Context, ref provider.StackRef) (string, error) {
-	recorded, err := records.ReadOrEmpty(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
+	recorded, err := records.ReadOrEmpty(ctx, p.keyValues, boxapi.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
 	if err != nil {
 		return "", err
 	}
-	var database live.QueueDatabase
+	var database boxapi.QueueDatabase
 	if len(recorded.Value) > 0 {
 		if err := json.Unmarshal(recorded.Value, &database); err != nil {
 			return "", fmt.Errorf("read %s's queue database record: %w", ref.Name.Env, err)
@@ -53,7 +53,7 @@ func (p *Provider) openDeliverySecret(ctx context.Context, ref provider.StackRef
 	if err != nil {
 		return "", fmt.Errorf("the delivery secret recorded for %s's queue is not base64: %w", ref.Name.Env, err)
 	}
-	bound, err := live.NewQueueDeliverySecretAssociatedData(ref.Project, ref.Tier, database.Stack)
+	bound, err := boxapi.NewQueueDeliverySecretAssociatedData(ref.Project, ref.Tier, database.Stack)
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +82,7 @@ func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, mani
 		}); err != nil {
 			return err
 		}
-		replaced, err := p.recordWorker(ctx, ref, worker.Name, live.QueueWorker{
+		replaced, err := p.recordWorker(ctx, ref, worker.Name, boxapi.QueueWorker{
 			App: app.App, Stack: ref.Name.String(), Container: name, Concurrency: worker.Concurrency,
 		})
 		if err != nil {
@@ -97,16 +97,16 @@ func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, mani
 	return nil
 }
 
-func (p *Provider) recordWorker(ctx context.Context, ref provider.StackRef, name string, worker live.QueueWorker) (string, error) {
+func (p *Provider) recordWorker(ctx context.Context, ref provider.StackRef, name string, worker boxapi.QueueWorker) (string, error) {
 	record, err := json.Marshal(worker)
 	if err != nil {
 		return "", err
 	}
 	replaced := ""
-	err = records.Change(ctx, p.keyValues, live.QueueWorkerKey(ref.Tier, ref.Project, ref.Name.Env, name), func(recorded records.Entry) ([]byte, bool, error) {
+	err = records.Change(ctx, p.keyValues, boxapi.QueueWorkerKey(ref.Tier, ref.Project, ref.Name.Env, name), func(recorded records.Entry) ([]byte, bool, error) {
 		replaced = ""
 		if len(recorded.Value) > 0 {
-			var previous live.QueueWorker
+			var previous boxapi.QueueWorker
 			if err := json.Unmarshal(recorded.Value, &previous); err == nil {
 				replaced = previous.Container
 			}
@@ -116,15 +116,15 @@ func (p *Provider) recordWorker(ctx context.Context, ref provider.StackRef, name
 	return replaced, err
 }
 
-func (p *Provider) retireWorkers(ctx context.Context, ref provider.StackRef, retiring func(name string, worker live.QueueWorker) bool) error {
-	partition, under := live.QueueWorkersUnder(ref.Tier, ref.Project, ref.Name.Env)
+func (p *Provider) retireWorkers(ctx context.Context, ref provider.StackRef, retiring func(name string, worker boxapi.QueueWorker) bool) error {
+	partition, under := boxapi.QueueWorkersUnder(ref.Tier, ref.Project, ref.Name.Env)
 	entries, err := p.keyValues.List(ctx, partition, under...)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
 		name := entry.Key.Path[len(entry.Key.Path)-1]
-		var worker live.QueueWorker
+		var worker boxapi.QueueWorker
 		if err := json.Unmarshal(entry.Value, &worker); err != nil || !retiring(name, worker) {
 			continue
 		}
@@ -144,7 +144,7 @@ func (p *Provider) removeWorkers(ctx context.Context, ref provider.StackRef) err
 	if ref.Project == "" || ref.Name.Env == "" {
 		return nil
 	}
-	return p.retireWorkers(ctx, ref, func(_ string, worker live.QueueWorker) bool {
+	return p.retireWorkers(ctx, ref, func(_ string, worker boxapi.QueueWorker) bool {
 		return worker.Stack == ref.Name.String()
 	})
 }

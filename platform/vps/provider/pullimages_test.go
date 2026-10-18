@@ -19,8 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func runnable(t *testing.T, path string, body []byte, mode os.FileMode) {
@@ -137,7 +136,7 @@ func provisioning(t *testing.T, machine *box) *vps.Provider {
 	t.Helper()
 	return vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 }
 
@@ -425,11 +424,11 @@ func TestAPasswordWithNoLoginNameIsRefusedBeforeTheImageIsPublished(t *testing.T
 func refusingPulls(said string, times int64) (*box, *atomic.Int64) {
 	var asked atomic.Int64
 	machine := &box{}
-	machine.refuses = func(command string) (session.Result, bool) {
+	machine.refuses = func(command string) (ssh.Result, bool) {
 		if !strings.Contains(command, "docker pull") {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
-		return session.Result{Code: 1, Stderr: said}, asked.Add(1) <= times
+		return ssh.Result{Code: 1, Stderr: said}, asked.Add(1) <= times
 	}
 	return machine, &asked
 }

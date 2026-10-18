@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 var gateTiers = []environment.Tier{environment.TierPreview, environment.TierProduction}
@@ -141,7 +141,7 @@ func TestTheCloudflareProxyInFrontOfABoxHandsTheBoxTheGateAtTheEdgeStepOfEachTie
 	unreached := errors.New("no box is reached to hold the gate")
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return nil, unreached },
+		func(context.Context) (ssh.Conn, error) { return nil, unreached },
 	)
 	front, err := p.Edges().Open(cloudflare.Kind, nil)
 	if err != nil {

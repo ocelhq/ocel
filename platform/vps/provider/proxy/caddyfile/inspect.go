@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const collisionSubject = "hostnames your Caddy also serves"
@@ -90,18 +90,18 @@ func (c Caddyfile) placedCheck(ctx context.Context, placed proxy.Spec) (provider
 }
 
 func (c Caddyfile) memberCheck(ctx context.Context) provider.HostCheck {
-	check := provider.HostCheck{Subject: switchboard.Name + " on " + c.Network, Verdict: provider.HostFail,
+	check := provider.HostCheck{Subject: boxapi.Switchboard + " on " + c.Network, Verdict: provider.HostFail,
 		Fix: "run `ocel bootstrap production`, which starts the switchboard on " + c.Network}
-	said, err := c.Box.Ran(ctx, "read the networks "+switchboard.Name+" is on", []string{"docker", "inspect", "--type", "container",
-		"--format", "{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}", switchboard.Name})
+	said, err := c.Box.Ran(ctx, "read the networks "+boxapi.Switchboard+" is on", []string{"docker", "inspect", "--type", "container",
+		"--format", "{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}", boxapi.Switchboard})
 	switch {
 	case err != nil:
 		check.Finding = err.Error()
 	case !slices.Contains(strings.Fields(said), c.Network):
-		check.Finding = fmt.Sprintf("%s is on %s and not on %s, where your Caddy reaches it by name", switchboard.Name, strings.TrimSpace(said), c.Network)
+		check.Finding = fmt.Sprintf("%s is on %s and not on %s, where your Caddy reaches it by name", boxapi.Switchboard, strings.TrimSpace(said), c.Network)
 	default:
 		check.Verdict, check.Fix = provider.HostPass, ""
-		check.Finding = fmt.Sprintf("%s is on %s, where your Caddy reaches it", switchboard.Name, c.Network)
+		check.Finding = fmt.Sprintf("%s is on %s, where your Caddy reaches it", boxapi.Switchboard, c.Network)
 	}
 	return check
 }
@@ -131,7 +131,7 @@ func (c Caddyfile) routing(ctx context.Context, hostname string) (provider.HostC
 		return check, err
 	case failure != "":
 		check.Finding = failure
-	case answered != switchboard.RouterKind:
+	case answered != boxapi.SwitchboardRouter:
 		check.Finding = fmt.Sprintf("%s answers on this box's 443 as %q, not through ocel's switchboard", hostname, answered)
 	default:
 		check.Verdict, check.Fix = provider.HostPass, ""

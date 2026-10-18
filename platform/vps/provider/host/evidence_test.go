@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
 func inspecting() map[string]string {
@@ -119,7 +120,7 @@ func TestEveryInspectThisPackageRunsIsOneOfTheFlavoursThoseRostersCover(t *testi
 func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 	t.Parallel()
 
-	project := live.AppNetwork(valued().Tier, valued().Project)
+	project := boxapi.AppNetwork(valued().Tier, valued().Project)
 	networking := map[string]struct{ command, network string }{
 		"what a bootstrap creates the proxy network with":     {networkCommand(), ProxyNetwork},
 		"what a bootstrap probes the proxy network with":      {networkProbe(), ProxyNetwork},
@@ -141,14 +142,14 @@ func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 			for _, ask := range strings.Split(line, "docker network inspect ")[1:] {
 				inspects++
 				ask, _, _ = strings.Cut(ask, "|")
-				if !strings.Contains(ask, quoted(site.network)) {
+				if !strings.Contains(ask, shell.Quote(site.network)) {
 					t.Errorf("%s runs %q, which inspects something other than %s by name", what, strings.TrimSpace(line), site.network)
 				}
 				if strings.Contains(ask, "--type container") || strings.Contains(ask, caddy.Container) || strings.Contains(ask, SwitchboardContainer) {
 					t.Errorf("%s runs %q and inspects a container: a network inspect is exempt from naming its fields because a network has no value a container was handed, and one that reaches a container is not",
 						what, strings.TrimSpace(line))
 				}
-				if format, formatted := strings.CutPrefix(ask, "--format "); formatted && !strings.HasPrefix(format, quoted(membersFormat)) {
+				if format, formatted := strings.CutPrefix(ask, "--format "); formatted && !strings.HasPrefix(format, shell.Quote(membersFormat)) {
 					t.Errorf("%s runs %q with a format other than the container names on the network, and a network inspect that prints more prints what those containers were handed",
 						what, strings.TrimSpace(line))
 				}
@@ -171,8 +172,8 @@ func TestTheLogsARefusalQuotesAreBounded(t *testing.T) {
 
 func expiring() map[string]string {
 	return map[string]string{
-		"what doctor reads a served leaf with": words([]string{SwitchboardBinary, "leaf", "shop.example.com"}),
-		"what a pinned pair is read off":       "cat " + quoted(caddy.PinCertificate(caddy.PinsDir+"/wildcard")),
+		"what doctor reads a served leaf with": shell.Words([]string{SwitchboardBinary, "leaf", "shop.example.com"}),
+		"what a pinned pair is read off":       "cat " + shell.Quote(caddy.PinCertificate(caddy.PinsDir+"/wildcard")),
 	}
 }
 

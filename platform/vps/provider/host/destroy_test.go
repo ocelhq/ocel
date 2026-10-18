@@ -14,9 +14,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type said struct{ lines []string }
@@ -61,7 +62,7 @@ func TestRemoveTakesWhatIsInstalledAndSaysWhatItTookAndWhatItLeft(t *testing.T) 
 		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(progress.lines, "\n"))
 	}
 	for _, command := range box.taking() {
-		if strings.Contains(command, quoted(dockerEngine)) || strings.Contains(command, quoted(dockerUnit)) {
+		if strings.Contains(command, shell.Quote(dockerEngine)) || strings.Contains(command, shell.Quote(dockerUnit)) {
 			t.Errorf("Remove() ran %q, and removing ocel is not removing the workloads this host serves", command)
 		}
 	}
@@ -76,12 +77,12 @@ func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	stamp := box.took(quoted(TierDir(tier)))
+	stamp := box.took(shell.Quote(TierDir(tier)))
 	if stamp < 0 {
 		t.Fatalf("Remove() never took %s:\n%s", TierDir(tier), strings.Join(box.taking(), "\n"))
 	}
 	for _, beneath := range []string{StateDir(tier), SealKeyPath(tier), boxstore.SealHelper, deployUser} {
-		if at := box.took(quoted(beneath)); at < 0 || at > stamp {
+		if at := box.took(shell.Quote(beneath)); at < 0 || at > stamp {
 			t.Errorf("Remove() took %s at command %d and the tier directory at %d, and the stamp is what an interrupted destroy leaves behind",
 				beneath, at, stamp)
 		}
@@ -94,7 +95,7 @@ func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(
 	tier := environment.TierProduction
 	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 	box.after = func(b *bench, command string) {
-		if !strings.HasSuffix(command, quoted(tierRoot)) {
+		if !strings.HasSuffix(command, shell.Quote(tierRoot)) {
 			return
 		}
 		b.mu.Lock()
@@ -119,7 +120,7 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 		return Item{Kind: KindFile, Name: StampPath(tier), Mode: 0o644, Owner: rootOwner, Content: []byte(`{"state": "compl`)}
 	}
 	box := machine(map[environment.Tier][]Item{
-		tier:   append(Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}), truncated(tier)),
+		tier:   append(Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{}), truncated(tier)),
 		beside: {truncated(beside)},
 	})
 
@@ -130,7 +131,7 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 	if err := bootstrap.Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v over a host an apply left half-written", err)
 	}
-	if box.took(quoted(TierDir(tier))) < 0 {
+	if box.took(shell.Quote(TierDir(tier))) < 0 {
 		t.Errorf("Remove() left %s in place:\n%s", TierDir(tier), strings.Join(box.taking(), "\n"))
 	}
 }
@@ -161,17 +162,17 @@ func TestADeployLoginSomethingStillUsesDoesNotStrandTheDestroy(t *testing.T) {
 
 	tier := environment.TierProduction
 	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if !strings.HasPrefix(command, "userdel ") || strings.Contains(command, " -f ") {
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
-		return session.Result{Code: 8, Stderr: "userdel: user " + deployUser + " is currently used by process 4021"}, true
+		return ssh.Result{Code: 8, Stderr: "userdel: user " + deployUser + " is currently used by process 4021"}, true
 	}
 
 	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v over a login a lingering session still uses, and every re-run would fail there again", err)
 	}
-	if box.took(quoted(TierDir(tier))) < 0 {
+	if box.took(shell.Quote(TierDir(tier))) < 0 {
 		t.Errorf("Remove() stopped at the login and left %s in place:\n%s", TierDir(tier), strings.Join(box.taking(), "\n"))
 	}
 }
@@ -188,7 +189,7 @@ func TestARootOtherTiersShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T) 
 	taken := box.taking()
 	for _, shared := range []string{stateRoot, boxstore.Dir, tierRoot} {
 		at := slices.IndexFunc(taken, func(command string) bool {
-			return strings.Contains(command, quoted(shared)) && !strings.HasPrefix(command, routingLocked("-x"))
+			return strings.Contains(command, shell.Quote(shared)) && !strings.HasPrefix(command, routingLocked("-x"))
 		})
 		if at < 0 {
 			t.Fatalf("Remove() left %s in place on a host that has nothing else:\n%s", shared, strings.Join(taken, "\n"))
@@ -229,12 +230,12 @@ func TestTheLastDestroyTakesTheLockDeploysLoadImagesUnderBeforeTheStateRoot(t *t
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := box.taking()
-	lock := slices.IndexFunc(taken, func(command string) bool { return strings.HasSuffix(command, quoted(imagesLock)) })
+	lock := slices.IndexFunc(taken, func(command string) bool { return strings.HasSuffix(command, shell.Quote(imagesLock)) })
 	if lock < 0 {
 		t.Fatalf("Remove() left %s, which every deploy's image load creates, so %s outlives the last tier:\n%s",
 			imagesLock, stateRoot, strings.Join(taken, "\n"))
 	}
-	root := slices.IndexFunc(taken, func(command string) bool { return strings.HasPrefix(command, "rmdir "+quoted(stateRoot)+" ") })
+	root := slices.IndexFunc(taken, func(command string) bool { return strings.HasPrefix(command, "rmdir "+shell.Quote(stateRoot)+" ") })
 	if root < lock {
 		t.Errorf("Remove() tried %s at command %d, before the lock inside it at %d", stateRoot, root, lock)
 	}
@@ -242,13 +243,13 @@ func TestTheLastDestroyTakesTheLockDeploysLoadImagesUnderBeforeTheStateRoot(t *t
 
 func gone(taken []string, name string) bool {
 	for _, command := range taken {
-		if strings.HasSuffix(strings.TrimSuffix(command, " || true"), quoted(name)) {
+		if strings.HasSuffix(strings.TrimSuffix(command, " || true"), shell.Quote(name)) {
 			return true
 		}
-		if strings.Contains(command, "docker network rm "+quoted(name)) {
+		if strings.Contains(command, "docker network rm "+shell.Quote(name)) {
 			return true
 		}
-		if strings.HasPrefix(command, "rmdir "+quoted(name)+" ") {
+		if strings.HasPrefix(command, "rmdir "+shell.Quote(name)+" ") {
 			return true
 		}
 		if under, sweeping := strings.CutPrefix(command, "rm -rf "); sweeping &&
@@ -268,7 +269,7 @@ func TestForgettingARecordOnAHostThatHasNoStoreIsAlreadyForgotten(t *testing.T) 
 		t.Fatalf("Forget() over a host a destroy has cleared = %v, want cleanup that does not need the store back", err)
 	}
 	for _, command := range box.commands() {
-		if strings.HasPrefix(command, quoted(boxstore.KeyValuesHelper)+" ") {
+		if strings.HasPrefix(command, shell.Quote(boxstore.KeyValuesHelper)+" ") {
 			t.Errorf("Forget() ran %q against a host that has no helper at all", command)
 		}
 	}
@@ -311,10 +312,10 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastTierAndByNoOther(t *testi
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	current := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
-	beside := Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
+	current := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
+	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))}
 	singletons := []string{
-		stateRoot, boxstore.Dir, boxstore.KeyValuesHelper, boxstore.SealHelper, SwitchboardBinary, ProxyConfig, live.RoutingTable, sshDir, tierRoot, deployUser,
+		stateRoot, boxstore.Dir, boxstore.KeyValuesHelper, boxstore.SealHelper, SwitchboardBinary, ProxyConfig, boxapi.RoutingTable, sshDir, tierRoot, deployUser,
 	}
 
 	for _, singleton := range singletons {
@@ -322,7 +323,7 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastTierAndByNoOther(t *testi
 			t.Errorf("destroying one tier takes %s, and the sibling tier still installed on this host deploys through it", singleton)
 		}
 	}
-	last := removing(current, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
+	last := removing(current, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	for _, singleton := range singletons {
 		if gone := removalOf(last, singleton); gone.action != provider.ActionDelete {
 			t.Errorf("destroying the last tier plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, gone.action)

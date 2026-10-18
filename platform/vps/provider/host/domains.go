@@ -12,8 +12,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func (h *Host) Claims(ctx context.Context) ([]HostClaim, error) {
@@ -256,7 +258,7 @@ func (h *Host) proxyInspected(ctx context.Context, tier environment.Tier) (bool,
 	return false, refusal.Refuse(refusal.CodeInvalid,
 		"%s on %s declares %s, which ocel never renders\n"+
 			"Remove %s and run `%s` to render it again from %s",
-		ProxyConfig, h.named(), declared, ProxyConfig, provider.BootstrapCommand(tier), live.RoutingTable)
+		ProxyConfig, h.Named(), declared, ProxyConfig, provider.BootstrapCommand(tier), boxapi.RoutingTable)
 }
 
 func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTable, error)) error {
@@ -277,7 +279,7 @@ func (h *Host) rerender(ctx context.Context) error {
 }
 
 func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
@@ -288,7 +290,7 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 	return h.takenUp(ctx, shaped, true, elevation)
 }
 
-func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, elevation acting) error {
+func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, elevation ssh.Acting) error {
 	err := shaped.failedPlace
 	if err == nil {
 		err = h.serving(ctx, loading, shaped.reloading, shaped.served, elevation)
@@ -299,10 +301,9 @@ func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, eleva
 	return nil
 }
 
-func (h *Host) serving(ctx context.Context, loading, reloading bool, served proxy.Spec, elevation acting) error {
+func (h *Host) serving(ctx context.Context, loading, reloading bool, served proxy.Spec, elevation ssh.Acting) error {
 	if loading {
-		if _, err := h.ran(ctx, "load the switchboard onto "+live.RoutingTable,
-			words(switchboardCommand("load", live.RoutingTable)), nil, elevation); err != nil {
+		if _, err := h.Run(ctx, elevation, "load the switchboard onto "+boxapi.RoutingTable, shell.Words(switchboardCommand("load", boxapi.RoutingTable)), nil); err != nil {
 			return err
 		}
 	}
@@ -312,7 +313,7 @@ func (h *Host) serving(ctx context.Context, loading, reloading bool, served prox
 	return h.front.Reload(ctx, served)
 }
 
-func (h *Host) reverted(ctx context.Context, shaped composed, loading bool, why error, elevation acting) error {
+func (h *Host) reverted(ctx context.Context, shaped composed, loading bool, why error, elevation ssh.Acting) error {
 	written := routingFiles(h.front.File())
 	if _, failedPlace, err := h.writePair(ctx, shaped.written, shaped.restoring, shaped.reloading); err != nil || failedPlace != nil {
 		return refusal.Refuse(refusal.CodeNotReady,

@@ -18,9 +18,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -205,7 +205,7 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if want := boxedge.Surface("domains", environment.TierProduction); owner != want {
+	if want := switchboard.Surface("domains", environment.TierProduction); owner != want {
 		t.Errorf("DomainOwner(%q) = %q, want %q read back off the configuration the running proxy was given", claimHostname, owner, want)
 	}
 
@@ -217,8 +217,8 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 		t.Errorf("the proxy served %q on the hostname it was already answering, want the release it served before the second claim: binding another name adds one, and a claim that moves what the names already bound answer breaks a site to add a domain to it", served)
 	}
 	refused := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: unclaimed.example.invalid")+" http://"+caddy.Container+"/")
-	if !strings.Contains(refused, "404") || !strings.Contains(strings.ToLower(refused), strings.ToLower(router.HeaderRouter)+": "+string(switchboard.RouterKind)) {
-		t.Errorf("a hostname nothing on this box claims was answered with\n%s\nwant a bare 404 with %s: %s, because an empty 200 reads as healthy to everything that checks it", refused, router.HeaderRouter, switchboard.RouterKind)
+	if !strings.Contains(refused, "404") || !strings.Contains(strings.ToLower(refused), strings.ToLower(router.HeaderRouter)+": "+string(boxapi.SwitchboardRouter)) {
+		t.Errorf("a hostname nothing on this box claims was answered with\n%s\nwant a bare 404 with %s: %s, because an empty 200 reads as healthy to everything that checks it", refused, router.HeaderRouter, boxapi.SwitchboardRouter)
 	}
 
 	unclaimed, err := f.edge.DomainOwner(ctx, "unclaimed.example.invalid")

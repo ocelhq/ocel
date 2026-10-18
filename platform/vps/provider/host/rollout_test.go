@@ -16,14 +16,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const (
@@ -78,19 +78,19 @@ func twoAppsServing(t *testing.T) string {
 	})
 }
 
-func gates(command string) bool { return strings.Contains(command, quoted("gate")) }
+func gates(command string) bool { return strings.Contains(command, shell.Quote("gate")) }
 
-func cutsOver(command string) bool { return strings.Contains(command, quoted("cutover")) }
+func cutsOver(command string) bool { return strings.Contains(command, shell.Quote("cutover")) }
 
-func idles(command string) bool { return strings.Contains(command, quoted("idle")) }
+func idles(command string) bool { return strings.Contains(command, shell.Quote("idle")) }
 
-func everyIdle(command string) session.Result {
-	_, asked, _ := strings.Cut(command, quoted("idle"))
+func everyIdle(command string) ssh.Result {
+	_, asked, _ := strings.Cut(command, shell.Quote("idle"))
 	var idle strings.Builder
 	for _, target := range strings.Fields(asked) {
 		fmt.Fprintln(&idle, strings.Trim(target, "'"))
 	}
-	return session.Result{Stdout: idle.String()}
+	return ssh.Result{Stdout: idle.String()}
 }
 
 type rolloutBench struct {
@@ -128,7 +128,7 @@ func (f *rolloutBench) state(t *testing.T) RoutingTable {
 	f.mu.Unlock()
 	state, err := ReadRoutingTable([]byte(recorded))
 	if err != nil {
-		t.Fatalf("%s was left as %q, which the next deploy cannot read: %v", live.RoutingTable, recorded, err)
+		t.Fatalf("%s was left as %q, which the next deploy cannot read: %v", boxapi.RoutingTable, recorded, err)
 	}
 	return state
 }
@@ -141,12 +141,12 @@ func upstreamsOf(state RoutingTable) map[string]string {
 	return upstreams
 }
 
-func benchedOn(t *testing.T, recorded string, gate, cutover session.Result) *rolloutBench {
+func benchedOn(t *testing.T, recorded string, gate, cutover ssh.Result) *rolloutBench {
 	t.Helper()
 	box := &rolloutBench{bench: machine(nil), recorded: recorded}
 	proxied := servesProxy(box.bench, &box.recorded)
 	var once sync.Once
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if result, mine := proxied(command); mine {
 			return result, true
 		}
@@ -156,22 +156,22 @@ func benchedOn(t *testing.T, recorded string, gate, cutover session.Result) *rol
 		case idles(command):
 			return everyIdle(command), true
 		case cutsOver(command):
-			answered := session.Result{}
+			answered := ssh.Result{}
 			once.Do(func() { answered = cutover })
 			return answered, true
 		default:
-			return session.Result{}, false
+			return ssh.Result{}, false
 		}
 	}
 	return box
 }
 
-func benched(t *testing.T, gate, cutover session.Result) *rolloutBench {
+func benched(t *testing.T, gate, cutover ssh.Result) *rolloutBench {
 	t.Helper()
 	return benchedOn(t, configFor(t, retired), gate, cutover)
 }
 
-func rolledOut(t *testing.T, rollout Rollout, gate, cutover session.Result, progress progress.Log) (*rolloutBench, error) {
+func rolledOut(t *testing.T, rollout Rollout, gate, cutover ssh.Result, progress progress.Log) (*rolloutBench, error) {
 	t.Helper()
 	box := benched(t, gate, cutover)
 	return box, box.host().RollOut(context.Background(), rollout, progress)
@@ -185,10 +185,10 @@ func unserved(err error) bool {
 func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneCutover(t *testing.T) {
 	t.Parallel()
 
-	box := benchedOn(t, twoAppsServing(t), session.Result{}, session.Result{})
+	box := benchedOn(t, twoAppsServing(t), ssh.Result{}, ssh.Result{})
 	var posted string
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if cutsOver(command) && posted == "" {
 			posted = box.recorded
 		}
@@ -198,12 +198,12 @@ func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneCutover(t *testing.T) {
 		t.Fatalf("RollOut(web and api) = %v", err)
 	}
 
-	gate := box.at(quoted("gate"))
+	gate := box.at(shell.Quote("gate"))
 	if gate < 0 || box.count(gates) != 1 {
 		t.Fatalf("a promotion of two apps gated as %v, want one gate naming both targets", box.commands())
 	}
 	for _, target := range []string{nextTarget + "/healthz", apiNextTarget + "/up"} {
-		if !strings.Contains(box.commands()[gate], quoted(target)) {
+		if !strings.Contains(box.commands()[gate], shell.Quote(target)) {
 			t.Errorf("the gate %q never probes %s", box.commands()[gate], target)
 		}
 	}
@@ -228,7 +228,7 @@ func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneCutover(t *testing.T) {
 		t.Errorf("the one cutover posted %v, want both apps onto their new targets at once: a box half on each promotion is the state this cutover exists to rule out", got)
 	}
 	for _, retiree := range []string{retired, apiRetired} {
-		if !strings.Contains(box.commands()[cutover], quoted("--retire")+" "+quoted(retiree)) {
+		if !strings.Contains(box.commands()[cutover], shell.Quote("--retire")+" "+shell.Quote(retiree)) {
 			t.Errorf("the cutover %q never drains %s", box.commands()[cutover], retiree)
 		}
 	}
@@ -236,7 +236,7 @@ func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneCutover(t *testing.T) {
 		t.Errorf("the promotion posted %d configurations, want the cutover alone: caddy restarts every server on any change to what it runs, and a server shut down under load drops the connections it has accepted but not yet read: %v", cutOver, box.commands())
 	}
 	for _, stopped := range []string{retiring, apiRetiring} {
-		if at := box.at("docker stop " + quoted(stopped)); at < cutover {
+		if at := box.at("docker stop " + shell.Quote(stopped)); at < cutover {
 			t.Errorf("%s was stopped at %d, before the cutover at %d drained it", stopped, at, cutover)
 		}
 	}
@@ -250,8 +250,8 @@ func TestAGateOneAppFailsWritesNothingAndCutsOverNoApp(t *testing.T) {
 
 	before := twoAppsServing(t)
 	box := benchedOn(t, before,
-		session.Result{Code: 4, Stdout: switchboard.Ungated + " " + apiNextTarget + "/up\n", Stderr: apiNextTarget + " never answered /up within 30s"},
-		session.Result{})
+		ssh.Result{Code: 4, Stdout: boxapi.Ungated + " " + apiNextTarget + "/up\n", Stderr: apiNextTarget + " never answered /up within 30s"},
+		ssh.Result{})
 	err := box.host().RollOut(context.Background(), bothApps(), progress.Discard())
 	if err == nil {
 		t.Fatal("a promotion whose api never came up released successfully")
@@ -266,7 +266,7 @@ func TestAGateOneAppFailsWritesNothingAndCutsOverNoApp(t *testing.T) {
 		t.Errorf("a failed gate left %s changed", ProxyConfig)
 	}
 	for _, container := range []string{physical, apiCurrent} {
-		if box.at("docker rm --force "+quoted(container)) < 0 {
+		if box.at("docker rm --force "+shell.Quote(container)) < 0 {
 			t.Errorf("a failed gate left %s running with nothing routing to it: %v", container, box.commands())
 		}
 	}
@@ -284,8 +284,8 @@ func TestAGateOneAppFailsWritesNothingAndCutsOverNoApp(t *testing.T) {
 func TestACutoverThatFailsPutsEveryAppBackOntoItsPreviousUpstreamAndPostsIt(t *testing.T) {
 	t.Parallel()
 
-	box := benchedOn(t, twoAppsServing(t), session.Result{},
-		session.Result{Code: 2, Stderr: "the proxy answered /load with 400 Bad Request: unknown module"})
+	box := benchedOn(t, twoAppsServing(t), ssh.Result{},
+		ssh.Result{Code: 2, Stderr: "the proxy answered /load with 400 Bad Request: unknown module"})
 	err := box.host().RollOut(context.Background(), bothApps(), progress.Discard())
 	if err == nil {
 		t.Fatal("a promotion whose cutover the proxy rejected released successfully")
@@ -301,12 +301,12 @@ func TestACutoverThatFailsPutsEveryAppBackOntoItsPreviousUpstreamAndPostsIt(t *t
 		t.Errorf("the previous configuration was written back and never posted: %v", box.commands())
 	}
 	for _, container := range []string{physical, apiCurrent} {
-		if box.at("docker rm --force "+quoted(container)) < 0 {
+		if box.at("docker rm --force "+shell.Quote(container)) < 0 {
 			t.Errorf("a rejected cutover left %s running: %v", container, box.commands())
 		}
 	}
 	for _, live := range []string{retiring, apiRetiring} {
-		if box.at("docker stop "+quoted(live)) >= 0 {
+		if box.at("docker stop "+shell.Quote(live)) >= 0 {
 			t.Errorf("a rejected cutover stopped %s, which is still what the box serves", live)
 		}
 	}
@@ -323,10 +323,10 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 			{RouteKey: RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-1:8080"},
 		},
 	})
-	box := benchedOn(t, twoAppsServing(t), session.Result{}, session.Result{})
+	box := benchedOn(t, twoAppsServing(t), ssh.Result{}, ssh.Result{})
 	proxied := box.answer
 	writes := 0
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if writesProxy(command) {
 			box.mu.Lock()
 			writes++
@@ -336,7 +336,7 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 			}
 			box.mu.Unlock()
 			if collided {
-				return session.Result{Code: routingMoved, Stderr: digested(neighbour)}, true
+				return ssh.Result{Code: routingMoved, Stderr: digested(neighbour)}, true
 			}
 		}
 		return proxied(command)
@@ -360,11 +360,11 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 func TestAWriteThatKeepsMovingIsRefusedBusyAndCutsOverNothing(t *testing.T) {
 	t.Parallel()
 
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if writesProxy(command) {
-			return session.Result{Code: routingMoved, Stderr: "a digest another writer left"}, true
+			return ssh.Result{Code: routingMoved, Stderr: "a digest another writer left"}, true
 		}
 		return proxied(command)
 	}
@@ -382,7 +382,7 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndCutsOverNothing(t *testing.T) {
 	if box.cutover() >= 0 {
 		t.Errorf("a release that never wrote its configuration still cut over: %v", box.commands())
 	}
-	if box.at("docker rm --force "+quoted(physical)) < 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 		t.Errorf("a refused release left %s running: %v", physical, box.commands())
 	}
 }
@@ -390,7 +390,7 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndCutsOverNothing(t *testing.T) {
 func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) {
 	t.Parallel()
 
-	for what, answer := range map[string][2]session.Result{
+	for what, answer := range map[string][2]ssh.Result{
 		"a gate that read a status":    {{Code: 3, Stderr: "answered /healthz with status 500"}, {}},
 		"a gate nothing ever answered": {{Code: 4, Stderr: "never answered /healthz"}, {}},
 		"a cutover":                    {{}, {Code: 2, Stderr: "the proxy answered /load with 400"}},
@@ -402,7 +402,7 @@ func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) 
 			if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
 				t.Fatalf("a release failing at %s released successfully", what)
 			}
-			if box.at("docker rm --force "+quoted(physical)) >= 0 {
+			if box.at("docker rm --force "+shell.Quote(physical)) >= 0 {
 				t.Errorf("a re-promotion of the build already serving failed at %s and removed %s, the container the box still routes to", what, physical)
 			}
 		})
@@ -412,12 +412,12 @@ func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) 
 func TestTheOldContainerIsStoppedOnlyAfterTheCutoverReturnsAndNothingReloadsTheProxyAfterIt(t *testing.T) {
 	t.Parallel()
 
-	box, err := rolledOut(t, aRollout(), session.Result{}, session.Result{}, &fake.Log{})
+	box, err := rolledOut(t, aRollout(), ssh.Result{}, ssh.Result{}, &fake.Log{})
 	if err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	call := box.cutover()
-	stop := box.at("docker stop " + quoted(retiring))
+	stop := box.at("docker stop " + shell.Quote(retiring))
 	if call < 0 || stop < 0 {
 		t.Fatalf("a successful release ran %v", box.commands())
 	}
@@ -440,7 +440,7 @@ func TestTheOldContainerIsStoppedOnlyAfterTheCutoverReturnsAndNothingReloadsTheP
 func TestEveryWayTheGateOrTheCutoverCanFailReachesTheSameEndState(t *testing.T) {
 	t.Parallel()
 
-	for what, answer := range map[string][2]session.Result{
+	for what, answer := range map[string][2]ssh.Result{
 		"a gate that read a status":            {{Code: 3, Stderr: "answered /healthz with status 404"}, {}},
 		"a gate nothing ever answered":         {{Code: 4, Stderr: "never answered /healthz"}, {}},
 		"a config the proxy rejected":          {{}, {Code: 2, Stderr: "the proxy answered /load with 400 Bad Request: unknown module"}},
@@ -460,10 +460,10 @@ func TestEveryWayTheGateOrTheCutoverCanFailReachesTheSameEndState(t *testing.T) 
 			if !unserved(err) {
 				t.Errorf("%s refused with %v, which does not say the previous release still serves", what, err)
 			}
-			if box.at("docker stop "+quoted(retiring)) >= 0 {
+			if box.at("docker stop "+shell.Quote(retiring)) >= 0 {
 				t.Errorf("%s stopped the retired container, and the box then serves nothing at all", what)
 			}
-			if box.at("docker rm --force "+quoted(physical)) < 0 {
+			if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 				t.Errorf("%s left the new container running beside the old one: %v", what, box.commands())
 			}
 			if got := upstreamsOf(box.state(t)); got["web"] != retired {
@@ -476,14 +476,14 @@ func TestEveryWayTheGateOrTheCutoverCanFailReachesTheSameEndState(t *testing.T) 
 func TestAFailureTheCutoverCanOnlyReachAfterItPostedPutsThePreviousConfigBackOnTheProxy(t *testing.T) {
 	t.Parallel()
 
-	for what, answered := range map[string]session.Result{
+	for what, answered := range map[string]ssh.Result{
 		"an upstreams read it could not parse": {Code: 5, Stderr: "cannot parse the proxy's upstreams"},
 		"a socket that stopped answering":      {Code: 2, Stderr: "the proxy answered nothing over /run/caddy-admin.sock"},
 	} {
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
-			box, err := rolledOut(t, aRollout(), session.Result{}, answered, progress.Discard())
+			box, err := rolledOut(t, aRollout(), ssh.Result{}, answered, progress.Discard())
 			if err == nil {
 				t.Fatalf("%s released successfully", what)
 			}
@@ -495,7 +495,7 @@ func TestAFailureTheCutoverCanOnlyReachAfterItPostedPutsThePreviousConfigBackOnT
 			if wrote < 0 || posted < wrote {
 				t.Errorf("%s posted a configuration it had not written back first: %v", what, box.commands())
 			}
-			if removed := box.at("docker rm --force " + quoted(physical)); removed < 0 || removed < posted {
+			if removed := box.at("docker rm --force " + shell.Quote(physical)); removed < 0 || removed < posted {
 				t.Errorf("%s removed %s before the proxy was put back onto %s: %v", what, physical, retired, box.commands())
 			}
 		})
@@ -505,7 +505,7 @@ func TestAFailureTheCutoverCanOnlyReachAfterItPostedPutsThePreviousConfigBackOnT
 func TestACutoverThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.T) {
 	t.Parallel()
 
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	var once sync.Once
 	box.broke = func(command string) error {
 		var err error
@@ -525,10 +525,10 @@ func TestACutoverThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.
 	if !strings.Contains(err.Error(), "connection reset by peer") {
 		t.Errorf("a cutover that never came back is refused with\n%s\nand never names what went wrong", err)
 	}
-	if box.at("docker stop "+quoted(retiring)) >= 0 {
+	if box.at("docker stop "+shell.Quote(retiring)) >= 0 {
 		t.Errorf("a cutover that never came back stopped the retired container: %v", box.commands())
 	}
-	if box.at("docker rm --force "+quoted(physical)) < 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 		t.Errorf("a cutover that never came back left the new container running: %v", box.commands())
 	}
 	if got := upstreamsOf(box.state(t)); got["web"] != retired {
@@ -543,14 +543,14 @@ func TestAFirstDeployThatFailsLeavesNothingServingAndIsNotAPathOfItsOwn(t *testi
 	t.Parallel()
 
 	box := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}),
-		session.Result{Code: 3, Stderr: "answered /healthz with status 500"}, session.Result{})
+		ssh.Result{Code: 3, Stderr: "answered /healthz with status 500"}, ssh.Result{})
 	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
 		t.Fatal("a first deploy whose app never came up released successfully")
 	}
 	if box.at("docker stop") >= 0 {
 		t.Errorf("a first deploy stopped something, and there was nothing to stop: %v", box.commands())
 	}
-	if box.at("docker rm --force "+quoted(physical)) < 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 		t.Errorf("a first deploy left its container running: %v", box.commands())
 	}
 }
@@ -560,7 +560,7 @@ func TestAGateOnADiscoveredHealthPathThatFailsSaysItWasFoundByProbingAndHowToNam
 
 	discovered := aRollout()
 	discovered.Apps[0].HealthPathDiscovered = true
-	_, err := rolledOut(t, discovered, session.Result{Code: 3, Stderr: "answered /healthz with status 503"}, session.Result{}, progress.Discard())
+	_, err := rolledOut(t, discovered, ssh.Result{Code: 3, Stderr: "answered /healthz with status 503"}, ssh.Result{}, progress.Discard())
 	if err == nil {
 		t.Fatal("a release whose gate failed released successfully")
 	}
@@ -583,7 +583,7 @@ func TestAReleaseWithNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing.T) 
 
 			blank := bothApps()
 			blank.Apps[1].HealthPath = path
-			box, err := rolledOut(t, blank, session.Result{}, session.Result{}, progress.Discard())
+			box, err := rolledOut(t, blank, ssh.Result{}, ssh.Result{}, progress.Discard())
 			if err == nil {
 				t.Fatalf("a release with %s released successfully", what)
 			}
@@ -594,11 +594,11 @@ func TestAReleaseWithNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing.T) 
 			if !strings.Contains(err.Error(), healthKey) || !strings.Contains(err.Error(), "api") {
 				t.Errorf("a release with %s is refused with\n%s\nwhich never names the app or the key that sets it", what, err)
 			}
-			if box.at(quoted("gate")) >= 0 || box.after(-1, writesProxy) >= 0 {
+			if box.at(shell.Quote("gate")) >= 0 || box.after(-1, writesProxy) >= 0 {
 				t.Errorf("a release with %s reached the helper or rewrote %s: %v", what, ProxyConfig, box.commands())
 			}
 			for _, name := range []string{physical, apiCurrent} {
-				if box.at("docker rm --force "+quoted(name)) < 0 {
+				if box.at("docker rm --force "+shell.Quote(name)) < 0 {
 					t.Errorf("a release with %s left %s running with nothing routed to it: %v", what, name, box.commands())
 				}
 				if !strings.Contains(err.Error(), name+" removed") {
@@ -612,12 +612,12 @@ func TestAReleaseWithNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing.T) 
 func TestAReleaseWithNothingToRetireNeverAsksForADrain(t *testing.T) {
 	t.Parallel()
 
-	box := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), session.Result{}, session.Result{})
+	box := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), ssh.Result{}, ssh.Result{})
 	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	for _, command := range box.commands() {
-		if strings.Contains(command, quoted("--retire")) {
+		if strings.Contains(command, shell.Quote("--retire")) {
 			t.Errorf("a first deploy asked the helper to drain: %q", command)
 		}
 	}
@@ -629,10 +629,10 @@ func TestAReleaseWithNothingToRetireNeverAsksForADrain(t *testing.T) {
 func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstream(t *testing.T) {
 	t.Parallel()
 
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	var posted string
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if cutsOver(command) && posted == "" {
 			posted = box.recorded
 		}
@@ -651,12 +651,12 @@ func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUps
 	if handed := renderedFrom(posted); handed != string(want) {
 		t.Errorf("the config the cutover left beside the table is\n%s\nwant the running one with only the route moved:\n%s\nanything else it declares changes what caddy runs, and caddy restarts every server to take it", handed, want)
 	}
-	gated := box.commands()[box.at(quoted("gate"))]
+	gated := box.commands()[box.at(shell.Quote("gate"))]
 	for _, wanted := range []string{
-		quoted(nextTarget + "/healthz"),
-		quoted("--deploy-timeout") + " " + quoted("30"),
-		quoted(SwitchboardMounted),
-		quoted(SwitchboardContainer),
+		shell.Quote(nextTarget + "/healthz"),
+		shell.Quote("--deploy-timeout") + " " + shell.Quote("30"),
+		shell.Quote(SwitchboardMounted),
+		shell.Quote(SwitchboardContainer),
 	} {
 		if !strings.Contains(gated, insideWatch(wanted)) {
 			t.Errorf("the gate is made as %q, which includes no %s", gated, wanted)
@@ -664,9 +664,9 @@ func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUps
 	}
 	cut := box.commands()[box.cutover()]
 	for _, wanted := range []string{
-		quoted("--retire") + " " + quoted(retired),
-		quoted("--drain-timeout") + " " + quoted("30"),
-		quoted(live.RoutingTable),
+		shell.Quote("--retire") + " " + shell.Quote(retired),
+		shell.Quote("--drain-timeout") + " " + shell.Quote("30"),
+		shell.Quote(boxapi.RoutingTable),
 	} {
 		if !strings.Contains(cut, wanted) {
 			t.Errorf("the cutover is made as %q, which includes no %s", cut, wanted)
@@ -678,7 +678,7 @@ func TestADrainThatReadZeroIsToldBeforeTheContainerItFreedIsStopped(t *testing.T
 	t.Parallel()
 
 	progress := &fake.Log{}
-	_, err := rolledOut(t, aRollout(), session.Result{}, session.Result{Stdout: switchboard.Drained + " " + retired + "\n"}, progress)
+	_, err := rolledOut(t, aRollout(), ssh.Result{}, ssh.Result{Stdout: boxapi.Drained + " " + retired + "\n"}, progress)
 	if err != nil {
 		t.Fatalf("RollOut() over a drain that read zero = %v", err)
 	}
@@ -696,7 +696,7 @@ func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 	t.Parallel()
 
 	progress := &fake.Log{}
-	_, err := rolledOut(t, aRollout(), session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"}, progress)
+	_, err := rolledOut(t, aRollout(), ssh.Result{}, ssh.Result{Stdout: boxapi.DrainExpired + " " + retired + " 2\n"}, progress)
 	if err != nil {
 		t.Fatalf("RollOut() over an expired drain = %v, want the new release serving", err)
 	}
@@ -711,7 +711,7 @@ func TestARetiringReleaseSaysWhatItWaitsForAndHowLongTheRetireeDrains(t *testing
 	t.Parallel()
 
 	progress := &fake.Log{}
-	if _, err := rolledOut(t, aRollout(), session.Result{}, session.Result{}, progress); err != nil {
+	if _, err := rolledOut(t, aRollout(), ssh.Result{}, ssh.Result{}, progress); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	for _, want := range []string{
@@ -741,7 +741,7 @@ func TestTheCompareAndSetOverTheProxyConfigIsOneCriticalSection(t *testing.T) {
 	if rendered := strings.Index(written, `mv "$rendered" `); rendered < locked {
 		t.Errorf("the staged write is\n%s\nand moves %s into place outside the lock, so two writers can leave one's table beside the other's rendering", written, ProxyConfig)
 	}
-	if !strings.Contains(written[:locked], "exec 9<"+quoted(routingLock)) {
+	if !strings.Contains(written[:locked], "exec 9<"+shell.Quote(routingLock)) {
 		t.Errorf("the staged write is\n%s\nand locks something other than %s: a lock on a file the write moves over is a lock on an inode the next writer never opens", written, routingLock)
 	}
 	if strings.Index(written, `cat > "$rendered"`) > locked {
@@ -766,10 +766,10 @@ func TestAWriteThatDiesBetweenItsMovesLeavesTheTableItWroteRatherThanTheConfig(t
 			t.Fatal(err)
 		}
 	}
-	executable(t, filepath.Join(bin, "mv"), "#!/bin/sh\nif [ \"$2\" = "+quoted(config)+" ]; then exit 1; fi\nexec "+quoted(moving)+" \"$@\"\n")
+	executable(t, filepath.Join(bin, "mv"), "#!/bin/sh\nif [ \"$2\" = "+shell.Quote(config)+" ]; then exit 1; fi\nexec "+shell.Quote(moving)+" \"$@\"\n")
 
 	after := string(mustWrite(t, routed()))
-	here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
+	here := strings.NewReplacer(boxapi.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
 	write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum([]byte(before))), ProxyConfig, nil)))
 	write.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 	write.Stdin = strings.NewReader(pairFed(routingPair{table: []byte(after), config: mustRender(t, routed())}))
@@ -792,7 +792,7 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 	config := renderedFrom(prior)
 	proxied := servesPair(box.bench, &box.recorded, &config)
 	died := false
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case writesProxy(command):
 			box.mu.Lock()
@@ -803,11 +803,11 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 			}
 			box.mu.Unlock()
 			if dying {
-				return session.Result{Code: 1, Stderr: "mv: cannot move the rendering into place"}, true
+				return ssh.Result{Code: 1, Stderr: "mv: cannot move the rendering into place"}, true
 			}
 			return proxied(command)
 		case gates(command), cutsOver(command):
-			return session.Result{}, true
+			return ssh.Result{}, true
 		case idles(command):
 			return everyIdle(command), true
 		default:
@@ -853,7 +853,7 @@ func TestAWriteOntoABoxMissingEitherFileSaysToBootstrapIt(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
+		here := strings.NewReplacer(boxapi.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
 		write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum(written)), ProxyConfig, nil)))
 		write.Stdin = strings.NewReader(pairFed(routingPair{table: mustWrite(t, routed()), config: mustRender(t, routed())}))
 		err := write.Run()
@@ -865,9 +865,9 @@ func TestAWriteOntoABoxMissingEitherFileSaysToBootstrapIt(t *testing.T) {
 
 	box := claimingBox(t, routed())
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if writesProxy(command) {
-			return session.Result{Code: routingUnseeded}, true
+			return ssh.Result{Code: routingUnseeded}, true
 		}
 		return proxied(command)
 	}
@@ -892,14 +892,14 @@ func TestTheTableAndItsConfigAreReadTogetherUnderTheLockAWriterHoldsAcrossBothMo
 			t.Fatal(err)
 		}
 	}
-	here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
+	here := strings.NewReplacer(boxapi.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
 	if !strings.Contains(stagedWrite("a-digest", ProxyConfig, nil), strings.TrimSuffix(routingLocked("-x"), "\n")) {
 		t.Fatalf("the staged write is\n%s\nand does not hold %s exclusively, so a read under it serializes against nothing", stagedWrite("a-digest", ProxyConfig, nil), routingLock)
 	}
 
 	acquired := filepath.Join(t.TempDir(), "acquired")
 	writer := exec.Command("flock", "-x", dir, "-c",
-		"touch "+quoted(acquired)+"; sleep 0.3; printf 'the table after' > "+quoted(table)+"; sleep 0.3; printf 'the config after' > "+quoted(config))
+		"touch "+shell.Quote(acquired)+"; sleep 0.3; printf 'the table after' > "+shell.Quote(table)+"; sleep 0.3; printf 'the config after' > "+shell.Quote(config))
 	if err := writer.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -940,7 +940,7 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	racing := make(chan error, 2)
 	for _, writer := range []string{"one", "the other"} {
 		go func() {
-			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace(stagedWrite(read, ProxyConfig, nil)))
+			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(boxapi.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace(stagedWrite(read, ProxyConfig, nil)))
 			run.Stdin = strings.NewReader(pairFed(routingPair{table: []byte("table by " + writer), config: []byte("config by " + writer)}))
 			racing <- run.Run()
 		}()
@@ -970,10 +970,10 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
 		}),
 	}
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	proxied := box.answer
 	writes := 0
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if writesProxy(command) {
 			box.mu.Lock()
 			writes++
@@ -983,7 +983,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 			}
 			box.mu.Unlock()
 			if collided {
-				return session.Result{Code: routingMoved, Stderr: digested(neighbour)}, true
+				return ssh.Result{Code: routingMoved, Stderr: digested(neighbour)}, true
 			}
 		}
 		return proxied(command)
@@ -1002,11 +1002,11 @@ func TestAFailureAfterTheCutoverSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(
 	t.Parallel()
 
 	progress := &fake.Log{}
-	box := benched(t, session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"})
+	box := benched(t, ssh.Result{}, ssh.Result{Stdout: boxapi.DrainExpired + " " + retired + " 2\n"})
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "docker stop "+quoted(retiring)+" >/dev/null") {
-			return session.Result{Code: 1, Stderr: "no space left on device"}, true
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, "docker stop "+shell.Quote(retiring)+" >/dev/null") {
+			return ssh.Result{Code: 1, Stderr: "no space left on device"}, true
 		}
 		return proxied(command)
 	}
@@ -1039,16 +1039,16 @@ func TestAFailureAfterTheCutoverSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(
 	}
 }
 
-func diagnosed(t *testing.T, gate session.Result, state, logs string) string {
+func diagnosed(t *testing.T, gate ssh.Result, state, logs string) string {
 	t.Helper()
-	box := benched(t, gate, session.Result{})
+	box := benched(t, gate, ssh.Result{})
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.HasPrefix(command, "docker inspect") && strings.Contains(command, ".State."):
-			return session.Result{Stdout: state}, true
+			return ssh.Result{Stdout: state}, true
 		case strings.Contains(command, "docker logs"):
-			return session.Result{Stdout: logs}, true
+			return ssh.Result{Stdout: logs}, true
 		default:
 			return proxied(command)
 		}
@@ -1057,8 +1057,8 @@ func diagnosed(t *testing.T, gate session.Result, state, logs string) string {
 	if err == nil {
 		t.Fatal("a release the gate refused returned no error at all")
 	}
-	read, removed := box.at("docker logs"), box.at("docker rm --force "+quoted(physical))
-	if read < 0 || box.at("docker inspect --type container --format "+quoted(strings.Join(stateSelectors(), " "))) < 0 {
+	read, removed := box.at("docker logs"), box.at("docker rm --force "+shell.Quote(physical))
+	if read < 0 || box.at("docker inspect --type container --format "+shell.Quote(strings.Join(stateSelectors(), " "))) < 0 {
 		t.Fatalf("a refused release captured no evidence at all: %v", box.commands())
 	}
 	if removed < read {
@@ -1071,7 +1071,7 @@ func TestAHungAppIsDiagnosedByTheCombinationAndNeverByOneLine(t *testing.T) {
 	t.Parallel()
 
 	said := diagnosed(t,
-		session.Result{Code: 4, Stderr: physical + ":" + containerimage.PortText + " never answered /healthz within 30s"},
+		ssh.Result{Code: 4, Stderr: physical + ":" + containerimage.PortText + " never answered /healthz within 30s"},
 		"Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0", "")
 
 	for what, wanted := range map[string]string{
@@ -1097,7 +1097,7 @@ func TestTheEvidenceIsNotCutToFourLinesTheWayEveryOtherRefusalOnThisHostIs(t *te
 	for at := range 10 {
 		fmt.Fprintf(&written, "helper line %d\n", at)
 	}
-	said := diagnosed(t, session.Result{Code: 3, Stderr: written.String()},
+	said := diagnosed(t, ssh.Result{Code: 3, Stderr: written.String()},
 		"Status=exited ExitCode=1 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=2026-01-01T00:00:01Z RestartCount=0",
 		"2026-01-01T00:00:01Z panic: no such table\n")
 
@@ -1121,7 +1121,7 @@ func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
 	}
 	read := map[string]string{}
 	for what, state := range shapes {
-		read[what] = diagnosed(t, session.Result{Code: 4, Stderr: "never answered /healthz"}, state, "")
+		read[what] = diagnosed(t, ssh.Result{Code: 4, Stderr: "never answered /healthz"}, state, "")
 	}
 	for what, said := range read {
 		for other, beside := range read {
@@ -1138,12 +1138,12 @@ func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
 	}
 }
 
-func refusedAfter(t *testing.T, putBack session.Result) (*rolloutBench, error) {
+func refusedAfter(t *testing.T, putBack ssh.Result) (*rolloutBench, error) {
 	t.Helper()
-	box := benched(t, session.Result{}, session.Result{Code: 5, Stderr: "cannot parse the proxy's upstreams"})
+	box := benched(t, ssh.Result{}, ssh.Result{Code: 5, Stderr: "cannot parse the proxy's upstreams"})
 	proxied := box.answer
 	posted := 0
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if cutsOver(command) {
 			box.mu.Lock()
 			posted++
@@ -1165,11 +1165,11 @@ func refusedAfter(t *testing.T, putBack session.Result) (*rolloutBench, error) {
 func TestARefusalNamesTheLiveUpstreamOnceAndTheAnswerFollowsWhetherTheProxyWasPutBack(t *testing.T) {
 	t.Parallel()
 
-	_, rolled := refusedAfter(t, session.Result{})
+	_, rolled := refusedAfter(t, ssh.Result{})
 	if !strings.Contains(rolled.Error(), "the previous release is still live") {
 		t.Errorf("a refusal that put the proxy back reads\n%s\nand never says which release is live", rolled)
 	}
-	box, stranded := refusedAfter(t, session.Result{Code: 1, Stderr: "the proxy answered nothing over /run/caddy-admin.sock"})
+	box, stranded := refusedAfter(t, ssh.Result{Code: 1, Stderr: "the proxy answered nothing over /run/caddy-admin.sock"})
 	if strings.Contains(stranded.Error(), "the previous release is still live") {
 		t.Errorf("a refusal that could not put the proxy back reads\n%s\nwhich asserts the previous release is live", stranded)
 	}
@@ -1179,17 +1179,17 @@ func TestARefusalNamesTheLiveUpstreamOnceAndTheAnswerFollowsWhetherTheProxyWasPu
 	if unserved(stranded) {
 		t.Errorf("a release whose proxy could not be put back refused with %v as though the previous release still served: the live release is unknown", stranded)
 	}
-	if box.at("docker rm --force "+quoted(physical)) >= 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) >= 0 {
 		t.Errorf("a release whose proxy could not be put back removed %s, which the proxy may be routing to", physical)
 	}
 }
 
-func strandedByWrite(t *testing.T, landed bool, back session.Result) (*rolloutBench, error) {
+func strandedByWrite(t *testing.T, landed bool, back ssh.Result) (*rolloutBench, error) {
 	t.Helper()
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	proxied := box.answer
 	writes := 0
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if !writesProxy(command) {
 			return proxied(command)
 		}
@@ -1201,7 +1201,7 @@ func strandedByWrite(t *testing.T, landed bool, back session.Result) (*rolloutBe
 			if landed {
 				proxied(command)
 			}
-			return session.Result{Code: 1, Stderr: "no space left on device"}, true
+			return ssh.Result{Code: 1, Stderr: "no space left on device"}, true
 		}
 		if back.Code != 0 {
 			return back, true
@@ -1226,14 +1226,14 @@ func TestACutoverConfigurationThatCannotBeWrittenLeavesNeitherARunningContainerN
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
-			box, err := strandedByWrite(t, landed, session.Result{})
+			box, err := strandedByWrite(t, landed, ssh.Result{})
 			if !unserved(err) {
 				t.Errorf("%s refused with %v, which does not say the previous release still serves", what, err)
 			}
-			if box.at(`"--retire"`) >= 0 || box.at(quoted("--drain-timeout")) >= 0 {
+			if box.at(`"--retire"`) >= 0 || box.at(shell.Quote("--drain-timeout")) >= 0 {
 				t.Errorf("%s still cut over to the configuration: %v", what, box.commands())
 			}
-			if box.at("docker rm --force "+quoted(physical)) < 0 {
+			if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 				t.Errorf("%s left %s running with nothing routing to it: %v", what, physical, box.commands())
 			}
 			if got := upstreamsOf(box.state(t)); got["web"] != retired {
@@ -1255,14 +1255,14 @@ func TestACutoverConfigurationThatCannotBeWrittenLeavesNeitherARunningContainerN
 func TestACutoverConfigurationThatCannotBeWrittenBackEitherNamesTheFileARestartWouldServe(t *testing.T) {
 	t.Parallel()
 
-	box, err := strandedByWrite(t, true, session.Result{Code: 1, Stderr: "no space left on device"})
+	box, err := strandedByWrite(t, true, ssh.Result{Code: 1, Stderr: "no space left on device"})
 	if !strings.Contains(err.Error(), "not restored") || !strings.Contains(err.Error(), ProxyConfig) {
 		t.Errorf("a %s that could be neither written nor put back is refused with\n%s\nwhich never says which file a restarted proxy would read", ProxyConfig, err)
 	}
 	if unserved(err) {
 		t.Errorf("a %s left naming the new release refused with %v as though the previous release still served", ProxyConfig, err)
 	}
-	if box.at("docker rm --force "+quoted(physical)) >= 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) >= 0 {
 		t.Errorf("the release removed %s while %s still names it", physical, ProxyConfig)
 	}
 }
@@ -1271,7 +1271,7 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 	t.Parallel()
 
 	progress := &fake.Log{}
-	if _, err := rolledOut(t, aRollout(), session.Result{}, session.Result{}, progress); err != nil {
+	if _, err := rolledOut(t, aRollout(), ssh.Result{}, ssh.Result{}, progress); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
 	stated := strings.Join(progress.Lines(), "\n")
@@ -1287,7 +1287,7 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 	}
 
 	quiet := &fake.Log{}
-	first := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), session.Result{}, session.Result{})
+	first := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), ssh.Result{}, ssh.Result{})
 	if err := first.host().RollOut(context.Background(), aRollout(), quiet); err != nil {
 		t.Fatal(err)
 	}
@@ -1296,13 +1296,13 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 	}
 }
 
-func interrupted(t *testing.T, at func(command string) bool, answer session.Result) (*rolloutBench, context.Context) {
+func interrupted(t *testing.T, at func(command string) bool, answer ssh.Result) (*rolloutBench, context.Context) {
 	t.Helper()
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if at(command) {
 			if writesProxy(command) {
 				proxied(command)
@@ -1325,7 +1325,7 @@ func TestAReleaseInterruptedAtTheCutoverStillPutsTheProxyBackAndRemovesWhatItSta
 			once.Do(func() { hit = true })
 		}
 		return hit
-	}, session.Result{Code: 2, Stderr: "the proxy answered nothing"})
+	}, ssh.Result{Code: 2, Stderr: "the proxy answered nothing"})
 	err := box.host().RollOut(ctx, aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("a release whose cutover failed under a cancelled context released successfully")
@@ -1334,7 +1334,7 @@ func TestAReleaseInterruptedAtTheCutoverStillPutsTheProxyBackAndRemovesWhatItSta
 	if got := upstreamsOf(state); got["web"] != retired {
 		t.Errorf("%s was left as %+v after the interrupted release, want the previous release put back: the context that delivered the interrupt is the one the unwind ran under, so the unwind never ran", ProxyConfig, state)
 	}
-	if box.at("docker rm --force "+quoted(physical)) < 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 		t.Errorf("the interrupted release left %s running with nothing routing to it: %v", physical, box.commands())
 	}
 	if !strings.Contains(err.Error(), "the previous release is still live") {
@@ -1352,12 +1352,12 @@ func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItS
 		}
 		writes++
 		return writes == 1
-	}, session.Result{Code: 1, Stderr: "connection reset after the move"})
+	}, ssh.Result{Code: 1, Stderr: "connection reset after the move"})
 	err := box.host().RollOut(ctx, aRollout(), progress.Discard())
 	if err == nil {
 		t.Fatal("a release whose cutover configuration was never confirmed released successfully")
 	}
-	if box.at("docker rm --force "+quoted(physical)) < 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 		t.Errorf("the interrupted release left %s running with nothing routing to it: %v", physical, box.commands())
 	}
 	if got := upstreamsOf(box.state(t)); got["web"] != retired {
@@ -1372,10 +1372,10 @@ func TestWhatFollowsTheCutoverLeavesARouteAnotherReleaseCutOverSinceOnItsUpstrea
 	t.Parallel()
 
 	overtaking := "shop-web-overtaker:" + containerimage.PortText
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	proxied := box.answer
 	var once sync.Once
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if cutsOver(command) {
 			once.Do(func() {
 				box.mu.Lock()
@@ -1400,11 +1400,11 @@ func TestWhatFollowsTheCutoverLeavesARouteAnotherReleaseCutOverSinceOnItsUpstrea
 func TestARetireeThatWouldNotStopSaysTheCutoverTookAndStillStopsEveryOther(t *testing.T) {
 	t.Parallel()
 
-	box := benchedOn(t, twoAppsServing(t), session.Result{}, session.Result{})
+	box := benchedOn(t, twoAppsServing(t), ssh.Result{}, ssh.Result{})
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "docker stop "+quoted(apiRetiring)+" >/dev/null") {
-			return session.Result{Code: 1, Stderr: "no space left on device"}, true
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, "docker stop "+shell.Quote(apiRetiring)+" >/dev/null") {
+			return ssh.Result{Code: 1, Stderr: "no space left on device"}, true
 		}
 		return proxied(command)
 	}
@@ -1429,7 +1429,7 @@ func TestARetireeThatWouldNotStopSaysTheCutoverTookAndStillStopsEveryOther(t *te
 			t.Errorf("a release whose retiree would not stop is refused with\n%s\nand that names no %s (%s)", err, detail, wanted)
 		}
 	}
-	if box.at("docker stop "+quoted(retiring)) < 0 {
+	if box.at("docker stop "+shell.Quote(retiring)) < 0 {
 		t.Errorf("a release whose other retiree would not stop never stopped %s, which it had drained: %v", retiring, box.commands())
 	}
 }
@@ -1446,14 +1446,14 @@ func TestARetireeAlreadyGoneFromTheBoxIsNoStopTheReleaseFailedToMake(t *testing.
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
-			box := benched(t, session.Result{}, session.Result{})
+			box := benched(t, ssh.Result{}, ssh.Result{})
 			proxied := box.answer
-			box.answer = func(command string) (session.Result, bool) {
+			box.answer = func(command string) (ssh.Result, bool) {
 				switch {
-				case strings.Contains(command, "docker stop "+quoted(retiring)+" >/dev/null"):
-					return session.Result{Code: 1, Stderr: "Error response from daemon: No such container: " + retiring}, true
+				case strings.Contains(command, "docker stop "+shell.Quote(retiring)+" >/dev/null"):
+					return ssh.Result{Code: 1, Stderr: "Error response from daemon: No such container: " + retiring}, true
 				case strings.Contains(command, ".State.Running"):
-					return session.Result{Stdout: running}, true
+					return ssh.Result{Stdout: running}, true
 				}
 				return proxied(command)
 			}
@@ -1475,11 +1475,11 @@ func TestARetireeAlreadyGoneFromTheBoxIsNoStopTheReleaseFailedToMake(t *testing.
 func TestWhatFollowsTheCutoverNeverStopsARetireeARouteDialsAgainOrAnotherCutoverIsDraining(t *testing.T) {
 	t.Parallel()
 
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if idles(command) {
-			return session.Result{}, true
+			return ssh.Result{}, true
 		}
 		return proxied(command)
 	}
@@ -1487,7 +1487,7 @@ func TestWhatFollowsTheCutoverNeverStopsARetireeARouteDialsAgainOrAnotherCutover
 	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
-	if box.at("docker stop "+quoted(retiring)) >= 0 {
+	if box.at("docker stop "+shell.Quote(retiring)) >= 0 {
 		t.Errorf("the release stopped %s after the proxy said it is still in use: a rollback that cut over a route back onto it while this release drained it then serves a stopped container", retiring)
 	}
 }
@@ -1495,10 +1495,10 @@ func TestWhatFollowsTheCutoverNeverStopsARetireeARouteDialsAgainOrAnotherCutover
 func TestWhatFollowsTheCutoverNeverStopsARetireeARollbackRoutedBeforeItsCutoverRenamedTheRouteFile(t *testing.T) {
 	t.Parallel()
 
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	proxied := box.answer
 	var once sync.Once
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if idles(command) {
 			once.Do(func() {
 				box.mu.Lock()
@@ -1512,7 +1512,7 @@ func TestWhatFollowsTheCutoverNeverStopsARetireeARollbackRoutedBeforeItsCutoverR
 	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
-	if box.at("docker stop "+quoted(retiring)) >= 0 {
+	if box.at("docker stop "+shell.Quote(retiring)) >= 0 {
 		t.Errorf("the release stopped %s while %s routes web to it: the rollback that wrote that route cuts over to a stopped container and web answers 502 until the next deploy", retiring, ProxyConfig)
 	}
 }
@@ -1520,17 +1520,17 @@ func TestWhatFollowsTheCutoverNeverStopsARetireeARollbackRoutedBeforeItsCutoverR
 func TestWhatFollowsTheCutoverCannotAskWhetherItsRetireeIsIdleStopsNothingAndSaysSo(t *testing.T) {
 	t.Parallel()
 
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	proxied := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if idles(command) {
-			return session.Result{Code: 5, Stderr: "permission denied reading /proc"}, true
+			return ssh.Result{Code: 5, Stderr: "permission denied reading /proc"}, true
 		}
 		return proxied(command)
 	}
 
 	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
-	if box.at("docker stop "+quoted(retiring)) >= 0 {
+	if box.at("docker stop "+shell.Quote(retiring)) >= 0 {
 		t.Errorf("the release stopped %s without knowing whether a route dials it again", retiring)
 	}
 	if err == nil || !strings.Contains(err.Error(), retiring) || !strings.Contains(err.Error(), "permission denied reading /proc") {
@@ -1542,7 +1542,7 @@ func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.
 	t.Parallel()
 
 	before := configFor(t, retired)
-	box := benchedOn(t, before, session.Result{}, session.Result{})
+	box := benchedOn(t, before, ssh.Result{}, ssh.Result{})
 	rollout := aRollout()
 	rollout.StillActive = func(context.Context) error {
 		return refusal.Refuse(refusal.CodeBusy, "promotion p2 no longer owns production: p3 took it")
@@ -1564,7 +1564,7 @@ func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.
 	if box.recorded != before {
 		t.Errorf("an overtaken release left %s changed", ProxyConfig)
 	}
-	if box.at("docker rm --force "+quoted(physical)) < 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 		t.Errorf("an overtaken release left %s running with nothing routing to it: %v", physical, box.commands())
 	}
 }
@@ -1572,7 +1572,7 @@ func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.
 func TestAFailedReleaseLeavesATargetAnotherReleaseIsStillDrainingForThatReleaseToStop(t *testing.T) {
 	t.Parallel()
 
-	for what, answer := range map[string][2]session.Result{
+	for what, answer := range map[string][2]ssh.Result{
 		"a gate that read a status": {{Code: 3, Stderr: "answered /healthz with status 500"}, {}},
 		"a cutover":                 {{}, {Code: 2, Stderr: "the proxy answered /load with 400"}},
 	} {
@@ -1581,16 +1581,16 @@ func TestAFailedReleaseLeavesATargetAnotherReleaseIsStillDrainingForThatReleaseT
 
 			box := benched(t, answer[0], answer[1])
 			answered := box.answer
-			box.answer = func(command string) (session.Result, bool) {
+			box.answer = func(command string) (ssh.Result, bool) {
 				if idles(command) {
-					return session.Result{}, true
+					return ssh.Result{}, true
 				}
 				return answered(command)
 			}
 			if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err == nil {
 				t.Fatalf("a release failing at %s released successfully", what)
 			}
-			if box.at("docker rm --force "+quoted(physical)) >= 0 {
+			if box.at("docker rm --force "+shell.Quote(physical)) >= 0 {
 				t.Errorf("a release failing at %s removed %s while the proxy said a cutover was still draining it: the requests that cutover is waiting out are cut, and the release that retired it stops it once they finish", what, physical)
 			}
 		})
@@ -1600,11 +1600,11 @@ func TestAFailedReleaseLeavesATargetAnotherReleaseIsStillDrainingForThatReleaseT
 func TestAFailedReleaseThatCannotAskWhetherItsTargetIsIdleRemovesNothingAndSaysSo(t *testing.T) {
 	t.Parallel()
 
-	box := benched(t, session.Result{Code: 3, Stderr: "answered /healthz with status 500"}, session.Result{})
+	box := benched(t, ssh.Result{Code: 3, Stderr: "answered /healthz with status 500"}, ssh.Result{})
 	answered := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if idles(command) {
-			return session.Result{Code: 5, Stderr: "permission denied reading /proc"}, true
+			return ssh.Result{Code: 5, Stderr: "permission denied reading /proc"}, true
 		}
 		return answered(command)
 	}
@@ -1612,7 +1612,7 @@ func TestAFailedReleaseThatCannotAskWhetherItsTargetIsIdleRemovesNothingAndSaysS
 	if err == nil {
 		t.Fatal("a release whose gate failed released successfully")
 	}
-	if box.at("docker rm --force "+quoted(physical)) >= 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) >= 0 {
 		t.Errorf("the release removed %s without knowing whether a cutover was still draining it", physical)
 	}
 	if !strings.Contains(err.Error(), physical+" left running") || !strings.Contains(err.Error(), "permission denied reading /proc") {
@@ -1624,10 +1624,10 @@ func TestARefusedRollbackStopsTheContainerItStartedAgainRatherThanRemovingIt(t *
 	t.Parallel()
 
 	for what, refused := range map[string]struct {
-		gate   session.Result
+		gate   ssh.Result
 		refuse func(context.Context) error
 	}{
-		"a gate that failed": {gate: session.Result{Code: 3, Stderr: "answered /healthz with status 503"}},
+		"a gate that failed": {gate: ssh.Result{Code: 3, Stderr: "answered /healthz with status 503"}},
 		"a promotion overtaken": {refuse: func(context.Context) error {
 			return errors.New("promotion p4 took the pointer")
 		}},
@@ -1638,15 +1638,15 @@ func TestARefusedRollbackStopsTheContainerItStartedAgainRatherThanRemovingIt(t *
 			rollback := aRollout()
 			rollback.Apps[0].Run = RunRestarted
 			rollback.StillActive = refused.refuse
-			box := benched(t, refused.gate, session.Result{})
+			box := benched(t, refused.gate, ssh.Result{})
 			err := box.host().RollOut(context.Background(), rollback, progress.Discard())
 			if !unserved(err) {
 				t.Fatalf("RollOut() refused by %s = %v, want a refusal that says the box never served it", what, err)
 			}
-			if box.at("docker rm --force "+quoted(physical)) >= 0 {
+			if box.at("docker rm --force "+shell.Quote(physical)) >= 0 {
 				t.Errorf("after %s the rollback removed %s, the container it rolled back to, and with it the values its own deploy handed it: %v", what, physical, box.commands())
 			}
-			if box.at("docker stop "+quoted(physical)) < 0 {
+			if box.at("docker stop "+shell.Quote(physical)) < 0 {
 				t.Errorf("after %s the rollback left %s running with nothing routed to it, where it found it stopped: %v", what, physical, box.commands())
 			}
 			if !strings.Contains(err.Error(), physical+" stopped") {
@@ -1661,11 +1661,11 @@ func TestARefusedRollOutRemovesAContainerItKeptWhereNothingRoutesToIt(t *testing
 
 	kept := aRollout()
 	kept.Apps[0].Run = RunKept
-	box := benched(t, session.Result{Code: 3, Stderr: "answered /healthz with status 503"}, session.Result{})
+	box := benched(t, ssh.Result{Code: 3, Stderr: "answered /healthz with status 503"}, ssh.Result{})
 	if err := box.host().RollOut(context.Background(), kept, progress.Discard()); !unserved(err) {
 		t.Fatalf("RollOut() whose gate failed = %v, want a refusal that says the box never served it", err)
 	}
-	if box.at("docker rm --force "+quoted(physical)) < 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 		t.Errorf("a refused roll-out left %s, the container its deploy ran for it, running with nothing routed to it: %v", physical, box.commands())
 	}
 }
@@ -1673,14 +1673,14 @@ func TestARefusedRollOutRemovesAContainerItKeptWhereNothingRoutesToIt(t *testing
 func TestAReleaseThatCannotReachDockerStillRemovesTheContainersItWouldHaveServed(t *testing.T) {
 	t.Parallel()
 
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	answered := box.answer
 	var reaches int
-	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, dockerReach) {
+	box.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, ssh.DockerReach) {
 			reaches++
 			if reaches == 1 {
-				return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true
+				return ssh.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true
 			}
 		}
 		return answered(command)
@@ -1689,7 +1689,7 @@ func TestAReleaseThatCannotReachDockerStillRemovesTheContainersItWouldHaveServed
 	if !unserved(err) {
 		t.Fatalf("RollOut() over an unreachable daemon = %v, want a refusal that says the box never served it", err)
 	}
-	if box.at("docker rm --force "+quoted(physical)) < 0 {
+	if box.at("docker rm --force "+shell.Quote(physical)) < 0 {
 		t.Errorf("the release left %s running with nothing routed to it: %v", physical, box.commands())
 	}
 	if !strings.Contains(err.Error(), physical+" removed") {
@@ -1700,7 +1700,7 @@ func TestAReleaseThatCannotReachDockerStillRemovesTheContainersItWouldHaveServed
 func TestAReleaseOfNoAppsTouchesNothing(t *testing.T) {
 	t.Parallel()
 
-	box := benched(t, session.Result{}, session.Result{})
+	box := benched(t, ssh.Result{}, ssh.Result{})
 	if err := box.host().RollOut(context.Background(), Rollout{DeployTimeout: 30 * time.Second, DrainTimeout: 30 * time.Second}, progress.Discard()); err != nil {
 		t.Fatalf("RollOut() of no apps = %v", err)
 	}
@@ -1712,10 +1712,10 @@ func TestAReleaseOfNoAppsTouchesNothing(t *testing.T) {
 func TestACutoverConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *testing.T) {
 	t.Parallel()
 
-	box := benchedOn(t, twoAppsServing(t), session.Result{}, session.Result{})
+	box := benchedOn(t, twoAppsServing(t), ssh.Result{}, ssh.Result{})
 	proxied := box.answer
 	writes := 0
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if !writesProxy(command) {
 			return proxied(command)
 		}
@@ -1725,7 +1725,7 @@ func TestACutoverConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *te
 		box.mu.Unlock()
 		if first {
 			proxied(command)
-			return session.Result{Code: 1, Stderr: "connection reset after the move"}, true
+			return ssh.Result{Code: 1, Stderr: "connection reset after the move"}, true
 		}
 		return proxied(command)
 	}
@@ -1744,11 +1744,11 @@ func TestACutoverConfigurationThatLandedAndReportedFailurePutsEveryAppBack(t *te
 	if got := upstreamsOf(state); got["web"] != retired || got["api"] != apiRetired {
 		t.Errorf("%s serves %v after the put-back, want both apps back on what served before", ProxyConfig, got)
 	}
-	if box.at(quoted("--retire")) >= 0 {
+	if box.at(shell.Quote("--retire")) >= 0 {
 		t.Errorf("a cutover configuration that reported failure was still cut over and drained: %v", box.commands())
 	}
 	for _, container := range []string{physical, apiCurrent} {
-		if box.at("docker rm --force "+quoted(container)) < 0 {
+		if box.at("docker rm --force "+shell.Quote(container)) < 0 {
 			t.Errorf("the put-back left %s running with nothing routing to it: %v", container, box.commands())
 		}
 	}
@@ -1760,11 +1760,11 @@ func TestARoutingTableThatReadsBackTornIsRefusedWithoutQuotingIt(t *testing.T) {
 	const key = "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----\n"
 	table := base64.StdEncoding.EncodeToString([]byte(`{"shields":[{"hostname":"shop.example.com","key":"` + key + `"}]}`))
 	box := machine(nil)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "base64 <") {
-			return session.Result{Stdout: "+" + table}, true
+			return ssh.Result{Stdout: "+" + table}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 
 	_, err := frontBox{box.host()}.Shielded(context.Background())
@@ -1786,12 +1786,12 @@ func TestAPreviewMovingOnLeavesTheContainerADeploymentPointerStillRoutesToRunnin
 			{RouteKey: keyed("web"), Upstream: retired},
 			{RouteKey: deployment, Upstream: retired},
 		},
-	}), session.Result{}, session.Result{})
+	}), ssh.Result{}, ssh.Result{})
 
 	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("RollOut() = %v", err)
 	}
-	if box.at("docker stop "+quoted(retiring)) >= 0 {
+	if box.at("docker stop "+shell.Quote(retiring)) >= 0 {
 		t.Errorf("the release stopped %s, which %s still routes to: a deployment's own hostname answers 502 the moment its preview moves on", retiring, deployment.Pointer)
 	}
 	state := box.state(t)

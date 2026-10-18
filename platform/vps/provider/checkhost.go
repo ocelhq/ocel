@@ -12,8 +12,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -128,7 +128,7 @@ func proxiedVerdict(ctx context.Context, look Lookup, serving provider.Liveness,
 	case err != nil:
 		check.Verdict = provider.HostFail
 		check.Finding = fmt.Sprintf("ask %s through Cloudflare what answers it: %v", hostname, err)
-	case answered == switchboard.RouterKind:
+	case answered == boxapi.SwitchboardRouter:
 		check.Verdict = provider.HostPass
 		check.Finding = fmt.Sprintf("%s resolves to Cloudflare at %s, and this box answers it", hostname, spell(found))
 		return check

@@ -10,9 +10,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 var coolifyServed = []string{"ocel-edge-probe.preview.p1305.test", "shop.p1305.test"}
@@ -34,7 +34,7 @@ func servingCoolify(t *testing.T) (*box, caddyfile.Caddyfile) {
 	machine.said["docker inspect"] = "coolify ocel \n"
 	machine.answers = map[string]router.Kind{}
 	for _, hostname := range coolifyServed {
-		machine.answers[hostname] = switchboard.RouterKind
+		machine.answers[hostname] = boxapi.SwitchboardRouter
 	}
 	return machine, front
 }

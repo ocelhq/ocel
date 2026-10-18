@@ -7,14 +7,14 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestATierDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
 	t.Parallel()
 
-	empty := Reading{Arch: ArchAMD64, Tier: environment.TierProduction, Observed: map[string]string{}}
-	beside := Reading{Arch: ArchAMD64, Tier: environment.TierPreview, Observed: map[string]string{}}
+	empty := Reading{Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: map[string]string{}}
+	beside := Reading{Arch: ssh.AMD64, Tier: environment.TierPreview, Observed: map[string]string{}}
 	taken := removing(empty, beside, appsPresent{containers: true, volumes: true})
 
 	containers, volumes := -1, -1
@@ -52,11 +52,11 @@ func TestATierDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThem
 
 	tier := environment.TierProduction
 	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "echo volumes") {
-			return session.Result{Stdout: "containers\nvolumes\n"}, true
+			return ssh.Result{Stdout: "containers\nvolumes\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	progress := &said{}
 	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress); err != nil {

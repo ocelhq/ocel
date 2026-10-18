@@ -13,7 +13,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 type Containers interface {
@@ -24,7 +24,7 @@ type Containers interface {
 var Capabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "NET_BIND_SERVICE", "SETGID", "SETUID", "SETPCAP"}
 
 type Policy struct {
-	live.DockerGrants
+	boxapi.DockerGrants
 	StateRoot string
 	Inspect   Containers
 	Ancestors func(path string) error
@@ -216,7 +216,7 @@ func (p Policy) runFlag(ctx context.Context, inv *Invocation, flag, value string
 }
 
 func (p Policy) refuseNetwork(network string) error {
-	if network == "none" || network == live.ProxyNetwork || strings.HasPrefix(network, "ocel-") && !strings.Contains(network, ":") ||
+	if network == "none" || network == boxapi.ProxyNetwork || strings.HasPrefix(network, "ocel-") && !strings.Contains(network, ":") ||
 		slices.Contains(p.Networks, network) {
 		return nil
 	}
@@ -282,7 +282,7 @@ func (p Policy) refuseBind(source string, writable bool) error {
 	if !filepath.IsAbs(source) || filepath.Clean(source) != source {
 		return refuse("bind source %s is not a clean absolute path", source)
 	}
-	at := slices.IndexFunc(p.Binds, func(bind live.DockerBind) bool { return bind.Path == source })
+	at := slices.IndexFunc(p.Binds, func(bind boxapi.DockerBind) bool { return bind.Path == source })
 	if at < 0 {
 		return refuse("%s is not a directory bootstrap granted deploys to mount", source)
 	}

@@ -16,7 +16,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func releasesDir(t *testing.T) string {
@@ -911,11 +912,11 @@ func TestAReleaseTheWindowDropsLosesItsImageAndItsArchiveInOneReconcile(t *testi
 }
 
 func restoring(rig *bench, said string) {
-	rig.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(releasesHelper)) {
-			return session.Result{Stdout: said}, true
+	rig.answer = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, shell.Quote(releasesHelper)) {
+			return ssh.Result{Stdout: said}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 }
 
@@ -931,12 +932,12 @@ func TestARollbackWhoseImageWasPrunedLoadsItFromItsArchiveOneLoadAtATime(t *test
 	if !has {
 		t.Error("EnsureImage() says the box lacks an image it just loaded from its archive")
 	}
-	restore := quoted(releasesHelper) + " " + quoted("shop/web") + " " + quoted("restore") + " " + quoted(appImage)
+	restore := shell.Quote(releasesHelper) + " " + shell.Quote("shop/web") + " " + shell.Quote("restore") + " " + shell.Quote(appImage)
 	at := rig.at(restore)
 	if at < 0 {
 		t.Fatalf("no command asked the releases helper to restore %s:\n%s", appImage, strings.Join(rig.commands(), "\n"))
 	}
-	if !strings.Contains(rig.commands()[at], "flock -x "+quoted(imagesLock)) {
+	if !strings.Contains(rig.commands()[at], "flock -x "+shell.Quote(imagesLock)) {
 		t.Errorf("the restore ran outside %s, and images are loaded onto a box one at a time: %s", imagesLock, rig.commands()[at])
 	}
 }
@@ -1009,18 +1010,18 @@ func TestTheLostReleasesOfEveryAppOnTheBoxAreNamedWithTheirApp(t *testing.T) {
 	}
 }
 
-func readingLost(rig *bench, result session.Result) {
-	rig.answer = func(command string) (session.Result, bool) {
+func readingLost(rig *bench, result ssh.Result) {
+	rig.answer = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "lost") {
 			return result, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 }
 
 func TestARollbackTargetWithNeitherContainerNorArchiveNeedsAction(t *testing.T) {
 	rig := machine(nil)
-	readingLost(rig, session.Result{Stdout: "shop/web ocel/shop/web:one\n"})
+	readingLost(rig, ssh.Result{Stdout: "shop/web ocel/shop/web:one\n"})
 
 	check := rig.host().CheckReleases(context.Background(), environment.TierProduction)
 
@@ -1039,7 +1040,7 @@ func TestARollbackTargetWithNeitherContainerNorArchiveNeedsAction(t *testing.T) 
 
 func TestEveryRollbackTargetWithAContainerOrAnArchivePasses(t *testing.T) {
 	rig := machine(nil)
-	readingLost(rig, session.Result{})
+	readingLost(rig, ssh.Result{})
 
 	check := rig.host().CheckReleases(context.Background(), environment.TierProduction)
 
@@ -1050,7 +1051,7 @@ func TestEveryRollbackTargetWithAContainerOrAnArchivePasses(t *testing.T) {
 
 func TestRollbackTargetsThatCouldNotBeReadFail(t *testing.T) {
 	rig := machine(nil)
-	readingLost(rig, session.Result{Code: 1, Stderr: "releases: /var/lib/ocel/releases is missing; run ocel bootstrap"})
+	readingLost(rig, ssh.Result{Code: 1, Stderr: "releases: /var/lib/ocel/releases is missing; run ocel bootstrap"})
 
 	check := rig.host().CheckReleases(context.Background(), environment.TierProduction)
 

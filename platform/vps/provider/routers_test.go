@@ -8,14 +8,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 func routed(t *testing.T, p *vps.Provider, stack edge.EdgeStack) router.Stack {
 	t.Helper()
-	paired, err := p.Routers().Open(switchboard.RouterKind)
+	paired, err := p.Routers().Open(boxapi.SwitchboardRouter)
 	if err != nil {
-		t.Fatalf("Routers().Open(%q) = %v", switchboard.RouterKind, err)
+		t.Fatalf("Routers().Open(%q) = %v", boxapi.SwitchboardRouter, err)
 	}
 	opened, err := paired.Open(router.NewStackState(stack.State()))
 	if err != nil {

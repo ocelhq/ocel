@@ -11,9 +11,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -82,9 +83,9 @@ func TestASurfaceNamedWithTheSeparatorIsRefusedRatherThanRenderedAmbiguously(t *
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: "ocel" + switchboard.ClaimSeparator + "shop", Pointer: pointed}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: "ocel" + boxapi.ClaimSeparator + "shop", Pointer: pointed}}
 	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
-		t.Errorf("a surface named with %q renders a claim that reads back naming a different surface", switchboard.ClaimSeparator)
+		t.Errorf("a surface named with %q renders a claim that reads back naming a different surface", boxapi.ClaimSeparator)
 	}
 }
 
@@ -92,9 +93,9 @@ func TestAHostnameNamedWithTheSeparatorIsRefusedTheWayASurfaceIs(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: "shop.example.com" + switchboard.ClaimSeparator + surface, Owner: surface, Pointer: pointed}}
+	state.Claims = []HostClaim{{Hostname: "shop.example.com" + boxapi.ClaimSeparator + surface, Owner: surface, Pointer: pointed}}
 	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
-		t.Errorf("a hostname containing %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", switchboard.ClaimSeparator)
+		t.Errorf("a hostname containing %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", boxapi.ClaimSeparator)
 	}
 }
 
@@ -297,9 +298,9 @@ func TestAWriteThisLoginCannotMakeNamesTheElevationItWasRefused(t *testing.T) {
 
 	box := refusingSudo(t)
 	answering := box.answer
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if writesProxy(command) {
-			return session.Result{Code: 1, Stderr: "cannot create " + ProxyConfig + ".XXXXXX: Permission denied"}, true
+			return ssh.Result{Code: 1, Stderr: "cannot create " + ProxyConfig + ".XXXXXX: Permission denied"}, true
 		}
 		return answering(command)
 	}
@@ -429,7 +430,7 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 	if at < 0 || table.Routes[at].Upstream != "shop-web-2222:"+containerimage.PortText {
 		t.Errorf("after a deploy of %s the routes read %v; the other project's app is named web too, and its live container is what a deploy that took its route would then stop", otherSurface, table.Routes)
 	}
-	if box.at("docker stop "+quoted("shop-web-2222")) >= 0 {
+	if box.at("docker stop "+shell.Quote("shop-web-2222")) >= 0 {
 		t.Errorf("the deploy stopped another project's live container: %v", box.commands())
 	}
 }
@@ -649,14 +650,14 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 	box := claimingBox(t, routed())
 	moved := mustWrite(t, twoProjects())
 	proxied := servesProxy(box.bench, &box.recorded)
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if !writesProxy(command) {
 			return proxied(command)
 		}
 		box.mu.Lock()
 		box.recorded = string(moved)
 		box.mu.Unlock()
-		return session.Result{Code: routingMoved, Stderr: digested(string(moved))}, true
+		return ssh.Result{Code: routingMoved, Stderr: digested(string(moved))}, true
 	}
 
 	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
@@ -689,13 +690,13 @@ func TestAWildcardIsRefusedAsAnOrdinaryClaim(t *testing.T) {
 	}
 }
 
-func cuttingOverBox(t *testing.T, config *string, cutOver func(at int) session.Result) *claimBench {
+func cuttingOverBox(t *testing.T, config *string, cutOver func(at int) ssh.Result) *claimBench {
 	t.Helper()
 
 	box := claimingBox(t, routed())
 	proxied := servesPair(box.bench, &box.recorded, config)
 	cutovers := 0
-	box.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (ssh.Result, bool) {
 		if reloadsFront(command) {
 			cutovers++
 			return cutOver(cutovers), true
@@ -710,11 +711,11 @@ func TestAReloadThatFailsPutsBackTheExactBytesOfBothFilesAndReloadsThem(t *testi
 
 	older := olderRendering(t, routed())
 	config := older
-	box := cuttingOverBox(t, &config, func(at int) session.Result {
+	box := cuttingOverBox(t, &config, func(at int) ssh.Result {
 		if at == 1 {
-			return session.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
+			return ssh.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
 		}
-		return session.Result{}
+		return ssh.Result{}
 	})
 	table := box.recorded
 
@@ -741,8 +742,8 @@ func TestAReloadThatFailsTwiceSaysTheProxyMayServeWhatTheFilesNoLongerRecord(t *
 	t.Parallel()
 
 	config := olderRendering(t, routed())
-	box := cuttingOverBox(t, &config, func(int) session.Result {
-		return session.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
+	box := cuttingOverBox(t, &config, func(int) ssh.Result {
+		return ssh.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
 	})
 	err := box.host().rerender(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "may still serve") {

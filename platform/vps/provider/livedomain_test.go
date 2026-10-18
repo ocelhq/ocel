@@ -26,11 +26,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const domainSlug = "bound"
@@ -175,9 +175,9 @@ func TestLiveDomainAddAsksForAnARecordNamingTheBoxAndTheBoxThenServesTheHostname
 	if served := vm.asks(t, hostname, "/"); served != "one" {
 		t.Errorf("the box answered %q for the hostname it just bound, want the release the project serves", served)
 	}
-	if head := vm.heads(t, hostname); !strings.Contains(strings.ToLower(head), strings.ToLower(router.HeaderRouter)+": "+string(switchboard.RouterKind)) {
+	if head := vm.heads(t, hostname); !strings.Contains(strings.ToLower(head), strings.ToLower(router.HeaderRouter)+": "+string(boxapi.SwitchboardRouter)) {
 		t.Errorf("the box answered the bound hostname with\n%s\nwant %s: %s, which is what the serving check reads to decide this edge serves it",
-			head, router.HeaderRouter, switchboard.RouterKind)
+			head, router.HeaderRouter, boxapi.SwitchboardRouter)
 	}
 }
 
@@ -335,7 +335,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 		t.Errorf("%s reads as %v to a second project on the same box, want it claimed: the proxy's route table is box-wide, so deploying over it would take a live site off the air",
 			hostname, claims[0].GetStatus())
 	}
-	if want := boxedge.Surface(domainSlug, environment.TierProduction); claims[0].GetOwner() != want {
+	if want := switchboard.Surface(domainSlug, environment.TierProduction); claims[0].GetOwner() != want {
 		t.Errorf("the claim on %s names %q, want %q: the refusal has to name who owns it or there is nothing to act on",
 			hostname, claims[0].GetOwner(), want)
 	}

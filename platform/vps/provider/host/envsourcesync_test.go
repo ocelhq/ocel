@@ -10,15 +10,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestEachTierRunsItsOwnEnvSourceSyncThatWritesThatTiersRecordsAlone(t *testing.T) {
 	t.Parallel()
 
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		items := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
+		items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})
 		unit := itemAt(t, items, KindUnit, "ocel-envsourcesync@"+string(tier)+".service")
 		if unit.Owner != rootOwner {
 			t.Errorf("%s is enabled as %s, and the sync reads the tier key, which is root's alone", unit.Name, unit.Owner)
@@ -30,9 +32,9 @@ func TestEachTierRunsItsOwnEnvSourceSyncThatWritesThatTiersRecordsAlone(t *testi
 		}
 	}
 
-	template := string(itemAt(t, Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, Front{}), KindFile, envSourceSyncTemplateFile).Content)
+	template := string(itemAt(t, Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, Front{}), KindFile, envSourceSyncTemplateFile).Content)
 	for _, want := range []string{
-		"ExecStart=" + LiveBinary + " " + live.EnvSourceSyncCommand + " --tier %i",
+		"ExecStart=" + LiveBinary + " " + boxapi.EnvSourceSyncCommand + " --tier %i",
 		"ProtectSystem=strict",
 		"ProtectHome=yes",
 		"PrivateTmp=yes",
@@ -62,7 +64,7 @@ func TestTheEnvSourceSyncRestartsWhenTheAgentBinaryOrItsUnitChangesAndIsWrittenA
 	t.Parallel()
 
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})
 	at := func(kind, name string) int {
 		return slices.IndexFunc(items, func(item Item) bool { return item.Kind == kind && item.Name == name })
 	}
@@ -80,7 +82,7 @@ func TestTheEnvSourceSyncRestartsWhenTheAgentBinaryOrItsUnitChangesAndIsWrittenA
 		}
 	}
 	template := itemAt(t, items, KindFile, envSourceSyncTemplateFile)
-	if !bytes.Equal(items[unit].Content, unitWatchFacts(template.Content, liveAgent(ArchAMD64))) {
+	if !bytes.Equal(items[unit].Content, unitWatchFacts(template.Content, liveAgent(ssh.AMD64))) {
 		t.Error("the unit's facts do not follow the unit file and the agent binary, so a changed sync would not restart it")
 	}
 	if template.Owner != rootOwner || template.Mode != 0o644 {
@@ -110,7 +112,7 @@ func TestAnApplyOverAHostBootstrappedBeforeTheEnvSourceSyncWritesAndStartsIt(t *
 			t.Errorf("an apply never wrote %s:\n%s", item.ID(), strings.Join(progress.lines, "\n"))
 		}
 	}
-	if older.at("systemctl restart "+quoted(EnvSourceSyncService(tier))) < 0 {
+	if older.at("systemctl restart "+shell.Quote(EnvSourceSyncService(tier))) < 0 {
 		t.Errorf("an apply never started %s:\n%s", EnvSourceSyncService(tier), strings.Join(older.commands(), "\n"))
 	}
 }
@@ -120,8 +122,8 @@ func TestDestroyingATierStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesTheT
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	current := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
-	beside := Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
+	current := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
+	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))}
 
 	shared := removing(current, beside, appsPresent{})
 	own := removalOf(shared, EnvSourceSyncService(production))
@@ -137,7 +139,7 @@ func TestDestroyingATierStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesTheT
 		}
 	}
 
-	last := removing(current, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
+	last := removing(current, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	for _, gone := range []string{EnvSourceSyncService(production), LiveBinary, envSourceSyncTemplateFile} {
 		if removalOf(last, gone).action != provider.ActionDelete {
 			t.Errorf("destroying the last tier plans %s as %q", gone, removalOf(last, gone).action)
@@ -149,11 +151,11 @@ func TestDestroyingATierStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesTheT
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := strings.Join(box.commands(), "\n")
-	if !strings.Contains(taken, "systemctl disable --now "+quoted(EnvSourceSyncService(production))) {
+	if !strings.Contains(taken, "systemctl disable --now "+shell.Quote(EnvSourceSyncService(production))) {
 		t.Errorf("the last destroy never stopped %s:\n%s", EnvSourceSyncService(production), taken)
 	}
 	for _, file := range []string{LiveBinary, envSourceSyncTemplateFile} {
-		if !strings.Contains(taken, "rm -rf "+quoted(file)) {
+		if !strings.Contains(taken, "rm -rf "+shell.Quote(file)) {
 			t.Errorf("the last destroy left %s:\n%s", file, taken)
 		}
 	}

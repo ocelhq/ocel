@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 type ours map[string]bool
@@ -27,8 +27,8 @@ func aPolicy(t *testing.T) (Policy, string) {
 		t.Fatal(err)
 	}
 	return Policy{
-		DockerGrants: live.DockerGrants{
-			Binds:      []live.DockerBind{{Path: granted}, {Path: state, Writable: true}},
+		DockerGrants: boxapi.DockerGrants{
+			Binds:      []boxapi.DockerBind{{Path: granted}, {Path: state, Writable: true}},
 			Networks:   []string{"coolify"},
 			Containers: []string{"coolify-proxy"},
 		},

@@ -11,12 +11,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-const FrontRecordPath = live.StateRoot + "/proxy.json"
+const FrontRecordPath = boxapi.StateRoot + "/proxy.json"
 
 type frontRecord struct {
 	Proxy      *Front           `json:"proxy"`
@@ -177,7 +179,7 @@ func (f Front) refuseDisagreeing(record frontRecord, tier environment.Tier) erro
 }
 
 func frontReading() string {
-	at := quoted(FrontRecordPath)
+	at := shell.Quote(FrontRecordPath)
 	return "if [ -f " + at + " ]; then cat " + at + "; fi"
 }
 
@@ -201,8 +203,8 @@ func (f Front) listOwned() []removal {
 	return frontMove{from: f}.listRemovals()
 }
 
-func (h *Host) frontRecorded(ctx context.Context, ask asking) (*frontRecord, error) {
-	said, err := ask(ctx, "read which proxy fronts this box", frontReading(), nil)
+func (h *Host) frontRecorded(ctx context.Context, as ssh.Acting) (*frontRecord, error) {
+	said, err := h.Run(ctx, as, "read which proxy fronts this box", frontReading(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -213,20 +215,20 @@ func (h *Host) frontRecorded(ctx context.Context, ask asking) (*frontRecord, err
 	if err := json.Unmarshal([]byte(said), &record); err != nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s on %s is not a record this ocel can read: %v\nRemove it and run `%s`",
-			FrontRecordPath, h.named(), err, provider.BootstrapCommand(environment.TierProduction))
+			FrontRecordPath, h.Named(), err, provider.BootstrapCommand(environment.TierProduction))
 	}
 	return &record, nil
 }
 
 func (h *Host) RefuseDisagreeingFront(ctx context.Context, tier environment.Tier) error {
-	record, err := h.frontRecorded(ctx, h.reach)
+	record, err := h.frontRecorded(ctx, ssh.RootWhenAble)
 	if err != nil {
 		return err
 	}
 	if record == nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s records no proxy for %s, so this deploy cannot tell what fronts it\nRun `%s`",
-			FrontRecordPath, h.named(), provider.BootstrapCommand(tier))
+			FrontRecordPath, h.Named(), provider.BootstrapCommand(tier))
 	}
 	if record.MovingFrom != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -237,7 +239,7 @@ func (h *Host) RefuseDisagreeingFront(ctx context.Context, tier environment.Tier
 }
 
 func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) {
-	existing, err := b.host.frontRecorded(ctx, b.host.reach)
+	existing, err := b.host.frontRecorded(ctx, ssh.RootWhenAble)
 	if err != nil {
 		return Reading{}, err
 	}

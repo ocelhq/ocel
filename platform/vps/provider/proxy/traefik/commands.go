@@ -1,6 +1,8 @@
 package traefik
 
-import "github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+import (
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+)
 
 const labelled = `{{json .Name}} {{json .Config.Labels}}`
 
@@ -15,7 +17,7 @@ const networkFact = "network="
 func switchboardNetworks() []string {
 	return []string{"docker", "inspect", "--type", "container", "--format",
 		"{{range $name, $_ := .NetworkSettings.Networks}}" + networkFact + "{{$name}} {{end}}",
-		switchboard.Name}
+		boxapi.Switchboard}
 }
 
 func coolifyProxyImage() []string {

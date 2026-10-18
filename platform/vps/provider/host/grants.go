@@ -5,8 +5,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type Grant struct {
@@ -14,7 +15,7 @@ type Grant struct {
 	Detail string
 }
 
-func Grants(tier environment.Tier, front Front) []Grant { return grants(tier, ArchAMD64, front) }
+func Grants(tier environment.Tier, front Front) []Grant { return grants(tier, ssh.AMD64, front) }
 
 func grants(tier environment.Tier, arch string, front Front) []Grant {
 	items := Items(tier, nil, arch, front)
@@ -29,11 +30,11 @@ func grants(tier environment.Tier, arch string, front Front) []Grant {
 	}
 	if line := written(items, KindFile, sudoersDocker); line.Name != "" {
 		grants = append(grants, Grant{
-			Name: "runs docker only through " + LiveBinary + " " + live.DockerCommand + ", as root, through one line in " + line.Name,
+			Name: "runs docker only through " + LiveBinary + " " + boxapi.DockerCommand + ", as root, through one line in " + line.Name,
 			Detail: "the line is\n\n      " + strings.TrimSpace(string(line.Content)) +
 				"\n\n    and " + deployer.name + " is in no group that reaches the docker socket, which docker documents as root-level (https://docs.docker.com/engine/install/linux-postinstall/). " +
 				"The " + DockerShim + " on its PATH hands every docker command to that check, which refuses what reaches the host: privileged or device access, a host namespace, a capability past the ones ocel's containers use, a published port beyond loopback, " +
-				"a mount of anything but the directories " + live.DockerGrantsPath + " lists under a path only root can change, a network not ocel's or granted, exec into a container ocel does not run, and any file it reads or writes outside " + stateRoot + ". " +
+				"a mount of anything but the directories " + boxapi.DockerGrantsPath + " lists under a path only root can change, a network not ocel's or granted, exec into a container ocel does not run, and any file it reads or writes outside " + stateRoot + ". " +
 				"An adopted proxy whose container mounts the docker socket reads the config this login writes for it, and through that config can reach the socket. " +
 				"Bootstrap uses a docker " + engineFloor + " or later it finds, or installs the daemon from " + dockerSource + "; destroy removes the login and leaves the engine and its containers",
 		})
@@ -78,7 +79,7 @@ func grants(tier environment.Tier, arch string, front Front) []Grant {
 	if unit := written(items, KindUnit, EnvSourceSyncService(tier)); unit.Name != "" {
 		grants = append(grants, Grant{
 			Name: "no hand in " + unit.Name,
-			Detail: "root's env source sync, " + LiveBinary + " " + live.EnvSourceSyncCommand + ", run by systemd, not by " + deployer.name +
+			Detail: "root's env source sync, " + LiveBinary + " " + boxapi.EnvSourceSyncCommand + ", run by systemd, not by " + deployer.name +
 				". Bounded to CAP_CHOWN and CAP_DAC_OVERRIDE on a read-only system, it writes " + KeyValuesDir(tier) +
 				" and nothing beside, seals through " + boxstore.SealHelper + " without sudo, and logs in to each env source with the credential " +
 				string(tier) + " stores in ocel's own values",

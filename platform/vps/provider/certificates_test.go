@@ -21,8 +21,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 var wildcardPin = caddy.PinsDir + "/wildcard"
@@ -59,7 +59,7 @@ func pinning(t *testing.T, machine *box, block []byte, at string) *vps.Provider 
 			SSH:          vps.Target{Host: "box.invalid", User: "ada"},
 			Certificates: map[string]string{"*.preview.example.com": at},
 		},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	return p
 }
@@ -141,7 +141,7 @@ func TestAPinThatDoesNotCoverTheHostnameIsRefusedAtBindWithAReasonThatNamesBoth(
 			SSH:          vps.Target{Host: "box.invalid", User: "ada"},
 			Certificates: map[string]string{"*.preview.example.com": wildcardPin},
 		},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 
 	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
@@ -167,7 +167,7 @@ func TestAnExpiredPinIsRefusedRatherThanServedUnderAHandleThatReadsHealthy(t *te
 			SSH:          vps.Target{Host: "box.invalid", User: "ada"},
 			Certificates: map[string]string{"*.preview.example.com": wildcardPin},
 		},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 
 	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
@@ -185,7 +185,7 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 	machine := &box{}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 
 	cert := certificateFor(t, p, "shop.example.com")
@@ -221,7 +221,7 @@ func TestTheProxyHandleIsReadOffTheHandshakeAndNeverOffCaddysDataDirectory(t *te
 	machine := &box{leaf: string(served)}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 
 	cert := certificateFor(t, p, "shop.example.com")
@@ -263,7 +263,7 @@ func TestAProxyServedLeafPastItsNotAfterReportsExpiredRatherThanServing(t *testi
 		machine := &box{leaf: string(selfSigned(t, []string{"shop.example.com"}, until))}
 		p := vps.ProviderOver(
 			vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-			func(context.Context) (host.Conn, error) { return machine, nil },
+			func(context.Context) (ssh.Conn, error) { return machine, nil },
 		)
 
 		cert := certificateFor(t, p, "shop.example.com")
@@ -296,7 +296,7 @@ func TestAProxyHandleWithNothingServedYetIsPendingRatherThanIssued(t *testing.T)
 	machine := &box{}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 
 	cert := certificateFor(t, p, "shop.example.com")
@@ -321,7 +321,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 	}}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 
 	_, err := p.Certificates().Inspect(context.Background(), edge.None, "", "pr-7.preview.example.com",
@@ -345,7 +345,7 @@ func TestABoxHasNoCertificateForThePreviewWildcardItself(t *testing.T) {
 	machine := &box{}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	wildcard := edge.PreviewWildcard("preview.example.com")
 

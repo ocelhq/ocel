@@ -19,8 +19,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type warned struct {
@@ -62,7 +62,7 @@ func reachingWith(causes map[string]error, dialed *[]string) vps.Reach {
 func preflightOver(machine *scripted, kind edge.Kind, reach vps.Reach) ([]string, error) {
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	p.Reaching(reach)
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
@@ -241,7 +241,7 @@ func TestABootstrapWhoseServingPortsAreClosedFromOutsideAsksWhetherTheyHaveBeenO
 	machine := boxSaying(nil)
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	var dialed []string
 	p.Reaching(reachingWith(map[string]error{"box.invalid:80": filtered, "box.invalid:443": filtered}, &dialed))
@@ -273,7 +273,7 @@ func TestConfirmingPortsStillClosedFromOutsideAsksAgain(t *testing.T) {
 	machine := boxSaying(nil)
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	var dialed []string
 	p.Reaching(reachingWith(map[string]error{"box.invalid:443": filtered}, &dialed))
@@ -294,7 +294,7 @@ func TestConfirmingPortsNowOpenFromOutsideLetsTheBootstrapGoAhead(t *testing.T) 
 	machine := boxSaying(nil)
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	causes := map[string]error{"box.invalid:80": filtered, "box.invalid:443": filtered}
 	var dialed []string

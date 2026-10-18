@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 func TestWhatTheSealHelperSealsTheBoxOpensNativelyUnderTheSameAssociatedData(t *testing.T) {
@@ -28,11 +28,11 @@ func TestWhatTheSealHelperSealsTheBoxOpensNativelyUnderTheSameAssociatedData(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := live.KeyPath(root, sealTier); got != filepath.Join(root, sealTier, "seal.key") {
+	if got := boxapi.KeyPath(root, sealTier); got != filepath.Join(root, sealTier, "seal.key") {
 		t.Fatalf("the agent reads the key at %s, and the helper minted it at %s", got, filepath.Join(root, sealTier, "seal.key"))
 	}
 
-	vault := live.Cipher{Root: root}
+	vault := boxapi.Cipher{Root: root}
 	opened, err := vault.Open(context.Background(), sealTier, bound, raw)
 	if err != nil {
 		t.Fatalf("Open() of what the helper sealed = %v", err)
@@ -53,14 +53,14 @@ func TestWhatTheKeyValueHelperWritesTheBoxReadsNatively(t *testing.T) {
 	shop := records.Partition{Tier: helperTier, Root: variablestore.RootValues, Path: []string{"shop"}}
 	var names []string
 	for _, key := range []records.Key{shop.Key("cells", "/", "DATABASE_URL", "*"), shop.Key("cells", "/", "SESSION", "pr-7")} {
-		name, err := live.PathOf(key)
+		name, err := boxapi.PathOf(key)
 		if err != nil {
 			t.Fatal(err)
 		}
 		names = append(names, name)
 		helperWrite(t, dir, name, "", "body of "+name)
 	}
-	store := live.KeyValues{Root: dir}
+	store := boxapi.KeyValues{Root: dir}
 	entry, err := store.Read(context.Background(), shop.Key("cells", "/", "DATABASE_URL", "*"))
 	if err != nil {
 		t.Fatalf("Read() of what the helper wrote = %v", err)
@@ -75,7 +75,7 @@ func TestWhatTheKeyValueHelperWritesTheBoxReadsNatively(t *testing.T) {
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("List() = %v, %v, want the two cells the helper wrote", listed, err)
 	}
-	if dir := live.KeyValuesDir(dir, helperTier); !strings.HasSuffix(dir, filepath.Join(helperTier, "keyvalues")) {
+	if dir := boxapi.KeyValuesDir(dir, helperTier); !strings.HasSuffix(dir, filepath.Join(helperTier, "keyvalues")) {
 		t.Errorf("the agent reads entries under %s, and the helper keeps them under <root>/<tier>/keyvalues", dir)
 	}
 }

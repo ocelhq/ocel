@@ -14,12 +14,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const (
@@ -104,13 +104,13 @@ func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.L
 		if strings.TrimSpace(app.HealthPath) == "" {
 			return router.Unserved{Err: fmt.Errorf("%w%s", refusal.Refuse(refusal.CodeInvalid,
 				"release %s onto %s: no health check path\nSet %q in your project configuration",
-				app.App, h.named(), healthKey), h.Discard(ctx, rollout))}
+				app.App, h.Named(), healthKey), h.Discard(ctx, rollout))}
 		}
 	}
 	if len(rollout.Apps) == 0 {
 		return nil
 	}
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return router.Unserved{Err: fmt.Errorf("%w%s", err, h.Discard(ctx, rollout))}
 	}
@@ -122,7 +122,7 @@ func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.L
 		names = append(names, app.name())
 	}
 	progress.Say(rollout.waiting())
-	gated, err := h.stream(ctx, renderStartWatch(names, gateCommand(rollout.DeployTimeout, gates)), nil, elevation)
+	gated, err := h.Stream(ctx, elevation, renderStartWatch(names, gateCommand(rollout.DeployTimeout, gates)), nil)
 	if err != nil {
 		return h.ungated(ctx, rollout, "never came back with an exit code", err.Error(), "", elevation)
 	}
@@ -158,7 +158,7 @@ func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.L
 		progress.Say(fmt.Sprintf("Draining retired container %s for up to %s: past that, %s",
 			containerOf(retiree), rollout.DrainTimeout, drainCeiling))
 	}
-	cutOver, err := h.stream(ctx, words(cutoverCommand(rollout.DrainTimeout, cut.retiring)), nil, elevation)
+	cutOver, err := h.Stream(ctx, elevation, shell.Words(cutoverCommand(rollout.DrainTimeout, cut.retiring)), nil)
 	if err != nil {
 		return h.refuseFailedCutover(ctx, rollout, cut, "never came back with an exit code", err.Error(), elevation)
 	}
@@ -169,7 +169,7 @@ func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.L
 	return h.stopRetired(ctx, rollout, cut, progress, elevation)
 }
 
-func (h *Host) stopRetired(ctx context.Context, rollout Rollout, cut cutover, progress progress.Log, elevation acting) error {
+func (h *Host) stopRetired(ctx context.Context, rollout Rollout, cut cutover, progress progress.Log, elevation ssh.Acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
@@ -198,21 +198,20 @@ func (h *Host) stopRetired(ctx context.Context, rollout Rollout, cut cutover, pr
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: cut over to %s, which now serve, but what follows the cutover did not all finish:\n%s",
-		rollout.apps(), h.named(), rollout.names(), strings.Join(failed, "\n"))
+		rollout.apps(), h.Named(), rollout.names(), strings.Join(failed, "\n"))
 }
 
-func (h *Host) idleUpstreams(ctx context.Context, upstreams []string, elevation acting) ([]string, error) {
+func (h *Host) idleUpstreams(ctx context.Context, upstreams []string, elevation ssh.Acting) ([]string, error) {
 	if len(upstreams) == 0 {
 		return nil, nil
 	}
-	said, err := h.ran(ctx, "ask the proxy whether a route or a drain still uses "+listed(upstreams, containerOf),
-		words(idleCommand(upstreams)), nil, elevation)
+	said, err := h.Run(ctx, elevation, "ask the proxy whether a route or a drain still uses "+listed(upstreams, containerOf), shell.Words(idleCommand(upstreams)), nil)
 	if err != nil {
 		return nil, err
 	}
 	state, err := h.routingTable(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%s could not be read to tell whether the proxy routes to them: %w", live.RoutingTable, err)
+		return nil, fmt.Errorf("%s could not be read to tell whether the proxy routes to them: %w", boxapi.RoutingTable, err)
 	}
 	idle := strings.Fields(said)
 	return slices.DeleteFunc(slices.Clone(upstreams), func(upstream string) bool {
@@ -222,12 +221,12 @@ func (h *Host) idleUpstreams(ctx context.Context, upstreams []string, elevation 
 }
 
 func runningCommand(names []string) string {
-	return "for name in " + words(names) + `; do ` +
+	return "for name in " + shell.Words(names) + `; do ` +
 		`if said=$(docker inspect --type container --format '{{.State.Running}}' "$name" 2>&1); then printf '%s %s\n' "$name" "$said"; ` +
 		`elif printf '%s' "$said" | grep -qi 'no such'; then printf '%s gone\n' "$name"; fi; done`
 }
 
-func (h *Host) stopped(ctx context.Context, upstreams []string, elevation acting) ([]string, error) {
+func (h *Host) stopped(ctx context.Context, upstreams []string, elevation ssh.Acting) ([]string, error) {
 	if len(upstreams) == 0 {
 		return nil, nil
 	}
@@ -235,7 +234,7 @@ func (h *Host) stopped(ctx context.Context, upstreams []string, elevation acting
 	for _, upstream := range upstreams {
 		names = append(names, containerOf(upstream))
 	}
-	said, err := h.ran(ctx, "read whether "+listed(upstreams, containerOf)+" stopped", runningCommand(names), nil, elevation)
+	said, err := h.Run(ctx, elevation, "read whether "+listed(upstreams, containerOf)+" stopped", runningCommand(names), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -306,10 +305,10 @@ func tellDrain(progress progress.Log, said string, window time.Duration) {
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
 		switch {
-		case len(fields) == 3 && fields[0] == switchboard.DrainExpired:
+		case len(fields) == 3 && fields[0] == boxapi.DrainExpired:
 			progress.Warn(fmt.Sprintf("Retired container %s still had %s in flight when its %s drain window closed: %s",
 				containerOf(fields[1]), requests(fields[2]), window, drainCeiling))
-		case len(fields) == 2 && fields[0] == switchboard.Drained:
+		case len(fields) == 2 && fields[0] == boxapi.Drained:
 			progress.Say("Drained retired container " + containerOf(fields[1]) + ": nothing was in flight")
 		}
 	}
@@ -336,33 +335,35 @@ const (
 	routingMoved       = 9
 	routingUnseeded    = 10
 	routingPlaceFailed = 11
-	routingLock        = live.StateRoot
+	routingLock        = boxapi.StateRoot
 )
 
-func routingLocked(mode string) string { return lockedWithin(routingLock, mode, routingLockSeconds) }
+func routingLocked(mode string) string {
+	return shell.Locked(routingLock, mode, shell.RoutingLockSeconds)
+}
 
 func pairReading() string {
 	printed := func(path string) string {
-		at := quoted(path)
+		at := shell.Quote(path)
 		return "if [ -f " + at + " ]; then printf '+'; base64 < " + at + " | tr -d '\\n'; fi; printf '\\n'"
 	}
 	return strings.Join([]string{
 		"set -e",
 		strings.TrimSuffix(routingLocked("-s"), "\n"),
-		printed(live.RoutingTable),
+		printed(boxapi.RoutingTable),
 		printed(ProxyConfig),
 	}, "\n")
 }
 
 func (h *Host) currentPair(ctx context.Context) (routingPair, error) {
-	said, err := h.reach(ctx, "read "+live.RoutingTable+" and "+ProxyConfig, pairReading(), nil)
+	said, err := h.Run(ctx, ssh.RootWhenAble, "read "+boxapi.RoutingTable+" and "+ProxyConfig, pairReading(), nil)
 	if err != nil {
 		return routingPair{}, err
 	}
 	lines := strings.SplitN(said, "\n", 3)
 	if len(lines) < 3 {
 		return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s and %s on %s read back as %d lines (%d bytes), not one line for each", live.RoutingTable, ProxyConfig, h.named(), strings.Count(said, "\n"), len(said))
+			"%s and %s on %s read back as %d lines (%d bytes), not one line for each", boxapi.RoutingTable, ProxyConfig, h.Named(), strings.Count(said, "\n"), len(said))
 	}
 	var read [2][]byte
 	for at, line := range lines[:2] {
@@ -373,7 +374,7 @@ func (h *Host) currentPair(ctx context.Context) (routingPair, error) {
 		decoded, err := base64.StdEncoding.DecodeString(encoded)
 		if err != nil {
 			return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
-				"%s and %s on %s read back undecodable: %v", live.RoutingTable, ProxyConfig, h.named(), err)
+				"%s and %s on %s read back undecodable: %v", boxapi.RoutingTable, ProxyConfig, h.Named(), err)
 		}
 		read[at] = decoded
 	}
@@ -387,7 +388,7 @@ func (h *Host) currentTable(ctx context.Context) (routingPair, error) {
 	}
 	if pair.table == nil {
 		return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s is missing on %s\nRun `ocel bootstrap` for this box's tier", live.RoutingTable, h.named())
+			"%s is missing on %s\nRun `ocel bootstrap` for this box's tier", boxapi.RoutingTable, h.Named())
 	}
 	return pair, nil
 }
@@ -521,16 +522,16 @@ func originPlacing(paths []string) []string {
 		return nil
 	}
 	dir := filepath.Dir(paths[0])
-	steps := []string{`if ! group=$(` + words(placementCommand(dir, "origin-group")) + ` </dev/null); then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`}
+	steps := []string{`if ! group=$(` + shell.Words(placementCommand(dir, "origin-group")) + ` </dev/null); then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`}
 	for at, path := range paths {
 		steps = append(steps, `if ! printf '%s' "$origin`+strconv.Itoa(at)+`" | base64 -d | docker run -i --user "0:$group" `+
-			words(placementCommand(dir, "place-origin", path)[2:])+`; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
+			shell.Words(placementCommand(dir, "place-origin", path)[2:])+`; then exit `+strconv.Itoa(routingPlaceFailed)+`; fi`)
 	}
 	return steps
 }
 
 func originUnplacing(dir string, kept []string) string {
-	return `if ! ` + words(placementCommand(dir, append([]string{"unplace-origins"}, kept...)...)) +
+	return `if ! ` + shell.Words(placementCommand(dir, append([]string{"unplace-origins"}, kept...)...)) +
 		` </dev/null; then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`
 }
 
@@ -539,8 +540,8 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 	if file != ProxyConfig && !placing {
 		file = ""
 	}
-	elevation, refused := h.elevate(ctx)
-	result, err := h.stream(ctx, stagedWrite(expected, file, originPaths(pair.origins)), strings.NewReader(pairFed(pair)), elevation)
+	elevation := ssh.RootWhenAble
+	result, err := h.Stream(ctx, elevation, stagedWrite(expected, file, originPaths(pair.origins)), strings.NewReader(pairFed(pair)))
 	if err != nil {
 		return "", nil, err
 	}
@@ -548,54 +549,46 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 	case 0:
 		return tableDigest(strings.TrimSpace(result.Stdout)), nil, nil
 	case routingPlaceFailed:
-		return tableDigest(strings.TrimSpace(result.Stdout)), h.refuse("place "+file, result, elevation), nil
+		return tableDigest(strings.TrimSpace(result.Stdout)), h.Refuse("place "+file, result), nil
 	case routingMoved:
 		return "", nil, h.movedUnder(expected, result)
 	case routingUnseeded:
-		seeded := live.RoutingTable
+		seeded := boxapi.RoutingTable
 		if file == ProxyConfig {
 			seeded += " or " + ProxyConfig
 		}
 		return "", nil, refusal.Refuse(refusal.CodeNotReady,
 			"%s is missing on %s; nothing was written\nRun `ocel bootstrap` for this box's tier",
-			seeded, h.named())
+			seeded, h.Named())
 	default:
-		return "", nil, unelevated(refused, h.refuse("write "+routingFiles(file), result, elevation))
+		return "", nil, h.Refuse("write "+routingFiles(file), result)
 	}
 }
 
 func routingFiles(file string) string {
 	if file == "" {
-		return live.RoutingTable
+		return boxapi.RoutingTable
 	}
-	return live.RoutingTable + " and " + file
+	return boxapi.RoutingTable + " and " + file
 }
 
-func (h *Host) movedUnder(expected tableDigest, result session.Result) error {
+func (h *Host) movedUnder(expected tableDigest, result ssh.Result) error {
 	return refusal.Refuse(refusal.CodeBusy,
 		"%s on %s changed during this deploy (%s, expected %s); nothing was written\nRun the deploy again",
-		live.RoutingTable, h.named(), strings.TrimSpace(result.Stderr), expected)
-}
-
-func unelevated(refused, why error) error {
-	if refused == nil {
-		return why
-	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"%v\ncould not elevate: %v", why, refused)
+		boxapi.RoutingTable, h.Named(), strings.TrimSpace(result.Stderr), expected)
 }
 
 type stagedFile struct{ at, staged, fed string }
 
 func stagedWrite(expected tableDigest, file string, origins []string) string {
-	files := []stagedFile{{at: live.RoutingTable, staged: "staged", fed: "written"}}
+	files := []stagedFile{{at: boxapi.RoutingTable, staged: "staged", fed: "written"}}
 	if file == ProxyConfig {
 		files = append(files, stagedFile{at: ProxyConfig, staged: "rendered", fed: "rendering"})
 	}
 	var staging, taken, decoding, unseeded, owning, moving, reading, placing []string
 	for _, file := range files {
-		at, staged := quoted(file.at), `"$`+file.staged+`"`
-		staging = append(staging, file.staged+`=$(mktemp `+quoted(file.at+".XXXXXX")+`)`)
+		at, staged := shell.Quote(file.at), `"$`+file.staged+`"`
+		staging = append(staging, file.staged+`=$(mktemp `+shell.Quote(file.at+".XXXXXX")+`)`)
 		taken = append(taken, staged)
 		decoding = append(decoding, `printf '%s' "$`+file.fed+`" | base64 -d > `+staged)
 		unseeded = append(unseeded, `[ ! -f `+at+` ]`)
@@ -627,13 +620,13 @@ func stagedWrite(expected tableDigest, file string, origins []string) string {
 
 func comparedUnder(expected tableDigest) []string {
 	return []string{
-		`current=$(sha256sum ` + quoted(live.RoutingTable) + ` | cut -d' ' -f1)`,
-		`if [ "$current" != ` + quoted(string(expected)) + ` ]; then printf '%s' "$current" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
+		`current=$(sha256sum ` + shell.Quote(boxapi.RoutingTable) + ` | cut -d' ' -f1)`,
+		`if [ "$current" != ` + shell.Quote(string(expected)) + ` ]; then printf '%s' "$current" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
 	}
 }
 
 func placeStep(feed, at string) string {
-	return `if ! ` + feed + words(placementFed(filepath.Dir(at), "place", at)) + `; then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`
+	return `if ! ` + feed + shell.Words(placementFed(filepath.Dir(at), "place", at)) + `; then exit ` + strconv.Itoa(routingPlaceFailed) + `; fi`
 }
 
 func replacement(expected tableDigest, at string, origins []string) string {
@@ -648,17 +641,17 @@ func replacement(expected tableDigest, at string, origins []string) string {
 }
 
 func (h *Host) destinationSum(ctx context.Context, at string) (string, error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return "", err
 	}
-	said, err := h.ran(ctx, "read "+at, words(placementCommand(filepath.Dir(at), "placed", at)), nil, elevation)
+	said, err := h.Run(ctx, elevation, "read "+at, shell.Words(placementCommand(filepath.Dir(at), "placed", at)), nil)
 	return strings.TrimSpace(said), err
 }
 
 func (h *Host) replace(ctx context.Context, expected tableDigest, at string, rendering []byte, origins []proxy.OriginFile) error {
-	elevation, refused := h.elevate(ctx)
-	result, err := h.stream(ctx, replacement(expected, at, originPaths(origins)), strings.NewReader(originsFed(origins)+string(rendering)), elevation)
+	elevation := ssh.RootWhenAble
+	result, err := h.Stream(ctx, elevation, replacement(expected, at, originPaths(origins)), strings.NewReader(originsFed(origins)+string(rendering)))
 	if err != nil {
 		return err
 	}
@@ -668,7 +661,7 @@ func (h *Host) replace(ctx context.Context, expected tableDigest, at string, ren
 	case routingMoved:
 		return h.movedUnder(expected, result)
 	default:
-		return unelevated(refused, h.refuse("place "+at, result, elevation))
+		return h.Refuse("place "+at, result)
 	}
 }
 
@@ -693,7 +686,7 @@ func cutoverCommand(window time.Duration, retiring []string) []string {
 			argv = append(argv, "--retire", retiree)
 		}
 	}
-	return switchboardCommand(append(argv, live.RoutingTable)...)
+	return switchboardCommand(append(argv, boxapi.RoutingTable)...)
 }
 
 func seconds(window time.Duration) string {
@@ -706,7 +699,7 @@ func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), UnwindWindow)
 }
 
-func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, said string, elevation acting) error {
+func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, said string, elevation ssh.Acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	if verdict == "" {
@@ -715,7 +708,7 @@ func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, s
 	failed := rollout.Apps
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
-		if len(fields) != 2 || fields[0] != switchboard.Ungated {
+		if len(fields) != 2 || fields[0] != boxapi.Ungated {
 			continue
 		}
 		if at := slices.IndexFunc(rollout.Apps, func(app AppRollout) bool { return app.gate() == fields[1] }); at >= 0 {
@@ -724,12 +717,12 @@ func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, s
 	}
 	var evidence strings.Builder
 	for _, app := range failed {
-		state := h.readEvidence(ctx, stateCommand(app.name()), elevation)
+		state := h.Evidence(ctx, elevation, stateCommand(app.name()))
 		if isUnstarted(state) {
 			evidence.WriteString("\n" + h.describeUnstarted(ctx, app.App, app.name(), state, elevation))
 			continue
 		}
-		logs := h.readEvidence(ctx, logCommand(app.name()), elevation)
+		logs := h.Evidence(ctx, elevation, logCommand(app.name()))
 		if logs == "" {
 			logs = noLogOutput
 		}
@@ -738,30 +731,30 @@ func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, s
 	}
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the gate %s; the previous release is still live\n%s%s%s",
-		rollout.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rollout, elevation))}
+		rollout.apps(), h.Named(), outcome, verdict, evidence.String(), h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) refuseUnstartedRollout(ctx context.Context, rollout Rollout, name string, elevation acting) error {
+func (h *Host) refuseUnstartedRollout(ctx context.Context, rollout Rollout, name string, elevation ssh.Acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	app := name
 	if at := slices.IndexFunc(rollout.Apps, func(each AppRollout) bool { return each.name() == name }); at >= 0 {
 		app = rollout.Apps[at].App
 	}
-	state := h.readEvidence(ctx, stateCommand(name), elevation)
+	state := h.Evidence(ctx, elevation, stateCommand(name))
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the previous release is still live\n%s%s",
-		rollout.apps(), h.named(), h.describeUnstarted(ctx, app, name, state, elevation), h.discard(ctx, rollout, elevation))}
+		rollout.apps(), h.Named(), h.describeUnstarted(ctx, app, name, state, elevation), h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) overtaken(ctx context.Context, rollout Rollout, why error, elevation acting) error {
+func (h *Host) overtaken(ctx context.Context, rollout Rollout, why error, elevation ssh.Acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	return router.Unserved{Err: fmt.Errorf("release %s onto %s: %w; nothing was written, so the box serves what it served before%s",
-		rollout.apps(), h.named(), why, h.discard(ctx, rollout, elevation))}
+		rollout.apps(), h.Named(), why, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) stranded(ctx context.Context, rollout Rollout, cut cutover, why error, elevation acting) error {
+func (h *Host) stranded(ctx context.Context, rollout Rollout, cut cutover, why error, elevation ssh.Acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	code := refusal.CodeNotReady
@@ -772,23 +765,23 @@ func (h *Host) stranded(ctx context.Context, rollout Rollout, cut cutover, why e
 	} else if restored, err := h.putBack(ctx, cut, elevation); err != nil {
 		return refusal.Refuse(code,
 			"release %s onto %s: could not write %s: %v\n%s not restored: %v\n%s left running",
-			rollout.apps(), h.named(), written, why, written, err, rollout.names())
+			rollout.apps(), h.Named(), written, why, written, err, rollout.names())
 	} else if restored {
 		rolled = written + " restored"
 	}
 	return router.Unserved{Err: refusal.Refuse(code,
 		"release %s onto %s: could not write %s; the proxy was not cut over: %v\n%s%s",
-		rollout.apps(), h.named(), written, why, rolled, h.discard(ctx, rollout, elevation))}
+		rollout.apps(), h.Named(), written, why, rolled, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) unfronted(ctx context.Context, rollout Rollout, why error, elevation acting) error {
+func (h *Host) unfronted(ctx context.Context, rollout Rollout, why error, elevation ssh.Acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	return router.Unserved{Err: fmt.Errorf("release %s onto %s: %w; the previous release is still live%s",
-		rollout.apps(), h.named(), why, h.discard(ctx, rollout, elevation))}
+		rollout.apps(), h.Named(), why, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) refuseFailedCutover(ctx context.Context, rollout Rollout, cut cutover, outcome, verdict string, elevation acting) error {
+func (h *Host) refuseFailedCutover(ctx context.Context, rollout Rollout, cut cutover, outcome, verdict string, elevation ssh.Acting) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	if verdict == "" {
@@ -797,14 +790,14 @@ func (h *Host) refuseFailedCutover(ctx context.Context, rollout Rollout, cut cut
 	if _, err := h.putBack(ctx, cut, elevation); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"release %s onto %s: the cutover helper %s; the live release is unknown\n%s\nproxy not restored; %s may be live and were left running: %v",
-			rollout.apps(), h.named(), outcome, verdict, rollout.names(), err)
+			rollout.apps(), h.Named(), outcome, verdict, rollout.names(), err)
 	}
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the cutover helper %s; the previous release is still live\n%s%s",
-		rollout.apps(), h.named(), outcome, verdict, h.discard(ctx, rollout, elevation))}
+		rollout.apps(), h.Named(), outcome, verdict, h.discard(ctx, rollout, elevation))}
 }
 
-func (h *Host) putBack(ctx context.Context, cut cutover, elevation acting) (bool, error) {
+func (h *Host) putBack(ctx context.Context, cut cutover, elevation ssh.Acting) (bool, error) {
 	if !cut.composed() {
 		return false, nil
 	}
@@ -812,22 +805,21 @@ func (h *Host) putBack(ctx context.Context, cut cutover, elevation acting) (bool
 	if err != nil || !back.changed {
 		return false, err
 	}
-	_, err = h.ran(ctx, "put the proxy back onto the previous release",
-		words(switchboardCommand("cutover", live.RoutingTable)), nil, elevation)
+	_, err = h.Run(ctx, elevation, "put the proxy back onto the previous release", shell.Words(switchboardCommand("cutover", boxapi.RoutingTable)), nil)
 	return true, errors.Join(back.failedPlace, err)
 }
 
 func (h *Host) Discard(ctx context.Context, rollout Rollout) string {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return fmt.Sprintf("\n%s left running: %v", rollout.names(), err)
 	}
 	return h.discard(ctx, rollout, elevation)
 }
 
-func (h *Host) discard(ctx context.Context, rollout Rollout, elevation acting) string {
+func (h *Host) discard(ctx context.Context, rollout Rollout, elevation ssh.Acting) string {
 	targets := make([]string, 0, len(rollout.Apps))
 	for _, app := range rollout.Apps {
 		targets = append(targets, app.Target)

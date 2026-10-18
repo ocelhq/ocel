@@ -14,11 +14,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/officialimages"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const recordedPassword = "5f1c0d7e9a3b48264c5d6e7f8091a2b3c4d5e6f708192a3b"
@@ -193,11 +193,11 @@ func TestADeployThatLosesTheNameToAnotherSharesTheWinnersPostgres(t *testing.T) 
 
 	machine := &box{}
 	withRecordedPostgres(machine)
-	machine.refuses = func(command string) (session.Result, bool) {
+	machine.refuses = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "'docker' 'run'") {
-			return session.Result{Code: 125, Stderr: `docker: Error response from daemon: Conflict. The container name "/shop-prod-web-r0a1b2c3d-main-pg" is already in use by container "9f2c"`}, true
+			return ssh.Result{Code: 125, Stderr: `docker: Error response from daemon: Conflict. The container name "/shop-prod-web-r0a1b2c3d-main-pg" is already in use by container "9f2c"`}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err != nil {
@@ -269,16 +269,16 @@ const takenDump = "/var/lib/ocel/production/backups/shop-prod-web-r0a1b2c3d-main
 
 func volumeOfAnotherMajor(machine *box, state string) {
 	withRecordedPostgres(machine)
-	machine.refuses = func(command string) (session.Result, bool) {
+	machine.refuses = func(command string) (ssh.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker volume ls") && strings.Contains(command, host.LabelGeneration):
-			return session.Result{Stdout: "16\n"}, true
+			return ssh.Result{Stdout: "16\n"}, true
 		case strings.Contains(command, ".State.Status"):
-			return session.Result{Stdout: state + " postgres:16 0123456789ab\n"}, true
+			return ssh.Result{Stdout: state + " postgres:16 0123456789ab\n"}, true
 		case strings.Contains(command, host.BackupsHelper) && strings.Contains(command, "'dump'"):
-			return session.Result{Stdout: takenDump + "\n"}, true
+			return ssh.Result{Stdout: takenDump + "\n"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 }
 
@@ -390,12 +390,12 @@ func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *tes
 
 	machine := &box{unsocket: true, login: "ada"}
 	actingAsOwner := "sudo -n -u " + host.DeployUser() + " "
-	machine.refuses = func(command string) (session.Result, bool) {
+	machine.refuses = func(command string) (ssh.Result, bool) {
 		owns := strings.Contains(command, "/kept/") || strings.Contains(command, ".env")
 		if owns && !strings.HasPrefix(command, actingAsOwner) {
-			return session.Result{Code: 1, Stderr: "mkdir: cannot create directory '/var/lib/ocel': Permission denied"}, true
+			return ssh.Result{Code: 1, Stderr: "mkdir: cannot create directory '/var/lib/ocel': Permission denied"}, true
 		}
-		return session.Result{}, false
+		return ssh.Result{}, false
 	}
 	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err != nil {
@@ -439,7 +439,7 @@ func TestAPostgresPasswordIsBoundToItsProjectTierStackAndResourceUnderResources(
 	if err != nil {
 		t.Fatal(err)
 	}
-	opened, err := live.Open(key, bound, sealed)
+	opened, err := boxapi.Open(key, bound, sealed)
 	if err != nil || string(opened) != "s3cr3t-postgres" {
 		t.Fatalf("Open() = %q, %v, want the password sealed as a resource secret of shop at production/prod--infra/resources/main/password to open: every box's Postgres password is bound to those", opened, err)
 	}

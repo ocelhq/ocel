@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func parityTables() map[string]RoutingTable {
@@ -57,7 +57,7 @@ func TestTheProviderRefusesExactlyTheRoutingTablesTheSwitchboardRefuses(t *testi
 
 	for what, table := range parityTables() {
 		_, renderErr := RenderProxyConfig(caddy.Builtin{}, table)
-		_, readErr := switchboard.Read(mustWrite(t, table))
+		_, readErr := boxapi.ReadTable(mustWrite(t, table))
 		if (renderErr == nil) != (readErr == nil) {
 			t.Errorf("%s: the provider says %v and the switchboard says %v, want both to refuse or both to take it: a table the provider writes and the switchboard cannot load strands the box on its old routes", what, renderErr, readErr)
 		}

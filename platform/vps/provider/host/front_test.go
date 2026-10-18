@@ -10,11 +10,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func routedByHand() Front { return Front{Manual: &ManualFront{Port: manual.DefaultPort}} }
@@ -29,7 +29,7 @@ func coolifysTraefik() Front {
 func TestABoxFrontedByHandInstallsNothingOfOcelsOwnProxy(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, routedByHand())
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, routedByHand())
 	for _, item := range items {
 		switch {
 		case item.Kind == KindContainer && item.Name == caddy.Container,
@@ -38,7 +38,7 @@ func TestABoxFrontedByHandInstallsNothingOfOcelsOwnProxy(t *testing.T) {
 			t.Errorf("a box fronted by your own proxy installs %s, which only ocel's own proxy reads", item.ID())
 		}
 	}
-	for _, wanted := range []string{SwitchboardBinary, live.RoutingTable, ProxyNetwork, SwitchboardContainer} {
+	for _, wanted := range []string{SwitchboardBinary, boxapi.RoutingTable, ProxyNetwork, SwitchboardContainer} {
 		if !slices.ContainsFunc(items, func(item Item) bool { return item.Name == wanted }) {
 			t.Errorf("a box fronted by your own proxy installs no %s; the switchboard still routes it", wanted)
 		}
@@ -47,7 +47,7 @@ func TestABoxFrontedByHandInstallsNothingOfOcelsOwnProxy(t *testing.T) {
 
 func switchboardOf(t *testing.T, front Front) boxContainer {
 	t.Helper()
-	board := itemAt(t, ProxyItems(ArchAMD64, front), KindContainer, SwitchboardContainer)
+	board := itemAt(t, ProxyItems(ssh.AMD64, front), KindContainer, SwitchboardContainer)
 	return *board.box
 }
 
@@ -72,8 +72,8 @@ func TestAProxyRoutedByHandIsTrustedForItsSchemeAndHostButNeverTheClientItNames(
 		t.Errorf("the switchboard serves as %q beside your proxy, want it relaying from the %s network alone, never an app network it joins, and trusting nobody's X-Forwarded-For", byHand, ProxyNetwork)
 	}
 	builtIn := switchboardOf(t, Front{}).command
-	if at := slices.Index(builtIn, "--front"); at < 0 || builtIn[at+1] != switchboard.FrontSocket || slices.Contains(builtIn, "--relay") {
-		t.Errorf("the switchboard serves as %q beside ocel's own proxy, want it trusting %s alone, over %s", builtIn, caddy.Container, switchboard.FrontSocket)
+	if at := slices.Index(builtIn, "--front"); at < 0 || builtIn[at+1] != boxapi.FrontSocket || slices.Contains(builtIn, "--relay") {
+		t.Errorf("the switchboard serves as %q beside ocel's own proxy, want it trusting %s alone, over %s", builtIn, caddy.Container, boxapi.FrontSocket)
 	}
 }
 
@@ -94,11 +94,11 @@ func TestAProxyRoutedByHandOnItsOwnNetworkIsHeardFromItAsFromTheBoxNetwork(t *te
 	if !slices.Equal(relayed, []string{ProxyNetwork, "coolify"}) {
 		t.Errorf("the switchboard serves as %q, want it relaying from %s and from coolify, the network your proxy reaches it on", board.command, ProxyNetwork)
 	}
-	if !strings.Contains(words(board.run()), words([]string{"--network", ProxyNetwork, "--network", "coolify"})) {
-		t.Errorf("the switchboard runs as %s, want it started on coolify as well as %s: it resolves the networks it relays from as it starts serving", words(board.run()), ProxyNetwork)
+	if !strings.Contains(shell.Words(board.run()), shell.Words([]string{"--network", ProxyNetwork, "--network", "coolify"})) {
+		t.Errorf("the switchboard runs as %s, want it started on coolify as well as %s: it resolves the networks it relays from as it starts serving", shell.Words(board.run()), ProxyNetwork)
 	}
-	if !strings.Contains(words(board.run()), words([]string{"--publish", "127.0.0.1:8480:" + switchboardPort})) {
-		t.Errorf("the switchboard runs as %s, want it still published on the loopback port beside the network", words(board.run()))
+	if !strings.Contains(shell.Words(board.run()), shell.Words([]string{"--publish", "127.0.0.1:8480:" + switchboardPort})) {
+		t.Errorf("the switchboard runs as %s, want it still published on the loopback port beside the network", shell.Words(board.run()))
 	}
 }
 
@@ -106,8 +106,8 @@ func TestTheSwitchboardIsWrittenOntoYourProxysNetworkOnlyWhenItExists(t *testing
 	t.Parallel()
 
 	written := switchboardOf(t, routedOnANetwork()).writing(containerRising)
-	asked := strings.Index(written, "docker network inspect "+quoted("coolify"))
-	ran := strings.Index(written, quoted("docker")+" "+quoted("create"))
+	asked := strings.Index(written, "docker network inspect "+shell.Quote("coolify"))
+	ran := strings.Index(written, shell.Quote("docker")+" "+shell.Quote("create"))
 	if asked < 0 || ran < 0 || asked > ran {
 		t.Fatalf("the switchboard write asks after coolify at %d and runs at %d, want the network found before a run that would fail on it:\n%s", asked, ran, written)
 	}
@@ -145,7 +145,7 @@ func TestAClaimOnABoxFrontedByHandWritesTheTableAloneAndReloadsNothing(t *testin
 		t.Fatal(err)
 	}
 	if len(table.Claims) != 1 || table.Claims[0].Hostname != claimed {
-		t.Errorf("%s records claims %v, want %s claimed", live.RoutingTable, table.Claims, claimed)
+		t.Errorf("%s records claims %v, want %s claimed", boxapi.RoutingTable, table.Claims, claimed)
 	}
 	if absent != "" {
 		t.Errorf("the claim wrote %s as %q, want nothing written for a proxy ocel never writes to", ProxyConfig, absent)
@@ -215,7 +215,7 @@ func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
 		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	at := box.at("/dev/stdin " + quoted(FrontRecordPath))
+	at := box.at("/dev/stdin " + shell.Quote(FrontRecordPath))
 	if at < 0 {
 		t.Fatalf("the apply never wrote %s:\n%s", FrontRecordPath, strings.Join(box.commands(), "\n"))
 	}
@@ -237,7 +237,7 @@ func TestABootstrapLeavesARecordThatAgreesUnchanged(t *testing.T) {
 		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	if at := box.at("/dev/stdin " + quoted(FrontRecordPath)); at >= 0 {
+	if at := box.at("/dev/stdin " + shell.Quote(FrontRecordPath)); at >= 0 {
 		t.Errorf("the apply rewrote %s, which blog set and this project agrees with: %s", FrontRecordPath, box.commands()[at])
 	}
 }
@@ -424,7 +424,7 @@ func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedM
 		t.Errorf("the plan names the move %q, want %q: %s runs on this box, so it is fronted by ocel's own proxy whether or not a record says so", move.Name, want, caddy.Container)
 	}
 	survey := box.commands()[box.at("for p in")]
-	if !strings.Contains(survey, "docker inspect --type container") || !strings.Contains(survey, quoted(caddy.Container)) {
+	if !strings.Contains(survey, "docker inspect --type container") || !strings.Contains(survey, shell.Quote(caddy.Container)) {
 		t.Errorf("the survey under a proxy routed by hand never asks after %s, so nothing it reads can say ocel's own proxy fronts the box:\n%s", caddy.Container, survey)
 	}
 }
@@ -459,8 +459,8 @@ func TestABootstrapOfAFreshBoxUnderAProxyRoutedByHandPlansItsRecord(t *testing.T
 	t.Parallel()
 
 	fresh := machine(nil)
-	fresh.answer = func(command string) (session.Result, bool) {
-		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
+	fresh.answer = func(command string) (ssh.Result, bool) {
+		return ssh.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
 	plan, err := NewBootstrap(fresh.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
 		provider.BootstrapRequest{Tier: environment.TierProduction})
@@ -477,7 +477,7 @@ func TestWhatABoxInstallsFollowsWhetherItsProxyOwnsThePorts(t *testing.T) {
 
 	for name, front := range map[string]Front{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand(), "a Traefik on the host": traefikOnTheHost()} {
 		owns := openFront(front, frontBox{}).Guarantees().OwnsPorts
-		installsProxy := slices.ContainsFunc(ProxyItems(ArchAMD64, front), func(item Item) bool {
+		installsProxy := slices.ContainsFunc(ProxyItems(ssh.AMD64, front), func(item Item) bool {
 			return item.Kind == KindContainer && item.Name == caddy.Container
 		})
 		if installsProxy != owns {

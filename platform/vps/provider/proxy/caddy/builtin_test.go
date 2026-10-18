@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -37,8 +37,8 @@ func (b *box) Said(_ context.Context, argv []string) (string, error) {
 func TestTheBuiltinProxyIsRenderedIntoTheFileItsContainerMounts(t *testing.T) {
 	t.Parallel()
 
-	if got := (caddy.Builtin{}).File(); got != live.ProxyConfig {
-		t.Errorf("File() = %q, want %q: it is mounted at %s, the file the proxy runs and reloads", got, live.ProxyConfig, caddy.ConfigMount)
+	if got := (caddy.Builtin{}).File(); got != boxapi.ProxyConfig {
+		t.Errorf("File() = %q, want %q: it is mounted at %s, the file the proxy runs and reloads", got, boxapi.ProxyConfig, caddy.ConfigMount)
 	}
 }
 

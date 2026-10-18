@@ -1,0 +1,84 @@
+package switchboard_test
+
+import (
+	"context"
+	"slices"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
+)
+
+func routedByHand() *machine {
+	m := aMachine()
+	m.byHand = manual.DefaultPort
+	return m
+}
+
+func TestABindOnABoxYourProxyFrontsSaysWhatToRouteToTheSwitchboard(t *testing.T) {
+	t.Parallel()
+
+	m := routedByHand()
+	stack := reconciledOn(t, m, slug)
+	var said []string
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{
+		Hostname: "shop.example.com",
+		Say:      func(line string) { said = append(said, line) },
+	}); err != nil {
+		t.Fatalf("BindDomain() = %v", err)
+	}
+	if want := manual.Route("shop.example.com", manual.DefaultPort); !slices.Contains(said, want) {
+		t.Errorf("the bind said %q, want %q: nothing reaches the hostname until your proxy routes it", said, want)
+	}
+}
+
+func TestABindOnABoxOcelsOwnProxyFrontsAsksNothingOfYou(t *testing.T) {
+	t.Parallel()
+
+	stack := reconciledOn(t, aMachine(), slug)
+	var said []string
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{
+		Hostname: "shop.example.com",
+		Say:      func(line string) { said = append(said, line) },
+	}); err != nil {
+		t.Fatalf("BindDomain() = %v", err)
+	}
+	if len(said) != 0 {
+		t.Errorf("the bind said %q, want nothing: ocel's own proxy takes the hostname up itself", said)
+	}
+}
+
+func TestAPreviewWildcardOnABoxYourProxyFrontsSaysWhatToRoute(t *testing.T) {
+	t.Parallel()
+
+	front := edgeOver(routedByHand(), fake.NewKeyValues())
+	var warned []string
+	spec := previewSpec()
+	spec.Warn = func(line string) { warned = append(warned, line) }
+	if _, err := front.ReconcilePreviewWildcard(context.Background(), spec); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard() = %v", err)
+	}
+	if want := manual.Route(edge.PreviewWildcard(previewBase), manual.DefaultPort); !slices.Contains(warned, want) {
+		t.Errorf("the wildcard said %q, want %q", warned, want)
+	}
+}
+
+func TestACertificateYourProxyServesIsKeptAsYours(t *testing.T) {
+	t.Parallel()
+
+	front := edgeOver(routedByHand(), fake.NewKeyValues())
+	for _, change := range front.PlanProjectRemoval(edge.ProjectScope{
+		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Address: address,
+	})[0].Changes {
+		if change.Kind != switchboard.CertificateKind {
+			continue
+		}
+		if change.Name != certs.ProxyHandle("shop.example.com") || change.Action != edge.PlanKeep || change.Reason != "your proxy serves it" {
+			t.Errorf("the certificate row is %+v, want %s kept as served by your proxy", change, certs.ProxyHandle("shop.example.com"))
+		}
+	}
+}

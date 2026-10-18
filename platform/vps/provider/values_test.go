@@ -16,8 +16,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
@@ -91,13 +92,13 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 	}
 	line := ""
 	for entry := range strings.Lines(file) {
-		if value, named := strings.CutPrefix(entry, variables.EnvVar+"="); named {
+		if value, named := strings.CutPrefix(entry, boxapi.EnvVar+"="); named {
 			line = strings.TrimSpace(value)
 		}
 	}
-	manifest, err := variables.Parse([]byte(line))
+	manifest, err := boxapi.Parse([]byte(line))
 	if err != nil {
-		t.Fatalf("%s = %q, which the runtime cannot read: %v", variables.EnvVar, line, err)
+		t.Fatalf("%s = %q, which the runtime cannot read: %v", boxapi.EnvVar, line, err)
 	}
 	if manifest.Slug != "shop" || manifest.Tier != "production" || manifest.Environment != "" {
 		t.Errorf("manifest = %+v, want the project slug and tier with no environment in production", manifest)
@@ -111,7 +112,7 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 		t.Errorf("manifest pins %+v, want the binding by name, the key the app reads it under, its type and the version granted", manifest.Bindings)
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, "src="+variables.SocketDir+",dst="+variables.SocketDir+",readonly") {
+	if !strings.Contains(joined, "src="+boxapi.SocketDir+",dst="+boxapi.SocketDir+",readonly") {
 		t.Errorf("the container is handed no socket to read its values through:\n%s", joined)
 	}
 }
@@ -164,7 +165,7 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 		t.Errorf("an app declaring no value is handed %q, want the health path alone", file)
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if strings.Contains(joined, "--mount") || strings.Contains(joined, variables.SocketDir) {
+	if strings.Contains(joined, "--mount") || strings.Contains(joined, boxapi.SocketDir) {
 		t.Errorf("an app declaring nothing live is handed the box socket anyway:\n%s", joined)
 	}
 }
@@ -172,7 +173,7 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 func TestAValueDeliveredUnderANameTheRuntimeReadsItsOwnFromIsRefused(t *testing.T) {
 	t.Parallel()
 
-	for _, owned := range []string{originguard.HealthPathVar, variables.EnvVar} {
+	for _, owned := range []string{originguard.HealthPathVar, boxapi.EnvVar} {
 		app := anApp()
 		app.Values = provider.AppValues{ContainerEnv: map[string]string{owned: "x"}}
 		_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), progress.Discard())
@@ -187,7 +188,7 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItShips(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	for arch, machine := range map[string]elf.Machine{host.ArchAMD64: elf.EM_X86_64, host.ArchARM64: elf.EM_AARCH64} {
+	for arch, machine := range map[string]elf.Machine{ssh.AMD64: elf.EM_X86_64, ssh.ARM64: elf.EM_AARCH64} {
 		raw, err := p.Runtime().Binary(context.Background(), arch)
 		if err != nil {
 			t.Fatalf("ContainerRuntime(%s) = %v", arch, err)

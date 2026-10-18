@@ -11,15 +11,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestTheAgentListensOnASocketSystemdBindsBeforeTheEngineAndKeepsAcrossARestart(t *testing.T) {
 	t.Parallel()
 
-	socket := string(itemAt(t, LiveItems(ArchAMD64), KindFile, liveSocketFile).Content)
+	socket := string(itemAt(t, LiveItems(ssh.AMD64), KindFile, liveSocketFile).Content)
 	for _, want := range []string{
-		"ListenStream=" + live.SocketPath,
+		"ListenStream=" + boxapi.SocketPath,
 		"Before=" + dockerUnit,
 		"SocketMode=0666",
 		"WantedBy=sockets.target",
@@ -28,7 +30,7 @@ func TestTheAgentListensOnASocketSystemdBindsBeforeTheEngineAndKeepsAcrossAResta
 			t.Errorf("the socket unit reads:\n%s\nand never says %q", socket, want)
 		}
 	}
-	service := string(itemAt(t, LiveItems(ArchAMD64), KindFile, liveUnitFile).Content)
+	service := string(itemAt(t, LiveItems(ssh.AMD64), KindFile, liveUnitFile).Content)
 	for _, want := range []string{
 		"ExecStart=" + LiveBinary,
 		"Requires=" + LiveSocketUnit,
@@ -43,15 +45,15 @@ func TestTheAgentListensOnASocketSystemdBindsBeforeTheEngineAndKeepsAcrossAResta
 	if strings.Contains(service, "User=") {
 		t.Errorf("the service unit reads:\n%s\nand names a user: the agent reads the tier key, which is root's alone", service)
 	}
-	if !strings.HasPrefix(live.SocketPath, live.SocketDir+"/") || live.SocketDir == ConnectorRun || strings.HasPrefix(live.SocketDir, ConnectorRun+"/") {
-		t.Errorf("the socket is at %s, under %s, which %s owns and could rename out from under every container", live.SocketPath, live.SocketDir, deployUser)
+	if !strings.HasPrefix(boxapi.SocketPath, boxapi.SocketDir+"/") || boxapi.SocketDir == ConnectorRun || strings.HasPrefix(boxapi.SocketDir, ConnectorRun+"/") {
+		t.Errorf("the socket is at %s, under %s, which %s owns and could rename out from under every container", boxapi.SocketPath, boxapi.SocketDir, deployUser)
 	}
 }
 
 func TestTheUnitsAreWrittenAfterWhatTheyWatchAndTheServiceAfterItsSocket(t *testing.T) {
 	t.Parallel()
 
-	items := LiveItems(ArchAMD64)
+	items := LiveItems(ssh.AMD64)
 	at := func(kind, name string) int {
 		return slices.IndexFunc(items, func(item Item) bool { return item.Kind == kind && item.Name == name })
 	}
@@ -66,7 +68,7 @@ func TestTheUnitsAreWrittenAfterWhatTheyWatchAndTheServiceAfterItsSocket(t *test
 			}
 		}
 	}
-	if items[service].Content == nil || !bytes.Equal(items[service].Content, unitWatchFacts(liveServiceUnit(), liveAgent(ArchAMD64))) {
+	if items[service].Content == nil || !bytes.Equal(items[service].Content, unitWatchFacts(liveServiceUnit(), liveAgent(ssh.AMD64))) {
 		t.Error("the service's facts do not follow the unit file and the agent, so a changed agent would not restart it")
 	}
 	for _, item := range items {
@@ -79,7 +81,7 @@ func TestTheUnitsAreWrittenAfterWhatTheyWatchAndTheServiceAfterItsSocket(t *test
 func TestTheAgentAndTheRuntimeAreStaticBinariesForEachArchitectureTheBoxRuns(t *testing.T) {
 	t.Parallel()
 
-	for arch, machine := range map[string]elf.Machine{ArchAMD64: elf.EM_X86_64, ArchARM64: elf.EM_AARCH64} {
+	for arch, machine := range map[string]elf.Machine{ssh.AMD64: elf.EM_X86_64, ssh.ARM64: elf.EM_AARCH64} {
 		runtime, err := ContainerRuntime(arch)
 		if err != nil {
 			t.Fatalf("ContainerRuntime(%s) = %v", arch, err)
@@ -101,7 +103,7 @@ func TestTheAgentAndTheRuntimeAreStaticBinariesForEachArchitectureTheBoxRuns(t *
 		t.Error("ContainerRuntime(riscv64) handed something back, and ocel builds the runtime for amd64 and arm64 alone")
 	}
 	reported, _ := ContainerRuntime("x86_64")
-	named, _ := ContainerRuntime(ArchAMD64)
+	named, _ := ContainerRuntime(ssh.AMD64)
 	if !bytes.Equal(reported, named) {
 		t.Error("ContainerRuntime(x86_64) is not the amd64 build, and an image reports its architecture either way")
 	}
@@ -112,13 +114,13 @@ func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingTierKeepsThem(t *testi
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	current := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
-	beside := Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
+	current := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
+	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))}
 	for _, name := range []string{LiveService, LiveSocketUnit, LiveBinary, liveUnitFile, liveSocketFile} {
 		if kept := removalOf(removing(current, beside, appsPresent{}), name); kept.action == provider.ActionDelete {
 			t.Errorf("destroying one tier takes %s, and the sibling tier's containers still read their values through it", name)
 		}
-		if gone := removalOf(removing(current, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{}), name); gone.action != provider.ActionDelete {
+		if gone := removalOf(removing(current, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{}), name); gone.action != provider.ActionDelete {
 			t.Errorf("destroying the last tier plans %s as %q", name, gone.action)
 		}
 	}
@@ -129,11 +131,11 @@ func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingTierKeepsThem(t *testi
 	}
 	taken := strings.Join(box.commands(), "\n")
 	for _, unit := range []string{LiveService, LiveSocketUnit} {
-		if !strings.Contains(taken, "systemctl disable --now "+quoted(unit)) {
+		if !strings.Contains(taken, "systemctl disable --now "+shell.Quote(unit)) {
 			t.Errorf("the last destroy never stopped %s:\n%s", unit, taken)
 		}
 	}
-	if !strings.Contains(taken, "rm -rf "+quoted(LiveBinary)) {
+	if !strings.Contains(taken, "rm -rf "+shell.Quote(LiveBinary)) {
 		t.Errorf("the last destroy left %s:\n%s", LiveBinary, taken)
 	}
 }
@@ -143,7 +145,7 @@ func TestTheDeployLoginIsToldItHasNoHandInTheAgent(t *testing.T) {
 
 	var named bool
 	for _, grant := range Grants(environment.TierProduction, Front{}) {
-		if !strings.Contains(grant.Name, live.SocketPath) {
+		if !strings.Contains(grant.Name, boxapi.SocketPath) {
 			continue
 		}
 		named = true

@@ -19,8 +19,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -108,12 +108,12 @@ type realtimeNamespaceRecord struct {
 
 func newRealtimeNamespaceKey(in resources.ProvisionRequest) (string, records.Key) {
 	namespace := chooseDeclaredName(in.Resource.Declared, in.Resource.Name)
-	return namespace, live.RealtimeNamespaceKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, namespace)
+	return namespace, boxapi.RealtimeNamespaceKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, namespace)
 }
 
 func newRealtimeNamespaceRecord(in resources.ProvisionRequest, seed []byte) (realtimeNamespaceRecord, error) {
 	verifyKey := base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
-	value, err := json.Marshal(live.RealtimeNamespace{VerifyKey: verifyKey})
+	value, err := json.Marshal(boxapi.RealtimeNamespace{VerifyKey: verifyKey})
 	if err != nil {
 		return realtimeNamespaceRecord{}, err
 	}
@@ -132,7 +132,7 @@ func newRealtimeBinding(in resources.ProvisionRequest, seed []byte, verifyKey st
 		Name:     in.Resource.Name,
 		Resource: in.Resource.Declared,
 		Properties: map[string]string{
-			provider.PropertyURL:        live.RealtimeSocketPath,
+			provider.PropertyURL:        boxapi.RealtimeSocketPath,
 			provider.PropertyHost:       realtimeGatewayAddress(in.Ref),
 			provider.PropertySigningKey: base64.StdEncoding.EncodeToString(seed),
 			provider.PropertyVerifyKey:  verifyKey,
@@ -226,7 +226,7 @@ func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.Provision
 }
 
 func newRealtimeSigningAssociatedData(in resources.ProvisionRequest) (seal.AssociatedData, error) {
-	return live.NewSecretAssociatedData(in.Ref.Project, in.Ref.Tier, in.Ref.Name.String(), resourceSecretFolder, in.Resource.Name, realtimeSigningName)
+	return boxapi.NewSecretAssociatedData(in.Ref.Project, in.Ref.Tier, in.Ref.Name.String(), resourceSecretFolder, in.Resource.Name, realtimeSigningName)
 }
 
 func (p *Provider) realtimeSigningSeed(ctx context.Context, in resources.ProvisionRequest) ([]byte, error) {
@@ -252,7 +252,7 @@ func decodeSigningSeed(in resources.ProvisionRequest, opened string) ([]byte, er
 }
 
 func (p *Provider) readRealtimeKeys(ctx context.Context, ref provider.StackRef) (map[string]string, error) {
-	partition, under := live.RealtimeNamespacesUnder(ref.Tier, ref.Project, ref.Name.Env)
+	partition, under := boxapi.RealtimeNamespacesUnder(ref.Tier, ref.Project, ref.Name.Env)
 	entries, err := p.keyValues.List(ctx, partition, under...)
 	if err != nil {
 		return nil, err
@@ -262,7 +262,7 @@ func (p *Provider) readRealtimeKeys(ctx context.Context, ref provider.StackRef) 
 		if len(entry.Key.Path) != len(under)+1 {
 			continue
 		}
-		var recorded live.RealtimeNamespace
+		var recorded boxapi.RealtimeNamespace
 		if err := json.Unmarshal(entry.Value, &recorded); err != nil {
 			return nil, fmt.Errorf("read %s: %w", entry.Key, err)
 		}
@@ -308,7 +308,7 @@ func (p *Provider) placeRealtimeGateway(ctx context.Context, ref provider.StackR
 
 func (p *Provider) RemoveRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	namespace := chooseDeclaredName(binding.Resource, binding.Name)
-	if err := records.Forget(ctx, p.keyValues, live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, namespace)); err != nil {
+	if err := records.Forget(ctx, p.keyValues, boxapi.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, namespace)); err != nil {
 		return err
 	}
 	if err := p.runRealtimeGateway(ctx, ref, progress); err != nil {

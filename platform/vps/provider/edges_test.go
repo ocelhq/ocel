@@ -12,13 +12,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func TestABoxRunsTheTunnelTheCloudflareProxyReachesItThrough(t *testing.T) {
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) {
+		func(context.Context) (ssh.Conn, error) {
 			return nil, errors.New("no box is reached to read what it runs")
 		},
 	)
@@ -36,7 +36,7 @@ func TestABoxRunsTheTunnelTheCloudflareProxyReachesItThrough(t *testing.T) {
 func TestABoxRefusesATunnelToAnEdgeThatOpensNone(t *testing.T) {
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return nil, errors.New("no box is reached to open an edge") },
+		func(context.Context) (ssh.Conn, error) { return nil, errors.New("no box is reached to open an edge") },
 	)
 
 	_, err := p.FindTunnelHooks(edge.None)
@@ -51,7 +51,7 @@ func TestTheCloudflareProxyOpenedWithTunnelSetReachesTheBoxThroughATunnel(t *tes
 	t.Setenv(provider.NamespaceEnvVar, "staging")
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return nil, errors.New("no box is reached to open an edge") },
+		func(context.Context) (ssh.Conn, error) { return nil, errors.New("no box is reached to open an edge") },
 	)
 
 	tunneled, err := p.Edges().Open(cloudflare.Kind, provider.Options{"tunnel": true})
@@ -72,7 +72,7 @@ func TestTheCloudflareProxyInFrontOfABoxOwnsWhatItForwardsInOcelsNamespace(t *te
 	t.Setenv(provider.NamespaceEnvVar, "staging")
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return nil, errors.New("no box is reached to open an edge") },
+		func(context.Context) (ssh.Conn, error) { return nil, errors.New("no box is reached to open an edge") },
 	)
 
 	front, err := p.Edges().Open(cloudflare.Kind, nil)

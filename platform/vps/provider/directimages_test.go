@@ -16,14 +16,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 func timedImagesOn(t *testing.T, machine *box, step time.Duration) provider.ImageStore {
 	t.Helper()
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (host.Conn, error) { return machine, nil },
+		func(context.Context) (ssh.Conn, error) { return machine, nil },
 	)
 	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 	p.Timing(func() time.Time {

@@ -11,8 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
@@ -20,7 +21,7 @@ const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
 func TestWhatATierKeepsIsRootsAndItsStateIsTheDeployPrincipalsAlone(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, Front{})
 	owners := map[string]string{}
 	for _, item := range items {
 		owners[item.Name] = item.Owner
@@ -47,18 +48,18 @@ func TestWhatATierKeepsIsRootsAndItsStateIsTheDeployPrincipalsAlone(t *testing.T
 func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *testing.T) {
 	t.Parallel()
 
-	tableDir := filepath.Dir(live.RoutingTable)
+	tableDir := filepath.Dir(boxapi.RoutingTable)
 	if tableDir == stateRoot || tableDir == proxyRoot {
 		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", tableDir)
 	}
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, Front{})
 	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == tableDir })
-	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), live.RoutingTable) })
+	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), boxapi.RoutingTable) })
 	if made < 0 || table < 0 || made > table {
 		t.Fatalf("%s is made at %d and the table in it first written at %d by %s: the table is written by renaming a file staged beside it, so its directory must exist first", tableDir, made, table, items[max(table, 0)].ID())
 	}
 	for _, item := range items {
-		if item.Name != tableDir && item.Name != live.RoutingTable && beneath(tableDir, item.Name) {
+		if item.Name != tableDir && item.Name != boxapi.RoutingTable && beneath(tableDir, item.Name) {
 			t.Errorf("%s is written beside the routing table, and whatever reads the table's directory reads it too", item.ID())
 		}
 	}
@@ -67,7 +68,7 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 func TestThePrincipalIsWrittenBeforeAnythingItOwns(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, Front{})
 	account := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUser })
 	if account < 0 {
 		t.Fatal("nothing in the item set creates the deploy principal")
@@ -84,7 +85,7 @@ func TestTheDeployKeysAreTheOnesTheItemContains(t *testing.T) {
 
 	keys := []byte(aKey + "\n")
 	var written Item
-	for _, item := range Items(environment.TierProduction, keys, ArchAMD64, Front{}) {
+	for _, item := range Items(environment.TierProduction, keys, ssh.AMD64, Front{}) {
 		if item.Name == authorizedKeys {
 			written = item
 		}
@@ -135,12 +136,12 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatExistsIsKept(t *testing.T
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	fresh := planFor(planned(Reading{Arch: ArchAMD64, Tier: tier, Keys: keys, Observed: map[string]string{}}), principal().ID())
+	fresh := planFor(planned(Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: map[string]string{}}), principal().ID())
 	if fresh.Action != provider.ActionCreate {
 		t.Errorf("a host with no %s plans %q, want it created", deployUser, fresh.Action)
 	}
 
-	installed := Reading{Arch: ArchAMD64, Tier: tier, Keys: keys, Observed: digests(Items(tier, keys, ArchAMD64, Front{}))}
+	installed := Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: digests(Items(tier, keys, ssh.AMD64, Front{}))}
 	if kept := planFor(planned(installed), principal().ID()); kept.Action != provider.ActionKeep {
 		t.Errorf("a host whose principal is unchanged from what ocel writes plans %q, want it kept", kept.Action)
 	}
@@ -155,8 +156,8 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	installed := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
-	moved := Reading{Arch: ArchAMD64, Tier: tier, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(installed)}
+	installed := Items(tier, []byte(aKey+"\n"), ssh.AMD64, Front{})
+	moved := Reading{Arch: ssh.AMD64, Tier: tier, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(installed)}
 	for _, change := range planned(moved) {
 		want := provider.ActionKeep
 		switch change.Name {
@@ -176,9 +177,9 @@ func TestThePrincipalGoesWithTheLastTierAndStaysWhileASiblingRemains(t *testing.
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := digests(Items(production, keys, ArchAMD64, Front{}))
+	installed := digests(Items(production, keys, ssh.AMD64, Front{}))
 
-	alone := removing(Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
+	alone := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	taken := slices.IndexFunc(alone, func(r removal) bool { return r.kind == KindUser && r.path == deployUser })
 	if taken < 0 {
 		t.Fatal("destroying the last tier leaves the deploy principal behind, and a login nothing uses is a login nobody revokes")
@@ -187,8 +188,8 @@ func TestThePrincipalGoesWithTheLastTierAndStaysWhileASiblingRemains(t *testing.
 		t.Error("the principal is removed before its home, and userdel over a home ocel still keeps state in is a home nothing owns")
 	}
 
-	beside := digests(Items(preview, keys, ArchAMD64, Front{}))
-	shared := removing(Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
+	beside := digests(Items(preview, keys, ssh.AMD64, Front{}))
+	shared := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
 	for _, r := range shared {
 		if r.kind == KindUser {
 			t.Error("destroying one tier takes the deploy principal an installed sibling still deploys as")
@@ -201,11 +202,11 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	installed := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
 
 	for name, sibling := range map[string]Reading{
 		"the last tier on the host": {Tier: preview, Observed: map[string]string{}},
-		"a tier beside its sibling": {Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))},
+		"a tier beside its sibling": {Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))},
 	} {
 		taken := removing(installed, sibling, appsPresent{})
 		stamp := index(taken, TierDir(production))
@@ -230,8 +231,8 @@ func TestDestroyOfAHalfWrittenHostNamesWhatExistsAndNothingBeside(t *testing.T) 
 		half[item.ID()] = item.Digest()
 	}
 	taken := removing(
-		Reading{Arch: ArchAMD64, Tier: production, Observed: half},
-		Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{},
+		Reading{Arch: ssh.AMD64, Tier: production, Observed: half},
+		Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{},
 	)
 	for _, r := range taken {
 		if _, present := half[r.kind+" "+r.path]; !present {

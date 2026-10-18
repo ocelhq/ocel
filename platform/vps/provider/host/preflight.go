@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const KeepWindow = 3
@@ -22,23 +24,23 @@ const KeepWindow = 3
 const FirstDeployFloor = 2 << 30
 
 func (h *Host) CheckEngine(ctx context.Context) error {
-	result, err := h.stream(ctx, dockerReach+" >/dev/null", nil, "")
+	result, err := h.Stream(ctx, ssh.Login, "docker version >/dev/null", nil)
 	if err != nil {
 		return err
 	}
 	if result.Code == 0 {
 		return nil
 	}
-	if deniedSocket(result.Stderr) {
+	if ssh.IsSocketDenied(result.Stderr) {
 		return refusal.Refuse(refusal.CodeDenied,
 			"%s is refused by the docker socket: %s\n"+
 				"Deploy as %s (set `user` under `ssh` to it), whose docker `ocel bootstrap %s` routes through checked sudo, or as a login with sudo without a password",
-			h.named(), spoken(result), deployUser, environment.TierProduction)
+			h.Named(), ssh.Spoken(result), deployUser, environment.TierProduction)
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s cannot run docker: %s\n"+
 			"Run `ocel bootstrap %s` or install docker",
-		h.named(), spoken(result), environment.TierProduction)
+		h.Named(), ssh.Spoken(result), environment.TierProduction)
 }
 
 type RepoImages struct {
@@ -74,8 +76,8 @@ func headroomCommand(repositories []string) string {
 		"printf 'root=%s\\n' \"$root\"\n" +
 		"printf 'free=%s\\n' \"$(df -Pk \"$root\" | tail -n 1 | awk '{print $4}')\"\n")
 	for _, repository := range repositories {
-		written.WriteString("printf 'repo=%s\\n' " + quoted(repository) + "\n" +
-			"docker image ls --filter reference=" + quoted(repository+":*") + " --format '{{.ID}} {{.Size}}' |" +
+		written.WriteString("printf 'repo=%s\\n' " + shell.Quote(repository) + "\n" +
+			"docker image ls --filter reference=" + shell.Quote(repository+":*") + " --format '{{.ID}} {{.Size}}' |" +
 			" sort -u | sed 's/^[^ ]* /size=/'\n")
 	}
 	return written.String()
@@ -142,11 +144,11 @@ func unread(what, said string) error {
 }
 
 func (h *Host) Headroom(ctx context.Context, repositories []string) (Headroom, error) {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return Headroom{}, err
 	}
-	rendered, err := h.ran(ctx, "read what is free on this host's docker data root", headroomCommand(repositories), nil, elevation)
+	rendered, err := h.Run(ctx, elevation, "read what is free on this host's docker data root", headroomCommand(repositories), nil)
 	if err != nil {
 		return Headroom{}, err
 	}
@@ -168,7 +170,7 @@ func (h *Host) CheckDisk(ctx context.Context, repositories []string) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s has %s free on %s; this deploy needs %s: %s\n"+
 			"Free space on %s",
-		h.named(), sized(room.Free), room.Root, sized(wanted), arithmetic(room), room.Root)
+		h.Named(), sized(room.Free), room.Root, sized(wanted), arithmetic(room), room.Root)
 }
 
 func arithmetic(room Headroom) string {
@@ -223,7 +225,7 @@ func sized(count int64) string {
 }
 
 func (h *Host) CheckProxy(ctx context.Context) error {
-	elevation, err := h.reachDocker(ctx)
+	elevation, err := ssh.Docker, h.Assume(ctx, ssh.Docker)
 	if err != nil {
 		return err
 	}
@@ -239,15 +241,15 @@ func (h *Host) CheckProxy(ctx context.Context) error {
 	return nil
 }
 
-func (h *Host) answers(ctx context.Context, asked boxContainer, elevation acting) error {
-	result, err := h.stream(ctx, words(asked.readiness()), nil, elevation)
+func (h *Host) answers(ctx context.Context, asked boxContainer, elevation ssh.Acting) error {
+	result, err := h.Stream(ctx, elevation, shell.Words(asked.readiness()), nil)
 	if err != nil {
 		return err
 	}
 	if result.Code == 0 {
 		return nil
 	}
-	state, err := h.said(ctx, stateCommand(asked.name), elevation)
+	state, err := h.Said(ctx, elevation, stateCommand(asked.name))
 	if err != nil {
 		return err
 	}
@@ -260,7 +262,7 @@ func (h *Host) answers(ctx context.Context, asked boxContainer, elevation acting
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s on %s %s: %s\n"+
 			"Run `ocel bootstrap %s`",
-		asked.name, h.named(), asked.unready, spoken(result), environment.TierProduction)
+		asked.name, h.Named(), asked.unready, ssh.Spoken(result), environment.TierProduction)
 }
 
 const (
@@ -275,22 +277,22 @@ func (h *Host) containerTrouble(name, state string) error {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s container on %s: %s\n"+
 				"Run `ocel bootstrap %s`",
-			name, h.named(), state, environment.TierProduction)
+			name, h.Named(), state, environment.TierProduction)
 	case status == proxyRestarting:
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s on %s keeps restarting: %s\n"+
 				"Check `docker logs %s`",
-			name, h.named(), state, name)
+			name, h.Named(), state, name)
 	case status == proxyExited:
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s on %s has exited: %s\n"+
 				"Run `docker start %s` or `ocel bootstrap %s`",
-			name, h.named(), state, name, environment.TierProduction)
+			name, h.Named(), state, name, environment.TierProduction)
 	case status != "running":
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s on %s is %s, not running: %s\n"+
 				"Run `docker start %s` or `ocel bootstrap %s`",
-			name, h.named(), status, state, name, environment.TierProduction)
+			name, h.Named(), status, state, name, environment.TierProduction)
 	}
 	return nil
 }
@@ -430,12 +432,12 @@ func withOwner(owners []portOwner, name string, container bool, port string) []p
 	return append(owners, portOwner{name: name, container: container, ports: []string{port}})
 }
 
-func (h *Host) publisherOf(read Reading, elevation acting) func(context.Context, string) ([]string, error) {
+func (h *Host) publisherOf(read Reading, elevation ssh.Acting) func(context.Context, string) ([]string, error) {
 	if !read.observed(KindEngine, dockerEngine) {
 		return func(context.Context, string) ([]string, error) { return nil, nil }
 	}
 	return func(ctx context.Context, port string) ([]string, error) {
-		said, err := h.ran(ctx, "ask which container publishes port "+port, words(publishing(port))+" 2>/dev/null || true", nil, elevation)
+		said, err := h.Run(ctx, elevation, "ask which container publishes port "+port, shell.Words(publishing(port))+" 2>/dev/null || true", nil)
 		return publishers(said), err
 	}
 }
@@ -445,7 +447,7 @@ func (h *Host) refuseTraefikUnreachable(ctx context.Context, read Reading) error
 	if fronting.Network != "" {
 		return nil
 	}
-	elevation, err := h.elevate(ctx)
+	elevation, err := ssh.Root, h.Assume(ctx, ssh.Root)
 	if err != nil {
 		return err
 	}
@@ -499,7 +501,7 @@ func (h *Host) refuseProxyUnreachable(ctx context.Context, read Reading) error {
 }
 
 func (h *Host) readServingOwners(ctx context.Context, read Reading) (portOwners, error) {
-	elevation, err := h.elevate(ctx)
+	elevation, err := ssh.Root, h.Assume(ctx, ssh.Root)
 	if err != nil {
 		return nil, err
 	}
